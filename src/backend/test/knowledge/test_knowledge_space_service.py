@@ -55,6 +55,7 @@ def _make_login_user(
         user_id=user_id,
         user_name=user_name,
         tenant_id=1,
+        is_global_super=False,
         is_admin=lambda: False,
         get_user_group_ids=_get_user_group_ids,
     )
@@ -331,10 +332,14 @@ async def test_add_folder_under_level_8_parent_creates_level_9_child(
     assert created.level == MAX_FOLDER_LEVEL
 
 
-async def test_public_square_info_preview_does_not_require_visible_permission(
+@pytest.mark.parametrize("is_released", [False, True])
+@pytest.mark.parametrize("auth_type", [AuthTypeEnum.PUBLIC, AuthTypeEnum.APPROVAL])
+async def test_shared_space_info_previews_joinable_spaces(
     service: KnowledgeSpaceService,
+    is_released: bool,
+    auth_type: AuthTypeEnum,
 ) -> None:
-    space = _make_space(space_id=301, user_id=9, is_released=True, auth_type=AuthTypeEnum.PUBLIC)
+    space = _make_space(space_id=301, user_id=9, is_released=is_released, auth_type=auth_type)
     creator = SimpleNamespace(user_id=9, user_name="creator", avatar=None)
 
     with (
@@ -371,6 +376,11 @@ async def test_public_square_info_preview_does_not_require_visible_permission(
 
     check_action.assert_awaited_once_with("knowledge_space", 301, "visible")
     assert result.id == 301
+    assert result.name == space.name
+    assert result.description == space.description
+    assert result.auth_type == auth_type
+    assert result.is_released == is_released
+    assert result.actions == []
     assert result.user_role is None
     assert result.subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
     assert result.is_followed is False
@@ -475,10 +485,12 @@ def test_visible_permission_preserves_non_default_subscription_status(
     assert KnowledgeSpaceService._resolve_effective_subscription_status(status, has_visible=True) == status
 
 
-async def test_private_space_info_still_requires_visible_permission(
+@pytest.mark.parametrize("is_released", [False, True])
+async def test_private_space_info_requires_visible_permission(
     service: KnowledgeSpaceService,
+    is_released: bool,
 ) -> None:
-    space = _make_space(space_id=302, user_id=9, is_released=False, auth_type=AuthTypeEnum.PRIVATE)
+    space = _make_space(space_id=302, user_id=9, is_released=is_released, auth_type=AuthTypeEnum.PRIVATE)
 
     with (
         patch(
@@ -590,3 +602,34 @@ async def test_square_marks_real_visible_grant_as_subscribed(
     item = result["data"][0]
     assert item.subscription_status == SpaceSubscriptionStatusEnum.SUBSCRIBED
     assert item.is_followed is True
+
+
+@pytest.mark.parametrize("is_released", [False, True])
+@pytest.mark.parametrize("auth_type", [AuthTypeEnum.PUBLIC, AuthTypeEnum.APPROVAL])
+@pytest.mark.parametrize("method", ["list_space_children", "asearch_space_children_cursor"])
+async def test_share_preview_content_requires_visible_permission(
+    service: KnowledgeSpaceService,
+    is_released: bool,
+    auth_type: AuthTypeEnum,
+    method: str,
+) -> None:
+    space = _make_space(space_id=301, user_id=9, is_released=is_released, auth_type=auth_type)
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=space,
+        ),
+        patch.object(service, "_check_action", new_callable=AsyncMock, return_value=False),
+        patch.object(
+            service, "_require_action", new_callable=AsyncMock, side_effect=SpacePermissionDeniedError()
+        ) as require_action,
+        patch.object(service, "_scan_visible_child_items", new_callable=AsyncMock) as scan,
+    ):
+        preview_space, has_content_permission = await service._require_space_info_permission(301)
+        assert preview_space.id == 301
+        assert has_content_permission is False
+        with pytest.raises(SpacePermissionDeniedError):
+            await getattr(service, method)(301)
+    require_action.assert_awaited_once_with("knowledge_space", 301, "visible")
+    scan.assert_not_awaited()

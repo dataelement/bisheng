@@ -49,6 +49,13 @@ class SkillSelectable(BaseModel):
     default_checked: bool = False
 
 
+class SkillRuntimeEntry(SkillSelectable):
+    """Stable identity and bundle revision for authenticated runtime consumers."""
+
+    id: int
+    content_hash: str
+
+
 class SkillFileEntry(BaseModel):
     path: str
     size: int

@@ -119,7 +119,7 @@ export function usePreviewSource(file: ArtifactFile | null, versionId: string) {
         setLoading(true);
         (async () => {
             try {
-                const url = await resolveArtifactUrl(file.file_url, versionId);
+                const url = file.directUrl || await resolveArtifactUrl(file.file_url, versionId);
                 if (cancelled) return;
                 if (kind === 'image') {
                     previewCache.set(key, { imageUrl: url });
@@ -152,6 +152,7 @@ export function usePreviewSource(file: ArtifactFile | null, versionId: string) {
 }
 
 interface PreviewBodyProps {
+    showSource?: boolean;
     file: ArtifactFile;
     versionId: string;
     /**
@@ -171,7 +172,7 @@ interface PreviewBodyProps {
     messageId?: string;
 }
 
-export function PreviewBody({ file, versionId, fileList, onArtifactPreview, citations, messageId, onOpenSource }: PreviewBodyProps) {
+export function PreviewBody({ file, versionId, fileList, onArtifactPreview, citations, messageId, onOpenSource, showSource = false }: PreviewBodyProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const { loading, error, text, imageUrl, resolvedUrl } = usePreviewSource(file, versionId);
@@ -294,6 +295,9 @@ export function PreviewBody({ file, versionId, fileList, onArtifactPreview, cita
             </div>
         );
     }
+    if (showSource && (kind === 'markdown' || kind === 'text')) {
+        return <pre className="whitespace-pre-wrap break-words p-6 font-mono text-body-sm text-text-1">{text}</pre>;
+    }
     if (kind === 'image') {
         return (
             <div className="flex h-full items-center justify-center p-4">
@@ -303,14 +307,15 @@ export function PreviewBody({ file, versionId, fileList, onArtifactPreview, cita
     }
     if (kind === 'document') {
         // docx / pdf / xls / xlsx / csv → reuse the shared knowledge-space viewer.
-        // compactMode = viewer only (no top bar / sidebar / zoom): Linsight's own
-        // toolbar (back / download / fullscreen / close) provides the chrome.
+        // The host owns document identity and download; retain viewer zoom and pagination.
         return (
             <FilePreview
                 fileName={file.file_name}
                 fileType={getFileExtension(file.file_name)}
                 fileUrl={resolvedUrl}
-                compactMode
+                hideSidebar
+                hideHeaderDownload
+                manageDocumentTitle={false}
             />
         );
     }

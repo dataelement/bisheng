@@ -1,3 +1,5 @@
+import { useServiceAccountOwnerCandidates } from "./useServiceAccountOwnerCandidates";
+import { useServiceAccountRequestScope } from "./useServiceAccountManagementScope";
 import { Button, Input, Textarea, notification } from '@bisheng/ui';
 import DepartmentUsersSelect,{
 type DepartmentUserOption,
@@ -33,6 +35,8 @@ export function CreateServiceAccountDialog({
   onOpenChange,
   onCreated,
 }: CreateServiceAccountDialogProps) {
+  const requestScope = useServiceAccountRequestScope();
+  const ownerCandidates = useServiceAccountOwnerCandidates(requestScope);
   const { t } = useTranslation()
   const { appConfig } = useContext(locationContext)
   // Single-tenant deployments have no "current tenant" to scope the owner
@@ -55,7 +59,7 @@ export function CreateServiceAccountDialog({
           name: name.trim(),
           description: description.trim() || null,
           resource_owner_user_id: owners[0].value,
-        })
+        }, requestScope)
       if (!account) return
       setName("")
       setDescription("")
@@ -105,6 +109,7 @@ export function CreateServiceAccountDialog({
           <div className="space-y-2">
             <Label>{t("openApiManagement.fields.owner")} *</Label>
             <DepartmentUsersSelect
+              candidateSource={ownerCandidates}
               value={owners}
               onChange={setOwners}
               multiple={false}

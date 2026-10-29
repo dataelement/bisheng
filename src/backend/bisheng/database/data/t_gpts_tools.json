@@ -1136,5 +1136,45 @@
     "is_delete": 0,
     "user_id": null,
     "id": 40
+  },
+  {
+    "id": 41,
+    "name": "知识库检索",
+    "logo": null,
+    "desc": "按当前执行用户权限检索文档知识库和知识空间，返回片段及文档来源。",
+    "tool_key": "bisheng_knowledge_search",
+    "type": 18,
+    "is_preset": 1,
+    "is_delete": 0,
+    "user_id": null,
+    "extra": "{}",
+    "api_params": [
+      {
+        "name": "query",
+        "description": "检索问题",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      },
+      {
+        "name": "space_ids",
+        "description": "要检索的文档知识库或知识空间 ID",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minItems": 1,
+          "maxItems": 50
+        }
+      }
+    ]
   }
 ]

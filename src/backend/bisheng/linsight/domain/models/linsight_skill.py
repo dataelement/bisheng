@@ -213,6 +213,8 @@ class LinsightSkillDao:
         owner_user_id: int = 0,
     ) -> tuple[list[LinsightSkill], int]:
         statement = select(LinsightSkill).where(LinsightSkill.owner_user_id == owner_user_id)
+        if owner_user_id == 0:
+            statement = statement.where(LinsightSkill.source != "personal")
         if keyword:
             pattern = f"%{keyword}%"
             statement = statement.where(

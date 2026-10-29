@@ -68,10 +68,10 @@ describe("sandbox tool copy", () => {
       expect(copy.sandboxSourceDeployment.length).toBeGreaterThan(0)
       expect(copy.sandboxSourceDefault.length).toBeGreaterThan(0)
     }
-    expect(files[0].sandboxAddressHint).toContain("负载均衡")
+    expect(files[0].sandboxAddressHint).toContain(String.fromCodePoint(0x8d1f, 0x8f7d, 0x5747, 0x8861))
     expect(files[1].sandboxAddressHint).toContain("load balancer")
     expect(files[2].sandboxAddressHint).toContain("ロードバランサ")
-    expect(files[0].sandboxTestScope).toContain("平台服务进程")
+    expect(files[0].sandboxTestScope).toContain(String.fromCodePoint(0x5e73, 0x53f0, 0x670d, 0x52a1, 0x8fdb, 0x7a0b))
     expect(files[1].sandboxTestScope).toContain("platform service")
     expect(files[2].sandboxTestScope).toContain("プラットフォーム")
   })

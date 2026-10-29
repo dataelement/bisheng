@@ -29,8 +29,8 @@ const MIN_RIGHT_WIDTH = 480;
 // Geometry of ArticleList's two-column browse grid. The default split width is
 // derived from these so the left column's article width stays identical whether
 // the detail panel is open or closed. Keep in sync with ArticleList: the grid
-// wrapper uses px-10 gutters, the row grid uses gap-x-4 with a 1px divider column.
-const LIST_GUTTER = 40; // px-10 horizontal padding on each side of the list
+// wrapper uses px-6 gutters, the row grid uses gap-x-4 with a 1px divider column.
+const LIST_GUTTER = 24; // px-6 horizontal padding on each side of the list
 const GRID_GAP = 16; // gap-x-4 between grid columns
 const GRID_DIVIDER = 1; // 1px vertical divider column between the two cards
 
@@ -39,7 +39,7 @@ const GRID_DIVIDER = 1; // 1px vertical divider column between the two cards
  * of the two-column browse grid.
  *
  * Two-column card width = (containerWidth − 2·gutter − 2·gap − divider) / 2.
- * In split mode the list keeps the same px-10 gutters, so the panel width is
+ * In split mode the list keeps the same px-6 gutters, so the panel width is
  * that card width plus both gutters back.
  */
 const getDefaultLeftWidth = (containerWidth: number) => {

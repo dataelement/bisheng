@@ -69,7 +69,8 @@ class AuditHarness:
         self.policy = SimpleNamespace(
             allowed_model_ids=[42],
             quota_epoch=1,
-            rows=[SimpleNamespace(model_id=42, version=1, quota_sync_state="READY", monthly_token_limit=100000)],
+            monthly_token_limit=100000,
+            rows=[SimpleNamespace(model_id=42, credit_rate=100, version=1, quota_sync_state="READY", monthly_token_limit=100000)],
         )
         self.model = SimpleNamespace(
             id=42, model_name="audit-fixture", name="audit-fixture", config={}, create_time=datetime.now(UTC)

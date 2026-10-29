@@ -176,17 +176,18 @@ export function PdfViewer({
     return (
         <div
             ref={scrollContainerRef}
-            className="scrollbar-os flex-1 overflow-auto bg-[#fbfbfb]"
+            className="scrollbar-os flex-1 overflow-auto bg-fill-1"
         >
             <div className="flex flex-col items-center py-4 gap-3">
                 {Array.from({ length: pdfDoc.numPages }, (_, i) => (
                     <div
                         key={i + 1}
                         data-page={i + 1}
+                        data-document-canvas
                         ref={(el) => {
                             if (el) pageRefs.current.set(i + 1, el);
                         }}
-                        className="relative shadow-md bg-white"
+                        className="relative shadow-md bg-white document-canvas"
                     >
                         <PdfPage pdfDoc={pdfDoc} pageIndex={i} width={containerWidth} zoomLevel={zoomLevel}
                             onError={handleRenderError}

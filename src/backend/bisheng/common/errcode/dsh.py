@@ -324,7 +324,68 @@ class DshToolOutputTooLargeError(BaseErrorCode):
     ClientCode: str = "tool_output_too_large"
 
 
+class DshContentSafetyAuthError(BaseErrorCode):
+    Code: int = 26170
+    Msg: str = "Content safety event authentication failed"
+    HttpStatus: int = 401
+    ClientCode: str = "content_safety_authentication_failed"
+    ErrorType: str = "authentication_error"
+
+    @classmethod
+    def tenant_forbidden(cls):
+        """Keep one authentication code while distinguishing a forbidden scope."""
+        error = cls()
+        error.HttpStatus = 403
+        return error
+
+
+class DshContentSafetyInvalidEventError(BaseErrorCode):
+    Code: int = 26171
+    Msg: str = "Content safety event is invalid"
+    HttpStatus: int = 400
+    ClientCode: str = "content_safety_event_invalid"
+    ErrorType: str = "invalid_request_error"
+
+
+class DshContentSafetyConflictError(BaseErrorCode):
+    Code: int = 26172
+    Msg: str = "Content safety event conflicts with a recorded fact"
+    HttpStatus: int = 409
+    ClientCode: str = "content_safety_event_conflict"
+    ErrorType: str = "conflict_error"
+
+
+class DshContentSafetyExpiredError(BaseErrorCode):
+    Code: int = 26173
+    Msg: str = "Content safety event predates the audit retention boundary"
+    HttpStatus: int = 410
+    ClientCode: str = "content_safety_event_expired"
+    ErrorType: str = "invalid_request_error"
+
+
+class DshContentSafetyUnavailableError(BaseErrorCode):
+    Code: int = 26174
+    Msg: str = "Content safety event ingestion is temporarily unavailable"
+    HttpStatus: int = 503
+    ClientCode: str = "content_safety_event_unavailable"
+    ErrorType: str = "service_unavailable_error"
+
+
+class DshContentSafetyTooLargeError(BaseErrorCode):
+    Code: int = 26175
+    Msg: str = "Content safety event exceeds the size limit"
+    HttpStatus: int = 413
+    ClientCode: str = "content_safety_event_too_large"
+    ErrorType: str = "invalid_request_error"
+
+
 DSH_ERROR_TYPES = (
+    DshContentSafetyAuthError,
+    DshContentSafetyInvalidEventError,
+    DshContentSafetyConflictError,
+    DshContentSafetyExpiredError,
+    DshContentSafetyUnavailableError,
+    DshContentSafetyTooLargeError,
     DshToolNotFoundError,
     DshToolPermissionDeniedError,
     DshToolUnsupportedError,

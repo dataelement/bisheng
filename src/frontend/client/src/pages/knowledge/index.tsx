@@ -11,26 +11,25 @@ import { useQueryClient } from "@tanstack/react-query";
 import store from "~/store";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useActivate, useUnactivate } from "react-activation";
+import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui";
 import {
-    Button,
-    Dialog,
-    DialogContent,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "~/components/ui";
-import {
-    KnowledgeSpace,
-    SpaceRole,
-    SpaceSortType,
-    VisibilityType,
-    getSpaceInfoApi,
-    getMineSpacesApi,
-    deleteSpaceApi,
+  KnowledgeSpace,
+  SpaceRole,
+  SpaceSortType,
+  VisibilityType,
+  getSpaceInfoApi,
+  getMineSpacesApi,
+  deleteSpaceApi,
+  unsubscribeSpaceApi,
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { useConfirm, useToastContext } from "~/Providers";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
+import { createApiStatusError, extractApiErrorMessage, extractApiStatusCode } from "~/utils/apiStatusError";
+import { KnowledgeHomePage } from "./KnowledgeHomePage";
+import { MODULE_HOME_FRAME, ModuleHomeHeader } from "~/components/ModuleHome";
+import { squareTypePath } from "~/pages/square/squarePaths";
+import { isDemoId } from "~/mock/demo/ids";
 import { KnowledgeSpaceContent } from "./SpaceDetail";
 import { KnowledgeAiBottomDock } from "./SpaceDetail/AiChat/KnowledgeAiBottomDock";
 import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
@@ -38,979 +37,1057 @@ import KnowledgeSquare from "./KnowledgeSquare";
 import { useFileManager } from "./hooks/useFileManager";
 import { useFileUpload } from "./hooks/useFileUpload";
 import { FROSTED_GLASS_CLASS, FROSTED_GLASS_ENABLED } from "~/utils/frostedGlass";
-import { useLocalize, useMediaQuery, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
 import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import {
-    SETTINGS_RETURN_STATE_KEY,
-    canOpenSharedSpace,
-    resolveUploadSizeLimits,
-    shouldNavigateOnSpaceSelect,
+  SETTINGS_RETURN_STATE_KEY,
+  canOpenSharedSpace,
+  resolveUploadSizeLimits,
+  shouldNavigateOnSpaceSelect,
 } from "./knowledgeUtils";
 import { resolveSpaceInfoFailure } from "./spaceInfoError";
 export default function Knowledge() {
-    const localize = useLocalize();
-    // 模块标题跟随后台配置的菜单显示名称
-    const menuNames = useWorkbenchMenuNames();
-    const bishengConfig = useRecoilValue(bishengConfState);
-    const uploadSizeLimits = useMemo(
-        () => resolveUploadSizeLimits(bishengConfig),
-        [bishengConfig],
-    );
-    const isH5 = usePrefersMobileLayout();
-    // ≥1024 = desktop (sidebar expanded by default). 768–1023 = tablet: sidebar starts
-    // collapsed but keeps its expand toggle (the mobile flow only kicks in below 768).
-    const isDesktop = useMediaQuery("(min-width: 1024px)");
-    const { isOverQuota } = useEffectiveQuota();
-    const previewNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
-    const [showKnowledgeSquare, setShowKnowledgeSquare] = useState(false);
-    const [isDragging, setIsDragging] = useState(false);
-    const [dragError, setDragError] = useState<string | null>(null);
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-    const [spaceListDrawerOpen, setSpaceListDrawerOpen] = useState(false);
-    // Mobile: a batch selection in the file list hides the AI dock and shows the action bar.
-    const [fileSelectionActive, setFileSelectionActive] = useState(false);
-    // Mobile: full-page file search (opened from the file-page top-bar search icon).
-    const [knowledgeSearchMode, setKnowledgeSearchMode] = useState(false);
-    const mobileHeadIconBtnClassName = "inline-flex size-5 shrink-0 items-center justify-center text-text-1";
-    const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
+  const localize = useLocalize();
+  // 模块标题跟随后台配置的菜单显示名称
+  const menuNames = useWorkbenchMenuNames();
+  const bishengConfig = useRecoilValue(bishengConfState);
+  const uploadSizeLimits = useMemo(() => resolveUploadSizeLimits(bishengConfig), [bishengConfig]);
+  const isH5 = usePrefersMobileLayout();
+  const { isOverQuota } = useEffectiveQuota();
+  const previewNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
+  const [showKnowledgeSquare, setShowKnowledgeSquare] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragError, setDragError] = useState<string | null>(null);
+  const [spaceListDrawerOpen, setSpaceListDrawerOpen] = useState(false);
+  // Mobile: a batch selection in the file list hides the AI dock and shows the action bar.
+  const [fileSelectionActive, setFileSelectionActive] = useState(false);
+  // Mobile: full-page file search (opened from the file-page top-bar search icon).
+  const [knowledgeSearchMode, setKnowledgeSearchMode] = useState(false);
+  const mobileHeadIconBtnClassName = "inline-flex size-5 shrink-0 items-center justify-center text-text-1";
+  const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
 
-    const { showToast } = useToastContext();
-    const confirm = useConfirm();
-    const { user, isUserLoading } = useAuthContext();
-    const navigate = useNavigate();
+  const { showToast } = useToastContext();
+  const confirm = useConfirm();
+  const { user, isUserLoading } = useAuthContext();
+  const navigate = useNavigate();
 
-    // Stable refs for functions used in effects — avoids infinite loops caused
-    // by unstable references (e.g. localize returns a new fn every render).
-    const localizeRef = useRef(localize);
-    localizeRef.current = localize;
-    const showToastRef = useRef(showToast);
-    showToastRef.current = showToast;
-    const navigateRef = useRef(navigate);
-    navigateRef.current = navigate;
-    const location = useLocation();
-    const queryClient = useQueryClient();
-    const { spaceId, folderId: urlFolderId } = useParams<{ spaceId?: string; folderId?: string }>();
-    const path = location.pathname || "";
-    const isShareRoute = /\/knowledge\/share\//.test(path);
-    const isDetailRoute = /\/knowledge\/space\//.test(path);
-    const previewSpaceId = isShareRoute ? spaceId : undefined;
-    const detailSpaceId = isDetailRoute ? spaceId : undefined;
-    const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
-    const [squarePreviewSpaceId, setSquarePreviewSpaceId] = useState<string | undefined>();
-    const [squarePreviewSpace, setSquarePreviewSpace] = useState<KnowledgeSpace | null>(null);
-    const [squarePreviewDrawerOpen, setSquarePreviewDrawerOpen] = useState(false);
-    const previewQueryCleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const [knowledgeTabActivateEpoch, setKnowledgeTabActivateEpoch] = useState(0);
-    const [squareStatusOverride, setSquareStatusOverride] = useState<
-        Record<string, "join" | "joined" | "pending" | "rejected">
-    >({});
+  // Stable refs for functions used in effects — avoids infinite loops caused
+  // by unstable references (e.g. localize returns a new fn every render).
+  const localizeRef = useRef(localize);
+  localizeRef.current = localize;
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+  const location = useLocation();
+  const queryClient = useQueryClient();
+  const { spaceId, folderId: urlFolderId } = useParams<{ spaceId?: string; folderId?: string }>();
+  const path = location.pathname || "";
+  const isShareRoute = /\/knowledge\/share\//.test(path);
+  const isDetailRoute = /\/knowledge\/space\//.test(path);
+  const previewSpaceId = isShareRoute ? spaceId : undefined;
+  const detailSpaceId = isDetailRoute ? spaceId : undefined;
+  const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
+  const [squarePreviewSpaceId, setSquarePreviewSpaceId] = useState<string | undefined>();
+  const [squarePreviewSpace, setSquarePreviewSpace] = useState<KnowledgeSpace | null>(null);
+  const [squarePreviewDrawerOpen, setSquarePreviewDrawerOpen] = useState(false);
+  const previewQueryCleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [knowledgeTabActivateEpoch, setKnowledgeTabActivateEpoch] = useState(0);
+  const [squareStatusOverride, setSquareStatusOverride] = useState<
+    Record<string, "join" | "joined" | "pending" | "rejected">
+  >({});
 
-    /** Wait for user fetch before applying plugin gate; avoid share routes firing APIs then bouncing wrong. */
-    const knowledgePluginGate = useMemo((): "loading" | "enabled" | "disabled" => {
-        if (isUserLoading) return "loading";
-        if (!user) return "enabled";
-        const plugins = (user as { plugins?: unknown }).plugins;
-        if (!Array.isArray(plugins)) return "enabled";
-        return plugins.includes("knowledge_space") ? "enabled" : "disabled";
-    }, [user, isUserLoading]);
-    const knowledgePluginEnabled = knowledgePluginGate === "enabled";
+  /** Wait for user fetch before applying plugin gate; avoid share routes firing APIs then bouncing wrong. */
+  const knowledgePluginGate = useMemo((): "loading" | "enabled" | "disabled" => {
+    if (isUserLoading) return "loading";
+    if (!user) return "enabled";
+    const plugins = (user as { plugins?: unknown }).plugins;
+    if (!Array.isArray(plugins)) return "enabled";
+    return plugins.includes("knowledge_space") ? "enabled" : "disabled";
+  }, [user, isUserLoading]);
+  const knowledgePluginEnabled = knowledgePluginGate === "enabled";
 
-    // Mirror the sidebar's space-list queries (same keys → react-query dedupes,
-    // no extra requests) purely to know when the first fetch has settled. The
-    // sidebar owns auto-select, so activeSpace stays null until those lists load;
-    // this lets the PC view show a loading state instead of flashing the "no
-    // space, create one" empty state before auto-select can land.
-    const { mine: { isFetched: mineSpacesFetched, data: mineSpaces = [] },
-        joined: { isFetched: joinedSpacesFetched, data: joinedSpaces = [] },
-        department: { isFetched: departmentSpacesFetched, data: departmentSpaces = [] },
-        error: spacesError, retry: retrySpaces } = useKnowledgeSpaceLists({ enabled: knowledgePluginEnabled });
+  // Mirror the sidebar's space-list queries (same keys → react-query dedupes,
+  // no extra requests) purely to know when the first fetch has settled. The
+  // sidebar owns auto-select, so activeSpace stays null until those lists load;
+  // this lets the PC view show a loading state instead of flashing the "no
+  // space, create one" empty state before auto-select can land.
+  const {
+    mine: { isFetched: mineSpacesFetched, data: mineSpaces = [] },
+    joined: { isFetched: joinedSpacesFetched, data: joinedSpaces = [] },
+    department: { isFetched: departmentSpacesFetched, data: departmentSpaces = [] },
+    error: spacesError,
+    retry: retrySpaces,
+  } = useKnowledgeSpaceLists({ enabled: knowledgePluginEnabled });
 
-    // True while we still can't tell whether the user has any space: the plugin
-    // gate is resolving, or the space lists haven't finished their first fetch.
-    const spacesResolving =
-        knowledgePluginGate === "loading" ||
-        (knowledgePluginEnabled && (!mineSpacesFetched || !joinedSpacesFetched || !departmentSpacesFetched));
+  // True while we still can't tell whether the user has any space: the plugin
+  // gate is resolving, or the space lists haven't finished their first fetch.
+  const spacesResolving =
+    knowledgePluginGate === "loading" ||
+    (knowledgePluginEnabled && (!mineSpacesFetched || !joinedSpacesFetched || !departmentSpacesFetched));
 
-    // No space in any section — drives the mobile full-page empty state.
-    const hasNoSpace =
-        !spacesError && !spacesResolving &&
-        mineSpaces.length === 0 &&
-        joinedSpaces.length === 0 &&
-        departmentSpaces.length === 0;
+  // No space in any section — drives the mobile full-page empty state.
+  const hasNoSpace =
+    !spacesError &&
+    !spacesResolving &&
+    mineSpaces.length === 0 &&
+    joinedSpaces.length === 0 &&
+    departmentSpaces.length === 0;
 
-    useEffect(() => {
-        if (!isH5) setSpaceListDrawerOpen(false);
-    }, [isH5]);
+  useEffect(() => {
+    if (!isH5) setSpaceListDrawerOpen(false);
+  }, [isH5]);
 
-    // Tablet (768–1023): collapse the sidebar by default so the file area gets the room,
-    // while the NavToggle stays available to expand it. Desktop keeps the user's choice.
-    useEffect(() => {
-        if (!isH5 && !isDesktop) setSidebarCollapsed(true);
-    }, [isH5, isDesktop]);
+  useEffect(() => {
+    if (showKnowledgeSquare) setSpaceListDrawerOpen(false);
+  }, [showKnowledgeSquare]);
 
-    useEffect(() => {
-        if (showKnowledgeSquare) setSpaceListDrawerOpen(false);
-    }, [showKnowledgeSquare]);
+  useEffect(() => {
+    if (!activeSpace) return;
+    setSpaceListDrawerOpen(false);
+    // Reset full-page search when switching spaces, otherwise a space entered
+    // after leaving search mode would render the search page instead of its file list.
+    setKnowledgeSearchMode(false);
+  }, [activeSpace?.id]);
 
-    useEffect(() => {
-        if (!activeSpace) return;
-        setSpaceListDrawerOpen(false);
-        // Reset full-page search when switching spaces, otherwise a space entered
-        // after leaving search mode would render the search page instead of its file list.
-        setKnowledgeSearchMode(false);
-    }, [activeSpace?.id]);
+  // The space list is a standalone page at /knowledge on every shell (mobile list page,
+  // desktop home). When the URL leaves a space detail route (browser Back, or in-app
+  // navigation to /knowledge), drop the active space so that page shows again.
+  useEffect(() => {
+    if (detailSpaceId || isShareRoute) return;
+    setActiveSpace(null);
+  }, [detailSpaceId, isShareRoute]);
 
-    // Mobile: the space list is a standalone page at /knowledge. When the URL leaves a
-    // space detail route (browser Back, or in-app navigation to /knowledge), drop the
-    // active space so the full-page list shows again. PC keeps its auto-selected space.
-    useEffect(() => {
-        if (!isH5) return;
-        if (detailSpaceId || isShareRoute) return;
+  // Browser Back/Forward: this tab is cached (react-activation), so the router hooks may
+  // not re-run inside it. Re-sync activeSpace with the live URL on popstate.
+  useEffect(() => {
+    const onPop = () => {
+      if (!/\/knowledge\/space\//.test(window.location.pathname)) {
         setActiveSpace(null);
-    }, [isH5, detailSpaceId, isShareRoute]);
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
-    // Browser Back/Forward: this tab is cached (react-activation), so the router hooks may
-    // not re-run inside it. Re-sync activeSpace with the live URL on popstate. Mobile only —
-    // desktop keeps its combined list+detail view (and auto-selects the first space).
-    useEffect(() => {
-        const onPop = () => {
-            if (!window.matchMedia("(max-width: 767px)").matches) return;
-            if (!/\/knowledge\/space\//.test(window.location.pathname)) {
-                setActiveSpace(null);
-            }
-        };
-        window.addEventListener("popstate", onPop);
-        return () => window.removeEventListener("popstate", onPop);
-    }, []);
+  // Feature gate: system may disable Knowledge Space via user plugins.
+  // Share links should redirect to workbench home with a clear permission toast.
+  useEffect(() => {
+    if (knowledgePluginGate !== "disabled") return;
+    showToastRef.current({
+      message: localizeRef.current("com_plugin_feature_no_access_toast"),
+      severity: NotificationSeverity.WARNING,
+    });
+    navigateRef.current("/c/new", { replace: true });
+  }, [knowledgePluginGate]);
 
-    // Feature gate: system may disable Knowledge Space via user plugins.
-    // Share links should redirect to workbench home with a clear permission toast.
-    useEffect(() => {
-        if (knowledgePluginGate !== "disabled") return;
+  // KeepAlive: when leaving /knowledge, reset square view so switching back lands on default page.
+  useUnactivate(() => {
+    setShowKnowledgeSquare(false);
+    setSquarePreviewDrawerOpen(false);
+    setSquarePreviewSpaceId(undefined);
+    if (previewQueryCleanupTimerRef.current) {
+      clearTimeout(previewQueryCleanupTimerRef.current);
+      previewQueryCleanupTimerRef.current = null;
+    }
+  });
+
+  // ─── File management (list, pagination, search, sort, navigation) ────
+  const fileManager = useFileManager({
+    activeSpace,
+    initialFolderId: urlFolderId,
+    enabled: !showKnowledgeSquare,
+  });
+
+  // KeepAlive: refresh the file list every time the user navigates back to /knowledge.
+  useActivate(() => {
+    fileManager.loadFiles(fileManager.currentPage);
+    setKnowledgeTabActivateEpoch((e) => e + 1);
+    // This tab is cached (react-activation) — re-syncing with the live URL is required,
+    // otherwise re-entering the Knowledge menu shows the previously-open space (stale
+    // activeSpace) instead of the space list. Read window.location directly because the
+    // router hooks can lag a cached re-activation.
+    if (typeof window !== "undefined" && !/\/knowledge\/space\//.test(window.location.pathname)) {
+      setActiveSpace(null);
+    }
+  });
+
+  const fileUpload = useFileUpload({
+    activeSpace,
+    currentFolderId: fileManager.currentFolderId,
+    currentPath: fileManager.currentPath,
+    files: fileManager.files,
+    setFiles: fileManager.setFiles,
+    setTotal: fileManager.setTotal,
+    loadFiles: fileManager.loadFiles,
+    currentPage: fileManager.currentPage,
+    markPendingDeletion: fileManager.markPendingDeletion,
+    clearPendingDeletion: fileManager.clearPendingDeletion,
+  });
+
+  // Share route: close drawer when leaving /knowledge/share/:spaceId
+  useEffect(() => {
+    if (!previewSpaceId) {
+      setPreviewDrawerOpen(false);
+    }
+  }, [previewSpaceId]);
+
+  // Deep link to space detail: /knowledge/space/:spaceId or /knowledge/space/:spaceId/folder/:folderId
+  useEffect(() => {
+    if (!detailSpaceId) return;
+    if (knowledgePluginGate === "loading" || knowledgePluginGate === "disabled") return;
+
+    // Immediately claim the space ID so the sidebar auto-select won't
+    // race ahead and pick a different space while the info fetch is in-flight.
+    setActiveSpace((prev) => (prev?.id === detailSpaceId ? prev : ({ id: detailSpaceId } as KnowledgeSpace)));
+    setShowKnowledgeSquare(false);
+    setSquarePreviewDrawerOpen(false);
+    setSquarePreviewSpaceId(undefined);
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const detail = await getSpaceInfoApi(detailSpaceId);
+        if (cancelled) return;
+        // No membership redirect here, deliberately. The space page is itself the
+        // non-member landing (header with 加入, and the server refuses the file
+        // list), and the desktop sidebar auto-selects the first department space
+        // whenever nothing is active. Diverting a non-follower to the share
+        // preview therefore looped: close the preview -> /knowledge -> auto-select
+        // the same department space -> redirect -> preview again, with no way out.
+        setActiveSpace({ ...detail, id: detailSpaceId });
+      } catch (error) {
+        if (cancelled) return;
+        // Only a space the server says is absent or closed to this caller
+        // sends the user away; anything else stays put (see spaceInfoError).
+        const failure = resolveSpaceInfoFailure(error);
         showToastRef.current({
-            message: localizeRef.current("com_plugin_feature_no_access_toast"),
+          message: failure.message || localizeRef.current(failure.messageKey),
+          severity: NotificationSeverity.WARNING,
+        });
+        if (failure.leaveSpace) {
+          navigateRef.current("/knowledge?square=1", { replace: true });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [detailSpaceId, knowledgePluginGate, knowledgeTabActivateEpoch]);
+
+  // 广场：?square=1；从消息提醒「拒绝加入知识空间」进入时带 previewSpace=，打开广场上的预览抽屉
+  useEffect(() => {
+    if (knowledgePluginGate === "loading" || knowledgePluginGate === "disabled") return;
+    const path = location.pathname || "";
+    const isSpaceDetailPath = /\/knowledge\/space\//.test(path);
+
+    // 深链在空间内时不要被历史遗留的 ?square=1 拉回广场（侧边选空间常不更新 URL）
+    if (isSpaceDetailPath) {
+      setShowKnowledgeSquare(false);
+      const params = new URLSearchParams(location.search);
+      if (params.get("square") === "1") {
+        params.delete("square");
+        const nextSearch = params.toString();
+        navigate(nextSearch ? `${path}?${nextSearch}` : path, { replace: true });
+      }
+      return;
+    }
+
+    const params = new URLSearchParams(location.search);
+    if (params.get("square") === "1") {
+      setShowKnowledgeSquare(true);
+    }
+    const previewFromQuery = params.get("previewSpace");
+    if (previewFromQuery) {
+      console.info("[Knowledge] previewSpace query detected", {
+        pathname: path,
+        search: location.search,
+        previewFromQuery,
+      });
+      setShowKnowledgeSquare(true);
+      setSquarePreviewSpaceId(previewFromQuery);
+      setSquarePreviewDrawerOpen(true);
+      if (previewQueryCleanupTimerRef.current) {
+        clearTimeout(previewQueryCleanupTimerRef.current);
+      }
+      // Delay URL cleanup so state updates (open drawer + target id) land first.
+      previewQueryCleanupTimerRef.current = setTimeout(() => {
+        const cleanupParams = new URLSearchParams(location.search);
+        cleanupParams.delete("previewSpace");
+        const nextSearch = cleanupParams.toString();
+        const basePath = path || "/knowledge";
+        console.info("[Knowledge] cleanup previewSpace query", {
+          from: location.search,
+          to: nextSearch ? `${basePath}?${nextSearch}` : basePath,
+          squarePreviewSpaceId: previewFromQuery,
+          squarePreviewDrawerOpen: true,
+        });
+        navigate(nextSearch ? `${basePath}?${nextSearch}` : basePath, { replace: true });
+        previewQueryCleanupTimerRef.current = null;
+      }, 0);
+    }
+  }, [location.search, location.pathname, navigate, knowledgePluginGate, knowledgeTabActivateEpoch]);
+
+  // Fallback for consecutive notification clicks in the same tab/session:
+  // update square preview drawer immediately even when route diff is swallowed.
+  useEffect(() => {
+    const onPreviewFromNotification = (evt: Event) => {
+      const customEvt = evt as CustomEvent<{ spaceId?: string }>;
+      const sid = customEvt?.detail?.spaceId;
+      if (!sid) return;
+      setShowKnowledgeSquare(true);
+      setSquarePreviewSpaceId(String(sid));
+      setSquarePreviewSpace(null);
+      setSquarePreviewDrawerOpen(true);
+    };
+    window.addEventListener("knowledge-square-preview", onPreviewFromNotification as EventListener);
+    return () => {
+      window.removeEventListener("knowledge-square-preview", onPreviewFromNotification as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    console.info("[Knowledge] square preview state", {
+      showKnowledgeSquare,
+      squarePreviewSpaceId,
+      squarePreviewDrawerOpen,
+      pathname: location.pathname,
+      search: location.search,
+    });
+  }, [
+    showKnowledgeSquare,
+    squarePreviewSpaceId,
+    squarePreviewDrawerOpen,
+    location.pathname,
+    location.search,
+  ]);
+
+  // Share link guard: if /knowledge/share/:spaceId points to an invalid/private space,
+  // or a space whose join policy changed (approval -> public), show toast and redirect to square.
+  // Space creator opens their own share link → go to space detail (same as sidebar entry).
+  useEffect(() => {
+    if (!previewSpaceId) return;
+    if (knowledgePluginGate === "loading" || knowledgePluginGate === "disabled") return;
+    let cancelled = false;
+    setPreviewDrawerOpen(false);
+    (async () => {
+      try {
+        const info = await getSpaceInfoApi(previewSpaceId);
+        if (cancelled) return;
+
+        // Anyone who can already read the space goes straight into it —
+        // a share link is a way in, not an application form. Only the
+        // creator short-circuited here, so a member or a granted user
+        // landed on the intro-and-apply drawer for a space that was
+        // already sitting in their own sidebar. `visible` is the same
+        // decision the space's own pages enforce; `role` cannot answer it,
+        // because an absent role maps to MEMBER exactly like a real one.
+        if (canOpenSharedSpace(info)) {
+          navigateRef.current(`/knowledge/space/${previewSpaceId}`, { replace: true });
+          return;
+        }
+
+        // Frontend fallback: in some scenarios (e.g. creator share link),
+        // `/info` may not provide `role/user_role`.
+        // If the space exists in "mine created" list, treat as creator and go to detail page.
+        try {
+          const mineSpaces = await getMineSpacesApi();
+          const previewId = String(previewSpaceId);
+          const isMineCreator = mineSpaces.some((s) => s.id === previewId && s.role === SpaceRole.CREATOR);
+          if (isMineCreator) {
+            navigateRef.current(`/knowledge/space/${previewSpaceId}`, { replace: true });
+            return;
+          }
+        } catch {
+          // ignore fallback error, keep existing guard behavior
+        }
+
+        // If the space is now private/inaccessible, treat as invalid for share links.
+        if (info.visibility === VisibilityType.PRIVATE) {
+          showToastRef.current({
+            message: localizeRef.current("com_knowledge.space_invalid_or_deleted"),
             severity: NotificationSeverity.WARNING,
+          });
+          setPreviewDrawerOpen(false);
+          navigateRef.current("/knowledge?square=1", { replace: true });
+          return;
+        }
+
+        // Space changed from approval to public while user had a pending application.
+        // Product expectation: toast + redirect to square page.
+        if (info.visibility === VisibilityType.PUBLIC && info.isPending) {
+          showToastRef.current({
+            message: localizeRef.current("com_knowledge.space_became_public_go_square"),
+            severity: NotificationSeverity.WARNING,
+          });
+          setPreviewDrawerOpen(false);
+          navigateRef.current("/knowledge?square=1", { replace: true });
+          return;
+        }
+
+        setPreviewDrawerOpen(true);
+      } catch (error) {
+        if (cancelled) return;
+        // Same rule as the detail load: a share link only sends the user to
+        // the square when the server says the space is gone or closed.
+        const failure = resolveSpaceInfoFailure(error);
+        showToastRef.current({
+          message: failure.message || localizeRef.current(failure.messageKey),
+          severity: NotificationSeverity.WARNING,
         });
-        navigateRef.current("/c/new", { replace: true });
-    }, [knowledgePluginGate]);
-
-    // KeepAlive: when leaving /knowledge, reset square view so switching back lands on default page.
-    useUnactivate(() => {
-        setShowKnowledgeSquare(false);
-        setSquarePreviewDrawerOpen(false);
-        setSquarePreviewSpaceId(undefined);
-        if (previewQueryCleanupTimerRef.current) {
-            clearTimeout(previewQueryCleanupTimerRef.current);
-            previewQueryCleanupTimerRef.current = null;
+        if (failure.leaveSpace) {
+          setPreviewDrawerOpen(false);
+          navigateRef.current("/knowledge?square=1", { replace: true });
         }
-    });
-
-    // ─── File management (list, pagination, search, sort, navigation) ────
-    const fileManager = useFileManager({
-        activeSpace,
-        initialFolderId: urlFolderId,
-        enabled: !showKnowledgeSquare,
-    });
-
-    // KeepAlive: refresh the file list every time the user navigates back to /knowledge.
-    useActivate(() => {
-        fileManager.loadFiles(fileManager.currentPage);
-        setKnowledgeTabActivateEpoch((e) => e + 1);
-        // This tab is cached (react-activation) — re-syncing with the live URL is required,
-        // otherwise re-entering the Knowledge menu shows the previously-open space (stale
-        // activeSpace) instead of the space list. Read window.location directly because the
-        // router hooks can lag a cached re-activation.
-        if (typeof window !== "undefined" && !/\/knowledge\/space\//.test(window.location.pathname)) {
-            setActiveSpace(null);
-        }
-    });
-
-    const fileUpload = useFileUpload({
-        activeSpace,
-        currentFolderId: fileManager.currentFolderId,
-        currentPath: fileManager.currentPath,
-        files: fileManager.files,
-        setFiles: fileManager.setFiles,
-        setTotal: fileManager.setTotal,
-        loadFiles: fileManager.loadFiles,
-        currentPage: fileManager.currentPage,
-        markPendingDeletion: fileManager.markPendingDeletion,
-        clearPendingDeletion: fileManager.clearPendingDeletion,
-    });
-
-    // Share route: close drawer when leaving /knowledge/share/:spaceId
-    useEffect(() => {
-        if (!previewSpaceId) {
-            setPreviewDrawerOpen(false);
-        }
-    }, [previewSpaceId]);
-
-    // Deep link to space detail: /knowledge/space/:spaceId or /knowledge/space/:spaceId/folder/:folderId
-    useEffect(() => {
-        if (!detailSpaceId) return;
-        if (knowledgePluginGate === "loading" || knowledgePluginGate === "disabled") return;
-
-        // Immediately claim the space ID so the sidebar auto-select won't
-        // race ahead and pick a different space while the info fetch is in-flight.
-        setActiveSpace((prev) => prev?.id === detailSpaceId ? prev : { id: detailSpaceId } as KnowledgeSpace);
-        setShowKnowledgeSquare(false);
-        setSquarePreviewDrawerOpen(false);
-        setSquarePreviewSpaceId(undefined);
-
-        let cancelled = false;
-        (async () => {
-            try {
-                const detail = await getSpaceInfoApi(detailSpaceId);
-                if (cancelled) return;
-                // No membership redirect here, deliberately. The space page is itself the
-                // non-member landing (header with 加入, and the server refuses the file
-                // list), and the desktop sidebar auto-selects the first department space
-                // whenever nothing is active. Diverting a non-follower to the share
-                // preview therefore looped: close the preview -> /knowledge -> auto-select
-                // the same department space -> redirect -> preview again, with no way out.
-                setActiveSpace({ ...detail, id: detailSpaceId });
-            } catch (error) {
-                if (cancelled) return;
-                // Only a space the server says is absent or closed to this caller
-                // sends the user away; anything else stays put (see spaceInfoError).
-                const failure = resolveSpaceInfoFailure(error);
-                showToastRef.current({
-                    message: failure.message || localizeRef.current(failure.messageKey),
-                    severity: NotificationSeverity.WARNING,
-                });
-                if (failure.leaveSpace) {
-                    navigateRef.current("/knowledge?square=1", { replace: true });
-                }
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [detailSpaceId, knowledgePluginGate, knowledgeTabActivateEpoch]);
-
-    // 广场：?square=1；从消息提醒「拒绝加入知识空间」进入时带 previewSpace=，打开广场上的预览抽屉
-    useEffect(() => {
-        if (knowledgePluginGate === "loading" || knowledgePluginGate === "disabled") return;
-        const path = location.pathname || "";
-        const isSpaceDetailPath = /\/knowledge\/space\//.test(path);
-
-        // 深链在空间内时不要被历史遗留的 ?square=1 拉回广场（侧边选空间常不更新 URL）
-        if (isSpaceDetailPath) {
-            setShowKnowledgeSquare(false);
-            const params = new URLSearchParams(location.search);
-            if (params.get("square") === "1") {
-                params.delete("square");
-                const nextSearch = params.toString();
-                navigate(nextSearch ? `${path}?${nextSearch}` : path, { replace: true });
-            }
-            return;
-        }
-
-        const params = new URLSearchParams(location.search);
-        if (params.get("square") === "1") {
-            setShowKnowledgeSquare(true);
-        }
-        const previewFromQuery = params.get("previewSpace");
-        if (previewFromQuery) {
-            console.info("[Knowledge] previewSpace query detected", {
-                pathname: path,
-                search: location.search,
-                previewFromQuery,
-            });
-            setShowKnowledgeSquare(true);
-            setSquarePreviewSpaceId(previewFromQuery);
-            setSquarePreviewDrawerOpen(true);
-            if (previewQueryCleanupTimerRef.current) {
-                clearTimeout(previewQueryCleanupTimerRef.current);
-            }
-            // Delay URL cleanup so state updates (open drawer + target id) land first.
-            previewQueryCleanupTimerRef.current = setTimeout(() => {
-                const cleanupParams = new URLSearchParams(location.search);
-                cleanupParams.delete("previewSpace");
-                const nextSearch = cleanupParams.toString();
-                const basePath = path || "/knowledge";
-                console.info("[Knowledge] cleanup previewSpace query", {
-                    from: location.search,
-                    to: nextSearch ? `${basePath}?${nextSearch}` : basePath,
-                    squarePreviewSpaceId: previewFromQuery,
-                    squarePreviewDrawerOpen: true,
-                });
-                navigate(nextSearch ? `${basePath}?${nextSearch}` : basePath, { replace: true });
-                previewQueryCleanupTimerRef.current = null;
-            }, 0);
-        }
-    }, [location.search, location.pathname, navigate, knowledgePluginGate, knowledgeTabActivateEpoch]);
-
-    // Fallback for consecutive notification clicks in the same tab/session:
-    // update square preview drawer immediately even when route diff is swallowed.
-    useEffect(() => {
-        const onPreviewFromNotification = (evt: Event) => {
-            const customEvt = evt as CustomEvent<{ spaceId?: string }>;
-            const sid = customEvt?.detail?.spaceId;
-            if (!sid) return;
-            setShowKnowledgeSquare(true);
-            setSquarePreviewSpaceId(String(sid));
-            setSquarePreviewSpace(null);
-            setSquarePreviewDrawerOpen(true);
-        };
-        window.addEventListener("knowledge-square-preview", onPreviewFromNotification as EventListener);
-        return () => {
-            window.removeEventListener("knowledge-square-preview", onPreviewFromNotification as EventListener);
-        };
-    }, []);
-
-    useEffect(() => {
-        console.info("[Knowledge] square preview state", {
-            showKnowledgeSquare,
-            squarePreviewSpaceId,
-            squarePreviewDrawerOpen,
-            pathname: location.pathname,
-            search: location.search,
-        });
-    }, [showKnowledgeSquare, squarePreviewSpaceId, squarePreviewDrawerOpen, location.pathname, location.search]);
-
-    // Share link guard: if /knowledge/share/:spaceId points to an invalid/private space,
-    // or a space whose join policy changed (approval -> public), show toast and redirect to square.
-    // Space creator opens their own share link → go to space detail (same as sidebar entry).
-    useEffect(() => {
-        if (!previewSpaceId) return;
-        if (knowledgePluginGate === "loading" || knowledgePluginGate === "disabled") return;
-        let cancelled = false;
-        setPreviewDrawerOpen(false);
-        (async () => {
-            try {
-                const info = await getSpaceInfoApi(previewSpaceId);
-                if (cancelled) return;
-
-                // Anyone who can already read the space goes straight into it —
-                // a share link is a way in, not an application form. Only the
-                // creator short-circuited here, so a member or a granted user
-                // landed on the intro-and-apply drawer for a space that was
-                // already sitting in their own sidebar. `visible` is the same
-                // decision the space's own pages enforce; `role` cannot answer it,
-                // because an absent role maps to MEMBER exactly like a real one.
-                if (canOpenSharedSpace(info)) {
-                    navigateRef.current(`/knowledge/space/${previewSpaceId}`, { replace: true });
-                    return;
-                }
-
-                // Frontend fallback: in some scenarios (e.g. creator share link),
-                // `/info` may not provide `role/user_role`.
-                // If the space exists in "mine created" list, treat as creator and go to detail page.
-                try {
-                    const mineSpaces = await getMineSpacesApi();
-                    const previewId = String(previewSpaceId);
-                    const isMineCreator = mineSpaces.some(
-                        (s) => s.id === previewId && s.role === SpaceRole.CREATOR
-                    );
-                    if (isMineCreator) {
-                        navigateRef.current(`/knowledge/space/${previewSpaceId}`, { replace: true });
-                        return;
-                    }
-                } catch {
-                    // ignore fallback error, keep existing guard behavior
-                }
-
-                // If the space is now private/inaccessible, treat as invalid for share links.
-                if (info.visibility === VisibilityType.PRIVATE) {
-                    showToastRef.current({
-                        message: localizeRef.current("com_knowledge.space_invalid_or_deleted"),
-                        severity: NotificationSeverity.WARNING,
-                    });
-                    setPreviewDrawerOpen(false);
-                    navigateRef.current("/knowledge?square=1", { replace: true });
-                    return;
-                }
-
-                // Space changed from approval to public while user had a pending application.
-                // Product expectation: toast + redirect to square page.
-                if (info.visibility === VisibilityType.PUBLIC && info.isPending) {
-                    showToastRef.current({
-                        message: localizeRef.current("com_knowledge.space_became_public_go_square"),
-                        severity: NotificationSeverity.WARNING,
-                    });
-                    setPreviewDrawerOpen(false);
-                    navigateRef.current("/knowledge?square=1", { replace: true });
-                    return;
-                }
-
-                setPreviewDrawerOpen(true);
-            } catch (error) {
-                if (cancelled) return;
-                // Same rule as the detail load: a share link only sends the user to
-                // the square when the server says the space is gone or closed.
-                const failure = resolveSpaceInfoFailure(error);
-                showToastRef.current({
-                    message: failure.message || localizeRef.current(failure.messageKey),
-                    severity: NotificationSeverity.WARNING,
-                });
-                if (failure.leaveSpace) {
-                    setPreviewDrawerOpen(false);
-                    navigateRef.current("/knowledge?square=1", { replace: true });
-                }
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [previewSpaceId, knowledgePluginGate, knowledgeTabActivateEpoch]);
-
-    // ─── Space actions ──────────────────────────────────────────────────
-    const handleSpaceSelect = async (space: KnowledgeSpace | null) => {
-        if (!space) {
-            setActiveSpace(null);
-            return;
-        }
-        // Clear folder context from URL so the file list re-fetches the space root.
-        // Without this, clicking a space while the URL is on /folder/<id> leaves the
-        // file list stuck on the folder's contents and the tree's folder highlight
-        // pointing at the wrong space (Bug A + Bug B).
-        // Never on a share route — see shouldNavigateOnSpaceSelect.
-        if (shouldNavigateOnSpaceSelect({
-            isShareRoute,
-            urlFolderId,
-            urlSpaceId: spaceId,
-            targetSpaceId: space.id,
-        })) {
-            navigate(`/knowledge/space/${space.id}`);
-        }
-        // Set list-level data immediately for fast UI switch
-        setActiveSpace(space);
-        // Then fetch full detail from info API
-        try {
-            const detail = await getSpaceInfoApi(space.id);
-            // Preserve the role from the list API (which has user_role).
-            // The /info endpoint may not return user_role, so mapSpace defaults to MEMBER.
-            // Only update role if detail explicitly provides a non-MEMBER role.
-            const mergedRole = detail.role !== SpaceRole.MEMBER ? detail.role : space.role;
-            setActiveSpace(prev => prev?.id === space.id ? { ...space, ...detail, id: space.id, role: mergedRole } : prev);
-        } catch {
-            // Keep list-level data if info fetch fails
-        }
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
+  }, [previewSpaceId, knowledgePluginGate, knowledgeTabActivateEpoch]);
 
-    // Pin / rename of the active space: merge the new fields, keep space + folder.
-    const handleActiveSpaceUpdate = (space: KnowledgeSpace) => {
-        setActiveSpace(prev => prev?.id === space.id ? { ...prev, ...space, role: prev.role } : prev);
-    };
-
-    // Hand the settings page the location being browsed, so leaving it resumes
-    // this space and folder instead of the settings' own space root.
-    const settingsEntryState = () => ({
-        [SETTINGS_RETURN_STATE_KEY]: `${location.pathname}${location.search}`,
-    });
-
-    const handleCreateSpace = () => {
-        (async () => {
-            try {
-                // Prefer cached "mine created" count (sidebar uses react-query) to avoid backend eventual consistency
-                // causing an off-by-one where the 31st is allowed and only the 32nd is blocked.
-                const cachedUpdate = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "mine", SpaceSortType.UPDATE_TIME]);
-                const cachedName = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "mine", SpaceSortType.NAME]);
-                const cachedCountMax = Math.max(cachedUpdate?.length ?? 0, cachedName?.length ?? 0);
-
-                const mineSpaces = await getMineSpacesApi();
-                const effectiveCount = Math.max(mineSpaces.length, cachedCountMax);
-
-                if (isOverQuota("knowledge_space", effectiveCount)) {
-                    showToast({
-                        message: localize("com_knowledge.create_space_limit_reached"),
-                        severity: NotificationSeverity.WARNING,
-                    });
-                    return;
-                }
-                navigate("/knowledge/create", { state: settingsEntryState() });
-            } catch {
-                // 如果校验接口失败，为避免阻塞用户操作，仍允许进入创建页面
-                // （可根据需要改成硬拦截）
-                // Fall back to cached count when possible; otherwise keep the original behavior.
-                const cachedUpdate = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "mine", SpaceSortType.UPDATE_TIME]);
-                const cachedName = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "mine", SpaceSortType.NAME]);
-                const cachedCountMax = Math.max(cachedUpdate?.length ?? 0, cachedName?.length ?? 0);
-
-                if (isOverQuota("knowledge_space", cachedCountMax)) {
-                    showToast({
-                        message: localize("com_knowledge.create_space_limit_reached"),
-                        severity: NotificationSeverity.WARNING,
-                    });
-                    return;
-                }
-
-                navigate("/knowledge/create", { state: settingsEntryState() });
-            }
-        })();
-    };
-
-    const handleSpaceSettings = (space: KnowledgeSpace) => {
-        navigate(`/knowledge/space/${space.id}/settings`, { state: settingsEntryState() });
-    };
-
-    // Delete the current space from the file-page top-bar menu, then return to the list.
-    const handleDeleteActiveSpace = async (sp: KnowledgeSpace | null) => {
-        if (!sp) return;
-        // Align with file-delete confirm (Figma "删除操作确认"): destructive variant.
-        const ok = await confirm({
-            description: `${localize("com_knowledge.confirm_delete_space")}${localize("com_knowledge.delete_irreversible_warning")}`,
-            variant: "destructive",
-        });
-        if (!ok) return;
-        try {
-            await deleteSpaceApi(sp.id);
-            queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-            showToast({ message: localize("com_knowledge.space_deleted"), severity: NotificationSeverity.SUCCESS });
-            setActiveSpace(null);
-            navigate("/knowledge");
-        } catch {
-            showToast({ message: localize("com_knowledge.delete_space_failed"), severity: NotificationSeverity.WARNING });
-        }
-    };
-
-    const handleDragStateChange = (dragging: boolean, error?: string | null) => {
-        setIsDragging(dragging);
-        setDragError(error || null);
-    };
-
-    const contextLabel = fileManager.currentFolderId ? localize("com_knowledge.folder") : localize("com_knowledge.knowledge_space");
-
-    if (knowledgePluginGate === "disabled") {
-        return null;
+  // ─── Space actions ──────────────────────────────────────────────────
+  const handleSpaceSelect = async (space: KnowledgeSpace | null) => {
+    if (!space) {
+      setActiveSpace(null);
+      return;
     }
-
-    // Knowledge square view
-    if (showKnowledgeSquare) {
-        return (
-            // Mobile: the MainLayout shell is h-auto/overflow-visible and html/body
-            // scrolling is globally disabled (WebView bottom-strip fix in index.html),
-            // so `h-full` collapses and the square's inner scroller never scrolls.
-            // Pin the wrapper to 100dvh on mobile so the inner overflow-y-auto works.
-            <div className="relative flex h-full min-h-0 max-[767px]:h-[100dvh]">
-                <KnowledgeSquare
-                    onBack={() => {
-                        setShowKnowledgeSquare(false);
-                        navigate("/knowledge", { replace: true });
-                    }}
-                    title={localize("com_knowledge.explore_square")}
-                    subtitle={localize("com_knowledge.explore_more_spaces")}
-                    searchPlaceholder={localize("com_knowledge.search_space_placeholder")}
-                    emptyText={localize("com_knowledge.no_matched_space")}
-                    joinToastPrefix={localize("com_knowledge.applied_to_join_space")}
-                    onPreviewSpace={(space) => {
-                        setSquarePreviewSpaceId(space.id);
-                        setSquarePreviewSpace(space);
-                        setSquarePreviewDrawerOpen(true);
-                    }}
-                    statusOverride={squareStatusOverride}
-                    onSquareStatusChange={(id, status) => {
-                        setSquareStatusOverride((prev) => {
-                            if (prev[String(id)] === status) {
-                                return prev;
-                            }
-                            return { ...prev, [String(id)]: status };
-                        });
-                    }}
-                />
-                <KnowledgeSpacePreviewDrawer
-                    spaceId={squarePreviewSpaceId}
-                    initialSpace={
-                        squarePreviewSpace
-                            ? {
-                                ...squarePreviewSpace,
-                                squareStatus:
-                                    squareStatusOverride[String(squarePreviewSpace.id)] ??
-                                    squarePreviewSpace.squareStatus,
-                            }
-                            : null
-                    }
-                    open={squarePreviewDrawerOpen}
-                    onOpenChange={(open) => {
-                        setSquarePreviewDrawerOpen(open);
-                        if (!open) {
-                            setSquarePreviewSpaceId(undefined);
-                            setSquarePreviewSpace(null);
-                        }
-                    }}
-                    onSquareStatusChange={(id, status) => {
-                        setSquareStatusOverride((prev) => {
-                            if (prev[String(id)] === status) {
-                                return prev;
-                            }
-                            return { ...prev, [String(id)]: status };
-                        });
-                    }}
-                />
-            </div>
-        );
+    // DEV sample rows (~/mock/demo) exist only in the list response.
+    if (isDemoId(space.id)) {
+      showToast({ message: localize("com_demo_data.readonly_toast"), severity: NotificationSeverity.INFO });
+      return;
     }
+    // Clear folder context from URL so the file list re-fetches the space root.
+    // Without this, clicking a space while the URL is on /folder/<id> leaves the
+    // file list stuck on the folder's contents and the tree's folder highlight
+    // pointing at the wrong space (Bug A + Bug B).
+    // Never on a share route — see shouldNavigateOnSpaceSelect.
+    if (
+      shouldNavigateOnSpaceSelect({
+        isShareRoute,
+        urlFolderId,
+        urlSpaceId: spaceId,
+        targetSpaceId: space.id,
+      })
+    ) {
+      navigate(`/knowledge/space/${space.id}`);
+    }
+    // Set list-level data immediately for fast UI switch
+    setActiveSpace(space);
+    // Then fetch full detail from info API
+    try {
+      const detail = await getSpaceInfoApi(space.id);
+      // Preserve the role from the list API (which has user_role).
+      // The /info endpoint may not return user_role, so mapSpace defaults to MEMBER.
+      // Only update role if detail explicitly provides a non-MEMBER role.
+      const mergedRole = detail.role !== SpaceRole.MEMBER ? detail.role : space.role;
+      setActiveSpace((prev) =>
+        prev?.id === space.id ? { ...space, ...detail, id: space.id, role: mergedRole } : prev,
+      );
+    } catch {
+      // Keep list-level data if info fetch fails
+    }
+  };
 
+  // Pin / rename of the active space: merge the new fields, keep space + folder.
+  const handleActiveSpaceUpdate = (space: KnowledgeSpace) => {
+    setActiveSpace((prev) => (prev?.id === space.id ? { ...prev, ...space, role: prev.role } : prev));
+  };
+
+  // Hand the settings page the location being browsed, so leaving it resumes
+  // this space and folder instead of the settings' own space root.
+  const settingsEntryState = () => ({
+    [SETTINGS_RETURN_STATE_KEY]: `${location.pathname}${location.search}`,
+  });
+
+  const handleCreateSpace = () => {
+    (async () => {
+      try {
+        // Prefer cached "mine created" count (sidebar uses react-query) to avoid backend eventual consistency
+        // causing an off-by-one where the 31st is allowed and only the 32nd is blocked.
+        const cachedUpdate = queryClient.getQueryData<KnowledgeSpace[]>([
+          "knowledgeSpaces",
+          "mine",
+          SpaceSortType.UPDATE_TIME,
+        ]);
+        const cachedName = queryClient.getQueryData<KnowledgeSpace[]>([
+          "knowledgeSpaces",
+          "mine",
+          SpaceSortType.NAME,
+        ]);
+        const cachedCountMax = Math.max(cachedUpdate?.length ?? 0, cachedName?.length ?? 0);
+
+        const mineSpaces = await getMineSpacesApi();
+        const effectiveCount = Math.max(mineSpaces.length, cachedCountMax);
+
+        if (isOverQuota("knowledge_space", effectiveCount)) {
+          showToast({
+            message: localize("com_knowledge.create_space_limit_reached"),
+            severity: NotificationSeverity.WARNING,
+          });
+          return;
+        }
+        navigate("/knowledge/create", { state: settingsEntryState() });
+      } catch {
+        // 如果校验接口失败，为避免阻塞用户操作，仍允许进入创建页面
+        // （可根据需要改成硬拦截）
+        // Fall back to cached count when possible; otherwise keep the original behavior.
+        const cachedUpdate = queryClient.getQueryData<KnowledgeSpace[]>([
+          "knowledgeSpaces",
+          "mine",
+          SpaceSortType.UPDATE_TIME,
+        ]);
+        const cachedName = queryClient.getQueryData<KnowledgeSpace[]>([
+          "knowledgeSpaces",
+          "mine",
+          SpaceSortType.NAME,
+        ]);
+        const cachedCountMax = Math.max(cachedUpdate?.length ?? 0, cachedName?.length ?? 0);
+
+        if (isOverQuota("knowledge_space", cachedCountMax)) {
+          showToast({
+            message: localize("com_knowledge.create_space_limit_reached"),
+            severity: NotificationSeverity.WARNING,
+          });
+          return;
+        }
+
+        navigate("/knowledge/create", { state: settingsEntryState() });
+      }
+    })();
+  };
+
+  const handleSpaceSettings = (space: KnowledgeSpace) => {
+    navigate(`/knowledge/space/${space.id}/settings`, { state: settingsEntryState() });
+  };
+
+  // Delete the current space from the file-page top-bar menu, then return to the list.
+  const handleDeleteActiveSpace = async (sp: KnowledgeSpace | null) => {
+    if (!sp) return;
+    // Align with file-delete confirm (Figma "删除操作确认"): destructive variant.
+    const ok = await confirm({
+      description: `${localize("com_knowledge.confirm_delete_space")}${localize("com_knowledge.delete_irreversible_warning")}`,
+      variant: "destructive",
+    });
+    if (!ok) return;
+    try {
+      await deleteSpaceApi(sp.id);
+      queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+      showToast({ message: localize("com_knowledge.space_deleted"), severity: NotificationSeverity.SUCCESS });
+      setActiveSpace(null);
+      navigate("/knowledge");
+    } catch {
+      showToast({
+        message: localize("com_knowledge.delete_space_failed"),
+        severity: NotificationSeverity.WARNING,
+      });
+    }
+  };
+
+  // Leave the current joined space from the space page, then return to the list.
+  // Mirrors useSpaceActions.handleLeaveSpace, including the organization-grant
+  // refusal (18071) that must not be reported as a generic failure.
+  // Unsubscribe refusal for a space granted through an organization: the user
+  // cannot leave on their own, so it is not reported as a generic failure.
+  const ORGANIZATION_GRANT_EXIT_DENIED_CODE = 18071;
+
+  const handleLeaveActiveSpace = async (sp: KnowledgeSpace | null) => {
+    if (!sp) return;
+    const ok = await confirm({
+      title: localize("com_knowledge.prompt"),
+      description: localize("com_knowledge.confirm_exit_space"),
+      confirmText: localize("com_knowledge.exit"),
+      cancelText: localize("com_knowledge.cancel"),
+    });
+    if (!ok) return;
+    try {
+      const response = await unsubscribeSpaceApi(sp.id);
+      const exitCode = extractApiStatusCode(response);
+      if (exitCode && exitCode !== 200) {
+        throw createApiStatusError(response);
+      }
+      queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+      showToast({ message: localize("com_knowledge.exited_space"), severity: NotificationSeverity.SUCCESS });
+      setActiveSpace(null);
+      navigate("/knowledge");
+    } catch (e) {
+      const errorCode = extractApiStatusCode(e);
+      const message =
+        errorCode === ORGANIZATION_GRANT_EXIT_DENIED_CODE
+          ? localize("com_knowledge.organization_grant_exit_blocked")
+          : extractApiErrorMessage(e) || localize("com_knowledge.exit_space_failed");
+      showToast({ message, severity: NotificationSeverity.WARNING });
+    }
+  };
+
+  const handleDragStateChange = (dragging: boolean, error?: string | null) => {
+    setIsDragging(dragging);
+    setDragError(error || null);
+  };
+
+  const contextLabel = fileManager.currentFolderId
+    ? localize("com_knowledge.folder")
+    : localize("com_knowledge.knowledge_space");
+
+  if (knowledgePluginGate === "disabled") {
+    return null;
+  }
+
+  // Knowledge square view. Desktop discovers spaces in the sidebar's 广场 (~/pages/square);
+  // the in-page square below remains for mobile and for the deep links that open it
+  // (`?square=1`, `?previewSpace=`, notification events) — those keep a back arrow.
+  const handleLeaveSquare = () => {
+    setShowKnowledgeSquare(false);
+    navigate("/knowledge", { replace: true });
+  };
+  const handleOpenSquare = () => {
+    if (isH5) setShowKnowledgeSquare(true);
+    else navigate(squareTypePath("knowledge"));
+  };
+
+  if (showKnowledgeSquare) {
     return (
-        <div className="relative flex h-full min-h-0">
-            {/* Drag and Drop Overlay. Frosted glass here is the sanctioned exception
+      // Mobile: the MainLayout shell is h-auto/overflow-visible and html/body
+      // scrolling is globally disabled (WebView bottom-strip fix in index.html),
+      // so `h-full` collapses and the square's inner scroller never scrolls.
+      // Pin the wrapper to 100dvh on mobile so the inner overflow-y-auto works.
+      <div className="relative flex h-full min-h-0 max-[767px]:h-[100dvh]">
+        <KnowledgeSquare
+          onBack={handleLeaveSquare}
+          title={localize("com_knowledge.explore_square")}
+          subtitle={localize("com_knowledge.explore_more_spaces")}
+          searchPlaceholder={localize("com_knowledge.search_space_placeholder")}
+          emptyText={localize("com_knowledge.no_matched_space")}
+          joinToastPrefix={localize("com_knowledge.applied_to_join_space")}
+          onPreviewSpace={(space) => {
+            setSquarePreviewSpaceId(space.id);
+            setSquarePreviewSpace(space);
+            setSquarePreviewDrawerOpen(true);
+          }}
+          statusOverride={squareStatusOverride}
+          onSquareStatusChange={(id, status) => {
+            setSquareStatusOverride((prev) => {
+              if (prev[String(id)] === status) {
+                return prev;
+              }
+              return { ...prev, [String(id)]: status };
+            });
+          }}
+        />
+        <KnowledgeSpacePreviewDrawer
+          spaceId={squarePreviewSpaceId}
+          initialSpace={
+            squarePreviewSpace
+              ? {
+                  ...squarePreviewSpace,
+                  squareStatus:
+                    squareStatusOverride[String(squarePreviewSpace.id)] ?? squarePreviewSpace.squareStatus,
+                }
+              : null
+          }
+          open={squarePreviewDrawerOpen}
+          onOpenChange={(open) => {
+            setSquarePreviewDrawerOpen(open);
+            if (!open) {
+              setSquarePreviewSpaceId(undefined);
+              setSquarePreviewSpace(null);
+            }
+          }}
+          onSquareStatusChange={(id, status) => {
+            setSquareStatusOverride((prev) => {
+              if (prev[String(id)] === status) {
+                return prev;
+              }
+              return { ...prev, [String(id)]: status };
+            });
+          }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative flex h-full min-h-0">
+      {/* Drag and Drop Overlay. Frosted glass here is the sanctioned exception
                 (single full-screen overlay, only while dragging) and is gated by the
                 global FROSTED_GLASS_ENABLED switch — see ~/utils/frostedGlass. */}
-            {isDragging && (
-                <div
-                    className={`absolute inset-0.5 z-[100] rounded-xl flex flex-col items-center justify-center pointer-events-none transition-all duration-300 ${FROSTED_GLASS_ENABLED ? FROSTED_GLASS_CLASS : ""} ${dragError ? "border border-dashed border-red-500 bg-[rgba(255,236,232,0.7)]" : "border border-dashed bg-[rgba(255,255,255,0.7)]"}`}
-                >
-                    <div className={`flex flex-col items-center justify-center p-8 rounded-2xl ${dragError ? "bg-transparent" : "bg-white/50"}`}>
-                        {dragError ? (
-                            <p className="text-xl font-medium text-red-500 mb-2">{dragError}</p>
-                        ) : (
-                            <p className="text-xl font-medium text-[#161616] mb-2">{localize("com_knowledge.drop_to_upload")}</p>
-                        )}
-                        <div className="text-center text-xs text-gray-400 leading-5">
-                            <p>{localize("com_knowledge.supported_formats")}</p>
-                            <p>{localize("com_knowledge.format_list")}</p>
-                            <p>
-                                {localize(
-                                    bishengConfig?.enable_media_upload
-                                        ? "com_knowledge.upload_size_limits_hint"
-                                        : "com_knowledge.upload_size_limit_hint_without_media",
-                                    {
-                                        docMax: uploadSizeLimits.defaultMaxMB,
-                                        mediaMax: uploadSizeLimits.mediaMaxMB,
-                                    },
-                                )}
-                            </p>
-                            <p>{localize("com_knowledge.max_upload_50_short")}</p>
-                        </div>
-                    </div>
-                </div>
+      {isDragging && (
+        <div
+          className={`absolute inset-0.5 z-[100] rounded-xl flex flex-col items-center justify-center pointer-events-none transition-all duration-300 ${FROSTED_GLASS_ENABLED ? FROSTED_GLASS_CLASS : ""} ${dragError ? "border border-dashed border-red-500 bg-[rgba(255,236,232,0.7)]" : "border border-dashed bg-[rgba(255,255,255,0.7)]"}`}
+        >
+          <div
+            className={`flex flex-col items-center justify-center p-8 rounded-2xl ${dragError ? "bg-transparent" : "bg-white/50"}`}
+          >
+            {dragError ? (
+              <p className="text-xl font-medium text-red-500 mb-2">{dragError}</p>
+            ) : (
+              <p className="text-xl font-medium text-[#161616] mb-2">
+                {localize("com_knowledge.drop_to_upload")}
+              </p>
             )}
+            <div className="text-center text-xs text-gray-400 leading-5">
+              <p>{localize("com_knowledge.supported_formats")}</p>
+              <p>{localize("com_knowledge.format_list")}</p>
+              <p>
+                {localize(
+                  bishengConfig?.enable_media_upload
+                    ? "com_knowledge.upload_size_limits_hint"
+                    : "com_knowledge.upload_size_limit_hint_without_media",
+                  {
+                    docMax: uploadSizeLimits.defaultMaxMB,
+                    mediaMax: uploadSizeLimits.mediaMaxMB,
+                  },
+                )}
+              </p>
+              <p>{localize("com_knowledge.max_upload_50_short")}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
-            {/* Sidebar — shown ≥768px. Must NOT mount on mobile (<768): its auto-select-first
-                effect would jump straight into a space and bypass the mobile list page.
-                Tablet (768–1023) keeps it (collapsed by default) so the expand toggle stays. */}
-            {!isH5 && (
-                <div className="h-full shrink-0">
-                    <KnowledgeSpaceSidebar
-                        activeSpaceId={activeSpace?.id}
-                        onSpaceSelect={handleSpaceSelect}
-                        onActiveSpaceUpdate={handleActiveSpaceUpdate}
-                        onCreateSpace={handleCreateSpace}
-                        onSpaceSettings={handleSpaceSettings}
-                        onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
-                        collapsed={sidebarCollapsed}
-                        onCollapsedChange={setSidebarCollapsed}
-                        // The URL names a space on both of these routes, so the
-                        // default-pick has nothing to decide and must not race
-                        // the route effect for the address bar.
-                        suppressAutoSelect={!!detailSpaceId || isShareRoute}
-                        hideExpandToggleWhenCollapsed={isDesktop && !!activeSpace}
-                    />
-                </div>
-            )}
+      {/* No in-module space list column: the workbench sidebar is global now, so every
+                shell is list-page-first — /knowledge is the home (KnowledgeHomePage on desktop,
+                the full-page list on mobile) and a space opens as its own page. The column's
+                auto-select-first effect must not come back: it would bypass that home. */}
 
-            {/* File page: the top Title ▾ opens this drawer to switch spaces (unchanged behaviour). */}
-            {/* Kept mounted while a space is active and toggled via `hidden` (not unmounted) so
+      {/* File page: the top Title ▾ opens this drawer to switch spaces (unchanged behaviour). */}
+      {/* Kept mounted while a space is active and toggled via `hidden` (not unmounted) so
                 the dropdown preserves its last state — cycled type / scroll — across re-opens. */}
-            {isH5 && activeSpace && typeof document !== "undefined"
-                ? createPortal(
-                    <div
-                        className={cn(
-                            "fixed inset-x-0 bottom-0 z-[80] flex flex-col bg-white",
-                            !spaceListDrawerOpen && "hidden",
-                        )}
-                        style={{ top: "calc(env(safe-area-inset-top, 0px) + 52px)" }}
-                        role="dialog"
-                        aria-modal="true"
-                        aria-hidden={!spaceListDrawerOpen}
-                        aria-label={menuNames.knowledge}
-                    >
-                        <div className="min-h-0 flex-1 overflow-hidden">
-                            <KnowledgeSpaceSidebar
-                                mobileDrawerMode
-                                compactMode
-                                onDrawerClose={() => setSpaceListDrawerOpen(false)}
-                                onNavigateAway={() => setSpaceListDrawerOpen(false)}
-                                activeSpaceId={activeSpace?.id}
-                                onSpaceSelect={(space) => {
-                                    handleSpaceSelect(space);
-                                    setSpaceListDrawerOpen(false);
-                                }}
-                                onActiveSpaceUpdate={handleActiveSpaceUpdate}
-                                onCreateSpace={() => {
-                                    handleCreateSpace();
-                                    setSpaceListDrawerOpen(false);
-                                }}
-                                onSpaceSettings={(space) => {
-                                    handleSpaceSettings(space);
-                                    setSpaceListDrawerOpen(false);
-                                }}
-                                onKnowledgeSquare={() => {
-                                    setShowKnowledgeSquare(true);
-                                    setSpaceListDrawerOpen(false);
-                                }}
-                            />
-                        </div>
-                        {/* Fixed bottom actions — go-to-square (left) + create space (right) */}
-                        <div className="flex shrink-0 items-center gap-3 bg-white px-4 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
-                            <Button
-                                variant="secondary"
-                                onClick={() => {
-                                    setShowKnowledgeSquare(true);
-                                    setSpaceListDrawerOpen(false);
-                                }}
-                                className="h-8 flex-1 gap-1 rounded-md border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
-                            >
-                                <Outlined.BlocksAndArrows className="size-4" />
-                                {localize("com_knowledge.go_to_square")}
-                            </Button>
-                            <Button
-                                variant="secondary"
-                                onClick={() => {
-                                    handleCreateSpace();
-                                    setSpaceListDrawerOpen(false);
-                                }}
-                                className="h-8 flex-1 gap-1 rounded-md bg-blue-100 px-3 py-[5px] text-sm font-normal leading-[22px] text-blue-main hover:bg-blue-200"
-                            >
-                                <Plus className="size-4" />
-                                {localize("com_knowledge.create_knowledge_space")}
-                            </Button>
-                        </div>
-                    </div>,
-                    document.body,
-                )
-                : null}
-
-            {activeSpace ? (
-                <div
-                    className={cn(
-                        "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
-                        // Mobile needs a DEFINITE viewport height (the KeepAlive shell is h-auto,
-                        // so percentage chains collapse): without it the content grows with the
-                        // file count and the absolute-bottom AI dock drifts / the layout cramps.
-                        isH5 ? "h-[100dvh]" : "h-full",
-                    )}
+      {isH5 && activeSpace && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className={cn(
+                "fixed inset-x-0 bottom-0 z-[80] flex flex-col bg-white",
+                !spaceListDrawerOpen && "hidden",
+              )}
+              style={{ top: "calc(env(safe-area-inset-top, 0px) + 52px)" }}
+              role="dialog"
+              aria-modal="true"
+              aria-hidden={!spaceListDrawerOpen}
+              aria-label={menuNames.knowledge}
+            >
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <KnowledgeSpaceSidebar
+                  mobileDrawerMode
+                  compactMode
+                  onDrawerClose={() => setSpaceListDrawerOpen(false)}
+                  onNavigateAway={() => setSpaceListDrawerOpen(false)}
+                  activeSpaceId={activeSpace?.id}
+                  onSpaceSelect={(space) => {
+                    handleSpaceSelect(space);
+                    setSpaceListDrawerOpen(false);
+                  }}
+                  onActiveSpaceUpdate={handleActiveSpaceUpdate}
+                  onCreateSpace={() => {
+                    handleCreateSpace();
+                    setSpaceListDrawerOpen(false);
+                  }}
+                  onSpaceSettings={(space) => {
+                    handleSpaceSettings(space);
+                    setSpaceListDrawerOpen(false);
+                  }}
+                  onKnowledgeSquare={() => {
+                    setShowKnowledgeSquare(true);
+                    setSpaceListDrawerOpen(false);
+                  }}
+                />
+              </div>
+              {/* Fixed bottom actions — go-to-square (left) + create space (right) */}
+              <div className="flex shrink-0 items-center gap-3 bg-white px-4 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setShowKnowledgeSquare(true);
+                    setSpaceListDrawerOpen(false);
+                  }}
+                  className="h-8 flex-1 gap-1 rounded-md border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
                 >
-                    {/* Mobile top bar now lives inside KnowledgeSpaceContent (it owns search/sort/upload). */}
-                    {/* `relative` anchors the bottom AI dock; the content scrolls within its own container while the dock overlays the bottom. */}
-                    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white shadow-[0px_4px_20px_0px_rgba(0,17,147,0.05)]">
-                        <KnowledgeSpaceContent
-                            space={activeSpace}
-                            files={fileManager.files}
-                            total={fileManager.total}
-                            onLoadMore={fileManager.loadMore}
-                            hasMore={fileManager.hasMore}
-                            loading={fileManager.loading}
-                            loadError={fileManager.loadError}
-                            loadMoreError={fileManager.loadMoreError}
-                            onSearch={fileManager.handleSearch}
-                            onFilterStatus={fileManager.setStatusFilter}
-                            onSort={(sortBy, direction) => {
-                                if (!sortBy || !direction) return;
-                                fileManager.handleSort(sortBy, direction);
-                            }}
-                            onNavigateFolder={(folderId?: string) => {
-                                // Drive folder navigation through the URL (like the sidebar tree
-                                // does) so the URL stays the single source of truth: useFileManager's
-                                // initialFolderId watcher syncs the content pane, and the sidebar
-                                // tree auto-expands/highlights to the same folder. Setting folder
-                                // state directly would leave the sidebar out of sync.
-                                const base = `/knowledge/space/${activeSpace.id}`;
-                                navigate(folderId ? `${base}/folder/${folderId}` : base);
-                            }}
-                            onUploadFile={fileUpload.handleUploadFile}
-                            onUploadFolder={fileUpload.handleUploadFolder}
-                            onCreateFolder={fileUpload.handleCreateFolder}
-                            onDownloadFile={() => showToast({ message: localize("com_knowledge.start_download"), severity: NotificationSeverity.SUCCESS })}
-                            onRenameFile={fileUpload.handleRenameFile}
-                            onDeleteFile={fileUpload.handleDeleteFile}
-                            onBatchDeleteFiles={fileUpload.handleBatchDelete}
-                            onEditTags={fileUpload.handleEditTags}
-                            onRetryFile={() => showToast({ message: localize("com_knowledge.retry_feature_dev"), severity: NotificationSeverity.INFO })}
-                            currentPath={fileManager.currentPath}
-                            currentFolderId={fileManager.currentFolderId}
-                            onDragStateChange={handleDragStateChange}
-                            uploadingFiles={fileUpload.uploadingFiles}
-                            creatingFolder={fileUpload.creatingFolder}
-                            uploadingFolder={fileUpload.uploadingFolder}
-                            onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
-                            onCreateSpace={handleCreateSpace}
-                            onGoKnowledgeSquare={() => setShowKnowledgeSquare(true)}
-                            onOpenSystemMenu={() => setSystemMenuOpen(true)}
-                            onToggleSpaceList={() => setSpaceListDrawerOpen((o) => !o)}
-                            spaceListOpen={spaceListDrawerOpen}
-                            onEditSpace={() => handleSpaceSettings(activeSpace)}
-                            onDeleteSpace={() => handleDeleteActiveSpace(activeSpace)}
-                            onOpenSearch={() => setKnowledgeSearchMode(true)}
-                            searchMode={knowledgeSearchMode}
-                            onCloseSearch={() => setKnowledgeSearchMode(false)}
-                            onSelectionActiveChange={setFileSelectionActive}
-                        />
-                        {/* Hide the AI dock during a mobile batch selection (the batch action bar
+                  <Outlined.BlocksAndArrows className="size-4" />
+                  {localize("com_knowledge.go_to_square")}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    handleCreateSpace();
+                    setSpaceListDrawerOpen(false);
+                  }}
+                  className="h-8 flex-1 gap-1 rounded-md bg-blue-100 px-3 py-[5px] text-sm font-normal leading-[22px] text-blue-main hover:bg-blue-200"
+                >
+                  <Plus className="size-4" />
+                  {localize("com_knowledge.create_knowledge_space")}
+                </Button>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {activeSpace ? (
+        <div
+          className={cn(
+            "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+            // Mobile needs a DEFINITE viewport height (the KeepAlive shell is h-auto,
+            // so percentage chains collapse): without it the content grows with the
+            // file count and the absolute-bottom AI dock drifts / the layout cramps.
+            isH5 ? "h-[100dvh]" : "h-full",
+          )}
+        >
+          {/* Mobile top bar now lives inside KnowledgeSpaceContent (it owns search/sort/upload). */}
+          {/* `relative` anchors the bottom AI dock; the content scrolls within its own container while the dock overlays the bottom. */}
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white shadow-[0px_4px_20px_0px_rgba(0,17,147,0.05)]">
+            <KnowledgeSpaceContent
+              space={activeSpace}
+              files={fileManager.files}
+              total={fileManager.total}
+              onLoadMore={fileManager.loadMore}
+              hasMore={fileManager.hasMore}
+              loading={fileManager.loading}
+              loadError={fileManager.loadError}
+              loadMoreError={fileManager.loadMoreError}
+              onSearch={fileManager.handleSearch}
+              onFilterStatus={fileManager.setStatusFilter}
+              onSort={(sortBy, direction) => {
+                if (!sortBy || !direction) return;
+                fileManager.handleSort(sortBy, direction);
+              }}
+              onNavigateFolder={(folderId?: string) => {
+                // Drive folder navigation through the URL (like the sidebar tree
+                // does) so the URL stays the single source of truth: useFileManager's
+                // initialFolderId watcher syncs the content pane, and the sidebar
+                // tree auto-expands/highlights to the same folder. Setting folder
+                // state directly would leave the sidebar out of sync.
+                const base = `/knowledge/space/${activeSpace.id}`;
+                navigate(folderId ? `${base}/folder/${folderId}` : base);
+              }}
+              onUploadFile={fileUpload.handleUploadFile}
+              onUploadFolder={fileUpload.handleUploadFolder}
+              onCreateFolder={fileUpload.handleCreateFolder}
+              onDownloadFile={() =>
+                showToast({
+                  message: localize("com_knowledge.start_download"),
+                  severity: NotificationSeverity.SUCCESS,
+                })
+              }
+              onRenameFile={fileUpload.handleRenameFile}
+              onDeleteFile={fileUpload.handleDeleteFile}
+              onBatchDeleteFiles={fileUpload.handleBatchDelete}
+              onEditTags={fileUpload.handleEditTags}
+              onRetryFile={() =>
+                showToast({
+                  message: localize("com_knowledge.retry_feature_dev"),
+                  severity: NotificationSeverity.INFO,
+                })
+              }
+              currentPath={fileManager.currentPath}
+              currentFolderId={fileManager.currentFolderId}
+              onDragStateChange={handleDragStateChange}
+              uploadingFiles={fileUpload.uploadingFiles}
+              creatingFolder={fileUpload.creatingFolder}
+              uploadingFolder={fileUpload.uploadingFolder}
+              onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
+              onCreateSpace={handleCreateSpace}
+              onGoKnowledgeSquare={handleOpenSquare}
+              onOpenSystemMenu={() => setSystemMenuOpen(true)}
+              onToggleSpaceList={() => setSpaceListDrawerOpen((o) => !o)}
+              spaceListOpen={spaceListDrawerOpen}
+              onEditSpace={() => handleSpaceSettings(activeSpace)}
+              onDeleteSpace={() => handleDeleteActiveSpace(activeSpace)}
+              onLeaveSpace={() => handleLeaveActiveSpace(activeSpace)}
+              onOpenSearch={() => setKnowledgeSearchMode(true)}
+              searchMode={knowledgeSearchMode}
+              onCloseSearch={() => setKnowledgeSearchMode(false)}
+              onSelectionActiveChange={setFileSelectionActive}
+            />
+            {/* Hide the AI dock during a mobile batch selection (the batch action bar
                             takes the bottom slot) and in search mode (the search page has no dock). */}
-                        {!fileSelectionActive && !knowledgeSearchMode && (
-                            <KnowledgeAiBottomDock
-                                key={String(activeSpace.id)}
-                                spaceId={String(activeSpace.id)}
-                                folderId={fileManager.currentFolderId}
-                                contextLabel={contextLabel}
-                            />
-                        )}
-                    </div>
-                </div>
-            ) : isH5 ? (
-                /* Mobile: standalone full-page space list. Tapping a space navigates to
+            {!fileSelectionActive && !knowledgeSearchMode && (
+              <KnowledgeAiBottomDock
+                key={String(activeSpace.id)}
+                spaceId={String(activeSpace.id)}
+                folderId={fileManager.currentFolderId}
+                contextLabel={contextLabel}
+                spaceName={activeSpace.name}
+              />
+            )}
+          </div>
+        </div>
+      ) : isH5 ? (
+        /* Mobile: standalone full-page space list. Tapping a space navigates to
                    /knowledge/space/:id (handled by handleSpaceSelect) → the file page. */
-                <div className="flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden bg-white">
-                    <div className="shrink-0 rounded-t-xl bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
-                        <div className="flex h-11 w-full min-w-0 items-center justify-between gap-3 px-4">
-                            <button
-                                type="button"
-                                aria-label={localize("com_nav_open_sidebar")}
-                                onClick={() => setSystemMenuOpen(true)}
-                                className={mobileHeadIconBtnClassName}
-                            >
-                                <Outlined.SidebarMenu className="size-5" />
-                            </button>
-                            <span className="min-w-0 flex-1 truncate text-center text-[16px] font-medium leading-6 text-text-1">
-                                {menuNames.knowledge}
-                            </span>
-                            <span className="size-5 shrink-0" aria-hidden />
-                        </div>
-                    </div>
-                    {spacesError ? <ApiRequestFailure error={spacesError} onRetry={retrySpaces} /> : hasNoSpace ? (
-                        /* Empty state: no space in any section. Drop the section list +
+        <div className="flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden bg-white">
+          <div className="shrink-0 rounded-t-xl bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+            <div className="flex h-11 w-full min-w-0 items-center justify-between gap-3 px-4">
+              <button
+                type="button"
+                aria-label={localize("com_nav_open_sidebar")}
+                onClick={() => setSystemMenuOpen(true)}
+                className={mobileHeadIconBtnClassName}
+              >
+                <Outlined.SidebarMenu className="size-5" />
+              </button>
+              <span className="min-w-0 flex-1 truncate text-center text-[16px] font-medium leading-6 text-text-1">
+                {menuNames.knowledge}
+              </span>
+              <span className="size-5 shrink-0" aria-hidden />
+            </div>
+          </div>
+          {spacesError ? (
+            <ApiRequestFailure error={spacesError} onRetry={retrySpaces} />
+          ) : hasNoSpace ? (
+            /* Empty state: no space in any section. Drop the section list +
                            bottom bar and center an illustration with two actions
                            (mirrors the subscription channel empty state). */
-                        <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 pb-16">
-                            <EmptyStateIllustration className="size-[120px]" />
-                            <p className="mt-6 text-[14px] leading-6 text-text-3">
-                                {localize("com_knowledge.no_related_content_you_can")}
-                            </p>
-                            <div className="mt-5 flex items-center gap-4">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowKnowledgeSquare(true)}
-                                    className="h-8 rounded-md border border-border-base bg-white px-4 text-[14px] leading-[22px] text-text-2 transition-colors active:border-blue-500 active:text-blue-500"
-                                >
-                                    {localize("com_knowledge.go_to_square")}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleCreateSpace}
-                                    className="h-8 rounded-md bg-blue-500 px-4 text-[14px] leading-[22px] text-white transition-colors active:bg-blue-600 btn-brand-primary"
-                                >
-                                    {localize("com_knowledge.create_knowledge_space")}
-                                </button>
-                            </div>
-                        </div>
-                    ) : (
-                        <>
-                            <div className="min-h-0 flex-1 overflow-hidden">
-                                <KnowledgeSpaceSidebar
-                                    mobilePageMode
-                                    onSpaceSelect={handleSpaceSelect}
-                                    onActiveSpaceUpdate={handleActiveSpaceUpdate}
-                                    onCreateSpace={handleCreateSpace}
-                                    onSpaceSettings={handleSpaceSettings}
-                                    onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
-                                />
-                            </div>
-                            {/* Fixed bottom go-to-square — reuses the PC sidebar button style */}
-                            <div className="shrink-0 bg-white px-4 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
-                                <Button
-                                    variant="secondary"
-                                    onClick={() => setShowKnowledgeSquare(true)}
-                                    className="h-8 w-full gap-1 rounded-md border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
-                                >
-                                    <Outlined.BlocksAndArrows className="size-4" />
-                                    {localize("com_knowledge.go_to_square")}
-                                </Button>
-                            </div>
-                        </>
-                    )}
-                </div>
-            ) : spacesError ? <ApiRequestFailure error={spacesError} onRetry={retrySpaces} /> : spacesResolving ? (
-                /* PC loading state — keep the loading view up until the space lists
-                   settle so the empty state never flashes before auto-select. */
-                <div className="flex flex-1 flex-col items-center justify-center py-10 text-center text-text-3">
-                    <LoadingIcon className="size-20 text-primary" />
-                </div>
-            ) : (
-                /* PC empty state when no space is selected — illustration + two actions */
-                <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
-                    <EmptyStateIllustration className="size-[120px]" />
-                    <p className="mt-6 text-[14px] font-normal leading-6 text-text-3">
-                        {localize("com_knowledge.no_related_content_you_can")}
-                    </p>
-                    <div className="mt-5 flex items-center gap-4">
-                        <button
-                            type="button"
-                            onClick={() => setShowKnowledgeSquare(true)}
-                            className="h-8 rounded-md border border-border-base bg-white px-4 text-[14px] leading-[22px] text-text-2 transition-colors hover:border-blue-500 hover:text-blue-500"
-                        >
-                            {localize("com_knowledge.go_to_square")}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={handleCreateSpace}
-                            className="h-8 rounded-md bg-blue-500 px-4 text-[14px] leading-[22px] text-white transition-colors hover:bg-blue-400 active:bg-blue-600 btn-brand-primary"
-                        >
-                            {localize("com_knowledge.create_knowledge_space")}
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            <KnowledgeSpacePreviewDrawer
-                spaceId={previewSpaceId}
-                open={previewDrawerOpen}
-                onOpenChange={(open) => {
-                    setPreviewDrawerOpen(open);
-                    if (previewNavTimerRef.current) {
-                        clearTimeout(previewNavTimerRef.current);
-                        previewNavTimerRef.current = null;
-                    }
-
-                    // 给 Sheet 的 slide-out 动画留出时间，避免立刻 navigate 导致动画被中断
-                    if (!open) {
-                        previewNavTimerRef.current = setTimeout(() => {
-                            navigate("/knowledge", { replace: true });
-                        }, 400);
-                    }
-                }}
-            />
-
-            {/* Duplicate file overwrite confirmation dialog */}
-            <Dialog
-                open={fileUpload.duplicateFiles.length > 0}
-                onOpenChange={(open) => !open && fileUpload.handleDuplicateSkip()}
-            >
-                <DialogContent className="sm:max-w-[460px]" onPointerDownOutside={(e) => e.preventDefault()}>
-                    <DialogHeader>
-                        <DialogTitle>{localize("com_knowledge.duplicate_file_title")}</DialogTitle>
-                    </DialogHeader>
-                    <ul className="overflow-y-auto max-h-[300px] py-2 space-y-1.5">
-                        {fileUpload.duplicateFiles.map((entry, idx) => {
-                            const name = entry.fileName;
-                            const ext = name.includes('.') ? name.slice(name.lastIndexOf('.')) : '';
-                            const base = name.includes('.') ? name.slice(0, name.lastIndexOf('.')) : name;
-                            const truncatedName = base.length > 10 ? base.slice(0, 10) + '....' + ext : name;
-                            const path = entry.oldFileLevelPath || '';
-                            return (
-                                <li key={idx} className="py-1 text-sm text-gray-700">
-                                    <span title={name}>{truncatedName}</span>
-                                    {path && <span className="ml-1 text-gray-400">({path})</span>}
-                                </li>
-                            );
-                        })}
-                    </ul>
-                    <DialogFooter>
-                        <Button variant="outline" className="h-8" onClick={fileUpload.handleDuplicateSkip}>
-                            {localize("com_knowledge.duplicate_cancel")}
-                        </Button>
-                        <Button className="h-8" onClick={fileUpload.handleDuplicateOverwrite}>
-                            {localize("com_knowledge.duplicate_replace")}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 pb-16">
+              <EmptyStateIllustration className="size-[120px]" />
+              <p className="mt-6 text-[14px] leading-6 text-text-3">
+                {localize("com_knowledge.no_related_content_you_can")}
+              </p>
+              <div className="mt-5 flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={handleOpenSquare}
+                  className="h-8 rounded-md border border-border-base bg-white px-4 text-[14px] leading-[22px] text-text-2 transition-colors active:border-blue-500 active:text-blue-500"
+                >
+                  {localize("com_knowledge.go_to_square")}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateSpace}
+                  className="h-8 rounded-md bg-blue-500 px-4 text-[14px] leading-[22px] text-white transition-colors active:bg-blue-600 btn-brand-primary"
+                >
+                  {localize("com_knowledge.create_knowledge_space")}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <KnowledgeSpaceSidebar
+                  mobilePageMode
+                  onSpaceSelect={handleSpaceSelect}
+                  onActiveSpaceUpdate={handleActiveSpaceUpdate}
+                  onCreateSpace={handleCreateSpace}
+                  onSpaceSettings={handleSpaceSettings}
+                  onKnowledgeSquare={handleOpenSquare}
+                />
+              </div>
+              {/* Fixed bottom go-to-square — reuses the PC sidebar button style */}
+              <div className="shrink-0 bg-white px-4 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
+                <Button
+                  variant="secondary"
+                  onClick={handleOpenSquare}
+                  className="h-8 w-full gap-1 rounded-md border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
+                >
+                  <Outlined.BlocksAndArrows className="size-4" />
+                  {localize("com_knowledge.go_to_square")}
+                </Button>
+              </div>
+            </>
+          )}
         </div>
-    );
+      ) : spacesError ? (
+        <ApiRequestFailure error={spacesError} onRetry={retrySpaces} />
+      ) : spacesResolving || detailSpaceId ? (
+        /* PC loading state — keep the loading view up until the space lists
+                   settle so the empty state never flashes before auto-select. */
+        <div className="flex flex-1 flex-col items-center justify-center py-10 text-center text-text-3">
+          <LoadingIcon className="size-20 text-primary" />
+        </div>
+      ) : !hasNoSpace ? (
+        <KnowledgeHomePage
+          onSpaceSelect={handleSpaceSelect}
+          onCreateSpace={handleCreateSpace}
+          onSpaceSettings={handleSpaceSettings}
+          onKnowledgeSquare={handleOpenSquare}
+        />
+      ) : (
+        /* PC empty state when the user has no space at all — the 我的 frame (title +
+                   switcher) stays, with the illustration + two actions centered below it. */
+        <div className={MODULE_HOME_FRAME}>
+          <ModuleHomeHeader title={menuNames.knowledge} />
+          <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
+            <EmptyStateIllustration className="size-[120px]" />
+            <p className="mt-6 text-[14px] font-normal leading-6 text-text-3">
+              {localize("com_knowledge.no_related_content_you_can")}
+            </p>
+            <div className="mt-5 flex items-center gap-4">
+              <button
+                type="button"
+                onClick={handleOpenSquare}
+                className="h-8 rounded-md border border-border-base bg-white px-4 text-[14px] leading-[22px] text-text-2 transition-colors hover:border-blue-500 hover:text-blue-500"
+              >
+                {localize("com_knowledge.go_to_square")}
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateSpace}
+                className="h-8 rounded-md bg-blue-500 px-4 text-[14px] leading-[22px] text-white transition-colors hover:bg-blue-400 active:bg-blue-600 btn-brand-primary"
+              >
+                {localize("com_knowledge.create_knowledge_space")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <KnowledgeSpacePreviewDrawer
+        spaceId={previewSpaceId}
+        open={previewDrawerOpen}
+        onOpenChange={(open) => {
+          setPreviewDrawerOpen(open);
+          if (previewNavTimerRef.current) {
+            clearTimeout(previewNavTimerRef.current);
+            previewNavTimerRef.current = null;
+          }
+
+          // 给 Sheet 的 slide-out 动画留出时间，避免立刻 navigate 导致动画被中断
+          if (!open) {
+            previewNavTimerRef.current = setTimeout(() => {
+              navigate("/knowledge", { replace: true });
+            }, 400);
+          }
+        }}
+      />
+
+      {/* Duplicate file overwrite confirmation dialog */}
+      <Dialog
+        open={fileUpload.duplicateFiles.length > 0}
+        onOpenChange={(open) => !open && fileUpload.handleDuplicateSkip()}
+      >
+        <DialogContent className="sm:max-w-[460px]" onPointerDownOutside={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>{localize("com_knowledge.duplicate_file_title")}</DialogTitle>
+          </DialogHeader>
+          <ul className="overflow-y-auto max-h-[300px] py-2 space-y-1.5">
+            {fileUpload.duplicateFiles.map((entry, idx) => {
+              const name = entry.fileName;
+              const ext = name.includes(".") ? name.slice(name.lastIndexOf(".")) : "";
+              const base = name.includes(".") ? name.slice(0, name.lastIndexOf(".")) : name;
+              const truncatedName = base.length > 10 ? base.slice(0, 10) + "...." + ext : name;
+              const path = entry.oldFileLevelPath || "";
+              return (
+                <li key={idx} className="py-1 text-sm text-gray-700">
+                  <span title={name}>{truncatedName}</span>
+                  {path && <span className="ml-1 text-gray-400">({path})</span>}
+                </li>
+              );
+            })}
+          </ul>
+          <DialogFooter>
+            <Button variant="outline" className="h-8" onClick={fileUpload.handleDuplicateSkip}>
+              {localize("com_knowledge.duplicate_cancel")}
+            </Button>
+            <Button className="h-8" onClick={fileUpload.handleDuplicateOverwrite}>
+              {localize("com_knowledge.duplicate_replace")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 }

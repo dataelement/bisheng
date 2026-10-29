@@ -251,3 +251,28 @@ def test_execute_code_without_work_dir_does_not_copy_cwd(tmp_path, monkeypatch):
     assert "secret-from-cwd.py" not in fake.last_put_members
     assert not any(method == "PUT" and url.endswith("/files") for method, url in fake.calls)
     assert not any(method == "GET" and url.endswith("/files") for method, url in fake.calls)
+
+
+def test_task_artifact_storage_failure_is_reported(tmp_path, monkeypatch):
+    fake = FakeRunnerClient()
+    fake.add_replica("http://runner-a:8080", write_after_exec={"output/report.xlsx": b"artifact"})
+    exe = _exe(fake, local_sync_path=str(tmp_path), workspace_prefix="workspace/task-1")
+    monkeypatch.setattr(LocalExecutor, "sync_to_workspace", lambda *args: 0)
+    with pytest.raises(SandboxProtocolError, match="workspace storage"):
+        exe.run("print('saved')")
+
+
+def test_task_returns_stable_artifact_reference(tmp_path, monkeypatch):
+    fake = FakeRunnerClient()
+    fake.add_replica("http://runner-a:8080", write_after_exec={"output/report.xlsx": b"artifact"})
+    exe = _exe(fake, local_sync_path=str(tmp_path), workspace_prefix="workspace/task-1")
+    saved = []
+
+    def persist(root, files):
+        saved.extend(files)
+        return len(files)
+
+    monkeypatch.setattr(exe, "sync_to_workspace", persist)
+    result = exe.run("print('saved')")
+    assert result["file_list"] == ["/output/report.xlsx"]
+    assert saved == ["output/report.xlsx"]

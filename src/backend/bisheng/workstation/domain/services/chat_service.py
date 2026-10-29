@@ -169,6 +169,11 @@ async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: 
 async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
     """Initialize chat session, message, and llm."""
     ws_config = await WorkStationService.aget_config()
+    from bisheng.common.services.config_service import settings as enterprise_settings
+    from bisheng.dsh.domain.services.model_catalog import authorized_workbench_models
+
+    if enterprise_settings.dsh.enabled:
+        ws_config.models = await authorized_workbench_models(login_user.user_id)
     model_info = next((model for model in ws_config.models if model.id == data.model), None)
     if not model_info:
         raise ValueError(f"Model with id '{data.model}' not found.")
@@ -1350,6 +1355,11 @@ async def _agent_initialize_chat(
       - `overrideParentMessageId` is ignored (regenerate UI removed)
     """
     ws_config = await WorkStationService.aget_config()
+    from bisheng.common.services.config_service import settings as enterprise_settings
+    from bisheng.dsh.domain.services.model_catalog import authorized_workbench_models
+
+    if enterprise_settings.dsh.enabled:
+        ws_config.models = await authorized_workbench_models(login_user.user_id)
     model_info = next((m for m in ws_config.models if m.id == data.model), None)
     if not model_info:
         raise ValueError(f"Model with id '{data.model}' not found.")
@@ -2525,7 +2535,8 @@ async def stream_chat_completion(
     """
     if data.task_mode:
         return await _task_mode_stream_completion(request, data, login_user)
-    return await _agent_stream_chat_completion(request, data, login_user, session_subject)
+    daily_data = data.model_copy(update={"skills": []})
+    return await _agent_stream_chat_completion(request, daily_data, login_user, session_subject)
 
 
 # Upper bound for in-stream title generation (task mode). Matches the gen_title

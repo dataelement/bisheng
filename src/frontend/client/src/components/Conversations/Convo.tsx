@@ -17,21 +17,27 @@ import store from "~/store";
 import { conversationTaskRunningState } from "~/store/linsight";
 import { cn } from "~/utils";
 import { ConvoOptions } from "./ConvoOptions";
+import { useTitleReveal } from "./useTitleReveal";
 
 type KeyEvent = KeyboardEvent<HTMLInputElement>;
 
-type ConversationProps = {
+interface ConversationProps {
   conversation: TConversation;
   retainView: () => void;
   toggleNav: () => void;
   isLatestConvo: boolean;
-};
+  /** Workbench sidebar rows: 8px side padding and a 22px line (Figma 13139:111616). */
+  compact?: boolean;
+  className?: string;
+}
 
 export default function Conversation({
   conversation,
   retainView,
   toggleNav,
   isLatestConvo,
+  compact = false,
+  className,
 }: ConversationProps) {
   const params = useParams();
 
@@ -47,6 +53,8 @@ export default function Conversation({
   const { navigateWithLastTools } = useNavigateToConvo();
   const { showToast } = useToastContext();
   const { conversationId, title } = conversation;
+  const updatedAt = new Date(conversation.updatedAt ?? '');
+  const hasDate = Number.isFinite(updatedAt.getTime());
   // Task-mode execution indicator: true while this conversation's linsight
   // session is still running, driving the sidebar spinner.
   const isTaskRunning = useRecoilValue(
@@ -180,13 +188,21 @@ export default function Conversation({
     [currentConvoId, conversationId, isLatestConvo, activeConvos]
   );
 
+  const titleReveal = useTitleReveal(title ?? "");
   return (
     <div
+      data-active={isActiveConvo}
+      onPointerEnter={titleReveal.reveal} onPointerLeave={titleReveal.reset}
+      onFocus={titleReveal.reveal} onBlur={titleReveal.reset}
       className={cn(
-        "group relative w-full content-stretch flex gap-[8px] items-center mb-1 rounded-lg shrink-0 transition-colors",
+        "dsh-history-row group relative w-full content-stretch flex gap-[8px] items-center mb-1 rounded-lg shrink-0 transition-colors",
         // Mobile rows: 8px left / 6px right, 8px vertical (desktop nav uses 12px/6px).
-        isSmallScreen ? "pl-[8px] pr-[6px] py-[8px]" : "px-[12px] py-[6px]",
-        isActiveConvo ? "bg-[#EEE]" : "hover:bg-fill-1",
+        isSmallScreen
+          ? "pl-[8px] pr-[6px] py-[8px]"
+          : compact
+            ? "px-[8px] py-[5px]"
+            : "px-[12px] py-[6px]",
+        isActiveConvo ? "bg-fill-2" : "hover:bg-fill-1",
         // Pin the hover fill while the row owns a transient UI — an open
         // options menu or the rename input — since the pointer leaves the row
         // (into the menu) long before the interaction is over. Never promoted
@@ -196,6 +212,7 @@ export default function Conversation({
         // #ECECEC hairline + soft drop shadow, both as shadows so the row
         // keeps its borderless box size.
         renaming && "shadow-[0_0_0_1px_#ECECEC,0_0_8px_rgba(3,7,117,0.05)]",
+        className,
       )}
     >
       {renaming ? (
@@ -203,7 +220,7 @@ export default function Conversation({
           <input
             ref={inputRef}
             type="text"
-            className="w-full bg-transparent text-[14px] leading-[20px] focus-visible:outline-none text-[#1A1A1A]"
+            className="w-full bg-transparent text-[14px] leading-[20px] focus-visible:outline-none text-text-1"
             value={titleInput ?? ""}
             onChange={(e) => setTitleInput(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -231,7 +248,8 @@ export default function Conversation({
       ) : (
         <a
           // Toggle conversation
-          // href={`/c/${conversationId}`}
+          href={`${__APP_ENV__.BASE_URL}/c/${conversationId}`}
+          aria-current={isActiveConvo ? "page" : undefined}
           data-testid="convo-item"
           onClick={clickHandler}
           className={cn(
@@ -257,17 +275,29 @@ export default function Conversation({
           >
             {/* F035: conversation list no longer distinguishes daily vs task
                 mode — the leading icon is removed for both (unified list). */}
-            <span className="text-[#1A1A1A] text-[14px] leading-[20px] font-normal truncate">
+            <span
+              ref={titleReveal.ref}
+              className={cn(
+                "dsh-history-label text-text-1 text-[14px] font-normal truncate",
+                compact && !isSmallScreen ? "leading-[22px]" : "leading-[20px]",
+              )}
+            >
               {title}
             </span>
           </div>
         </a>
+      )}
+      {!renaming && hasDate && (
+        <time className="dsh-history-time" dateTime={updatedAt.toISOString()}>
+          {updatedAt.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}
+        </time>
       )}
       {/* While renaming, drop the options slot entirely — an empty flex item
           would still cost the row an extra 8px gap before the right padding. */}
       {!renaming && (
       <div
         className={cn(
+          "dsh-history-options",
           isSmallScreen
             ? "flex w-[48px] justify-end items-center shrink-0"
             : // While running, keep the slot visible so the spinner shows without

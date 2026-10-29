@@ -106,6 +106,7 @@ ApprovalCenterService.decide_task()
 | `approval/domain/services/approval_seed_service.py` | **预置场景 seed（每租户）**：`DEFAULT_APPROVAL_SCENARIO_SEEDS` 三条 × 五行（scenario / route / flow / flow_version / node） | `seed_approval_scenarios_for_tenant()`、`seed_approval_scenarios_in_session()` |
 | `approval/domain/services/approval_registry.py` | 场景预置目录 + handler 注册表 | `with_default_presets()`、`register_handler()`、`get_handler()` |
 | `approval/domain/services/approval_runtime_handler_factory.py` | 为 outbox 执行 / 多节点 advance 重新构造运行时 handler | `build_runtime_handler(scenario_code)` |
+| `approval/application/execution_source.py` | 业务侧只读审批投影 | `get_business_approval()` / `get_business_approvals()`（按 100 条分批，版本记录复用） |
 | `approval/domain/services/approval_notification_service.py` | 站内信统一封装 | `notify_user()` / `notify_users()` / `notify_admins()` |
 | `approval/domain/services/user_menu_access_service.py` | 菜单授权增删查，含父级菜单依赖自动补全 | `grant_menu_access()`、`revoke_menu_access()`、`ensure_application_allowed()` |
 | `approval/domain/services/approval_service.py` + `message_handler.py` | **旧系统（已废弃）**：部门知识空间文件上传审批（`approval_request` 表），与审批中心独立，仅兼容存量、勿新增功能 | `ApprovalService.decide_request()` |
@@ -300,6 +301,9 @@ POST   /approval/admin/exceptions/{exception_id}/cancel      # 取消审批（�
 ---
 
 ## 8. 站内信通知矩阵
+
+审批深链：发布首节点通知以 `instance_id` 定位，由每位接收人解析自己的 task，不能向所有人共用首个 task_id。撤回及业务取消通知发送给原审批人，进入「我的审批」已处理项；同栏内更换目标必须重新读取详情，筛选切换不能覆盖通知指定的目标。目标不可用时不选取另一条无关记录。
+
 
 | 触发时机 | 接收人 | 实现位置 |
 |----------|--------|---------|

@@ -223,7 +223,7 @@ function VolumeControl({
                         "flex h-[88px] w-7 items-center justify-center rounded-full py-3",
                         dark
                             ? "bg-black/80"
-                            : "bg-white shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]",
+                            : "bg-bg-page shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]",
                     )}
                 >
                     <TrackBar
@@ -391,6 +391,7 @@ export function MediaPlayer({
     return (
         <div
             ref={containerRef}
+            data-document-canvas={onDarkStage ? "" : undefined}
             className={cn(
                 "relative overflow-hidden",
                 onDarkStage ? "bg-black" : "bg-fill-2",

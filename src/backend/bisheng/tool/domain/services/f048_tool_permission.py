@@ -217,7 +217,7 @@ class F048ToolPermissionAdapter:
             or (not record.preset and not record.owner_user_id)
         ):
             raise PermissionInvalidResourceError()
-        if record.preset and action is not None and action not in SYSTEM_TOOL_ACTIONS:
+        if record.preset and action is not None and action not in SYSTEM_TOOL_ACTIONS | {"manage_permission"}:
             raise InvalidCatalogActionError(msg=f"Preset tool does not support action: {action}")
         return VerifiedPermissionTarget.from_business_service(
             tenant_id=record.tenant_id,

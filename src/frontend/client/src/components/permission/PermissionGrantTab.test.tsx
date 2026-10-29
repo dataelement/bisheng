@@ -15,7 +15,11 @@ jest.mock("~/api/permission", () => ({
 }));
 
 jest.mock("~/hooks", () => ({
-  useLocalize: () => (key: string) => key,
+  useLocalize: () => (key: string) => {
+    const labels = jest.requireActual("~/locales/en/translation.json").com_permission;
+    return key.startsWith("com_permission.level_")
+      ? labels[key.split(".")[1]] : key;
+  },
 }));
 
 jest.mock("./SubjectSearchUser", () => ({

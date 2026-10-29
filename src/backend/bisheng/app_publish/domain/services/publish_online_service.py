@@ -42,8 +42,14 @@ from typing import Any
 
 from loguru import logger
 
+from bisheng.app_publish.application.release_tenancy import (
+    ApprovedReleaseSource,
+    qualify_approved_release,
+    require_release_eligible,
+)
 from bisheng.app_publish.domain.constants import AppReleaseAuditAction
 from bisheng.app_publish.domain.models.app_deployment import (
+    STAGE_APPROVED,
     STAGE_ONLINE,
     STAGE_PENDING_ONLINE,
     STAGE_PUBLISHING,
@@ -56,12 +62,16 @@ from bisheng.app_publish.domain.services import publish_notification_service, sc
 from bisheng.app_publish.domain.services.preview_instance_service import PreviewInstanceService
 from bisheng.app_publish.domain.services.release_audit import write_release_audit
 from bisheng.app_publish.domain.services.version_service import VersionService
+from bisheng.app_runtime.application.tenant_access import require_app_request_tenant
+from bisheng.approval.application.execution_source import get_business_approval
 from bisheng.common.errcode.app_publish import (
     AppCapacityInsufficientError,
+    AppPublishOwnerOnlyError,
     AppSchemaMigrationFailedError,
     AppStartupProbeFailedError,
     AppVersionNotFoundError,
 )
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.app import AppDao
 from bisheng.database.models.app_version import TERMINAL_STATE_ONLINE
@@ -110,8 +120,8 @@ class PublishOnlineService:
     async def bring_online(cls, instance_id: int, payload_snapshot: dict) -> dict[str, Any]:
         """The approval outbox's business execution (AC-31 / AC-36).
 
-        Order: load → stage → dispatch on the application state. Staging first
-        matters — ``pending_version_id`` is what makes "approved while stopped,
+        Order: load → qualify frozen source → stage → dispatch on state. Staging
+        after qualification matters — ``pending_version_id`` is what makes "approved while stopped,
         takes effect on resume" (AC-36) true without a sixth application state,
         so it is written even on the branch that deliberately does not start
         anything.
@@ -126,6 +136,30 @@ class PublishOnlineService:
             # race, not an error: return and let the outbox mark it executed.
             logger.info(f"app_publish.on_approved app_id={app_id} vanished; treating as cancelled")
             return {"status": STATUS_APP_DELETED, "app_id": app_id}
+
+        try:
+            source = await qualify_approved_release(instance_id, payload_snapshot)
+        except BaseErrorCode as error:
+            # Each cleanup step is independent; the eligibility error remains the outbox cause.
+            try:
+                await cls._record_eligibility_failure(instance_id, payload_snapshot, app, error)
+            except Exception:
+                logger.exception("app_publish eligibility failure could not be persisted app_id={}", app_id)
+            try:
+                approval = await get_business_approval(instance_id)
+                if (
+                    approval is not None
+                    and approval.tenant_id == app.tenant_id
+                    and approval.scenario_code == "app_publish_request"
+                    and approval.business_resource_type == "app"
+                    and approval.business_resource_id == app.id
+                    and approval.status in {"approved", "executing", "executed", "execute_failed"}
+                    and approval.payload_snapshot.get("app_id") == app.id
+                ):
+                    await PreviewInstanceService.reclaim_on_release_terminal(dict(approval.payload_snapshot))
+            except Exception:
+                logger.exception("app_publish refused release preview cleanup failed app_id={}", app_id)
+            raise
 
         version = await VersionService.get_version(app_id, version_id)
         if version is None:
@@ -166,7 +200,8 @@ class PublishOnlineService:
             app,
             version,
             payload_snapshot,
-            action=AppStateService.publish,
+            action=None,
+            source=source,
             audit_action=AppReleaseAuditAction.APPROVED,
             instance_id=instance_id,
         )
@@ -186,7 +221,11 @@ class PublishOnlineService:
                 details={"app_id": app_id, "reason": "app_missing"},
                 hints=["请刷新页面确认应用是否已被删除"],
             )
+        require_app_request_tenant(app.tenant_id, actor)
+        if int(getattr(actor, "user_id", 0) or 0) != app.owner_user_id:
+            raise AppPublishOwnerOnlyError()
         version_id = app.pending_version_id or app.current_version_id
+        await require_release_eligible(app.id, version_id=str(version_id or ""))
         version = await VersionService.get_version(app_id, str(version_id or ""))
         if version is None:
             raise AppVersionNotFoundError(
@@ -229,6 +268,7 @@ class PublishOnlineService:
         audit_action: AppReleaseAuditAction,
         instance_id: int | None,
         actor=None,
+        source: ApprovedReleaseSource | None = None,
     ) -> dict[str, Any]:
         """Run one start attempt and record whichever of the three outcomes happened.
 
@@ -246,6 +286,21 @@ class PublishOnlineService:
         at approval time would change the schema under whichever version is
         live if the start later fails.
         """
+        if (actor is None) == (source is None):
+            raise AppVersionNotFoundError(details={"reason": "execution_source_required"})
+        if source is not None:
+            if not isinstance(source, ApprovedReleaseSource) or (
+                source.app_id != app.id
+                or source.version_id != version.id
+                or source.tenant_id != app.tenant_id
+                or source.owner_user_id != app.owner_user_id
+            ):
+                raise AppVersionNotFoundError(details={"reason": "execution_source_invalid"})
+        else:
+            require_app_request_tenant(app.tenant_id, actor)
+            if int(getattr(actor, "user_id", 0) or 0) != app.owner_user_id:
+                raise AppPublishOwnerOnlyError()
+            await require_release_eligible(app.id, version_id=version.id)
         deployment = await cls._deployment_ref(payload_snapshot, app)
         try:
             from bisheng.common.services.config_service import settings
@@ -256,7 +311,12 @@ class PublishOnlineService:
             return await cls._settle_schema_failure(
                 app, version, deployment, payload_snapshot, error=error, instance_id=instance_id
             )
-        result = await action(app.id, actor=actor if actor is not None else cls._owner_actor(app))
+        if source is not None:
+            from bisheng.app_runtime.application.approved_release import start_approved_release
+
+            result = await start_approved_release(source)
+        else:
+            result = await action(app.id, actor=actor)
 
         if result.ok:
             # The one authorised UPDATE of app_version, and the only place a
@@ -540,20 +600,23 @@ class PublishOnlineService:
             return int(code) == CODE_CAPACITY_INSUFFICIENT
         return str(detail.get("stage") or "") == _STAGE_ADMISSION
 
-    @staticmethod
-    def _owner_actor(app):
-        """Act as the owner.
-
-        F054's operator check passes the owner, a tenant administrator or a
-        super admin. Publishing after approval is done *for* the owner, so
-        borrowing their identity keeps the audit trail truthful — an
-        ``is_global_super`` shortcut would record the platform as the actor and
-        would also skip the very check we want exercised.
-        """
-        return SimpleNamespace(
-            user_id=int(app.owner_user_id or 0),
-            tenant_id=int(app.tenant_id or 0),
-            is_global_super=False,
+    @classmethod
+    async def _record_eligibility_failure(cls, instance_id, payload_snapshot, app, error):
+        deployment = await cls._deployment_ref(payload_snapshot, app)
+        if (
+            not getattr(deployment, "id", None)
+            or deployment.app_id != app.id
+            or deployment.tenant_id != app.tenant_id
+            or getattr(deployment, "approval_instance_id", None) != instance_id
+            or deployment.version_id != payload_snapshot.get("version_id")
+        ):
+            logger.warning("app_publish refused release has no matching persistent source app_id={}", app.id)
+            return
+        await cls._advance_deployment(
+            deployment,
+            stage=STAGE_APPROVED,
+            status=STATUS_FAILED,
+            failure=failure_from_error(error, stage=STAGE_APPROVED),
         )
 
     @staticmethod

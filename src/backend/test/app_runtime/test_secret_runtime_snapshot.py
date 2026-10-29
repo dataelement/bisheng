@@ -11,8 +11,10 @@ from test.app_runtime.test_runtime_delivery_repository import runtime_repo as ru
 async def secret_runtime(runtime_repo, monkeypatch):
     from cryptography.fernet import Fernet
 
+    from bisheng.app_publish.domain.models.app_deployment import AppDeployment
     from bisheng.app_publish.domain.models.app_secret_config import AppSecretConfig
     from bisheng.app_publish.domain.models.hosted_app_subject import HostedAppSubject
+    from bisheng.app_publish.domain.repositories import release_tenancy_repository
     from bisheng.app_runtime.domain.models.runtime_delivery import (
         RuntimeAssignment,
         RuntimeDelivery,
@@ -25,11 +27,21 @@ async def secret_runtime(runtime_repo, monkeypatch):
     from bisheng.database.models.app_instance import AppInstance
     from bisheng.database.models.app_version import AppVersion
     from bisheng.database.models.audit_log import AuditLog
+    from bisheng.database.models.tenant import UserTenant
     from bisheng.open_api.domain.models.api_credential import ApiCredential
     from bisheng.open_api.domain.models.credential_delegate_scope import ApiCredentialDelegateScope
+    from bisheng.open_api.domain.repositories import owner_repository
+    from bisheng.user.domain.models.user import User
     from test.app_publish.conftest import _sqlite_ddl_quirks
 
+    # F113 keeps the approved release and membership real. SQLite uses one
+    # connection, so provider reads share the fixture UoW instead of nested BEGIN.
+    monkeypatch.setattr(release_tenancy_repository, "get_async_db_session", runtime_repo.transaction)
+    monkeypatch.setattr(owner_repository, "get_async_db_session", runtime_repo.transaction)
     models = [
+        User,
+        UserTenant,
+        AppDeployment,
         App,
         AppVersion,
         AppInstance,
@@ -94,6 +106,17 @@ async def secret_runtime(runtime_repo, monkeypatch):
     )
     async with runtime_repo.transaction() as session:
         for row in [
+            User(user_id=7, user_name="secret-owner", password=""),
+            UserTenant(user_id=7, tenant_id=1, is_active=1),
+            AppDeployment(
+                app_id=app.id,
+                tenant_id=1,
+                owner_user_id=7,
+                submitted_by_user_id=7,
+                version_id=version.id,
+                stage="approved",
+                status="succeeded",
+            ),
             app,
             version,
             op,

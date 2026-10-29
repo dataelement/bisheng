@@ -1,15 +1,8 @@
 import { SubjectIdentity } from "./SubjectIdentity";
-import { Checkbox } from '@bisheng/ui';
+import { Checkbox } from "@bisheng/ui";
 import { Button, SearchInput, Tag } from "@bisheng/ui";
-import {
-  getDepartmentChildren,
-  searchDepartments,
-} from "~/api/permission";
-import type {
-  GrantDepartmentNode,
-  ResourceType,
-  SelectedSubject,
-} from "~/api/permission";
+import { getDepartmentChildren, searchDepartments } from "~/api/permission";
+import type { GrantDepartmentNode, ResourceType, SelectedSubject } from "~/api/permission";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useMemo, useRef } from "react";
 import { useLocalize } from "~/hooks";
@@ -65,43 +58,23 @@ export function SubjectSearchDepartment({
 }: SubjectSearchDepartmentProps) {
   const localize = useLocalize();
   const disabledIdSet = useMemo(() => new Set(disabledIds), [disabledIds]);
-  const disabledSubtreeRootIdSet = useMemo(
-    () => new Set(disabledSubtreeRootIds),
-    [disabledSubtreeRootIds],
-  );
+  const disabledSubtreeRootIdSet = useMemo(() => new Set(disabledSubtreeRootIds), [disabledSubtreeRootIds]);
 
   const fetchChildren = departmentChildrenApi ?? getDepartmentChildren;
   const fetchSearch = departmentSearchApi ?? searchDepartments;
   const tree = useGrantDepartmentTree({
     fetchChildren: (parentId, signal) =>
-      fetchChildren(
-        resourceType,
-        resourceId,
-        parentId,
-        signal ? { signal } : undefined,
-      ),
+      fetchChildren(resourceType, resourceId, parentId, signal ? { signal } : undefined),
     fetchSearch: (keyword, signal) =>
-      fetchSearch(
-        resourceType,
-        resourceId,
-        keyword,
-        50,
-        signal ? { signal } : undefined,
-      ),
+      fetchSearch(resourceType, resourceId, keyword, 50, signal ? { signal } : undefined),
   });
 
   // Remember each selected dept's path at pick time so implicit selection can be
   // computed by path even after a search swaps the rendered nodes.
   const selectedPathRef = useRef<Map<number, string>>(new Map());
 
-  const departmentSubjects = useMemo(
-    () => value.filter((s) => s.type === "department"),
-    [value]
-  );
-  const selectedIdSet = useMemo(
-    () => new Set(departmentSubjects.map((s) => s.id)),
-    [departmentSubjects]
-  );
+  const departmentSubjects = useMemo(() => value.filter((s) => s.type === "department"), [value]);
+  const selectedIdSet = useMemo(() => new Set(departmentSubjects.map((s) => s.id)), [departmentSubjects]);
   const selectedPaths = departmentSubjects
     .map((s) => s.departmentTreePath ?? tree.getNode(s.id)?.path ?? selectedPathRef.current.get(s.id))
     .filter((p): p is string => !!p);
@@ -126,12 +99,20 @@ export function SubjectSearchDepartment({
 
   const departmentPath = (node: GrantDepartmentNode) => {
     const searchNodes = new Map<number, GrantDepartmentNode>();
-    const collect = (nodes: GrantDepartmentNode[]) => nodes.forEach((item) => {
-      searchNodes.set(item.id, item);
-      collect(item.children ?? []);
-    });
+    const collect = (nodes: GrantDepartmentNode[]) =>
+      nodes.forEach((item) => {
+        searchNodes.set(item.id, item);
+        collect(item.children ?? []);
+      });
     collect(tree.searchRoots);
-    return node.path.split("/").filter(Boolean).map((id) => searchNodes.get(Number(id))?.name ?? tree.getNode(Number(id))?.name).filter(Boolean).join(" / ") || node.name;
+    return (
+      node.path
+        .split("/")
+        .filter(Boolean)
+        .map((id) => searchNodes.get(Number(id))?.name ?? tree.getNode(Number(id))?.name)
+        .filter(Boolean)
+        .join(" / ") || node.name
+    );
   };
   const toggle = (node: GrantDepartmentNode) => {
     if (tree.searching || tree.searchInput.tooLong || tree.searchInput.composing) return;
@@ -146,14 +127,20 @@ export function SubjectSearchDepartment({
     if (node.path) selectedPathRef.current.set(node.id, node.path);
     onChange([
       ...value,
-      { type: "department", id: node.id, name: node.name, externalId: node.external_id, departmentPath: departmentPath(node), departmentTreePath: node.path, include_children: includeChildren },
+      {
+        type: "department",
+        id: node.id,
+        name: node.name,
+        externalId: node.external_id,
+        departmentPath: departmentPath(node),
+        departmentTreePath: node.path,
+        include_children: includeChildren,
+      },
     ]);
   };
 
   const searchMode = tree.searchMode;
-  const browseRoots = tree.rootIds
-    .map((id) => tree.getNode(id))
-    .filter((n): n is GrantDepartmentNode => !!n);
+  const browseRoots = tree.rootIds.map((id) => tree.getNode(id)).filter((n): n is GrantDepartmentNode => !!n);
   const roots = searchMode ? tree.searchRoots : browseRoots;
   const loadError = searchMode ? tree.searchError : tree.rootError;
   const retry = searchMode ? tree.retrySearch : tree.retryRoot;
@@ -175,7 +162,11 @@ export function SubjectSearchDepartment({
           className="w-full"
         />
       </div>
-      {tree.searchInput.tooLong && <p role="alert" className="text-caption text-danger">{localize("com_permission.search_too_long")}</p>}
+      {tree.searchInput.tooLong && (
+        <p role="alert" className="text-caption text-danger">
+          {localize("com_permission.search_too_long")}
+        </p>
+      )}
       <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-md border border-border-base">
         {busy && !blocked && (
           <div className="flex items-center justify-center gap-2 py-4 text-sm text-text-3">
@@ -183,10 +174,19 @@ export function SubjectSearchDepartment({
             {localize("com_ui_loading")}
           </div>
         )}
-        {!busy && loadError && <div className="flex flex-col items-center gap-2 py-4 text-body-sm text-text-3"><span>{localize("com_permission.load_failed")}</span><Button size="small" color="default" variant="outlined" onClick={retry}>{localize("com_ui_retry")}</Button></div>}
+        {!busy && loadError && (
+          <div className="flex flex-col items-center gap-2 py-4 text-body-sm text-text-3">
+            <span>{localize("com_permission.load_failed")}</span>
+            <Button size="small" color="default" variant="outlined" onClick={retry}>
+              {localize("com_ui_retry")}
+            </Button>
+          </div>
+        )}
         {!busy && !loadError && roots.length === 0 && (
           <PermissionEmptyState
-            message={localize(searchMode ? "com_permission.empty_search" : "com_permission.empty_departments")}
+            message={localize(
+              searchMode ? "com_permission.empty_search" : "com_permission.empty_departments",
+            )}
           />
         )}
         {!busy && !loadError && roots.length > 0 && (
@@ -247,7 +247,7 @@ function DepartmentRow({
   const nodePath = parentPath ? `${parentPath} / ${node.name}` : node.name;
 
   const childNodes: GrantDepartmentNode[] = searchMode
-    ? node.children ?? []
+    ? (node.children ?? [])
     : (tree.getChildIds(node.id) ?? [])
         .map((id) => tree.getNode(id))
         .filter((n): n is GrantDepartmentNode => !!n);
@@ -321,7 +321,12 @@ function DepartmentRow({
         <div className={PERMISSION_SUBJECT_SLOT_CLASS}>
           <Outlined.City className={PERMISSION_SUBJECT_ICON_CLASS} />
         </div>
-        <div className="min-w-0 pl-1"><span className="block truncate" title={node.name}>{node.name}</span><SubjectIdentity type="department" externalId={node.external_id} path={nodePath} /></div>
+        <div className="min-w-0 pl-1">
+          <span className="block truncate" title={node.name}>
+            {node.name}
+          </span>
+          <SubjectIdentity type="department" externalId={node.external_id} path={nodePath} />
+        </div>
         {(grantedLabel || granted || coveredByGrantedSubtree) && (
           <Tag size="small" className="ml-auto shrink-0">
             {grantedLabel
@@ -333,9 +338,14 @@ function DepartmentRow({
         )}
       </div>
       {!searchMode && isExpanded && tree.failedLayerIds.has(node.id) && (
-        <div className="flex items-center gap-2 py-1 text-caption text-text-3" style={{ paddingLeft: permissionSubjectIndent(depth + 1) }}>
+        <div
+          className="flex items-center gap-2 py-1 text-caption text-text-3"
+          style={{ paddingLeft: permissionSubjectIndent(depth + 1) }}
+        >
           <span>{localize("com_permission.load_failed")}</span>
-          <Button size="small" color="default" variant="outlined" onClick={() => tree.retryLayer(node.id)}>{localize("com_ui_retry")}</Button>
+          <Button size="small" color="default" variant="outlined" onClick={() => tree.retryLayer(node.id)}>
+            {localize("com_ui_retry")}
+          </Button>
         </div>
       )}
       {node.has_children &&
@@ -365,7 +375,5 @@ export function isDepartmentPathCovered(
   subtreeRootIds: ReadonlySet<number>,
 ): boolean {
   if (!path || subtreeRootIds.size === 0) return false;
-  return path
-    .split("/")
-    .some((segment) => segment !== "" && subtreeRootIds.has(Number(segment)));
+  return path.split("/").some((segment) => segment !== "" && subtreeRootIds.has(Number(segment)));
 }

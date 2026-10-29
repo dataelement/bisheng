@@ -1,4 +1,5 @@
 import { SubjectBusinessId } from "../selectComponent/SubjectSearchStatus"
+import type { UseLazyDepartmentTreeOptions } from "../department/useLazyDepartmentTree"
 import { LazyDepartmentTree, useLazyDepartmentTree } from "@/components/bs-comp/department"
 import { Checkbox } from '@bisheng/ui';
 import {
@@ -31,12 +32,14 @@ interface SubjectSearchDepartmentProps {
   resourceType?: ResourceType
   resourceId?: string
   allowOrganizationTree?: boolean
+  dataSource?: UseLazyDepartmentTreeOptions
   includeChildren?: boolean
   onIncludeChildrenChange?: (v: boolean) => void
   onSelectionSummaryChange?: (v: SelectedSubject[]) => void
   showIncludeChildrenToggle?: boolean
   disabledIds?: number[]
   disabledLabel?: string
+  searchPlaceholder?: string
 }
 
 export function SubjectSearchDepartment({
@@ -45,12 +48,14 @@ export function SubjectSearchDepartment({
   resourceType,
   resourceId,
   allowOrganizationTree = false,
+  dataSource,
   includeChildren = false,
   onIncludeChildrenChange = () => undefined,
   onSelectionSummaryChange,
   showIncludeChildrenToggle = true,
   disabledIds = [],
   disabledLabel,
+  searchPlaceholder,
 }: SubjectSearchDepartmentProps) {
   const { t } = useTranslation("permission")
   const disabledIdSet = new Set(disabledIds)
@@ -78,6 +83,7 @@ export function SubjectSearchDepartment({
         scoped
           ? getGrantSubjectDepartmentPathTreeApi(resourceType!, resourceId!, id)
           : getDepartmentPathTreeApi(id, false),
+      ...dataSource,
     }
   )
 
@@ -102,7 +108,7 @@ export function SubjectSearchDepartment({
   // Return every explicit pick so summary consumers preserve other subject types.
   // Subtree coverage remains a flag rather than enumerated descendant picks.
   useEffect(() => {
-    onSelectionSummaryChange?.(value)
+    onSelectionSummaryChange?.(value.filter(subject => subject.type === "department"))
   }, [value, onSelectionSummaryChange])
 
   const displayPath = (node: DepartmentTreeNode): string => {
@@ -171,7 +177,7 @@ export function SubjectSearchDepartment({
           renderRowPrefix={renderRowPrefix}
           renderRowSuffix={renderRowSuffix}
           isRowDisabled={(n) => disabledIdSet.has(n.id)}
-          searchPlaceholder={t("search.department")}
+          searchPlaceholder={searchPlaceholder ?? t("search.department")}
           emptyHint={t("empty.departments")}
           wheelScrollFix
           className="p-1"

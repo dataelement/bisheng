@@ -117,7 +117,7 @@ const TestDialog = forwardRef((props, ref) => {
 });
 
 // Main component  TODO(refactor, state confusion)
-const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref) => {
+const McpServerEditorDialog = forwardRef<{ open: (...args: unknown[]) => void }, { existingNames?: string[]; onReload: () => void }>(({ existingNames = [], onReload }, ref) => {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
     const [availableTools, setAvailableTools] = useState([]);

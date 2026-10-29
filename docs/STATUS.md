@@ -1,4 +1,266 @@
+## 2026-10-28 — 工作流下线后的旧卡片与运行状态
+
+- 旧连接每次提交实时校验工作流发布状态；下线后返回明确提示并停止等待，禁用历史交互卡片，拦截重复提交。
+- 正常完成的会话正确结束运行状态；草稿预览和自动重跑沿用既有约定。
+- 后端与前端定向自动回归、静态检查及 Client 生产构建已验证；环境部署、真实账号与原生桌面复测待执行。[修复记录](status/workflow-offline-20261028.md)。
+
+## 2026-10-28 — 知识空间退出后旧资料页面访问修复
+
+- 资料预览现在校验当前文件可见权限与空间归属，退出后保存的页面链接按实时授权处理；独立文件授权由统一权限运行时判断。
+- 新增回归在原实现复现 7 项失败；修复后 42 项相关回归通过，同步最新目标后 54 项通过；Ruff、格式、架构守卫和差异检查通过。测试使用外部服务夹具。
+- 源码修复完成；测试环境部署和真实账号验收待执行。已签发对象存储直链按原有效期生效。[修复与复测记录](status/knowledge-exit-access-20261028.md)。
+
+## 2026-10-28 — 订阅频道导航与当前地址同步
+
+- 根因：整个频道路由树共用 KeepAlive 缓存，跨模块返回时保留旧路由上下文与详情状态。频道首页、详情、创建、设置及分享页改为消费实时路由，聊天继续保留缓存与草稿。
+- 31 项相关回归通过；新增真实 Subscription 回归在原代码失败、修复后通过。客户端与平台 ESLint、严格类型检查、共享包检查、i18n 检查及客户端生产构建通过。
+- 13001 Chrome 已复现原问题；本地 Chrome 真实组件配合测试数据验证首页恢复、详情切换、历史导航及聊天草稿保留。13001 部署与 macOS 客户端修复后验收待执行。[修复与复测记录](status/channel-route-navigation-20261028.md)。
+
+## 2026-10-28 — 知识空间资料预览与下载地址修复
+
+- 根因：对象存储地址被加上 `/workspace` 页面前缀，13001 返回 HTML；修复后使用文件根路径，统一 PDF、PPTX 转换预览及列表/预览页下载。
+- 69 项相关回归、客户端 ESLint、1484 个严格类型文件与生产构建通过；macOS Chrome 本地组件成功渲染实际 file/4 的 2 页 PDF。PPTX 使用转换结果夹具验证。原工具栏测试的 ESM 加载问题在参考分支同样复现。
+- 当前为源码交付；13001 部署、Windows Chrome 与同事原始 PPTX 待验收。[修复与复测记录](status/knowledge-preview-resource-routing-20261028.md)。
+- TXT 专项复核：macOS 从搜索结果打开实际 file/6，确认同一地址前缀问题；#2535 已合并的共享修复覆盖正文加载。新增 5 项正文回归、相关 33 项检查及客户端静态检查通过，实际 TXT 本地组件显示正常。13001 部署后完整验收与 Safari 验收待执行。[TXT 证据](status/knowledge-txt-preview-20261028.md)。
+
+## 2026-10-28 — 普通 Chat 知识空间按会话隔离
+
+- 修复账号级知识选择导致 C1、C2 相互覆盖：选择按账号与会话保存，输入框、发送和重新生成共用当前会话范围，首次发送的正式 ID 迁移保留选择。
+- 初始定向回归 31 项通过；同步最新目标 `894d4d7de` 后 6 个文件 / 48 项回归通过，客户端 ESLint、类型检查和生产构建通过。扩展输入框回归的 4 项工具／技能显示失败在原始基线上同样复现。
+- 本次交付为源码修复；部署、Windows 安装包、真实账号检索与引用待验收。记录与清单：[会话知识空间隔离](status/chat-knowledge-session-isolation-20261028.md)。
+
+## 2026-10-27 — Work 1.2.0 五条 PR 同步验证
+
+- 本批功能分别在 PR #2519、#2520、#2521、#2523、#2524 交付；各分支同步目标 `f834aa2b1` 与公共质量修复 `bb949d634`（PR #2529）。本节记录分支验证，功能进入目标分支的状态以对应 PR 合并结果为准。
+- 合并后五个分支的平台和客户端全量 ESLint 通过；公共修复的全量类型、双前端构建与 64 项定向回归通过。GitHub 针对各 PR 最新提交执行 Frontend Quality 检查。
+- 定向回归：#2519 图片接收与输入框 44 项；#2520 Logo 上传 6 项；#2521 输入框图标 13 项；#2523 权限角色和授权列表 22 项；#2524 工具目录前端 18 项及后端完整目录组 23 项，均通过。
+- 部门来源断言校验现有完整行中的来源与子部门文案；目录测试同时保留翻译标识、稳定排序、权限及账户开关回归。后端使用 Python 3.11 完整依赖环境和项目测试夹具，外部服务由夹具隔离。
+- 五个分支采用相同的本批状态记录，保留每项功能原始证据，支持逐条合并时复用相同文档内容。真实账号与部署验收继续单列。
+
+## 2026-10-27 — Work 工具列表、详情与搜索复用共享翻译
+
+- 基线：`dataelement/bisheng:feat/bisheng-work-120-main@d2be34458dbfa19c40324f6916dfa75202743cf9`；分支 `codex/work120-tool-localization`，目录 `.worktrees/bisheng-work120-tool-localization`。
+- 实现：现有工具中英日词典迁入 `packages/locales/src/tool`，生成平台与客户端资源；目录为内置工具提供稳定 `tool_key`。列表、详情、无障碍名称和搜索使用统一显示数据，搜索同时覆盖原始文案和工具标识。自定义 API/MCP/技能保留配置文案，旧接口与未知工具使用原始信息。知识库检索复用已有分类翻译，当前 39 个内置工具均有词典条目。
+- 自动验证：前端 23 项回归、隔离目录服务 5 项测试、1,471 个严格类型文件、变更文件 ESLint、Ruff、词典生成与 i18n 检查、生产构建通过。后端测试加载实际目录服务，提供方、可用性与技能依赖使用夹具；jsdom 将当前环境中缺失原生组件的可选 canvas 视为未安装。
+- 全量 client lint 的 23 项存量错误位于 chatApi.ts、ComposerEditor.test.tsx、CitationReferencesDrawer.tsx，已核对三文件及 lint 配置与目标分支一致；完整后端环境和真实账号网页/原生桌面验收待执行。发布需同步后端目录接口与 client 网页。
+- 本轮交付源码 PR；证据位于主工作区 `outputs/bisheng-work120-tool-localization-20261027/`。
+
+## 2026-10-27 — Knowledge-space permission role localization
+
+- Baseline: `dataelement/bisheng:feat/bisheng-work-120-main@d2be34458dbfa19c40324f6916dfa75202743cf9`, verified remotely before implementation and PR delivery. Branch: `codex/work-knowledge-permission-locale`.
+- Root cause: permission components displayed the API model name directly, while the standard role names arrive in Chinese. The protected creator row therefore displayed Chinese in English mode.
+- Implementation: resolve `owner`, `manager`, `editor` and `viewer` through the existing Chinese/English/Japanese locale entries at render time. Draft rows, role menus, member lists, authorization selectors/badges and role-name search share the resolver. Custom role names and submitted role keys retain their original values.
+- Verification: 47 permission tests passed; 3 existing failures were reproduced with baseline production sources (department badge text assertion, source-comment Chinese scan, retired tab-selector assertion). The focused role/authorization suite passed 21 cases. Strict client type checking (1,469 files), changed-file ESLint, i18n parity, architecture guard, diff checks and production client build passed. Full client ESLint reports the same 23 errors against both baseline and modified sources in unrelated chat files.
+- Test fixtures use the existing English role dictionary; the list fixture now provides its required confirmation hook. Added tests cover all four standard roles in three languages, preserved custom names, protected creator rows, live English/Chinese switching, absent role options and localized role-name search.
+- Delivery: web-client change for the desktop embedded knowledge-space page. Target deployment and native visual acceptance remain pending. Local evidence: `outputs/knowledge-permission-locale-20261027/`.
+
+## 2026-10-27 — 聊天输入框资源图标统一
+
+- 需求：输入框内技能、工具、知识空间统一显示菜单同款图标与资源名称；每项保留整体选中、删除和撤销。
+- 实现：ComposerReference 明确携带 skill/tool/space 类型，复用 Outlined.Skill、Outlined.Hammer、Outlined.FolderClose；标签与文字共享输入区，长名称省略并保留完整 title，颜色沿用品牌主题。资源名称以文本节点写入，ID、工具 children 与发送关联继续独立保存。
+- 基线：已核对远端 `dataelement/bisheng:feat/bisheng-work-120-main@d4d60f77e41d58753a76969c6f40465a36054fa6`；工作目录 `.worktrees/bisheng-composer-resource-icons`，分支 `codex/composer-resource-icons`。
+- 验证：13 项 ComposerEditor 回归通过，1,467 个严格类型文件检查、修改文件 lint、生产构建、三语言一致性、架构检查与 diff 检查通过。全量 client lint 首次检查保留 23 项存量问题，本次已将所修改测试内的 2 处中文输入数据改为引用现有语言资源，其余 21 项位于未改动文件。
+- 隔离 macOS Electron 窗口使用真实 ComposerEditor，确认三类 SVG、完整名称、contenteditable=false、整体删除及撤销恢复；浅深色截图已检查。该证据为实际组件验证，真实账号页面及发布环境验收待执行。
+- 配套 Work 实现位于 `codex/v120-composer-resource-icons`，支持 skill/tool/folder 图标与草稿持久化。
+
+## 2026-10-27 — 工作台双 Logo 上传修复与 3006 验收
+
+- 基线：`dataelement/bisheng:feat/bisheng-work-120-main@d4d60f77e41d58753a76969c6f40465a36054fa6`；独立分支 `codex/workbench-logo-upload`。
+- 根因修复：Logo 上传直接使用现有上传 API 和统一错误处理，成功后更新地址；接口拒绝或图片解码失败时保留当前 Logo 并显示原因。文件选择后重置输入值，同文件可再次选择；上传中禁用重复选择和删除。保留 PNG/JPG/JPEG 合同及现有 Work/Chat 共享助手图标配置。
+- 自动验证：6 项组件回归通过，覆盖两处上传入口、错误保留、同文件重试、压缩失败、请求中状态和绝对地址；同组用例在旧代码上有 3 项失败。612 个严格类型文件、变更文件 lint、架构检查、生产构建和 diff 检查通过。全量 platform lint 报告 95 项问题，涉及的 8 个文件均与基线一致。
+- 部署：基于 3006 当前 `tools-skills-auth-20261026-root-membership` 源码合入两个上传组件，发布为 `workbench-logo-upload-20261027-100846`。669 个构建文件及 7,436 个保留文件逐一核验；仅重建 3006 前端，其余 3006 容器保持原实例。原发布目录保留用于回退。
+- 真实验收：修复前两个 PNG 上传请求已可成功，原始服务端失败未复现；本次定位并修复前端失败处理与重试缺陷。修复后在管理员「构建 → 工作台」分别上传原有两张 Logo，看到“配置保存成功”，刷新后两处新图片地址保留且图片正常显示。验证保持原有图案。
+- 证据：主工作区 `outputs/workbench-logo-upload-20261027/` 的 `deployment.json`、`browser-verification.json`、`saved.png`、`verified.png` 与构建日志。真实验证覆盖后台上传、保存及刷新；本次桌面 Work/Chat 共享逻辑保持源码原状，桌面展示联动验收单列。
+
+## 2026-10-26 — 聊天输入框图片粘贴修复
+
+- 基线：远端 `dataelement/bisheng:feat/bisheng-work-120-main@d4d60f77e41d58753a76969c6f40465a36054fa6`；独立修复分支 `codex/chat-image-paste`。
+- 根因：上传格式列表只依据 `enable_etl4lm` 选择图片格式，后台已配置的模型视觉能力在附件接收阶段没有参与判断。当前输入框将图片接收与处理能力分开：PNG/JPG/JPEG/WebP/GIF/BMP 可经粘贴、拖拽、选择文件进入附件区，任务模式切回普通聊天时保留图片。
+- 普通聊天发送时使用所选模型的 `visual` 与服务端图片解析能力判断。视觉模型直接走已有识图链路；具备解析能力时沿用文件解析链路；条件不足时提示用户切换模型或配置解析服务，保留图片和文字。全局附件权限、格式范围、大小限制及普通聊天配文字发送规则继续生效。
+- 自动验证：44 项定向回归通过，包括真实 ComposerEditor / 粘贴 Hook / InputFiles 组件组合（上传接口使用测试响应）；相同新增行为用例在旧代码下有 4 项失败。1,467 个严格类型文件检查、修改文件 lint、三语言一致性、架构检查、生产构建及 diff 检查通过。
+- 全量 client lint 仍有基线 23 项问题，位于未改动的 `api/chatApi.ts`、`ComposerEditor.test.tsx` 和 `CitationReferencesDrawer.tsx`；本轮保持修复范围。
+- 状态：代码及定向自动验证完成。运行环境部署、真实模型识图及 Windows/macOS 安装包端到端验收待执行；本轮仅修改平台聊天前端，桌面原生程序保持现状。
+
+## 2026-10-27 — 恢复 Work 1.2.0 前端质量检查
+
+- 基线：`dataelement/bisheng:feat/bisheng-work-120-main@f834aa2b1`；工作目录 `.worktrees/bisheng-work120-frontend-quality`。
+- 实现：引用请求与展示组件以明确的错误结构处理失效、权限和传输失败；复用请求层已有的 `silent` 类型；敏感词表单保存始终读取当前值，加载提示补齐中英日翻译；主体搜索保持 Unicode 空白边界规则；测试使用国际化样例文案。
+- 全量前端 ESLint、严格类型检查、语言资源一致性、平台与客户端生产构建通过。64 项定向回归覆盖引用接口失败与成功、Unicode 空白、主体搜索、输入法和授权提示。
+- ESLint 历史豁免由工具自动清理，仅减少计数；质量规则保持原合同。依赖按锁文件安装；客户端 jsdom 测试将本机缺失原生二进制的可选 canvas 作为未安装处理，相关用例覆盖 DOM 与请求逻辑。
+- 交付范围为代码及自动化验证；真实账号与发布环境验收待执行。
+
+## 2026-10-27 — 工具开关保持列表位置
+
+- 工具目录按类型和固定资源标识排序，账户启停只更新可用状态；关闭、重新开启、刷新和重新进入目录时保持同一顺序。
+- 根因：目录原来将 `ready` 放在排序首位，账户关闭工具后进入列表末尾。修复由目录服务直接使用稳定字段排序，客户端继续消费服务端顺序。
+- 基线：`dataelement/bisheng:feat/bisheng-work-120-main@0d6080902`，工作分支 `codex/work120-stable-tool-order`。
+- 验证：新增 API / 内置 / MCP 三类工具启停与重新加载回归，原实现 3 项失败，修复后 3 项通过；使用实际目录服务及隔离的数据依赖运行相关目录、权限入口、只读试用和可用状态共 10 项通过；架构守卫、F821 静态检查与差异检查通过。
+- 本轮交付服务端代码。运行环境更新与用户界面验收待执行；证据位于主工作区 `outputs/tool-order-20261027/`。
+
+## 2026-10-27 — 任务模式恢复 local 执行器（定向自动化通过）
+
+- 基线：`dataelement/bisheng:feat/bisheng-work-120-main@e59b249a3a2fc5672f14aa012f04d867a28f7049`；工作目录 `.worktrees/bisheng-work120-main-integration`。本轮修复后端任务执行链路。
+- 实现：按 `local`、`container`、`e2b` 分别绑定当前任务工作目录和持久化 workspace 路径；缺省类型归一为 `local`，E2B 文件预上传由 E2B 分支处理。自动装配、资源使用权限、账户工具开关与调用审计沿用现有入口。
+- 连续性：local 生成和修改的文件回写当前轮对象存储；追问通过已有工作区继承及文件恢复逻辑装入新目录，并按文件指纹识别本轮修改后的交付物。
+- 验证：324 项测试及 9 个子测试通过，覆盖三类执行器初始化、代码执行超时、工作区边界、文件回传、追问恢复、交付物筛选、工具权限与账户可用性、开放 API 任务模式提交/配置/查询/端点。新增 12 项 local 回归在基线代码上全部失败，在修复后全部通过。两轮连续性测试启动真实 Python 子进程生成 CSV，清除首轮本地目录后通过对象存储继承并修改原文件，验证最终文件内容；对象存储和权限使用测试替身。
+- 测试环境：macOS、Python 3.11.15，独立环境按 `uv.lock` 执行 `uv sync --frozen --extra test`，额外安装 `pypandoc-binary==1.15` 供既有模块导入；测试配置使用空 YAML。原有凭据边界测试在基线和修复版均因真实 Settings 赋值校验失败，本轮改为注入独立配置替身后通过。
+- 静态检查：变更 Python 文件格式、测试与错误码 Ruff、架构检查、差异空白检查和中英日错误文案生成一致性通过。`workbench_impl.py` 全文件 Ruff 既有问题由 58 项降为 57 项，新增诊断为 0。
+- 验收边界：本轮完成代码与定向自动化验证。真实部署、普通账号与开放 API 全链路验收待执行。
+- 执行边界：`local` 使用后端 worker 的本机子进程；部署方负责该运行环境的隔离。当前代码继续使用现有的工具授权、账户可用性检查、路径检查和调用审计。
+
+## 2026-10-27 — Desktop 公开地址统一与 Nginx 转发
+
+- 源码基线：实时核对 `upstream/feat/bisheng-work-120-main@d4d60f77e41d58753a76969c6f40465a36054fa6`；独立工作区 `.worktrees/bisheng-work-public-origin`，分支 `codex/work-public-origin`。现场安装包为 BISHENG `1.2.0-test.2`、Harness `0.2.1-rc.2`；本轮修改范围为服务端、部署模板和回归测试。
+- 部署配置统一使用 `dsh.platform_public_url`。配置加载时按 HTTP URL 规则规范化域名大小写、默认端口、国际化域名与 IPv6；登录授权和 MCP Host/Origin 校验共用规范地址。两个 Nginx 模板以 `$http_host` 保留公开端口；外部代理使用同一通用转发规则。
+- 新增地址回归在修改前为 14 失败 / 9 通过，修复后 23 项通过。真实 Nginx 1.28.0 加载生产模板中的 map/请求头转发指令，覆盖两个入口的单层 HTTP、双层 HTTPS，MCP 初始化、工具列表以及错误 Host、错误 Origin、伪造转发头拒绝，4 项通过；原有 Work 能力回归 15 项通过，合计 42 项。完整生产路由、数据库登录、真实模型聊天和实际工具业务调用属于独立部署验收。
+- 13001 现场已取得认证后 MCP 421；公开登录预请求返回的地址确认为 `http://192.168.106.109:13001`。现有源码已兼容带端口和去端口的 Host，故原 `$host` 丢端口只能证明转发缺陷。具体拒绝层、实际转发 Host 和运行的工具服务版本仍待服务器核验。109 SSH 密钥认证失败，本次通过独立修复分支交付，远端环境和安装包保持原版本。
+- 提交前再次验证 42 项回归全部通过，Ruff、差异空白检查及变更文件架构检查通过。发布模板以注释形式提供 Desktop 配置示例，兼容旧镜像配置解析。测试同事按 [13001 配置核对与验收清单](../features/v3.0.0/110-dsh-local-access/public-origin-13001-validation.md) 记录逐跳 Host、各 API 实例版本、部署与回退信息，完成真实登录、Chat 和工具调用验收。
+
+## 2026-10-23 — 工具统一开关与 Work 手动选择
+
+- 工具与技能页统一为“全部 / 技能 / 工具”，API、MCP 与平台工具合并展示；工具行及详情使用统一工具名称，列表每行提供账户启停开关。全部页复用技能中心的详情与开关。
+- 账户启停覆盖所有工具类型，与原有租户和资源使用权限共同生效。Chat、云端任务和桌面 Work 在发现、选择及实际调用时执行检查；已发布工作流和助手保持各自配置。桌面知识空间专用检索入口也复用此工具权限与启停边界。
+- 本地 43 项账户隔离、目录、调用拒绝和知识检索边界测试通过；客户端 12 项分类及选择菜单测试、1467 个严格类型文件检查、变更 lint 与生产构建通过。知识空间端点文件有 4 项既有 lint 问题，保留原状。
+- 3006 发布 `tool-selection-20261023-1805`，沿用 `67db6edb6` 主线和任务消息广播修复；发布前活动任务为 0，API、后台工作进程及前端健康检查通过，原发布目录保留用于回退。在实际后端依赖下，ToolExecutor 的 3 项同步/异步执行与初始化拒绝回归通过。
+- 真实普通账号网页验收：全部/技能/工具三分类、统一工具图标、每行开关和类型标记移除均确认；关闭当前时间工具、刷新后状态保持、Chat 菜单对应入口禁用，随后恢复原启用值。证据 `outputs/tool-selection-20261023/tools.png`（主工作区）。本轮覆盖配置、菜单与执行边界；外部提供方业务端到端验收保持单列。
+- 桌面手动选择使用原生 /tools 与加号菜单，将账户绑定的工具引用加入输入框，发送前重查可用性；具体安装与验收状态见桌面仓库 STATUS。
+
+## 2026-10-23 — 网页与桌面任务消息同步修复
+
+- 用户现场会话 `8ed7e55860c34b258910fbf4aa67288d` / 版本 `a7e5e1779f0d48039976c3fcce970efd`，数据库确认 15:59:55 completed、2 个最终文件、Redis 待发送消息 0；桌面截图停在 3/5。
+- 根因：每条 WebSocket 直接 BLPOP 同一队列，多个页面和断开的旧连接竞争消费事件。修改为订阅先建立、队列事件原子广播给全部在线连接，再确认移除；工作进程沿用原队列写入，前端事件合同保持。
+- 同时监听客户端断开并取消订阅；空闲连接按 15 秒间隔读取数据库终态，通过原有完成 / 失败 / 终止事件收尾。保留排队事件顺序，避免终态核对提前截断尾部进度。
+- 隔离真实 Redis 与生命周期 14 项回归通过；服务器完整依赖下 19 项通过，含真实双 WebSocket、不同 Redis 客户端、事件顺序、旧工作进程队列格式、断连资源释放、任务隔离、丢失完成通知及传输异常。新增和变更代码 Ruff、逐文件架构检查通过。
+- 功能提交 `359df6ca7df56253e36882baac3c8906d300500f` 已推送平台分支 `feat/bisheng-work-120-main`；3006 发布 `task-stream-sync-20261023-171818`，完整应用导入、三个运行源码文件哈希及 HTTP 健康检查通过。
+- 发布前活动任务为 0，仅更新 API；任务工作进程、前端、Gateway 与 3007 的容器及启动时间保持。桌面 Chat 复用服务端修复，现有桌面包可继续使用。双 WebSocket 自动验收通过，安装后原生界面的人工验收待执行。
+- 部署与验证证据：主工作区 `outputs/task-stream-sync-20261023/`。
+
+## 2026-10-23 — 同事提测环境核对
+
+- 用户要求汇总近期桌面 / 网页 / 服务后端功能影响范围，确认 3006 最新运行代码和桌面安装包。Work 保持自动调用平台工具。
+- 本次功能源码基线 `feat/bisheng-work-120-main@ef4e5c0cb6b51391ef7f9b79d4793436f905d907`；API、backend_worker 与 backend_linsight 三进程各核对 1,717 个源码文件，全部一致，包含 47 个近期变更文件。
+- 客户端从该基线重新生产构建并发布至 `test-handoff-20261023-150004`。客户端与管理端容器入口文件哈希分别为 `99ed764aa00d6d2103e99acc1e9ea08b3e3184eb3e9b34c5681d05eb6a5862dd`、`35bccc46680defc98fb572abc092e64dbaa8044d51453dc6409dd0c64a41c16e`，均与发布文件一致；倍率显示管理端更新保持。
+- 后端健康、技能页、模型页与桌面接入配置接口均 HTTP 200；后台三进程、Gateway 与 3007 容器 ID 及启动时间保持。此次为静态前端更新，无数据库变更。
+- 前轮功能与权限证据保持独立；普通用户真实知识库数据、多账号交叉和 Office 产物验收交由同事补测。桌面最新包验证和 Word 提测说明在主工作区 `outputs/test-handoff-20261023/`。
+
+## 2026-10-23 — 简化模型积分倍率显示
+
+- 移除 ModelMultiplierInput 输入框旁的乘号装饰，保留倍率输入、校验、保存、重试和状态反馈。
+- 5 项倍率保存/冲突/校验回归、变更 lint 与管理前端生产构建通过。
+- 3006 管理前端发布 multiplier-symbol-20261023-143032，仅重建前端，保留最新 chat-row-a7cdfa16e-20261023-r5 客户端与所有后台、3007 实例。浏览器连接当前不可用，未进行本轮渲染截图验收；文件哈希、HTTP 路由和服务保持检查通过。
+- 证据 outputs/multiplier-symbol-20261023。
+
+## 2026-10-23 — 技能列表与 Token 数量展示细节
+
+- 移除技能列表个人行的更新时间；网页工具与技能入口复用原技能中心 Newspaper 图标，桌面 capabilities 入口映射至已有 skills 图标。内置工具启停范围保持现状。
+- 桌面中文 Token 日历提示、累计和输入/输出统计统一按原始值选单位：小于 1 亿使用万，达到 1 亿使用亿，两种单位均保留一位小数。消息数继续显示整数；未知用量保留不可用状态。英文使用本地化紧凑计数与一位小数。
+- 新增 6 个日期提示和统计一致性的边界回归（0、万、小于亿、等于亿、大于亿）；完整桌面 2057 项通过、3 项条件跳过，类型与 JS 语法检查通过。前端 1467 个严格类型文件、变更 lint、技能列表回归与生产构建通过。
+- 3006 客户端发布 skill-detail-20261023-131210；管理前端及后端服务保持原实例，保留 new-model-visibility-20261023 修复，并同步同事远端 d985514cd。网页已确认技能行时间移除及菜单图标。macOS arm64 安装包、开发签名与包内 Office 验证通过；包内账号与导航插件和源码逐字节一致。新进程真实提示为 115.2万，累计为 940.2万，截图已保存。
+- 证据 outputs/skill-detail-20261023。
+
+## 2026-10-23 — 能力空状态、导航位置与用量提示
+
+- 用户确认空状态仅显示“目前还没有配置相关能力”，去掉查看全部按钮。网页和桌面共用的工具与技能入口移至发现广场前。
+- 桌面账号与用量日历改用 Harness Tooltip 原语，鼠标悬停和键盘聚焦显示日期、当前指标与完整数值；使用 body portal 保持在设置滚动容器外可见。中英文的 Token/消息切换和身份切换回归通过。
+- 内置工具类别补齐知识库检索的中英日翻译，并在构建工具和流程侧栏使用真实元数据作为缺失翻译的默认值。
+- 前端 client 1467、platform 550 个严格类型文件及变更 lint 通过，两套生产构建通过。桌面类型检查、35 项设置视图回归、全量 2051 项测试通过（3 项条件跳过）；macOS arm64 打包、开发签名和包内 Office 检查通过。
+- 3006 前端发布 capability-polish-20261023-121446。组合构建保留同事已部署的积分作用域编辑 5 个前端文件；构建时的源码快照记录在 outputs/capability-polish-20261023/preserved-platform-wip.json，已随同事提交 17bc89dad 合入共享分支。后端、Gateway 和 3007 容器保持原实例。网页验收确认空状态、菜单位置和知识库工具名称；新桌面进程确认菜单顺序和日期 Token 气泡实际显示 2026-10-22 / 1,152,049。消息数同日数据为 81，切换与提示合同自动回归通过。
+- 交付证据 outputs/capability-polish-20261023，安装包与截图在该目录。Windows 验收未执行。
+
+## 2026-10-23 — 统一技能管理与桌面导航
+
+- 用户授权修复桌面更多入口、合并技能中心、个人和企业技能逐项启停、上传按钮置于技能分类栏右侧，并合入同事最新提交重新打包。
+- 根因：平台上报 capabilities 后，桌面固定导航白名单拒绝整个目录。扩展明确路由白名单及对应主题范围，保持原导航权限和路径校验。
+- 技能分类复用原设计列表与个人/企业分组；个人技能由浏览器预览迁入按账号隔离的服务器存储，复用对象存储与现有 Skill 行，上传保留二进制资源；旧本地包通过稳定 ID 幂等迁移。技能关闭按账号保存，输入、Chat provisioning、模型/工具运行中间件、Work 目录与版本包读取共同约束；管理员总停用继续优先。
+- 已通过 37 项后端目录/开关/所有权测试，25 项列表/菜单回归、11 项输入框回归及 22 项包验证/持久化回归；前端 1467 个严格类型文件、变更 lint 和生产构建通过。合入同事平台 8862f452a、桌面 514959d 后，桌面全量 2051 项通过、3 项条件跳过，类型检查和 macOS arm64 打包通过；开发签名校验及包内 Office 生成/转换检查通过。
+- 3006 已部署真实技能存储与启停逻辑，保留当前 credit-usage-tabs-20261023-r2 管理页更新。真实依赖下验证了企业关闭后的目录/版本包拒绝、个人 ZIP 二进制完整性与重试幂等、跨账号隔离，以及关闭后模型/工具运行中间件和 Chat provisioning 拒绝；临时验收技能已清理。
+- 最新包使用隔离验证配置连接 3006：更多菜单显示工具与技能、知识空间、订阅、应用、发现广场；工具与技能入口正常打开，技能分类显示个人/企业组和各项开关，右侧上传按钮可打开上传对话框。实际模型生成文档的用户验收另行进行。
+- 证据 outputs/skills-unification-20261023；本地旧 Skill service/provisioning 大套件因隔离环境缺 pandas 尚未加载，使用服务器完整依赖继续验证运行合同。
+
+## 2026-10-22 — 3007 能力整合至 3006 / 共享分支
+
+- 用户授权直接合入平台 feat/bisheng-work-120-main 与桌面 V1.2.0，并更新 3006。平台基线 a15826aeb，桌面基线 56dcf4b，Harness 0.2.0-rc.2。
+- 按功能迁移已验收的工具与技能中心精简列表、后台技能归位、输入框二级菜单/行内引用/字体/光标修复，以及账号联网搜索设置和服务端执行约束。保留最新模型、积分、知识空间、任务模式和桌面主题改动。
+- 桌面企业工具通过宿主 MCP 注册与审批；技能复用主线已有 provider 和 ZIP 包，每次加载重新校验依赖并补充原生工具名称。保持单一技能目录，支持完整二进制附件。
+- 自动验证：32 项后端、24 项网页输入/目录回归，1465 个严格类型文件、定向 lint、前后台构建通过；桌面 npm ci 补丁重放、类型检查、构建通过，完整回归 241 文件 / 2047 项通过、2 项条件跳过（含真实 Python MCP 跨运行时检查）。
+- 3006 已发布并完成真实账号检查：时间工具执行、原生技能 ZIP/依赖、账号关闭后输入目录/MCP 目录/直接调用拦截、真实数据库绑定与缓存同步/异步执行拒绝均通过，搜索网络调用数 0，原设置已恢复。3007 与 3006 网关容器保持；现有数据库、配置与模型/积分源码保留。
+- 网页浏览器确认任务模式置顶、技能/工具二级菜单、无前置图标、连续工具行内引用、精简列表与搜索详情。3006 展示自身已有的 39 项工具和 6 项技能；3007 演示资源配置保留在独立环境。
+- 合入范围与最终共享分支 SHA 记录在主工作区 outputs/capabilities-merge-20261022。
+
+## 2026-10-22 — 内置知识库检索工具
+
+- 工具目录登记 `bisheng_knowledge_search`（知识库检索），通用 ToolExecutor 绑定真实执行用户和当前租户，沿用工具使用授权和调用审计。模型输入限定 query / space_ids。
+- 桌面检索 API 与平台工具共用检索及结果格式，复用文档知识库、知识空间、文件和主版本过滤。支持同步/异步调用；租户上下文变化或执行用户失效时返回错误。
+- 自动化：59 项定向测试、8 个子测试通过，覆盖身份参数伪造、普通用户绑定、权限拒绝、租户变化、文件可见性、来源及登记幂等。新增代码 Ruff 和架构检查通过；原知识空间 endpoint 的 4 项 Ruff 既有问题与基线一致。
+- 3006 发布到 `knowledge-tool-20261022-221700`，后端健康，发布前运行中任务为 0。存量登记完成（tool_id=40，category_id=18），统一权限投影为 CURRENT；现有前端和其他工具权限保持原值。
+- 3006 真实冒烟：通过 ToolExecutor 初始化并执行新工具，管理员检索空间 1 返回 8 个片段，来源字段完整；现有环境未找到可访问空间的普通用户，普通用户真实数据验收待补。登记脚本连接释放调整后，本地 9 项登记回归再次通过。
+- 本次完成平台通用工具入口。云端 Work / 统一 MCP 的发现及调用端接线由对应集成工作继续完成；普通用户真实数据检索验收与管理员运行验证分开记录。
+- 运维登记与权限检查步骤见 [脚本说明](../src/backend/scripts/README.md)。
+
+## 2026-10-22 — 企业技能运行时接口
+
+- 新增登录态 `/api/v1/linsight/skill/runtime/catalog` 和 `/runtime/{id}/bundle?version=<content_hash>`，供桌面 Work 使用与 Chat 相同的租户已启用技能。管理接口继续使用管理员权限。
+- 目录返回稳定记录 ID 和内容版本；完整 ZIP 保留脚本、模板及二进制资产。下载前后检查租户、启用状态与版本；响应附带 SHA-256 和 no-store。
+- 自动化：运行时/API/服务测试 53 项通过；运行时及真实租户隔离测试 12 项通过；Ruff 通过。覆盖普通用户、未登录、跨租户、禁用撤销、版本失效及完整包下载。
+- 3006 已部署到 `enterprise-skills-20261022-184518`，复用当前发布的前端及环境配置，后端健康检查通过。新版桌面实际读取目录并显示平台 Office 技能。
+- 权限语义沿用 Chat 的租户已启用技能规则；Work 本地工具执行继续受桌面权限策略约束。真实 Office 文件生成验收由用户执行。
+
+## 2026-10-22 — 用户可选模型统一配置
+
+- 交付方式按用户确认调整为直接合入 `feat/bisheng-work-120-main`；合并前同步远端 `022aee8cb`，保留 Chat 字体渲染更新，状态文档保留双方记录。
+
+- 布局微调：可见范围标题与按钮统一左对齐，右侧三列使用固定宽度，支持图片和积分倍率整体右移，显示名称区域获得更多空间。定向 ESLint 与管理端构建通过，已部署 3006 `user-models-6dea932e8-20261022`，实际页面截图确认标题与按钮左侧对齐、支持图片及积分倍率右移。
+
+- 基线 `feat/bisheng-work-120-main@b3fbbd166`。统一工作台与桌面端配置，显示实际模型、服务提供方、显示名称、视觉、积分倍率及“配置可见范围”按钮；其他系统配置保持现有流程。
+- 管理员专用读取入口保留完整原始元数据，保存名称保留隐藏模型、描述和既有默认值。Chat 与桌面目录使用服务提供方及显示名称，调用和授权继续使用原模型 ID。
+- 自动化：后台隔离容器测试 58 项通过、2 项环境用例跳过；管理端相关 28 项通过，严格类型检查 550 文件、定向 ESLint、生产构建及架构检查通过。全局 i18n 检查的两组错误与基线一致（既有日文权限文案及 28001–28009 错误码）。本次新增文案提供中英日三语。
+- 3006 已发布 `user-models-2a309aeff-20261022`，后台健康。实际管理员页面验证合并表格、名称保存与重新加载、用户/部门/角色可见范围弹窗、其他模型配置。实际 BISHENG Dev 刷新后，模型选择器显示“阿里云百炼 / Qwen 名称联动验收”；随后恢复原名称 `qwen`，后台和桌面均确认恢复。权限和倍率沿用原值。设计及验收范围见 [配置说明](product/user-selectable-models-20261022.md)。
+
+## 2026-10-22 — Chat 与 Work 字体渲染一致
+
+- Chat 界面采用 Harness Work 的系统字体平滑设置（antialiased / grayscale），欢迎标题沿用共同的 26px / 500 / 32px 字阶。字体族和字号相同时，字形边缘也使用一致的渲染方式。
+- 对照已安装 Harness 0.2.0-rc.2 的基础样式完成源码核对；客户端生产构建通过，源码 `022aee8cb` 已推送共同分支。3006 发布到 `chat-font-022aee8cb-20261022`，保留管理端 `user-models-6dea932e8` 版本，前端 HTTP 200。现有桌面包重新加载网页即可生效，视觉效果由用户手动验收。
+
+## 2026-10-22 — 文件预览与深色主题
+
+- 文件画布与应用界面采用独立配色边界。Word、Excel、PDF、HTML 和引用文档保留文件内容配色；预览背景、缩放工具栏、加载与错误状态、文本/Markdown、音视频及产物侧栏使用主题色。
+- 文档画布通过 `data-document-canvas` 与桌面宿主约定；宿主为弹出菜单和对话框提供完整深色文字、背景和控件色。
+- 客户端生产构建通过。桌面类型检查及相关回归 28 项通过；按用户要求由用户手动验收视觉效果。源码 `b3fbbd166` 已推送 `feat/bisheng-work-120-main`，3006 前端发布到 `dark-preview-b3fbbd166-20261022`，前端容器已启动。
+
+## 2026-10-22 — Chat 输入提示及上下文弹窗交互
+
+- 输入提示随编辑器真实空状态显示，聚焦空输入框保留提示；中文输入法组合输入即时隐藏提示，清空后恢复，文字与光标使用相同的内边距。
+- 加号菜单按打开方式恢复焦点：鼠标操作返回编辑器，键盘操作返回触发按钮。知识空间列表采用固定高度，加载与结果变化保持弹窗尺寸。
+- 此前输入提示回归 9 项及构建通过；本轮合入集成分支 `94f6380fc` 后，`646980179` 的 Chat 构建通过并推送 `dataelement/bisheng:feat/bisheng-work-120-main`。3006 前端发布目录为 `knowledge-picker-646980179-20261022`，前端容器已重新启动；按用户要求由用户手动验收界面。
+
 # DSH 企业后台交付状态
+
+- 2026-10-22：共同开发与后续交付统一使用 `feat/bisheng-work-120-main`；合入任务模式修复 `51baf285f`，保留消息操作样式提交 `cb4b18018`。合并无代码冲突，后端与已发布到 3006 的修复版本一致，前端与共同分支原有版本一致。
+
+- 2026-10-22：统一 Chat 消息操作为复制、点赞、点踩、导出，采用 DSH Work 0.2.0-rc.2 的原始图标及 28px 按钮、15px 图标、8px 间距；桌面内嵌 Chat 与网页共用此实现，Work 保留新建分支。参考桌面分支 V1.2.0 b510182。复制回归 2 项、前端类型检查、改动文件 ESLint 与客户端构建通过；前端全量 ESLint 在平台既有文件报 95 项错误。本次源码待部署后的视觉验收。
+
+- 2026-10-22：Chat 输入提示改为独立定位，空输入框聚焦仍显示，开始输入（含中文组词）立即隐藏，清空后恢复；提示文字沿用输入框内边距，与光标起点对齐，中文组词期间保持原生输入位置。ComposerEditor 9 项回归和客户端构建通过；3006 预览已验证聚焦显示、输入隐藏、清空恢复及内边距一致，API 返回 200。预览保留任务模式与积分结算更新，等待用户在桌面端验收后推送共享分支。
+
+- 2026-10-22：修复主线迁移后 Desktop Chat 网页会话交换 500：恢复经过校验的 `web_session_cookie_name` 配置，默认使用 `access_token_cookie`；会话测试改用实际 `DshSettings`，覆盖默认配置和自定义入口 Cookie。27 项会话及配置回归与 Ruff 通过；独立容量工厂测试因本地缺少 docstring_parser 待复验。3006 部署复验执行中。
+
+## 2026-10-22：任务模式执行链路补齐（3006 已发布，业务效果待用户验收）
+
+- 基线：`codex/work120-main-integration@480fc2972`，同步 3006 已发布的 Cookie 配置修复 `a01d35a3c`；候选代码在独立工作树开发。
+- 已实现：有使用权限时自动装配代码执行器；工具与分类配置统一解析；恢复容器执行器传输；文件落入任务持久化空间并通过稳定路径引用；恢复执行带入原文件、产物及中间文件，后续任务继承原文件和产物；检测交替重复的工具调用。
+- 安全边界：权限入口沿用统一工具授权与审计。执行器地址与凭据由后端配置控制，代码执行通过隔离 runner；本机直接执行配置在任务启动时报告配置错误。
+- 自动化：96 项定向测试通过，覆盖隐式授权、配置解析、文件回传、隔离传输、任务文件恢复与重复调用。
+- 真实环境：3006 隔离执行器探测已通过，后端执行与积分修复均已发布，14 个部署文件与修复清单一致；页面及健康接口返回 200。Excel、Word、PPT 和 Excel 续写任务均完成并返回产物，Excel/Word 下载成功。按用户最新要求，文件打开、内容和版式效果由用户验收。共享结算和 Work 审计边界回归 33 项通过、2 项外部 Redis 用例未运行，完整审计集受测试 ORM mock 初始化问题影响，未计为通过。详细记录见 [任务验收](TASKMODE_EXECUTION_ACCEPTANCE.md)。
+
+
+## 2026-10-22：Work 120 main 积分与 Chat 集成候选
+
+- 基线：`upstream/feat/bisheng-work-120-main@7c701e86bcdfbafd53a99997f3146097a1497c41`；集成分支：`codex/work120-main-integration`。
+- 迁入旧 Work 120 的 Chat 交互与桌面桥接，以及 3007 的统一积分、模型倍率和可见范围；沿用新基线的原生登录与席位移除实现。桌面配套分支为 `dataelement/bisheng-work:codex/v120-unified-credits`，基于 V1.2.0。
+- 自动化：Chat 定向测试 101 项、管理端相关测试 213 项、原生认证及迁移测试 11 项、模型审计测试 24 项通过；双前端生产构建与前端工作区类型检查通过。部分测试按运行环境跳过。
+- 后台全量 DSH 回归仍有失败及环境错误，涉及旧版按模型额度断言、数据库/Redis 等依赖和测试隔离，当前状态为集成候选。真实数据库迁移、登录、Chat/Work 扣分与权限联调待验收。
+- 当前交付为源码分支。3006/3007 部署、共享目标分支合并及桌面安装包发布待后续执行。
+- 迁移范围和数据升级路径见 [集成说明](WORK120_MAIN_INTEGRATION.md)。
+
 
 - 2026-09-22：跟进 #2433 的席位反馈验收。确认“重新分配”后，失败原因以“用户名 + 原因”的单个 toast 展示，约 4 秒自动消失；每次操作的同一失败只提示一次，新操作可再次提示。表格保持原列宽。已撤销席位的管理提示提供明确的重新分配步骤。批量容量错误配套 [Gateway #6](https://github.com/dataelement/bisheng-gateway/pull/6)：新增和待恢复成员统一计入所需席位，容量不足统一返回 seat_limit_reached。
   - 自动化：39 文件 / 333 项 DSH 前端回归、平台全量 lint、467 文件严格类型检查、生产构建、i18n 校验和架构守卫通过。
@@ -15,3 +277,126 @@
 - 2026-09-17：`codex/dsh-enterprise-beta2` 已归并最新看板、部门额度、导航、个人年度用量和隐藏审计入口，进入提测候选。
 - 实现、来源、确定性检查和真实环境验收边界见 [提测交付记录](../features/v3.0.0-beta2/062-dsh-desktop-model-access/enterprise-beta2-delivery.md)。
 - 当前组合分支基于最新已核验的 beta2-pre 基线；真实数据库与登录态端到端验收由提测执行。
+
+
+## 2026-10-22 Chat knowledge dialog presentation
+- KnowledgeSpaceDialog publishes its open/close lifecycle to the desktop presentation bridge. The dialog portal uses the full desktop window; the underlying chat layout follows the host-provided chat region dimensions.
+- The knowledge overlay has an explicit presentation class so the host can apply Work's sampled mask color and alpha. Browser-only dialogs retain the shared Modal behavior.
+- Client production build passed. 3006 frontend release: `chat-window-dialog-20261022-1905`, preserving the current enterprise skills, backend and admin deployment. Visual acceptance is assigned to the user.
+
+
+## 2026-10-22 Select skills before task mode
+- Synced `feat/bisheng-work-120-main@fd153d685` before the change.
+- Chat exposes the enabled skill picker to users with task-mode access while composing ordinary chat. Selecting a skill retains the selection and activates task mode; further skill selection keeps task mode active. Switching back to ordinary chat clears task skills and keeps the picker available.
+- Ten focused composer tests and the client production build passed. Deployed client build to 3006 release `chat-skill-auto-mode-20261022`, preserving the current backend and admin files. Desktop Chat loads this client; visual acceptance remains with the user.
+
+## 2026-10-23：客户端管理拆分积分设置与用量
+
+- 基于共同分支 `feat/bisheng-work-120-main@448fbad77`，将原“积分与使用数据”拆成“积分设置”和“用量”两个独立页签。默认显示积分设置，已有 `?tab=usage` 链接直接进入用量；按用户、部门及时间筛选归属用量页。
+- 积分配置、分配优先级及保存接口沿用现有实现，本次调整页面组织和中英日页签文案。
+- 自动化：页面导航、设置与积分保存共 12 项测试通过；平台 550 个严格类型文件、变更文件 lint、生产构建通过。全量 lint 存在 8 个基线文件的 95 项既有错误；全量 i18n 校验与 `448fbad77` 基线输出一致（日文 12 个缺失键与 9 个后端错误码翻译缺失）。
+- 部署：3006 管理前端发布为 `credit-usage-tabs-20261023-r2`，基于并行更新后的 `skills-unified-20261023-111837` 保留其后端和 Chat 客户端。仅重建前端容器，旧发布目录保留用于回滚。管理端入口 SHA-256：`eddd88a6389b10263602affba649ede2cc26b36ff1f2dd5752df5c5c77465259`。
+- 浏览器验收：3006 当前管理员登录态下，两页签均加载真实数据；用量筛选与图表独立显示；返回积分页时筛选栏收起。实际积分配置调整由用户继续体验。
+
+## 2026-10-23：按用户、部门、角色分配积分并行内编辑
+
+- 积分设置采用“用户 / 部门 / 角色”分类切换，各列表仅展示对应对象及配置额度。新增分配在当前列表创建编辑行，已有记录原行编辑，支持保存、取消、启停和失败保留草稿；对象名称直接展示。
+- 统一积分计算按当前用户命中的有效用户、部门（含祖先部门）、角色配置取最高值。个人较低或零额度继续参与取最大值；停用配置退出计算。Chat 与 Work 沿用同一计算入口、原有鉴权、租户过滤、版本冲突与审计记录。
+- 自动化：14 项前端定向测试、36 项后端规则与仓储测试通过；5 项需要专用 Redis 的账本用例条件跳过。550 个严格类型文件、变更 ESLint、Ruff 和管理端生产构建通过。全量 i18n 输出保持上一基线的 12 个日文键与 9 个错误码翻译缺口。
+- 3006 发布：`credit-scope-editing-20261023`，保留 `credit-usage-tabs-20261023-r2` 内已合入的技能运行逻辑及 Chat 客户端，仅更新积分计算文件和管理端构建。发布前确认执行中会话为零；历史已完成会话中的两条遗留任务记录保持原样。旧发布目录用于回滚。
+- 线上验收：后端健康通过，实际容器中的最高额度计算验证通过；浏览器用户列表 11 条原配置完整显示，原行编辑、取消、部门/角色分类新增对象选择均通过。业务积分数值保持原值。真实新增/修改保存的操作由用户继续体验，保存合同与冲突恢复已自动验证。
+- 合并前同步共同分支 `aea7ce81e`，保留同事技能统一管理改动。管理入口构建 SHA-256：`15abecaf313fbfd2985ed1501a27ce12b7a6fc549e189168b3359b2faf686b7a`。
+
+## 2026-10-23：新增对话模型默认对所有成员可见
+
+- 企业客户端启用时，新增服务商携带的对话模型、已有服务商追加的对话模型，在创建事务中写入所属租户的所有成员可见配置（初始积分倍率 1）。模型及授权同时提交；授权失败时模型创建一起回滚。已有模型的显式授权、版本和积分倍率继续保留。Embedding 等模型沿用原有入口；模型上线状态、模型能力与调用额度继续由原运行链路校验。
+- 自动化：53 项默认授权、普通成员有效权限、既有指定用户授权、跨租户隔离、失败回滚及模型 DAO 回归通过；变更 Ruff、格式检查、diff 检查通过。本机轻量 Python 环境缺少完整 provider 依赖，测试启动器跳过 `llm.domain` 聚合入口，实际 DAO、异步 SQLite、策略仓储及事务照常执行；完整 provider 导入链由 3006 正常启动验证。
+- 3006 发布：`new-model-visibility-20261023`，基于现场 `capability-polish-20261023-121446`，仅覆盖三个后端文件，保留现有前端及其他会话更新；发布前执行中会话为零，旧发布保留用于回滚。服务健康检查通过，已安装源码哈希匹配。
+- 现场验证：真实数据库事务中验证默认所有成员可见、已有显式限制保留及重复初始化幂等，测试数据全部回滚。业务模型及授权保持原值。管理员从界面新建真实模型及普通用户真实调用留待产品验收。
+
+## 2026-10-26 — 工具与技能授权
+
+- 基线：dataelement/bisheng feat/bisheng-work-120-main@d4d60f77e41d58753a76969c6f40465a36054fa6，提交前再次核验远端 SHA 一致。
+- 实现：顶部“工具与技能”中英日同步；内置工具、企业技能复用授权弹窗与 F048 资源授权服务。用户确认保留全员可用，管理员可关闭全员并授权指定人员、部门或用户组。
+- 全员使用采用所属租户成员的普通 Grant；模型升级至 f048-v6，迁移将旧系统全员标记转换为可撤销 Grant。重跑迁移及初始化保留已撤销结果。个人技能持续校验所属账户。
+- 使用边界：工具列表和每次调用、技能目录/直接下载/装载、开放 API 配置/提交按当前使用授权过滤；个人启停在企业授权范围内生效。
+- 自动验证：123 项权限与技能回归通过；隔离提供方实现后，24 项工具业务测试及 9 个子场景通过。前端 4 项回归、611 个严格类型文件、变更 lint、生产构建、i18n 与架构检查通过。
+- 扩大回归：技能业务组基线 69 通过/20 失败，本分支 72 通过/18 失败（补齐 runtime 测试身份与 DAO fixture，增加撤销下载回归）；余下为原有 selectable/provisioning fixture 与业务入口不匹配。授权主体路由组基线和本分支均 9 通过/1 失败，原因是本地 FastAPI 路由结构变化。完整提供方导入、真实 OpenFGA/数据库迁移、普通账号网页及任务端到端验收待上线环境执行。
+- 上线步骤与回退：[upgrade.md](../features/local/tools-skills-authorization/upgrade.md)。已提交 [PR #2518](https://github.com/dataelement/bisheng/pull/2518)，部署与合并单独执行。
+
+
+### 2026-10-26 — 3006 授权部署与根租户成员兼容
+
+- 已发布 f048-v6 / Catalog 3，迁移 18 项内置工具、7 项企业技能；重复迁移检查全部 preserved。API、worker、Linsight 各 20 个发布文件哈希一致；后台健康、页面与 browser-config 返回 200。
+- 管理员页面已确认“工具与技能”、内置工具授权盾牌、技能授权按钮，以及默认开启的全员可用和用户/部门/用户组入口。实际权限配置保持原值。
+- 真实成员核验发现根租户沿用动态归属而没有持久 member 元组。组织关系适配器现从 active UserTenant 快照补充请求级根租户成员事实；迁出、停用、历史记录均移除该事实。子租户沿用持久投影。
+- 根租户归属变更、停用、历史状态、请求上下文及原授权模型共 53 项定向回归通过，变更 Ruff / 格式 / diff 检查通过。最终发布 `tools-skills-auth-20261026-root-membership` 已完成，后台三个进程各 23 个源文件哈希一致。真实 OpenFGA 抽样 3 位 active 成员、25 项资源共 75 次 can_use 全部允许；无成员身份的 25 次检查全部拒绝，旧 user:* 工具公开标记归零。API 两个实例均就绪并使用 Catalog 3。
+
+- 3006 最终健康与 browser-config 返回 200，管理员授权弹窗重新读取成功。业务权限开关和指定人员保存、普通账号完整任务调用由用户继续验收。首次发布后检查触发自动回退导致服务中断，已恢复并收敛部署检查范围；最终版本、备份和验收日志已留存。
+
+## 2026-10-28 — 知识空间提问模型选择与布局
+
+- 基线：`dataelement/bisheng:feat/bisheng-work-120-main@2a726f5c97be74670d99718cdc475cb1f7331b62`；分支 `codex/knowledge-ask-model`。
+- 根因：模型触发器基础样式受主聊天页面选择器限制，知识空间按钮失去 flex 对齐；提问栏缺少模型选择回调，跨页交接仅携带问题和知识空间。
+- 实现：共享组件统一提供按钮基础布局，知识输入框限制模型区域宽度并保留全名提示；草稿保存选择，发送携带稳定模型 ID，新对话完成普通聊天模式、配置、模型和知识空间准备后发送。模型失效时恢复问题草稿并提示重新选择。
+- 自动验证：5 组 / 48 项相关回归通过，覆盖真实发送 Hook 的请求参数、模型记录、缓存任务页回到新对话、配置延迟、重复激活、失效模型和文章附件交接。将新增用例运行于原始实现，复现 5 项失败。客户端 1,480 个严格类型文件、全量 ESLint、生产构建、三语言一致性、架构守卫和差异检查通过。
+- 组件验证：macOS Electron 43.0.0 使用实际 KnowledgeAskBar / KnowledgeAiInput / AiModelSelect，800/500/320 宽度与 100%/125%/150% 缩放共 9 组布局检查通过；选择长名称模型后发送，交接获得 model=2、space=28。配置、导航和后端服务采用隔离夹具。
+- 交付边界：本次修改平台网页客户端；发布需部署配套 client。Windows 安装包、真实账号和模型服务端执行验收待测试环境复测。
+
+- 同步目标分支 `474783598` 的连续提问修复：发送链路同时校验路由和实际会话，发送获接受后完成交接；保留连续提问、生成中切换知识空间、拒绝后重试和重复激活回归。组合代码继续通过相关检查。
+
+## 2026-10-28 — 发现广场应用对话返回修复
+
+- 应用对话读取当前路由和入口来源，发现广场进入后返回应用分类。33 项组合回归、前端质量检查和构建通过；macOS Electron 两条组件导航路径通过。
+- 部署及真实账号 macOS 客户端验收待执行。[修复与验证记录](status/app-explore-chat-return-20261028.md)。
+
+## 2026-10-28 — 知识空间分享介绍与加入入口
+
+- 根因：介绍访问绑定广场发布状态，与加入接口按开放／审批设置处理的规则存在差异。
+- 已在 `codex/knowledge-share-preview` 修正介绍访问条件；广场筛选与内容权限沿用各自原有规则。
+- 修复前复现 2 项失败，修复后 58 项相关回归通过；Ruff、格式、架构与差异检查通过。
+- 本次按用户要求直接交付 `feat/bisheng-work-120-main`；测试环境部署与 macOS 真实账号验收待执行。
+- 记录：[分享介绍修复](status/knowledge-share-preview-20261028.md)。
+
+## 2026-10-28 — 应用对话简介字段统一
+
+- 助手详情读取层统一将已保存的 `desc` 映射为会话使用的 `description`，应用对话显示实际简介。
+- 28 项相关回归、Client ESLint、1,488 个文件的严格类型检查、生产构建、i18n 与改动文件架构检查通过。测试环境部署及 macOS 原生客户端验收待执行。[修复记录](status/app-description-20261028.md)。
+
+## 2026-10-28 — 知识空间跳转新聊天自动提交
+
+- 聊天缓存保持路由更新，发送准备完成使用独立状态驱动提交；覆盖相同模型与知识空间的连续提问。
+- 同步目标 `e468e2f2b` 后，7 组 / 71 项回归、客户端静态检查与构建通过，macOS 浏览器组件夹具连续 3 次自动提交成功；13001 部署与原生客户端验收待执行。
+- [修复与验证记录](status/knowledge-ask-submit-20261028.md)。
+
+## 2026-10-28 — 发现广场应用卡片暗色主题
+
+- 应用卡片及其操作区统一使用主题表面颜色，暗色沿用知识空间配色。同步目标 `9a077fdce` 后，Client 静态检查与构建、18 项权限与导航组合回归通过；卡片保持已通过 12 组组件渲染验证的代码。
+- 已创建 [PR #2544](https://github.com/dataelement/bisheng/pull/2544)，发布位置为 Client 网页资源。环境发布、13001 真实账号及 Windows 验收待执行。[修复记录](status/app-square-dark-theme-20261028.md)。
+
+## 2026-10-28 — 订阅审批、关注列表与访问状态一致性
+
+- 归属：毕昇平台共用的频道服务和网页客户端；桌面端呈现内嵌页面。初始基线 `1a8ac45e1`，构建验证基线 `c8ae351ee`，合入前保留 `8821e490d` 的应用描述更新，独立分支 `codex/channel-state-consistency`。
+- 实现：详情、广场和关注列表统一使用有效访问权限；授权投影成功后激活成员；自动审批统一交给持久化审批任务。前端采用服务端返回的订阅结果，并在页面恢复、窗口切回和可见状态每 30 秒刷新；广场刷新保留已加载页面，访问撤回收起内容。
+- 验证：后端 55 项通过；相同用例在初始基线产生 12 项失败、43 项通过。前端 15 项组件与 Hook 回归通过。client/platform 全量 ESLint、严格类型、共享包检查、i18n、Ruff、架构与差异检查、客户端生产构建通过。
+- 交付：用户授权直接合入 `dataelement/bisheng:feat/bisheng-work-120-main`；13100 部署、真实审批记录与权限数据核验、原生 macOS 验收待执行。
+- [修复与验证记录](status/channel-state-consistency-20261028.md)。
+
+
+## 2026-10-28 — 应用中心置顶状态保存
+
+- 助手与工作流统一使用应用目录解析，完成上线状态和使用权限校验后保存当前用户置顶记录；Client 按业务状态确认成功，失败显示操作提示。
+- 22 项后端、22 项前端回归、静态与类型检查、i18n 和 Client 生产构建通过。测试环境发布、真实账号与 macOS 原生复测待执行。[修复记录](status/app-pin-state-20261028.md)。
+
+## 2026-10-28 — Work 知识检索旧库升级
+
+- 测试环境内置目录缺少 `bisheng_knowledge_search`；Work 检索前的工具门禁会拒绝缺项。升级命令现在一并完成工具登记和该分类的权限校准，并以 CURRENT 状态报告完成。
+- 源码与 Docker 入口统一支持 `upgrade-work-knowledge`；命令默认预览，Apply 绑定权限 Store 和审计操作人，重复执行保留管理员配置及个人开关。
+- 84 项相关回归及 17 个参数子项通过，包含 SQLite 登记、实际权限校准器的受控验证、双空间资料来源和缺项拒绝；静态与差异检查通过。
+- 后端代码与升级命令交付；环境数据升级及 test3 / dsh-sara5 的 K1/K2 真实验收待执行。[修复与部署说明](status/work-knowledge-upgrade-20261028.md)。
+
+## 2026-10-28 — Work 知识检索发布流程
+
+- `docker/deploy.sh update` 在 backend 就绪后执行知识工具登记与权限校准，成功后更新其余选中服务；失败向发布调用方返回错误并停止后续步骤。
+- 新增目标镜像预览入口，发布显式携带 Store 确认值和操作人；沿用现有数据维护与权限入口。操作说明见 `docker/README.md`。
+- 原脚本同组测试 19 失败、4 通过；修复后部署测试 23 项及组合回归 107 项、17 个参数子项通过。Docker 与外部权限服务使用替身；13001 发布和真实账号验收待执行。详见 `docs/status/work-knowledge-release-gate-20261028.md`。

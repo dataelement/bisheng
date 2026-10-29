@@ -89,6 +89,10 @@ def test_workbench_endpoint_uses_tenant_admin_dep():
     assert 'get_model_admin_user' not in deps
 
 
+def test_editable_workbench_settings_uses_tenant_admin_dep():
+    assert 'get_tenant_admin_user' in _endpoint_deps('/llm/workbench/settings', 'GET')
+
+
 def test_knowledge_config_endpoint_uses_tenant_admin_dep():
     deps = _endpoint_deps('/llm/knowledge', 'POST')
     assert 'get_tenant_admin_user' in deps

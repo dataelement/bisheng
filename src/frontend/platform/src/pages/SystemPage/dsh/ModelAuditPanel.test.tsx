@@ -79,29 +79,27 @@ beforeEach(() => {
     progress: { last_write_at: null },
   });
   api.mode.mockResolvedValue({ mode: "METADATA", version: 1 });
-  api.body.mockImplementation(
-    async function* (): AsyncGenerator<AuditBodyFrame> {
-      yield {
-        type: "meta",
-        request_id: "one",
-        encoding_version: 1,
-        content_state: "COMPLETE",
-      };
-      yield {
-        type: "part",
-        seq: 0,
-        channel: "input",
-        unit_index: 0,
-        fragment: "<img src=x onerror=alert(1)>private-original",
-      };
-      yield {
-        type: "end",
-        last_seq: 0,
-        content_state: "COMPLETE",
-        transfer_status: "COMPLETED",
-      };
-    },
-  );
+  api.body.mockImplementation(async function* (): AsyncGenerator<AuditBodyFrame> {
+    yield {
+      type: "meta",
+      request_id: "one",
+      encoding_version: 1,
+      content_state: "COMPLETE",
+    };
+    yield {
+      type: "part",
+      seq: 0,
+      channel: "input",
+      unit_index: 0,
+      fragment: "<img src=x onerror=alert(1)>private-original",
+    };
+    yield {
+      type: "end",
+      last_seq: 0,
+      content_state: "COMPLETE",
+      transfer_status: "COMPLETED",
+    };
+  });
 });
 
 function renderPanel(globalAdmin = true, tenantId = 1) {
@@ -132,25 +130,17 @@ describe("audit tenant selection", () => {
     renderPanel(true, 2);
     await screen.findByText("First tenant (first)");
     await waitFor(() =>
-      expect(api.page).toHaveBeenCalledWith(
-        { tenant_id: 1, limit: 20 },
-        expect.any(AbortSignal),
-      ),
+      expect(api.page).toHaveBeenCalledWith({ tenant_id: 1, limit: 20 }, expect.any(AbortSignal)),
     );
     expect(api.mode).toHaveBeenCalledWith(1, expect.any(AbortSignal));
-    expect(api.page.mock.calls.every(([query]) => query.tenant_id === 1)).toBe(
-      true,
-    );
+    expect(api.page.mock.calls.every(([query]) => query.tenant_id === 1)).toBe(true);
   });
 
   it("defaults global administrators to the default tenant even without a personal tenant", async () => {
     renderPanel(true, 0);
     await screen.findByText("First tenant (first)");
     await waitFor(() =>
-      expect(api.page).toHaveBeenCalledWith(
-        { tenant_id: 1, limit: 20 },
-        expect.any(AbortSignal),
-      ),
+      expect(api.page).toHaveBeenCalledWith({ tenant_id: 1, limit: 20 }, expect.any(AbortSignal)),
     );
   });
 
@@ -174,12 +164,12 @@ describe("audit tenant selection", () => {
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
         screen.getByRole("radio", {
-          name: "dsh.modelAuditView.views.requests",
+          name: "dsh.modelAuditView.views.unassociated",
         }),
       );
     await screen.findByText("Synthetic");
     expect(api.page).toHaveBeenCalledWith(
-      { tenant_id: 2, limit: 20 },
+      { tenant_id: 2, limit: 20, association_status: "UNASSOCIATED" },
       expect.any(AbortSignal),
     );
     expect(api.mode).toHaveBeenCalledWith(2, expect.any(AbortSignal));
@@ -194,27 +184,19 @@ describe("audit tenant selection", () => {
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
         screen.getByRole("radio", {
-          name: "dsh.modelAuditView.views.requests",
+          name: "dsh.modelAuditView.views.unassociated",
         }),
       );
     await screen.findByText("Synthetic");
-    fireEvent.click(
-      screen.getByRole("button", { name: "dsh.modelAuditView.original" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "dsh.modelAuditView.original" }));
     await screen.findByText(/private-original/);
     const oldSignal = api.page.mock.calls.at(-1)?.[1] as AbortSignal;
-    fireEvent.keyDown(
-      screen.getByRole("combobox", { name: "dsh.modelAuditView.selectTenant" }),
-      { key: "ArrowDown" },
-    );
-    fireEvent.click(
-      await screen.findByRole("option", { name: "Second tenant (second)" }),
-    );
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "dsh.modelAuditView.selectTenant" }), {
+      key: "ArrowDown",
+    });
+    fireEvent.click(await screen.findByRole("option", { name: "Second tenant (second)" }));
     await waitFor(() =>
-      expect(api.page).toHaveBeenLastCalledWith(
-        { tenant_id: 2, limit: 20 },
-        expect.any(AbortSignal),
-      ),
+      expect(api.page).toHaveBeenLastCalledWith({ tenant_id: 2, limit: 20 }, expect.any(AbortSignal)),
     );
     expect(oldSignal.aborted).toBe(true);
     expect(screen.queryByText(/private-original/)).toBeNull();
@@ -246,21 +228,14 @@ describe("audit tenant selection", () => {
     expect(api.page).not.toHaveBeenCalled();
     fireEvent.keyDown(selector, { key: "ArrowDown" });
     expect(await screen.findAllByRole("option")).toHaveLength(1);
-    fireEvent.click(
-      screen.getByRole("option", { name: "Second tenant (second)" }),
-    );
+    fireEvent.click(screen.getByRole("option", { name: "Second tenant (second)" }));
     await waitFor(() =>
-      expect(api.page).toHaveBeenCalledWith(
-        { tenant_id: 2, limit: 20 },
-        expect.any(AbortSignal),
-      ),
+      expect(api.page).toHaveBeenCalledWith({ tenant_id: 2, limit: 20 }, expect.any(AbortSignal)),
     );
   });
 
   it("offers retry after loading fails and handles an empty list", async () => {
-    api.tenants
-      .mockRejectedValueOnce(new Error("unavailable"))
-      .mockResolvedValueOnce({ data: [], total: 0 });
+    api.tenants.mockRejectedValueOnce(new Error("unavailable")).mockResolvedValueOnce({ data: [], total: 0 });
     renderPanel();
     await screen.findByRole("alert");
     expect(screen.getByRole("combobox")).toHaveAttribute("aria-disabled", "true");
@@ -275,7 +250,7 @@ describe("audit tenant selection", () => {
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
         screen.getByRole("radio", {
-          name: "dsh.modelAuditView.views.requests",
+          name: "dsh.modelAuditView.views.unassociated",
         }),
       );
     await screen.findByText("Synthetic");
@@ -286,7 +261,7 @@ describe("audit tenant selection", () => {
       }),
     ).toBeNull();
     expect(api.page).toHaveBeenCalledWith(
-      { tenant_id: 2, limit: 20 },
+      { tenant_id: 2, limit: 20, association_status: "UNASSOCIATED" },
       expect.any(AbortSignal),
     );
     expect(screen.queryByRole("button", { name: "dsh.save" })).toBeNull();
@@ -294,36 +269,32 @@ describe("audit tenant selection", () => {
 });
 describe("request-card audit UI", () => {
   it("renders bounded original segments without truncation or refetch", async () => {
-    api.body.mockImplementation(
-      async function* (): AsyncGenerator<AuditBodyFrame> {
+    api.body.mockImplementation(async function* (): AsyncGenerator<AuditBodyFrame> {
+      yield {
+        type: "meta",
+        request_id: "one",
+        encoding_version: 1,
+        content_state: "COMPLETE",
+      };
+      for (let index = 0; index < 1000; index++)
         yield {
-          type: "meta",
-          request_id: "one",
-          encoding_version: 1,
-          content_state: "COMPLETE",
+          type: "part",
+          seq: index,
+          channel: "input",
+          unit_index: index,
+          fragment: JSON.stringify({
+            role: "user",
+            content: "segment-fragment-" + index,
+          }),
         };
-        for (let index = 0; index < 1000; index++)
-          yield {
-            type: "part",
-            seq: index,
-            channel: "input",
-            unit_index: index,
-            fragment: JSON.stringify({
-              role: "user",
-              content: "segment-fragment-" + index,
-            }),
-          };
-        yield {
-          type: "end",
-          last_seq: 999,
-          content_state: "COMPLETE",
-          transfer_status: "COMPLETED",
-        };
-      },
-    );
-    const { container } = render(
-      <ModelAuditBody requestId="one" tenantId={2} />,
-    );
+      yield {
+        type: "end",
+        last_seq: 999,
+        content_state: "COMPLETE",
+        transfer_status: "COMPLETED",
+      };
+    });
+    const { container } = render(<ModelAuditBody requestId="one" tenantId={2} />);
     await screen.findByText("dsh.modelAuditView.transfer.completed");
     expect(container.querySelectorAll("article")).toHaveLength(100);
     expect(screen.getByText("segment-fragment-999")).toBeVisible();
@@ -332,8 +303,7 @@ describe("request-card audit UI", () => {
       name: "dsh.modelAuditView.message_content",
     });
     region.scrollTop = 200;
-    for (let index = 0; index < 9; index++)
-      fireEvent.click(screen.getByRole("button", { name: "dsh.next" }));
+    for (let index = 0; index < 9; index++) fireEvent.click(screen.getByRole("button", { name: "pagination.next" }));
     await screen.findByText("segment-fragment-0");
     expect(screen.queryByText("segment-fragment-999")).toBeNull();
     expect(container.querySelectorAll("article")).toHaveLength(100);
@@ -351,28 +321,25 @@ describe("request-card audit UI", () => {
       audit_record_missing: true,
       gap: "MODE_UNKNOWN",
     });
-    render(<ModelAuditRequests tenantId={2} initialView="requests" />);
+    render(<ModelAuditRequests tenantId={2} initialView="unassociated" />);
     fireEvent.click(
       screen.getByRole("button", {
         name: "dsh.modelAuditView.advancedFilters",
       }),
     );
-    fireEvent.change(
-      screen.getByLabelText("dsh.modelAuditView.filters.request_id"),
-      { target: { value: "missing" } },
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "dsh.modelAuditView.search" }),
-    );
+    fireEvent.change(screen.getByLabelText("dsh.modelAuditView.filters.request_id"), {
+      target: { value: "missing" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "dsh.modelAuditView.search" }));
     await screen.findByText("dsh.modelAuditView.missing.MODE_UNKNOWN");
     expect(api.body).not.toHaveBeenCalled();
   });
   it("retains exact-request filtering without redundant user conversation navigation", async () => {
-    render(<ModelAuditRequests tenantId={2} initialView="requests" />);
+    render(<ModelAuditRequests tenantId={2} initialView="unassociated" />);
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
         screen.getByRole("radio", {
-          name: "dsh.modelAuditView.views.requests",
+          name: "dsh.modelAuditView.views.unassociated",
         }),
       );
     await screen.findByText("Synthetic");
@@ -381,17 +348,14 @@ describe("request-card audit UI", () => {
         name: "dsh.modelAuditView.advancedFilters",
       }),
     );
-    fireEvent.change(
-      screen.getByLabelText("dsh.modelAuditView.filters.request_id"),
-      { target: { value: "one" } },
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "dsh.modelAuditView.search" }),
-    );
+    fireEvent.change(screen.getByLabelText("dsh.modelAuditView.filters.request_id"), {
+      target: { value: "one" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "dsh.modelAuditView.search" }));
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
         screen.getByRole("radio", {
-          name: "dsh.modelAuditView.views.requests",
+          name: "dsh.modelAuditView.views.unassociated",
         }),
       );
     await screen.findByText("Synthetic");
@@ -402,19 +366,18 @@ describe("request-card audit UI", () => {
           tenant_id: 2,
           limit: 20,
           request_id: "one",
+          association_status: "UNASSOCIATED",
         },
         expect.any(AbortSignal),
       ),
     );
   });
   it("does not prefetch originals; explicitly opened originals render as text and clear on pagination", async () => {
-    const { container } = render(
-      <ModelAuditRequests tenantId={2} initialView="requests" />,
-    );
+    const { container } = render(<ModelAuditRequests tenantId={2} initialView="unassociated" />);
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
         screen.getByRole("radio", {
-          name: "dsh.modelAuditView.views.requests",
+          name: "dsh.modelAuditView.views.unassociated",
         }),
       );
     await screen.findByText("Synthetic");
@@ -425,15 +388,9 @@ describe("request-card audit UI", () => {
         name: "dsh.modelAuditView.request_details",
       }),
     );
-    expect(
-      screen.getByText("dsh.modelAuditView.states.INTERRUPTED"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("dsh.modelAuditView.states.COMPLETE"),
-    ).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: "dsh.modelAuditView.original" }),
-    );
+    expect(screen.getByText("dsh.modelAuditView.states.INTERRUPTED")).toBeInTheDocument();
+    expect(screen.getByText("dsh.modelAuditView.states.COMPLETE")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "dsh.modelAuditView.original" }));
     await screen.findByText(/private-original/);
     expect(container.querySelector("img")).toBeNull();
     expect(api.body).toHaveBeenCalledTimes(1);
@@ -450,9 +407,7 @@ describe("request-card audit UI", () => {
     render(<ModelAuditMode tenantId={2} canConfigure={false} />);
     await screen.findByText("dsh.modelAuditView.modes.METADATA");
     expect(screen.queryByRole("combobox")).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "dsh.modelAuditView.configure" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "dsh.modelAuditView.configure" })).toBeNull();
     expect(screen.queryByRole("button", { name: "dsh.save" })).toBeNull();
     expect(api.save).not.toHaveBeenCalled();
   });

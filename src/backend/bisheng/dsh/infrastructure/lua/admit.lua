@@ -49,7 +49,10 @@ if redis.call('EXISTS',KEYS[5])==1 then
   if redis.call('HGET',KEYS[5],'admission')~=ARGV[4] then return {'DENY','request_conflict'} end
   return {'EXISTS',redis.call('HGET',KEYS[5],'event')}
 end
-if not less(used,limit) then return {'DENY','quota_exceeded'} end
+-- Every model consumes the same user's monthly allowance.
+local total_used=redis.call('HGET',KEYS[2],'used')
+if not integer(total_used) then return {'DENY','bad_counter'} end
+if not less(total_used,limit) then return {'DENY','quota_exceeded'} end
 local kind=redis.call('TYPE',KEYS[7]).ok
 if (kind~='none' and kind~='zset') or redis.call('HGET',KEYS[1],'running_index')~='1' or redis.call('ZCARD',KEYS[7])~=tonumber(redis.call('HGET',KEYS[1],'running_count')) then return {'DENY','running_index_missing'} end
 redis.call('HSET',KEYS[1],'write_in_progress','1')

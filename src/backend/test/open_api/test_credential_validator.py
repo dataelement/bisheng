@@ -8,15 +8,19 @@ from bisheng.common.errcode.open_api import (
     OpenApiCredentialMissingError,
     ServiceAccountInactiveError,
 )
+from bisheng.database.models.tenant import UserTenant
 from bisheng.open_api.domain.models.api_credential import SUBJECT_KIND_SERVICE_ACCOUNT
 from bisheng.open_api.domain.models.service_account import ServiceAccount
 from bisheng.open_api.domain.schemas.credential import KeyIssueRequest
 from bisheng.open_api.domain.services.credential_service import CredentialService, hash_token
 from bisheng.open_api.domain.services.credential_validator import extract_bearer_token, validate_bearer
+from bisheng.user.domain.models.user import User
 
 
 async def seed_service_account(open_api_db, *, disabled=False):
     async with open_api_db() as session:
+        session.add(User(user_id=21, user_name="integration-owner", password=""))
+        session.add(UserTenant(user_id=21, tenant_id=1, is_active=1, status="active"))
         row = ServiceAccount(
             tenant_id=1,
             name="integration",

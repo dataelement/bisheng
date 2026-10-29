@@ -1,11 +1,8 @@
-/** Skill center home. `?skill=<id>` opens one skill's detail. */
-export const skillCenterPath = '/skills';
-
-/** Deep link to one skill's detail dialog. */
-export function skillDetailPath(skill: { id: number | string }): string {
-  const params = new URLSearchParams();
-  params.set('skill', String(skill.id));
-  return `${skillCenterPath}?${params.toString()}`;
+/** 技能 module home: 我的技能 by default, `?view=square` is the 技能广场, `?skill=<id>` opens a detail. */
+export const skillCenterPath = "/capabilities?type=skill";
+export const skillSquarePath = skillCenterPath;
+export function skillDetailPath(skill: { id: number | string; source?: "personal" | "platform" }): string {
+  return `${skillCenterPath}&skill=${encodeURIComponent(skill.id)}`;
 }
 
 export interface SkillManifest {
@@ -19,9 +16,10 @@ export interface SkillManifest {
 }
 
 export interface PersonalSkill extends SkillManifest {
+  resourceId?: number;
   id: string;
   scope: string;
-  source: 'personal';
+  source: "personal";
   enabled: boolean;
   updatedAt: string;
   revision: string;
@@ -29,12 +27,13 @@ export interface PersonalSkill extends SkillManifest {
 }
 
 export interface PlatformSkill {
+  resourceId?: number;
   id: string;
   name: string;
   displayName: string;
   description: string;
-  source: 'platform';
-  enabled: true;
+  source: "platform";
+  enabled: boolean;
 }
 
 export type CenterSkill = PersonalSkill | PlatformSkill;
@@ -45,7 +44,7 @@ export interface SkillRecord {
   name: string;
   displayName: string;
   description: string;
-  source: 'personal' | 'platform';
+  source: "personal" | "platform";
   enabled: boolean;
   contentHash: string;
   bundleMissing: boolean;
@@ -60,6 +59,6 @@ export interface SkillRecord {
 export class SkillError extends Error {
   constructor(public readonly code: string) {
     super(code);
-    this.name = 'SkillError';
+    this.name = "SkillError";
   }
 }

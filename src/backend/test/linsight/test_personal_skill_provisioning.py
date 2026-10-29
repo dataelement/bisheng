@@ -123,6 +123,17 @@ async def env(monkeypatch, tmp_path):
     tenant_filter._tenant_aware_tables = set()
     tenant_filter.register_tenant_filter_events()
     set_current_tenant_id(TENANT)
+    from unittest.mock import AsyncMock
+
+    async def permitted(_user, *, resource_ids, **kwargs):
+        return {str(skill_id): {"use"} for skill_id in resource_ids}
+
+    monkeypatch.setattr("bisheng.permission.application.business_authorization.batch_check_business_actions", permitted)
+    monkeypatch.setattr("bisheng.utils.http_middleware._check_is_global_super", AsyncMock(return_value=False))
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.services.user_skills.SkillAvailabilityRepository.disabled_ids",
+        AsyncMock(return_value=set()),
+    )
 
     store = SkillStore(root=tmp_path / "skills", minio=FakeMinioStorage())
     personal = await _seed(

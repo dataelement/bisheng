@@ -5,18 +5,6 @@ from typing import Any, Union
 from loguru import logger
 from sqlmodel import and_, col, or_, select
 
-from bisheng.core.database.dialect_helpers import json_array_contains
-
-
-def _db_dialect() -> str:
-    try:
-        from bisheng.core.database.manager import sync_get_database_connection
-
-        return sync_get_database_connection().engine.dialect.name
-    except Exception:
-        return "mysql"
-
-
 from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import resp_200
@@ -28,6 +16,7 @@ from bisheng.core.context.tenant import (
     get_current_tenant_id,
 )
 from bisheng.core.database import get_async_db_session
+from bisheng.core.database.dialect_helpers import json_array_contains
 from bisheng.database.models.app import AppDao
 from bisheng.database.models.assistant import Assistant, AssistantDao
 from bisheng.database.models.audit_log import AuditLog, AuditLogDao, EventType, ObjectType, SystemId
@@ -46,6 +35,16 @@ from bisheng.tool.domain.models.gpts_tools import GptsToolsType
 from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.services.auth import LoginUser
 
+
+def _db_dialect() -> str:
+    try:
+        from bisheng.core.database.manager import sync_get_database_connection
+
+        return sync_get_database_connection().engine.dialect.name
+    except Exception:
+        return "mysql"
+
+
 # F056 AC-32: the system-audit export walks the same paginated query the
 # list uses. The cap keeps one request bounded; the frontend tells the
 # operator to narrow the filters when ``total`` exceeds it.
@@ -57,7 +56,12 @@ AUDIT_EXPORT_PAGE_SIZE = 500
 class AuditLogService:
     @classmethod
     async def _user_has_log_web_menu(cls, user: UserPayload) -> bool:
-        """角色 / 部门管理员合并后的 web_menu 含 ``log``（审计页）时允许使用审计 API。"""
+        """Admit tenant administrators or roles with the audit menu."""
+        from bisheng.common.permission_identity import check_tenant_admin
+
+        tenant_id = get_current_tenant_id()
+        if tenant_id is not None and await check_tenant_admin(user.user_id, tenant_id):
+            return True
         db_user = await UserDao.aget_user(user.user_id)
         if not db_user:
             return False

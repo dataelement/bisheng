@@ -3,7 +3,10 @@ import { createFrontendProxy, frontendEnvDefinitions, loadFrontendEnv, resolveAp
 import react from "@vitejs/plugin-react";
 import fs from "fs";
 import path from "path";
-import { defineConfig } from "vite";
+import { createRequire } from "node:module";
+import postcss from "postcss";
+import tailwindcss from "tailwindcss";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import { createHtmlPlugin } from 'vite-plugin-html';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import svgr from "vite-plugin-svgr";
@@ -15,6 +18,124 @@ import svgr from "vite-plugin-svgr";
  * 内层网关访问 api或者前端静态资源需要去掉【custom】前缀
  */
 const app_env = { BASE_URL: '' } // /custom
+
+
+/** Compile the public UI preset only inside this feature, preserving the legacy app theme. */
+function dshContentSafetyStyles(): Plugin {
+  const require = createRequire(import.meta.url);
+  const scope = ".dsh-content-safety";
+  const cssFile = path.resolve(__dirname, "src/style/dsh-content-safety.css");
+  const tokensFile = require.resolve("@bisheng/ui/tokens.css");
+  const presetFile = require.resolve("@bisheng/ui/tailwind-preset");
+  const uiDirectory = path.dirname(require.resolve("@bisheng/ui"));
+  const featureDirectory = path.resolve(__dirname, "src/pages/SystemPage/dsh");
+  const preset = require(presetFile) as Partial<import("tailwindcss").Config>;
+  const scopedSelector = (selector: string): string => {
+    if (selector.startsWith(":root")) return selector.replace(":root", scope);
+    // Theme owners live on html; component selectors remain inside the feature.
+    const owner = selector.match(/^(\.dark(?:\.theme-green)?|\.theme-green)(?=\s|$)/);
+    if (owner) return `${owner[0]} ${scope}${selector.slice(owner[0].length)}`;
+    return `${scope} ${selector}`;
+  };
+  return {
+    name: "dsh-content-safety-styles",
+    enforce: "pre",
+    async load(id) {
+      if (id.split("?")[0] !== cssFile) return;
+      this.addWatchFile(tokensFile);
+      this.addWatchFile(presetFile);
+      const tokens = postcss.parse(fs.readFileSync(tokensFile, "utf8"), { from: tokensFile });
+      tokens.walkRules(rule => { rule.selectors = rule.selectors.map(scopedSelector); });
+      const utilities = await postcss([tailwindcss({
+        presets: [preset],
+        content: [`${uiDirectory}/**/*.{ts,tsx}`, `${featureDirectory}/**/*.{ts,tsx}`],
+        important: scope,
+        corePlugins: { preflight: false },
+      })]).process("@tailwind utilities;", { from: cssFile });
+      const animations = new Map<string, string>();
+      utilities.root.walkAtRules(/keyframes$/, rule => {
+        const renamed = `dsh-safety-${rule.params}`;
+        animations.set(rule.params, renamed);
+        rule.params = renamed;
+      });
+      utilities.root.walkDecls(/^(animation|animation-name)$/, declaration => {
+        declaration.value = declaration.value.replace(/[A-Za-z_][\w-]*/g,
+          name => animations.get(name) ?? name);
+      });
+      utilities.root.walkRules(rule => {
+        if (rule.parent?.type === "atrule" && /keyframes$/.test(rule.parent.name)) return;
+        rule.selectors = rule.selectors.map(selector =>
+          selector.includes(scope) ? selector : `${scope} ${selector}`);
+      });
+      // Inherit the shared system font without resetting any controls outside the feature.
+      const families = preset.theme?.fontFamily;
+      const fonts = typeof families === "object" ? families.sans : undefined;
+      const fontFamily = Array.isArray(fonts) && fonts.every(font => typeof font === "string")
+        ? fonts.join(", ") : "inherit";
+      return `${tokens.toString()}\n${scope} { font-family: ${fontFamily}; }\n${utilities.root.toString()}`;
+    },
+    handleHotUpdate({ file, server, modules }) {
+      if (file === tokensFile || file === presetFile || file.startsWith(uiDirectory + path.sep)
+          || file.startsWith(featureDirectory + path.sep)) {
+        const cssModule = server.moduleGraph.getModuleById(cssFile);
+        if (cssModule) {
+          server.moduleGraph.invalidateModule(cssModule);
+          return [...modules, cssModule];
+        }
+      }
+    },
+  };
+}
+
+const commonProxyOptions = {
+  changeOrigin: true,
+  secure: false,
+  ws: true
+};
+
+// Emit one loud, actionable warning the first time MinIO answers a proxied
+// object request with 403. For presigned (SigV4) URLs to the public bucket a
+// 403 is almost always SignatureDoesNotMatch: changeOrigin rewrites Host to the
+// proxy target host, but the URL was signed for the backend `sharepoint` host.
+// The classic trap is `127.0.0.1` vs `localhost` (not interchangeable for
+// signing). Without this, the only symptom is silently broken images.
+let warnedMinio403 = false;
+const warnMinioSignatureMismatch = (targetHost: string, requestUrl: string) => {
+  if (warnedMinio403) return;
+  warnedMinio403 = true;
+  console.warn(
+    `\n\x1b[33m[bisheng:minio-proxy] ⚠️  MinIO returned 403 for "${requestUrl}".\n` +
+    `  Almost certainly a SigV4 host mismatch: the dev proxy forwards Host=${targetHost},\n` +
+    `  but the presigned URL was signed for a different host.\n` +
+    `  Fix: set VITE_MINIO_PROXY_TARGET so its host EXACTLY equals backend config.yaml\n` +
+    `  object_storage.minio.sharepoint  (note: 127.0.0.1 ≠ localhost).\x1b[0m\n`,
+  );
+};
+
+const createProxyConfig = (target: string, rewrite = true, isMinio = false, verbose = false) => ({
+  ...commonProxyOptions,
+  target,
+  ...(rewrite && {
+    rewrite: (p: string) => p.replace(new RegExp(`^${app_env.BASE_URL}`), '')
+  }),
+  configure: (proxy: import('http-proxy').ProxyServer) => {
+    // Per-request logging is opt-in (VITE_PROXY_LOG=1): on by default it prints
+    // dozens of lines per page load and buries the warnings that matter.
+    if (verbose) {
+      proxy.on('proxyReq', (proxyReq) => {
+        console.log('Proxying request to:', proxyReq.path);
+      });
+    }
+    if (isMinio) {
+      const targetHost = new URL(target).host;
+      proxy.on('proxyRes', (proxyRes, req) => {
+        if (proxyRes.statusCode === 403) {
+          warnMinioSignatureMismatch(targetHost, req.url || '');
+        }
+      });
+    }
+  }
+});
 
 const apiRoutes = ["/api/", "/health"];
 const fileServiceRoutes = ["/bisheng", "/tmp-dir"];
@@ -134,6 +255,8 @@ export default defineConfig(({ command, mode }) => {
         }
       }
     },
+    // Prebundle workspace UI with its own dependency graph; the app pins a different merge version.
+    optimizeDeps: { include: ["@bisheng/ui"] },
     resolve: {
       // Workspace viewers must use the app's initialized i18n hook instance.
       dedupe: ['react-i18next'],
@@ -142,6 +265,7 @@ export default defineConfig(({ command, mode }) => {
       }
     },
     plugins: [
+      dshContentSafetyStyles(),
       react(),
       svgr(),
       createHtmlPlugin({

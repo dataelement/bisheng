@@ -81,7 +81,9 @@ export function SectionHeader({
                • Inner px-4 (16px) aligns the title text with the items' left gutter. */
             className={
                 mobile
-                    ? "group sticky top-0 left-0 z-[2] flex w-[100cqi] cursor-pointer items-center justify-between bg-[#FBFBFB] px-5 py-2"
+                    // bg-white, not transparent: the header is sticky, so it still has to mask the
+                    // cards scrolling under it — it just matches the page instead of tinting a band.
+                    ? "group sticky top-0 left-0 z-[2] flex w-[100cqi] cursor-pointer items-center justify-between bg-white px-5 py-2"
                     : compact
                         ? "group sticky top-0 left-0 z-[2] mb-2 flex h-[38px] w-[100cqi] cursor-pointer items-center justify-between bg-[#FBFBFB] px-4"
                         : "group sticky top-0 left-0 z-[2] mb-2 flex h-7 w-[100cqi] cursor-pointer items-center justify-between bg-[#FBFBFB] px-4 transition-colors hover:bg-[#F4F4F4]"

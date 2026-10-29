@@ -95,7 +95,7 @@ describe("DSH market administration", () => {
         render(view()); await screen.findByText("Company Demo");
         expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
         expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "import", exact: true })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /^import$/ })).toBeInTheDocument();
         expect(within(screen.getByRole("table")).getAllByRole("button").map(button => button.textContent)).toEqual(["details", "delete"]);
         expect(screen.getAllByRole("columnheader").map(cell => cell.textContent)).toEqual(["name", "version", "platform", "updated", "actions"]);
     });

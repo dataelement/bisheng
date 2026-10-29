@@ -1,30 +1,31 @@
 // @ts-strict-ignore
-"use client"
-import { useEffect, useRef } from "react"
-import { useRecoilState, useRecoilValue } from "recoil"
-import { NotificationSeverity } from "~/common"
-import { useLocalize, useToast } from "~/hooks"
-import { SkillMethod } from "./appUtils/skillMethod"
-import { chatApiVersionState, submitDataState } from "./store/atoms"
-import { appConversationsState } from "./store/appSidebarAtoms"
-import { genTitle } from "~/api/chat/data-service"
-import logger from "~/utils/logger"
-import { useOptionalStandaloneChatContext } from "~/pages/standaloneChat/StandaloneChatContext"
+"use client";
+import { useEffect, useRef } from "react";
+import { useRecoilState, useRecoilValue } from "recoil";
+import { NotificationSeverity } from "~/common";
+import { useLocalize, useToast } from "~/hooks";
+import { SkillMethod } from "./appUtils/skillMethod";
+import { chatApiVersionState, submitDataState } from "./store/atoms";
+import { appConversationsState } from "./store/appSidebarAtoms";
+import { genTitle } from "~/api/chat/data-service";
+import logger from "~/utils/logger";
+import { useOptionalStandaloneChatContext } from "~/pages/standaloneChat/StandaloneChatContext";
 import {
-    buildWorkflowInitMessage,
-    claimWorkflowHandshake,
-    createWorkflowActivation,
-    decideWorkflowCloseAction,
-    isWorkflowFinishedStatusCheck,
-    syncWorkflowActivation,
-} from "./workflowAutoRerun"
-import type { WorkflowCloseAction } from "./workflowAutoRerun"
+  buildWorkflowInitMessage,
+  claimWorkflowHandshake,
+  createWorkflowActivation,
+  decideWorkflowCloseAction,
+  isWorkflowFinishedStatusCheck,
+  syncWorkflowActivation,
+} from "./workflowAutoRerun";
+import type { WorkflowCloseAction } from "./workflowAutoRerun";
 
-export const AppLostMessage = '11111'
-const wsMap = new Map<string, WebSocket>()
+export const AppLostMessage = "11111";
+const unavailableCodes = new Set(["10421", "13002", "13010", AppLostMessage]);
+const wsMap = new Map<string, WebSocket>();
 // 会话运行时信息
-const sessionInfoMap = new Map<string, any>()
-const restartCallbacks = new Map<string, () => void>()
+const sessionInfoMap = new Map<string, any>();
+const restartCallbacks = new Map<string, () => void>();
 
 /**
  * Force-close the websocket and forget any session info for the given chatId.
@@ -34,488 +35,527 @@ const restartCallbacks = new Map<string, () => void>()
  * the user sees after deleting an in-flight chat.
  */
 export const closeAppChatWebSocket = (chatId: string) => {
-    const ws = wsMap.get(chatId)
-    if (ws) {
-        try {
-            // Best-effort: tell backend to stop processing before yanking the socket.
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ action: 'stop' }))
-            }
-            // Detach handlers so the close event doesn't bubble error toasts.
-            ws.onmessage = null
-            ws.onerror = null
-            ws.onclose = null
-            ws.close()
-        } catch {
-            // ignore — the socket may already be in a teardown state
-        }
+  const ws = wsMap.get(chatId);
+  if (ws) {
+    try {
+      // Best-effort: tell backend to stop processing before yanking the socket.
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: "stop" }));
+      }
+      // Detach handlers so the close event doesn't bubble error toasts.
+      ws.onmessage = null;
+      ws.onerror = null;
+      ws.onclose = null;
+      ws.close();
+    } catch {
+      // ignore — the socket may already be in a teardown state
     }
-    wsMap.delete(chatId)
-    sessionInfoMap.delete(chatId)
-    restartCallbacks.delete(chatId)
-}
+  }
+  wsMap.delete(chatId);
+  sessionInfoMap.delete(chatId);
+  restartCallbacks.delete(chatId);
+};
 
 export const enum ActionType {
-    INIT_DATA = 'init_data',
-    INPUT = 'input',
-    CHECK_STATUS = 'check_status',
-    STOP = 'stop',
-    RESTART = 'restart',
-    FORM_SUBMIT = 'form_submit',
-    MESSAGE_INPUT = 'message_input',
-    SKILL_INPUT = 'skill_input',
-    SKILL_FORM_SUBMIT = 'skill_form_submit'
+  INIT_DATA = "init_data",
+  INPUT = "input",
+  CHECK_STATUS = "check_status",
+  STOP = "stop",
+  RESTART = "restart",
+  FORM_SUBMIT = "form_submit",
+  MESSAGE_INPUT = "message_input",
+  SKILL_INPUT = "skill_input",
+  SKILL_FORM_SUBMIT = "skill_form_submit",
 }
 
 export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: boolean } = {}) => {
-    const { showToast } = useToast();
-    const [submitData, setSubmitData] = useRecoilState(submitDataState)
-    const [, setAppConversations] = useRecoilState(appConversationsState)
-    const apiVersion = useRecoilValue(chatApiVersionState)
-    const localize = useLocalize()
-    const standaloneContext = useOptionalStandaloneChatContext()
-    const activationRef = useRef(createWorkflowActivation(helpers.chatId))
-    activationRef.current = syncWorkflowActivation(activationRef.current, helpers.chatId)
+  const { showToast } = useToast();
+  const [submitData, setSubmitData] = useRecoilState(submitDataState);
+  const [, setAppConversations] = useRecoilState(appConversationsState);
+  const apiVersion = useRecoilValue(chatApiVersionState);
+  const localize = useLocalize();
+  const standaloneContext = useOptionalStandaloneChatContext();
+  const activationRef = useRef(createWorkflowActivation(helpers.chatId));
+  activationRef.current = syncWorkflowActivation(activationRef.current, helpers.chatId);
 
-    const websocket = wsMap.get(helpers.chatId)
-    const currentChatId = useCurrentChatId(helpers.chatId)
+  const unavailableRef = useRef<Record<string, string>>({});
+  const isUnavailable = () =>
+    unavailableCodes.has(String(helpers.appLost)) || !!unavailableRef.current[helpers.chatId];
 
-    // Track whether genTitle has been called for this chatId to avoid duplicates
-    const hasGeneratedTitleRef = useRef<Record<string, boolean>>({})
+  const websocket = wsMap.get(helpers.chatId);
+  const currentChatId = useCurrentChatId(helpers.chatId);
 
-    /**
-     * Generate an AI title for a new conversation after the first AI response.
-     * Mirrors the logic in useAiChat.ts onFinal for daily-mode conversations.
-     */
-    const triggerGenTitle = () => {
-        const chatId = helpers.chatId
-        if (!helpers.flow?.isNew) return
-        if (hasGeneratedTitleRef.current[chatId]) return
-        hasGeneratedTitleRef.current[chatId] = true
+  // Track whether genTitle has been called for this chatId to avoid duplicates
+  const hasGeneratedTitleRef = useRef<Record<string, boolean>>({});
 
-        genTitle({ conversationId: chatId }, apiVersion)
-            .then((res: { title?: string }) => {
-                if (!res?.title) return
-                // Update the sidebar conversation list with the new title
-                setAppConversations((prev) =>
-                    prev.map((c) => (c.id === chatId ? { ...c, title: res.title! } : c))
-                )
-            })
-            .catch(() => {
-                // genTitle failure is non-critical
-            })
+  /**
+   * Generate an AI title for a new conversation after the first AI response.
+   * Mirrors the logic in useAiChat.ts onFinal for daily-mode conversations.
+   */
+  const triggerGenTitle = () => {
+    const chatId = helpers.chatId;
+    if (!helpers.flow?.isNew) return;
+    if (hasGeneratedTitleRef.current[chatId]) return;
+    hasGeneratedTitleRef.current[chatId] = true;
+
+    genTitle({ conversationId: chatId }, apiVersion)
+      .then((res: { title?: string }) => {
+        if (!res?.title) return;
+        // Update the sidebar conversation list with the new title
+        setAppConversations((prev) => prev.map((c) => (c.id === chatId ? { ...c, title: res.title! } : c)));
+      })
+      .catch(() => {
+        // genTitle failure is non-critical
+      });
+  };
+
+  const sendWorkflowStatusCheck = (ws: WebSocket) => {
+    const activation = activationRef.current;
+    if (!claimWorkflowHandshake(activation, helpers.chatId)) return;
+
+    ws.send(
+      JSON.stringify({
+        action: ActionType.CHECK_STATUS,
+        chat_id: helpers.chatId,
+        flow_id: helpers.flow.id,
+      }),
+    );
+  };
+
+  // 连接WebSocket
+  const connect = (callBack) => {
+    if (!canExecute || isUnavailable()) return;
+    const replacingExistingSocket = !!websocket;
+    if (websocket) {
+      if (!callBack) {
+        if (websocket.readyState === WebSocket.OPEN) {
+          if (helpers.flow.flow_type === 10) {
+            sendWorkflowStatusCheck(websocket);
+          }
+          return;
+        }
+        if (websocket.readyState === WebSocket.CONNECTING) return;
+        wsMap.delete(helpers.chatId);
+      } else if (websocket.readyState === WebSocket.OPEN) {
+        return;
+      }
+    }
+    if (!helpers.wsUrl) return;
+
+    const isSecureProtocol = window.location.protocol === "https:";
+    const webSocketProtocol = isSecureProtocol ? "wss" : "ws";
+    const ws = new WebSocket(`${webSocketProtocol}://${helpers.wsUrl}`);
+    wsMap.set(helpers.chatId, ws);
+
+    ws.onopen = () => {
+      console.log("WebSocket connection established!");
+      helpers.clearError();
+      if (helpers.flow.flow_type === 10) {
+        // 工作流初始化
+        // console.log('helpers.flow :>> ', helpers.flow);
+        const shouldCheckStatus = replacingExistingSocket || !helpers.flow.isNew;
+        if (shouldCheckStatus) {
+          sendWorkflowStatusCheck(ws);
+          return;
+        }
+        const { data, ...flow } = helpers.flow;
+        const msg = {
+          action: ActionType.INIT_DATA,
+          chat_id: helpers.chatId,
+          flow_id: helpers.flow.id,
+          data: { ...flow, ...data },
+        };
+        claimWorkflowHandshake(activationRef.current, helpers.chatId);
+        ws?.send(JSON.stringify(msg));
+      } else {
+        // 助手初始化
+        const msg = {
+          chatHistory: [],
+          chat_id: helpers.chatId,
+          flow_id: helpers.flow.id,
+          inputs: {
+            data:
+              helpers.flow.flow_type === 5
+                ? {
+                    id: helpers.flow.id,
+                    chatId: helpers.chatId,
+                    type: helpers.flow.flow_type,
+                  }
+                : undefined,
+          },
+          name: helpers.flow.name,
+          description: helpers.flow.description,
+        };
+        ws?.send(JSON.stringify(msg));
+        // skill hack
+        if (helpers.flow.flow_type === 1 && callBack) {
+          callBack?.(ws);
+          callBack = null;
+        }
+      }
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log("data :>> ", data);
+        handleMessages(data, ws);
+
+        if (data.type === "close" && callBack) {
+          callBack?.(ws);
+          callBack = null;
+        }
+      } catch (error) {
+        console.error("WebSocket message parse error:", error);
+      }
+    };
+
+    ws.onclose = (event) => {
+      console.log("close chatId:>> ", helpers.chatId);
+      console.error("ws close :>> ", event);
+      helpers.handleMsgError({ code: "", data: null }, true);
+      // todo 错误消息写入消息下面
+    };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error", helpers.chatId, error);
+      helpers.handleMsgError({
+        code: isUnavailable() ? unavailableRef.current[helpers.chatId] || String(helpers.appLost) : "",
+        data: null,
+      });
+    };
+  };
+  const handleMessages = (data, _ws) => {
+    // Keep terminal availability errors stable across queued close/input frames.
+    if (isUnavailable()) return;
+    // 过滤无效数据
+    if (data.category === "end_cover" && data.type !== "end_cover") {
+      return;
     }
 
-    const sendWorkflowStatusCheck = (ws: WebSocket) => {
-        const activation = activationRef.current
-        if (!claimWorkflowHandshake(activation, helpers.chatId)) return
-
-        ws.send(JSON.stringify({
-            action: ActionType.CHECK_STATUS,
-            chat_id: helpers.chatId,
-            flow_id: helpers.flow.id,
-        }))
+    let workflowCloseAction: WorkflowCloseAction | null = null;
+    if (helpers.flow.flow_type === 10 && data.type === "close" && data.category === "processing") {
+      workflowCloseAction = decideWorkflowCloseAction({
+        data,
+        activation: activationRef.current,
+        enabled: standaloneContext?.autoRerunOnOpen ?? false,
+        isStandaloneWorkflow: standaloneContext?.flowType === "workflow",
+        isNewConversation: !!helpers.flow.isNew,
+      });
+      logger.debug("workflow-auto-rerun", {
+        chatId: helpers.chatId,
+        decision: workflowCloseAction,
+      });
+      if (workflowCloseAction === "ignore") return;
+      if (isWorkflowFinishedStatusCheck(data)) {
+        activationRef.current.handled = true;
+      }
     }
 
-    // 连接WebSocket
-    const connect = (callBack) => {
-        if (!canExecute) return
-        const replacingExistingSocket = !!websocket
-        if (websocket) {
-            if (!callBack) {
-                if (websocket.readyState === WebSocket.OPEN) {
-                    if (helpers.flow.flow_type === 10) {
-                        sendWorkflowStatusCheck(websocket)
-                    }
-                    return
-                }
-                if (websocket.readyState === WebSocket.CONNECTING) return
-                wsMap.delete(helpers.chatId)
-            } else if (websocket.readyState === WebSocket.OPEN) {
-                return
-            }
-        }
-        if (!helpers.wsUrl) return
-        if (helpers.appLost === AppLostMessage) return
-
-        const isSecureProtocol = window.location.protocol === "https:";
-        const webSocketProtocol = isSecureProtocol ? "wss" : "ws";
-        const ws = new WebSocket(`${webSocketProtocol}://${helpers.wsUrl}`)
-        wsMap.set(helpers.chatId, ws)
-
-        ws.onopen = () => {
-            console.log("WebSocket connection established!");
-            helpers.clearError()
-            if (helpers.flow.flow_type === 10) {
-                // 工作流初始化
-                // console.log('helpers.flow :>> ', helpers.flow);
-                const shouldCheckStatus = replacingExistingSocket || !helpers.flow.isNew
-                if (shouldCheckStatus) {
-                    sendWorkflowStatusCheck(ws)
-                    return
-                }
-                const { data, ...flow } = helpers.flow
-                const msg = {
-                    action: ActionType.INIT_DATA,
-                    chat_id: helpers.chatId,
-                    flow_id: helpers.flow.id,
-                    data: { ...flow, ...data },
-                }
-                claimWorkflowHandshake(activationRef.current, helpers.chatId)
-                ws?.send(JSON.stringify(msg))
-            } else {
-                // 助手初始化
-                const msg = {
-                    chatHistory: [],
-                    chat_id: helpers.chatId,
-                    flow_id: helpers.flow.id,
-                    inputs: {
-                        data: helpers.flow.flow_type === 5 ? {
-                            id: helpers.flow.id,
-                            chatId: helpers.chatId,
-                            type: helpers.flow.flow_type,
-                        } : undefined
-                    },
-                    name: helpers.flow.name,
-                    description: helpers.flow.description
-                }
-                ws?.send(JSON.stringify(msg))
-                // skill hack
-                if (helpers.flow.flow_type === 1 && callBack) {
-                    callBack?.(ws)
-                    callBack = null
-                }
-            }
-        }
-
-        ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data)
-                console.log('data :>> ', data);
-                handleMessages(data, ws)
-
-                if (data.type === 'close' && callBack) {
-                    callBack?.(ws)
-                    callBack = null
-                }
-            } catch (error) {
-                console.error("WebSocket message parse error:", error)
-            }
-        }
-
-        ws.onclose = (event) => {
-            console.log('close chatId:>> ', helpers.chatId);
-            console.error('ws close :>> ', event);
-            helpers.handleMsgError({ code: '', data: null }, true)
-            // todo 错误消息写入消息下面
-        }
-
-        ws.onerror = (error) => {
-            console.error('链接异常error', helpers.chatId, error);
-            helpers.handleMsgError({ code: '', data: null })
-        }
-    }
-    const handleMessages = (data, _ws) => {
-        // 过滤无效数据
-        if ((data.category === 'end_cover' && data.type !== 'end_cover')) {
-            return
-        }
-
-        let workflowCloseAction: WorkflowCloseAction | null = null
-        if (helpers.flow.flow_type === 10 && data.type === 'close' && data.category === 'processing') {
-            workflowCloseAction = decideWorkflowCloseAction({
-                data,
-                activation: activationRef.current,
-                enabled: standaloneContext?.autoRerunOnOpen ?? false,
-                isStandaloneWorkflow: standaloneContext?.flowType === 'workflow',
-                isNewConversation: !!helpers.flow.isNew,
-            })
-            logger.debug('workflow-auto-rerun', {
-                chatId: helpers.chatId,
-                decision: workflowCloseAction,
-            })
-            if (workflowCloseAction === 'ignore') return
-            if (isWorkflowFinishedStatusCheck(data)) {
-                activationRef.current.handled = true
-            }
-        }
-
-        if (data.type === 'begin') {
-            // 工作流input会有再begin之前出现的情况
-            // helpers.stopShow(true)
-        } else if (data.type === 'close' && data.category === 'processing') {
-            helpers.stopShow(false)
-            helpers.message.closeAllLogMsg(helpers.chatId);
-            // Generate title for new conversations after first round completes
-            // triggerGenTitle()
-        }
-
-        // messages
-        if (data.category === 'error' || data.type === 'error') {
-            let code = 0, message = ''
-            if (typeof data.message === 'string') {
-                // 兼容助手错误信息
-                const _data = JSON.parse(data.message)
-                code = _data.status_code
-                message = _data.status_message
-            } else {
-                code = data.message.status_code
-                message = data.message.status_message
-            }
-            if (![10421, 13002].includes(code)) {
-                showToast({
-                    message: code === 500 ? message : localize(`api_errors.${String(code)}`, { ...(data.message?.data || {}), defaultValue: localize('api_errors.fallback') }),
-                    severity: NotificationSeverity.WARNING,
-                })
-            } else {
-                helpers.handleMsgError({ code, data: data.message?.data })
-            }
-            return helpers.message.closeAllMsg(helpers.chatId)
-        } else if (data.category === 'node_run') {
-            return helpers.message.createNodeMsg(helpers.chatId, data)
-        } else if (data.category === 'guide_word') {
-            data.message.msg = data.message.guide_word
-        } else if (data.category === 'input') {
-            const { node_id, input_schema } = data.message
-            sessionInfoMap.set(helpers.chatId, { node_id, message_id: data.message_id })
-            // 待用户输入
-            helpers.showInputForm({ ...input_schema, node_id })
-            return
-        } else if (data.category === 'guide_question') {
-            return helpers.showGuideQuestion(helpers.chatId, data.message.guide_question.filter(q => q))
-        } else if (data.category === 'stream_msg') {
-            // helpers.flow.flow_type === 10 && helpers.reRunShow(true) // 成环的工作流不展示重跑按钮
-            helpers.message.streamMsg(helpers.chatId, data)
-            if (data.type === 'end') triggerGenTitle()
-        } else if (data.category === 'end_cover' && data.type === 'end_cover') {
-            _ws.send(JSON.stringify({ action: 'stop' }))
-            return helpers.message.endMsg(helpers.chatId, data)
-        }
-
-        /***** 技能 & 助手 start******/
-        if (helpers.flow.flow_type !== 10) {
-            if (Array.isArray(data) && data.length) return
-            if (data.type === 'start') {
-                const _data = helpers.flow.flow_type === 5 ? data : SkillMethod.getStartParam(data, helpers.chatId)
-                helpers.message.createMsg(helpers.chatId, _data)
-            } else if (data.type === 'stream') {
-                helpers.message.skillStreamMsg(helpers.chatId, data)
-            }
-            if (['end', 'end_cover'].includes(data.type) && data.receiver?.is_self) {
-                // 群聊@自己时
-                helpers.showInputForm({})
-            } else if (['end', 'end_cover'].includes(data.type)) {
-                // todo 无未闭合的消息，先创建（补一条start）  工具类除外
-                helpers.message.skillStreamMsg(helpers.chatId, data)
-            } else if (data.type === 'close') {
-                helpers.message.skillCloseMsg()
-                // Generate title for new conversations after first round completes
-                // triggerGenTitle()
-            }
-
-            return
-        }
-        /***** 技能 end******/
-        if (data.type === 'close' && data.category === 'processing') {
-            helpers.message.insetSeparator(helpers.chatId, 'com_chat_round_finished')
-            // 重启会话按钮,接收close确认后端处理结束后重启会话
-            const restartCallback = restartCallbacks.get(helpers.chatId)
-            if (restartCallback) {
-                restartCallbacks.delete(helpers.chatId)
-                restartCallback()
-            } else {
-                if (workflowCloseAction === 'auto') {
-                    helpers.reRunShow(false)
-                    helpers.stopShow(true)
-                    _ws.send(JSON.stringify(buildWorkflowInitMessage(helpers.flow, helpers.chatId)))
-                } else if (workflowCloseAction === 'manual') {
-                    helpers.reRunShow(true)
-                }
-            }
-        } else if (data.type === 'over') {
-            helpers.message.createMsg(helpers.chatId, data)
-        }
-    }
-    useEffect(() => {
-        if (!canExecute) return
-        connect()
-
-        return () => {
-            // 后台运行的会话结束后，断开WebSocket连接
-            if (currentChatId !== helpers.chatId) {
-                // 断开WebSocket连接
-                if (websocket && !helpers.running) {
-                    console.log('ws close', currentChatId, helpers.chatId)
-                    websocket.close()
-                    wsMap.delete(helpers.chatId)
-                    restartCallbacks.delete(helpers.chatId)
-                }
-            }
-        }
-    }, [helpers.chatId, helpers.running, canExecute])
-
-    const sendWsMsg = async (msg) => {
-        if (!canExecute) return
-        try {
-            if (websocket && websocket.readyState === WebSocket.OPEN) {
-                websocket.send(JSON.stringify(msg))
-            } else {
-                connect((_websocket) => {
-                    _websocket.send(JSON.stringify(msg))
-                })
-            }
-        } catch (error: any) {
-            showToast({
-                message: error.message,
-                severity: NotificationSeverity.WARNING,
-            })
-        }
+    if (data.type === "begin") {
+      // 工作流input会有再begin之前出现的情况
+      // helpers.stopShow(true)
+    } else if (data.type === "close" && data.category === "processing") {
+      helpers.stopShow(false);
+      helpers.message.closeAllLogMsg(helpers.chatId);
+      // Generate title for new conversations after first round completes
+      // triggerGenTitle()
     }
 
-    // 监听submitData变化，发送消息（必须在当前会话调用）
-    useEffect(() => {
-        if (canExecute && submitData
-            && (submitData.action === 'skill_input' || websocket && websocket.readyState === WebSocket.OPEN)) {
-            const action = submitData.action
+    // messages
+    if (data.category === "error" || data.type === "error") {
+      let code = 0,
+        message = "";
+      if (typeof data.message === "string") {
+        // 兼容助手错误信息
+        const _data = JSON.parse(data.message);
+        code = _data.status_code;
+        message = _data.status_message;
+      } else {
+        code = data.message.status_code;
+        message = data.message.status_message;
+      }
+      if (unavailableCodes.has(String(code))) {
+        unavailableRef.current[helpers.chatId] = String(code);
+        restartCallbacks.delete(helpers.chatId);
+        sessionInfoMap.delete(helpers.chatId);
+        helpers.handleMsgError({ code: String(code), data: data.message?.data });
+        helpers.message.closeAllLogMsg(helpers.chatId);
+      }
+      if (![10421, 13002].includes(code)) {
+        showToast({
+          message:
+            code === 500
+              ? message
+              : localize(`api_errors.${String(code)}`, {
+                  ...(data.message?.data || {}),
+                  defaultValue: localize("api_errors.fallback"),
+                }),
+          severity: NotificationSeverity.WARNING,
+        });
+      }
+      return helpers.message.closeAllMsg(helpers.chatId);
+    } else if (data.category === "node_run") {
+      return helpers.message.createNodeMsg(helpers.chatId, data);
+    } else if (data.category === "guide_word") {
+      data.message.msg = data.message.guide_word;
+    } else if (data.category === "input") {
+      const { node_id, input_schema } = data.message;
+      sessionInfoMap.set(helpers.chatId, { node_id, message_id: data.message_id });
+      // 待用户输入
+      helpers.showInputForm({ ...input_schema, node_id });
+      return;
+    } else if (data.category === "guide_question") {
+      return helpers.showGuideQuestion(
+        helpers.chatId,
+        data.message.guide_question.filter((q) => q),
+      );
+    } else if (data.category === "stream_msg") {
+      // helpers.flow.flow_type === 10 && helpers.reRunShow(true) // 成环的工作流不展示重跑按钮
+      helpers.message.streamMsg(helpers.chatId, data);
+      if (data.type === "end") triggerGenTitle();
+    } else if (data.category === "end_cover" && data.type === "end_cover") {
+      _ws.send(JSON.stringify({ action: "stop" }));
+      return helpers.message.endMsg(helpers.chatId, data);
+    }
 
-            switch (action) {
-                case ActionType.RESTART: {
-                    sendWsMsg({ action: 'stop' })
-                    const initMessage = buildWorkflowInitMessage(submitData.flow, submitData.chatId)
-                    restartCallbacks.set(submitData.chatId, () => {
-                        sendWsMsg(initMessage)
-                    })
-                    break
-                }
-                case ActionType.INPUT: {
-                    const sessionInfo = sessionInfoMap.get(helpers.chatId)
-                    const node = submitData.flow.data.nodes.find(node => node.id === sessionInfo?.node_id)
-                    const tab = node.data.tab.value
-                    let variable = ''
-                    node.data.group_params.some(group =>
-                        group.params.some(param => {
-                            if (param.tab === tab) {
-                                variable = param.key
-                                return true
-                            }
-                            return false
-                        })
-                    )
+    /***** 技能 & 助手 start******/
+    if (helpers.flow.flow_type !== 10) {
+      if (Array.isArray(data) && data.length) return;
+      if (data.type === "start") {
+        const _data = helpers.flow.flow_type === 5 ? data : SkillMethod.getStartParam(data, helpers.chatId);
+        helpers.message.createMsg(helpers.chatId, _data);
+      } else if (data.type === "stream") {
+        helpers.message.skillStreamMsg(helpers.chatId, data);
+      }
+      if (["end", "end_cover"].includes(data.type) && data.receiver?.is_self) {
+        // 群聊@自己时
+        helpers.showInputForm({});
+      } else if (["end", "end_cover"].includes(data.type)) {
+        // todo 无未闭合的消息，先创建（补一条start）  工具类除外
+        helpers.message.skillStreamMsg(helpers.chatId, data);
+      } else if (data.type === "close") {
+        helpers.message.skillCloseMsg();
+        // Generate title for new conversations after first round completes
+        // triggerGenTitle()
+      }
 
-                    let message = submitData.input
-                    let filePath = []
-                    // 文件拼接入消息
-                    if (submitData.files?.length) {
-                        const [_filePath, fileNames] = submitData.files.reduce((acc, cur) => {
-                            acc[0].push(cur.filepath ?? cur.file_path ?? cur.path)
-                            acc[1].push(cur.name)
-                            return acc
-                        }, [[], []])
-                        filePath = _filePath
-                        // 文件拼接入消息
-                        const _value = submitData.input
-                        message = fileNames.length > 0 ? fileNames.join('\n') + '\n' + _value : _value;
-                    }
-
-                    // Attachments travel twice on purpose: `dialog_files_content`
-                    // is what the workflow node reads, while `files` keeps them
-                    // as structured data so the message can render them (and the
-                    // backend can make them permanent) instead of relying on the
-                    // filenames glued onto the text.
-                    const messageFiles = (submitData.files || []).map((f) => ({
-                        file_id: f.file_id ?? f.id,
-                        file_name: f.name ?? f.file_name,
-                        file_url: f.filepath ?? f.file_path ?? f.path,
-                        // What the media chip draws with. Mapping down to the
-                        // three fields above dropped these, so a video sent from
-                        // a workflow rendered as a bare extension card while the
-                        // same file in daily chat showed its poster and length.
-                        ...(f.cover_filepath ? { cover_filepath: f.cover_filepath } : {}),
-                        ...(f.mediaDurationSec != null ? { mediaDurationSec: f.mediaDurationSec } : {}),
-                    }))
-
-                    sendWsMsg({
-                        action: 'input',
-                        chat_id: submitData.chatId,
-                        flow_id: submitData.flow.id,
-                        data: {
-                            [sessionInfo?.node_id]: {
-                                data: {
-                                    [variable]: message,
-                                    dialog_files_content: filePath
-                                },
-                                message,
-                                files: messageFiles,
-                                message_id: sessionInfo.message_id,
-                                category: 'question',
-                                extra: '',
-                                source: 0
-                            }
-                        },
-                    })
-
-                    helpers.message.createSendMsg(message, messageFiles)
-                    break
-                }
-                case ActionType.SKILL_INPUT:
-                    sendWsMsg(submitData.data)
-                    helpers.message.createSendMsg(submitData.input)
-                    break;
-                case ActionType.FORM_SUBMIT:
-                    sendWsMsg({
-                        action: 'input',
-                        chat_id: submitData.chatId,
-                        flow_id: submitData.flowId,
-                        data: {
-                            [submitData.nodeId!]: {
-                                data: submitData.data,
-                                message: submitData.input,
-                                message_id: sessionInfoMap.get(helpers.chatId).message_id,
-                                category: 'question',
-                                extra: '',
-                                source: 0
-                            }
-                        },
-                    })
-
-                    helpers.message.createSendMsg(submitData.input)
-                    break;
-                case ActionType.SKILL_FORM_SUBMIT:
-                    sendWsMsg(submitData.data)
-
-                    helpers.message.createSendMsg(submitData.input)
-                    break;
-                case ActionType.MESSAGE_INPUT:
-                    sendWsMsg({
-                        action: 'input',
-                        chat_id: submitData.chatId,
-                        flow_id: submitData.flowId,
-                        data: {
-                            [submitData.data.nodeId!]: {
-                                data: submitData.data.data,
-                                message: submitData.data.message,
-                                message_id: submitData.data.msgId
-                            }
-                        },
-                    })
-                    // 闭合所有输出节点
-                    helpers.message.closeOutputMsg(submitData.data.data.output_result)
-                    break;
-                case ActionType.STOP:
-                    sendWsMsg({ action: 'stop' })
-                    break;
-            }
-            setSubmitData(null)
+      return;
+    }
+    /***** 技能 end******/
+    if (data.type === "close" && data.category === "processing") {
+      helpers.message.insetSeparator(helpers.chatId, "com_chat_round_finished");
+      // 重启会话按钮,接收close确认后端处理结束后重启会话
+      const restartCallback = restartCallbacks.get(helpers.chatId);
+      if (restartCallback) {
+        restartCallbacks.delete(helpers.chatId);
+        restartCallback();
+      } else {
+        if (workflowCloseAction === "auto") {
+          helpers.reRunShow(false);
+          helpers.stopShow(true);
+          _ws.send(JSON.stringify(buildWorkflowInitMessage(helpers.flow, helpers.chatId)));
+        } else if (workflowCloseAction === "manual") {
+          helpers.reRunShow(true);
         }
-    }, [submitData])
-}
+      }
+    } else if (data.type === "over") {
+      helpers.message.createMsg(helpers.chatId, data);
+    }
+  };
+  useEffect(() => {
+    if (!canExecute) return;
+    connect();
 
+    return () => {
+      // 后台运行的会话结束后，断开WebSocket连接
+      if (currentChatId !== helpers.chatId) {
+        // 断开WebSocket连接
+        if (websocket && !helpers.running) {
+          console.log("ws close", currentChatId, helpers.chatId);
+          websocket.close();
+          wsMap.delete(helpers.chatId);
+          restartCallbacks.delete(helpers.chatId);
+        }
+      }
+    };
+  }, [helpers.chatId, helpers.running, canExecute]);
+
+  const sendWsMsg = async (msg) => {
+    if (!canExecute) return;
+    try {
+      if (websocket && websocket.readyState === WebSocket.OPEN) {
+        websocket.send(JSON.stringify(msg));
+      } else {
+        connect((_websocket) => {
+          _websocket.send(JSON.stringify(msg));
+        });
+      }
+    } catch (error: any) {
+      showToast({
+        message: error.message,
+        severity: NotificationSeverity.WARNING,
+      });
+    }
+  };
+
+  // 监听submitData变化，发送消息（必须在当前会话调用）
+  useEffect(() => {
+    if (submitData && isUnavailable()) {
+      helpers.handleMsgError({
+        code: unavailableRef.current[helpers.chatId] || String(helpers.appLost),
+        data: null,
+      });
+      setSubmitData(null);
+      return;
+    }
+    if (
+      canExecute &&
+      submitData &&
+      (submitData.action === "skill_input" || (websocket && websocket.readyState === WebSocket.OPEN))
+    ) {
+      const action = submitData.action;
+
+      switch (action) {
+        case ActionType.RESTART: {
+          sendWsMsg({ action: "stop" });
+          const initMessage = buildWorkflowInitMessage(submitData.flow, submitData.chatId);
+          restartCallbacks.set(submitData.chatId, () => {
+            sendWsMsg(initMessage);
+          });
+          break;
+        }
+        case ActionType.INPUT: {
+          const sessionInfo = sessionInfoMap.get(helpers.chatId);
+          const node = submitData.flow.data.nodes.find((node) => node.id === sessionInfo?.node_id);
+          const tab = node.data.tab.value;
+          let variable = "";
+          node.data.group_params.some((group) =>
+            group.params.some((param) => {
+              if (param.tab === tab) {
+                variable = param.key;
+                return true;
+              }
+              return false;
+            }),
+          );
+
+          let message = submitData.input;
+          let filePath = [];
+          // 文件拼接入消息
+          if (submitData.files?.length) {
+            const [_filePath, fileNames] = submitData.files.reduce(
+              (acc, cur) => {
+                acc[0].push(cur.filepath ?? cur.file_path ?? cur.path);
+                acc[1].push(cur.name);
+                return acc;
+              },
+              [[], []],
+            );
+            filePath = _filePath;
+            // 文件拼接入消息
+            const _value = submitData.input;
+            message = fileNames.length > 0 ? fileNames.join("\n") + "\n" + _value : _value;
+          }
+
+          // Attachments travel twice on purpose: `dialog_files_content`
+          // is what the workflow node reads, while `files` keeps them
+          // as structured data so the message can render them (and the
+          // backend can make them permanent) instead of relying on the
+          // filenames glued onto the text.
+          const messageFiles = (submitData.files || []).map((f) => ({
+            file_id: f.file_id ?? f.id,
+            file_name: f.name ?? f.file_name,
+            file_url: f.filepath ?? f.file_path ?? f.path,
+            // What the media chip draws with. Mapping down to the
+            // three fields above dropped these, so a video sent from
+            // a workflow rendered as a bare extension card while the
+            // same file in daily chat showed its poster and length.
+            ...(f.cover_filepath ? { cover_filepath: f.cover_filepath } : {}),
+            ...(f.mediaDurationSec != null ? { mediaDurationSec: f.mediaDurationSec } : {}),
+          }));
+
+          sendWsMsg({
+            action: "input",
+            chat_id: submitData.chatId,
+            flow_id: submitData.flow.id,
+            data: {
+              [sessionInfo?.node_id]: {
+                data: {
+                  [variable]: message,
+                  dialog_files_content: filePath,
+                },
+                message,
+                files: messageFiles,
+                message_id: sessionInfo.message_id,
+                category: "question",
+                extra: "",
+                source: 0,
+              },
+            },
+          });
+
+          helpers.message.createSendMsg(message, messageFiles);
+          break;
+        }
+        case ActionType.SKILL_INPUT:
+          sendWsMsg(submitData.data);
+          helpers.message.createSendMsg(submitData.input);
+          break;
+        case ActionType.FORM_SUBMIT:
+          sendWsMsg({
+            action: "input",
+            chat_id: submitData.chatId,
+            flow_id: submitData.flowId,
+            data: {
+              [submitData.nodeId!]: {
+                data: submitData.data,
+                message: submitData.input,
+                message_id: sessionInfoMap.get(helpers.chatId).message_id,
+                category: "question",
+                extra: "",
+                source: 0,
+              },
+            },
+          });
+
+          helpers.message.createSendMsg(submitData.input);
+          break;
+        case ActionType.SKILL_FORM_SUBMIT:
+          sendWsMsg(submitData.data);
+
+          helpers.message.createSendMsg(submitData.input);
+          break;
+        case ActionType.MESSAGE_INPUT:
+          sendWsMsg({
+            action: "input",
+            chat_id: submitData.chatId,
+            flow_id: submitData.flowId,
+            data: {
+              [submitData.data.nodeId!]: {
+                data: submitData.data.data,
+                message: submitData.data.message,
+                message_id: submitData.data.msgId,
+              },
+            },
+          });
+          // 闭合所有输出节点
+          helpers.message.closeOutputMsg(submitData.data.data.output_result);
+          break;
+        case ActionType.STOP:
+          sendWsMsg({ action: "stop" });
+          break;
+      }
+      setSubmitData(null);
+    }
+  }, [submitData]);
+};
 
 const useCurrentChatId = (chatId) => {
-    const currentChatIdRef = useRef<string | null>(null)
-    useEffect(() => {
-        currentChatIdRef.current = chatId
-    }, [chatId])
+  const currentChatIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    currentChatIdRef.current = chatId;
+  }, [chatId]);
 
-    return currentChatIdRef.current
-}
+  return currentChatIdRef.current;
+};

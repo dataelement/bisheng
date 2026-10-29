@@ -16,12 +16,21 @@ from mcp.server import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import ValidationError
+from starlette.datastructures import Headers
 
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.open_api import (
+    OpenApiCredentialMissingError,
+    OpenApiDelegateLocalDevRefusedError,
+    OpenApiDelegationModeUnsupportedError,
+    OpenApiScopeMissingError,
+)
 from bisheng.common.services.config_service import settings
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.audit_log import AuditLog
+from bisheng.open_api.application.access_context import open_api_access_context, validate_bearer
 from bisheng.open_api.domain.context import get_current_open_api_principal
+from bisheng.open_api.domain.scopes import OpenApiScopeMarker
 from bisheng.open_api.domain.services.call_audit_service import open_api_call_audit_service
 from bisheng.open_mcp.auth import MCP_PATH, OpenMcpTransportAuth, get_current_mcp_scope
 from bisheng.open_mcp.registry import TOOL_REGISTRY, list_tools_for
@@ -77,30 +86,34 @@ def create_open_mcp_runtime() -> OpenMcpRuntime:
     async def call_tool(name: str, arguments: dict[str, Any]) -> types.CallToolResult | types.ErrorData:
         started_at = time.perf_counter()
         definition = TOOL_REGISTRY.get(name)
-        principal = get_current_open_api_principal()
         result_code: int | str | None = None
         result_name = "failed"
         try:
             if definition is None:
                 result_code = types.INVALID_PARAMS
                 return types.ErrorData(code=types.INVALID_PARAMS, message="Unknown tool")
-            if principal is None:
-                result_code = "UNAUTHENTICATED"
-                return error_result(result_code, "MCP execution identity is missing")
-            if not definition.visible_to(principal):
-                result_code = "PERMISSION_DENIED"
-                return error_result(result_code, "Credential is not allowed to call this tool")
+            async with _tool_access_context(definition) as principal:
+                if principal is None:
+                    result_code = "UNAUTHENTICATED"
+                    return error_result(result_code, "MCP execution identity is missing")
+                if not definition.visible_to(principal):
+                    result_code = "PERMISSION_DENIED"
+                    return error_result(result_code, "Credential is not allowed to call this tool")
 
-            try:
-                definition.input_model.model_validate(arguments)
-            except ValidationError as exc:
-                tool_result = error_result_from_exception(exc)
-                result_code = _tool_error_code(tool_result)
-                return tool_result
+                try:
+                    definition.input_model.model_validate(arguments)
+                except ValidationError as exc:
+                    tool_result = error_result_from_exception(exc)
+                    result_code = _tool_error_code(tool_result)
+                    return tool_result
 
-            result = await execute_tool(name, arguments)
-            result_name = "success"
-            return success_result(result)
+                result = await execute_tool(name, arguments)
+                result_name = "success"
+                return success_result(result)
+        except (OpenApiScopeMissingError, OpenApiDelegationModeUnsupportedError, OpenApiDelegateLocalDevRefusedError):
+            # Fresh admission preserves the established tool visibility contract.
+            result_code = "PERMISSION_DENIED"
+            return error_result(result_code, "Credential is not allowed to call this tool")
         except (BaseErrorCode, HTTPException, McpUploadError) as exc:
             tool_result = error_result_from_exception(exc)
             result_code = _tool_error_code(tool_result)
@@ -142,6 +155,24 @@ def create_open_mcp_runtime() -> OpenMcpRuntime:
         app=OpenMcpTransportAuth(_StreamableHttpApp(manager)),
         manager=manager,
     )
+
+
+@asynccontextmanager
+async def _tool_access_context(definition):
+    scope = get_current_mcp_scope()
+    if scope is None:
+        raise OpenApiCredentialMissingError()
+    headers = Headers(scope=scope)
+    # ContextVars are task-local; never overwrite the shared ASGI scope principal.
+    async with open_api_access_context(
+        authorization=headers.get("Authorization"),
+        headers=headers.items(),
+        marker=OpenApiScopeMarker(scope=definition.scope, modes=definition.modes, session=False),
+        on_behalf_of=headers.get("X-On-Behalf-Of"),
+        end_user=headers.get("X-End-User"),
+        credential_validator=validate_bearer,
+    ) as principal:
+        yield principal
 
 
 def _transport_security_settings() -> TransportSecuritySettings:

@@ -1,5 +1,9 @@
-"""AC-21: ID and historical names are exclusive exact filters with indexed pagination."""
+"""AC-21: ID and historical names are exclusive exact filters with indexed pagination.
 
+Coverage AC: AC-03, AC-45, AC-49.
+"""
+
+from datetime import timedelta
 from hashlib import sha256
 
 import pytest
@@ -13,6 +17,8 @@ from test.dsh.test_model_audit_flow import BASE, LOCAL_ADMIN, call, fixture
 
 async def test_exact_model_filters_match_ids_and_complete_names_without_like_or_distinct():
     async with fixture() as (harness, client, _objects):
+        # Keep manually inserted fixed-time records inside the relative query window.
+        harness.queries.now = lambda: NOW + timedelta(seconds=1)
         names = ["Provider / Old%_name", "Provider / Old%_name extra", "Provider / Renamed", "Provider / Old%_name"]
         for tenant in (2, 3):
             with audit_session(harness.engine, tenant) as session, session.begin():

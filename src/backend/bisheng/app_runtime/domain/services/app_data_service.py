@@ -36,7 +36,13 @@ from typing import Any
 
 from bisheng.app_runtime.domain.constants import AppAuditAction, AppState
 from bisheng.app_runtime.domain.services.orchestrator_client import orchestrator_client
-from bisheng.common.errcode.app_factory import AppDataForbiddenError, AppDataInvalidError, AppNotFoundError
+from bisheng.app_runtime.domain.services.tenant_access import require_app_request_tenant
+from bisheng.common.errcode.app_factory import (
+    AppDataForbiddenError,
+    AppDataInvalidError,
+    AppDataNotReadyError,
+    AppNotFoundError,
+)
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import set_current_tenant_id
 from bisheng.core.database import get_async_db_session
@@ -65,6 +71,8 @@ class AppDataService:
     async def list_tables(cls, app_id: str, *, actor) -> dict[str, Any]:
         """``{tables: [{name, column_count}]}`` — ``[]`` is a legitimate answer."""
         app = await cls._load_owned(app_id, actor)
+        if not app.current_version_id and not app.pending_version_id:
+            raise AppDataNotReadyError(app_id=app.id)
         return await cls._call(app, actor, "tables", {}, lambda: orchestrator_client.db_tables(app_id=app.id))
 
     @classmethod
@@ -208,6 +216,7 @@ class AppDataService:
         check: this is the one surface where an administrator's reach ends,
         and the check must not have a branch that could widen it.
         """
+        require_app_request_tenant(app.tenant_id, actor)
         if int(getattr(actor, "user_id", 0) or 0) != int(app.owner_user_id or 0):
             raise AppDataForbiddenError(app_id=app.id)
 
