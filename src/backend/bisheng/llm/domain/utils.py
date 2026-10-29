@@ -12,6 +12,12 @@ from loguru import logger
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, StatusEnum
 from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.common.errcode.dsh import (
+    DshModelNotAllowedError,
+    DshMonthlyTokenLimitExceededError,
+    DshQuotaUnavailableError,
+    DshUserDisabledError,
+)
 from bisheng.common.errcode.server import LlmInvokeError
 from bisheng.common.schemas.telemetry.event_data_schema import ModelInvokeEventData
 from bisheng.common.services import telemetry_service
@@ -33,6 +39,20 @@ class LlmProviderDailyLimitExceededError(Exception):
     HTTP 429 rather than a generic 502 — can tell this apart from an upstream
     failure without matching on message text.
     """
+
+
+# Failures that say nothing about the model's health, so they must not flip its
+# shared status to "abnormal" for every user:
+# - F087: the request was too long for the model.
+# - Client-module (DSH) admission: this one user is out of credits, may not use
+#   the model, or is disabled. Rejected before the provider is ever called.
+_NOT_A_MODEL_FAULT = (
+    ContextOverflowError,
+    DshModelNotAllowedError,
+    DshMonthlyTokenLimitExceededError,
+    DshQuotaUnavailableError,
+    DshUserDisabledError,
+)
 
 
 def usable_proxy_url(value: object) -> str | None:
@@ -354,9 +374,9 @@ def wrapper_bisheng_model_limit_check(func):
             result = func(*args, **kwargs)
 
             return result
-        except ContextOverflowError:
-            # F087: the request was too long for the model, not a broken model —
-            # record the failed call but leave the model's status alone.
+        except _NOT_A_MODEL_FAULT:
+            # Record the failed call but leave the model's status alone: the
+            # model itself is fine (see _NOT_A_MODEL_FAULT).
             status = None
             telemetry_status = StatusEnum.FAILED
             raise
@@ -405,9 +425,9 @@ def wrapper_bisheng_model_limit_check_async(func):
             status = None
             telemetry_status = StatusEnum.FAILED
             raise
-        except ContextOverflowError:
-            # F087: the request was too long for the model, not a broken model —
-            # record the failed call but leave the model's status alone.
+        except _NOT_A_MODEL_FAULT:
+            # Record the failed call but leave the model's status alone: the
+            # model itself is fine (see _NOT_A_MODEL_FAULT).
             status = None
             telemetry_status = StatusEnum.FAILED
             raise
@@ -447,9 +467,9 @@ def wrapper_bisheng_model_generator(func):
                 yield item
                 if first_token_cost_time == 0:
                     first_token_cost_time = int((time.time() - start_time) * 1000)
-        except ContextOverflowError:
-            # F087: the request was too long for the model, not a broken model —
-            # record the failed call but leave the model's status alone.
+        except _NOT_A_MODEL_FAULT:
+            # Record the failed call but leave the model's status alone: the
+            # model itself is fine (see _NOT_A_MODEL_FAULT).
             status = None
             telemetry_status = StatusEnum.FAILED
             raise
@@ -487,9 +507,9 @@ def wrapper_bisheng_model_generator_async(func):
                 yield item
                 if first_token_cost_time == 0:
                     first_token_cost_time = int((time.time() - start_time) * 1000)
-        except ContextOverflowError:
-            # F087: the request was too long for the model, not a broken model —
-            # record the failed call but leave the model's status alone.
+        except _NOT_A_MODEL_FAULT:
+            # Record the failed call but leave the model's status alone: the
+            # model itself is fine (see _NOT_A_MODEL_FAULT).
             status = None
             telemetry_status = StatusEnum.FAILED
             raise

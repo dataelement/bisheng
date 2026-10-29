@@ -4099,7 +4099,7 @@
       "userTab": "用户",
       "addCredits": "新增分配",
       "emptyCredits": "暂无积分配置",
-      "ruleHelp": "按用户、部门或角色设置每人每月积分。同时命中多条有效配置时取最高值，Chat 和 Work 共用。",
+      "ruleHelp": "按用户、部门或角色设置每人每月积分。同时命中多条有效配置时取最高值，Chat 和 Work 共用。未命中任何有效配置的人员不限额度。",
       "scope": "适用范围",
       "monthlyCredits": "每人每月积分",
       "creditRangeHint": "请输入 0 至 {{max}} 之间的积分，最多保留 6 位小数。",

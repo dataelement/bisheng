@@ -62,3 +62,16 @@ def test_genuine_billing_not_misrouted_to_rate_limit():
     say 'try later'); it stays QUOTA_EXHAUSTED so the copy points to 'top up'."""
     for msg in ("账户余额不足", "您已欠费", "arrearage", "insufficient balance"):
         assert label_error(unwrap(RuntimeError(msg))) is ErrorType.QUOTA_EXHAUSTED, msg
+
+
+def test_platform_credit_rejection_labels_credit_exhausted():
+    """chat_service tags this BaseErrorCode so the bubble shows the credit card."""
+    from bisheng.common.errcode.dsh import DshMonthlyTokenLimitExceededError
+
+    exc = DshMonthlyTokenLimitExceededError()
+    assert label_error(exc) is ErrorType.CREDIT_EXHAUSTED
+    payload = json.loads(
+        exc.to_sse_event_instance_str(data={"error_type": ErrorType.CREDIT_EXHAUSTED.value}).split("data: ", 1)[1]
+    )
+    assert payload["status_code"] == 26121
+    assert payload["data"]["error_type"] == "credit_exhausted"
