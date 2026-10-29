@@ -8,6 +8,7 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
+from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagLink
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
@@ -37,6 +38,11 @@ from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import 
     commit_tracked_fulltext_changes,
     track_fulltext_file_changes,
 )
+from bisheng.knowledge.domain.services.uploader_org_names import (
+    EMPTY_UPLOADER_ORG,
+    path_ids,
+    resolve_uploader_org_names,
+)
 
 _ABNORMAL_UPLOAD_STATUSES = (
     KnowledgeFileStatus.FAILED.value,
@@ -50,6 +56,65 @@ _SOURCE_SPACE_LEVELS = (
     KnowledgeSpaceLevelEnum.TEAM_KS.value,
     KnowledgeSpaceLevelEnum.PERSONAL.value,
 )
+
+
+def _path_segments(path_column):
+    """`/1/2/3/` 这种路径的段数. 斜杠是单字节, MySQL 与 DM8 的 LENGTH 结果一致."""
+    return func.length(path_column) - func.length(func.replace(path_column, "/", "")) - 1
+
+
+def _uploader_org_name_filter(level: str, name: str):
+    """上传人组织路径上存在指定层级和名称的有效部门.
+
+    文件没登记 belonging_organization_id 时, 用上传人当前主部门.
+    部门没写 org_level 时, 按公司根路径的相对深度判断.
+    """
+    start = aliased(Department)
+    ancestor = aliased(Department)
+    primary = aliased(UserDepartment)
+    company_path = (
+        select(Department.path)
+        .where(Department.org_level == "company", Department.status == "active")
+        .limit(1)
+        .scalar_subquery()
+    )
+    relative_depth = {"company": 0, "dept": 1, "office": 2}[level]
+    return exists(
+        select(start.id)
+        .select_from(start)
+        .outerjoin(
+            primary,
+            and_(
+                KnowledgeFile.belonging_organization_id.is_(None),
+                primary.user_id == KnowledgeFile.user_id,
+                primary.is_primary == 1,
+            ),
+        )
+        .join(
+            ancestor,
+            or_(
+                ancestor.id == start.id,
+                and_(
+                    ancestor.path != "",
+                    start.path.like(func.concat(ancestor.path, "%")),
+                ),
+            ),
+        )
+        .where(
+            start.id == func.coalesce(KnowledgeFile.belonging_organization_id, primary.department_id),
+            ancestor.name == name,
+            ancestor.status == "active",
+            or_(
+                ancestor.org_level == level,
+                and_(
+                    or_(ancestor.org_level.is_(None), ancestor.org_level == ""),
+                    company_path.is_not(None),
+                    ancestor.path.like(func.concat(company_path, "%")),
+                    _path_segments(ancestor.path) - _path_segments(company_path) == relative_depth,
+                ),
+            ),
+        )
+    )
 
 
 def _source_upload_filters():
@@ -267,6 +332,9 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         keyword: str | None = None,
         knowledge_name: str | None = None,
         uploader_name: str | None = None,
+        uploader_company: str | None = None,
+        uploader_department: str | None = None,
+        uploader_office: str | None = None,
         update_time_from: date | None = None,
         update_time_to: date | None = None,
     ) -> tuple[list[dict], int]:
@@ -280,6 +348,12 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             filters.append(Knowledge.name.like(f"%{knowledge_name}%"))
         if uploader_name:
             filters.append(KnowledgeFile.user_name.like(f"%{uploader_name}%"))
+        if uploader_company:
+            filters.append(_uploader_org_name_filter("company", uploader_company))
+        if uploader_department:
+            filters.append(_uploader_org_name_filter("dept", uploader_department))
+        if uploader_office:
+            filters.append(_uploader_org_name_filter("office", uploader_office))
         if update_time_from is not None:
             filters.append(KnowledgeFile.update_time >= datetime.combine(update_time_from, time.min))
         if update_time_to is not None:
@@ -302,7 +376,9 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
                     Knowledge.name,
                     KnowledgeSpaceScope.level,
                     KnowledgeFile.status,
+                    KnowledgeFile.user_id,
                     KnowledgeFile.user_name,
+                    KnowledgeFile.belonging_organization_id,
                     KnowledgeFile.remark,
                     KnowledgeFile.update_time,
                 )
@@ -314,9 +390,12 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
                 .limit(limit)
             )
         ).all()
+        start_ids = await self._org_start_ids([(row.belonging_organization_id, row.user_id) for row in rows])
+        org_names = await self._uploader_org_names_by_id(set(start_ids.values()))
         items = []
-        for row in rows:
+        for index, row in enumerate(rows):
             updated = row.update_time
+            organization_id = start_ids.get(index, 0)
             items.append(
                 {
                     "file_id": int(row.id),
@@ -326,11 +405,127 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
                     "space_level": getattr(row.level, "value", row.level),
                     "status": int(row.status),
                     "uploader_name": row.user_name or "",
+                    **org_names.get(organization_id, EMPTY_UPLOADER_ORG),
                     "remark": row.remark or "",
                     "update_time": updated.isoformat() if updated is not None else "",
                 }
             )
         return items, total
+
+    async def list_abnormal_uploader_org_options(self) -> dict[str, list[str]]:
+        filters = and_(_source_upload_filters(), KnowledgeFile.status.in_(_ABNORMAL_UPLOAD_STATUSES))
+        pairs = (
+            await self.session.execute(
+                select(KnowledgeFile.belonging_organization_id, KnowledgeFile.user_id)
+                .join(Knowledge, Knowledge.id == KnowledgeFile.knowledge_id)
+                .join(KnowledgeSpaceScope, KnowledgeSpaceScope.space_id == Knowledge.id)
+                .where(filters)
+                .distinct()
+            )
+        ).all()
+        start_ids = await self._org_start_ids(pairs)
+        org_names = await self._uploader_org_names_by_id(set(start_ids.values()))
+        name_rows = (
+            await self.session.execute(
+                select(Knowledge.name, KnowledgeFile.user_name)
+                .join(Knowledge, Knowledge.id == KnowledgeFile.knowledge_id)
+                .join(KnowledgeSpaceScope, KnowledgeSpaceScope.space_id == Knowledge.id)
+                .where(filters)
+                .distinct()
+            )
+        ).all()
+        companies: set[str] = set()
+        departments: set[str] = set()
+        offices: set[str] = set()
+        knowledges: set[str] = set()
+        uploaders: set[str] = set()
+        for names in org_names.values():
+            if names["company_name"]:
+                companies.add(names["company_name"])
+            if names["department_name"]:
+                departments.add(names["department_name"])
+            if names["office_name"]:
+                offices.add(names["office_name"])
+        for knowledge_name, uploader_name in name_rows:
+            if knowledge_name:
+                knowledges.add(str(knowledge_name))
+            if uploader_name:
+                uploaders.add(str(uploader_name))
+        return {
+            "companies": sorted(companies),
+            "departments": sorted(departments),
+            "offices": sorted(offices),
+            "knowledges": sorted(knowledges),
+            "uploaders": sorted(uploaders),
+        }
+
+    async def _org_start_ids(self, pairs: list[tuple]) -> dict[int, int]:
+        """每行用来拆名称的部门: 文件登记的组织优先, 没有则用上传人唯一主部门."""
+        missing_users = {int(user_id) for organization_id, user_id in pairs if not organization_id and user_id}
+        primary_by_user = await self._primary_department_ids(missing_users)
+        start_ids: dict[int, int] = {}
+        for index, (organization_id, user_id) in enumerate(pairs):
+            if organization_id:
+                start_ids[index] = int(organization_id)
+                continue
+            department_id = primary_by_user.get(int(user_id or 0))
+            if department_id:
+                start_ids[index] = department_id
+        return start_ids
+
+    async def _primary_department_ids(self, user_ids: set[int]) -> dict[int, int]:
+        if not user_ids:
+            return {}
+        rows = (
+            await self.session.execute(
+                select(UserDepartment.user_id, UserDepartment.department_id).where(
+                    col(UserDepartment.user_id).in_(user_ids),
+                    UserDepartment.is_primary == 1,
+                )
+            )
+        ).all()
+        grouped: dict[int, list[int]] = {}
+        for user_id, department_id in rows:
+            grouped.setdefault(int(user_id), []).append(int(department_id))
+        return {user_id: departments[0] for user_id, departments in grouped.items() if len(departments) == 1}
+
+    async def _uploader_org_names_by_id(self, organization_ids: set[int]) -> dict[int, dict[str, str]]:
+        if not organization_ids:
+            return {}
+        rows = list(
+            (await self.session.execute(select(Department).where(col(Department.id).in_(organization_ids)))).scalars()
+        )
+        by_id = {int(row.id): row for row in rows if row.id is not None}
+        missing = {department_id for row in rows for department_id in path_ids(row.path)} - set(by_id)
+        if missing:
+            ancestors = (
+                await self.session.execute(select(Department).where(col(Department.id).in_(missing)))
+            ).scalars()
+            for row in ancestors:
+                if row.id is not None:
+                    by_id[int(row.id)] = row
+        company = next(
+            (row for row in by_id.values() if str(getattr(row, "org_level", "") or "") == "company"),
+            None,
+        )
+        if company is None:
+            company_path = (
+                await self.session.execute(
+                    select(Department.path)
+                    .where(Department.org_level == "company", Department.status == "active")
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+        else:
+            company_path = company.path
+        return {
+            organization_id: resolve_uploader_org_names(
+                by_id.get(organization_id),
+                by_id,
+                company_path,
+            )
+            for organization_id in organization_ids
+        }
 
     async def lock_abnormal_source_file(self, file_id: int) -> KnowledgeFile | None:
         stmt = (

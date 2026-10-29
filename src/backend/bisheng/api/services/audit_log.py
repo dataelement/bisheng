@@ -1,21 +1,19 @@
+# ruff: noqa: RUF002, RUF003
 import asyncio
 from datetime import datetime
-from typing import Any, List, Dict, Optional, Union, Tuple
+from typing import Any, Union
 
 from loguru import logger
-from sqlalchemy import func
-from sqlmodel import col, or_, and_, select
+from sqlmodel import and_, col, or_, select
 
-from bisheng.core.database.dialect_helpers import json_array_contains
-
-
-def _db_dialect() -> str:
-    try:
-        from bisheng.core.database.manager import sync_get_database_connection
-        return sync_get_database_connection().engine.dialect.name
-    except Exception:
-        return 'mysql'
-
+from bisheng.api.services.audit_user_org import (
+    EMPTY_USER_ORG,
+    org_names_for_users,
+    user_ids_for_org_filters,
+)
+from bisheng.api.services.audit_user_org import (
+    list_user_org_options as load_user_org_options,
+)
 from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import resp_200
@@ -23,29 +21,39 @@ from bisheng.chat_session.domain.services.chat_feedback_service import ChatFeedb
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.core.context.tenant import (
+    bypass_tenant_filter,
     get_admin_scope_tenant_id,
     get_current_tenant_id,
 )
-from bisheng.database.models.assistant import AssistantDao, Assistant
-from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
-from bisheng.database.models.flow import FlowDao, Flow, FlowType
+from bisheng.core.database.dialect_helpers import json_array_contains
+from bisheng.database.models.assistant import Assistant, AssistantDao
+from bisheng.database.models.audit_log import AuditLog, AuditLogDao, EventType, ObjectType, SystemId
+from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.flow import Flow, FlowDao, FlowType
 from bisheng.database.models.group import Group
-from bisheng.database.models.group_resource import ResourceTypeEnum
+from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.role import Role
-from bisheng.database.models.session import MessageSessionDao, MessageSession, feedback_opinion_count
+from bisheng.database.models.session import MessageSession, MessageSessionDao, feedback_opinion_count
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, Knowledge
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.tool.domain.models.gpts_tools import GptsToolsType
-from bisheng.database.models.department import DepartmentDao
-from bisheng.user.domain.models.user import UserDao, User
+from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.services.auth import LoginUser
 from bisheng.user.domain.services.platform_operator import has_platform_operator_role
 
 
+def _db_dialect() -> str:
+    try:
+        from bisheng.core.database.manager import sync_get_database_connection
+
+        return sync_get_database_connection().engine.dialect.name
+    except Exception:
+        return "mysql"
+
+
 # todo change to async or submit thread pool
 class AuditLogService:
-
     @classmethod
     async def _user_has_log_web_menu(cls, user: UserPayload) -> bool:
         """角色 / 部门管理员合并后的 web_menu 含 ``log``（审计页）时允许使用审计 API。"""
@@ -53,10 +61,8 @@ class AuditLogService:
         if not db_user:
             return False
         is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(user.user_id))
-        _, web_menu = await LoginUser.get_roles_web_menu(
-            db_user, is_department_admin=is_department_admin
-        )
-        return 'log' in set(web_menu)
+        _, web_menu = await LoginUser.get_roles_web_menu(db_user, is_department_admin=is_department_admin)
+        return "log" in set(web_menu)
 
     @classmethod
     async def _can_read_tenant_audit(cls, user: UserPayload) -> bool:
@@ -70,7 +76,7 @@ class AuditLogService:
         return has_platform_operator_role(user)
 
     @classmethod
-    def _get_audit_tenant_scope(cls, user: UserPayload) -> Optional[int]:
+    def _get_audit_tenant_scope(cls, user: UserPayload) -> int | None:
         """Tenant id to scope audit reads to, or None to skip scoping.
 
         - Global super w/o F019 admin-scope     -> None  (sees all tenants)
@@ -88,9 +94,66 @@ class AuditLogService:
         return get_current_tenant_id()
 
     @classmethod
-    async def get_audit_log(cls, login_user: UserPayload, group_ids, operator_ids, start_time, end_time,
-                            system_id, event_type, page, limit,
-                            responsible_user_ids=None) -> Any:
+    async def list_user_org_options(cls, login_user: UserPayload) -> dict[str, list[str]]:
+        if not login_user.is_admin() and not await cls._can_read_tenant_audit(login_user):
+            groups = await UserGroupDao.aget_user_admin_group(login_user.user_id)
+            if not groups:
+                raise UnAuthorizedError()
+        return await cls._read_org(login_user, load_user_org_options)
+
+    @classmethod
+    async def _read_org(cls, login_user: UserPayload, loader):
+        """Global super without an admin scope reads every tenant's departments."""
+        if cls._get_audit_tenant_scope(login_user) is None:
+            with bypass_tenant_filter():
+                return await loader()
+        return await loader()
+
+    @classmethod
+    async def _org_restricted_user_ids(
+        cls,
+        login_user: UserPayload,
+        user_ids: list[int] | None,
+        user_department: str | None,
+        user_company: str | None,
+        user_office: str | None,
+    ) -> list[int] | None:
+        """None: no org filter. Empty list: org filter matches nobody."""
+        org_user_ids = await cls._read_org(
+            login_user,
+            lambda: user_ids_for_org_filters(user_department, user_company, user_office),
+        )
+        if org_user_ids is None:
+            return None
+        selected: set[int] = set()
+        for value in user_ids or []:
+            if value in (None, ""):
+                continue
+            try:
+                selected.add(int(value))
+            except (TypeError, ValueError):
+                continue
+        if selected:
+            org_user_ids &= selected
+        return sorted(org_user_ids)
+
+    @classmethod
+    async def get_audit_log(
+        cls,
+        login_user: UserPayload,
+        group_ids,
+        operator_ids,
+        start_time,
+        end_time,
+        system_id,
+        event_type,
+        page,
+        limit,
+        responsible_user_ids=None,
+        user_department: str | None = None,
+        user_company: str | None = None,
+        user_office: str | None = None,
+    ) -> Any:
         groups = group_ids
         if not login_user.is_admin():
             if await cls._can_read_tenant_audit(login_user):
@@ -107,6 +170,17 @@ class AuditLogService:
                         return UnAuthorizedError.return_resp()
 
         tenant_scope = cls._get_audit_tenant_scope(login_user)
+        restricted_operator_ids = await cls._org_restricted_user_ids(
+            login_user,
+            operator_ids,
+            user_department,
+            user_company,
+            user_office,
+        )
+        if restricted_operator_ids is not None:
+            if not restricted_operator_ids:
+                return resp_200(data={"data": [], "total": 0})
+            operator_ids = restricted_operator_ids
         data, total = await AuditLogDao.get_audit_logs(
             groups,
             operator_ids,
@@ -120,28 +194,33 @@ class AuditLogService:
             tenant_scope=tenant_scope,
         )
         operator_user_ids = sorted(
-            {int(log.operator_id) for log in data if getattr(log, 'operator_id', None) not in (None, 0)}
+            {int(log.operator_id) for log in data if getattr(log, "operator_id", None) not in (None, 0)}
         )
         external_id_map: dict[int, str | None] = {}
+        org_map: dict[int, dict[str, str]] = {}
         if operator_user_ids:
-            users = await UserDao.aget_user_by_ids(operator_user_ids) or []
-            for user in users:
+            users, org_map = await asyncio.gather(
+                UserDao.aget_user_by_ids(operator_user_ids),
+                cls._read_org(login_user, lambda: org_names_for_users(operator_user_ids)),
+            )
+            for user in users or []:
                 if user.user_id is None:
                     continue
-                external_id = str(getattr(user, 'external_id', None) or '').strip() or None
+                external_id = str(getattr(user, "external_id", None) or "").strip() or None
                 external_id_map[int(user.user_id)] = external_id
 
         serialized: list[dict] = []
         for log in data:
             item = log.model_dump()
-            operator_id = int(getattr(log, 'operator_id', 0) or 0)
-            item['operator_external_id'] = external_id_map.get(operator_id) if operator_id else None
+            operator_id = int(getattr(log, "operator_id", 0) or 0)
+            item["operator_external_id"] = external_id_map.get(operator_id) if operator_id else None
+            item.update(org_map.get(operator_id) or EMPTY_USER_ORG)
             serialized.append(item)
-        return resp_200(data={'data': serialized, 'total': total})
+        return resp_200(data={"data": serialized, "total": total})
 
     @classmethod
-    async def get_all_responsible_persons(cls, login_user: UserPayload) -> List[Dict]:
-        groups: List[int] = []
+    async def get_all_responsible_persons(cls, login_user: UserPayload) -> list[dict]:
+        groups: list[int] = []
         if not login_user.is_admin():
             if not await cls._can_read_tenant_audit(login_user):
                 groups = [one.group_id for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
@@ -160,8 +239,8 @@ class AuditLogService:
         return name or ext
 
     @classmethod
-    async def get_all_operators(cls, login_user: UserPayload) -> List[Dict]:
-        groups: List[int] = []
+    async def get_all_operators(cls, login_user: UserPayload) -> list[dict]:
+        groups: list[int] = []
         if not login_user.is_admin():
             if not await cls._can_read_tenant_audit(login_user):
                 groups = [one.group_id for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
@@ -193,8 +272,16 @@ class AuditLogService:
         return list(res.values())
 
     @classmethod
-    def _chat_log(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
-                  object_id: str, object_name: str, resource_type: ResourceTypeEnum):
+    def _chat_log(
+        cls,
+        user: UserPayload,
+        ip_address: str,
+        event_type: EventType,
+        object_type: ObjectType,
+        object_id: str,
+        object_name: str,
+        resource_type: ResourceTypeEnum,
+    ):
         # F008: Use operator's user groups instead of resource group (ReBAC migration)
         user_groups = UserGroupDao.get_user_group(user.user_id)
         group_ids = [one.group_id for one in user_groups]
@@ -212,10 +299,17 @@ class AuditLogService:
         AuditLogDao.insert_audit_logs([audit_log])
 
     @classmethod
-    async def _chat_log_async(cls, user: UserPayload, ip_address: str, event_type: EventType,
-                              object_type: ObjectType,
-                              object_id: str, object_name: str, resource_type: ResourceTypeEnum,
-                              group_ids: List[int] = None):
+    async def _chat_log_async(
+        cls,
+        user: UserPayload,
+        ip_address: str,
+        event_type: EventType,
+        object_type: ObjectType,
+        object_id: str,
+        object_name: str,
+        resource_type: ResourceTypeEnum,
+        group_ids: list[int] | None = None,
+    ):
         # F008: Use operator's user groups instead of resource group (ReBAC migration)
         if group_ids is None:
             user_groups = await UserGroupDao.aget_user_group(user.user_id)
@@ -241,8 +335,15 @@ class AuditLogService:
         logger.info(f"act=create_chat_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
         # Getting Assistant Details
         assistant_info = AssistantDao.get_one_assistant(assistant_id)
-        cls._chat_log(user, ip_address, EventType.CREATE_CHAT, ObjectType.ASSISTANT,
-                      assistant_id, assistant_info.name, ResourceTypeEnum.ASSISTANT)
+        cls._chat_log(
+            user,
+            ip_address,
+            EventType.CREATE_CHAT,
+            ObjectType.ASSISTANT,
+            assistant_id,
+            assistant_info.name,
+            ResourceTypeEnum.ASSISTANT,
+        )
 
     @classmethod
     def create_chat_workflow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_info=None):
@@ -252,8 +353,15 @@ class AuditLogService:
         logger.info(f"act=create_chat_workflow user={user.user_name} ip={ip_address} flow={flow_id}")
         if not flow_info:
             flow_info = FlowDao.get_flow_by_id(flow_id)
-        cls._chat_log(user, ip_address, EventType.CREATE_CHAT, ObjectType.WORK_FLOW,
-                      flow_id, flow_info.name, ResourceTypeEnum.WORK_FLOW)
+        cls._chat_log(
+            user,
+            ip_address,
+            EventType.CREATE_CHAT,
+            ObjectType.WORK_FLOW,
+            flow_id,
+            flow_info.name,
+            ResourceTypeEnum.WORK_FLOW,
+        )
 
     @classmethod
     async def delete_chat_workflow(cls, user: UserPayload, ip_address: str, flow_info: Flow):
@@ -261,8 +369,15 @@ class AuditLogService:
         Delete Audit Log for Workflow Session
         """
         logger.info(f"act=delete_chat_workflow user={user.user_name} ip={ip_address} flow={flow_info.id}")
-        await cls._chat_log_async(user, ip_address, EventType.DELETE_CHAT, ObjectType.WORK_FLOW,
-                                  flow_info.id, flow_info.name, ResourceTypeEnum.WORK_FLOW)
+        await cls._chat_log_async(
+            user,
+            ip_address,
+            EventType.DELETE_CHAT,
+            ObjectType.WORK_FLOW,
+            flow_info.id,
+            flow_info.name,
+            ResourceTypeEnum.WORK_FLOW,
+        )
 
     @classmethod
     async def delete_chat_assistant(cls, user: UserPayload, ip_address: str, assistant_info: Assistant):
@@ -270,13 +385,27 @@ class AuditLogService:
         Delete audit log for assistant session
         """
         logger.info(f"act=delete_assistant_flow user={user.user_name} ip={ip_address} assistant={assistant_info.id}")
-        await cls._chat_log_async(user, ip_address, EventType.DELETE_CHAT, ObjectType.ASSISTANT,
-                                  assistant_info.id, assistant_info.name, ResourceTypeEnum.ASSISTANT)
+        await cls._chat_log_async(
+            user,
+            ip_address,
+            EventType.DELETE_CHAT,
+            ObjectType.ASSISTANT,
+            assistant_info.id,
+            assistant_info.name,
+            ResourceTypeEnum.ASSISTANT,
+        )
 
     @classmethod
-    def _build_log(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
-                   object_id: str,
-                   object_name: str, resource_type: ResourceTypeEnum):
+    def _build_log(
+        cls,
+        user: UserPayload,
+        ip_address: str,
+        event_type: EventType,
+        object_type: ObjectType,
+        object_id: str,
+        object_name: str,
+        resource_type: ResourceTypeEnum,
+    ):
         """
         Build Module Audit Log
         """
@@ -299,9 +428,16 @@ class AuditLogService:
         AuditLogDao.insert_audit_logs([audit_log])
 
     @classmethod
-    async def _build_log_async(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
-                               object_id: str,
-                               object_name: str, resource_type: ResourceTypeEnum):
+    async def _build_log_async(
+        cls,
+        user: UserPayload,
+        ip_address: str,
+        event_type: EventType,
+        object_type: ObjectType,
+        object_id: str,
+        object_name: str,
+        resource_type: ResourceTypeEnum,
+    ):
         """
         Build Module Audit Log
         """
@@ -330,8 +466,15 @@ class AuditLogService:
         """
         logger.info(f"act=create_build_workflow user={user.user_name} ip={ip_address} flow={flow_id}")
         flow_info = FlowDao.get_flow_by_id(flow_id)
-        cls._build_log(user, ip_address, EventType.CREATE_BUILD, ObjectType.WORK_FLOW,
-                       flow_info.id, flow_info.name, ResourceTypeEnum.WORK_FLOW)
+        cls._build_log(
+            user,
+            ip_address,
+            EventType.CREATE_BUILD,
+            ObjectType.WORK_FLOW,
+            flow_info.id,
+            flow_info.name,
+            ResourceTypeEnum.WORK_FLOW,
+        )
 
     @classmethod
     async def update_build_workflow(cls, user: UserPayload, ip_address: str, flow_id: str):
@@ -340,8 +483,15 @@ class AuditLogService:
         """
         logger.info(f"act=update_build_workflow user={user.user_name} ip={ip_address} flow={flow_id}")
         flow_info = await FlowDao.aget_flow_by_id(flow_id)
-        await cls._build_log_async(user, ip_address, EventType.UPDATE_BUILD, ObjectType.WORK_FLOW, flow_info.id,
-                                   flow_info.name, ResourceTypeEnum.WORK_FLOW)
+        await cls._build_log_async(
+            user,
+            ip_address,
+            EventType.UPDATE_BUILD,
+            ObjectType.WORK_FLOW,
+            flow_info.id,
+            flow_info.name,
+            ResourceTypeEnum.WORK_FLOW,
+        )
 
     @classmethod
     def delete_build_workflow(cls, user: UserPayload, ip_address: str, flow_info: Flow):
@@ -349,8 +499,15 @@ class AuditLogService:
         Delete Workflow Audit Log
         """
         logger.info(f"act=delete_build_workflow user={user.user_name} ip={ip_address} flow={flow_info.id}")
-        cls._build_log(user, ip_address, EventType.DELETE_BUILD, ObjectType.WORK_FLOW,
-                       flow_info.id, flow_info.name, ResourceTypeEnum.WORK_FLOW)
+        cls._build_log(
+            user,
+            ip_address,
+            EventType.DELETE_BUILD,
+            ObjectType.WORK_FLOW,
+            flow_info.id,
+            flow_info.name,
+            ResourceTypeEnum.WORK_FLOW,
+        )
 
     @classmethod
     def create_build_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
@@ -359,8 +516,15 @@ class AuditLogService:
         """
         logger.info(f"act=create_build_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
         assistant_info = AssistantDao.get_one_assistant(assistant_id)
-        cls._build_log(user, ip_address, EventType.CREATE_BUILD, ObjectType.ASSISTANT,
-                       assistant_info.id, assistant_info.name, ResourceTypeEnum.ASSISTANT)
+        cls._build_log(
+            user,
+            ip_address,
+            EventType.CREATE_BUILD,
+            ObjectType.ASSISTANT,
+            assistant_info.id,
+            assistant_info.name,
+            ResourceTypeEnum.ASSISTANT,
+        )
 
     @classmethod
     def update_build_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
@@ -370,8 +534,15 @@ class AuditLogService:
         logger.info(f"act=update_build_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
         assistant_info = AssistantDao.get_one_assistant(assistant_id)
 
-        cls._build_log(user, ip_address, EventType.UPDATE_BUILD, ObjectType.ASSISTANT,
-                       assistant_info.id, assistant_info.name, ResourceTypeEnum.ASSISTANT)
+        cls._build_log(
+            user,
+            ip_address,
+            EventType.UPDATE_BUILD,
+            ObjectType.ASSISTANT,
+            assistant_info.id,
+            assistant_info.name,
+            ResourceTypeEnum.ASSISTANT,
+        )
 
     @classmethod
     def delete_build_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
@@ -381,8 +552,15 @@ class AuditLogService:
         logger.info(f"act=delete_build_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
         assistant_info = AssistantDao.get_one_assistant(assistant_id)
 
-        cls._build_log(user, ip_address, EventType.DELETE_BUILD, ObjectType.ASSISTANT,
-                       assistant_info.id, assistant_info.name, ResourceTypeEnum.ASSISTANT)
+        cls._build_log(
+            user,
+            ip_address,
+            EventType.DELETE_BUILD,
+            ObjectType.ASSISTANT,
+            assistant_info.id,
+            assistant_info.name,
+            ResourceTypeEnum.ASSISTANT,
+        )
 
     @classmethod
     async def create_chat_message(cls, user: UserPayload, ip_address: str, message: Union[str, MessageSession]):
@@ -399,9 +577,16 @@ class AuditLogService:
         user_groups = await UserGroupDao.aget_user_group(message_session.user_id)
         group_ids = [ug.group_id for ug in user_groups]
 
-        await cls._chat_log_async(user, ip_address, EventType.CREATE_CHAT, ObjectType.WORKSTATION,
-                                  message_session.chat_id, message_session.name, ResourceTypeEnum.WORKSTATION,
-                                  group_ids)
+        await cls._chat_log_async(
+            user,
+            ip_address,
+            EventType.CREATE_CHAT,
+            ObjectType.WORKSTATION,
+            message_session.chat_id,
+            message_session.name,
+            ResourceTypeEnum.WORKSTATION,
+            group_ids,
+        )
 
     @classmethod
     async def delete_chat_message(cls, user: UserPayload, ip_address: str, message: Union[str, MessageSession]):
@@ -415,12 +600,28 @@ class AuditLogService:
 
         logger.info(f"act=delete_chat_message user={user.user_name} ip={ip_address} session={message_session.chat_id}")
 
-        await cls._chat_log_async(user, ip_address, EventType.DELETE_CHAT, ObjectType.WORKSTATION,
-                                  message_session.chat_id, message_session.name, ResourceTypeEnum.WORKSTATION)
+        await cls._chat_log_async(
+            user,
+            ip_address,
+            EventType.DELETE_CHAT,
+            ObjectType.WORKSTATION,
+            message_session.chat_id,
+            message_session.name,
+            ResourceTypeEnum.WORKSTATION,
+        )
 
     @classmethod
-    def _knowledge_log(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
-                       object_id: str, object_name: str, resource_type: ResourceTypeEnum, resource_id: str):
+    def _knowledge_log(
+        cls,
+        user: UserPayload,
+        ip_address: str,
+        event_type: EventType,
+        object_type: ObjectType,
+        object_id: str,
+        object_name: str,
+        resource_type: ResourceTypeEnum,
+        resource_id: str,
+    ):
         """
         Logs of Knowledge Base Modules
         """
@@ -456,8 +657,16 @@ class AuditLogService:
             knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
             object_name = knowledge_info.name if knowledge_info else str(knowledge_id)
         logger.info(f"act=create_knowledge user={user.user_name} ip={ip_address} knowledge={knowledge_id}")
-        cls._knowledge_log(user, ip_address, EventType.CREATE_KNOWLEDGE, ObjectType.KNOWLEDGE,
-                           str(knowledge_id), object_name, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
+        cls._knowledge_log(
+            user,
+            ip_address,
+            EventType.CREATE_KNOWLEDGE,
+            ObjectType.KNOWLEDGE,
+            str(knowledge_id),
+            object_name,
+            ResourceTypeEnum.KNOWLEDGE,
+            str(knowledge_id),
+        )
 
     @classmethod
     def delete_knowledge(cls, user: UserPayload, ip_address: str, knowledge: Knowledge):
@@ -465,8 +674,16 @@ class AuditLogService:
         Delete Knowledge Base Audit Log
         """
         logger.info(f"act=delete_knowledge user={user.user_name} ip={ip_address} knowledge={knowledge.id}")
-        cls._knowledge_log(user, ip_address, EventType.DELETE_KNOWLEDGE, ObjectType.KNOWLEDGE,
-                           str(knowledge.id), knowledge.name, ResourceTypeEnum.KNOWLEDGE, str(knowledge.id))
+        cls._knowledge_log(
+            user,
+            ip_address,
+            EventType.DELETE_KNOWLEDGE,
+            ObjectType.KNOWLEDGE,
+            str(knowledge.id),
+            knowledge.name,
+            ResourceTypeEnum.KNOWLEDGE,
+            str(knowledge.id),
+        )
 
     @classmethod
     async def create_knowledge_space(cls, user: UserPayload, ip_address: str, knowledge: Knowledge):
@@ -515,56 +732,123 @@ class AuditLogService:
         """
         Audit Logs for Knowledge Base Upload Files
         """
-        logger.info(f"act=upload_knowledge_file user={user.user_name} ip={ip_address}"
-                    f" knowledge={knowledge_id} file={file_name}")
-        cls._knowledge_log(user, ip_address, EventType.UPLOAD_FILE, ObjectType.FILE,
-                           str(knowledge_id), file_name, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
+        logger.info(
+            f"act=upload_knowledge_file user={user.user_name} ip={ip_address} knowledge={knowledge_id} file={file_name}"
+        )
+        cls._knowledge_log(
+            user,
+            ip_address,
+            EventType.UPLOAD_FILE,
+            ObjectType.FILE,
+            str(knowledge_id),
+            file_name,
+            ResourceTypeEnum.KNOWLEDGE,
+            str(knowledge_id),
+        )
 
     @classmethod
     def delete_knowledge_file(cls, user: UserPayload, ip_address: str, knowledge_id: int, file_name: str):
         """
         Audit Logs for Knowledge Base Deletion Files
         """
-        logger.info(f"act=delete_knowledge_file user={user.user_name} ip={ip_address}"
-                    f" knowledge={knowledge_id} file={file_name}")
-        cls._knowledge_log(user, ip_address, EventType.DELETE_FILE, ObjectType.FILE,
-                           str(knowledge_id), file_name, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
+        logger.info(
+            f"act=delete_knowledge_file user={user.user_name} ip={ip_address} knowledge={knowledge_id} file={file_name}"
+        )
+        cls._knowledge_log(
+            user,
+            ip_address,
+            EventType.DELETE_FILE,
+            ObjectType.FILE,
+            str(knowledge_id),
+            file_name,
+            ResourceTypeEnum.KNOWLEDGE,
+            str(knowledge_id),
+        )
 
     @classmethod
     def link_file_version(cls, user: UserPayload, ip_address: str, knowledge_id: int, doc_summary: str):
         """Audit: file linked into an existing logical document as a new version."""
-        logger.info(f"act=link_file_version user={user.user_name} ip={ip_address}"
-                    f" knowledge={knowledge_id} summary={doc_summary}")
-        cls._knowledge_log(user, ip_address, EventType.LINK_FILE_VERSION, ObjectType.FILE,
-                           str(knowledge_id), doc_summary, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
+        logger.info(
+            f"act=link_file_version user={user.user_name} ip={ip_address}"
+            f" knowledge={knowledge_id} summary={doc_summary}"
+        )
+        cls._knowledge_log(
+            user,
+            ip_address,
+            EventType.LINK_FILE_VERSION,
+            ObjectType.FILE,
+            str(knowledge_id),
+            doc_summary,
+            ResourceTypeEnum.KNOWLEDGE,
+            str(knowledge_id),
+        )
 
     @classmethod
     def set_primary_version(cls, user: UserPayload, ip_address: str, knowledge_id: int, doc_summary: str):
         """Audit: a historical version was promoted to primary."""
-        logger.info(f"act=set_primary_version user={user.user_name} ip={ip_address}"
-                    f" knowledge={knowledge_id} summary={doc_summary}")
-        cls._knowledge_log(user, ip_address, EventType.SET_PRIMARY_VERSION, ObjectType.FILE,
-                           str(knowledge_id), doc_summary, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
+        logger.info(
+            f"act=set_primary_version user={user.user_name} ip={ip_address}"
+            f" knowledge={knowledge_id} summary={doc_summary}"
+        )
+        cls._knowledge_log(
+            user,
+            ip_address,
+            EventType.SET_PRIMARY_VERSION,
+            ObjectType.FILE,
+            str(knowledge_id),
+            doc_summary,
+            ResourceTypeEnum.KNOWLEDGE,
+            str(knowledge_id),
+        )
 
     @classmethod
     def delete_file_version(cls, user: UserPayload, ip_address: str, knowledge_id: int, doc_summary: str):
         """Audit: historical version deleted."""
-        logger.info(f"act=delete_file_version user={user.user_name} ip={ip_address}"
-                    f" knowledge={knowledge_id} summary={doc_summary}")
-        cls._knowledge_log(user, ip_address, EventType.DELETE_FILE_VERSION, ObjectType.FILE,
-                           str(knowledge_id), doc_summary, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
+        logger.info(
+            f"act=delete_file_version user={user.user_name} ip={ip_address}"
+            f" knowledge={knowledge_id} summary={doc_summary}"
+        )
+        cls._knowledge_log(
+            user,
+            ip_address,
+            EventType.DELETE_FILE_VERSION,
+            ObjectType.FILE,
+            str(knowledge_id),
+            doc_summary,
+            ResourceTypeEnum.KNOWLEDGE,
+            str(knowledge_id),
+        )
 
     @classmethod
     def dismiss_similar_file(cls, user: UserPayload, ip_address: str, knowledge_id: int, doc_summary: str):
         """Audit: user dismissed a similar-file recommendation."""
-        logger.info(f"act=dismiss_similar_file user={user.user_name} ip={ip_address}"
-                    f" knowledge={knowledge_id} summary={doc_summary}")
-        cls._knowledge_log(user, ip_address, EventType.DISMISS_SIMILAR_FILE, ObjectType.FILE,
-                           str(knowledge_id), doc_summary, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
+        logger.info(
+            f"act=dismiss_similar_file user={user.user_name} ip={ip_address}"
+            f" knowledge={knowledge_id} summary={doc_summary}"
+        )
+        cls._knowledge_log(
+            user,
+            ip_address,
+            EventType.DISMISS_SIMILAR_FILE,
+            ObjectType.FILE,
+            str(knowledge_id),
+            doc_summary,
+            ResourceTypeEnum.KNOWLEDGE,
+            str(knowledge_id),
+        )
 
     @classmethod
-    def _system_log(cls, user: UserPayload, ip_address: str, group_ids: List[int], event_type: EventType,
-                    object_type: ObjectType, object_id: str, object_name: str, note: str = ''):
+    def _system_log(
+        cls,
+        user: UserPayload,
+        ip_address: str,
+        group_ids: list[int],
+        event_type: EventType,
+        object_type: ObjectType,
+        object_id: str,
+        object_name: str,
+        note: str = "",
+    ):
 
         audit_log = AuditLog(
             operator_id=user.user_id,
@@ -581,14 +865,22 @@ class AuditLogService:
         AuditLogDao.insert_audit_logs([audit_log])
 
     @classmethod
-    def update_user(cls, user: UserPayload, ip_address: str, user_id: int, group_ids: List[int], note: str):
+    def update_user(cls, user: UserPayload, ip_address: str, user_id: int, group_ids: list[int], note: str):
         """
         Modify a user's user groups and roles
         """
         logger.info(f"act=update_system_user user={user.user_name} ip={ip_address} user_id={user_id} note={note}")
         user_info = UserDao.get_user(user_id)
-        cls._system_log(user, ip_address, group_ids, EventType.UPDATE_USER,
-                        ObjectType.USER_CONF, str(user_id), user_info.user_name, note)
+        cls._system_log(
+            user,
+            ip_address,
+            group_ids,
+            EventType.UPDATE_USER,
+            ObjectType.USER_CONF,
+            str(user_id),
+            user_info.user_name,
+            note,
+        )
 
     @classmethod
     def forbid_user(cls, user: UserPayload, ip_address: str, user_info: User):
@@ -600,8 +892,15 @@ class AuditLogService:
         # Get the group to which the user belongs
         user_group = UserGroupDao.get_user_group(user_info.user_id)
         user_group = [one.group_id for one in user_group]
-        cls._system_log(user, ip_address, user_group, EventType.FORBID_USER,
-                        ObjectType.USER_CONF, str(user_info.user_id), user_info.user_name)
+        cls._system_log(
+            user,
+            ip_address,
+            user_group,
+            EventType.FORBID_USER,
+            ObjectType.USER_CONF,
+            str(user_info.user_id),
+            user_info.user_name,
+        )
 
     @classmethod
     def recover_user(cls, user: UserPayload, ip_address: str, user_info: User):
@@ -609,72 +908,106 @@ class AuditLogService:
         # Get the group to which the user belongs
         user_group = UserGroupDao.get_user_group(user_info.user_id)
         user_group = [one.group_id for one in user_group]
-        cls._system_log(user, ip_address, user_group, EventType.RECOVER_USER,
-                        ObjectType.USER_CONF, str(user_info.user_id), user_info.user_name)
+        cls._system_log(
+            user,
+            ip_address,
+            user_group,
+            EventType.RECOVER_USER,
+            ObjectType.USER_CONF,
+            str(user_info.user_id),
+            user_info.user_name,
+        )
 
     @classmethod
     def create_user_group(cls, user: UserPayload, ip_address: str, group_info: Group):
         logger.info(f"act=create_user_group user={user.user_name} ip={ip_address} group_id={group_info.id}")
-        cls._system_log(user, ip_address, [group_info.id], EventType.CREATE_USER_GROUP,
-                        ObjectType.USER_GROUP_CONF, str(group_info.id), group_info.group_name)
+        cls._system_log(
+            user,
+            ip_address,
+            [group_info.id],
+            EventType.CREATE_USER_GROUP,
+            ObjectType.USER_GROUP_CONF,
+            str(group_info.id),
+            group_info.group_name,
+        )
 
     @classmethod
     def update_user_group(cls, user: UserPayload, ip_address: str, group_info: Group):
         logger.info(f"act=update_user_group user={user.user_name} ip={ip_address} group_id={group_info.id}")
         # Get user group information
-        cls._system_log(user, ip_address, [group_info.id], EventType.UPDATE_USER_GROUP,
-                        ObjectType.USER_GROUP_CONF, str(group_info.id), group_info.group_name)
+        cls._system_log(
+            user,
+            ip_address,
+            [group_info.id],
+            EventType.UPDATE_USER_GROUP,
+            ObjectType.USER_GROUP_CONF,
+            str(group_info.id),
+            group_info.group_name,
+        )
 
     @classmethod
     def delete_user_group(cls, user: UserPayload, ip_address: str, group_info: Group):
         logger.info(f"act=delete_user_group user={user.user_name} ip={ip_address} group_id={group_info.id}")
         # Get user group information
-        cls._system_log(user, ip_address, [group_info.id], EventType.DELETE_USER_GROUP,
-                        ObjectType.USER_GROUP_CONF, str(group_info.id), group_info.group_name)
+        cls._system_log(
+            user,
+            ip_address,
+            [group_info.id],
+            EventType.DELETE_USER_GROUP,
+            ObjectType.USER_GROUP_CONF,
+            str(group_info.id),
+            group_info.group_name,
+        )
 
     @classmethod
     def create_role(cls, user: UserPayload, ip_address: str, role: Role):
         logger.info(f"act=create_role user={user.user_name} ip={ip_address} role_id={role.id}")
         user_groups = UserGroupDao.get_user_group(user.user_id)
         group_ids = [one.group_id for one in user_groups]
-        cls._system_log(user, ip_address, group_ids, EventType.CREATE_ROLE,
-                        ObjectType.ROLE_CONF, str(role.id), role.role_name)
+        cls._system_log(
+            user, ip_address, group_ids, EventType.CREATE_ROLE, ObjectType.ROLE_CONF, str(role.id), role.role_name
+        )
 
     @classmethod
     def update_role(cls, user: UserPayload, ip_address: str, role: Role):
         logger.info(f"act=update_role user={user.user_name} ip={ip_address} role_id={role.id}")
         user_groups = UserGroupDao.get_user_group(user.user_id)
         group_ids = [one.group_id for one in user_groups]
-        cls._system_log(user, ip_address, group_ids, EventType.UPDATE_ROLE,
-                        ObjectType.ROLE_CONF, str(role.id), role.role_name)
+        cls._system_log(
+            user, ip_address, group_ids, EventType.UPDATE_ROLE, ObjectType.ROLE_CONF, str(role.id), role.role_name
+        )
 
     @classmethod
     def delete_role(cls, user: UserPayload, ip_address: str, role: Role):
         logger.info(f"act=delete_role user={user.user_name} ip={ip_address} role_id={role.id}")
         user_groups = UserGroupDao.get_user_group(user.user_id)
         group_ids = [one.group_id for one in user_groups]
-        cls._system_log(user, ip_address, group_ids, EventType.DELETE_ROLE,
-                        ObjectType.ROLE_CONF, str(role.id), role.role_name)
+        cls._system_log(
+            user, ip_address, group_ids, EventType.DELETE_ROLE, ObjectType.ROLE_CONF, str(role.id), role.role_name
+        )
 
     @classmethod
-    def create_tool(cls, user: UserPayload, ip_address: str, group_ids: List[int], tool_type: GptsToolsType):
+    def create_tool(cls, user: UserPayload, ip_address: str, group_ids: list[int], tool_type: GptsToolsType):
         logger.info(f"act=create_tool user={user.user_name} ip={ip_address} tool_type_id={tool_type.id}")
 
-        cls._system_log(user, ip_address, group_ids, EventType.ADD_TOOL, ObjectType.TOOL, str(tool_type.id),
-                        tool_type.name)
+        cls._system_log(
+            user, ip_address, group_ids, EventType.ADD_TOOL, ObjectType.TOOL, str(tool_type.id), tool_type.name
+        )
 
     @classmethod
-    def update_tool(cls, user: UserPayload, ip_address: str, group_ids: List[int], tool_type: GptsToolsType):
+    def update_tool(cls, user: UserPayload, ip_address: str, group_ids: list[int], tool_type: GptsToolsType):
         logger.info(f"act=update_tool user={user.user_name} ip={ip_address} tool_type_id={tool_type.id}")
 
-        cls._system_log(user, ip_address, group_ids, EventType.UPDATE_TOOL, ObjectType.TOOL, str(tool_type.id),
-                        tool_type.name)
+        cls._system_log(
+            user, ip_address, group_ids, EventType.UPDATE_TOOL, ObjectType.TOOL, str(tool_type.id), tool_type.name
+        )
 
     @classmethod
-    def delete_tool(cls, user: UserPayload, ip_address: str, group_ids: List[int], tool_type: GptsToolsType):
+    def delete_tool(cls, user: UserPayload, ip_address: str, group_ids: list[int], tool_type: GptsToolsType):
         logger.info(f"act=delete_tool user={user.user_name} ip={ip_address} tool_type_id={tool_type.id}")
-        cls._system_log(user, ip_address, group_ids, EventType.DELETE_TOOL, ObjectType.TOOL, str(tool_type.id),
-                        tool_type.name)
+        cls._system_log(
+            user, ip_address, group_ids, EventType.DELETE_TOOL, ObjectType.TOOL, str(tool_type.id), tool_type.name
+        )
 
     @classmethod
     def user_login(cls, user: UserPayload, ip_address: str):
@@ -684,15 +1017,22 @@ class AuditLogService:
         # bypass, hotfix-3's tenant-aware user_group table trips
         # NoTenantContextError on every login.
         from bisheng.core.context.tenant import bypass_tenant_filter
+
         with bypass_tenant_filter():
             user_group = UserGroupDao.get_user_group(user.user_id)
         user_group = [one.group_id for one in user_group]
-        cls._system_log(user, ip_address, user_group, EventType.USER_LOGIN,
-                        ObjectType.NONE, '', '')
+        cls._system_log(user, ip_address, user_group, EventType.USER_LOGIN, ObjectType.NONE, "", "")
 
     @classmethod
-    async def _dashboard_log(cls, user: UserPayload, ip_address: str, group_ids: List[int], event_type: EventType,
-                             object_id: str, object_name: str):
+    async def _dashboard_log(
+        cls,
+        user: UserPayload,
+        ip_address: str,
+        group_ids: list[int],
+        event_type: EventType,
+        object_id: str,
+        object_name: str,
+    ):
 
         audit_log = AuditLog(
             operator_id=user.user_id,
@@ -708,20 +1048,23 @@ class AuditLogService:
         await AuditLogDao.ainsert_audit_logs([audit_log])
 
     @classmethod
-    async def create_dashboard(cls, user: UserPayload, ip_address: str, dashboard_id: str, dashboard_name: str,
-                               group_ids: List[int]):
+    async def create_dashboard(
+        cls, user: UserPayload, ip_address: str, dashboard_id: str, dashboard_name: str, group_ids: list[int]
+    ):
         logger.info(f"act=create_dashboard user={user.user_name} ip={ip_address} dashboard_id={dashboard_id}")
         await cls._dashboard_log(user, ip_address, group_ids, EventType.CREATE_DASHBOARD, dashboard_id, dashboard_name)
 
     @classmethod
-    async def update_dashboard(cls, user: UserPayload, ip_address: str, dashboard_id: str, dashboard_name: str,
-                               group_ids: List[int]):
+    async def update_dashboard(
+        cls, user: UserPayload, ip_address: str, dashboard_id: str, dashboard_name: str, group_ids: list[int]
+    ):
         logger.info(f"act=update_dashboard user={user.user_name} ip={ip_address} dashboard_id={dashboard_id}")
         await cls._dashboard_log(user, ip_address, group_ids, EventType.UPDATE_DASHBOARD, dashboard_id, dashboard_name)
 
     @classmethod
-    async def delete_dashboard(cls, user: UserPayload, ip_address: str, dashboard_id: str, dashboard_name: str,
-                               group_ids: List[int]):
+    async def delete_dashboard(
+        cls, user: UserPayload, ip_address: str, dashboard_id: str, dashboard_name: str, group_ids: list[int]
+    ):
         logger.info(f"act=delete_dashboard user={user.user_name} ip={ip_address} dashboard_id={dashboard_id}")
         await cls._dashboard_log(user, ip_address, group_ids, EventType.DELETE_DASHBOARD, dashboard_id, dashboard_name)
 
@@ -768,9 +1111,9 @@ class AuditLogService:
         await AuditLogDao.ainsert_audit_logs([audit_log])
 
     @classmethod
-    async def get_filter_flow_ids(cls, user: UserPayload, flow_ids: List[str], group_ids: List[int]) -> (bool, List):
+    async def get_filter_flow_ids(cls, user: UserPayload, flow_ids: list[str], group_ids: list[int]) -> (bool, list):
         """Filter workflow, assistant and workstation ids by visible groups."""
-        flow_ids = [one for one in flow_ids]
+        flow_ids = list(flow_ids)
         group_admins = []
         if not user.is_admin():
             if not await cls._can_read_tenant_audit(user):
@@ -792,10 +1135,10 @@ class AuditLogService:
         # Get all apps under groupingID
         group_flows = []
         if group_admins:
-            group_flows = await GroupResourceDao.get_groups_resource(group_admins,
-                                                                     resource_types=[ResourceTypeEnum.WORK_FLOW,
-                                                                                     ResourceTypeEnum.ASSISTANT,
-                                                                                     ResourceTypeEnum.WORKSTATION])
+            group_flows = await GroupResourceDao.get_groups_resource(
+                group_admins,
+                resource_types=[ResourceTypeEnum.WORK_FLOW, ResourceTypeEnum.ASSISTANT, ResourceTypeEnum.WORKSTATION],
+            )
             # User group under user management has no resources
             if not group_flows:
                 return False, []
@@ -814,11 +1157,23 @@ class AuditLogService:
         return True, filter_flow_ids
 
     @classmethod
-    async def get_session_list(cls, user: UserPayload, flow_ids: List[str], user_ids: List[int], group_ids: List[int],
-                               start_date: datetime, end_date: datetime,
-                               feedback: str, sensitive_status: int, page: int, page_size: int,
-                               answer_abnormal: int | None = None) -> Tuple[
-        List[AppChatList], int]:
+    async def get_session_list(
+        cls,
+        user: UserPayload,
+        flow_ids: list[str],
+        user_ids: list[int],
+        group_ids: list[int],
+        start_date: datetime,
+        end_date: datetime,
+        feedback: str,
+        sensitive_status: int,
+        page: int,
+        page_size: int,
+        answer_abnormal: int | None = None,
+        user_department: str | None = None,
+        user_company: str | None = None,
+        user_office: str | None = None,
+    ) -> tuple[list[AppChatList], int]:
 
         if user.is_admin() or await cls._can_read_tenant_audit(user):
             # Administrator, or 角色中开启「审计」菜单：与超管同级的会话列表范围（可筛选用户组，不传则不过滤组）
@@ -857,7 +1212,18 @@ class AuditLogService:
         if answer_abnormal in (0, 1):
             conditions.append(MessageSession.answer_abnormal == answer_abnormal)
 
-        if user_ids:
+        restricted_user_ids = await cls._org_restricted_user_ids(
+            user,
+            user_ids,
+            user_department,
+            user_company,
+            user_office,
+        )
+        if restricted_user_ids is not None:
+            if not restricted_user_ids:
+                return [], 0
+            conditions.append(col(MessageSession.user_id).in_(restricted_user_ids))
+        elif user_ids:
             conditions.append(col(MessageSession.user_id).in_(user_ids))
 
         if start_date:
@@ -869,18 +1235,18 @@ class AuditLogService:
             conditions.append(col(MessageSession.flow_id).in_(flow_ids))
 
         # Process type filtering (fixed enumeration)
-        conditions.append(col(MessageSession.flow_type).in_([
-            FlowType.WORKFLOW.value,
-            FlowType.ASSISTANT.value,
-            FlowType.WORKSTATION.value
-        ]))
+        conditions.append(
+            col(MessageSession.flow_type).in_(
+                [FlowType.WORKFLOW.value, FlowType.ASSISTANT.value, FlowType.WORKSTATION.value]
+            )
+        )
 
         # Feedback status filtering
         feedback_map = {
-            'like': col(MessageSession.like) > 0,
-            'dislike': col(MessageSession.dislike) > 0,
-            'copied': col(MessageSession.copied) > 0,
-            'comment': feedback_opinion_count() > 0,
+            "like": col(MessageSession.like) > 0,
+            "dislike": col(MessageSession.dislike) > 0,
+            "copied": col(MessageSession.copied) > 0,
+            "comment": feedback_opinion_count() > 0,
         }
         if feedback in feedback_map:
             conditions.append(feedback_map[feedback])
@@ -889,8 +1255,7 @@ class AuditLogService:
         if search_group_ids:
             dialect = _db_dialect()
             group_filters = [
-                json_array_contains(MessageSession.group_ids, str(gid), dialect)
-                for gid in search_group_ids
+                json_array_contains(MessageSession.group_ids, str(gid), dialect) for gid in search_group_ids
             ]
             conditions.append(or_(*group_filters))
 
@@ -920,23 +1285,25 @@ class AuditLogService:
 
         target_user_ids_list = list(target_user_ids)
 
-        async def get_users_groups_map(u_ids: List[int]):
+        async def get_users_groups_map(u_ids: list[int]):
             # get user groups for multiple users
-            if not u_ids: return {}
+            if not u_ids:
+                return {}
             tasks = [user.get_user_groups(uid) for uid in u_ids]
             results = await asyncio.gather(*tasks)
-            return dict(zip(u_ids, results))
+            return dict(zip(u_ids, results, strict=False))
 
-        users_data, flows_data, assistants_data, user_groups_map = await asyncio.gather(
+        users_data, flows_data, assistants_data, user_groups_map, org_map = await asyncio.gather(
             UserDao.aget_user_by_ids(target_user_ids_list),
             FlowDao.aget_flow_by_ids(list(target_flow_ids)),
             AssistantDao.aget_assistants_by_ids(list(target_assistant_ids)),
-            get_users_groups_map(target_user_ids_list)
+            get_users_groups_map(target_user_ids_list),
+            cls._read_org(user, lambda: org_names_for_users(target_user_ids_list)),
         )
 
         user_map = {u.user_id: u.user_name for u in users_data}
         user_external_id_map = {
-            u.user_id: (str(getattr(u, 'external_id', None) or '').strip() or None)
+            u.user_id: (str(getattr(u, "external_id", None) or "").strip() or None)
             for u in users_data
             if u.user_id is not None
         }
@@ -944,7 +1311,7 @@ class AuditLogService:
         assistant_map = {a.id: a.name for a in assistants_data}
 
         # Construct the return object
-        result: List[AppChatList] = []
+        result: list[AppChatList] = []
 
         for session in res:
             # Determine the current name
@@ -955,35 +1322,60 @@ class AuditLogService:
                 current_name = assistant_map.get(session.flow_id, current_name)
 
             # Append to the result set
-            result.append(AppChatList(
-                **session.model_dump(exclude={'flow_name'}),
-                flow_name=current_name,
-                like_count=session.like,
-                dislike_count=session.dislike,
-                copied_count=session.copied,
-                comment_count=len(feedback_comments.get(session.chat_id, [])),
-                feedback_comments=feedback_comments.get(session.chat_id, []),
-                user_name=user_map.get(session.user_id, ""),
-                user_external_id=user_external_id_map.get(session.user_id),
-                user_groups=user_groups_map.get(session.user_id, [])
-            ))
+            result.append(
+                AppChatList(
+                    **session.model_dump(exclude={"flow_name"}),
+                    flow_name=current_name,
+                    like_count=session.like,
+                    dislike_count=session.dislike,
+                    copied_count=session.copied,
+                    comment_count=len(feedback_comments.get(session.chat_id, [])),
+                    feedback_comments=feedback_comments.get(session.chat_id, []),
+                    user_name=user_map.get(session.user_id, ""),
+                    user_external_id=user_external_id_map.get(session.user_id),
+                    user_groups=user_groups_map.get(session.user_id, []),
+                    **(org_map.get(session.user_id) or EMPTY_USER_ORG),
+                )
+            )
 
         return result, total
 
     @classmethod
-    async def get_session_messages(cls, user: UserPayload, flow_ids: List[str], user_ids: List[int],
-                                   group_ids: List[int],
-                                   start_date: datetime, end_date: datetime, feedback: str,
-                                   sensitive_status: int,
-                                   answer_abnormal: int | None = None) -> List[AppChatList]:
+    async def get_session_messages(
+        cls,
+        user: UserPayload,
+        flow_ids: list[str],
+        user_ids: list[int],
+        group_ids: list[int],
+        start_date: datetime,
+        end_date: datetime,
+        feedback: str,
+        sensitive_status: int,
+        answer_abnormal: int | None = None,
+        user_department: str | None = None,
+        user_company: str | None = None,
+        user_office: str | None = None,
+    ) -> list[AppChatList]:
         page = 1
         page_size = 50
         res = []
         while True:
-            result, total = await cls.get_session_list(user, flow_ids, user_ids, group_ids, start_date, end_date,
-                                                       feedback,
-                                                       sensitive_status, page, page_size,
-                                                       answer_abnormal)
+            result, _total = await cls.get_session_list(
+                user,
+                flow_ids,
+                user_ids,
+                group_ids,
+                start_date,
+                end_date,
+                feedback,
+                sensitive_status,
+                page,
+                page_size,
+                answer_abnormal,
+                user_department,
+                user_company,
+                user_office,
+            )
             if not result:
                 break
             page += 1
@@ -991,7 +1383,7 @@ class AuditLogService:
         return res
 
     @classmethod
-    async def get_chat_messages(cls, chat_list: List[AppChatList]) -> List[AppChatList]:
+    async def get_chat_messages(cls, chat_list: list[AppChatList]) -> list[AppChatList]:
         chat_ids = [chat.chat_id for chat in chat_list]
 
         chat_messages = await ChatMessageDao.get_all_message_by_chat_ids(chat_ids)
@@ -1003,6 +1395,7 @@ class AuditLogService:
         for chat in chat_list:
             chat_messages = chat_messages_map.get(chat.chat_id, [])
             # remove workflow input event, because it's not show in web
-            chat.messages = [message for message in chat_messages
-                             if message.category != WorkflowEventType.UserInput.value]
+            chat.messages = [
+                message for message in chat_messages if message.category != WorkflowEventType.UserInput.value
+            ]
         return chat_list

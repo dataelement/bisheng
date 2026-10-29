@@ -21,6 +21,9 @@ async def get_audit_logs(
     event_type: str | None = Query(default=None, description="Operation behaviors"),
     page: int | None = Query(default=0, description="Page"),
     limit: int | None = Query(default=0, description="Listings Per Page"),
+    user_department: str | None = Query(default=None, description="User department name"),
+    user_company: str | None = Query(default=None, description="User company name"),
+    user_office: str | None = Query(default=None, description="User office name"),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     group_ids = [one for one in group_ids if one]
@@ -37,12 +40,21 @@ async def get_audit_logs(
         page,
         limit,
         responsible_user_ids=responsible_user_ids or None,
+        user_department=user_department,
+        user_company=user_company,
+        user_office=user_office,
     )
 
 
 @router.get("/responsible-persons")
 async def get_all_responsible_persons(*, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     return resp_200(data=await AuditLogService.get_all_responsible_persons(login_user))
+
+
+@router.get("/user-org-options")
+async def get_user_org_options(*, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    """Company, department and office names for the audit filters."""
+    return resp_200(data=await AuditLogService.list_user_org_options(login_user))
 
 
 @router.get("/operators")
@@ -66,6 +78,9 @@ async def get_session_list(
     answer_abnormal: int | None = Query(
         default=None, ge=0, le=1, description="任务是否异常, 0否 1是. 工具准备失败且执行中未使用不算"
     ),
+    user_department: str | None = Query(default=None, description="User department name"),
+    user_company: str | None = Query(default=None, description="User company name"),
+    user_office: str | None = Query(default=None, description="User office name"),
     page: int | None = Query(default=1, description="Page"),
     page_size: int | None = Query(default=10, description="Listings Per Page"),
 ):
@@ -82,6 +97,9 @@ async def get_session_list(
         page,
         page_size,
         answer_abnormal,
+        user_department,
+        user_company,
+        user_office,
     )
     return resp_200(data={"data": data, "total": total})
 
@@ -99,9 +117,23 @@ async def get_session_messages(
     answer_abnormal: int | None = Query(
         default=None, ge=0, le=1, description="任务是否异常, 0否 1是. 工具准备失败且执行中未使用不算"
     ),
+    user_department: str | None = Query(default=None, description="User department name"),
+    user_company: str | None = Query(default=None, description="User company name"),
+    user_office: str | None = Query(default=None, description="User office name"),
 ):
     """Export data for a list of session details"""
     result = await AuditLogService.get_session_messages(
-        login_user, flow_ids, user_ids, group_ids, start_date, end_date, feedback, sensitive_status, answer_abnormal
+        login_user,
+        flow_ids,
+        user_ids,
+        group_ids,
+        start_date,
+        end_date,
+        feedback,
+        sensitive_status,
+        answer_abnormal,
+        user_department,
+        user_company,
+        user_office,
     )
     return resp_200(data={"data": result})
