@@ -31,6 +31,20 @@ def test_documents_across_groups_dates_and_external_usage():
     assert DocumentStatistics(records[:1], stats.called_at).aggregate([], "document_usage_ratio") == [[1.0]]
 
 
+def test_contribution_ratio_assigns_each_document_to_its_earliest_group():
+    stats = DocumentStatistics(
+        [
+            {"knowledge_identity": "document:1", "timestamp": ts("2026-08-01") / 1000, "file_id": 1, "level": "科室库"},
+            {"knowledge_identity": "document:1", "timestamp": ts("2026-09-01") / 1000, "file_id": 2, "level": "公共库"},
+            {"knowledge_identity": "document:2", "timestamp": ts("2026-09-02") / 1000, "file_id": 3, "level": "公共库"},
+        ],
+        {},
+    )
+    rows = stats.aggregate([("level", None)], "knowledge_contribution_ratio")
+    assert rows == [["公共库", 0.5], ["科室库", 0.5]]
+    assert sum(row[-1] for row in rows) == 1
+
+
 def test_empty_and_missing_identity():
     import pytest
 
@@ -81,7 +95,8 @@ def test_time_boundaries_contribution_and_call_union():
     )
     assert stats.aggregate([], "called_document_count", end=ts("2026-08-02T23:59:59")) == [[0]]
     assert stats.aggregate([], "called_document_count", end=ts("2026-08-03T23:59:59")) == [[1]]
-    assert stats.aggregate([("org", None)], "knowledge_contribution_ratio") == [["A", 1.0], ["B", 1.0]]
+    # 同一文档两个入口只归最早的组织, 占比合计为 100%.
+    assert stats.aggregate([("org", None)], "knowledge_contribution_ratio") == [["A", 1.0]]
     assert stats.aggregate([], "knowledge_contribution_ratio") == [[1.0]]
     assert stats.aggregate([], "total_file_count", start=2, end=1) == []
     with pytest.raises(ValueError, match="日统计"):

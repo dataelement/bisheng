@@ -111,6 +111,20 @@ class DocumentStatistics:
                 self.category_conflicts[identity] = rows
         self.called_at = called_at
 
+    def _contribution_rows(self) -> list[dict]:
+        # 一份知识只按最早的有效入口归入一个分组, 后发布或分享的入口不再把占比重复加进别的组.
+        chosen: dict[str, tuple[tuple[int, int], dict]] = {}
+        for row in self.records:
+            created = milliseconds(row["timestamp"])
+            identity = row["knowledge_identity"]
+            raw_file_id = row.get("file_id")
+            file_id = int(raw_file_id) if str(raw_file_id).lstrip("-").isdigit() else 0
+            rank = (created, file_id)
+            current = chosen.get(identity)
+            if current is None or rank < current[0]:
+                chosen[identity] = (rank, row)
+        return [item[1] for item in chosen.values()]
+
     def conflict_samples(self, limit: int = 5) -> list[dict]:
         result = []
         for identity in sorted(self.category_conflicts)[:limit]:
@@ -159,7 +173,8 @@ class DocumentStatistics:
             raise ValueError("文档统计只能配置一个时间维度")
         groups: dict[tuple, dict[str, int]] = defaultdict(dict)
         all_first: dict[str, int] = {}
-        for row in self.records:
+        source = self._contribution_rows() if metric == "knowledge_contribution_ratio" else self.records
+        for row in source:
             created = milliseconds(row["timestamp"])
             if created > end:
                 continue
