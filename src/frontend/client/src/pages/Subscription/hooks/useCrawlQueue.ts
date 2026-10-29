@@ -11,7 +11,7 @@ import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { extractApiStatusCode } from "../errorUtils";
-import { crawlErrorMessageKey } from "../CreateChannel/crawlErrorUtils";
+import { crawlErrorMessageKey, mapCrawlError, normalizeCrawlUrl, type CrawlErrorCode } from "../CreateChannel/crawlErrorUtils";
 
 const CONCURRENCY = 3;
 
@@ -34,7 +34,7 @@ export interface CrawlQueueItem {
     sourceName?: string;
     sourceIcon?: string;
     preview?: CrawlPreview;
-    errorCode?: number;
+    errorCode?: CrawlErrorCode;
     abortController: AbortController;
 }
 
@@ -60,15 +60,6 @@ function looksLikeSinglePage(url: string, raw: any): boolean {
     return /(article|detail|content|zhengce|policy|post)/.test(lower);
 }
 
-function mapCrawlError(error: unknown): number {
-    const code = extractApiStatusCode(error);
-    if (code === 19006 || code === 19005 || code === 19004 || code === 19003) return code;
-    if (code === 13005) return 19005;
-    if (code === 13004) return 19004;
-    if (code === 13003) return 19003;
-    return 19003;
-}
-
 export function useCrawlQueue({ onSourceAdded }: UseCrawlQueueOptions): UseCrawlQueueReturn {
     const [queue, setQueue] = useState<CrawlQueueItem[]>([]);
     const [panelOpen, setPanelOpen] = useState(false);
@@ -85,8 +76,8 @@ export function useCrawlQueue({ onSourceAdded }: UseCrawlQueueOptions): UseCrawl
     localizeRef.current = localize;
 
     // 19006 is an account-level quota error: every further crawl also fails, so
-    // surface it as an error toast instead of (only) a queue-item tooltip.
-    const notifyIfLimitExceeded = useCallback((errorCode: number) => {
+    // Also surface it as an error toast while keeping the queue reason visible.
+    const notifyIfLimitExceeded = useCallback((errorCode: CrawlErrorCode) => {
         if (errorCode !== API_KEY_LIMIT_CODE) return;
         showToastRef.current?.({
             message: localizeRef.current(crawlErrorMessageKey(API_KEY_LIMIT_CODE)),
@@ -110,9 +101,11 @@ export function useCrawlQueue({ onSourceAdded }: UseCrawlQueueOptions): UseCrawl
     useEffect(() => {
         const prev = prevInProgressRef.current;
         if (prev === 0 && inProgressCount > 0) setPanelOpen(true);
-        else if (prev > 0 && inProgressCount === 0) setPanelOpen(false);
+        else if (prev > 0 && inProgressCount === 0) {
+            setPanelOpen(queue.some(item => item.status === "failed"));
+        }
         prevInProgressRef.current = inProgressCount;
-    }, [inProgressCount]);
+    }, [inProgressCount, queue]);
 
     const updateItem = useCallback((id: string, patch: Partial<CrawlQueueItem>) => {
         if (!mountedRef.current) return;
@@ -126,7 +119,8 @@ export function useCrawlQueue({ onSourceAdded }: UseCrawlQueueOptions): UseCrawl
     }, []);
 
     const runWorker = useCallback(async (item: CrawlQueueItem) => {
-        const { id, url, abortController } = item;
+        const { id, abortController } = item;
+        const url = normalizeCrawlUrl(item.url) ?? item.url;
         const signal = abortController.signal;
         if (signal.aborted) return;
         updateItem(id, { status: "crawling" });
@@ -135,9 +129,9 @@ export function useCrawlQueue({ onSourceAdded }: UseCrawlQueueOptions): UseCrawl
         try {
             const res = await crawlTempSourceApi({ url }, { signal, showError: false });
             const root: any = res ?? {};
-            const codeRaw = root?.status_code ?? root?.code;
-            if (codeRaw && codeRaw !== 200) {
-                const errorCode = mapCrawlError({ status_code: Number(codeRaw) });
+            const codeRaw = extractApiStatusCode(res);
+            if (codeRaw != null && codeRaw !== 200 && codeRaw !== 0) {
+                const errorCode = mapCrawlError(res);
                 notifyIfLimitExceeded(errorCode);
                 updateItem(id, { status: "failed", errorCode });
                 return;
@@ -175,7 +169,9 @@ export function useCrawlQueue({ onSourceAdded }: UseCrawlQueueOptions): UseCrawl
             const addRes = await addWebsiteSourceApi({ url }, { signal, showError: false });
             const code = extractApiStatusCode(addRes);
             if (code != null && code !== 200) {
-                updateItem(id, { status: "failed", errorCode: 19003 });
+                const errorCode = mapCrawlError(addRes);
+                notifyIfLimitExceeded(errorCode);
+                updateItem(id, { status: "failed", errorCode });
                 return;
             }
             const raw: any = (addRes as any)?.data ?? addRes ?? {};
@@ -196,20 +192,26 @@ export function useCrawlQueue({ onSourceAdded }: UseCrawlQueueOptions): UseCrawl
             if (mountedRef.current) onSourceAddedRef.current(source);
         } catch (error) {
             if (signal.aborted || (error as any)?.name === "AbortError") return;
-            updateItem(id, { status: "failed", errorCode: 19003 });
+            const errorCode = mapCrawlError(error);
+            notifyIfLimitExceeded(errorCode);
+            updateItem(id, { status: "failed", errorCode });
         }
     }, [updateItem, notifyIfLimitExceeded]);
 
     const enqueue = useCallback((url: string) => {
+        const normalizedUrl = normalizeCrawlUrl(url);
         const id = generateUUID(8);
         const abortController = new AbortController();
         const item: CrawlQueueItem = {
             id,
-            url,
-            status: "pending",
+            url: url.trim(),
+            status: normalizedUrl ? "pending" : "failed",
+            ...(normalizedUrl ? {} : { errorCode: "invalid_url" as const }),
             abortController,
         };
         setQueue(prev => [...prev, item]);
+        setPanelOpen(true);
+        if (normalizedUrl === null) return;
         limitRef.current(() => runWorker(item)).catch(() => { /* swallow */ });
     }, [runWorker]);
 
