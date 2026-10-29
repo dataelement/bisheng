@@ -1,3 +1,4 @@
+import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig";
 import { Tabs, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
@@ -13,6 +14,7 @@ import { DSH_SECTIONS, resolveDshSection, type DshSection } from "./sections";
 
 export function DshPage() {
   const { user } = useContext(userContext);
+  const { appConfig } = useContext(locationContext);
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
@@ -21,7 +23,7 @@ export function DshPage() {
     useState<HTMLDivElement | null>(null);
   const canManageDsh =
     user?.role === "admin" || !!user?.is_global_super || !!user?.is_child_admin;
-  const canManageSafety = canManageDsh;
+  const canManageSafety = canManageDsh && appConfig.isPro === true;
   const sections = DSH_SECTIONS.filter(({ value }) =>
     config?.enabled === false
       ? value === "access"
@@ -37,15 +39,20 @@ export function DshPage() {
   );
   useEffect(() => {
     if (
-      !canManageDsh ||
+      !canManageSafety ||
       config?.enabled === false ||
       config?.management_enabled === false
     )
       setSafetyVisited(false);
     else if (section === "content-safety") setSafetyVisited(true);
-  }, [section, canManageDsh, config?.enabled, config?.management_enabled]);
+  }, [section, canManageSafety, config?.enabled, config?.management_enabled]);
 
   if (!canManageDsh) return <Navigate to="/403" replace />;
+  if (
+    appConfig.isPro === false &&
+    new URLSearchParams(location.search).get("tab") === "content-safety"
+  )
+    return <Navigate to={`/dsh?tab=${section}`} replace />;
   return (
     <div className="flex h-full w-full flex-col px-2 pt-4">
       <Tabs
@@ -74,7 +81,8 @@ export function DshPage() {
           </div>
         )}
         <div className="min-h-0 flex-1 overflow-hidden">
-          {(section === "content-safety" || safetyVisited) &&
+          {canManageSafety &&
+            (section === "content-safety" || safetyVisited) &&
             config?.enabled !== false && (
               <div
                 hidden={section !== "content-safety"}
