@@ -1,3 +1,12 @@
+## 2026-10-29 — 每月积分业务上限与输入精度
+
+- 确认规则：每人每月积分为 0～1,000,000，支持整数或最多 1 位小数，默认值 500。前端输入、保存按钮与后端写入接口按同一范围校验，中英日提示同步更新。
+- 基线：实时获取 `dataelement/bisheng:feat/bisheng-work-120-main@62ad8ecccda06dbfdf8d77b845de1a7fe0af3319`；工作目录 `.worktrees/bisheng-monthly-credit-business-limit`，分支 `codex/monthly-credit-business-limit`。本轮范围为平台管理端与服务端。
+- 根因与实现：原上限源自底层 64 位整数存储极限。`CreditRuleInput` 承担管理端业务校验，`CreditRuleValue` 承担历史额度和迁移的精确值校验。实际消耗、余额、倍率和底层账本保留原有精度；已有额度原值保留，编辑保存使用新规则。
+- 自动化：前端输入与保存流程 35 项通过；后端 schema、SQLite 仓储/历史迁移、隔离真实 Redis 账本联合回归 51 项通过。覆盖 0、0.1、999999.9、1000000、1000000.0、超限与多位小数、取消编辑、迁移精确值与幂等、倍率计费、重复结算与 Redis 数据恢复。
+- 静态检查：前端完整 lint/typecheck、中英日 i18n 检查、变更 Python Ruff、架构检查和 diff 检查通过。前端复用本地已有依赖，后端 Python 3.11.15；Redis 8.8.0 临时实例启用 AOF/noeviction，测试后关闭并清理。
+- 验收状态：代码与上述自动化通过；测试环境部署、真实账号页面验收及 MySQL/DM8 迁移验收待执行。需求与验收条件见 [积分输入规则](../features/local/monthly-credit-input/spec.md)。
+
 ## 2026-10-28 — 工作流下线后的旧卡片与运行状态
 
 - 旧连接每次提交实时校验工作流发布状态；下线后返回明确提示并停止等待，禁用历史交互卡片，拦截重复提交。

@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 TOKENS_PER_CREDIT = 1_000_000
+MAX_MONTHLY_CREDITS = 1_000_000
 MAX_TOKEN_LIMIT = 9_223_372_036_854_775_807
 
 
@@ -48,7 +49,9 @@ class ModelVisibilityInput(BaseModel):
         return self.everyone or any(subject.id in memberships[subject.kind] for subject in self.subjects)
 
 
-class CreditRuleInput(BaseModel):
+class CreditRuleValue(BaseModel):
+    """Exact stored allowance, including values imported from legacy policies."""
+
     model_config = ConfigDict(extra="forbid", strict=True)
     version: int = Field(ge=0)
     monthly_credits: str = Field(pattern=r"^(0|[1-9][0-9]{0,12})(\.[0-9]{1,6})?$")
@@ -64,6 +67,18 @@ class CreditRuleInput(BaseModel):
     @property
     def monthly_token_limit(self) -> int:
         return int(Decimal(self.monthly_credits) * TOKENS_PER_CREDIT)
+
+
+class CreditRuleInput(CreditRuleValue):
+    """Business limits for administrator-created or edited allowances."""
+
+    monthly_credits: str = Field(pattern=r"^(0|[1-9][0-9]{0,6})(\.[0-9])?$")
+
+    @model_validator(mode="after")
+    def validate_monthly_allowance(self):
+        if self.monthly_token_limit > MAX_MONTHLY_CREDITS * TOKENS_PER_CREDIT:
+            raise ValueError("Monthly credits must be between 0 and 1000000 with up to 1 decimal place")
+        return self
 
 
 def effective_token_limit(*, user_id: int, departments: set[int], roles: set[int], rules: list[dict]) -> int:
