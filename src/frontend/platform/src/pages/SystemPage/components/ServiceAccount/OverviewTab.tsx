@@ -10,6 +10,10 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Label } from "@/components/bs-ui/label";
 
 import { locationContext } from "@/contexts/locationContext";
+import { userContext } from "@/contexts/userContext";
+import { getTenantApi, getUserTenantsApi } from "@/controllers/API/tenant";
+import { displayTenantName } from "@/utils/tenantDisplayName";
+import { useQuery } from "@tanstack/react-query";
 import {
 deleteServiceAccountApi,
 listServiceAccountResourceGrantsApi,
@@ -60,6 +64,21 @@ export function OverviewTab({
   // A standard docker install is a single (Root) tenant: showing "Tenant: 1"
   // there names a concept the deployment does not expose anywhere else.
   const multiTenantEnabled = !!appConfig?.multiTenantEnabled
+  const { user } = useContext(userContext)
+  const isGlobalAdmin = !!user && (user.is_global_super || user.role === "admin")
+  const tenantName = useQuery({
+    queryKey: ["service-account-tenant-name", user?.user_id, detail.tenant_id, isGlobalAdmin],
+    enabled: multiTenantEnabled,
+    queryFn: async () => {
+      if (isGlobalAdmin) {
+        return displayTenantName((await getTenantApi(detail.tenant_id)).tenant_name)
+      }
+      const tenants = await getUserTenantsApi()
+      return displayTenantName(tenants.find(tenant => tenant.tenant_id === detail.tenant_id)?.tenant_name)
+    },
+    staleTime: 60_000,
+    onError: showApiError,
+  })
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(detail.name)
   const [description, setDescription] = useState(detail.description || "")
@@ -191,7 +210,7 @@ export function OverviewTab({
         </Field>
         {multiTenantEnabled ? (
           <Field label={t("openApiManagement.fields.tenant")}>
-            {detail.tenant_id}
+            {tenantName.isLoading ? t("loading") : tenantName.data || "-"}
           </Field>
         ) : null}
         <Field

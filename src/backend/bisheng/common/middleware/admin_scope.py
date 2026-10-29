@@ -57,15 +57,14 @@ from bisheng.utils.http_middleware import (
 # are global for super admins / naturally subtree-bounded for child admins
 # via ``visible_tenant_ids`` (CustomMiddleware). The ``/api/v1/audit_log``
 # literal was also dead code — the real router prefix is ``/api/v1/audit``,
-# so it never matched. Both prefixes were removed; scope now only affects
-# the LLM management surface (and the admin endpoints used to set it).
+# so it never matched. Business knowledge and application routes must also
+# stay outside this scope. Only workstation configuration belongs here;
+# matching the entire workstation router would filter its application lists.
 MANAGEMENT_API_PREFIXES: tuple[str, ...] = (
     "/api/v1/llm",
-    "/api/v1/workstation",
+    "/api/v1/workstation/config",
     "/api/v1/linsight",
     "/api/v1/tool",
-    "/api/v1/knowledge",
-    "/api/v1/chat/online",
     "/api/v1/admin",
     "/api/v1/service-accounts",
     "/api/v1/personal-tokens",

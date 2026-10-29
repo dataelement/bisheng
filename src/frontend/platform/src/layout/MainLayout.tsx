@@ -384,7 +384,7 @@ export default function MainLayout() {
                                     >
                                         <Outlined.City className="h-4 w-4 my-4 mr-2 shrink-0" />
                                         <span className="mx-[14px] max-w-[56px] text-[14px] leading-[48px]">
-                                            {t("tenant.management")}
+                                            {t("menu.tenant")}
                                         </span>
                                     </NavLink>
                                 </>

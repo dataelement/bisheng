@@ -196,6 +196,7 @@
     "bottomText": "Bisheng"
   },
   "menu": {
+    "tenant": "Tenant",
     "languageChinese": "中文",
     "languageJapanese": "日本語",
     "user": "User",
@@ -3280,7 +3281,8 @@
     },
     "releaseNotes": {
       "title": "Release notes",
-      "empty": "No release notes provided"
+      "empty": "No release notes provided",
+      "column": "Version notes"
     }
   },
   "dsh": {

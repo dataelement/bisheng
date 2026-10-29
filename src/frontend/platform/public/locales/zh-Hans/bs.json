@@ -196,6 +196,7 @@
     "otherMethods": "其他登录方式"
   },
   "menu": {
+    "tenant": "租  户",
     "languageChinese": "中文",
     "languageJapanese": "日本語",
     "user": "用户",
@@ -2085,7 +2086,7 @@
   "com_dropAnyFileToAdd": "将任何文件拖放到此处以添加到对话中",
   "com_ui_upload_file_type_error": "该应用不支持上传此类型文件",
   "more": "更多",
-  "tenant.management": "租户管理",
+  "tenant.management": "租户",
   "tenant.adminScope.label": "管理视图",
   "tenant.adminScope.global": "全树（默认）",
   "tenant.adminScope.switched": "已切换管理视图：{{name}}",
@@ -3225,7 +3226,8 @@
     },
     "releaseNotes": {
       "title": "发布说明",
-      "empty": "未填写发布说明"
+      "empty": "未填写发布说明",
+      "column": "版本说明"
     }
   },
   "dsh": {

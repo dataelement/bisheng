@@ -195,6 +195,7 @@
     "otherMethods": "その他のログイン方法"
   },
   "menu": {
+    "tenant": "テナント",
     "languageChinese": "中文",
     "languageJapanese": "日本語",
     "user": "ユーザー",
@@ -2085,7 +2086,7 @@
   "com_dropAnyFileToAdd": "ここにファイルをドロップして会話に追加できます",
   "com_ui_upload_file_type_error": "このアプリケーションはこのファイル形式のアップロードに対応していません。",
   "more": "もっと見る",
-  "tenant.management": "テナント管理",
+  "tenant.management": "テナント",
   "tenant.adminScope.label": "管理ビュー",
   "tenant.adminScope.global": "全ツリー（デフォルト）",
   "tenant.adminScope.switched": "管理ビューを {{name}} に切り替えました",
@@ -3225,7 +3226,8 @@
     },
     "releaseNotes": {
       "title": "リリースノート",
-      "empty": "リリースノートは未入力です"
+      "empty": "リリースノートは未入力です",
+      "column": "バージョンの説明"
     }
   },
   "dsh": {

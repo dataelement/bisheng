@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 import type { HostedAppVersion } from "@/controllers/API/hostedApp"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { VersionListCard } from "./VersionListCard"
@@ -50,11 +50,17 @@ describe("version history release notes", () => {
       version("one", 1, "First"),
     ]
     const view = render(<VersionListCard appId="app" />)
+    const actions = screen.getAllByRole("button", { name: "hostedApp.releaseNotes.column" })
+    const row = actions[1].closest("tr")
+    fireEvent.click(actions[0])
     expect(screen.getByText(/Second/).textContent).toBe("Second\n  details")
-    const row = screen.getByText("First").closest("tr")
-    expect(row?.previousElementSibling?.textContent).toContain("v1")
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" })
+    expect(row?.textContent).toContain("v1")
+    expect(screen.getByRole("columnheader", { name: "operations" })).toBeInTheDocument()
+    expect(view.container.querySelectorAll("tbody tr")).toHaveLength(2)
     state.rows = [version("three", 3, "Third")]
     view.rerender(<VersionListCard appId="app" reloadKey="changed" />)
+    fireEvent.click(screen.getAllByRole("button", { name: "hostedApp.releaseNotes.column" })[0])
     expect(screen.getByText("Third")).not.toBeNull()
     expect(screen.queryByText("First")).toBeNull()
   })
@@ -63,9 +69,12 @@ describe("version history release notes", () => {
     const notes = '<script>alert("x")</script> **new**'
     state.rows = [version("one", 1), version("two", 2, notes)]
     const { container } = render(<VersionListCard appId="app" />)
+    fireEvent.click(screen.getAllByRole("button", { name: "hostedApp.releaseNotes.column" })[0])
     expect(screen.getByText("hostedApp.releaseNotes.empty")).not.toBeNull()
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" })
+    fireEvent.click(screen.getAllByRole("button", { name: "hostedApp.releaseNotes.column" })[1])
     expect(
-      within(screen.getByText(notes).closest("tr")!).getByText(notes),
+      within(screen.getByRole("dialog")).getByText(notes),
     ).not.toBeNull()
     expect(container.querySelector("script")).toBeNull()
   })
