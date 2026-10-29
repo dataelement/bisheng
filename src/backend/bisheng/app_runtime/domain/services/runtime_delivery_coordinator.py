@@ -479,6 +479,7 @@ class RuntimeDeliveryCoordinator:
                 await self.repo.save(op)
 
     async def recover(self, app, route, *, running):
+        from bisheng.app_publish.domain.schemas.app_manifest import egress_domains_of
         from bisheng.app_runtime.domain.services.app_state_service import AppStateService
 
         assignments = await self.repo.find(RuntimeAssignment, app_id=app.id)
@@ -515,6 +516,8 @@ class RuntimeDeliveryCoordinator:
             "expected_pending_version_id": app.pending_version_id,
             "auto_commit": True,
             "recovery_attempt": attempt,
+            # The egress policy is reissued per operation from this field; omitting it cuts the app off.
+            "egress_domains": egress_domains_of(version.manifest),
         }
         async with self.repo.transaction():
             from bisheng.database.models.app import App
