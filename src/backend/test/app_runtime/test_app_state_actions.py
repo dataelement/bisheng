@@ -524,9 +524,9 @@ class TestDelete:
     async def test_grants_are_projected_with_the_record_read_before_the_transition(
         self, app_db, app_factory, app_owner, fake_permission_projection, audit_sink
     ):
-        """The real app adapter refuses a deleted app with 19003 (AC-29's single
+        """The real app adapter refuses a deleted app with 25022 (AC-29's single
         error). Reading the record after the state flipped turned every delete into
-        a 19003 that left the grants in OpenFGA and skipped the audit and hooks —
+        a 25022 that left the grants in OpenFGA and skipped the audit and hooks —
         found on 114 on 2026-09-15. The adapter here enforces that same gate."""
         from types import SimpleNamespace
 
@@ -630,3 +630,26 @@ class TestAudit:
             assert row["target_type"] == "app" and row["target_id"] == app.id
             assert "version_id" in row["metadata"] and row["metadata"]["reason"]
         assert audit_sink[0]["metadata"]["version_id"] == version.id
+
+
+async def test_draft_start_reports_review_reason_before_release_source_lookup(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from bisheng.app_runtime.domain.services.app_state_service import AppStateService
+    from bisheng.common.errcode.app_factory import AppStateConflictError
+
+    app = SimpleNamespace(id="draft", pending_version_id=None, current_version_id=None)
+    monkeypatch.setattr(AppStateService, "_load", AsyncMock(return_value=app))
+    monkeypatch.setattr(AppStateService, "_require_operator", AsyncMock())
+    refusal = AsyncMock(side_effect=AppStateConflictError(reason="approval_pending"))
+    monkeypatch.setattr("bisheng.app_publish.application.version_review.refuse_unapproved_start", refusal)
+    eligible = AsyncMock()
+    deploy = AsyncMock()
+    monkeypatch.setattr("bisheng.app_runtime.domain.services.app_state_service.require_release_eligible", eligible)
+    monkeypatch.setattr(AppStateService, "_start_authorized", deploy)
+    with pytest.raises(AppStateConflictError) as caught:
+        await AppStateService.resume("draft", actor=object())
+    assert caught.value.kwargs["reason"] == "approval_pending"
+    eligible.assert_not_awaited()
+    deploy.assert_not_awaited()

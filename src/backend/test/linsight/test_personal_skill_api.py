@@ -86,6 +86,16 @@ def api(tmp_path, monkeypatch):
 
     monkeypatch.setattr(model_module, "get_async_db_session", _session)
     monkeypatch.setattr(PersonalSkillService, "_audit", AsyncMock())
+
+    async def permitted(_user, *, resource_ids, **kwargs):
+        return {str(skill_id): {"use"} for skill_id in resource_ids}
+
+    monkeypatch.setattr("bisheng.permission.application.business_authorization.batch_check_business_actions", permitted)
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.services.user_skills.SkillAvailabilityRepository.disabled_ids",
+        AsyncMock(return_value=set()),
+    )
+
     monkeypatch.setattr(
         "bisheng.permission.application.business_authorization.require_business_action",
         AsyncMock(),
@@ -111,6 +121,7 @@ def api(tmp_path, monkeypatch):
         lambda: SkillService(store=store, owner_projection=projection),
     )
 
+    monkeypatch.setattr("bisheng.utils.http_middleware._check_is_global_super", AsyncMock(return_value=False))
     logged_in = _app()
 
     async def end_user():
@@ -183,7 +194,7 @@ class TestPersonalSkillApi:
             "update_time",
         }
         selectable = api.client.get(f"{BASE}/selectable").json()["data"]
-        assert [row["name"] for row in selectable] == ["he-tong"]
+        assert {row["name"] for row in selectable} == {"he-tong", "pdf"}
         assert set(selectable[0]) == {"name", "display_name", "description", "default_checked"}
 
         center = api.client.get(f"{BASE}/center").json()["data"]
@@ -199,7 +210,7 @@ class TestPersonalSkillApi:
 
         toggled = api.client.patch(f"{BASE}/he-tong/status", json={"enabled": False}).json()
         assert toggled["data"] == {"ok": True}
-        assert api.client.get(f"{BASE}/selectable").json()["data"] == []
+        assert [row["name"] for row in api.client.get(f"{BASE}/selectable").json()["data"]] == ["pdf"]
         assert api.client.get(f"{BASE}/candidates").json()["data"][0]["id"] == personal["id"]
         assert api.client.delete(f"{BASE}/he-tong").json()["data"] == {"ok": True}
 

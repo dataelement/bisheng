@@ -134,3 +134,13 @@ async def test_sync_failure_never_blocks_the_turn(tmp_path):
         await task._sync_workspace_originals(SimpleNamespace(id=SVID))  # must not raise
 
     assert task._baseline_files == {}
+
+
+async def test_previous_deliverable_reaches_executor_and_baseline(tmp_path):
+    objects = {f"workspace/{SVID}/output/report.xlsx": b"PK\x03\x04previous-result"}
+    task = _task(str(tmp_path))
+    with patch("bisheng.linsight.domain.task_exec.get_minio_storage", AsyncMock(return_value=_minio(objects))):
+        await task._sync_workspace_originals(SimpleNamespace(id=SVID))
+    local = tmp_path / "output" / "report.xlsx"
+    assert local.read_bytes() == objects[f"workspace/{SVID}/output/report.xlsx"]
+    assert str(local) in {os.path.normpath(p) for p in task._baseline_files}

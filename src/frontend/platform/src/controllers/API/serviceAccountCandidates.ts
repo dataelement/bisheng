@@ -4,16 +4,16 @@ import {
   getDepartmentPathTreeApi,
   searchDepartmentsApi,
 } from "./department"
-import { filterDelegateCandidatesApi } from "./serviceAccount"
+import { filterDelegateCandidatesApi, type ServiceAccountRequestScope } from "./serviceAccount"
 
 /** Intersect visible candidates with the same eligibility rules used on save. */
-export function createDelegateCandidateSource(serviceAccountId: number) {
+export function createDelegateCandidateSource(serviceAccountId: number, scope?: ServiceAccountRequestScope) {
   const filterUserIds = async (ids: number[], signal?: AbortSignal): Promise<number[]> => {
     if (!ids.length) return []
     const eligible = await filterDelegateCandidatesApi(
       serviceAccountId,
       ids.map((subject_id) => ({ subject_type: "user", subject_id })),
-      signal,
+      signal, scope,
     )
     return eligible.filter((entry) => entry.subject_type === "user").map((entry) => entry.subject_id)
   }
@@ -31,6 +31,7 @@ export function createDelegateCandidateSource(serviceAccountId: number) {
     const eligible = await filterDelegateCandidatesApi(
       serviceAccountId,
       [...ids].map((subject_id) => ({ subject_type: "department", subject_id })),
+      undefined, scope,
     )
     const allowed = new Set(
       eligible.filter((entry) => entry.subject_type === "department").map((entry) => entry.subject_id),
@@ -54,7 +55,7 @@ export function createDelegateCandidateSource(serviceAccountId: number) {
   return {
     filterUserIds,
     departmentSource: {
-      cacheKey: `delegate-departments:${serviceAccountId}`,
+      cacheKey: `delegate-departments:${scope?.tenantId ?? "legacy"}:${serviceAccountId}`,
       fetchChildren: async (parentId: number | null) =>
         filterDepartments(await getDepartmentChildrenApi(parentId, false)),
       fetchSearch: async (keyword: string) =>

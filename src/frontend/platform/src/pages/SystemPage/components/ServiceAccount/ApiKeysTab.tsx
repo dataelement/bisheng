@@ -1,3 +1,4 @@
+import { useServiceAccountRequestScope } from "./useServiceAccountManagementScope";
 import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { Button, notification } from '@bisheng/ui';
 import { Tag } from "@bisheng/ui";
@@ -48,6 +49,7 @@ export function ApiKeysTab({
   initialIssueOpen = false,
   onKeysChanged,
 }: ApiKeysTabProps) {
+  const requestScope = useServiceAccountRequestScope();
   const { t } = useTranslation()
   const [scopes, setScopes] = useState<OpenApiScopeItem[]>([])
   const [dialogOpen, setDialogOpen] = useState(initialIssueOpen)
@@ -57,8 +59,8 @@ export function ApiKeysTab({
   const [loadingScopes, setLoadingScopes] = useState(true)
 
   const fetchPage = useCallback((page: number, pageSize: number) =>
-    listServiceAccountKeysPageApi(serviceAccountId, { page, page_size: pageSize }),
-  [serviceAccountId])
+    listServiceAccountKeysPageApi(serviceAccountId, { page, page_size: pageSize }, requestScope),
+  [serviceAccountId, requestScope])
   const list = useOpenApiList(fetchPage)
   const keys = list.items
   const loadKeys = list.reload
@@ -75,12 +77,13 @@ export function ApiKeysTab({
 
   const handleRevoke = (keyId: number) => {
     bsConfirm({
+      signal: requestScope.signal,
       title: t("openApiManagement.keys.revokeConfirmTitle"),
       desc: t("openApiManagement.keys.revokeConfirm"),
       okTxt: t("openApiManagement.actions.revoke"),
       onOk: (close) => {
         setLoading(true)
-        return revokeServiceAccountKeyApi(serviceAccountId, keyId)
+        return revokeServiceAccountKeyApi(serviceAccountId, keyId, requestScope)
           .then(async (result) => {
             if (!result) return
             notification.open({ type: "success", title: String(t("openApiManagement.keys.revokeConfirmTitle") ?? ''), description: String(t("openApiManagement.feedback.keyRevoked") ?? '') })
@@ -95,12 +98,13 @@ export function ApiKeysTab({
 
   const handleRevokeAll = () => {
     bsConfirm({
+      signal: requestScope.signal,
       title: t("openApiManagement.keys.revokeAllConfirmTitle"),
       desc: t("openApiManagement.keys.revokeAllConfirm"),
       okTxt: t("openApiManagement.actions.revokeAll"),
       onOk: (close) => {
         setLoading(true)
-        return revokeAllServiceAccountKeysApi(serviceAccountId)
+        return revokeAllServiceAccountKeysApi(serviceAccountId, requestScope)
           .then(async (result) => {
             if (!result) return
             const { revoked } = result

@@ -2,6 +2,9 @@
 
 
 def audit_status_facts(row):
+    # External observations do not establish native execution, capture or usage axes.
+    if getattr(row, "record_origin", "MODEL") == "EXTERNAL_SAFETY":
+        return "NOT_APPLICABLE", [], False
     reasons = []
     axes = (
         ("model_result", {"RUNNING", "SUCCEEDED"}, {"FAILED", "CANCELLED", "UNKNOWN"}),
@@ -30,5 +33,8 @@ def audit_status_facts(row):
 
 def refresh_audit_status(row):
     row.audit_status = audit_status_facts(row)[0]
-    if row.conversation_key and row.group_indexed_status != row.audit_status:
+    safety_changed = bool(getattr(row, "has_sensitive_hit", False)) != bool(
+        getattr(row, "group_indexed_sensitive_hit", False)
+    )
+    if row.conversation_key and (row.group_indexed_status != row.audit_status or safety_changed):
         row.group_index_pending = True

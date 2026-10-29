@@ -84,6 +84,14 @@ class ContainerExecutor(LocalExecutor):
             return LOCAL_DESCRIPTION + path_namespace_rules(include_skills=True) + self.kb_stage_hint()
         return LOCAL_DESCRIPTION + self.kb_stage_hint()
 
+    def _publish_generated_files(self, dir_path: str, touched: list[str]) -> list[str]:
+        if not self.workspace_prefix:
+            return super()._publish_generated_files(dir_path, touched)
+        files = [rel for rel in touched if os.path.isfile(os.path.join(dir_path, rel))]
+        if self.sync_to_workspace(dir_path, files) != len(files):
+            raise SandboxProtocolError(msg="Could not persist task artifacts to workspace storage")
+        return ["/" + rel.replace(os.sep, "/").lstrip("/") for rel in files]
+
     def execute_code(
         self,
         code: str | None = None,

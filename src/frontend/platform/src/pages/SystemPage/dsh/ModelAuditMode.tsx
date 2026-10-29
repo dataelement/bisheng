@@ -63,7 +63,10 @@ export function ModelAuditMode({
   };
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2 text-sm md:justify-end">
+      <div
+        className="flex flex-wrap items-center gap-2 text-sm md:justify-end"
+        aria-describedby={`${panelId}-collection-hint`}
+      >
         <span className="text-xs text-muted-foreground">
           {t("dsh.modelAuditView.capture_status")}
         </span>
@@ -95,17 +98,13 @@ export function ModelAuditMode({
             {t("dsh.modelAuditView.configure")}
           </Button>
         )}
-        <Button
-          type="button"
-          size="small"
-          variant="text" color="default"
-          className="text-sm [@media(pointer:coarse)]:min-h-11"
-          disabled={busy}
-          onClick={() => setRevision((old) => old + 1)}
-        >
-          {t("dsh.modelAuditView.refresh_mode")}
-        </Button>
       </div>
+      <p
+        id={`${panelId}-collection-hint`}
+        className="col-span-full text-xs text-muted-foreground"
+      >
+        {t("dsh.modelAuditView.collectionHint")}
+      </p>
       {snapshot && !canCaptureContent && (
         <Alert
           live

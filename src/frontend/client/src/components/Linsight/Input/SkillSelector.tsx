@@ -2,8 +2,8 @@ import { Tooltip as SharedTooltip } from '@bisheng/ui';
 /**
  * F035 Track H: multi-select list of enabled skills, rendered inside the
  * "+" menu's "Add Skill" submenu. Data: GET /api/v1/linsight/skill/selectable
- * (enabled skills only, plain login auth). Selections become chips above the
- * textarea; only checked skills are sent with the submission. Supports keyword
+ * (enabled skills only, plain login auth). Selections become references in the
+ * composer; only checked skills are sent with the submission. Supports keyword
  * search over display name + description.
  */
 import { Loader2 } from 'lucide-react';
@@ -20,6 +20,7 @@ import type { TaskModeSkill } from '~/store/linsight';
 import { cn } from '~/utils';
 
 interface SkillSelectorProps {
+    layout?: 'default' | 'command';
     selected: TaskModeSkill[];
     onChange: (skills: TaskModeSkill[]) => void;
 }
@@ -62,7 +63,7 @@ function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
                     <div className="min-w-0 flex-1">
                         <p
                             ref={nameRef}
-                            className={cn('truncate text-[14px] leading-5', isChecked ? 'text-blue-500' : 'text-slate-700')}
+                            className={cn('truncate text-[14px] leading-5', isChecked ? 'text-blue-500' : 'text-text-1')}
                         >
                             {skill.display_name}
                         </p>
@@ -77,15 +78,23 @@ function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
     );
 }
 
-export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
+export function SkillSelector({ selected, onChange, layout }: SkillSelectorProps) {
     const localize = useLocalize();
     const [keyword, setKeyword] = useState('');
     const { data: skills = [], isFetching } = useQuery({
         queryKey: ['linsightSelectableSkills'],
         queryFn: getSelectableSkills,
-        refetchOnWindowFocus: false,
+        refetchOnWindowFocus: true,
+        staleTime: 0,
         refetchOnReconnect: false,
     });
+
+    useEffect(() => {
+        if (isFetching) return;
+        const allowed = new Set(skills.map(skill => skill.name));
+        const next = selected.filter(skill => allowed.has(skill.name));
+        if (next.length !== selected.length) onChange(next);
+    }, [skills, selected, onChange, isFetching]);
 
     const filtered = useMemo(() => {
         const kw = keyword.trim().toLowerCase();
@@ -133,6 +142,53 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
         );
     };
 
+    // The composer owns command-menu presentation; the shared selector below
+    // retains the standard page layout. Both use the same filtering and selection.
+    if (layout === 'command') {
+        return (
+            <div className="dsh-skill-picker">
+                <input
+                    className="dsh-skill-picker-search"
+                    aria-label={localize('com_linsight_skill_search')}
+                    placeholder={localize('com_linsight_skill_search')}
+                    value={keyword}
+                    onChange={(event) => setKeyword(event.target.value)}
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                />
+                <div ref={listAreaRef} style={keyword ? { minHeight: unfilteredHeight } : undefined}>
+                    {isFetching && skills.length === 0 ? (
+                        <div className="flex justify-center py-4">
+                            <Loader2 size={16} className="animate-spin text-text-3" />
+                        </div>
+                    ) : filtered.length === 0 ? (
+                        <StateView size="inline" title={localize('com_linsight_skill_empty')} />
+                    ) : filtered.map((skill) => {
+                        const isChecked = selected.some((item) => item.name === skill.name);
+                        return (
+                            <DropdownMenuItem
+                                key={skill.name}
+                                className="dsh-command-skill-row"
+                                role="menuitemcheckbox"
+                                aria-checked={isChecked}
+                                onSelect={(event) => {
+                                    event.preventDefault();
+                                    handleToggle(skill);
+                                }}
+                            >
+                                <span className="dsh-command-name">{skill.display_name}</span>
+                                {skill.description && (
+                                    <span className="dsh-command-description">{skill.description}</span>
+                                )}
+                                {isChecked && <Outlined.Check size={14} className="shrink-0 text-blue-500" />}
+                            </DropdownMenuItem>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    }
+
     return (
         // gap-2: 8px between the search box and the list below it, so the first
         // row doesn't crowd the input's bottom border.
@@ -164,7 +220,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
             >
             {isFetching && skills.length === 0 ? (
                 <div className="flex justify-center py-4">
-                    <Loader2 size={16} className="animate-spin text-slate-300" />
+                    <Loader2 size={16} className="animate-spin text-text-3" />
                 </div>
             ) : filtered.length === 0 ? (
                 // Inline tier (组件-State状态页.md §3): a selector with no
@@ -182,7 +238,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                         aria-hidden
                         className={cn(
                             'pointer-events-none absolute left-0 right-0 top-0 z-10 h-3 transition-opacity duration-150',
-                            'bg-gradient-to-b from-white to-transparent',
+                            'bg-gradient-to-b from-[rgb(var(--dsh-menu-bg,var(--bg-page)))] to-transparent',
                             canScrollUp ? 'opacity-100' : 'opacity-0',
                         )}
                     />
@@ -191,7 +247,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                         aria-hidden
                         className={cn(
                             'pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-3 transition-opacity duration-150',
-                            'bg-gradient-to-t from-white to-transparent',
+                            'bg-gradient-to-t from-[rgb(var(--dsh-menu-bg,var(--bg-page)))] to-transparent',
                             canScrollDown ? 'opacity-100' : 'opacity-0',
                         )}
                     />
@@ -205,7 +261,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                             {/* Hairline between rows — a standalone element rather than a
                                 border on the row, so it sits centred in the 4px gutter and
                                 never cuts across a selected row's tinted background. */}
-                            {i > 0 && <div aria-hidden className="mx-2 h-px shrink-0 bg-slate-100" />}
+                            {i > 0 && <div aria-hidden className="mx-2 h-px shrink-0 bg-fill-2" />}
                             <SkillRow
                                 skill={skill}
                                 isChecked={selected.some((s) => s.name === skill.name)}

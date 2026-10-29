@@ -10,7 +10,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.group import Group
-from bisheng.database.models.tenant import UserTenant
+from bisheng.database.models.tenant import Tenant, UserTenant
+from bisheng.tenant.domain.repositories import grant_department_repository
 from bisheng.tenant.domain.repositories import grant_subject_search_repository as queries
 from bisheng.tenant.domain.services.f048_permission_subject import TenantPermissionSubjectDirectory
 from bisheng.user.domain.models.user import User
@@ -20,8 +21,12 @@ from bisheng.user.domain.models.user import User
 async def directory(monkeypatch):
     engine = create_async_engine("sqlite+aiosqlite://")
     async with engine.begin() as conn:
-        tables = [model.__table__ for model in (Department, User, UserTenant, UserDepartment, Group)]
+        tables = [model.__table__ for model in (Department, Tenant, User, UserTenant, UserDepartment, Group)]
         await conn.run_sync(lambda db: SQLModel.metadata.create_all(db, tables=tables))
+        await conn.execute(
+            Tenant.__table__.insert(),
+            {"id": 1, "tenant_code": "root", "tenant_name": "Root", "root_dept_id": 1},
+        )
         await conn.execute(
             Department.__table__.insert(),
             [
@@ -127,6 +132,7 @@ async def directory(monkeypatch):
             yield db
 
     monkeypatch.setattr(queries, "get_async_db_session", session)
+    monkeypatch.setattr(grant_department_repository, "get_async_db_session", session)
     yield TenantPermissionSubjectDirectory()
     await engine.dispose()
 

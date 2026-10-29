@@ -1,8 +1,11 @@
 import asyncio
 import json
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from copy import copy
+from dataclasses import dataclass
 from queue import Queue
+from types import MappingProxyType
 
 from fastapi import Request, WebSocket
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
@@ -38,6 +41,16 @@ from bisheng.llm.domain import LLMService
 from bisheng.utils import get_request_ip
 from bisheng.utils.threadpool import thread_pool
 from bisheng_langchain.gpts.message_types import LiberalToolMessage
+
+
+@dataclass(frozen=True, slots=True)
+class ChatMessageExecution:
+    operator: UserPayload
+    execution_snapshot: Mapping[str, object]
+    session_subject: object | None = None
+
+    def __post_init__(self):
+        object.__setattr__(self, "execution_snapshot", MappingProxyType(dict(self.execution_snapshot)))
 
 
 class ChatClient:
@@ -92,13 +105,24 @@ class ChatClient:
     async def send_json(self, message: ChatMessage):
         await self.websocket.send_json(message.dict())
 
-    async def handle_message(self, message: dict[any, any]):
+    async def handle_message(self, message: dict[any, any], *, execution_context: ChatMessageExecution | None = None):
         logger.info(f"client_id={self.client_key} handle_message start, message: {message}")
         trace_id = trace_id_var.get()
         # Handling messages from clients, Submit to Thread Pool for Execution
         if self.work_type == WorkType.GPTS:
+            worker = self
+            if execution_context is not None:
+                # Identity-bound agents/callbacks belong to this message, never the shared connection.
+                worker = copy(self)
+                worker.login_user = execution_context.operator
+                worker.user_id = execution_context.operator.user_id
+                worker.kwargs = {**self.kwargs, "execution_snapshot": execution_context.execution_snapshot}
+                worker.session_subject = execution_context.session_subject
+                worker.gpts_agent = None
+                worker.gpts_async_callback = None
+                worker.db_assistant = None
             thread_pool.submit(
-                trace_id, self.wrapper_task, trace_id, self.handle_gpts_message, message, trace_id=trace_id
+                trace_id, worker.wrapper_task, trace_id, worker.handle_gpts_message, message, trace_id=trace_id
             )
             # await self.handle_gpts_message(message)
 

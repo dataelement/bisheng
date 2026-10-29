@@ -225,13 +225,13 @@ export function SkillDetails({ skill, toggling = false, onClose, onToggle, onUpd
             >
               {localize(shown.enabled ? 'com_skill_center_status_enabled' : 'com_skill_center_disabled_tag')}
             </span>
-            {personal && (
+            {(
               <Switch
                 className="shrink-0"
-                checked={personal.enabled}
+                checked={skill.enabled}
                 loading={toggling}
                 aria-label={switchLabel}
-                onCheckedChange={(enabled) => onToggle(personal, enabled)}
+                onCheckedChange={(enabled) => onToggle(skill, enabled)}
               />
             )}
           </div>

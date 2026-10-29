@@ -36,7 +36,7 @@ jest.mock('react-i18next', () => {
         t: (key, options) => i18n.t(key, options),
         i18n: {
           ...i18n,
-          changeLanguage: jest.fn(),
+          changeLanguage: jest.fn(() => Promise.resolve()),
         },
       };
     },

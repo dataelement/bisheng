@@ -43,6 +43,7 @@ const BUILTIN_TOOL_I18N: Record<string, string> = {
     search_knowledge_bases: "com_tools_knowledge_search",
     web_search: "com_tools_web_search",
     web_fetch: "com_tools_web_fetch",
+    read_skill_file: "skillReference.readFile",
 };
 
 function resolveToolName(

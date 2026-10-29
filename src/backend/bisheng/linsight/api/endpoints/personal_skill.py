@@ -59,14 +59,32 @@ async def skill_center(
     keyword: str | None = Query(default=None),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> UnifiedResponseModel:
+    from bisheng.linsight.domain.services.user_skills import UserSkillsService
+
     service = _service()
-    center = await service.list_center(login_user.user_id, tab=tab, keyword=keyword)
+    center = await service.list_center(login_user.user_id, tab=tab)
+    visible = await UserSkillsService(login_user.user_id).records(False, candidates=center.enterprise, actor=login_user)
+    enterprise = [{**_card(service, row), "enabled": enabled} for row, enabled in visible]
+    personal = [_card(service, row) for row in center.personal]
+    enterprise_count = len(enterprise)
+    if keyword:
+
+        def matches(card):
+            return (
+                keyword.casefold()
+                in " ".join(str(card.get(key, "")) for key in ("name", "display_name", "description")).casefold()
+            )
+
+        if tab == "enterprise":
+            enterprise = [card for card in enterprise if matches(card)]
+        else:
+            personal = [card for card in personal if matches(card)]
     return resp_200(
         {
-            "personal": [_card(service, row) for row in center.personal],
-            "enterprise": [_card(service, row) for row in center.enterprise],
+            "personal": personal,
+            "enterprise": enterprise,
             "personal_count": center.personal_count,
-            "enterprise_count": center.enterprise_count,
+            "enterprise_count": enterprise_count,
         }
     )
 
@@ -75,9 +93,12 @@ async def skill_center(
 async def skill_candidates(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> UnifiedResponseModel:
+    from bisheng.linsight.domain.services.user_skills import UserSkillsService
+
     service = _service()
     rows = await service.list_candidates(login_user.user_id)
-    return resp_200([_card(service, row) for row in rows])
+    visible = await UserSkillsService(login_user.user_id).records(candidates=rows, actor=login_user)
+    return resp_200([_card(service, row) for row, _ in visible])
 
 
 @router.get("/personal/usage", summary="Personal skill quota")

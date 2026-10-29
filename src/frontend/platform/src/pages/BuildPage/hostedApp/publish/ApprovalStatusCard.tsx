@@ -116,11 +116,7 @@ export function ApprovalStatusCard({
     })
   }
 
-  // AC-06 — every application in this release arrives through the CLI and
-  // has no draft workspace on the platform, so there is nothing for a submit
-  // button to submit. Shown disabled with the real remedy as the panel's
-  // description rather than hidden: an owner looking for "where do I publish"
-  // needs to be told where publishing happens, not to find nothing.
+  // Releases are submitted through the CLI; keep its guidance in the panel.
   const actions = (
     <>
       {canWithdraw && (
@@ -134,9 +130,6 @@ export function ApprovalStatusCard({
           {t("hostedApp.publishStatus.withdraw")}
         </Button>
       )}
-      <Button variant="outline" size="sm" disabled>
-        {t("hostedApp.publishStatus.submit")}
-      </Button>
     </>
   )
 

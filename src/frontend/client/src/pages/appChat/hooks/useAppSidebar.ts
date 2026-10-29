@@ -1,20 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useRecoilState, useRecoilValue, useSetRecoilState } from 'recoil';
-import { NotificationSeverity } from '~/common';
-import type { AppConversation, AppItem, ConversationGroup } from '~/@types/app';
-import { getAppConversationsApi, getAssistantDetailApi, getFlowApi } from '~/api/apps';
-import { groupConversationsByTime, getAppShareUrl } from '~/pages/apps/appUtils';
-import { copyText, generateUUID } from '~/utils';
-import { useToastContext } from '~/Providers';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useRecoilState, useRecoilValue, useSetRecoilState } from "recoil";
+import { NotificationSeverity } from "~/common";
+import type { AppConversation, AppItem, ConversationGroup } from "~/@types/app";
+import { getAppConversationsApi, getAssistantDetailApi, getFlowApi } from "~/api/apps";
+import { groupConversationsByTime, getAppShareUrl } from "~/pages/apps/appUtils";
+import { copyText, generateUUID } from "~/utils";
+import { useToastContext } from "~/Providers";
 import {
   appConversationsState,
   currentAppInfoState,
   sidebarVisibleState,
-} from '~/pages/appChat/store/appSidebarAtoms';
-import { currentChatState } from '~/pages/appChat/store/atoms';
-import { copyAppChatOrigin, copyAppChatReturnTo } from '~/pages/appChat/appChatOrigin';
-import { useLocalize } from '~/hooks';
+} from "~/pages/appChat/store/appSidebarAtoms";
+import { currentChatState } from "~/pages/appChat/store/atoms";
+import { copyAppChatOrigin, copyAppChatReturnTo } from "~/pages/appChat/appChatOrigin";
+import { useLocalize } from "~/hooks";
 
 // flow_type 5 === assistant; anything else (1 = skill, 10 = workflow) goes through getFlowApi.
 const FLOW_TYPE_ASSISTANT = 5;
@@ -58,11 +58,11 @@ export function useAppSidebar() {
       const list: AppConversation[] = (res.data?.list || []).map((item: any) => {
         return {
           id: item.chat_id,
-          title: item.name || item.flow_name || localizeRef.current('com_ui_new_chat'),
+          title: item.name || item.flow_name || localizeRef.current("com_ui_new_chat"),
           flowId: item.flow_id || flowId,
           flowType: Number(item.flow_type || flowType),
-          updatedAt: item.update_time || '',
-          createdAt: item.create_time || '',
+          updatedAt: item.update_time || "",
+          createdAt: item.create_time || "",
         };
       });
       setConversations(list);
@@ -71,7 +71,10 @@ export function useAppSidebar() {
       // Show toast only when user deletes all conversations (non-empty → empty),
       // not on initial load when no history exists
       if (list.length === 0 && hadConversationsRef.current) {
-        showToastRef.current?.({ message: localizeRef.current('com_app.history_deleted'), severity: NotificationSeverity.WARNING });
+        showToastRef.current?.({
+          message: localizeRef.current("com_app.history_deleted"),
+          severity: NotificationSeverity.WARNING,
+        });
       }
       hadConversationsRef.current = list.length > 0;
       return list;
@@ -94,14 +97,17 @@ export function useAppSidebar() {
     if (conversationId) copyAppChatReturnTo(conversationId, chatId);
     // Prepend a "New Chat" placeholder so the sidebar shows it immediately
     // and the auto-select guard won't redirect away from it.
-    setConversations((prev) => [{
-      id: chatId,
-      title: localize('com_ui_new_chat'),
-      flowId: flowId,
-      flowType: Number(flowType),
-      updatedAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-    }, ...prev]);
+    setConversations((prev) => [
+      {
+        id: chatId,
+        title: localize("com_ui_new_chat"),
+        flowId: flowId,
+        flowType: Number(flowType),
+        updatedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      },
+      ...prev,
+    ]);
     const nextPath = `/app/${chatId}/${flowId}/${flowType}`;
     navigate(nextPath, { state: location.state });
   }, [flowId, flowType, conversationId, location.state, navigate, setConversations, localize]);
@@ -128,12 +134,15 @@ export function useAppSidebar() {
     const fromSidebar =
       currentApp && String(currentApp.id) === String(flowId) ? currentApp.can_share : undefined;
     if (fromChat !== true && fromSidebar !== true) return;
-    const url = getAppShareUrl(flowId, flowType || '');
+    const url = getAppShareUrl(flowId, flowType || "");
     try {
       await copyText(url);
-      showToast?.({ message: localize('com_app_share_link_copied'), severity: NotificationSeverity.SUCCESS });
+      showToast?.({ message: localize("com_app_share_link_copied"), severity: NotificationSeverity.SUCCESS });
     } catch {
-      showToast?.({ message: localize('com_app_share_link_copy_failed'), severity: NotificationSeverity.WARNING });
+      showToast?.({
+        message: localize("com_app_share_link_copy_failed"),
+        severity: NotificationSeverity.WARNING,
+      });
     }
   }, [flowId, flowType, showToast, chatState?.flow, currentApp, localize]);
 
@@ -149,19 +158,20 @@ export function useAppSidebar() {
     const numericType = Number(flowType);
     (async () => {
       try {
-        const res = numericType === FLOW_TYPE_ASSISTANT
-          ? await getAssistantDetailApi(flowId, undefined, true)
-          : await getFlowApi(flowId, 'v1', undefined, true);
+        const res =
+          numericType === FLOW_TYPE_ASSISTANT
+            ? await getAssistantDetailApi(flowId, undefined, true)
+            : await getFlowApi(flowId, "v1", undefined, true);
         if (res?.status_code !== 200) return;
         const data = res.data;
         if (!data) return;
         setCurrentApp({
           id: data.id ?? flowId,
-          name: data.name ?? '',
-          description: data.description ?? data.desc ?? '',
-          logo: data.logo ?? '',
+          name: data.name ?? "",
+          description: data.description ?? data.desc ?? "",
+          logo: data.logo ?? "",
           flow_type: Number(data.flow_type ?? numericType),
-          user_id: data.user_id ?? '',
+          user_id: data.user_id ?? "",
           can_share: data.can_share === true,
         } as AppItem);
       } catch {
@@ -181,22 +191,27 @@ export function useAppSidebar() {
     // (e.g. freshly opened from app center with a generated UUID), prepend a
     // placeholder so the sidebar shows it immediately — same as createNewChat.
     const currentConversationId = conversationIdRef.current;
-    if (currentConversationId && !list.some(c => c.id === currentConversationId)) {
-      setConversations((prev) => [{
-        id: currentConversationId,
-        title: localizeRef.current('com_ui_new_chat'),
-        flowId: flowId!,
-        flowType: Number(flowType),
-        updatedAt: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-      }, ...prev]);
+    if (currentConversationId && !list.some((c) => c.id === currentConversationId)) {
+      setConversations((prev) => [
+        {
+          id: currentConversationId,
+          title: localizeRef.current("com_ui_new_chat"),
+          flowId: flowId!,
+          flowType: Number(flowType),
+          updatedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
     }
-  // Read the current route when a retry finishes, without reloading on navigation.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Read the current route when a retry finishes, without reloading on navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchConversations]);
 
   useEffect(() => {
-    void retryConversations().catch(() => { /* The sidebar owns the failed-list state. */ });
+    void retryConversations().catch(() => {
+      /* The sidebar owns the failed-list state. */
+    });
     // Only re-run when fetchConversations identity changes (i.e. flowId changes).
     // conversationId is intentionally excluded to prevent re-fetch on every navigation.
   }, [retryConversations]);

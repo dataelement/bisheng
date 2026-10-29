@@ -1,3 +1,5 @@
+import { useServiceAccountOwnerCandidates } from "./useServiceAccountOwnerCandidates";
+import { useServiceAccountRequestScope } from "./useServiceAccountManagementScope";
 import { Button, Input, Textarea, notification } from '@bisheng/ui';
 import DepartmentUsersSelect,{
 type DepartmentUserOption,
@@ -51,6 +53,8 @@ export function OverviewTab({
   onChanged,
   onDeleted,
 }: OverviewTabProps) {
+  const requestScope = useServiceAccountRequestScope();
+  const ownerCandidates = useServiceAccountOwnerCandidates(requestScope);
   const { t } = useTranslation()
   const { appConfig } = useContext(locationContext)
   // A standard docker install is a single (Root) tenant: showing "Tenant: 1"
@@ -96,7 +100,7 @@ export function OverviewTab({
     }
     setLoading("save")
     try {
-      const updated = await updateServiceAccountApi(detail.id, payload)
+      const updated = await updateServiceAccountApi(detail.id, payload, requestScope)
       if (!updated) return
       notification.open({ type: "success", title: String(t("openApiManagement.serviceAccount.title") ?? ''), description: String(t("openApiManagement.feedback.updated") ?? '') })
       setEditing(false)
@@ -111,7 +115,7 @@ export function OverviewTab({
   const handleToggle = () => {
     const enabled = detail.status !== "enabled"
     setLoading("toggle")
-    void setServiceAccountEnabledApi(detail.id, enabled)
+    void setServiceAccountEnabledApi(detail.id, enabled, requestScope)
       .then((updated) => {
         if (!updated) return
         notification.open({ type: "success", title: String(t("openApiManagement.serviceAccount.title") ?? ''), description: String(t(
@@ -126,9 +130,10 @@ export function OverviewTab({
 
   const handleDelete = async () => {
     setLoading("delete")
-    const grants = await listServiceAccountResourceGrantsApi(detail.id).finally(() => setLoading(null))
+    const grants = await listServiceAccountResourceGrantsApi(detail.id, requestScope).finally(() => setLoading(null))
     if (!grants) return
     bsConfirm({
+      signal: requestScope.signal,
       title: t("openApiManagement.serviceAccount.deleteConfirmTitle"),
       desc: (
         <div className="space-y-2 text-left">
@@ -159,7 +164,7 @@ export function OverviewTab({
       ),
       onOk: (close) => {
         setLoading("delete")
-        return deleteServiceAccountApi(detail.id)
+        return deleteServiceAccountApi(detail.id, requestScope)
           .then((result) => {
             if (!result) return
             notification.open({ type: "success", title: String(t("openApiManagement.serviceAccount.title") ?? ''), description: String(t("openApiManagement.feedback.deleted") ?? '') })
@@ -206,6 +211,7 @@ export function OverviewTab({
           {editing ? (
             <div className="space-y-2">
               <DepartmentUsersSelect
+              candidateSource={ownerCandidates}
                 multiple={false}
                 value={owner}
                 onChange={setOwner}

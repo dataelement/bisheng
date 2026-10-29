@@ -1,16 +1,16 @@
-import { Pagination, Button, SearchInput, Select, notification } from '@bisheng/ui';
+import { Pagination, Button, SearchInput, Select, notification } from "@bisheng/ui";
 // F035 (PRD §4.5): tenant custom skill management section, mounted in the
 // merged 日常 tab of 构建-工作台配置 (replaces the legacy SOP manual library).
 // List shows display_name only — the skill ID stays detail-level; no
 // migration-source badge (FR-5.1).
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
+import { hasResourceAction, useResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-
 
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Switch } from "@bisheng/ui";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
-import { QuestionHint as QuestionTooltip } from "@/components/bs-comp/QuestionHint";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { SkillBrief, SkillDetail, skillApi } from "@/controllers/API/linsight";
 import { showApiError } from "@/controllers/request";
@@ -23,258 +23,263 @@ import { SkillFormDrawer } from "./SkillFormDrawer";
 import { SkillUploadDialog } from "./SkillUploadDialog";
 
 const ChevronRight = Outlined.Right,
-    Plus = Outlined.Plus,
-    Upload = Outlined.Upload;
+  Plus = Outlined.Plus,
+  Upload = Outlined.Upload;
 
 const PAGE_SIZE = 10;
 
 interface SkillManagementProps {
-    scopeVersion?: number;
-    /** F035 (v2.6): whether the client 添加技能 entry is shown. Default off. */
-    entryEnabled?: boolean;
-    onEntryToggle?: (enabled: boolean) => void;
+  scopeVersion?: number;
 }
 
-export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntryToggle }: SkillManagementProps) {
-    const { t } = useTranslation();
-    const paginationLocale = usePaginationLocale();
-    const [skills, setSkills] = useState<SkillBrief[]>([]);
-    const [total, setTotal] = useState(0);
-    const [page, setPage] = useState(1);
-    const [keyword, setKeyword] = useState("");
-    const [statusFilter, setStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
-    const selectLabels = useSelectLabels();
-    const [loading, setLoading] = useState(false);
+export function SkillManagement({ scopeVersion = 0 }: SkillManagementProps) {
+  const { t } = useTranslation();
+  const paginationLocale = usePaginationLocale();
+  const [skills, setSkills] = useState<SkillBrief[]>([]);
+  const [permissionSkill, setPermissionSkill] = useState<SkillBrief | null>(null);
+  const { actions } = useResourceActions(
+    "linsight_skill",
+    skills.map((skill) => String(skill.id)),
+    ["manage_permission"],
+  );
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [keyword, setKeyword] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
+  const selectLabels = useSelectLabels();
+  const [loading, setLoading] = useState(false);
 
-    const [uploadOpen, setUploadOpen] = useState(false);
-    const [formOpen, setFormOpen] = useState(false);
-    const [editing, setEditing] = useState<SkillDetail | null>(null);
-    const [detail, setDetail] = useState<SkillDetail | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<SkillDetail | null>(null);
+  const [detail, setDetail] = useState<SkillDetail | null>(null);
 
-    const loadSkills = useCallback((targetPage: number, kw: string, status: typeof statusFilter) => {
-        setLoading(true);
-        skillApi
-            .getSkillList({
-                keyword: kw || undefined,
-                enabled: status === "all" ? undefined : status === "enabled",
-                page: targetPage,
-                page_size: PAGE_SIZE,
-            })
-            .then((res) => {
-                setSkills(res.data);
-                setTotal(res.total);
-            })
-            .catch(showApiError).finally(() => setLoading(false));
-    }, []);
+  const loadSkills = useCallback((targetPage: number, kw: string, status: typeof statusFilter) => {
+    setLoading(true);
+    skillApi
+      .getSkillList({
+        keyword: kw || undefined,
+        enabled: status === "all" ? undefined : status === "enabled",
+        page: targetPage,
+        page_size: PAGE_SIZE,
+      })
+      .then((res) => {
+        setSkills(res.data);
+        setTotal(res.total);
+      })
+      .catch(showApiError)
+      .finally(() => setLoading(false));
+  }, []);
 
-    useEffect(() => {
-        loadSkills(page, keyword, statusFilter);
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- keyword is applied via handleSearch
-    }, [page, statusFilter, scopeVersion]);
+  useEffect(() => {
+    loadSkills(page, keyword, statusFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyword is applied via handleSearch
+  }, [page, statusFilter, scopeVersion]);
 
-    const refresh = () => loadSkills(page, keyword, statusFilter);
+  const refresh = () => loadSkills(page, keyword, statusFilter);
 
-    const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
-    const handleSearch = (value: string) => {
-        setKeyword(value);
-        clearTimeout(searchTimerRef.current);
-        searchTimerRef.current = setTimeout(() => {
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const handleSearch = (value: string) => {
+    setKeyword(value);
+    clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setPage(1);
+      loadSkills(1, value, statusFilter);
+    }, 300);
+  };
+
+  const handleToggle = (skill: SkillBrief, enabled: boolean) => {
+    // Optimistic flip: takes effect immediately in the end-user picker (FR-5.9).
+    setSkills((prev) => prev.map((s) => (s.name === skill.name ? { ...s, enabled } : s)));
+    skillApi
+      .setSkillStatus(skill.name, enabled)
+      .then(() => {
+        notification.open({
+          type: "success",
+          description: String(
+            enabled ? t("skillManage.enabledToast") : (t("skillManage.disabledToast") ?? ""),
+          ),
+        });
+      })
+      .catch((error) => {
+        setSkills((prev) => prev.map((s) => (s.name === skill.name ? { ...s, enabled: !enabled } : s)));
+        showApiError(error);
+      });
+  };
+
+  const handleDelete = (skill: SkillBrief) => {
+    bsConfirm({
+      desc: t("skillManage.deleteConfirm", { name: skill.display_name }),
+      okTxt: t("skillManage.deleteAction"),
+      onOk(next) {
+        return skillApi.deleteSkill(skill.name).then(() => {
+          notification.open({ type: "success", description: String(t("skillManage.deleted") ?? "") });
+          refresh();
+          next();
+        });
+      },
+    });
+  };
+
+  const openDetail = (skill: SkillBrief) => {
+    skillApi.getSkillDetail(skill.name).then(setDetail).catch(showApiError);
+  };
+
+  // From the detail sheet: close it first, then open the next overlay once the
+  // exit animation finishes — stacking two Radix modals traps focus/clicks.
+  const handleEditFromDetail = (d: SkillDetail) => {
+    setDetail(null);
+    setTimeout(() => {
+      setEditing(d);
+      setFormOpen(true);
+    }, 200);
+  };
+
+  const handleDeleteFromDetail = (d: SkillDetail) => {
+    setDetail(null);
+    setTimeout(() => handleDelete(d), 200);
+  };
+
+  const handleCreate = () => {
+    setEditing(null);
+    setFormOpen(true);
+  };
+
+  const emptyHint = keyword || statusFilter !== "all" ? t("skillManage.noMatch") : t("skillManage.empty");
+
+  return (
+    <div className="mb-6">
+      <div className="flex items-center gap-2 mb-3">
+        <p className="text-lg font-bold">{t("skillManage.title")}</p>
+        <span className="text-sm text-muted-foreground">{t("skillManage.catalogHint")}</span>
+      </div>
+      <div className="flex items-center gap-2 mb-3">
+        <SearchInput
+          placeholder={t("skillManage.searchPlaceholder")}
+          onChange={(e) => handleSearch(e.target.value)}
+          className={"w-64"}
+        />
+        <Select
+          {...selectLabels}
+          aria-label={t("skillManage.columns.status")}
+          className="w-28"
+          options={[
+            { value: "all", label: t("skillManage.statusAll") },
+            { value: "enabled", label: t("skillManage.statusEnabled") },
+            { value: "disabled", label: t("skillManage.statusDisabled") },
+          ]}
+          value={statusFilter}
+          onChange={(v) => {
+            if (v == null || v === statusFilter) return;
+            setStatusFilter(v as typeof statusFilter);
             setPage(1);
-            loadSkills(1, value, statusFilter);
-        }, 300);
-    };
-
-    const handleToggle = (skill: SkillBrief, enabled: boolean) => {
-        // Optimistic flip: takes effect immediately in the end-user picker (FR-5.9).
-        setSkills((prev) => prev.map((s) => (s.name === skill.name ? { ...s, enabled } : s)));
-        skillApi.setSkillStatus(skill.name, enabled).then(() => {
-                notification.open({ type: "success", description: String(enabled ? t("skillManage.enabledToast") : t("skillManage.disabledToast") ?? '') });
-        }).catch(error => {
-                setSkills((prev) => prev.map((s) => (s.name === skill.name ? { ...s, enabled: !enabled } : s)));
-                showApiError(error);
-        });
-    };
-
-    const handleDefaultCheckedToggle = (skill: SkillBrief, defaultChecked: boolean) => {
-        setSkills((prev) => prev.map((s) => (s.name === skill.name ? { ...s, default_checked: defaultChecked } : s)));
-        skillApi.setSkillDefaultChecked(skill.name, defaultChecked).then(() => {
-                notification.open({ type: "success", description: String(defaultChecked
-                        ? t("skillManage.defaultCheckedOnToast")
-                        : t("skillManage.defaultCheckedOffToast") ?? '') });
-        }).catch(error => {
-                setSkills((prev) =>
-                    prev.map((s) => (s.name === skill.name ? { ...s, default_checked: !defaultChecked } : s)),
-                );
-                showApiError(error);
-        });
-    };
-
-    const handleDelete = (skill: SkillBrief) => {
-        bsConfirm({
-            desc: t("skillManage.deleteConfirm", { name: skill.display_name }),
-            okTxt: t("skillManage.deleteAction"),
-            onOk(next) {
-                return skillApi.deleteSkill(skill.name).then(() => {
-                        notification.open({ type: "success", description: String(t("skillManage.deleted") ?? '') });
-                        refresh();
-                    next();
-                });
-            },
-        });
-    };
-
-    const openDetail = (skill: SkillBrief) => {
-        skillApi
-            .getSkillDetail(skill.name)
-            .then(setDetail)
-            .catch(showApiError);
-    };
-
-    // From the detail sheet: close it first, then open the next overlay once the
-    // exit animation finishes — stacking two Radix modals traps focus/clicks.
-    const handleEditFromDetail = (d: SkillDetail) => {
-        setDetail(null);
-        setTimeout(() => {
-            setEditing(d);
-            setFormOpen(true);
-        }, 200);
-    };
-
-    const handleDeleteFromDetail = (d: SkillDetail) => {
-        setDetail(null);
-        setTimeout(() => handleDelete(d), 200);
-    };
-
-    const handleCreate = () => {
-        setEditing(null);
-        setFormOpen(true);
-    };
-
-    const emptyHint = keyword || statusFilter !== "all" ? t("skillManage.noMatch") : t("skillManage.empty");
-
-    return (
-        <div className="mb-6">
-            <div className="flex items-center gap-2 mb-3">
-                <p className="text-lg font-bold">{t("skillManage.title")}</p>
-                <Switch checked={entryEnabled} onCheckedChange={onEntryToggle} />
-                <span className="text-sm text-muted-foreground">{t("skillManage.entryToggleTip")}</span>
-            </div>
-            <div className="flex items-center gap-2 mb-3">
-                <SearchInput placeholder={t("skillManage.searchPlaceholder")} onChange={(e) => handleSearch(e.target.value)} className={"w-64"} />
-                <Select
-                    {...selectLabels}
-                    aria-label={t("skillManage.columns.status")}
-                    className="w-28"
-                    options={[
-                        { value: "all", label: t("skillManage.statusAll") },
-                        { value: "enabled", label: t("skillManage.statusEnabled") },
-                        { value: "disabled", label: t("skillManage.statusDisabled") },
-                    ]}
-                    value={statusFilter}
-                    onChange={(v) => {
-                        if (v == null || v === statusFilter) return;
-                        setStatusFilter(v as typeof statusFilter);
-                        setPage(1);
-                    }}
-                />
-                <div className="ml-auto flex gap-2">
-                    <Button variant="outlined" onClick={() => setUploadOpen(true)} color="default">
-                        <Upload className="size-4 mr-1.5" />
-                        {t("skillManage.upload")}
-                    </Button>
-                    <Button onClick={handleCreate}>
-                        <Plus className="size-4 mr-1.5" />
-                        {t("skillManage.create")}
-                    </Button>
-                </div>
-            </div>
-            <div className="border rounded-md">
-                {/* table-fixed: honor column widths so the description truncates instead of
-                    widening the table and triggering a horizontal scrollbar */}
-                <Table className="table-fixed">
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-56">{t("skillManage.columns.displayName")}</TableHead>
-                            <TableHead>{t("skillManage.columns.description")}</TableHead>
-                            <TableHead className="w-24">{t("skillManage.columns.status")}</TableHead>
-                            <TableHead className="w-28">
-                                <div className="flex items-center gap-1">
-                                    {t("skillManage.columns.defaultChecked")}
-                                    <QuestionTooltip content={t("skillManage.defaultCheckedTip")} />
-                                </div>
-                            </TableHead>
-                            <TableHead className="w-40">{t("skillManage.columns.updateTime")}</TableHead>
-                            <TableHead className="w-8" />
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {skills.length === 0 && !loading && (
-                            <TableRow>
-                                <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
-                                    {emptyHint}
-                                </TableCell>
-                            </TableRow>
-                        )}
-                        {skills.map((skill) => (
-                            <TableRow
-                                key={skill.id}
-                                className="group cursor-pointer hover:bg-primary/5"
-                                onClick={() => openDetail(skill)}
-                            >
-                                <TableCell className="font-medium">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                        <div className="size-[34px] shrink-0 rounded-[9px] grid place-items-center text-primary bg-gradient-to-br from-[#EEF2FF] to-[#E2EAFF]">
-                                            <Sparkles className="size-[17px]" />
-                                        </div>
-                                        <span className="truncate min-w-0">{skill.display_name}</span>
-                                    </div>
-                                </TableCell>
-                                <TableCell className="truncate" title={skill.description}>
-                                    {skill.description}
-                                </TableCell>
-                                {/* Quick toggle stays inline; stop the click from opening the detail sheet */}
-                                <TableCell onClick={(e) => e.stopPropagation()}>
-                                    <Switch
-                                        checked={skill.enabled}
-                                        onCheckedChange={(checked) => handleToggle(skill, checked)}
-                                    />
-                                </TableCell>
-                                {/* A disabled skill is never offered, so its preselect is frozen (value kept) */}
-                                <TableCell onClick={(e) => e.stopPropagation()}>
-                                    <Switch
-                                        checked={skill.default_checked}
-                                        disabled={!skill.enabled}
-                                        onCheckedChange={(checked) => handleDefaultCheckedToggle(skill, checked)}
-                                    />
-                                </TableCell>
-                                <TableCell className="text-muted-foreground text-xs">
-                                    {(skill.update_time ?? skill.create_time)?.replace("T", " ").slice(0, 16) ?? "--"}
-                                </TableCell>
-                                {/* chevron nudges right + turns brand-blue on row hover — a quiet "clickable" cue */}
-                                <TableCell className="text-[#C4C9D4] transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-primary">
-                                    <ChevronRight className="size-4" />
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </div>
-            <Pagination locale={paginationLocale}
-                className="mt-2"
-                current={page}
-                pageSize={PAGE_SIZE}
-                total={total}
-                showTotal
-                onChange={(p) => setPage(p)}
-            />
-            <SkillUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} onUploaded={refresh} />
-            <SkillFormDrawer open={formOpen} editing={editing} onOpenChange={setFormOpen} onSaved={refresh} />
-            <SkillDetailSheet
-                detail={detail}
-                onOpenChange={(open) => !open && setDetail(null)}
-                onEdit={handleEditFromDetail}
-                onDelete={handleDeleteFromDetail}
-            />
+          }}
+        />
+        <div className="ml-auto flex gap-2">
+          <Button variant="outlined" onClick={() => setUploadOpen(true)} color="default">
+            <Upload className="size-4 mr-1.5" />
+            {t("skillManage.upload")}
+          </Button>
+          <Button onClick={handleCreate}>
+            <Plus className="size-4 mr-1.5" />
+            {t("skillManage.create")}
+          </Button>
         </div>
-    );
+      </div>
+      <div className="border rounded-md">
+        {/* table-fixed: honor column widths so the description truncates instead of
+                    widening the table and triggering a horizontal scrollbar */}
+        <Table className="table-fixed">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-56">{t("skillManage.columns.displayName")}</TableHead>
+              <TableHead>{t("skillManage.columns.description")}</TableHead>
+              <TableHead className="w-24">{t("skillManage.columns.status")}</TableHead>
+              <TableHead className="w-40">{t("skillManage.columns.updateTime")}</TableHead>
+              <TableHead className="w-24">{t("permission:dialog.tabGrant")}</TableHead>
+              <TableHead className="w-8" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {skills.length === 0 && !loading && (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
+                  {emptyHint}
+                </TableCell>
+              </TableRow>
+            )}
+            {skills.map((skill) => (
+              <TableRow
+                key={skill.id}
+                className="group cursor-pointer hover:bg-primary/5"
+                onClick={() => openDetail(skill)}
+              >
+                <TableCell className="font-medium">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="size-[34px] shrink-0 rounded-[9px] grid place-items-center text-primary bg-gradient-to-br from-[#EEF2FF] to-[#E2EAFF]">
+                      <Sparkles className="size-[17px]" />
+                    </div>
+                    <span className="truncate min-w-0">{skill.display_name}</span>
+                  </div>
+                </TableCell>
+                <TableCell className="truncate" title={skill.description}>
+                  {skill.description}
+                </TableCell>
+                {/* Quick toggle stays inline; stop the click from opening the detail sheet */}
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <Switch
+                    checked={skill.enabled}
+                    onCheckedChange={(checked) => handleToggle(skill, checked)}
+                  />
+                </TableCell>
+                <TableCell className="text-muted-foreground text-xs">
+                  {(skill.update_time ?? skill.create_time)?.replace("T", " ").slice(0, 16) ?? "--"}
+                </TableCell>
+                <TableCell onClick={(event) => event.stopPropagation()}>
+                  {hasResourceAction(actions, skill.id, "manage_permission") && (
+                    <Button variant="ghost" size="sm" onClick={() => setPermissionSkill(skill)}>
+                      {t("permission:dialog.tabGrant")}
+                    </Button>
+                  )}
+                </TableCell>
+                {/* chevron nudges right + turns brand-blue on row hover — a quiet "clickable" cue */}
+                <TableCell className="text-[#C4C9D4] transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-primary">
+                  <ChevronRight className="size-4" />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <Pagination
+        locale={paginationLocale}
+        className="mt-2"
+        current={page}
+        pageSize={PAGE_SIZE}
+        total={total}
+        showTotal
+        onChange={(p) => setPage(p)}
+      />
+      {permissionSkill && (
+        <PermissionDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setPermissionSkill(null);
+          }}
+          resourceType="linsight_skill"
+          resourceId={String(permissionSkill.id)}
+          resourceName={permissionSkill.display_name}
+          allowAllMembers
+        />
+      )}
+      <SkillUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} onUploaded={refresh} />
+      <SkillFormDrawer open={formOpen} editing={editing} onOpenChange={setFormOpen} onSaved={refresh} />
+      <SkillDetailSheet
+        detail={detail}
+        onOpenChange={(open) => !open && setDetail(null)}
+        onEdit={handleEditFromDetail}
+        onDelete={handleDeleteFromDetail}
+      />
+    </div>
+  );
 }

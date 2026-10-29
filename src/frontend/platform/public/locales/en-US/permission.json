@@ -278,5 +278,10 @@
     "knowledge_space": "Knowledge space",
     "tool": "Tool",
     "workflow": "Workflow"
-  }
+  },
+  "allMembers": {
+  "title": "Available to all members",
+  "publicHint": "All members of this enterprise can use this item. Turn off to use the grants below.",
+  "selectedHint": "Access follows the selected users, departments and groups."
+}
 }

@@ -34,7 +34,7 @@ export function NewTabHint({ file, className }: NewTabHintProps) {
             role="img"
             title={label}
             aria-label={label}
-            className={cn('inline-flex shrink-0 items-center text-[#C0C4CC]', className)}
+            className={cn('inline-flex shrink-0 items-center text-text-3', className)}
         >
             <Outlined.ArrowRightUp className="size-4" />
         </span>

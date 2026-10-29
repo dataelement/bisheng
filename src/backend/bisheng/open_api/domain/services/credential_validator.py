@@ -44,6 +44,7 @@ from bisheng.open_api.domain.models.api_credential import (
 from bisheng.open_api.domain.repositories.credential_repository import CredentialRepository
 from bisheng.open_api.domain.repositories.service_account_repository import ServiceAccountRepository
 from bisheng.open_api.domain.services.credential_service import CREDENTIAL_CACHE_KEY, CredentialService, hash_token
+from bisheng.open_api.domain.services.service_account_tenancy import revalidate_service_account
 
 #: Which prefix a plaintext must carry for each subject kind. Built from the
 #: constants rather than written out, so a prefix change moves the regex and the
@@ -159,6 +160,7 @@ async def validate_bearer(authorization: str | None) -> OpenApiPrincipal:
                     expiration=ttl,
                 )
         await _assert_tenant_active(principal.tenant_id, redis)
+        principal = await revalidate_service_account(principal)
     except OpenApiAuthError:
         raise
     except Exception as exc:

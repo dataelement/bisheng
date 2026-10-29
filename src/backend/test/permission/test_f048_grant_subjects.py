@@ -140,34 +140,32 @@ async def test_the_department_answers_carry_the_org_tree_shape(monkeypatch) -> N
     )
     assert "children" in node and "has_children" in node
 
-    async def one_department(*args, **kwargs):
-        del args, kwargs
-        return type("D", (), {"id": 7, "tenant_id": 1, "path": "/7/"})()
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
 
-    async def forest(*args, **kwargs):
-        del args, kwargs
-        return [node]
+    result = {"roots": [node], "total_matches": 1, "truncated": False}
+    directory = SimpleNamespace(candidate_department_path=AsyncMock(return_value=result))
+    monkeypatch.setattr(grant_subject_service, "get_grant_subject_directory", AsyncMock(return_value=directory))
 
-    monkeypatch.setattr(grant_subject_service.DepartmentDao, "aget_by_id", one_department)
-    monkeypatch.setattr(grant_subject_service.DepartmentService, "abuild_forest_within_subtree", forest)
-
-    revealed = await grant_subject_service.get_candidate_department_path(
-        GrantSubjectScope(tenant_id=1, department_path=None), dept_id=7
-    )
+    scope = GrantSubjectScope(tenant_id=1, department_path=None)
+    revealed = await grant_subject_service.get_candidate_department_path(scope, dept_id=7)
     assert set(revealed) == {"roots", "total_matches", "truncated"}
     assert revealed["roots"] == [node]
+    directory.candidate_department_path.assert_awaited_once_with(scope, dept_id=7)
 
 
 async def test_a_department_bound_space_reveals_nothing_outside_its_subtree(monkeypatch) -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
     from bisheng.permission.domain.services import grant_subject_service
 
-    async def elsewhere(*args, **kwargs):
-        del args, kwargs
-        return type("D", (), {"id": 9, "tenant_id": 1, "path": "/1/9/"})()
-
-    monkeypatch.setattr(grant_subject_service.DepartmentDao, "aget_by_id", elsewhere)
-
-    revealed = await grant_subject_service.get_candidate_department_path(
-        GrantSubjectScope(tenant_id=1, department_path="/2/"), dept_id=9
+    directory = SimpleNamespace(
+        candidate_department_path=AsyncMock(return_value={"roots": [], "total_matches": 0, "truncated": False})
     )
+    monkeypatch.setattr(grant_subject_service, "get_grant_subject_directory", AsyncMock(return_value=directory))
+
+    scope = GrantSubjectScope(tenant_id=1, department_path="/2/")
+    revealed = await grant_subject_service.get_candidate_department_path(scope, dept_id=9)
     assert revealed["roots"] == []
+    directory.candidate_department_path.assert_awaited_once_with(scope, dept_id=9)

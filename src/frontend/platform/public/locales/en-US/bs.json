@@ -1095,7 +1095,7 @@
     "workflow": "Workflow",
     "skill": "Skill",
     "workbench": "WorkBench",
-    "tools": "Tools",
+    "tools": "Tools & Skills",
     "tagLibrary": "Tag Library",
     "createTagLibrary": "Create Tag Library",
     "editTagLibrary": "Edit Tag Library",
@@ -1392,7 +1392,8 @@
     "gaodeMap": "Gaode Map",
     "gaodeMapSSE": "Gaode Map (SSE Protocol)",
     "gaodeMapStreamable": "Gaode Map (streamable Protocol)",
-    "gaodeMapDesc": "AMap provides a variety of location-based services, including geocoding, reverse geocoding, IP location, weather query, cycling path planning, walking path planning, driving path planning, bus path planning, distance measurement, keyword search, nearby search, and detailed search services"
+    "gaodeMapDesc": "AMap provides a variety of location-based services, including geocoding, reverse geocoding, IP location, weather query, cycling path planning, walking path planning, driving path planning, bus path planning, distance measurement, keyword search, nearby search, and detailed search services",
+    "skills": "Skills"
   },
   "test": {
     "test": "Test",
@@ -2666,7 +2667,8 @@
       "githubFetch": "Failed to fetch from GitHub: repo / branch / path not found or network error. Check the URL and retry",
       "githubRateLimit": "GitHub rate limit exceeded, please retry later",
       "unknown": "Operation failed, please retry"
-    }
+    },
+    "catalogHint": "Saved skills are available within organization permissions. Users choose per task; disabled skills stay unavailable."
   },
   "citation": {
     "unsupportedPreview": "Preview is not supported for this file type",
@@ -2969,6 +2971,13 @@
       "tightenConfirmOk": "Restrict",
       "revokeConfirmTitle": "Revoke this key?",
       "revokeConfirmBody": "The key stops working immediately and the holder's AI assistant loses access; the holder can generate a new one at any time."
+    },
+    "tenantScope": {
+      "label": "Tenant to manage",
+      "choose": "Select a tenant to manage",
+      "hint": "Choose where to view and create service accounts. Existing accounts stay in their tenant. This selection is shared with other administration pages.",
+      "changed": "The management tenant has changed. Refresh and confirm your action again. The original request will not be retried automatically.",
+      "refresh": "Refresh"
     }
   },
   "mediaPreview": {
@@ -3104,7 +3113,7 @@
     "data": {
       "loading": "Loading…",
       "forbidden": "You do not have permission to access this application's data; only the owner can.",
-      "notReady": "The application has not created its database yet.",
+      "notReady": "The app has not created a database. Publish and approve draft apps first. Apps that only use browser storage do not have tables here.",
       "noTables": "The application's database has no tables yet.",
       "noRows": "This table has no rows yet.",
       "loadFailed": "Failed to load application data",
@@ -3376,7 +3385,6 @@
         "branch_pending": "Branch summary updating",
         "child_level": "Child Agent · level {{level}}",
         "children": "Child Agent conversations",
-        "continue": "Continue in this conversation",
         "known_abnormal": "Anomalies recorded · summary updating",
         "no_children": "No child conversations match these filters",
         "own_count": "{{count}} requests in this conversation",
@@ -3396,7 +3404,8 @@
         "refresh_required": "The conversation directory changed. Refresh records to continue.",
         "retry": "Retry",
         "summary_pending": "Summary updating",
-        "updating": "Relationships or totals are updating. Showing the last complete directory; request details remain available."
+        "updating": "Relationships or totals are updating. Showing the last complete directory; request details remain available.",
+        "depth_limit": "The conversation nesting display limit has been reached."
       },
       "summary_status": "Status",
       "status_pending": "In progress or awaiting audit updates",
@@ -3408,8 +3417,6 @@
       "group_abnormal": "{{count}} abnormal",
       "group_scope": "Only matching requests are shown. Group totals and status cover all indexed requests and may lag.",
       "group_all": "View all saved requests",
-      "all_scope": "Showing all saved requests for this user and conversation; other filters were cleared.",
-      "return_results": "Back to filtered results",
       "scan_limited": "No more matches in this batch. Continue to the next page.",
       "more_reasons": "{{count}} more",
       "summary": {
@@ -3420,8 +3427,7 @@
       },
       "views": {
         "groups": "Conversations",
-        "unassociated": "Unassociated requests",
-        "requests": "Request details"
+        "unassociated": "Unassociated requests"
       },
       "reasons": {
         "model_result_FAILED": "Model call failed",
@@ -3438,7 +3444,7 @@
         "INVALID_STATE": "Unrecognized record state"
       },
       "advanced_hint": "Refine by model, status or complete identifiers. Names and identifiers use exact matching.",
-      "all_time": "All time",
+      "all_time": "Last 7 days (default)",
       "async_hint": "Recorded asynchronously; gaps may exist",
       "capture_status": "Collection",
       "clear_advanced": "Clear advanced filters",
@@ -3449,8 +3455,8 @@
       "log_title": "Audit logs",
       "managed_tenant": "Managed tenant",
       "model_placeholder": "Select a model or enter its full historical name",
-      "no_end": "No end limit",
-      "no_start": "No start limit",
+      "no_end": "Default: current time",
+      "no_start": "Default: 7 days before the end",
       "query_info": "Scope and query details",
       "refresh_mode": "Refresh status",
       "refresh_records": "Refresh records",
@@ -3538,7 +3544,7 @@
       "noModels": "No matching available models. Enter a complete historical name to search.",
       "loadMoreModels": "Load more models",
       "mode": "Capture mode",
-      "modeHint": "Turning off stops new capture; saved records remain readable. Saving model inputs and outputs uses additional storage.",
+      "modeHint": "Storing input and output content uses additional storage. Changing the collection mode does not delete existing records.",
       "contentKeyMissing": "This service has no valid audit encryption key, so content capture cannot be enabled. Ask an operator to configure it, then refresh.",
       "contentKeyLost": "Content capture is configured, but this service's encryption key is unavailable. New originals cannot be saved; model calls are unaffected. Contact an operator.",
       "contentKeyReady": "This service's audit encryption key is available. Check each audit record for its actual retention status.",
@@ -3612,7 +3618,8 @@
         "loading": "Reading original…",
         "completed": "Transfer completed.",
         "interrupted": "Reading did not finish. Collapse and retry; retained content status is unchanged."
-      }
+      },
+      "collectionHint": "When audit collection is off but sensitive word checks are on, the system still records request summaries and check results, without storing input or output content. When both are off, no new request summaries are recorded. Existing records remain available."
     },
     "searchUsername": "Search username",
     "departmentAndMember": "Department / member",
@@ -4017,7 +4024,213 @@
     "useDepartmentQuota": "Use department default",
     "inlineQuotaHelp": "Department changes apply to default members. Custom quotas stay unchanged. Click Save to apply.",
     "monthlyQuotaWan": "Monthly quota (10K Tokens)",
-    "usageDimension": "Usage dimension"
+    "usageDimension": "Usage dimension",
+    "contentSafety": {
+      "actions": {
+        "close": "Close",
+        "load_more": "Load more",
+        "refresh": "Refresh",
+        "retry": "Retry",
+        "save": "Save",
+        "saved": "Saved. Changes apply to new requests within 5 seconds.",
+        "saving": "Saving",
+        "view_details": "View check details"
+      },
+      "association": {
+        "ASSOCIATED": "Linked to an audit record",
+        "UNASSOCIATED": "Not linked to an audit record"
+      },
+      "delivery": {
+        "backlog": "Some check records have not arrived. The displayed results may be incomplete.",
+        "committed": "Record saved",
+        "pending": "Record awaiting delivery",
+        "quarantined": "The record was not accepted. Ask an administrator to investigate.",
+        "retrying": "Record delivery retrying"
+      },
+      "description": "Check Desktop model inputs and outputs against the current tenant’s word list. Stop delivery when a match is found.",
+      "details": {
+        "backend_request_id": "Model request ID",
+        "builtin_digest": "Built-in word list fingerprint",
+        "drain_status": "Reading after delivery stopped",
+        "empty": "No check records are available. This does not confirm that checks passed.",
+        "event_id": "Check record ID",
+        "event_kind": "Record type",
+        "event_version": "Record version",
+        "events": "Check records",
+        "forwarded": "Model request forwarded",
+        "gateway_request_id": "Forwarding request ID",
+        "hit_count": "Match count",
+        "hit_count_truncated": "The match count is capped. There may be more matches.",
+        "input": "Input check",
+        "model_started_at": "Model execution started at",
+        "no_matched_text": "Check records do not store matched text.",
+        "not_forwarded": "Model request not forwarded",
+        "occurred_at": "Check time",
+        "output": "Output check",
+        "policy_version": "Check settings version",
+        "received_at": "Record received",
+        "request_started_at": "Request started",
+        "rule_refs": "Matched rule IDs",
+        "source": "Record source",
+        "summary": "Overall check result",
+        "title": "Sensitive word check details",
+        "unknown": "Unconfirmed",
+        "matched_words": "Matched sensitive words",
+        "matched_words_unavailable": "This check did not save the matched words; they cannot be recovered.",
+        "no_matches": "No matched words recorded."
+      },
+      "details_status": {
+        "AVAILABLE": "Details available",
+        "PENDING": "Details have not arrived yet. Refresh later.",
+        "PURGED": "Details were removed under the retention policy. Known check results are retained.",
+        "UNREPORTED": "Check details have not been received."
+      },
+      "directions": {
+        "BOTH": "Both input and output matched",
+        "INPUT": "Input matched",
+        "OUTPUT": "Output matched"
+      },
+      "drain": {
+        "DISCONNECTED": "Reading connection closed",
+        "FINISHED": "Response fully read",
+        "LIMITED": "Reading capacity limit reached",
+        "NOT_REQUIRED": "No further reading required",
+        "RUNNING": "Waiting for the model response to end",
+        "TIMED_OUT": "Reading time limit reached",
+        "usage_hint": "This status does not confirm that the model stopped or billing ended. Refer to the model usage record."
+      },
+      "errors": {
+        "capabilities_unknown": "Check availability could not be confirmed. Refresh or contact an administrator.",
+        "check_unavailable": "The content check could not finish, so delivery stopped. Try again later or contact an administrator.",
+        "content_blocked": "Content matched a sensitive word. Delivery has stopped.",
+        "deployment_disabled": "Sensitive word controls are not enabled for this deployment. Contact an administrator.",
+        "events_load_failed": "Could not load check details. Try again.",
+        "load_failed": "Could not load sensitive word settings. Refresh to retry.",
+        "save_failed": "Could not save. Your edits are retained. Try again.",
+        "unavailable": "Sensitive word checks are unavailable. Ask an administrator to check the service.",
+        "version_conflict": "The settings have changed. Your edits are retained. Refresh the latest settings before saving again."
+      },
+      "event_kinds": {
+        "DECISION": "Block decision",
+        "DRAIN": "Subsequent reading result",
+        "FINAL": "Check finished"
+      },
+      "filters": {
+        "all": "All",
+        "direction": "Match direction",
+        "has_hit": "Match recorded",
+        "hit": "Sensitive word match",
+        "no_known_hit": "No known match",
+        "no_known_hit_hint": "No known match does not mean the checks passed.",
+        "state": "Check result"
+      },
+      "model_entry": {
+        "ENTERED": "Model processing entered",
+        "NOT_APPLICABLE": "Not applicable",
+        "NOT_ENTERED": "Model not invoked",
+        "UNOBSERVED": "Model execution result not observed"
+      },
+      "origins": {
+        "EXTERNAL_SAFETY": "External check record",
+        "MODEL": "Model call record"
+      },
+      "readiness": {
+        "all_count": "{{count}} matched requests among all summarized requests",
+        "as_of": "Totals updated through {{time}}",
+        "matching_count": "{{count}} matched requests within the current filters",
+        "pending": "Match totals are updating. Refresh later; individual requests remain available.",
+        "ready": "Match totals updated",
+        "scan_limited": "This query reached its scan limit. Narrow the filters or continue browsing.",
+        "version": "Totals version",
+        "own_hits": "Matched requests in this conversation",
+        "branch_hits": "Matched requests including child conversations",
+        "all_hits": "Matched requests across the full conversation",
+        "matching_hits": "Matched requests within current filters"
+      },
+      "settings": {
+        "activation_hint": "Saved changes apply to new requests within 5 seconds. Requests already in progress keep their original settings.",
+        "auto_reply": "Block message",
+        "auto_reply_hint": "Shown when content is blocked. Do not include sensitive information.",
+        "builtin_digest": "Built-in word list fingerprint",
+        "builtin_words": "Built-in word lists",
+        "custom_words": "Custom sensitive words",
+        "custom_words_hint": "Enter one word per line. Matching is literal and case-sensitive.",
+        "custom_words_limit": "Custom words can use up to {{bytes}} bytes.",
+        "default_off": "No settings saved. Checks are off by default.",
+        "disabled_hint": "Turning checks off affects new requests. Recorded results are retained.",
+        "effective_words": "Active word count",
+        "effective_words_limit": "The active list supports up to {{count}} words and {{bytes}} bytes, with up to {{length}} characters per word.",
+        "enabled": "Enable checks",
+        "input_enabled": "Check inputs",
+        "output_enabled": "Check outputs",
+        "scope_hint": "These settings apply only to the selected tenant.",
+        "version": "Current settings version",
+        "word_sources": "Word list sources"
+      },
+      "states": {
+        "BLOCKED": "Matched",
+        "DISABLED": "Disabled",
+        "ERROR": "Check failed",
+        "NOT_APPLICABLE": "Not applicable",
+        "PASSED": "Passed",
+        "UNREPORTED": "Complete result not received"
+      },
+      "title": "Sensitive word controls",
+      "validation": {
+        "custom_words_too_large": "Custom words exceed the size limit. Reduce the list and try again.",
+        "reply_required": "Enter a block message before enabling checks.",
+        "too_many_words": "The active word count exceeds the limit. Reduce the words or selected lists.",
+        "word_too_long": "A word exceeds the length limit. Shorten it and try again.",
+        "words_required": "Select a valid word list or add custom words before enabling checks.",
+        "checks_required": "Select input checks or output checks before enabling checks.",
+        "reply_too_long": "The block message can contain up to 2048 characters. Shorten it and try again.",
+        "range_too_large": "Select a time range of 31 days or less."
+      }
+    },
+    "unified": {
+      "overview": "Credits and usage",
+      "models": "Model permissions",
+      "credits": "Credit settings",
+      "usage": "Usage",
+      "visibility": "Visibility",
+      "searchRole": "Search roles…",
+      "canUse": "Can use",
+      "selectedSubjects": "Selected: {{count}}",
+      "addToDraft": "Add to permission list",
+      "role": "Role",
+      "searchUser": "Search users…",
+      "searchDepartment": "Search departments…",
+      "everyoneVisible": "Visible to all members",
+      "everyoneVisibleHelp": "Everyone in the enterprise can use this model.",
+      "selectedVisible": "Visible to selected members",
+      "selectedVisibleHelp": "Only the users, departments and roles listed below can use this model.",
+      "saved": "Saved",
+      "visibilityHelp": "Choose which members can use this model.",
+      "modelSettings": "Model permissions and rate",
+      "multiplier": "Credit multiplier",
+      "multiplierHelp": "Defaults to 1; up to two decimal places. Credits = tokens / 1,000,000 × multiplier. Shared by Chat and Work; changes apply to new calls.",
+      "multiplierInvalid": "Enter a multiplier from 0.01 to 1000 with up to two decimal places.",
+      "everyone": "Everyone",
+      "DEPARTMENT": "Department",
+      "ROLE": "Role",
+      "USER": "Member",
+      "userTab": "Users",
+      "addCredits": "Add allowance",
+      "emptyCredits": "No credit allowances yet",
+      "ruleHelp": "Set monthly credits per member by user, department or role. The highest matching enabled allowance applies, shared by Chat and Work.",
+      "scope": "Scope",
+      "monthlyCredits": "Credits per member / month",
+      "creditRangeHint": "Enter credits from 0 to {{max}}, with up to 6 decimal places.",
+      "enabled": "Enable rule",
+      "selectSubject": "Select a subject",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "edit": "Edit",
+      "yes": "Enabled",
+      "no": "Disabled",
+      "usedCredits": "Credits used in this period: {{value}}"
+    }
   },
   "request": {
     "session_expired": "Session expired",

@@ -6,11 +6,7 @@ import type {
   AuditQueryReadiness,
   AuditTreePage,
 } from "@/types/dshModelAudit";
-import {
-  getAuditGroups,
-  getAuditReadiness,
-  getAuditTree,
-} from "@/controllers/API/dshModelAudit";
+import { getAuditGroups, getAuditReadiness, getAuditTree } from "@/controllers/API/dshModelAudit";
 import { displayTenantName } from "@/utils/tenantDisplayName";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -34,8 +30,7 @@ export function ModelAuditPanel() {
   };
   const ownTenant = Number(identity?.tenant_id);
   const canConfigure =
-    identity?.is_child_admin !== true &&
-    (identity?.role === "admin" || identity?.is_global_super === true);
+    identity?.is_child_admin !== true && (identity?.role === "admin" || identity?.is_global_super === true);
   const initialTenant = canConfigure
     ? 1
     : Number.isSafeInteger(ownTenant) && ownTenant > 0
@@ -48,43 +43,49 @@ export function ModelAuditPanel() {
     <div className="min-w-0 space-y-4">
       <div className="grid items-center gap-3 border-b pb-4 md:grid-cols-[minmax(0,1fr)_auto]">
         {canConfigure ? (
-          <ModelAuditTenantSelect
-            initialTenant={initialTenant}
-            value={tenant}
-            onChange={setTenant}
-          />
+          <ModelAuditTenantSelect initialTenant={initialTenant} value={tenant} onChange={setTenant} />
         ) : (
           <p className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">
-              {t("dsh.modelAuditView.tenant")}
-            </span>
-            {displayTenantName(identity?.tenant_name) ||
-              t("dsh.modelAuditView.managed_tenant")}
+            <span className="text-muted-foreground">{t("dsh.modelAuditView.tenant")}</span>
+            {displayTenantName(identity?.tenant_name) || t("dsh.modelAuditView.managed_tenant")}
           </p>
         )}
         {tenant !== undefined && (
-          <ModelAuditMode
-            key={"mode-" + tenant}
-            tenantId={tenant}
-            canConfigure={canConfigure}
-          />
+          <ModelAuditMode key={"mode-" + tenant} tenantId={tenant} canConfigure={canConfigure} />
         )}
       </div>
-      {tenant !== undefined && (
-        <ModelAuditRequests key={"requests-" + tenant} tenantId={tenant} />
-      )}
+      {tenant !== undefined && <ModelAuditRequests key={"requests-" + tenant} tenantId={tenant} />}
     </div>
   );
 }
 
 interface ModelAuditRequestsProps {
   tenantId?: number;
-  initialView?: "groups" | "unassociated" | "requests";
+  initialView?: "groups" | "unassociated";
 }
-export function ModelAuditRequests({
-  tenantId,
-  initialView = "groups",
-}: ModelAuditRequestsProps) {
+export function ModelAuditRequests(props: ModelAuditRequestsProps) {
+  const { user } = useContext(userContext);
+  const identity = user as {
+    user_id?: unknown;
+    tenant_id?: unknown;
+    leaf_tenant_id?: unknown;
+    role?: unknown;
+    is_global_super?: unknown;
+    is_child_admin?: unknown;
+  } | null;
+  const scope = JSON.stringify([
+    props.tenantId,
+    identity?.user_id,
+    identity?.tenant_id,
+    identity?.leaf_tenant_id,
+    identity?.role,
+    identity?.is_global_super,
+    identity?.is_child_admin,
+  ]);
+  return <ModelAuditRequestPage key={scope} {...props} />;
+}
+
+function ModelAuditRequestPage({ tenantId, initialView = "groups" }: ModelAuditRequestsProps) {
   const { t } = useTranslation();
   const initialQuery = { tenant_id: tenantId, limit: 20 };
   const [query, setQuery] = useState<ModelAuditQuery>(initialQuery);
@@ -92,33 +93,18 @@ export function ModelAuditRequests({
   const [history, setHistory] = useState<(string | undefined)[]>([]);
   const [revision, setRevision] = useState(0);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [infoOpen, setInfoOpen] = useState(false);
   const [view, setView] = useState(initialView);
-  const [groups, setGroups] = useState<AuditGroupPage | AuditTreePage | null>(
-    null,
-  );
+  const [groups, setGroups] = useState<AuditGroupPage | AuditTreePage | null>(null);
   const [groupLoading, setGroupLoading] = useState(false);
   const [groupFailed, setGroupFailed] = useState(false);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [readiness, setReadiness] = useState<AuditQueryReadiness | null>(null);
   const [readinessFailed, setReadinessFailed] = useState(false);
   const groupMode = useRef<"tree" | "legacy" | null>(null);
-  const saved = useRef<{
-    view: typeof view;
-    query: ModelAuditQuery;
-    draft: ModelAuditQuery;
-    history: (string | undefined)[];
-    scroll: number;
-    container: HTMLElement | null;
-    openGroup: string | null;
-  } | null>(null);
-  const [hasReturn, setHasReturn] = useState(false);
-  const section = useRef<HTMLElement>(null);
   const requestQuery = useMemo(
     () => ({
       ...query,
-      association_status:
-        view === "unassociated" ? ("UNASSOCIATED" as const) : undefined,
+      association_status: view === "unassociated" ? ("UNASSOCIATED" as const) : undefined,
     }),
     [query, view],
   );
@@ -153,10 +139,7 @@ export function ModelAuditRequests({
     const load = async () => {
       const capabilities = await getAuditReadiness(tenantId, abort.signal);
       if (abort.signal.aborted) return null;
-      const nextMode =
-        capabilities.hierarchy_available && capabilities.hierarchy_ready
-          ? "tree"
-          : "legacy";
+      const nextMode = capabilities.hierarchy_available && capabilities.hierarchy_ready ? "tree" : "legacy";
       if (query.cursor && groupMode.current && groupMode.current !== nextMode) {
         return {
           items: [],
@@ -187,53 +170,17 @@ export function ModelAuditRequests({
   }, [query, revision, view, tenantId]);
   const loading = view === "groups" ? groupLoading : requestLoading;
   const failed = view === "groups" ? groupFailed : requestFailed;
-  const nextCursor =
-    view === "groups" ? groups?.next_cursor : page?.next_cursor;
-  const pending = (
-    Object.keys({ ...query, ...draft }) as (keyof ModelAuditQuery)[]
-  ).some((key) => key !== "cursor" && query[key] !== draft[key]);
-  const handleApply = (next: ModelAuditQuery, preserveReturn = false) => {
-    if (!preserveReturn) {
-      setHasReturn(false);
-      saved.current = null;
-    }
+  const nextCursor = view === "groups" ? groups?.next_cursor : page?.next_cursor;
+  const pending = (Object.keys({ ...query, ...draft }) as (keyof ModelAuditQuery)[]).some(
+    (key) => key !== "cursor" && query[key] !== draft[key],
+  );
+  const handleApply = (next: ModelAuditQuery) => {
     const firstPage = { ...next, cursor: undefined };
     setHistory([]);
     setExpanded(null);
     setOpenGroup(null);
     setDraft(firstPage);
     setQuery(firstPage);
-  };
-  const handleNavigate = (userId: number, conversationId: string) => {
-    if (!hasReturn) {
-      let container = section.current?.parentElement || null;
-      while (
-        container &&
-        (container.scrollHeight <= container.clientHeight ||
-          !/(auto|scroll)/.test(window.getComputedStyle(container).overflowY))
-      )
-        container = container.parentElement;
-      saved.current = {
-        view,
-        query,
-        draft,
-        history,
-        scroll: container?.scrollTop ?? window.scrollY,
-        container,
-        openGroup,
-      };
-      setHasReturn(true);
-    }
-    setView("requests");
-    handleApply(
-      {
-        tenant_id: tenantId,
-        limit: 20,
-        user_id: userId,
-        conversation_id: conversationId,
-      },
-      true,
-    );
   };
   const handleRefresh = () => {
     setExpanded(null);
@@ -243,36 +190,10 @@ export function ModelAuditRequests({
     setRevision((old) => old + 1);
   };
   return (
-    <section
-      ref={section}
-      tabIndex={-1}
-      className="min-w-0 space-y-4"
-      aria-label={t("dsh.modelAudit")}
-    >
+    <section tabIndex={-1} className="min-w-0 space-y-4" aria-label={t("dsh.modelAudit")}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-medium">{t("dsh.modelAuditView.log_title")}</h2>
-        <Button
-          type="button"
-          size="small"
-          variant="text" color="default"
-          className="text-sm [@media(pointer:coarse)]:min-h-11"
-          aria-expanded={infoOpen}
-          aria-controls="audit-query-info"
-          onClick={() => setInfoOpen((old) => !old)}
-        >
-          {t("dsh.modelAuditView.query_info")}
-        </Button>
       </div>
-      {infoOpen && (
-        <div
-          id="audit-query-info"
-          className="space-y-2 rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground"
-        >
-          <p>{t("dsh.modelAuditView.scopeHint")}</p>
-          <p>{t("dsh.modelAuditView.modelHint")}</p>
-          <p>{t("dsh.modelAuditView.backlogUnknown")}</p>
-        </div>
-      )}
       <ModelAuditFilters
         pending={pending}
         tenantId={tenantId}
@@ -288,13 +209,11 @@ export function ModelAuditRequests({
           size="small"
           aria-label={t("dsh.modelAuditView.title")}
           value={view}
-          options={(["groups", "unassociated", "requests"] as const).map((value) => ({
+          options={(["groups", "unassociated"] as const).map((value) => ({
             value,
             label: t("dsh.modelAuditView.views." + value),
           }))}
           onChange={(value) => {
-            setHasReturn(false);
-            saved.current = null;
             setView(value as typeof view);
             setHistory([]);
             setExpanded(null);
@@ -303,40 +222,11 @@ export function ModelAuditRequests({
           }}
         />
         {view === "groups" && (
-          <span className="text-xs text-muted-foreground">
-            {t("dsh.modelAuditView.group_order")}
-          </span>
+          <span className="text-xs text-muted-foreground">{t("dsh.modelAuditView.group_order")}</span>
         )}
-        {hasReturn && (
-          <Button
-            type="button"
-            variant="link" color="default"
-            size="small"
-            onClick={() => {
-              const old = saved.current;
-              if (!old) return;
-              setView(old.view);
-              setQuery(old.query);
-              setDraft(old.draft);
-              setHistory(old.history);
-              setExpanded(null);
-              setOpenGroup(old.openGroup);
-              setHasReturn(false);
-              window.requestAnimationFrame(() => {
-                section.current?.focus({ preventScroll: true });
-                if (old.container?.isConnected)
-                  old.container.scrollTop = old.scroll;
-                else window.scrollTo(0, old.scroll);
-              });
-            }}
-          >
-            {t("dsh.modelAuditView.return_results")}
-          </Button>
-        )}
+
       </div>
-      {(readinessFailed ||
-        readiness?.status_ready === false ||
-        readiness?.name_ready === false) && (
+      {(readinessFailed || readiness?.status_ready === false || readiness?.name_ready === false) && (
         <p role="status" className="text-sm text-muted-foreground">
           {t("dsh.modelAuditView.index_preparing")}
         </p>
@@ -346,19 +236,9 @@ export function ModelAuditRequests({
           {t("dsh.modelAuditView.index_delay")}
         </p>
       )}
-      {view === "groups" &&
-        readiness?.hierarchy_available &&
-        readiness.phase !== "READY" && (
-          <p role="status" className="text-xs text-muted-foreground">
-            {t(
-              "dsh.modelAuditView.tree." +
-                (readiness.hierarchy_ready ? "updating" : "preparing"),
-            )}
-          </p>
-        )}
-      {hasReturn && (
-        <p className="text-xs text-muted-foreground">
-          {t("dsh.modelAuditView.all_scope")}
+      {view === "groups" && readiness?.hierarchy_available && readiness.phase !== "READY" && (
+        <p role="status" className="text-xs text-muted-foreground">
+          {t("dsh.modelAuditView.tree." + (readiness.hierarchy_ready ? "updating" : "preparing"))}
         </p>
       )}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
@@ -377,7 +257,8 @@ export function ModelAuditRequests({
         <Button
           type="button"
           size="small"
-          variant="text" color="default"
+          variant="text"
+          color="default"
           className="text-sm [@media(pointer:coarse)]:min-h-11"
           disabled={loading}
           onClick={handleRefresh}
@@ -385,27 +266,18 @@ export function ModelAuditRequests({
           {t("dsh.modelAuditView.refresh_records")}
         </Button>
       </div>
-      {view !== "groups" && missing && (
-        <p role="status">{t("dsh.modelAuditView.missing." + missing.gap)}</p>
-      )}
+      {view !== "groups" && missing && <p role="status">{t("dsh.modelAuditView.missing." + missing.gap)}</p>}
       {failed ? (
         <p role="alert">{t("dsh.modelAuditView.loadError")}</p>
       ) : loading ? (
         <p role="status">{t("dsh.loading")}</p>
       ) : view === "groups" ? (
         <>
-          {groups?.scan_limited && (
-            <p role="status">{t("dsh.modelAuditView.scan_limited")}</p>
-          )}
+          {groups?.scan_limited && <p role="status">{t("dsh.modelAuditView.scan_limited")}</p>}
           {groups?.progress.refresh_required && (
             <div role="alert" className="space-y-2 text-sm">
               <p>{t("dsh.modelAuditView.tree.refresh_required")}</p>
-              <Button
-                type="button"
-                variant="outlined" color="default"
-                size="small"
-                onClick={handleRefresh}
-              >
+              <Button type="button" variant="outlined" color="default" size="small" onClick={handleRefresh}>
                 {t("dsh.modelAuditView.refresh_records")}
               </Button>
             </div>
@@ -418,40 +290,26 @@ export function ModelAuditRequests({
           {groups?.items.map((group) =>
             "generation" in group ? (
               <ModelAuditTree
-                key={
-                  group.conversation_key +
-                  ":" +
-                  revision +
-                  ":" +
-                  group.generation
-                }
+                key={group.conversation_key + ":" + revision + ":" + group.generation}
                 node={group}
+                progress={groups.progress}
                 query={query}
                 expanded={openGroup === group.conversation_key}
                 onToggle={() =>
-                  setOpenGroup((old) =>
-                    old === group.conversation_key
-                      ? null
-                      : group.conversation_key,
-                  )
+                  setOpenGroup((old) => (old === group.conversation_key ? null : group.conversation_key))
                 }
-                onNavigate={handleNavigate}
                 onRefresh={handleRefresh}
               />
             ) : (
               <ModelAuditGroup
                 key={group.conversation_key + ":" + revision}
                 group={group}
+                progress={groups.progress}
                 query={query}
                 expanded={openGroup === group.conversation_key}
                 onToggle={() =>
-                  setOpenGroup((old) =>
-                    old === group.conversation_key
-                      ? null
-                      : group.conversation_key,
-                  )
+                  setOpenGroup((old) => (old === group.conversation_key ? null : group.conversation_key))
                 }
-                onNavigate={handleNavigate}
               />
             ),
           )}
@@ -465,10 +323,7 @@ export function ModelAuditRequests({
             row={row}
             tenantId={tenantId}
             expanded={expanded === row.request_id}
-            onToggle={() =>
-              setExpanded(expanded === row.request_id ? null : row.request_id)
-            }
-            onNavigate={handleNavigate}
+            onToggle={() => setExpanded(expanded === row.request_id ? null : row.request_id)}
           />
         ))
       )}

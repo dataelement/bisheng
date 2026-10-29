@@ -1084,7 +1084,7 @@
     "assistant": "助手",
     "workflow": "工作流",
     "skill": "技能",
-    "tools": "工具",
+    "tools": "工具与技能",
     "tagLibrary": "标签库",
     "createTagLibrary": "创建标签库",
     "editTagLibrary": "编辑标签库",
@@ -1375,7 +1375,8 @@
     "gaodeMap": "高德地图",
     "gaodeMapSSE": "高德地图（SSE 协议）",
     "gaodeMapStreamable": "高德地图（streamable 协议）",
-    "gaodeMapDesc": "高德地图API，提供地理编码、逆地理编码、IP定位、天气查询、骑行路径规划、步行路径规划、驾车路径规划、公交路径规划、距离测量、关键词搜索、周边搜索、详情搜索等服务"
+    "gaodeMapDesc": "高德地图API，提供地理编码、逆地理编码、IP定位、天气查询、骑行路径规划、步行路径规划、驾车路径规划、公交路径规划、距离测量、关键词搜索、周边搜索、详情搜索等服务",
+    "skills": "技能"
   },
   "test": {
     "test": "测试",
@@ -2611,7 +2612,8 @@
       "githubFetch": "从 GitHub 拉取失败：仓库 / 分支 / 路径不存在或网络异常，请检查链接后重试",
       "githubRateLimit": "GitHub 访问已达速率限制，请稍后再试",
       "unknown": "操作失败，请重试"
-    }
+    },
+    "catalogHint": "技能保存后按企业权限提供，用户在前台按任务选择。停用后停止提供。"
   },
   "citation": {
     "unsupportedPreview": "该类型文件不支持预览",
@@ -2914,6 +2916,13 @@
       "tightenConfirmOk": "确定收紧",
       "revokeConfirmTitle": "吊销这把密钥？",
       "revokeConfirmBody": "吊销后立即失效，持有人的 AI 助手将无法访问平台知识；持有人可自行重新生成。"
+    },
+    "tenantScope": {
+      "label": "管理租户",
+      "choose": "请选择管理租户",
+      "hint": "选择查看和创建服务账号的租户，不改变已有账号的归属。此选择与其他管理页面共享。",
+      "changed": "管理租户已变化。请刷新后重新确认操作，原请求不会自动重试。",
+      "refresh": "刷新"
     }
   },
   "mediaPreview": {
@@ -3049,7 +3058,7 @@
     "data": {
       "loading": "正在读取…",
       "forbidden": "你没有访问该应用数据的权限，仅应用所有者可查看。",
-      "notReady": "该应用尚未创建数据库。",
+      "notReady": "应用尚未创建数据库。草稿应用需要先完成发布审批并上线；仅使用浏览器存储的应用不会在这里产生数据表。",
       "noTables": "该应用的数据库里还没有表。",
       "noRows": "这张表还没有数据。",
       "loadFailed": "应用数据读取失败",
@@ -3321,7 +3330,6 @@
         "branch_pending": "含子会话汇总更新中",
         "child_level": "子 Agent · 第 {{level}} 级",
         "children": "子 Agent 会话",
-        "continue": "继续查看该会话",
         "known_abnormal": "已记录异常 · 汇总更新中",
         "no_children": "没有符合筛选条件的子会话",
         "own_count": "本会话 {{count}} 个请求",
@@ -3341,7 +3349,8 @@
         "refresh_required": "会话目录已更新，请刷新记录后继续查看。",
         "retry": "重试",
         "summary_pending": "汇总更新中",
-        "updating": "正在整理最新关系或统计，当前展示已完成的目录；请求明细仍可查看。"
+        "updating": "正在整理最新关系或统计，当前展示已完成的目录；请求明细仍可查看。",
+        "depth_limit": "已达到会话层级展示上限。"
       },
       "summary_status": "状态",
       "status_pending": "进行中或等待记录补齐",
@@ -3353,8 +3362,6 @@
       "group_abnormal": "异常 {{count}}",
       "group_scope": "当前仅显示筛选命中的请求；会话数量与状态汇总涵盖全部已索引请求，可能存在更新延迟。",
       "group_all": "查看全部已存请求",
-      "all_scope": "已切换到该用户会话的全部已存请求，其他筛选已解除。",
-      "return_results": "返回筛选结果",
       "scan_limited": "本批未找到更多匹配，可翻页继续查找。",
       "more_reasons": "另 {{count}} 项",
       "summary": {
@@ -3365,8 +3372,7 @@
       },
       "views": {
         "groups": "会话日志",
-        "unassociated": "未关联请求",
-        "requests": "请求明细"
+        "unassociated": "未关联请求"
       },
       "reasons": {
         "model_result_FAILED": "模型调用失败",
@@ -3383,7 +3389,7 @@
         "INVALID_STATE": "记录状态无法识别"
       },
       "advanced_hint": "按模型、状态或完整编号进一步筛选；名称与编号均精确匹配。",
-      "all_time": "全部时间",
+      "all_time": "最近 7 天（默认）",
       "async_hint": "异步记录，可能存在缺口",
       "capture_status": "采集状态",
       "clear_advanced": "清空高级条件",
@@ -3394,8 +3400,8 @@
       "log_title": "审计日志",
       "managed_tenant": "当前管理租户",
       "model_placeholder": "选择模型，或填写完整历史名称",
-      "no_end": "不限结束",
-      "no_start": "不限开始",
+      "no_end": "默认当前时间",
+      "no_start": "默认结束前 7 天",
       "query_info": "范围与查询说明",
       "refresh_mode": "刷新状态",
       "refresh_records": "刷新记录",
@@ -3483,7 +3489,7 @@
       "noModels": "没有匹配的开放模型，可填写完整历史名称查询。",
       "loadMoreModels": "加载更多模型",
       "mode": "采集模式",
-      "modeHint": "关闭后不再记录新的模型请求，已保存的记录仍可查看。保存输入输出原文会增加存储占用。",
+      "modeHint": "保存输入、输出原文会增加存储占用。调整采集模式不会删除已有记录。",
       "contentKeyMissing": "当前服务未配置有效的审计加密密钥，暂不能启用正文采集。请联系运维人员，配置后刷新。",
       "contentKeyLost": "已配置正文采集，但当前服务的加密密钥不可用，新的请求无法保存原文；模型调用不受影响。请联系运维人员。",
       "contentKeyReady": "当前服务的审计加密密钥可用；实际留存结果请查看审计记录状态。",
@@ -3557,7 +3563,8 @@
         "loading": "正在读取原文…",
         "completed": "本次传输已完成。",
         "interrupted": "本次读取未完成，请收起后重试；这不改变原文留存状态。"
-      }
+      },
+      "collectionHint": "关闭审计采集后，若敏感词检查仍开启，系统会继续记录请求摘要和检查结果，但不会保存输入、输出正文。两项均关闭时，不再新增请求摘要，已有记录仍可查看。"
     },
     "searchUsername": "搜索用户名",
     "departmentAndMember": "部门 / 成员",
@@ -3962,7 +3969,213 @@
     "useDepartmentQuota": "继承部门默认额度",
     "inlineQuotaHelp": "修改部门额度时，默认成员同步更新；单独设置的成员保持个人额度。点击右上角保存生效。",
     "monthlyQuotaWan": "每月额度（万 Token）",
-    "usageDimension": "统计维度"
+    "usageDimension": "统计维度",
+    "contentSafety": {
+      "actions": {
+        "close": "关闭",
+        "load_more": "加载更多",
+        "refresh": "刷新",
+        "retry": "重试",
+        "save": "保存",
+        "saved": "已保存，5 秒内对新请求生效。",
+        "saving": "保存中",
+        "view_details": "查看检查详情"
+      },
+      "association": {
+        "ASSOCIATED": "已关联审计记录",
+        "UNASSOCIATED": "尚未关联审计记录"
+      },
+      "delivery": {
+        "backlog": "部分检查记录尚未送达，当前结果可能不完整。",
+        "committed": "记录已保存",
+        "pending": "记录等待送达",
+        "quarantined": "记录未被接收，请联系管理员检查。",
+        "retrying": "记录正在补报"
+      },
+      "description": "按当前租户的词库检查 Desktop 模型输入和输出，命中后停止交付相关内容。",
+      "details": {
+        "backend_request_id": "模型请求编号",
+        "builtin_digest": "内置词库标识",
+        "drain_status": "停止交付后的读取状态",
+        "empty": "暂无检查记录，不能据此判断已经通过。",
+        "event_id": "检查记录编号",
+        "event_kind": "记录类型",
+        "event_version": "记录版本",
+        "events": "检查记录",
+        "forwarded": "已转发模型请求",
+        "gateway_request_id": "转发请求编号",
+        "hit_count": "命中次数",
+        "hit_count_truncated": "命中次数已截断，实际次数可能更多。",
+        "input": "输入检查",
+        "model_started_at": "模型执行开始时间",
+        "no_matched_text": "检查记录不保存命中原文。",
+        "not_forwarded": "未转发模型请求",
+        "occurred_at": "检查时间",
+        "output": "输出检查",
+        "policy_version": "检查配置版本",
+        "received_at": "记录接收时间",
+        "request_started_at": "请求开始时间",
+        "rule_refs": "命中规则编号",
+        "source": "记录来源",
+        "summary": "整体检查结果",
+        "title": "敏感词检查详情",
+        "unknown": "未确认",
+        "matched_words": "命中敏感词",
+        "matched_words_unavailable": "该检查记录未保存命中词，无法还原。",
+        "no_matches": "无已记录的命中词。"
+      },
+      "details_status": {
+        "AVAILABLE": "明细可查看",
+        "PENDING": "明细尚未到达，请稍后刷新。",
+        "PURGED": "明细已按保留规则清理，已知检查结果仍保留。",
+        "UNREPORTED": "尚未收到检查明细。"
+      },
+      "directions": {
+        "BOTH": "输入和输出均命中",
+        "INPUT": "输入命中",
+        "OUTPUT": "输出命中"
+      },
+      "drain": {
+        "DISCONNECTED": "读取连接已断开",
+        "FINISHED": "已读完响应",
+        "LIMITED": "已到读取容量限制",
+        "NOT_REQUIRED": "无需继续读取",
+        "RUNNING": "正在等待模型响应结束",
+        "TIMED_OUT": "已到读取时限",
+        "usage_hint": "此状态不代表模型已经停止或不再计费，用量以模型记录为准。"
+      },
+      "errors": {
+        "capabilities_unknown": "无法确认敏感词检查是否可用，请刷新或联系管理员。",
+        "check_unavailable": "本次内容检查未能完成，已停止交付。请稍后重试或联系管理员。",
+        "content_blocked": "内容命中敏感词，已停止交付。",
+        "deployment_disabled": "当前部署未启用敏感词控制，请联系管理员。",
+        "events_load_failed": "未能读取检查详情，请重试。",
+        "load_failed": "未能读取敏感词配置，请刷新重试。",
+        "save_failed": "保存失败，修改内容已保留，请重试。",
+        "unavailable": "敏感词检查服务暂不可用，请联系管理员检查服务状态。",
+        "version_conflict": "配置已被更新，当前修改已保留。请刷新最新配置后再保存。"
+      },
+      "event_kinds": {
+        "DECISION": "阻断判定",
+        "DRAIN": "后续读取结果",
+        "FINAL": "检查结束"
+      },
+      "filters": {
+        "all": "全部",
+        "direction": "命中方向",
+        "has_hit": "有命中",
+        "hit": "敏感词命中",
+        "no_known_hit": "无已知命中",
+        "no_known_hit_hint": "无已知命中不代表已经检查通过。",
+        "state": "检查结果"
+      },
+      "model_entry": {
+        "ENTERED": "已进入模型处理",
+        "NOT_APPLICABLE": "不适用",
+        "NOT_ENTERED": "未调用模型",
+        "UNOBSERVED": "未观测到模型执行结果"
+      },
+      "origins": {
+        "EXTERNAL_SAFETY": "外部检查记录",
+        "MODEL": "模型调用记录"
+      },
+      "readiness": {
+        "all_count": "全部已汇总请求中，{{count}} 个命中",
+        "as_of": "统计更新至 {{time}}",
+        "matching_count": "符合当前筛选条件的请求中，{{count}} 个命中",
+        "pending": "命中统计更新中，请稍后刷新；请求明细仍可查看。",
+        "ready": "命中统计已更新",
+        "scan_limited": "本次查询已到扫描上限，请缩小范围或继续查看。",
+        "version": "统计版本",
+        "own_hits": "本会话命中请求数",
+        "branch_hits": "含子会话的命中请求数",
+        "all_hits": "全会话命中请求数",
+        "matching_hits": "当前筛选命中请求数"
+      },
+      "settings": {
+        "activation_hint": "保存后最多 5 秒对新请求生效；已开始的请求继续使用开始时的配置。",
+        "auto_reply": "阻断提示",
+        "auto_reply_hint": "命中时向用户显示，请勿包含敏感信息。",
+        "builtin_digest": "内置词库标识",
+        "builtin_words": "内置词库",
+        "custom_words": "自定义敏感词",
+        "custom_words_hint": "每行一个词，按字面匹配，区分大小写。",
+        "custom_words_limit": "自定义词最多 {{bytes}} 字节。",
+        "default_off": "尚未设置，默认不检查。",
+        "disabled_hint": "关闭后停止检查新请求，已记录的检查结果仍然保留。",
+        "effective_words": "生效词数",
+        "effective_words_limit": "生效词库最多 {{count}} 词、{{bytes}} 字节；每词最多 {{length}} 个字符。",
+        "enabled": "启用检查",
+        "input_enabled": "检查输入",
+        "output_enabled": "检查输出",
+        "scope_hint": "配置仅用于当前选择的租户。",
+        "version": "当前配置版本",
+        "word_sources": "词库来源"
+      },
+      "states": {
+        "BLOCKED": "命中",
+        "DISABLED": "已关闭",
+        "ERROR": "检查失败",
+        "NOT_APPLICABLE": "不适用",
+        "PASSED": "通过",
+        "UNREPORTED": "未收到完整结果"
+      },
+      "title": "敏感词控制",
+      "validation": {
+        "custom_words_too_large": "自定义敏感词超过大小限制，请减少后重试。",
+        "reply_required": "启用检查前，请填写阻断提示。",
+        "too_many_words": "生效词数超过限制，请减少词条或词库来源。",
+        "word_too_long": "词条超过长度限制，请缩短后重试。",
+        "words_required": "启用检查前，请选择有效词库或填写自定义敏感词。",
+        "checks_required": "启用检查前，请至少选择检查输入或检查输出。",
+        "reply_too_long": "阻断提示最多 2048 个字符，请缩短后重试。",
+        "range_too_large": "单次查询最多 31 天，请缩小时间范围。"
+      }
+    },
+    "unified": {
+      "overview": "积分与使用数据",
+      "models": "模型权限",
+      "credits": "积分设置",
+      "usage": "用量",
+      "visibility": "可见范围",
+      "searchRole": "搜索角色…",
+      "canUse": "可使用",
+      "selectedSubjects": "已选择 {{count}} 项",
+      "addToDraft": "添加到授权列表",
+      "role": "角色",
+      "searchUser": "搜索用户…",
+      "searchDepartment": "搜索部门…",
+      "everyoneVisible": "所有成员可见",
+      "everyoneVisibleHelp": "企业内所有成员均可使用此模型。",
+      "selectedVisible": "部分成员可见",
+      "selectedVisibleHelp": "仅下方授权的用户、部门和角色可使用此模型。",
+      "saved": "已保存",
+      "visibilityHelp": "设置可使用此模型的成员范围。",
+      "modelSettings": "模型权限与倍率",
+      "multiplier": "积分倍率",
+      "multiplierHelp": "默认 1 倍，支持两位小数。消耗积分 = Token 用量 ÷ 100 万 × 倍率；Chat 和 Work 共用，新调用按保存后的倍率计费。",
+      "multiplierInvalid": "请输入 0.01～1000 之间的倍率，最多两位小数。",
+      "everyone": "所有成员",
+      "DEPARTMENT": "部门",
+      "ROLE": "角色",
+      "USER": "成员",
+      "userTab": "用户",
+      "addCredits": "新增分配",
+      "emptyCredits": "暂无积分配置",
+      "ruleHelp": "按用户、部门或角色设置每人每月积分。同时命中多条有效配置时取最高值，Chat 和 Work 共用。",
+      "scope": "适用范围",
+      "monthlyCredits": "每人每月积分",
+      "creditRangeHint": "请输入 0 至 {{max}} 之间的积分，最多保留 6 位小数。",
+      "enabled": "启用规则",
+      "selectSubject": "选择对象",
+      "save": "保存",
+      "saving": "保存中…",
+      "cancel": "取消",
+      "edit": "编辑",
+      "yes": "已启用",
+      "no": "已停用",
+      "usedCredits": "当前时段已消耗 {{value}} 积分"
+    }
   },
   "request": {
     "session_expired": "登录过期",

@@ -55,3 +55,10 @@ describe("version tab release notes", () => {
     expect(screen.getByText("Current app")).not.toBeNull()
   })
 })
+
+
+it.each(["pending", "rejected", "withdrawn", "exception", "cancelled", "approved"])("shows the actual %s approval while the runtime outcome is empty", async (status) => {
+  mock.fetch.mockResolvedValue([{ ...version("v1"), terminal_state: null, approval_status: status }])
+  render(<VersionsTab appId="app" />)
+  expect(await screen.findByText(`hostedApp.publishStatus.approvalState.${status}`)).toBeInTheDocument()
+})

@@ -28,7 +28,13 @@ export type DepartmentUserOption = {
   department_path?: string
 }
 
+export interface DepartmentUserCandidateSource {
+  cacheKey: string
+  fetchPage: (keyword: string, page: number, signal: AbortSignal) => Promise<{ data: UserListItem[]; total: number }>
+}
+
 interface DepartmentUsersSelectProps {
+  candidateSource?: DepartmentUserCandidateSource
   value: DepartmentUserOption[]
   onChange: (v: DepartmentUserOption[]) => void
   multiple?: boolean
@@ -72,6 +78,7 @@ export default function DepartmentUsersSelect({
   rootDeptId,
   emptyMessage,
   filterUserIds,
+  candidateSource,
 }: DepartmentUsersSelectProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -84,7 +91,7 @@ export default function DepartmentUsersSelect({
   const tree = useLazyDepartmentTree(
     rootDeptId != null
       ? {
-          autoLoad: open,
+          autoLoad: open && !candidateSource,
           autoExpandRoots: true,
           cacheKey: `dept-users:${rootDeptId}`,
           fetchChildren: async (parentId) => {
@@ -101,7 +108,7 @@ export default function DepartmentUsersSelect({
           fetchSearch: () => Promise.resolve({ roots: [], total_matches: 0, truncated: false }),
           fetchPathTree: (id) => getDepartmentPathTreeApi(id, false),
         }
-      : { autoLoad: open, autoExpandRoots: true, cacheKey: "dept-users" }
+      : { autoLoad: open && !candidateSource, autoExpandRoots: true, cacheKey: "dept-users" }
   )
 
   const selectedMap = useMemo(() => {
@@ -148,9 +155,10 @@ export default function DepartmentUsersSelect({
 
   const search = useSubjectSearch<UserListItem>({
     enabled: open,
-    emptyByDefault: true,
-    scopeKey: String(rootDeptId ?? "all"),
+    emptyByDefault: !candidateSource,
+    scopeKey: candidateSource?.cacheKey ?? String(rootDeptId ?? "all"),
     fetchPage: async (keyword, page, signal) => {
+      if (candidateSource) return candidateSource.fetchPage(keyword, page, signal)
       const result = rootDeptId != null
         ? await searchGlobalMembersApi({ keyword, page, limit: 50, rootDeptId }, { signal })
         : await getUsersApi({ name: keyword, page, pageSize: 50, withDepartmentPath: true }, { signal })
@@ -334,14 +342,14 @@ export default function DepartmentUsersSelect({
             // shard preventDefaults wheel; drive scrollTop manually.
             onScroll={(event) => {
               const element = event.currentTarget
-              if (keywordTrim && element.scrollTop + element.clientHeight >= element.scrollHeight - 40) search.loadMore()
+              if ((keywordTrim || candidateSource) && element.scrollTop + element.clientHeight >= element.scrollHeight - 40) search.loadMore()
             }}
             onWheel={(e) => {
               e.currentTarget.scrollTop += e.deltaY
-              if (keywordTrim && e.currentTarget.scrollTop + e.currentTarget.clientHeight >= e.currentTarget.scrollHeight - 40) search.loadMore()
+              if ((keywordTrim || candidateSource) && e.currentTarget.scrollTop + e.currentTarget.clientHeight >= e.currentTarget.scrollHeight - 40) search.loadMore()
             }}
           >
-            {search.tooLong || search.failed ? <SubjectSearchStatus tooLong={search.tooLong} failed={search.failed} onRetry={search.retry} /> : keywordTrim ? (
+            {search.tooLong || search.failed ? <SubjectSearchStatus tooLong={search.tooLong} failed={search.failed} onRetry={search.retry} /> : keywordTrim || candidateSource ? (
               // Search mode: a flat list of matched users (by name), each labeled
               // with its resolved department path (lazy, no full tree to bucket into).
               searchingUsers ? (
@@ -389,7 +397,7 @@ export default function DepartmentUsersSelect({
               browseRoots.map((n) => renderDeptNode(n, 0, []))
             )}
           </div>
-          {!!keywordTrim && !search.loading && !search.failed && !search.tooLong && searchedUsers.length < search.total && <button type="button" onClick={search.loadMore}>{t("subjectSearch.loadMore")}</button>}
+          {!!(keywordTrim || candidateSource) && !search.loading && !search.failed && !search.tooLong && searchedUsers.length < search.total && <button type="button" onClick={search.loadMore}>{t("subjectSearch.loadMore")}</button>}
         </div>
       </PopoverContent>
     </Popover>

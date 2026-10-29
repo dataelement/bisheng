@@ -22,3 +22,13 @@ it('keeps failed async confirmations open and permits retry after releasing the 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
     expect(onOk).toHaveBeenCalledTimes(2)
 })
+
+it('closes an invalidated form confirmation without submitting it', async () => {
+    const scope = new AbortController()
+    const onOk = vi.fn()
+    await act(async () => { bsConfirm({ desc: 'Old tenant form', okTxt: 'Save old tenant', signal: scope.signal, onOk }) })
+    expect(await screen.findByRole('button', { name: 'Save old tenant' })).toBeInTheDocument()
+    act(() => scope.abort())
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(onOk).not.toHaveBeenCalled()
+})

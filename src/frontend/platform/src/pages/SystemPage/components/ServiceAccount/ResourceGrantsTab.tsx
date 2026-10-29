@@ -1,3 +1,4 @@
+import { useServiceAccountRequestScope } from "./useServiceAccountManagementScope";
 import { TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { Button, SearchInput, Select, notification, toast } from '@bisheng/ui';
 import { Tooltip as SharedTooltip } from "@bisheng/ui";
@@ -54,6 +55,7 @@ export function ResourceGrantsTab({
   serviceAccountId,
   serviceAccountName,
 }: ResourceGrantsTabProps) {
+  const requestScope = useServiceAccountRequestScope();
   const { t } = useTranslation()
   const selectLabels = useSelectLabels()
   const [grants, setGrants] = useState<ServiceAccountResourceGrant[]>([])
@@ -73,15 +75,15 @@ export function ResourceGrantsTab({
     setLoadingData(true)
     try {
       const [grantRows, keyRows] = await Promise.all([
-        listServiceAccountResourceGrantsApi(serviceAccountId),
-        listServiceAccountKeysApi(serviceAccountId),
+        listServiceAccountResourceGrantsApi(serviceAccountId, requestScope),
+        listServiceAccountKeysApi(serviceAccountId, requestScope),
       ])
       if (grantRows) setGrants(grantRows)
       if (keyRows) setKeys(keyRows)
     } finally {
       setLoadingData(false)
     }
-  }, [serviceAccountId])
+  }, [serviceAccountId, requestScope])
 
   useEffect(() => {
     void load().catch(showApiError)
@@ -147,8 +149,7 @@ export function ResourceGrantsTab({
                 assignee_id: grant.assignee_id,
                 expected_assignee_version: grant.assignee_version,
               })),
-            },
-          )
+            }, requestScope)
         if (!result) {
           completed = false
           break
@@ -195,8 +196,7 @@ export function ResourceGrantsTab({
                 target_model_key: targetModelKey,
               },
             ],
-          },
-        )
+          }, requestScope)
       if (!result) return
       notification.open({ type: "success", title: String(t("openApiManagement.grants.change") ?? ''), description: String(t("openApiManagement.feedback.grantUpdated") ?? '') })
       await load()

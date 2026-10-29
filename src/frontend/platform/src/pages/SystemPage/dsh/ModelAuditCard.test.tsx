@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { ModelAuditRecord } from "@/types/dshModelAudit";
+import { dshTime } from "./common";
 
 const bodies = vi.hoisted(() => ({ render: vi.fn() }));
 vi.mock("./ModelAuditBody", () => ({
@@ -53,20 +54,18 @@ it("uses localized unavailable text when the user no longer exists", () => {
       row={{ ...row, user_name: null }}
       expanded={false}
       onToggle={vi.fn()}
-      onNavigate={vi.fn()}
     />,
   );
   expect(screen.getByText("dsh.modelAuditView.user_unavailable")).toBeVisible();
   expect(screen.queryByText(/#20/)).toBeNull();
 });
 
-it("keeps request information compact, revealing exact IDs without fetching an original", () => {
+it("AC-72: groups business request details under a heading without IDs or duplicate metadata", () => {
   render(
     <ModelAuditCard
       row={row}
       expanded={false}
       onToggle={vi.fn()}
-      onNavigate={vi.fn()}
     />,
   );
   const card = screen.getByRole("article");
@@ -81,13 +80,21 @@ it("keeps request information compact, revealing exact IDs without fetching an o
   fireEvent.click(
     screen.getByRole("button", { name: "dsh.modelAuditView.request_details" }),
   );
-  expect(screen.getByText(row.request_id)).toBeVisible();
-  expect(screen.getByText(row.conversation_id!)).toBeVisible();
+  const details = screen.getByRole("region", { name: "dsh.modelAuditView.request_details" });
+  expect(within(details).getByRole("heading", { name: "dsh.modelAuditView.request_details", level: 3 })).toBeVisible();
+  expect(within(details).getAllByRole("term")).toHaveLength(5);
+  for (const axis of ["model_result", "response_result", "usage_settlement", "content_status"])
+    expect(within(details).getByText("dsh.modelAuditView.axes." + axis)).toBeVisible();
+  expect(screen.queryByText(row.request_id)).toBeNull();
+  expect(screen.queryByText(row.conversation_id!)).toBeNull();
+  expect(screen.getAllByText(row.model_name)).toHaveLength(1);
+  for (const label of ["dsh.contentSafety.details.source", "dsh.contentSafety.details.model_started_at", "dsh.modelAuditView.conversation", "dsh.modelAuditView.filters.request_id"])
+    expect(within(details).queryByText(label)).toBeNull();
+  expect(screen.getByRole("button", { name: "dsh.modelAuditView.request_details" })).toHaveAttribute("aria-controls", details.id);
   expect(bodies.render).not.toHaveBeenCalled();
 });
 
 it("places the original between the request header and the independently colored status footer", () => {
-  const navigate = vi.fn();
   const toggle = vi.fn();
   render(
     <ModelAuditCard
@@ -95,7 +102,6 @@ it("places the original between the request header and the independently colored
       tenantId={2}
       expanded
       onToggle={toggle}
-      onNavigate={navigate}
     />,
   );
   const card = screen.getByRole("article");
@@ -126,7 +132,6 @@ it("places the original between the request header and the independently colored
   expect(
     screen.queryByRole("button", { name: "dsh.modelAuditView.sources.parent" }),
   ).toBeNull();
-  expect(navigate).not.toHaveBeenCalled();
   fireEvent.keyDown(body, { key: "Escape" });
   expect(toggle).toHaveBeenCalledOnce();
   expect(
@@ -145,7 +150,6 @@ it("does not make metadata-only or uncaptured records fetchable", () => {
       }}
       expanded={false}
       onToggle={onToggle}
-      onNavigate={vi.fn()}
     />,
   );
   const button = screen.getByRole("button", {
@@ -169,7 +173,6 @@ it("AC-12, AC-13: shows model and response reasons independently and handles old
       }}
       expanded={false}
       onToggle={vi.fn()}
-      onNavigate={vi.fn()}
     />,
   );
   fireEvent.click(
@@ -190,11 +193,50 @@ it("AC-12, AC-13: shows model and response reasons independently and handles old
       row={row}
       expanded={false}
       onToggle={vi.fn()}
-      onNavigate={vi.fn()}
     />,
   );
   expect(screen.queryByText("dsh.modelAuditView.failures.model")).toBeNull();
   expect(
     screen.getByText("dsh.modelAuditView.failures.unavailable"),
   ).toBeVisible();
+});
+
+// Coverage AC: AC-72.
+it("keeps the request time in the header without repeating model execution metadata", () => {
+  const started = "2026-10-16T11:22:33Z";
+  render(<ModelAuditCard row={{ ...row, record_origin: "MODEL", model_entered: true, model_started_at: started }} expanded={false} onToggle={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "dsh.modelAuditView.request_details" }));
+  expect(screen.queryByText("dsh.contentSafety.details.model_started_at")).toBeNull();
+  expect(screen.queryByText(dshTime(started))).toBeNull();
+  expect(screen.getByRole("article").querySelector("header time")).toHaveAttribute("datetime", row.started_at);
+});
+
+it.each([
+  { entered: null, expected: "UNOBSERVED" },
+  { entered: false, expected: "NOT_ENTERED" },
+  { entered: true, expected: "UNOBSERVED" },
+] as const)("AC-72: shows one model result without inventing execution for entered=$entered", ({ entered, expected }) => {
+  render(<ModelAuditCard row={{ ...row, record_origin: "EXTERNAL_SAFETY", model_entered: entered, model_result: null, response_result: null, usage_settlement: null, content_status: "NOT_CAPTURED" }} expanded={false} onToggle={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "dsh.modelAuditView.request_details" }));
+  const details = screen.getByRole("region", { name: "dsh.modelAuditView.request_details" });
+  expect(within(details).getAllByText("dsh.modelAuditView.axes.model_result")).toHaveLength(1);
+  expect(within(details).getByText("dsh.contentSafety.model_entry." + expected)).toBeVisible();
+  expect(within(details).getByText("dsh.modelAuditView.states.NOT_CAPTURED")).toBeVisible();
+  expect(within(details).queryByText("dsh.modelAuditView.states.SUCCEEDED")).toBeNull();
+  expect(within(details).getAllByRole("term")).toHaveLength(4);
+  expect(within(details).getAllByText(entered === false ? "dsh.contentSafety.model_entry.NOT_APPLICABLE" : "dsh.modelAuditView.states.UNKNOWN")).toHaveLength(2);
+  expect(bodies.render).not.toHaveBeenCalled();
+});
+
+it("AC-72: keeps sanitized failure reasons and the existing details toggle", () => {
+  render(<ModelAuditCard row={{ ...row, model_result: "FAILED", model_error_code: "private upstream diagnostic", response_error_code: "peer_disconnected" }} expanded={false} onToggle={vi.fn()} />);
+  const toggle = screen.getByRole("button", { name: "dsh.modelAuditView.request_details" });
+  fireEvent.click(toggle);
+  const details = screen.getByRole("region", { name: "dsh.modelAuditView.request_details" });
+  expect(within(details).getByText("dsh.modelAuditView.failures.unavailable")).toBeVisible();
+  expect(within(details).getByText("dsh.modelAuditView.failures.peer_disconnected")).toBeVisible();
+  expect(within(details).queryByText("private upstream diagnostic")).toBeNull();
+  fireEvent.click(toggle);
+  expect(screen.queryByRole("region", { name: "dsh.modelAuditView.request_details" })).toBeNull();
+  expect(toggle).toHaveAttribute("aria-expanded", "false");
 });

@@ -192,13 +192,7 @@ class OpenTaskModeService:
             raise OpenApiModelUnavailableError(model=model_id)
 
     @staticmethod
-    async def enabled_skill_rows(user_id: int) -> list:
-        """Enabled tenant skills plus this caller's enabled personal skills.
-
-        A personal skill of the same name hides the tenant skill. Another
-        user's personal skills are absent, so naming one is the same as naming
-        a skill that does not exist.
-        """
+    async def enabled_skill_rows(login_user: UserPayload) -> list:
         import tempfile
         from pathlib import Path
 
@@ -208,13 +202,18 @@ class OpenTaskModeService:
         # Listing names does not read bundles. Skip the configured cache root so
         # a config lookup is not required just to answer which skills exist.
         store = SkillStore(root=Path(tempfile.gettempdir()) / "linsight-skill-list")
-        return list(await PersonalSkillService(store=store).list_candidates(user_id))
+        rows = list(await PersonalSkillService(store=store).list_candidates(login_user.user_id))
+        from bisheng.linsight.domain.services.user_skills import UserSkillsService
+
+        return [
+            row for row, _ in await UserSkillsService(login_user.user_id).records(candidates=rows, actor=login_user)
+        ]
 
     @classmethod
-    async def check_skills(cls, user_id: int, names: list[str] | None) -> None:
+    async def check_skills(cls, names: list[str] | None, login_user: UserPayload) -> None:
         if not names:
             return
-        enabled = {row.name for row in await cls.enabled_skill_rows(user_id)}
+        enabled = {row.name for row in await cls.enabled_skill_rows(login_user)}
         missing = [name for name in names if name not in enabled]
         if missing:
             raise OpenApiTaskSkillUnavailableError(unavailable=missing)
@@ -298,7 +297,7 @@ class OpenTaskModeService:
         await TempUploadService.assert_owned_references(req.file_refs(), subject)
         config = await WorkStationService.get_open_api_daily_config(login_user)
         await cls.check_model(req.model, config)
-        await cls.check_skills(login_user.user_id, req.skills)
+        await cls.check_skills(req.skills, login_user)
         cls.check_tools(req.tools, config)
         await cls.check_knowledge_libraries(login_user, req.knowledge_ids)
         await cls.check_knowledge_spaces(login_user, req.knowledge_space_ids)
@@ -518,7 +517,7 @@ class OpenTaskModeService:
         allowed_models = {str(item.get("id")) for item in models}
         skills = [
             OpenTaskSkill(name=row.name, display_name=row.display_name or row.name, description=row.description)
-            for row in await cls.enabled_skill_rows(login_user.user_id)
+            for row in await cls.enabled_skill_rows(login_user)
         ]
         return {
             "models": models,

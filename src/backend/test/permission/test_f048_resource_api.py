@@ -379,25 +379,15 @@ async def test_super_admin_my_permissions_returns_full_effective_actions() -> No
 
 
 @pytest.mark.asyncio
-async def test_ordinary_user_my_permissions_for_preset_tool_returns_empty_actions() -> None:
+async def test_revoked_user_my_permissions_for_preset_tool_requires_visibility() -> None:
+    from bisheng.common.errcode.permission import PermissionDeniedError
+
     runtime = _ContextRuntime()
-    api = F048ResourcePermissionApi(
-        resources=_ToolResources(),
-        runtime=runtime,
-        subjects=_Subjects(),
-    )
+    api = F048ResourcePermissionApi(resources=_ToolResources(), runtime=runtime, subjects=_Subjects())
     actor = PermissionActor(user_id=7, current_tenant_id=9)
-
-    result = await api.get_my_permissions(
-        resource_type="tool",
-        resource_id="20",
-        actor=actor,
-    )
-
-    assert result["actions"] == []
-    assert result["sources"] == []
-    assert result["projection_degraded"] is False
-    assert runtime.visible_checks == 0
+    with pytest.raises(PermissionDeniedError):
+        await api.get_my_permissions(resource_type="tool", resource_id="20", actor=actor)
+    assert runtime.visible_checks == 1
 
 
 @pytest.mark.asyncio

@@ -87,9 +87,9 @@ export function ApprovalPane({
   const [revokeReason, setRevokeReason] = useState("");
   /**
    * The review view (AC-25) is a second mode of this same surface, not a second
-   * surface — design D14 案 A, read on the page the approval centre became: it
+   * surface — design D14 option A, read on the approval center page: it
    * takes over both columns so the file tree and the code get the full content
-   * panel, and 「返回」 puts the list back with the selection intact. A route of
+   * panel, and Back restores the list with the selection intact. A route of
    * its own would need a permission guard and a return state for nothing.
    */
   const [reviewTarget, setReviewTarget] = useState<AppReviewTarget | null>(null);
@@ -174,7 +174,8 @@ export function ApprovalPane({
       const visibleItems = targetFilter === "pending_me"
         ? resp.data.filter((t) => t.status === "pending")
         : resp.data.filter((t) => t.status !== "pending");
-      const nextId = (resolvedTask ? getId(resolvedTask, "task") : null) ?? getId(visibleItems[0], "task");
+      const nextId = resolvedTask ? getId(resolvedTask, "task")
+        : preferredId || preferredInstanceId ? null : getId(visibleItems[0], "task");
       setSelectedTaskId(nextId);
       await loadDetail(nextId, "task");
     } catch (error) {
@@ -208,7 +209,7 @@ export function ApprovalPane({
         ? resp.data.filter((i) => IN_PROGRESS_STATUSES.has(i.status ?? ""))
         : resp.data.filter((i) => !IN_PROGRESS_STATUSES.has(i.status ?? ""));
       const validPreferred = preferredId && resp.data.some((i) => getId(i, "instance") === preferredId) ? preferredId : null;
-      const nextId = validPreferred ?? getId(visibleItems[0], "instance");
+      const nextId = validPreferred ?? preferredId ?? getId(visibleItems[0], "instance");
       setSelectedInstanceId(nextId);
       await loadDetail(nextId, "request");
     } catch (error) {
@@ -245,7 +246,7 @@ export function ApprovalPane({
     // loadTasks/loadRequests are re-created every render; listing them would refetch on each
     // keystroke. The load is intentionally keyed on "which list is being shown".
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, activeTab]);
+  }, [open, activeTab, target?.taskId, target?.instanceId]);
 
   // Auto-select first visible item when sub-filter changes
   const autoSelectTask = (items: ApprovalTaskItem[]) => {
@@ -258,13 +259,6 @@ export function ApprovalPane({
     setSelectedInstanceId(first);
     void loadDetail(first, "request");
   };
-
-  // Re-select only when the sub-filter itself changes — following the item lists would fight the
-  // user's own selection on every list refresh.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (activeTab === "my_tasks") autoSelectTask(filteredTaskItems); }, [taskFilter]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (activeTab === "my_requests") autoSelectRequest(filteredRequestItems); }, [requestsFilter]);
 
   const openTask = async (id: number) => {
     setSelectedTaskId(id); setLoadingDetail(true); setDecisionComment(""); setCompactView("detail");
@@ -361,7 +355,7 @@ export function ApprovalPane({
             {/* Left list — hidden in compact detail view */}
             <div className={cn("flex min-h-0 flex-col border-r border-fill-2 bg-white", compactView === "detail" && "hidden md:flex")}>
               {listHeader}
-              {/* 待我处理/已处理 · 审批中/已完成 — design-system Tabs (line type, ink
+              {/* Pending/processed tasks and active/completed requests use shared Tabs (line type, ink
                   variant: the surrounding column already draws its own edges, so no
                   divider, and an accent here would fight the status badges in the list). */}
               <div className="px-3 pt-3 pb-2">
@@ -382,8 +376,13 @@ export function ApprovalPane({
                   }
                   activeKey={activeTab === "my_tasks" ? taskFilter : requestsFilter}
                   onChange={(key) => {
-                    if (activeTab === "my_tasks") setTaskFilter(key as TaskFilter);
-                    else setRequestsFilter(key as RequestsFilter);
+                    if (activeTab === "my_tasks") {
+                      setTaskFilter(key as TaskFilter);
+                      autoSelectTask(taskItems.filter((item) => key === "pending_me" ? item.status === "pending" : item.status !== "pending"));
+                    } else {
+                      setRequestsFilter(key as RequestsFilter);
+                      autoSelectRequest(requestItems.filter((item) => key === "in_progress" ? IN_PROGRESS_STATUSES.has(item.status ?? "") : !IN_PROGRESS_STATUSES.has(item.status ?? "")));
+                    }
                   }}
                 />
               </div>

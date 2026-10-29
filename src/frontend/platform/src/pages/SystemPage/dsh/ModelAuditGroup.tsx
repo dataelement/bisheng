@@ -1,5 +1,11 @@
 import { Button } from "@bisheng/ui";
-import type { AuditConversation, ModelAuditQuery } from "@/types/dshModelAudit";
+import "@/style/dsh-content-safety.css";
+import { Badge, Tag } from "@bisheng/ui";
+import type {
+  AuditConversation,
+  AuditQueryReadiness,
+  ModelAuditQuery,
+} from "@/types/dshModelAudit";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DshPager, dshTime } from "./common";
@@ -8,17 +14,17 @@ import { useModelAudit } from "./useModelAudit";
 
 interface ModelAuditGroupProps {
   group: AuditConversation;
+  progress?: AuditQueryReadiness;
   query: ModelAuditQuery;
   expanded: boolean;
   onToggle: () => void;
-  onNavigate: (userId: number, conversationId: string) => void;
 }
 export function ModelAuditGroup({
   group,
+  progress,
   query,
   expanded,
   onToggle,
-  onNavigate,
 }: ModelAuditGroupProps) {
   const { t } = useTranslation();
   const id = useId();
@@ -58,6 +64,16 @@ export function ModelAuditGroup({
             : t("dsh.modelAuditView.summary.NORMAL")}
         </span>
       </header>
+      <ModelAuditSafetySummary
+        progress={progress}
+        own={{
+          label: "all_hits",
+          ready: progress?.safety_ready,
+          count: group.sensitive_hit_count,
+          hasHit: group.has_sensitive_hit,
+        }}
+        matchingCount={group.matching_sensitive_hit_count}
+      />
       {expanded && (
         <div id={id} className="space-y-3 border-t p-3">
           <p className="text-xs text-muted-foreground">
@@ -67,7 +83,6 @@ export function ModelAuditGroup({
             key={JSON.stringify(query)}
             group={group}
             query={query}
-            onNavigate={onNavigate}
           />
         </div>
       )}
@@ -75,15 +90,95 @@ export function ModelAuditGroup({
   );
 }
 
+type SafetyCount = {
+  label: "all_hits" | "own_hits" | "branch_hits";
+  count?: number | null;
+  ready?: boolean;
+  hasHit?: boolean;
+};
+interface ModelAuditSafetySummaryProps {
+  progress?: AuditQueryReadiness;
+  own: SafetyCount;
+  branch?: SafetyCount;
+  matchingCount?: number | null;
+}
+function knownSafetyCount(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+export function ModelAuditSafetySummary({
+  progress,
+  own,
+  branch,
+  matchingCount,
+}: ModelAuditSafetySummaryProps) {
+  const { t } = useTranslation();
+  const prefix = "dsh.contentSafety.readiness.";
+  const counts = branch ? [own, branch] : [own];
+  const available = (value: SafetyCount) =>
+    progress?.safety_ready === true &&
+    value.ready === true &&
+    knownSafetyCount(value.count);
+  const ready = counts.every(available);
+  const knownHit = counts.some((value) =>
+    value.hasHit === true || (knownSafetyCount(value.count) && value.count > 0),
+  );
+  const watermark = progress?.safety_summary_as_of;
+  return (
+    <div className="dsh-content-safety">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 text-xs text-text-2">
+        {counts.filter(available).map((value) => (
+          <span key={value.label} className="inline-flex items-center gap-2">
+            {t(prefix + value.label)}
+            <Badge
+              count={value.count ?? undefined}
+              showZero
+              color="brand"
+              aria-label={t(prefix + value.label) + ": " + value.count}
+            />
+          </span>
+        ))}
+        {ready && knownSafetyCount(matchingCount) && (
+          <span className="inline-flex items-center gap-2">
+            {t(prefix + "matching_hits")}
+            <Badge
+              count={matchingCount}
+              showZero
+              color="brand"
+              aria-label={t(prefix + "matching_hits") + ": " + matchingCount}
+            />
+          </span>
+        )}
+        <span
+          role={ready ? undefined : "status"}
+          title={ready ? undefined : t(prefix + "pending")}
+        >
+          <Tag size="small" color={ready ? "success" : "warning"}>
+            {t(ready ? prefix + "ready" : "dsh.modelAuditView.summary.PREPARING")}
+          </Tag>
+        </span>
+        {knownHit && (
+          <Tag size="small" color="danger">
+            {t("dsh.contentSafety.states.BLOCKED")}
+          </Tag>
+        )}
+        {watermark && !Number.isNaN(Date.parse(watermark)) && (
+          <time dateTime={watermark}>
+            {t(prefix + "as_of", { time: dshTime(watermark) })}
+          </time>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface GroupRequestsProps {
   group: AuditConversation;
   query: ModelAuditQuery;
-  onNavigate: (userId: number, conversationId: string) => void;
 }
 export function ModelAuditGroupRequests({
   group,
   query,
-  onNavigate,
 }: GroupRequestsProps) {
   const { t } = useTranslation();
   const [cursor, setCursor] = useState<string>();
@@ -123,7 +218,6 @@ export function ModelAuditGroupRequests({
                 old === row.request_id ? null : row.request_id,
               )
             }
-            onNavigate={onNavigate}
           />
         ))
       )}

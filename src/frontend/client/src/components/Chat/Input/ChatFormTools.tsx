@@ -1,4 +1,4 @@
-import { Button, Select } from '@bisheng/ui';
+import { Button, Select } from "@bisheng/ui";
 import { GlobeIcon, Settings2Icon } from "lucide-react";
 import { useLocalize } from "~/hooks";
 import useSelectCopy from "~/hooks/useSelectCopy";
@@ -63,15 +63,13 @@ export const ChatToolDown = ({
             "rounded-full",
             compact ? "gap-1 px-1.5" : "gap-2 px-2",
             // Business on-state of the web-search switch, not a Select state.
-            active && "bg-blue-100 text-blue-600 hover:bg-blue-100 data-[menu-open]:bg-blue-100"
+            active && "bg-blue-100 text-blue-600 hover:bg-blue-100 data-[menu-open]:bg-blue-100",
           )}
         >
           <Settings2Icon />
           {/* Compact: collapse to icon only to save horizontal space. */}
           {!compact && (
-            <span className="truncate min-w-0 max-w-[min(36vw,140px)]">
-              {localize("com_tools_title")}
-            </span>
+            <span className="truncate min-w-0 max-w-[min(36vw,140px)]">{localize("com_tools_title")}</span>
           )}
         </Button>
       }
