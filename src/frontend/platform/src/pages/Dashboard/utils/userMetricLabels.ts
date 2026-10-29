@@ -1,7 +1,10 @@
 import type { DashboardComponent } from "../types/dataConfig"
 
 const USER_METRIC_LABELS: Record<string, { name: string; legacy: string[] }> = {
-  logged_in_employee_count: { name: "累积登录人数", legacy: ["实际登录人数", "累计实际登录人数"] },
+  logged_in_employee_count: {
+    name: "累计登录人次",
+    legacy: ["累积登录人数", "累计登录人数", "实际登录人数", "累计实际登录人数"],
+  },
   active_employee_count: { name: "全员有效用户数", legacy: ["全员总数", "有效人员总数"] },
   participation_rate: { name: "全员参与度占比", legacy: ["全员参与占比"] },
 }

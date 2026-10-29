@@ -7,7 +7,8 @@ need de-duplicating, which metrics carry a number of their own, and which column
 """
 
 import sys
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 if "langchain.docstore.document" not in sys.modules:
     _docstore_stub = MagicMock()
@@ -157,6 +158,128 @@ def test_author_chosen_sum_of_a_stored_column_is_carried():
     assert column is not None and column.field == "file_size"
 
 
+def test_knowledge_detail_lists_readable_fields_without_counted_time():
+    fields = [field for field, _label in detail_module.DETAIL_IDENTITY_COLUMNS["mid_knowledge_space_content_stat"]]
+
+    assert fields[:4] == ["file_name", "space_name", "space_level_name", "file_category_name"]
+    for field in (
+        "file_subcategory_name",
+        "business_domain_name",
+        "uploader_user_id",
+        "uploader_company_name",
+        "uploader_department_name",
+        "uploader_office_name",
+        "uploader_squad_name",
+        "belonging_company_name",
+        "belonging_department_name",
+        "belonging_office_name",
+        "belonging_squad_name",
+        "original_space_name",
+    ):
+        assert field in fields
+    assert "counted_at_text" not in fields
+    assert "timestamp" not in fields
+
+
+def test_qa_detail_lists_source_and_ids_without_asker_id():
+    fields = [field for field, _label in detail_module.DETAIL_IDENTITY_COLUMNS["mid_realtime_qa_question_fact"]]
+
+    assert fields[fields.index("scene") + 1] == "source_app"
+    for field in ("space_id", "file_id", "business_domain_code"):
+        assert field in fields
+    assert "user_id" not in fields
+
+
+def test_login_event_columns_follow_the_row_grain():
+    day_metrics = (
+        MetricConfig(field="logged_in_employee_count", name="累计登录人次", is_virtual=True),
+        MetricConfig(field="login_count", name="实际登录次数"),
+    )
+    person_metrics = (
+        MetricConfig(field="active_user_count", name="活跃用户数", is_virtual=True),
+        MetricConfig(field="participation_rate", name="全员参与度占比", is_virtual=True),
+        MetricConfig(field="active_employee_count", name="全员有效用户数", is_virtual=True),
+    )
+    expected = ["primary_department_name", "login_count", "first_login_at_text", "last_login_at_text"]
+
+    for dataset_code in ("mid_user_increment", "mid_user_daily_participation"):
+        for metric in day_metrics:
+            assert [column.field for column in detail_module._login_event_columns(dataset_code, metric)] == expected
+        for metric in person_metrics:
+            assert detail_module._login_event_columns(dataset_code, metric) == []
+    assert (
+        detail_module._login_event_columns("mid_active_user", MetricConfig(field="login_count", name="实际登录次数"))
+        == []
+    )
+
+
+def test_qa_enum_label_uses_dashboard_text_and_keeps_unknown_codes():
+    assert detail_module._enum_label("mid_realtime_qa_question_fact", "scene", "expert_question") == "专家问答"
+    assert detail_module._enum_label("mid_realtime_qa_question_fact", "source_app", "shougang_portal") == "首钢知识门户"
+    assert detail_module._enum_label("mid_realtime_qa_question_fact", "scene", "custom_scene") == "custom_scene"
+    assert detail_module._enum_label("mid_realtime_qa_question_fact", "scene", None) is None
+
+
+async def test_qa_export_translates_known_labels_and_drops_asker_id(monkeypatch):
+    from bisheng.telemetry_search.domain.init_dataset import DASHBOARD_DATASET
+
+    dataset = next(item for item in DASHBOARD_DATASET if item.dataset_code == "mid_realtime_qa_question_fact")
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+    captured: dict = {}
+
+    async def scan(*_args, **kwargs):
+        captured["includes"] = kwargs["query"]["_source"]["includes"]
+        yield {
+            "_source": {
+                "user_id": 3,
+                "user_name": "张三",
+                "qa_type": "expert",
+                "qa_type_name": "专家问答",
+                "scene": "document_qa",
+                "source_app": "other_app",
+                "question_id": "7",
+                "conversation_id": "chat-1",
+                "space_id": 12,
+                "file_id": 34,
+                "business_domain_code": "ROLL",
+                "timestamp": 1780000000,
+            }
+        }
+
+    monkeypatch.setattr(detail_module, "get_async_db_session", Session)
+    monkeypatch.setattr(
+        detail_module,
+        "DashboardDatasetRepositoryImpl",
+        lambda _: SimpleNamespace(find_one=AsyncMock(return_value=dataset)),
+    )
+    monkeypatch.setattr(detail_module, "get_es_connection", AsyncMock())
+    monkeypatch.setattr(detail_module, "async_scan", scan)
+    monkeypatch.setattr(detail_module, "enrich_qa_detail_rows", AsyncMock())
+
+    result = await detail_module.query_detail_rows(
+        dataset_code="mid_realtime_qa_question_fact",
+        data_config=ComponentDataConfig(metrics=[{"fieldId": "total_qa_count"}]),
+        row_limit=10,
+    )
+
+    row = result.rows[0]
+    assert row["scene"] == "知识门户·文档问答"
+    assert row["source_app"] == "other_app"
+    assert row["space_id"] == 12
+    assert row["file_id"] == 34
+    assert row["business_domain_code"] == "ROLL"
+    assert "user_id" not in row
+    assert "question_id" not in row
+    assert "user_id" in captured["includes"]
+
+
 def test_columns_start_with_identity_then_chart_dimensions_without_repeats():
     data_config = _data_config(
         metric={"fieldId": "new_file_count"},
@@ -191,7 +314,9 @@ def test_filters_become_one_bool_query():
 
     filters = [
         FilterExpression(bool_operator="must", filters=[{"operator": "term", "field": "status", "value": "success"}]),
-        FilterExpression(bool_operator="must", filters=[{"operator": "term", "field": "parse_type", "value": "etl4lm"}]),
+        FilterExpression(
+            bool_operator="must", filters=[{"operator": "term", "field": "parse_type", "value": "etl4lm"}]
+        ),
     ]
 
     query = detail_module._build_bool_query(filters)
