@@ -157,9 +157,9 @@ class DshModelAuditQueryRepository(AuditTreeQueryRepository, AuditConversationRe
         )
         return AuditRequestMetadata(**data).model_dump()
 
-    def page(self, *, cursor=None, limit=20, now=None, **filters):
+    def page(self, *, cursor=None, limit=20, now=None, exclude_auxiliary=False, **filters):
         tenant = require_tenant()
-        if type(limit) is not int or not 1 <= limit <= 100:
+        if type(limit) is not int or not 1 <= limit <= 100 or type(exclude_auxiliary) is not bool:
             raise ValueError("Audit request page exceeds bounds")
         filters = {key: value for key, value in filters.items() if value is not None}
         window = None
@@ -175,10 +175,21 @@ class DshModelAuditQueryRepository(AuditTreeQueryRepository, AuditConversationRe
         # Bind only explicit filters. A moving default window is not a user edit.
         fingerprint = sha256(
             json.dumps(
-                [tenant, filters], sort_keys=True, default=str, ensure_ascii=False, separators=(",", ":")
+                [tenant, {**filters, "exclude_auxiliary": True} if exclude_auxiliary else filters],
+                sort_keys=True,
+                default=str,
+                ensure_ascii=False,
+                separators=(",", ":"),
             ).encode()
         ).hexdigest()
         statement = select(DshModelAuditRequest)
+        if exclude_auxiliary:
+            statement = statement.where(
+                or_(
+                    DshModelAuditRequest.request_kind.is_(None),
+                    DshModelAuditRequest.request_kind.not_in(("session-title", "compaction")),
+                )
+            )
         if window is not None:
             statement = statement.where(
                 DshModelAuditRequest.started_at >= window[0], DshModelAuditRequest.started_at < window[1]

@@ -262,28 +262,11 @@ function ModelAuditRequestPage({
           </span>
         )}
       </div>
-      {(readinessFailed ||
-        readiness?.status_ready === false ||
-        readiness?.name_ready === false) && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t("dsh.modelAuditView.index_preparing")}
+      {readinessFailed && (
+        <p role="alert" className="text-sm text-muted-foreground">
+          {t("dsh.modelAuditView.loadError")}
         </p>
       )}
-      {view === "groups" && readiness?.indexing_pending !== false && (
-        <p role="status" className="text-xs text-muted-foreground">
-          {t("dsh.modelAuditView.index_delay")}
-        </p>
-      )}
-      {view === "groups" &&
-        readiness?.hierarchy_available &&
-        readiness.phase !== "READY" && (
-          <p role="status" className="text-xs text-muted-foreground">
-            {t(
-              "dsh.modelAuditView.tree." +
-                (readiness.hierarchy_ready ? "updating" : "preparing"),
-            )}
-          </p>
-        )}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
         <p>
           {t("dsh.modelAuditView.watermark")}:{" "}

@@ -341,13 +341,16 @@ describe("audit statistics without internal versions", () => {
     />);
     expect(screen.queryByText(/dsh.contentSafety.readiness.version/)).toBeNull();
     expect(screen.queryByText(/987654321/)).toBeNull();
-    expect(screen.getByText(ready ? "dsh.contentSafety.readiness.ready" : "dsh.modelAuditView.summary.PREPARING")).toBeVisible();
-    expect(document.querySelector("time")).toHaveAttribute("datetime", watermark);
-    expect(screen.getByText("dsh.contentSafety.states.BLOCKED")).toBeVisible();
     if (ready) {
+      expect(screen.getByText("dsh.contentSafety.readiness.ready")).toBeVisible();
+      expect(document.querySelector("time")).toHaveAttribute("datetime", watermark);
+      expect(screen.getByText("dsh.contentSafety.states.BLOCKED")).toBeVisible();
       expect(screen.getByLabelText("dsh.contentSafety.readiness.own_hits: 3")).toBeVisible();
       expect(screen.getByLabelText("dsh.contentSafety.readiness.branch_hits: 5")).toBeVisible();
     } else {
+      expect(screen.queryByText("dsh.modelAuditView.summary.PREPARING")).toBeNull();
+      expect(document.querySelector("time")).toBeNull();
+      expect(screen.queryByText("dsh.contentSafety.states.BLOCKED")).toBeNull();
       expect(screen.queryByLabelText("dsh.contentSafety.readiness.own_hits: 3")).toBeNull();
     }
   });

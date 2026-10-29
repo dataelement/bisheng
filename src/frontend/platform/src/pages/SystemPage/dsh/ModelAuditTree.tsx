@@ -67,41 +67,19 @@ export function ModelAuditTree({
         <span>
           {t("dsh.modelAuditView.group_last")}: {dshTime(node.last_request_at)}
         </span>
-        <span>
-          {node.own_summary.ready
-            ? t(prefix + "own_count", {
-                count: Number(node.own_summary.request_count),
-              })
-            : t(prefix + "summary_pending")}
-        </span>
-        {node.has_children && (
-          <span>
-            {node.branch_summary.ready
-              ? t(prefix + "branch_count", {
-                  count: Number(node.branch_summary.request_count),
-                })
-              : t(prefix + "branch_pending")}
+        {node.own_summary.ready && (
+          <span>{t(prefix + "own_count", { count: Number(node.own_summary.request_count) })}</span>
+        )}
+        {node.has_children && node.branch_summary.ready && (
+          <span>{t(prefix + "branch_count", { count: Number(node.branch_summary.request_count) })}</span>
+        )}
+        {ready && (
+          <span className={abnormal ? "text-destructive" : "text-success-foreground"}>
+            {abnormal
+              ? t("dsh.modelAuditView.group_abnormal", { count: Number(node.branch_summary.abnormal_count) })
+              : t("dsh.modelAuditView.summary.NORMAL")}
           </span>
         )}
-        <span
-          className={
-            abnormal
-              ? "text-destructive"
-              : ready
-                ? "text-success-foreground"
-                : "text-muted-foreground"
-          }
-        >
-          {abnormal
-            ? ready
-              ? t("dsh.modelAuditView.group_abnormal", {
-                  count: Number(node.branch_summary.abnormal_count),
-                })
-              : t(prefix + "known_abnormal")
-            : ready
-              ? t("dsh.modelAuditView.summary.NORMAL")
-              : t(prefix + "summary_pending")}
-        </span>
       </header>
       <ModelAuditSafetySummary
         progress={progress}

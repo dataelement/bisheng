@@ -1070,3 +1070,43 @@ ContentSafetyRequestDetails将当前请求已加载的事件汇总为一个区�
 | T269 | 验收 | PASS；回归、门禁与真实组件核验 | PASS；仅合成数据 | PASS | PASS / T268 / PASS | PASS |
 
 后端分层/序列化/数据库项N/A。T267–T269完成后254/269，原15项真实DM8/容量/完整特性待验保持不变。无backend/Gateway/数据库改动；前两轮去重与统计版本隐藏的未提交改动保留。本轮未提交、推送、合并或部署。
+
+
+## 2026-10-29 Wave54：未就绪统计、两个方向开关及会话内辅助请求展示（T270–T279）
+
+用户确认：隐藏未就绪统计而保留会话和请求；敏感词只显示输入/输出开关，无旧三开关组合兼容；第三项仅调整会话内请求记录，不改变外层会话分页或统计。对应spec AC-73、AC-74、AC-75及design§4.10已同步。
+
+- 前端：统计没有完成时不渲染计数、准备/更新中标签及旧时间，树/旧会话行仍可展开；Panel不显示统计/关系准备说明，实际readiness读取失败仍用固定错误提示，扫描上限及查询错误恢复保留。请求自身安全结果与已知命中不变。两个方向任一开启即在草稿/保存中派生enabled=true，两者关闭为false，原子保存、CAS、只读与租户取消不变。卡片只移除用途和会话来源标签，不删除API字段或后台事实。
+- 后端：QueryService.groups仅会话key非空分支传内部exclude_auxiliary=true；Repository.page的WHERE在keyset及limit+1前排除session-title/compaction，同时保留NULL用途。cursor指纹包含该范围，不能复用到未过滤查询。外层会话/树、普通请求页、未关联列表、汇总投影/ALL_INDEXED_REQUESTS统计及模型计量完全不改。没有新表、字段、索引或迁移，无Gateway/Desktop代码变化。
+
+| 检查 | 命令 / 证据 | 结果 |
+|---|---|---|
+| 前端反例 | cwd=src/frontend；pnpm --filter bisheng exec vitest run src/pages/SystemPage/dsh/ModelAuditPresentation.test.tsx src/pages/SystemPage/dsh/DshContentSafetySettings.test.tsx src/pages/SystemPage/dsh/ContentSafetyDetails.test.tsx --reporter=dot | **9 FAIL / 76 PASS**；/private/tmp/dsh-audit-refinement-red.log |
+| 后端反例 | cwd=src/backend；既有Python3.11执行pytest test/dsh/test_model_audit_visible_requests.py | **1 FAIL**，返回首两条辅助请求而非两条可见请求；/private/tmp/dsh-conversation-visibility-red.log |
+| 最终前端 | cwd=src/frontend；pnpm --filter bisheng exec vitest run src/pages/SystemPage/dsh --reporter=dot | **26文件295 PASS**；/private/tmp/dsh-audit-refinement-tests.log；包括四种方向组合、全部关闭再启用、部分统计就绪/完整未就绪、就绪恢复和真实读取失败提示 |
+| 后端查询组合 | config=/private/tmp/dsh-credit-limit-fix-20261027/test-config.yaml PYTHONDONTWRITEBYTECODE=1 /Users/zhangguoqing/works/bisheng/src/backend/.venv/bin/python -m pytest -q -p no:cacheprovider test/dsh/test_model_audit_visible_requests.py test/dsh/test_model_audit_groups.py test/dsh/test_model_audit_tree_queries.py test/dsh/test_content_safety_group_query_api.py test/dsh/test_content_safety_queries.py --tb=short | **108 PASS**；/private/tmp/dsh-conversation-visibility-tests.log。真实ASGI/HTTP及隔离SQLite，包括分页首段全辅助、第二页不漏不重、NULL用途、精确辅助编号仍隐藏、游标范围隔离、外层计数及六条原始记录不变；不代表真实双库验收 |
+| 代码规范 | 本轮三个Python文件ruff format/check；全部修改源逐文件scripts/arch-guard.sh；git diff --check；前端单文件行数 | **PASS**；未新增凭据、普通日志词值、HTTP客户端或状态库，前端文件均≤600行 |
+| 前端质量门禁 | pnpm lint；pnpm typecheck；pnpm check-i18n；pnpm locales:check | **全部PASS**；三语及生成检查PASS，无新文案键；/private/tmp/dsh-audit-refinement-{lint,typecheck,i18n}.log |
+| Platform构建 | pnpm --filter bisheng build | **PASS**，14.92秒，仅既有chunk体积提示；/private/tmp/dsh-audit-refinement-build.log |
+| 本地真实组件 | Vite挂载真实设置、树会话及请求卡片，API wrapper以下仅合成GET/PUT；默认桌面及500px | **PASS**；检查开关只有输入/输出，连同两个词库来源共4个复选框；无准备状态，无用途/来源标签，未就绪会话行仍在；输入单独启用后显式保存成功，全部取消再保存成功；500px的clientWidth=scrollWidth=500 |
+
+[桌面](/private/tmp/dsh-audit-refinement-desktop.png)、[500px](/private/tmp/dsh-audit-refinement-mobile-500.png)。Chrome DevTools工具因其他浏览器实例占用无法连接，未关闭其他浏览器，改用本线程IAB临时页完成实测。页面合成数据，不是109部署后验收；临时视口已恢复、临时页已关闭，三个临时入口/config文件及Vite服务均已清理。首次质量检查发现移除旧提示后readinessFailed未使用，保留真正读取错误反馈后修复；新严格测试夹具补齐必填summary_as_of后转绿，未修改冻结基线。一次追加测试脚本的cwd路径错误未改动文件，已在正确目录重试并重新验证，不将该次旧测试运行当新增断言证据。
+
+本轮没有提交、推送、合并或修改109配置/数据；真实MySQL/DM8、完整特性及容量的原15项任务继续待验。
+
+主agent按仓库task-review清单读取实际文件与配对用例并自审：
+
+| 任务 | 类型 | 架构/命名/前端约定 | 信息泄漏/设计同步 | 范围/配对/依赖 | 结果 |
+|---|---|---|---|---|---|
+| T270 | 测试 | PASS；AC-74四组合与原子保存 | PASS / N/A | PASS / N/A / T269 | PASS |
+| T271 | 实现 | PASS；原组件和API命令，派生字段无新状态库 | PASS；无旧组合兼容 / AC-74 | PASS / T270 / PASS | PASS |
+| T272 | 测试 | PASS；AC-73、AC-75标注，统计和卡片分开断言 | PASS / N/A | PASS / N/A / T269 | PASS |
+| T273 | 测试 | PASS；AC-73新规则并保留真实读取失败、查询及懒加载 | PASS / N/A | PASS / N/A / T269 | PASS |
+| T274 | 实现 | PASS；统计未就绪直接隐藏，原会话树交互不动 | PASS / AC-73 | PASS / T272、T273 / PASS | PASS |
+| T275 | 实现 | PASS；只移除统计占位，真实错误不静默 | PASS / AC-73 | PASS / T273 / PASS | PASS |
+| T276 | 测试 | PASS；AC-75真实HTTP和隔离SQL、游标范围验证 | PASS；无正文读取 / N/A | PASS / N/A / T269 | PASS |
+| T277 | 实现 | PASS；Service只传内部范围，SQL在Repository，租户/授权路径不动 | PASS；无新API字段 / AC-75 | PASS / T276 / PASS | PASS |
+| T278 | 实现 | PASS；只删两处标签，头部信息及详情权限不变 | PASS / AC-75 | PASS / T272 / PASS | PASS |
+| T279 | 验收 | PASS；295前端、108后端及质量门禁、实际组件 | PASS；合成数据 / 文档同步 | PASS / 各实现 / PASS | PASS |
+
+本轮没有ORM/迁移/错误码/数据库结构变化，序列化采用原DTO；未增加权限分支、手写租户WHERE或Gateway耦合。无章节重编号，新增AC引用均写全且任务依赖无环，每任务至多两个目标文件。T270–T279完成后264/279，原15项真实双库/完整特性/容量待验保持不变；未提交、推送或部署。

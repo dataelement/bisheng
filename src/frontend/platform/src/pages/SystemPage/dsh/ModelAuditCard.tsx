@@ -84,15 +84,6 @@ export function ModelAuditCard({
         <span className="max-w-48 truncate" title={row.user_name || undefined}>
           {row.user_name || t("dsh.modelAuditView.user_unavailable")}
         </span>
-        <span className="whitespace-nowrap font-medium text-primary dark:text-foreground">
-          {t("dsh.modelAuditView.kinds." + (row.request_kind || "unknown"))}
-        </span>
-        <span className="whitespace-nowrap">
-          {t(
-            "dsh.modelAuditView.sources.origin." +
-              (row.session_origin || "unknown"),
-          )}
-        </span>
         <Button
           variant="link"
           className="h-7 p-0 text-xs dark:text-foreground [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:text-sm"
