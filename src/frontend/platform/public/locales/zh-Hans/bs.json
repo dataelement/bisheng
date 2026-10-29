@@ -478,6 +478,71 @@
     "viewPermission": "查看权限",
     "themeColor": "主题配色",
     "appearanceSettings": "外观设置",
+    "inviteCode": {
+      "tab": "邀请码",
+      "hint": "生成邀请码后发给用户，用户在任务模式中绑定。每新建一个任务消耗一次。",
+      "searchPlaceholder": "搜索邀请码或批次名称",
+      "create": "生成邀请码",
+      "empty": "还没有邀请码",
+      "loading": "加载中",
+      "unbound": "未绑定",
+      "columns": {
+        "code": "邀请码",
+        "batch": "批次",
+        "limit": "可用次数",
+        "used": "已用次数",
+        "remaining": "剩余次数",
+        "user": "绑定用户",
+        "created": "创建时间"
+      },
+      "actions": {
+        "edit": "编辑",
+        "delete": "删除",
+        "save": "保存",
+        "cancel": "取消",
+        "copy": "复制",
+        "done": "完成",
+        "increase": "增加",
+        "decrease": "减少"
+      },
+      "createDialog": {
+        "title": "生成邀请码",
+        "name": "批次名称",
+        "namePlaceholder": "例如：体验批次",
+        "num": "生成数量",
+        "limit": "每码可用次数",
+        "submit": "生成",
+        "result": "已生成 {{count}} 个邀请码",
+        "rangeHint": "数量为 1–100，可用次数为 1–100000"
+      },
+      "editDialog": {
+        "title": "编辑邀请码",
+        "name": "批次名称",
+        "limit": "可用次数",
+        "limitHint": "不能小于已用次数 {{used}}"
+      },
+      "deleteConfirm": {
+        "title": "删除邀请码",
+        "desc": "删除 {{code}} 后无法恢复。已绑定的用户会失去这条码上剩余的次数。"
+      },
+      "feedback": {
+        "created": "邀请码已生成",
+        "saved": "已保存",
+        "deleted": "已删除",
+        "copied": "已复制",
+        "invalid": "请填写批次名称。数量为 1–100，可用次数为 1–100000"
+      },
+      "pagination": {
+        "total": "共 {{total}} 条",
+        "pageSize": "{{size}} 条/页",
+        "jumpPrefix": "跳至",
+        "jumpSuffix": "页",
+        "jumpError": "请输入 1–{{totalPages}}",
+        "prev": "上一页",
+        "next": "下一页",
+        "nav": "分页"
+      }
+    },
     "toolAuthorization": "工具权限",
     "createUser": "创建用户",
     "usernamePlaceholder": "后续使用此用户名进行登录，用户名不可修改",

@@ -28,6 +28,7 @@ import { ChatEmptyState } from "./components/ChatEmptyState";
 import { copyAppChatOrigin, copyAppChatReturnTo } from "~/pages/appChat/appChatOrigin";
 import { appConversationsState } from "./store/appSidebarAtoms";
 import { currentChatState, currentRunningState } from "./store/atoms";
+import { useSessionPresence } from "~/hooks/useSessionPresence";
 import useChatHelpers from "./useChatHelpers";
 import { useWebSocket } from "./useWebsocket";
 import { generateUUID } from "~/utils";
@@ -39,7 +40,12 @@ const _SELECTABLE_CATEGORIES = new Set(["question", "answer", "agent_answer", "o
 
 export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }) {
   const { user } = useAuthContext();
-  const help = useChatHelpers();
+  // Department concurrency: the page lease backing this session page. Share
+  // views (`readOnly`) and guest sessions do not count.
+  const presence = useSessionPresence(cid, { disabled: Boolean(readOnly) || isGuestMode });
+  // The lease id must be in `wsUrl` on the very first render: `useWebsocket`
+  // keeps connections in a module-level map and never reconnects on a URL change.
+  const help = useChatHelpers(presence.leaseId);
   useWebSocket(help, { canExecute: !readOnly });
 
   const localize = useLocalize();

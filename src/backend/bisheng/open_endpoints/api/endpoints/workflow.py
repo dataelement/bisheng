@@ -12,9 +12,11 @@ from bisheng.api.v1.schema.workflow import WorkflowEvent, WorkflowEventType, Wor
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.errcode.http_error import ServerError
+from bisheng.common.errcode.workstation import DepartmentDailyChatConcurrentLimitError
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData
 from bisheng.common.services import telemetry_service
 from bisheng.core.logger import trace_id_var
+from bisheng.department.domain.services.department_flow_service import DepartmentFlowService, SlotOutcome
 from bisheng.open_api.domain.context import OpenApiExecutionSnapshot, get_current_open_api_principal
 from bisheng.open_api.domain.scopes import open_api_scope
 from bisheng.open_api.domain.services.session_subject_service import session_subject_from_principal
@@ -23,10 +25,10 @@ from bisheng.open_endpoints.domain.utils import get_open_api_operator, get_open_
 from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.workflow.domain.services.published_workflow_service import PublishedWorkflowService
 
-router = APIRouter(prefix='/workflow', tags=['OpenAPI', 'Workflow'])
+router = APIRouter(prefix="/workflow", tags=["OpenAPI", "Workflow"])
 
 
-@router.post('/invoke')
+@router.post("/invoke")
 @open_api_scope("workflow:invoke", session=True)
 async def invoke_workflow(body: OpenWorkflowInvokeRequest):
     login_user = get_open_api_operator()
@@ -48,29 +50,50 @@ async def invoke_workflow(body: OpenWorkflowInvokeRequest):
         principal,
         trace_id=str(trace_id_var.get() or uuid.uuid4().hex),
     )
-    invocation = await PublishedWorkflowService.prepare_invocation(
-        workflow_id=workflow_id,
-        operator_user_id=login_user.user_id,
-        session_subject=session_subject,
-        execution_snapshot=execution_snapshot,
-        session_id=body.session_id,
-        override=body.override,
-        user_input=body.input,
-        message_id=body.message_id,
-    )
+    # Department concurrency: the open API has no page lease, so this call holds
+    # one execution lease from enqueue until the last event has been delivered.
+    flow_outcome, flow_lease = await DepartmentFlowService.ensure_lease(login_user)
+    if flow_outcome is SlotOutcome.REJECTED:
+        # Must run before ``prepare_invocation``, otherwise the workflow is
+        # already queued while the caller is told it was refused.
+        raise DepartmentDailyChatConcurrentLimitError()
+    flow_renew_task = DepartmentFlowService.start_renewal(flow_lease) if flow_lease else None
+    try:
+        invocation = await PublishedWorkflowService.prepare_invocation(
+            workflow_id=workflow_id,
+            operator_user_id=login_user.user_id,
+            session_subject=session_subject,
+            execution_snapshot=execution_snapshot,
+            session_id=body.session_id,
+            override=body.override,
+            user_input=body.input,
+            message_id=body.message_id,
+        )
+    except BaseException:
+        # The event generator below never runs when preparation fails; releasing
+        # here keeps the slot from lingering for the full lease TTL.
+        await DepartmentFlowService.stop_renewal(flow_renew_task, flow_lease)
+        raise
     session_id = invocation.session_id
-    logger.debug(f'waiting workflow over or input: {workflow_id}, {session_id}')
+    logger.debug(f"waiting workflow over or input: {workflow_id}, {session_id}")
 
     async def handle_workflow_event(event_list: list):
-        async for output in PublishedWorkflowService.iter_events(invocation, stream=bool(body.stream)):
-            event = (
-                WorkflowEvent(event=WorkflowEventType.Close.value)
-                if output.close
-                else WorkFlowService.convert_chat_response_to_workflow_event(output.data)
-            )
-            workflow_stream = WorkflowStream(session_id=session_id, data=event)
-            event_list.append(workflow_stream.data)
-            yield f'data: {workflow_stream.model_dump_json()}\n\n'
+        try:
+            async for output in PublishedWorkflowService.iter_events(invocation, stream=bool(body.stream)):
+                event = (
+                    WorkflowEvent(event=WorkflowEventType.Close.value)
+                    if output.close
+                    else WorkFlowService.convert_chat_response_to_workflow_event(output.data)
+                )
+                workflow_stream = WorkflowStream(session_id=session_id, data=event)
+                event_list.append(workflow_stream.data)
+                yield f"data: {workflow_stream.model_dump_json()}\n\n"
+        finally:
+            # Release at the real end of the stream, not when the endpoint
+            # returns: a streaming response starts after this function returns.
+            # The non-streaming path drains this generator too, so the release
+            # happens exactly once.
+            await DepartmentFlowService.stop_renewal(flow_renew_task, flow_lease)
 
     res = []
     # Non-streaming returns a cumulative list of events
@@ -78,43 +101,48 @@ async def invoke_workflow(body: OpenWorkflowInvokeRequest):
         async for _ in handle_workflow_event(res):
             pass
         end_time = time.time()
-        await telemetry_service.log_event(user_id=login_user.user_id,
-                                          event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
-                                          trace_id=trace_id_var.get(),
-                                          event_data=ApplicationAliveEventData(
-                                              app_id=workflow_id,
-                                              app_name=workflow_info.name,
-                                              app_type=ApplicationTypeEnum.WORKFLOW,
-                                              chat_id=session_id,
-                                              start_time=int(invocation.start_time),
-                                              end_time=int(end_time)))
-        return resp_200(data={
-            'session_id': session_id,
-            'events': res
-        })
+        await telemetry_service.log_event(
+            user_id=login_user.user_id,
+            event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
+            trace_id=trace_id_var.get(),
+            event_data=ApplicationAliveEventData(
+                app_id=workflow_id,
+                app_name=workflow_info.name,
+                app_type=ApplicationTypeEnum.WORKFLOW,
+                chat_id=session_id,
+                start_time=int(invocation.start_time),
+                end_time=int(end_time),
+            ),
+        )
+        return resp_200(data={"session_id": session_id, "events": res})
     try:
-        return StreamingResponse(handle_workflow_event(res), media_type='text/event-stream')
+        return StreamingResponse(handle_workflow_event(res), media_type="text/event-stream")
     except Exception as exc:
-        logger.exception(f'invoke_workflow error: {exc!s}')
+        logger.exception(f"invoke_workflow error: {exc!s}")
         return JSONResponse(status_code=500, content=str(exc))
     finally:
         end_time = time.time()
-        await telemetry_service.log_event(user_id=login_user.user_id,
-                                          event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
-                                          trace_id=trace_id_var.get(),
-                                          event_data=ApplicationAliveEventData(
-                                              app_id=workflow_id,
-                                              app_name=workflow_info.name,
-                                              app_type=ApplicationTypeEnum.WORKFLOW,
-                                              chat_id=session_id,
-                                              start_time=int(invocation.start_time),
-                                              end_time=int(end_time)))
+        await telemetry_service.log_event(
+            user_id=login_user.user_id,
+            event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
+            trace_id=trace_id_var.get(),
+            event_data=ApplicationAliveEventData(
+                app_id=workflow_id,
+                app_name=workflow_info.name,
+                app_type=ApplicationTypeEnum.WORKFLOW,
+                chat_id=session_id,
+                start_time=int(invocation.start_time),
+                end_time=int(end_time),
+            ),
+        )
 
 
-@router.post('/stop')
+@router.post("/stop")
 @open_api_scope("workflow:invoke", session=True)
-async def stop_workflow(workflow_id: UUID = Body(..., description='Workflow UniqueID'),
-                        session_id: str = Body(description='SessionsID,Once,workflowUnique identifier of the call')):
+async def stop_workflow(
+    workflow_id: UUID = Body(..., description="Workflow UniqueID"),
+    session_id: str = Body(description="SessionsID,Once,workflowUnique identifier of the call"),
+):
     workflow_id = workflow_id.hex
     login_user = await get_open_api_operator_async()
     principal = get_current_open_api_principal()
@@ -127,4 +155,3 @@ async def stop_workflow(workflow_id: UUID = Body(..., description='Workflow Uniq
         session_subject=session_subject_from_principal(principal),
     )
     return resp_200()
-

@@ -107,7 +107,7 @@ interface AiChatInputProps {
     onModelAutoChange?: (val: string) => void;
     placeholder?: string;
     /** files: uploaded file list [{path, name}], null means still uploading */
-    onSend: (text: string, files?: any[] | null) => void | boolean;
+    onSend: (text: string, files?: any[] | null) => void | boolean | Promise<void | boolean>;
     onStop: () => void;
     onScrollToBottom: () => void;
     /** Optional controlled value — for filling in preset questions */
@@ -378,10 +378,14 @@ const AiChatInput = memo(
             (file) => file?.parsing_status && !['completed', 'failed'].includes(file.parsing_status),
         );
 
-        const handleSend = useCallback(() => {
+        // Blocks a second send while an async onSend (e.g. the department lease
+        // check) is still deciding; the draft is not cleared until it resolves.
+        const sendPendingRef = useRef(false);
+        const handleSend = useCallback(async () => {
             const trimmed = text.trim();
             // Workbench: uploaded files require accompanying text before send.
             if (!trimmed || disabled || sendDisabled || isStreaming || isParsingMedia || fileUploading || filesParsing) return;
+            if (sendPendingRef.current) return;
             if (!taskMode && !isLingsi && chatFiles?.some((file) => !canProcessChatImage(
                 file.name || file.file_name || file.filename || '', supportsVision, supportsImageParsing,
             ))) {
@@ -392,11 +396,17 @@ const AiChatInput = memo(
             // that this component revokes on the very next line, and it outranks
             // the server cover in the message bubble — so it stops here, and the
             // bubble goes back to `cover_filepath` once parsing produces it.
-            const accepted = onSend(trimmed, chatFiles?.map((file) => (
-                file?.mediaCoverUrl?.startsWith('blob:')
-                    ? { ...file, mediaCoverUrl: undefined }
-                    : file
-            )) ?? chatFiles);
+            sendPendingRef.current = true;
+            let accepted: void | boolean;
+            try {
+                accepted = await onSend(trimmed, chatFiles?.map((file) => (
+                    file?.mediaCoverUrl?.startsWith('blob:')
+                        ? { ...file, mediaCoverUrl: undefined }
+                        : file
+                )) ?? chatFiles);
+            } finally {
+                sendPendingRef.current = false;
+            }
             if (accepted === false) return;
             setText("");
             if (taskMode && !isLingsi) setDailySkills([]);

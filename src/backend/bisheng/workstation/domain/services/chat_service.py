@@ -82,7 +82,11 @@ from bisheng.core.storage.chat_attachment import promote_chat_attachments
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.department.domain.services.department_flow_service import DepartmentFlowService
+from bisheng.department.domain.services.department_flow_service import (
+    DepartmentFlowService,
+    SlotOutcome,
+    lease_id_from_headers,
+)
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.llm.domain import LLMService
 from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
@@ -2486,18 +2490,25 @@ async def _agent_stream_chat_completion(
         await log_telemetry_events(str(login_user.user_id), conversation_id, start_time)
 
     async def event_stream():
-        dept_flow_slot: int | None = None
-        flow_lim, flow_dept = await DepartmentFlowService.resolve_limit_and_dept(login_user)
-        if flow_lim > 0 and flow_dept is not None:
-            acquired = await DepartmentFlowService.try_acquire_daily_chat_slot(
-                flow_dept,
-                login_user.user_id,
-                flow_lim,
-            )
-            if not acquired:
+        # A page lease (sent by the session page's heartbeat) keeps the slot
+        # while the user stays on the page, so this request must not release it.
+        # Without one, this reply holds its own execution lease and releases it
+        # when the stream really ends.
+        execution_lease = None
+        execution_task = None
+        page_lease_id = lease_id_from_headers(getattr(request, "headers", None))
+        if page_lease_id is not None:
+            outcome, _ = await DepartmentFlowService.ensure_lease(login_user, page_lease_id)
+            if outcome is SlotOutcome.REJECTED:
                 yield DepartmentDailyChatConcurrentLimitError().to_sse_event_instance_str()
                 return
-            dept_flow_slot = flow_dept
+        else:
+            outcome, execution_lease = await DepartmentFlowService.ensure_lease(login_user)
+            if outcome is SlotOutcome.REJECTED:
+                yield DepartmentDailyChatConcurrentLimitError().to_sse_event_instance_str()
+                return
+            if outcome is SlotOutcome.HELD and execution_lease is not None:
+                execution_task = DepartmentFlowService.start_renewal(execution_lease)
         # Held explicitly so the inner generator can be closed deterministically:
         # when this outer one is torn down, `impl` would otherwise be finalised
         # whenever the GC and the loop's asyncgen hooks get to it — too late (or
@@ -2508,13 +2519,18 @@ async def _agent_stream_chat_completion(
                 yield chunk
         finally:
             await impl.aclose()
-            if dept_flow_slot is not None:
-                await DepartmentFlowService.release_daily_chat_slot(
-                    dept_flow_slot,
-                    login_user.user_id,
-                )
+            if execution_task is not None or execution_lease is not None:
+                await DepartmentFlowService.stop_renewal(execution_task, execution_lease)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+def _department_limit_stream_response() -> StreamingResponse:
+    """SSE error for a rejected execution lease at a submit entry."""
+    return StreamingResponse(
+        iter([DepartmentDailyChatConcurrentLimitError().to_sse_event_instance_str()]),
+        media_type="text/event-stream",
+    )
 
 
 async def stream_chat_completion(
@@ -2534,7 +2550,19 @@ async def stream_chat_completion(
     conversation/chat_id); otherwise the daily agent flow runs unchanged.
     """
     if data.task_mode:
-        return await _task_mode_stream_completion(request, data, login_user)
+        # The submit core inside ``_task_mode_stream_completion`` finishes before
+        # it returns the handoff stream, so the execution lease covers exactly
+        # this submit request and is released on return.
+        page_lease_id = lease_id_from_headers(getattr(request, "headers", None))
+        if page_lease_id is not None:
+            outcome, _ = await DepartmentFlowService.ensure_lease(login_user, page_lease_id)
+            if outcome is SlotOutcome.REJECTED:
+                return _department_limit_stream_response()
+            return await _task_mode_stream_completion(request, data, login_user)
+        async with DepartmentFlowService.hold_execution_lease(login_user) as (outcome, _lease):
+            if outcome is SlotOutcome.REJECTED:
+                return _department_limit_stream_response()
+            return await _task_mode_stream_completion(request, data, login_user)
     daily_data = data.model_copy(update={"skills": []})
     return await _agent_stream_chat_completion(request, daily_data, login_user, session_subject)
 
@@ -2587,7 +2615,13 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
     # failures stay best-effort here: the client's start-execute is the fallback.
     from bisheng.workstation.domain.services.task_submit_service import submit_task_turn
 
-    _session, session_version = await submit_task_turn(data, login_user)
+    try:
+        _session, session_version = await submit_task_turn(data, login_user)
+    except BaseErrorCode as exc:
+        return StreamingResponse(
+            iter([exc.to_sse_event_instance_str()]),
+            media_type="text/event-stream",
+        )
 
     # Generate the conversation title straight from the user's question (task
     # mode has no "round complete" moment to hang it on). Reuse the daily-mode

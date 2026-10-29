@@ -414,17 +414,6 @@
       "count": 1
     }
   },
-  "src/components/Chat/InviteCode.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "src/components/Chat/Landing.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 2
@@ -1431,9 +1420,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 6
     }
   },
   "src/components/Voice/SpeechToText.tsx": {
@@ -2009,7 +1995,7 @@
       "count": 3
     },
     "no-console": {
-      "count": 2
+      "count": 1
     },
     "no-restricted-imports": {
       "count": 1

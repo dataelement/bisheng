@@ -28,7 +28,7 @@ type SentMessageFile = {
     mediaDurationSec?: number
 }
 
-export default function useChatHelpers() {
+export default function useChatHelpers(flowLeaseId?: string | null) {
     const chatState = useRecoilValue(currentChatState)
     const runState = useRecoilValue(currentRunningState)
     const [bishengConfig] = useRecoilState(bishengConfState)
@@ -48,12 +48,20 @@ export default function useChatHelpers() {
 
         const routeConfig = {
             [FLOW_TYPES.SKILL]: `${host}${basePath}/api/${v}/chat/${flow.id}?type=L1`,
-            [FLOW_TYPES.ASSISTANT]: `${window.location.host}${basePath}/api/${v}/assistant/chat/${flow.id}`,
-            [FLOW_TYPES.WORK_FLOW]: `${host}${basePath}/api/${v}/workflow/chat/${flow.id}?chat_id=${chatId}`
+            // Browsers cannot set headers on a WebSocket, so the page lease rides
+            // along as a query parameter. It must be present on the FIRST render:
+            // `useWebsocket` caches connections in a module-level map and will not
+            // reconnect just because the URL changed later.
+            [FLOW_TYPES.ASSISTANT]: `${window.location.host}${basePath}/api/${v}/assistant/chat/${flow.id}${
+                flowLeaseId ? `?flow_lease_id=${flowLeaseId}` : ''
+            }`,
+            [FLOW_TYPES.WORK_FLOW]: `${host}${basePath}/api/${v}/workflow/chat/${flow.id}?chat_id=${chatId}${
+                flowLeaseId ? `&flow_lease_id=${flowLeaseId}` : ''
+            }`
         };
 
         return routeConfig[type] || '';
-    }, [chatState, chatId, bishengConfig, apiVersion])
+    }, [chatState, chatId, bishengConfig, apiVersion, flowLeaseId])
 
     const appLost = useMemo(() => {
         return runState?.error?.code

@@ -9,6 +9,7 @@ import { useRecoilState } from "recoil";
 import { getRecommendedAppsApi } from "~/api/apps";
 import { writeAppChatOrigin, writeAppChatReturnTo } from "~/pages/appChat/appChatOrigin";
 import AiChatInput from "~/components/Chat/AiChatInput";
+import { useTaskInviteQuota } from "~/components/Chat/TaskInviteQuota";
 import { resolveTaskModeOnNavigation } from "~/components/Chat/resolveTaskMode";
 import AiChatMessages from "~/components/Chat/AiChatMessages";
 import { PinnedTaskPanel } from "~/components/Linsight/Execution/PinnedTaskPanel";
@@ -33,6 +34,7 @@ import { useAuthContext } from "~/hooks/AuthContext";
 import { useGetBsConfig, useGetOrgToolList } from "~/hooks/queries/data-provider";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/queries";
 import useAiChat from "~/hooks/useAiChat";
+import { useSessionPresence } from "~/hooks/useSessionPresence";
 import {
   moveConversationModel,
   readAdminDefaultModelId,
@@ -95,6 +97,12 @@ const ChatView = ({
   // so the welcome subtitle can hide without shifting the title / input box.
   const [landingHasSelection, setLandingHasSelection] = useState(false);
 
+  // Department concurrency: one page lease per session page. Share pages are
+  // read-only views of somebody else's session and must not consume a slot.
+  const presence = useSessionPresence(conversationId === "new" ? "" : conversationId, {
+    disabled: Boolean(shareToken),
+  });
+
   // Core chat state — replaces old ChatContext + useSSE + useChatHelpers
   const {
     selectedOrgKbs,
@@ -111,7 +119,7 @@ const ChatView = ({
     sendMessage,
     stopGenerating,
     regenerate,
-  } = useAiChat(conversationId, false, shareToken);
+  } = useAiChat(conversationId, false, shareToken, "chat", presence.ensureLeaseId);
 
   const selectedOrgKbIds = useMemo(
     () => selectedOrgKbs.filter((item) => item.type === "org").map((item) => String(item.id)),
@@ -273,14 +281,28 @@ const ChatView = ({
     return Array.isArray(plugins) ? plugins.includes("linsight_task_mode") : true;
   }, [user]);
 
+  const inviteOn =
+    taskMode &&
+    canUseTaskMode &&
+    !!(bsConfig as { linsight_invitation_code?: boolean } | undefined)?.linsight_invitation_code;
+  const {
+    bar: inviteQuotaBar,
+    dialog: inviteQuotaDialog,
+    allowSend: allowInviteSend,
+  } = useTaskInviteQuota(inviteOn);
+
   const handleSend = useCallback(
-    (text: string, files?: any[] | null) => {
-      // Capture the turn's resources before resetting its composer draft.
-      const accepted = sendMessage(text, files, { taskMode: taskMode && canUseTaskMode });
+    async (text: string, files?: any[] | null) => {
+      const isTaskTurn = taskMode && canUseTaskMode;
+      if (isTaskTurn && !allowInviteSend()) return false;
+      // Capture the turn's resources before resetting its composer draft. A
+      // `false` result (e.g. the department is full) keeps the draft so the
+      // user can send again once a slot frees up.
+      const accepted = await sendMessage(text, files, { taskMode: isTaskTurn });
       if (accepted) setInputText("");
       return accepted;
     },
-    [taskMode, canUseTaskMode, sendMessage],
+    [taskMode, canUseTaskMode, sendMessage, allowInviteSend],
   );
 
   const isNew = conversationId === "new";
@@ -696,6 +718,7 @@ const ChatView = ({
   return (
     <TaskTurnLoadContext.Provider value={reportTaskTurnLoadFailed}>
     <Presentation isLingsi={false}>
+      {inviteQuotaDialog}
       <div className="dsh-chat-surface" data-testid="dsh-chat-surface">
         <div ref={chatContainerRef} className="relative z-10 flex h-full min-w-0 flex-1 flex-col">
           {/* Layout: treat "loading an existing conversation" the same as
@@ -803,6 +826,7 @@ const ChatView = ({
                         ) : (
                           <div className="dsh-chat-composer-seat">
                             {latestTaskVersionId && <PinnedTaskPanel versionId={latestTaskVersionId} />}
+                            {inviteQuotaBar}
                             <AiChatInput
                               allowConfiguration={false}
                               disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length || !!shareToken}
@@ -1009,6 +1033,7 @@ const ChatView = ({
                       {/* Input area for landing page */}
                       {!shareToken && (
                         <div className="w-full">
+                          {inviteQuotaBar}
                           <AiChatInput
                             elevated
                             disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length || !!shareToken}

@@ -26,6 +26,7 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTe
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.assistant import AssistantDeletedError, AssistantNotOnlineError, AssistantOtherError
+from bisheng.common.errcode.workstation import DepartmentDailyChatConcurrentLimitError
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationProcessEventData, NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -88,6 +89,10 @@ class ChatClient:
         # Asynchronous Task List
         self.task_ids = []
         self.background_tasks: set[asyncio.Task] = set()
+        # Department concurrency lease held by this connection (execution lease
+        # only — a page lease belongs to the browser tab and is never stored).
+        self.execution_lease = None
+        self.execution_renew_task = None
         # A queue of streaming outputs to accept the content of the streaming output, processing newquestionEmpty at all times
         self.stream_queue = Queue()
 
@@ -376,6 +381,20 @@ class ChatClient:
                 self.chat_history = []
                 await self.init_gpts_agent()
                 return
+
+            # Local import: ``clients/__init__`` pulls in WorkflowClient, which
+            # imports this package's siblings — a module-level import here makes
+            # ``bisheng.common.chat`` circular.
+            from bisheng.common.chat.clients.base import ensure_client_execution_lease
+
+            # Department concurrency: a page lease is only re-asserted; without
+            # one this connection takes its own execution lease on first
+            # execution and keeps it until the socket closes.
+            flow_outcome = await ensure_client_execution_lease(self)
+            if flow_outcome == "rejected":
+                # The existing ``except BaseErrorCode`` below turns this into the
+                # standard error frame with status_code 12045.
+                raise DepartmentDailyChatConcurrentLimitError()
 
             # Inisialisasiagent
             await self.init_gpts_agent()

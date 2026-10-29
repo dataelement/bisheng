@@ -384,6 +384,7 @@ async def workflow_ws(
     workflow_id: str,
     websocket: WebSocket,
     chat_id: str | None = None,
+    flow_lease_id: str | None = None,
     login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws),
 ):
     try:
@@ -393,7 +394,17 @@ async def workflow_ws(
             resource_id=workflow_id,
             action="use",
         )
-        await chat_manager.dispatch_client(websocket, workflow_id, chat_id, login_user, WorkType.WORKFLOW, websocket)
+        # ``flow_lease_id`` is the page lease opened by the session page; without
+        # it the connection takes its own execution lease.
+        await chat_manager.dispatch_client(
+            websocket,
+            workflow_id,
+            chat_id,
+            login_user,
+            WorkType.WORKFLOW,
+            websocket,
+            flow_lease_id=flow_lease_id,
+        )
     except UnAuthorizedError:
         await websocket.close(
             code=http_status.WS_1008_POLICY_VIOLATION,

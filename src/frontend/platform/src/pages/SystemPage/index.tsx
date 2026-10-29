@@ -4,6 +4,7 @@ import { Tabs } from "@bisheng/ui";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import Config from "./components/Config";
+import { InviteCodeTab } from "./components/InviteCodeTab";
 import OrganizationAndMembers from "./components/OrganizationAndMembers";
 import OrgSync from "./components/OrgSync";
 import { PersonalToken } from "./components/PersonalToken";
@@ -200,6 +201,22 @@ export default function SystemPage() {
                       {" "}
                       <div className="min-h-0 flex-1 overflow-hidden">
                         <Theme />
+                      </div>
+                    </>
+                  ),
+                },
+              ]
+            : []),
+          ...(canAccessSystemConfig
+            ? [
+                {
+                  key: "inviteCode",
+                  label: <> {t("system.inviteCode.tab")} </>,
+                  children: (
+                    <>
+                      {" "}
+                      <div className="min-h-0 flex-1 overflow-hidden">
+                        <InviteCodeTab />
                       </div>
                     </>
                   ),

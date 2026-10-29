@@ -250,6 +250,7 @@ async def chat(
     assistant_id: str,
     websocket: WebSocket,
     chat_id: str | None = None,
+    flow_lease_id: str | None = None,
     login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws),
 ):
     try:
@@ -259,7 +260,17 @@ async def chat(
             resource_id=assistant_id,
             action="use",
         )
-        await chat_manager.dispatch_client(websocket, assistant_id, chat_id, login_user, WorkType.GPTS, websocket)
+        # ``flow_lease_id`` is the page lease opened by the session page; without
+        # it the connection takes its own execution lease.
+        await chat_manager.dispatch_client(
+            websocket,
+            assistant_id,
+            chat_id,
+            login_user,
+            WorkType.GPTS,
+            websocket,
+            flow_lease_id=flow_lease_id,
+        )
     except UnAuthorizedError:
         await websocket.close(
             code=http_status.WS_1008_POLICY_VIOLATION,

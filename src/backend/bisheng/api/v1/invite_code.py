@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body, Request
+from fastapi import APIRouter, Body, Depends, Query, Request
 from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
@@ -6,30 +6,33 @@ from bisheng.api.v1.schemas import resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.utils import get_request_ip
 
-router = APIRouter(prefix='/invite', tags=['InviteCode'])
+router = APIRouter(prefix="/invite", tags=["InviteCode"])
 
 
-@router.post('/code')
-async def create_invite_code(request: Request, login_user: UserPayload = Depends(UserPayload.get_admin_user),
-                             name: str = Body(..., description='Batch'),
-                             num: int = Body(..., description='Number of invitation codes in the current batch'),
-                             limit: int = Body(..., description='Current batch invite code usage limit')):
+@router.post("/code")
+async def create_invite_code(
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_admin_user),
+    name: str = Body(..., description="Batch"),
+    num: int = Body(..., description="Number of invitation codes in the current batch"),
+    limit: int = Body(..., description="Current batch invite code usage limit"),
+):
     """
     Create an invite code
     """
     logger.debug(
-        f"create invite code user_id: {login_user.user_id}, ip: {get_request_ip(request)}, name: {name}, num: {num}, limit: {limit}")
+        f"create invite code user_id: {login_user.user_id}, ip: {get_request_ip(request)}, name: {name}, num: {num}, limit: {limit}"
+    )
     codes = await InviteCodeService.create_batch_invite_codes(login_user, name, num, limit)
-    return resp_200(data={
-        "name": name,
-        "limit": limit,
-        "codes": codes
-    })
+    return resp_200(data={"name": name, "limit": limit, "codes": codes})
 
 
-@router.post('/bind')
-async def bind_invite_code(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
-                           code: str = Body(..., embed=True, description='Invitation Code')):
+@router.post("/bind")
+async def bind_invite_code(
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    code: str = Body(..., embed=True, description="Invitation Code"),
+):
     """
     Binding Invitation Code
     """
@@ -38,7 +41,41 @@ async def bind_invite_code(request: Request, login_user: UserPayload = Depends(U
     return resp_200()
 
 
-@router.get('/code')
+@router.get("/codes")
+async def list_invite_codes(
+    login_user: UserPayload = Depends(UserPayload.get_admin_user),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    keyword: str = Query(""),
+):
+    """List invite codes for the system admin page."""
+    logger.debug(f"list invite code user_id: {login_user.user_id}, page: {page}, keyword: {keyword}")
+    data = await InviteCodeService.list_invite_codes(keyword, page, page_size)
+    return resp_200(data=data)
+
+
+@router.put("/code/{code_id}")
+async def update_invite_code(
+    code_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_admin_user),
+    name: str = Body(..., description="Batch"),
+    limit: int = Body(..., description="Usage limit"),
+):
+    """Update an invite code's batch name and usage limit."""
+    logger.debug(f"update invite code user_id: {login_user.user_id}, id: {code_id}, name: {name}, limit: {limit}")
+    data = await InviteCodeService.update_invite_code(code_id, name, limit)
+    return resp_200(data=data)
+
+
+@router.delete("/code/{code_id}")
+async def delete_invite_code(code_id: int, login_user: UserPayload = Depends(UserPayload.get_admin_user)):
+    """Delete an invite code."""
+    logger.debug(f"delete invite code user_id: {login_user.user_id}, id: {code_id}")
+    await InviteCodeService.delete_invite_code(code_id)
+    return resp_200()
+
+
+@router.get("/code")
 async def get_bind_code_num(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     Get the number of times a valid invitation code bound by a user can be used
