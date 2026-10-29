@@ -62,9 +62,6 @@ def test_same_view_filters_orm_and_manual_queries(monkeypatch, path, super_admin
             manual = db.exec(stmt).all()
         return {"automatic": automatic, "manual": manual}
 
-    business_path = path in {"/api/v1/knowledge", "/api/v1/workflow/list", "/api/v1/apps"}
-    if business_path:
-        expected = [2]
     try:
         with tenant.tenant_execution_scope(2), TestClient(app) as client:
             client.cookies.set("access_token_cookie", "test-token")

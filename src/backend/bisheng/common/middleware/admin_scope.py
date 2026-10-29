@@ -47,17 +47,30 @@ from bisheng.utils.http_middleware import (
     _extract_http_access_token,
 )
 
-# Management configuration shares one scope. Knowledge spaces and application
-# routes keep their normal permission-based visibility, including workstation
-# application lists. RPC and execution retain their bound tenant identities.
+# Browser management views share one scope for global platform administrators.
+# Other users keep their own tenant scope; RPC and execution retain their
+# independently bound tenant identities.
 MANAGEMENT_API_PREFIXES: tuple[str, ...] = (
     "/api/v1/llm",
-    "/api/v1/workstation/config",
+    "/api/v1/workstation",
     "/api/v1/linsight",
     "/api/v1/tool",
+    "/api/v1/knowledge",
+    "/api/v1/chat/online",
     "/api/v1/admin",
     "/api/v1/service-accounts",
     "/api/v1/personal-tokens",
+    "/api/v1/workflow/list",
+    "/api/v1/workflow/get_one_flow",
+    "/api/v1/workflow/create",
+    "/api/v1/workflow/update",
+    "/api/v1/workflow/versions",
+    "/api/v1/workflow/change_version",
+    "/api/v1/workflow/status",
+    "/api/v1/workflow/write/auth",
+    "/api/v1/flows",
+    "/api/v1/assistant",
+    "/api/v1/apps",
     "/api/v1/approval/admin",
     "/api/v1/audit",
     "/api/v1/app-runtime-audit",

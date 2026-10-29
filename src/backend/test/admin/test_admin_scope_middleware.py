@@ -30,7 +30,7 @@ from bisheng.core.context.tenant import (
     get_is_management_api,
 )
 
-BUSINESS_LIST_PATHS = (
+TENANT_VIEW_LIST_PATHS = (
     "/api/v1/workflow/list",
     "/api/v1/apps",
     "/api/v1/assistant",
@@ -102,7 +102,7 @@ def _build_app():
             "is_mgmt": get_is_management_api(),
         }
 
-    for path in BUSINESS_LIST_PATHS:
+    for path in TENANT_VIEW_LIST_PATHS:
         app.add_api_route(path, _chat_echo, methods=["GET"])
 
     return app
@@ -189,23 +189,19 @@ class TestManagementApiDetection:
         assert body["is_mgmt"] is False
         assert fake_redis.expire_calls == []
 
-    @pytest.mark.parametrize("path", BUSINESS_LIST_PATHS)
-    def test_model_scope_does_not_change_business_lists(self, path, monkeypatch, fake_redis, fake_settings):
+    @pytest.mark.parametrize("path", TENANT_VIEW_LIST_PATHS)
+    @pytest.mark.parametrize("is_super", (True, False))
+    def test_lists_follow_global_management_view(self, path, is_super, monkeypatch, fake_redis, fake_settings):
         _patch_jwt(monkeypatch, {"user_id": 1})
-        _patch_super(monkeypatch, True)
+        _patch_super(monkeypatch, is_super)
         fake_redis.store["admin_scope:1"] = "5"
+        fake_redis.aget = AsyncMock(wraps=fake_redis.aget)
         client = _client_with_cookie(_build_app())
-        assert client.get("/api/v1/llm").json()["scope"] == 5
-        fake_redis.expire_calls.clear()
-        check_super = AsyncMock()
-        monkeypatch.setattr(f"{MIDDLEWARE_MOD}._check_is_global_super", check_super)
 
-        response = client.get(path)
-
-        assert response.status_code == 200
-        assert response.json() == {"scope": None, "is_mgmt": False}
-        assert fake_redis.expire_calls == []
-        check_super.assert_not_awaited()
+        assert client.get(path).json() == {"scope": 5 if is_super else None, "is_mgmt": True}
+        if not is_super:
+            fake_redis.aget.assert_not_awaited()
+            assert fake_redis.expire_calls == []
 
     def test_mgmt_path_marks_is_management_true(self, monkeypatch, fake_redis, fake_settings):
         _patch_jwt(monkeypatch, {"user_id": 1})
