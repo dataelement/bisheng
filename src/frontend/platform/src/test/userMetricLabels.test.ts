@@ -26,18 +26,20 @@ function legacyComponent(
 
 describe("user metric labels", () => {
   it("updates the dataset picker labels in all supported languages", () => {
-    expect(zhDashboard.logged_in_employee_count).toBe("累积登录人数")
+    expect(zhDashboard.logged_in_employee_count).toBe("累计登录人次")
     expect(zhDashboard.active_employee_count).toBe("全员有效用户数")
     expect(zhDashboard.participation_rate).toBe("全员参与度占比")
-    expect(enDashboard.logged_in_employee_count).toBe("Cumulative Logged-in Employees")
-    expect(jaDashboard.logged_in_employee_count).toBe("累計ログイン従業員数")
+    expect(enDashboard.logged_in_employee_count).toBe("Cumulative Logged-in Person-times")
+    expect(jaDashboard.logged_in_employee_count).toBe("累計ログイン人回")
     expect(enDashboard.active_employee_count).toBe("Total Effective Users")
     expect(jaDashboard.active_employee_count).toBe("有効ユーザー総数")
   })
 
   it.each([
-    ["mid_user_increment", "logged_in_employee_count", "实际登录人数", "累积登录人数"],
-    ["mid_user_daily_participation", "logged_in_employee_count", "累计实际登录人数", "累积登录人数"],
+    ["mid_user_increment", "logged_in_employee_count", "累积登录人数", "累计登录人次"],
+    ["mid_user_increment", "logged_in_employee_count", "累计登录人数", "累计登录人次"],
+    ["mid_user_increment", "logged_in_employee_count", "实际登录人数", "累计登录人次"],
+    ["mid_user_daily_participation", "logged_in_employee_count", "累计实际登录人数", "累计登录人次"],
     ["mid_user_increment", "active_employee_count", "全员总数", "全员有效用户数"],
     ["mid_user_daily_participation", "active_employee_count", "有效人员总数", "全员有效用户数"],
     ["mid_user_increment", "participation_rate", "全员参与占比", "全员参与度占比"],

@@ -536,7 +536,7 @@
   "source_app": "Source Application",
   "mid_user_daily_participation": "Daily Workforce Participation",
   "participation_rate": "Workforce Participation Rate",
-  "logged_in_employee_count": "Cumulative Logged-in Employees",
+  "logged_in_employee_count": "Cumulative Logged-in Person-times",
   "active_employee_count": "Total Effective Users",
   "login_count": "Login Count",
   "local_date": "Calendar Date",

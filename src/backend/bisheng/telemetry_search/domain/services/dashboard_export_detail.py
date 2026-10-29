@@ -42,6 +42,7 @@ from .qa_detail_columns import (
     QA_DETAIL_FIELDS,
     QA_DETAIL_SOURCE_FIELDS,
     enrich_qa_detail_rows,
+    format_asked_at,
     visible_detail_columns,
 )
 from .user_metric_definitions import USER_STAT_DATASETS
@@ -58,7 +59,19 @@ DETAIL_IDENTITY_COLUMNS: dict[str, list[tuple[str, str]]] = {
         ("space_name", "知识空间"),
         ("space_level_name", "知识库大类"),
         ("file_category_name", "知识分类"),
+        ("file_subcategory_name", "二级知识分类"),
+        ("business_domain_name", "业务域"),
         ("uploader_user_name", "上传人"),
+        ("uploader_user_id", "上传人ID"),
+        ("uploader_company_name", "上传人公司"),
+        ("uploader_department_name", "上传人部门"),
+        ("uploader_office_name", "上传人科室"),
+        ("uploader_squad_name", "上传人班组"),
+        ("belonging_company_name", "所属公司"),
+        ("belonging_department_name", "所属部门"),
+        ("belonging_office_name", "所属科室"),
+        ("belonging_squad_name", "所属班组"),
+        ("original_space_name", "原始上传库"),
         ("local_date", "日期"),
     ],
     "mid_knowledge_file_increment": [
@@ -107,10 +120,14 @@ DETAIL_IDENTITY_COLUMNS: dict[str, list[tuple[str, str]]] = {
         ("user_name", "提问人"),
         ("qa_type_name", "问答类型"),
         ("scene", "场景"),
+        ("source_app", "来源应用"),
         ("asker_company_name", "提问人公司"),
         ("asker_department_name", "提问人部门"),
         ("asker_office_name", "提问人科室"),
         ("primary_department_name", "所属部门"),
+        ("space_id", "知识空间ID"),
+        ("file_id", "文件ID"),
+        ("business_domain_code", "业务域编码"),
     ],
     "mid_user_increment": [
         ("user_name", "用户名"),
@@ -119,6 +136,19 @@ DETAIL_IDENTITY_COLUMNS: dict[str, list[tuple[str, str]]] = {
 }
 
 _TIMESTAMP_FIELD = "timestamp"
+_COUNTED_AT_FIELD = "counted_at_text"
+_QA_LABEL_FIELDS = frozenset({"scene", "source_app"})
+_LOGIN_EVENT_DATASETS = frozenset({"mid_user_increment", "mid_user_daily_participation"})
+# One row is already one user-day, or one stored login-count record. Person-level
+# metrics keep a single scanned day, so these numbers would not match the period.
+_LOGIN_EVENT_METRICS = frozenset({"logged_in_employee_count", "login_count"})
+_LOGIN_EVENT_COLUMNS = (
+    ("primary_department_name", "主部门"),
+    ("login_count", "实际登录次数"),
+    ("first_login_at_text", "首次登录时间"),
+    ("last_login_at_text", "末次登录时间"),
+)
+_LOGIN_EVENT_SOURCE_FIELDS = ("first_login_at", "last_login_at")
 _SUMMABLE_AGGREGATIONS = {
     AggsTypeEnum.SUM,
     AggsTypeEnum.AVG,
@@ -201,6 +231,25 @@ def _value_column(data_config: ComponentDataConfig, metric_config: MetricConfig 
     if data_config.metrics[0].aggregation in (AggregationType.COUNT, AggregationType.DISTINCT_COUNT):
         return None
     return DetailColumn(field=metric_config.field, label=label)
+
+
+def _login_event_columns(dataset_code: str, metric_config: MetricConfig | None) -> list[DetailColumn]:
+    """Readable login fields when the exported row is already one day or one count record."""
+    if dataset_code not in _LOGIN_EVENT_DATASETS or metric_config is None:
+        return []
+    if metric_config.field not in _LOGIN_EVENT_METRICS:
+        return []
+    return [DetailColumn(field=field, label=label) for field, label in _LOGIN_EVENT_COLUMNS]
+
+
+def _enum_label(dataset_code: str, field: str, value: Any) -> Any:
+    """Dashboard display text for a stored code. Unknown codes stay as stored."""
+    if value is None or value == "" or isinstance(value, bool) or not isinstance(value, (str, int)):
+        return value
+    from .dashboard import DashboardService
+
+    labels = DashboardService._get_enum_labels(dataset_code, field)
+    return labels.get(str(value), value)
 
 
 def _dimension_columns(data_config: ComponentDataConfig) -> list[DetailColumn]:
@@ -300,11 +349,14 @@ async def query_detail_rows(
         if uses_category_fields(fields, filters):
             statistics.validate_categories()
         rows = statistics.detail(metric_config.field, start=start, end=end)
+        for row in rows:
+            row[_COUNTED_AT_FIELD] = format_asked_at(row.get(_TIMESTAMP_FIELD))
         columns = _ordered_unique(
             [
                 DetailColumn(field="knowledge_identity", label="文档唯一标识"),
                 DetailColumn(field="file_id", label="关联文件入口ID"),
                 *[DetailColumn(field=field, label=label) for field, label in DETAIL_IDENTITY_COLUMNS[dataset_code]],
+                DetailColumn(field=_COUNTED_AT_FIELD, label="计入时间"),
                 *_dimension_columns(data_config),
             ]
         )
@@ -312,7 +364,7 @@ async def query_detail_rows(
             from bisheng.common.errcode.telemetry import DashboardExportLimitExceededError
 
             raise DashboardExportLimitExceededError()
-        return DetailRows(columns=columns, rows=rows)
+        return DetailRows(columns=visible_detail_columns(columns, rows, set()), rows=rows)
     filters = DataQueryService.merge_filters(filters, _metric_filter(metric_config))
     detail_query = _build_bool_query(filters)
     if metric_config and (
@@ -343,6 +395,7 @@ async def query_detail_rows(
                 DetailColumn(field="local_date", label="登录日期"),
             ]
         )
+    identity_columns.extend(_login_event_columns(dataset_code, metric_config))
     value_column = _value_column(data_config, metric_config)
     columns = _ordered_unique(
         [*identity_columns, *_dimension_columns(data_config), *([value_column] if value_column else [])]
@@ -353,6 +406,8 @@ async def query_detail_rows(
     source_fields.add(_TIMESTAMP_FIELD)
     if dataset_code == QA_DETAIL_DATASET:
         source_fields.update(QA_DETAIL_SOURCE_FIELDS)
+    if any(column.field == "first_login_at_text" for column in columns):
+        source_fields.update(_LOGIN_EVENT_SOURCE_FIELDS)
     if deduplicate_field:
         source_fields.add(deduplicate_field)
 
@@ -377,17 +432,23 @@ async def query_detail_rows(
             if key in seen_keys:
                 continue
             seen_keys.add(key)
-        rows.append(
-            {
-                _TIMESTAMP_FIELD: source.get(_TIMESTAMP_FIELD),
-                **{column.field: _source_value(source, column.field) for column in columns},
-                **(
-                    {field: _source_value(source, field) for field in QA_DETAIL_SOURCE_FIELDS}
-                    if dataset_code == QA_DETAIL_DATASET
-                    else {}
-                ),
-            }
-        )
+        row = {
+            _TIMESTAMP_FIELD: source.get(_TIMESTAMP_FIELD),
+            **{column.field: _source_value(source, column.field) for column in columns},
+            **(
+                {field: _source_value(source, field) for field in QA_DETAIL_SOURCE_FIELDS}
+                if dataset_code == QA_DETAIL_DATASET
+                else {}
+            ),
+        }
+        if dataset_code == QA_DETAIL_DATASET:
+            for field in _QA_LABEL_FIELDS:
+                if field in row:
+                    row[field] = _enum_label(dataset_code, field, row[field])
+        if "first_login_at_text" in row:
+            row["first_login_at_text"] = format_asked_at(source.get("first_login_at"))
+            row["last_login_at_text"] = format_asked_at(source.get("last_login_at"))
+        rows.append(row)
         if len(rows) > row_limit:
             break
 

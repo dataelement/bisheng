@@ -23,10 +23,15 @@ async def test_new_users_excludes_existing_users_activity_and_preserves_chart_fi
         {"user_id": 3, "metric_source": "participation", "primary_department_id": "A"},
         {"user_id": 4, "metric_source": "increment", "primary_department_id": "B"},
     ]
-    filters = [FilterExpression(bool_operator="must", filters=[
-        TermOp(field="primary_department_id", value="A"),
-        RangeOp(field="timestamp", value=RangeValue(gte=1000, lt=2000)),
-    ])]
+    filters = [
+        FilterExpression(
+            bool_operator="must",
+            filters=[
+                TermOp(field="primary_department_id", value="A"),
+                RangeOp(field="timestamp", value=RangeValue(gte=1000, lt=2000)),
+            ],
+        )
+    ]
     original_filters = deepcopy(filters)
 
     async def search(service):
@@ -34,16 +39,23 @@ async def test_new_users_excludes_existing_users_activity_and_preserves_chart_fi
         assert {"term": {"primary_department_id": "A"}} in query
         assert {"range": {"timestamp": {"gte": 1000, "lt": 2000}}} in query
         terms = [item["term"] for item in query if "term" in item]
-        users = {row["user_id"] for row in records if all(
-            row.get(field) == value for term in terms for field, value in term.items()
-        )}
+        users = {
+            row["user_id"]
+            for row in records
+            if all(row.get(field) == value for term in terms for field, value in term.items())
+        }
         return [[len(users)]]
 
     monkeypatch.setattr(component.SearchEngineService, "search", search)
     service = component.DataQueryService(dataset_code="mid_user_increment", data_config=ComponentDataConfig())
     result = await service.query_one_metric(
-        metrics()["new_user_count"], "sum", -1,
-        index_name="mid_user_engagement_stat", dimensions=[], stack_dimension=None, filters=filters,
+        metrics()["new_user_count"],
+        "sum",
+        -1,
+        index_name="mid_user_engagement_stat",
+        dimensions=[],
+        stack_dimension=None,
+        filters=filters,
     )
     assert result == [[1]]
     assert filters == original_filters
@@ -68,5 +80,5 @@ def test_new_user_export_uses_creation_source_and_active_metric_uses_logins():
 def test_login_metric_only_changes_name(code):
     dataset = next(item for item in DASHBOARD_DATASET if item.dataset_code == code)
     metric = next(item for item in dataset.schema_config["metrics"] if item["field"] == "logged_in_employee_count")
-    assert metric["name"] == "累积登录人数"
+    assert metric["name"] == "累计登录人次"
     assert metric["calculation"] == "login_participation"

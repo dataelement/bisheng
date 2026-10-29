@@ -92,7 +92,12 @@ async def test_original_dimensions_group_export_and_preserve_filter_values(setup
 
 
 async def test_query_rollups_export_match_with_shared_references(setup):
-    _, load = setup
+    stats, load = setup
+    for record in stats.records:
+        if record["knowledge_identity"] == "document:1":
+            record["file_subcategory_name"] = "工艺"
+            record["business_domain_name"] = "轧钢"
+            record["uploader_user_id"] = 15
     config = ComponentDataConfig(
         dimensions=[{"fieldId": "uploader_department_name"}],
         metrics=[{"fieldId": field} for field in ("total_file_count", "called_document_count", "document_usage_ratio")],
@@ -110,6 +115,13 @@ async def test_query_rollups_export_match_with_shared_references(setup):
     shared = next(row for row in export.rows if row["knowledge_identity"] == "document:1")
     assert shared["file_id"] == "1 / 2"
     assert shared["uploader_department_name"] == "A / B"
+    assert shared["file_subcategory_name"] == "工艺"
+    assert shared["business_domain_name"] == "轧钢"
+    assert shared["uploader_user_id"] == "15"
+    assert shared["counted_at_text"] == "2026-08-01 00:00:00"
+    labels = {column.field: column.label for column in export.columns}
+    assert labels["counted_at_text"] == "计入时间"
+    assert "local_date" not in labels
 
 
 async def test_month_drilldown_does_not_count_later_share_as_new(setup):
