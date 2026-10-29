@@ -1102,6 +1102,10 @@ DASHBOARD_DATASET = [
                 DimensionConfig(name="问答类型", field="qa_type_name"),
                 DimensionConfig(name="提问人主部门ID", field="primary_department_id"),
                 DimensionConfig(name="提问人主部门", field="primary_department_name"),
+                # Primary-department path split by org_level: company / dept / office.
+                DimensionConfig(name="提问人公司", field="asker_company_name"),
+                DimensionConfig(name="提问人部门", field="asker_department_name"),
+                DimensionConfig(name="提问人科室", field="asker_office_name"),
                 DimensionConfig(name="部门口径来源", field="department_source"),
                 DimensionConfig(name="提问人ID", field="user_id"),
                 DimensionConfig(name="提问人", field="user_name"),

@@ -99,6 +99,9 @@ DETAIL_IDENTITY_COLUMNS: dict[str, list[tuple[str, str]]] = {
         ("user_name", "提问人"),
         ("qa_type_name", "问答类型"),
         ("scene", "场景"),
+        ("asker_company_name", "提问人公司"),
+        ("asker_department_name", "提问人部门"),
+        ("asker_office_name", "提问人科室"),
         ("primary_department_name", "所属部门"),
     ],
     "mid_user_increment": [
@@ -274,24 +277,29 @@ async def query_detail_rows(
         from .knowledge_document_reader import document_reader, split_time_filters
 
         clauses, start, end = split_time_filters(filters)
-        clauses.extend([
-            {"term": {"tenant_id": get_current_tenant_id() or 1}},
-            {"terms": {"space_level": ["public", "department", "team", "team_ks", "personal"]}},
-        ])
+        clauses.extend(
+            [
+                {"term": {"tenant_id": get_current_tenant_id() or 1}},
+                {"terms": {"space_level": ["public", "department", "team", "team_ks", "personal"]}},
+            ]
+        )
         async with document_reader(dataset.es_index_name) as reader:
             statistics = await reader.load(
-                clauses, include_usage=metric_config.field in {"called_document_count", "document_usage_ratio"},
+                clauses,
+                include_usage=metric_config.field in {"called_document_count", "document_usage_ratio"},
             )
         fields = [dimension.field_id for dimension in [*data_config.dimensions, *data_config.get_stack_dimensions()]]
         if uses_category_fields(fields, filters):
             statistics.validate_categories()
         rows = statistics.detail(metric_config.field, start=start, end=end)
-        columns = _ordered_unique([
-            DetailColumn(field="knowledge_identity", label="文档唯一标识"),
-            DetailColumn(field="file_id", label="关联文件入口ID"),
-            *[DetailColumn(field=field, label=label) for field, label in DETAIL_IDENTITY_COLUMNS[dataset_code]],
-            *_dimension_columns(data_config),
-        ])
+        columns = _ordered_unique(
+            [
+                DetailColumn(field="knowledge_identity", label="文档唯一标识"),
+                DetailColumn(field="file_id", label="关联文件入口ID"),
+                *[DetailColumn(field=field, label=label) for field, label in DETAIL_IDENTITY_COLUMNS[dataset_code]],
+                *_dimension_columns(data_config),
+            ]
+        )
         if len(rows) > row_limit:
             from bisheng.common.errcode.telemetry import DashboardExportLimitExceededError
 
@@ -310,19 +318,21 @@ async def query_detail_rows(
         )
 
     daily_login_metric = (
-        dataset_code in USER_STAT_DATASETS and metric_config is not None
+        dataset_code in USER_STAT_DATASETS
+        and metric_config is not None
         and metric_config.field == "logged_in_employee_count"
     )
     identity_columns = [
-        DetailColumn(field=field, label=label)
-        for field, label in DETAIL_IDENTITY_COLUMNS.get(dataset_code, [])
+        DetailColumn(field=field, label=label) for field, label in DETAIL_IDENTITY_COLUMNS.get(dataset_code, [])
     ]
     if daily_login_metric:
-        identity_columns.extend([
-            DetailColumn(field="user_id", label="用户ID"),
-            DetailColumn(field="user_name", label="用户名"),
-            DetailColumn(field="local_date", label="登录日期"),
-        ])
+        identity_columns.extend(
+            [
+                DetailColumn(field="user_id", label="用户ID"),
+                DetailColumn(field="user_name", label="用户名"),
+                DetailColumn(field="local_date", label="登录日期"),
+            ]
+        )
     value_column = _value_column(data_config, metric_config)
     columns = _ordered_unique(
         [*identity_columns, *_dimension_columns(data_config), *([value_column] if value_column else [])]
@@ -370,9 +380,5 @@ async def query_detail_rows(
 
     # Columns that are empty for every row carry no information — a mixed-grain index
     # (file rows vs. per-day rows) always produces a few of these.
-    populated = [
-        column
-        for column in columns
-        if any(row.get(column.field) not in (None, "") for row in rows)
-    ]
+    populated = [column for column in columns if any(row.get(column.field) not in (None, "") for row in rows)]
     return DetailRows(columns=populated or columns, rows=rows)
