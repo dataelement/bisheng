@@ -1054,8 +1054,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return space, folder
 
     @staticmethod
-    def _is_square_preview_space(space: Knowledge) -> bool:
-        return space.is_released and space.auth_type in {
+    def _is_joinable_preview_space(space: Knowledge) -> bool:
+        """Share previews follow the join policy; release controls square discovery."""
+        return space.auth_type in {
             AuthTypeEnum.PUBLIC,
             AuthTypeEnum.APPROVAL,
         }
@@ -1070,7 +1071,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "visible",
         ):
             return space, True
-        if self._is_square_preview_space(space):
+        if self._is_joinable_preview_space(space):
             return space, False
         raise SpacePermissionDeniedError()
 
@@ -1608,7 +1609,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # gets. Report the effective actions the way the space list and the
         # channel detail already do, so `visible` answers it outright.
         #
-        # Only for a caller who holds the space. The square preview deliberately
+        # Only for a caller who holds the space. The share/square preview deliberately
         # answers without `visible` — asking the permission runtime for a viewer
         # who has none would both cost a lookup and require a runtime the preview
         # path does not depend on. No actions is the honest answer there.
@@ -4377,13 +4378,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self.update_folder_update_time(file_record.file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
 
-    async def get_file_preview(self, file_id: int) -> dict:
-        # Product contract: preview is intentionally action-free. The business
-        # service still resolves the canonical file row and status, but it does
-        # not invoke PermissionAction or treat `visible` as a preview action.
-        file_record = await self._get_file_for_action(file_id)
+    async def get_file_preview(self, file_id: int, *, space_id: int | None = None) -> dict:
+        """Authorize current file visibility before issuing content URLs."""
+        file_record = await self._get_file_for_action(file_id, space_id=space_id)
+        await self._require_action("knowledge_file", file_record.id, "visible")
 
-        original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
+        original_url, preview_url = KnowledgeService.get_file_share_url(file=file_record)
         metadata = file_record.user_metadata or {}
         html_preview_url = ""
         html_snapshot_object_name = metadata.get("html_snapshot_object_name")

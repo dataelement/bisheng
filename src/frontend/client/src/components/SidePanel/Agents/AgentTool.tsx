@@ -31,7 +31,7 @@ export default function AgentTool({
         { pluginKey: tool, action: 'uninstall', auth: null, isEntityTool: true },
         {
           onError: (error: unknown) => {
-            showToast({ message: `Error while deleting the tool: ${error}`, status: 'error' });
+            showToast({ message: `Error while deleting the tool: ${error}`, status: 'warning' });
           },
           onSuccess: () => {
             const tools = getValues('tools').filter((fn: string) => fn !== tool);

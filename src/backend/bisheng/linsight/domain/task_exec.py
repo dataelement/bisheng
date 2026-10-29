@@ -711,7 +711,6 @@ class LinsightWorkflowTask:
         await self._seed_workspace_from_previous(session_model)
         # Must run between the seed and tool construction: the code interpreter's
         # file list is snapshotted from file_dir when the tool is built.
-        await self._sync_workspace_originals(session_model)
 
         # Initialization Execution Component
         self.llm = await self._get_llm(session_model)
@@ -1045,9 +1044,8 @@ class LinsightWorkflowTask:
         return file_path
 
     async def _generate_tools(self, session_model: LinsightSessionVersion) -> list:
-        """Build Tool List"""
-        if not session_model.tools:
-            return []
+        """Resolve authorized task infrastructure and the selected optional tools."""
+        await self._sync_workspace_originals(session_model)
 
         return await LinsightWorkbenchImpl.init_linsight_config_tools(
             session_version=session_model, llm=self.llm, need_upload=True, file_dir=self.file_dir
@@ -1071,7 +1069,7 @@ class LinsightWorkflowTask:
         from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
 
         # Whether the code interpreter is actually bound this run (it is injected
-        # only when the user selected it). Everything that points the model at it —
+        # through the current user permission policy). Everything that points the model at it —
         # the uploaded-files pointer block and the binary read guard — must stay in
         # lockstep with this flag, or we recreate the "told to call a tool that
         # isn't there" failure mode.
@@ -1111,6 +1109,7 @@ class LinsightWorkflowTask:
             session_model.tenant_id,
             getattr(session_model, "skills", None),
             strict=is_unattended_run(session_model),
+            user_id=session_model.user_id,
         )
         if skills.failed:
             await self._push_skill_load_failure(session_model.id, skills.failed)
@@ -1196,8 +1195,8 @@ class LinsightWorkflowTask:
         which is empty on a follow-up ("总结一下刚才那个表") — the originals only
         exist in the workspace, copied there by the seed. The code interpreter's
         file list is built from the local ``file_dir``, so without this step the
-        model sees ``uploads/x.xlsx`` in ``ls``, is told by the pointer block that
-        it can compute on it, and then finds nothing in the sandbox.
+        model sees ``uploads/x.xlsx`` (or ``large_tool_results/<call_id>``) in
+        ``ls``, is told it can open them, and then finds nothing in the sandbox.
 
         Runs after the seed and before tools are built. Idempotent: on a fresh turn
         the prefetch already wrote these files and ``_materialize`` serves them from
@@ -1208,22 +1207,34 @@ class LinsightWorkflowTask:
 
             minio = await get_minio_storage()
             backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
-            ls_res = await backend.als(UPLOADS_DIR)
-            if getattr(ls_res, "error", None):
-                return
-
+            # uploads/ originals: the code interpreter computes on the raw xlsx/docx.
+            # large_tool_results/: FilesystemMiddleware dumps oversized tool payloads
+            # here and the prompt forbids re-running that call. A follow-up that
+            # `open('large_tool_results/<call_id>')` must find the file in cwd.
             synced: list[str] = []
-            for entry in ls_res.entries or []:
-                rel = str(entry.get("path") or "").lstrip("/")
-                # Markdown views are already local (or are read through read_file,
-                # which goes to MinIO anyway); only the originals need a local copy.
-                if not rel.startswith(f"{UPLOADS_DIR}/") or rel.endswith(".md"):
+            # Prior deliverables are also execution inputs on follow-up turns.
+            # Materialize them before the sandbox working set is copied in.
+            for zone, skip_md in (
+                (UPLOADS_DIR, True),
+                ("large_tool_results", False),
+                ("output", False),
+                ("scratch", False),
+            ):
+                ls_res = await backend.als(zone)
+                if getattr(ls_res, "error", None):
                     continue
-                local_path = os.path.join(self.file_dir, rel)
-                if os.path.exists(local_path):
-                    continue
-                if await asyncio.to_thread(backend.ensure_local, rel):
-                    synced.append(local_path)
+                for entry in ls_res.entries or []:
+                    rel = str(entry.get("path") or "").lstrip("/")
+                    if not rel.startswith(f"{zone}/"):
+                        continue
+                    # Markdown views of uploads are read through read_file (MinIO).
+                    if skip_md and rel.endswith(".md"):
+                        continue
+                    local_path = os.path.join(self.file_dir, rel)
+                    if os.path.exists(local_path):
+                        continue
+                    if await asyncio.to_thread(backend.ensure_local, rel):
+                        synced.append(local_path)
 
             if synced:
                 # These arrived AFTER _init_file_directory took the baseline, so

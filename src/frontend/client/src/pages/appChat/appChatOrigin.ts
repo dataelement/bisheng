@@ -6,6 +6,7 @@ export type AppChatOrigin = 'home' | 'center' | 'explore';
 export type AppChatReturnTo =
     | '/apps'
     | '/apps/explore'
+    | '/square?type=apps'
     | '/c/new';
 
 export function appChatOriginStorageKey(conversationId: string): string {
@@ -21,6 +22,7 @@ export function normalizeAppChatReturn(path?: string | null): AppChatReturnTo | 
     const normalizedPath = path.trim().replace(/\/+$/, '');
     if (normalizedPath === '/apps' || normalizedPath === '/workspace/apps') return '/apps';
     if (normalizedPath === '/apps/explore' || normalizedPath === '/workspace/apps/explore') return '/apps/explore';
+    if (normalizedPath === '/square?type=apps' || normalizedPath === '/workspace/square?type=apps') return '/square?type=apps';
     if (normalizedPath === '/c/new' || normalizedPath === '/workspace/c/new') return '/c/new';
     return null;
 }
@@ -121,7 +123,7 @@ export function deriveAppChatOriginFromEntry(search: string, state: unknown): Ap
     const from = sp.get('from');
     const entry = sp.get('entry');
     if (returnTo === '/apps') return 'center';
-    if (returnTo === '/apps/explore') return 'explore';
+    if (returnTo === '/apps/explore' || returnTo === '/square?type=apps') return 'explore';
     if (returnTo === '/c/new') return 'home';
     if (from === 'center') return 'center';
     if (from === 'explore') return 'explore';
@@ -129,7 +131,7 @@ export function deriveAppChatOriginFromEntry(search: string, state: unknown): Ap
     const sr = (state as { appSurfaceReturn?: string } | null | undefined)?.appSurfaceReturn;
     const normalizedSurfaceReturn = normalizeAppChatReturn(sr);
     if (normalizedSurfaceReturn === '/apps') return 'center';
-    if (normalizedSurfaceReturn === '/apps/explore') return 'explore';
+    if (normalizedSurfaceReturn === '/apps/explore' || normalizedSurfaceReturn === '/square?type=apps') return 'explore';
     if (normalizedSurfaceReturn === '/c/new') return 'home';
     return null;
 }

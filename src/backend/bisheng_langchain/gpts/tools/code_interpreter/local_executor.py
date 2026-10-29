@@ -388,8 +388,11 @@ class LocalExecutor(BaseExecutor):
             file_name = os.path.join(dir_path, rel)
             if not os.path.isfile(file_name):
                 continue
-            file_ext = os.path.splitext(rel)[-1]
-            file_list.append(self.upload_minio(f"{uuid.uuid4().hex}.{file_ext}", file_name))
+            if self.workspace_prefix:
+                file_list.append("/" + rel.replace(os.sep, "/").lstrip("/"))
+            else:
+                file_ext = os.path.splitext(rel)[-1]
+                file_list.append(self.upload_minio(f"{uuid.uuid4().hex}{file_ext}", file_name))
         # Mirror the same set into the session workspace so the file tools and the
         # next turn can see what this run produced (see sync_to_workspace).
         self.sync_to_workspace(dir_path, touched)

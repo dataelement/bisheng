@@ -12,6 +12,7 @@ from bisheng.common.errcode.dsh_audit import DshAuditQueryInvalidError
 from bisheng.common.schemas.api import resp_200
 from bisheng.dsh.api.dependencies import get_settings
 from bisheng.dsh.audit_admin_runtime import build_audit_administration
+from bisheng.dsh.domain.schemas.content_safety import ContentSafetyState, SensitiveDirection
 from bisheng.dsh.domain.schemas.model_audit import (
     AuditModeCommand,
     ContentStatus,
@@ -82,7 +83,10 @@ async def requests(
     usage_settlement: UsageSettlement | None = None,
     content_status: ContentStatus | None = None,
     association_status: Literal["ASSOCIATED", "UNASSOCIATED"] | None = None,
-    audit_status: Literal["NORMAL", "ABNORMAL"] | None = None,
+    audit_status: Literal["NORMAL", "ABNORMAL", "NOT_APPLICABLE"] | None = None,
+    has_sensitive_hit: bool | None = None,
+    sensitive_direction: SensitiveDirection | None = None,
+    content_safety_state: ContentSafetyState | None = None,
     start_at: datetime | None = None,
     end_at: datetime | None = None,
 ):
@@ -106,8 +110,63 @@ async def requests(
             content_status=content_status,
             association_status=association_status,
             audit_status=audit_status,
+            has_sensitive_hit=has_sensitive_hit,
+            sensitive_direction=sensitive_direction,
+            content_safety_state=content_safety_state,
             start_at=start_at,
             end_at=end_at,
+        )
+    )
+
+
+@router.get("/content-safety-events")
+async def unassociated_safety_events(
+    response: Response,
+    tenant_id: Tenant = None,
+    cursor: Cursor = None,
+    limit: Limit = 20,
+    association_status: Literal["UNASSOCIATED"] = "UNASSOCIATED",
+    start_at: datetime | None = None,
+    end_at: datetime | None = None,
+    user_id: Annotated[int | None, Query(gt=0, le=9223372036854775807)] = None,
+    model_id: Annotated[int | None, Query(gt=0, le=9223372036854775807)] = None,
+    gateway_request_id: Annotated[str | None, Query(min_length=1, max_length=36)] = None,
+    backend_request_id: Annotated[str | None, Query(min_length=1, max_length=36)] = None,
+    user=Depends(audit_admin),
+    service=Depends(get_audit_management),
+):
+    response.headers["Cache-Control"] = "no-store"
+    return resp_200(
+        data=await service.queries.unassociated_safety_events(
+            user.user_id,
+            tenant_id,
+            association_status=association_status,
+            start_at=start_at,
+            end_at=end_at,
+            user_id=user_id,
+            model_id=model_id,
+            gateway_request_id=gateway_request_id,
+            backend_request_id=backend_request_id,
+            cursor=cursor,
+            limit=limit,
+        )
+    )
+
+
+@router.get("/requests/{request_id}/content-safety-events")
+async def request_safety_events(
+    request_id: Annotated[str, Path(min_length=1, max_length=36)],
+    response: Response,
+    tenant_id: Tenant = None,
+    cursor: Cursor = None,
+    limit: Limit = 20,
+    user=Depends(audit_admin),
+    service=Depends(get_audit_management),
+):
+    response.headers["Cache-Control"] = "no-store"
+    return resp_200(
+        data=await service.queries.request_safety_events(
+            user.user_id, tenant_id, request_id, cursor=cursor, limit=limit
         )
     )
 

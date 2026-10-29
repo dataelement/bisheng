@@ -4,6 +4,7 @@
  * the multi-select skill list).
  */
 import { Check } from 'lucide-react';
+import { useState } from 'react';
 import { Outlined } from 'bisheng-icons';
 import {
     DropdownMenu,
@@ -14,10 +15,13 @@ import {
     DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '~/components/ui';
-import { useLocalize } from '~/hooks';
+import { useLocalize, useMediaQuery } from '~/hooks';
 import type { TaskModeSkill } from '~/store/linsight';
 import { cn } from '~/utils';
 import { SkillSelector } from './SkillSelector';
+import { SkillMenuEntries } from '~/components/Skills/SkillMenuEntries';
+import { SkillMenuPanel } from '~/components/Skills/SkillMenuPanel';
+import { skillCenterPreviewEnabled } from '~/components/Skills/types';
 
 interface PlusMenuProps {
     disabled?: boolean;
@@ -47,9 +51,11 @@ export function PlusMenu({
     showAddSkill = true,
 }: PlusMenuProps) {
     const localize = useLocalize();
+    const isMobile = useMediaQuery('(max-width: 576px)');
+    const [skillPanelOpen, setSkillPanelOpen] = useState(false);
 
     return (
-        <DropdownMenu>
+        <DropdownMenu onOpenChange={(open) => { if (!open) setSkillPanelOpen(false); }}>
             <DropdownMenuTrigger asChild disabled={disabled}>
                 <button
                     type="button"
@@ -65,8 +71,9 @@ export function PlusMenu({
 
             <DropdownMenuContent
                 align="start"
-                className="flex w-[200px] flex-col gap-1 rounded-2xl border-slate-100 p-3 shadow-xl"
+                className={cn('flex w-[200px] flex-col gap-1 rounded-2xl border-slate-100 p-3 shadow-xl', isMobile && skillPanelOpen && 'max-h-[min(440px,var(--radix-dropdown-menu-content-available-height))] w-[min(calc(100vw-24px),320px)] gap-0 p-2')}
             >
+                {isMobile && skillPanelOpen ? <SkillMenuPanel selected={selectedSkills} onChange={onSkillsChange} onBack={() => setSkillPanelOpen(false)} /> : <>
                 {/* Upload file — same icon component as the daily-mode "+" menu:
                     the old `link.svg` asset bakes its own colour in and can't
                     follow the shared resting tint. */}
@@ -85,14 +92,16 @@ export function PlusMenu({
                 {onUploadFolder && (
                     <DropdownMenuItem
                         onSelect={() => onUploadFolder()}
-                        className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 outline-none"
+                        className="flex h-8 cursor-pointer items-center gap-3 rounded-lg px-2 outline-none"
                     >
-                        <Outlined.FolderClose size={16} className="shrink-0 text-slate-600" />
+                        <Outlined.FolderClose size={16} className="shrink-0 text-text-2" />
                         <span className="text-[14px] font-normal text-slate-700">
                             {localize('com_ui_upload_folder')}
                         </span>
                     </DropdownMenuItem>
                 )}
+
+                <SkillMenuEntries selected={selectedSkills} onChange={onSkillsChange} onOpenMobile={isMobile ? () => setSkillPanelOpen(true) : undefined} />
 
                 {/* Divider between upload and the mode entries (spec §1) */}
                 <div className="my-1 h-px bg-slate-100" />
@@ -115,7 +124,7 @@ export function PlusMenu({
                 </DropdownMenuItem>
 
                 {/* Add Skill submenu — task mode only (hidden in daily mode) */}
-                {showAddSkill && (
+                {!skillCenterPreviewEnabled && showAddSkill && (
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger
                             className={cn(
@@ -125,7 +134,7 @@ export function PlusMenu({
                         >
                             <div className="flex items-center gap-3">
                                 <div className="relative">
-                                    <Outlined.Newspaper
+                                    <Outlined.Skill
                                         size={16}
                                         className={cn(selectedSkills.length > 0 ? 'text-blue-500' : 'text-text-2')}
                                     />
@@ -150,6 +159,7 @@ export function PlusMenu({
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
                 )}
+                </>}
             </DropdownMenuContent>
         </DropdownMenu>
     );

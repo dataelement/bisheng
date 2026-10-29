@@ -1,3 +1,4 @@
+import { DemoTag } from '~/mock/demo/DemoTag';
 import type { AppItem } from '~/@types/app';
 import { Button } from '~/components';
 import AppAvator from '~/components/Avator';
@@ -75,9 +76,10 @@ export function AgentCard({
     <div
       className={cn(
         'group/card relative flex cursor-pointer flex-col overflow-hidden rounded-[12px] border border-solid p-2 transition-all',
-        'border-border-base border-[0.5px] bg-white fine-pointer:hover:shadow-[0px_2.094px_8.796px_1.047px_rgba(117,145,212,0.12)]',
+        '[--app-card-surface:var(--bg-page)] dark:[--app-card-surface:var(--fill-1)]',
+        'border-border-base border-[0.5px] bg-[rgb(var(--app-card-surface))] fine-pointer:hover:shadow-[0px_2.094px_8.796px_1.047px_rgba(117,145,212,0.12)]',
         'after:pointer-events-none after:absolute after:inset-0 after:rounded-[12px] after:border after:border-blue-500 after:opacity-0 after:transition-opacity fine-pointer:group-hover/card:after:opacity-100',
-        'bg-[linear-gradient(135deg,_rgb(var(--brand-500)/0.04)_0%,_rgb(255,255,255)_50%,_rgb(var(--brand-500)/0.04)_100%)]',
+        'bg-[linear-gradient(135deg,rgb(var(--brand-500)/0.04)_0%,rgb(var(--app-card-surface))_50%,rgb(var(--brand-500)/0.04)_100%)] dark:bg-[linear-gradient(135deg,rgb(var(--brand-500)/0.08)_0%,rgb(var(--app-card-surface))_50%,rgb(var(--brand-500)/0.08)_100%)]',
       )}
       onClick={() => onStartChat(agent)}
       onMouseEnter={() => {
@@ -91,6 +93,7 @@ export function AgentCard({
           <p className="font-['PingFang_SC'] font-normal leading-[22px] text-text-1 text-[14px] truncate">
             {agent.name}
           </p>
+          <DemoTag id={agent.id} className="shrink-0" />
         </div>
 
         {isMobileCard ? (
@@ -116,7 +119,7 @@ export function AgentCard({
                   <button
                     type="button"
                     onClick={(e) => e.stopPropagation()}
-                    className="inline-flex size-6 items-center justify-center rounded-md border border-border-base bg-white text-text-3 fine-pointer:hover:bg-fill-1"
+                    className="inline-flex size-6 items-center justify-center rounded-md border border-border-base bg-[rgb(var(--app-card-surface))] text-text-3 fine-pointer:hover:bg-fill-1"
                     aria-label={localize('com_ui_more')}
                   >
                     <MoreVertical className="size-4" />
@@ -196,7 +199,7 @@ export function AgentCard({
 
       {/* Description — fixed 3-line block (h = 3 × leading) so every card keeps a
           uniform height regardless of text length; clamp to 3 lines with ellipsis. */}
-      <div className="mt-2 h-[58.5px] overflow-hidden font-['PingFang_SC'] font-normal text-[12px] text-[#a9aeb8] leading-[19.5px] break-words line-clamp-3">
+      <div className="mt-2 h-[58.5px] overflow-hidden font-['PingFang_SC'] font-normal text-[12px] text-text-3 leading-[19.5px] break-words line-clamp-3">
         {agent.description || localize('com_app_no_description_placeholder')}
       </div>
 
@@ -204,7 +207,7 @@ export function AgentCard({
         <div className="mt-auto flex w-full min-w-0 items-center justify-between gap-1">
           <div className="relative min-w-0 flex-1 overflow-hidden">
             <div className="flex items-center gap-1 overflow-hidden whitespace-nowrap">
-              {(agent.tags && agent.tags.length > 0 ? agent.tags : [{ name: '精选' }]).map((tag, idx) => (
+              {(agent.tags && agent.tags.length > 0 ? agent.tags : [{ name: localize('com_app_featured_tag') }]).map((tag, idx) => (
                 <div
                   key={idx}
                   className="shrink-0 rounded-[4px] bg-fill-2 px-2 py-0.5 text-[12px] font-normal leading-[20px] text-text-2"
@@ -213,7 +216,7 @@ export function AgentCard({
                 </div>
               ))}
             </div>
-            <div className="pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-white to-transparent" />
+            <div className="pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-[rgb(var(--app-card-surface))] to-transparent" />
           </div>
           <Button
             onClick={(e) => {
@@ -222,7 +225,7 @@ export function AgentCard({
             }}
             variant="outline"
             className={cn(
-              "h-6 shrink-0 rounded-md border border-border-base bg-white px-2 py-0 text-[12px] font-normal leading-[20px] text-text-2 transition-opacity fine-pointer:hover:bg-fill-1",
+              "h-6 shrink-0 rounded-md border border-border-base bg-[rgb(var(--app-card-surface))] px-2 py-0 text-[12px] font-normal leading-[20px] text-text-2 transition-opacity fine-pointer:hover:bg-fill-1",
               shouldUseHoverActionsInMobileCard
                 ? "opacity-0 pointer-events-none fine-pointer:group-hover/card:opacity-100 fine-pointer:group-hover/card:pointer-events-auto"
                 : "opacity-100 pointer-events-auto",
@@ -239,7 +242,7 @@ export function AgentCard({
               // Hover surfaces: actions overlay the bottom of the description on
               // hover (faded mask hides the text underneath), so the card height
               // stays at title + description without a reserved button row.
-              ? 'absolute inset-x-0 bottom-0 z-20 hidden px-2 pb-2 pt-6 [background:linear-gradient(to_top,#ffffff_55%,rgba(255,255,255,0))] fine-pointer:group-hover/card:block'
+              ? 'absolute inset-x-0 bottom-0 z-20 hidden px-2 pb-2 pt-6 [background:linear-gradient(to_top,rgb(var(--app-card-surface))_55%,rgb(var(--app-card-surface)/0))] fine-pointer:group-hover/card:block'
               // No-hover surfaces: actions sit in normal flow below the description.
               : 'mt-2 block',
           )}

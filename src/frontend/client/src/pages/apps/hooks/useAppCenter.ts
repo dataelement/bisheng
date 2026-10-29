@@ -13,6 +13,7 @@ import {
   recentAppsState,
 } from '~/pages/apps/store/appCenterAtoms';
 import { normalizeAppChatReturn, writeAppChatOrigin, writeAppChatReturnTo } from '~/pages/appChat/appChatOrigin';
+import { isDemoId } from '~/mock/demo/ids';
 import { copyText, generateUUID } from '~/utils';
 
 const APP_CENTER_PAGE_SIZE = 20;
@@ -40,6 +41,15 @@ export function useAppCenter() {
   const { showToast } = useToastContext();
   const localize = useLocalize();
   const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
+  /** DEV sample rows (~/mock/demo) exist only in the list response: say so instead of acting. */
+  const blockDemoApp = useCallback(
+    (app: AppItem) => {
+      if (!isDemoId(app.id)) return false;
+      showToast?.({ message: localize('com_demo_data.readonly_toast'), severity: NotificationSeverity.INFO });
+      return true;
+    },
+    [localize, showToast],
+  );
   const appLastOriginKey = 'app-last-origin';
 
   const [, setRecentApps] = useRecoilState(recentAppsState);
@@ -119,24 +129,29 @@ export function useAppCenter() {
   /** Toggle pin state for an app */
   const togglePin = useCallback(
     async (app: AppItem) => {
+      if (blockDemoApp(app)) return;
       const shouldPin = !app.is_pinned;
       try {
-        await pinAppApi(app.id, shouldPin);
+        const response = await pinAppApi(app.id, shouldPin);
+        if (response?.status_code !== 200) {
+          throw new Error("App pin request failed");
+        }
         // Refresh the list to get updated pin state from backend
         await fetchApps();
       } catch {
         showToast?.({
           message: shouldPin ? localize('com_app_pin_failed') : localize('com_app_unpin_failed'),
-          severity: NotificationSeverity.ERROR,
+          severity: NotificationSeverity.WARNING,
         });
       }
     },
-    [fetchApps, localize, showToast],
+    [blockDemoApp, fetchApps, localize, showToast],
   );
 
   /** Navigate into an app — always create a new conversation */
   const continueChat = useCallback(
     (app: AppItem) => {
+      if (blockDemoApp(app)) return;
       const chatId = generateUUID(32);
       const returnTo = normalizeAppChatReturn(location.pathname) ?? '/apps';
       writeAppChatOrigin(chatId, 'center');
@@ -151,12 +166,13 @@ export function useAppCenter() {
         state: { appSurfaceReturn: returnTo },
       });
     },
-    [location.pathname, navigate],
+    [blockDemoApp, location.pathname, navigate],
   );
 
   /** Create a new conversation and navigate */
   const startChat = useCallback(
     (app: AppItem) => {
+      if (blockDemoApp(app)) return;
       const chatId = generateUUID(32);
       const returnTo = normalizeAppChatReturn(location.pathname) ?? '/apps';
       writeAppChatOrigin(chatId, 'center');
@@ -171,7 +187,7 @@ export function useAppCenter() {
         state: { appSurfaceReturn: returnTo },
       });
     },
-    [location.pathname, navigate],
+    [blockDemoApp, location.pathname, navigate],
   );
 
   /** Copy share link to clipboard */
@@ -183,7 +199,7 @@ export function useAppCenter() {
         await copyText(url);
         showToast?.({ message: localize('com_app_share_link_copied'), severity: NotificationSeverity.SUCCESS });
       } catch {
-        showToast?.({ message: localize('com_app_share_link_copy_failed'), severity: NotificationSeverity.ERROR });
+        showToast?.({ message: localize('com_app_share_link_copy_failed'), severity: NotificationSeverity.WARNING });
       }
     },
     [localize, showToast],

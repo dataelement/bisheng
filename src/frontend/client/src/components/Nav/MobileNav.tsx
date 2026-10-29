@@ -125,7 +125,7 @@ export default function MobileNav({
   return (
     <div
       className={cn(
-        'bg-token-main-surface-primary sticky top-0 z-10 w-full bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)] dark:bg-gray-800 dark:text-white',
+        'dsh-mobile-chat-header bg-token-main-surface-primary sticky top-0 z-10 w-full bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)] dark:bg-gray-800 dark:text-white',
       )}
     >
       <div

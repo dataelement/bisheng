@@ -1,4 +1,4 @@
-"""One independently enforced monthly allowance per user/model pair."""
+"""Model visibility projections and the shared monthly personal allowance."""
 
 from typing import TypedDict
 
@@ -14,7 +14,7 @@ class DshModelQuotaConfig(BaseModel):
     monthly_token_limit: int = Field(
         ge=0,
         le=9223372036854775807,
-        description="Actual monthly token allowance for this model only. Zero denies new requests; admitted requests may finish.",
+        description="Shared monthly token allowance. Zero denies new requests; admitted requests may finish.",
     )
 
 
@@ -22,8 +22,6 @@ def validate_model_configs(value: object) -> list[DshModelQuotaConfig]:
     configs = TypeAdapter(list[DshModelQuotaConfig]).validate_python(value)
     if len({item.model_id for item in configs}) != len(configs):
         raise ValueError("Each user/model pair must have exactly one configuration")
-    if sum(item.monthly_token_limit for item in configs) > 9223372036854775807:
-        raise ValueError("The informational allowance total exceeds int64")
     return sorted(configs, key=lambda item: item.model_id)
 
 
@@ -41,6 +39,7 @@ def model_configs_payload(value: object) -> list[DshModelQuotaPayload]:
 
 
 class DshModelPolicyState(BaseModel):
+    credit_rate: int = Field(default=100, ge=1, le=100000)
     model_config = ConfigDict(from_attributes=True)
     model_id: int
     monthly_token_limit: int
@@ -59,33 +58,32 @@ class DshPolicySnapshot(BaseModel):
     tenant_id: int
     user_id: int
     rows: list[DshModelPolicyState]
+    ledger_epoch: int = Field(default=1, ge=1)
+    shared_token_limit: int = Field(default=0, ge=0, le=9223372036854775807)
 
     @property
     def model_configs(self) -> list[DshModelQuotaConfig]:
         return [
             DshModelQuotaConfig(model_id=r.model_id, monthly_token_limit=r.monthly_token_limit)
             for r in self.rows
-            if r.enabled and r.monthly_token_limit > 0
+            if r.enabled
         ]
 
     @property
     def allowed_model_ids(self) -> list[int]:
-        return [r.model_id for r in self.rows if r.enabled and r.monthly_token_limit > 0]
+        return [r.model_id for r in self.rows if r.enabled]
 
     @property
     def monthly_token_limit(self) -> int:
-        return sum(r.monthly_token_limit for r in self.rows if r.enabled and r.monthly_token_limit > 0)
+        return self.shared_token_limit
 
     @property
     def version(self) -> int:
-        return sum(r.version for r in self.rows)
+        return max(1, sum(r.version for r in self.rows))
 
     @property
     def quota_epoch(self) -> int:
-        epochs = {r.quota_epoch for r in self.rows}
-        if len(epochs) != 1:
-            raise ValueError("Policy rows disagree on the recovered usage epoch")
-        return next(iter(epochs))
+        return self.ledger_epoch
 
     @property
     def quota_sync_state(self) -> str:

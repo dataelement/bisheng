@@ -15,17 +15,15 @@ import {
 } from "@/controllers/API/permission"
 import {
   AlertTriangle,
-  Building2,
   Loader2,
   LockKeyhole,
   Search,
   Trash2,
-  User,
-  Users,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { canMutatePermissionAssignee } from "./assigneePolicy"
+import { PermissionSubjectIdentity } from "./PermissionSubjectLayout"
 import { SourceBadge } from "./SourceBadge"
 import type { SubjectType } from "./types"
 
@@ -40,19 +38,8 @@ interface PermissionListTabProps {
   onMutationSuccess?: (result: MutateResourceGrantsResult) => void
 }
 
-const SUBJECT_ICONS = {
-  user: User,
-  department: Building2,
-  user_group: Users,
-}
-
 function createMutationIdempotencyKey(): string {
   return `grant-mutate-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-}
-
-function getAvatarLabel(assignee: PermissionGrantAssignee): string {
-  const name = assignee.subject.name?.trim() || assignee.subject.id
-  return (name.charAt(0) || "U").toUpperCase()
 }
 
 function getInheritedSourceLabel(
@@ -91,7 +78,6 @@ function RosterRow({
   onRemove,
 }: RosterRowProps) {
   const { t } = useTranslation("permission")
-  const SubjectIcon = SUBJECT_ICONS[assignee.subject.type]
   const editable = canMutatePermissionAssignee(assignee, context, models)
   const displayName =
     assignee.subject.name ||
@@ -106,32 +92,11 @@ function RosterRow({
       data-editable={String(editable)}
       className="flex min-h-[58px] items-center gap-4 border-b border-[#F2F3F5] py-3 last:border-b-0"
     >
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        {assignee.subject.type === "user" ? (
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#C9CDD4] text-sm font-semibold text-white">
-            {getAvatarLabel(assignee)}
-          </span>
-        ) : (
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <SubjectIcon aria-hidden="true" className="size-4" />
-          </span>
-        )}
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-[#212121]">
-            {displayName}
-          </p>
-          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1 text-xs text-[#86909C]">
-            <SourceBadge source={assignee.source} />
-            <span>{t(`scope.${assignee.scope.toLowerCase()}`)}</span>
-            {assignee.inherited_from && (
-              <span className="truncate">
-                · {t("roster.inheritedFrom")}:{" "}
-                {getInheritedSourceLabel(assignee, t)}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
+      <PermissionSubjectIdentity type={assignee.subject.type} name={displayName} metadata={<>
+        <SourceBadge source={assignee.source} />
+        <span>{t(`scope.${assignee.scope.toLowerCase()}`)}</span>
+        {assignee.inherited_from && <span className="truncate">· {t("roster.inheritedFrom")}: {getInheritedSourceLabel(assignee, t)}</span>}
+      </>} />
 
       <div className="flex w-[176px] shrink-0 items-center justify-end gap-1">
         {editable ? (

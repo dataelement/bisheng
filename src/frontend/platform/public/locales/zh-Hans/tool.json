@@ -1,5 +1,9 @@
 {
   "categories": {
+    "知识库检索": {
+      "name": "知识库检索",
+      "desc": "检索当前账号有权访问的知识库内容。"
+    },
     "代码执行器": {
       "name": "代码执行器",
       "desc": "通过执行代码完成图表绘制、文件处理等编程类操作"
@@ -354,6 +358,10 @@
       "name": "时间",
       "desc": "返回当前时间，如果未指定时区，将使用 UTC+8 时间",
       "params": {}
+    },
+    "bisheng_knowledge_search": {
+      "name": "$t(tool:categories.知识库检索.name)",
+      "desc": "$t(tool:categories.知识库检索.desc)"
     }
   },
   "addMcpServer": "添加 MCP 服务器",

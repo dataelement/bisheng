@@ -34,6 +34,12 @@ from bisheng.core.ai import (
     ChatZhipuAI,
 )
 from bisheng.core.ai.llm.custom_chat_deepseek import CustomChatDeepSeek
+from bisheng.dsh.domain.services.chat_credits import (
+    account_async,
+    account_async_stream,
+    account_sync,
+    account_sync_stream,
+)
 from bisheng.llm.domain.const import LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMModel, LLMServer
 
@@ -334,6 +340,7 @@ class BishengLLM(BishengBase, BaseChatModel):
         return self.llm._llm_type
 
     @wrapper_bisheng_model_limit_check
+    @account_sync
     def _generate(
         self,
         messages: list[BaseMessage],
@@ -354,6 +361,7 @@ class BishengLLM(BishengBase, BaseChatModel):
         return normalize_reasoning_content(ret)
 
     @wrapper_bisheng_model_limit_check_async
+    @account_async
     async def _agenerate(
         self,
         messages: list[BaseMessage],
@@ -388,6 +396,7 @@ class BishengLLM(BishengBase, BaseChatModel):
         return super().bind(tools=formatted_tools, **kwargs)
 
     @wrapper_bisheng_model_generator
+    @account_sync_stream
     def _stream(
         self,
         messages: list[BaseMessage],
@@ -399,6 +408,7 @@ class BishengLLM(BishengBase, BaseChatModel):
             yield normalize_reasoning_content(one)
 
     @wrapper_bisheng_model_generator_async
+    @account_async_stream
     async def _astream(
         self,
         messages: list[BaseMessage],

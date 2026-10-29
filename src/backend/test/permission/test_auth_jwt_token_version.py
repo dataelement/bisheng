@@ -66,6 +66,31 @@ class TestJWTPayload:
         assert subject['token_version'] == 9
 
 
+class TestRequestSubject:
+    def test_bearer_is_used_when_cookie_is_missing(self, auth_jwt_instance):
+        token = auth_jwt_instance.create_access_token(
+            subject={'user_id': 1, 'user_name': 'admin', 'tenant_id': 1},
+        )
+        auth_jwt_instance.req = SimpleNamespace(
+            cookies={},
+            headers={'Authorization': f'Bearer {token}'},
+        )
+        assert auth_jwt_instance.get_subject()['user_id'] == 1
+
+    def test_cookie_is_preferred_over_bearer(self, auth_jwt_instance):
+        cookie_token = auth_jwt_instance.create_access_token(
+            subject={'user_id': 2, 'user_name': 'cookie', 'tenant_id': 1},
+        )
+        bearer_token = auth_jwt_instance.create_access_token(
+            subject={'user_id': 9, 'user_name': 'bearer', 'tenant_id': 1},
+        )
+        auth_jwt_instance.req = SimpleNamespace(
+            cookies={'access_token_cookie': cookie_token},
+            headers={'Authorization': f'Bearer {bearer_token}'},
+        )
+        assert auth_jwt_instance.get_subject()['user_id'] == 2
+
+
 class TestLoginUserField:
     """``LoginUser.token_version`` round-trip without hitting DB."""
 

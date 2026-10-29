@@ -42,6 +42,7 @@ function classifyToolType(tc: AgentToolCall): "knowledge" | "web" | "tool" {
 const BUILTIN_TOOL_I18N: Record<string, string> = {
     search_knowledge_bases: "com_tools_knowledge_search",
     web_search: "com_tools_web_search",
+    read_skill_file: "skillReference.readFile",
 };
 
 function resolveToolName(

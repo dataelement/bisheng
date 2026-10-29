@@ -13,6 +13,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.telemetry.event_data_schema import ToolInvocationEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.logger import trace_id_var
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
@@ -25,6 +26,11 @@ from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRagTool
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType
 from bisheng.tool.domain.services.openapi import OpenApiSchema
+from bisheng.tool.domain.services.user_availability import (
+    UserToolAvailabilityService,
+    manages_availability,
+    uses_account_availability,
+)
 from bisheng.utils.async_utils import run_async_safe
 from bisheng_langchain.gpts.load_tools import load_tools
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
@@ -85,6 +91,7 @@ class ToolExecutor(BaseTool):
     tool_id: int = Field(..., description="Tool ID")
     tool_is_preset: int = Field(..., description="kind of the Tool, api、mcp、preset")
     tool_name: str = Field(..., description="Tool Name")
+    tool_key: str = Field(default="", description="Stable preset tool identity")
 
     # langchain tool fields
     name: str = Field(..., description="Tool Name for llm")
@@ -151,25 +158,20 @@ class ToolExecutor(BaseTool):
             tool_id=tool.id,
             tool_is_preset=tool.is_preset,
             tool_name=tool.name,
+            tool_key=getattr(tool, "tool_key", ""),
         )
 
     @staticmethod
-    def parse_preset_tool_params(tool: GptsTools, tool_type: GptsToolsType) -> dict:
-        """parse tool init params"""
-        # get tool config from tool.extra first
-        params = {}
-        if tool.extra:
-            if isinstance(tool.extra, str):
-                params = json.loads(tool.extra)
-            elif isinstance(tool.extra, dict):
-                params = tool.extra
-        elif tool_type.extra:
-            if isinstance(tool_type.extra, str):
-                params = json.loads(tool_type.extra)
-            elif isinstance(tool_type.extra, dict):
-                params = tool_type.extra
+    def parse_preset_extra(tool: GptsTools, tool_type: GptsToolsType | None) -> dict:
+        """Resolve the tool override or category configuration into a fresh object."""
+        extra = tool.extra or (tool_type.extra if tool_type else None)
+        if isinstance(extra, str):
+            return json.loads(extra)
+        return json.loads(json.dumps(extra or {}))
 
-        # special handling for bisheng_code_interpreter, because it needs minio config
+    @staticmethod
+    def parse_preset_tool_params(tool: GptsTools, tool_type: GptsToolsType) -> dict:
+        params = ToolExecutor.parse_preset_extra(tool, tool_type)
         if tool.tool_key == "bisheng_code_interpreter":
             return {"minio": settings.get_minio_conf().model_dump(), **params}
         return params
@@ -195,7 +197,24 @@ class ToolExecutor(BaseTool):
 
     @classmethod
     def _init_preset_tool(cls, tool: GptsTools, tool_type: GptsToolsType, **kwargs) -> BaseTool:
-        tool_name_param = {tool.tool_key: cls.parse_preset_tool_params(tool, tool_type)}
+        params = cls.parse_preset_tool_params(tool, tool_type)
+        if tool.tool_key == "bisheng_code_interpreter" and params.get("type") == "container":
+            from bisheng.tool.infrastructure.container_executor import ContainerExecutor
+            from bisheng_langchain.gpts.tools.code_interpreter.tool import CodeInterpreterTool
+
+            config = params.get("config", {}).get("container", {})
+            # Runner addresses and credentials come exclusively from host settings.
+            executor = ContainerExecutor(
+                minio=params.get("minio"),
+                sandbox_conf=settings.sandbox_conf,
+                **{
+                    key: config[key]
+                    for key in ("local_sync_path", "workspace_prefix", "keep_session", "timeout")
+                    if key in config
+                },
+            )
+            return CodeInterpreterTool(executor=executor, description=executor.description)
+        tool_name_param = {tool.tool_key: params}
         tool_langchain = load_tools(tool_params=tool_name_param, **kwargs)
         if not tool_langchain:
             raise ValueError(f"Failed to load preset tool: {tool.tool_key}")
@@ -237,7 +256,15 @@ class ToolExecutor(BaseTool):
         **kwargs,
     ) -> BaseTool:
         if tool.is_preset == ToolPresetType.PRESET.value:
-            tool_instance = cls._init_preset_tool(tool, tool_type, **kwargs)
+            if tool.tool_key == "bisheng_knowledge_search":
+                from bisheng.tool.domain.langchain.work_knowledge import WorkKnowledgeSearch
+
+                tenant_id = get_current_tenant_id()
+                if tenant_id is None:
+                    raise PermissionError("Knowledge retrieval requires a tenant context.")
+                tool_instance = WorkKnowledgeSearch(user_id=user_id, tenant_id=tenant_id)
+            else:
+                tool_instance = cls._init_preset_tool(tool, tool_type, **kwargs)
         elif tool.is_preset == ToolPresetType.API.value:
             tool_instance = cls._init_api_tool(tool, tool_type, **kwargs)
         elif tool.is_preset == ToolPresetType.MCP.value:
@@ -260,6 +287,8 @@ class ToolExecutor(BaseTool):
         user_id: int,
         **kwargs,
     ) -> BaseTool:
+        if uses_account_availability(app_type) and manages_availability(tool):
+            UserToolAvailabilityService(user_id).ensure_enabled_sync(tool.id)
         try:
             return cls._init_by_tool_and_type(
                 tool=tool,
@@ -322,6 +351,13 @@ class ToolExecutor(BaseTool):
     ) -> list[BaseTool]:
         result = []
         for tool in tools:
+            if (
+                uses_account_availability(app_type)
+                and manages_availability(tool)
+                and not UserToolAvailabilityService(user_id).is_enabled_sync(tool.id)
+            ):
+                continue
+
             tool_type = tool_types_map.get(tool.type)
             if not tool_type:
                 raise ValueError(f"Tool type with id {tool.type} not found.")
@@ -457,11 +493,23 @@ class ToolExecutor(BaseTool):
         kwargs.setdefault("ephemeral_source", True)
         return KnowledgeRagTool.init_knowledge_rag_tool(**kwargs)
 
+    async def _require_current_use(self):
+        tool = await GptsToolsDao.aget_one_tool(tool_id=self.tool_id)
+        if tool is None:
+            raise PermissionError("Tool is unavailable")
+        group = await GptsToolsDao.aget_one_tool_type(tool_type_id=tool.type)
+        if group is None or group.is_delete:
+            raise PermissionError("Tool is unavailable")
+        await self._ensure_use_permission_async(group, self.user_id)
+
     @wrapper_tool_sync
     def _run(
         self, *args: Any, config: RunnableConfig, run_manager: CallbackManagerForToolRun | None = None, **kwargs
     ) -> Any:
 
+        if uses_account_availability(self.app_type) and self.tool_id and self.tool_is_preset in (0, 1, 2):
+            run_async_safe(self._require_current_use())
+            UserToolAvailabilityService(self.user_id).ensure_enabled_sync(self.tool_id)
         if signature(self.tool_instance._run).parameters.get("config"):
             kwargs["config"] = config
         if signature(self.tool_instance._run).parameters.get("run_manager"):
@@ -472,6 +520,9 @@ class ToolExecutor(BaseTool):
     async def _arun(
         self, *args: Any, config: RunnableConfig, run_manager: CallbackManagerForToolRun | None = None, **kwargs
     ) -> Any:
+        if uses_account_availability(self.app_type) and self.tool_id and self.tool_is_preset in (0, 1, 2):
+            await self._require_current_use()
+            await UserToolAvailabilityService(self.user_id).ensure_enabled(self.tool_id)
         if signature(self.tool_instance._run).parameters.get("config"):
             kwargs["config"] = config
         if signature(self.tool_instance._run).parameters.get("run_manager"):

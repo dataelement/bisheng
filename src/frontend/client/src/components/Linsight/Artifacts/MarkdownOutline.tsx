@@ -246,7 +246,7 @@ export function MarkdownOutline({ contentRef, contentKey }: MarkdownOutlineProps
                     onKeyDown={handleListKeyDown}
                     className={cn(
                         'absolute right-0 top-1/2 w-[240px] -translate-y-1/2 overflow-hidden rounded-[10px]',
-                        'border border-[#ebecf0] bg-white shadow-[0px_4px_16px_rgba(0,0,0,0.08)]',
+                        'border border-border-base bg-bg-page shadow-[0px_4px_16px_rgba(0,0,0,0.08)]',
                         'transition-[opacity,transform] ease-out motion-reduce:transition-none',
                         'coarse-pointer:w-[min(260px,68vw)]',
                         // Opens fast enough to feel like a direct response to the

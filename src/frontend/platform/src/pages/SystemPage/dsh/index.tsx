@@ -2,10 +2,12 @@ import { Button } from '@/components/bs-ui/button'
 import { getModelListApi } from '@/controllers/API/finetune'
 import { userContext } from '@/contexts/userContext'
 import { useDshBrowserConfig } from '@/hooks/useDshBrowserConfig'
-import { DshDesktopModelConfig } from '@/pages/ModelPage/manage/dsh/DshDesktopModelConfig'
+import WorkbenchModel from '@/pages/ModelPage/manage/tabs/WorkbenchModel'
+import type { ModelServer } from '@/pages/ModelPage/manage/userModelMetadata'
 import type { DshSection } from '@/pages/DshPage/sections'
 import { useContext, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { CreditRulesView } from './CreditRulesView'
 import { AuditHistory } from './AuditHistory'
 import { PolicyView } from './PolicyView'
 import { SettingsPanel } from './SettingsPanel'
@@ -16,7 +18,7 @@ interface DshManagementProps {
     usageToolbarTarget?: HTMLDivElement | null
 }
 
-export function DshManagement({ section = 'models', usageToolbarTarget }: DshManagementProps) {
+export function DshManagement({ section = 'credits', usageToolbarTarget }: DshManagementProps) {
     const { t } = useTranslation()
     const { user } = useContext(userContext)
     const { config, failed } = useDshBrowserConfig()
@@ -26,6 +28,7 @@ export function DshManagement({ section = 'models', usageToolbarTarget }: DshMan
     return <div className="flex h-full min-h-0 flex-col px-6 py-5">
         <div className="min-h-0 flex-1 overflow-y-auto">
             {activeSection === 'models' && <DshModelsView />}
+            {activeSection === 'credits' && <CreditRulesView />}
             {activeSection === 'usage' && <PolicyView toolbarTarget={usageToolbarTarget} />}
             {activeSection === 'model-audit' && <ModelAuditPanel />}
             {activeSection === 'operations' && <AuditHistory revision={0} />}
@@ -36,7 +39,7 @@ export function DshManagement({ section = 'models', usageToolbarTarget }: DshMan
 
 function DshModelsView() {
     const { t } = useTranslation()
-    const [data, setData] = useState<Parameters<typeof DshDesktopModelConfig>[0]['data'] | null>(null)
+    const [data, setData] = useState<ModelServer[] | null>(null)
     const [error, setError] = useState(false)
     const [revision, setRevision] = useState(0)
 
@@ -74,5 +77,5 @@ function DshModelsView() {
         )
     }
 
-    return <DshDesktopModelConfig data={data} />
+    return <WorkbenchModel data={data} onBack={() => window.history.back()} />
 }

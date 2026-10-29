@@ -1,9 +1,15 @@
 import * as React from "react";
+import { Outlined } from "bisheng-icons";
 import {
     DropdownMenuCheckboxItem,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuPortal,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
 } from "~/components/ui/DropdownMenu";
+import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 
 /**
@@ -152,6 +158,93 @@ export const ActionMenuCheckboxItem = React.forwardRef<
     );
 });
 
+/** Row of an action menu that opens a side panel on hover / arrow-right.
+ *  Same geometry as ActionMenuItem; the trailing chevron comes from the primitive. */
+export const ActionMenuSub = DropdownMenuSub;
+
+type DropdownMenuSubTriggerProps = React.ComponentPropsWithoutRef<
+    typeof DropdownMenuSubTrigger
+>;
+
+interface ActionMenuSubTriggerProps
+    extends Omit<DropdownMenuSubTriggerProps, "children"> {
+    icon?: React.ReactNode;
+    label?: React.ReactNode;
+    children?: React.ReactNode;
+    /** Drops the trailing chevron the DropdownMenuSubTrigger primitive always
+     *  appends. It is the primitive's last child, hence the :last-child reach —
+     *  the leading `icon` is the first child and is left alone. */
+    hideChevron?: boolean;
+}
+
+export const ActionMenuSubTrigger = React.forwardRef<
+    React.ElementRef<typeof DropdownMenuSubTrigger>,
+    ActionMenuSubTriggerProps
+>(function ActionMenuSubTrigger(
+    { icon, label, className, children, hideChevron, ...props },
+    ref,
+) {
+    const content = children ?? label;
+    return (
+        <DropdownMenuSubTrigger
+            ref={ref}
+            className={cn(
+                itemRegularClassName,
+                "font-normal data-[state=open]:bg-fill-2",
+                hideChevron && "[&>svg:last-child]:hidden",
+                className,
+            )}
+            {...props}
+        >
+            {renderIcon(icon)}
+            {typeof content === "string" ? (
+                <span className={cn(labelClassName, "flex-1")}>{content}</span>
+            ) : (
+                content
+            )}
+        </DropdownMenuSubTrigger>
+    );
+});
+
+type DropdownMenuSubContentProps = React.ComponentPropsWithoutRef<
+    typeof DropdownMenuSubContent
+>;
+
+/** Side panel of an ActionMenuSub. Portalled so it escapes the parent menu's
+ *  `overflow-hidden`, scrollable once the list outgrows the panel, and centered
+ *  on its trigger row rather than aligned to its top edge. */
+export const ActionMenuSubContent = React.forwardRef<
+    React.ElementRef<typeof DropdownMenuSubContent>,
+    DropdownMenuSubContentProps & { width?: number | string }
+>(function ActionMenuSubContent(
+    { className, align = "center", sideOffset = 4, width, style, ...props },
+    ref,
+) {
+    const widthStyle =
+        width != null
+            ? { width: typeof width === "number" ? `${width}px` : width }
+            : undefined;
+    return (
+        <DropdownMenuPortal>
+            <DropdownMenuSubContent
+                ref={ref}
+                align={align}
+                sideOffset={sideOffset}
+                collisionPadding={8}
+                className={cn(
+                    // Same default width as ActionMenuContent, so a submenu and the
+                    // menu it hangs off line up unless a call site overrides both.
+                    "max-h-[280px] w-[160px] overflow-y-auto p-2 z-[100]",
+                    actionMenuSurfaceClassName,
+                    className,
+                )}
+                style={widthStyle ? { ...widthStyle, ...style } : style}
+                {...props}
+            />
+        </DropdownMenuPortal>
+    );
+});
+
 function renderIcon(icon: React.ReactNode, danger?: boolean): React.ReactNode {
     if (icon == null || icon === false) return null;
     const iconClass = danger ? iconDangerClassName : iconRegularClassName;
@@ -164,7 +257,38 @@ function renderIcon(icon: React.ReactNode, danger?: boolean): React.ReactNode {
     return icon;
 }
 
+interface ActionMenuDividerProps {
+    /** 0.5px rule instead of the 1px one: in a short menu (two or three rows) the
+     *  full-weight divider reads heavier than the rows it separates. */
+    hairline?: boolean;
+}
+
 /** Thin horizontal separator spanning the container's inner width (Figma 13198:78128). */
-export function ActionMenuDivider() {
-    return <div className="my-1.5 h-px bg-border-base" role="separator" />;
+export function ActionMenuDivider({ hairline = false }: ActionMenuDividerProps = {}) {
+    return (
+        <div
+            role="separator"
+            className={cn(
+                "my-1.5",
+                hairline ? "border-t-[0.5px] border-border-base" : "h-px bg-border-base",
+            )}
+        />
+    );
+}
+
+/** Placeholder row shown while a menu's items are still being resolved (e.g. a
+ *  lazy permission lookup), so the menu doesn't open half-empty and then grow.
+ *  Inline-level loading per the Loading spec §3 (packages/ui/docs): 16px mono
+ *  ring + text, 8px gap, same 32px row geometry as ActionMenuItem. */
+export function ActionMenuLoadingRow({ label }: { label?: string }) {
+    const localize = useLocalize();
+    return (
+        <div
+            role="status"
+            className="flex h-8 items-center gap-2 px-2 text-sm leading-[22px] text-text-3"
+        >
+            <Outlined.Loading className="size-4 shrink-0 animate-spin motion-reduce:animate-pulse" aria-hidden />
+            <span className={labelClassName}>{label ?? localize("com_list_loading")}</span>
+        </div>
+    );
 }

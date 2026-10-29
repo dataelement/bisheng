@@ -59,7 +59,7 @@ export function CopyShareLinkButton({
         } catch {
             showToast({
                 message: errorMessage || localize("com_knowledge.copy_failed_retry"),
-                status: "error",
+                status: "warning",
             });
         }
     };

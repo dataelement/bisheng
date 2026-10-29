@@ -123,18 +123,7 @@ class WorkflowClient(BaseClient):
             unique_id = f"{self.chat_id}_async_task_id"
         logger.debug(f"init workflow with unique_id: {unique_id}, workflow_id: {workflow_id}, chat_id: {self.chat_id}")
         self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, self.user_id)
-        # JudgingworkflowWhether it is online, if it is not online, close the currentwebsocketLinks
-        workflow_db = FlowDao.get_flow_by_id(workflow_id)
-        if workflow_db.status != FlowStatus.ONLINE.value and self.chat_id:
-            self.workflow.set_workflow_stop()
-            try:
-                await WorkflowOfflineError().websocket_close_message(websocket=self.websocket, close_ws=False)
-                await self.send_response("processing", "close", "")
-            except Exception:
-                logger.warning("websocket is closed")
-            self.workflow.clear_workflow_status()
-            self.workflow = None
-            logger.debug("workflow is offline not support with chat")
+        if not await self.ensure_workflow_available(workflow_id):
             return False, unique_id
 
         status_info = self.workflow.get_workflow_status()
@@ -237,12 +226,34 @@ class WorkflowClient(BaseClient):
             logger.warning(f"workflow status is unknown: {status_info}")
         return False
 
+    async def ensure_workflow_available(self, workflow_id: str) -> bool:
+        # Builder preview uses an empty chat ID and may execute draft workflows.
+        if not self.chat_id:
+            return True
+        workflow_db = FlowDao.get_flow_by_id(workflow_id)
+        if workflow_db and workflow_db.status == FlowStatus.ONLINE.value:
+            return True
+
+        if self.workflow:
+            await self.workflow.async_set_workflow_stop()
+            # The worker consumes the stop marker before terminal-state cleanup.
+            self.workflow = None
+        await WorkflowOfflineError().websocket_close_message(websocket=self.websocket, close_ws=False)
+        await self.send_response("processing", "close", "")
+        return False
+
     async def handle_user_input(self, data: dict):
+        if not await self.ensure_workflow_available(self.client_id):
+            return
         logger.info(f"get user input: {data}")
         if not self.workflow:
-            logger.warning("workflow is over")
+            await self.send_response("processing", "close", "")
             return
         status_info = await self.workflow.async_get_workflow_status()
+        if not status_info:
+            self.workflow = None
+            await self.send_response("processing", "close", "")
+            return
         if status_info["status"] != WorkflowStatus.INPUT.value:
             logger.warning(f"workflow is not input status: {status_info}")
         else:

@@ -162,19 +162,15 @@ async def test_used_apps_filter_with_visible_before_pagination():
 
 async def test_pin_used_app_requires_use_action():
     login_user = _LoginUser()
-    app_info = SimpleNamespace(
-        id="wf-1",
-        flow_type=FlowType.WORKFLOW.value,
-        status=FlowStatus.ONLINE.value,
-    )
+    app_info = {"id": "wf-1", "flow_type": FlowType.WORKFLOW.value, "status": FlowStatus.ONLINE.value}
     check_action = AsyncMock(return_value=True)
     add_user_link = MagicMock(return_value=(None, True))
 
     with (
         patch.object(
             apps_mod.FlowDao,
-            "aget_flow_by_id",
-            new=AsyncMock(return_value=app_info),
+            "aget_all_apps",
+            new=AsyncMock(return_value=([app_info], False)),
         ),
         patch.object(
             apps_mod,
@@ -203,18 +199,14 @@ async def test_pin_used_app_requires_use_action():
 
 async def test_pin_used_app_denies_without_use_action():
     login_user = _LoginUser()
-    app_info = SimpleNamespace(
-        id="asst-1",
-        flow_type=FlowType.ASSISTANT.value,
-        status=FlowStatus.ONLINE.value,
-    )
+    app_info = {"id": "asst-1", "flow_type": FlowType.ASSISTANT.value, "status": FlowStatus.ONLINE.value}
     add_user_link = MagicMock()
 
     with (
         patch.object(
             apps_mod.FlowDao,
-            "aget_flow_by_id",
-            new=AsyncMock(return_value=app_info),
+            "aget_all_apps",
+            new=AsyncMock(return_value=([app_info], False)),
         ),
         patch.object(
             apps_mod,

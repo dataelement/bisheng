@@ -6,6 +6,10 @@ export type { ButtonProps, ButtonStyleProps } from './components/Button/Button';
 // Toast — imperative `toast.*` API + the single <Toaster /> container
 // (组件-Toast轻提示.md). Copy comes from the caller, so the contract holds.
 export * from './components/Toast';
+// Notification — the top-right card for things the user did NOT just do
+// (组件-Notification通知提醒.md): imperative `notification.*` API + the single
+// <Notifier /> container. Shares Toast's queue core; copy comes from the caller.
+export * from './components/Notification';
 // Crash screen. Shared because the identifiers, the QR payload and the log file
 // have to be identical across the apps for a support handover to work — the
 // copy and the artwork are passed in, so the contract above still holds.

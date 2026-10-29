@@ -67,6 +67,8 @@ export default function useChatHelpers() {
                 running: false,
                 showStop: false,
                 showUpload: false,
+                inputForm: false,
+                showReRun: false,
                 inputDisabled: close || !!errorMsg.code, //chatState?.flow.flow_type !== 1, // 技能不禁止输入
                 // showReRun: chatState?.flow.flow_type === 10, // 错误时工作流展示重试按钮
                 error: close ? prev[chatId].error : errorMsg,
@@ -90,7 +92,7 @@ export default function useChatHelpers() {
             ...prev,
             [chatId]: {
                 ...prev[chatId],
-                running: true,
+                running: show,
                 showStop: show,
             },
         }))
@@ -391,7 +393,6 @@ export default function useChatHelpers() {
         endMsg: (chatid: string, data: any) => {
             // 删除所有未结束消息
             if (data.type === "end_cover" && data.message) {
-                console.log("触发安全审计,删除所有未结束消息")
                 data.category = "stream_msg"
                 data.type = "over"
                 data.id = generateUUID(8)

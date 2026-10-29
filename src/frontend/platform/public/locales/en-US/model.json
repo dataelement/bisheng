@@ -1,5 +1,8 @@
 {
   "model": {
+    "chatModelRequired": "Configure at least one chat model.",
+    "chatModelRowRequired": "Select a model for each row or remove the empty row.",
+    "workbenchChatModels": "Chat models for daily mode, knowledge spaces, and subscriptions",
     "editPrompt": "Edit Prompt",
     "docKnowledgeAbstractPrompt": "Document Knowledge Base Abstract Prompt",
     "docKnowledgeAbstractPromptTooltip": "When uploading files to the document knowledge base, the prompt used for summarizing the file",
@@ -109,10 +112,17 @@
     "status": "Status",
     "available": "Available",
     "actions": "Actions",
-    "configureDshPermission": "Configure permissions",
+    "desktop": "Desktop",
+    "configureDshPermission": "Visibility",
     "noOnlineDshModels": "No online models available yet",
     "visionRetry": "Load or save failed. Retry",
-    "loading": "Loading"
+    "loading": "Loading",
+    "userSelectableModels": "User-selectable models",
+    "userSelectableModelsHelp": "Configure models available in Chat and Work. Save display names to sync them to clients. Vision, credit multipliers and visibility are saved separately when changed.",
+    "otherModelSettings": "Other model settings",
+    "visibilityScope": "Visibility",
+    "configureVisibility": "Configure visibility",
+    "displayName": "Display name"
   },
   "finetune": {
     "rtServiceManagement": "FT Service Management",

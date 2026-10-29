@@ -1,0 +1,39 @@
+.dsh-message-action {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: calc(28px + var(--dsh-content-font-delta, 0px));
+    height: calc(28px + var(--dsh-content-font-delta, 0px));
+    padding: 6px;
+    border: none;
+    border-radius: var(--dsw-radius-sm, 6px);
+    background: transparent;
+    color: var(--dsw-alias-label-tertiary, rgb(var(--text-3)));
+    cursor: pointer;
+}
+.dsh-message-action svg {
+    width: calc(15px + var(--dsh-content-font-delta, 0px));
+    height: calc(15px + var(--dsh-content-font-delta, 0px));
+}
+.dsh-message-action:hover {
+    background: var(--dsw-alias-interactive-bg-hover, rgb(var(--fill-1)));
+    color: var(--dsw-alias-label-secondary, rgb(var(--text-2)));
+}
+.dsh-message-action:focus-visible {
+    outline: 2px solid rgb(var(--brand-500));
+    outline-offset: 2px;
+}
+.dsh-message-feedback {
+    display: contents;
+}
+.dsh-response-actions,
+.dsh-response-actions div:has(> .dsh-message-action) {
+    gap: 8px;
+}
+
+.dsh-response-actions > div {
+    width: auto;
+    height: auto;
+    min-height: calc(28px + var(--dsh-content-font-delta, 0px));
+}

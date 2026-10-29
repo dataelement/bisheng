@@ -1,28 +1,32 @@
 import { Button } from "@/components/bs-ui/button";
-import type { AuditTreeNode, ModelAuditQuery } from "@/types/dshModelAudit";
+import type {
+  AuditQueryReadiness,
+  AuditTreeNode,
+  ModelAuditQuery,
+} from "@/types/dshModelAudit";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DshPager, dshTime } from "./common";
-import { ModelAuditGroupRequests } from "./ModelAuditGroup";
+import { ModelAuditGroupRequests, ModelAuditSafetySummary } from "./ModelAuditGroup";
 import { useModelAuditTree } from "./useModelAuditTree";
 
 interface ModelAuditTreeProps {
   node: AuditTreeNode;
+  progress?: AuditQueryReadiness;
   query: ModelAuditQuery;
   expanded: boolean;
   onToggle: () => void;
-  onNavigate: (userId: number, conversationId: string) => void;
   onRefresh: () => void;
   depth?: number;
 }
 
 export function ModelAuditTree({
   node,
+  progress,
   query,
   expanded,
   onToggle,
-  onNavigate,
   onRefresh,
   depth = 0,
 }: ModelAuditTreeProps) {
@@ -63,42 +67,36 @@ export function ModelAuditTree({
         <span>
           {t("dsh.modelAuditView.group_last")}: {dshTime(node.last_request_at)}
         </span>
-        <span>
-          {node.own_summary.ready
-            ? t(prefix + "own_count", {
-                count: Number(node.own_summary.request_count),
-              })
-            : t(prefix + "summary_pending")}
-        </span>
-        {node.has_children && (
-          <span>
-            {node.branch_summary.ready
-              ? t(prefix + "branch_count", {
-                  count: Number(node.branch_summary.request_count),
-                })
-              : t(prefix + "branch_pending")}
+        {node.own_summary.ready && (
+          <span>{t(prefix + "own_count", { count: Number(node.own_summary.request_count) })}</span>
+        )}
+        {node.has_children && node.branch_summary.ready && (
+          <span>{t(prefix + "branch_count", { count: Number(node.branch_summary.request_count) })}</span>
+        )}
+        {ready && (
+          <span className={abnormal ? "text-destructive" : "text-success-foreground"}>
+            {abnormal
+              ? t("dsh.modelAuditView.group_abnormal", { count: Number(node.branch_summary.abnormal_count) })
+              : t("dsh.modelAuditView.summary.NORMAL")}
           </span>
         )}
-        <span
-          className={
-            abnormal
-              ? "text-destructive"
-              : ready
-                ? "text-success-foreground"
-                : "text-muted-foreground"
-          }
-        >
-          {abnormal
-            ? ready
-              ? t("dsh.modelAuditView.group_abnormal", {
-                  count: Number(node.branch_summary.abnormal_count),
-                })
-              : t(prefix + "known_abnormal")
-            : ready
-              ? t("dsh.modelAuditView.summary.NORMAL")
-              : t(prefix + "summary_pending")}
-        </span>
       </header>
+      <ModelAuditSafetySummary
+        progress={progress}
+        own={{
+          label: "own_hits",
+          ready: node.own_summary.safety_ready,
+          count: node.own_summary.sensitive_hit_count,
+          hasHit: node.own_summary.has_sensitive_hit,
+        }}
+        branch={node.has_children ? {
+          label: "branch_hits",
+          ready: node.branch_summary.safety_ready,
+          count: node.branch_summary.sensitive_hit_count,
+          hasHit: node.branch_summary.has_sensitive_hit,
+        } : undefined}
+        matchingCount={node.matching_sensitive_hit_count}
+      />
       {expanded && (
         <div
           id={id}
@@ -127,7 +125,6 @@ export function ModelAuditTree({
                 key={JSON.stringify(query)}
                 group={node}
                 query={query}
-                onNavigate={onNavigate}
               />
             </>
           )}
@@ -138,13 +135,7 @@ export function ModelAuditTree({
             >
               <h3 className="text-sm font-medium">{t(prefix + "children")}</h3>
               {depth >= 31 ? (
-                <Button
-                  type="button"
-                  variant="link"
-                  onClick={() => onNavigate(node.user_id, node.conversation_id)}
-                >
-                  {t(prefix + "continue")}
-                </Button>
+                <p className="text-sm text-muted-foreground">{t(prefix + "depth_limit")}</p>
               ) : (
                 <TreeChildren
                   key={JSON.stringify([
@@ -155,7 +146,6 @@ export function ModelAuditTree({
                   node={node}
                   query={query}
                   depth={depth}
-                  onNavigate={onNavigate}
                   onRefresh={onRefresh}
                 />
               )}
@@ -171,7 +161,6 @@ interface TreeChildrenProps {
   node: AuditTreeNode;
   query: ModelAuditQuery;
   depth: number;
-  onNavigate: ModelAuditTreeProps["onNavigate"];
   onRefresh: () => void;
 }
 
@@ -179,7 +168,6 @@ function TreeChildren({
   node,
   query,
   depth,
-  onNavigate,
   onRefresh,
 }: TreeChildrenProps) {
   const { t } = useTranslation();
@@ -229,6 +217,7 @@ function TreeChildren({
             <ModelAuditTree
               key={child.conversation_key}
               node={child}
+              progress={state.page?.progress}
               query={query}
               depth={depth + 1}
               expanded={open === child.conversation_key}
@@ -239,7 +228,6 @@ function TreeChildren({
                     : child.conversation_key,
                 )
               }
-              onNavigate={onNavigate}
               onRefresh={onRefresh}
             />
           ))}

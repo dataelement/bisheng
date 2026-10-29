@@ -174,6 +174,22 @@ module.exports = {
         toast: 'var(--z-toast)',
         tooltip: 'var(--z-tooltip)',
       },
+      // Transition motion for the notice family (组件-Toast轻提示.md §7 /
+      // 组件-Notification通知提醒.md §7). Declared as theme values rather than
+      // written inline as `duration-[240ms]` / `ease-[cubic-bezier(…)]`: client
+      // also loads tailwindcss-animate, which registers its own `duration-*` /
+      // `ease-*` (animation-duration / animation-timing-function), so an
+      // ARBITRARY value matches two utilities and Tailwind silently drops it —
+      // the transition then runs at the 150ms default with the default curve.
+      // Named values compile on both sides without ambiguity.
+      transitionDuration: {
+        160: '160ms',
+        240: '240ms',
+      },
+      transitionTimingFunction: {
+        // The one easing every toast / notification transition uses.
+        notice: 'cubic-bezier(0.2, 0, 0, 1)',
+      },
       keyframes: {
         // Tooltip motion (组件-Tooltip文字提示.md 落地 §7): 150ms fade in,
         // 100ms fade out. Fade only — a tooltip that also moves reads as a

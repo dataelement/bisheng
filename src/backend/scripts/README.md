@@ -2,6 +2,49 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## Built-in knowledge retrieval tool
+
+`register_work_knowledge_tool.py` completes the Work knowledge-search upgrade in
+an existing database: register `bisheng_knowledge_search`, reconcile its category
+through the F048 permission facade, and verify the projection is CURRENT. Fresh
+installations use the seed catalog. Run one process during release maintenance
+from `src/backend` with the live service `config`:
+
+```bash
+python scripts/register_work_knowledge_tool.py
+python scripts/register_work_knowledge_tool.py --apply --confirm-store-id <store-id-from-preview> --operator-id <user-id>
+```
+
+The preview returns the Store/model identity, catalog plan, permission state and
+`ready`. Apply validates the selected Store and runtime readiness before writing,
+creates missing catalog rows with database-assigned IDs in one transaction, and
+projects exactly the knowledge category. Existing entries, account switches,
+administrator configuration and current permission modes are preserved. Conflicting
+ownership, duplicate keys, deleted entries or a pending projection require operator
+resolution. A permission failure exits with an error; repeat the same command after
+recovering the service to complete the committed catalog's projection.
+
+Both container entrypoints expose the same upgrade operation. After deploying the
+backend code, use the service's working directory and configuration:
+
+```bash
+docker compose exec backend sh entrypoint.sh upgrade-work-knowledge
+docker compose exec backend sh entrypoint.sh upgrade-work-knowledge --apply --confirm-store-id <store-id-from-preview> --operator-id <user-id>
+```
+
+For repository-managed Compose updates, `docker/deploy.sh update` includes this
+operation as a required release stage whenever `backend` is selected. It requires
+the confirmed Store and audit operator, waits for backend readiness, runs the
+upgrade, then updates the remaining services. See the
+[deployment procedure](../../../docker/README.md) for preview, failure recovery
+and external-pipeline integration.
+
+Completion requires `ready: true`, then ordinary-user discovery and execution.
+Verify single-space retrieval and K1/K2 multi-selection with distinct source markers
+and citations in Work. Keep the account enable switch and document permissions in
+the acceptance path. Code deployment, successful data upgrade, and real Work task
+acceptance are separate delivery states.
+
 ## Diagnostic Scripts
 
 ### `measure_dsh_model_audit.py`
@@ -1074,3 +1117,60 @@ SQL checkpoints allow rerunning to continue. This rebuilds navigation only and
 never reads model bodies, replays requests, or merges audit/billing records.
 An active background lease returns BUSY; do not override it. Terminal histories
 and tenants currently in OFF mode are also processed by the independent worker.
+
+## DSH content-safety replay and retention
+
+Run `dsh_content_safety_maintenance.py` from `src/backend/`, with the same
+`config` environment variable as the live service. It uses only the shared SQL
+configuration and a strict, explicit tenant scope; it does not start Redis,
+object storage, model admission, SSO or the full application context.
+
+```bash
+export config=config.yaml
+python scripts/dsh_content_safety_maintenance.py rebuild --tenant-id 1
+python scripts/dsh_content_safety_maintenance.py rebuild --tenant-id 1 --apply --batch-size 100 --max-batches 20
+python scripts/dsh_content_safety_maintenance.py purge-details --tenant-id 1 --before 2026-10-01T00:00:00Z
+python scripts/dsh_content_safety_maintenance.py purge-details --tenant-id 1 --before 2026-10-01T00:00:00Z --apply
+python scripts/dsh_content_safety_maintenance.py purge-audit --tenant-id 1 --before 2026-10-01T00:00:00Z --apply --max-batches 20
+```
+
+All commands default to **dry-run**. It validates configuration and tenant
+existence, and prints proposed bounds without scanning or writing facts; it is
+not a count of recoverable or removable records. No retention period is enabled
+implicitly. Both purge commands require an explicit timezone-aware `--before`;
+cutoffs are normalized to UTC and exclusive. Disabled or archived tenants remain
+eligible for maintenance of retained history.
+
+`rebuild` replays only facts still present and permitted by the persisted deletion
+watermark. Each JSONL report describes a committed batch: `examined` includes
+`skipped_expired`, so examined rows must not be described as restored rows.
+Resume with `--cursor '<next_cursor>'`, using the same tenant. No retained fact
+means no reconstruction of deleted details or conversion of unknown legacy checks
+to PASSED. Group and hierarchy summaries converge through their normal worker.
+
+`purge-details` removes facts by receipt time, preserving main audit summaries and
+any existing main-cleanup watermark or cursor. `purge-audit` first commits its
+monotonic deletion watermark separately, then deletes bounded eligible main rows
+and their associated safety facts, updating affected summaries atomically. A
+failed batch rolls back while earlier batches and the watermark remain committed.
+Rerun with the same cutoff to resume; its persisted cursor is independent of the
+rebuild cursor. Running or unsettled rows are skipped and can be revisited by
+another run with the same cutoff after they finish, even after `has_more=false`.
+A report is emitted only after its batch commits; a lost report can be retried.
+
+The default is one batch of at most 100 rows; `--batch-size` accepts 1..100 and
+`--max-batches` accepts 1..10000. These operations do **not** reclaim native body
+metadata, shared objects, encryption keys, model-call records or monthly usage.
+Main cleanup does not remove unrelated unassociated safety facts. Deploy the
+retention guards for all writers before applying a main-audit deletion checkpoint.
+Exit codes: 0 success, 2 invalid arguments/request, 3 missing service database
+configuration/dependencies, 4 unknown tenant, 5 operational failure. The standalone
+CLI suppresses infrastructure logging and prints only its own JSONL and fixed,
+type-only errors; importing it does not change the host logging configuration.
+Errors omit SQL, credentials and payloads. MySQL/DM8 concurrency, interruption and
+recovery require the separate real-database acceptance; SQLite CLI tests do not
+establish those guarantees.
+
+## 工具与技能全员授权升级（f048-v6）
+
+`migrate_capability_authorization.py` 将现有内置工具及企业技能的全员可用状态转换为所属租户成员的可撤销 Grant。默认 dry-run，apply 需要 Store 确认与操作人；在发布授权模型后、业务进程停止期间执行。重复执行保留管理员的撤销结果。完整顺序见 [升级说明](../../../features/local/tools-skills-authorization/upgrade.md)。

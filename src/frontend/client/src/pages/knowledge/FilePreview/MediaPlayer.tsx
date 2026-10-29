@@ -19,6 +19,11 @@ interface MediaPlayerProps {
     /** Start on its own. Off in knowledge preview, where opening a file is
      *  browsing; on in chat, where opening a clip is asking to watch it. */
     autoPlay?: boolean;
+    /** Force the dark stage (white controls over a scrim) for audio too — for
+     *  a player sitting on a lightbox, where the light audio card glares. */
+    darkStage?: boolean;
+    /** Extra classes on the stage, e.g. a stage colour to replace the default. */
+    className?: string;
 }
 
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -211,7 +216,7 @@ function VolumeControl({
                         "flex h-[88px] w-7 items-center justify-center rounded-full py-3",
                         dark
                             ? "bg-black/80"
-                            : "bg-white shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]",
+                            : "bg-bg-page shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]",
                     )}
                 >
                     <TrackBar
@@ -229,7 +234,15 @@ function VolumeControl({
     );
 }
 
-export function MediaPlayer({ kind, src, allowDownload = false, onDownload, autoPlay = false }: MediaPlayerProps) {
+export function MediaPlayer({
+    kind,
+    src,
+    allowDownload = false,
+    onDownload,
+    autoPlay = false,
+    darkStage = false,
+    className,
+}: MediaPlayerProps) {
     const localize = useLocalize();
     const isVideo = kind === "video";
     const containerRef = useRef<HTMLDivElement>(null);
@@ -359,7 +372,7 @@ export function MediaPlayer({ kind, src, allowDownload = false, onDownload, auto
     const speedMenu = (trigger: ReactNode) => (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-            <ActionMenuContent width={96} align="end" side="top" className={menuSurfaceClass}>
+            <ActionMenuContent data-document-canvas={onDarkStage ? "" : undefined} width={96} align="end" side="top" className={menuSurfaceClass}>
                 {PLAYBACK_RATES.map((value) => (
                     <ActionMenuItem
                         key={value}
@@ -375,7 +388,7 @@ export function MediaPlayer({ kind, src, allowDownload = false, onDownload, auto
     const showMoreMenu = allowDownload || pipSupported;
     /* Video plays on a black stage with white controls over a scrim; audio has no
        picture, so it uses the design-system neutral fill with dark controls. */
-    const onDarkStage = isVideo;
+    const onDarkStage = isVideo || darkStage;
     const hoverClass = onDarkStage ? "hover:bg-white/20" : "hover:bg-fill-3";
     const iconButtonClass = cn(
         "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
@@ -385,7 +398,7 @@ export function MediaPlayer({ kind, src, allowDownload = false, onDownload, auto
        rather than covering the stage below the bar. */
     const menuSurfaceClass = onDarkStage
         ? "border-0 bg-black/75"
-        : "bg-white/85";
+        : "bg-bg-page/85";
     /* The shared menu item forces a dark label while highlighted, which is
        unreadable on the dark surface — keep it white on hover/focus too. */
     const menuItemClass = onDarkStage
@@ -402,10 +415,12 @@ export function MediaPlayer({ kind, src, allowDownload = false, onDownload, auto
     return (
         <div
             ref={containerRef}
+            data-document-canvas={onDarkStage ? "" : undefined}
             className={cn(
                 "relative overflow-hidden",
                 onDarkStage ? "bg-black" : "bg-fill-2",
                 fullscreen ? "flex h-full w-full flex-col justify-center" : "rounded-xl",
+                className,
             )}
         >
             {isVideo ? (
@@ -428,7 +443,7 @@ export function MediaPlayer({ kind, src, allowDownload = false, onDownload, auto
                         className="flex h-[200px] w-full items-center justify-center"
                         onClick={togglePlay}
                     >
-                        <Outlined.FileAudio className="size-12 text-text-4" />
+                        <Outlined.FileAudio className={cn("size-12", onDarkStage ? "text-white/60" : "text-text-4")} />
                     </div>
                     <audio
                         ref={(node) => {
@@ -522,7 +537,7 @@ export function MediaPlayer({ kind, src, allowDownload = false, onDownload, auto
                                 <Outlined.More className="size-4" />
                             </button>
                         </DropdownMenuTrigger>
-                        <ActionMenuContent align="end" side="top" className={menuSurfaceClass}>
+                        <ActionMenuContent data-document-canvas={onDarkStage ? "" : undefined} align="end" side="top" className={menuSurfaceClass}>
                             {allowDownload && (
                                 <ActionMenuItem
                                     onClick={onDownload}

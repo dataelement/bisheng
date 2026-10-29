@@ -8,6 +8,8 @@ from bisheng.dsh.infrastructure.model_audit_telemetry import record_audit_metric
 
 
 def derive_audit_states(row, *, now, window, activity, has_fragments):
+    if getattr(row, "record_origin", "MODEL") == "EXTERNAL_SAFETY":
+        return {}
     changes = {}
     last = row.last_write_at or row.started_at
     last = last.replace(tzinfo=UTC) if last.tzinfo is None else last
@@ -53,11 +55,19 @@ class DshModelAuditStateService:
         inspect_rows = [*rows, *(row for row in annotations if row.request_id not in existing_ids)]
         changed = 0
         for row in inspect_rows:
+            # Keep the original batch for cursor advancement, but do not inspect
+            # external rows through activity, manifest or original-body storage.
+            if getattr(row, "record_origin", "MODEL") == "EXTERNAL_SAFETY":
+                continue
             active = await self.activity.confirmed(row.request_id)
 
             def apply(repository, row=row, active=active):
                 current = repository.request(row.request_id, lock=True)
-                if current is None or current.state_version != row.state_version:
+                if (
+                    current is None
+                    or current.state_version != row.state_version
+                    or getattr(current, "record_origin", "MODEL") == "EXTERNAL_SAFETY"
+                ):
                     return 0
                 _, occurrences, _ = repository.facts(row.request_id)
                 changes = derive_audit_states(

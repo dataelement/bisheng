@@ -1,5 +1,8 @@
 {
   "model": {
+    "chatModelRequired": "対話モデルを1つ以上設定してください。",
+    "chatModelRowRequired": "各行でモデルを選択するか、未選択の行を削除してください。",
+    "workbenchChatModels": "日常モード・ナレッジスペース・サブスクリプションの対話モデル",
     "editPrompt": "プロンプトを編集",
     "docKnowledgeAbstractPrompt": "ドキュメント知識ベース要約プロンプト",
     "docKnowledgeAbstractPromptTooltip": "ドキュメント知識ベースのファイルアップロード時にファイルを要約するプロンプト",
@@ -107,10 +110,17 @@
     "status": "ステータス",
     "available": "利用可能",
     "actions": "操作",
-    "configureDshPermission": "権限を設定",
+    "desktop": "デスクトップ",
+    "configureDshPermission": "権限と倍率",
     "noOnlineDshModels": "利用可能なオンラインモデルがありません",
     "visionRetry": "読み込みまたは保存に失敗。再試行",
-    "loading": "読み込み中"
+    "loading": "読み込み中",
+    "userSelectableModels": "ユーザー選択モデル",
+    "userSelectableModelsHelp": "Chat と Work で選択できるモデルを設定します。表示名は保存後にクライアントへ同期されます。画像対応、クレジット倍率、表示範囲は変更時に個別保存されます。",
+    "otherModelSettings": "その他のモデル設定",
+    "visibilityScope": "表示範囲",
+    "configureVisibility": "表示範囲を設定",
+    "displayName": "表示名"
   },
   "finetune": {
     "rtServiceManagement": "FTサービス管理",

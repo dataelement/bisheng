@@ -22,20 +22,24 @@ def tree_now(value=None):
 
 
 class AuditHierarchyRepository:
-    def tree_pending_tenants(self, *, cursor=0):
+    def tree_pending_tenants(self, *, cursor=0, include_group_pending=False):
         from sqlalchemy import or_
 
         from bisheng.core.context.tenant import bypass_tenant_filter
         from bisheng.database.models.tenant import Tenant
 
         # Tenant directory drives the scan: no DISTINCT/GROUP BY on the large request table.
-        pending = select(Request.request_id).where(Request.tenant_id == Tenant.id, Request.hierarchy_indexed.is_(False))
+        request_dirty = Request.hierarchy_indexed.is_(False)
+        if include_group_pending:
+            request_dirty = or_(request_dirty, Request.group_index_pending.is_(True))
+        pending = select(Request.request_id).where(Request.tenant_id == Tenant.id, request_dirty)
         dirty = select(State.tenant_id).where(
             State.tenant_id == Tenant.id,
             or_(
                 State.phase != "IDLE",
                 State.revision != State.published_revision,
                 State.summary_revision != State.published_summary_revision,
+                State.safety_summary_revision != State.published_safety_summary_revision,
                 State.failed.is_(True),
             ),
         )
@@ -137,6 +141,7 @@ class AuditHierarchyRepository:
             and (
                 state.revision != state.published_revision
                 or state.summary_revision != state.published_summary_revision
+                or state.safety_summary_revision != state.published_safety_summary_revision
                 or counts_pending
             )
         )

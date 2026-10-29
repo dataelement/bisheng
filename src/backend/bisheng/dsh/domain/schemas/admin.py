@@ -181,6 +181,7 @@ class LastCallSnapshot(DshContract):
 
 
 class UsageMetrics(DshContract):
+    billed_tokens: NonnegativeInt | None = None
     message_count: NonnegativeInt
     qa_count: NonnegativeInt
     failed_count: NonnegativeInt

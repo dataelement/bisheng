@@ -2,6 +2,7 @@
 /**
  * Direct API calls for the AI chat system.
  */
+import { readCitationFailure } from "~/api/citationFailure";
 import http from "~/api/request";
 import { normalizeHistoryMediaFiles } from "~/utils/mediaAttachmentUtils";
 import { getShareTokenFromPath } from "~/utils/shareToken";
@@ -352,20 +353,22 @@ export function getCitationUnresolvedReason(citationId: string): CitationUnresol
     return citationReasonCache[citationId];
 }
 
-function citationReasonFromPayload(payload: any): CitationUnresolvedReason {
-    const reason = payload?.data?.reason ?? payload?.reason;
+function citationReasonFromPayload(value: unknown): CitationUnresolvedReason {
+    const payload = readCitationFailure(value);
+    const reason = payload.data?.reason ?? payload.reason;
     if (reason === "expired") {
         return "expired";
     }
     return "forbidden";
 }
 
-function throwCitationResolveError(citationId: string, payload: any): never {
+function throwCitationResolveError(citationId: string, payload: unknown): never {
     const reason = citationReasonFromPayload(payload);
     citationReasonCache[citationId] = reason;
-    const err: any = new Error(reason === "expired" ? "citation expired" : "citation forbidden");
-    err.citationForbidden = reason !== "expired";
-    err.citationExpired = reason === "expired";
+    const err = Object.assign(new Error(`citation ${reason}`), {
+        citationForbidden: reason === "forbidden",
+        citationExpired: reason === "expired",
+    });
     throw err;
 }
 
@@ -382,7 +385,7 @@ export async function getCitationDetail(citationId: string): Promise<ChatCitatio
     }
 
     try {
-        const res = await http.get<any>(API.citationDetail(citationId), citationShareHeaders());
+        const res = await http.get<ChatCitation & { status_code?: number; data?: ChatCitation & { status_code?: number } }>(API.citationDetail(citationId), citationShareHeaders());
         // 404 = not found, no permission, or the temp object is gone. Read `reason`
         // so expired and forbidden stay distinct (F054/F062).
         if (res?.status_code === 404 || res?.data?.status_code === 404) {
@@ -395,13 +398,14 @@ export async function getCitationDetail(citationId: string): Promise<ChatCitatio
         }
         citationDetailMemoryCache[citationId] = detail;
         return detail;
-    } catch (error: any) {
-        if (error?.citationForbidden || error?.citationExpired) {
+    } catch (error: unknown) {
+        const failure = readCitationFailure(error);
+        if (failure.citationForbidden || failure.citationExpired) {
             throw error;
         }
-        const status = error?.status_code || error?.response?.data?.status_code;
+        const status = failure.status_code || failure.response?.data?.status_code;
         if (status === 404) {
-            throwCitationResolveError(citationId, error?.response?.data ?? error);
+            throwCitationResolveError(citationId, failure.response?.data ?? error);
         }
         throw error;
     }

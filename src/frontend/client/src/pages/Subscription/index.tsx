@@ -1,3 +1,4 @@
+import { refreshChannelState, useChannelAccessGuard, useChannelStateRefresh } from "./hooks/useChannelStateRefresh";
 import { useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -19,16 +20,20 @@ import { LoadingIcon } from "~/components/ui/icon/Loading";
 import ChannelSquare from "../ChannelSquare";
 import { ChannelLayout } from "./ChannelLayout";
 import { ChannelDiscoveryHome } from "./ChannelDiscoveryHome";
+import { ChannelHomePage } from "./ChannelHomePage";
+import { isDemoId } from "~/mock/demo/ids";
 import { ChannelSquareTabs } from "./ChannelSquareTabs";
 import { ChannelPreviewDrawer } from "./ChannelPreviewDrawer";
 import { canReadChannelContent } from "./channelContentAccess";
 import FullScreenArticle from "./Article/FullScreenArticle";
 import { ChannelSidebar } from "./Sidebar/ChannelSidebar";
+import { Button, Tooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useSetRecoilState, useRecoilValue } from "recoil";
 import store from "~/store";
-import { subscriptionDetailPaneWidthState, subscriptionMobileChannelDropdownOpenState } from "~/store/subscriptionLayout";
+import { subscriptionMobileChannelDropdownOpenState } from "~/store/subscriptionLayout";
 import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
+import { squareTypePath } from "~/pages/square/squarePaths";
 
 const extractShareChannelIdFromPath = (pathname: string): string | undefined => {
     const matched = pathname.match(/\/channel\/share\/([^/?#]+)/);
@@ -81,9 +86,6 @@ export default function Subscription() {
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
     const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
-    // Right-area width (detail panel + splitter) published by ChannelLayout; offsets
-    // the persistent 频道/广场 tab so it tracks the article-list column's right edge.
-    const detailPaneWidth = useRecoilValue(subscriptionDetailPaneWidthState);
     // True while the H5 channel-switcher dropdown is open — greys out the persistent
     // 频道/广场 tab, matching the header's left/right action buttons.
     const mobileChannelDropdownOpen = useRecoilValue(subscriptionMobileChannelDropdownOpenState);
@@ -108,7 +110,7 @@ export default function Subscription() {
         if (channelPluginGate !== "disabled") return;
         showToast({
             message: localize("com_plugin_feature_no_access_toast"),
-            severity: NotificationSeverity.ERROR,
+            severity: NotificationSeverity.WARNING,
         });
         navigate("/c/new", { replace: true });
     }, [channelPluginGate, showToast, navigate, localize]);
@@ -394,6 +396,14 @@ export default function Subscription() {
     // Page owns channel list + auto-select on both PC and H5 so the page lands on a real channel
     // by default. Channel switching UI is route-driven (system menu reveal on H5).
     const channelPluginEnabled = channelPluginGate === "enabled";
+    useChannelStateRefresh(() => { void refreshChannelState(queryClient); }, channelPluginEnabled);
+    useChannelAccessGuard(activeChannel?.id, () => {
+        const channelId = activeChannel?.id;
+        setActiveChannel(null);
+        setFullScreenArticle(null);
+        setShowAiAssistant(false);
+        if (channelId) navigate(`/channel/share/${encodeURIComponent(channelId)}`, { replace: true });
+    });
     const { data: createdChannelsForAuto = [], isFetched: createdAutoFetched } = useQuery({
         queryKey: ["channels", "created", SortType.RECENT_UPDATE],
         queryFn: () => getChannelsApi({ type: "created", sortBy: SortType.RECENT_UPDATE }),
@@ -419,24 +429,38 @@ export default function Subscription() {
         createdChannelCountRef.current = createdChannelsForAuto.length;
     }, [createdChannelsForAuto.length]);
 
-    // Auto-select first channel when nothing is active (skip while a share/preview is resolving).
+    // Mobile: auto-select the first channel when nothing is active (skip while a
+    // share/preview is resolving). Desktop lands on ChannelHomePage instead and a
+    // channel is an explicit pick, so it must not be chosen for the user.
     useEffect(() => {
+        if (!isH5) return;
         if (!channelPluginEnabled) return;
         if (activeChannel || previewChannelId || showChannelSquare) return;
         if (!createdAutoFetched || !subscribedAutoFetched) return;
-        if (createdChannelsForAuto.length > 0) {
-            setActiveChannel(createdChannelsForAuto[0]);
-        } else if (subscribedChannelsForAuto.length > 0) {
-            setActiveChannel(subscribedChannelsForAuto[0]);
-        }
-    }, [channelPluginEnabled, activeChannel, previewChannelId, showChannelSquare, createdAutoFetched, subscribedAutoFetched, createdChannelsForAuto, subscribedChannelsForAuto]);
+        // Never land on a DEV sample row (~/mock/demo): the backend has no such channel.
+        const firstReal = [...createdChannelsForAuto, ...subscribedChannelsForAuto].find((c) => !isDemoId(c.id));
+        if (firstReal) setActiveChannel(firstReal);
+    }, [isH5, channelPluginEnabled, activeChannel, previewChannelId, showChannelSquare, createdAutoFetched, subscribedAutoFetched, createdChannelsForAuto, subscribedChannelsForAuto]);
 
     useEffect(() => {
         if (!isH5) setChannelListDrawerOpen(false);
     }, [isH5]);
 
+    // Desktop: /channel is the module home. /channel and /channel/:id render the same
+    // component instance, so coming back (workbench sidebar, browser Back) keeps the
+    // picked channel in state — drop it, or the home would never show again.
+    useEffect(() => {
+        if (isH5 || detailChannelId || isShareRoute) return;
+        setActiveChannel(null);
+    }, [isH5, detailChannelId, isShareRoute]);
+
     // Handle channel selection
     const handleChannelSelect = (channel: Channel | null) => {
+        // DEV sample rows (~/mock/demo) also show up in the header channel switcher.
+        if (channel && isDemoId(channel.id)) {
+            showToast({ message: localize("com_demo_data.readonly_toast"), severity: NotificationSeverity.INFO });
+            return;
+        }
         setActiveChannel(channel);
         if (isH5) setChannelListDrawerOpen(false);
     };
@@ -454,8 +478,11 @@ export default function Subscription() {
     };
 
     // Channel square
+    // Desktop discovers channels in the sidebar's 广场 (~/pages/square). The in-page square
+    // remains for mobile and for the deep links that open it (`?square=1`).
     const handleChannelSquare = () => {
-        setShowChannelSquare(true);
+        if (isH5) setShowChannelSquare(true);
+        else navigate(squareTypePath("channel"));
     };
 
     // Esc to exit full screen
@@ -472,19 +499,34 @@ export default function Subscription() {
         return null;
     }
 
+    /** Desktop module home (ChannelHomePage): nothing picked, nothing resolving, and the
+     *  user has at least one channel — otherwise the discovery empty state shows instead. */
+    const showChannelHome =
+        !isH5 &&
+        !showChannelSquare &&
+        !activeChannel &&
+        !channelsResolving &&
+        !detailChannelId &&
+        createdChannelsForAuto.length + subscribedChannelsForAuto.length > 0;
+
     return (
         <div className="relative flex min-h-0 flex-1 flex-col touch-desktop:flex-row">
-            {/* 频道 / 广场 切换 — 提升到两个视图之上常驻，切换时同一滑块平滑移动，
-                位置与频道页标题行右上（pt-5 / px-10）对齐。仅 PC。
-                覆盖频道页、广场页，以及无频道/无订阅的发现空页（!channelsResolving），
-                加载中（channelsResolving 且非广场）暂不显示。 */}
-            {!isH5 && (showChannelSquare || !channelsResolving) ? (
-                <div className="absolute top-5 z-20 flex h-10 items-center" style={{ right: `${detailPaneWidth + 40}px` }}>
-                    <ChannelSquareTabs
-                        active={showChannelSquare ? "square" : "channel"}
-                        onChannelClick={handleSquareBack}
-                        onSquareClick={handleChannelSquare}
-                    />
+            {/* PC：`?square=1` 深链仍会在本页打开广场（分享链接失效等场景）；广场的常规入口已移到
+                侧栏「广场」，这里只留一个返回键作为出口。 */}
+            {!isH5 && showChannelSquare ? (
+                <div className="absolute left-4 top-4 z-20">
+                    <Tooltip content={localize("com_ui_go_back")}>
+                        <Button
+                            color="default"
+                            variant="outlined"
+                            size="small"
+                            iconOnly
+                            aria-label={localize("com_ui_go_back")}
+                            onClick={handleSquareBack}
+                        >
+                            <Outlined.ArrowLeft />
+                        </Button>
+                    </Tooltip>
                 </div>
             ) : null}
             {/* H5：同一个切换器常驻在两个视图之上（不随 showChannelSquare 卸载），
@@ -576,7 +618,9 @@ export default function Subscription() {
                                     setShowFullScreenBtn(true);
                                 }}
                             />
-                        ) : channelsResolving ? (
+                        ) : channelsResolving || detailChannelId ? (
+                            // Also while a /channel/:id deep link is resolving its channel, so the
+                            // desktop home never flashes before the channel page.
                             <div className="relative flex flex-1 flex-col items-center justify-center py-10 text-center text-text-3">
                                 {isH5 ? (
                                     <div className="absolute inset-x-0 top-0 z-10 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
@@ -599,6 +643,22 @@ export default function Subscription() {
                                 ) : null}
                                 <LoadingIcon className="size-20 text-primary" />
                             </div>
+                        ) : showChannelHome ? (
+                            <ChannelHomePage
+                                createdChannels={createdChannelsForAuto}
+                                subscribedChannels={subscribedChannelsForAuto}
+                                // A route change, not just state: /channel stays the home, so the
+                                // workbench sidebar's 频道 entry always has somewhere to come back to.
+                                onChannelSelect={(channel) => {
+                                    // DEV sample rows (~/mock/demo) exist only in the list response.
+                                    if (isDemoId(channel.id)) {
+                                        showToast({ message: localize("com_demo_data.readonly_toast"), severity: NotificationSeverity.INFO });
+                                        return;
+                                    }
+                                    navigate(`/channel/${channel.id}`);
+                                }}
+                                onCreateChannel={handleCreateChannel}
+                            />
                         ) : (
                             <ChannelDiscoveryHome
                                 enabled

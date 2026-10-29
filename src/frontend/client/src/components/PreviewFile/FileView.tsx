@@ -139,7 +139,7 @@ const Row = React.memo(({ drawfont, index, style, size, labels, pdf, onLoad, onS
         }
     }
 
-    return <div className="bg-[#fff] border-b-2 overflow-hidden" style={style}>
+    return <div data-document-canvas className="document-canvas border-b-2 overflow-hidden" style={style}>
         {/* <span className="absolute">{index + 1}</span> */}
         {/* canvas  */}
         <div ref={wrapRef} className="canvasWrapper"></div>

@@ -214,7 +214,7 @@ customAxios.interceptors.response.use(
     if (response.data?.status_code === 11001) {
       const message = translateApiErrorMessage(response.data) || response.data.status_message || '';
       if (message && shouldToastLicenseExpired()) {
-        window.showToast?.({ message, status: 'error' });
+        window.showToast?.({ message, status: 'warning' });
       }
       const err: any = new Error(message || 'license expired (11001)');
       err.status_code = 11001;
@@ -260,7 +260,7 @@ customAxios.interceptors.response.use(
       const message = translateApiErrorMessage(response.data);
       const display = message || response.data.status_message || "";
       if (display) {
-        window.showToast?.({ message: display, status: 'error' });
+        window.showToast?.({ message: display, status: 'warning' });
       }
       const err: any = new Error(display || `request failed (${response.data.status_code})`);
       err.status_code = response.data.status_code;
@@ -271,7 +271,7 @@ customAxios.interceptors.response.use(
 
     if (response.config.showError && response.data && response.data.status_code !== 200) {
       console.log('业务错误:>> ', response.config.url, response.data);
-      window.showToast?.({ message: translateApiErrorMessage(response.data), status: 'error' });
+      window.showToast?.({ message: translateApiErrorMessage(response.data), status: 'warning' });
     }
     return response;
   },
@@ -379,6 +379,13 @@ customAxios.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+// DEV only, opt-in: pad the workbench module lists with sample rows (~/mock/demo).
+// The DEV guard is a build-time constant, so the branch — and the dynamic import's
+// chunk with it — is dropped from production bundles.
+if (import.meta.env.DEV) {
+  void import('~/mock/demo').then(({ installDemoData }) => installDemoData(customAxios));
+}
 
 const paramsSerializer = (params) => {
   return Object.keys(params)

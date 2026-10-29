@@ -131,3 +131,18 @@ def test_to_linsight_submit_no_skills_stays_none():
     submit = chat_service._to_linsight_submit(data)
 
     assert submit.skills is None
+
+
+async def test_daily_mode_clears_stale_skill_selection(patch_handlers):
+    data = _data(task_mode=False)
+    data.skills = ["morning-report"]
+    await chat_service.stream_chat_completion(MagicMock(), data, MagicMock())
+    assert patch_handlers["daily"].await_args.args[1].skills == []
+    assert data.skills == ["morning-report"]
+
+
+async def test_task_mode_keeps_skill_selection(patch_handlers):
+    data = _data(task_mode=True)
+    data.skills = ["morning-report"]
+    await chat_service.stream_chat_completion(MagicMock(), data, MagicMock())
+    assert patch_handlers["task"].await_args.args[1].skills == ["morning-report"]

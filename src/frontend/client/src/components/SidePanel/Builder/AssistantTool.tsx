@@ -31,7 +31,7 @@ export default function AssistantTool({
         { pluginKey: tool, action: 'uninstall', auth: null, isEntityTool: true },
         {
           onError: (error: unknown) => {
-            showToast({ message: `Error while deleting the tool: ${error}`, status: 'error' });
+            showToast({ message: `Error while deleting the tool: ${error}`, status: 'warning' });
           },
           onSuccess: () => {
             const fns = getValues('functions').filter((fn) => fn !== tool);

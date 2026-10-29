@@ -133,17 +133,15 @@ export default function AppRoot() {
     if (!isAuthenticated) {
         return null;
     }
-    // Root uses h-full (not h-[100dvh]) so it fills the parent card, which
-    // MainLayout sizes to calc(100dvh-16px) (the outer <main> has a p-2 gutter).
-    // Hardcoding 100dvh made this 16px taller than the card and tripped the
-    // card's overflow into a scrollbar. Inner height math is relative (100%) too.
+    // Root uses h-full so it fills the MainLayout panel whatever that panel's
+    // height is; inner height math is relative (100%) too.
     return (
         <div className="h-full w-full overflow-hidden">
             {/* Page header banner */}
             <Banner onHeightChange={setBannerHeight} />
             <div
                 className={cn(
-                    "flex w-full overflow-hidden bg-[#F9F9F9]",
+                    "flex w-full overflow-hidden bg-white",
                     isAppConversationRoute
                         ? " touch-mobile:p-0 max-[768px]:p-0"
                         : " touch-mobile:p-0",
@@ -152,7 +150,7 @@ export default function AppRoot() {
             >
                 <div
                     className={cn(
-                        "relative z-0 flex h-full w-full overflow-hidden rounded-xl touch-mobile:rounded-none",
+                        "relative z-0 flex h-full w-full overflow-hidden",
                         "bg-white p-0",
                     )}
                 >
