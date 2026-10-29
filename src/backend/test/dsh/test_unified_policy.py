@@ -76,14 +76,17 @@ def test_ambiguous_or_duplicate_scope_is_rejected():
         CreditRuleInput(version=0, monthly_credits=True)
 
 
-@pytest.mark.parametrize("credits", ["-1", "1e3", "0.0000001", "9223372036854.775808", "NaN", "01", 500, True])
+@pytest.mark.parametrize(
+    "credits",
+    ["-1", "1e3", "0.01", "1.00", "1000000.1", "1000001", "0.0000001", "9223372036854.775808", "NaN", "01", 500, True],
+)
 def test_credit_input_preserves_exact_decimal_contract(credits):
     with pytest.raises(ValidationError):
         CreditRuleInput(version=0, monthly_credits=credits)
 
 
-def test_credit_input_accepts_smallest_unit():
-    assert CreditRuleInput(version=0, monthly_credits="0.000001").monthly_token_limit == 1
+def test_credit_input_accepts_smallest_allowance_increment():
+    assert CreditRuleInput(version=0, monthly_credits="0.1").monthly_token_limit == 100_000
 
 
 @pytest.mark.parametrize("multiplier,rate", [("1", 100), ("1.1", 110), ("1.25", 125), ("0.01", 1), ("1000", 100000)])
@@ -99,7 +102,7 @@ def test_invalid_model_multiplier_is_rejected(multiplier):
 
 @pytest.mark.parametrize(
     "credits,tokens",
-    [("9223372036854.775806", 9223372036854775806), ("9223372036854.775807", 9223372036854775807)],
+    [("0", 0), ("999999.9", 999999900000), ("1000000", 1000000000000), ("1000000.0", 1000000000000)],
 )
-def test_credit_allowance_accepts_the_exact_accounting_boundary(credits, tokens):
+def test_credit_allowance_accepts_business_boundaries(credits, tokens):
     assert CreditRuleInput(version=0, monthly_credits=credits).monthly_token_limit == tokens
