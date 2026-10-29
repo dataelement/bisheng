@@ -524,9 +524,9 @@ class TestDelete:
     async def test_grants_are_projected_with_the_record_read_before_the_transition(
         self, app_db, app_factory, app_owner, fake_permission_projection, audit_sink
     ):
-        """The real app adapter refuses a deleted app with 19003 (AC-29's single
+        """The real app adapter refuses a deleted app with 25022 (AC-29's single
         error). Reading the record after the state flipped turned every delete into
-        a 19003 that left the grants in OpenFGA and skipped the audit and hooks —
+        a 25022 that left the grants in OpenFGA and skipped the audit and hooks —
         found on 114 on 2026-09-15. The adapter here enforces that same gate."""
         from types import SimpleNamespace
 

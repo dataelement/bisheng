@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Sequence
+from contextlib import nullcontext
 from datetime import datetime
 from time import perf_counter
 from typing import TYPE_CHECKING
@@ -27,6 +28,7 @@ from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
 from bisheng.common.services.config_service import settings
 from bisheng.common.services.metric_log import emit_metric
+from bisheng.core.context.tenant import strict_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType, UserLinkType
@@ -842,7 +844,9 @@ class WorkFlowService(BaseService):
         # F048 visible-first strategy:
         #   * Super admins and tenant admins skip the permission system
         #     entirely and scan the business DB directly; every returned row
-        #     gets ``write=True`` because they are effectively unrestricted.
+        #     gets ``write=True`` within their management scope. A tenant
+        #     admin's managed list must exclude root-tenant candidates before
+        #     pagination; the default readable scope also includes root rows.
         #     Enumerating "all apps in a tenant" through OpenFGA is wasteful
         #     for these identities and prone to trip the 5 000-object visible
         #     enumeration cap.
@@ -899,20 +903,22 @@ class WorkFlowService(BaseService):
                 )
             effective_flow_ids = visible_id_list
 
-        data, has_more, writeable_ids = await cls._scan_visible_flows_cursor(
-            user=user,
-            name=name,
-            status=status,
-            flow_ids=effective_flow_ids,
-            flow_type=flow_type,
-            cursor=decoded,
-            page_size=page_size,
-            managed=managed,
-            search_description=search_description,
-            required_action=required_action,
-            app_state=app_state,
-            admin_bypass=is_admin,
-        )
+        management_scope = strict_tenant_filter() if managed and is_admin and not actor.super_admin else nullcontext()
+        with management_scope:
+            data, has_more, writeable_ids = await cls._scan_visible_flows_cursor(
+                user=user,
+                name=name,
+                status=status,
+                flow_ids=effective_flow_ids,
+                flow_type=flow_type,
+                cursor=decoded,
+                page_size=page_size,
+                managed=managed,
+                search_description=search_description,
+                required_action=required_action,
+                app_state=app_state,
+                admin_bypass=is_admin,
+            )
 
         enrich_start = perf_counter()
         data = cls.add_extra_field(

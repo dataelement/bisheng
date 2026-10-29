@@ -1167,6 +1167,9 @@ domain 对业务 model/repository 的 import 必须由架构测试禁止。正�
 
 ## 5. 已知坑 / 反直觉事实
 
+- 构建页 `managed=true` 的租户管理员快捷查询须在 `strict_tenant_filter()` 中执行完整游标扫描；默认可读范围含根租户，直接跳过逐资源校验会把根租户应用当成本租户可管理应用返回，后续 `my-permissions` 再拒绝。使用既有过滤上下文可在 SQL 分页前收敛三类应用，结束或异常时恢复读取范围；普通用户、超管和非管理读取保留原路径。存量资源不迁移。
+- 权限旧错误码 `19001–19007` 与信息源冲突，现迁至 `25020–25026`（按原顺序一一映射），`19000` 不变。错误类名及 `PermissionFGAUnavailableError` 别名不变；三语文案从 locales 单一源生成。旧号只保留信息源含义，不能通过改 `19003` 文案兼容权限，否则信息源解析失败会显示成权限错误。
+
 - 不同资源表的数字 ID 可以相同；只比较 parent_id/resource_id 会把合法根目录上传误判为自关联。
 - 上传失败项可能没有权限镜像。整批先加载镜像再删除会令一个缺失项阻断所有已创建权限的清理；
   上传补偿须逐文件基于创建 ledger 撤销，且不能在权限撤销失败的 finally 中硬删业务记录。
@@ -1263,7 +1266,7 @@ tenant/resource/current Catalog/resource version，任一变化返回 25002，�
 正常 DENY 同样是 200 且 `data.allowed=false`；业务操作端点再统一翻译为 19000。
 tenant mismatch 与“未共享的跨 tenant ID”不能通过不同错误文案泄露资源存在性。
 
-OpenFGA 不可用返回 `19002` 业务错误，不伪装为 `{"allowed": false}`；
+OpenFGA 不可用返回 `25021` 业务错误，不伪装为 `{"allowed": false}`；
 未知/不适用 action 返回 `25001`。
 
 #### Grant mutation
@@ -1450,7 +1453,7 @@ release contract 分配模块 `250`：
 | 25013 | PermissionMutationTooLarge | tuple 原子上限无法满足 |
 | 25014 | PermissionEnumerationIncomplete | StreamedListObjects 未正常结束、结果超过入口容量或无法证明集合完整 |
 
-通用 deny 继续用 19000，OpenFGA unavailable 用 19002，非法 resource type/id 用 19003；
+通用 deny 继续用 19000，OpenFGA unavailable 用 25021，非法 resource type/id 用 25022；
 不得创建相同含义的新码。
 
 ### 6.4 Incoming 依赖
@@ -1976,6 +1979,8 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 ---
 
 ## 修订历史
+
+- 2026-10-29：修复租户管理员构建列表的跨租户快捷放行；权限冲突码迁至 25020–25026，保留信息源原码及存量资源归属；仅执行本缺陷定向验证。
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
