@@ -249,5 +249,5 @@ export async function applyMenuAccessApi(data: {
 }
 
 export async function getApprovalInstanceDetailForAdminApi(instanceId: number): Promise<ApprovalInstanceDetail> {
-  return await axios.get(`/api/v1/approval/instances/${instanceId}`);
+  return await axios.get(`/api/v1/approval/admin/instances/${instanceId}`);
 }

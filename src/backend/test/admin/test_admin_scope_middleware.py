@@ -31,6 +31,9 @@ from bisheng.core.context.tenant import (
 )
 
 BUSINESS_LIST_PATHS = (
+    "/api/v1/workflow/list",
+    "/api/v1/apps",
+    "/api/v1/assistant",
     "/api/v1/knowledge",
     "/api/v1/knowledge/space/department",
     "/api/v1/knowledge/space/mine",

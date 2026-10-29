@@ -190,7 +190,7 @@ class PublishStatusService:
 
     @classmethod
     async def _require_viewer(cls, app, actor, *, entry: str = ENTRY_DETAIL) -> None:
-        """Owner, this tenant's administrator, or a platform super admin.
+        """Owner, administrators, or a same-tenant subject granted the edit action.
 
         Refuses with a **business** error so the response is an HTTP 200 the
         front end can render. Raising ``HTTPException(403)`` here would take the
@@ -218,6 +218,10 @@ class PublishStatusService:
             return
         user_id = int(getattr(actor, "user_id", 0) or 0)
         if await check_tenant_admin(user_id, int(app.tenant_id or 0)):
+            return
+        from bisheng.permission.application.business_authorization import check_business_action
+
+        if await check_business_action(actor, resource_type="app", resource_id=app.id, action="edit"):
             return
         raise cls._not_visible(app)
 

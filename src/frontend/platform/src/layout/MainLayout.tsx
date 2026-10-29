@@ -1,3 +1,4 @@
+import { HeaderTenantScope } from "@/components/HeaderTenantScope";
 // @ts-strict-ignore
 import { Button, Dropdown, DropdownChevron, DropdownItem, DropdownSeparator, Select } from '@bisheng/ui';
 import { LoadingIcon } from "@/components/bs-icons/loading";
@@ -156,6 +157,7 @@ export default function MainLayout() {
                         <HeaderMenu />
                     </div>
                     <div className="flex w-fit relative z-10">
+                        {isGlobalSuper && appConfig.multiTenantEnabled && <HeaderTenantScope user={user} />}
                         <div className="flex">
                             <TooltipProvider>
                                 <Tooltip

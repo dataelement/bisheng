@@ -3,16 +3,16 @@
 Writes nothing. What it does own is the **permission dispatch by entry**, which
 is easy to get wrong in a way that only shows up as a security bug:
 
-* the platform detail page is *owner or this tenant's administrator or super
-  admin* — the people who operate the app;
+* the platform detail page admits granted editors/managers as well as the
+  owner and administrators — the people who operate the app;
 * the CLI (F053) and the MCP tools (F052) are *owner only*, because they run on
   a credential that acts for its resource owner. Letting an administrator's key
   read every app's logs would quietly widen the open-API surface past what the
   credential's holder was granted.
 
-Both rules are **business pre-checks**, not F048 checks: the permission runtime
-short-circuits administrators to ALLOW, so it cannot express either of them
-(constitution C4 note).
+The platform management read uses the concrete F048 edit action after tenant
+eligibility. Credential doors and private data keep their original owner-only
+business pre-checks; administrator shortcuts cannot replace those checks.
 
 Refusals raise 161xx business codes, never HTTP 403/404. The platform request
 interceptor turns a GET answered with those statuses into a full-page redirect
@@ -184,19 +184,29 @@ class AppQueryService:
         depended on it would return the wrong set the day it runs on a code path
         without tenant context.
         """
-        scope_tenant = int(tenant_id if tenant_id is not None else getattr(actor, "tenant_id", 0) or 0)
+        from sqlmodel import select
+
+        from bisheng.core.context.tenant import get_admin_scope_tenant_id, is_management_all_tenants
+
+        is_super = bool(getattr(actor, "is_global_super", False))
+        scope = get_admin_scope_tenant_id() if is_super else None
+        scope_tenant = int(tenant_id if tenant_id is not None else scope or getattr(actor, "tenant_id", 0) or 0)
         user_id = int(getattr(actor, "user_id", 0) or 0)
-        is_admin = bool(getattr(actor, "is_global_super", False)) or await check_tenant_admin(user_id, scope_tenant)
+        all_tenants = tenant_id is None and is_super and is_management_all_tenants()
+        is_admin = is_super or await check_tenant_admin(user_id, scope_tenant)
         async with get_async_db_session() as session:
-            rows = (
-                await AppDao.alist_by_tenant(session, scope_tenant)
-                if is_admin
-                else await AppDao.alist_by_owner(session, user_id)
-            )
+            if all_tenants:
+                rows = (await session.exec(select(App))).all()
+            else:
+                rows = (
+                    await AppDao.alist_by_tenant(session, scope_tenant)
+                    if is_admin
+                    else await AppDao.alist_by_owner(session, user_id)
+                )
         return [
             cls._detail_payload(row)
             for row in rows
-            if row.state != AppState.DELETED.value and int(row.tenant_id or 0) == scope_tenant
+            if row.state != AppState.DELETED.value and (all_tenants or int(row.tenant_id or 0) == scope_tenant)
         ]
 
     # -- runtime status --------------------------------------------------
@@ -283,6 +293,10 @@ class AppQueryService:
         if user_id == int(app.owner_user_id or 0) or is_super:
             return app
         if await check_tenant_admin(user_id, int(app.tenant_id or 0)):
+            return app
+        from bisheng.permission.application.business_authorization import check_business_action
+
+        if await check_business_action(actor, resource_type="app", resource_id=app.id, action="edit"):
             return app
         raise AppManageForbiddenError(app_id=app_id)
 
