@@ -8,12 +8,13 @@ import { getAsrWebSocketUrl } from "../../../../shared/voice/url";
 import { useAudioPlayerStore, useAudioStore } from "./audioPlayerStore";
 
 interface SpeechToTextProps {
+  inline?: boolean;
   disabled?: boolean;
   realtime?: boolean;
   modelId?: string;
   stopSignal?: number;
   onChange: (text: string) => void;
-  onRecordingStart?: () => void;
+  onRecordingStart?: (realtime?: boolean) => void;
   onRecordingEnd?: () => void;
   onBusyChange?: (busy: boolean) => void;
 }
@@ -52,12 +53,13 @@ export function SpeechToTextComponent(props: SpeechToTextProps) {
     if (sessionRef.current || props.disabled) return;
     stopAudio();
     setCurrentPlayingId(null);
-    callbacks.current.onRecordingStart?.();
     const version =
       (window as Window & { chat_version?: string }).chat_version || "v1";
+    const realtime = !!props.realtime && version === "v1";
+    callbacks.current.onRecordingStart?.(realtime);
     const session = new VoiceSession(
       {
-        realtime: !!props.realtime && version === "v1",
+        realtime,
         modelId: props.modelId ?? "",
         websocketUrl: getAsrWebSocketUrl(import.meta.env.BASE_URL, window.location.origin),
         transcribe: async (form) => {
@@ -93,15 +95,15 @@ export function SpeechToTextComponent(props: SpeechToTextProps) {
   };
 
   const label = t(recording ? "voiceInput.pause" : "voiceInput.start");
-  return (
-    <div className="absolute right-12 top-5">
+  const control = (
       <Button
         type="button"
-        size="small"
+        size={props.inline ? "medium" : "small"}
         iconOnly
-        variant="text"
-        color="default"
-        className="h-6 w-6"
+        shape={props.inline ? "circle" : "square"}
+        variant={props.inline ? (recording ? "outlined" : "solid") : "text"}
+        color={props.inline && !recording ? "primary" : "default"}
+        className={props.inline ? undefined : "h-6 w-6"}
         disabled={!recording && (props.disabled || busy)}
         aria-label={label}
         title={label}
@@ -111,8 +113,8 @@ export function SpeechToTextComponent(props: SpeechToTextProps) {
       >
         {recording ? <Outlined.PlayerPause /> : <Outlined.Microphone />}
       </Button>
-    </div>
   );
+  return props.inline ? control : <div className="absolute right-12 top-5">{control}</div>;
 }
 
 export default SpeechToTextComponent;

@@ -1,0 +1,8 @@
+state
+deleted
+kind	status	cleanup_status
+destroy	completed	complete
+state	COUNT(*)
+released	17
+kind	state	COUNT(*)
+snapshot	purged	2

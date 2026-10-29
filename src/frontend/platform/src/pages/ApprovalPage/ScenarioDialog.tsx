@@ -1,10 +1,12 @@
-import { Button } from '@bisheng/ui';
+import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
+import { Button, Select } from '@bisheng/ui';
 
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { type ApprovalScenarioPreset } from "@/controllers/API/approval";
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { APPROVER_SOURCE_LABEL_KEYS } from "./approvalMetadata";
+import { approverSourceLabel } from "./approverSources";
+import { locationContext } from "@/contexts/locationContext";
 
 interface AddScenarioDialogProps {
   open: boolean;
@@ -16,6 +18,8 @@ interface AddScenarioDialogProps {
 
 export function AddScenarioDialog({ open, presets, existingCodes, onClose, onConfirm }: AddScenarioDialogProps) {
   const { t } = useTranslation("bs");
+  const { appConfig } = useContext(locationContext);
+  const selectLabels = useSelectLabels();
   const available = useMemo(() => presets.filter((p) => !existingCodes.has(p.scenario_code)), [presets, existingCodes]);
   const [selected, setSelected] = useState("");
   useEffect(() => {
@@ -29,7 +33,7 @@ export function AddScenarioDialog({ open, presets, existingCodes, onClose, onCon
     .join("、");
 
   const approverSourceLabels = (preset?.approver_source_types ?? [])
-    .map((s) => t(APPROVER_SOURCE_LABEL_KEYS[s] ?? `approvalPage.approverSource.${s}`, { defaultValue: s }))
+    .map((s) => approverSourceLabel(s, t, undefined, !!appConfig.multiTenantEnabled))
     .join("、");
 
   return (
@@ -41,18 +45,11 @@ export function AddScenarioDialog({ open, presets, existingCodes, onClose, onCon
         <div className="space-y-4 py-2">
           <label className="block text-sm text-muted-foreground">
             {t("approvalPage.scenarioNameLabel")}
-            <select
-              value={selected}
-              onChange={(e) => setSelected(e.target.value)}
-              className="mt-1 block h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
-            >
-              {available.length === 0 && <option value="">{t("approvalPage.allPresetsAdded")}</option>}
-              {available.map((p) => (
-                <option key={p.scenario_code} value={p.scenario_code}>
-                  {p.scenario_name}
-                </option>
-              ))}
-            </select>
+            <Select {...selectLabels} aria-label={t("approvalPage.scenarioNameLabel")}
+              value={selected || null} className="mt-1" disabled={available.length === 0}
+              placeholder={t("approvalPage.allPresetsAdded")}
+              options={available.filter(p => p.scenario_code != null && p.scenario_code !== '').map(p => ({ value: p.scenario_code, label: p.scenario_name }))}
+              onChange={value => setSelected(String(value ?? ''))} />
           </label>
           {preset && (
             <div className="rounded-lg bg-gray-50 dark:bg-gray-50/[0.06] p-3 text-xs text-muted-foreground space-y-1.5">

@@ -1,12 +1,12 @@
 // @ts-strict-ignore
-import { Button } from '@bisheng/ui';
+import { Button, Dropdown, DropdownChevron, DropdownItem, DropdownSeparator, Select } from '@bisheng/ui';
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
 import { GithubIcon } from "@/components/bs-icons";
 import { Outlined } from "bisheng-icons";
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { locationContext } from "@/contexts/locationContext";
 import i18next from "i18next";
 import { GanttChartIcon, Lock, MoonStar, Sun } from "lucide-react";
@@ -20,18 +20,35 @@ import { Separator } from "../components/bs-ui/separator";
 import { darkContext } from "../contexts/darkContext";
 import { userContext } from "../contexts/userContext";
 import { logoutApi } from "../controllers/API/user";
-import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 import { User } from "../types/api/user";
 import { getBrandAssetUrl } from "../utils/brand";
 import { HeaderMenu } from "./HeaderMenu";
 import { LicenseBanner } from "./LicenseBanner";
+
+const PRIMARY_PAGE_PATHS = new Set([
+    "/dashboard",
+    "/build/client",
+    "/filelib",
+    "/dataset",
+    "/model/management",
+    "/model/finetune",
+    "/dsh",
+    "/evaluation",
+    "/label",
+    "/log",
+    "/approval",
+    "/sys",
+    "/tenant",
+]);
 
 export default function MainLayout() {
     const { dark, setDark } = useContext(darkContext);
     const { appConfig } = useContext(locationContext);
 
     const { user, setUser } = useContext(userContext);
-    const { language, languageNames, options, changLanguage, t } = useLanguage(user);
+    const { language, options, changLanguage, t } = useLanguage(user);
+    const selectLabels = useSelectLabels();
+    const languageOptions = Object.entries(options).map(([value, label]) => ({ value, label }));
 
     const handleLogout = () => {
         bsConfirm({
@@ -39,7 +56,7 @@ export default function MainLayout() {
             desc: `${t("menu.logoutContent")}？`,
             okTxt: t("system.confirm"),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(logoutApi()).then((_) => {
+                return logoutApi().then((_) => {
                     const thirdPartyLogoutUrl = localStorage.getItem("THIRD_PARTY_LOGOUT_URL");
                     localStorage.removeItem("isLogin");
                     if (thirdPartyLogoutUrl) {
@@ -47,8 +64,8 @@ export default function MainLayout() {
                     } else {
                         setUser(null);
                     }
+                    next();
                 });
-                next();
             },
         });
     };
@@ -95,6 +112,7 @@ export default function MainLayout() {
     // NavLink matches on pathname only, so every link falling back to
     // /menu-pending?menu=<key> would light up together; disambiguate by `menu`.
     const location = useLocation();
+    const isPrimaryPage = PRIMARY_PAGE_PATHS.has(location.pathname.replace(/\/$/, ""));
     const pendingNavClass =
         (menuKey: string) =>
         ({ isActive }: { isActive: boolean }) => {
@@ -116,9 +134,9 @@ export default function MainLayout() {
 
     return (
         <div className="flex">
-            <div className="bg-background-main w-full h-screen flex flex-col">
+            <div className="bg-[#f8f8f8] dark:bg-background-main w-full h-screen flex flex-col">
                 {isGlobalSuper && <LicenseBanner />}
-                <div className="flex justify-between h-[64px] shrink-0 bg-background-main relative z-[21]">
+                <div className="flex justify-between h-[64px] shrink-0 bg-[#f8f8f8] dark:bg-background-main relative z-[21]">
                     <div className="flex h-9 my-[14px]">
                         <div className="inline-block">
                             {/* @ts-ignore */}
@@ -159,24 +177,17 @@ export default function MainLayout() {
                                 </Tooltip>
                             </TooltipProvider>
                             <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
-                            <SelectHover
-                                className={"-top-4"}
-                                triagger={
-                                    <div className="h-8 px-3 bg-header-icon rounded-lg cursor-pointer my-4 flex items-center justify-center">
-                                        <span className="text-sm leading-8">{languageNames[language]}</span>
-                                        <Outlined.Down className="ml-1 w-4 h-4" />
-                                    </div>
-                                }
-                            >
-                                {Object.entries(options).map(([key, value]) => (
-                                    <SelectHoverItem key={key} onClick={() => changLanguage(key)}>
-                                        <span>{value}</span>
-                                        {language === key && (
-                                            <Outlined.Check className="w-4 h-4 absolute top-1/2 right-0 transform -translate-y-1/2" />
-                                        )}
-                                    </SelectHoverItem>
-                                ))}
-                            </SelectHover>
+                            <Select
+                                {...selectLabels}
+                                variant="ghost"
+                                className="my-4 w-auto"
+                                aria-label={t("system.language")}
+                                options={languageOptions}
+                                value={language}
+                                onChange={(value) => {
+                                    if (value != null) changLanguage(String(value));
+                                }}
+                            />
                             <Separator
                                 className="mx-[23px] h-6 border-l my-5 border-[#dddddd]"
                                 orientation="vertical"
@@ -189,36 +200,36 @@ export default function MainLayout() {
                                 src={__APP_ENV__.BASE_URL + (user.avatar || "/assets/user.png")}
                                 alt=""
                             />
-                            <SelectHover
-                                triagger={
-                                    <span className="leading-8 text-[14px] mr-8 max-w-40 cursor-pointer text-ellipsis overflow-hidden whitespace-nowrap">
-                                        {user.user_name} <Outlined.Down className="inline-block mt-[-2px]" />
-                                    </span>
+                            <Dropdown
+                                trigger="hover"
+                                align="end"
+                                menu={
+                                    <>
+                                        {hasWorkbenchEntry && (
+                                            <DropdownItem icon={<GanttChartIcon />} onSelect={() => window.open("/workspace/")}>
+                                                {t("menu.workspace")}
+                                            </DropdownItem>
+                                        )}
+                                        <DropdownItem icon={<Lock />} onSelect={JumpResetPage}>
+                                            {t("menu.changePwd")}
+                                        </DropdownItem>
+                                        <DropdownSeparator />
+                                        <DropdownItem danger icon={<Outlined.LogOut />} onSelect={handleLogout}>
+                                            {t("menu.logout")}
+                                        </DropdownItem>
+                                    </>
                                 }
                             >
-                                {hasWorkbenchEntry && (
-                                    <SelectHoverItem onClick={() => window.open("/workspace/")}>
-                                        <GanttChartIcon className="w-4 h-4 mr-1" />
-                                        <span>{t("menu.workspace")}</span>
-                                    </SelectHoverItem>
-                                )}
-                                <SelectHoverItem onClick={JumpResetPage}>
-                                    <Lock className="w-4 h-4 mr-1" />
-                                    <span>{t("menu.changePwd")}</span>
-                                </SelectHoverItem>
-                                <SelectHoverItem
-                                    onClick={handleLogout}
-                                    className="text-[#f53f3f] hover:bg-red-50 dark:hover:bg-red-950/30 dark:text-[#f53f3f]"
-                                >
-                                    <Outlined.LogOut className="w-4 h-4 mr-1" />
-                                    <span>{t("menu.logout")}</span>
-                                </SelectHoverItem>
-                            </SelectHover>
+                                <Button type="button" variant="text" color="default" className="mr-8 max-w-40">
+                                    <span className="truncate">{user.user_name}</span>
+                                    <DropdownChevron />
+                                </Button>
+                            </Dropdown>
                         </div>
                     </div>
                 </div>
                 <div className="flex flex-1 min-h-0">
-                    <div className="relative z-10 bg-background-main h-full w-[184px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
+                    <div className="relative z-10 bg-[#f8f8f8] dark:bg-background-main h-full w-[184px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
                         <nav
                             className="overflow-y-auto overflow-x-hidden [&_.navlink>svg]:text-text-2 [&_.navlink.active>svg]:text-inherit"
                             style={{ maxHeight: "calc(100vh - 64px - 90px - var(--license-banner-h, 0px))" }}
@@ -381,7 +392,7 @@ export default function MainLayout() {
                         </nav>
                         {!appConfig.noFace && (
                             <div className="absolute left-0 bottom-0 w-[180px] p-2">
-                                <div className="help flex items-between my-3">
+                                <div className="help flex items-between my-2">
                                     <TooltipProvider>
                                         <Tooltip
                                             content={
@@ -437,7 +448,8 @@ export default function MainLayout() {
                     document scrollbar, so calc(100vw-184px) overshot the free space
                     by the scrollbar width and forced a horizontal document scrollbar
                     (which then cost vertical space and produced a second, outer scrollbar). */}
-                    <div className="flex-1 min-w-0 bg-background-main-content rounded-lg">
+                    {/* Clip child backgrounds to the shared radius without creating a scroll container. */}
+                    <div className={`flex-1 min-w-0 bg-background-main-content rounded-lg${isPrimaryPage ? " mr-4 mb-4 overflow-clip" : ""}`}>
                         <Suspense
                             fallback={
                                 <div className="flex items-center justify-center h-full">
@@ -474,11 +486,14 @@ export default function MainLayout() {
 }
 
 const useLanguage = (user: User) => {
+    const { t } = useTranslation();
     // APP_CONFIG.disableJa (config.js) hides Japanese from the switcher.
     const jaDisabled = !!(window as any).APP_CONFIG?.disableJa;
-    const options: Record<string, string> = jaDisabled
-        ? { "zh-Hans": "中文", "en-US": "English" }
-        : { "zh-Hans": "中文", "en-US": "English", ja: "日本語" };
+    const options: Record<string, string> = {
+        "zh-Hans": t("menu.languageChinese"),
+        "en-US": "English",
+        ...(!jaDisabled && { ja: t("menu.languageJapanese") }),
+    };
     // Source of truth for the displayed label is whatever i18next resolved
     // during init (which already honors disableJa).
     const initialLanguage = options[i18next.language] ? i18next.language : "zh-Hans";
@@ -491,7 +506,6 @@ const useLanguage = (user: User) => {
         }
     }, [user]);
 
-    const { t } = useTranslation();
     const changLanguage = (ln: string) => {
         setLanguage(ln);
         localStorage.setItem("i18nextLng", ln);
@@ -502,7 +516,6 @@ const useLanguage = (user: User) => {
     };
     return {
         language,
-        languageNames: options,
         options,
         changLanguage,
         t,

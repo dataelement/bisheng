@@ -133,8 +133,8 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
             api_key: (value) => !value && 'API Key ' + t('chatConfig.errors.required')
         },
         cloudsway: {
-            api_key: (value) => !value && 'API Key ' + t('chatConfig.errors.required'),
-            endpoint: (value) => !value && 'endpoint ' + t('chatConfig.errors.required')
+            api_key: (value) => !value && 'AccessKey ' + t('chatConfig.errors.required'),
+            endpoint: (value) => !value && 'Endpoint ' + t('chatConfig.errors.required')
         },
         searXNG: {
             server_url: (value) => !value && 'The server address cannot be empty'
@@ -334,24 +334,27 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
             case 'cloudsway':
                 return (
                     <>
+                        {/* Cloudsway issues an AccessKey and an Endpoint id; the console names are used as labels */}
                         <InputField
                             required
-                            label="API Key"
+                            label="AccessKey"
                             type="password"
                             name="api_key"
                             value={currentToolMap['api_key'] || ''}
                             onChange={handleParamChange}
                             error={(formErrors as any).api_key}
                             id="cloudsway-api-key"
+                            tooltip={t('chatConfig.webSearch.cloudswayAccessKeyTip')}
                         />
                         <InputField
                             required
-                            label="endpoint"
+                            label="Endpoint"
                             name="endpoint"
                             value={currentToolMap['endpoint'] || ''}
                             onChange={handleParamChange}
                             error={(formErrors as any).endpoint}
                             id="cloudsway-endpoint"
+                            tooltip={t('chatConfig.webSearch.cloudswayEndpointTip')}
                         />
                         {baseUrlField}
                     </>

@@ -5,7 +5,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { alertContext } from "../../contexts/alertContext";
 import { Variable, VariableType, delVariableApi, getVariablesApi, saveVariableApi } from "../../controllers/API/flow";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { handleUiRequest, showApiError } from "../../controllers/request";
 import { generateUUID } from "../../utils";
 import { Dialog } from "../bs-ui/dialog";
 import VarDialog from "./VarDialog";
@@ -57,7 +57,6 @@ export default function VariablesComponent({ vid, nodeId, flowId, onChange }: {
             });
         }
 
-        setOpenPop(false)
         // api
         const param: any = {
             "flow_id": flowId,
@@ -70,20 +69,21 @@ export default function VariablesComponent({ vid, nodeId, flowId, onChange }: {
         if (_item.update) {
             param.id = _item.id
         }
-        captureAndAlertRequestErrorHoc(saveVariableApi(param).then(res => {
+        saveVariableApi(param).then(res => {
+            setOpenPop(false)
             const _items = items.map(item => item.id === _item.id ? { ..._item, id: res.id, update: true } : item)
             // const hasValue = _items.find(item => item.name)
             // 保存时 id传出去保存，用来校验必填项
             onChange(_items.map(el => el.name))
             setItems(_items)
-        }))
+        }).catch(showApiError)
     }
 
     // 
     const handleDelClick = async (index) => {
         const newItems = cloneDeep(items);
         const item = newItems.splice(index, 1);
-        item[0].update && await captureAndAlertRequestErrorHoc(delVariableApi(item[0].id))
+        if (item[0].update) await delVariableApi(item[0].id)
         setItems(newItems)
         // 触发必填校验
         !newItems.length && onChange('')
@@ -112,7 +112,7 @@ export default function VariablesComponent({ vid, nodeId, flowId, onChange }: {
                         <Dialog open={openPop} onOpenChange={setOpenPop}>
                             <VarDialog data={item} onSave={handleSave} onClose={setOpenPop} />
                         </Dialog>
-                        <button onClick={() => handleDelClick(idx)} >
+                        <button onClick={handleUiRequest(() => handleDelClick(idx))} >
                             <X className={"h-4 w-4 hover:text-accent-foreground"} />
                         </button>
                     </div>

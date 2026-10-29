@@ -1,787 +1,808 @@
-import { Tooltip as SharedTooltip } from '@bisheng/ui';
+import { Dropdown, DropdownItem, DropdownSeparator, Tooltip as SharedTooltip } from "@bisheng/ui";
 import { Download, MoreVertical, GitBranch, History, FileSearch } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useState, type MouseEvent } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Tag } from "@bisheng/ui";
 import { Button } from "~/components";
-import { Checkbox } from '@bisheng/ui';
+import { Checkbox } from "@bisheng/ui";
 import { RoundCheckbox } from "~/components/ui/RoundCheckbox";
 import { SELECTION_CHECKBOX_CLASS } from "./selectionCheckboxStyles";
 import { Card, CardContent } from "~/components/ui/Card";
-import {
-    DropdownMenu,
-    DropdownMenuTrigger
-} from "~/components/ui/DropdownMenu";
-import { ActionMenuContent, ActionMenuItem, ActionMenuLoadingRow } from "~/components/ActionMenu";
 import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemRetryable, isKnowledgeItemUploading, type KnowledgeStatusTone } from "../knowledgeUtils";
+import {
+  formatTimeCard,
+  getKnowledgeApprovalStatusLabel,
+  isKnowledgeApprovalRejected,
+  isKnowledgeItemPreviewable,
+  isKnowledgeItemRetryable,
+  isKnowledgeItemUploading,
+  type KnowledgeStatusTone,
+} from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
-
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Highlight case-insensitive matches of `keyword` inside `text` (Figma 11814:70449). */
 const renderHighlightedName = (text: string, keyword?: string) => {
-    const kw = keyword?.trim();
-    if (!kw) return text;
-    const parts = text.split(new RegExp(`(${escapeRegExp(kw)})`, "gi"));
-    const lowerKw = kw.toLowerCase();
-    return parts.map((part, i) =>
-        part.toLowerCase() === lowerKw
-            ? <span key={i} className="text-blue-500">{part}</span>
-            : part
-    );
+  const kw = keyword?.trim();
+  if (!kw) return text;
+  const parts = text.split(new RegExp(`(${escapeRegExp(kw)})`, "gi"));
+  const lowerKw = kw.toLowerCase();
+  return parts.map((part, i) =>
+    part.toLowerCase() === lowerKw ? (
+      <span key={i} className="text-blue-500">
+        {part}
+      </span>
+    ) : (
+      part
+    ),
+  );
 };
 
 interface FileCardProps {
-    file: KnowledgeFile;
-    userRole: SpaceRole;
-    /** F040: lazily resolve this file's action permissions when its menu opens. */
-    onEnsureFilePermissions?: (file: KnowledgeFile) => void;
-    /** True while that lookup is in flight — the menu shows a loading row instead
-     *  of the fail-closed item set so items don't pop in after it opens. */
-    permissionsLoading?: boolean;
-    isSelected: boolean;
-    onSelect: (selected: boolean) => void;
-    onDownload: () => void;
-    onRename: (newName: string) => void;
-    onDelete: () => void;
-    onEditTags: () => void;
-    onRetry?: () => void;
-    onNavigateFolder?: (folderId?: string) => void;
-    onPreview?: (fileId: string) => void;
-    onValidateName?: (newName: string) => string | null;
-    onCancelCreate?: () => void;
-    onManagePermission?: () => void;
-    /** F034: open the move dialog for this file/folder. Shown when provided. */
-    onMove?: () => void;
-    /** F034: whether this file/folder can be moved (move permission in this space). */
-    canMove?: boolean;
-    canRename?: boolean;
-    canDelete?: boolean;
-    canDownload?: boolean;
-    /** Version management gating for per-row version actions / badges. */
-    versionManagementEnabled?: boolean;
-    /** Open the version-management (similar-document linking) dialog for this file. */
-    onOpenVersionManagement?: (file: KnowledgeFile) => void;
-    /** Open the version-history sheet for this file. */
-    onOpenVersionHistory?: (file: KnowledgeFile) => void;
-    /** Whether the current user can manage members (gates the "similar" pill). */
-    canManageMembers?: boolean;
-    disableClickNavigate?: boolean;
-    hideSelectionCheckbox?: boolean;
-    /** H5: render as list-row (not card tile). */
-    mobileListMode?: boolean;
-    /** Hide per-file download UI (icon + menu item), e.g. in read-only preview drawers. */
-    hideDownloadActions?: boolean;
-    /** Tag IDs hit by the active search; matching tags are highlighted in TagGroup. */
-    highlightedTagIds?: number[];
-    /** Keyword hit by the active search; matching substring in the file name is highlighted. */
-    highlightKeyword?: string;
-    // F034 drag-move: card is a drag source; folder cards are drop targets.
-    cardDraggable?: boolean;
-    onCardDragStart?: (e: React.DragEvent) => void;
-    isFolderDragOver?: boolean;
-    onFolderDragOver?: (e: React.DragEvent) => void;
-    onFolderDragLeave?: () => void;
-    onFolderDrop?: (e: React.DragEvent) => void;
+  file: KnowledgeFile;
+  userRole: SpaceRole;
+  /** F040: lazily resolve this file's action permissions when its menu opens. */
+  onEnsureFilePermissions?: (file: KnowledgeFile) => void;
+  /** True while that lookup is in flight — the menu shows a loading row instead
+   *  of the fail-closed item set so items don't pop in after it opens. */
+  permissionsLoading?: boolean;
+  isSelected: boolean;
+  onSelect: (selected: boolean) => void;
+  onDownload: () => void;
+  onRename: (newName: string) => void | Promise<void>;
+  onDelete: () => void;
+  onEditTags: () => void;
+  onRetry?: () => void;
+  onNavigateFolder?: (folderId?: string) => void;
+  onPreview?: (fileId: string) => void;
+  onValidateName?: (newName: string) => string | null;
+  onCancelCreate?: () => void;
+  onManagePermission?: () => void;
+  /** F034: open the move dialog for this file/folder. Shown when provided. */
+  onMove?: () => void;
+  /** F034: whether this file/folder can be moved (move permission in this space). */
+  canMove?: boolean;
+  canRename?: boolean;
+  canDelete?: boolean;
+  canDownload?: boolean;
+  /** Version management gating for per-row version actions / badges. */
+  versionManagementEnabled?: boolean;
+  /** Open the version-management (similar-document linking) dialog for this file. */
+  onOpenVersionManagement?: (file: KnowledgeFile) => void;
+  /** Open the version-history sheet for this file. */
+  onOpenVersionHistory?: (file: KnowledgeFile) => void;
+  /** Whether the current user can manage members (gates the "similar" pill). */
+  canManageMembers?: boolean;
+  disableClickNavigate?: boolean;
+  hideSelectionCheckbox?: boolean;
+  /** H5: render as list-row (not card tile). */
+  mobileListMode?: boolean;
+  /** Hide per-file download UI (icon + menu item), e.g. in read-only preview drawers. */
+  hideDownloadActions?: boolean;
+  /** Tag IDs hit by the active search; matching tags are highlighted in TagGroup. */
+  highlightedTagIds?: number[];
+  /** Keyword hit by the active search; matching substring in the file name is highlighted. */
+  highlightKeyword?: string;
+  // F034 drag-move: card is a drag source; folder cards are drop targets.
+  cardDraggable?: boolean;
+  onCardDragStart?: (e: React.DragEvent) => void;
+  isFolderDragOver?: boolean;
+  onFolderDragOver?: (e: React.DragEvent) => void;
+  onFolderDragLeave?: () => void;
+  onFolderDrop?: (e: React.DragEvent) => void;
 }
 
 export function FileCard({
-    file,
-    userRole,
-    onEnsureFilePermissions,
-    permissionsLoading = false,
-    isSelected,
-    onSelect,
-    onDownload,
+  file,
+  userRole,
+  onEnsureFilePermissions,
+  permissionsLoading = false,
+  isSelected,
+  onSelect,
+  onDownload,
+  onRename,
+  onDelete,
+  onEditTags,
+  onRetry,
+  onNavigateFolder,
+  onPreview,
+  onValidateName,
+  onCancelCreate,
+  onManagePermission,
+  onMove,
+  canMove = false,
+  canRename = false,
+  canDelete = false,
+  canDownload = false,
+  versionManagementEnabled = false,
+  onOpenVersionManagement,
+  onOpenVersionHistory,
+  canManageMembers = false,
+  disableClickNavigate = false,
+  hideSelectionCheckbox = false,
+  mobileListMode = false,
+  hideDownloadActions = false,
+  highlightedTagIds,
+  highlightKeyword,
+  cardDraggable = false,
+  onCardDragStart,
+  isFolderDragOver = false,
+  onFolderDragOver,
+  onFolderDragLeave,
+  onFolderDrop,
+}: FileCardProps) {
+  const localize = useLocalize();
+  /** True when primary input is mouse + hover: actions reveal on card hover. Touch / coarse pointer: keep actions visible (viewport width does not matter). */
+  const revealCardActionsOnHoverOnly = useMediaQuery("(hover: hover) and (pointer: fine)");
+  const isCreating = !!file.isCreating;
+  // Uploading placeholder cards have no backend identity yet — not movable.
+  const isUploading = isKnowledgeItemUploading(file);
+  const [hovered, setHovered] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  // F040: resolve this file's action permissions lazily, only when the menu opens.
+  const handleMoreMenuOpenChange = (open: boolean) => {
+    setMoreMenuOpen(open);
+    if (open) onEnsureFilePermissions?.(file);
+  };
+  // Right-click context menu mirrors the "..." action menu, positioned at the cursor.
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const failureMessage =
+    (file.status === FileStatus.FAILED ||
+      file.status === FileStatus.TIMEOUT ||
+      file.status === FileStatus.VIOLATION) &&
+    file.errorMessage?.trim()
+      ? file.errorMessage.trim()
+      : null;
+  const approvalStatusLabel = getKnowledgeApprovalStatusLabel(file);
+  const approvalReason = file.approvalReason?.trim() || null;
+
+  const isAdmin = userRole === SpaceRole.CREATOR || userRole === SpaceRole.ADMIN;
+  const isFolder = file.type === FileType.FOLDER;
+  // A folder still uploading its batch: shown only as a name with a translucent
+  // "uploading" overlay, not clickable, not a drag source / drop target.
+  // Inline-create placeholders (isCreating) are excluded — a freshly created
+  // folder is a normal folder with a highlighted rename input, no scrim/tag.
+  const isUploadingFolderPlaceholder = isFolder && isUploading && !isCreating;
+  // The frontend-only folder upload placeholder (no backend identity) keeps a
+  // disabled checkbox instead of dropping it, so the column stays put.
+  const isSelectable = !isUploadingFolderPlaceholder;
+  /** Files that haven't finished parsing get the neutral grey skin (Figma 11671:34497). */
+  const isNotParsed = !isFolder && !!file.status && file.status !== FileStatus.SUCCESS;
+  /** Subset of isNotParsed that should show the "In progress" overlay tag. */
+  const isInProgress =
+    !isFolder &&
+    (file.status === FileStatus.UPLOADING ||
+      file.status === FileStatus.PROCESSING ||
+      file.status === FileStatus.WAITING ||
+      file.status === FileStatus.REBUILDING);
+
+  const {
+    isRenaming,
+    renameValue,
+    setRenameValue,
+    inputRef,
+    handleRenameSubmit,
+    handleKeyDown,
+    startRenamingFromMenu,
+    handleMenuCloseAutoFocus,
+  } = useInlineRename({
+    fileName: file.name,
+    isFolder,
+    isCreating,
     onRename,
-    onDelete,
-    onEditTags,
-    onRetry,
-    onNavigateFolder,
-    onPreview,
     onValidateName,
     onCancelCreate,
-    onManagePermission,
-    onMove,
-    canMove = false,
-    canRename = false,
-    canDelete = false,
-    canDownload = false,
-    versionManagementEnabled = false,
-    onOpenVersionManagement,
-    onOpenVersionHistory,
-    canManageMembers = false,
-    disableClickNavigate = false,
-    hideSelectionCheckbox = false,
-    mobileListMode = false,
-    hideDownloadActions = false,
-    highlightedTagIds,
-    highlightKeyword,
-    cardDraggable = false,
-    onCardDragStart,
-    isFolderDragOver = false,
-    onFolderDragOver,
-    onFolderDragLeave,
-    onFolderDrop,
-}: FileCardProps) {
-    const localize = useLocalize();
-    /** True when primary input is mouse + hover: actions reveal on card hover. Touch / coarse pointer: keep actions visible (viewport width does not matter). */
-    const revealCardActionsOnHoverOnly = useMediaQuery(
-        "(hover: hover) and (pointer: fine)",
+  });
+
+  // formatTime is now imported from ../knowledgeUtils
+
+  const nameToneClass = isKnowledgeItemPreviewable(file) ? "text-text-1" : "text-text-3";
+
+  /**
+   * Status pill overlaid on the bottom-left of the preview area (Figma 11671:34497).
+   * Covers all non-success states: parsing-like (neutral grey) + error / approval (colored).
+   * Drawn by the design-system Tag in its status form (组件-Tag标签.md §5); the
+   * status → color mapping is deliberately kept next to each surface rather
+   * than shared with FileListRow — the two differ on an unknown status (this
+   * one renders nothing, the row falls back to the queueing label).
+   */
+  const renderStatusOverlayTag = (inline = false) => {
+    // Uploading folder placeholder: a neutral "uploading" pill in the same
+    // bottom-left slot as the file status tags — no spinner over the icon.
+    if (isUploadingFolderPlaceholder) {
+      const pill = (
+        <Tag size="small" dot className="whitespace-nowrap">
+          {localize("com_knowledge.uploading_status")}
+        </Tag>
+      );
+      // z-20 keeps the tag crisp above the translucent uploading scrim (z-10).
+      return inline ? pill : <div className="absolute bottom-1 left-1 z-20">{pill}</div>;
+    }
+    // The backend returns this folder anomaly signal only to the space creator.
+    if (isFolder) {
+      if (file.hasAbnormalFiles !== true) return null;
+      const pill = (
+        <Tag size="small" dot color="danger" className="whitespace-nowrap">
+          {localize("com_knowledge.folder_abnormal")}
+        </Tag>
+      );
+      return inline ? pill : <div className="absolute bottom-1 left-1 z-20">{pill}</div>;
+    }
+    if (!isAdmin) return null;
+    if (file.status === FileStatus.SUCCESS) return null;
+
+    const approvalLabel = approvalStatusLabel;
+    const statusReason = failureMessage || approvalReason;
+
+    let label: string | null = null;
+    let tone: KnowledgeStatusTone = "default";
+
+    if (approvalLabel) {
+      label = approvalLabel;
+      // Same call as the list row: everything not rejected keeps the blue
+      // it had before the migration, `finalize_failed` included.
+      tone = isKnowledgeApprovalRejected(file) ? "danger" : "approving";
+    } else {
+      const config: Record<string, { label: string; tone: KnowledgeStatusTone }> = {
+        [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), tone: "default" },
+        [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), tone: "default" },
+        [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), tone: "default" },
+        [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), tone: "default" },
+        [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), tone: "danger" },
+        [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), tone: "danger" },
+        [FileStatus.VIOLATION]: { label: localize("com_knowledge.violation"), tone: "danger" },
+      };
+      const item = file.status ? config[file.status] : undefined;
+      if (!item) return null;
+      label = item.label;
+      tone = item.tone;
+    }
+
+    if (!label) return null;
+
+    // 组件-Tag标签.md §5 — the status form, `small` rung; identical drawing
+    // to the desktop list row (FileListRow), overlaid here on the preview.
+    const pill = (
+      <Tag size="small" dot color={tone} className="whitespace-nowrap">
+        {label}
+      </Tag>
     );
-    const isCreating = !!file.isCreating;
-    // Uploading placeholder cards have no backend identity yet — not movable.
-    const isUploading = isKnowledgeItemUploading(file);
-    const [hovered, setHovered] = useState(false);
-    const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-    // F040: resolve this file's action permissions lazily, only when the menu opens.
-    const handleMoreMenuOpenChange = (open: boolean) => {
-        setMoreMenuOpen(open);
-        if (open) onEnsureFilePermissions?.(file);
-    };
-    // Right-click context menu mirrors the "..." action menu, positioned at the cursor.
-    const [contextMenuOpen, setContextMenuOpen] = useState(false);
-    const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
-    const failureMessage = (
-        file.status === FileStatus.FAILED ||
-        file.status === FileStatus.TIMEOUT ||
-        file.status === FileStatus.VIOLATION
-    ) && file.errorMessage?.trim()
-        ? file.errorMessage.trim()
-        : null;
-    const approvalStatusLabel = getKnowledgeApprovalStatusLabel(file);
-    const approvalReason = file.approvalReason?.trim() || null;
 
-    const isAdmin = userRole === SpaceRole.CREATOR || userRole === SpaceRole.ADMIN;
-    const isFolder = file.type === FileType.FOLDER;
-    // A folder still uploading its batch: shown only as a name with a translucent
-    // "uploading" overlay, not clickable, not a drag source / drop target.
-    // Inline-create placeholders (isCreating) are excluded — a freshly created
-    // folder is a normal folder with a highlighted rename input, no scrim/tag.
-    const isUploadingFolderPlaceholder = isFolder && isUploading && !isCreating;
-    // The frontend-only folder upload placeholder (no backend identity) keeps a
-    // disabled checkbox instead of dropping it, so the column stays put.
-    const isSelectable = !isUploadingFolderPlaceholder;
-    /** Files that haven't finished parsing get the neutral grey skin (Figma 11671:34497). */
-    const isNotParsed = !isFolder && !!file.status && file.status !== FileStatus.SUCCESS;
-    /** Subset of isNotParsed that should show the "In progress" overlay tag. */
-    const isInProgress = !isFolder && (
-        file.status === FileStatus.UPLOADING ||
-        file.status === FileStatus.PROCESSING ||
-        file.status === FileStatus.WAITING ||
-        file.status === FileStatus.REBUILDING
-    );
-
-    const {
-        isRenaming,
-        renameValue,
-        setRenameValue,
-        inputRef,
-        handleRenameSubmit,
-        handleKeyDown,
-        startRenaming,
-    } = useInlineRename({
-        fileName: file.name,
-        isFolder,
-        isCreating,
-        onRename,
-        onValidateName,
-        onCancelCreate,
-    });
-
-    // formatTime is now imported from ../knowledgeUtils
-
-    const nameToneClass = isKnowledgeItemPreviewable(file)
-        ? "text-text-1"
-        : "text-text-3";
-
-    /**
-     * Status pill overlaid on the bottom-left of the preview area (Figma 11671:34497).
-     * Covers all non-success states: parsing-like (neutral grey) + error / approval (colored).
-     * Drawn by the design-system Tag in its status form (组件-Tag标签.md §5); the
-     * status → color mapping is deliberately kept next to each surface rather
-     * than shared with FileListRow — the two differ on an unknown status (this
-     * one renders nothing, the row falls back to the queueing label).
-     */
-    const renderStatusOverlayTag = (inline = false) => {
-        // Uploading folder placeholder: a neutral "uploading" pill in the same
-        // bottom-left slot as the file status tags — no spinner over the icon.
-        if (isUploadingFolderPlaceholder) {
-            const pill = (
-                <Tag size="small" dot className="whitespace-nowrap">
-                    {localize("com_knowledge.uploading_status")}
-                </Tag>
-            );
-            // z-20 keeps the tag crisp above the translucent uploading scrim (z-10).
-            return inline ? pill : <div className="absolute bottom-1 left-1 z-20">{pill}</div>;
-        }
-        // The backend returns this folder anomaly signal only to the space creator.
-        if (isFolder) {
-            if (file.hasAbnormalFiles !== true) return null;
-            const pill = (
-                <Tag size="small" dot color="danger" className="whitespace-nowrap">
-                    {localize("com_knowledge.folder_abnormal")}
-                </Tag>
-            );
-            return inline ? pill : <div className="absolute bottom-1 left-1 z-20">{pill}</div>;
-        }
-        if (!isAdmin) return null;
-        if (file.status === FileStatus.SUCCESS) return null;
-
-        const approvalLabel = approvalStatusLabel;
-        const statusReason = failureMessage || approvalReason;
-
-        let label: string | null = null;
-        let tone: KnowledgeStatusTone = "default";
-
-        if (approvalLabel) {
-            label = approvalLabel;
-            // Same call as the list row: everything not rejected keeps the blue
-            // it had before the migration, `finalize_failed` included.
-            tone = isKnowledgeApprovalRejected(file) ? "danger" : "approving";
-        } else {
-            const config: Record<string, { label: string; tone: KnowledgeStatusTone }> = {
-                [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), tone: "default" },
-                [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), tone: "default" },
-                [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), tone: "default" },
-                [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), tone: "default" },
-                [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), tone: "danger" },
-                [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), tone: "danger" },
-                [FileStatus.VIOLATION]: { label: localize("com_knowledge.violation"), tone: "danger" },
-            };
-            const item = file.status ? config[file.status] : undefined;
-            if (!item) return null;
-            label = item.label;
-            tone = item.tone;
-        }
-
-        if (!label) return null;
-
-        // 组件-Tag标签.md §5 — the status form, `small` rung; identical drawing
-        // to the desktop list row (FileListRow), overlaid here on the preview.
-        const pill = (
-            <Tag size="small" dot color={tone} className="whitespace-nowrap">
-                {label}
-            </Tag>
-        );
-
-        const wrapped = statusReason ? (
-            <SharedTooltip  content={statusReason} side="top" ><span className="inline-flex">{pill}</span></SharedTooltip>
-        ) : pill;
-
-        // Inline (H5 row meta line) returns the bare pill; desktop card overlays it on the icon.
-        return inline ? wrapped : (
-            <div className="absolute bottom-1 left-1 z-10">{wrapped}</div>
-        );
-    };
-
-    // Similar-document tag — placed in the SAME slot as the status tag: overlaid on the
-    // icon for the desktop card, inline after the name for the H5 row. The two never
-    // co-occur (similar only shows on SUCCESS files, the status tag only on non-success).
-    const renderSimilarTag = (overlay = false) => {
-        if (!(versionManagementEnabled && canManageMembers && file.has_similar && !file.is_multi_version && file.status === FileStatus.SUCCESS)) {
-            return null;
-        }
-        const btn = (
-            <button
-                type="button"
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenVersionManagement?.(file);
-                }}
-                className="flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44] hover:bg-[#FFE6D2]"
-            >
-                <FileSearch className="size-3" />
-                {localize("com_knowledge.version.pill_similar")}
-            </button>
-        );
-        return overlay ? <div className="absolute bottom-1 left-1 z-10">{btn}</div> : btn;
-    };
-
-    const getStatusText = () => {
-        if (isRenaming) {
-            return (
-                <div className="flex-1 min-w-0 pr-1">
-                    <input
-                        ref={inputRef}
-                        type="text"
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onBlur={handleRenameSubmit}
-                        onKeyDown={handleKeyDown}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-full h-6 px-1.5 text-sm border border-border-deep rounded outline-none shadow-focus bg-white font-normal"
-                    />
-                </div>
-            );
-        }
-
-        return (
-            <div className="flex min-w-0 items-start gap-1.5">
-                {versionManagementEnabled && file.is_multi_version && file.version_no != null && file.version_no >= 1 && (
-                    <span className="mt-0.5 flex h-5 shrink-0 items-center justify-center rounded bg-blue-50 px-1.5 text-xs font-medium text-blue-500">
-                        {`V${file.version_no}`}
-                    </span>
-                )}
-                <span
-                    className={cn(
-                        "line-clamp-2 min-h-[40px] min-w-0 break-all leading-5",
-                        nameToneClass,
-                    )}
-                >
-                    {renderHighlightedName(file.name, highlightKeyword)}
-                </span>
-            </div>
-        );
-    };
-
-    const handleCardClick = () => {
-        if (isCreating || isRenaming || isUploadingFolderPlaceholder) return;
-        // Folder click is treated as "enter folder"/"navigate directory"
-        // (depending on the parent component's onNavigateFolder implementation).
-        if (isFolder) {
-            onNavigateFolder?.(file.id);
-            return;
-        }
-
-        if (!isKnowledgeItemPreviewable(file)) return;
-
-        // Space square drawer sets disableClickNavigate to avoid relying on default navigation;
-        // still honor explicit onPreview when provided.
-        if (disableClickNavigate && !onPreview) return;
-        onPreview?.(file.id);
-    };
-
-    const hasRetryOption = Boolean(onRetry && isKnowledgeItemRetryable(file));
-    // Version row actions visible for this file (parsed non-folder for management; multi-version for history).
-    const showVersionManagement = versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && Boolean(onOpenVersionManagement);
-    const showVersionHistory = versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);
-    const showMoveItem = Boolean(onMove) && !isCreating;
-    const showMenuDownloadItem = canDownload && !hideDownloadActions;
-    // Card view puts EVERY action behind the ⋮ menu, even a lone one, so a card
-    // never sprouts a second floating control over its thumbnail.
-    const hasReviewedMenuItems = showMenuDownloadItem || isAdmin || canRename || canDelete
-        || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory;
-    // Placeholder has only a temp id (no backend identity) — suppress all row actions.
-    const showMoreMenu = !isUploadingFolderPlaceholder && hasReviewedMenuItems;
-    const showCardActions = moreMenuOpen || hovered;
-    const cardOpensPreviewOrFolder =
-        !isCreating &&
-        !isRenaming &&
-        !isUploadingFolderPlaceholder &&
-        (isFolder || isKnowledgeItemPreviewable(file));
-
-    // Shared action-menu items, reused by the "..." dropdown, the H5 row menu and
-    // the right-click menu. While permissions are still resolving, show a single
-    // loading row so the menu doesn't open with a few items and then grow.
-    const moreMenuItems = permissionsLoading ? (
-        <ActionMenuLoadingRow />
+    const wrapped = statusReason ? (
+      <SharedTooltip content={statusReason} side="top">
+        <span className="inline-flex">{pill}</span>
+      </SharedTooltip>
     ) : (
-        <>
-            {showMenuDownloadItem && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                    icon={<Outlined.Download />}
-                    label={localize("com_knowledge.download")}
-                />
-            )}
-            {onManagePermission && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
-                    icon={<Outlined.PeopleSafe />}
-                    label={localize("com_permission.manage_permission")}
-                />
-            )}
-            {isAdmin && !isFolder && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onEditTags(); }}
-                    icon={<Outlined.Tag />}
-                    label={localize("com_knowledge.edit_tags")}
-                />
-            )}
-            {canRename && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); startRenaming(); }}
-                    icon={<Outlined.Edit />}
-                    label={localize("com_knowledge.rename")}
-                />
-            )}
-            {showMoveItem && (
-                <ActionMenuItem
-                    disabled={!canMove || isUploading}
-                    onClick={(e) => { e.stopPropagation(); onMove?.(); }}
-                    icon={<Outlined.MoveToFolder />}
-                    label={localize("com_knowledge.move")}
-                />
-            )}
-            {isAdmin && hasRetryOption && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
-                    icon={<Outlined.Refresh />}
-                    label={localize("com_knowledge.retry")}
-                />
-            )}
-            {showVersionManagement && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
-                    icon={<GitBranch />}
-                    label={localize("com_knowledge.version.menu_version_management")}
-                />
-            )}
-            {showVersionHistory && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onOpenVersionHistory?.(file); }}
-                    icon={<History />}
-                    label={localize("com_knowledge.version.menu_version_history")}
-                />
-            )}
-            {canDelete && (
-                <ActionMenuItem
-                    danger
-                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                    icon={<Outlined.Delete />}
-                    label={localize("com_knowledge.delete")}
-                />
-            )}
-        </>
+      pill
     );
 
-    const handleCardContextMenu = (e: MouseEvent<HTMLDivElement>) => {
-        if (!showMoreMenu) return;
-        e.preventDefault();
-        // Same lazy permission resolution as the "..." trigger, otherwise the
-        // right-click menu renders with unresolved (reduced) permissions.
-        onEnsureFilePermissions?.(file);
-        setContextMenuPosition({ x: e.clientX, y: e.clientY });
-        setContextMenuOpen(true);
-    };
+    // Inline (H5 row meta line) returns the bare pill; desktop card overlays it on the icon.
+    return inline ? wrapped : <div className="absolute bottom-1 left-1 z-10">{wrapped}</div>;
+  };
 
-    // H5 mobile list row: flat row (no border / shadow / card background) with
-    // icon + title + date + tags, and a circular checkbox on the far right.
-    // Rendered independently from the desktop card so the desktop path is untouched.
-    if (mobileListMode) {
-        const mobileStatusPill = renderStatusOverlayTag(true);
-        const mobileSimilarTag = renderSimilarTag();
-        return (
-            <div
-                className={cn(
-                    // Full-bleed row: the list container has no horizontal padding on mobile,
-                    // so the row's own px-4 gives the 16px content gutter while the selected
-                    // background spans the full width.
-                    "flex items-center gap-2 px-4 py-3",
-                    cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
-                )}
-                style={
-                    isSelected
-                        ? { background: "linear-gradient(0deg, rgb(var(--brand-500)/0.07) 0%, rgb(var(--brand-500)/0.07) 100%), #FFF" }
-                        : undefined
-                }
-                onClick={handleCardClick}
-            >
-                {/* File icon 48x48 — colored icons render without backdrop on H5 */}
-                <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md">
-                    <FileIconRenderer file={file} isFolder={isFolder} iconClassName="size-12 shrink-0" thumbBordered transparentBg />
-                </div>
+  // Similar-document tag — placed in the SAME slot as the status tag: overlaid on the
+  // icon for the desktop card, inline after the name for the H5 row. The two never
+  // co-occur (similar only shows on SUCCESS files, the status tag only on non-success).
+  const renderSimilarTag = (overlay = false) => {
+    if (!(
+      versionManagementEnabled &&
+      canManageMembers &&
+      file.has_similar &&
+      !file.is_multi_version &&
+      file.status === FileStatus.SUCCESS
+    )) {
+      return null;
+    }
+    const btn = (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpenVersionManagement?.(file);
+        }}
+        className="flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44] hover:bg-[#FFE6D2]"
+      >
+        <FileSearch className="size-3" />
+        {localize("com_knowledge.version.pill_similar")}
+      </button>
+    );
+    return overlay ? <div className="absolute bottom-1 left-1 z-10">{btn}</div> : btn;
+  };
 
-                {/* Text block: title (+ status) / (date + tags) */}
-                <div className="flex min-w-0 flex-1 flex-col">
-                    {isRenaming ? (
-                        <input
-                            ref={inputRef}
-                            type="text"
-                            value={renameValue}
-                            onChange={(e) => setRenameValue(e.target.value)}
-                            onBlur={handleRenameSubmit}
-                            onKeyDown={handleKeyDown}
-                            onClick={(e) => e.stopPropagation()}
-                            className="h-6 w-full rounded border border-border-deep bg-white px-1.5 text-sm font-normal shadow-focus outline-none"
-                        />
-                    ) : (
-                        <div className="flex min-w-0 items-center gap-1.5">
-                            <span className={cn("min-w-0 truncate text-sm leading-5", nameToneClass)}>
-                                {renderHighlightedName(file.name, highlightKeyword)}
-                            </span>
-                            {mobileStatusPill && (
-                                <span className="inline-flex shrink-0 items-center self-center leading-5">
-                                    {mobileStatusPill}
-                                </span>
-                            )}
-                            {mobileSimilarTag && (
-                                <span className="inline-flex shrink-0 items-center self-center leading-5">
-                                    {mobileSimilarTag}
-                                </span>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Date + tags on a single line */}
-                    <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden">
-                        <span className="shrink-0 text-xs leading-5 text-text-3 tabular-nums">
-                            {formatTimeCard(file.updatedAt)}
-                        </span>
-                        {!isFolder && file.tags && file.tags.length > 0 && (
-                            <>
-                                <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0]" aria-hidden />
-                                <TagGroup
-                                    tags={file.tags}
-                                    variant="text-h5"
-                                    highlightedTagIds={highlightedTagIds}
-                                />
-                            </>
-                        )}
-                    </div>
-                </div>
-
-                {/* Circular selection checkbox on the far right */}
-                {!hideSelectionCheckbox && (
-                    <RoundCheckbox
-                        className="shrink-0"
-                        checked={isSelected}
-                        disabled={!isSelectable}
-                        onCheckedChange={(checked) => onSelect(checked)}
-                    />
-                )}
-            </div>
-        );
+  const getStatusText = () => {
+    if (isRenaming) {
+      return (
+        <div className="flex-1 min-w-0 pr-1">
+          <input
+            ref={inputRef}
+            type="text"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onBlur={handleRenameSubmit}
+            onKeyDown={handleKeyDown}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full h-6 px-1.5 text-sm border border-border-deep rounded outline-none shadow-focus bg-white font-normal"
+          />
+        </div>
+      );
     }
 
     return (
-        <Card
-            draggable={cardDraggable && !isCreating && !isUploading}
-            onDragStart={cardDraggable ? onCardDragStart : undefined}
-            onDragOver={isFolder && !isUploadingFolderPlaceholder ? onFolderDragOver : undefined}
-            onDragLeave={isFolder && !isUploadingFolderPlaceholder ? onFolderDragLeave : undefined}
-            onDrop={isFolder && !isUploadingFolderPlaceholder ? onFolderDrop : undefined}
-            className={cn(
-                "group relative rounded-md overflow-hidden border-[0.5px] p-0 gap-0 py-0 shadow-none max-[767px]:rounded-md",
-                !mobileListMode && "h-[160px]",
-                cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
-                isSelected
-                    ? "bg-blue-50"
-                    : isNotParsed
-                        ? "bg-[#fbfbfb]"
-                        : "bg-white",
-                isSelected
-                    ? "border-border-base shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]"
-                    : "border-border-base hover:border-border-deep",
-                hovered && "shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]",
-                // F034: highlight a folder card as the drop target — card border only
-                isFolderDragOver && "border-primary"
-            )}
-            style={{
-                transitionProperty: 'background-color, box-shadow, border-color',
-                transitionDuration: '350ms',
-                transitionTimingFunction: 'ease-in-out',
-                ...(isSelected
-                    ? { backgroundColor: 'rgb(var(--brand-500)/0.07)' }
-                    : isNotParsed
-                        ? { backgroundColor: '#fbfbfb' }
-                        : {}),
-            }}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-            onClick={handleCardClick}
-            onContextMenu={handleCardContextMenu}
-        >
-            {/* Right-click menu: an invisible cursor-anchored trigger drives the same items as the "..." menu. */}
-            {showMoreMenu && (
-                <DropdownMenu open={contextMenuOpen} onOpenChange={setContextMenuOpen}>
-                    <DropdownMenuTrigger asChild>
-                        <button
-                            type="button"
-                            aria-hidden="true"
-                            tabIndex={-1}
-                            className="fixed size-0 opacity-0"
-                            style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
-                        />
-                    </DropdownMenuTrigger>
-                    <ActionMenuContent align="start" width={140} onClick={(e) => e.stopPropagation()}>
-                        {moreMenuItems}
-                    </ActionMenuContent>
-                </DropdownMenu>
-            )}
-            <CardContent className={cn(
-                "flex flex-col p-0",
-                !mobileListMode && "h-full",
-                mobileListMode && "max-[767px]:flex-row max-[767px]:items-center max-[767px]:gap-2 max-[767px]:p-1"
-            )}>
-                {/* Uploading-folder scrim: 50% white mask over the whole card so it reads
-                    as "in progress". The "上传中" status tag sits above it (z-20). */}
-                {isUploadingFolderPlaceholder && (
-                    <div className="pointer-events-none absolute inset-0 z-10 bg-white/50" />
-                )}
-                {!hideSelectionCheckbox && mobileListMode && (
-                    <div className="hidden max-[767px]:flex max-[767px]:shrink-0 max-[767px]:items-center max-[767px]:justify-center max-[767px]:pl-1 max-[767px]:pr-0.5">
-                        <Checkbox
-                            className={`peer ${(cn(
-                                SELECTION_CHECKBOX_CLASS,
-                                !isSelectable && "cursor-not-allowed opacity-50",
-                            )) || ''}`}
-                            disabled={!isSelectable}
-                            checked={isSelected}
-                            onCheckedChange={(checked) => onSelect(!!checked)}
-                            onPointerDown={(e) => e.stopPropagation()}
-                            onMouseDown={(e) => e.stopPropagation()}
-                            onClick={(e) => e.stopPropagation()}
-                        />
-                    </div>
-                )}
-                {/* Thumbnail / icon area — flexes to fill the remaining space under
-                    the 160px fixed-height card, leaving the bottom info row at its natural height. */}
-                <div className={cn(
-                    "relative flex min-h-0 flex-1 p-1.5",
-                    mobileListMode && "max-[767px]:h-12 max-[767px]:w-12 max-[767px]:flex-none max-[767px]:p-0 max-[767px]:rounded-sm",
-                )}>
-                    <div className={cn(
-                        "relative flex flex-1 items-center justify-center overflow-hidden rounded-sm",
-                        isSelected
-                            ? "bg-transparent"
-                            : isNotParsed
-                                ? "bg-[#fbfbfb]"
-                                : "bg-white",
-                        mobileListMode && "max-[767px]:rounded-sm",
-                    )}>
-                        <FileIconRenderer file={file} isFolder={isFolder} />
-                        {renderStatusOverlayTag()}
-                        {renderSimilarTag(true)}
-                    </div>
-
-                    {!hideSelectionCheckbox && (
-                        <div
-                            className={cn(
-                                "absolute left-2 top-2 z-10 transition-opacity",
-                                mobileListMode && "max-[767px]:hidden",
-                                !revealCardActionsOnHoverOnly
-                                    ? "opacity-100"
-                                    : isSelected
-                                    ? "opacity-100"
-                                    : "opacity-0 group-hover:opacity-100"
-                            )}
-                        >
-                            <Checkbox
-                                className={`peer ${(cn(
-                                    SELECTION_CHECKBOX_CLASS,
-                                    !isSelectable && "cursor-not-allowed opacity-50",
-                                )) || ''}`}
-                                disabled={!isSelectable}
-                                checked={isSelected}
-                                onCheckedChange={(checked) => onSelect(!!checked)}
-                                onPointerDown={(e) => e.stopPropagation()}
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => e.stopPropagation()}
-                            />
-                        </div>
-                    )}
-
-                    {!mobileListMode && (
-                        <div
-                            className={cn(
-                                "absolute right-2 top-2 z-20 flex items-center gap-1 transition-opacity",
-                                !revealCardActionsOnHoverOnly
-                                    ? "pointer-events-auto opacity-100"
-                                    : showCardActions
-                                    ? "pointer-events-auto opacity-100"
-                                    : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
-                            )}
-                        >
-                            {showMoreMenu && (
-                                <DropdownMenu open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange}>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button
-                                            variant="outline"
-                                            size="icon"
-                                            className="w-5 h-5 rounded-md shrink-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                                            onClick={(e) => e.stopPropagation()}
-                                        >
-                                            <MoreVertical className="size-4 text-text-2 group-hover:text-text-1" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-
-                                    <ActionMenuContent
-                                        align="end"
-                                        width={140}
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
-                                        {moreMenuItems}
-                                    </ActionMenuContent>
-                                </DropdownMenu>
-                            )}
-                        </div>
-                    )}
-                </div>
-
-                {/* Bottom info area */}
-                <div className={cn(
-                    "flex flex-col gap-1 px-2 py-1.5",
-                    mobileListMode && "max-[767px]:min-w-0 max-[767px]:flex-1 max-[767px]:gap-0 max-[767px]:p-0 max-[767px]:pr-1",
-                )}>
-                    {/* File name + status */}
-                    <div className="flex min-w-0 text-xs font-medium">
-                        {getStatusText()}
-                    </div>
-
-                    {/* Footer (tags + time) */}
-                    <div className="flex min-w-0 items-center justify-between gap-2">
-                        <div className="flex min-h-[20px] min-w-0 flex-1 items-center">
-                            {(!isFolder && file.tags && file.tags.length > 0) && (
-                                <TagGroup tags={file.tags} variant="text" highlightedTagIds={highlightedTagIds} />
-                            )}
-                        </div>
-                        <span className="shrink-0 text-caption-sm leading-5 text-text-3 tabular-nums">{formatTimeCard(file.updatedAt)}</span>
-                    </div>
-                </div>
-
-                {mobileListMode && (
-                    <div
-                        className={cn(
-                            "flex shrink-0 items-center gap-1 pr-1 transition-opacity",
-                            !revealCardActionsOnHoverOnly
-                                ? "pointer-events-auto opacity-100"
-                                : showCardActions
-                                  ? "pointer-events-auto opacity-100"
-                                  : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100",
-                        )}
-                    >
-                    {showMenuDownloadItem && (
-                        <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-5 w-5 shrink-0 rounded-md hover:bg-gray-100"
-                            onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                            title={localize("com_knowledge.download")}
-                        >
-                            <Download className="size-3.5 text-text-2" />
-                        </Button>
-                    )}
-                    {showMoreMenu && (
-                        <DropdownMenu open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange}>
-                            <DropdownMenuTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-5 w-5 shrink-0 rounded-md"
-                                    onClick={(e) => e.stopPropagation()}
-                                >
-                                    <MoreVertical className="size-4 text-text-2" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <ActionMenuContent
-                                align="end"
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                {moreMenuItems}
-                            </ActionMenuContent>
-                        </DropdownMenu>
-                    )}
-                    </div>
-                )}
-            </CardContent>
-        </Card>
+      <div className="flex min-w-0 items-start gap-1.5">
+        {versionManagementEnabled &&
+          file.is_multi_version &&
+          file.version_no != null &&
+          file.version_no >= 1 && (
+            <span className="mt-0.5 flex h-5 shrink-0 items-center justify-center rounded bg-blue-50 px-1.5 text-xs font-medium text-blue-500">
+              {`V${file.version_no}`}
+            </span>
+          )}
+        <span className={cn("line-clamp-2 min-h-[40px] min-w-0 break-all leading-5", nameToneClass)}>
+          {renderHighlightedName(file.name, highlightKeyword)}
+        </span>
+      </div>
     );
+  };
+
+  const handleCardClick = () => {
+    if (isCreating || isRenaming || isUploadingFolderPlaceholder) return;
+    // Folder click is treated as "enter folder"/"navigate directory"
+    // (depending on the parent component's onNavigateFolder implementation).
+    if (isFolder) {
+      onNavigateFolder?.(file.id);
+      return;
+    }
+
+    if (!isKnowledgeItemPreviewable(file)) return;
+
+    // Space square drawer sets disableClickNavigate to avoid relying on default navigation;
+    // still honor explicit onPreview when provided.
+    if (disableClickNavigate && !onPreview) return;
+    onPreview?.(file.id);
+  };
+
+  const hasRetryOption = Boolean(onRetry && isKnowledgeItemRetryable(file));
+  // Version row actions visible for this file (parsed non-folder for management; multi-version for history).
+  const showVersionManagement =
+    versionManagementEnabled &&
+    !isFolder &&
+    file.status === FileStatus.SUCCESS &&
+    isAdmin &&
+    Boolean(onOpenVersionManagement);
+  const showVersionHistory =
+    versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);
+  const showMoveItem = Boolean(onMove) && !isCreating;
+  const showMenuDownloadItem = canDownload && !hideDownloadActions;
+  // Card view puts EVERY action behind the ⋮ menu, even a lone one, so a card
+  // never sprouts a second floating control over its thumbnail.
+  const hasReviewedMenuItems =
+    showMenuDownloadItem ||
+    isAdmin ||
+    canRename ||
+    canDelete ||
+    Boolean(onManagePermission) ||
+    showMoveItem ||
+    showVersionManagement ||
+    showVersionHistory;
+  // Placeholder has only a temp id (no backend identity) — suppress all row actions.
+  const showMoreMenu = !isUploadingFolderPlaceholder && hasReviewedMenuItems;
+  const showCardActions = moreMenuOpen || hovered;
+  const cardOpensPreviewOrFolder =
+    !isCreating &&
+    !isRenaming &&
+    !isUploadingFolderPlaceholder &&
+    (isFolder || isKnowledgeItemPreviewable(file));
+
+  // The danger row gets its own group only when something sits above it.
+  const hasItemsAboveDelete =
+    showMenuDownloadItem ||
+    Boolean(onManagePermission) ||
+    canRename ||
+    (isAdmin && (!isFolder || hasRetryOption)) ||
+    showMoveItem ||
+    showVersionManagement ||
+    showVersionHistory;
+  // Shared action-menu items, reused by the "..." dropdown, the H5 row menu and
+  // the right-click menu. While permissions are still resolving, show a single
+  // loading row so the menu doesn't open with a few items and then grow.
+  const moreMenuItems = permissionsLoading ? (
+    <DropdownItem disabled icon={<Outlined.Loading className="animate-spin motion-reduce:animate-pulse" />}>
+      {localize("com_list_loading")}
+    </DropdownItem>
+  ) : (
+    <>
+      {showMenuDownloadItem && (
+        <DropdownItem onSelect={() => onDownload()} icon={<Outlined.Download />}>
+          {localize("com_knowledge.download")}
+        </DropdownItem>
+      )}
+      {onManagePermission && (
+        <DropdownItem onSelect={() => onManagePermission()} icon={<Outlined.PeopleSafe />}>
+          {localize("com_permission.manage_permission")}
+        </DropdownItem>
+      )}
+      {isAdmin && !isFolder && (
+        <DropdownItem onSelect={() => onEditTags()} icon={<Outlined.Tag />}>
+          {localize("com_knowledge.edit_tags")}
+        </DropdownItem>
+      )}
+      {canRename && (
+        <DropdownItem onSelect={startRenamingFromMenu} icon={<Outlined.Edit />}>
+          {localize("com_knowledge.rename")}
+        </DropdownItem>
+      )}
+      {showMoveItem && (
+        <DropdownItem
+          disabled={!canMove || isUploading}
+          onSelect={() => onMove?.()}
+          icon={<Outlined.MoveToFolder />}
+        >
+          {localize("com_knowledge.move")}
+        </DropdownItem>
+      )}
+      {isAdmin && hasRetryOption && (
+        <DropdownItem onSelect={() => onRetry?.()} icon={<Outlined.Refresh />}>
+          {localize("com_knowledge.retry")}
+        </DropdownItem>
+      )}
+      {showVersionManagement && (
+        <DropdownItem onSelect={() => onOpenVersionManagement?.(file)} icon={<GitBranch />}>
+          {localize("com_knowledge.version.menu_version_management")}
+        </DropdownItem>
+      )}
+      {showVersionHistory && (
+        <DropdownItem onSelect={() => onOpenVersionHistory?.(file)} icon={<History />}>
+          {localize("com_knowledge.version.menu_version_history")}
+        </DropdownItem>
+      )}
+      {canDelete && hasItemsAboveDelete && <DropdownSeparator />}
+      {canDelete && (
+        <DropdownItem danger onSelect={() => onDelete()} icon={<Outlined.Delete />}>
+          {localize("com_knowledge.delete")}
+        </DropdownItem>
+      )}
+    </>
+  );
+
+  const handleCardContextMenu = (e: MouseEvent<HTMLDivElement>) => {
+    if (!showMoreMenu) return;
+    e.preventDefault();
+    // Same lazy permission resolution as the "..." trigger, otherwise the
+    // right-click menu renders with unresolved (reduced) permissions.
+    onEnsureFilePermissions?.(file);
+    setContextMenuPosition({ x: e.clientX, y: e.clientY });
+    setContextMenuOpen(true);
+  };
+
+  // H5 mobile list row: flat row (no border / shadow / card background) with
+  // icon + title + date + tags, and a circular checkbox on the far right.
+  // Rendered independently from the desktop card so the desktop path is untouched.
+  if (mobileListMode) {
+    const mobileStatusPill = renderStatusOverlayTag(true);
+    const mobileSimilarTag = renderSimilarTag();
+    return (
+      <div
+        className={cn(
+          // Full-bleed row: the list container has no horizontal padding on mobile,
+          // so the row's own px-4 gives the 16px content gutter while the selected
+          // background spans the full width.
+          "flex items-center gap-2 px-4 py-3",
+          cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
+        )}
+        style={
+          isSelected
+            ? {
+                background:
+                  "linear-gradient(0deg, rgb(var(--brand-500)/0.07) 0%, rgb(var(--brand-500)/0.07) 100%), #FFF",
+              }
+            : undefined
+        }
+        onClick={handleCardClick}
+      >
+        {/* File icon 48x48 — colored icons render without backdrop on H5 */}
+        <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md">
+          <FileIconRenderer
+            file={file}
+            isFolder={isFolder}
+            iconClassName="size-12 shrink-0"
+            thumbBordered
+            transparentBg
+          />
+        </div>
+
+        {/* Text block: title (+ status) / (date + tags) */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          {isRenaming ? (
+            <input
+              ref={inputRef}
+              type="text"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onBlur={handleRenameSubmit}
+              onKeyDown={handleKeyDown}
+              onClick={(e) => e.stopPropagation()}
+              className="h-6 w-full rounded border border-border-deep bg-white px-1.5 text-sm font-normal shadow-focus outline-none"
+            />
+          ) : (
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className={cn("min-w-0 truncate text-sm leading-5", nameToneClass)}>
+                {renderHighlightedName(file.name, highlightKeyword)}
+              </span>
+              {mobileStatusPill && (
+                <span className="inline-flex shrink-0 items-center self-center leading-5">
+                  {mobileStatusPill}
+                </span>
+              )}
+              {mobileSimilarTag && (
+                <span className="inline-flex shrink-0 items-center self-center leading-5">
+                  {mobileSimilarTag}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Date + tags on a single line */}
+          <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden">
+            <span className="shrink-0 text-xs leading-5 text-text-3 tabular-nums">
+              {formatTimeCard(file.updatedAt)}
+            </span>
+            {!isFolder && file.tags && file.tags.length > 0 && (
+              <>
+                <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0]" aria-hidden />
+                <TagGroup tags={file.tags} variant="text-h5" highlightedTagIds={highlightedTagIds} />
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Circular selection checkbox on the far right */}
+        {!hideSelectionCheckbox && (
+          <RoundCheckbox
+            className="shrink-0"
+            checked={isSelected}
+            disabled={!isSelectable}
+            onCheckedChange={(checked) => onSelect(checked)}
+          />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <Card
+      draggable={cardDraggable && !isCreating && !isUploading}
+      onDragStart={cardDraggable ? onCardDragStart : undefined}
+      onDragOver={isFolder && !isUploadingFolderPlaceholder ? onFolderDragOver : undefined}
+      onDragLeave={isFolder && !isUploadingFolderPlaceholder ? onFolderDragLeave : undefined}
+      onDrop={isFolder && !isUploadingFolderPlaceholder ? onFolderDrop : undefined}
+      className={cn(
+        "group relative rounded-md overflow-hidden border-[0.5px] p-0 gap-0 py-0 shadow-none max-[767px]:rounded-md",
+        !mobileListMode && "h-[160px]",
+        cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
+        isSelected ? "bg-blue-50" : isNotParsed ? "bg-[#fbfbfb]" : "bg-white",
+        isSelected
+          ? "border-border-base shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]"
+          : "border-border-base hover:border-border-deep",
+        hovered && "shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]",
+        // F034: highlight a folder card as the drop target — card border only
+        isFolderDragOver && "border-primary",
+      )}
+      style={{
+        transitionProperty: "background-color, box-shadow, border-color",
+        transitionDuration: "350ms",
+        transitionTimingFunction: "ease-in-out",
+        ...(isSelected
+          ? { backgroundColor: "rgb(var(--brand-500)/0.07)" }
+          : isNotParsed
+            ? { backgroundColor: "#fbfbfb" }
+            : {}),
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={handleCardClick}
+      onContextMenu={handleCardContextMenu}
+    >
+      {/* Right-click menu: an invisible cursor-anchored trigger drives the same items as the "..." menu. */}
+      {/* Portaled menu clicks still bubble through the React tree; keep them off the card. */}
+      {showMoreMenu && (
+        <span className="contents" onClick={(e) => e.stopPropagation()}>
+          <Dropdown
+            open={contextMenuOpen}
+            onOpenChange={setContextMenuOpen}
+            onCloseAutoFocus={handleMenuCloseAutoFocus}
+            menu={moreMenuItems}
+          >
+            <button
+              type="button"
+              aria-hidden="true"
+              tabIndex={-1}
+              className="fixed size-0 opacity-0"
+              style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
+            />
+          </Dropdown>
+        </span>
+      )}
+      <CardContent
+        className={cn(
+          "flex flex-col p-0",
+          !mobileListMode && "h-full",
+          mobileListMode && "max-[767px]:flex-row max-[767px]:items-center max-[767px]:gap-2 max-[767px]:p-1",
+        )}
+      >
+        {/* Uploading-folder scrim: 50% white mask over the whole card so it reads
+                    as "in progress". The "上传中" status tag sits above it (z-20). */}
+        {isUploadingFolderPlaceholder && (
+          <div className="pointer-events-none absolute inset-0 z-10 bg-white/50" />
+        )}
+        {!hideSelectionCheckbox && mobileListMode && (
+          <div className="hidden max-[767px]:flex max-[767px]:shrink-0 max-[767px]:items-center max-[767px]:justify-center max-[767px]:pl-1 max-[767px]:pr-0.5">
+            <Checkbox
+              className={`peer ${
+                cn(SELECTION_CHECKBOX_CLASS, !isSelectable && "cursor-not-allowed opacity-50") || ""
+              }`}
+              disabled={!isSelectable}
+              checked={isSelected}
+              onCheckedChange={(checked) => onSelect(!!checked)}
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        )}
+        {/* Thumbnail / icon area — flexes to fill the remaining space under
+                    the 160px fixed-height card, leaving the bottom info row at its natural height. */}
+        <div
+          className={cn(
+            "relative flex min-h-0 flex-1 p-1.5",
+            mobileListMode &&
+              "max-[767px]:h-12 max-[767px]:w-12 max-[767px]:flex-none max-[767px]:p-0 max-[767px]:rounded-sm",
+          )}
+        >
+          <div
+            className={cn(
+              "relative flex flex-1 items-center justify-center overflow-hidden rounded-sm",
+              isSelected ? "bg-transparent" : isNotParsed ? "bg-[#fbfbfb]" : "bg-white",
+              mobileListMode && "max-[767px]:rounded-sm",
+            )}
+          >
+            <FileIconRenderer file={file} isFolder={isFolder} />
+            {renderStatusOverlayTag()}
+            {renderSimilarTag(true)}
+          </div>
+
+          {!hideSelectionCheckbox && (
+            <div
+              className={cn(
+                "absolute left-2 top-2 z-10 transition-opacity",
+                mobileListMode && "max-[767px]:hidden",
+                !revealCardActionsOnHoverOnly
+                  ? "opacity-100"
+                  : isSelected
+                    ? "opacity-100"
+                    : "opacity-0 group-hover:opacity-100",
+              )}
+            >
+              <Checkbox
+                className={`peer ${
+                  cn(SELECTION_CHECKBOX_CLASS, !isSelectable && "cursor-not-allowed opacity-50") || ""
+                }`}
+                disabled={!isSelectable}
+                checked={isSelected}
+                onCheckedChange={(checked) => onSelect(!!checked)}
+                onPointerDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          )}
+
+          {!mobileListMode && (
+            <div
+              className={cn(
+                "absolute right-2 top-2 z-20 flex items-center gap-1 transition-opacity",
+                !revealCardActionsOnHoverOnly
+                  ? "pointer-events-auto opacity-100"
+                  : showCardActions
+                    ? "pointer-events-auto opacity-100"
+                    : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100",
+              )}
+            >
+              {showMoreMenu && (
+                <span className="contents" onClick={(e) => e.stopPropagation()}>
+                  <Dropdown
+                    align="end"
+                    open={moreMenuOpen}
+                    onOpenChange={handleMoreMenuOpenChange}
+                    onCloseAutoFocus={handleMenuCloseAutoFocus}
+                    menu={moreMenuItems}
+                  >
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="w-5 h-5 rounded-md shrink-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                    >
+                      <MoreVertical className="size-4 text-text-2 group-hover:text-text-1" />
+                    </Button>
+                  </Dropdown>
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Bottom info area */}
+        <div
+          className={cn(
+            "flex flex-col gap-1 px-2 py-1.5",
+            mobileListMode &&
+              "max-[767px]:min-w-0 max-[767px]:flex-1 max-[767px]:gap-0 max-[767px]:p-0 max-[767px]:pr-1",
+          )}
+        >
+          {/* File name + status */}
+          <div className="flex min-w-0 text-xs font-medium">{getStatusText()}</div>
+
+          {/* Footer (tags + time) */}
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <div className="flex min-h-[20px] min-w-0 flex-1 items-center">
+              {!isFolder && file.tags && file.tags.length > 0 && (
+                <TagGroup tags={file.tags} variant="text" highlightedTagIds={highlightedTagIds} />
+              )}
+            </div>
+            <span className="shrink-0 text-caption-sm leading-5 text-text-3 tabular-nums">
+              {formatTimeCard(file.updatedAt)}
+            </span>
+          </div>
+        </div>
+
+        {mobileListMode && (
+          <div
+            className={cn(
+              "flex shrink-0 items-center gap-1 pr-1 transition-opacity",
+              !revealCardActionsOnHoverOnly
+                ? "pointer-events-auto opacity-100"
+                : showCardActions
+                  ? "pointer-events-auto opacity-100"
+                  : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100",
+            )}
+          >
+            {showMenuDownloadItem && (
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-5 w-5 shrink-0 rounded-md hover:bg-gray-100"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDownload();
+                }}
+                title={localize("com_knowledge.download")}
+              >
+                <Download className="size-3.5 text-text-2" />
+              </Button>
+            )}
+            {showMoreMenu && (
+              <span className="contents" onClick={(e) => e.stopPropagation()}>
+                <Dropdown
+                  align="end"
+                  open={moreMenuOpen}
+                  onOpenChange={handleMoreMenuOpenChange}
+                  onCloseAutoFocus={handleMenuCloseAutoFocus}
+                  menu={moreMenuItems}
+                >
+                  <Button variant="outline" size="icon" className="h-5 w-5 shrink-0 rounded-md">
+                    <MoreVertical className="size-4 text-text-2" />
+                  </Button>
+                </Dropdown>
+              </span>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }

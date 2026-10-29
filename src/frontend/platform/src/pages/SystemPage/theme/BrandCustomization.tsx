@@ -1,22 +1,16 @@
 // @ts-strict-ignore
-import { Button, Input, notification } from '@bisheng/ui';
+import { Button, Input, Select, notification } from '@bisheng/ui';
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import BuiltinLoadingIcon from "@/components/bs-icons/loading/Loading.svg?react";
 
 
 import { Label } from "@/components/bs-ui/label";
-import {
-Select,
-SelectContent,
-SelectItem,
-SelectTrigger,
-SelectValue,
-} from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
 import { darkContext } from "@/contexts/darkContext";
 import type { BrandAsset,BrandAssetOption,BrandConfig,BrandText } from "@/controllers/API";
 import { getBrandAssetOptionsApi,getBrandConfigApi,saveBrandConfigApi } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { withBrandBaseUrl } from "@/utils/brand";
 import { Outlined } from "bisheng-icons";
 
@@ -193,6 +187,7 @@ function BrandTextField({
 
 export default function BrandCustomization() {
     const { t } = useTranslation();
+    const selectLabels = useSelectLabels();
 
     const { dark } = useContext(darkContext);
     const [config, setConfig] = useState<BrandConfig>(() => cloneBrandConfig(DEFAULT_BRAND_CONFIG));
@@ -203,18 +198,19 @@ export default function BrandCustomization() {
     const [previewTarget, setPreviewTarget] = useState<BrandPreviewTarget | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [loadFailed, setLoadFailed] = useState(false);
 
     useEffect(() => {
         let mounted = true;
 
         const loadBrandData = async () => {
             const [configData, optionEntries, loadingIconOptions] = await Promise.all([
-                captureAndAlertRequestErrorHoc(getBrandConfigApi()),
+                getBrandConfigApi(),
                 Promise.all(ASSET_ROWS.map(async ({ key }) => ({
                     key,
-                    options: await captureAndAlertRequestErrorHoc(getBrandAssetOptionsApi(key)),
+                    options: await getBrandAssetOptionsApi(key),
                 }))),
-                captureAndAlertRequestErrorHoc(getBrandAssetOptionsApi("loadingIcon")),
+                getBrandAssetOptionsApi("loadingIcon"),
             ]);
 
             if (!mounted) return;
@@ -238,7 +234,10 @@ export default function BrandCustomization() {
             setLoading(false);
         };
 
-        loadBrandData();
+        void loadBrandData().catch(error => {
+            if (mounted) setLoadFailed(true);
+            showApiError(error);
+        }).finally(() => { if (mounted) setLoading(false) });
 
         return () => {
             mounted = false;
@@ -418,13 +417,16 @@ export default function BrandCustomization() {
         }
 
         setSaving(true);
-        const saved = await captureAndAlertRequestErrorHoc(saveBrandConfigApi(normalizeForSave(config)));
-        setSaving(false);
-        if (!saved) return;
-
+        try {
+        const saved = await saveBrandConfigApi(normalizeForSave(config));
         setConfig(saved);
         applyRuntimeBrandConfig(saved);
         notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("theme.brandSaveSuccess") ?? '') });
+        } catch (error) {
+            showApiError(error);
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
@@ -445,7 +447,7 @@ export default function BrandCustomization() {
                                 <Outlined.Refresh className="mr-1 size-4" />
                                 {t("theme.brandResetDefault")}
                             </Button>
-                            <Button type="button" loading={saving} onClick={handleSave} disabled={Boolean(saving) || (loading)}>
+                            <Button type="button" loading={saving} onClick={handleSave} disabled={loadFailed || Boolean(saving) || (loading)}>
                                 <Outlined.FileSaveAs className="mr-1 size-4" />
                                 {t("theme.brandSave")}
                             </Button>
@@ -518,17 +520,21 @@ export default function BrandCustomization() {
                         />
                         <div className="grid grid-cols-1 items-center gap-3 sm:grid-cols-[140px_minmax(0,240px)_auto]">
                             <Label>{t("theme.brandLoadingAnimation")}</Label>
-                            <Select value={config.loading.animation || "none"} onValueChange={(value) => handleAnimationChange(value === "none" ? "" : value as BrandConfig["loading"]["animation"])}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">{t("theme.brandAnimationNone")}</SelectItem>
-                                    <SelectItem value="animate-spin">{t("theme.brandAnimationSpin")}</SelectItem>
-                                    <SelectItem value="animate-pulse">{t("theme.brandAnimationPulse")}</SelectItem>
-                                    <SelectItem value="animate-bounce">{t("theme.brandAnimationBounce")}</SelectItem>
-                                </SelectContent>
-                            </Select>
+                            <Select
+                                {...selectLabels}
+                                options={[
+                                    { value: "none", label: t("theme.brandAnimationNone") },
+                                    { value: "animate-spin", label: t("theme.brandAnimationSpin") },
+                                    { value: "animate-pulse", label: t("theme.brandAnimationPulse") },
+                                    { value: "animate-bounce", label: t("theme.brandAnimationBounce") },
+                                ]}
+                                value={config.loading.animation || "none"}
+                                onChange={(value) => {
+                                    if (value == null) return;
+                                    handleAnimationChange(value === "none" ? "" : value as BrandConfig["loading"]["animation"]);
+                                }}
+                                aria-label={t("theme.brandLoadingAnimation")}
+                            />
                             <Button type="button" size="small" variant={previewTarget === "loadingAnimation" ? "default" : "outline"} className="w-fit" onClick={() => setPreviewTarget("loadingAnimation")}>
                                 <Outlined.Eye className="mr-1 size-4" />
                                 {t("theme.brandPreviewButton")}

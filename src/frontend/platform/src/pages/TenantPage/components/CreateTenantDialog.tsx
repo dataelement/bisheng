@@ -1,9 +1,9 @@
-import { Button, Input, notification } from '@bisheng/ui';
+import { Alert, Button, Input, notification } from '@bisheng/ui';
 
 
 
 import { getTenantApi, updateTenantApi } from "@/controllers/API/tenant";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import type { Tenant, TenantUpdateForm } from "@/types/api/tenant";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -23,8 +23,7 @@ export function CreateTenantDialog({ tenant, onClose, onSuccess }: Props) {
 
   useEffect(() => {
     if (!tenant) return;
-    captureAndAlertRequestErrorHoc(
-      getTenantApi(tenant.id).then((res) => {
+    getTenantApi(tenant.id).then((res) => {
         setCode(res.tenant_code);
         setForm({
           tenant_name: res.tenant_name,
@@ -33,8 +32,7 @@ export function CreateTenantDialog({ tenant, onClose, onSuccess }: Props) {
           contact_email: res.contact_email || "",
           logo: res.logo || "",
         });
-      }),
-    );
+      }).catch(showApiError);
   }, [tenant]);
 
   const handleSubmit = async () => {
@@ -43,9 +41,11 @@ export function CreateTenantDialog({ tenant, onClose, onSuccess }: Props) {
     if (!tenant || !form.tenant_name?.trim()) return;
     setLoading(true);
     try {
-      await captureAndAlertRequestErrorHoc(updateTenantApi(tenant.id, form));
+      await updateTenantApi(tenant.id, form);
       notification.open({ type: "success", title: String(t("updateSuccess") ?? ''), description: "" });
       onSuccess();
+    } catch (error) {
+      showApiError(error);
     } finally {
       setLoading(false);
     }
@@ -63,9 +63,11 @@ export function CreateTenantDialog({ tenant, onClose, onSuccess }: Props) {
           {tenant ? t("tenant.edit") : t("tenant.create")}
         </h3>
         {!tenant && (
-          <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950 dark:text-amber-100">
-            {t("tenant.createDeprecatedDesc")}
-          </div>
+          <Alert
+            type="warning"
+            className="mb-4"
+            description={t("tenant.createDeprecatedDesc")}
+          />
         )}
         <div className="space-y-4">
           <div>

@@ -1167,6 +1167,9 @@ domain 对业务 model/repository 的 import 必须由架构测试禁止。正�
 
 ## 5. 已知坑 / 反直觉事实
 
+- 构建页 `managed=true` 的租户管理员快捷查询须在 `strict_tenant_filter()` 中执行完整游标扫描；默认可读范围含根租户，直接跳过逐资源校验会把根租户应用当成本租户可管理应用返回，后续 `my-permissions` 再拒绝。使用既有过滤上下文可在 SQL 分页前收敛三类应用，结束或异常时恢复读取范围；普通用户、超管和非管理读取保留原路径。存量资源不迁移。
+- 权限旧错误码 `19001–19007` 与信息源冲突，现迁至 `25020–25026`（按原顺序一一映射），`19000` 不变。错误类名及 `PermissionFGAUnavailableError` 别名不变；三语文案从 locales 单一源生成。旧号只保留信息源含义，不能通过改 `19003` 文案兼容权限，否则信息源解析失败会显示成权限错误。
+
 - 不同资源表的数字 ID 可以相同；只比较 parent_id/resource_id 会把合法根目录上传误判为自关联。
 - 上传失败项可能没有权限镜像。整批先加载镜像再删除会令一个缺失项阻断所有已创建权限的清理；
   上传补偿须逐文件基于创建 ledger 撤销，且不能在权限撤销失败的 finally 中硬删业务记录。
@@ -1206,6 +1209,7 @@ domain 对业务 model/repository 的 import 必须由架构测试禁止。正�
 | 31 | 列表路径成本取决于候选规模、可见率、业务过滤和继承比例 | 把 joined 的 ID-first 或文件的 candidate-first 机械推广到所有列表 | §3 决策14入口登记 + BENCH-01 业务链路阶段 |
 | 32 | 文件夹本级授权不意味着整个知识空间可见；读取指定文件夹时只要求该容器可见，子项仍逐项执行包含继承的最终判断 | 先校验空间 visible 会使只有某层文件夹权限的账号无法列出或搜索其下级；直接放行全部子项又会越过 CUSTOM 边界 | `KnowledgeSpaceService._require_container_read_permission`，由普通列表与搜索共用；根目录仍校验空间 visible |
 | 33 | 服务账号继承需要每层资源的 `service_account:*` mode/permission_enabled 技术标记；这些标记不授予任何账号资源权限 | 旧数据只有 `user:*` 时会出现空间 visible 成功而子项不可见、上传失败；新增 Grant 不会补齐存量后代的技术标记 | 创建与迁移编译器写入两类主体标记；模型发布脚本 `publish_authorization_model_change.py` 和完整对账脚本 `reconcile_f048_visible_projection.py` 在维护窗口按 CURRENT 模式补齐，保留 CUSTOM 边界；模型已一致也必须补齐并校验后才返回成功 |
+| 34 | 预置工具的历史 `user_id` 可以非空；预置身份只由 `GptsToolsType.is_preset=1` 决定；权限 mirror 为 `CURRENT` 也可能缺失系统 tuples | 把创建者为空作为额外条件会从工作台剔除预置工具，并错误地按 USER 迁移；只修分类或只检查 mirror 不能补齐存量系统授权 | 运行时、迁移、清单与租户复制统一判定；显式系统资源审计读取真实 wildcard `visible/system_use_marker`，仅为有效预置工具经版本围栏和 durable ledger 补缺，保留既有 Grant，拒绝 non-CURRENT；预置工具仍只支持 `visible/use` 并经实际动作鉴权 |
 
 ---
 
@@ -1262,7 +1266,7 @@ tenant/resource/current Catalog/resource version，任一变化返回 25002，�
 正常 DENY 同样是 200 且 `data.allowed=false`；业务操作端点再统一翻译为 19000。
 tenant mismatch 与“未共享的跨 tenant ID”不能通过不同错误文案泄露资源存在性。
 
-OpenFGA 不可用返回 `19002` 业务错误，不伪装为 `{"allowed": false}`；
+OpenFGA 不可用返回 `25021` 业务错误，不伪装为 `{"allowed": false}`；
 未知/不适用 action 返回 `25001`。
 
 #### Grant mutation
@@ -1449,7 +1453,7 @@ release contract 分配模块 `250`：
 | 25013 | PermissionMutationTooLarge | tuple 原子上限无法满足 |
 | 25014 | PermissionEnumerationIncomplete | StreamedListObjects 未正常结束、结果超过入口容量或无法证明集合完整 |
 
-通用 deny 继续用 19000，OpenFGA unavailable 用 19002，非法 resource type/id 用 19003；
+通用 deny 继续用 19000，OpenFGA unavailable 用 25021，非法 resource type/id 用 25022；
 不得创建相同含义的新码。
 
 ### 6.4 Incoming 依赖
@@ -1699,6 +1703,7 @@ direct member、department member 和无权限用户；文档/日志不保存固
 | 旧事实 | 新事实 | 规则 |
 |---|---|---|
 | 直接 owner/manager/editor/viewer tuple，无 binding | standard model Grant assignee | 只迁直接 tuple，不迁 computed/parent 蕴含 |
+| `user_group:{id}#admin` 的旧 `manager/can_manage` | `LEGACY_USER_GROUP_ADMIN_MANAGER_RETIRED` INFO 审计项 | 新用户组不再按管理员身份单独授予资源管理权限；无论是否匹配 binding 均不创建 Grant/visible contribution，不改授 `#member`，旧 tuple 仍进入核对后的退役计划；成员授权和创建者 owner 保留 |
 | tuple 唯一匹配 binding | binding 映射后的 model Grant assignee | 不额外创建 standard Grant |
 | 编辑过的旧 system model | `legacy-system-<relation>-<hash>` historical custom | 不污染新标准模型 |
 | Config custom model | custom model snapshot | 仅含 `view_*` 时保留 active visibility-only 模型，action 为空但 Grant 仍可见；不得映射到带 level-1 动作的 Viewer 标准模型 |
@@ -1743,7 +1748,7 @@ migration coordinator 只接收规范化事实，不 import 这些业务 ORM/Rep
 | knowledge_library | `Knowledge.user_id/type` | 当前 `user_id`→protected；其他 direct owner→ordinary |
 | folder / knowledge_file | `KnowledgeFile.user_id/file_type/path` + 所属 `Knowledge.tenant_id` | 当前 `user_id`→protected；其他 direct owner→ordinary；tenant 以根知识库/空间为 canonical，修正历史 child tenant 漂移；父目录已删除的 FAILED 文件由 knowledge adapter 标为 `STALE_FAILED_RESOURCE`，只审计并退休遗留 tuple，不创建资源权限图 |
 | workflow / assistant | `Flow.user_id` / `Assistant.user_id` | 当前 `user_id`→protected；其他 direct owner→ordinary；builtin 走 system allowlist |
-| tool | `GptsTools.user_id/is_preset` | 普通工具当前 `user_id`→protected；其他 owner→ordinary；preset 可为 system-owned |
+| tool | `GptsToolsType.user_id/is_preset` | 仅 `is_preset=1` 判定预置工具并作为 system-owned，历史 `user_id` 非空不影响该判定；普通 API/MCP 工具当前 `user_id`→protected，其他 owner→ordinary |
 | channel | `Channel.user_id` + active channel CREATOR membership | 唯一 CREATOR→protected；若 `user_id` 不同则作为 ordinary owner 保留；缺 CREATOR 可按有效 `user_id` 修复，多个 CREATOR 阻断 |
 | dashboard | `Dashboard.user_id/dashboard_type` | CUSTOM；包括 preset 示例在内，当前 `user_id`→protected，其他 owner→ordinary，不使用 system predicate |
 
@@ -1819,6 +1824,12 @@ migration run。使用 `scripts/reconcile_f048_visible_projection.py` 执行独�
    fingerprint 和 tuple key 前向续跑；成功后重启服务，由稳定 Store name 自动发现新 model。
 
 ### 8.3 正式迁移命令与启服门禁
+
+仍使用旧 RBAC、尚未完成 F006 的环境，必须先升级到包含 F006 的 2.5.x 版本，按该版本
+说明完成权限数据迁移与验证（regression=0，并核对非管理员账号的资源访问），再升级到
+后续目标版本并执行 F048。F048 的输入是已迁移的旧 ReBAC tuple 与 Config，不承担旧
+`roleaccess` 的首次转换；当前版本不恢复 F006，也不得在 F048 环境运行它。已完成 F006
+的旧 ReBAC 环境无需重复中间阶段，升级时保留原数据库和 OpenFGA Store。
 
 Schema 命令只有 `alembic upgrade head`，revision 只做 DDL。F048 数据迁移入口固定为
 `src/backend/scripts/migrate_f048_permission_data.py`；它提供 `migrate` 和 `verify`，
@@ -1969,8 +1980,13 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 
 ## 修订历史
 
+- 2026-10-29：修复租户管理员构建列表的跨租户快捷放行；权限冲突码迁至 25020–25026，保留信息源原码及存量资源归属；仅执行本缺陷定向验证。
+
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-10-23 | 工具预置身份仅依据 `is_preset=1`；统一运行时、清单、迁移和租户复制；显式补齐 CURRENT 存量工具缺失的 wildcard 系统授权，保留既有 Grant，并走版本围栏与投影账本 | 用户确认移除历史创建者限制，并修复被旧迁移按 USER 处理的预置工具；仅交付代码与回归，不执行线上数据变更 |
+| 2026-10-22 | 明确纯 RBAC 老环境先在 2.5.x 完成 F006 及验证，再升级到后续版本执行 F048；当前分支不恢复 F006 | 用户选择分阶段升级路径 |
+| 2026-10-22 | F048 迁移退役旧用户组管理员默认 manager 授权；旧 F006 入口已删除，不恢复；成员授权和创建者权限继续保留 | 用户明确新用户组只有成员与创建人，不再为管理员分别授予资源管理权限 |
 | 2026-10-08 | 父子资源按类型与 ID 判定自关联；上传失败逐文件按创建 ledger 撤权并清理镜像、存储对象及业务记录，保留补偿审计和失败恢复边界 | beta3 根目录上传 ID 碰撞及整批权限清理中断 |
 | 2026-09-14 | 修正指定文件夹列表/搜索的容器鉴权，补充服务账号多级继承、编辑者/所有者动作、CUSTOM 隔断、撤权与历史标记修复回归 | v2 服务账号访问知识空间与独立授权文件夹的排查 |
 | 2026-08-13 | 对单槽浅层 visible、inactive 既有授权保持、删除零引用门禁、旧系统单次迁移、列表路径、契约/依赖/测试/可观测执行 24 项 Design 接手测试与 Constitution Check；复审 LGTM，停在 Design ★ | `/sdd-review ... design` |

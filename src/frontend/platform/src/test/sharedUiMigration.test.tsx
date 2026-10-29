@@ -5,7 +5,7 @@ import { Button, Input, Textarea, Toaster, Notifier, notification, toast } from 
 import { InputList } from '@/components/bs-comp/formFields/InputList';
 import { NonNegativeInput } from '@/components/bs-comp/formFields/NonNegativeInput';
 import { PassInput } from '@/components/bs-comp/formFields/PassInput';
-import { ButtonNumber } from '@/components/bs-comp/formFields/NumberStepper';
+import Temperature from '@/pages/BuildPage/assistant/editAssistant/Temperature';
 
 afterEach(() => { cleanup(); toast.clear(); notification.closeAll(); vi.useRealTimers(); });
 it('retains loading submission protection at the business caller', () => {
@@ -23,18 +23,27 @@ it('uses shared soft limits and forwards refs', () => {
 });
 it('retains numeric validation in the business field', () => {
     const change=vi.fn();render(<NonNegativeInput aria-label="Limit" min={1} max={4} defaultValue={2} onValueChange={change}/>);
-    const input=screen.getByRole('textbox',{name:'Limit'});fireEvent.change(input,{target:{value:'8'}});
-    expect(input).toHaveAttribute('aria-invalid','true');expect(change).not.toHaveBeenCalled();
-    fireEvent.change(input,{target:{value:''}});fireEvent.blur(input);expect(change).toHaveBeenLastCalledWith(2);
+    const input=screen.getByRole('spinbutton',{name:'Limit'});fireEvent.change(input,{target:{value:'8'}});
+    // The shared InputNumber keeps what was typed and reports the range on blur.
+    expect(input).toHaveValue('8');expect(change).not.toHaveBeenCalled();
+    fireEvent.blur(input);expect(input).toHaveAttribute('aria-invalid','true');expect(screen.getByText('sharedUi.maximum')).toBeInTheDocument();
+    fireEvent.change(input,{target:{value:'3'}});expect(change).toHaveBeenLastCalledWith(3);expect(input).not.toHaveAttribute('aria-invalid');
+    fireEvent.change(input,{target:{value:''}});fireEvent.blur(input);expect(change).toHaveBeenLastCalledWith(2);expect(input).toHaveValue('2');
 });
 it('retains labeled secret visibility and its value', () => {
     render(<PassInput aria-label="Secret" defaultValue="secret"/>);const input=screen.getByLabelText('Secret');
     fireEvent.click(screen.getByRole('button'));expect(input).toHaveAttribute('type','text');expect(input).toHaveValue('secret');
 });
-it('retains dictionary identifiers and business stepper bounds', () => {
-    const change=vi.fn();render(<><InputList dict value={[{key:'preset',value:'First'}]} onChange={change}/><ButtonNumber defaultValue={0} min={0} max={2} step={0.1}/></>);
+it('retains dictionary identifiers and the temperature bounds', () => {
+    const change=vi.fn();render(<InputList dict value={[{key:'preset',value:'First'}]} onChange={change}/>);
     fireEvent.change(screen.getByRole('textbox'),{target:{value:'Changed'}});expect(change.mock.calls[0][0][0]).toEqual({key:'preset',value:'Changed'});
-    expect(screen.getByRole('button',{name:'-'})).toBeDisabled();fireEvent.click(screen.getByRole('button',{name:'+'}));expect(screen.getByText('0.1')).toBeInTheDocument();
+    const temperature=vi.fn();render(<Temperature value={0} onChange={temperature}/>);
+    const box=screen.getByRole('spinbutton',{name:'build.temperature'});
+    expect(box).toHaveAttribute('aria-valuemin','0');expect(box).toHaveAttribute('aria-valuemax','2');
+    expect(screen.getByRole('button',{name:'bs:sharedUi.decrease'})).toBeDisabled();
+    fireEvent.change(box,{target:{value:'0.7'}});expect(temperature).toHaveBeenLastCalledWith(0.7);
+    // An out-of-range value stays in the box and never reaches the business state.
+    fireEvent.change(box,{target:{value:'3'}});expect(temperature).toHaveBeenCalledTimes(1);
 });
 it('uses direct shared queues with multiline descriptions and separate viewports',()=>{
     vi.useFakeTimers();render(<><Toaster closeLabel="Close"/><Notifier closeLabel="Close" expandLabel="Expand"/></>);

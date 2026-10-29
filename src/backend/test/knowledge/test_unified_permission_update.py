@@ -11,6 +11,15 @@ from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, Knowledge, K
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
 
+@pytest.fixture(autouse=True)
+def normal_space_binding():
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id",
+        new=AsyncMock(return_value=None),
+    ):
+        yield
+
+
 def _space() -> Knowledge:
     return Knowledge(
         id=101,

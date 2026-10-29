@@ -1,0 +1,45 @@
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+......                                                                   [100%]
+=============================== warnings summary ===============================
+bisheng/core/ai/__init__.py:2
+  /work/bisheng/core/ai/__init__.py:2: DeprecationWarning: `langchain-community` is being sunset and is no longer actively maintained. See https://github.com/langchain-ai/langchain-community/issues/674 for details and migration guidance toward standalone integration packages.
+    from langchain_community.chat_models import ChatTongyi, ChatZhipuAI, MoonshotChat
+
+../app/.venv/lib/python3.11/site-packages/simhash/__init__.py:50
+  /app/.venv/lib/python3.11/site-packages/simhash/__init__.py:50: DeprecationWarning: invalid escape sequence '\w'
+    """
+
+../app/.venv/lib/python3.11/site-packages/jieba/__init__.py:44
+  /app/.venv/lib/python3.11/site-packages/jieba/__init__.py:44: DeprecationWarning: invalid escape sequence '\.'
+    re_han_default = re.compile("([\u4E00-\u9FD5a-zA-Z0-9+#&\._%\-]+)", re.U)
+
+../app/.venv/lib/python3.11/site-packages/jieba/__init__.py:46
+  /app/.venv/lib/python3.11/site-packages/jieba/__init__.py:46: DeprecationWarning: invalid escape sequence '\s'
+    re_skip_default = re.compile("(\r\n|\s)", re.U)
+
+../app/.venv/lib/python3.11/site-packages/jieba/finalseg/__init__.py:78
+  /app/.venv/lib/python3.11/site-packages/jieba/finalseg/__init__.py:78: DeprecationWarning: invalid escape sequence '\.'
+    re_skip = re.compile("([a-zA-Z0-9]+(?:\.\d+)?%?)")
+
+../app/.venv/lib/python3.11/site-packages/jieba/_compat.py:18
+  /app/.venv/lib/python3.11/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+    import pkg_resources
+
+../app/.venv/lib/python3.11/site-packages/jieba/posseg/__init__.py:16
+  /app/.venv/lib/python3.11/site-packages/jieba/posseg/__init__.py:16: DeprecationWarning: invalid escape sequence '\.'
+    re_skip_detail = re.compile("([\.0-9]+|[a-zA-Z0-9]+)")
+
+../app/.venv/lib/python3.11/site-packages/jieba/posseg/__init__.py:17
+  /app/.venv/lib/python3.11/site-packages/jieba/posseg/__init__.py:17: DeprecationWarning: invalid escape sequence '\.'
+    re_han_internal = re.compile("([\u4E00-\u9FD5a-zA-Z0-9+#&\._]+)")
+
+../app/.venv/lib/python3.11/site-packages/jieba/posseg/__init__.py:18
+  /app/.venv/lib/python3.11/site-packages/jieba/posseg/__init__.py:18: DeprecationWarning: invalid escape sequence '\s'
+    re_skip_internal = re.compile("(\r\n|\s)")
+
+../app/.venv/lib/python3.11/site-packages/jieba/posseg/__init__.py:21
+  /app/.venv/lib/python3.11/site-packages/jieba/posseg/__init__.py:21: DeprecationWarning: invalid escape sequence '\.'
+    re_num = re.compile("[\.0-9]+")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+6 passed, 10 warnings in 2.57s

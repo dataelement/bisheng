@@ -1,4 +1,4 @@
-import { Outlined } from "bisheng-icons";
+import { DshMessageActionIcon } from "./DshMessageActionIcon";
 import { useCallback, useState } from "react";
 import { stripCitationHandles } from "~/components/Chat/Messages/Content/citationUtils";
 import { useLocalize } from "~/hooks";
@@ -27,11 +27,11 @@ export function CopyButton({ text, stripHandles = false }: CopyButtonProps) {
         <button
             type="button"
             onClick={handleCopy}
-            className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-[#F7F7F7]"
+            className="dsh-message-action"
             title={localize('com_ui_copy')}
             aria-label={localize('com_ui_copy')}
         >
-            {copied ? <Outlined.Copied size={14} className="text-blue-500" /> : <Outlined.Copy size={14} className="text-[#818181]" />}
+            <DshMessageActionIcon kind={copied ? "check" : "copy"} />
         </button>
     );
 }

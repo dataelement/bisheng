@@ -1,7 +1,7 @@
 import axios from "@/controllers/request"
 import type { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
 
-export type PermissionSubjectType = "user" | "service_account" | "department" | "user_group"
+export type PermissionSubjectType = "user" | "service_account" | "department" | "user_group" | "tenant"
 
 export type PermissionResourceType =
   | "knowledge_space"
@@ -14,12 +14,16 @@ export type PermissionResourceType =
   | "channel"
   | "dashboard"
   | "linsight_skill"
+  // F054 hosted applications. This union is duplicated in
+  // components/bs-comp/permission/types.ts — add to both or the dialog and
+  // its API layer disagree on what is grantable.
+  | "app"
 
 export type PermissionActionLevel = 1 | 2 | 3 | 4
 export type PermissionModelKind = "STANDARD" | "CUSTOM"
 export type ResourcePermissionMode = "INHERIT" | "CUSTOM"
 export type GrantMutationOperation = "ADD" | "MOVE" | "REMOVE"
-export type PermissionSubjectKind = "user" | "service_account" | "department" | "user_group"
+export type PermissionSubjectKind = "user" | "service_account" | "department" | "user_group" | "tenant"
 
 export interface PermissionCatalogAction {
   code: string
@@ -147,6 +151,9 @@ export interface GrantablePermissionModel {
 }
 
 export interface ResourcePermissionContext {
+  tenant_id?: string
+  all_members_model_key?: string
+  all_members_sources?: Array<{ assignee_id: string; assignee_version: number }>
   mode: ResourcePermissionMode
   parent_type: PermissionResourceType | null
   parent_id: string | null
@@ -332,7 +339,7 @@ export async function getResourcePermissionContextApi(
 export async function getResourcePermissionGrantsApi(
   resourceType: PermissionResourceType,
   resourceId: string,
-  params: { cursor?: string | null; page_size?: number } = {},
+  params: { cursor?: string | null; page_size?: number; keyword?: string; subject_type?: string } = {},
 ): Promise<PermissionGrantCursorPage> {
   return await axios.get(
     `${permissionResourcePath(resourceType, resourceId)}/grants`,
@@ -340,6 +347,8 @@ export async function getResourcePermissionGrantsApi(
       params: {
         cursor: params.cursor ?? undefined,
         page_size: params.page_size ?? 50,
+        keyword: params.keyword || undefined,
+        subject_type: params.subject_type || undefined,
       },
     },
   )

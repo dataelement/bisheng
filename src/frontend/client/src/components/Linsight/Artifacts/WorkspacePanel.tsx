@@ -19,9 +19,10 @@ import { useEffect, useState } from 'react';
 import type { ChatCitation } from '~/api/chatApi';
 
 import { useLocalize } from '~/hooks';
-import { EmptyStateIllustration } from '~/components/illustrations';
+import { EmptyStateIllustration, SystemMaintenanceIllustration } from '~/components/illustrations';
+import { Skeleton } from '~/components/ui/Skeleton';
 import { cn } from '~/utils';
-import { type ArtifactFile } from './artifactUtils';
+import { getArtifactPreviewKind, type ArtifactFile } from './artifactUtils';
 import { NewTabHint } from './NewTabHint';
 import { PreviewBody } from './PreviewBody';
 import { SaveAsButton } from './SaveAsButton';
@@ -32,6 +33,10 @@ import type { SourcePreview } from './useWorkspacePanel';
 
 interface WorkspacePanelProps {
     files: ArtifactFile[];
+    /** Task-turn details are still loading — show a skeleton, not the empty state. */
+    loading?: boolean;
+    /** A task-turn detail failed to load — the list is unknown, not empty. */
+    loadFailed?: boolean;
     versionId: string;
     citations?: ChatCitation[] | null;
     messageId?: string;
@@ -55,12 +60,14 @@ interface WorkspacePanelProps {
 }
 
 const iconBtn =
-    'flex h-7 w-7 items-center justify-center rounded-lg text-text-3 transition-colors hover:bg-gray-100';
+    'flex h-7 w-7 items-center justify-center rounded-lg text-text-3 transition-colors hover:bg-fill-2';
 
 type CompareTab = 'report' | 'source';
 
 export function WorkspacePanel({
     files,
+    loading = false,
+    loadFailed = false,
     versionId,
     citations,
     messageId,
@@ -77,6 +84,9 @@ export function WorkspacePanel({
     onToggleFullscreen,
 }: WorkspacePanelProps) {
     const localize = useLocalize();
+    const [showSource, setShowSource] = useState(false);
+    useEffect(() => setShowSource(false), [previewFile?.file_url]);
+    const kind = previewFile ? getArtifactPreviewKind(previewFile) : undefined;
     const comparing = !!previewFile && !!sourcePreview;
     const tabsLayout = comparing && compareLayout === 'tabs';
     const [tab, setTab] = useState<CompareTab>('report');
@@ -114,7 +124,7 @@ export function WorkspacePanel({
             tabIndex={0}
             /* has-[[data-state=open]]: hold the hover look while this row's own
                "另存为" menu is open — the pointer is on the panel by then. */
-            className="group/row flex cursor-pointer items-center justify-between gap-2 rounded-lg py-2 pl-1 pr-1 hover:bg-[#F7F7F7] has-[[data-state=open]]:bg-[#F7F7F7]"
+            className="group/row flex cursor-pointer items-center justify-between gap-2 rounded-lg py-2 pl-1 pr-1 hover:bg-fill-1 has-[[data-state=open]]:bg-fill-1"
             onClick={() => onPreview(file)}
             onKeyDown={(e) => e.key === 'Enter' && onPreview(file)}
         >
@@ -192,6 +202,14 @@ export function WorkspacePanel({
                             <Outlined.Close className="size-4" />
                         </button></SharedTooltip>
             </div>
+            {(kind === 'markdown' || kind === 'text') && (
+                <div className="flex shrink-0 gap-1 border-b border-border-base px-4 py-2">
+                    <Segmented size="small" value={showSource ? 'source' : 'preview'}
+                        onChange={(value) => setShowSource(value === 'source')}
+                        options={[{ value: 'preview', label: localize('dshChat.preview') },
+                            { value: 'source', label: localize('dshChat.source') }]} />
+                </div>
+            )}
             {/* preview body — scrollbar-os: respect OS scrollbar setting. Kept
                 mounted on the source tab so the report keeps its place. */}
             <div
@@ -205,6 +223,7 @@ export function WorkspacePanel({
                 )}
             >
                 <PreviewBody
+                    showSource={showSource}
                     file={previewFile}
                     versionId={versionId}
                     fileList={files}
@@ -220,7 +239,7 @@ export function WorkspacePanel({
     return (
         <div
             className={cn(
-                'flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#FBFBFB]',
+                'flex h-full min-h-0 w-full flex-col overflow-hidden bg-bg-page',
                 // Fullscreen overlays the whole route viewport flush to the edges;
                 // the card chrome (radius/border) only applies to the docked panel.
                 !fullscreen && 'rounded-lg border border-border-base',
@@ -273,6 +292,21 @@ export function WorkspacePanel({
                     <div className="min-h-0 flex-1 overflow-y-auto scrollbar-os px-3 pt-1 pb-4">
                         {files.length ? (
                             <div className="flex flex-col gap-2">{files.map(renderRow)}</div>
+                        ) : loading ? (
+                            // Skeleton rows match the file-row height; the State spec forbids an empty state while loading.
+                            <div className="flex flex-col gap-2" aria-busy="true">
+                                <span className="sr-only">{localize('com_linsight_loading')}</span>
+                                {[0, 1, 2].map((i) => (
+                                    <div key={i} className="py-2 pl-1 pr-1">
+                                        <Skeleton className="h-5 w-3/5 rounded" />
+                                    </div>
+                                ))}
+                            </div>
+                        ) : loadFailed ? (
+                            <div className="flex h-full flex-col items-center justify-center text-center">
+                                <SystemMaintenanceIllustration className="mb-4 size-[120px]" />
+                                <p className="text-[14px] font-normal text-text-3">{localize('com_linsight_detail_load_failed')}</p>
+                            </div>
                         ) : (
                             <div className="flex h-full flex-col items-center justify-center text-center">
                                 <EmptyStateIllustration className="mb-4 size-[120px]" />

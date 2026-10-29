@@ -1486,17 +1486,6 @@ button {
    found in ~33 business files is now a no-op — clean it up as files get touched.)
    Sanctioned exceptions below only make bars LESS visible, never force them on. */
 
-/* Hide scrollbar entirely (used by horizontal tab strips) */
-.no-scrollbar {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-
 /* Show scrollbar only while actively scrolling (used by NotificationsDialog) */
 .scroll-on-scroll {
   scrollbar-width: thin; /* Firefox: always thin so toggling never reflows */
@@ -1833,26 +1822,7 @@ html {
   transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
 }
 
-/* Global font stack = font-family-base in 基础-字体规范.md §1.
- * Pure system stack (zero webfont loading): SF Pro + PingFang on Apple,
- * Segoe UI + Microsoft YaHei on Windows, Roboto + Noto Sans CJK on Android.
- * Step ① of the two-step swap: @font-face blocks and font files
- * (Inter / AlibabaPuHuiTi / Roboto Mono / Söhne) are intentionally KEPT
- * until the Windows regression pass confirms rendering, then removed. */
-body,
-html {
-  height: 100%;
-  font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    "PingFang SC",
-    "Hiragino Sans GB",
-    "Microsoft YaHei",
-    "Noto Sans CJK SC",
-    sans-serif;
-}
+
 
 .dark body,
 .dark html {
@@ -3181,4 +3151,38 @@ button.scroll-convo {
 .bs-frosted-glass {
   -webkit-backdrop-filter: blur(var(--bs-frosted-glass-blur, 16px));
   backdrop-filter: blur(var(--bs-frosted-glass-blur, 16px));
+}
+
+/* File canvases preserve document colors while their surrounding controls follow the theme. */
+.document-canvas {
+  color-scheme: light;
+  background-color: #fff;
+  color: #1d2129;
+  --bg-page: 255 255 255;
+  --text-1: 29 33 41;
+  --text-2: 78 89 105;
+  --text-3: 134 144 156;
+  --border-base: 229 230 235;
+}
+
+/* Markdown previews use the same semantic palette as prose in Chat and task results. */
+.preview-prose,
+body[data-dsh-chat-theme] .dsh-web-chat .prose,
+body[data-dsh-chat-theme] .dsh-chat-preview-modal .prose {
+  --tw-prose-body: rgb(var(--text-1));
+  --tw-prose-headings: rgb(var(--text-1));
+  --tw-prose-lead: rgb(var(--text-2));
+  --tw-prose-links: rgb(var(--brand-500));
+  --tw-prose-bold: rgb(var(--text-1));
+  --tw-prose-counters: rgb(var(--text-3));
+  --tw-prose-bullets: rgb(var(--text-3));
+  --tw-prose-hr: rgb(var(--border-base));
+  --tw-prose-quotes: rgb(var(--text-2));
+  --tw-prose-quote-borders: rgb(var(--border-base));
+  --tw-prose-captions: rgb(var(--text-3));
+  --tw-prose-code: rgb(var(--text-1));
+  --tw-prose-pre-code: rgb(var(--text-1));
+  --tw-prose-pre-bg: rgb(var(--fill-2));
+  --tw-prose-th-borders: rgb(var(--border-deep));
+  --tw-prose-td-borders: rgb(var(--border-base));
 }

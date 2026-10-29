@@ -7,7 +7,7 @@ import StepProgress from "@/components/bs-ui/step";
 
 import { retryKnowledgeFileApi,subUploadLibFile } from "@/controllers/API";
 import { checkResourceActionApi } from "@/controllers/API/permission";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 
 import { useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -76,9 +76,7 @@ export default function FilesUpload() {
         setHasEditPermission(false);
         return;
       }
-      const result = await captureAndAlertRequestErrorHoc(
-        checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(knowledgeId), action: 'edit' })
-      );
+      const result = await checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(knowledgeId), action: 'edit' });
       const allowed = !!result?.allowed;
       setHasEditPermission(allowed);
       setPermissionChecked(true);
@@ -87,7 +85,7 @@ export default function FilesUpload() {
         navigate(`/filelib/${knowledgeId}`);
       }
     };
-    guardByPermission();
+    void guardByPermission().catch(showApiError).finally(() => setPermissionChecked(true));
   }, [knowledgeId]);
 
   // Step 1: File upload completed, jump to step 2
@@ -199,7 +197,7 @@ export default function FilesUpload() {
       max_chunk_size: Number(_config.rules.maxChunkSize)
     };
 
-    captureAndAlertRequestErrorHoc(subUploadLibFile(apiConfig).then(res => {
+    subUploadLibFile(apiConfig).then(res => {
       const repeatFilesRes = res.filter(e => e.status === 3);
       if (repeatFilesRes.length) {
         const newRepeatFiles = repeatFilesRes.filter(file =>
@@ -220,10 +218,10 @@ export default function FilesUpload() {
         resultId: res[index]?.id
       })));
       setCurrentStep(4)
-    }).finally(() => {
+    }).catch(showApiError).finally(() => {
       submittingRef.current = false;
       setIsSubmitting(false);
-    }));
+    });
 
     _tempConfigRef.current = apiConfig;
   };
@@ -232,7 +230,7 @@ export default function FilesUpload() {
   const handleSaveByDefaultConfig = async (_config) => {
     isNextBtnClickRef.current = false;
 
-    await captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
+    await subUploadLibFile(_config).then(res => {
       const _repeatFiles = res.filter(e => e.status === 3);
       if (_repeatFiles.length) {
         setRepeatFiles(repeatFileI18nRmark(_repeatFiles, t));
@@ -241,7 +239,7 @@ export default function FilesUpload() {
         toast.show({ type: 'success', message: String(t('addSuccess') ?? '') });
         navigate(-1);
       }
-    }));
+    });
   };
 
   function dedupeWithRemovedPaths(objs) {
@@ -294,12 +292,12 @@ export default function FilesUpload() {
       setResultFiles(newResultFiles);
     }
 
-    captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(params).then(res => {
+    retryKnowledgeFileApi(params).then(res => {
       setRepeatFiles([]);
       setRetryLoad(false);
       toast.show({ type: 'success', message: String(t('addSuccess') ?? '') });
       repeatCallBackRef.current();
-    }), () => {
+    }).catch(showApiError).finally(() => {
       setRetryLoad(false);
     });
   };

@@ -1,6 +1,6 @@
 // @ts-strict-ignore
 import { Button, Input, toast } from '@bisheng/ui';
-import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
+import { QaKnowledgeSelect } from './QaKnowledgeSelect';
 
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 
@@ -10,7 +10,7 @@ import { Outlined } from "bisheng-icons";
 
 import SimpleUpload from "@/components/bs-ui/upload/simple";
 import { createDatasetApi } from "@/controllers/API/finetune";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { downloadFile } from "@/util/utils";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -28,6 +28,7 @@ export interface CreateDataSetHandle { open: () => void }
 const CreateDataSet = forwardRef<CreateDataSetHandle, CreateDataSetProps>(({ onChange }, ref) => {
     const { t } = useTranslation()
     const [open, setOpen] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
     const [form, setForm] = useState({ ...DEFAULT_FORM });
     const [error, setError] = useState({
         dataSetName: false,
@@ -106,21 +107,21 @@ const CreateDataSet = forwardRef<CreateDataSetHandle, CreateDataSetProps>(({ onC
         if (errors.length > 0) {
             return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') });
         }
-        setOpen(false);
-
-        captureAndAlertRequestErrorHoc(createDatasetApi({
+        setSubmitting(true);
+        createDatasetApi({
             name: form.dataSetName,
             files: form.fileUrl,
             qa_list: form.knowledgeLib.map(el => el.value)
         }).then(() => {
+            setOpen(false);
             toast.show({ type: 'success', message: String(t('dataset.creationSuccess') ?? '') });
             onChange();
-        }));
+        }).catch(showApiError).finally(() => setSubmitting(false));
     };
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent className="sm:max-w-[625px]">
+            <DialogContent className="grid-cols-1 sm:max-w-[625px]">
                 <DialogHeader>
                     <DialogTitle>{t('dataset.createDataset')}</DialogTitle>
                 </DialogHeader>
@@ -171,12 +172,10 @@ const CreateDataSet = forwardRef<CreateDataSetHandle, CreateDataSetProps>(({ onC
                             <label htmlFor="knowledgeLib" className="bisheng-label">
                                 <span className="text-red-500">*</span>{t('dataset.selectQaKnowledgeLib')}
                             </label>
-                            <KnowledgeSelect
-                                type="qa"
-                                multiple
+                            <QaKnowledgeSelect
                                 value={form.knowledgeLib}
                                 onChange={handleKnowledgeLibChange}
-                                className={`${error.knowledgeLib ? 'border-red-400' : ''}`}
+                                error={error.knowledgeLib}
                             />
                         </div>
                     )}
@@ -185,7 +184,7 @@ const CreateDataSet = forwardRef<CreateDataSetHandle, CreateDataSetProps>(({ onC
                     <DialogClose asChild>
                         <Button variant="outlined" type="button" onClick={() => setOpen(false)} color="default">{t('cancel')}</Button>
                     </DialogClose>
-                    <Button type="submit" onClick={handleSubmit}>{t('confirm')}</Button>
+                    <Button type="submit" disabled={submitting} onClick={handleSubmit}>{t('confirm')}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

@@ -1,372 +1,372 @@
+import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig";
 // @ts-strict-ignore
-import { Button, toast } from '@bisheng/ui';
+import { shouldRetryApiError } from "@bisheng/api-client";
+import { Button, Cascader, toast } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Label } from "@/components/bs-ui/label";
-import Cascader from "@/components/bs-ui/select/cascader";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import {
+  fromModelCascaderValue,
+  toModelCascaderOptions,
+  toModelCascaderValue,
+} from "@/components/bs-comp/formFields/modelOptions";
 
 import { ModelFieldHint } from "../ModelFieldHint";
 import { getLinsightModelEnvelope, updateLinsightModelConfig } from "@/controllers/API/finetune";
 import { FallbackBlockedBanner, InheritedBadge } from "../SystemConfigBanners";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { generateUUID } from "@/components/bs-ui/utils";
+import { showApiError } from "@/controllers/request";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useModel } from "..";
-import { ModelManagement } from "@/pages/BuildPage/bench/ModelManagement";
+import { UserSelectableModels } from "../UserSelectableModels";
+import { updateModelMetadata } from "../userModelMetadata";
 import { hasValidWorkbenchEmbeddingModelId } from "./workbenchModelValidation";
 
-export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange, placeholder = '' }) => {
-    const defaultValue = useMemo(() => {
-        let _defaultValue = []
-        if (!value || !options || options.length === 0) return _defaultValue
+export const ModelSelect = ({
+  required = false,
+  close = false,
+  label,
+  tooltipText = "",
+  value,
+  options,
+  onChange,
+  placeholder = "",
+}) => {
+  const { t } = useTranslation();
+  const selectLabels = useSelectLabels();
+  const cascaderOptions = useMemo(() => toModelCascaderOptions(options), [options]);
+  const cascaderValue = useMemo(() => toModelCascaderValue(value, options), [options, value]);
 
-        options.forEach(option => {
-            const model = option.children?.find(el => el.value == value)
-            if (model) {
-                _defaultValue = [
-                    { value: option.value, label: option.label },
-                    { value: model.value, label: model.label }
-                ]
-                return true
-            }
-            return false
-        })
-        return _defaultValue
-    }, [value, options])
+  return (
+    <div className="min-w-0">
+      <Label className="bisheng-label">
+        <span>{label}</span>
+        {required && <span className="text-red-500 text-xs">*</span>}
+        {tooltipText && <ModelFieldHint className="ml-1" content={tooltipText}></ModelFieldHint>}
+      </Label>
+      <Cascader
+        {...selectLabels}
+        className="w-full"
+        options={cascaderOptions}
+        value={cascaderValue}
+        allowClear={close}
+        onChange={(path) => onChange(fromModelCascaderValue(path))}
+        placeholder={placeholder || t("build.selectModel")}
+        aria-label={typeof label === "string" && label ? label : t("build.selectModel")}
+        backLabel={t("sharedUi.back")}
+        doneLabel={t("sharedUi.done")}
+        searchPlaceholder={t("sharedUi.searchModels")}
+      />
+    </div>
+  );
+};
 
+export default function WorkbenchModel({ data, onBack }) {
+  const { config: enterpriseConfig } = useDshBrowserConfig();
+  const { llmOptions, embeddings, asrModel, ttsModel } = useModel();
+  const { t } = useTranslation("model");
+
+
+  const [form, setForm] = useState<any>({
+    sourceModelId: null,
+    linsightDefaultModelId: null,
+    chatDefaultModelId: null,
+    asrModelId: null,
+    ttsModelId: null,
+    knowledgeSpaceLlmId: null,
+    chatTitleLlmId: null,
+    imageReadModelId: null,
+    models: [],
+  });
+
+  const lastSaveFormDataRef = useRef(null);
+  const [saveload, setSaveLoad] = useState(false);
+
+  const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
+
+  // Look up the model's own name from the cascader options by id, used as
+  // the default displayName when the admin leaves it empty.
+  const findModelLabel = (id) => {
+    if (!id) return "";
+    for (const group of llmOptions) {
+      const hit = group.children?.find((el) => el.value == id);
+      if (hit) return hit.label;
+    }
+    return "";
+  };
+
+  const submitConfig = async () => {
+    const {
+      linsightDefaultModelId,
+      chatDefaultModelId,
+      sourceModelId,
+      asrModelId,
+      ttsModelId,
+      chatTitleLlmId,
+      imageReadModelId,
+      models,
+    } = form;
+    setSaveLoad(true);
+    try {
+      const data = {
+        abstract_prompt: linsightConfig?.abstract_prompt,
+        knowledge_space_llm: linsightConfig?.knowledge_space_llm,
+        // Empty displayName falls back to the model's own name so the
+        // workspace model picker never renders a blank option.
+        models: models.map((m) => ({ ...m, displayName: m.displayName?.trim() || findModelLabel(m.id) })),
+        embedding_model: { id: String(sourceModelId) },
+        // Linsight default executor model: one of the workbench chat models' id.
+        linsight_default_model_id: linsightDefaultModelId ? String(linsightDefaultModelId) : null,
+        // Daily-mode default model: independent sibling of the Linsight default.
+        chat_default_model_id: chatDefaultModelId ? String(chatDefaultModelId) : null,
+        asr_model: asrModelId ? { id: String(asrModelId) } : null, // 支持空值
+        tts_model: ttsModelId ? { id: String(ttsModelId) } : null, // 支持空值
+        // “应用会话标题生成模型”
+        chat_title_llm: chatTitleLlmId ? { id: String(chatTitleLlmId) } : null, // 支持空值
+        image_read_model: imageReadModelId ? { id: String(imageReadModelId) } : null,
+      };
+
+      await updateLinsightModelConfig(data);
+      lastSaveFormDataRef.current = { ...lastSaveFormDataRef.current, ...data };
+      toast.show({ type: "success", message: String(t("model.saveSuccess") ?? "") });
+      let updatedConfig;
+      try {
+        updatedConfig = await refetchConfig({ throwOnError: true });
+      } catch (refreshError) {
+        // The write committed. Keep the accepted form and report only the failed refresh.
+        showApiError(refreshError);
+        return;
+      }
+
+      // Apply refreshed data only when the refresh succeeds.
+      const newConfig = updatedConfig.data;
+      setForm({
+        sourceModelId: newConfig?.embedding_model?.id || null,
+        linsightDefaultModelId: newConfig?.linsight_default_model_id || null,
+        chatDefaultModelId: newConfig?.chat_default_model_id || null,
+        asrModelId: newConfig?.asr_model?.id || null,
+        ttsModelId: newConfig?.tts_model?.id || null,
+        chatTitleLlmId: newConfig?.chat_title_llm?.id || null,
+        imageReadModelId: newConfig?.image_read_model?.id || null,
+        knowledgeSpaceLlmId: newConfig?.knowledge_space_llm?.id || null,
+        models: newConfig?.models || [],
+      });
+
+      lastSaveFormDataRef.current = {
+        embedding_model: { id: newConfig?.embedding_model?.id },
+        linsight_default_model_id: newConfig?.linsight_default_model_id || null,
+        chat_default_model_id: newConfig?.chat_default_model_id || null,
+        abstract_prompt: newConfig?.abstract_prompt || defalutPrompt,
+        asr_model: { id: newConfig?.asr_model?.id },
+        tts_model: { id: newConfig?.tts_model?.id },
+        chat_title_llm: { id: newConfig?.chat_title_llm?.id },
+        image_read_model: { id: newConfig?.image_read_model?.id },
+        knowledge_space_llm: { id: newConfig?.knowledge_space_llm?.id },
+        models: newConfig?.models || [],
+      };
+    } catch (err) {
+      showApiError(err);
+      throw err;
+    } finally {
+      setSaveLoad(false);
+    }
+  };
+
+  // 检查是否修改了 embedding 模型
+  const checkEmbeddingModified = () => {
+    const lastEmbeddingId = lastSaveFormDataRef.current?.embedding_model?.id;
+    const currentEmbeddingId = form.sourceModelId;
+    return lastEmbeddingId !== currentEmbeddingId;
+  };
+
+  const handleSave = () => {
+    if (form.models.some((model) => String(model.description ?? "").length > 50)) return;
+    const errors = [];
+    if (!enterpriseConfig?.enabled && !form.models.length) {
+      errors.push(t("model.chatModelRequired"));
+    }
+    // Reject blank rows: a model without an id serializes to `{ id: '' }`,
+    // which reaches the client model picker as <SelectItem value="">
+    // (empty string) and crashes the whole page in Radix. Force the admin
+    // to pick a model or remove the empty row before saving.
+    if (form.models.some((model) => !model.id)) {
+      errors.push(t("model.chatModelRowRequired"));
+    }
+    if (!hasValidWorkbenchEmbeddingModelId(form.sourceModelId)) {
+      errors.push(t("model.workVectorModel") + t("bs:required"));
+    }
+    if (errors.length) {
+      toast.show({ type: "error", message: errors.filter(Boolean).join("\n") });
+      return;
+    }
+
+    if (checkEmbeddingModified()) {
+      bsConfirm({
+        title: t("model.tip"),
+        desc: t("model.confirmEmbeddingChange"),
+        showClose: true,
+        okTxt: t("model.confirm"),
+        canelTxt: t("model.cancel"),
+        onOk(next) {
+          return submitConfig().then(next);
+        },
+        onCancel() {},
+      });
+    } else {
+      void submitConfig().catch(showApiError);
+    }
+  };
+
+  useEffect(() => {
+    if (error) {
+      return;
+    }
+
+    // 2. 配置数据就绪后，更新表单和缓存（添加 defalutPrompt 到依赖）
+    if (linsightConfig) {
+      setForm({
+        sourceModelId: linsightConfig.embedding_model?.id || null,
+        linsightDefaultModelId: linsightConfig.linsight_default_model_id || null,
+        chatDefaultModelId: linsightConfig.chat_default_model_id || null,
+        asrModelId: linsightConfig.asr_model?.id || null,
+        ttsModelId: linsightConfig.tts_model?.id || null,
+        chatTitleLlmId: linsightConfig.chat_title_llm?.id || null,
+        imageReadModelId: linsightConfig.image_read_model?.id || null,
+        knowledgeSpaceLlmId: linsightConfig.knowledge_space_llm?.id || null,
+        models: linsightConfig.models || [],
+      });
+
+      lastSaveFormDataRef.current = {
+        embedding_model: { id: linsightConfig.embedding_model?.id },
+        linsight_default_model_id: linsightConfig.linsight_default_model_id || null,
+        chat_default_model_id: linsightConfig.chat_default_model_id || null,
+        abstract_prompt: linsightConfig.abstract_prompt || defalutPrompt,
+        asr_model: { id: linsightConfig.asr_model?.id },
+        tts_model: { id: linsightConfig.tts_model?.id },
+        chat_title_llm: { id: linsightConfig.chat_title_llm?.id },
+        image_read_model: { id: linsightConfig.image_read_model?.id },
+        knowledge_space_llm: { id: linsightConfig.knowledge_space_llm?.id },
+        models: linsightConfig.models || [],
+      };
+    }
+  }, [linsightConfig, error, defalutPrompt, t]);
+
+  if (loading)
     return (
-        <div>
-            <Label className="bisheng-label">
-                <span>{label}</span>
-                {required && <span className="text-red-500 text-xs">*</span>}
-                {tooltipText && <ModelFieldHint className="ml-1" content={tooltipText}></ModelFieldHint>}
-            </Label>
-            <Cascader
-                key={`model-select-${value}-${options.length}`}
-                defaultValue={defaultValue}
-                options={options}
-                close={close}
-                onChange={(val) => onChange(val?.[1])}
-                placeholder={placeholder}
-            />
-        </div>
-    )
-}
-
-export default function WorkbenchModel({ onBack }) {
-    const { llmOptions, embeddings, asrModel, ttsModel } = useModel();
-    const { t } = useTranslation('model')
-
-    const modelRefs = useRef<(HTMLDivElement | null)[]>([])
-
-    const [form, setForm] = useState<any>({
-        sourceModelId: null,
-        linsightDefaultModelId: null,
-        chatDefaultModelId: null,
-        asrModelId: null,
-        ttsModelId: null,
-        knowledgeSpaceLlmId: null,
-        chatTitleLlmId: null,
-        models: [],
-    });
-
-    useEffect(() => {
-    });
-    const lastSaveFormDataRef = useRef(null)
-    const [saveload, setSaveLoad] = useState(false)
-
-    const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
-
-    // Look up the model's own name from the cascader options by id, used as
-    // the default displayName when the admin leaves it empty.
-    const findModelLabel = (id) => {
-        if (!id) return '';
-        for (const group of llmOptions) {
-            const hit = group.children?.find((el) => el.value == id);
-            if (hit) return hit.label;
-        }
-        return '';
-    };
-
-    const submitConfig = async () => {
-        const { linsightDefaultModelId, chatDefaultModelId, sourceModelId, asrModelId, ttsModelId, chatTitleLlmId, models } = form;
-        setSaveLoad(true);
-        try {
-            const data = {
-                // Empty displayName falls back to the model's own name so the
-                // workspace model picker never renders a blank option.
-                models: models.map((m) => m.displayName ? m : { ...m, displayName: findModelLabel(m.id) }),
-                embedding_model: { id: String(sourceModelId) },
-                // Linsight default executor model: one of the workbench chat models' id.
-                linsight_default_model_id: linsightDefaultModelId ? String(linsightDefaultModelId) : null,
-                // Daily-mode default model: independent sibling of the Linsight default.
-                chat_default_model_id: chatDefaultModelId ? String(chatDefaultModelId) : null,
-                asr_model: asrModelId ? { id: String(asrModelId) } : null, // 支持空值
-                tts_model: ttsModelId ? { id: String(ttsModelId) } : null, // 支持空值
-                // “应用会话标题生成模型”
-                chat_title_llm: chatTitleLlmId ? { id: String(chatTitleLlmId) } : null, // 支持空值
-            };
-
-            // 提交更新并通过 refetch 获取最新配置（无需再次调用 getLinsightModelConfig）
-            const response = await captureAndAlertRequestErrorHoc(updateLinsightModelConfig(data));
-            const updatedConfig = await refetchConfig();
-
-            // 直接使用 refetch 返回的最新数据更新状态
-            const newConfig = updatedConfig.data;
-            setForm({
-                sourceModelId: newConfig?.embedding_model?.id || null,
-                linsightDefaultModelId: newConfig?.linsight_default_model_id || null,
-                chatDefaultModelId: newConfig?.chat_default_model_id || null,
-                asrModelId: newConfig?.asr_model?.id || null,
-                ttsModelId: newConfig?.tts_model?.id || null,
-                chatTitleLlmId: newConfig?.chat_title_llm?.id || null,
-                knowledgeSpaceLlmId: newConfig?.knowledge_space_llm?.id || null,
-                models: newConfig?.models || [],
-            });
-
-            lastSaveFormDataRef.current = {
-                embedding_model: { id: newConfig?.embedding_model?.id },
-                linsight_default_model_id: newConfig?.linsight_default_model_id || null,
-                chat_default_model_id: newConfig?.chat_default_model_id || null,
-                abstract_prompt: newConfig?.abstract_prompt || defalutPrompt,
-                asr_model: { id: newConfig?.asr_model?.id },
-                tts_model: { id: newConfig?.tts_model?.id },
-                chat_title_llm: { id: newConfig?.chat_title_llm?.id },
-                knowledge_space_llm: { id: newConfig?.knowledge_space_llm?.id },
-                models: newConfig?.models || [],
-            };
-            if (response !== false) {
-                toast.show({ type: 'success', message: String(t('model.saveSuccess') ?? '') });
-            }
-        } catch (err) {
-            toast.show({ type: 'error', message: String(t('model.saveFailed') ?? '') });
-        } finally {
-            setSaveLoad(false);
-        }
-    };
-
-    // 检查是否修改了 embedding 模型
-    const checkEmbeddingModified = () => {
-        const lastEmbeddingId = lastSaveFormDataRef.current?.embedding_model?.id;
-        const currentEmbeddingId = form.sourceModelId;
-        return lastEmbeddingId !== currentEmbeddingId;
-    };
-
-    const handleSave = () => {
-        if (form.models.some(model => String(model.description ?? "").length > 50)) return;
-        const errors = [];
-        if (!form.models.length) {
-            errors.push('请至少配置一个对话模型');
-        }
-        // Reject blank rows: a model without an id serializes to `{ id: '' }`,
-        // which reaches the client model picker as <SelectItem value="">
-        // (empty string) and crashes the whole page in Radix. Force the admin
-        // to pick a model or remove the empty row before saving.
-        if (form.models.some((model) => !model.id)) {
-            errors.push('存在未选择模型的对话模型行，请选择模型或删除该行');
-        }
-        if (!hasValidWorkbenchEmbeddingModelId(form.sourceModelId)) {
-            errors.push(t('model.workVectorModel') + t('bs:required'));
-        }
-        if (errors.length) {
-            toast.show({ type: 'error', message: errors.filter(Boolean).join('\n') });
-            return;
-        }
-
-        if (checkEmbeddingModified()) {
-            bsConfirm({
-                title: t('model.tip'),
-                desc: t('model.confirmEmbeddingChange'),
-                showClose: true,
-                okTxt: t('model.confirm'),
-                canelTxt: t('model.cancel'),
-                onOk(next) {
-                    submitConfig().then(next);
-                },
-                onCancel() { }
-            });
-        } else {
-            submitConfig();
-        }
-    };
-
-    useEffect(() => {
-        if (error) {
-            toast.show({ type: 'error', message: String(t('model.fetchConfigFailed') ?? '') });
-            return;
-        }
-
-        // 2. 配置数据就绪后，更新表单和缓存（添加 defalutPrompt 到依赖）
-        if (linsightConfig) {
-            setForm({
-                sourceModelId: linsightConfig.embedding_model?.id || null,
-                linsightDefaultModelId: linsightConfig.linsight_default_model_id || null,
-                chatDefaultModelId: linsightConfig.chat_default_model_id || null,
-                asrModelId: linsightConfig.asr_model?.id || null,
-                ttsModelId: linsightConfig.tts_model?.id || null,
-                chatTitleLlmId: linsightConfig.chat_title_llm?.id || null,
-                knowledgeSpaceLlmId: linsightConfig.knowledge_space_llm?.id || null,
-                models: linsightConfig.models || [],
-            });
-
-            lastSaveFormDataRef.current = {
-                embedding_model: { id: linsightConfig.embedding_model?.id },
-                linsight_default_model_id: linsightConfig.linsight_default_model_id || null,
-                chat_default_model_id: linsightConfig.chat_default_model_id || null,
-                abstract_prompt: linsightConfig.abstract_prompt || defalutPrompt,
-                asr_model: { id: linsightConfig.asr_model?.id },
-                tts_model: { id: linsightConfig.tts_model?.id },
-                chat_title_llm: { id: linsightConfig.chat_title_llm?.id },
-                knowledge_space_llm: { id: linsightConfig.knowledge_space_llm?.id },
-                models: linsightConfig.models || [],
-            };
-        }
-    }, [linsightConfig, error, defalutPrompt, t]);
-
-    if (loading) return (
-        <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <Outlined.Loading  className="size-4 animate-spin"/>
-        </div>
+      <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+        <Outlined.Loading className="size-4 animate-spin" />
+      </div>
     );
-    // console.log('ASR Model Options structure:', JSON.stringify(asrModel, null, 2));
-    console.log('TTS Model Options structure:', JSON.stringify(embeddings, null, 2));
-    const inheritedFromRoot = !!linsightConfig?.inherited_from_root;
-    const fallbackBlocked = !!linsightConfig?.fallback_blocked;
-    return (
-        <div className="max-w-[880px] mx-auto gap-y-4 flex flex-col mt-16 relative">
-            <FallbackBlockedBanner visible={fallbackBlocked} />
-            {inheritedFromRoot && (
-                <div className="-mb-2 text-xs text-muted-foreground flex items-center">
-                    <InheritedBadge visible={true} />
-                </div>
-            )}
-            <div>
-                <h3 className="bisheng-label mb-2">日常模式/知识空间/订阅对话模型</h3>
-                <ModelManagement
-                    ref={modelRefs}
-                    models={form.models}
-                    errors={[]}
-                    error={''}
-                    linsightDefaultModelId={form.linsightDefaultModelId}
-                    onLinsightDefaultChange={(id) => setForm((prev) => ({ ...prev, linsightDefaultModelId: id }))}
-                    chatDefaultModelId={form.chatDefaultModelId}
-                    onChatDefaultChange={(id) => setForm((prev) => ({ ...prev, chatDefaultModelId: id }))}
-                    onAdd={() => setForm((prev) => ({
-                        ...prev,
-                        models: [...prev.models, { key: generateUUID(4), id: '', name: '', displayName: '', description: '', visual: false }],
-                    }))}
-                    onRemove={(index) => setForm((prev) => {
-                        const removed = prev.models[index];
-                        // If the removed model was the Linsight default, clear the selection.
-                        const linsightDefaultModelId = removed?.id && removed.id === prev.linsightDefaultModelId
-                            ? null
-                            : prev.linsightDefaultModelId;
-                        // Same for the daily-mode default.
-                        const chatDefaultModelId = removed?.id && String(removed.id) === String(prev.chatDefaultModelId ?? '')
-                            ? null
-                            : prev.chatDefaultModelId;
-                        return {
-                            ...prev,
-                            models: prev.models.filter((_, i) => i !== index),
-                            linsightDefaultModelId,
-                            chatDefaultModelId,
-                        };
-                    })}
-                    onModelChange={(index, id) => setForm((prev) => ({
-                        ...prev,
-                        models: prev.models.map((item, i) => i === index ? { ...item, id } : item),
-                    }))}
-                    onNameChange={(index, displayName) => setForm((prev) => ({
-                        ...prev,
-                        models: prev.models.map((item, i) => i === index ? { ...item, displayName } : item),
-                    }))}
-                    onDescriptionChange={(index, description) => setForm((prev) => ({
-                        ...prev,
-                        models: prev.models.map((item, i) => i === index ? { ...item, description } : item),
-                    }))}
-                    onVisualToggle={(index, visual) => setForm((prev) => ({
-                        ...prev,
-                        models: prev.models.map((item, i) => i === index ? { ...item, visual } : item),
-                    }))}
-                />
-            </div>
-            <ModelSelect
-                close
-                label={t('model.workVectorModel')}
-                tooltipText={t('model.workVectorModelTooltip')}
-                value={form.sourceModelId}
-                options={embeddings}
-                onChange={(val) => setForm({ ...form, sourceModelId: val })}
-                required
-            />
-            <h3 className="bisheng-label">{t('model.workbenchVoiceModel')}</h3>
-            <div className="border rounded-lg p-4 -mt-3 space-y-4">
-                <ModelSelect
-                    close
-                    label={t('model.asrModel')}
-                    tooltipText={t('model.asrModelTooltip')}
-                    value={form.asrModelId}
-                    options={asrModel}
-                    onChange={(val) => setForm({ ...form, asrModelId: val })}
-                />
-                <ModelSelect
-                    close
-                    label={t('model.ttsModel')}
-                    tooltipText={t('model.ttsModelTooltip')}
-                    value={form.ttsModelId}
-                    options={ttsModel}
-                    onChange={(val) => setForm({ ...form, ttsModelId: val })}
-                />
-            </div>
-            <ModelSelect
-                close
-                label={t('model.sessionTitleGenerationModel')}
-                value={form.chatTitleLlmId}
-                options={llmOptions}
-                onChange={(val) => setForm({ ...form, chatTitleLlmId: val })}
-            />
-            <div className="mt-10 text-center space-x-6">
-                <Button variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
-                <Button disabled={saveload} onClick={handleSave}>
-                    {saveload && <Outlined.Loading className="animate-spin mr-2" />}
-                    {t('model.save')}
-                </Button>
-            </div>
+  const inheritedFromRoot = !!linsightConfig?.inherited_from_root;
+  const fallbackBlocked = !!linsightConfig?.fallback_blocked;
+  return (
+    <div className="w-full max-w-[1440px] mx-auto gap-y-4 flex flex-col mt-8 relative">
+      <FallbackBlockedBanner visible={fallbackBlocked} />
+      {inheritedFromRoot && (
+        <div className="-mb-2 text-xs text-muted-foreground flex items-center">
+          <InheritedBadge visible={true} />
         </div>
-    );
+      )}
+      <UserSelectableModels
+        data={data}
+        configuredModels={form.models}
+        enterpriseEnabled={!!enterpriseConfig?.enabled}
+        disabled={saveload || !linsightConfig}
+        onMetadataChange={(model, changes) =>
+          setForm((prev) => ({
+            ...prev,
+            models: updateModelMetadata(prev.models, model, changes),
+          }))
+        }
+      />
+      <details className="mt-2 border-t pt-4">
+        <summary className="cursor-pointer text-sm text-muted-foreground">
+          {t("model.otherModelSettings")}
+        </summary>
+        <div className="mt-4 max-w-[880px] space-y-4">
+          <ModelSelect
+            close
+            label={t("model.workVectorModel")}
+            tooltipText={t("model.workVectorModelTooltip")}
+            value={form.sourceModelId}
+            options={embeddings}
+            onChange={(val) => setForm({ ...form, sourceModelId: val })}
+            required
+          />
+          <h3 className="bisheng-label">{t("model.workbenchVoiceModel")}</h3>
+          <div className="border rounded-lg p-4 -mt-3 space-y-4">
+            <ModelSelect
+              close
+              label={t("model.asrModel")}
+              tooltipText={t("model.asrModelTooltip")}
+              value={form.asrModelId}
+              options={asrModel}
+              onChange={(val) => setForm({ ...form, asrModelId: val })}
+            />
+            <ModelSelect
+              close
+              label={t("model.ttsModel")}
+              tooltipText={t("model.ttsModelTooltip")}
+              value={form.ttsModelId}
+              options={ttsModel}
+              onChange={(val) => setForm({ ...form, ttsModelId: val })}
+            />
+          </div>
+          <ModelSelect
+            close
+            label={t("model.sessionTitleGenerationModel")}
+            value={form.chatTitleLlmId}
+            options={llmOptions}
+            onChange={(val) => setForm({ ...form, chatTitleLlmId: val })}
+          />
+        </div>
+      </details>
+      <div className="mt-6 flex justify-end gap-4">
+        <Button className="px-6" variant="outlined" onClick={onBack}>
+          {t("model.cancel")}
+        </Button>
+        <Button className="px-10" disabled={saveload || !linsightConfig} onClick={handleSave}>
+          {saveload && <Outlined.Loading className="mr-2 animate-spin" />}
+          {t("model.save")}
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export function useLinsightConfig() {
-    return useQuery({
-        queryKey: ["linsightModelEnvelope"],
-        queryFn: () => captureAndAlertRequestErrorHoc(getLinsightModelEnvelope()),
-        select: (env) => {
-            // F022: backend returns {data, inherited_from_root, fallback_blocked}.
-            // Hand the destructured shape back so the component can render the
-            // Badge / Banner without re-fetching.
-            const cfg = env?.data || {
-                models: [],
-                embedding_model: null,
-                abstract_prompt: defalutPrompt,
-                linsight_default_model_id: null,
-                chat_default_model_id: null,
-                asr_model: null,
-                tts_model: null,
-                knowledge_space_llm: null,
-                chat_title_llm: null,
-            };
-            return {
-                ...cfg,
-                inherited_from_root: !!env?.inherited_from_root,
-                fallback_blocked: !!env?.fallback_blocked,
-            };
-        },
-        retry: 1,
-    });
+  return useQuery({
+    queryKey: ["linsightModelEnvelope"],
+    queryFn: () => getLinsightModelEnvelope({ showError: false }),
+    onError: showApiError,
+    select: (env) => {
+      // F022: backend returns {data, inherited_from_root, fallback_blocked}.
+      // Hand the destructured shape back so the component can render the
+      // Badge / Banner without re-fetching.
+      const cfg = env?.data || {
+        models: [],
+        embedding_model: null,
+        abstract_prompt: defalutPrompt,
+        linsight_default_model_id: null,
+        chat_default_model_id: null,
+        asr_model: null,
+        tts_model: null,
+        knowledge_space_llm: null,
+        chat_title_llm: null,
+        image_read_model: null,
+      };
+      return {
+        ...cfg,
+        inherited_from_root: !!env?.inherited_from_root,
+        fallback_blocked: !!env?.fallback_blocked,
+      };
+    },
+    retry: (failureCount, error) => shouldRetryApiError(error) && failureCount < 1,
+  });
 }
 
 export const defalutPrompt = `# role

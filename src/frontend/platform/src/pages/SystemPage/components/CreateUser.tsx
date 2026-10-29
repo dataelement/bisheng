@@ -7,7 +7,7 @@ import { Label } from "@/components/bs-ui/label";
 
 import { generateUUID } from "@/components/bs-ui/utils";
 import { createUserApi } from "@/controllers/API/user";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest } from "@/controllers/request";
 import { handleEncrypt,PWD_RULE } from "@/pages/LoginPage/utils";
 import { copyText } from "@/utils";
 import { Outlined } from "bisheng-icons";
@@ -46,14 +46,14 @@ export default function CreateUser({ open, onClose, onSave }) {
             group_id: Number(item.groupId),
             role_ids: item.roles.map(r => Number(r))
         }))
-        captureAndAlertRequestErrorHoc(createUserApi(form.user_name, encryptPwd, group_roles).then(() => {
+        await createUserApi(form.user_name, encryptPwd, group_roles).then(() => {
             copyText(`${t('system.username')}: ${form.user_name}，${t('system.initialPassword')}: ${form.password}`).then(() =>
                 toast.show({ type: 'success', message: [String(t('prompt') ?? ''), String(t('system.userCreationSuccess') ?? '')].filter(Boolean).join('\n') }))
             onClose(false)
             setItems([initItems])
             setForm(initUser)
             onSave()
-        }))
+        })
     }
 
     const handleChangeRoleItems = (index, groupId, roles) => {
@@ -96,7 +96,7 @@ export default function CreateUser({ open, onClose, onSave }) {
             </div>
             <DialogFooter>
                 <Button variant="outlined" onClick={handleCancel} color="default">{t('cancel')}</Button>
-                <Button onClick={handleConfirm}>{t('confirm')}</Button>
+                <Button onClick={handleUiRequest(handleConfirm)}>{t('confirm')}</Button>
             </DialogFooter>
         </DialogContent>
     </Dialog>

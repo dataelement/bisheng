@@ -5,13 +5,14 @@ import { LoadingIcon } from "@/components/bs-icons/loading"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 
 import { copyComponentTo, getDashboards } from "@/controllers/API/dashboard"
+import { showApiError } from "@/controllers/request"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { cn } from "@/utils"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import ReactGridLayout, { Layout, verticalCompactor } from "react-grid-layout"
 import "react-grid-layout/css/styles.css"
 import { useTranslation } from "react-i18next"
-import { useMutation, useQuery, useQueryClient } from "react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import "react-resizable/css/styles.css"
 import { DashboardsQueryKey, useDashboardPermissions } from "../../hook"
 import { DashboardComponent } from "../../types/dataConfig"
@@ -67,9 +68,7 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
             // queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
             notification.open({ type: "success", description: String(t('copyToTargetSuccess') ?? '') })
         },
-        onError: () => {
-            notification.open({ type: "error", description: String(t('copyFailed') ?? '') })
-        },
+        onError: showApiError,
     })
 
     // When the page loads, it automatically refreshes according to the query component configuration.

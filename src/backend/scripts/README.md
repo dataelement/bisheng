@@ -2,7 +2,70 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## Built-in knowledge retrieval tool
+
+`register_work_knowledge_tool.py` completes the Work knowledge-search upgrade in
+an existing database: register `bisheng_knowledge_search`, reconcile its category
+through the F048 permission facade, and verify the projection is CURRENT. Fresh
+installations use the seed catalog. Run one process during release maintenance
+from `src/backend` with the live service `config`:
+
+```bash
+python scripts/register_work_knowledge_tool.py
+python scripts/register_work_knowledge_tool.py --apply --confirm-store-id <store-id-from-preview> --operator-id <user-id>
+```
+
+The preview returns the Store/model identity, catalog plan, permission state and
+`ready`. Apply validates the selected Store and runtime readiness before writing,
+creates missing catalog rows with database-assigned IDs in one transaction, and
+projects exactly the knowledge category. Existing entries, account switches,
+administrator configuration and current permission modes are preserved. Conflicting
+ownership, duplicate keys, deleted entries or a pending projection require operator
+resolution. A permission failure exits with an error; repeat the same command after
+recovering the service to complete the committed catalog's projection.
+
+Both container entrypoints expose the same upgrade operation. After deploying the
+backend code, use the service's working directory and configuration:
+
+```bash
+docker compose exec backend sh entrypoint.sh upgrade-work-knowledge
+docker compose exec backend sh entrypoint.sh upgrade-work-knowledge --apply --confirm-store-id <store-id-from-preview> --operator-id <user-id>
+```
+
+For repository-managed Compose updates, `docker/deploy.sh update` includes this
+operation as a required release stage whenever `backend` is selected. It requires
+the confirmed Store and audit operator, waits for backend readiness, runs the
+upgrade, then updates the remaining services. See the
+[deployment procedure](../../../docker/README.md) for preview, failure recovery
+and external-pipeline integration.
+
+Completion requires `ready: true`, then ordinary-user discovery and execution.
+Verify single-space retrieval and K1/K2 multi-selection with distinct source markers
+and citations in Work. Keep the account enable switch and document permissions in
+the acceptance path. Code deployment, successful data upgrade, and real Work task
+acceptance are separate delivery states.
+
 ## Diagnostic Scripts
+
+### `measure_dsh_model_audit.py`
+
+Post-development DSH audit timing probe for the **disposable loopback fixture only**.
+Start `python -m test.dsh.audit_local_server --real-stores` first. Supply its
+synthetic administrator/user tokens via `DSH_AUDIT_ADMIN_TOKEN` and
+`DSH_AUDIT_USER_TOKEN`; never use business credentials. The default performs
+read-only preflight. `--apply` sends synthetic requests, measures OFF/METADATA/CONTENT,
+and restores the initial mode. It neither loads application config nor opens DB clients.
+
+```bash
+python scripts/measure_dsh_model_audit.py --base http://127.0.0.1:8786
+python scripts/measure_dsh_model_audit.py --base http://127.0.0.1:8786 --apply --samples 10
+```
+
+JSON output separates first content/response duration, metadata/body visibility,
+and the existing persisted `dsh_model_call` Token baseline. An independent fixture
+model-entered counter supplies the denominator. Small-sample percentiles and process
+peak RSS are observations, not a production SLA; production identity/model/Gateway/DM8
+are outside this fixture. No prompt text or credentials are printed.
 
 ### `diagnose_dm_column_reflection.py`
 
@@ -190,10 +253,31 @@ Model equality does not establish that historical service-account resource
 markers exist. This is an explicit deployment operation: container startup,
 `alembic upgrade head`, and `docker/deploy.sh update` do not run data repairs.
 
-For a first migration from legacy RBAC, use `migrate_f048_permission_data.py`;
+For a first migration from pre-F048 ReBAC, use `migrate_f048_permission_data.py`;
 its resource projection already writes both `user:*` and `service_account:*`
 markers at every hierarchy level. Do not repeat the first migration to repair
-an existing F048 installation.
+an existing F048 installation. Legacy RBAC environments must first complete
+the 2.5.x upgrade stage described below.
+
+### `repair_deleted_app_grants.py`
+
+Close the permission gate of hosted apps deleted before the 2026-09-16 delete
+fix (`AppStateService.delete` used to re-read the permission record after
+flipping the app to `deleted`, got 19003, and skipped the delete projection, the
+delete audit and the lifecycle hooks). F048's delete plan removes only the
+`permission_enabled` markers on the object; grant links, `custom_mode` and
+visible-projection tuples stay, as after deleting any F048 resource. The script
+lists deleted apps that still carry `permission_enabled` and, with `--apply`,
+projects the removal using the pre-deletion record. Dry-run is the default.
+
+```bash
+cd src/backend
+PYTHONPATH=./ .venv/bin/python scripts/repair_deleted_app_grants.py                  # list only
+PYTHONPATH=./ .venv/bin/python scripts/repair_deleted_app_grants.py --apply          # repair all
+PYTHONPATH=./ .venv/bin/python scripts/repair_deleted_app_grants.py --apply --app-id <app_id>
+```
+
+Exit code 1 means at least one app still has a `permission_enabled` marker after `--apply`.
 
 ### `cleanup_f048_user_group_admin_grants.py`
 
@@ -499,13 +583,18 @@ empty.
 
 Audit and repair missing F048 projections for business-verified platform
 resources. The current inventory covers preset tool categories
-(`is_preset=1 AND user_id IS NULL`). Preset dashboards are intentionally
+(`is_preset=1 AND is_delete=0`), regardless of historical `user_id`. Preset dashboards are intentionally
 excluded: they are ordinary resources owned by the first super administrator.
 The reconciler does not infer system ownership from the resource-type
 allowlist alone.
 
-The default dry-run reports missing/non-current modes for those tool
-categories:
+The default dry-run reports missing/non-current modes and checks actual
+`user:*` system tuples at higher consistency for `CURRENT` categories. A
+`CURRENT` mode alone does not prove that system authorization is complete.
+`MISSING_TUPLES` lists missing `visible` / `system_use_marker` relations;
+`incomplete_count` counts affected existing resources and `missing_tuple_count`
+counts their missing relations. `missing_count` counts resources without a mode.
+Dry-run writes no permission modes, operations, grants, or tuples:
 
 ```bash
 export config=config.yaml
@@ -524,16 +613,27 @@ PYTHONPATH=./ .venv/bin/python \
   --operator-id 1
 ```
 
-Apply calls the regular `authorize_system_owned` facade. The resulting mode,
-durable projection operation/tuples, and OpenFGA marker tuples are therefore
-created by the same path as online resource creation. An existing
+Apply calls `authorize_system_owned` for absent modes and `repair_system_owned`
+for `CURRENT` preset tools with missing system relations. The repair only adds
+the missing relations through a durable `RESOURCE_SYSTEM_REPAIR` operation,
+claims the existing resource version, and finalizes the next version after
+OpenFGA verification. Existing Grant/assignee rows, visibility contributions,
+and permission mode are preserved. A second run with complete tuples performs
+no writes; later tuple loss can be repaired at the new resource version. An existing
 non-`CURRENT` mode is a blocker and remains owned by the ordinary
 operation/FAILED_CLOSED recovery scripts.
 
-The general projection-operation reconciler cannot repair this case because a
-freshly seeded resource has no durable operation yet. The visible reconciler
-also cannot repair it because system-owned resources intentionally have no
-Grant/assignee source rows.
+Run this explicit maintenance procedure after deploying the classifier fix to
+repair historical presets migrated as user-owned resources. Restarting the
+service does not repair all existing presets, and resuming a completed F048
+migration does not refresh its frozen resource classification. Review the
+dry-run against the target environment before applying; deploying this code
+alone does not mutate production permissions.
+
+The general projection-operation reconciler cannot invent missing system
+tuples for a historical resource: no operation describing that correction
+exists yet. The visible reconciler only rebuilds ordinary Grant sources;
+system authorization has a separate canonical business predicate.
 
 ### `recover_f048_failed_closed_projection.py`
 
@@ -586,10 +686,32 @@ finalized operation only verifies and skips it.
 
 ### `migrate_f048_permission_data.py`
 
+Legacy `user_group:<id>#admin` resource `manager`/`can_manage` tuples are
+retired with an INFO audit item instead of becoming F048 Grants or visible
+contributions. User groups no longer grant resource management separately to
+administrators. These tuples are not reassigned to `#member`; existing member
+Grants and protected resource creators still migrate normally. The retired
+F006 RBAC-to-ReBAC scripts are no longer shipped on this release line.
+
 Formal, forward-only migration from the legacy relation-model Config and
 resource tuples to the F048 Catalog / Model / Grant control plane. This is the
 only F048 business-data migration entry point. Alembic remains DDL-only, and
 the service never invokes this script from API startup, Celery, or Linsight.
+
+Upgrade prerequisite for legacy RBAC environments:
+
+1. Upgrade to a 2.5.x release that ships F006. Follow that release's schema
+   and data-upgrade instructions, then run its F006 RBAC-to-ReBAC migration
+   and verification. Require zero permission regressions and verify resource
+   access with a non-admin account before continuing.
+2. Upgrade from the verified 2.5.x environment to the target release while
+   retaining its database and OpenFGA Store, then run the F048 migration and
+   verification below. F048 consumes the existing ReBAC tuples; it does not
+   replace F006's conversion of legacy `roleaccess` rows.
+
+Do not skip the 2.5.x stage for a pure RBAC environment or restore/run F006
+inside an F048 deployment. Existing pre-F048 ReBAC environments that have
+already completed F006 do not need to repeat that stage.
 
 Run every command from `src/backend/` with the same `config` value as the live
 deployment.
@@ -730,6 +852,54 @@ Exit codes:
 - `0`: command completed successfully
 - `3`: a migration or verification safety gate blocked progress
 - `4`: unexpected runtime/infrastructure failure; traceback is printed
+
+### `upgrade_f048_authorization_model.py` / `.sh`
+
+Makes the F054 **`app`** resource type effective on an environment that has
+**already** run the F048 migration. A fresh install needs nothing — the model is
+built from the constants at first boot — but an existing one needs this, for two
+independent reasons:
+
+- adding `app` changes the authorization-model checksum, so every process boots
+  into `migration_required` and answers 503 for **all** permission checks until
+  the SQL pin is moved deliberately;
+- `permission_action_resource_scope` is written only by the first migration and
+  by a Catalog draft publish, and no `CatalogChangeType` can change an action's
+  `resource_types` — so without a backfill `is_action_effective("app", …)` is
+  false forever and every check raises `InvalidCatalogActionError`.
+
+Four steps: publish (or adopt) the model in the store, insert the new ACTIVE
+`authorization_model_release` and retire the old one, re-point the CURRENT
+`permission_catalog_release`, backfill the `app` scope rows. Steps 2-4 share one
+transaction; step 1 is an HTTP write and cannot join it.
+
+```bash
+cd src/backend/
+export config=config.yaml            # same value the live service runs with
+
+bash scripts/upgrade_f048_authorization_model.sh              # plan — writes nothing
+bash scripts/upgrade_f048_authorization_model.sh apply
+bash scripts/upgrade_f048_authorization_model.sh verify
+bash scripts/upgrade_f048_authorization_model.sh rollback     # re-point SQL back
+```
+
+Operational notes:
+
+- **Restart every process after `apply` or `rollback`** — API, celery x3, beat,
+  linsight worker. Heartbeats are re-checked every 15 s (TTL 45 s): a process
+  left running fails closed rather than continuing to serve.
+- **Ship the code before adding a new `config.yaml` key.** `load_settings_from_yaml`
+  raises `KeyError` on an unknown top-level key, so adding `app_runtime:` ahead
+  of the code stops the backend from starting.
+- `apply` is idempotent — it locates an existing model by canonical checksum, so
+  a re-run reports `noop` instead of publishing a duplicate. It refuses to run
+  while permission runtime heartbeats are live unless `--allow-live` is given.
+- `rollback` re-points SQL and removes the `app` scope rows. The published model
+  **stays in the store** (OpenFGA models are immutable); it becomes an orphan
+  nobody pins, which is harmless exactly because `apply` matches by checksum.
+
+Exit codes: `0` success, `3` a safety gate blocked progress, `4` unexpected
+runtime failure.
 
 ### `benchmark_f048_permission_paths.py`
 
@@ -1180,3 +1350,106 @@ bash scripts/seed_load_test_org.sh --departments 200 --users 50000 --apply
 python scripts/dsh_migrate_role_policies.py --tenant 2 --actor 1 --model 7
 python scripts/dsh_migrate_role_policies.py --tenant 2 --actor 1 --model 7 --apply
 ```
+
+## Vibe runtime v2 deployment bindings
+
+`upgrade_vibe_runtime.py` uses authenticated scope APIs only. Export a signed manager
+`/v2/upgrade/inventory` during the maintenance window, review its SHA256, then run
+dry-run first with `BISHENG_MANAGEMENT_TOKEN`, `--inventory`, `--base-url` and
+`--report`. `--apply` additionally requires `--acknowledge-maintenance` and
+`--expected-inventory-sha256`. The backend rechecks live Engine facts. After import,
+use `POST /api/v1/apps/{app_id}/runtime/upgrade/rebind` to rebuild the current frozen
+image with backend storage; pending approved versions are preserved. Do not restore
+an older SQLite database as part of a code rollback.
+## DSH audit model-name digest backfill
+
+After the `dsh_audit_model_lookup` schema migration and deployment of all new writers,
+run from `src/backend/` using the same `config` environment as the service:
+
+```bash
+python scripts/backfill_dsh_audit_model_names.py --tenant-id 1
+python scripts/backfill_dsh_audit_model_names.py --tenant-id 1 --apply --batch-size 200 --max-batches 20
+```
+
+Dry-run is the default. Repeat per tenant until `has_more=false`; resume with
+`--after-request-id` from the previous output. Rerun from the beginning for a final
+check. Only missing digests are filled; original names and bodies remain unchanged.
+Historical exact-name lookup is incomplete until this operation finishes. No fuzzy
+query fallback or automatic startup backfill is performed.
+
+## DSH audit presentation preparation
+
+Run from `src/backend/` using the live service config. `python scripts/backfill_dsh_audit_presentation.py --tenant-id 1` previews one bounded batch; add `--apply --max-batches 20` to prepare historical presentation statuses and mark conversation projection. Resume with the reported `--after-request-id`, then rerun from the start to catch late rows. The independent audit inspection task projects groups; no model bodies, policy or keys are changed.
+
+## Audit conversation hierarchy
+
+After upgrading all audit writers and preparing legacy audit status/group data,
+run from `src/backend/` using the live service's `config` environment variable:
+
+```bash
+python scripts/prepare_dsh_audit_tree.py --tenant-id 1
+python scripts/prepare_dsh_audit_tree.py --tenant-id 1 --apply --max-steps 100
+```
+
+The default is read-only. Each applied step handles at most 100 records/nodes;
+SQL checkpoints allow rerunning to continue. This rebuilds navigation only and
+never reads model bodies, replays requests, or merges audit/billing records.
+An active background lease returns BUSY; do not override it. Terminal histories
+and tenants currently in OFF mode are also processed by the independent worker.
+
+## DSH content-safety replay and retention
+
+Run `dsh_content_safety_maintenance.py` from `src/backend/`, with the same
+`config` environment variable as the live service. It uses only the shared SQL
+configuration and a strict, explicit tenant scope; it does not start Redis,
+object storage, model admission, SSO or the full application context.
+
+```bash
+export config=config.yaml
+python scripts/dsh_content_safety_maintenance.py rebuild --tenant-id 1
+python scripts/dsh_content_safety_maintenance.py rebuild --tenant-id 1 --apply --batch-size 100 --max-batches 20
+python scripts/dsh_content_safety_maintenance.py purge-details --tenant-id 1 --before 2026-10-01T00:00:00Z
+python scripts/dsh_content_safety_maintenance.py purge-details --tenant-id 1 --before 2026-10-01T00:00:00Z --apply
+python scripts/dsh_content_safety_maintenance.py purge-audit --tenant-id 1 --before 2026-10-01T00:00:00Z --apply --max-batches 20
+```
+
+All commands default to **dry-run**. It validates configuration and tenant
+existence, and prints proposed bounds without scanning or writing facts; it is
+not a count of recoverable or removable records. No retention period is enabled
+implicitly. Both purge commands require an explicit timezone-aware `--before`;
+cutoffs are normalized to UTC and exclusive. Disabled or archived tenants remain
+eligible for maintenance of retained history.
+
+`rebuild` replays only facts still present and permitted by the persisted deletion
+watermark. Each JSONL report describes a committed batch: `examined` includes
+`skipped_expired`, so examined rows must not be described as restored rows.
+Resume with `--cursor '<next_cursor>'`, using the same tenant. No retained fact
+means no reconstruction of deleted details or conversion of unknown legacy checks
+to PASSED. Group and hierarchy summaries converge through their normal worker.
+
+`purge-details` removes facts by receipt time, preserving main audit summaries and
+any existing main-cleanup watermark or cursor. `purge-audit` first commits its
+monotonic deletion watermark separately, then deletes bounded eligible main rows
+and their associated safety facts, updating affected summaries atomically. A
+failed batch rolls back while earlier batches and the watermark remain committed.
+Rerun with the same cutoff to resume; its persisted cursor is independent of the
+rebuild cursor. Running or unsettled rows are skipped and can be revisited by
+another run with the same cutoff after they finish, even after `has_more=false`.
+A report is emitted only after its batch commits; a lost report can be retried.
+
+The default is one batch of at most 100 rows; `--batch-size` accepts 1..100 and
+`--max-batches` accepts 1..10000. These operations do **not** reclaim native body
+metadata, shared objects, encryption keys, model-call records or monthly usage.
+Main cleanup does not remove unrelated unassociated safety facts. Deploy the
+retention guards for all writers before applying a main-audit deletion checkpoint.
+Exit codes: 0 success, 2 invalid arguments/request, 3 missing service database
+configuration/dependencies, 4 unknown tenant, 5 operational failure. The standalone
+CLI suppresses infrastructure logging and prints only its own JSONL and fixed,
+type-only errors; importing it does not change the host logging configuration.
+Errors omit SQL, credentials and payloads. MySQL/DM8 concurrency, interruption and
+recovery require the separate real-database acceptance; SQLite CLI tests do not
+establish those guarantees.
+
+## 工具与技能全员授权升级（f048-v6）
+
+`migrate_capability_authorization.py` 将现有内置工具及企业技能的全员可用状态转换为所属租户成员的可撤销 Grant。默认 dry-run，apply 需要 Store 确认与操作人；在发布授权模型后、业务进程停止期间执行。重复执行保留管理员的撤销结果。完整顺序见 [升级说明](../../../features/local/tools-skills-authorization/upgrade.md)。

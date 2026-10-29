@@ -1,0 +1,482 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-10-22T10:49:09.248453+00:00",
+  "source_base": "c90927b1f4e0388a956d4e300c7951ff7745b1bf",
+  "release_inheritance": "9d156f261cc7769fcf75f41caeb104a425308017",
+  "evidence_kind": "local-tests-and-native-engine",
+  "runtime_deployment_verified": true,
+  "kubernetes_deployment_verified": false,
+  "docker_live_status": "three_bundle_languages_and_source_image_two_revisions_passed_complete_image_independent_observe_passed_faults_pending",
+  "kubernetes_live_status": "installation_passed_business_pending",
+  "dm8_driver_status": "not_run_static_only",
+  "suites": [
+    {
+      "name": "runtime",
+      "command": "src/runtime-manager: PYTHONPATH=/private/tmp/f059-crypto50 python -m pytest -q tests",
+      "passed": 967,
+      "skipped": 10,
+      "failed": 0,
+      "kind": "local-tests",
+      "log_sha256": "2390efd9de70822c872f8bc6d5ba991c0fa0feb794b3acd5a2700524f448225d",
+      "private_log": "/private/tmp/f059-integration-runtime-latest.log"
+    },
+    {
+      "name": "app-proxy",
+      "command": "src/app-proxy: python -m pytest -q tests",
+      "passed": 256,
+      "skipped": 0,
+      "failed": 0,
+      "kind": "local-tests",
+      "log_sha256": "185366c197e87c2376cc7dfa10fa6d0e089dcb09bd7efb8f8f87b30ad93ffc79",
+      "private_log": "/private/tmp/f059-e2e-app-proxy-full.log"
+    },
+    {
+      "name": "backend",
+      "command": "config=/private/tmp/f059-test-config-auth.yaml python -m pytest -q src/backend/test/app_runtime src/backend/test/app_publish",
+      "passed": 1564,
+      "skipped": 18,
+      "failed": 0,
+      "kind": "local-tests",
+      "log_sha256": "e9654c4908a8d820f97fa3dce9f4b7aeedabb20879ceb6c5a2c1034ce8e52ef5",
+      "private_log": "/private/tmp/f059-backend-full-final.log"
+    },
+    {
+      "name": "harness-permission",
+      "command": "config=/private/tmp/f059-test-config-auth.yaml python -m pytest -q src/backend/test/app_runtime/test_k8s_e2e_contract.py src/backend/test/app_runtime/test_app_permission_registration.py src/backend/test/e2e/test_e2e_vibe_k8s_runtime.py",
+      "passed": 54,
+      "skipped": 11,
+      "failed": 0,
+      "kind": "local-tests",
+      "log_sha256": "53085a2bca1e1b0b75f887a8b8009eeaf63deaa0516a771d150427ddc8467989",
+      "private_log": "/private/tmp/f059-e2e-harness-final.log"
+    }
+  ],
+  "limitations": [
+    "Historical local/native-engine records below retain their original source and gates; current platform subset is in current_platform_partial.",
+    "189 installation and 3 real report rejection/restoration pairs passed; full business/fault acceptance remains incomplete.",
+    "Final native amd64 and arm64 nine-image suites passed at source 54b; formal public CI release and cross-node verification have not run.",
+    "DM8 is static-only by user instruction. Docker L3 firewall fallback is not verified by successful HTTP/SDK tests."
+  ],
+  "native_engine": {
+    "host": "192.168.106.109",
+    "scope": "dedicated-e2e-f059-docker",
+    "manager_image_id": "sha256:4e1be0d30cde2a755b1bcfaa7d0b9b743df33ebc3ec05f37a383a0f0dc1f36c1",
+    "platform": "linux/amd64",
+    "result": {
+      "platform": "linux/amd64",
+      "checks": [
+        {
+          "language": "python3.11",
+          "offline": true,
+          "code_update": true,
+          "dependency_reuse": true
+        },
+        {
+          "language": "node20",
+          "offline": true,
+          "code_update": true,
+          "dependency_reuse": true
+        },
+        {
+          "language": "static",
+          "offline": true,
+          "code_update": true,
+          "dependency_reuse": true
+        },
+        {
+          "language": "static",
+          "offline": true,
+          "install_hook": true,
+          "frontend_build": true,
+          "source_change_invalidates_dependency": true
+        },
+        {
+          "language": "python3.11",
+          "offline": true,
+          "local_native_wheel": true,
+          "source_change_invalidates_dependency": true
+        }
+      ]
+    },
+    "result_sha256": "0f8f802bbbcca0e0374f376e8a8a3216c4bfbf032b0ae640ab1e4d3e4f185e5a",
+    "non_test_containers_before_after_sha256": "a01118b42cd860d661a9062be5227ede560b3e872ef828216e9031ce3d881154",
+    "script_sha256": "a8b6ddd97fdc9eb88f7728819390f74df4a3b111179cf42aaa2c398ba8d1f3c0",
+    "code_critical_hashes": {
+      "bundle_preparer.py": "13a8e75152f5c3c13bb376166074f1f2f51fdb43cfc84ef89d6a7017d724a9fb",
+      "bundle_launch.py": "b1c4b9bf686a6def9d9910130ee07f7e90958e2217bac3f6931778a91cf74ee7"
+    },
+    "no_new_oci_images_asserted": true,
+    "temporary_containers_and_network_cleaned": true,
+    "artifact_port": "in-memory; not real backend/MinIO/approval",
+    "private_evidence_dir": "/opt/e2e-f059-docker/evidence"
+  },
+  "current_platform_partial": {
+    "host": "192.168.106.109",
+    "source_commit": "54b3ea2c15836529cc24667d9a58be49e35bf710",
+    "harness_source_commit": "7b728fcb664731bd51fa4fc54dcf471250587d27",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:26f61e7ba98726d3c78ade8236ef78d09567583282bf2292f911af04b2a4b7f1",
+    "profile_revision": 1,
+    "journal_sha256": "2ba501be64af36e771fcbe708e537f35b6e5586c65c52f398f9b1b95ea412137",
+    "private_journal": "/opt/e2e-f059-docker-platform/evidence/docker-platform-r2.json",
+    "completed": {
+      "e2e-f059-python-bundle-r2": {
+        "app_id": "d2a5a6e5d5f042fc9e4067835cf981e3",
+        "steps": [
+          "publish",
+          "observe-v1",
+          "stop-resume",
+          "publish-update",
+          "observe-v2"
+        ]
+      },
+      "e2e-f059-node-bundle-r2": {
+        "app_id": "177fd95216834fcca33ab70ca098f55c",
+        "steps": [
+          "publish",
+          "observe-v1",
+          "stop-resume",
+          "publish-update",
+          "observe-v2"
+        ]
+      },
+      "e2e-f059-static-bundle-r2": {
+        "app_id": "29ced3ce8c68445b8bc072d68d88470e",
+        "steps": [
+          "publish",
+          "observe-v1",
+          "stop-resume",
+          "publish-update",
+          "observe-v2"
+        ]
+      }
+    },
+    "source_image_failed_attempt": {
+      "app_id": "cb0e1ce510bb4fff87c8972e267bcdb2",
+      "deployment_id": "9bdb045e72784556b0456b9b26f5b2ef",
+      "code": 16124,
+      "stage": "precheck_probe",
+      "reason": "startup_exited",
+      "interpretation": "build completed; fixture imports SDK but empty requirements and bare legacy base do not supply it; explicit offline fixture material being added, not accepted as success"
+    },
+    "full_image": "separate fixed-digest batch running; not passed yet",
+    "boundary": "real platform API, natural tenant users, approval and proxy; does not prove Docker firewall fallback L3 enforcement, real model positive request or all failure/restore/delete paths"
+  },
+  "complete_image_partial": {
+    "source_commit": "54b3ea2c15836529cc24667d9a58be49e35bf710",
+    "journal_sha256": "7f8eae51034e034b4c210ee7488aeebf9178ef08f34cbc830be951738ce4453f",
+    "apps": {
+      "e2e-f059-python-image-d109image1": {
+        "app_id": "09d8ff6d31c740ada5604b90bbabbbc4",
+        "deployment_id": "9a2fdde368924820abc56e7a9590f515",
+        "version_id": "c1ed61c32e134b858e00636e563f9ae5",
+        "mode": "image",
+        "runtime": "python3.11"
+      }
+    },
+    "passed_events": [
+      {
+        "name": "publish",
+        "outcome": "passed",
+        "app_id": "09d8ff6d31c740ada5604b90bbabbbc4",
+        "version_id": "2ea5fcfe28034d59a33b5eee88bac087"
+      },
+      {
+        "name": "owner-and-entry-boundaries",
+        "outcome": "passed",
+        "app_id": "09d8ff6d31c740ada5604b90bbabbbc4"
+      },
+      {
+        "name": "stop-resume",
+        "outcome": "passed",
+        "app_id": "09d8ff6d31c740ada5604b90bbabbbc4",
+        "version_id": "2ea5fcfe28034d59a33b5eee88bac087"
+      },
+      {
+        "name": "iteration",
+        "outcome": "passed",
+        "app_id": "09d8ff6d31c740ada5604b90bbabbbc4",
+        "version_id": "c1ed61c32e134b858e00636e563f9ae5"
+      },
+      {
+        "name": "owner-and-entry-boundaries",
+        "outcome": "passed",
+        "app_id": "09d8ff6d31c740ada5604b90bbabbbc4"
+      }
+    ],
+    "first_platform_exit": 1,
+    "independent_v2_observe_exit": 0,
+    "boundary": "both publications and fresh v2 observations passed; original final observation failed without precise frame, transient cause unresolved, not an uninterrupted whole-batch pass"
+  },
+  "source_image_completed": {
+    "source_commit": "54b3ea2c15836529cc24667d9a58be49e35bf710",
+    "fixture_source_commit": "66e507ec810100a4ae3a6245d2ab6fcac49e9718",
+    "journal_sha256": "3c8b0eaff14c5483568767f64e8c706b512df81aa6ca0d0e98776a8bb35b79f4",
+    "private_journal": "/opt/e2e-f059-docker-platform/evidence/docker-source-d109src1.json",
+    "apps": {
+      "e2e-f059-python-source-d109src1": {
+        "app_id": "80555884a2ba44e7964632e5b6b4e2c4",
+        "deployment_id": "8d2759291099498fa511f9d5b4c853b4",
+        "version_id": "3886dadce1724139b089587d2641ce55",
+        "mode": "source-image",
+        "runtime": "python3.11"
+      },
+      "e2e-f059-missing-dependency-d109src1": {
+        "app_id": "3f7513f9662c440a9bc8fa5b55bdff46",
+        "deployment_id": "4fe9926ab3ef4a68a6a767976f2b08ee",
+        "version_id": "570d603df56f4c5e8c29acc163d8e5b3",
+        "mode": "bundle",
+        "runtime": "python3.11"
+      }
+    },
+    "events": [
+      {
+        "name": "runtime-diagnostics",
+        "acs": [
+          "AC-01",
+          "AC-30",
+          "AC-32"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792678293.965235,
+        "executor_kind": "docker",
+        "checks": [
+          "orchestration_backend",
+          "platform_ledger",
+          "data_root_writable",
+          "host_data_root_mapping",
+          "egress_whitelist",
+          "application_network_internal",
+          "egress_firewall_fallback",
+          "storage_configured"
+        ]
+      },
+      {
+        "name": "preview-and-approval",
+        "acs": [
+          "AC-05",
+          "AC-36",
+          "AC-50"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792678321.27285,
+        "app_id": "80555884a2ba44e7964632e5b6b4e2c4",
+        "instance_id": 10,
+        "session_id": "3267d489f2214dccad1545dc295b1f7f"
+      },
+      {
+        "name": "publish",
+        "acs": [
+          "AC-04",
+          "AC-05",
+          "AC-24",
+          "AC-25",
+          "AC-36"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792678325.4432757,
+        "app_id": "80555884a2ba44e7964632e5b6b4e2c4",
+        "deployment_id": "ec3093cd6db64cfc866817190d2662a8",
+        "version_id": "3725a9e5634141cfa19ee65327f59e25",
+        "mode": "source-image",
+        "runtime": "python3.11",
+        "package_sha256": "64b5825e266463bd893598bd2588b89c50dfb0670640dedafc78241e551fe793"
+      },
+      {
+        "name": "application-check",
+        "acs": [
+          "AC-36",
+          "AC-46"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792678326.179594,
+        "app_id": "80555884a2ba44e7964632e5b6b4e2c4",
+        "path": "/health"
+      },
+      {
+        "name": "application-check",
+        "acs": [
+          "AC-36",
+          "AC-46"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792678326.2282357,
+        "app_id": "80555884a2ba44e7964632e5b6b4e2c4",
+        "path": "/sdk/identity"
+      },
+      {
+        "name": "application-check",
+        "acs": [
+          "AC-36",
+          "AC-46"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792678326.8323536,
+        "app_id": "80555884a2ba44e7964632e5b6b4e2c4",
+        "path": "/sdk/storage-roundtrip"
+      },
+      {
+        "name": "websocket-allow-deny",
+        "acs": [
+          "AC-12",
+          "AC-36",
+          "AC-53"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792678326.9988253,
+        "slug": "e2e-f059-python-source-d109src1"
+      },
+      {
+        "name": "owner-and-entry-boundaries",
+        "acs": [
+          "AC-10",
+          "AC-12",
+          "AC-33",
+          "AC-36",
+          "AC-46"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792678406.2470763,
+        "app_id": "80555884a2ba44e7964632e5b6b4e2c4",
+        "entry_status": 200
+      },
+      {
+        "name": "stop-resume",
+        "acs": [
+          "AC-29",
+          "AC-33",
+          "AC-35",
+          "AC-36"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792678449.2689679,
+        "app_id": "80555884a2ba44e7964632e5b6b4e2c4",
+        "operation_id": "5b9a97e0e6ea4a809f866e29c4f2e250",
+        "version_id": "3725a9e5634141cfa19ee65327f59e25",
+        "generation": 3
+      },
+      {
+        "name": "preview-and-approval",
+        "acs": [
+          "AC-05",
+          "AC-36",
+          "AC-50"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792678502.015527,
+        "app_id": "80555884a2ba44e7964632e5b6b4e2c4",
+        "instance_id": 11,
+        "session_id": "03a5e25d3f4344ae8ca7a0b346e567b6"
+      },
+      {
+        "name": "iteration",
+        "acs": [
+          "AC-04",
+          "AC-05",
+          "AC-24",
+          "AC-25",
+          "AC-36"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792678516.3044503,
+        "app_id": "80555884a2ba44e7964632e5b6b4e2c4",
+        "deployment_id": "8d2759291099498fa511f9d5b4c853b4",
+        "version_id": "3886dadce1724139b089587d2641ce55",
+        "mode": "source-image",
+        "runtime": "python3.11",
+        "package_sha256": "9df8aa2bc3c45bb68aa2692c80221313148b8a9f809c7d50b55053278870a6bc"
+      },
+      {
+        "name": "application-check",
+        "acs": [
+          "AC-36",
+          "AC-46"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792678517.0248623,
+        "app_id": "80555884a2ba44e7964632e5b6b4e2c4",
+        "path": "/health"
+      },
+      {
+        "name": "application-check",
+        "acs": [
+          "AC-36",
+          "AC-46"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792678517.0709221,
+        "app_id": "80555884a2ba44e7964632e5b6b4e2c4",
+        "path": "/sdk/identity"
+      },
+      {
+        "name": "application-check",
+        "acs": [
+          "AC-36",
+          "AC-46"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792678517.5420403,
+        "app_id": "80555884a2ba44e7964632e5b6b4e2c4",
+        "path": "/sdk/storage-roundtrip"
+      },
+      {
+        "name": "websocket-allow-deny",
+        "acs": [
+          "AC-12",
+          "AC-36",
+          "AC-53"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792678517.6367054,
+        "slug": "e2e-f059-python-source-d109src1"
+      },
+      {
+        "name": "owner-and-entry-boundaries",
+        "acs": [
+          "AC-10",
+          "AC-12",
+          "AC-33",
+          "AC-36",
+          "AC-46"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792678597.357703,
+        "app_id": "80555884a2ba44e7964632e5b6b4e2c4",
+        "entry_status": 200
+      },
+      {
+        "name": "preapproval-failure",
+        "acs": [
+          "AC-08",
+          "AC-09",
+          "AC-28"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792678605.9663966,
+        "app_id": "3f7513f9662c440a9bc8fa5b55bdff46",
+        "stage": "precheck_build",
+        "code": 16227
+      }
+    ],
+    "platform_exit": 0,
+    "explicit_offline_wheel_count": 8,
+    "no_download_in_bootstrap": true,
+    "boundary": "full source-image two revisions and expected missing-dependency rejection passed; Docker manager remains source54b; fault/upgrade/cleanup incomplete"
+  }
+}

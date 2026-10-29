@@ -10,16 +10,13 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import BackgroundTasks
+from fastapi import BackgroundTasks, HTTPException
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 
 from bisheng.api.v1.schemas import ExcelRule, KnowledgeFileOne, KnowledgeFileProcess
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
-from bisheng.common.errcode.open_api import OpenApiAuthDependencyUnavailableError
-from bisheng.common.errcode.permission import PermissionServiceUnavailableError
-from bisheng.common.errcode.tenant_fga import PermissionBackendUnavailableError
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.models.knowledge import (
     AuthTypeEnum,
@@ -35,9 +32,11 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_document_re
 from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
     KnowledgeDocumentVersionRepositoryImpl,
 )
+from bisheng.knowledge.domain.schemas.retrieval_facade import RetrievalIdentity, RetrievalRequest
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
-from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+from bisheng.knowledge.domain.services.retrieval_facade_service import RetrievalFacadeService
+from bisheng.open_api.domain.context import get_current_open_api_principal
 from bisheng.open_endpoints.domain.schemas.filelib import RetrieveChunk, RetrieveReq, RetrieveResp
 from bisheng.open_endpoints.domain.utils import get_open_api_operator, get_open_api_operator_async
 from bisheng.open_mcp.auth import get_current_mcp_scope
@@ -189,39 +188,51 @@ async def clear_knowledge(*, request: Request, knowledge_id: int, version_repo, 
 
 
 async def retrieve_knowledge(*, request: Request, command, version_repo) -> RetrieveResp:
-    login_user = await get_open_api_operator_async()
-    service = KnowledgeSpaceChatService(request=request, login_user=login_user)
-    service.version_repo = version_repo
+    """Run the same retrieval as ``POST /api/v2/filelib/retrieve``.
+
+    Both doors go through ``RetrievalFacadeService``, so "what this credential
+    can retrieve" has one answer: file-level filtering inside knowledge spaces,
+    fail-closed on a permission outage. The argument checks below mirror the
+    HTTP route's — dropping a filter silently would return a wider set than the
+    caller asked for.
+    """
     request_data = RetrieveReq.model_validate(command.model_dump())
-    filters = None
+    tag_filters = None
     if request_data.filters and request_data.filters.knowledge_base_filters:
-        filters = {
-            item.knowledge_base_id: {
-                "tags": item.tags,
-                "tag_match_mode": item.tag_match_mode,
-            }
-            for item in request_data.filters.knowledge_base_filters
-        }
-    try:
-        results = await service.aretrieve_chunks(
+        target_ids = set(request_data.knowledge_base_ids)
+        tag_filters = {}
+        for item in request_data.filters.knowledge_base_filters:
+            if item.knowledge_base_id not in target_ids:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"filter references kb_id {item.knowledge_base_id} not present in knowledge_base_ids",
+                )
+            if item.tag_match_mode != "ANY":
+                raise HTTPException(status_code=400, detail="tag_match_mode=ALL is not yet supported")
+            tag_filters[item.knowledge_base_id] = list(item.tags)
+    principal = get_current_open_api_principal()
+    identity = RetrievalIdentity.from_open_api_principal(principal) if principal is not None else None
+    result = await RetrievalFacadeService.retrieve(
+        identity,
+        RetrievalRequest(
             query=request_data.query,
-            knowledge_base_ids=request_data.knowledge_base_ids,
-            kb_filters=filters,
+            knowledge_ids=request_data.knowledge_base_ids,
             top_k=request_data.top_k,
             max_content=request_data.max_content,
-        )
-    except (PermissionBackendUnavailableError, PermissionServiceUnavailableError) as exc:
-        raise OpenApiAuthDependencyUnavailableError() from exc
+            tag_filters=tag_filters,
+        ),
+        version_repo=version_repo,
+    )
     chunks = [
         RetrieveChunk(
-            content=document.page_content,
-            knowledge_id=knowledge_id,
-            document_id=int(document.metadata.get("document_id", 0)),
-            document_name=str(document.metadata.get("document_name", "")),
-            chunk_index=int(document.metadata.get("chunk_index", 0)),
-            document_update_time=str(document.metadata.get("document_update_time", "")),
+            content=chunk.content,
+            knowledge_id=chunk.knowledge_id,
+            document_id=chunk.document_id,
+            document_name=chunk.document_name,
+            chunk_index=chunk.chunk_index,
+            document_update_time=chunk.document_update_time,
         )
-        for knowledge_id, document in results
+        for chunk in result.chunks
     ]
     return RetrieveResp(chunks=chunks, total=len(chunks))
 

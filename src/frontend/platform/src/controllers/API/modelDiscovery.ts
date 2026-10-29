@@ -1,6 +1,6 @@
 import request from "@/controllers/request";
 
-export type ModelType = "llm" | "embedding" | "rerank" | "asr" | "tts";
+export type ModelType = "llm" | "embedding" | "rerank" | "asr" | "asr_rt" | "tts";
 export interface DiscoveredModel {
   model_name: string;
   display_name: string;

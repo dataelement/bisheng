@@ -278,5 +278,10 @@
     "knowledge_space": "知识空间",
     "tool": "工具",
     "workflow": "工作流"
-  }
+  },
+  "allMembers": {
+  "title": "全员可用",
+  "publicHint": "当前企业所有成员均可使用。关闭后，按下方指定范围授权。",
+  "selectedHint": "当前按指定人员、部门和用户组授权。"
+}
 }

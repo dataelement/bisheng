@@ -1,0 +1,884 @@
+"""The five state actions — the sole writer of ``app.state`` (决议-8).
+
+F055 calls these; it never writes the column itself. That is not a style
+preference: approval, capacity admission and the operator's stop button all
+race each other, and a single writer with a compare-and-set is the only version
+of this that stays correct without row locks.
+
+The shape of every action is the same, and the order matters:
+
+1. load the app and check the **business** rules (owner-only delete, owner  or
+   tenant admin or super admin for the rest). These cannot be F048 checks — the
+   permission runtime short-circuits administrators to ALLOW, so "owner only"
+   is inexpressible there (constitution C4 note).
+2. ask capacity **before** claiming the transition. AC-41 wants a resume that
+   loses the capacity gate to stay ``stopped``, and it cannot stay ``stopped``
+   if we already wrote ``online``.
+3. claim the transition with ``AppDao.aupdate_state_cas`` — ``WHERE id = :id
+   AND state IN (allowed)``. Zero rows means a concurrent action got there
+   first: 16102, not a silent overwrite.
+4. issue the orchestration intent, and on a start failure park the app in
+   ``pending_capacity`` with the reason instead of leaving a half-usable
+   instance running (spec §3).
+5. audit — every action, its outcome, the version and the reason (AC-65). The
+   audit trail *is* the state history; there is no history table (D8).
+
+Version selection is one rule, in one place: ``pending_version_id ??
+current_version_id``. It is what makes "approved while stopped, takes effect on
+resume" (AC-04) true without a sixth state.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
+
+from loguru import logger
+
+from bisheng.app_publish.application.release_tenancy import ApprovedReleaseSource, require_release_eligible
+from bisheng.app_publish.domain.schemas.app_manifest import egress_domains_of
+from bisheng.app_runtime.domain.constants import (
+    DEFAULT_TIER_ID,
+    AppAuditAction,
+    AppState,
+    default_tier,
+    is_transition_allowed,
+)
+from bisheng.app_runtime.domain.services import lifecycle_hooks, runtime_env_ports
+from bisheng.app_runtime.domain.services.orchestrator_client import orchestrator_client
+from bisheng.app_runtime.domain.services.state_change_notify import notify_owner_of_admin_state_change
+from bisheng.common.errcode.app_factory import (
+    AppCapacityInsufficientError,
+    AppManageForbiddenError,
+    AppNotFoundError,
+    AppOnlineCannotDeleteError,
+    AppOwnerOnlyError,
+    AppProbeFailedError,
+    AppStateConflictError,
+)
+from bisheng.common.permission_identity import check_tenant_admin
+from bisheng.common.services.config_service import settings
+from bisheng.core.context.tenant import bypass_tenant_filter, set_current_tenant_id
+from bisheng.core.database import get_async_db_session
+from bisheng.database.models.app import App, AppDao
+from bisheng.database.models.app_instance import PHASE_RUNNING, PHASE_STOPPED, AppInstanceDao
+from bisheng.database.models.app_version import TERMINAL_STATE_ONLINE, AppVersion, AppVersionDao
+from bisheng.database.models.audit_log import AuditLogDao
+from bisheng.permission.application.access import get_f048_resource_adapter
+from bisheng.permission.domain.services.permission_action_service import PermissionActor
+from bisheng.user.domain.models.user import UserDao
+
+#: Health probe defaults when the manifest declares none. Mirrors
+#: runtime-manager's ``HealthIn`` so an omitted block means the same thing on
+#: both sides rather than two different "defaults".
+_DEFAULT_HEALTH: dict[str, Any] = {"path": "/", "interval": 10, "timeout": 3, "retries": 3, "start_period": 20}
+
+
+#: The backend half of design §7「关键日志 / 指标」. The audit trail records what
+#: an *operator* asked for; this records what the state machine actually did —
+#: including the writes that lost their compare-and-set, which never reach the
+#: audit table at all and are otherwise invisible while an app is "stuck".
+#: Emitted through ``logger.bind`` so the fields stay machine-readable
+#: (``record["extra"]``) instead of only existing inside a formatted sentence.
+EVENT_STATE_TRANSITION = "app.state_transition"
+
+
+@dataclass(slots=True)
+class ActionResult:
+    """What an action did, in the words the caller has to show a human.
+
+    ``ok=False`` is a *handled* outcome (parked for capacity, start failed), not
+    an exception: the app is in a defined state and the reason is the copy the
+    detail page and the CLI both render (AC-65).
+    """
+
+    app_id: str
+    state: str
+    ok: bool = True
+    reason: str = ""
+    version_id: str | None = None
+    detail: dict[str, Any] = field(default_factory=dict)
+
+
+class AppStateService:
+    """Five actions plus ``stage_version``. Nothing else writes ``app.state``."""
+
+    # ------------------------------------------------------------------
+    # version staging & selection
+    # ------------------------------------------------------------------
+
+    @classmethod
+    async def stage_version(cls, app_id: str, version_id: str) -> None:
+        """Record an approved-but-not-yet-running version (AC-04).
+
+        Called by F055 the moment approval passes. It writes
+        ``app.pending_version_id`` and **leaves the state alone** — that is the
+        whole point: a stopped app that gets a new version approved stays
+        stopped until somebody resumes it, and then starts the new one.
+
+        Written through the same compare-and-set as a real transition (target
+        state = current state) so a concurrent stop cannot be papered over by a
+        blind UPDATE.
+        """
+        app = await cls._load(app_id)
+        async with get_async_db_session() as session:
+            won = await AppDao.aupdate_state_cas(
+                session,
+                app_id,
+                from_states=(app.state,),
+                to_state=app.state,
+                pending_version_id=version_id,
+            )
+            await session.commit()
+        if not won:
+            raise AppStateConflictError(msg="应用状态已变化, 请刷新后重试", app_id=app_id, action="stage_version")
+        logger.info("app_runtime.stage_version app_id={} version_id={} state={}", app_id, version_id, app.state)
+
+    @staticmethod
+    def _pick_version(app: App) -> str | None:
+        """``pending_version_id ?? current_version_id`` — the single取版 rule (AC-04)."""
+        return app.pending_version_id or app.current_version_id
+
+    # ------------------------------------------------------------------
+    # the five actions
+    # ------------------------------------------------------------------
+
+    @classmethod
+    async def publish(cls, app_id: str, *, actor) -> ActionResult:
+        """Go online after approval: capacity gate → start → cut traffic over."""
+        return await cls._start(
+            app_id,
+            actor=actor,
+            audit_action=AppAuditAction.PUBLISH,
+            shortage_state=AppState.PENDING_CAPACITY,
+        )
+
+    @classmethod
+    async def manual_publish(cls, app_id: str, *, actor) -> ActionResult:
+        """Retry a parked application without a second approval round (F055 AC-32)."""
+        return await cls._start(
+            app_id,
+            actor=actor,
+            audit_action=AppAuditAction.MANUAL_PUBLISH,
+            shortage_state=AppState.PENDING_CAPACITY,
+        )
+
+    @classmethod
+    async def resume(cls, app_id: str, *, actor) -> ActionResult:
+        """Re-enable a stopped application; capacity is re-checked (AC-41).
+
+        A shortage leaves it ``stopped`` rather than parking it in
+        ``pending_capacity``: the operator asked for it to run *now*, and moving
+        it to a different state would make the button they pressed look like it
+        did something else.
+        """
+        return await cls._start(
+            app_id,
+            actor=actor,
+            audit_action=AppAuditAction.RESUME,
+            shortage_state=None,
+        )
+
+    @classmethod
+    async def stop(cls, app_id: str, *, actor) -> ActionResult:
+        """Reclaim the execution body. Code snapshot, per-app database and
+        attachments stay exactly where they are (AC-39 / AC-40)."""
+        app = await cls._load(app_id)
+        await cls._require_operator(app, actor)
+        if not is_transition_allowed(app.state, AppState.STOPPED.value):
+            raise AppStateConflictError(msg="当前状态不支持下线", app_id=app_id, state=app.state)
+
+        won = await cls._transition(
+            app_id, to_state=AppState.STOPPED, from_states=(app.state,), reason="stopped by user", actor=actor
+        )
+        if not won:
+            raise AppStateConflictError(msg="应用状态已变化, 请刷新后重试", app_id=app_id, action="stop")
+
+        if settings.app_runtime.runtime_protocol_version == 2:
+            from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
+
+            await RuntimeDeliveryCoordinator().stop(app)
+        else:
+            await orchestrator_client.stop(app_id=app_id)
+        await cls._set_instance_phase(app_id, PHASE_STOPPED, tenant_id=app.tenant_id)
+        await cls._audit(AppAuditAction.STOP, app, actor, version_id=app.current_version_id, reason="stopped by user")
+        # Post-hook, after the audit: an administrator stopping someone else's
+        # app tells the owner (F056 AC-43). Never raises — see the module.
+        await notify_owner_of_admin_state_change(app=app, actor=actor, action="stop")
+        return ActionResult(app_id=app_id, state=AppState.STOPPED.value, version_id=app.current_version_id)
+
+    @classmethod
+    async def delete(cls, app_id: str, *, actor) -> ActionResult:
+        """Explicit deletion — the **only** path that destroys an app's data (AC-40).
+
+        Owner-only (AC-44, administrators once the owner is gone) and blocked
+        while online (AC-42): stopping first is
+        what guarantees the container and its host volume are torn down by a
+        state action instead of orphaned by a row that disappeared.
+        """
+        app = await cls._load(app_id)
+        await cls._require_deleter(app, actor)
+        if app.state == AppState.ONLINE.value:
+            raise AppOnlineCannotDeleteError(app_id=app_id)
+        if not is_transition_allowed(app.state, AppState.DELETED.value):
+            raise AppStateConflictError(msg="当前状态不支持删除", app_id=app_id, state=app.state)
+
+        # Read the permission record while the row still carries a live state, and
+        # before anything destructive runs. The app adapter refuses to build a
+        # target for a deleted app (one error for absent / foreign / deleted,
+        # AC-29), so loading it after the transition failed every delete with 25022
+        # once the state had already flipped — and skipped the audit, the grant
+        # cleanup and the lifecycle hooks. The permission mirror compares versions,
+        # not app state, so the pre-transition record still projects the removal.
+        adapter = await get_f048_resource_adapter("app")
+        permission_record = await adapter.load_permission_record(app.id)
+
+        # Assets first: a row that says "deleted" while the volume survives is
+        # invisible garbage; a purged volume with the row still present is a
+        # visible, retryable failure.
+        if settings.app_runtime.runtime_protocol_version == 2:
+            from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
+
+            await RuntimeDeliveryCoordinator().stop(app, destroy=True, purge_volume=True)
+        else:
+            await orchestrator_client.destroy(app_id=app_id, purge_volume=True)
+
+        # The audit remark names who actually deleted it: an administrator may
+        # now delete an app whose owner is gone (_require_deleter).
+        by_owner = int(getattr(actor, "user_id", 0) or 0) == int(app.owner_user_id or 0)
+        reason = "deleted by owner" if by_owner else "deleted by administrator (owner account inactive)"
+        won = await cls._transition(
+            app_id, to_state=AppState.DELETED, from_states=(app.state,), reason=reason, actor=actor
+        )
+        if not won:
+            raise AppStateConflictError(msg="应用状态已变化, 请刷新后重试", app_id=app_id, action="delete")
+
+        # The deletion is a fact from here on: audit it before any follow-up step
+        # that can fail, so the record never depends on the cleanup succeeding.
+        await cls._audit(AppAuditAction.DELETE, app, actor, version_id=app.current_version_id, reason=reason)
+
+        failures: list[str | Exception] = []
+        try:
+            await cls._project_delete(adapter, permission_record, app, actor)
+        except Exception as exc:
+            # Same contract as the lifecycle hooks below: the assets and the row are
+            # already gone, so raising would report a completed delete as failed and
+            # skip the hooks. The failure is logged and audited, and the leftover
+            # grants are an operator repair, not a user retry.
+            logger.exception("app delete: permission projection failed app_id={}", app_id)
+            failures.append(f"permission projection failed: {exc}")
+
+        failures.extend(
+            await lifecycle_hooks.on_app_deleted(
+                app_id=app_id,
+                actor_user_id=int(getattr(actor, "user_id", 0) or 0),
+                tenant_id=int(app.tenant_id or 0),
+            )
+        )
+        for failure in failures:
+            await cls._audit(
+                AppAuditAction.DELETE_HOOK_FAILED,
+                app,
+                actor,
+                version_id=app.current_version_id,
+                reason=str(failure),
+            )
+        return ActionResult(app_id=app_id, state=AppState.DELETED.value, version_id=app.current_version_id)
+
+    # ------------------------------------------------------------------
+    # start pipeline shared by publish / manual_publish / resume
+    # ------------------------------------------------------------------
+
+    @classmethod
+    async def _start(
+        cls,
+        app_id: str,
+        *,
+        actor,
+        audit_action: AppAuditAction,
+        shortage_state: AppState | None,
+    ) -> ActionResult:
+        app = await cls._load(app_id)
+        await cls._require_operator(app, actor)
+        if not cls._pick_version(app):
+            from bisheng.app_publish.application.version_review import refuse_unapproved_start
+
+            await refuse_unapproved_start(app.id)
+        await require_release_eligible(app.id, version_id=str(cls._pick_version(app) or ""))
+        return await cls._start_authorized(
+            app,
+            actor=actor,
+            audit_action=audit_action,
+            shortage_state=shortage_state,
+        )
+
+    @classmethod
+    async def publish_approved(cls, source: ApprovedReleaseSource) -> ActionResult:
+        if not isinstance(source, ApprovedReleaseSource) or source.audit_source != "approval_outbox":
+            raise AppStateConflictError(action="approved_source_invalid")
+        app = await cls._load(source.app_id)
+        if (
+            app.id != source.app_id
+            or app.tenant_id != source.tenant_id
+            or app.owner_user_id != source.owner_user_id
+            or cls._pick_version(app) != source.version_id
+        ):
+            raise AppStateConflictError(app_id=app.id, action="approved_source_changed")
+        return await cls._start_authorized(
+            app,
+            actor=source,
+            audit_action=AppAuditAction.PUBLISH,
+            shortage_state=AppState.PENDING_CAPACITY,
+        )
+
+    @classmethod
+    async def _start_authorized(cls, app: App, *, actor, audit_action: AppAuditAction, shortage_state: AppState | None):
+        app_id = app.id
+        if not is_transition_allowed(app.state, AppState.ONLINE.value):
+            raise AppStateConflictError(msg="当前状态不支持该操作", app_id=app_id, state=app.state)
+
+        version_id = cls._pick_version(app)
+        version = await cls._load_version(app_id, version_id)
+        tier = await cls._resolve_tier(version.tier_id)
+        if settings.app_runtime.runtime_protocol_version == 2:
+            from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
+
+            try:
+                deployed = await RuntimeDeliveryCoordinator().deploy(app, version, tier)
+            except AppCapacityInsufficientError:
+                return await cls._park(
+                    app,
+                    actor,
+                    version_id=version.id,
+                    shortage_state=None if app.state == AppState.ONLINE.value else shortage_state,
+                    reason="capacity_exhausted",
+                    detail={"stage": "admission"},
+                )
+            except AppProbeFailedError as exc:
+                return await cls._park(
+                    app,
+                    actor,
+                    version_id=version.id,
+                    shortage_state=None if app.state == AppState.ONLINE.value else shortage_state,
+                    reason="execution_failed",
+                    detail={"stage": "deploy", "code": exc.code, **exc.kwargs},
+                )
+            await cls._audit(audit_action, app, actor, version_id=version.id, reason="started", detail=deployed)
+            if audit_action == AppAuditAction.RESUME:
+                await cls._resume_notice(app, actor)
+            return ActionResult(app_id=app.id, state=AppState.ONLINE.value, version_id=version.id, detail=deployed)
+
+        if audit_action is AppAuditAction.RESUME and app.pending_version_id:
+            # F055 AC-36 with AC-42. An approval that landed while the application
+            # was stopped only *staged* its version: nothing was started, so
+            # F055's go-live path never ran and the version's declared tables
+            # were never built. Resuming is where that version actually goes
+            # live, so the migration happens here too — before the start, so a
+            # refusal (16259) leaves the application stopped on a database
+            # nobody touched. ``publish`` / ``manual_publish`` already migrated
+            # in ``PublishOnlineService._settle`` and must not pay for a second
+            # RPC, which is why this is keyed on the action rather than on
+            # "there is a pending version".
+            from bisheng.app_publish.domain.services import schema_evolution_service
+
+            await schema_evolution_service.migrate_for_release(app_id, version.manifest)
+
+        # An application that is *already online* keeps its state when a start
+        # fails. The previous version is still serving — a new instance is
+        # created beside the old one and a failed probe only tears down the new
+        # one — so parking it would take a working application off the entry
+        # (``pending_capacity`` is not in ``ENTRY_VISIBLE_STATES``) and block
+        # its owner's next ``bisheng deploy`` (16252), to describe a failure
+        # that cost the user nothing. This mirrors AC-05, which keeps a
+        # rejected *iteration* online with the current version running, and
+        # AC-41's "a resume that loses the capacity gate stays stopped": the
+        # source state decides where a failure lands. F055's AC-31 describes
+        # the first release, where there is no running version to protect.
+        shortage_state = None if app.state == AppState.ONLINE.value else shortage_state
+
+        verdict = await orchestrator_client.admission(tier=tier, purpose="run")
+        if not verdict.get("admitted"):
+            return await cls._park(
+                app,
+                actor,
+                version_id=version.id,
+                shortage_state=shortage_state,
+                reason=str(verdict.get("reason") or "capacity_exhausted"),
+                detail={"snapshot": verdict.get("snapshot") or {}, "stage": "admission"},
+            )
+
+        try:
+            payload = cls._deploy_payload(app, version, tier)
+            # The capability environment is merged **last** and wins over the
+            # version's own injections: the platform-reserved names (the runtime
+            # credential and the model face address) are the platform's to set,
+            # which is what F054 contract §5's "平台保留 env 名覆盖调用方同名值"
+            # means at this end of the wire. Resolved here rather than inside
+            # ``_deploy_payload`` because minting the credential is an await and
+            # that helper is a pure function the tests assert against.
+            payload["env"].update(
+                await runtime_env_ports.capability_env(app_id=app.id, capabilities=version.capabilities)
+            )
+            deployed = await orchestrator_client.deploy(**payload)
+        except (AppProbeFailedError, AppCapacityInsufficientError) as exc:
+            # Deliberately *before* the state is claimed: an app that never
+            # started must not spend a moment advertising an entry URL that
+            # answers 502, and parking from the source state keeps the whole
+            # attempt inside the legal transition table.
+            logger.warning("app_runtime.start failed app_id={} version={} err={}", app_id, version.id, exc)
+            return await cls._park(
+                app,
+                actor,
+                version_id=version.id,
+                shortage_state=shortage_state,
+                reason=str(exc),
+                detail={"stage": "deploy", "code": getattr(exc, "code", None)},
+            )
+
+        won = await cls._transition(
+            app_id,
+            to_state=AppState.ONLINE,
+            from_states=(app.state,),
+            current_version_id=version.id,
+            pending_version_id=None,
+            # The action name, not "started": publish / manual_publish / resume
+            # all land on ``online`` and only this tells them apart in the log.
+            reason=audit_action.value,
+            actor=actor,
+        )
+        if not won:
+            raise AppStateConflictError(msg="应用状态已变化, 请刷新后重试", app_id=app_id, action=audit_action.value)
+
+        await _mark_version_online(app_id, version.id)
+        # Going online does NOT grant anyone else access: an app stays owner-only
+        # until its owner or an admin authorizes subjects through the platform's
+        # permission-management UI (the F048 授权 dialog). Auto-opening every
+        # published app to the whole tenant was a shortcut that bypassed that
+        # explicit authorization step, so it was removed on purpose.
+        await cls._set_instance_phase(
+            app_id,
+            str(deployed.get("phase") or PHASE_RUNNING),
+            tenant_id=app.tenant_id,
+            version_id=version.id,
+            exec_ref=deployed.get("instance_id"),
+        )
+        await cls._audit(audit_action, app, actor, version_id=version.id, reason="started", detail=deployed)
+        if audit_action == AppAuditAction.RESUME:
+            # Only a resume is "an administrator changed my running app" (F056
+            # AC-43). Publish and manual publish are F055's pipeline — their
+            # messages come from the approval engine and F055 itself, and a
+            # second copy from here would double them (spec 决议-11).
+            await cls._resume_notice(app, actor)
+        return ActionResult(
+            app_id=app_id,
+            state=AppState.ONLINE.value,
+            version_id=version.id,
+            detail={"phase": deployed.get("phase"), "instance_id": deployed.get("instance_id")},
+        )
+
+    @classmethod
+    async def _park(
+        cls,
+        app: App,
+        actor,
+        *,
+        version_id: str | None,
+        shortage_state: AppState | None,
+        reason: str,
+        detail: dict[str, Any],
+    ) -> ActionResult:
+        """Record "it did not start, and here is why" without leaving anything half-up."""
+        target = shortage_state.value if shortage_state is not None else app.state
+        if shortage_state is not None and app.state != shortage_state.value:
+            won = await cls._transition(
+                app.id, to_state=shortage_state, from_states=(app.state,), reason=reason, actor=actor
+            )
+            if not won:
+                # The parking did not stick — a concurrent action moved the app
+                # first, or the edge is one the table refuses. Report the state
+                # we actually left behind: returning the intent would write a
+                # fiction into the audit trail and into F055's release record,
+                # which reads ``state`` back out of this result.
+                target = app.state
+        await cls._audit(
+            AppAuditAction.PUBLISH_PENDING,
+            app,
+            actor,
+            version_id=version_id,
+            reason=reason,
+            detail=detail,
+        )
+        return ActionResult(
+            app_id=app.id,
+            state=target,
+            ok=False,
+            reason=reason,
+            version_id=version_id,
+            detail=detail,
+        )
+
+    @staticmethod
+    def _deploy_payload(app: App, version: AppVersion, tier: dict[str, Any]) -> dict[str, Any]:
+        manifest = version.manifest if isinstance(version.manifest, dict) else {}
+        injections = version.injections if isinstance(version.injections, dict) else {}
+        env = injections.get("env") if isinstance(injections.get("env"), dict) else {}
+        health = manifest.get("health") if isinstance(manifest.get("health"), dict) else {}
+        return {
+            "app_id": app.id,
+            "slug": app.slug,
+            "version_id": version.id,
+            "version_no": version.version_no,
+            "image_ref": version.image_ref or "",
+            "tier": tier,
+            "port": int(manifest.get("port") or 8080),
+            "env": {str(key): str(value) for key, value in env.items()},
+            "health": {**_DEFAULT_HEALTH, **health},
+            "platform_api_base": settings.app_runtime.entry_base_url or "",
+            # The proxy strips this prefix and the app's framework re-adds it
+            # (D5.2); passing it explicitly keeps the value out of the manager's
+            # assumptions about URL layout.
+            "base_path": f"/apps/{app.slug}",
+            # ``egress.domains`` from the version's manifest (F054 AC-16). Sent
+            # raw: what is a legal destination is the manager's question, not
+            # this layer's, and the platform's own addresses are added there —
+            # so an application can neither reach the platform by declaring it
+            # nor lose it by leaving it out.
+            "egress_domains": egress_domains_of(manifest),
+        }
+
+    # ------------------------------------------------------------------
+    # helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    async def _load(app_id: str) -> App:
+        async with get_async_db_session() as session:
+            row = await AppDao.aget(session, app_id)
+        if row is None or row.state == AppState.DELETED.value:
+            raise AppNotFoundError(app_id=app_id)
+        set_current_tenant_id(int(row.tenant_id or 0))
+        return row
+
+    @staticmethod
+    async def _load_version(app_id: str, version_id: str | None) -> AppVersion:
+        """Always scoped by ``app_id``: ``app_version`` has no tenant column, so
+        the app row the caller already resolved is what keeps this read inside
+        the tenant (design K5 ② / pit 31)."""
+        if not version_id:
+            raise AppStateConflictError(msg="该应用还没有可运行的版本", app_id=app_id, reason="no_version")
+        async with get_async_db_session() as session:
+            row = await AppVersionDao.aget(session, app_id, version_id)
+        if row is None:
+            raise AppStateConflictError(msg="该应用还没有可运行的版本", app_id=app_id, reason="version_missing")
+        return row
+
+    @staticmethod
+    async def _resolve_tier(tier_id: str | None) -> dict[str, Any]:
+        """``{cpu: vCPU float, mem: MiB int}`` — the table wins, the constant backs it up.
+
+        F055 owns the ``resource_tier`` rows and seeds them from
+        ``DEFAULT_TIERS``, so "not seeded yet" and "just seeded" resolve to the
+        same numbers (design D11). Reading the table directly rather than
+        through F055's service keeps the dependency pointing F055 → F054.
+        """
+        code = tier_id or DEFAULT_TIER_ID
+        try:
+            from bisheng.database.models.resource_tier import ResourceTierDao
+
+            with bypass_tenant_filter():
+                async with get_async_db_session() as session:
+                    row = await ResourceTierDao.aget_by_code(session, code)
+            if row is not None:
+                return {"cpu": row.cpu_millicores / 1000, "mem": row.memory_mb}
+        except Exception as exc:
+            logger.debug("app_runtime.resolve_tier table lookup failed code={}: {}", code, exc)
+        spec = default_tier(code) or default_tier(DEFAULT_TIER_ID) or {}
+        return {"cpu": float(spec.get("cpu", 0.5)), "mem": int(spec.get("memory_mb", 1024))}
+
+    @staticmethod
+    async def _transition(
+        app_id: str,
+        *,
+        to_state: AppState,
+        from_states: tuple[str, ...],
+        current_version_id: Any = ...,
+        pending_version_id: Any = ...,
+        reason: str = "",
+        actor: Any = None,
+    ) -> bool:
+        """The single writer's single gate: check the table, then compare-and-set.
+
+        The module docstring promises that every write of ``app.state`` is
+        validated against ``ALLOWED_TRANSITIONS`` first. That promise used to
+        live in each caller, and ``_park`` was the one that did not keep it —
+        it wrote ``online → pending_capacity``, an edge the table deliberately
+        omits, and the CAS let it through because ``from_states`` only answers
+        "is it still the state I read", never "is this edge legal". Checking
+        here covers every caller, including the ones not written yet.
+
+        A refused edge is a **programming error surfaced as a no-op**: log it
+        loudly and report the write as lost, exactly as a CAS that lost a race
+        would, so the caller's existing "it did not stick" path handles it.
+        ``stage_version`` deliberately does not come through here — it writes a
+        self-edge to fence concurrent stops, and self-edges are not in the
+        table.
+
+        Every outcome — refused edge, lost race, applied — leaves one
+        ``app.state_transition`` event (§7), so the question "why is this app in
+        this state" is answerable from the log of this one function.
+        """
+        actor_id = _audit_operator_id(actor) or None
+        event = logger.bind(
+            event=EVENT_STATE_TRANSITION,
+            app_id=app_id,
+            from_state="|".join(from_states),
+            to_state=to_state.value,
+            reason=reason,
+            actor=actor_id,
+        )
+        illegal = [src for src in from_states if not is_transition_allowed(src, to_state.value)]
+        if illegal:
+            # One line, not two: the structured event carries everything the
+            # old ``app_runtime.illegal_transition`` line did, and a second
+            # copy under a different name only splits the search.
+            event.bind(result="refused").error(
+                "{} app_id={} {} -> {} refused (illegal edge) reason={} actor={}",
+                EVENT_STATE_TRANSITION,
+                app_id,
+                illegal,
+                to_state.value,
+                reason,
+                actor_id,
+            )
+            return False
+        sources = from_states
+        kwargs: dict[str, Any] = {}
+        if current_version_id is not ...:
+            kwargs["current_version_id"] = current_version_id
+        if pending_version_id is not ...:
+            kwargs["pending_version_id"] = pending_version_id
+        async with get_async_db_session() as session:
+            won = await AppDao.aupdate_state_cas(
+                session, app_id, from_states=sources, to_state=to_state.value, **kwargs
+            )
+            await session.commit()
+        event.bind(result="applied" if won else "lost_race").info(
+            "{} app_id={} {} -> {} result={} reason={} actor={}",
+            EVENT_STATE_TRANSITION,
+            app_id,
+            sources,
+            to_state.value,
+            "applied" if won else "lost_race",
+            reason,
+            actor_id,
+        )
+        return won
+
+    @staticmethod
+    async def _resume_notice(app, actor):
+        await notify_owner_of_admin_state_change(app=app, actor=actor, action="resume")
+
+    @classmethod
+    async def commit_runtime_delivery(cls, repository, operation, ready):
+        """Single owner transaction: F054 state, F055 version and F086 projections."""
+        from bisheng.app_publish.domain.services.version_service import VersionService
+        from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeOperation
+        from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import RuntimeConflict
+        from bisheng.app_runtime.domain.services.runtime_projection_service import RuntimeProjectionService
+        from bisheng.database.models.app import App
+
+        async with repository.transaction() as session:
+            op = await repository.get(RuntimeOperation, operation.id, lock=True)
+            if op.stage == "serving":
+                return
+            app = await repository.get(App, op.app_id, lock=True)
+            expected = op.payload
+            if (
+                app is None
+                or app.tenant_id != op.tenant_id
+                or (app.state, app.current_version_id, app.pending_version_id)
+                != (
+                    expected["expected_app_state"],
+                    expected.get("expected_current_version_id"),
+                    expected.get("expected_pending_version_id"),
+                )
+            ):
+                raise RuntimeConflict("application_state_changed")
+            if op.version_id not in {app.current_version_id, app.pending_version_id}:
+                raise RuntimeConflict("runtime_version_not_approved")
+            from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeDelivery
+
+            deliveries = await repository.find(RuntimeDelivery, app_id=app.id, version_id=op.version_id)
+            if not deliveries or deliveries[0].content != op.payload.get("resolved_delivery"):
+                raise RuntimeConflict("runtime_delivery_not_frozen")
+            if op.payload.get("purpose") == "config_restart":
+                if app.state != AppState.ONLINE.value or op.version_id != app.current_version_id:
+                    raise RuntimeConflict("rebuild_version_changed")
+                await RuntimeProjectionService(repository).verify_config_restart_origin(op)
+            else:
+                if not is_transition_allowed(app.state, AppState.ONLINE.value):
+                    raise RuntimeConflict("illegal_application_transition")
+                won = await AppDao.aupdate_state_cas(
+                    session,
+                    app.id,
+                    from_states=(app.state,),
+                    to_state=AppState.ONLINE.value,
+                    current_version_id=op.version_id,
+                    pending_version_id=app.pending_version_id if op.payload.get("preserve_pending_version") else None,
+                )
+                if not won:
+                    raise RuntimeConflict("application_state_changed")
+                await VersionService.mark_runtime_online(repository, app.id, op.version_id)
+            await AppInstanceDao.aupsert(
+                session,
+                app.id,
+                tenant_id=app.tenant_id,
+                version_id=op.version_id,
+                phase=PHASE_RUNNING,
+                exec_ref=ready["result"]["exec_ref"],
+                health="ready",
+                started_at=datetime.now(),
+            )
+            await RuntimeProjectionService(repository).activate(op, ready)
+
+    @staticmethod
+    async def _set_instance_phase(
+        app_id: str,
+        phase: str,
+        *,
+        tenant_id: int | None = None,
+        version_id: str | None = None,
+        exec_ref: str | None = None,
+    ) -> None:
+        # ``tenant_id`` is passed rather than left to the before_flush auto-fill:
+        # that listener only exists in a process that installed the tenant filter,
+        # and a NULL here is a NOT NULL violation rather than a silent leak.
+        fields: dict[str, Any] = {"phase": phase, "tenant_id": tenant_id}
+        if version_id:
+            fields["version_id"] = version_id
+        if exec_ref:
+            fields["exec_ref"] = exec_ref
+        if phase == PHASE_RUNNING:
+            fields["started_at"] = datetime.now()
+        async with get_async_db_session() as session:
+            await AppInstanceDao.aupsert(session, app_id, **fields)
+            await session.commit()
+
+    @staticmethod
+    async def _require_owner(app: App, actor) -> None:
+        """Owner-only, checked here rather than in F048.
+
+        The permission runtime allows administrators unconditionally, so
+        expressing "only the owner" there is impossible — a tenant admin would
+        pass. AC-44 says they must not.
+        """
+        if int(getattr(actor, "user_id", 0) or 0) != int(app.owner_user_id or 0):
+            raise AppOwnerOnlyError(app_id=app.id)
+
+    @classmethod
+    async def _require_deleter(cls, app: App, actor) -> None:
+        """Owner-only, unless the owner's account is gone.
+
+        Delete stays owner-only (AC-44): an administrator must not remove an
+        application whose owner can still look after it. But once the owner is
+        disabled or removed, nobody could delete the application at all — it
+        would sit in the list forever (found on 114, 2026-10-10). Then the
+        administrators who may already stop it (``_require_operator``) may also
+        delete it.
+        """
+        from bisheng.app_runtime.domain.services.tenant_access import require_app_request_tenant
+
+        require_app_request_tenant(app.tenant_id, actor, allow_global_super=True)
+        if int(getattr(actor, "user_id", 0) or 0) == int(app.owner_user_id or 0):
+            return
+        owner = await UserDao.aget_user(int(app.owner_user_id or 0))
+        if owner is None or int(owner.delete or 0) == 1:
+            await cls._require_operator(app, actor)
+            return
+        raise AppOwnerOnlyError(app_id=app.id)
+
+    @staticmethod
+    async def _require_operator(app: App, actor) -> None:
+        """Owner or this tenant's administrator or platform super admin (AC-41)."""
+        from bisheng.app_runtime.domain.services.tenant_access import require_app_request_tenant
+
+        require_app_request_tenant(app.tenant_id, actor, allow_global_super=True)
+        user_id = int(getattr(actor, "user_id", 0) or 0)
+        if user_id == int(app.owner_user_id or 0):
+            return
+        if bool(getattr(actor, "is_global_super", False)):
+            return
+        if await check_tenant_admin(user_id, int(app.tenant_id or 0)):
+            return
+        raise AppManageForbiddenError(app_id=app.id)
+
+    @staticmethod
+    async def _project_delete(adapter, record, app: App, actor) -> None:
+        if record is None:
+            return
+        await adapter.project_delete(
+            record=record,
+            actor=PermissionActor(
+                user_id=int(getattr(actor, "user_id", 0) or 0),
+                current_tenant_id=int(app.tenant_id or 0),
+                super_admin=bool(getattr(actor, "is_global_super", False)),
+            ),
+        )
+
+    @staticmethod
+    async def _audit(
+        action: AppAuditAction,
+        app: App,
+        actor,
+        *,
+        version_id: str | None = None,
+        reason: str = "",
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        await AuditLogDao.ainsert_v2(
+            tenant_id=int(app.tenant_id or 0),
+            operator_id=_audit_operator_id(actor),
+            operator_tenant_id=int(getattr(actor, "tenant_id", 0) or app.tenant_id or 0),
+            operator_name=getattr(actor, "user_name", None),
+            action=action.value,
+            target_type="app",
+            target_id=app.id,
+            object_name=app.name,
+            reason=reason or None,
+            metadata={
+                "version_id": version_id,
+                "state": app.state,
+                "reason": reason,
+                **(detail or {}),
+                **_audit_source(actor),
+            },
+        )
+
+
+def _audit_operator_id(actor) -> int:
+    # Provenance supplies attribution only; it never passes a human permission gate.
+    if isinstance(actor, ApprovedReleaseSource):
+        return actor.owner_user_id
+    return int(getattr(actor, "user_id", 0) or 0)
+
+
+def _audit_source(actor) -> dict:
+    if not isinstance(actor, ApprovedReleaseSource):
+        return {}
+    return {
+        "execution_source": actor.audit_source,
+        "approval_instance_id": actor.approval_instance_id,
+        "deployment_id": actor.deployment_id,
+    }
+
+
+async def _mark_version_online(app_id: str, version_id: str) -> None:
+    """Latch the approval outcome of the version that just started (design D8).
+
+    A module function rather than a method so that the "only ``terminal_state``
+    is ever updated" rule stays visible next to the single call site.
+    """
+    async with get_async_db_session() as session:
+        await AppVersionDao.amark_terminal(session, app_id, version_id, TERMINAL_STATE_ONLINE)
+        await session.commit()

@@ -30,7 +30,7 @@ export const Controls = forwardRef<
     return (
         <Panel
             className={cn(
-                "flex gap-1 rounded-md bg-background  p-1 text-foreground left-52 selelct-none",
+                "flex gap-1 rounded-md bg-background  p-1 text-foreground !left-52 selelct-none",
                 className,
             )}
             {...props}

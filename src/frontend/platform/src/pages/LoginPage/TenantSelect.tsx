@@ -2,7 +2,7 @@
 import { Button } from '@bisheng/ui';
 
 import { logoutApi } from "@/controllers/API/user";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -26,12 +26,10 @@ export default function TenantSelect() {
 
     const handleBackToLogin = () => {
         sessionStorage.removeItem("pending_tenants");
-        captureAndAlertRequestErrorHoc(
-            logoutApi().then(() => {
+        logoutApi().then(() => {
                 // @ts-ignore
                 location.href = __APP_ENV__.BASE_URL || "/";
-            }),
-        );
+            }).catch(showApiError);
     };
 
     return (

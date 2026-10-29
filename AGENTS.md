@@ -9,7 +9,7 @@
 | Path | Project | Stack |
 |------|---------|-------|
 | `src/backend/` | FastAPI + Celery Workers + Linsight Worker | Python 3.11+, uv, SQLModel, LangGraph |
-| `src/frontend/platform/` | Admin / builder UI | Vite 5 + **Zustand** + react-query v3 + bs-ui |
+| `src/frontend/platform/` | Admin / builder UI | Vite 6 + **Zustand** + @tanstack/react-query v4 + bs-ui |
 | `src/frontend/client/` | End-user chat UI (`/workspace` base path) | Vite 6 + **Recoil** + react-query v4 (@tanstack) + shadcn/ui |
 
 **Runtime topology** (full picture → `docs/architecture/01-architecture-overview.md`):
@@ -38,7 +38,7 @@ Middleware (MySQL / Redis / Milvus / ES / MinIO / OpenFGA): integration tests ru
 ## 4. Frontend Rules (P0)
 
 Two React apps that **must not be mixed**. Per-app rules auto-load from each sub-project's `AGENTS.md`:
-- `src/frontend/platform/AGENTS.md` — Admin/builder UI (Zustand, react-query v3, bs-ui, `@/`)
+- `src/frontend/platform/AGENTS.md` — Admin/builder UI (Zustand, @tanstack/react-query v4, bs-ui, `@/`)
 - `src/frontend/client/AGENTS.md` — End-user chat UI (Recoil, react-query v4, shadcn, `~/`)
 
 **Design specs & component library — mandatory entry for ANY UI work (new pages AND edits to existing ones):**
@@ -53,6 +53,7 @@ Two React apps that **must not be mixed**. Per-app rules auto-load from each sub
 - Named exports for components (`export function`); no default exports. Minimize `any` — if unavoidable, `// eslint-disable-next-line` + a one-line reason.
 - **Never** `import axios` directly — use the wrapped request module. (store must not call HTTP = constitution **C7**)
 - **Never** introduce new UI or state-management libraries.
+- **Shared list infrastructure**: list sorting uses `@hello-pangea/dnd` and file-preview virtualization uses `react-window`, both pinned in the workspace catalog. Do not reintroduce `react-beautiful-dnd` or `react-virtualized`. Client's existing `react-dnd` remains for its distinct drag/drop use cases; it is not replaced by the list-sorting library. Keep file-upload drop handling on its existing single owner.
 - All code comments in English.
 - 403 handled automatically by response interceptors — never add 403 branches in business code.
 - **A Radix `<SelectItem>` must never receive an empty-string `value`** — it throws and takes the whole page down with it. Any selector rendering a backend list has to filter out rows whose id is `null` or `''` before mapping them to items. Do not rely on the backend to sanitize: older backend versions do send such rows, and the crash surfaces to the user as a blank page rather than an empty dropdown.
@@ -66,7 +67,7 @@ Two React apps that **must not be mixed**. Per-app rules auto-load from each sub
 ## 5. Architecture Guard (Auto-enforced)
 
 `scripts/arch-guard.sh` runs after every Write/Edit via a PostToolUse hook (through `.claude/hooks/arch-guard-hook.sh`, which feeds violations back to the agent as `additionalContext` for self-correction).
-The 8 RULEs are the machine-enforcement arm of constitution **C1 / C4 / C6 / C7** — the clause↔RULE anchor table lives in [`docs/constitution.md`](docs/constitution.md). **VIOLATION must be fixed immediately.**
+The 10 RULEs (RULE-1 … RULE-10) are the machine-enforcement arm of constitution **C1 / C4 / C6 / C7** — the clause↔RULE anchor table lives in [`docs/constitution.md`](docs/constitution.md). **VIOLATION must be fixed immediately.**
 
 ---
 
@@ -115,6 +116,7 @@ Backend runtime pitfalls (tenant-filter SELECT-only gap, ruff hook import trap, 
 **Method pitfalls** (they cost more than the factual ones above):
 
 - **To decide whether code is still live, trace its callers and its frontend entry point** — its presence in the tree proves nothing. This repo carries a lot of paths whose UI was removed while the backend implementation stayed. Grep the backend, then the frontend API layer and component usages, and then check whether guard conditions and field defaults leave the branch permanently untaken. Reading statically and treating leftovers as current produces badly wrong conclusions.
+- **Before naming a root cause, check the magnitude and measure where the bug reproduces.** Write down the number your explanation predicts and do the byte arithmetic; if it doesn't add up, it isn't the cause. A memory problem has three shapes and each leaves a different trace: live objects (tracemalloc grows), allocator retention (RSS plateaus near a peak, `malloc_trim` gives some back), a native leak (linear growth per operation that neither gc nor trim recovers) — a linear climb rules out the second outright. Take the decisive measurements in the environment that actually shows the bug; when two environments differ in several variables (branch, database, a fix), split them before attributing, and until then call it a correlation. A suspected mechanism that a 50-line script can test gets the script first. The COFCO task-mode OOM was blamed on missing summarization for two rounds; the real cause — dmPython ≤ 2.5.38 leaking one reference per `fetchall` value — only surfaced through a minimal repro and per-layer A/B.
 - **Let the root cause determine the scope; don't fold every gap you pass into one change.** For each candidate ask "once the root cause is fixed, does this still hold?" — the ones that don't go on an explicit "not doing" list with the reason. Before editing a prompt or adding a fallback, read what the existing template / DB config / YAML **actually contains**; absence from the code is not absence from the system. And the right treatment for dead code is deletion, not reconnection.
 - **Surface model misbehaviour; do not paper over it with a fallback.** A model that claims a deliverable it never produced is a diagnosable defect — manufacturing the file on its behalf destroys the evidence and makes the defect unmeasurable. Preference order: fix the prompt, then detect and log or flag, then let the UI show the anomaly honestly (greyed out and marked "not generated", not a normal-looking link that does nothing). Keep a fallback only where it is already an established product contract.
 - **When several agents share one working tree, repository-wide git writes are forbidden**: `git stash` (including pop/apply), `git checkout .`, `git reset --hard`, `git clean`, and `git restore` without a path. They act on the whole tree rather than "your" files and silently swallow another session's in-progress work. Read committed content with `git show HEAD:<path>`, inspect your own edits with `git diff HEAD -- <path>`, and use `git worktree add` when you need a clean checkout; a path-scoped `git checkout <ref> -- <path>` is safe. Put this in the task brief when dispatching concurrent sub-agents.
@@ -130,3 +132,4 @@ Backend runtime pitfalls (tenant-filter SELECT-only gap, ruff hook import trap, 
 
 **Instruction files (AGENTS.md map).** Root = this file, loaded every session. Auto-loaded on top when editing the matching directory: `src/backend/`, `src/frontend/platform/`, `src/frontend/client/`, `src/frontend/packages/ui/` (shared component library + design-token SSOT), plus deep-dir specials `src/backend/bisheng/core/database/alembic/` (migrations), `src/backend/scripts/` (one-off scripts), `src/backend/bisheng/linsight/` (agent-framework contracts) and `src/backend/bisheng/linsight/builtin_skills/` (skill-pack authoring). Every `CLAUDE.md` is a symlink to its sibling `AGENTS.md` — edit `AGENTS.md` only. Put a new rule in the deepest file covering its scope (cross-app / cross-module → this file; app- or dir-specific → the nearest file); never duplicate a rule across levels — it *will* drift.
 
+**Only write verified behaviour into an AGENTS.md entry, and say how it was verified** (a measurement, a repro script, a test). A hypothesis written as a rule is loaded into every later session as fact: the 2026-08 guess that history summarization "does nothing for process memory" graduated from memory into `linsight/AGENTS.md` unmeasured and steered a 2026-10 OOM investigation for three rounds. If something is plausible but unproven, keep it in memory marked as a hypothesis.

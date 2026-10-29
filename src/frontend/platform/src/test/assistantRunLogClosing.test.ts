@@ -1,11 +1,12 @@
-import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
+import { createMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import { ChatMessageType } from "@/types/chat";
 import { beforeEach, describe, expect, it } from "vitest";
 
+const store = createMessageStore();
 type RunLogCard = ChatMessageType & { interrupted?: boolean };
 
 const asMessages = (rows: unknown[]) => rows as ChatMessageType[];
-const readMessages = () => useMessageStore.getState().messages as RunLogCard[];
+const readMessages = () => store.getState().messages as RunLogCard[];
 
 /**
  * A tool card closes only when its own end frame arrives. One got lost — the
@@ -23,13 +24,13 @@ describe("dangling run-log cards at session close", () => {
   });
 
   beforeEach(() => {
-    useMessageStore.setState({ messages: [], hisMessages: [] });
+    store.setState({ messages: [], hisMessages: [] });
   });
 
   it("settles a tool card whose end frame never arrived", () => {
-    useMessageStore.setState({ messages: asMessages([runLog("a", true), runLog("b", false)]) });
+    store.setState({ messages: asMessages([runLog("a", true), runLog("b", false)]) });
 
-    useMessageStore.getState().closeDanglingRunLogs();
+    store.getState().closeDanglingRunLogs();
 
     const [settled, interrupted] = readMessages();
     expect(settled.interrupted).toBeUndefined();
@@ -40,19 +41,19 @@ describe("dangling run-log cards at session close", () => {
 
   it("leaves the streaming answer alone", () => {
     const answer = { id: "answer", category: "answer", end: false, message: "", thought: "" };
-    useMessageStore.setState({ messages: asMessages([answer]) });
+    store.setState({ messages: asMessages([answer]) });
 
-    useMessageStore.getState().closeDanglingRunLogs();
+    store.getState().closeDanglingRunLogs();
 
     expect(readMessages()[0].end).toBe(false);
   });
 
   it("does not touch the list when every card is already closed", () => {
     const messages = asMessages([runLog("a", true)]);
-    useMessageStore.setState({ messages });
+    store.setState({ messages });
 
-    useMessageStore.getState().closeDanglingRunLogs();
+    store.getState().closeDanglingRunLogs();
 
-    expect(useMessageStore.getState().messages).toBe(messages);
+    expect(store.getState().messages).toBe(messages);
   });
 });

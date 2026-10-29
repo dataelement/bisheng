@@ -15,7 +15,7 @@ import {
     getDepartmentKnowledgeSpacesApi,
     setDepartmentKnowledgeSpacesVisibilityApi,
 } from "@/controllers/API/departmentKnowledgeSpace";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import type { DepartmentTreeNode } from "@/types/api/department";
 import { Checkbox } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
@@ -48,9 +48,7 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
     const nameRef = useRef<Map<number, string>>(new Map());
 
     const loadBindings = useCallback(async () => {
-        const spaceRes = await captureAndAlertRequestErrorHoc(
-            getDepartmentKnowledgeSpacesApi({ order_by: "name", include_hidden: true }),
-        );
+        const spaceRes = await getDepartmentKnowledgeSpacesApi({ order_by: "name", include_hidden: true });
         const nextBindings = new Map<number, Binding>();
         const visible = new Set<number>();
         if (spaceRes && Array.isArray(spaceRes)) {
@@ -70,7 +68,7 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
 
     useEffect(() => {
         if (!open) return;
-        void loadBindings();
+        void loadBindings().catch(showApiError);
     }, [open, loadBindings]);
 
     const visibleBoundIds = useMemo(() => {
@@ -154,31 +152,24 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
     const handleSave = async () => {
         if (!hasChanges) return;
         setSaving(true);
-        let ok = true;
-        if (ok && pendingCreate.length) {
-            const res = await captureAndAlertRequestErrorHoc(batchCreateDepartmentKnowledgeSpacesApi(pendingCreate));
-            if (!res) ok = false;
+        try {
+        if (pendingCreate.length) {
+            await batchCreateDepartmentKnowledgeSpacesApi(pendingCreate);
         }
-        if (ok && pendingHide.length) {
-            const res = await captureAndAlertRequestErrorHoc(
-                setDepartmentKnowledgeSpacesVisibilityApi(pendingHide, true),
-            );
-            if (!res) ok = false;
+        if (pendingHide.length) {
+            await setDepartmentKnowledgeSpacesVisibilityApi(pendingHide, true);
         }
-        if (ok && pendingRestore.length) {
-            const res = await captureAndAlertRequestErrorHoc(
-                setDepartmentKnowledgeSpacesVisibilityApi(pendingRestore, false),
-            );
-            if (!res) ok = false;
+        if (pendingRestore.length) {
+            await setDepartmentKnowledgeSpacesVisibilityApi(pendingRestore, false);
         }
-        setSaving(false);
         onChanged?.();
-        if (!ok) {
-            await loadBindings();
-            return;
-        }
         notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("bench.departmentKnowledgeSpaceSaveSuccess") ?? '') });
         onOpenChange(false);
+        } catch (error) {
+            showApiError(error);
+        } finally {
+            setSaving(false);
+        }
     };
 
     const renderRowPrefix = (node: DepartmentTreeNode) => (

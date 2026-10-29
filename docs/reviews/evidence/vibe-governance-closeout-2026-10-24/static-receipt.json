@@ -1,0 +1,8 @@
+{
+  "changed_python_files": 66,
+  "ruff": "pass",
+  "architecture": "zero_violations_existing_settings_warning",
+  "installer_bash_syntax": "pass",
+  "compose_yaml_and_role_bindings": "pass",
+  "runtime_ui_locale_parity": "pass"
+}

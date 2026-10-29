@@ -17,7 +17,7 @@ batchCreateDepartmentKnowledgeSpacesApi,
 getDepartmentKnowledgeSpacesApi,
 type DepartmentKnowledgeSpaceSummary,
 } from "@/controllers/API/departmentKnowledgeSpace"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { showApiError } from "@/controllers/request"
 import { useEffect,useMemo,useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -49,12 +49,12 @@ export function DepartmentSpaceDialog({
 
     let active = true
     setLoading(true)
-    captureAndAlertRequestErrorHoc(getDepartmentKnowledgeSpacesApi({ order_by: "name" })).then(
+    getDepartmentKnowledgeSpacesApi({ order_by: "name" }).then(
       (res) => {
-        if (!active || res === false || !Array.isArray(res)) return
+        if (!active || !Array.isArray(res)) return
         setDepartmentSpaces(res)
       }
-    ).finally(() => {
+    ).catch(showApiError).finally(() => {
       if (active) setLoading(false)
     })
 
@@ -91,18 +91,19 @@ export function DepartmentSpaceDialog({
     }
 
     setSubmitting(true)
-    const res = await captureAndAlertRequestErrorHoc(
-      batchCreateDepartmentKnowledgeSpacesApi(selectedDepartmentIds)
-    )
-    setSubmitting(false)
-
-    if (res === false) return
+    try {
+    const res = await batchCreateDepartmentKnowledgeSpacesApi(selectedDepartmentIds)
 
     notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("departmentSpace.submitSuccess", {
         count: Array.isArray(res) ? res.length : selectedDepartmentIds.length,
       }) ?? '') })
     onCreated?.()
     onOpenChange(false)
+    } catch (error) {
+      showApiError(error)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (

@@ -1,14 +1,14 @@
-import { notification } from '@bisheng/ui';
+import { Pagination, notification } from '@bisheng/ui';
 // @ts-strict-ignore
 import { Button, SearchInput } from '@bisheng/ui';
 import { FileIcon } from "@/components/bs-icons/file";
 
 import { Dialog,DialogContent } from '@/components/bs-ui/dialog';
 
-import AutoPagination from '@/components/bs-ui/pagination/autoPagination';
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 
 import { delChunkApi,getFileBboxApi,getFilePathApi,getKnowledgeChunkApi,readFileByLibDatabase,updateChunkApi } from '@/controllers/API';
-import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
+import { showApiError } from '@/controllers/request';
 import { useTable } from '@/util/hook';
 import { Outlined } from "bisheng-icons";
 import { useCallback,useEffect,useMemo,useRef,useState } from 'react';
@@ -25,6 +25,7 @@ import PreviewParagraph from './PreviewParagraph';
 export default function Paragraphs({ fileId, onBack, canEditKb = false, canDeleteKb = false }) {
     console.log('Props fileId:', fileId);
     const { t } = useTranslation('knowledge');
+    const paginationLocale = usePaginationLocale();
     const { id } = useParams();
     const navigate = useNavigate();
     const { selectedBbox } = useKnowledgeStore();
@@ -158,13 +159,13 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
         console.log('Converted localIndex:', chunkIndexPage);
         const bbox = { chunk_bboxes: selectedBbox };
         const bboxStr = selectedBbox.length ? JSON.stringify(bbox) : safeChunks[chunkIndexPage]?.bbox || '';
-        captureAndAlertRequestErrorHoc(updateChunkApi({
+        updateChunkApi({
             knowledge_id: Number(id),
             file_id: selectedFileId || currentFile?.id || '',
             chunk_index: chunkIndex,
             text,
             bbox: bboxStr
-        }))
+        }).then(() => {
         setChunks(chunks => chunks.map(chunk =>
             chunk.chunkIndex === chunkIndex ? { ...chunk, bbox: bboxStr, text } : chunk
         ));
@@ -172,6 +173,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
             (item) => item?.metadata?.chunk_index === chunkIndex,
             (item) => ({ text, metadata: { ...item.metadata, bbox: bboxStr } })
         );
+        }).catch(showApiError)
     }, [canEditKb, id, currentFile, refreshData, selectedBbox, safeChunks, pageSize, selectedFileId]);
     const fetchFileUrl = useCallback(async (fileId) => {
         console.log('Getting file URL:', fileId);
@@ -333,15 +335,16 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
             if (selectedChunkIndex === data) {
                 setSelectedBbox([]);
             }
-            await captureAndAlertRequestErrorHoc(delChunkApi({
+            await delChunkApi({
                 knowledge_id: Number(id),
                 file_id: selectedFileId || currentFile?.id || '',
                 chunk_index: data || 0
-            }));
+            });
             await new Promise(resolve => setTimeout(resolve, 100));
             await reload();
         } catch (error) {
-            console.error('Failed to delete chunk:', error);
+            showApiError(error);
+            setChunks(chunks);
             await reload();
         }
     }, [
@@ -489,9 +492,9 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
             </div>
             {/* Pagination */}
             <div className="bisheng-table-footer px-6">
-                <AutoPagination
+                <Pagination locale={paginationLocale}
                     className="justify-end"
-                    page={page}
+                    current={page}
                     pageSize={pageSize}
                     total={total}
                     showTotal={true}

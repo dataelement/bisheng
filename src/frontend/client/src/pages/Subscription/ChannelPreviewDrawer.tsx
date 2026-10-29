@@ -1,4 +1,6 @@
-import { Tooltip as SharedTooltip } from '@bisheng/ui';
+import { showApiError } from "~/api/request";
+import { Tooltip as SharedTooltip } from "@bisheng/ui";
+import { refreshChannelState, useChannelStateRefresh } from "./hooks/useChannelStateRefresh";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { NoPermissionIllustration } from "~/components/illustrations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -6,22 +8,17 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { X } from "lucide-react";
 import {
-    type ChannelDetailResponse,
-    getArticlesApi,
-    getChannelDetailApi,
-    subscribeManagerChannelApi,
+  type ChannelDetailResponse,
+  getArticlesApi,
+  getChannelDetailApi,
+  subscribeManagerChannelApi,
 } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
 import { InfiniteScroll } from "~/components/InfiniteScroll";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { Button } from "~/components/ui/Button";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
-import {
-    Sheet,
-    SheetContent,
-    SheetHeader,
-    SheetTitle,
-} from "~/components/ui/Sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "~/components/ui/Sheet";
 
 import { useAuthContext } from "~/hooks/AuthContext";
 import { useToastContext } from "~/Providers";
@@ -33,365 +30,381 @@ const PREVIEW_PAGE_SIZE = 10;
 const MAX_SUBSCRIPTIONS = 20;
 
 interface ChannelPreviewDrawerProps {
-    channelId: string | undefined;
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    /** Called after subscribe / apply succeeds so the channel square list can refetch. */
-    onSubscriptionChanged?: () => void;
+  channelId: string | undefined;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Called after subscribe / apply succeeds so the channel square list can refetch. */
+  onSubscriptionChanged?: () => void;
 }
 
 /** `rejected` is deliberately absent: a rejected application can be resubmitted,
  *  so it collapses into "none" (the plain 订阅 button). */
 type SubscribeStatus = "none" | "subscribed" | "pending";
 
-export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscriptionChanged }: ChannelPreviewDrawerProps) {
-    const previewListScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
-    const localize = useLocalize();
-    const navigate = useNavigate();
-    const { showToast } = useToastContext();
-    const { user } = useAuthContext();
-    const queryClient = useQueryClient();
-    const [subscribeStatus, setSubscribeStatus] = useState<SubscribeStatus>("none");
-    const [subscribing, setSubscribing] = useState(false);
-    const [articles, setArticles] = useState<any[]>([]);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [hasMore, setHasMore] = useState(false);
-    const [loadingMore, setLoadingMore] = useState(false);
+export function ChannelPreviewDrawer({
+  channelId,
+  open,
+  onOpenChange,
+  onSubscriptionChanged,
+}: ChannelPreviewDrawerProps) {
+  const previewListScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
+  const localize = useLocalize();
+  const navigate = useNavigate();
+  const { showToast } = useToastContext();
+  const { user } = useAuthContext();
+  const queryClient = useQueryClient();
+  const [subscribing, setSubscribing] = useState(false);
+  const [articles, setArticles] = useState<any[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-    // 切换频道/关闭抽屉时，重置本地订阅交互态，避免状态串到下一条频道
-    useEffect(() => {
-        if (!open) {
-            setSubscribeStatus("none");
-            setSubscribing(false);
-            return;
-        }
-        setSubscribeStatus("none");
-    }, [channelId, open]);
+  useChannelStateRefresh(() => {
+    void refreshChannelState(queryClient);
+  }, open);
 
-    // Fetch channel detail
-    const {
-        data: channelDetail,
-        isLoading: isDetailLoading,
-        isError: isDetailError,
-    } = useQuery({
-        queryKey: ["channelPreviewDetail", channelId],
-        queryFn: async () => {
-            const res: any = await getChannelDetailApi(channelId!);
-            if (res?.status_code && res.status_code !== 200) {
-                throw new Error(res.status_message || localize("com_subscription.channel_load_failed"));
-            }
-            return res;
-        },
-        enabled: !!channelId && open,
-        staleTime: 0,
-        refetchOnMount: "always",
-    });
+  // Fetch channel detail
+  const {
+    data: channelDetail,
+    isLoading: isDetailLoading,
+    isError: isDetailError,
+  } = useQuery({
+    queryKey: ["channelPreviewDetail", channelId],
+    queryFn: async () => {
+      const res: any = await getChannelDetailApi(channelId!);
+      if (res?.status_code && res.status_code !== 200) {
+        throw new Error(res.status_message || localize("com_subscription.channel_load_failed"));
+      }
+      return res;
+    },
+    enabled: !!channelId && open,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
 
-    const isCreatorView =
-        Boolean(user?.username) && Boolean(channelDetail?.creator_name) && user?.username === channelDetail?.creator_name;
+  const isCreatorView =
+    Boolean(user?.username) &&
+    Boolean(channelDetail?.creator_name) &&
+    user?.username === channelDetail?.creator_name;
 
-    const effectiveSubscribeStatus: SubscribeStatus = (() => {
-        if (subscribeStatus !== "none") return subscribeStatus;
-        const sub = String(channelDetail?.subscription_status ?? "").toLowerCase();
-        if (sub === "subscribed") return "subscribed";
-        if (sub === "pending") return "pending";
-        // "rejected" included: the user may apply again, so show the 订阅 button.
-        return "none";
-    })();
+  const effectiveSubscribeStatus: SubscribeStatus = (() => {
+    const sub = String(channelDetail?.subscription_status ?? "").toLowerCase();
+    if (sub === "subscribed") return "subscribed";
+    if (sub === "pending") return "pending";
+    // "rejected" included: the user may apply again, so show the 订阅 button.
+    return "none";
+  })();
 
-    const canLoadArticles = canReadChannelContent({
-        actions: channelDetail?.actions,
-        isSubscribed: effectiveSubscribeStatus === "subscribed",
-        isCreatorView,
-    });
-    // Anyone who may not read the content gets the intro-and-apply view. This
-    // used to be scoped to `review` channels, which left every other
-    // no-permission case asking for articles the server refuses.
-    const hideArticles = !!channelDetail && !canLoadArticles;
+  const canLoadArticles = canReadChannelContent({
+    actions: channelDetail?.actions,
+    isSubscribed: effectiveSubscribeStatus === "subscribed",
+    isCreatorView,
+  });
+  // Anyone who may not read the content gets the intro-and-apply view. This
+  // used to be scoped to `review` channels, which left every other
+  // no-permission case asking for articles the server refuses.
+  const hideArticles = !!channelDetail && !canLoadArticles;
 
-    // Fetch article list
-    const {
-        data: articlesData,
-        isInitialLoading: isArticlesInitialLoading,
-        isError: isArticlesError,
-    } = useQuery({
-        queryKey: ["channelPreviewArticles", channelId],
-        queryFn: async () => {
-            const res: any = await getArticlesApi({
-                channelId: channelId!,
-                page: 1,
-                pageSize: PREVIEW_PAGE_SIZE,
-            });
-            if (res?.status_code && res.status_code !== 200) {
-                throw new Error(res.status_message || localize("com_subscription.article_load_failed"));
-            }
-            return res;
-        },
-        // Never ask for a list the server will refuse: a 403 trips the global
-        // redirect and throws the viewer out of the square onto the home page,
-        // toast and all. The drawer is the non-member's intro-and-apply view and
-        // has to be able to render without the articles.
-        enabled: !!channelId && open && canLoadArticles,
-        staleTime: 0,
-        refetchOnMount: "always",
-    });
+  // Fetch article list
+  const {
+    data: articlesData,
+    isInitialLoading: isArticlesInitialLoading,
+    isError: isArticlesError,
+  } = useQuery({
+    queryKey: ["channelPreviewArticles", channelId],
+    queryFn: async () => {
+      const res: any = await getArticlesApi({
+        channelId: channelId!,
+        page: 1,
+        pageSize: PREVIEW_PAGE_SIZE,
+      });
+      if (res?.status_code && res.status_code !== 200) {
+        throw new Error(res.status_message || localize("com_subscription.article_load_failed"));
+      }
+      return res;
+    },
+    // Never ask for a list the server will refuse: a 403 trips the global
+    // redirect and throws the viewer out of the square onto the home page,
+    // toast and all. The drawer is the non-member's intro-and-apply view and
+    // has to be able to render without the articles.
+    enabled: !!channelId && open && canLoadArticles,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
 
-    // `isLoading` stays true forever on a disabled query in react-query v4;
-    // `isInitialLoading` is the disabled-aware form.
-    const isLoading = isDetailLoading || isArticlesInitialLoading;
+  // `isLoading` stays true forever on a disabled query in react-query v4;
+  // `isInitialLoading` is the disabled-aware form.
+  const isLoading = isDetailLoading || isArticlesInitialLoading;
 
-    useEffect(() => {
-        if (!channelId) {
-            setArticles([]);
-            setCurrentPage(1);
-            setHasMore(false);
-            return;
-        }
-        const mapped = (articlesData?.data || []).map(item => mapToArticle(item, channelId));
-        setArticles(mapped);
-        setCurrentPage(1);
-        const total = articlesData?.total || 0;
-        setHasMore(PREVIEW_PAGE_SIZE < total);
-    }, [channelId, articlesData]);
+  useEffect(() => {
+    if (!channelId) {
+      setArticles([]);
+      setCurrentPage(1);
+      setHasMore(false);
+      return;
+    }
+    const mapped = (articlesData?.data || []).map((item) => mapToArticle(item, channelId));
+    setArticles(mapped);
+    setCurrentPage(1);
+    const total = articlesData?.total || 0;
+    setHasMore(PREVIEW_PAGE_SIZE < total);
+  }, [channelId, articlesData]);
 
-    const loadMoreArticles = async () => {
-        if (!channelId || loadingMore || !hasMore) return;
-        const nextPage = currentPage + 1;
-        setLoadingMore(true);
-        try {
-            const res: any = await getArticlesApi({
-                channelId,
-                page: nextPage,
-                pageSize: PREVIEW_PAGE_SIZE,
-            });
-            if (res?.status_code && res.status_code !== 200) {
-                throw new Error(res.status_message || localize("com_subscription.article_load_failed"));
-            }
-            const nextMapped = (res?.data || []).map((item: any) => mapToArticle(item, channelId));
-            setArticles(prev => [...prev, ...nextMapped]);
-            setCurrentPage(nextPage);
-            const total = res?.total || 0;
-            setHasMore(nextPage * PREVIEW_PAGE_SIZE < total);
-        } catch (e: any) {
-            showToast({
-                message: e?.message || localize("com_subscription.article_load_failed"),
-                severity: NotificationSeverity.WARNING,
-            });
-            setHasMore(false);
-        } finally {
-            setLoadingMore(false);
-        }
-    };
+  const loadMoreArticles = async () => {
+    if (!channelId || loadingMore || !hasMore) return;
+    const nextPage = currentPage + 1;
+    setLoadingMore(true);
+    try {
+      const res: any = await getArticlesApi({
+        channelId,
+        page: nextPage,
+        pageSize: PREVIEW_PAGE_SIZE,
+      });
+      if (res?.status_code && res.status_code !== 200) {
+        throw new Error(res.status_message || localize("com_subscription.article_load_failed"));
+      }
+      const nextMapped = (res?.data || []).map((item: any) => mapToArticle(item, channelId));
+      setArticles((prev) => [...prev, ...nextMapped]);
+      setCurrentPage(nextPage);
+      const total = res?.total || 0;
+      setHasMore(nextPage * PREVIEW_PAGE_SIZE < total);
+    } catch (e: any) {
+      showToast({
+        message: e?.message || localize("com_subscription.article_load_failed"),
+        severity: NotificationSeverity.WARNING,
+      });
+      setHasMore(false);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
-    // Handle subscribe action
-    const handleSubscribe = async () => {
-        if (!channelId || subscribing) return;
-        if (subscribeStatus === "subscribed" || subscribeStatus === "pending") return;
+  // Handle subscribe action
+  const handleSubscribe = async () => {
+    if (!channelId || subscribing) return;
+    if (effectiveSubscribeStatus === "subscribed" || effectiveSubscribeStatus === "pending") return;
 
-        setSubscribing(true);
-        try {
-            const res: any = await subscribeManagerChannelApi({ channel_id: channelId });
-            const root = res;
-            const statusCode = root?.status_code ?? root?.code;
-            if (statusCode && statusCode !== 200) {
-                const msg =
-                    root?.status_message ||
-                    root?.message ||
-                    localize("com_subscription.subscribe_failed_retry");
-                throw new Error(msg);
-            }
+    setSubscribing(true);
+    try {
+      const res: any = await subscribeManagerChannelApi({ channel_id: channelId });
+      const root = res;
+      const statusCode = root?.status_code ?? root?.code;
+      if (statusCode && statusCode !== 200) {
+        const msg =
+          root?.status_message || root?.message || localize("com_subscription.subscribe_failed_retry");
+        throw new Error(msg);
+      }
 
-            if (channelDetail?.visibility === "review") {
-                setSubscribeStatus("pending");
-                showToast({ message: localize("com_subscription.subscribe_application_sent"), severity: NotificationSeverity.SUCCESS });
-            } else {
-                setSubscribeStatus("subscribed");
-                showToast({ message: localize("com_subscription.subscribe_success"), severity: NotificationSeverity.SUCCESS });
-            }
+      if ((res?.data ?? res) === "pending") {
+        showToast({
+          message: localize("com_subscription.subscribe_application_sent"),
+          severity: NotificationSeverity.SUCCESS,
+        });
+      } else {
+        showToast({
+          message: localize("com_subscription.subscribe_success"),
+          severity: NotificationSeverity.SUCCESS,
+        });
+      }
 
-            // Refresh background channel lists (sidebar uses ["channels","subscribed",sort])
-            queryClient.invalidateQueries({ queryKey: ["channels", "subscribed"] });
-            queryClient.invalidateQueries({ queryKey: ["channels"] });
-            queryClient.invalidateQueries({ queryKey: ["channelPreviewDetail", channelId] });
-            queryClient.invalidateQueries({ queryKey: ["channelPreviewArticles", channelId] });
-            onSubscriptionChanged?.();
-        } catch (e: any) {
-            const msg =
-                e?.response?.data?.status_message ||
-                e?.message ||
-                localize("com_subscription.subscribe_failed_retry");
-            showToast({ message: msg, severity: NotificationSeverity.WARNING });
-        } finally {
-            setSubscribing(false);
-        }
-    };
+      // Refresh background channel lists (sidebar uses ["channels","subscribed",sort])
+      await refreshChannelState(queryClient);
+      queryClient.invalidateQueries({ queryKey: ["channelPreviewArticles", channelId] });
+      onSubscriptionChanged?.();
+    } catch (error) {
+      showApiError(error);
+    } finally {
+      setSubscribing(false);
+    }
+  };
 
-    // Button config based on effective subscribe status
-    const getButtonConfig = (status: SubscribeStatus) => {
-        if (status === "subscribed") {
-            return { text: localize("com_subscription.subscribed"), disabled: true, variant: "secondary" as const };
-        }
-        if (status === "pending") {
-            return { text: localize("com_subscription.applying"), disabled: true, variant: "secondary" as const };
-        }
-        return { text: localize("com_subscription.subscribe"), disabled: false, variant: "outline" as const };
-    };
-    const btnConfig = getButtonConfig(effectiveSubscribeStatus);
+  // Button config based on effective subscribe status
+  const getButtonConfig = (status: SubscribeStatus) => {
+    if (status === "subscribed") {
+      return { text: localize("com_subscription.subscribed"), disabled: true, variant: "secondary" as const };
+    }
+    if (status === "pending") {
+      return { text: localize("com_subscription.applying"), disabled: true, variant: "secondary" as const };
+    }
+    return { text: localize("com_subscription.subscribe"), disabled: false, variant: "outline" as const };
+  };
+  const btnConfig = getButtonConfig(effectiveSubscribeStatus);
 
-    // Handle error — channel not found, inaccessible, or articles cannot be loaded
-    useEffect(() => {
-        if (open && (isDetailError || isArticlesError)) {
-            showToast({ message: localize("com_subscription.channel_invalid_or_inaccessible"), severity: NotificationSeverity.WARNING });
-            onOpenChange(false);
-            navigate("/channel?square=1", { replace: true });
-        }
-    }, [isDetailError, isArticlesError, open]);
+  // Handle error — channel not found, inaccessible, or articles cannot be loaded
+  useEffect(() => {
+    if (open && (isDetailError || isArticlesError)) {
+      showToast({
+        message: localize("com_subscription.channel_invalid_or_inaccessible"),
+        severity: NotificationSeverity.WARNING,
+      });
+      onOpenChange(false);
+      navigate("/channel?square=1", { replace: true });
+    }
+  }, [isDetailError, isArticlesError, open]);
 
-    return (
-        <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent
-                side="right"
-                className="flex h-full min-h-0 w-full flex-col overflow-hidden p-4 sm:max-w-[1000px]"
-                hideClose
-                onCloseAutoFocus={(e) => e.preventDefault()}
-            >
-                {isLoading ? (
-                    <div className="flex flex-col items-center justify-center h-full gap-3 text-text-3">
-                        <LoadingIcon className="size-20 text-primary" />
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="flex h-full min-h-0 w-full flex-col overflow-hidden p-4 sm:max-w-[1000px]"
+        hideClose
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-text-3">
+            <LoadingIcon className="size-20 text-primary" />
+          </div>
+        ) : channelDetail ? (
+          <>
+            {/* Channel Info Header */}
+            <SheetHeader className="gap-4 border-b border-border-base pb-6 text-left">
+              <div className="flex items-center justify-between">
+                <SheetTitle className="text-[20px] font-medium leading-7 text-text-1">
+                  {channelDetail.name}
+                </SheetTitle>
+                <button
+                  type="button"
+                  onClick={() => onOpenChange(false)}
+                  className="inline-flex size-10 shrink-0 items-center justify-center rounded-md text-text-2 hover:bg-fill-1"
+                  aria-label={localize("close")}
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
+
+              {/* Description (2-line clamp + tooltip) */}
+              {channelDetail.description && (
+                <SharedTooltip content={channelDetail.description}>
+                  <p className="cursor-default text-left text-[14px] leading-[22px] text-[#A9AEB8] line-clamp-2">
+                    {channelDetail.description}
+                  </p>
+                </SharedTooltip>
+              )}
+
+              {/* Creator Info */}
+              <div className="mt-0 flex items-center gap-1">
+                <Avatar className="w-5 h-5">
+                  {/* Backend currently doesn't provide creator_avatar, use AvatarName fallback directly for now */}
+                  <AvatarName name={channelDetail.creator_name} className="text-xs" />
+                </Avatar>
+                <span className="text-[14px] leading-[22px] text-text-3">{channelDetail.creator_name}</span>
+              </div>
+
+              {/* Data Overview Row & Button */}
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 flex-wrap items-center gap-2 text-[14px] leading-[22px] text-text-3">
+                  {channelDetail.source_infos && channelDetail.source_infos.length > 0 && (
+                    <div className="flex items-center">
+                      <div className="flex -space-x-1.5">
+                        {channelDetail.source_infos.slice(0, 4).map((source: any, index: number) => (
+                          <div
+                            key={source.id}
+                            className="size-5 rounded-sm border border-white overflow-hidden bg-gray-100"
+                            style={{ zIndex: 4 - index }}
+                          >
+                            <img
+                              src={source.source_icon || source.icon || "/default-source.png"}
+                              alt={source.source_name || source.name}
+                              className="w-full h-full object-cover rounded-md"
+                            />
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                ) : channelDetail ? (
-                    <>
-                        {/* Channel Info Header */}
-                        <SheetHeader className="gap-4 border-b border-border-base pb-6 text-left">
-                            <div className="flex items-center justify-between">
-                                <SheetTitle className="text-[20px] font-medium leading-7 text-text-1">
-                                    {channelDetail.name}
-                                </SheetTitle>
-                                <button
-                                    type="button"
-                                    onClick={() => onOpenChange(false)}
-                                    className="inline-flex size-10 shrink-0 items-center justify-center rounded-md text-text-2 hover:bg-fill-1"
-                                    aria-label={localize("close")}
-                                >
-                                    <X className="size-5" />
-                                </button>
-                            </div>
+                  )}
+                  <span className="whitespace-nowrap">
+                    {channelDetail.article_count ?? 0}
+                    {localize("com_subscription.articles_count")}
+                  </span>
+                  <span className="whitespace-nowrap">
+                    {channelDetail.subscriber_count ?? 0}
+                    {localize("com_subscription.subscribe")}
+                  </span>
+                </div>
 
-                            {/* Description (2-line clamp + tooltip) */}
-                            {channelDetail.description && (
-                                <SharedTooltip  content={channelDetail.description} ><p className="cursor-default text-left text-[14px] leading-[22px] text-[#A9AEB8] line-clamp-2">
-                                            {channelDetail.description}
-                                        </p></SharedTooltip>
-                            )}
+                {/* Hide subscribe button for private channels or if the user is the creator */}
+                {channelDetail.visibility !== "private" && (
+                  <Button
+                    variant={btnConfig.variant}
+                    disabled={btnConfig.disabled || subscribing}
+                    onClick={handleSubscribe}
+                    className={`h-8 rounded-md px-4 py-[5px] text-[14px] font-normal leading-[22px] flex-shrink-0 ${
+                      effectiveSubscribeStatus === "subscribed"
+                        ? "bg-fill-2 text-text-3 border-border-base cursor-default"
+                        : effectiveSubscribeStatus === "pending"
+                          ? "bg-fill-2 text-text-4 border-border-base cursor-not-allowed"
+                          : "text-text-1 border-border-base hover:bg-gray-50"
+                    }`}
+                  >
+                    {subscribing ? localize("com_subscription.processing") : btnConfig.text}
+                  </Button>
+                )}
+              </div>
+            </SheetHeader>
 
-                            {/* Creator Info */}
-                            <div className="mt-0 flex items-center gap-1">
-                                <Avatar className="w-5 h-5">
-                                    {/* Backend currently doesn't provide creator_avatar, use AvatarName fallback directly for now */}
-                                    <AvatarName name={channelDetail.creator_name} className="text-xs" />
-                                </Avatar>
-                                <span className="text-[14px] leading-[22px] text-text-3">{channelDetail.creator_name}</span>
-                            </div>
-
-                            {/* Data Overview Row & Button */}
-                            <div className="flex items-center justify-between gap-3">
-                                <div className="flex min-w-0 flex-wrap items-center gap-2 text-[14px] leading-[22px] text-text-3">
-                                    {channelDetail.source_infos && channelDetail.source_infos.length > 0 && (
-                                        <div className="flex items-center">
-                                            <div className="flex -space-x-1.5">
-                                                {channelDetail.source_infos.slice(0, 4).map((source: any, index: number) => (
-                                                    <div
-                                                        key={source.id}
-                                                        className="size-5 rounded-sm border border-white overflow-hidden bg-gray-100"
-                                                        style={{ zIndex: 4 - index }}
-                                                    >
-                                                        <img
-                                                            src={source.source_icon || source.icon || "/default-source.png"}
-                                                            alt={source.source_name || source.name}
-                                                            className="w-full h-full object-cover rounded-md"
-                                                        />
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                    <span className="whitespace-nowrap">{channelDetail.article_count ?? 0}{localize("com_subscription.articles_count")}</span>
-                                    <span className="whitespace-nowrap">{channelDetail.subscriber_count ?? 0}{localize("com_subscription.subscribe")}</span>
-                                </div>
-
-                                {/* Hide subscribe button for private channels or if the user is the creator */}
-                                {channelDetail.visibility !== "private" && (
-                                    <Button
-                                        variant={btnConfig.variant}
-                                        disabled={btnConfig.disabled || subscribing}
-                                        onClick={handleSubscribe}
-                                        className={`h-8 rounded-md px-4 py-[5px] text-[14px] font-normal leading-[22px] flex-shrink-0 ${effectiveSubscribeStatus === "subscribed"
-                                            ? "bg-fill-2 text-text-3 border-border-base cursor-default"
-                                            : effectiveSubscribeStatus === "pending"
-                                                ? "bg-fill-2 text-text-4 border-border-base cursor-not-allowed"
-                                                : "text-text-1 border-border-base hover:bg-gray-50"
-                                            }`}
-                                    >
-                                        {subscribing ? localize("com_subscription.processing") : btnConfig.text}
-                                    </Button>
-                                )}
-                            </div>
-                        </SheetHeader>
-
-                        {/* Article List / Pending Message */}
-                        <div ref={previewListScrollRevealRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-on-scroll px-4 pt-2">
-                            {hideArticles ? (
-                                <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
-                                    <NoPermissionIllustration className="size-[120px] mb-4" />
-                                    <div className="text-[14px] font-normal text-text-3">{localize("com_subscription.channel_content_needs_approval")}</div>
-                                </div>
-                            ) : articles.length > 0 ? (
-                                <InfiniteScroll
-                                    loadMore={loadMoreArticles}
-                                    hasMore={hasMore}
-                                    isLoading={loadingMore}
-                                    emptyText={localize("com_subscription.all_messages_are_here")}
-                                    className=""
-                                >
-                                    {articles.map((article, i) => (
-                                        <div
-                                            key={article.id}
-                                            className={i > 0 ? "border-t border-dashed border-border-base" : undefined}
-                                        >
-                                            <ArticleCard
-                                                article={article}
-                                                showArticleActions={false}
-                                                variant="grid"
-                                                onSelect={(a) => {
-                                                    if (a?.sensitiveReview?.can_view === false) {
-                                                        showToast({
-                                                            message: a.sensitiveReview.auto_reply || localize("com_subscription.sensitive_review_blocked"),
-                                                            severity: NotificationSeverity.WARNING
-                                                        });
-                                                        return;
-                                                    }
-                                                    const url = (a?.url || "").trim();
-                                                    if (!url) {
-                                                        showToast({
-                                                            message: localize("com_subscription.no_original_link"),
-                                                            severity: NotificationSeverity.WARNING
-                                                        });
-                                                        return;
-                                                    }
-                                                    window.open(url, "_blank", "noopener,noreferrer");
-                                                }}
-                                                isSelected={false}
-                                            />
-                                        </div>
-                                    ))}
-                                </InfiniteScroll>
-                            ) : (
-                                <div className="flex items-center justify-center h-64 text-text-3 text-sm">{localize("com_subscription.no_articles")}</div>
-                            )}
-                        </div>
-                    </>
-                ) : null}
-            </SheetContent>
-        </Sheet>
-    );
+            {/* Article List / Pending Message */}
+            <div
+              ref={previewListScrollRevealRef}
+              className="flex-1 min-h-0 overflow-y-auto scrollbar-on-scroll px-4 pt-2"
+            >
+              {hideArticles ? (
+                <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+                  <NoPermissionIllustration className="size-[120px] mb-4" />
+                  <div className="text-[14px] font-normal text-text-3">
+                    {localize("com_subscription.channel_content_access_required")}
+                  </div>
+                </div>
+              ) : articles.length > 0 ? (
+                <InfiniteScroll
+                  loadMore={loadMoreArticles}
+                  hasMore={hasMore}
+                  isLoading={loadingMore}
+                  emptyText={localize("com_subscription.all_messages_are_here")}
+                  className=""
+                >
+                  {articles.map((article, i) => (
+                    <div
+                      key={article.id}
+                      className={i > 0 ? "border-t border-dashed border-border-base" : undefined}
+                    >
+                      <ArticleCard
+                        article={article}
+                        showArticleActions={false}
+                        variant="grid"
+                        onSelect={(a) => {
+                          if (a?.sensitiveReview?.can_view === false) {
+                            showToast({
+                              message:
+                                a.sensitiveReview.auto_reply ||
+                                localize("com_subscription.sensitive_review_blocked"),
+                              severity: NotificationSeverity.WARNING,
+                            });
+                            return;
+                          }
+                          const url = (a?.url || "").trim();
+                          if (!url) {
+                            showToast({
+                              message: localize("com_subscription.no_original_link"),
+                              severity: NotificationSeverity.WARNING,
+                            });
+                            return;
+                          }
+                          window.open(url, "_blank", "noopener,noreferrer");
+                        }}
+                        isSelected={false}
+                      />
+                    </div>
+                  ))}
+                </InfiniteScroll>
+              ) : (
+                <div className="flex items-center justify-center h-64 text-text-3 text-sm">
+                  {localize("com_subscription.no_articles")}
+                </div>
+              )}
+            </div>
+          </>
+        ) : null}
+      </SheetContent>
+    </Sheet>
+  );
 }

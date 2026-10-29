@@ -20,8 +20,6 @@ class MarketActor:
 
 async def market_actor(request: Request) -> MarketActor:
     from bisheng.core.context.tenant import set_current_tenant_id, set_is_management_api, set_visible_tenant_ids
-    from bisheng.user.domain.services.auth import AuthJwt, LoginUser
-    from bisheng.utils.http_middleware import _validate_token_version
 
     authorization = request.headers.get("authorization", "")
     if len(request.headers.getlist("authorization")) > 1:
@@ -40,7 +38,10 @@ async def market_actor(request: Request) -> MarketActor:
                 runtime = await get_runtime(request, get_settings())
                 principal = await runtime.access.authenticate(authorization)
             except BaseErrorCode as exc:
-                raise HTTPException(getattr(exc, "HttpStatus", 503), exc.Msg) from exc
+                raise HTTPException(
+                    getattr(exc, "HttpStatus", 503),
+                    {"error": exc.Msg, "code": getattr(exc, "ClientCode", "authorization_unavailable")},
+                ) from exc
             tenant_id = int(principal.tenant_id)
             set_is_management_api(False)
             set_current_tenant_id(tenant_id)
@@ -48,6 +49,9 @@ async def market_actor(request: Request) -> MarketActor:
             tenant_context.set_admin_scope_tenant_id(None)
             tenant_context._bypass_tenant_filter.set(False)
             return MarketActor(tenant_id, int(principal.user_id), desktop=True)
+    from bisheng.user.domain.services.auth import AuthJwt, LoginUser
+    from bisheng.utils.http_middleware import _validate_token_version
+
     token = request.cookies.get("access_token_cookie")
     if authorization.startswith("Bearer "):
         token = authorization[7:]

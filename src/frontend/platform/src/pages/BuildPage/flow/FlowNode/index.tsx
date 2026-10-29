@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { toast } from '@bisheng/ui';
+import { Alert, toast } from '@bisheng/ui';
 import { LoadingIcon } from '@/components/bs-icons/loading';
 import { Card,CardContent } from '@/components/bs-ui/card';
 
@@ -309,9 +309,10 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                 {/* The Code node runs unsandboxed Python, so it ships switched off.
                     Say so here rather than letting the author find out from a failed run. */}
                 {node.type === 'code' && !appConfig.codeNodeEnabled && (
-                    <div className='px-4 py-2 text-xs text-orange-600 bg-orange-50 dark:bg-orange-950/40'>
-                        {t('node.code.disabledHint')}
-                    </div>
+                    <Alert
+                        type="warning"
+                        description={t('node.code.disabledHint')}
+                    />
                 )}
 
                 {/* body */}

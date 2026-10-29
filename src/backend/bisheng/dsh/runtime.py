@@ -20,9 +20,9 @@ async def read_policy(user_id: int):
         from bisheng.core.database import get_sync_db_session
 
         with get_sync_db_session() as session:
-            from bisheng.dsh.domain.repositories.subject_policy import DshSubjectPolicyRepository
+            from bisheng.dsh.domain.repositories.unified_policy import UnifiedPolicyRepository
 
-            policy = DshSubjectPolicyRepository(session).effective(user_id)
+            policy = UnifiedPolicyRepository(session).effective(user_id)
             return policy.model_copy(deep=True) if policy else None
 
     return await asyncio.to_thread(read)
@@ -55,6 +55,7 @@ class ModelRuntime:
     quota: QuotaRedis
     settings: object
     activation_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    audit: object | None = None
 
     async def activate(self):
         async with self.activation_lock:
@@ -71,15 +72,26 @@ class ModelRuntime:
             logger.exception("DSH quota storage is unavailable")
             raise DshQuotaUnavailableError() from None
 
-    async def complete(self, principal, request):
+    async def complete(
+        self, principal, request, *, request_id=None, audit_context=None, audit_callback=None, conversation=None
+    ):
         from bisheng.dsh.domain.services.access import principal_scope
 
         with principal_scope(principal):
             month = datetime.now(UTC).astimezone(ZoneInfo(self.settings.billing_timezone)).strftime("%Y-%m")
             await self.prepare_month(principal, month)
-            return await self.model.complete(principal, request)
+            return await self.model.complete(
+                principal,
+                request,
+                request_id=request_id,
+                audit_context=audit_context,
+                audit_callback=audit_callback,
+                conversation=conversation,
+            )
 
     async def close(self):
+        if self.audit is not None:
+            await self.audit.close()
         self.quota.topology.close()
         await self.quota.redis.aclose()
 
@@ -118,6 +130,10 @@ async def get_model_runtime(runtime) -> ModelRuntime:
 
     capabilities = desktop_model_capabilities
 
+    from bisheng.dsh.audit_runtime import ModelAuditRuntime
+    from bisheng.dsh.domain.services.model_display import read_display_names
+
+    audit = ModelAuditRuntime(config, redis)
     model = DshModelService(
         policy_reader=read_policy,
         model_loader=LLMService.get_dsh_model_snapshot,
@@ -126,7 +142,9 @@ async def get_model_runtime(runtime) -> ModelRuntime:
         usage=usage,
         now=lambda: datetime.now(UTC),
         billing_timezone=config.billing_timezone,
+        audit_factory=audit.capture,
+        display_names_reader=read_display_names,
     )
-    result = ModelRuntime(model, usage, quota, config)
+    result = ModelRuntime(model, usage, quota, config, audit=audit)
     runtime.models = result
     return result

@@ -1,11 +1,11 @@
-import { Button, SearchInput, notification } from '@bisheng/ui';
+import { Pagination, Button, SearchInput, notification } from '@bisheng/ui';
 import { Tag } from "@bisheng/ui";
 import { useSubjectTable } from "@/components/bs-comp/selectComponent/useSubjectTable";
 import { SubjectSearchStatus } from "@/components/bs-comp/selectComponent/SubjectSearchStatus";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import {
@@ -14,7 +14,7 @@ import {
   listTenantAdminsApi,
   revokeTenantAdminApi,
 } from "@/controllers/API/tenant";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import type { Tenant, TenantUser } from "@/types/api/tenant";
 import { displayTenantName } from "@/utils/tenantDisplayName";
 import { useCallback, useEffect, useState } from "react";
@@ -31,6 +31,7 @@ const isRootTenant = (tenant: Tenant) => tenant.id === 1;
 
 export function TenantUserDialog({ tenant, onClose }: Props) {
   const { t } = useTranslation("bs");
+  const paginationLocale = usePaginationLocale();
   const [adminIds, setAdminIds] = useState<Set<number>>(new Set());
   const rootTenant = isRootTenant(tenant);
 
@@ -57,7 +58,7 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
     if (rootTenant) return;
     listTenantAdminsApi(tenant.id)
       .then((res) => setAdminIds(new Set(res?.user_ids || [])))
-      .catch(() => setAdminIds(new Set()));
+      .catch(showApiError);
   }, [rootTenant, tenant.id]);
 
   useEffect(() => {
@@ -65,12 +66,10 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
   }, [reloadAdmins]);
 
   const handlePromoteAdmin = (userId: number) => {
-    captureAndAlertRequestErrorHoc(
-      grantTenantAdminApi(tenant.id, userId).then(() => {
+    grantTenantAdminApi(tenant.id, userId).then(() => {
         notification.open({ type: "success", title: String(t("updateSuccess") ?? ''), description: "" });
         reloadAdmins();
-      }),
-    );
+      }).catch(showApiError);
   };
 
   const handleRevokeAdmin = (userId: number) => {
@@ -78,13 +77,11 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
       title: t("tenant.revokeAdmin"),
       desc: t("tenant.confirmRevokeAdmin"),
       onOk: (next: () => void) => {
-        captureAndAlertRequestErrorHoc(
-          revokeTenantAdminApi(tenant.id, userId).then(() => {
+        return revokeTenantAdminApi(tenant.id, userId).then(() => {
             notification.open({ type: "success", title: String(t("updateSuccess") ?? ''), description: "" });
             reloadAdmins();
-          }),
-        );
-        next();
+            next();
+          });
       },
     });
   };
@@ -172,8 +169,8 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
         </div>
 
         <div className="flex items-center justify-between mt-4">
-          <AutoPagination
-            page={page}
+          <Pagination locale={paginationLocale} size="small" simple
+            current={page}
             pageSize={pageSize}
             total={total}
             onChange={(newPage: number) => setPage(newPage)}

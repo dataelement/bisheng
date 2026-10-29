@@ -1,0 +1,98 @@
+{
+  "date": "2026-10-23",
+  "reviewed_commit": "7b90271017b74f8c43075dd28e40d895462d6783",
+  "result": "NEEDS_FIX",
+  "independent_verdict": "REVISE",
+  "high": 2,
+  "medium": 3,
+  "design_confirmed": false,
+  "product_tests_executed": false,
+  "remote_mutations": false,
+  "canonical_designs_edited": false,
+  "findings": [
+    {
+      "id": "R1",
+      "severity": "high",
+      "feature": "F056",
+      "line": 18,
+      "title": "10,000 行/90 天硬限制违背已确认的全部导出",
+      "detail": "F056 AC-56 及原 AC-32 要求导出当前筛选的全部受授权记录。设计 §2、D13 把 10,001 行及超过 90 天的合法筛选直接拒绝，属于需求收窄，不能仅称作实现预算。应将内部批次做成有界，持久任务完成全部冻结选择；若要用户总量限制，须先提规格变更。",
+      "ac": [
+        "F056 AC-32",
+        "F056 AC-56"
+      ],
+      "origin": [
+        "critic B1",
+        "primary verification"
+      ]
+    },
+    {
+      "id": "R2",
+      "severity": "high",
+      "feature": "F054",
+      "line": 55,
+      "title": "OBO 配置错误提示与已确认规格不一致",
+      "detail": "F054 AC-70 已明确对原本有权者显示“本环境配置不完整，请联系平台管理员”；设计 D7 却要求通用“应用暂不可用”。应在原登录/租户/可见性判定之后，把 identity_config_incomplete 映射为确认过的配置提示，不暴露配置值。",
+      "ac": [
+        "F054 AC-70",
+        "F054 AC-71"
+      ],
+      "origin": [
+        "critic S3",
+        "primary verification"
+      ]
+    },
+    {
+      "id": "R3",
+      "severity": "medium",
+      "feature": "F055",
+      "line": 222,
+      "title": "密钥敏感项缺少从注入到全部日志/诊断路径的明确传递合同",
+      "detail": "现有 container_runner.redact 仅替换名称含 TOKEN/SECRET/KEY 等且值长至少 6 的环境值。PIN=1234 或普通名称下的长值均可绕过旧规则。设计只写“已知值原文脱敏”，未明确批准声明如何生成 operation 绑定敏感项以及 Docker 正式日志、legacy 日志、K8s 日志/启动失败、diagnostic_tail 落库前各消费者如何取得并使用。应统一敏感清单，先脱敏再截断/分行，并覆盖短值、换行/跨块、重叠值；不宣称防住应用主动编码外传。",
+      "ac": [
+        "F055 AC-68",
+        "F055 AC-79"
+      ],
+      "origin": [
+        "critic S1",
+        "primary verification"
+      ]
+    },
+    {
+      "id": "R4",
+      "severity": "medium",
+      "feature": "F055",
+      "line": 94,
+      "title": "部署密钥轮换后历史 request_id 的 HMAC 无法按现有合同验证",
+      "detail": "幂等摘要由可轮换 runtime_payload_key 派生，但维护方案只重加密业务密文与运行 payload。历史 mutation 仅存 HMAC，旧值已改/删时无法重新生成；同参历史重试会成为错误冲突或失去幂等保障。应选择独立稳定验证 key 或持久 key version + 旧 key 验证/保留策略，明确轮换/清理步骤。",
+      "ac": [
+        "F055 AC-77"
+      ],
+      "origin": [
+        "critic S2",
+        "primary verification"
+      ]
+    },
+    {
+      "id": "R5",
+      "severity": "medium",
+      "feature": "F055",
+      "line": 213,
+      "title": "路由生效与 applied_revision 的完成/恢复协议仍含未定选择",
+      "detail": "设计写“尽量同事务”，没有选定唯一完成点或给出跨事务重放步骤。现有 AppStateService.commit_runtime_delivery 在 op.stage=serving 时立即返回（658–659 行），并由 RuntimeProjectionService.activate 提交路由；若路由已提交而 F055 结果回调失败，沿用旧幂等早退可能不再补写 applied_revision/释放配置 guard，导致实际运行新值却长期显示 pending/unknown。应明确同一 UoW 的公开结果适配协议，或以 version/revision/operation/exec_ref 冻结事实幂等补齐的恢复路径；覆盖该崩溃点及 completed/serving 重试。这里是设计遗漏，不是已复现的产品缺陷。",
+      "ac": [
+        "F055 AC-76",
+        "F055 AC-77",
+        "F055 AC-86"
+      ],
+      "origin": [
+        "primary review"
+      ]
+    }
+  ],
+  "design_sha256": {
+    "F054": "71c7dd43cb35832e547f4893d092d52fb60bbf69e37c9fe58ab24bc5cce54cb3",
+    "F055": "d66add116486204bb2bfd653f8fa87d59c42b1472aa36835003e298af7bc5ef0",
+    "F056": "375bf364e0a585f66eac7015e0d8ef33a9b48fefbc8d0ce0a437cabf903f0644"
+  }
+}

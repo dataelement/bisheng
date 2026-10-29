@@ -9,13 +9,8 @@ import {
   DialogTitle,
 } from "@/components/bs-ui/dialog";
 import { Input } from "@bisheng/ui";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/bs-ui/select";
+import { Select } from "@bisheng/ui";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import {
   DiscoveredModel,
   DiscoveryConnection,
@@ -53,6 +48,7 @@ export function ModelDiscovery({
   onImport,
 }: ModelDiscoveryProps) {
   const { t } = useTranslation("model");
+  const selectLabels = useSelectLabels();
   const [source, setSource] = useState<DiscoverySource>("auto");
   const [options, setOptions] = useState<Record<string, string>>({});
   const [resultInfo, setResultInfo] = useState<DiscoveryResult | null>(null);
@@ -170,9 +166,13 @@ export function ModelDiscovery({
     } catch (failure: unknown) {
       if (version === requestVersion.current) {
         lastConnection.current = "";
-        const reason = (
-          failure as { response?: { data?: { data?: { reason?: string } } } }
-        )?.response?.data?.data?.reason;
+        const failureData = failure as {
+          data?: { reason?: string };
+          response?: { data?: { data?: { reason?: string } } };
+        };
+        const reason =
+          failureData?.data?.reason ??
+          failureData?.response?.data?.data?.reason;
         setRequiredReason(
           ["workspace", "credentials", "resource", "region"].includes(
             reason || "",
@@ -308,27 +308,23 @@ export function ModelDiscovery({
                 placeholder={t("model.searchDiscoveredModels")}
                 onChange={(event) => setKeyword(event.target.value)}
               />
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger
-                  aria-label={t("model.filterModelType")}
-                  className="w-40 shrink-0"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">
-                    {t("model.allModelTypes")}
-                  </SelectItem>
-                  {allowedTypes.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {t(`model.type_${type}`)}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="unknown">
-                    {t("model.unknownModelType")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <Select
+                {...selectLabels}
+                aria-label={t("model.filterModelType")}
+                className="w-40 shrink-0"
+                value={typeFilter}
+                onChange={(value) => {
+                  if (value) setTypeFilter(String(value));
+                }}
+                options={[
+                  { value: "all", label: t("model.allModelTypes") },
+                  ...allowedTypes.map((type) => ({
+                    value: type,
+                    label: t(`model.type_${type}`),
+                  })),
+                  { value: "unknown", label: t("model.unknownModelType") },
+                ]}
+              />
             </div>
             <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -459,32 +455,25 @@ export function ModelDiscovery({
                       !added &&
                       !unsupported ? (
                         <Select
-                          value={type || ""}
-                          onValueChange={(value) =>
-                            setTypes((previous) => ({
-                              ...previous,
-                              [model.model_name]: value as ModelType,
-                            }))
-                          }
-                        >
-                          <SelectTrigger
-                            aria-label={t("model.confirmModelTypeFor", {
-                              name: model.model_name,
-                            })}
-                            className="w-36 h-8"
-                          >
-                            <SelectValue
-                              placeholder={t("model.confirmModelType")}
-                            />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {allowedTypes.map((value) => (
-                              <SelectItem key={value} value={value}>
-                                {t(`model.type_${value}`)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          {...selectLabels}
+                          aria-label={t("model.confirmModelTypeFor", {
+                            name: model.model_name,
+                          })}
+                          className="w-36"
+                          placeholder={t("model.confirmModelType")}
+                          value={type || null}
+                          onChange={(value) => {
+                            if (value)
+                              setTypes((previous) => ({
+                                ...previous,
+                                [model.model_name]: value as ModelType,
+                              }));
+                          }}
+                          options={allowedTypes.map((value) => ({
+                            value,
+                            label: t(`model.type_${value}`),
+                          }))}
+                        />
                       ) : (
                         <span className="shrink-0 rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
                           {t(

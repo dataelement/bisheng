@@ -233,26 +233,18 @@ npm start -- --host 0.0.0.0   # 端口 3001，API 代理到 localhost:7860
 
 ## 远程开发工作流
 
-项目支持本地编辑、远程运行的开发模式。代码在本地 Mac 编辑，通过 rsync 同步到远程服务器执行。
+个人开发机用「git 检出 + systemd」部署：目标机上的 `/opt/bisheng` 是真实的 git 检出，部署就是把它收敛到分支头再重启服务，`git rev-parse HEAD` 就是这台机器的版本。
 
-### 同步脚本
+旧的 rsync 同步脚本 `bisheng-sync.sh`（个人本地文件，已被 `.gitignore` 排除）**不要再用来部署**。rsync 只覆盖有改动的文件，目标机上更早落后的文件和已删除的文件都不会被处理，「目标机是否等于某个提交」无法回答。
 
-项目根目录的 `bisheng-sync.sh` 提供三种同步模式：
+### 114（192.168.106.114）
 
-| 命令 | 说明 |
-|------|------|
-| `./bisheng-sync.sh up` | 本地代码推送到远程服务器 |
-| `./bisheng-sync.sh down` | 远程代码拉取到本地 |
-| `./bisheng-sync.sh watch` | 监听本地文件变化，自动推送到远程 |
-
-### 日常流程
-
-1. 终端 A 常驻 `./bisheng-sync.sh watch`，监听文件变化自动同步
-2. 本地 IDE（Claude Code / Cursor 等）编辑 `/Users/lilu/Projects/bisheng` 下的代码
-3. 改动自动推送到远程服务器，远程进程加载新代码
-4. 浏览器通过 `http://192.168.106.114:8860` 访问（Nginx 反向代理）
-
-注意：如果未开启 watch 模式，修改代码后需手动执行 `./bisheng-sync.sh up` 推送到远程。
+| 项 | 内容 |
+|----|------|
+| 部署 | `bash /opt/bisheng-ops/deploy.sh`（默认分支 `feat/3.0.0-vibe`）。脚本和运维说明在独立的运维仓 `/opt/bisheng-ops/`，不进产品仓，先读它的 README |
+| 后端 | 6 个 systemd unit（`bisheng-api`、4 个 `bisheng-celery-*`、`bisheng-linsight-worker`）+ `bisheng.target` |
+| 入口 | `http://192.168.106.114:4101/`（管理端，vite 开发服务）、`/workspace/`（用户端静态包）、`/apps/<slug>/`（托管应用） |
+| 托管应用运行时层 | 2026-10-27 起以容器运行（协议 v2 + 宿主隔离），`deploy.sh` 不更新它；换镜像的步骤见运维仓 README。为什么不能再用 systemd 形态见 [14-app-factory-deployment.md](14-app-factory-deployment.md) 「形态二」 |
 
 ## Celery Worker 启动模式
 
@@ -373,8 +365,22 @@ ownership）。横向扩容时按下表核对。
 [C8](../constitution.md#c8-no-shared-state-on-the-local-filesystem)。单机 compose 下 `backend` 与
 `backend_worker` 共享同一个 `/app/data`，会让「跨进程传文件」看起来能用——这是巧合，不是保证。
 
+## 备份
+
+权威存储只有三处，备份也只看这三处：**MySQL / DM8**（全部业务元数据）、**MinIO**（知识库文件、
+灵思技能 bundle、托管应用代码包等对象）、**Redis**（缓存与队列，可丢，重启后自愈）。节点本地磁盘
+（`/app/data`、进程缓存目录）不在备份范围内——它们是缓存，见上文「多节点部署」。
+
+装了应用工场运行时层的环境**多一处**：托管应用的 SQLite 库放在 runtime-manager 所在机器的本机磁盘
+（`{data_root}/apps/{app_id}/db/`），既不在 MySQL 也不在 MinIO 里，平台本体的备份**覆盖不到它**。
+它的快照方法（WAL 库不能裸 tar）、对象存储里哪些前缀属于托管应用、以及恢复顺序，见
+[`14-app-factory-deployment.md`](14-app-factory-deployment.md) 的「备份与恢复」一节。
+
 ## 相关文档
 
 - 系统架构总览 -- `docs/architecture/01-architecture-overview.md`
 - 配置系统详解 -- Settings 类定义在 `src/backend/bisheng/core/config/settings.py`
 - 开发指南 -- `docs/architecture/09-development-guide.md`
+- **应用工场部署与配置** -- `docs/architecture/14-app-factory-deployment.md`（v3.0 新增的托管应用
+  运行时层：runtime-manager / app-proxy 两个服务、`/apps/` 的 nginx location、`app_runtime` 与
+  `open_platform` 配置项、⚠️ 加键与发版的先后顺序。**这一层默认不安装**，不装时本文其余内容不受影响）

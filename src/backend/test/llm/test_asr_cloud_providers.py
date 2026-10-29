@@ -15,8 +15,9 @@ import pytest
 from fastapi import HTTPException
 from websockets.exceptions import InvalidStatus
 
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.core.ai.asr import realtime, speech_cloud, volcengine
-from bisheng.core.ai.asr.capabilities import realtime_protocol
+from bisheng.core.ai.asr.capabilities import realtime_protocol, should_promote_legacy_asr
 from bisheng.llm.domain.llm.asr import BishengASR, is_asr_provider_supported
 from bisheng.utils.mask_data import JsonFieldMasker
 
@@ -244,11 +245,13 @@ async def test_save_rejects_a_resource_the_speech_credentials_cannot_use(monkeyp
         raise volcengine.SpeechAccessRejected("rejected")
 
     monkeypatch.setattr(volcengine.VolcengineRealtimeASRClient, "verify_access", reject)
-    speech = SimpleNamespace(model_type="asr", model_name="bigmodel")
+    speech = SimpleNamespace(model_type="asr_rt", model_name="bigmodel")
     with pytest.raises(HTTPException) as caught:
         await LLMService._ensure_volcengine_speech("volcengine", VOLC_CONFIG, [speech])
     assert caught.value.status_code == 10804
 
+    file_typed = SimpleNamespace(model_type="asr", model_name="bigmodel")
+    await LLMService._ensure_volcengine_speech("volcengine", VOLC_CONFIG, [file_typed])
     chat = SimpleNamespace(model_type="llm", model_name="doubao")
     await LLMService._ensure_volcengine_speech("volcengine", VOLC_CONFIG, [chat])
 
@@ -275,10 +278,23 @@ async def test_factory_and_capability_match(provider, model, config, cls):
     assert realtime_protocol(provider, model)
     assert is_asr_provider_supported(provider)
     server = SimpleNamespace(type=provider, config=config)
-    instance = await BishengASR.init_asr_client(SimpleNamespace(model_name=model, config=None), server)
+    instance = await BishengASR.init_asr_client(
+        SimpleNamespace(model_name=model, model_type="asr_rt", config=None), server
+    )
     assert isinstance(instance, cls) and isinstance(instance, realtime.RealtimeASRClient)
-    with pytest.raises(ValueError):
-        await BishengASR.init_asr_client(SimpleNamespace(model_name="unsupported", config=None), server)
+    unknown = SimpleNamespace(model_name="unsupported", model_type="asr_rt", config=None)
+    if provider == "volcengine":
+        with pytest.raises(ValueError):
+            await BishengASR.init_asr_client(unknown, server)
+    else:
+        built = await BishengASR.init_asr_client(unknown, server)
+        assert built.model == "unsupported"
+    legacy = await BishengASR.init_asr_client(SimpleNamespace(model_name=model, model_type="asr", config=None), server)
+    assert isinstance(legacy, cls)
+    with pytest.raises(ValueError, match="no file ASR client"):
+        await BishengASR.init_asr_client(
+            SimpleNamespace(model_name="unsupported", model_type="asr", config=None), server
+        )
     assert realtime_protocol(provider, "unsupported") is None
 
 
@@ -416,3 +432,186 @@ async def test_cloud_file_model_override_preserves_credentials(
     assert transcript.text == "Final."
     assert client.model == model
     assert socket.closed
+
+
+def test_legacy_promotion_follows_server_type():
+    assert should_promote_legacy_asr("tencent", "16k_zh", "asr")
+    assert should_promote_legacy_asr("qianfan", "1537", "asr")
+    assert should_promote_legacy_asr("volcengine", "bigmodel", "asr")
+    assert should_promote_legacy_asr("qwen", "paraformer-realtime-v2", "asr")
+    assert not should_promote_legacy_asr("openai", "16k_zh", "asr")
+    assert not should_promote_legacy_asr("tencent", "new-engine", "asr")
+    assert not should_promote_legacy_asr("tencent", "16k_zh", "asr_rt")
+
+
+def test_tencent_unknown_engine_is_the_url_parameter():
+    client = speech_cloud.TencentRealtimeASRClient("new-engine", TENCENT_CONFIG)
+    query = dict(
+        parse_qsl(
+            urlsplit(
+                speech_cloud.tencent_url(
+                    client.app_id, client.secret_id, client.secret_key, client.model, "voice", 1, 2
+                )
+            ).query
+        )
+    )
+    assert query["engine_model_type"] == "new-engine"
+    with pytest.raises(ValueError):
+        speech_cloud.TencentRealtimeASRClient("  ", TENCENT_CONFIG)
+
+
+async def test_baidu_non_numeric_engine_fails_when_the_session_starts(monkeypatch):
+    monkeypatch.setattr(speech_cloud, "connect", AsyncMock())
+    client = speech_cloud.BaiduRealtimeASRClient("not-a-pid", BAIDU_CONFIG)
+    with pytest.raises(ValueError):
+        await client.create_connection().start()
+    with pytest.raises(ValueError):
+        speech_cloud.BaiduRealtimeASRClient("", BAIDU_CONFIG)
+
+
+async def test_get_bisheng_asr_builds_an_unlisted_tencent_engine(monkeypatch):
+    model = SimpleNamespace(id=21, model_name="new-engine", model_type="asr_rt", online=True, config=None)
+    server = SimpleNamespace(type="tencent", name="Tencent", config=TENCENT_CONFIG)
+
+    async def lookup(_model_id):
+        return model, server
+
+    monkeypatch.setattr(BishengASR, "get_model_server_info", lookup)
+    instance = await BishengASR.get_bisheng_asr(
+        model_id=21,
+        ignore_online=True,
+        app_id=ApplicationTypeEnum.MODEL_TEST.value,
+        app_name=ApplicationTypeEnum.MODEL_TEST.value,
+        app_type=ApplicationTypeEnum.MODEL_TEST,
+        user_id=1,
+    )
+    assert instance.asr.model == "new-engine"
+
+
+async def test_probe_invokes_realtime_asr(monkeypatch):
+    from bisheng.llm.domain.services.llm import LLMService
+
+    fake = AsyncMock()
+    fake.ainvoke = AsyncMock(return_value="hello")
+    getter = AsyncMock(return_value=fake)
+    monkeypatch.setattr("bisheng.llm.domain.services.llm.BishengASR.get_bisheng_asr", getter)
+    await LLMService._invoke_model_probe(SimpleNamespace(id=21, model_type="asr_rt", model_name="new-engine"), {})
+    getter.assert_awaited()
+    fake.ainvoke.assert_awaited()
+
+
+async def test_empty_workbench_slot_accepts_realtime_asr(monkeypatch):
+    from bisheng.llm.domain.schemas import WorkbenchModelConfig
+    from bisheng.llm.domain.services.llm import LLMService
+
+    saved = {}
+
+    async def get_workbench():
+        return WorkbenchModelConfig()
+
+    async def update(_user, workbench, _tasks):
+        saved["id"] = workbench.asr_model.id
+
+    monkeypatch.setattr(LLMService, "get_workbench_llm", get_workbench)
+    monkeypatch.setattr(LLMService, "update_workbench_llm", update)
+    await LLMService.set_default_model(SimpleNamespace(id=9, model_type="asr_rt", model_name="16k_zh"))
+    assert saved["id"] == "9"
+
+
+async def test_file_typed_tencent_model_is_not_kept(monkeypatch):
+    from bisheng.llm.domain.models.llm_server import LLMDao
+    from bisheng.llm.domain.schemas import LLMModelCreateReq, LLMServerCreateReq
+    from bisheng.llm.domain.services.llm import LLMService
+
+    deleted = {}
+
+    async def no_server(_name):
+        return None
+
+    async def insert(server, models, **_kwargs):
+        server.id = 7
+        return server
+
+    async def listed(_server_id, operator=None):
+        return SimpleNamespace(
+            id=7,
+            tenant_id=1,
+            models=[SimpleNamespace(id=21, model_name="16k_zh", model_type="asr")],
+        )
+
+    async def delete(server_id):
+        deleted["id"] = server_id
+
+    async def lookup(_model_id):
+        return (
+            SimpleNamespace(id=21, model_name="16k_zh", model_type="asr", online=True, config=None),
+            SimpleNamespace(type="tencent", name="Tencent", config=TENCENT_CONFIG),
+        )
+
+    monkeypatch.setattr(LLMDao, "aget_server_by_name", no_server)
+    monkeypatch.setattr(LLMDao, "ainsert_server_with_models", insert)
+    monkeypatch.setattr(LLMDao, "adelete_server_by_id", delete)
+    monkeypatch.setattr(LLMService, "get_one_llm", listed)
+    monkeypatch.setattr(BishengASR, "get_model_server_info", lookup)
+    server = LLMServerCreateReq(
+        name="tencent-speech",
+        type="tencent",
+        config=TENCENT_CONFIG,
+        models=[LLMModelCreateReq(name="Chinese", model_name="16k_zh", model_type="asr")],
+    )
+    with pytest.raises(HTTPException):
+        await LLMService.add_llm_server(SimpleNamespace(), SimpleNamespace(user_id=1), server)
+    assert deleted["id"] == 7
+
+
+async def test_add_checks_speech_by_calling_the_provider(monkeypatch):
+    from bisheng.llm.domain.models.llm_server import LLMDao
+    from bisheng.llm.domain.schemas import LLMModelCreateReq, LLMServerCreateReq
+    from bisheng.llm.domain.services.llm import LLMService
+
+    deleted = {}
+    called = {}
+
+    async def no_server(_name):
+        return None
+
+    async def insert(server, models, **_kwargs):
+        server.id = 8
+        return server
+
+    async def listed(_server_id, operator=None):
+        return SimpleNamespace(
+            id=8,
+            tenant_id=1,
+            models=[SimpleNamespace(id=22, model_name="new-engine", model_type="asr_rt")],
+        )
+
+    async def delete(server_id):
+        deleted["id"] = server_id
+
+    async def lookup(_model_id):
+        return (
+            SimpleNamespace(id=22, model_name="new-engine", model_type="asr_rt", online=True, config=None),
+            SimpleNamespace(type="tencent", name="Tencent", config=TENCENT_CONFIG),
+        )
+
+    async def reject(self, _audio, **_kwargs):
+        called["provider"] = True
+        raise RuntimeError("vendor rejected")
+
+    monkeypatch.setattr(LLMDao, "aget_server_by_name", no_server)
+    monkeypatch.setattr(LLMDao, "ainsert_server_with_models", insert)
+    monkeypatch.setattr(LLMDao, "adelete_server_by_id", delete)
+    monkeypatch.setattr(LLMService, "get_one_llm", listed)
+    monkeypatch.setattr(BishengASR, "get_model_server_info", lookup)
+    monkeypatch.setattr(BishengASR, "ainvoke", reject)
+    server = LLMServerCreateReq(
+        name="tencent-speech-rt",
+        type="tencent",
+        config=TENCENT_CONFIG,
+        models=[LLMModelCreateReq(name="New", model_name="new-engine", model_type="asr_rt")],
+    )
+    with pytest.raises(HTTPException):
+        await LLMService.add_llm_server(SimpleNamespace(), SimpleNamespace(user_id=1), server)
+    assert called["provider"] is True
+    assert deleted["id"] == 8

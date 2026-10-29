@@ -1,4 +1,4 @@
-import { Button, SearchInput, toast, notification } from '@bisheng/ui';
+import { Button, Dropdown, DropdownItem, DropdownSeparator, SearchInput, Select, toast, notification } from '@bisheng/ui';
 import { KnowledgeLibraryDialog } from "./components/KnowledgeLibraryDialog";
 // @ts-strict-ignore
 import { Outlined } from "bisheng-icons";
@@ -21,18 +21,18 @@ import { KnowledgeTooltip } from "./components/KnowledgeTooltip";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { useLazyResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Select,SelectContent,SelectItem,SelectTrigger } from "@/components/bs-ui/select";
-import { TableHeadEnumFilter } from "@/components/bs-ui/select/filter";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
 
 
 
 import { useContext,useEffect,useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import LoadMore from "../../components/bs-comp/loadMore";
 import { userContext } from "../../contexts/userContext";
 import { copyLibDatabase,deleteFileLib,readFileLibDatabase } from "../../controllers/API";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { showApiError } from "../../controllers/request";
 import { useInfiniteCursorTable } from "../../util/hook";
 import { FileAbnormalStatusCell } from "./components/FileAbnormalStatusCell";
 
@@ -60,7 +60,11 @@ interface KnowledgeListRow {
 }
 
 const doing = {} // Record knowledge bases being copied
-export default function KnowledgeFile() {
+interface KnowledgeFileProps {
+    toolbarTarget?: HTMLDivElement | null;
+}
+
+export default function KnowledgeFile({ toolbarTarget }: KnowledgeFileProps) {
     const [open, setOpen] = useState(false);
     const { user } = useContext(userContext);
 
@@ -71,6 +75,8 @@ export default function KnowledgeFile() {
     // New: Control Select dropdown state to avoid occasional popup issues
     const [selectOpenId, setSelectOpenId] = useState<string | null>(null);
     const [modalKey, setModalKey] = useState(0); // New: Used to force re-render of modal
+    const [fileStatusFilter, setFileStatusFilter] = useState<string | null>(null);
+    const selectLabels = useSelectLabels();
     // Permission management state
     const [permDialogOpen, setPermDialogOpen] = useState(false);
     const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
@@ -158,10 +164,10 @@ export default function KnowledgeFile() {
             title: t('prompt'),
             desc: t('lib.confirmDeleteLibrary', { ns: 'bs' }),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteFileLib(id).then(res => {
+                return deleteFileLib(id).then(() => {
                     reload();
-                }));
-                next()
+                    next()
+                });
             },
         })
     }
@@ -206,6 +212,10 @@ export default function KnowledgeFile() {
     }, [])
 
     const { t, i18n } = useTranslation('knowledge');
+    const fileStatusFilterOptions = [
+        { label: t('fileStatusFilterAll'), value: 'all' },
+        { label: t('fileStatusAbnormal'), value: 'abnormal' },
+    ];
     useEffect(() => {
         i18n.loadNamespaces('knowledge');
     }, [i18n]);
@@ -245,10 +255,11 @@ export default function KnowledgeFile() {
         doing[elem.id] = true;
 
         try {
-            await captureAndAlertRequestErrorHoc(copyLibDatabase(elem.id, newName));
+            await copyLibDatabase(elem.id, newName);
             reload();
         } catch (error) {
-            toast.show({ type: 'error', message: String(t('copyFailed') ?? '') });
+            delete doing[elem.id];
+            showApiError(error);
         } finally {
             setCopyLoadingId(null);
             setSelectOpenId(null);
@@ -263,16 +274,60 @@ export default function KnowledgeFile() {
         console.log("modalKey:", modalKey);
     }, [settingsOpen, currentSettingLib, modalKey]);
 
+    const renderRowMenu = (el: KnowledgeListRow) => {
+        const resourceId = String(el.id);
+        if (rowActionsLoading[resourceId]) {
+            return <DropdownItem disabled icon={<Outlined.Loading className="animate-spin" />}>
+                {t('knowledgeRowActions.loading', { ns: 'permission' })}
+            </DropdownItem>;
+        }
+        if (!hasRowActions(el)) {
+            return <DropdownItem disabled>{t('knowledgeRowActions.empty', { ns: 'permission' })}</DropdownItem>;
+        }
+        const hasLeadingItems = canManageKb(el) || canCopy(el) || canEdit(el);
+        return <>
+            {canManageKb(el) && (
+                <DropdownItem icon={<Shield />} onSelect={() => {
+                    setPermTarget({ id: resourceId, name: el.name });
+                    setPermDialogOpen(true);
+                    setModalKey(prev => prev + 1);
+                }}>
+                    {t('managePermission', { ns: 'permission' })}
+                </DropdownItem>
+            )}
+            {canCopy(el) && (
+                <DropdownItem icon={<Outlined.Copy />} disabled={copyLoadingId === resourceId} onSelect={() => handleCopy(el)}>
+                    {t('lib.copy', { ns: 'bs' })}
+                </DropdownItem>
+            )}
+            {canEdit(el) && (
+                <DropdownItem icon={<Outlined.Setting />} onSelect={() => handleOpenSettings(el)}>
+                    {t('settings')}
+                </DropdownItem>
+            )}
+            {canDelete(el) && <>
+                {hasLeadingItems && <DropdownSeparator />}
+                <DropdownItem danger icon={<Outlined.Delete />} onSelect={() => handleDelete(el.id)}>
+                    {t('delete')}
+                </DropdownItem>
+            </>}
+        </>;
+    };
+
+    const toolbar = (
+        <div className="flex items-center justify-end gap-4">
+            <SearchInput placeholder={t('lib.searchPlaceholder', { ns: 'bs' })} onChange={(e) => search(e.target.value)} />
+            {canCreateLibrary && <Button onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>}
+        </div>
+    );
+
     return (
         <div className="relative">
+            {toolbarTarget ? createPortal(toolbar, toolbarTarget) : toolbarTarget === undefined ? toolbar : null}
             {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <Outlined.Loading  className="size-4 animate-spin"/>
             </div>}
             <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-20">
-                <div className="flex justify-end gap-4 items-center absolute right-0 top-[-40px]">
-                    <SearchInput placeholder={t('lib.searchPlaceholder', { ns: 'bs' })} onChange={(e) => search(e.target.value)} />
-                    {canCreateLibrary && <Button onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>}
-                </div>
                 <Table noScroll>
                     <TableHeader>
                         <TableRow>
@@ -282,14 +337,26 @@ export default function KnowledgeFile() {
                             <TableHead>
                                 <div className="flex items-center">
                                     {t('fileStatus')}
-                                    <TableHeadEnumFilter
-                                        options={[
-                                            { label: t('fileStatusFilterAll'), value: 'all' },
-                                            { label: t('fileStatusAbnormal'), value: 'abnormal' },
-                                        ]}
+                                    <Select
+                                        {...selectLabels}
+                                        options={fileStatusFilterOptions}
+                                        value={fileStatusFilter}
                                         onChange={(value) => {
-                                            filterData({ has_abnormal: value === 'abnormal' ? true : undefined })
+                                            const next = value == null ? null : String(value);
+                                            setFileStatusFilter(next);
+                                            filterData({ has_abnormal: next === 'abnormal' ? true : undefined })
                                         }}
+                                        trigger={
+                                            <button
+                                                type="button"
+                                                className="ml-3 inline-flex outline-none"
+                                                aria-label={t('fileStatusFilterLabel', {
+                                                    value: fileStatusFilterOptions.find(option => option.value === fileStatusFilter)?.label ?? t('fileStatusFilterAll'),
+                                                })}
+                                            >
+                                                <Outlined.Filter size={16} aria-hidden className={fileStatusFilter ? 'text-primary' : 'text-gray-400'} />
+                                            </button>
+                                        }
                                     />
                                 </div>
                             </TableHead>
@@ -352,114 +419,39 @@ export default function KnowledgeFile() {
 
                                 {showOperationsColumn && <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-2">
-                                        {(isLibraryBusy(el) || canReadRow(el)) && <Select
-                                            key={`${el.id}-${modalKey}`}
-                                            open={selectOpenId === String(el.id)}
-                                            onOpenChange={(isOpen) => void handleRowMenuOpenChange(el, isOpen)}
-                                            onValueChange={(selectedValue) => {
-                                                setSelectOpenId(null);
-                                                console.log("Selected value:", selectedValue, "for lib:", el.id);
-
-                                                switch (selectedValue) {
-                                                    case 'permission':
-                                                        setPermTarget({ id: String(el.id), name: el.name });
-                                                        setPermDialogOpen(true);
-                                                        setModalKey(prev => prev + 1);
-                                                        break;
-                                                    case 'copy':
-                                                        canCopy(el) && handleCopy(el);
-                                                        break;
-                                                    case 'set':
-                                                        canEdit(el) && handleOpenSettings(el);
-                                                        break;
-                                                    case 'delete':
-                                                        canDelete(el) && handleDelete(el.id);
-                                                        break;
-                                                }
-                                            }}
-                                        >
-                                            <SelectTrigger
-                                                showIcon={false}
-                                                disabled={copyLoadingId === String(el.id)}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                }}
-                                                className="size-10 px-2 bg-transparent border-none shadow-none hover:bg-gray-300 flex items-center justify-center duration-200 relative"
-                                            >
-                                                {[KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state) ? (
-                                                    <>
-                                                        <Outlined.Loading className="animate-spin animate-spin" />
-                                                        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white text-gray-800 text-xs px-2 py-1 rounded whitespace-nowrap border border-gray-300 shadow-sm">
-                                                            {t('copying')}
-                                                        </div>
-                                                    </>
-                                                ) : (
-                                                    <Outlined.More size={24} color="#a69ba2" strokeWidth={1.75} />
-                                                )}
-                                            </SelectTrigger>
-                                            <SelectContent
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                }}
-                                                className="z-50 overflow-visible"
-                                            >
-                                                {rowActionsLoading[String(el.id)] && (
-                                                    <SelectItem showIcon={false} value="loading" disabled>
-                                                        <div className="flex gap-2 items-center">
-                                                            <Outlined.Loading className="animate-spin w-4 h-4 animate-spin" />
-                                                            {t('knowledgeRowActions.loading', { ns: 'permission' })}
-                                                        </div>
-                                                    </SelectItem>
-                                                )}
-                                                {!rowActionsLoading[String(el.id)] && canManageKb(el) && (
-                                                    <SelectItem showIcon={false} value="permission">
-                                                        <div className="flex gap-2 items-center">
-                                                            <Shield className="w-4 h-4" />
-                                                            {t('managePermission', { ns: 'permission' })}
-                                                        </div>
-                                                    </SelectItem>
-                                                )}
-                                                {!rowActionsLoading[String(el.id)] && canCopy(el) && (
-                                                    <SelectItem
-                                                        showIcon={false}
-                                                        value="copy"
-                                                        disabled={copyLoadingId === String(el.id)}
+                                        {(isLibraryBusy(el) || canReadRow(el)) && (
+                                            // Menu clicks bubble through the portal; keep them off the row's onClick.
+                                            <span className="contents" onClick={(e) => e.stopPropagation()}>
+                                                <Dropdown
+                                                    key={`${el.id}-${modalKey}`}
+                                                    align="end"
+                                                    disabled={copyLoadingId === String(el.id)}
+                                                    open={selectOpenId === String(el.id)}
+                                                    onOpenChange={(isOpen) => void handleRowMenuOpenChange(el, isOpen)}
+                                                    menu={renderRowMenu(el)}
+                                                >
+                                                    <Button
+                                                        variant="text"
+                                                        color="default"
+                                                        size="large"
+                                                        iconOnly
+                                                        aria-label={t('more', { ns: 'bs' })}
+                                                        className="relative"
                                                     >
-                                                        <div className="flex gap-2 items-center" >
-                                                            <Outlined.Copy className="w-4 h-4" />
-                                                            {t('lib.copy', { ns: 'bs' })}
-                                                        </div>
-                                                    </SelectItem>
-                                                )}
-                                                {!rowActionsLoading[String(el.id)] && canEdit(el) && (
-                                                    <SelectItem
-                                                        value="set"
-                                                        showIcon={false}
-                                                    >
-                                                        <div className="flex gap-2 items-center">
-                                                            <Outlined.Setting className="w-4 h-4" />
-                                                            {t('settings')}
-                                                        </div>
-                                                    </SelectItem>
-                                                )}
-                                                {!rowActionsLoading[String(el.id)] && canDelete(el) && (
-                                                    <SelectItem
-                                                        value="delete"
-                                                        showIcon={false}
-                                                    >
-                                                        <div className="flex gap-2 items-center">
-                                                            <Outlined.Delete className="w-4 h-4" />
-                                                            {t('delete')}
-                                                        </div>
-                                                    </SelectItem>
-                                                )}
-                                                {!rowActionsLoading[String(el.id)] && !hasRowActions(el) && (
-                                                    <SelectItem showIcon={false} value="empty" disabled>
-                                                        {t('knowledgeRowActions.empty', { ns: 'permission' })}
-                                                    </SelectItem>
-                                                )}
-                                            </SelectContent>
-                                        </Select>}
+                                                        {[KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state) ? (
+                                                            <>
+                                                                <Outlined.Loading className="animate-spin" />
+                                                                <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white text-gray-800 text-xs px-2 py-1 rounded whitespace-nowrap border border-gray-300 shadow-sm">
+                                                                    {t('copying')}
+                                                                </div>
+                                                            </>
+                                                        ) : (
+                                                            <Outlined.More />
+                                                        )}
+                                                    </Button>
+                                                </Dropdown>
+                                            </span>
+                                        )}
                                     </div>
                                 </TableCell>}
                             </TableRow>
@@ -472,12 +464,6 @@ export default function KnowledgeFile() {
                     keeps the footer always-visible and stalls pagination. */}
                 {hasMore && <LoadMore onScrollLoad={loadMore} />}
             </div>
-            <div className="bisheng-table-footer px-6 bg-background-login">
-                <div className="flex items-center gap-2">
-                    <p className="desc">{t('lib.libraryCollection', { ns: 'bs' })}</p>
-                </div>
-            </div>
-
             {/* Create modal */}
             <KnowledgeLibraryDialog
                 datalist={datalist}

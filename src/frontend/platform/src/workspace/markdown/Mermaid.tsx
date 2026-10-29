@@ -1,4 +1,6 @@
 // @ts-strict-ignore
+import { loadDiagramLibrary } from '@bisheng/diagram-runtime';
+import { useTranslation } from "react-i18next";
 import { Button } from '@bisheng/ui';
 
 import type React from "react"
@@ -35,31 +37,11 @@ function normalizeMindmapIndent(src: string): string {
 }
 
 // 动态加载 mermaid
-export const loadScript = async (fileName) => {
-    if (window[fileName]) {
-        return window[fileName]
-    }
-
-    const script = document.createElement("script")
-    script.src = `${__APP_ENV__.BASE_URL}/${fileName}.min.js`
-    script.type = "module"
-
-    return new Promise((resolve, reject) => {
-        script.onload = () => {
-            // 等待 mermaid 初始化
-            const checkMermaid = setInterval(() => {
-                if (window[fileName]) {
-                    clearInterval(checkMermaid)
-                    resolve(window[fileName])
-                }
-            }, 100)
-        }
-        script.onerror = reject
-        document.head.appendChild(script)
-    })
-}
+export const loadScript = (fileName: 'echarts' | 'mermaid') =>
+    loadDiagramLibrary(fileName, { baseUrl: __APP_ENV__.BASE_URL });
 
 export default function MermaidBlock({ children }: { children: string }) {
+    const { t } = useTranslation("shared");
     const ref = useRef<HTMLDivElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const [mode, setMode] = useState<"chart" | "code">("chart")
@@ -211,10 +193,10 @@ export default function MermaidBlock({ children }: { children: string }) {
                 <div className="flex items-center justify-between p-2 relative z-10 bg-muted">
                     <div className="flex gap-1 bg-background rounded-md">
                         <Button onClick={() => setMode("chart")} variant={mode === "chart" ? "default" : "ghost"} className="text-xs h-8">
-                            图表
+                            {t("app_chat.chart")}
                         </Button>
                         <Button onClick={() => setMode("code")} variant={mode === "code" ? "default" : "ghost"} className="text-xs h-8">
-                            代码
+                            {t("app_chat.code")}
                         </Button>
                     </div>
                     {mode === "chart" && (
@@ -228,7 +210,7 @@ export default function MermaidBlock({ children }: { children: string }) {
                             <Separator orientation="vertical" className="h-4 mx-1" />
                             <Button onClick={handleDownload} variant="text" className="text-xs h-8" color="default">
                                 <DownloadIcon size={16} />
-                                下载
+                                {t("app_chat.download")}
                             </Button>
                         </div>
                     )}
@@ -236,7 +218,7 @@ export default function MermaidBlock({ children }: { children: string }) {
                         <div className="flex items-center">
                             <Button onClick={handleCopy} variant="text" className="text-xs h-8" color="default">
                                 <Copy size={16} />
-                                {copySuccess ? "已复制" : "复制"}
+                                {copySuccess ? t("app_chat.copied") : t("app_chat.copy_code")}
                             </Button>
                         </div>
                     )}

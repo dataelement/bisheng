@@ -24,7 +24,7 @@ token:
   existingSecretKey: token
 
 env:
-  SANDBOX_MAX_SESSIONS: "2"
+  SANDBOX_MAX_SESSIONS: "50"
   SANDBOX_ENABLE_UID_ISOLATION: "true"
   SANDBOX_LEASE_TTL_S: "900"
   SANDBOX_LOG_LEVEL: INFO
@@ -53,8 +53,9 @@ podSecurityContext: {}
 # Who may call POST /v1/sessions. Uses the automatic namespace name label.
 networkPolicy:
   enabled: true
-  # Deny all egress (user code shares the runner netns).
-  denyEgress: true
+  # User code shares the runner netns. Egress is allowed so the sandbox
+  # can reach the public internet. Ingress stays limited to platform pods.
+  denyEgress: false
   allowFrom:
     - namespaceSelector:
         matchLabels:

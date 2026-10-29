@@ -88,8 +88,10 @@ MAX_UNPACKED_SIZE = 500 * _MB
 # materialize guards check this ceiling, not the live setting: a bundle accepted under
 # a larger setting has to stay readable after an admin lowers it.
 MAX_UNPACKED_CEILING = 1024 * _MB
-# Personal uploads ignore the tenant's larger 系统配置 caps. These are the fixed
-# ceilings from the personal-skill contract.
+# Personal uploads ignore the tenant's 系统配置 caps. Confirmed 2026-09-14:
+# one file up to 50 MiB (52,428,800 bytes), unpacked contents up to 200 MiB
+# (209,715,200 bytes), SKILL.md itself up to 1 MiB. Equal to a limit passes.
+# The 200 MiB figure on the dialog is the account quota, not this per-file cap.
 PERSONAL_UPLOAD_MAX_BYTES = 50 * _MB
 PERSONAL_UNPACKED_MAX_BYTES = 200 * _MB
 PERSONAL_SKILL_MD_MAX_BYTES = 1 * _MB
@@ -392,14 +394,21 @@ async def accept_skill_upload(
     lower = (filename or "").lower()
     if lower.endswith(".md"):
         kind = "md"
-    elif lower.endswith((".zip", ".skill")):
+    elif lower.endswith(".zip"):
         kind = "zip"
+    elif lower.endswith(".skill"):
+        # Browsers have no MIME for this extension and often send text/plain
+        # or another generic type. The bytes decide whether it is a zip.
+        kind = "skill"
     else:
         raise SkillValidationError(msg="unsupported file type: expecting .md, .zip or .skill")
 
     mime = _declared_content_type(content_type)
     if kind == "md":
         if mime not in _MD_CONTENT_TYPES or _looks_like_zip(data):
+            raise SkillTypeMismatchError()
+    elif kind == "skill":
+        if not _looks_like_zip(data):
             raise SkillTypeMismatchError()
     elif mime not in _ZIP_CONTENT_TYPES or not _looks_like_zip(data):
         raise SkillTypeMismatchError()

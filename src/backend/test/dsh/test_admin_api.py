@@ -35,8 +35,6 @@ async def test_management_routes_use_verified_actor_and_reject_body_spoofing():
     app.dependency_overrides[admin.get_management] = lambda: service
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         routes = [
-            ("GET", "/users", None),
-            ("GET", "/license", None),
             ("GET", "/models/4/subjects", None),
             (
                 "PUT",
@@ -53,16 +51,6 @@ async def test_management_routes_use_verified_actor_and_reject_body_spoofing():
                     "monthly_token_limit": 0,
                 },
             ),
-            (
-                "POST",
-                "/users/20/revoke",
-                {"operation_id": "00000000-0000-4000-8000-000000000001", "expected_grant_version": 1},
-            ),
-            (
-                "POST",
-                "/users/20/reassign",
-                {"operation_id": "00000000-0000-4000-8000-000000000001", "expected_grant_version": 1},
-            ),
             ("GET", "/operations/op", None),
             ("GET", "/users/20/policy", None),
             ("GET", "/users/20/sessions", None),
@@ -71,17 +59,21 @@ async def test_management_routes_use_verified_actor_and_reject_body_spoofing():
             response = await client.request(method, "/api/v1/dsh/admin" + path, json=body)
             assert response.status_code == 200
             assert response.json()["data"]["status"] == "PROCESSING"
-        assert service.command.await_args_list[0].args[0] == 90
-        response = await client.post(
-            "/api/v1/dsh/admin/users/20/revoke",
-            json={"operation_id": "x", "expected_grant_version": 1, "actor_user_id": 1},
+        assert service.update_policy.await_args.args[0] == 90
+        response = await client.put(
+            "/api/v1/dsh/admin/users/20/models/4/policy",
+            json={
+                "operation_id": "op",
+                "expected_version": 0,
+                "enabled": True,
+                "monthly_token_limit": 100,
+                "actor_user_id": 1,
+            },
         )
         assert response.status_code in (400, 422)
-        response = await client.post(
-            "/api/v1/dsh/admin/users/20/revoke", json={"operation_id": "not-uuid", "expected_grant_version": 1}
-        )
-        assert response.status_code in (400, 422)
-        response = await client.get("/api/v1/dsh/admin/users?limit=101")
+        for path in ("/users", "/license", "/users/20/revoke", "/users/20/reassign"):
+            assert (await client.get("/api/v1/dsh/admin" + path)).status_code == 404
+        response = await client.get("/api/v1/dsh/admin/users/20/sessions?limit=101")
         assert response.status_code in (400, 422)
 
 

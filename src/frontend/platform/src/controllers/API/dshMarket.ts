@@ -18,6 +18,16 @@ export interface MarketPlugin {
 export interface MarketImport { id: string; status: "validating" | "completed" | "pending" | "failed"; error: string; created_at: string }
 const tenantHeaders = (tenant: number) => ({ "x-dsh-market-tenant": String(tenant) });
 const base = "/api/v1/dsh/market/admin";
+export interface MarketInstallPolicy {
+    tenant_id: number;
+    allow_third_party_plugins: boolean;
+    allow_third_party_workbenches: boolean;
+}
+type InstallPolicyField = "allow_third_party_plugins" | "allow_third_party_workbenches";
+export const getMarketInstallPolicy = (tenant: number, signal?: AbortSignal) =>
+    request.get<unknown, MarketInstallPolicy>(`${base}/install-policy`, { signal, headers: tenantHeaders(tenant) });
+export const setMarketInstallPolicy = (tenant: number, field: InstallPolicyField, allowed: boolean) =>
+    request.patch<unknown, MarketInstallPolicy>(`${base}/install-policy`, { field, allowed }, { headers: tenantHeaders(tenant) });
 export const listMarketPlugins = (params: { page: number }, tenant: number, signal?: AbortSignal) =>
     request.get<unknown, { data: MarketPlugin[]; total: number }>(`${base}/plugins`, { params, signal, headers: tenantHeaders(tenant) });
 export const getMarketContext = () => request.get<unknown, { tenant_id: number }>(`${base}/context`);

@@ -120,6 +120,21 @@ def _already_published(store: SkillStore, existing, tenant_id: int, name: str, s
         return False
 
 
+# ``metadata.default-checked: true`` preselects a shipped skill in the end-user
+# picker. Applied only when the row is first created: afterwards the column belongs
+# to the administrator (skill management toggles it), and an image upgrade must
+# not flip their choice back.
+DEFAULT_CHECKED_META_KEY = "default-checked"
+
+
+def _default_checked_of(meta: dict) -> bool:
+    metadata = meta.get("metadata")
+    if not isinstance(metadata, dict):
+        return False
+    value = metadata.get(DEFAULT_CHECKED_META_KEY)
+    return value is True or str(value).strip().lower() == "true"
+
+
 def _display_name_of(meta: dict, name: str) -> str:
     metadata = meta.get("metadata")
     if isinstance(metadata, dict):
@@ -161,6 +176,7 @@ async def _seed_one(store: SkillStore, tenant_id: int, name: str, meta: dict, fi
                 display_name=display_name,
                 description=description,
                 enabled=True,
+                default_checked=_default_checked_of(meta),
                 source=SKILL_SOURCE_BUILTIN,
                 object_path=ref.object_key,
                 content_hash=ref.content_hash,
@@ -205,6 +221,11 @@ async def seed_builtin_skills(tenant_ids: Iterable[int] | None = None, *, store:
             for name, (meta, files) in bundles.items():
                 try:
                     outcome = await _seed_one(store, tenant_id, name, meta, files)
+                    row = await LinsightSkillDao.get_by_name(name)
+                    if row is not None and row.source == SKILL_SOURCE_BUILTIN:
+                        from bisheng.linsight.domain.services.skill_permission import ensure_builtin_skill_permission
+
+                        await ensure_builtin_skill_permission(row)
                 except Exception:
                     logger.exception("built-in skill {!r} failed to seed for tenant {}", name, tenant_id)
                     outcome = "failed"

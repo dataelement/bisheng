@@ -22,6 +22,7 @@ import store from "~/store";
 import HeaderTitle from "./HeaderTitle";
 import { QueryKeys } from "~/types/chat";
 import type { ConversationData } from "~/types/chat/queries";
+import { useScrollOnUserMessage } from "~/hooks/useScrollOnUserMessage";
 
 interface AiChatMessagesProps {
     messages: ChatMessage[];
@@ -37,6 +38,7 @@ interface AiChatMessagesProps {
     hideHeaderTitle?: boolean;
     /** When true, renders messages as a flat list without tree/sibling navigation */
     flatMode?: boolean;
+    scrollOnUserMessage?: boolean;
     /** Knowledge space AI panel: full-width column, 14px body, gray user / borderless assistant */
     knowledgeChatLayout?: boolean;
     /** Show the export-session entry under assistant messages. The full homepage/task
@@ -186,6 +188,7 @@ export default function AiChatMessages({
     hideShare = false,
     hideHeaderTitle = false,
     flatMode = false,
+    scrollOnUserMessage = false,
     knowledgeChatLayout = false,
     allowExport = false,
     stripCitationHandlesOnCopy,
@@ -294,6 +297,13 @@ export default function AiChatMessages({
         endRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
+    useScrollOnUserMessage(messages, conversationId, scrollOnUserMessage, () => {
+        isUserScrolledUp.current = false;
+        setShowScrollBtn(false);
+        const container = scrollRef.current;
+        container?.scrollTo({ top: container.scrollHeight, behavior: 'auto' });
+    });
+
     const hasMessages = messages.length > 0;
 
     // 点赞/点踩 is offered on every real chat surface; the read-only anonymous
@@ -374,7 +384,7 @@ export default function AiChatMessages({
                 (z-10) so it fades, but BELOW pinned sticky headers (z-20) — the
                 overflow container creates no stacking context, so a header's z-20
                 bubbles up to outrank this overlay and stays crisp. */}
-            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-10 bg-gradient-to-b from-white to-transparent" />
+            <div className="dsh-chat-scroll-fade pointer-events-none absolute inset-x-0 top-0 z-10 h-10 bg-gradient-to-b from-white to-transparent" />
             <div
                 ref={(el) => {
                     scrollRef.current = el;
@@ -391,7 +401,7 @@ export default function AiChatMessages({
                 // specificity it would win on source order.
                 style={{ scrollbarGutter: "stable both-edges" }}
                 className={cn(
-                    "min-h-0 flex-1 overflow-y-auto scrollbar-on-scroll",
+                    "dsh-chat-message-scroll min-h-0 flex-1 overflow-y-auto scrollbar-on-scroll",
                     hideHeaderTitle
                         ? "pt-2"
                         : isNarrowViewport

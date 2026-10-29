@@ -1,11 +1,16 @@
-import { Button } from '@bisheng/ui';
+import { useContext } from "react";
+import { locationContext } from "@/contexts/locationContext";
+import { approverSourceLabel } from "./approverSources";
+import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
+import { Alert, Button, Select } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { listApprovalNodesApi } from "@/controllers/API/approval";
+import { handleUiRequest, showApiError } from '@/controllers/request';
 import { Switch, Tag, Tooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import type { ApproverSource } from "./approvalMetadata";
-import { APPROVER_SOURCE_OPTIONS, conditionLabel } from "./approvalMetadata";
+import { conditionLabel } from "./approvalMetadata";
 import { ActionBtn, SectionHeader, StatusBadge } from "./ApprovalPrimitives";
 
 import type { useApprovalController } from "./useApprovalController";
@@ -13,6 +18,8 @@ interface FlowManagementPanelProps {
   controller: ReturnType<typeof useApprovalController>;
 }
 export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
+  const { appConfig } = useContext(locationContext);
+  const selectLabels = useSelectLabels();
   const {
     activeTab,
     t,
@@ -59,8 +66,8 @@ export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
         <div className="flex flex-1 overflow-hidden">
           {/* left: scenario list */}
           <aside className="flex w-[268px] shrink-0 flex-col border-r border-border bg-card">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <span className="text-sm font-semibold text-foreground">{t("approvalPage.scenarioSection")}</span>
+            <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
+              <span className="text-base font-semibold text-foreground">{t("approvalPage.scenarioSection")}</span>
               <Button size="small" variant="outlined" type="button" onClick={() => setShowAddScenario(true)} color="default">
                 <Outlined.Plus size={12} />
                 {t("approvalPage.add")}
@@ -76,12 +83,12 @@ export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
                     onKeyDown={(event) => {
                       if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
                         event.preventDefault();
-                        void selectScenario(s.id);
+                        void selectScenario(s.id).catch(showApiError);
                       }
                     }}
                     key={s.id}
 
-                    onClick={() => void selectScenario(s.id)}
+                    onClick={() => void selectScenario(s.id).catch(showApiError)}
                     className={`group relative w-full rounded-lg border px-3 py-3 text-left transition-colors ${
                       active
                         ? "border-primary/30 bg-primary/5"
@@ -133,7 +140,7 @@ export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
             ) : (
               <div className="flex flex-col gap-0">
                 {/* scenario header */}
-                <div className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
+                <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-6">
                   <div className="flex items-center gap-3">
                     <span className="text-base font-semibold text-foreground">{selectedScenario.scenario_name}</span>
                     <StatusBadge enabled={selectedScenario.enabled} />
@@ -249,40 +256,34 @@ export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
 
                     {/* flow selector + actions row */}
                     <div className="mb-4 flex items-center gap-3">
-                      <select
-                        value={selectedFlowId ?? ""}
-                        onChange={async (e) => {
-                          const id = Number(e.target.value) || null;
+                      <Select {...selectLabels} aria-label={t("approvalPage.selectFlow")} value={selectedFlowId ?? null} allowClear
+                        placeholder={t("approvalPage.selectFlow")} className="w-64 max-w-full"
+                        options={flows.filter(flow => flow.id != null).map(flow => ({ value: flow.id, label: flow.flow_name || flow.flow_code || '' }))}
+                        onChange={handleUiRequest(async (value) => {
+                          const id = Number(value) || null;
                           if (isNodeEditMode && isNodeDirty) {
                             bsConfirm({
                               title: t("approvalPage.discardChangesTitle"),
                               desc: t("approvalPage.switchFlowDiscardDesc"),
                               onOk: async (next) => {
+                                const nextNodes = id ? await listApprovalNodesApi(id) : [];
                                 setIsNodeEditMode(false);
                                 setDraftNodes([]);
                                 setIsNodeDirty(false);
                                 setSelectedFlowId(id);
-                                setNodes(id ? await listApprovalNodesApi(id) : []);
+                                setNodes(nextNodes);
                                 next();
                               },
                             });
                             return;
                           }
+                          const nextNodes = id ? await listApprovalNodesApi(id) : [];
                           setIsNodeEditMode(false);
                           setDraftNodes([]);
                           setIsNodeDirty(false);
                           setSelectedFlowId(id);
-                          setNodes(id ? await listApprovalNodesApi(id) : []);
-                        }}
-                        className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
-                      >
-                        <option value="">{t("approvalPage.selectFlow")}</option>
-                        {flows.map((f) => (
-                          <option key={f.id} value={f.id}>
-                            {f.flow_name || f.flow_code}
-                          </option>
-                        ))}
-                      </select>
+                          setNodes(nextNodes);
+                        })} />
                       {selectedFlow && <StatusBadge enabled={selectedFlow.is_active} />}
                       <div className="ml-auto flex items-center gap-2">
                         {isNodeEditMode ? (
@@ -354,10 +355,11 @@ export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
                         ) : (
                           <>
                             {isNodeEditMode && (
-                              <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-                                <Outlined.Edit size={11} className="shrink-0" />
-                                <span>{t("approvalPage.nodeEditModeHint")}</span>
-                              </div>
+                              <Alert
+                                type="warning"
+                                className="mb-3"
+                                description={t("approvalPage.nodeEditModeHint")}
+                              />
                             )}
                             <div className="rounded-lg border border-border overflow-hidden">
                               {displayNodes.map((node, idx) => {
@@ -398,23 +400,18 @@ export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
                                         >
                                           <Outlined.Down size={14} />
                                         </ActionBtn>
-                                        <select
-                                          value={node.node_mode ?? "or"}
-                                          disabled={!isNodeEditMode}
-                                          onChange={(e) => {
+                                        <Select {...selectLabels} aria-label={t("approvalPage.nodeModeLabel")} size="small"
+                                          value={node.node_mode ?? 'or'} disabled={!isNodeEditMode}
+                                          options={[{ value: 'or', label: t("approvalPage.nodeModeOr") }, { value: 'and', label: t("approvalPage.nodeModeAnd") }]}
+                                          onChange={(value) => {
                                             if (!isNodeEditMode) return;
                                             setDraftNodes((prev) =>
                                               prev.map((n) =>
-                                                n.id === node.id ? { ...n, node_mode: e.target.value } : n,
+                                                n.id === node.id ? { ...n, node_mode: String(value ?? 'or') } : n,
                                               ),
                                             );
                                             setIsNodeDirty(true);
-                                          }}
-                                          className="h-7 rounded border border-border bg-background px-2 text-xs text-foreground outline-none"
-                                        >
-                                          <option value="or">{t("approvalPage.nodeModeOr")}</option>
-                                          <option value="and">{t("approvalPage.nodeModeAnd")}</option>
-                                        </select>
+                                          }} />
                                         <ActionBtn
                                           label={t("approvalPage.edit")}
                                           disabled={!isNodeEditMode}
@@ -457,12 +454,7 @@ export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
                                             icon={<Outlined.People size={12} />}
                                             className="whitespace-nowrap"
                                           >
-                                            {(() => {
-                                              const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === src.type);
-                                              return opt
-                                                ? t(opt.labelKey, { defaultValue: src.type })
-                                                : (src.label ?? src.type);
-                                            })()}
+                                            {approverSourceLabel(src.type, t, src.label, !!appConfig.multiTenantEnabled)}
                                           </Tag>
                                         );
                                       })}

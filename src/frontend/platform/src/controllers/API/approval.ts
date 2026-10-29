@@ -6,6 +6,13 @@ export interface ApprovalScenarioPreset {
   handler_key?: string;
   condition_fields?: string[];
   approver_source_types?: string[];
+  /**
+   * The scenario admits no exemption — every request goes to a person, so the
+   * branch editor must not offer the auto-approval type. The backend refuses
+   * such a route anyway (18119); hiding it keeps the promise visible rather
+   * than letting an administrator find out by hitting an error.
+   */
+  mandatory_approval?: boolean;
 }
 
 export interface ApprovalScenarioItem {

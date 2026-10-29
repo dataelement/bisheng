@@ -1,7 +1,8 @@
 // @ts-strict-ignore
 import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
-import { Button, Input, notification } from '@bisheng/ui';
+import { Button, Input, Select, notification } from '@bisheng/ui';
 import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect"
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 
 import {
@@ -13,7 +14,6 @@ import {
 } from "@/components/bs-ui/dialog"
 
 import { Label } from "@/components/bs-ui/label"
-import MultiSelect from "@/components/bs-ui/select/multi"
 
 
 import { cn } from "@/utils"
@@ -25,7 +25,7 @@ import {
   getDepartmentMemberEditFormApi,
   type DepartmentMemberEditForm,
 } from "@/controllers/API/department"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { handleUiRequest, showApiError } from "@/controllers/request"
 import type { DepartmentMember, DepartmentTreeNode } from "@/types/api/department"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -46,6 +46,7 @@ export function OrganizationMemberEditDialog({
   onSaved,
 }: Props) {
   const { t } = useTranslation()
+  const selectLabels = useSelectLabels()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<DepartmentMemberEditForm | null>(null)
@@ -74,9 +75,7 @@ export function OrganizationMemberEditDialog({
     if (!member) return
     setLoading(true)
     try {
-      const data = await captureAndAlertRequestErrorHoc(
-        getDepartmentMemberEditFormApi(deptId, member.user_id)
-      )
+      const data = await getDepartmentMemberEditFormApi(deptId, member.user_id)
       if (!data) {
         notification.open({ type: "warning", title: String(t("prompt") ?? ''), description: String(t("bs:department.memberEditLoadFailed") ?? '') })
         return
@@ -119,7 +118,7 @@ export function OrganizationMemberEditDialog({
   }, [deptId, member, t])
 
   useEffect(() => {
-    if (open && member) void load()
+    if (open && member) void load().catch(showApiError)
     if (!open) resetLocal()
   }, [open, member, load, resetLocal])
 
@@ -127,9 +126,7 @@ export function OrganizationMemberEditDialog({
     async (deptInternalId: number | null, node: DepartmentTreeNode | null) => {
       if (deptInternalId == null || !node) return
       setPrimaryDeptInternalId(deptInternalId)
-      const rows = await captureAndAlertRequestErrorHoc(
-        getDepartmentAssignableRolesApi(node.dept_id)
-      )
+      const rows = await getDepartmentAssignableRolesApi(node.dept_id)
       const list = Array.isArray(rows) ? rows : []
       setPrimaryAssignableList(list.map((r: { id: number; role_name: string }) => ({
         id: r.id,
@@ -201,13 +198,7 @@ export function OrganizationMemberEditDialog({
     bsConfirm({
       desc: t("bs:department.deleteLocalMemberConfirm"),
       onOk: async (close) => {
-        const chk = await captureAndAlertRequestErrorHoc(
-          checkDepartmentMemberDeleteApi(deptId, member.user_id)
-        )
-        if (chk === false) {
-          close()
-          return
-        }
+        const chk = await checkDepartmentMemberDeleteApi(deptId, member.user_id)
         if (chk?.has_assets) {
           const c = chk.counts
           notification.open({ type: "warning", title: String(t("prompt") ?? ''), description: String(t("bs:department.deleteLocalMemberBlocked", {
@@ -218,13 +209,7 @@ export function OrganizationMemberEditDialog({
           close()
           return
         }
-        const delRes = await captureAndAlertRequestErrorHoc(
-          deleteDepartmentLocalMemberApi(deptId, member.user_id)
-        )
-        if (delRes === false) {
-          close()
-          return
-        }
+        await deleteDepartmentLocalMemberApi(deptId, member.user_id)
         notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("bs:department.deleteLocalMemberDone") ?? '') })
         onSaved()
         onClose()
@@ -232,6 +217,11 @@ export function OrganizationMemberEditDialog({
       },
     })
   }, [deptId, form, member, onClose, onSaved, t])
+
+  const lockedGroupIds = useMemo(
+    () => new Set<number>(form?.locked_group_ids ?? []),
+    [form]
+  )
 
   const title = useMemo(() => {
     if (!form) return t("edit")
@@ -250,12 +240,9 @@ export function OrganizationMemberEditDialog({
     setSaving(true)
     try {
       if (form.edit_mode === "affiliate") {
-        const res = await captureAndAlertRequestErrorHoc(
-          applyDepartmentMemberEditApi(deptId, member.user_id, {
+        await applyDepartmentMemberEditApi(deptId, member.user_id, {
             context_role_ids: Array.from(ctxRoles),
           })
-        )
-        if (res === false) return
       } else {
         const affiliate_roles = (form.affiliate_rows ?? []).map((row) => ({
           dept_id: row.dept_id,
@@ -275,14 +262,13 @@ export function OrganizationMemberEditDialog({
           primary_role_ids: Array.from(primaryRoles),
           affiliate_roles,
         }
-        const res = await captureAndAlertRequestErrorHoc(
-          applyDepartmentMemberEditApi(deptId, member.user_id, body)
-        )
-        if (res === false) return
+        await applyDepartmentMemberEditApi(deptId, member.user_id, body)
       }
       notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("bs:department.memberEditSaved") ?? '') })
       onSaved()
       onClose()
+    } catch (error) {
+      showApiError(error)
     } finally {
       setSaving(false)
     }
@@ -291,7 +277,8 @@ export function OrganizationMemberEditDialog({
   const renderRoleMultiSelect = (
     options: { id: number; role_name: string }[],
     selected: Set<number>,
-    onSelectionChange: (next: Set<number>) => void
+    onSelectionChange: (next: Set<number>) => void,
+    ariaLabel: string
   ) => {
     if (!options.length) {
       return (
@@ -299,13 +286,18 @@ export function OrganizationMemberEditDialog({
       )
     }
     return (
-      <MultiSelect
+      <Select
+        {...selectLabels}
         multiple
+        showSearch
         className="mt-1"
-        options={options.map((r) => ({ label: r.role_name, value: String(r.id) }))}
+        aria-label={ariaLabel}
+        options={options
+          .filter((r) => r.id != null)
+          .map((r) => ({ label: r.role_name, value: String(r.id) }))}
         value={Array.from(selected).map(String)}
         onChange={(vals) => {
-          const next = new Set((vals as string[]).map((id) => Number(id)))
+          const next = new Set(vals.map((id) => Number(id)))
           onSelectionChange(next)
           // Sync-delete a removed role from every other dropdown that offers it,
           // so shared/global roles can actually be removed instead of being
@@ -314,7 +306,6 @@ export function OrganizationMemberEditDialog({
           pruneSharedRoleEverywhere(removed)
         }}
         placeholder={t("bs:department.multiSelectRolesPlaceholder")}
-        searchPlaceholder={t("system.searchRoles")}
       />
     )
   }
@@ -354,20 +345,30 @@ export function OrganizationMemberEditDialog({
                       {t("bs:department.memberEditUserGroupsEmpty")}
                     </p>
                   ) : (
-                    <MultiSelect
+                    <Select
+                      {...selectLabels}
                       multiple
+                      showSearch
                       className="mt-1"
-                      options={form.manageable_groups.map((g) => ({
-                        label: g.group_name,
-                        value: String(g.id),
-                      }))}
-                      lockedValues={(form.locked_group_ids ?? []).map(String)}
+                      aria-label={t("bs:department.userGroups")}
+                      options={form.manageable_groups
+                        .filter((g) => g.id != null)
+                        .map((g) => ({
+                          label: g.group_name,
+                          value: String(g.id),
+                          // Locked groups cannot be toggled from the panel
+                          disabled: lockedGroupIds.has(g.id),
+                        }))}
                       value={Array.from(groupSel).map(String)}
-                      onChange={(vals) =>
-                        setGroupSel(new Set((vals as string[]).map((id) => Number(id))))
-                      }
+                      onChange={(vals) => {
+                        // Locked groups stay selected even if removed via a tag or clear
+                        const next = new Set(vals.map((id) => Number(id)))
+                        groupSel.forEach((id) => {
+                          if (lockedGroupIds.has(id)) next.add(id)
+                        })
+                        setGroupSel(next)
+                      }}
                       placeholder={t("bs:department.multiSelectUserGroupsPlaceholder")}
-                      searchPlaceholder={t("system.searchUserGroups")}
                     />
                   )}
                 </div>
@@ -379,7 +380,7 @@ export function OrganizationMemberEditDialog({
                         className="mt-1"
                         modal={false}
                         value={primaryDeptInternalId}
-                        onChange={(id, node) => void handlePrimaryDeptChange(id, node)}
+                        onChange={handleUiRequest(handlePrimaryDeptChange)}
                         placeholder={t("bs:department.memberEditPrimaryPlaceholder")}
                       />
                     ) : (
@@ -405,7 +406,12 @@ export function OrganizationMemberEditDialog({
                 {form.primary_department && (
                   <div>
                     <Label>{t("bs:department.roles")}</Label>
-                    {renderRoleMultiSelect(primaryRoleOptions, primaryRoles, setPrimaryRoles)}
+                    {renderRoleMultiSelect(
+                      primaryRoleOptions,
+                      primaryRoles,
+                      setPrimaryRoles,
+                      t("bs:department.roles")
+                    )}
                   </div>
                 )}
                 {form.affiliate_rows.length > 0 && (
@@ -418,7 +424,8 @@ export function OrganizationMemberEditDialog({
                           form.assignable_roles_catalog[row.dept_id] ?? [],
                           affRoleByDept[row.dept_id] ?? new Set(),
                           (next) =>
-                            setAffRoleByDept((prev) => ({ ...prev, [row.dept_id]: next }))
+                            setAffRoleByDept((prev) => ({ ...prev, [row.dept_id]: next })),
+                          `${row.name} ${t("bs:department.roles")}`
                         )}
                       </div>
                     ))}
@@ -433,7 +440,8 @@ export function OrganizationMemberEditDialog({
                 {renderRoleMultiSelect(
                   form.assignable_roles_catalog[form.context.dept_id] ?? [],
                   ctxRoles,
-                  setCtxRoles
+                  setCtxRoles,
+                  t("bs:department.roles")
                 )}
               </div>
             )}

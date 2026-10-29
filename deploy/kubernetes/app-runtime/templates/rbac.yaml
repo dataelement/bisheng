@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.services.managerAccount }}
+  namespace: {{ .Values.services.namespace }}
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: runtime-manager
+  namespace: {{ .Values.execution.namespace }}
+rules:
+  - apiGroups: [""]
+    resources: [pods, services, persistentvolumeclaims, secrets]
+    verbs: [get, list, watch, create, patch, delete]
+  - apiGroups: [""]
+    resources: [pods/log, events, endpoints]
+    verbs: [get, list, watch]
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: runtime-manager
+  namespace: {{ .Values.execution.namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.services.managerAccount }}
+    namespace: {{ .Values.services.namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: runtime-manager
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: runtime-budget
+  namespace: {{ .Values.execution.namespace }}
+spec:
+  hard:
+    requests.memory: {{ printf "%dMi" (int .Values.execution.memoryBudgetMi) | quote }}
+    limits.memory: {{ printf "%dMi" (int .Values.execution.memoryBudgetMi) | quote }}
+    requests.cpu: {{ printf "%dm" (int .Values.execution.cpuBudgetMillicores) | quote }}
+    limits.cpu: {{ printf "%dm" (int .Values.execution.cpuBudgetMillicores) | quote }}
+    pods: {{ .Values.execution.maxPods | quote }}
+    services.nodeports: "0"
+    services.loadbalancers: "0"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: runtime-container-limits
+  namespace: {{ .Values.execution.namespace }}
+spec:
+  limits:
+    - type: Container
+      min: {cpu: 1m, memory: 16Mi, ephemeral-storage: 1Mi}
+      max:
+        cpu: {{ printf "%dm" (int .Values.execution.cpuBudgetMillicores) | quote }}
+        memory: {{ printf "%dMi" (int .Values.execution.memoryBudgetMi) | quote }}
+        ephemeral-storage: {{ printf "%dMi" (int .Values.execution.temporaryStorageMi) | quote }}

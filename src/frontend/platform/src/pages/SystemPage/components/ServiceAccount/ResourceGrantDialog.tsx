@@ -1,4 +1,5 @@
-import { Button, SearchInput, notification } from '@bisheng/ui';
+import { useServiceAccountRequestScope } from "./useServiceAccountManagementScope";
+import { Button, SearchInput, Select, notification } from '@bisheng/ui';
 
 import { Checkbox } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
@@ -13,13 +14,7 @@ DialogHeader,
 DialogTitle,
 } from "@/components/bs-ui/dialog";
 
-import {
-Select,
-SelectContent,
-SelectItem,
-SelectTrigger,
-SelectValue,
-} from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
 import {
 getGrantablePermissionModelsApi,
@@ -30,7 +25,7 @@ import {
 listServiceAccountGrantableResourcesApi,
 mutateServiceAccountResourceGrantsApi,
 } from "@/controllers/API/serviceAccount";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import type {
 ServiceAccountGrantableResource,
 ServiceAccountResourceGrant,
@@ -69,7 +64,9 @@ export function ResourceGrantDialog({
   onOpenChange,
   onGranted,
 }: ResourceGrantDialogProps) {
+  const requestScope = useServiceAccountRequestScope();
   const { t } = useTranslation()
+  const selectLabels = useSelectLabels()
   const [resourceType, setResourceType] = useState<string>(
     SERVICE_ACCOUNT_RESOURCE_TYPES[0],
   )
@@ -100,16 +97,14 @@ export function ResourceGrantDialog({
     setResources([])
     setLoadingResources(true)
     const timer = window.setTimeout(() => {
-      void captureAndAlertRequestErrorHoc(
-        listServiceAccountGrantableResourcesApi(serviceAccountId, {
+      void listServiceAccountGrantableResourcesApi(serviceAccountId, {
           resource_type: resourceType,
           keyword: keyword.trim() || undefined,
-        }),
-      )
+        }, requestScope)
         .then((rows) => {
           if (active && rows) setResources(rows)
         })
-        .finally(() => {
+        .catch(showApiError).finally(() => {
           if (active) setLoadingResources(false)
         })
     }, 250)
@@ -117,7 +112,7 @@ export function ResourceGrantDialog({
       active = false
       window.clearTimeout(timer)
     }
-  }, [editingGrant, keyword, open, resourceType, serviceAccountId])
+  }, [editingGrant, keyword, open, resourceType, serviceAccountId, requestScope])
 
   useEffect(() => {
     if (!open || !editingGrant) return
@@ -133,16 +128,14 @@ export function ResourceGrantDialog({
     setModelKey(editingGrant.model_key)
     setModels([])
     setLoadingModels(true)
-    void captureAndAlertRequestErrorHoc(
-      getGrantablePermissionModelsApi(
+    void getGrantablePermissionModelsApi(
         editingGrant.resource_type as never,
         editingGrant.resource_id,
-      ),
-    )
+      )
       .then((available) => {
         if (available) setModels(filterPermissionTiers(available))
       })
-      .finally(() => setLoadingModels(false))
+      .catch(showApiError).finally(() => setLoadingModels(false))
   }, [editingGrant, open])
 
   const isGranted = (resource: ServiceAccountGrantableResource) =>
@@ -174,13 +167,13 @@ export function ResourceGrantDialog({
       setModels([])
       setLoadingModels(true)
       try {
-        const available = await captureAndAlertRequestErrorHoc(
-          getGrantablePermissionModelsApi(
+        const available = await getGrantablePermissionModelsApi(
             resource.resource_type as never,
             resource.resource_id,
-          ),
-        )
+          )
         if (available) setModels(filterPermissionTiers(available))
+      } catch (error) {
+        showApiError(error)
       } finally {
         setLoadingModels(false)
       }
@@ -190,22 +183,19 @@ export function ResourceGrantDialog({
   const handleGrant = async () => {
     if (!selectedResources.length || !modelKey) return
     setLoading(true)
+    let completedCount = 0
     try {
       let completed = true
-      let completedCount = 0
       for (const selected of selectedResources) {
-        const context = await captureAndAlertRequestErrorHoc(
-          getResourcePermissionContextApi(
+        const context = await getResourcePermissionContextApi(
             selected.resource_type as never,
             selected.resource_id,
-          ),
-        )
+          )
         if (!context) {
           completed = false
           break
         }
-        const result = await captureAndAlertRequestErrorHoc(
-          mutateServiceAccountResourceGrantsApi(
+        const result = await mutateServiceAccountResourceGrantsApi(
             serviceAccountId,
             selected.resource_type,
             selected.resource_id,
@@ -232,9 +222,7 @@ export function ResourceGrantDialog({
                       },
                     },
                   ],
-            },
-          ),
-        )
+            }, requestScope)
         if (!result) {
           completed = false
           break
@@ -258,6 +246,10 @@ export function ResourceGrantDialog({
       onOpenChange(false)
       setSelectedResources([])
       setModelKey("")
+    } catch (error) {
+      setSelectedResources(current => current.slice(completedCount))
+      if (completedCount > 0) await onGranted().catch(showApiError)
+      showApiError(error)
     } finally {
       setLoading(false)
     }
@@ -291,27 +283,21 @@ export function ResourceGrantDialog({
             <label className="space-y-1 text-sm">
               <span>{t("openApiManagement.grants.resourceType")}</span>
               <Select
-                value={resourceType}
-                onValueChange={(value) => {
-                  setResourceType(value)
+                {...selectLabels}
+                options={SERVICE_ACCOUNT_RESOURCE_TYPES.map((type) => ({
+                  value: type,
+                  label: t(`openApiManagement.resourceTypes.${type}`),
+                }))}
+                value={resourceType || null}
+                onChange={(value) => {
+                  if (value == null) return
+                  setResourceType(String(value))
                   setSelectedResources([])
                   setModels([])
                   setModelKey("")
                 }}
-              >
-                <SelectTrigger
-                  aria-label={t("openApiManagement.grants.resourceType")}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SERVICE_ACCOUNT_RESOURCE_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {t(`openApiManagement.resourceTypes.${type}`)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                aria-label={t("openApiManagement.grants.resourceType")}
+              />
             </label>
             <label className="space-y-1 text-sm">
               <span>{t("openApiManagement.grants.resourceSearch")}</span>
@@ -385,23 +371,19 @@ export function ResourceGrantDialog({
         <label className="space-y-1 text-sm">
           <span>{t("openApiManagement.grants.model")}</span>
           <Select
-            value={modelKey}
+            {...selectLabels}
+            options={models
+              .filter((model) => model.key != null && model.key !== "")
+              .map((model) => ({
+                value: model.key,
+                label: t(`openApiManagement.permissionTiers.${model.key}`),
+              }))}
+            value={modelKey || null}
             disabled={!selectedResources.length || loadingModels}
-            onValueChange={setModelKey}
-          >
-            <SelectTrigger aria-label={t("openApiManagement.grants.model")}>
-              <SelectValue
-                placeholder={t("openApiManagement.grants.modelPlaceholder")}
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {models.map((model) => (
-                <SelectItem key={model.key} value={model.key}>
-                  {t(`openApiManagement.permissionTiers.${model.key}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={(value) => setModelKey(value == null ? "" : String(value))}
+            placeholder={t("openApiManagement.grants.modelPlaceholder")}
+            aria-label={t("openApiManagement.grants.model")}
+          />
         </label>
         <DialogFooter>
           <Button variant="outlined" disabled={loading} onClick={() => onOpenChange(false)} color="default">

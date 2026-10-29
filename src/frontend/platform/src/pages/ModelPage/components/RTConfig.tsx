@@ -16,7 +16,7 @@ import {
     TableRow
 } from "../../../components/bs-ui/table";
 import { addServiceApi, deleteServiceApi, getServicesApi } from "../../../controllers/API";
-import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { showApiError } from "../../../controllers/request";
 import { useCopyText } from "../../../util/hook";
 
 export default function RTConfig({ open, onChange }) {
@@ -104,7 +104,7 @@ const useRTService = (onChange) => {
     const [showAdd, setShowAdd] = useState(false)
 
     useEffect(() => {
-        loadData()
+        void loadData().catch(showApiError)
     }, [])
 
     const loadData = async () => {
@@ -117,20 +117,20 @@ const useRTService = (onChange) => {
     }
 
     const addItem = (name, ftUrl) => {
-        captureAndAlertRequestErrorHoc(addServiceApi(name, ftUrl).then(data => {
+        addServiceApi(name, ftUrl).then(data => {
             setServices([...services, {
                 id: data.id,
                 name,
                 ftUrl
             }])
             setShowAdd(false)
-        }))
+        }).catch(showApiError)
     }
 
     const handleDel = (id) => {
-        captureAndAlertRequestErrorHoc(deleteServiceApi(id).then(res =>
+        deleteServiceApi(id).then(res =>
             setServices(services.filter(el => el.id !== id))
-        ))
+        ).catch(showApiError)
     }
 
     const create = () => {

@@ -12,6 +12,7 @@ import { ServiceAccount } from "./components/ServiceAccount";
 import UserGroups from "./components/UserGroup";
 import Users from "./components/Users";
 import Theme from "./theme";
+import { ResourceTierTab } from "./components/ResourceTierTab";
 
 export default function SystemPage() {
   const { user } = useContext(userContext);
@@ -41,12 +42,17 @@ export default function SystemPage() {
   /** F053 service accounts + personal tokens. Admin rights are necessary but not
    *  sufficient: the console stays hidden until the deployment opts in, so a
    *  release can ship the backend while the surface is still being built. */
-  const showOpenApiManagement = (isSuperAdmin || isChildAdmin) && !!appConfig?.openApiManagementEnabled;
+  const showOpenApiManagement =
+    (isSuperAdmin || isChildAdmin) && !!appConfig?.openApiManagementEnabled
+  /** F055 AC-45: resource tiers are platform-level (shared across tenants), so
+   *  super admin only — and only where the app-factory runtime layer is
+   *  deployed; without it there is nothing the tiers would apply to. */
+  const showResourceTierTab = isSuperAdmin && !!appConfig?.appRuntimeEnabled
 
   const defaultTab = showOrgTab ? "organization" : showUserGroupTab ? "userGroup" : "user";
 
   return (
-    <div className="flex h-full w-full flex-col px-2 pt-4">
+    <div className="flex h-full w-full flex-col px-4 pt-4">
       <Tabs
         defaultActiveKey={defaultTab}
         className="flex min-h-0 w-full flex-1 flex-col [&>div:first-child]:shrink-0 [&>[role=tabpanel][data-state=active]]:flex [&>[role=tabpanel]]:min-h-0 [&>[role=tabpanel]]:flex-1 [&>[role=tabpanel]]:flex-col [&>[role=tabpanel]]:overflow-hidden [&>[role=tabpanel]>div]:mt-2"
@@ -163,6 +169,11 @@ export default function SystemPage() {
                 },
               ]
             : []),
+          ...(showResourceTierTab ? [{
+            key: "resourceTier",
+            label: t("hostedApp.tierAdmin.title"),
+            children: <div className="min-h-0 flex-1 overflow-hidden"><ResourceTierTab /></div>,
+          }] : []),
           ...(canAccessSystemConfig
             ? [
                 {

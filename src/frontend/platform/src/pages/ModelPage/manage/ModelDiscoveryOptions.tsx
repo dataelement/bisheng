@@ -1,13 +1,8 @@
 import { useState } from "react";
 import { Button, Input } from "@bisheng/ui";
 import { Label } from "@/components/bs-ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/bs-ui/select";
+import { Select } from "@bisheng/ui";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { DiscoverySource } from "@/controllers/API/modelDiscovery";
 import { useTranslation } from "react-i18next";
 
@@ -71,6 +66,7 @@ export function ModelDiscoveryOptions({
   onChange,
 }: ModelDiscoveryOptionsProps) {
   const { t } = useTranslation("model");
+  const selectLabels = useSelectLabels();
   const [advanced, setAdvanced] = useState(false);
   const presets = presetProviders.has(provider);
   const needsFields = source === "auto" && !!requiredReason;
@@ -103,30 +99,22 @@ export function ModelDiscoveryOptions({
         <div className="flex items-center gap-3">
           <Label htmlFor="discovery-source">{t("model.discoverySource")}</Label>
           <Select
+            {...selectLabels}
+            id="discovery-source"
+            className="w-48"
+            aria-label={t("model.discoverySource")}
             value={source}
-            onValueChange={(value) => onChange(value as DiscoverySource, {})}
-          >
-            <SelectTrigger
-              id="discovery-source"
-              className="w-48"
-              aria-label={t("model.discoverySource")}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="auto">
-                {t("model.discoverySourceAuto")}
-              </SelectItem>
-              <SelectItem value="live">
-                {t("model.discoverySourceLive")}
-              </SelectItem>
-              {presets && (
-                <SelectItem value="preset">
-                  {t("model.discoverySourcePreset")}
-                </SelectItem>
-              )}
-            </SelectContent>
-          </Select>
+            onChange={(value) => {
+              if (value) onChange(value as DiscoverySource, {});
+            }}
+            options={[
+              { value: "auto", label: t("model.discoverySourceAuto") },
+              { value: "live", label: t("model.discoverySourceLive") },
+              ...(presets
+                ? [{ value: "preset", label: t("model.discoverySourcePreset") }]
+                : []),
+            ]}
+          />
         </div>
       )}
       {fields.length > 0 && (

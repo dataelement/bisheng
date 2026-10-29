@@ -6,7 +6,7 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogT
 
 import { createFileLib, updateKnowledge } from "@/controllers/API";
 import { getKnowledgeModelConfig } from "@/controllers/API/finetune";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { ModelSelect } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -108,7 +108,7 @@ export function QaLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode 
         setIsSubmitting(true);
         try {
             if (mode === 'create') {
-                await captureAndAlertRequestErrorHoc(createFileLib({
+                await createFileLib({
                     name,
                     description: desc,
                     model: modelId,
@@ -118,7 +118,7 @@ export function QaLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode 
                     (window as Window & { libname?: [string, string] }).libname = [name, desc];
                     navigate(isImport ? `/filelib/qalib/upload/${res.id}` : `/filelib/qalib/${res.id}`);
                     onOpenChange(false);
-                })).finally(() => {
+                }).finally(() => {
                     setIsSubmitting(false)
                 });
 
@@ -135,11 +135,7 @@ export function QaLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode 
                 onLoadEnd();
             }
         } catch (error) {
-            if (error) {
-                notification.open({ type: "error", description: String(error || t('operationFailed')) });
-            } else {
-                notification.open({ type: "error", description: String(mode === 'create' ? t('createFailed') : t('updateFailed') ?? '') });
-            }
+            showApiError(error);
         } finally {
             setIsSubmitting(false);
         }

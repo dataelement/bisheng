@@ -5,7 +5,7 @@ import {
   type PermissionGrantAssignee,
   type ResourcePermissionContext,
 } from "@/controllers/API/permission"
-import { fireEvent, render, screen, waitFor } from "@/test/test-utils"
+import { fireEvent, render, screen, selectOption, waitFor } from "@/test/test-utils"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/controllers/API/permission", () => ({
@@ -118,9 +118,7 @@ describe("F048 PermissionGrantTab", () => {
       await screen.findByTestId("legacy-permission-grant-layout"),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: "select-alice" }))
-    fireEvent.change(screen.getByLabelText("grant.addModel"), {
-      target: { value: "editor" },
-    })
+    await selectOption("grant.addModel", "Editor")
     fireEvent.click(screen.getByRole("button", { name: "grant.submit" }))
 
     await waitFor(() => {
@@ -152,12 +150,11 @@ describe("F048 PermissionGrantTab", () => {
       />,
     )
 
-    expect(await screen.findByText("Editor")).toBeInTheDocument()
-    expect(screen.getByText("Owner")).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText("grant.addModel")).not.toHaveAttribute("aria-disabled", "true"))
     fireEvent.click(screen.getByRole("button", { name: "select-alice" }))
-    fireEvent.change(screen.getByLabelText("grant.addModel"), {
-      target: { value: "editor" },
-    })
+    fireEvent.click(screen.getByLabelText("grant.addModel"))
+    expect(await screen.findByRole("option", { name: "Owner" })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("option", { name: "Editor" }))
     fireEvent.click(screen.getByRole("button", { name: "grant.submit" }))
 
     await waitFor(() => {
@@ -199,10 +196,8 @@ describe("F048 PermissionGrantTab", () => {
       />,
     )
 
-    fireEvent.change(
-      await screen.findByLabelText("grant.model.41"),
-      { target: { value: "editor" } },
-    )
+    await screen.findByLabelText("grant.model.41")
+    await selectOption("grant.model.41", "Editor")
     fireEvent.click(screen.getByRole("button", { name: "grant.move.41" }))
 
     await waitFor(() => {
@@ -221,7 +216,9 @@ describe("F048 PermissionGrantTab", () => {
         }),
       )
     })
-    expect(screen.getByLabelText("grant.model.42")).toBeDisabled()
+    expect(screen.getByLabelText("grant.model.42")).toHaveAttribute("aria-disabled", "true")
+    fireEvent.click(screen.getByLabelText("grant.model.42"))
+    expect(screen.getByLabelText("grant.model.42")).toHaveAttribute("aria-expanded", "false")
     expect(screen.getByRole("button", { name: "grant.remove.42" })).toBeDisabled()
   })
 
@@ -292,7 +289,7 @@ describe("F048 PermissionGrantTab", () => {
 
   it("removes exactly one editable assignee and reports stale conflicts", async () => {
     vi.mocked(mutateResourceGrantsApi).mockRejectedValueOnce(
-      new Error("stale resource version"),
+      { status_code: 25002, status_message: "stale resource version" },
     )
     render(
       <PermissionGrantTab
@@ -325,6 +322,20 @@ describe("F048 PermissionGrantTab", () => {
     })
   })
 
+  it("does not misreport an unavailable tenant member as a version conflict", async () => {
+    vi.mocked(mutateResourceGrantsApi).mockRejectedValueOnce({ status_code: 25016, status_message: "Member is unavailable" })
+    const onSuccess = vi.fn()
+    render(<PermissionGrantTab resourceType="workflow" resourceId="flow-1" context={context} legacyAddLayout showExistingAssignees={false} onSuccess={onSuccess} />)
+    await screen.findByTestId("legacy-permission-grant-layout")
+    fireEvent.click(screen.getByRole("button", { name: "select-alice" }))
+    await selectOption("grant.addModel", "Editor")
+    fireEvent.click(screen.getByRole("button", { name: "grant.submit" }))
+    await screen.findByRole("alert")
+    expect(screen.queryByText("grant.conflict")).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "grant.submit" })).toBeDisabled()
+    expect(onSuccess).not.toHaveBeenCalled()
+  })
+
   it("keeps an inactive existing row read-only when it is not grantable", async () => {
     vi.mocked(getGrantablePermissionModelsApi).mockResolvedValueOnce([
       { key: "viewer", name: "Viewer", level: 1, active: true },
@@ -352,7 +363,9 @@ describe("F048 PermissionGrantTab", () => {
 
     expect(await screen.findByText("Retired editor")).toBeInTheDocument()
     const rowModel = screen.getByLabelText("grant.model.41")
-    expect(rowModel).toBeDisabled()
+    expect(rowModel).toHaveAttribute("aria-disabled", "true")
+    fireEvent.click(rowModel)
+    expect(rowModel).toHaveAttribute("aria-expanded", "false")
     expect(screen.getByLabelText("grant.addModel")).not.toHaveTextContent(
       "Retired editor",
     )

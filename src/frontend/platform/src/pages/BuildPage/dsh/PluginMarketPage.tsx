@@ -1,4 +1,5 @@
-import { Button, Input, notification } from '@bisheng/ui';
+import { Button, Input, notification, Pagination, Segmented } from '@bisheng/ui';
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
@@ -18,19 +19,51 @@ import {
 } from "@/controllers/API/dshMarket";
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+
+import { InstallPolicySettings } from "./InstallPolicySettings";
+import { WorkbenchMarketSection } from "./WorkbenchMarketSection";
 
 const MAX_UPLOAD = 512 * 1024 * 1024;
 
-export function PluginMarketPage() {
+interface PluginMarketPageProps {
+  toolbarTarget?: HTMLDivElement | null;
+}
+
+export function PluginMarketPage({ toolbarTarget }: PluginMarketPageProps) {
   const { user } = useContext(userContext);
   const { t } = useTranslation("dshMarket");
   if (!canManageWorkbenchConfig(user)) return <div className="p-8">{t("forbidden")}</div>;
-  return <TenantPluginMarket key={`${user.user_id}:${user.tenant_id}`} />;
+  return <PluginMarketContent key={`${user.user_id}:${user.tenant_id}`} toolbarTarget={toolbarTarget} />;
+}
+
+function PluginMarketContent({ toolbarTarget }: PluginMarketPageProps) {
+  const { t } = useTranslation("dshMarket");
+  const [section, setSection] = useState("plugins");
+  const selector = (
+    <Segmented
+      aria-label={t("marketSections")}
+      value={section}
+      onChange={setSection}
+      options={[
+        { value: "plugins", label: t("pluginSection") },
+        { value: "workbenches", label: t("workbenchSection") },
+      ]}
+    />
+  );
+
+  return (
+    <div className="h-full overflow-auto px-2 pb-4">
+      {toolbarTarget ? createPortal(selector, toolbarTarget) : toolbarTarget === undefined ? selector : null}
+      {section === "plugins" ? <TenantPluginMarket /> : <WorkbenchMarketSection />}
+    </div>
+  );
 }
 
 function TenantPluginMarket() {
   const { t } = useTranslation("dshMarket");
+  const paginationLocale = usePaginationLocale();
   const [tenant, setTenant] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<{ data: MarketPlugin[]; total: number }>({ data: [], total: 0 });
@@ -112,7 +145,7 @@ function TenantPluginMarket() {
       setChecking(false);
       return;
     }
-    if (!file.name.toLowerCase().endsWith(".zip") || file.size > MAX_UPLOAD) {
+    if (!/\.(?:zip|tgz|tar\.gz)$/i.test(file.name) || file.size > MAX_UPLOAD) {
       setPreviewError(true);
       setChecking(false);
       return;
@@ -169,7 +202,7 @@ function TenantPluginMarket() {
 
   async function uploadFile() {
     if (!file || tenant === null || !preview?.allowed || checking) return;
-    if (!file.name.toLowerCase().endsWith(".zip") || file.size > MAX_UPLOAD) {
+    if (!/\.(?:zip|tgz|tar\.gz)$/i.test(file.name) || file.size > MAX_UPLOAD) {
       notification.open({ type: "error", title: String(t("invalidFile") ?? ''), description: String("") });
       return;
     }
@@ -200,7 +233,7 @@ function TenantPluginMarket() {
   }
 
   return (
-    <main className="h-full overflow-auto p-6 space-y-6">
+    <main className="space-y-6 pt-6">
       <header className="flex items-start justify-between gap-6">
         <div className="space-y-3">
           <h1 className="text-xl font-semibold">{t("title")}</h1>
@@ -210,6 +243,7 @@ function TenantPluginMarket() {
           {t("import")}
         </Button>
       </header>
+      {tenant !== null && <InstallPolicySettings tenant={tenant} />}
       {error && (
         <div role="alert" className="text-red-600 flex items-center gap-3">
           {t("loadFailed")}
@@ -263,20 +297,15 @@ function TenantPluginMarket() {
           {!data.data.length && <p className="p-10 text-center text-muted-foreground">{t("empty")}</p>}
         </div>
       )}
-      <div className="flex items-center justify-end gap-4">
-        <span>{t("total", { count: data.total })}</span>
-        {data.total > 20 && (
-          <>
-            <Button variant="outlined" disabled={page === 1 || loading} onClick={() => setPage((v) => v - 1)} color="default">
-              {t("previous")}
-            </Button>
-            <span>{page}</span>
-            <Button variant="outlined" disabled={page * 20 >= data.total || loading} onClick={() => setPage((v) => v + 1)} color="default">
-              {t("next")}
-            </Button>
-          </>
-        )}
-      </div>
+      <Pagination
+        locale={paginationLocale}
+        current={page}
+        pageSize={20}
+        total={data.total}
+        showTotal
+        disabled={loading}
+        onChange={(nextPage) => setPage(nextPage)}
+      />
       {imports.some((job) => job.status === "validating" || job.status === "failed") && (
         <section className="border rounded-lg p-4 space-y-3">
           <h2 className="font-semibold">{t("imports")}</h2>
@@ -317,7 +346,7 @@ function TenantPluginMarket() {
             <DialogTitle>{t("import")}</DialogTitle>
             <DialogDescription>{t("uploadHint")}</DialogDescription>
           </DialogHeader>
-          <Input type="file" accept=".zip,application/zip" disabled={busy} aria-label={t("import")} onChange={(e) => {
+          <Input type="file" accept=".zip,.tgz,.tar.gz,application/zip,application/gzip" disabled={busy} aria-label={t("import")} onChange={(e) => {
               setPreview(null);
               setFile(e.target.files?.[0] || null);
             }} />

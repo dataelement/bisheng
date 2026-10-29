@@ -31,3 +31,16 @@ def test_parse_preset_extra_copies_dict_payload():
     parsed["config"]["container"]["keep_session"] = True
     assert stored["type"] == "container"
     assert stored["config"]["container"] == {}
+
+
+def test_parse_preset_extra_keeps_non_json_runtime_objects():
+    # The task-mode code interpreter stores E2B WriteEntry objects in extra before
+    # init; a JSON round trip raised TypeError and silently dropped the tool.
+    from e2b.sandbox.filesystem.filesystem import WriteEntry
+
+    entry = WriteEntry(data="/ws/skills/a.py", path="./skills/a.py")
+    stored = {"type": "local", "config": {"e2b": {"file_list": [entry]}}}
+    parsed = ToolExecutor.parse_preset_extra(SimpleNamespace(extra=stored), None)
+    assert parsed["config"]["e2b"]["file_list"][0].path == "./skills/a.py"
+    parsed["config"]["e2b"]["file_list"].clear()
+    assert len(stored["config"]["e2b"]["file_list"]) == 1

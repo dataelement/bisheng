@@ -11,6 +11,7 @@ existence is not leaked (design §7.5).
 
 from __future__ import annotations
 
+import asyncio
 from typing import NamedTuple, Protocol
 
 from loguru import logger
@@ -36,6 +37,7 @@ from bisheng.linsight.domain.schemas.skill_schema import (
     SkillDetail,
     SkillFileContent,
     SkillFileEntry,
+    SkillRuntimeEntry,
     SkillSelectable,
 )
 from bisheng.linsight.domain.services.github_skill_fetcher import fetch_skill_files, parse_github_url
@@ -49,6 +51,7 @@ from bisheng.linsight.domain.services.skill_store import (
     BundleTooLargeError,
     SkillStore,
     compose_skill_md,
+    pack_bundle_zip,
     parse_skill_md,
     render_skill_md,
     resolve_skill_unpacked_limit,
@@ -77,6 +80,16 @@ class SkillMeta(NamedTuple):
 SKILL_OBJECT_TYPE = "linsight_skill"
 
 
+def _display_name_from_frontmatter(meta: dict, fallback: str) -> str:
+    """Read a human name from frontmatter, then fall back to the skill id."""
+    metadata = meta.get("metadata") if isinstance(meta.get("metadata"), dict) else {}
+    for value in (metadata.get(DISPLAY_NAME_META_KEY), meta.get("display_name"), meta.get("display-name")):
+        text = str(value or "").strip()
+        if text:
+            return text
+    return fallback
+
+
 class LinsightSkillOwnerProjectionPort(Protocol):
     """Durable owner projection required before skill creation completes."""
 
@@ -90,6 +103,7 @@ class LinsightSkillOwnerProjectionPort(Protocol):
         resource_version: int,
         context_version: str,
         idempotency_key: str,
+        shared_with_tenant: bool = False,
     ): ...
 
 
@@ -126,7 +140,9 @@ class SkillService:
         self,
         store: SkillStore | None = None,
         owner_projection: LinsightSkillOwnerProjectionPort | None = None,
+        personal_owner: int | None = None,
     ):
+        self.personal_owner = personal_owner
         self.store = store or SkillStore()
         self._owner_projection = owner_projection or _ConfiguredOwnerProjection()
 
@@ -139,17 +155,62 @@ class SkillService:
         )
         return PageData(data=[SkillBrief.from_model(s) for s in skills], total=total)
 
-    async def get_selectable(self) -> list[SkillSelectable]:
-        skills = await LinsightSkillDao.list_enabled()
+    async def get_selectable(self, user_id=None) -> list[SkillSelectable]:
+        from bisheng.linsight.domain.services.user_skills import UserSkillsService
+
+        skills = [row for row, _ in await UserSkillsService(user_id).records()]
         return [
             SkillSelectable(
                 name=s.name,
                 display_name=s.display_name or s.name,
                 description=s.description,
-                default_checked=bool(s.default_checked),
+                default_checked=False,
             )
             for s in skills
         ]
+
+    async def get_runtime_catalog(self, user_id=None) -> list[SkillRuntimeEntry]:
+        from bisheng.linsight.domain.services.user_skills import UserSkillsService
+
+        skills = [row for row, _ in await UserSkillsService(user_id).records()]
+        return [
+            SkillRuntimeEntry(
+                id=skill.id,
+                name=skill.name,
+                display_name=skill.display_name or skill.name,
+                description=skill.description,
+                default_checked=bool(skill.default_checked),
+                content_hash=skill.content_hash,
+            )
+            for skill in skills
+        ]
+
+    async def get_runtime_bundle(self, tenant_id: int, skill_id: int, version: str, user_id=None) -> bytes:
+        from bisheng.linsight.domain.services.user_skills import UserSkillsService
+
+        async def authorized():
+            skill = next(
+                (
+                    row
+                    for row, _ in await UserSkillsService(user_id).records()
+                    if row.id == skill_id and row.tenant_id == tenant_id
+                ),
+                None,
+            )
+            if skill is None:
+                raise SkillNotFoundError()
+            if skill.content_hash != version:
+                raise SkillValidationError(msg="Skill version changed. Refresh the skill catalog.")
+            return skill
+
+        skill = await authorized()
+        bundle = await asyncio.to_thread(
+            lambda: pack_bundle_zip(
+                self._load_existing_bundle(tenant_id, skill.name, version, owner_user_id=skill.owner_user_id)
+            )
+        )
+        await authorized()
+        return bundle
 
     async def get_detail(self, tenant_id: int, name: str) -> SkillDetail:
         skill = await self._get_or_404(name)
@@ -248,8 +309,33 @@ class SkillService:
         await LinsightSkillDao.update(skill)
         return await self.get_detail(tenant_id, name)
 
+    @staticmethod
+    def _keep_skill_id(
+        files: dict[str, bytes],
+        meta: SkillMeta,
+        skill_name: str,
+        *,
+        current_display_name: str = "",
+    ) -> SkillMeta:
+        """Keep the skill ID already stored on this row.
+
+        An uploaded bundle may name itself differently. The row, its id and the
+        directory stay. SKILL.md is rewritten so its frontmatter matches. A bundle
+        with no display name of its own reports its skill id as the display name;
+        that must not replace the name already shown for this skill.
+        """
+        uploaded_name = meta.name
+        if meta.name != skill_name:
+            parsed, body = parse_skill_md(files[SKILL_MD].decode("utf-8"))
+            parsed["name"] = skill_name
+            files[SKILL_MD] = render_skill_md(parsed, body).encode("utf-8")
+            meta = meta._replace(name=skill_name, normalized_from=None)
+        if current_display_name and meta.display_name == uploaded_name:
+            meta = meta._replace(display_name=current_display_name)
+        return meta
+
     async def update_from_upload(self, tenant_id: int, name: str, filename: str, data: bytes) -> SkillDetail:
-        """Whole-bundle replacement; frontmatter name (after normalization) must equal the path name."""
+        """Whole-bundle replacement. The skill ID stays the path name."""
         skill = await self._get_or_404(name)
         meta, files = self._parse_upload(
             filename,
@@ -257,8 +343,7 @@ class SkillService:
             max_size=await resolve_skill_upload_limit(),
             max_unpacked=await resolve_skill_unpacked_limit(),
         )
-        if meta.name != name:
-            raise SkillValidationError(msg=f"frontmatter name '{meta.name}' must equal skill ID '{name}'")
+        meta = self._keep_skill_id(files, meta, name, current_display_name=skill.display_name or "")
         await self._check_duplicate(name, meta.display_name, exclude_id=skill.id, owner_user_id=skill.owner_user_id)
         ref = self.store.write_bundle(tenant_id, name, files)
         skill.display_name, skill.description = meta.display_name, meta.description
@@ -286,7 +371,7 @@ class SkillService:
     # ----------------------------------------------------------- internals --
     async def _get_or_404(self, name: str) -> LinsightSkill:
         skill = await LinsightSkillDao.get_by_name(name)
-        if not skill:
+        if not skill or (skill.source == "personal" and skill.created_by != self.personal_owner):
             # built-in names also land here: 404 without leaking existence (design §7.5).
             raise SkillNotFoundError()
         return skill
@@ -334,8 +419,7 @@ class SkillService:
             raise SkillValidationError(msg=str(exc))
         name = str(meta.get("name") or "").strip()
         description = str(meta.get("description") or "").strip()
-        metadata = meta.get("metadata") or {}
-        display_name = str(metadata.get(DISPLAY_NAME_META_KEY) or "").strip() or name
+        display_name = _display_name_from_frontmatter(meta, name)
         if not description:
             raise SkillValidationError(msg="frontmatter 'description' is required")
         normalized_from: str | None = None
@@ -343,9 +427,10 @@ class SkillService:
             slug = slugify_pinyin(name)
             if not validate_skill_name(slug):
                 normalized_from, name = name, slug
-                display_name = str(metadata.get(DISPLAY_NAME_META_KEY) or "").strip() or normalized_from
+                display_name = _display_name_from_frontmatter(meta, normalized_from)
                 meta["name"] = slug
-                if not metadata.get(DISPLAY_NAME_META_KEY):
+                metadata = meta.get("metadata") if isinstance(meta.get("metadata"), dict) else {}
+                if display_name == normalized_from and not metadata.get(DISPLAY_NAME_META_KEY):
                     metadata[DISPLAY_NAME_META_KEY] = normalized_from
                     meta["metadata"] = metadata
                 files[SKILL_MD] = render_skill_md(meta, body).encode("utf-8")
@@ -379,7 +464,9 @@ class SkillService:
         if existing and existing.id != exclude_id:
             raise SkillNameDuplicateError()
 
-    def _load_existing_bundle(self, tenant_id: int, name: str, content_hash: str) -> dict[str, bytes]:
+    def _load_existing_bundle(
+        self, tenant_id: int, name: str, content_hash: str, *, owner_user_id: int = 0
+    ) -> dict[str, bytes]:
         """Read a stored bundle back as a file mapping (edit = read-modify-write).
 
         Goes through the store's reader rather than joining paths itself; the
@@ -387,8 +474,10 @@ class SkillService:
         version is materialized locally.
         """
         return {
-            entry["path"]: self.store.read_bytes(tenant_id, name, content_hash, entry["path"])
-            for entry in self.store.list_files(tenant_id, name, content_hash)
+            entry["path"]: self.store.read_bytes(
+                tenant_id, name, content_hash, entry["path"], owner_user_id=owner_user_id
+            )
+            for entry in self.store.list_files(tenant_id, name, content_hash, owner_user_id=owner_user_id)
         }
 
     async def _discard_unpublished(self, tenant_id: int, name: str, content_hash: str, owner_user_id: int = 0) -> None:
@@ -416,7 +505,7 @@ class SkillService:
             display_name=display_name,
             description=description,
             enabled=True,
-            source=SKILL_SOURCE_MANUAL,
+            source="personal" if self.personal_owner is not None else SKILL_SOURCE_MANUAL,
             object_path=ref.object_key,
             content_hash=ref.content_hash,
             size=ref.size,
@@ -435,5 +524,6 @@ class SkillService:
             resource_version=0,
             context_version=f"{SKILL_OBJECT_TYPE}:{skill.id}:v0",
             idempotency_key=(f"{SKILL_OBJECT_TYPE}:create:{tenant_id}:{skill.id}"),
+            shared_with_tenant=self.personal_owner is None,
         )
         return await self.get_detail(tenant_id, name)

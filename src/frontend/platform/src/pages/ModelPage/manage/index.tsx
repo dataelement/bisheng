@@ -11,11 +11,11 @@ import { useTranslation } from "react-i18next"
 
 
 import { changeLLmServerStatus, getAssistantModelList, getModelListApi, verifyLLmModelStatus } from "@/controllers/API/finetune"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { useQuery } from "react-query"
+import { useQuery } from "@tanstack/react-query"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import ModelConfig from "./ModelConfig"
 import { canManageModelSettings } from "./permissions"
+import { isSpeechModelType } from "./speechConfig"
 import { ScopeBar } from "./ScopeBar"
 import { ModelProviderRow } from "./ModelProviderRow"
 import SystemModelConfig from "./SystemModelConfig"
@@ -100,23 +100,19 @@ export default function Management() {
 
     // off & online
     const handleCheck = async (serverId: number, modelId: number, online: boolean) => {
-        const result = await captureAndAlertRequestErrorHoc(
-            changeLLmServerStatus(String(modelId), Number(online)).then(() => {
-                setData(prev => prev.map(server => server.id === serverId
-                    ? { ...server, models: server.models.map(model => model.id === modelId ? { ...model, online } : model) }
-                    : server))
-                void refetch()
-                return true
-            })
-        )
-        return result === true
+        await changeLLmServerStatus(String(modelId), Number(online));
+        setData(prev => prev.map(server => server.id === serverId
+            ? { ...server, models: server.models.map(model => model.id === modelId ? { ...model, online } : model) }
+            : server));
+        void refetch();
+        return true;
     }
 
     const handleVerify = async (serverId: number, modelId: number) => {
-        const result = await captureAndAlertRequestErrorHoc(verifyLLmModelStatus(modelId))
+        const result = await verifyLLmModelStatus(modelId);
         if (result?.id) {
-            handleVerified(serverId, result)
-            toast.show({ type: 'success', message: String(t('model.statusUpdated') ?? '') })
+            handleVerified(serverId, result);
+            toast.show({ type: 'success', message: String(t('model.statusUpdated') ?? '') });
         }
     }
 
@@ -164,7 +160,7 @@ export default function Management() {
             {/* v2.5.1 F019: scope switcher lives here (LLM is the only page
                 whose data actually changes with scope). System-level config
                 stays super-admin only regardless of active scope. */}
-            <div className="flex items-center justify-between gap-4">
+            <div className="ml-4 mr-2 flex items-center justify-between gap-4">
                 <div>
                     {appConfig.multiTenantEnabled && <ScopeBar user={user} onScopeChange={reload} />}
                 </div>
@@ -180,7 +176,7 @@ export default function Management() {
             </div>
             <div className="h-[85%]">
                 <div className="flex h-10 justify-between items-center font-medium text-muted-foreground text-sm">
-                    <span className="ml-5">{t('model.serviceProvider')}</span>
+                    <span className="ml-4">{t('model.serviceProvider')}</span>
                     <span className="mr-5">{t('model.actions')}</span>
                 </div>
                 <div className="pb-20">
@@ -198,9 +194,6 @@ export default function Management() {
                 </div>
             </div>
         </div>
-        <div className="bisheng-table-footer bg-background-login px-6">
-            <p className="desc">{t('model.modelCollectionCaption')}.</p>
-        </div>
     </div>
 
 }
@@ -208,7 +201,7 @@ export default function Management() {
 // model list（embeddings llm）
 export function useModel(type = 'llm') {
     const { data, isLoading, refetch } = useQuery({
-        queryKey: type === 'llm' ? "QueryModelsKey" : "QueryAssistantModelsKey",
+        queryKey: [type === 'llm' ? "QueryModelsKey" : "QueryAssistantModelsKey"],
         queryFn: () => type === 'llm' ? getModelListApi() : getAssistantModelList(),
         select: (data) => {
             const llmOptions = []
@@ -228,7 +221,7 @@ export function useModel(type = 'llm') {
                         label: model.model_name
                     }
                     if (!model.online) return
-                    if (model.model_type === 'asr') {
+                    if (isSpeechModelType(model.model_type)) {
                         serverAsrItem.children.push(item)
                     } else if (model.model_type === 'tts') {
                         serverTtsItem.children.push(item)

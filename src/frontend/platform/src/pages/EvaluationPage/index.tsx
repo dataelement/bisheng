@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { Button } from '@bisheng/ui';
+import { Pagination, Button } from '@bisheng/ui';
 
 import {
   Table,
@@ -17,7 +17,7 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Tag, Tooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 
 import {
   Evaluation,
@@ -25,7 +25,7 @@ import {
   getEvaluationApi,
   getEvaluationUrlApi,
 } from "@/controllers/API/evaluate";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { downloadFile } from "@/util/utils";
 import { map } from "lodash-es";
@@ -44,6 +44,7 @@ import {
 export default function EvaluationPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const paginationLocale = usePaginationLocale();
 
   const {
     page,
@@ -70,12 +71,10 @@ export default function EvaluationPage() {
       title: t("prompt"),
       desc: t("evaluation.confirmDeleteEvaluation"),
       onOk(next) {
-        captureAndAlertRequestErrorHoc(
-          deleteEvaluationApi(id).then(() => {
+        return deleteEvaluationApi(id).then(() => {
             reload();
-          })
-        );
-        next();
+            next();
+          });
       },
     });
   };
@@ -94,7 +93,7 @@ export default function EvaluationPage() {
       )}
       <div className="h-full overflow-y-auto pb-10">
         <div className="mb-10 w-full">
-            <div className="flex items-center justify-end gap-4">
+            <div className="mr-2 flex items-center justify-end gap-4">
               <Button onClick={() => navigate("/evaluation/create")}>
                 {t("create")}
               </Button>
@@ -185,7 +184,7 @@ export default function EvaluationPage() {
                     </TableCell>
                     <TableCell className="flex justify-end">
                       <div className="flex gap-2">
-                        {el.status !== EvaluationStatusEnum.failed && <Button size="small" variant="link" onClick={() => handleDownload(el)}>
+                        {el.status !== EvaluationStatusEnum.failed && <Button size="small" variant="link" onClick={handleUiRequest(() => handleDownload(el))}>
                           {t("evaluation.download")}
                         </Button>}
                         <Button size="small" variant="link" color="danger" onClick={() => handleDelete(el.id)}>
@@ -200,10 +199,9 @@ export default function EvaluationPage() {
           </div>
       </div>
       <div className="bisheng-table-footer px-6 bg-background-login">
-        <p className="desc">{t("evaluation.evaluationCollection")}</p>
-        <div>
-          <AutoPagination
-            page={page}
+        <div className="ml-auto">
+          <Pagination locale={paginationLocale}
+            current={page}
             pageSize={pageSize}
             total={total}
             onChange={(newPage) => setPage(newPage)}

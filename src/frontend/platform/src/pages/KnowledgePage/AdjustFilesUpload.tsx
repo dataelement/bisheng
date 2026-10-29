@@ -7,7 +7,7 @@ import StepProgress from "@/components/bs-ui/step";
 
 import { rebUploadFile,retryKnowledgeFileApi } from "@/controllers/API";
 import { checkResourceActionApi } from "@/controllers/API/permission";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 
 import { useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -43,9 +43,7 @@ export default function AdjustFilesUpload() {
         setHasEditPermission(false);
         return;
       }
-      const result = await captureAndAlertRequestErrorHoc(
-        checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(knowledgeId), action: 'edit' })
-      );
+      const result = await checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(knowledgeId), action: 'edit' });
       const allowed = !!result?.allowed;
       setPermissionChecked(true);
       setHasEditPermission(allowed);
@@ -54,7 +52,7 @@ export default function AdjustFilesUpload() {
         navigate(`/filelib/${knowledgeId}`, { replace: true });
       }
     };
-    guardByPermission();
+    void guardByPermission().catch(showApiError).finally(() => setPermissionChecked(true));
   }, [knowledgeId, navigate, t]);
 
   useEffect(() => {
@@ -261,8 +259,7 @@ export default function AdjustFilesUpload() {
       max_chunk_size: Number(_config.rules.maxChunkSize)
     };
 
-    captureAndAlertRequestErrorHoc(
-      rebUploadFile(apiConfig)
+    rebUploadFile(apiConfig)
         .then(res => {
 
           // 1. Fix duplicate file check (single object processing)
@@ -284,11 +281,10 @@ export default function AdjustFilesUpload() {
           toast.show({ type: 'success', message: String(t('adjustSegmentStrategySuccess') ?? '') });
           setCurrentStep(3); // Only jump when successful and no duplicates
         })
-        .finally(() => {
+        .catch(showApiError).finally(() => {
           submittingRef.current = false;
           setIsSubmitting(false);
-        })
-    );
+        });
 
     _tempConfigRef.current = apiConfig;
   };
@@ -304,8 +300,7 @@ export default function AdjustFilesUpload() {
       file_objs: objs
     };
 
-    captureAndAlertRequestErrorHoc(
-      retryKnowledgeFileApi(params)
+    retryKnowledgeFileApi(params)
         .then(res => {
           // Additional: Update file ID after overwrite
           setResultFiles(prevFiles =>
@@ -319,10 +314,9 @@ export default function AdjustFilesUpload() {
           toast.show({ type: 'success', message: String(t('parseSuccess') ?? '') });
           repeatCallBackRef.current();
         })
-        .catch(() => {
+        .catch(showApiError).finally(() => {
           setRetryLoad(false); // Also need to stop loading on error
-        })
-    );
+        });
   };
 
   const handleUnRetry = () => {

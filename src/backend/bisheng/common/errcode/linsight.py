@@ -38,6 +38,13 @@ class LinsightFileTooLargeError(BaseErrorCode):
     Msg: str = "The file exceeds the upload size limit"
 
 
+# The PDF preview of a task-generated .ppt/.pptx could not be produced (LibreOffice
+# failed, timed out, or rendered zero pages). The original file stays downloadable.
+class LinsightArtifactPreviewError(BaseErrorCode):
+    Code: int = 11025
+    Msg: str = "Failed to generate the slide preview"
+
+
 # Your Idea has run out of uses, please use the new invite code to activate the Idea feature
 class LinsightUseUpError(BaseErrorCode):
     Code: int = 11030
@@ -60,6 +67,22 @@ class LinsightToolInitError(BaseErrorCode):
 class LinsightBishengLLMError(BaseErrorCode):
     Code: int = 11090
     Msg: str = "InspirationBisheng LLMRelated Errors"
+
+
+# F087: the task's context still exceeded the model's context window after the
+# framework compressed history and retried. Written as ``error_code`` by
+# ``classify_for_event`` for the ``context_overflow`` error type.
+class LinsightContextOverflowError(BaseErrorCode):
+    Code: int = 11075
+    Msg: str = "The task content exceeds the model's context length"
+
+
+# F087: generating the summary while compressing task history failed twice.
+# Raised by the task-mode summarization middleware; the classifier matches it by
+# class name (``common`` must not import ``linsight``), so keep the name stable.
+class LinsightContextCompressFailedError(BaseErrorCode):
+    Code: int = 11076
+    Msg: str = "Failed to compress the task history"
 
 
 # The Inspiration session version has been completed or is being executed and cannot be executed again

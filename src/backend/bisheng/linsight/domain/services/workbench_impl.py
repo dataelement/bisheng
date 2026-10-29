@@ -26,6 +26,7 @@ from bisheng.common.errcode.linsight import (
     LinsightFolderFileCountExceededError,
     LinsightFolderTotalSizeExceededError,
 )
+from bisheng.common.errcode.sandbox import SandboxConfigurationError
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -53,7 +54,7 @@ from bisheng.linsight.domain.schemas.linsight_schema import (
 )
 from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.services import LLMService
-from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao
 from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng.utils import util
 from bisheng.utils.util import async_calculate_md5
@@ -222,7 +223,7 @@ class LinsightWorkbenchImpl:
     @classmethod
     async def _get_llm(cls, invoke_user_id: int) -> (BishengLLM, Any):
         # Get and validate the workbench configuration
-        workbench_conf = await cls._get_workbench_config()
+        workbench_conf = await cls._get_workbench_config(invoke_user_id)
 
         # BuatLLMInstances
         linsight_conf = settings.get_linsight_conf()
@@ -1643,9 +1644,12 @@ class LinsightWorkbenchImpl:
             return {"task_title": fallback, "chat_id": chat_id, "error_message": str(e)}
 
     @classmethod
-    async def _get_workbench_config(cls):
+    async def _get_workbench_config(cls, user_id: int):
         """Get and validate the workbench configuration"""
         workbench_conf = await LLMService.get_workbench_llm()
+        from bisheng.dsh.domain.services.model_catalog import project_workbench_config
+
+        workbench_conf = await project_workbench_config(workbench_conf, user_id)
         if not workbench_conf or not workbench_conf.linsight_default_model_id:
             raise cls.BishengLLMError(
                 "The task has been terminated, please contact the administrator to check the status of the Ideas task execution model"
@@ -2261,69 +2265,54 @@ class LinsightWorkbenchImpl:
     async def _init_bisheng_code_tool(
         cls, selected_tool_ids: list[int], file_dir: str, user_id: int, session_version_id: str | None = None
     ) -> list[BaseTool]:
-        """Initialize the code interpreter separately (it needs the workspace dir bound).
+        """Bind the task's implicit execution capability through tool-use authorization.
 
-        ``selected_tool_ids`` is the user's per-turn tool selection. The id is
-        consumed (removed) on a hit so the generic ``init_by_tool_ids`` pass does
-        not build a second, workspace-less copy of the same tool.
+        Consume an explicit selection too, so every task owns one workspace-bound
+        interpreter. Revoked implicit access leaves the remaining tools available;
+        an explicitly requested capability retains normal permission errors.
         """
-        tools = []
         bisheng_code_tool = await GptsToolsDao.aget_tool_by_tool_key(tool_key="bisheng_code_interpreter")
-        if not bisheng_code_tool or bisheng_code_tool.id not in selected_tool_ids:
-            return tools
-        # Individual initialization code interpreter tool
-        selected_tool_ids.remove(bisheng_code_tool.id)
-        # Same extra source as ToolExecutor.parse_preset_tool_params: tool row, then
-        # category. Built-in-tool UI writes type.extra and NULLs the row.
-        tool_type = None
-        type_id = getattr(bisheng_code_tool, "type", None)
-        if not bisheng_code_tool.extra and type_id:
-            tool_type = await GptsToolsDao.aget_one_tool_type(tool_type_id=type_id)
+        if not bisheng_code_tool:
+            return []
+        explicit = bisheng_code_tool.id in selected_tool_ids
+        if explicit:
+            selected_tool_ids.remove(bisheng_code_tool.id)
+        tool_type = await GptsToolsDao.aget_one_tool_type(tool_type_id=bisheng_code_tool.type)
+        if tool_type is None:
+            raise SandboxConfigurationError()
+        try:
+            await ToolExecutor._ensure_use_permission_async(tool_type, user_id)
+        except PermissionError:
+            if explicit:
+                raise
+            logger.info("Task execution capability unavailable to user_id={}", user_id)
+            return []
         code_config = ToolExecutor.parse_preset_extra(bisheng_code_tool, tool_type)
         executor_type = code_config.get("type") or "local"
-        if "config" not in code_config:
-            code_config["config"] = {}
-        if "local" not in code_config["config"]:
-            code_config["config"]["local"] = {}
-        code_config["config"]["local"]["local_sync_path"] = file_dir
-        # With local isolation on, keep one run dir for the whole task; released by
-        # the task's _cleanup_resources before file_dir is deleted.
-        code_config["config"]["local"]["keep_run_dir"] = True
-        if "container" not in code_config["config"]:
-            code_config["config"]["container"] = {}
-        code_config["config"]["container"]["local_sync_path"] = file_dir
-        # Sticky replica + work dir across tool_calls in one Linsight task (AC-06).
-        code_config["config"]["container"]["keep_session"] = True
-        code_config["config"]["container"]["timeout"] = 3600
+        if executor_type not in {"local", "container", "e2b"}:
+            raise SandboxConfigurationError()
+        # Normalize the default before the factory selects config[executor_type].
+        code_config["type"] = executor_type
+        executor_config = code_config.setdefault("config", {}).setdefault(executor_type, {})
+        executor_config["local_sync_path"] = file_dir
         if session_version_id:
             from bisheng.linsight.domain.services.workspace_backend import WORKSPACE_PREFIX
 
-            # Lets the executor mirror what it writes into ``workspace/<svid>/``.
-            # Without it the local working dir is the ONLY copy, so the file tools
-            # cannot see a code-generated deliverable and the next turn's
-            # seed-from-previous finds an empty ``output/``.
-            workspace_prefix = f"{WORKSPACE_PREFIX}/{session_version_id}"
-            code_config["config"]["local"]["workspace_prefix"] = workspace_prefix
-            code_config["config"]["container"]["workspace_prefix"] = workspace_prefix
-        if "e2b" not in code_config["config"]:
-            code_config["config"]["e2b"] = {}
-        code_config["config"]["e2b"]["local_sync_path"] = file_dir
-        # Default60Validity period of minutes
-        code_config["config"]["e2b"]["timeout"] = 3600
-        code_config["config"]["e2b"]["keep_sandbox"] = True
-        # ``file_list`` is the E2B copy-in set: E2bCodeExecutor.__init__ reads every
-        # entry fully into worker memory and pushes it into the sandbox up front.
-        # E2B's own contract caps that at SIZE_AUTOPUSH — anything larger is meant to
-        # be requested explicitly per run — while the dual-track ingest keeps
-        # originals up to _RAW_KEEP_MAX_BYTES (50MB), which LocalExecutor serves for
-        # free through local_sync_path. Filter here so the E2B ceiling is honoured
-        # without shrinking what the local executor can reach.
-        # Container mode copy-in happens at run() (AC-11); do not pre-scan.
-        # Skill bundles are already in file_dir: task startup copies them before
-        # this tool is built, so the walk below sees /skills/.
-        if executor_type != "container":
-            code_config["config"]["e2b"]["file_list"] = build_e2b_file_list(file_dir)
+            # File tools and follow-up turns read the same durable workspace.
+            executor_config["workspace_prefix"] = f"{WORKSPACE_PREFIX}/{session_version_id}"
+        if executor_type == "local":
+            executor_config["keep_run_dir"] = True
+        elif executor_type == "container":
+            executor_config["keep_session"] = True
+            executor_config["timeout"] = 3600
+        elif executor_type == "e2b":
+            executor_config["timeout"] = 3600
+            executor_config["keep_sandbox"] = True
+            # E2B eagerly reads this copy-in set. Local uses the task directory
+            # directly; container copies its working set at run().
+            executor_config["file_list"] = build_e2b_file_list(file_dir)
 
+        bisheng_code_tool = GptsTools(**bisheng_code_tool.model_dump())
         bisheng_code_tool.extra = code_config
 
         tools = await ToolExecutor.init_by_tool_id(
@@ -2353,42 +2342,21 @@ class LinsightWorkbenchImpl:
         """
         tools = []
 
-        if not session_version.tools:
-            return tools
+        tool_ids = list(dict.fromkeys(cls._extract_tool_ids(session_version.tools or [])))
 
-        # &Extraction toolID
-        tool_ids = list(dict.fromkeys(cls._extract_tool_ids(session_version.tools)))  # de-dup, preserve order
-
-        # todo Better tool initialization scheme
-        # The code interpreter binds ONLY when the user picked it for this turn.
-        # It used to be gated on the daily-config whitelist (the admin-configured
-        # candidate list), which made it bind on every task turn regardless of the
-        # input-bar toggle — the whitelist is the set of tools a user MAY pick,
-        # not a set of tools to auto-enable.
+        # Task infrastructure is resolved on each execution/resume, independently
+        # of the optional tools selected in the composer. Initialization failures
+        # propagate before the model starts so capability loss is actionable.
         if need_upload and file_dir:
-            try:
-                bisheng_code_tool = await cls._init_bisheng_code_tool(
-                    tool_ids,
-                    file_dir,
-                    user_id=session_version.user_id,
-                    session_version_id=session_version.id,
+            tools.extend(
+                await cls._init_bisheng_code_tool(
+                    tool_ids, file_dir, user_id=session_version.user_id, session_version_id=session_version.id
                 )
-                tools.extend(bisheng_code_tool)
-            except Exception:
-                # Swallowing is deliberate (a broken tool must not kill the task),
-                # but it must stay diagnosable: logger.error(f"...{e!s}") dropped the
-                # traceback, so a run silently losing the code interpreter looked
-                # identical whether the cause was a permission gate, a bad config or
-                # a missing sandbox. logger.exception keeps the stack.
-                logger.exception(
-                    "Failed to initialize BiSheng code interpreter tool: session_version_id={}",
-                    session_version.id,
-                )
+            )
 
-        # Image View is a visual-model config row, not a LangChain tool.
-        # Daily chat skips it and wires pixel viewing separately. Passing the
-        # row to load_tools raises "Got unknown tool image_view" and aborts
-        # the task before skills or any other tool run.
+        # Retired builtin row. Saved task selections may still name it.
+        # Passing the row to load_tools raises "Got unknown tool image_view"
+        # and aborts the task before skills or any other tool run.
         from bisheng.common.image_view.loop import IMAGE_VIEW_TOOL_KEY
 
         image_view_tool = await GptsToolsDao.aget_tool_by_tool_key(tool_key=IMAGE_VIEW_TOOL_KEY)

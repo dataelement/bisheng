@@ -92,6 +92,16 @@ def get_env():
     env["version"] = __version__
     env["enable_etl4lm"] = image_parser_enabled
     env["multi_tenant_enabled"] = bisheng_settings.multi_tenant.enabled
+    # Open platform switch → platform appConfig.openPlatformEnabled (gates the
+    # local-dev-toolkit scopes and the connect-info panel only).
+    env["open_platform_enabled"] = bisheng_settings.open_platform.enabled
+    # F054: app-factory runtime layer switch → platform appConfig.appRuntimeEnabled
+    # / client BishengConfig.app_runtime_enabled. Anonymous read on purpose: the
+    # /apps/* entry has to answer "this environment has no app factory" before
+    # anyone is logged in (AC-30 / AC-62).
+    env["app_runtime_enabled"] = bisheng_settings.app_runtime.enabled
+    # Open API (beta2): personal-token feature switch + management-UI tab gate.
+    # Four sibling switches on purpose — each gates a different surface.
     env["personal_token_enabled"] = bool(bisheng_settings.open_api.pat_enabled)
     env["open_api_management_enabled"] = bool(bisheng_settings.open_api.management_ui_enabled)
     try:

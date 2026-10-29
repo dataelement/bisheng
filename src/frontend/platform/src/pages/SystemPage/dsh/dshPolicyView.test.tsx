@@ -84,7 +84,7 @@ describe('unified usage selection', () => {
             button: 0,
             ctrlKey: false,
         })
-        await screen.findByRole('heading', { name: 'dsh.entireTenant' })
+        await waitFor(() => expect(getDshUsageOverview).toHaveBeenLastCalledWith(expect.objectContaining({ departmentId: undefined, includeSummary: true }), expect.any(AbortSignal)))
         await screen.findByText('15')
         expect(getDshUsageOverview).toHaveBeenCalledWith(
             expect.objectContaining({ departmentId: undefined, includeSummary: true }),
@@ -92,9 +92,9 @@ describe('unified usage selection', () => {
         )
         expect(screen.queryByText('dsh.selectDepartmentForUsage')).toBeNull()
         fireEvent.click(screen.getByText('pick-department'))
-        await screen.findByRole('heading', { name: 'Research' })
+        await waitFor(() => expect(getDshUsageOverview).toHaveBeenLastCalledWith(expect.objectContaining({ departmentId: 10, includeSummary: true }), expect.any(AbortSignal)))
         fireEvent.click(screen.getByRole('button', { name: 'dsh.entireTenant' }))
-        await screen.findByRole('heading', { name: 'dsh.entireTenant' })
+        await waitFor(() => expect(getDshUsageOverview).toHaveBeenLastCalledWith(expect.objectContaining({ departmentId: undefined, includeSummary: true }), expect.any(AbortSignal)))
         expect(screen.queryByText('dsh.usageMemberDetails')).toBeNull()
         expect(screen.queryByRole('table')).toBeNull()
     })
@@ -105,7 +105,7 @@ describe('unified usage selection', () => {
             return { ...page, items: [...page.items, { ...page.items[0], user_id: 1, user_name: 'admin' }] }
         })
         render(<PolicyView />)
-        await screen.findByRole('heading', { name: 'Research / admin' })
+        await waitFor(() => expect(screen.getByLabelText('dsh.selectUsageUser')).toHaveTextContent('admin'))
     })
     it('finds the current user beyond the first page before choosing a fallback', async () => {
         vi.mocked(getDshUsageOverview).mockResolvedValueOnce({
@@ -122,7 +122,7 @@ describe('unified usage selection', () => {
             has_more: true,
         })
         render(<PolicyView />)
-        await screen.findByRole('heading', { name: 'Research / alice' })
+        await screen.findByRole('button', { name: 'dsh.selectUsageUser' }).then((trigger) => waitFor(() => expect(trigger).toHaveTextContent('alice')))
         expect(getDshUsageOverview).toHaveBeenCalledWith(
             expect.objectContaining({ keyword: 'alice', limit: 100 }),
             expect.any(AbortSignal),
@@ -136,20 +136,20 @@ describe('unified usage selection', () => {
     })
     it('keeps user candidates in the search dropdown and retains selection when changing dates', async () => {
         render(<PolicyView />)
-        await screen.findByRole('heading', { name: 'Research / alice' })
+        await screen.findByRole('button', { name: 'dsh.selectUsageUser' }).then((trigger) => waitFor(() => expect(trigger).toHaveTextContent('alice')))
         fireEvent.click(screen.getByLabelText('dsh.selectUsageUser'))
         await screen.findByRole('option', { name: /alice/u })
         expect(screen.queryByRole('table')).toBeNull()
         fireEvent.change(screen.getByPlaceholderText('dsh.searchUsers'), { target: { value: 'ali' } })
         fireEvent.click(await screen.findByRole('option', { name: /alice/u }))
-        await screen.findByRole('heading', { name: 'Research / alice' })
+        await screen.findByRole('button', { name: 'dsh.selectUsageUser' }).then((trigger) => waitFor(() => expect(trigger).toHaveTextContent('alice')))
         await screen.findByText('15')
         expect(screen.queryByRole('option')).toBeNull()
         expect(screen.queryByRole('table')).toBeNull()
         fireEvent.click(screen.getByLabelText('dsh.usageRange'))
         fireEvent.click(screen.getByText('dsh.range.today'))
         await waitFor(() => expect(getDshUsageTimeSummary).toHaveBeenCalledTimes(2))
-        expect(screen.getByRole('heading', { name: 'Research / alice' })).toBeTruthy()
+        expect(screen.getByLabelText('dsh.selectUsageUser')).toHaveTextContent('alice')
         await waitFor(() => expect(document.querySelector('[data-usage-line-chart="tokens"]')).toBeTruthy())
         expect(getDshUsageOverview).toHaveBeenCalledWith(
             expect.objectContaining({ keyword: 'ali' }),
@@ -180,7 +180,7 @@ describe('unified usage selection', () => {
     })
     it('offers the three fixed time ranges without custom date controls', async () => {
         render(<PolicyView />)
-        await screen.findByRole('heading', { name: 'Research / alice' })
+        await screen.findByRole('button', { name: 'dsh.selectUsageUser' }).then((trigger) => waitFor(() => expect(trigger).toHaveTextContent('alice')))
         fireEvent.click(screen.getByLabelText('dsh.usageRange'))
         expect(screen.getByText('dsh.range.today')).toBeTruthy()
         expect(screen.queryByText('dsh.range.7d')).toBeNull()
@@ -189,16 +189,13 @@ describe('unified usage selection', () => {
         expect(screen.queryByText('dsh.range.custom')).toBeNull()
         expect(screen.queryByLabelText('dsh.rangeStart')).toBeNull()
     })
-    it('places filters in the supplied header target and removes them on unmount', async () => {
-        const target = document.createElement('div')
-        document.body.append(target)
-        const view = render(<PolicyView toolbarTarget={target} />)
-        await screen.findByRole('heading', { name: 'Research / alice' })
-        expect(target).toContainElement(screen.getByLabelText('dsh.usageFilters'))
-        expect(view.container.querySelector('[aria-label="dsh.usageFilters"]')).toBeNull()
-        view.unmount()
-        expect(target).toBeEmptyDOMElement()
-        target.remove()
+    it('places filters and refresh in the content row without the former target heading', async () => {
+        const view = render(<PolicyView />)
+        await waitFor(() => expect(screen.getByLabelText('dsh.selectUsageUser')).toHaveTextContent('alice'))
+        const filters = screen.getByLabelText('dsh.usageFilters')
+        expect(view.container).toContainElement(filters)
+        expect(filters.parentElement).toContainElement(screen.getByRole('button', { name: 'dsh.refresh' }))
+        expect(screen.queryByRole('heading', { name: 'Research / alice' })).toBeNull()
     })
     it('selects the first available tenant user when the current user is absent', async () => {
         vi.mocked(getDshUsageOverview).mockResolvedValueOnce({
@@ -215,7 +212,7 @@ describe('unified usage selection', () => {
             has_more: false,
         })
         render(<PolicyView />)
-        await screen.findByRole('heading', { name: 'Research / bob' })
+        await waitFor(() => expect(screen.getByLabelText('dsh.selectUsageUser')).toHaveTextContent('bob'))
         expect(getDshUsageTimeSummary).toHaveBeenCalledWith('30', expect.any(Object), expect.any(AbortSignal))
     })
 })

@@ -11,7 +11,7 @@ WorkbenchTheme,
 getBrandConfigApi,
 saveBrandConfigApi,
 } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -42,11 +42,11 @@ export default function WorkbenchThemeSettings() {
 
     useEffect(() => {
         (async () => {
-            const data = await captureAndAlertRequestErrorHoc(getBrandConfigApi());
+            const data = await getBrandConfigApi();
             if (!data) return;
             setConfig(data);
             setSelected(data.workbenchTheme === "green" ? "green" : "blue");
-        })();
+        })().catch(showApiError);
     }, []);
 
     const handleSelect = async (value: WorkbenchTheme) => {
@@ -54,16 +54,16 @@ export default function WorkbenchThemeSettings() {
         setSaving(true);
         const prev = selected;
         setSelected(value); // optimistic
-        const saved = await captureAndAlertRequestErrorHoc(
-            saveBrandConfigApi(toUpdatePayload(config, value)),
-        );
-        setSaving(false);
-        if (!saved) {
-            setSelected(prev); // rollback
-            return;
-        }
+        try {
+        const saved = await saveBrandConfigApi(toUpdatePayload(config, value));
         setConfig(saved);
         notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("theme.workbenchThemeSaved") ?? '') });
+        } catch (error) {
+            setSelected(prev); // rollback
+            showApiError(error);
+        } finally {
+            setSaving(false);
+        }
     };
 
     if (!config) {

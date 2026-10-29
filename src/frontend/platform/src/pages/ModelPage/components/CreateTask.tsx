@@ -1,17 +1,10 @@
 // @ts-strict-ignore
-import { Button, Input } from '@bisheng/ui';
+import { Button, Input, Select } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 import { useContext, useEffect, useRef, useState } from "react";
 
-import {
-    Select,
-    SelectContent,
-    SelectGroup,
-    SelectItem,
-    SelectTrigger,
-    SelectValue
-} from "../../../components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { Tooltip } from "@bisheng/ui";
 
 import { useTranslation } from "react-i18next";
@@ -22,12 +15,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { alertContext } from "../../../contexts/alertContext";
 import { getFTServicesApi, getServicesApi } from "../../../controllers/API";
 import { createTaskApi } from "../../../controllers/API/finetune";
-import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { showApiError } from "../../../controllers/request";
 import Combobox from "./Combobox";
 import CreateTaskList from "./CreateTaskList";
 
 export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
     const { t } = useTranslation('model')
+    const selectLabels = useSelectLabels()
     const defaultTable = [
         { name: 'gpus', value: '', desc: t('finetune.gpuDesc') },
         { name: 'val_ratio', value: '0.1', desc: t('finetune.valRatioDesc') },
@@ -74,11 +68,14 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
         console.log('object :>> ', resultRef.current);
         setLoading(true)
         // api
-        const res = await captureAndAlertRequestErrorHoc(createTaskApi(resultRef.current))
-        setLoading(false)
-        if (!res) return
-
+        try {
+        const res = await createTaskApi(resultRef.current)
         onCreate(res.id)
+        } catch (error) {
+            showApiError(error)
+        } finally {
+            setLoading(false)
+        }
     }
 
     return <div className="pt-2 h-[calc(100vh-162px-var(--license-banner-h,0px))] px-2 overflow-y-auto">
@@ -97,18 +94,15 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
                     </Tooltip> */}
                 </small>
                 <div className="flex gap-4 items-center">
-                    <Select onValueChange={handleRtChange}>
-                        <SelectTrigger className="w-[280px]">
-                            <SelectValue placeholder="" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                {
-                                    services.map(service => <SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>)
-                                }
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
+                    <Select
+                        {...selectLabels}
+                        className="w-[280px]"
+                        aria-label={t('finetune.rtService')}
+                        options={services
+                            .filter(service => service.id != null && service.id !== '')
+                            .map(service => ({ value: service.id, label: String(service.name ?? '') }))}
+                        onChange={(val) => { if (val != null) handleRtChange(val) }}
+                    />
                     <Button size="small" onClick={gpuClick}>{t('finetune.gpuResourceUsage')}</Button>
                 </div>
             </div>

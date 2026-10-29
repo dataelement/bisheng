@@ -1,10 +1,10 @@
-import { Input } from '@bisheng/ui';
+import { Input, Select } from '@bisheng/ui';
+import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
 import { Label } from '@/components/bs-ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/bs-ui/select';
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getModelProviders } from './modelProviderFields';
-import { configWithDefaults, getConfigError, getSpeechFields, speechDocs, speechProviders } from './speechConfig';
+import { configWithDefaults, getConfigError, getSpeechFields, isSpeechModelType, speechDocs, speechProviders } from './speechConfig';
 import type { ConfigField, ProviderConfig } from './speechConfig';
 
 interface CustomFormProps {
@@ -30,6 +30,7 @@ interface FormFieldProps {
 
 function FormField({ field, value, providerName, apiKeySite, onChange }: FormFieldProps) {
     const { t } = useTranslation();
+    const selectLabels = useSelectLabels();
     return <div className="space-y-2">
         <Label className="bisheng-label" htmlFor={field.key}>
             {field.label}{field.required && ' *'}
@@ -37,10 +38,14 @@ function FormField({ field, value, providerName, apiKeySite, onChange }: FormFie
                 ({t('model.getApiKey', { provider: providerName })})
             </a>}
         </Label>
-        {field.options ? <Select value={value} onValueChange={value => onChange(field.key, value)}>
-            <SelectTrigger id={field.key}><SelectValue /></SelectTrigger>
-            <SelectContent>{field.options.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
-        </Select> : <Input id={field.key} type={field.type || 'text'} autoComplete="off" placeholder={field.example ? t('model.formatExample', { example: field.example }) : field.placeholder} value={value}
+        {field.options ? <Select
+            {...selectLabels}
+            id={field.key}
+            aria-label={field.label}
+            options={field.options.filter(option => option.value != null && option.value !== '')}
+            value={value || null}
+            onChange={next => onChange(field.key, next == null ? '' : String(next))}
+        /> : <Input id={field.key} type={field.type || 'text'} autoComplete="off" placeholder={field.example ? t('model.formatExample', { example: field.example }) : field.placeholder} value={value}
             onChange={event => onChange(field.key, event.target.value)} required={field.required} />}
     </div>;
 }
@@ -50,8 +55,8 @@ export const CustomForm = forwardRef<CustomFormHandle, CustomFormProps>(function
 ) {
     const { t } = useTranslation();
     const [form, setForm] = useState(formData);
-    const hasSpeech = speechProviders.includes(provider) && modelTypes.includes('asr');
-    const speechOnly = hasSpeech && modelTypes.every(type => type === 'asr');
+    const hasSpeech = speechProviders.includes(provider) && modelTypes.some(isSpeechModelType);
+    const speechOnly = hasSpeech && modelTypes.every(isSpeechModelType);
     const commonFields = speechOnly ? [] : getModelProviders()[provider] || [];
     const speechFields = hasSpeech ? getSpeechFields(provider, form, t) : [];
     const fields = [...commonFields, ...speechFields];

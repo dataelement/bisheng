@@ -1,13 +1,13 @@
-import { Button, Input, SearchInput, notification } from '@bisheng/ui';
+import { Pagination, Button, Input, SearchInput, notification } from '@bisheng/ui';
 import { Tag, type TagColor } from "@bisheng/ui";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import { deleteTenantApi, getTenantsApi, updateTenantStatusApi } from "@/controllers/API/tenant";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { useTable } from "@/util/hook";
@@ -44,6 +44,7 @@ export default function TenantPage() {
 
 function TenantPageInner() {
   const { t } = useTranslation("bs");
+  const paginationLocale = usePaginationLocale();
   const { appConfig } = useContext(locationContext);
   const multiTenantEnabled = !!appConfig?.multiTenantEnabled;
   const [createOpen, setCreateOpen] = useState(false);
@@ -78,22 +79,18 @@ function TenantPageInner() {
         title: t("tenant.disable"),
         desc: t("tenant.confirmDisable"),
         onOk: (next: () => void) => {
-          captureAndAlertRequestErrorHoc(
-            updateTenantStatusApi(tenant.id, newStatus).then(() => {
+          return updateTenantStatusApi(tenant.id, newStatus).then(() => {
               notification.open({ type: "success", title: String(t("updateSuccess") ?? ''), description: "" });
               reload();
-            }),
-          );
-          next();
+              next();
+            });
         },
       });
     } else {
-      captureAndAlertRequestErrorHoc(
-        updateTenantStatusApi(tenant.id, newStatus).then(() => {
+      updateTenantStatusApi(tenant.id, newStatus).then(() => {
           notification.open({ type: "success", title: String(t("updateSuccess") ?? ''), description: "" });
           reload();
-        }),
-      );
+        }).catch(showApiError);
     }
   };
 
@@ -104,13 +101,11 @@ function TenantPageInner() {
 
   const confirmDelete = () => {
     if (!deleteTarget || deleteConfirmCode !== deleteTarget.tenant_code) return;
-    captureAndAlertRequestErrorHoc(
-      deleteTenantApi(deleteTarget.id).then(() => {
+    deleteTenantApi(deleteTarget.id).then(() => {
         notification.open({ type: "success", title: String(t("updateSuccess") ?? ''), description: "" });
         setDeleteTarget(null);
         reload();
-      }),
-    );
+      }).catch(showApiError);
   };
 
   // Tenant CRUD only makes sense in multi-tenant deployments. The route is
@@ -123,8 +118,8 @@ function TenantPageInner() {
   return (
     <div className="relative h-full px-2 py-4 overflow-hidden">
       <div className="flex justify-between items-center mb-4">
-        <span className="text-lg font-bold">{t("tenant.management")}</span>
-        <div className="flex gap-4 items-center">
+        <span className="pl-2 text-lg font-bold">{t("tenant.management")}</span>
+        <div className="mr-2 flex gap-4 items-center">
           <SearchInput placeholder={t("tenant.search")} onChange={(e) => search(e.target.value)} />
         </div>
       </div>
@@ -240,10 +235,9 @@ function TenantPageInner() {
         </Table>
       </div>
 
-      <div className="bisheng-table-footer bg-background-login">
-        <p className="desc">{t("tenant.management")}</p>
-        <AutoPagination
-          page={page}
+      <div className="bisheng-table-footer bg-background-login justify-end px-6">
+        <Pagination locale={paginationLocale}
+          current={page}
           pageSize={pageSize}
           total={total}
           onChange={(newPage: number) => setPage(newPage)}

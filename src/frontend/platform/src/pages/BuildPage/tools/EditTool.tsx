@@ -1,17 +1,16 @@
 // @ts-strict-ignore
-import { Button, Input, Textarea, toast } from '@bisheng/ui';
+import { Button, Dropdown, DropdownChevron, DropdownItem, Input, Textarea, toast } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Dialog,DialogContent,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
 
 import { Label } from "@/components/bs-ui/label";
 import { Popover,PopoverClose,PopoverContent,PopoverTrigger } from "@/components/bs-ui/popover";
-import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger } from "@/components/bs-ui/select";
 import { Sheet,SheetContent,SheetFooter,SheetHeader,SheetTitle } from "@/components/bs-ui/sheet";
 import { Table,TableBody,TableCell,TableHead,TableHeader,TableRow } from "@/components/bs-ui/table";
 
 import { createTool,deleteTool,downloadToolSchema,testToolApi,updateTool } from "@/controllers/API/tools";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { RadioGroup,Radio as RadioGroupItem } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { forwardRef,useEffect,useImperativeHandle,useRef,useState } from "react";
@@ -72,7 +71,7 @@ export const TestDialog = forwardRef<{
         setLoading(true)
         const { server_host, children, auth_method, parameter_name } = toolRef.current
         const { apiKey, apiLocation, authMethod, authType, parameter } = formRef.current.state
-        await captureAndAlertRequestErrorHoc(testToolApi({
+        await testToolApi({
             server_host,
             extra: children.find(el => el.name === apiData.name).extra,
             auth_method: authMethod === 'apikey' ? 1 : 0,
@@ -81,8 +80,7 @@ export const TestDialog = forwardRef<{
             request_params: formRef.current.values,
             api_location: apiLocation || 'query',
             parameter_name: parameter || parameter_name
-        }).then(setResult))
-        setLoading(false)
+        }).then(setResult).catch(showApiError).finally(() => setLoading(false))
     }
     return <Dialog open={testShow} onOpenChange={setTestShow}>
         <DialogContent className="sm:max-w-[625px]">
@@ -177,7 +175,7 @@ const EditTool = forwardRef((props: any, ref) => {
     // sendRequest to backend to get Schema
     const handleImportSchema = () => {
         // http://192.168.106.120:3002/openapi-test.json
-        captureAndAlertRequestErrorHoc(downloadToolSchema({ download_url: schemaUrl.current })).then(res => {
+        downloadToolSchema({ download_url: schemaUrl.current }).then(res => {
             schemaUrl.current = ''
             if (!res) return
             fromDataRef.current = { ...res, id: fromDataRef.current.id }
@@ -191,13 +189,13 @@ const EditTool = forwardRef((props: any, ref) => {
                 parameter: res.parameter_name
             }))
             setTableData(res.children)
-        })
+        }).catch(showApiError)
     };
     // set schemaContent
     const handleSelectTemplate = (key = '') => {
         if (!editShow) return
         const file_content = key ? Example[key] : formState.schemaContent
-        file_content && captureAndAlertRequestErrorHoc(downloadToolSchema({ file_content })).then(res => {
+        file_content && downloadToolSchema({ file_content }).then(res => {
             schemaUrl.current = ''
             if (!res) return
             fromDataRef.current = { ...res, id: fromDataRef.current.id }
@@ -211,7 +209,7 @@ const EditTool = forwardRef((props: any, ref) => {
                 parameter: res.parameter_name
             }));
             setTableData(res.children)
-        })
+        }).catch(showApiError)
     };
 
     const [saveLoading, setSaveLoading] = useState(false)
@@ -257,14 +255,13 @@ const EditTool = forwardRef((props: any, ref) => {
         }
         const methodApi = delShow ? updateTool : createTool
         setSaveLoading(true)
-        captureAndAlertRequestErrorHoc(methodApi(data)).then(res => {
-            setSaveLoading(false)
+        methodApi(data).then(res => {
             if (!res) return
             // save
             setEditShow(false)
             props.onReload()
             toast.show({ type: "success", message: String(t('skills.saveSuccessful') ?? '') })
-        })
+        }).catch(showApiError).finally(() => setSaveLoading(false))
     };
     // del tool
     const handleDelete = () => {
@@ -273,8 +270,7 @@ const EditTool = forwardRef((props: any, ref) => {
             desc: t('skills.deleteSure'),
             onOk(next) {
                 // api
-                captureAndAlertRequestErrorHoc(deleteTool(fromDataRef.current.id)).then(res => {
-                    if (res === false) return
+                return deleteTool(fromDataRef.current.id).then(() => {
                     props.onReload()
                     setEditShow(false)
                     next()
@@ -317,17 +313,19 @@ const EditTool = forwardRef((props: any, ref) => {
                                     </div>
                                 </PopoverContent>
                             </Popover>
-                            <Select value="1" onValueChange={(k) => handleSelectTemplate(k)}>
-                                <SelectTrigger >
-                                    <span>{t('tools.examples')}</span>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectGroup>
-                                        <SelectItem value="json">{t('tools.weatherJson')}</SelectItem>
-                                        <SelectItem value="yaml">{t('tools.petShopYaml')}</SelectItem>
-                                    </SelectGroup>
-                                </SelectContent>
-                            </Select>
+                            {/* Inserting an example is an action (the trigger never shows a value), so this is a menu, not a Select. */}
+                            <Dropdown
+                                align="end"
+                                menu={<>
+                                    <DropdownItem onSelect={() => handleSelectTemplate('json')}>{t('tools.weatherJson')}</DropdownItem>
+                                    <DropdownItem onSelect={() => handleSelectTemplate('yaml')}>{t('tools.petShopYaml')}</DropdownItem>
+                                </>}
+                            >
+                                <Button type="button" variant="outlined" color="default">
+                                    {t('tools.examples')}
+                                    <DropdownChevron />
+                                </Button>
+                            </Dropdown>
                         </div>
                     </div>
                     <div className="px-6 mb-4" >

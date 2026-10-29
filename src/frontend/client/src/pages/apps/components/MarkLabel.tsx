@@ -1,7 +1,7 @@
 import { GripVertical, Plus, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
+import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import { getAllLabelsApi, updateHomeLabelApi } from '~/api/apps';
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components";
 import { useToastContext } from "~/Providers";

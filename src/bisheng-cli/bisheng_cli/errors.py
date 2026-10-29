@@ -1,0 +1,484 @@
+"""Exit codes and the translation layer on top of the platform's error codes.
+
+Three ideas hold this file together.
+
+**One code, one next action.** The exit-code table is partitioned by what the
+caller does next, not by severity. `16225` ("the platform never seeded the
+approval scene — go find an administrator, editing your code will not help") and
+`16226` ("the box is out of capacity — wait, or have the owner publish manually")
+are the canonical example: identical severity, opposite responses, so they get
+13 and 14 and must never be merged back together.
+
+**Three parts, always.** Every failure prints the platform's raw `code`, one
+sentence of Chinese explaining it, and a concrete next step. Dropping the raw
+code makes support unable to place the failure; dropping the sentence leaves a
+number; dropping the next step leaves the agent with nothing to act on.
+
+**Unknown is neither crash nor success.** An unregistered code degrades in two
+stages — first by HTTP status class (a 503 is "the platform is briefly down",
+whatever the code says), then to exit 19 which prints the code and message
+verbatim. It must never land on exit 1, which means "the CLI itself broke".
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from bisheng_cli.output import mask
+
+# ---- exit codes ---------------------------------------------------------
+
+EXIT_OK = 0
+EXIT_INTERNAL = 1
+EXIT_USAGE = 2
+EXIT_NOT_LOGGED_IN = 3
+EXIT_AUTH = 4
+EXIT_FORBIDDEN = 5
+EXIT_LOCAL_INVALID = 6
+EXIT_UNREACHABLE = 7
+EXIT_NOT_ENABLED = 8
+EXIT_PLATFORM_TOO_OLD = 9
+EXIT_PRECHECK_FAILED = 10
+EXIT_SECRET_FOUND = 11
+EXIT_PUBLISH_CONFLICT = 12
+EXIT_SCENE_MISSING = 13
+EXIT_CAPACITY = 14
+# 18 = a defect on either side of the contract. It is separate from 1 and from
+# 19 because the *action* differs, and the action is the whole point of this
+# table: on 1 (the CLI crashed) retrying once is reasonable; on 19 (a code we
+# have no entry for) the caller reads the message and may retry with different
+# arguments; on 18 both retrying and changing arguments are guaranteed useless
+# — the only correct move is to stop and file the defect. Folding it into 19
+# would also mislabel it: 19 says "unregistered code", and 26004 / 26031 are
+# codes we know exactly.
+EXIT_DEFECT = 18
+EXIT_UNKNOWN_CODE = 19
+EXIT_REJECTED = 20
+EXIT_WITHDRAWN = 21
+EXIT_PENDING_ONLINE = 22
+EXIT_WAIT_TIMEOUT = 23
+EXIT_CANCELLED = 24
+EXIT_APPROVAL_EXCEPTION = 25
+
+# ---- code → (sentence, next step) --------------------------------------
+
+# INV-31 has three gates that all mean the same thing to a developer, so they
+# say the same thing: the CLI-side scope check in `login`, the platform's
+# channel-entrance refusal (`26051`), and `26016`.
+#
+# `26016` is the platform saying "a delegated key must send X-On-Behalf-Of".
+# That reading is right for a general integration and useless here: **the CLI
+# never sends identity headers**, on any command, so there is no header to add
+# and the only thing 26016 can mean on this wire is "this key carries
+# `delegate`". Translating it to "add the header" would be advice no caller can
+# act on; leaving it unregistered dropped it to exit 19 ("未登记的错误码 26016"),
+# which is how a delegate-only key used to fail `bisheng login`.
+_DELEGATE_ONLY_SENTENCE = "这把密钥被配置为委托专用（delegate），不能用于本地开发"
+_DELEGATE_ONLY_NEXT_STEP = "请平台管理员另外签发一把不含 delegate 位的服务账号密钥用于 CLI。"
+
+ERROR_HINTS: dict[int, tuple[str, str]] = {
+    16233: ("Release notes exceed the limit", "Shorten the release notes to 2,000 characters and retry."),
+    # --- F049, 260 segment: credential and scope ---
+    26001: (
+        "请求没有携带可识别的 Authorization 头",
+        "检查密钥的传法：--api-key、环境变量 BISHENG_API_KEY 或 --api-key-stdin，值需是完整的 bs-sak- 开头字符串。",
+    ),
+    # 26002 covers four causes with one code, not three: the key is unknown /
+    # revoked / expired, **or the service account behind it is disabled or
+    # deleted**. That last one used to arrive as its own code (26027); on the
+    # beta2 server it does not — `credential_validator.resolve_service_account`
+    # raises `OpenApiCredentialInvalidError` for a missing, disabled or
+    # cross-tenant account. So "get a new key" can no longer be the only next
+    # step: for a disabled account a new key is just as dead as the old one, and
+    # a developer who is not told that will keep asking for re-issues.
+    26002: (
+        "平台不接受这把密钥（不存在、已撤销、已过期，或密钥所属的服务账号已被停用/删除——平台不区分这几种成因）",
+        "请平台管理员先确认该服务账号仍是启用状态，再在服务账号详情页重新签发一把密钥；账号本身被停用时，换密钥没有用。",
+    ),
+    # Still registered because the code still exists and still means what it
+    # says — but on beta2 it is raised only on the management face (issuing a
+    # key for a disabled account, `open_api/api/endpoints/service_account_keys.py`),
+    # which no CLI command calls. A CLI run that receives it is talking to a
+    # platform whose runtime path differs from the one measured here.
+    26027: (
+        "密钥所属的服务账号已被停用或删除",
+        "请平台管理员启用该服务账号；换一把密钥没有用，问题在账号本身。",
+    ),
+    26003: (
+        "这把密钥缺少本次操作需要的权限位",
+        "请平台管理员在服务账号详情页编辑该密钥、补勾所缺权限位后重试（无需重新签发）。",
+    ),
+    # 26004 changed meaning under the beta2 server. It used to be "any
+    # identity-passing header at all", which for this CLI could only ever be its
+    # own defect. It is now raised by `identity_service.resolve_request_identity`
+    # for a request that **did** carry `X-On-Behalf-Of` and whose delegation was
+    # refused (the key has no `delegate` bit, or the target is outside the key's
+    # delegate scope). The half that still holds is the diagnosis: the CLI sends
+    # no identity headers on any command, so the header came from something else
+    # on the path. Naming both origins is the difference between a bug report
+    # that goes to the right place and one that goes nowhere.
+    26004: (
+        "平台按「委托被拒」拒绝了这次调用：请求里带了 X-On-Behalf-Of 身份头，而这把密钥未开启委托、或委托目标不在允许范围内",
+        "CLI 从不发送这个头，所以它来自链路上的其它环节：先查网关 / 反向代理是否注入了 X-On-Behalf-Of；确认没有再连同 --verbose 输出报 CLI 故障。改密钥或权限位都不解决它。",
+    ),
+    # 26016 / 26051 are the same verdict reached at two different gates: 26016
+    # by the delegation resolver (login's `whoami` requires no scope, so the
+    # entrance gate lets it through), 26051 by the entrance gate itself on the
+    # toolkit endpoints (`deploy` / `logs`). One next step, because there is
+    # only one: get a key without `delegate`.
+    26016: (_DELEGATE_ONLY_SENTENCE, _DELEGATE_ONLY_NEXT_STEP),
+    26051: (_DELEGATE_ONLY_SENTENCE, _DELEGATE_ONLY_NEXT_STEP),
+    # A `bs-pat-` personal token authenticates on the same wire as a service
+    # account key, so a developer can paste one into `bisheng login` and will:
+    # the platform then answers with these two codes, and unregistered they
+    # degraded to the generic "ask your admin about the permission bits" /
+    # "check whether the key expired" fallbacks — both of which point away from
+    # the actual cause. Note a personal token can never carry `app:manage`
+    # (伴生 PRD §4.10.3 whitelist), so it logs in and then fails every deploy.
+    26040: (
+        "这是一把个人访问令牌，而本平台没有开启个人访问令牌能力",
+        "改用服务账号密钥（bs-sak- 开头）——CLI 的 deploy 本来就只认服务账号密钥，个人令牌拿不到 app:manage 位。",
+    ),
+    26043: (
+        "个人访问令牌的持有人已停用、已删除，或已不在本租户",
+        "找平台管理员恢复该账号，或改用服务账号密钥（bs-sak- 开头）重新 login。",
+    ),
+    26030: (
+        "平台鉴权服务暂时不可用（fail-closed，与密钥无关），可重试",
+        "稍等片刻后重跑同一条命令；持续不恢复再联系平台管理员。",
+    ),
+    26031: (
+        "平台端点缺少权限位标记，这是平台缺陷",
+        "请报平台故障并附上失败的命令与时间；CLI 侧无可修改项。",
+    ),
+    # --- F054, 161 segment: orchestrator ---
+    16101: (
+        "平台上找不到这个应用",
+        "确认 --app-id 是否写错，或该应用是否已被删除；必要时删掉 .bisheng/app.json 里的过期标识重新首发。",
+    ),
+    16103: (
+        "应用标识（slug）已被占用",
+        "在 bisheng-app.yaml 里换一个 slug 再部署。已删除的应用同样占用它原来的标识，不能复用。",
+    ),
+    16121: (
+        "编排器不可用（容器守护进程或 runtime-manager 不可达），可重试",
+        "稍后重试；持续不恢复请联系运维检查 runtime-manager 与 dockerd。注意这不代表应用实例不存在。",
+    ),
+    # --- F055, 162 segment: receive gates (synchronous leg of POST /deploy) ---
+    16201: (
+        "上传包超过平台配置的体量上限",
+        "先看忽略统计里排除了多少，再按 Top 10 大文件清理；仍不够就请运维调整 app_runtime.max_package_mb。",
+    ),
+    16202: (
+        "平台无法解包，或包内含非法路径条目",
+        "重新执行 deploy 生成包；若持续失败，用 --dry-run 检查是否有符号链接、设备文件或越界路径。",
+    ),
+    16203: (
+        "包根里没有 bisheng-app.yaml",
+        "检查 deploy 的 PATH 参数与包根是否一致——本地校验已经过了，说明上传的包根不是项目根。",
+    ),
+    16205: (
+        "这个应用归属于别人，当前密钥的资源归属人无权操作",
+        "改用资源归属人正确的那把密钥；应用归属不因任何请求头改变。",
+    ),
+    16207: (
+        "本环境未启用应用工场运行时层",
+        "请平台管理员打开 app_runtime 开关并重启后端；开关未开时 deploy / logs 都不可用。",
+    ),
+    # --- F055, 162 segment: hosted precheck ---
+    16221: (
+        "应用声明（bisheng-app.yaml）未通过平台校验",
+        "按 details 指出的字段补齐或修正 bisheng-app.yaml 后重新 deploy。",
+    ),
+    16222: (
+        "声明的 runtime 平台不支持",
+        "把 bisheng-app.yaml 的 runtime 改成 details/hints 里列出的受支持取值之一。",
+    ),
+    16223: (
+        "声明的资源档位不存在或已停用",
+        "改用平台当前提供的档位；不确定就先删掉 tier 让平台取默认值。",
+    ),
+    16224: (
+        "能力声明无法解析",
+        "修正 bisheng-app.yaml 里 capabilities 段的写法后重发。",
+    ),
+    16227: (
+        "依赖构建失败",
+        "看下面的构建日志与提示: 依赖装不上就改依赖清单（requirements.txt / package.json）,"
+        " 连不上软件源则是构建环境的网络问题, 找管理员而不是改代码。",
+    ),
+    16228: (
+        "应用启动探活失败",
+        "先看下方应用启动输出的末尾；再确认应用监听声明的端口、绑定 0.0.0.0，且 / 返回 500 以下的状态码。用 bisheng dev 本地复现后再重发。",
+    ),
+    16230: (
+        "bisheng-app.yaml 里含密钥或密钥引用",
+        "从 bisheng-app.yaml 删除密钥值或 vault:// 这类引用后重发；清单里不写任何密钥。",
+    ),
+    16231: (
+        "本环境尚未开放能力声明需要的平台能力",
+        "请管理员开启开放平台能力后重发，或先从 bisheng-app.yaml 移除对应的能力声明。",
+    ),
+    16232: (
+        "WebSocket 无需在 bisheng-app.yaml 里声明",
+        "删掉清单里的 WebSocket 键后重发；托管入口直接转发 WebSocket，前端要对任何 close 自动重连。",
+    ),
+    16241: (
+        "安全扫描在包内命中了疑似密钥",
+        "按输出里的 文件:行号 移除密钥、改用环境变量引用后重发；平台不会回显命中的值。",
+    ),
+    # --- F055, 162 segment: publish-flow conflicts ---
+    16225: (
+        "平台没有配置发布审批场景",
+        "请平台管理员补齐发布审批场景配置；改代码或改声明都没有用。",
+    ),
+    16226: (
+        "运行环境容量不足",
+        "等资源释放后重试，或让应用归属人在应用详情页·发布手动上线。",
+    ),
+    16229: (
+        "本次发布包含未确认的结构变更",
+        "确认变更影响后带上 --confirm-schema-change 重发。",
+    ),
+    16251: (
+        "该应用已有在途的发布审批单",
+        "先在应用详情页·发布撤回在途单，再重新 deploy；CLI 不提供撤回命令。",
+    ),
+    16252: (
+        "该应用处于待上线状态",
+        "先在应用详情页·发布完成或放弃这次上线，再重新 deploy。",
+    ),
+    16254: (
+        "该操作仅限应用归属人执行",
+        "改用资源归属人是该应用 owner 的那把密钥。",
+    ),
+}
+# Runtime v2 keeps the existing runtime code; its capacity remedy is unchanged.
+ERROR_HINTS[16125] = ERROR_HINTS[16226]
+
+ERROR_EXIT_CODES: dict[int, int] = {
+    16233: EXIT_LOCAL_INVALID,
+    26001: EXIT_AUTH,
+    26002: EXIT_AUTH,
+    26027: EXIT_AUTH,
+    26003: EXIT_FORBIDDEN,
+    # Both sides of the defect class land on 18 (see its definition above): the
+    # request reached the platform carrying an identity header this CLI never
+    # sends, or the platform is missing a scope marking. Neither is anything the
+    # caller did or can fix by retrying or by changing arguments — 26004 stays
+    # on 18 under beta2's wider reading of it ("delegation refused") for exactly
+    # that reason, even though the platform now describes it as a key-
+    # configuration problem: no CLI key delegates, so no key change is the fix.
+    26004: EXIT_DEFECT,
+    # Not EXIT_DEFECT: nothing is broken, the key is simply the wrong kind —
+    # and not EXIT_UNKNOWN_CODE either, which would invite a retry with
+    # different arguments. It is the same refusal `delegate_refusal()` raises
+    # locally, so it lands on the same exit code.
+    26016: EXIT_FORBIDDEN,
+    26051: EXIT_FORBIDDEN,
+    26040: EXIT_FORBIDDEN,
+    26043: EXIT_AUTH,
+    26030: EXIT_UNREACHABLE,
+    26031: EXIT_DEFECT,
+    16101: EXIT_LOCAL_INVALID,
+    16121: EXIT_UNREACHABLE,
+    16125: EXIT_CAPACITY,
+    16201: EXIT_LOCAL_INVALID,
+    16202: EXIT_LOCAL_INVALID,
+    16203: EXIT_LOCAL_INVALID,
+    16103: EXIT_PUBLISH_CONFLICT,
+    16205: EXIT_PUBLISH_CONFLICT,
+    16207: EXIT_NOT_ENABLED,
+    16221: EXIT_PRECHECK_FAILED,
+    16222: EXIT_PRECHECK_FAILED,
+    16223: EXIT_PRECHECK_FAILED,
+    16224: EXIT_PRECHECK_FAILED,
+    16227: EXIT_PRECHECK_FAILED,
+    16228: EXIT_PRECHECK_FAILED,
+    16230: EXIT_PRECHECK_FAILED,
+    16231: EXIT_PRECHECK_FAILED,
+    16232: EXIT_PRECHECK_FAILED,
+    16241: EXIT_SECRET_FOUND,
+    16225: EXIT_SCENE_MISSING,
+    16226: EXIT_CAPACITY,
+    16229: EXIT_PUBLISH_CONFLICT,
+    16251: EXIT_PUBLISH_CONFLICT,
+    16252: EXIT_PUBLISH_CONFLICT,
+    16254: EXIT_PUBLISH_CONFLICT,
+}
+
+# Unregistered codes degrade by HTTP status class before falling to exit 19.
+_HTTP_STATUS_FALLBACK: dict[int, int] = {
+    401: EXIT_AUTH,
+    403: EXIT_FORBIDDEN,
+    502: EXIT_UNREACHABLE,
+    503: EXIT_UNREACHABLE,
+    504: EXIT_UNREACHABLE,
+}
+
+
+class CliError(Exception):
+    """A failure with a decided exit code and something to say about it."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        exit_code: int = EXIT_INTERNAL,
+        code: int | None = None,
+        next_step: str = "",
+        platform_message: str = "",
+        details: Any = None,
+        hints: list[str] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.message = message
+        self.exit_code = exit_code
+        self.code = code
+        self.next_step = next_step
+        self.platform_message = platform_message
+        self.details = details
+        self.hints = hints or []
+
+    def as_failure(self, stage: str | None = None) -> dict[str, Any]:
+        """The machine-readable five-tuple.
+
+        `details` and `hints` go through untouched: they are the entire input a
+        local agent has for repairing the failure automatically.
+        """
+        return {
+            "stage": stage,
+            "code": self.code,
+            "message": self.platform_message or self.message,
+            "details": self.details,
+            "hints": self.hints,
+        }
+
+
+def error_from_platform(
+    code: int,
+    message: str = "",
+    *,
+    http_status: int | None = None,
+    details: Any = None,
+    hints: list[str] | None = None,
+) -> CliError:
+    """Translate a platform error code into a CliError."""
+    hint = ERROR_HINTS.get(code)
+    if code == 16233:
+        from bisheng_cli.release_notes import MAX_CODEPOINTS
+        from bisheng_cli.release_notes import message as release_notes_message
+
+        hint = (release_notes_message("too_long", limit=MAX_CODEPOINTS), release_notes_message("fix_input"))
+    if hint is not None:
+        human, next_step = hint
+        next_step = _augment_next_step(code, next_step, details)
+        return CliError(
+            human,
+            exit_code=ERROR_EXIT_CODES[code],
+            code=code,
+            next_step=next_step,
+            platform_message=message,
+            details=details,
+            hints=hints,
+        )
+
+    exit_code = _HTTP_STATUS_FALLBACK.get(http_status or 0, EXIT_UNKNOWN_CODE)
+    if exit_code == EXIT_UNREACHABLE:
+        human = f"平台暂时不可用（HTTP {http_status}），可重试"
+        next_step = "稍后重跑同一条命令；持续不恢复请联系平台管理员。"
+    elif exit_code == EXIT_AUTH:
+        human = f"平台拒绝了这次鉴权（HTTP {http_status}）"
+        next_step = "检查密钥是否有效、是否已过期或被撤销。"
+    elif exit_code == EXIT_FORBIDDEN:
+        human = f"平台以权限不足拒绝了这次请求（HTTP {http_status}）"
+        next_step = "请平台管理员核对该密钥的权限位。"
+    else:
+        human = f"平台返回未登记的错误码 {code}"
+        next_step = "按平台给出的信息处置；若无法判断，请把该错误码报给平台支持。"
+    return CliError(
+        human,
+        exit_code=exit_code,
+        code=code,
+        next_step=next_step,
+        platform_message=message,
+        details=details,
+        hints=hints,
+    )
+
+
+def _augment_next_step(code: int, next_step: str, details: Any) -> str:
+    """Fold code-specific payload fields into the next step.
+
+    Only `26003` needs this today: naming the missing scope verbatim is the
+    difference between "ask your admin for permissions" and an admin who knows
+    which checkbox to tick.
+    """
+    if code == 26003 and isinstance(details, dict):
+        required = details.get("required")
+        # A single string, not a list (OpenApiScopeMissingError(required: str)).
+        if isinstance(required, str) and required:
+            return f"该密钥缺少权限位 {required}。" + next_step
+    return next_step
+
+
+def delegate_refusal() -> CliError:
+    """CLI-side refusal of a delegate-only key.
+
+    Shaped to match the server-side refusal on purpose (same sentence, same
+    next step, same exit code as `26016` / `26051`): the rejections are the same
+    product rule enforced at different gates, and a caller that special-cases
+    one of them is a caller that will mishandle the others.
+
+    This path is no longer the one a delegate-only key normally takes — the
+    platform refuses it during `whoami` (26016), before `login` ever sees a
+    scope list. It stays because it is the only gate that still works if a
+    future platform lets such a key read its own scopes.
+    """
+    return CliError(
+        _DELEGATE_ONLY_SENTENCE,
+        exit_code=EXIT_FORBIDDEN,
+        next_step=_DELEGATE_ONLY_NEXT_STEP,
+    )
+
+
+#: How many lines of a server-supplied log excerpt to print for a person.
+#: The whole tail is 80 lines and reaches ``--json`` intact; a person reading a
+#: terminal wants the end of it, which is where the actual error is.
+_HUMAN_LOG_LINES = 20
+
+
+def _log_excerpt(details: Any) -> list[str]:
+    """The build log tail, when the platform sent one.
+
+    Hints routinely say "look at the log excerpt below", and until this existed
+    there was no below: ``details`` only ever reached ``--json``, so in the
+    terminal the advice pointed at nothing. A failure a person cannot diagnose
+    from the output is a failure they will re-run unchanged.
+    """
+    if not isinstance(details, dict):
+        return []
+    tail = details.get("tail")
+    if not isinstance(tail, (list, tuple)):
+        return []
+    lines = [str(one).rstrip() for one in tail]
+    return [one for one in lines if one][-_HUMAN_LOG_LINES:]
+
+
+def render_human(err: CliError) -> str:
+    """Format a failure for a person: raw code, sentence, next step, hints, log."""
+    head = f"错误 {err.code}: {err.message}" if err.code is not None else f"错误: {err.message}"
+    lines = [head]
+    if err.platform_message and err.platform_message != err.message:
+        lines.append(f"  平台信息: {err.platform_message}")
+    if err.next_step:
+        lines.append(f"  下一步: {err.next_step}")
+    for hint in err.hints:
+        lines.append(f"  提示: {hint}")
+    excerpt = _log_excerpt(err.details)
+    if excerpt:
+        # 16228 carries the start-up probe instance's output, everything else
+        # with a tail is a build.
+        lines.append("  应用启动输出(末尾):" if err.code == 16228 else "  构建日志(末尾):")
+        lines.extend(f"    {one}" for one in excerpt)
+    return mask("\n".join(lines))

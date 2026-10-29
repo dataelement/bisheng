@@ -20,6 +20,10 @@ router = APIRouter()
 @router.get("/config", summary="Get workbench configuration", response_model=UnifiedResponseModel)
 async def get_config(request: Request, login_user=LoginUserDep):
     ret = await WorkStationService.get_daily_chat_config()
+    if bisheng_settings.dsh.enabled:
+        from bisheng.dsh.domain.services.model_catalog import authorized_workbench_models
+
+        ret.models = await authorized_workbench_models(login_user.user_id)
     linsight_config = await WorkStationService.get_linsight_config()
     # `enable_etl4lm` historically gated the frontend on `etl4lm.url` alone, but the
     # parse pipeline now supports mineru / paddle_ocr as alternative providers that
@@ -27,13 +31,10 @@ async def get_config(request: Request, login_user=LoginUserDep):
     # follows whichever loader_provider is actually selected and configured.
     knowledge_conf = await bisheng_settings.async_get_knowledge()
     ret = ret.model_dump(exclude_unset=True) if ret else {}
-    # The admin curates this tool list, but each tool keeps its own resource
-    # permission, so only offer the ones this user may actually run. Task mode
-    # binds the same daily selection (see `_build_linsight_submit_payload`), so
-    # filtering here covers both modes. The admin-facing `/config/daily` is
-    # deliberately left unfiltered — that endpoint edits the curated list.
-    if ret.get("tools"):
-        ret["tools"] = await WorkStationService.afilter_tools_by_use_permission(ret["tools"], login_user)
+    from bisheng.dsh.domain.services.capability_catalog import CapabilityCatalogService
+
+    ret["tools"] = await CapabilityCatalogService(login_user).picker_tools()
+    ret["skillEntry"] = {"enabled": True}
     # Organization knowledge bases in this user-facing payload seed default
     # selections and expose display metadata. Filter by `visible` intentionally;
     # whether a selected library may be used is enforced by the retrieval path.
@@ -45,8 +46,7 @@ async def get_config(request: Request, login_user=LoginUserDep):
     ret["linsight_invitation_code"] = linsight_invitation_code if linsight_invitation_code else False
     ret["linsight_cache_dir"] = "./"
     ret["waiting_list_url"] = (await bisheng_settings.aget_linsight_conf()).waiting_list_url
-    # 首钢部署专属命名空间：整段透传给前端 (deployment_label / portal_admin_url 等),
-    # 同时基于 prefix 派生 enabled 标志,供文件编码 (FileTable) 等功能门控使用。
+    # Forward the deployment namespace and derive its feature flag from prefix.
     shougang_raw = (await bisheng_settings.aget_all_config()).get("shougang", None)
     if isinstance(shougang_raw, dict):
         prefix = shougang_raw.get("prefix")
@@ -54,8 +54,7 @@ async def get_config(request: Request, login_user=LoginUserDep):
         ret["shougang"] = {**shougang_raw, "enabled": enabled}
     else:
         ret["shougang"] = None
-    # 知识空间目录树展示开关：透传给前端 sidebar (KnowledgeSpaceItem) 做门控。
-    # 缺省视为 true；中粮场内部署设 false 时只展示空间、不展开文件夹树。
+    # Directory trees default to visible; deployments may show space names only.
     ks_raw = (await bisheng_settings.aget_all_config()).get("knowledge_space", None)
     tree_display = True
     if isinstance(ks_raw, dict):

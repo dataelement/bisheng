@@ -1,76 +1,38 @@
 // @ts-strict-ignore
+import { getCitationAccessScope } from "../citationScope";
 import { AppNumType, AppType } from "@/types/app";
-import originAxios from "axios";
+import originAxios, { type AxiosRequestConfig } from "axios";
 import { AppConfig } from "../../types/api/app";
 import { FlowType } from "../../types/flow";
 import axios from "../request";
-import {
-    APIClassType,
-    BuildStatusTypeAPI,
-    InitTypeAPI,
-    RTServer
-} from "./../../types/api/index";
+import { APIClassType, BuildStatusTypeAPI, InitTypeAPI, RTServer } from "./../../types/api/index";
 
 export const paramsSerializer = (params) => {
-    return Object.keys(params)
-        .map(key => {
-            const value = params[key];
-            if (value === undefined) {
-                return null; // 只返回非undefined的值
-            }
-            if (Array.isArray(value)) {
-                return value.map(val => `${key}=${val}`).join('&');
-            }
-            return `${key}=${value}`;
-        })
-        .filter(item => item !== null) // 过滤掉值为null的项
-        .join('&');
-}
+  return Object.keys(params)
+    .map((key) => {
+      const value = params[key];
+      if (value === undefined) {
+        return null; // 只返回非undefined的值
+      }
+      if (Array.isArray(value)) {
+        return value.map((val) => `${key}=${val}`).join("&");
+      }
+      return `${key}=${value}`;
+    })
+    .filter((item) => item !== null) // 过滤掉值为null的项
+    .join("&");
+};
 
 const GITHUB_API_URL = "https://api.github.com";
 
-export interface ChatCitationItem {
-    itemId?: string;
-    chunkId?: string;
-    chunkIndex?: number;
-    documentName?: string;
-    fileName?: string;
-    filename?: string;
-    file_name?: string;
-    title?: string;
-    snippet?: string;
-    content?: string;
-    page?: number;
-    bbox?: string | null;
-}
+export type { ChatCitation, ChatCitationItem } from "@bisheng/chat/citations";
+import type { ChatCitation } from "@bisheng/chat/citations";
 
-export interface ChatCitation {
-    id?: number;
-    messageId?: number;
-    citationId: string;
-    itemId?: string;
-    type?: string;
-    sourcePayload?: {
-        items?: ChatCitationItem[];
-        url?: string;
-        title?: string;
-        snippet?: string;
-        source?: string;
-        siteIcon?: string;
-        datePublished?: string;
-        knowledgeName?: string;
-        fileType?: string;
-        documentName?: string;
-        previewUrl?: string;
-        downloadUrl?: string;
-        sourceUrl?: string;
-        page?: number;
-        [key: string]: any;
-    };
-    [key: string]: any;
+function citationCacheKey(id: string, scope = getCitationAccessScope()) {
+  return JSON.stringify([scope, id]);
 }
-
 const citationDetailMemoryCache: Record<string, ChatCitation> = {};
+const citationFreshRequestCache = new Map<string, Promise<ChatCitation>>();
 const citationResolveRequestCache: Record<string, Promise<ChatCitation[]>> = {};
 
 export type CitationUnresolvedReason = "forbidden" | "expired";
@@ -78,115 +40,141 @@ export type CitationUnresolvedReason = "forbidden" | "expired";
 const citationReasonCache: Record<string, CitationUnresolvedReason> = {};
 
 export function getCitationUnresolvedReason(citationId: string): CitationUnresolvedReason | undefined {
-    return citationReasonCache[citationId];
+  return citationReasonCache[citationCacheKey(citationId)];
 }
 
-function citationReasonFromPayload(payload: any): CitationUnresolvedReason {
-    const reason = payload?.data?.reason ?? payload?.reason;
-    if (reason === "expired") {
-        return "expired";
-    }
-    return "forbidden";
+function citationRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+const citationRequestOptions: AxiosRequestConfig & { silent: boolean } = { silent: true };
+function citationReasonFromPayload(payload: unknown): CitationUnresolvedReason {
+  const record = citationRecord(payload);
+  const reason = citationRecord(record.data).reason ?? record.reason;
+  if (reason === "expired") {
+    return "expired";
+  }
+  return "forbidden";
 }
 
-function throwCitationResolveError(citationId: string, payload: any): never {
-    const reason = citationReasonFromPayload(payload);
-    citationReasonCache[citationId] = reason;
-    const err: any = new Error(reason === "expired" ? "citation expired" : "citation forbidden");
-    err.citationForbidden = reason !== "expired";
-    err.citationExpired = reason === "expired";
-    throw err;
+function throwCitationResolveError(
+  citationId: string,
+  payload: unknown,
+  scope = getCitationAccessScope(),
+): never {
+  const reason = citationReasonFromPayload(payload);
+  citationReasonCache[citationCacheKey(citationId, scope)] = reason;
+  throw Object.assign(new Error(reason === "expired" ? "citation expired" : "citation forbidden"), {
+    citationForbidden: reason !== "expired",
+    citationExpired: reason === "expired",
+  });
 }
 
-export async function getCitationDetail(citationId: string): Promise<ChatCitation> {
-    if (citationDetailMemoryCache[citationId]) {
-        return citationDetailMemoryCache[citationId];
-    }
+export async function getCitationDetail(
+  citationId: string,
+  options?: { fresh?: boolean },
+): Promise<ChatCitation> {
+  const scope = getCitationAccessScope();
+  if (!options?.fresh && citationDetailMemoryCache[citationCacheKey(citationId, scope)]) {
+    return citationDetailMemoryCache[citationCacheKey(citationId, scope)];
+  }
 
-    try {
-        const detail = await axios.get<any, ChatCitation>(
-            `/api/v1/citations/${encodeURIComponent(citationId)}`,
-            { silent: true } as any,
-        );
-        if ((detail as any)?.status_code === 404) {
-            throwCitationResolveError(citationId, detail);
-        }
-        if (detail?.citationId) {
-            citationDetailMemoryCache[detail.citationId] = detail;
-            delete citationReasonCache[detail.citationId];
-        }
-        citationDetailMemoryCache[citationId] = detail;
-        return detail;
-    } catch (error: any) {
-        if (error?.citationForbidden || error?.citationExpired) {
-            throw error;
-        }
-        const status = error?.status_code || error?.response?.data?.status_code;
-        if (status === 404) {
-            throwCitationResolveError(citationId, error?.response?.data ?? error);
-        }
-        throw error;
+  if (options?.fresh) {
+    const key = citationCacheKey(citationId, scope);
+    const pending = citationFreshRequestCache.get(key);
+    if (pending) return pending;
+    const request = readCitationDetail(citationId, scope).finally(() => {
+      if (citationFreshRequestCache.get(key) === request) citationFreshRequestCache.delete(key);
+    });
+    citationFreshRequestCache.set(key, request);
+    return request;
+  }
+  return readCitationDetail(citationId, scope);
+}
+
+async function readCitationDetail(citationId: string, scope: string): Promise<ChatCitation> {
+  try {
+    const detail = await axios.get<unknown, ChatCitation & { status_code?: number }>(
+      `/api/v1/citations/${encodeURIComponent(citationId)}`,
+      citationRequestOptions,
+    );
+    if (detail?.status_code === 404) {
+      throwCitationResolveError(citationId, detail, scope);
     }
+    if (detail?.citationId) {
+      citationDetailMemoryCache[citationCacheKey(detail.citationId, scope)] = detail;
+      delete citationReasonCache[citationCacheKey(detail.citationId, scope)];
+    }
+    citationDetailMemoryCache[citationCacheKey(citationId, scope)] = detail;
+    return detail;
+  } catch (error: unknown) {
+    const failure = citationRecord(error);
+    if (failure.citationForbidden || failure.citationExpired) throw error;
+    const envelope = citationRecord(citationRecord(failure.response).data);
+    const status = failure.status_code || envelope.status_code;
+    if (status === 404) throwCitationResolveError(citationId, envelope, scope);
+    throw error;
+  }
 }
 
 export async function resolveCitationDetails(citationIds: string[]): Promise<ChatCitation[]> {
-    const uniqueCitationIds = Array.from(new Set(
-        citationIds.filter((citationId) => citationId && !citationId.startsWith("citation:")),
-    )).filter((citationId) => !citationDetailMemoryCache[citationId]);
+  const scope = getCitationAccessScope();
+  const uniqueCitationIds = Array.from(
+    new Set(citationIds.filter((citationId) => citationId && !citationId.startsWith("citation:"))),
+  ).filter((citationId) => !citationDetailMemoryCache[citationCacheKey(citationId, scope)]);
 
-    if (!uniqueCitationIds.length) {
-        return citationIds
-            .map((citationId) => citationDetailMemoryCache[citationId])
-            .filter(Boolean);
-    }
+  if (!uniqueCitationIds.length) {
+    return citationIds
+      .map((citationId) => citationDetailMemoryCache[citationCacheKey(citationId, scope)])
+      .filter(Boolean);
+  }
 
-    const requestKey = uniqueCitationIds.sort().join("|");
-    const pendingRequest = citationResolveRequestCache[requestKey];
-    const resolvedItems = pendingRequest
-        ? await pendingRequest
-        : await (citationResolveRequestCache[requestKey] = axios.post<any, { items?: ChatCitation[]; unresolved?: { citationId?: string; reason?: string }[] }>(
-            `/api/v1/citations/resolve`,
-            {
-                citationIds: uniqueCitationIds,
-            },
-            { silent: true } as any,
-        ).then((response) => {
-            const items = Array.isArray(response?.items) ? response.items : [];
-            items.forEach((detail) => {
-                if (detail?.citationId) {
-                    citationDetailMemoryCache[detail.citationId] = detail;
-                    delete citationReasonCache[detail.citationId];
-                }
-            });
-            const unresolved = Array.isArray(response?.unresolved) ? response.unresolved : [];
-            unresolved.forEach((entry) => {
-                if (entry?.citationId && (entry.reason === "expired" || entry.reason === "forbidden")) {
-                    citationReasonCache[entry.citationId] = entry.reason;
-                }
-            });
-            return items;
-        }).finally(() => {
-            delete citationResolveRequestCache[requestKey];
+  const requestKey = citationCacheKey(uniqueCitationIds.sort().join("|"), scope);
+  const pendingRequest = citationResolveRequestCache[requestKey];
+  const resolvedItems = pendingRequest
+    ? await pendingRequest
+    : await (citationResolveRequestCache[requestKey] = axios
+        .post<unknown, { items?: ChatCitation[]; unresolved?: { citationId?: string; reason?: string }[] }>(
+          `/api/v1/citations/resolve`,
+          {
+            citationIds: uniqueCitationIds,
+          },
+          citationRequestOptions,
+        )
+        .then((response) => {
+          const items = Array.isArray(response?.items) ? response.items : [];
+          items.forEach((detail) => {
+            if (detail?.citationId) {
+              citationDetailMemoryCache[citationCacheKey(detail.citationId, scope)] = detail;
+              delete citationReasonCache[citationCacheKey(detail.citationId, scope)];
+            }
+          });
+          const unresolved = Array.isArray(response?.unresolved) ? response.unresolved : [];
+          unresolved.forEach((entry) => {
+            if (entry?.citationId && (entry.reason === "expired" || entry.reason === "forbidden")) {
+              citationReasonCache[citationCacheKey(entry.citationId, scope)] = entry.reason;
+            }
+          });
+          return items;
+        })
+        .finally(() => {
+          delete citationResolveRequestCache[requestKey];
         }));
 
-    return citationIds
-        .map((citationId) => citationDetailMemoryCache[citationId])
-        .filter(Boolean)
-        .concat(resolvedItems.filter((detail) => detail?.citationId && !citationIds.includes(detail.citationId)));
+  return citationIds
+    .map((citationId) => citationDetailMemoryCache[citationCacheKey(citationId, scope)])
+    .filter(Boolean)
+    .concat(resolvedItems.filter((detail) => detail?.citationId && !citationIds.includes(detail.citationId)));
 }
 
 export async function getRepoStars(owner, repo) {
-    try {
-        const response = await axios.get(
-            `${GITHUB_API_URL}/repos/${owner}/${repo}`
-        );
-        return response.data.stargazers_count;
-    } catch (error) {
-        console.error("Error fetching repository data:", error);
-        return null;
-    }
+  try {
+    const response = await axios.get(`${GITHUB_API_URL}/repos/${owner}/${repo}`);
+    return response.data.stargazers_count;
+  } catch (error) {
+    console.error("Error fetching repository data:", error);
+    return null;
+  }
 }
-
 
 /**
  * Fetches all objects from the API endpoint.
@@ -194,86 +182,86 @@ export async function getRepoStars(owner, repo) {
  * @returns  A promise that resolves to an AxiosResponse containing all the objects.
  */
 export async function getAll() {
-    return await axios.get(`/api/v1/all`);
+  return await axios.get(`/api/v1/all`);
 }
 
 /**
  * 读取 saved 组件s
  */
 export async function getComponents(): Promise<any[]> {
-    return await axios.get(`/api/v1/component`);
+  return await axios.get(`/api/v1/component`);
 }
 /**
  * save 组件
  */
 export async function saveComponent(data): Promise<any[]> {
-    return await axios.post(`/api/v1/component`, data);
+  return await axios.post(`/api/v1/component`, data);
 }
 
 /**
  * 覆盖 组件
  */
 export async function overridComponent(data): Promise<any[]> {
-    return await axios.patch(`/api/v1/component`, data);
+  return await axios.patch(`/api/v1/component`, data);
 }
 /**
  * 删除 组件
  */
 export async function delComponentApi(name): Promise<any> {
-    return await axios.delete(`/api/v1/component`, { data: { name } });
+  return await axios.delete(`/api/v1/component`, { data: { name } });
 }
 /**
  * 获取平台配置
  */
 export async function getAppConfig(): Promise<AppConfig> {
-    return await axios.get(`/api/v1/env`);
+  return await axios.get(`/api/v1/env`);
 }
 /**
  * 获取平台配置
  */
 export async function saveThemeApi(data: string): Promise<any> {
-    return await axios.post(`/api/v1/web/config`, { value: data });
+  return await axios.post(`/api/v1/web/config`, { value: data });
 }
 
 export interface BrandText {
-    zh: string;
-    en: string;
+  zh: string;
+  en: string;
 }
 
 export interface BrandAsset {
-    url: string;
-    relative_path?: string;
-    file_name?: string;
+  url: string;
+  relative_path?: string;
+  file_name?: string;
 }
 
 export interface BrandAssetOption extends BrandAsset {
-    is_default?: boolean;
+  is_default?: boolean;
 }
 
 export interface BrandAssets {
-    favicon: BrandAsset;
-    loginHeroLight: BrandAsset;
-    loginHeroDark: BrandAsset;
-    headerLogoLight: BrandAsset;
-    headerLogoDark: BrandAsset;
+  favicon: BrandAsset;
+  loginHeroLight: BrandAsset;
+  loginHeroDark: BrandAsset;
+  headerLogoLight: BrandAsset;
+  headerLogoDark: BrandAsset;
 }
 
 export interface BrandLoading {
-    icon?: BrandAsset | null;
-    iconOptions?: BrandAsset[];
-    animation: "" | "animate-spin" | "animate-pulse" | "animate-bounce";
+  icon?: BrandAsset | null;
+  iconOptions?: BrandAsset[];
+  animation: "" | "animate-spin" | "animate-pulse" | "animate-bounce";
 }
 
 export type WorkbenchTheme = "blue" | "green";
 
 export interface BrandConfig {
-    brandName: BrandText;
-    linsightAgentName: BrandText;
-    assets: BrandAssets;
-    loading: BrandLoading;
-    URLLoadingIcon?: string;
-    /** Workbench (end-user app) accent theme preset. */
-    workbenchTheme?: WorkbenchTheme;
+  brandName: BrandText;
+  linsightAgentName: BrandText;
+  assets: BrandAssets;
+  loading: BrandLoading;
+  URLLoadingIcon?: string;
+  /** Workbench (end-user app) accent theme preset. */
+  workbenchTheme?: WorkbenchTheme;
 }
 
 export type BrandConfigUpdate = Omit<BrandConfig, "linsightAgentName">;
@@ -281,30 +269,30 @@ export type BrandConfigUpdate = Omit<BrandConfig, "linsightAgentName">;
 export type BrandAssetCategory = keyof BrandAssets | "loadingIcon";
 
 export async function getBrandConfigApi(): Promise<BrandConfig> {
-    return await axios.get(`/api/v1/brand/config`);
+  return await axios.get(`/api/v1/brand/config`);
 }
 
 export async function saveBrandConfigApi(data: BrandConfigUpdate): Promise<BrandConfig> {
-    return await axios.put(`/api/v1/brand/config`, data);
+  return await axios.put(`/api/v1/brand/config`, data);
 }
 
 export async function getBrandAssetOptionsApi(category: BrandAssetCategory): Promise<BrandAssetOption[]> {
-    return await axios.get(`/api/v1/brand/assets/options`, { params: { category } });
+  return await axios.get(`/api/v1/brand/assets/options`, { params: { category } });
 }
 
 export async function uploadBrandAssetApi(data: FormData): Promise<BrandAsset> {
-    return await axios.post(`/api/v1/brand/assets`, data, {
-        headers: { "Content-Type": "multipart/form-data" },
-    });
+  return await axios.post(`/api/v1/brand/assets`, data, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
 }
 
 export async function deleteBrandAssetApi(
-    category: BrandAssetCategory,
-    relativePath: string
+  category: BrandAssetCategory,
+  relativePath: string,
 ): Promise<BrandAsset> {
-    return await axios.delete(`/api/v1/brand/assets`, {
-        params: { category, relative_path: relativePath },
-    });
+  return await axios.delete(`/api/v1/brand/assets`, {
+    params: { category, relative_path: relativePath },
+  });
 }
 /**
  * Reads all templates from the database.
@@ -313,11 +301,11 @@ export async function deleteBrandAssetApi(
  * @throws Will throw an error if reading fails.
  */
 export async function readTempsDatabase(type, id?: number): Promise<FlowType[]> {
-    const typeMap = {
-        [AppType.FLOW]: 10,
-        [AppType.ASSISTANT]: 5
-    }
-    return await axios.get(`/api/v1/skill/template?flow_type=${typeMap[type]}${id ? '&id=' + id : ''}`);
+  const typeMap = {
+    [AppType.FLOW]: 10,
+    [AppType.ASSISTANT]: 5,
+  };
+  return await axios.get(`/api/v1/skill/template?flow_type=${typeMap[type]}${id ? "&id=" + id : ""}`);
 }
 
 /**
@@ -327,8 +315,8 @@ export async function readTempsDatabase(type, id?: number): Promise<FlowType[]> 
  * @returns  null.
  */
 export function createTempApi(params, type) {
-    const map = { assistant: 5, skill: 1, flow: 10 }
-    return axios.post(`/api/v1/skill/template/create`, { ...params, flow_type: map[type] });
+  const map = { assistant: 5, skill: 1, flow: 10 };
+  return axios.post(`/api/v1/skill/template/create`, { ...params, flow_type: map[type] });
 }
 
 /**
@@ -338,7 +326,7 @@ export function createTempApi(params, type) {
  * @returns  null.
  */
 export function deleteTempApi(temp_id) {
-    return axios.delete(`/api/v1/skill/template/${temp_id}`);
+  return axios.delete(`/api/v1/skill/template/${temp_id}`);
 }
 
 /**
@@ -348,7 +336,7 @@ export function deleteTempApi(temp_id) {
  * @returns  null.
  */
 export function updateTempApi(temp_id, data) {
-    return axios.post(`/api/v1/skill/template/${temp_id}`, data);
+  return axios.post(`/api/v1/skill/template/${temp_id}`, data);
 }
 
 /**
@@ -359,144 +347,144 @@ export function updateTempApi(temp_id, data) {
 //   request:  { cursor?, pageSize, name, type, action }
 //   response: { data: any[], page_size, has_more, next_cursor }
 //   The legacy `total` / `page_num` fields are gone (spec AC-01).
-export async function readFileLibDatabase(
-    {
-        cursor,
-        pageSize = 20,
-        name = '',
-        type = 0,
-        action = 'use',
-        has_abnormal,
-    }: {
-        cursor?: string | null;
-        pageSize?: number;
-        name?: string;
-        type?: number;
-        action?: 'visible' | 'use';
-        has_abnormal?: boolean;
+export async function readFileLibDatabase({
+  cursor,
+  pageSize = 20,
+  name = "",
+  type = 0,
+  action = "use",
+  has_abnormal,
+}: {
+  cursor?: string | null;
+  pageSize?: number;
+  name?: string;
+  type?: number;
+  action?: "visible" | "use";
+  has_abnormal?: boolean;
+}): Promise<{ data: any[]; page_size: number; has_more: boolean; next_cursor: string | null }> {
+  const response = await axios.get("/api/v1/knowledge", {
+    params: {
+      action,
+      page_size: pageSize,
+      name,
+      type,
+      ...(cursor ? { cursor } : {}),
+      ...(has_abnormal ? { has_abnormal: true } : {}),
     },
-): Promise<{ data: any[]; page_size: number; has_more: boolean; next_cursor: string | null }> {
-    const response = await axios.get('/api/v1/knowledge', {
-        params: {
-            action,
-            page_size: pageSize,
-            name,
-            type,
-            ...(cursor ? { cursor } : {}),
-            ...(has_abnormal ? { has_abnormal: true } : {}),
-        },
-    });
-    return response as any;
+  });
+  return response as any;
 }
 
 /**
  * 复制知识库
  */
 export async function copyLibDatabase(knowledge_id, newName) {
-    await axios.post(`/api/v1/knowledge/copy`, { knowledge_id, knowledge_name: newName });
+  await axios.post(`/api/v1/knowledge/copy`, { knowledge_id, knowledge_name: newName });
 }
 /**
  * 复制qa知识库
  */
 export async function copyQaDatabase(knowledge_id, knowledge_name) {
-    await axios.post(`/api/v1/knowledge/qa/copy`, { knowledge_id, knowledge_name });
+  await axios.post(`/api/v1/knowledge/qa/copy`, { knowledge_id, knowledge_name });
 }
 /**
  * 获取知识库下文件列表
  */
-export async function readFileByLibDatabase({ id, page, pageSize = 20, name = '', status, file_ids }) {
-    if (Array.isArray(status)) {
-        if (status?.includes(1)) { // 4合并到解析中
-            status.push(4)
-        } else {
-            status = status?.filter(item => item !== 4)
-        }
+export async function readFileByLibDatabase({ id, page, pageSize = 20, name = "", status, file_ids }) {
+  if (Array.isArray(status)) {
+    if (status?.includes(1)) {
+      // 4合并到解析中
+      status.push(4);
+    } else {
+      status = status?.filter((item) => item !== 4);
     }
+  }
 
-    const params = {
-        page_num: page,
-        page_size: pageSize,
-        file_name: name,
-        status: status === 999 ? undefined : status,
-        file_ids,
-    }
-    const response: { data: any[], total: number, writeable: any } = await axios.get(`/api/v1/knowledge/file_list/${id}`, {
-        params, paramsSerializer
-    });
+  const params = {
+    page_num: page,
+    page_size: pageSize,
+    file_name: name,
+    status: status === 999 ? undefined : status,
+    file_ids,
+  };
+  const response: { data: any[]; total: number; writeable: any } = await axios.get(
+    `/api/v1/knowledge/file_list/${id}`,
+    {
+      params,
+      paramsSerializer,
+    },
+  );
 
-    return response
-    // return { data, writeable, pages: Math.ceil(total / pageSize) }
+  return response;
+  // return { data, writeable, pages: Math.ceil(total / pageSize) }
 }
 /**
  * 添加元数据
  */
 export async function addMetadata(knowledge_id, metadata_fields) {
-    await axios.post(`/api/v1/knowledge/add_metadata_fields`, {
-        knowledge_id: knowledge_id,
-        metadata_fields: metadata_fields,
-    });
+  await axios.post(`/api/v1/knowledge/add_metadata_fields`, {
+    knowledge_id: knowledge_id,
+    metadata_fields: metadata_fields,
+  });
 }
 /**
  * 修改元数据名称
  */
 export async function updateMetadataFields(
-    knowledge_id: string | number,
-    updates: Array<{ old_field_name: string; new_field_name: string }>
+  knowledge_id: string | number,
+  updates: Array<{ old_field_name: string; new_field_name: string }>,
 ) {
-    await axios.put(`/api/v1/knowledge/update_metadata_fields`, {
-        knowledge_id: knowledge_id,
-        metadata_fields: updates,
-    });
+  await axios.put(`/api/v1/knowledge/update_metadata_fields`, {
+    knowledge_id: knowledge_id,
+    metadata_fields: updates,
+  });
 }
 /**
  * 用户自定义元数据
  */
 export async function saveUserMetadataApi(
-    knowledge_id: string | number,
-    updates: Array<{ field_name: string; field_value: any }>,
-    updated_at?: string | number
+  knowledge_id: string | number,
+  updates: Array<{ field_name: string; field_value: any }>,
+  updated_at?: string | number,
 ) {
-    await axios.put(`/api/v1/knowledge/file/user_metadata`, {
-        knowledge_file_id: knowledge_id,
-        user_metadata_list: updates,
-        updated_at: updated_at
-    });
+  await axios.put(`/api/v1/knowledge/file/user_metadata`, {
+    knowledge_file_id: knowledge_id,
+    user_metadata_list: updates,
+    updated_at: updated_at,
+  });
 }
 /**
  * 删除元数据
  */
-export async function deleteMetadataFields(
-    knowledge_id: string | number,
-    fieldNames: string[]
-) {
-    await axios.delete(`/api/v1/knowledge/delete_metadata_fields`, {
-        data: {
-            knowledge_id: knowledge_id,
-            field_names: fieldNames,
-        },
-    });
+export async function deleteMetadataFields(knowledge_id: string | number, fieldNames: string[]) {
+  await axios.delete(`/api/v1/knowledge/delete_metadata_fields`, {
+    data: {
+      knowledge_id: knowledge_id,
+      field_names: fieldNames,
+    },
+  });
 }
 // 获取元数据
 export async function getMetaFile(file_id): Promise<any> {
-    return await axios.get(`/api/v1/knowledge/file/info/${file_id}`);
+  return await axios.get(`/api/v1/knowledge/file/info/${file_id}`);
 }
 
 /**
  * 重试解析文件
  */
 export async function retryKnowledgeFileApi(data) {
-    await axios.post(`/api/v1/knowledge/retry`, data);
+  await axios.post(`/api/v1/knowledge/retry`, data);
 }
 
 /**
  * 上传文件
  */
-export async function uploadLibFile(data, config, type: 'knowledge' | 'icon', url) {
-    const urls = {
-        knowledge: '/api/v1/knowledge/upload',
-        icon: '/api/v1/upload/icon',
-    }
-    return await axios.post(url || urls[type], data, config);
+export async function uploadLibFile(data, config, type: "knowledge" | "icon", url) {
+  const urls = {
+    knowledge: "/api/v1/knowledge/upload",
+    icon: "/api/v1/upload/icon",
+  };
+  return await axios.post(url || urls[type], data, config);
 }
 
 /**
@@ -505,51 +493,51 @@ export async function uploadLibFile(data, config, type: 'knowledge' | 'icon', ur
  */
 
 type ExcelRule = {
-    slice_length: number;
-    append_header: boolean;
-    header_start_row: number;
-    header_end_row: number;
+  slice_length: number;
+  append_header: boolean;
+  header_start_row: number;
+  header_end_row: number;
 };
 type UploadFileFc = {
-    knowledge_id: number; // 必需
-    separator: string[]; // 必需，切分相关参数，如果不传，使用默认值
-    separator_rule: ('after' | 'before')[]; // 必需
-    chunk_size: number; // 必需
-    chunk_overlap: number; // 必需
-    file_list: { file_path: string }[]; // 必需
-    retain_images?: boolean; //保留文档图片
-    force_ocr?: boolean;//强制开启ocr
-    enable_formula?: boolean;//开启公式识别
-    filter_page_header_footer?: number;//过滤页眉页脚，0=不过滤，1=过滤
-    split_mode?: 'auto' | 'custom' | 'hierarchical'; //切分模式
-    hierarchy_level?: number; //切分层级
-    append_title?: boolean; //切片是否追加章节标题
-    max_chunk_size?: number; //单 chunk 最大字符数
-    excel_rules: {
-        [uuid: string]: ExcelRule
-    };
-}
+  knowledge_id: number; // 必需
+  separator: string[]; // 必需，切分相关参数，如果不传，使用默认值
+  separator_rule: ("after" | "before")[]; // 必需
+  chunk_size: number; // 必需
+  chunk_overlap: number; // 必需
+  file_list: { file_path: string }[]; // 必需
+  retain_images?: boolean; //保留文档图片
+  force_ocr?: boolean; //强制开启ocr
+  enable_formula?: boolean; //开启公式识别
+  filter_page_header_footer?: number; //过滤页眉页脚，0=不过滤，1=过滤
+  split_mode?: "auto" | "custom" | "hierarchical"; //切分模式
+  hierarchy_level?: number; //切分层级
+  append_title?: boolean; //切片是否追加章节标题
+  max_chunk_size?: number; //单 chunk 最大字符数
+  excel_rules: {
+    [uuid: string]: ExcelRule;
+  };
+};
 type DefaultUploadFileFc = {
-    knowledge_id: number; // 必需
-    file_list: { file_path: string }[]; // 必需
+  knowledge_id: number; // 必需
+  file_list: { file_path: string }[]; // 必需
 };
 ///
 export async function subUploadLibFile(data: UploadFileFc): Promise<any>;
 export async function subUploadLibFile(data: DefaultUploadFileFc): Promise<any>;
 export async function subUploadLibFile(data: UploadFileFc | DefaultUploadFileFc) {
-    return await axios.post(`/api/v1/knowledge/process`, data);
+  return await axios.post(`/api/v1/knowledge/process`, data);
 }
 
 export async function importKnowledgeWebLinkApi(
-    knowledgeId: string | number,
-    data: { url: string; title?: string; overwrite?: boolean }
+  knowledgeId: string | number,
+  data: { url: string; title?: string; overwrite?: boolean },
 ) {
-    return await axios.post(`/api/v1/knowledge/space/${knowledgeId}/web-links`, data, { silent: true } as any);
+  return await axios.post(`/api/v1/knowledge/space/${knowledgeId}/web-links`, data, { silent: true });
 }
 
 //调整分段策略
 export async function rebUploadFile(data) {
-    return await axios.post(`/api/v1/knowledge/process/rebuild`, data);
+  return await axios.post(`/api/v1/knowledge/process/rebuild`, data);
 }
 /**
  * 查看文件切片（SSE 版本）
@@ -567,408 +555,430 @@ const currentEventSource = null; // 仅保留此变量用于跟踪当前连接
  * @returns {() => void} 取消函数
  */
 export function previewFileSplitApi(
-    data: Record<string, any>,
-    onEvent: (eventType: string, payload: any) => void,
-    options: { pollInterval?: number } = {}
+  data: Record<string, any>,
+  onEvent: (eventType: string, payload: any) => void,
+  options: { pollInterval?: number } = {},
 ) {
-    const createController = new AbortController();
-    const pollingController = new AbortController();
-    const createSignal = createController.signal;
-    const pollingSignal = pollingController.signal;
-    const pollInterval = Math.max(1000, options.pollInterval || 2000);
-    let pollTimer = null;
-    let isFinished = false;
+  const createController = new AbortController();
+  const pollingController = new AbortController();
+  const createSignal = createController.signal;
+  const pollingSignal = pollingController.signal;
+  const pollInterval = Math.max(1000, options.pollInterval || 2000);
+  let pollTimer = null;
+  let isFinished = false;
 
-    const clear = () => {
-        if (pollTimer) {
-            clearTimeout(pollTimer);
-            pollTimer = null;
-        }
-        createController.abort();
-        pollingController.abort();
-    };
+  const clear = () => {
+    if (pollTimer) {
+      clearTimeout(pollTimer);
+      pollTimer = null;
+    }
+    createController.abort();
+    pollingController.abort();
+  };
 
-    const emitError = (payload) => {
-        onEvent('error', {
-            code: payload?.code || 10952,
-            message: payload?.message || '文档解析失败',
-            data: payload?.data,
-            ...payload,
-        });
-    };
+  const emitError = (payload) => {
+    onEvent("error", {
+      code: payload?.code || 10952,
+      message: payload?.message || "文档解析失败",
+      data: payload?.data,
+      ...payload,
+    });
+  };
 
-    /**
-     * 轮询状态请求。
-     * @param {string} taskId 任务标识
-     */
-    /**
-     * 轮询状态请求。
-     * @param {string} previewFileId 预览任务标识
-     */
-    const pollStatus = (previewFileId) => {
-        if (isFinished) return;
-        console.log('开始轮询状态, preview_file_id:', previewFileId);
-        axios
-            .get(`/api/v1/knowledge/preview/status`, {
-                params: { preview_file_id: previewFileId },
-                signal: pollingSignal
-            })
-            .then((result: any) => {
-                // axios 拦截器已经返回了 response.data.data，所以这里直接使用 result
-                // 后端返回格式: resp_200(data=file_status)，其中 file_status 是 {"status":"processing"} 或 {"status":"completed","data":{...}}
-                // 经过拦截器后，result 应该是: {"status":"processing"} 或 {"status":"completed","data":{...}}
-                console.log('轮询状态响应:', result);
-                const status: string = result?.status;
-                const payload = result?.data;
-                const code = result?.code;
-                const message = result?.message;
-
-                if (!status || typeof status !== 'string') {
-                    console.error('轮询响应缺少 status 字段或格式异常:', result);
-                    isFinished = true;
-                    emitError({ message: '轮询响应格式异常' });
-                    return;
-                }
-
-                switch (status) {
-                    case 'processing':
-                        onEvent('processing', payload || {});
-                        if (!isFinished) {
-                            pollTimer = setTimeout(() => pollStatus(previewFileId), pollInterval);
-                        }
-                        break;
-                    case 'completed':
-                        isFinished = true;
-                        onEvent('completed', payload || {});
-                        onEvent('closed', { message: '轮询完成' });
-                        break;
-                    case 'error':
-                        isFinished = true;
-                        emitError({ code, message, ...(payload || {}) });
-                        break;
-                    case 'canceled':
-                        isFinished = true;
-                        onEvent('canceled', payload || {});
-                        break;
-                    default:
-                        // 未知状态视为错误
-                        console.warn('未知的轮询状态:', status);
-                        isFinished = true;
-                        emitError({ code, message: message || `未知状态: ${status}` });
-                }
-            })
-            .catch((err) => {
-                console.error('preview 轮询请求失败', err);
-
-                if (originAxios.isCancel?.(err) || err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') {
-                    return;
-                }
-                isFinished = true;
-                emitError({ message: '文档解析失败' });
-            });
-    };
-
+  /**
+   * 轮询状态请求。
+   * @param {string} taskId 任务标识
+   */
+  /**
+   * 轮询状态请求。
+   * @param {string} previewFileId 预览任务标识
+   */
+  const pollStatus = (previewFileId) => {
+    if (isFinished) return;
+    console.log("开始轮询状态, preview_file_id:", previewFileId);
     axios
-        .post('/api/v1/knowledge/preview', data, {
-            signal: createSignal
-        })
-        .then((result: any) => {
-            console.log('preview 创建任务响应:', result);
+      .get(`/api/v1/knowledge/preview/status`, {
+        params: { preview_file_id: previewFileId },
+        signal: pollingSignal,
+      })
+      .then((result: any) => {
+        // axios 拦截器已经返回了 response.data.data，所以这里直接使用 result
+        // 后端返回格式: resp_200(data=file_status)，其中 file_status 是 {"status":"processing"} 或 {"status":"completed","data":{...}}
+        // 经过拦截器后，result 应该是: {"status":"processing"} 或 {"status":"completed","data":{...}}
+        console.log("轮询状态响应:", result);
+        const status: string = result?.status;
+        const payload = result?.data;
+        const code = result?.code;
+        const message = result?.message;
 
-            if (!result || isFinished) {
-                console.warn('预览任务创建响应为空或已结束');
-                return;
+        if (!status || typeof status !== "string") {
+          console.error("轮询响应缺少 status 字段或格式异常:", result);
+          isFinished = true;
+          emitError({ message: "轮询响应格式异常" });
+          return;
+        }
+
+        switch (status) {
+          case "processing":
+            onEvent("processing", payload || {});
+            if (!isFinished) {
+              pollTimer = setTimeout(() => pollStatus(previewFileId), pollInterval);
             }
-            const previewFileId = result?.preview_file_id || result?.previewFileId;
-
-            if (previewFileId) {
-                console.log('获取到 preview_file_id:', previewFileId, '开始轮询');
-                // 立即开始第一次轮询
-                pollStatus(previewFileId);
-                return;
-            }
-
-            // 如果没有 preview_file_id，可能是响应格式异常
-            console.error('任务创建失败：未找到 preview_file_id，响应数据:', JSON.stringify(result));
+            break;
+          case "completed":
             isFinished = true;
-            emitError({ message: '任务创建失败：响应中缺少任务ID，请检查后端接口返回格式' });
-        })
-        .catch((err) => {
-            console.error('preview 请求失败', err);
-
-            if (originAxios.isCancel?.(err) || err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') {
-                return;
-            }
+            onEvent("completed", payload || {});
+            onEvent("closed", { message: "轮询完成" });
+            break;
+          case "error":
             isFinished = true;
-            emitError({ message: '文档解析失败' });
-        });
+            emitError({ code, message, ...(payload || {}) });
+            break;
+          case "canceled":
+            isFinished = true;
+            onEvent("canceled", payload || {});
+            break;
+          default:
+            // 未知状态视为错误
+            console.warn("未知的轮询状态:", status);
+            isFinished = true;
+            emitError({ code, message: message || `未知状态: ${status}` });
+        }
+      })
+      .catch((err) => {
+        console.error("preview 轮询请求失败", err);
 
-    return () => {
+        if (
+          err?.kind === "canceled" ||
+          originAxios.isCancel?.(err) ||
+          err?.code === "ERR_CANCELED" ||
+          err?.name === "CanceledError"
+        ) {
+          return;
+        }
         isFinished = true;
-        clear();
-    };
+        onEvent("error", err);
+      });
+  };
+
+  axios
+    .post("/api/v1/knowledge/preview", data, {
+      signal: createSignal,
+    })
+    .then((result: any) => {
+      console.log("preview 创建任务响应:", result);
+
+      if (!result || isFinished) {
+        console.warn("预览任务创建响应为空或已结束");
+        return;
+      }
+      const previewFileId = result?.preview_file_id || result?.previewFileId;
+
+      if (previewFileId) {
+        console.log("获取到 preview_file_id:", previewFileId, "开始轮询");
+        // 立即开始第一次轮询
+        pollStatus(previewFileId);
+        return;
+      }
+
+      // 如果没有 preview_file_id，可能是响应格式异常
+      console.error("任务创建失败：未找到 preview_file_id，响应数据:", JSON.stringify(result));
+      isFinished = true;
+      emitError({ message: "任务创建失败：响应中缺少任务ID，请检查后端接口返回格式" });
+    })
+    .catch((err) => {
+      console.error("preview 请求失败", err);
+
+      if (
+        err?.kind === "canceled" ||
+        originAxios.isCancel?.(err) ||
+        err?.code === "ERR_CANCELED" ||
+        err?.name === "CanceledError"
+      ) {
+        return;
+      }
+      isFinished = true;
+      onEvent("error", err);
+    });
+
+  return () => {
+    isFinished = true;
+    clear();
+  };
 }
 
 /**
  * 获取知识库下的切分段落
  */
 export async function getKnowledgeChunkApi(params): Promise<any> {
-    let queryStr = ''
-    if (params.file_ids?.length) {
-        queryStr = params.file_ids.map(id => `file_ids=${id}`).join('&');
-    } else {
-        delete params.file_ids;
-        return Promise.resolve({ data: [] });
-    }
-    return await axios.get(`/api/v1/knowledge/chunk?${queryStr}`, { params });
+  let queryStr = "";
+  if (params.file_ids?.length) {
+    queryStr = params.file_ids.map((id) => `file_ids=${id}`).join("&");
+  } else {
+    delete params.file_ids;
+    return Promise.resolve({ data: [] });
+  }
+  return await axios.get(`/api/v1/knowledge/chunk?${queryStr}`, { params });
 }
 
 /**
  * 删除知识库分块内容
  */
 export async function delChunkApi(data) {
-    return await axios.delete(`/api/v1/knowledge/chunk`, { data });
+  return await axios.delete(`/api/v1/knowledge/chunk`, { data });
 }
 
 /**
  * 删除知识库分块内容(预览时)
  */
 export async function delChunkInPreviewApi(data) {
-    return await axios.delete(`/api/v1/knowledge/preview`, { data });
+  return await axios.delete(`/api/v1/knowledge/preview`, { data });
 }
 
 /**
  * 跟新知识库分块内容
  */
 export async function updatePreviewChunkApi(data) {
-    return await axios.put(`/api/v1/knowledge/preview`, data);
+  return await axios.put(`/api/v1/knowledge/preview`, data);
 }
 
 /**
  * 删除知识库分块内容
  */
 type KnowledgePutRequest = {
-    knowledge_id: number;
-    file_id: number;
-    chunk_index: number;
-    text: string;
-    bbox: any
-}
+  knowledge_id: number;
+  file_id: number;
+  chunk_index: number;
+  text: string;
+  bbox: any;
+};
 export async function updateChunkApi(data: KnowledgePutRequest) {
-    return await axios.put(`/api/v1/knowledge/chunk`, data);
+  return await axios.put(`/api/v1/knowledge/chunk`, data);
 }
 
 /**
  * 创建支持库
  */
 export async function createFileLib(data) {
-    return await axios.post(`/api/v1/knowledge/create`, data);
+  return await axios.post(`/api/v1/knowledge/create`, data);
 }
 
 /**
  * 修改知识库
  */
 export async function updateKnowledgeApi(data) {
-    return await axios.put(`/api/v1/knowledge/`, data);
-};
+  return await axios.put(`/api/v1/knowledge/`, data);
+}
 
 /**
  * 删除支持库
  */
 export async function deleteFileLib(id) {
-    return await axios.delete(`/api/v1/knowledge/`, { data: { knowledge_id: id } });
+  return await axios.delete(`/api/v1/knowledge/`, { data: { knowledge_id: id } });
 }
 
 // 获取灵思工具
 export async function getLinsightTools(): Promise<any> {
-    return await axios.get('/api/v1/tool/linsight/preset');
+  return await axios.get("/api/v1/tool/linsight/preset");
 }
 
 // 获取个人知识库信息
 export async function getPersonalKnowledgeInfo(): Promise<any> {
-    return await axios.get('/api/v1/knowledge/personal_knowledge_info');
+  return await axios.get("/api/v1/knowledge/personal_knowledge_info");
 }
 
 /**
  * 删除知识库下文件
  */
 export async function deleteFile(id) {
-    return await axios.delete(`/api/v1/knowledge/file/${id}`);
+  return await axios.delete(`/api/v1/knowledge/file/${id}`);
 }
 
 /**
  * 批量下载知识库下文件
  */
-export async function batchDownloadFileApi(data: { knowledge_id: number; file_ids: number[] }): Promise<string> {
-    const res: any = await axios.post(`/api/v1/knowledge/file/batch_download`, data);
-    // Depending on how backend wraps the URL, we may extract it from res.data or it's just the URL string
-    return res?.url ?? "";
+export async function batchDownloadFileApi(data: {
+  knowledge_id: number;
+  file_ids: number[];
+}): Promise<string> {
+  const res: any = await axios.post(`/api/v1/knowledge/file/batch_download`, data);
+  // Depending on how backend wraps the URL, we may extract it from res.data or it's just the URL string
+  return res?.url ?? "";
 }
 
 /**
  * 获取Qa问题列表
  */
-export async function getQaList(id, data: { page, pageSize, keyword }) {
-    return await axios.get(`/api/v1/knowledge/qa/list/${id}`, {
-        params: {
-            page_size: data.pageSize,
-            page_num: data.page,
-            keyword: data.keyword
-        },
-    });
+export async function getQaList(id, data: { page; pageSize; keyword }) {
+  return await axios.get(`/api/v1/knowledge/qa/list/${id}`, {
+    params: {
+      page_size: data.pageSize,
+      page_num: data.page,
+      keyword: data.keyword,
+    },
+  });
 }
-
 
 /**
  * 导出QA文件
  */
 export async function getQaFile(id): Promise<{ file_list: string[] }> {
-    return await axios.get(`/api/v1/knowledge/qa/export/${id}`);
+  return await axios.get(`/api/v1/knowledge/qa/export/${id}`);
 }
 
 /**
  * 导入QA文件
  */
-export async function postImportQaFile(id, params): Promise<{
-    result: {
-        answers: string,
-        questions: string[],
-    }[]
+export async function postImportQaFile(
+  id,
+  params,
+): Promise<{
+  result: {
+    answers: string;
+    questions: string[];
+  }[];
 }> {
-    const { url } = params;
-    return await axios.post(`/api/v1/knowledge/qa/import/${id}`, {
-        file_list: [url],
-    });
+  const { url } = params;
+  return await axios.post(`/api/v1/knowledge/qa/import/${id}`, {
+    file_list: [url],
+  });
 }
 
 /**
  * 预览QA文件
  */
-export async function getQaFilePreview(id, params): Promise<{
-    result: {
-        answers: string,
-        questions: string[],
-    }[]
+export async function getQaFilePreview(
+  id,
+  params,
+): Promise<{
+  result: {
+    answers: string;
+    questions: string[];
+  }[];
 }> {
-    const { url, size, offset } = params;
-    return await axios.post(`/api/v1/knowledge/qa/preview/${id}`, {
-        file_url: url,
-        size,
-        offset,
-    });
+  const { url, size, offset } = params;
+  return await axios.post(`/api/v1/knowledge/qa/preview/${id}`, {
+    file_url: url,
+    size,
+    offset,
+  });
 }
 
 /**
  * 修改qa状态
  */
 export async function updateQaStatus(id, status) {
-    return await axios.post(`/api/v1/knowledge/qa/status_switch`, {
-        id,
-        status
-    });
+  return await axios.post(`/api/v1/knowledge/qa/status_switch`, {
+    id,
+    status,
+  });
 }
 
 /**
  * Qa问题新增/修改
  */
-export async function updateQa(id, data: { questions, answers, knowledge_id, source, id?: any }) {
-    if (id) {
-        data.id = id
-    }
+export async function updateQa(id, data: { questions; answers; knowledge_id; source; id?: any }) {
+  if (id) {
+    data.id = id;
+  }
 
-    return await axios.post(`/api/v1/knowledge/qa/add`, data);
+  return await axios.post(`/api/v1/knowledge/qa/add`, data);
 }
 
 /**
  * 删除Qa问题
  */
 export async function deleteQa(ids) {
-    return await axios.delete(`/api/v1/knowledge/qa/delete`, {
-        data: { ids }
-    });
+  return await axios.delete(`/api/v1/knowledge/qa/delete`, {
+    data: { ids },
+  });
 }
 
 /**
  * 获取Qa问题详情
  */
 export async function getQaDetail(id) {
-    return await axios.get(`/api/v1/knowledge/qa/detail?id=${id}`);
+  return await axios.get(`/api/v1/knowledge/qa/detail?id=${id}`);
 }
 
 /**
  * 添加相似问到问题
  */
-export async function addSimilarQa(data: { ids: string[], question: string }) {
-    return await axios.post(`/api/v1/knowledge/qa/append`, data);
+export async function addSimilarQa(data: { ids: string[]; question: string }) {
+  return await axios.post(`/api/v1/knowledge/qa/append`, data);
 }
 
 /**
  * 生成相似问
  */
 export async function generateSimilarQa(question, anwser) {
-    return await axios.post(`/api/v1/knowledge/qa/auto_question`, {
-        "ori_question": question,
-        "anwser": anwser,
-        "number": 3
-    });
+  return await axios.post(`/api/v1/knowledge/qa/auto_question`, {
+    ori_question: question,
+    anwser: anwser,
+    number: 3,
+  });
 }
 
 /**
  * 获取模型列表
  */
 export async function getEmbeddingModel(): Promise<{ models: string[] }> {
-    return await axios.get(`/api/v1/knowledge/embedding_param`);
+  return await axios.get(`/api/v1/knowledge/embedding_param`);
 }
 
 /**
  * 获取文件地址
  */
 export async function getFilePathApi(file_id) {
-    return await axios.get(`/api/v1/knowledge/file_share`, { params: { file_id } });
+  return await axios.get(`/api/v1/knowledge/file_share`, { params: { file_id } });
 }
 
 /**
  * 获取文件chunk对应的文本
  */
 export async function getFileBboxApi(file_id) {
-    return await axios.get(`/api/v1/knowledge/file_bbox`, { params: { file_id } });
+  return await axios.get(`/api/v1/knowledge/file_bbox`, { params: { file_id } });
 }
 
 /**
  * 获取知识库详情
  */
 export async function getKnowledgeDetailApi(knowledge_id): Promise<any[]> {
-    const queryStr = knowledge_id.map(id => `knowledge_id=${id}`).join('&');
-    return await axios.get(`/api/v1/knowledge/info?${queryStr}`);
+  const queryStr = knowledge_id.map((id) => `knowledge_id=${id}`).join("&");
+  return await axios.get(`/api/v1/knowledge/info?${queryStr}`);
 }
 
 /**
  * 获取RT服务列表
  */
 export async function getServicesApi(): Promise<RTServer[]> {
-    return await axios.get(`/api/v1/server/list_server`);
+  return await axios.get(`/api/v1/server/list_server`);
 }
 
 /**
  * 获取FT服务列表
  */
 export async function getFTServicesApi(server_id: number): Promise<RTServer[]> {
-    return await axios.get(`/api/v1/finetune/model/list?server_id=${server_id}`);
+  return await axios.get(`/api/v1/finetune/model/list?server_id=${server_id}`);
 }
 
 /**
  * 获取RT服务列表（包含已删除data）
  */
 export async function getAllServicesApi(): Promise<any[]> {
-    return await axios.get(`/api/v1/finetune/server/filters`);
+  return await axios.get(`/api/v1/finetune/server/filters`);
 }
 
 /**
  * 添加服务
  */
 export async function addServiceApi(name: string, ftUrl: string): Promise<{ id: number }> {
-    return await axios.post(`/api/v1/server/add`,
-        { endpoint: '', sft_endpoint: ftUrl, server: name, remark: 'RT模块创建' });
+  return await axios.post(`/api/v1/server/add`, {
+    endpoint: "",
+    sft_endpoint: ftUrl,
+    server: name,
+    remark: "RT模块创建",
+  });
 }
 
 /**
@@ -976,21 +986,18 @@ export async function addServiceApi(name: string, ftUrl: string): Promise<{ id: 
  *
  */
 export async function deleteServiceApi(id) {
-    return await axios.delete(`/api/v1/server/${id}`);
+  return await axios.delete(`/api/v1/server/${id}`);
 }
 
 /**
  * 获取发布模型的状态信息
  */
 export async function getModelInfoApi(id) {
-    return await axios.get(`/api/v1/server/model/${id}`);
+  return await axios.get(`/api/v1/server/model/${id}`);
 }
 
-
-export async function postValidateCode(
-    code: string
-): Promise<any> {
-    return await axios.post("/api/v1/validate/code", { code });
+export async function postValidateCode(code: string): Promise<any> {
+  return await axios.post("/api/v1/validate/code", { code });
 }
 
 /**
@@ -1001,63 +1008,62 @@ export async function postValidateCode(
  * @returns A promise that resolves to an AxiosResponse containing the validation results.
  */
 export async function postValidatePrompt(
-    name: string,
-    template: string,
-    frontend_node: APIClassType
+  name: string,
+  template: string,
+  frontend_node: APIClassType,
 ): Promise<any> {
-    return await axios.post("/api/v1/validate/prompt", {
-        name: name,
-        template: template,
-        frontend_node: frontend_node,
-    });
+  return await axios.post("/api/v1/validate/prompt", {
+    name: name,
+    template: template,
+    frontend_node: frontend_node,
+  });
 }
 
 /**
  * 获取会话列表
  */
 export const getChatsApi = (page) => {
-    function isJsonSerializable(str) {
-        try {
-            JSON.parse(str);
-            return true;
-        } catch (e) {
-            return false;
-        }
+  function isJsonSerializable(str) {
+    try {
+      JSON.parse(str);
+      return true;
+    } catch (e) {
+      return false;
     }
+  }
 
-    return (axios.get(`/api/v1/chat/list?page=${page}&limit=40`) as Promise<any[]>).then(res => {
-        const result = res?.filter((el, i) => el.chat_id) || []
-        return result.map(el => {
-            const { intermediate_steps, message } = el.latest_message || { intermediate_steps: '', message: '' }
-            const _message = (function () {
-                if (intermediate_steps) return intermediate_steps;
-                if (isJsonSerializable(message)) {
-                    const json = JSON.parse(message);
-                    if (Array.isArray(json)) return message
-                    const chatKey = el.flow_type === AppNumType.FLOW ? 'msg' : Object.keys(json)[0]
-                    return json[chatKey] || ''
-                }
-                return message;
-            }())
+  return (axios.get(`/api/v1/chat/list?page=${page}&limit=40`) as Promise<any[]>).then((res) => {
+    const result = res?.filter((el, i) => el.chat_id) || [];
+    return result.map((el) => {
+      const { intermediate_steps, message } = el.latest_message || { intermediate_steps: "", message: "" };
+      const _message = (function () {
+        if (intermediate_steps) return intermediate_steps;
+        if (isJsonSerializable(message)) {
+          const json = JSON.parse(message);
+          if (Array.isArray(json)) return message;
+          const chatKey = el.flow_type === AppNumType.FLOW ? "msg" : Object.keys(json)[0];
+          return json[chatKey] || "";
+        }
+        return message;
+      })();
 
-            return {
-                ...el,
-                latest_message: {
-                    ...el.latest_message,
-                    message: typeof _message === 'string' ? _message.substring(0, 40) : ''
-                }
-            }
-        })
-    })
+      return {
+        ...el,
+        latest_message: {
+          ...el.latest_message,
+          message: typeof _message === "string" ? _message.substring(0, 40) : "",
+        },
+      };
+    });
+  });
 };
 
 /**
  * 删除会话
  */
 export const deleteChatApi = (chatId) => {
-    return axios.delete(`/api/v1/chat/${chatId}`)
+  return axios.delete(`/api/v1/chat/${chatId}`);
 };
-
 
 /**
  * 获取会话消息记录
@@ -1066,78 +1072,84 @@ export const deleteChatApi = (chatId) => {
  * @returns {Promise<any>} his data.
  */
 export interface MessageDB {
-    /** 场景 */
-    category: string;
-    chat_id: string;
-    create_time: string;
-    extra: string;
-    /** 文件列表 */
-    files: string;
-    flow_id: string;
-    id: number;
-    /** 日志 */
-    intermediate_steps: string;
-    /** 机器人回复 */
-    is_bot: boolean;
-    /** 已点赞 */
-    liked: number;
-    /** 消息内容 */
-    message: string;
-    receiver: null;
-    remark: null;
-    sender: string;
-    solved: number;
-    /** 有溯源 */
-    source: number;
-    type: string;
-    update_time: string;
-    user_id: number;
+  /** 场景 */
+  category: string;
+  chat_id: string;
+  create_time: string;
+  extra: string;
+  /** 文件列表 */
+  files: string;
+  flow_id: string;
+  id: number;
+  /** 日志 */
+  intermediate_steps: string;
+  /** 机器人回复 */
+  is_bot: boolean;
+  /** 已点赞 */
+  liked: number;
+  /** 消息内容 */
+  message: string;
+  receiver: null;
+  remark: null;
+  sender: string;
+  solved: number;
+  /** 有溯源 */
+  source: number;
+  type: string;
+  update_time: string;
+  user_id: number;
 }
 
-export async function getChatHistory(flowId: string, chatId: string, pageSize: number, id?: number): Promise<MessageDB[]> {
-    // hack Switch API URL based on routing 
-    let url = '/api/v1/chat/history'
-    if (location.pathname.indexOf('/log/chatlog') || location.pathname.indexOf('/label/chat')) {
-        url = '/api/v1/session/chat/history'
-    }
-    return await axios.get(`${url}?flow_id=${flowId}&chat_id=${chatId}&page_size=${pageSize}&id=${id || ''}`);
+export async function getChatHistory(
+  flowId: string,
+  chatId: string,
+  pageSize: number,
+  id?: number,
+): Promise<MessageDB[]> {
+  // hack Switch API URL based on routing
+  let url = "/api/v1/chat/history";
+  if (location.pathname.indexOf("/log/chatlog") || location.pathname.indexOf("/label/chat")) {
+    url = "/api/v1/session/chat/history";
+  }
+  return await axios.get(`${url}?flow_id=${flowId}&chat_id=${chatId}&page_size=${pageSize}&id=${id || ""}`);
 }
 
 /**
  * 赞 踩消息
  */
 export const likeChatApi = (chatId, liked) => {
-    liked && copyTrackingApi({
-        message_id: chatId,
-        operation_type: liked === 1 ? 'like' : 'dislike'
-    })
-    return axios.post(`/api/v1/liked`, { message_id: chatId, liked });
+  liked &&
+    copyTrackingApi({
+      message_id: chatId,
+      operation_type: liked === 1 ? "like" : "dislike",
+    });
+  return axios.post(`/api/v1/liked`, { message_id: chatId, liked });
 };
 
 /**
  * 踩消息反馈
  */
 export const disLikeCommentApi = (message_id, comment) => {
-    return axios.post(`/api/v1/chat/comment`, { message_id, comment });
+  return axios.post(`/api/v1/chat/comment`, { message_id, comment });
 };
 
 /**
  * 点击复制上报
  * */
 export const copyTrackingApi = (msgId) => {
-    trackingApi({
-        message_id: msgId,
-        operation_type: 'copy'
-    })
-    return axios.post(`/api/v1/chat/copied`, { message_id: msgId });
-}
+  trackingApi({
+    message_id: msgId,
+    operation_type: "copy",
+  });
+  return axios.post(`/api/v1/chat/copied`, { message_id: msgId });
+};
 
 /**
  * Tracking
  */
-export const trackingApi = (data: { message_id: string, operation_type: 'dislike' | 'like' | 'copy' }) => {
-    return axios.post(`/api/v1/session/chat/message/telemetry`, data);
-}
+export const trackingApi = (data: { message_id: string; operation_type: "dislike" | "like" | "copy" }) => {
+  return axios.post(`/api/v1/session/chat/message/telemetry`, data);
+};
 
 /**
  * Fetches the version of the API.
@@ -1145,8 +1157,8 @@ export const trackingApi = (data: { message_id: string, operation_type: 'dislike
  * @returns {Promise<AxiosResponse<any>>} A promise that resolves to an AxiosResponse containing the version information.
  */
 export async function getVersion() {
-    const respnose = await axios.get("/api/v1/version");
-    return respnose.data;
+  const respnose = await axios.get("/api/v1/version");
+  return respnose.data;
 }
 
 /**
@@ -1155,12 +1167,9 @@ export async function getVersion() {
  * @returns {Promise<BuildStatusTypeAPI>} A promise that resolves to an AxiosResponse containing the build status.
  *
  */
-export async function getBuildStatus(
-    flowId: string,
-    versionId?: number
-): Promise<BuildStatusTypeAPI> {
-    const qstr = versionId ? `?version_id=${versionId}` : "";
-    return await axios.get(`/api/v1/build/${flowId}/status${qstr}`);
+export async function getBuildStatus(flowId: string, versionId?: number): Promise<BuildStatusTypeAPI> {
+  const qstr = versionId ? `?version_id=${versionId}` : "";
+  return await axios.get(`/api/v1/build/${flowId}/status${qstr}`);
 }
 
 //docs for postbuildinit
@@ -1171,13 +1180,13 @@ export async function getBuildStatus(
  *
  */
 export async function postBuildInit(data: {
-    flow: FlowType
-    chatId?: string
-    versionId?: number
+  flow: FlowType;
+  chatId?: string;
+  versionId?: number;
 }): Promise<any> {
-    const { flow, chatId, versionId } = data;
-    const qstr = versionId ? `?version_id=${versionId}` : ''
-    return await axios.post(`/api/v1/build/init/${flow.id}${qstr}`, chatId ? { chat_id: chatId } : flow);
+  const { flow, chatId, versionId } = data;
+  const qstr = versionId ? `?version_id=${versionId}` : "";
+  return await axios.post(`/api/v1/build/init/${flow.id}${qstr}`, chatId ? { chat_id: chatId } : flow);
 }
 
 // fetch(`/upload/${id}`, {
@@ -1189,40 +1198,37 @@ export async function postBuildInit(data: {
  * @param {File} file - The file to upload.
  * @param {string} id - The ID of the flow to upload the file to.
  */
-export async function uploadFile(
-    file: File,
-    id: string
-): Promise<any> {
-    const formData = new FormData();
-    formData.append("file", file);
-    return await axios.post(`/api/v1/upload/${id}`, formData);
+export async function uploadFile(file: File, id: string): Promise<any> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return await axios.post(`/api/v1/upload/${id}`, formData);
 }
 
 /***************************
- * ************ model ************ 
+ * ************ model ************
  */
 /**
  * 获取知识库下文件列表
  *
  */
 export async function serverListApi(byRtName?: string): Promise<any[]> {
-    return await axios.get(`/api/v1/server/list`).then((list: any) => {
-        return byRtName ? list.filter(item => item.server === byRtName) : list
-    });
+  return await axios.get(`/api/v1/server/list`).then((list: any) => {
+    return byRtName ? list.filter((item) => item.server === byRtName) : list;
+  });
 }
 
 /**
  * 上下线
  */
 export async function switchOnLineApi(id, on) {
-    return await axios.post(`/api/v1/server/${on ? 'load' : 'unload'}`, { deploy_id: id });
+  return await axios.post(`/api/v1/server/${on ? "load" : "unload"}`, { deploy_id: id });
 }
 
 /**
  * 修改配置
  */
 export async function updateConfigApi(id, config) {
-    return await axios.post(`/api/v1/server/update`, { id, config });
+  return await axios.post(`/api/v1/server/update`, { id, config });
 }
 
 /**
@@ -1230,159 +1236,173 @@ export async function updateConfigApi(id, config) {
  *
  */
 export async function GPUlistApi(): Promise<any> {
-    return await axios.get(`/api/v1/server/GPU`);
+  return await axios.get(`/api/v1/server/GPU`);
 }
 export async function GPUlistByFinetuneApi(): Promise<any> {
-    return await axios.get(`/api/v1/finetune/gpu`);
+  return await axios.get(`/api/v1/finetune/gpu`);
 }
 // 工作台配置
 export async function setWorkstationConfigApi(data): Promise<any> {
-    return await axios.post(`api/v1/workstation/config`, data);
+  return await axios.post(`api/v1/workstation/config`, data);
 }
 export async function getWorkstationConfigApi(): Promise<any> {
-    return await axios.get(`api/v1/workstation/config`);
+  return await axios.get(`api/v1/workstation/config`);
 }
 // 工作台日常配置
 export async function setDailyConfigApi(data): Promise<any> {
-    return await axios.post(`api/v1/workstation/config/daily`, data);
+  return await axios.post(`api/v1/workstation/config/daily`, data);
 }
 export async function getDailyConfigApi(): Promise<any> {
-    return await axios.get(`api/v1/workstation/config/daily`);
+  return await axios.get(`api/v1/workstation/config/daily`);
 }
 // 工作台灵思配置
 export async function getLinsiConfigApi(): Promise<any> {
-    return await axios.get(`api/v1/workstation/config/linsight`);
+  return await axios.get(`api/v1/workstation/config/linsight`);
 }
 export async function setLinsiConfigApi(data): Promise<any> {
-    return await axios.post(`api/v1/workstation/config/linsight`, data);
+  return await axios.post(`api/v1/workstation/config/linsight`, data);
 }
 // 工作台订阅配置
 export async function getSubConfigApi(): Promise<any> {
-    return await axios.get(`api/v1/workstation/config/subscription`);
+  return await axios.get(`api/v1/workstation/config/subscription`);
 }
 export async function setSubConfigApi(data): Promise<any> {
-    return await axios.post(`api/v1/workstation/config/subscription`, data);
+  return await axios.post(`api/v1/workstation/config/subscription`, data);
 }
 // 工作台知识空间配置
 export async function getKnowledgeConfigApi(): Promise<any> {
-    return await axios.get(`api/v1/workstation/config/knowledge_space`);
+  return await axios.get(`api/v1/workstation/config/knowledge_space`);
 }
 export async function setKnowledgeConfigApi(data): Promise<any> {
-    return await axios.post(`api/v1/workstation/config/knowledge_space`, data);
+  return await axios.post(`api/v1/workstation/config/knowledge_space`, data);
 }
 export async function getChatHistoryApi(chatId: string): Promise<any> {
-    return await axios.get('/api/v1/session/chat/messages/' + chatId);
+  return await axios.get("/api/v1/session/chat/messages/" + chatId);
 }
 
 /***************************
- * ************ 溯源 ************ 
+ * ************ 溯源 ************
  */
 // 分词
 export async function splitWordApi(word: string, messageId: string): Promise<string[]> {
-    return await axios.get(`/api/v1/qa/keyword?message_id=${messageId}`)
+  return await axios.get(`/api/v1/qa/keyword?message_id=${messageId}`);
 }
 
 // 获取 chunks
 export async function getSourceChunksApi(chatId: string, messageId: number, keys: string) {
-    try {
-        const chunks: any[] = await axios.post(`/api/v1/qa/chunk`, {
-            chat_id: chatId,
-            message_id: messageId,
-            keys,
-        })
+  try {
+    const chunks: any[] = await axios.post(`/api/v1/qa/chunk`, {
+      chat_id: chatId,
+      message_id: messageId,
+      keys,
+    });
 
-        const fileMap = {}
-        chunks.forEach(chunk => {
-            const list = fileMap[chunk.file_id]
-            if (list) {
-                fileMap[chunk.file_id].push(chunk)
-            } else {
-                fileMap[chunk.file_id] = [chunk]
-            }
-        });
+    const fileMap = {};
+    chunks.forEach((chunk) => {
+      const list = fileMap[chunk.file_id];
+      if (list) {
+        fileMap[chunk.file_id].push(chunk);
+      } else {
+        fileMap[chunk.file_id] = [chunk];
+      }
+    });
 
-        return Object.keys(fileMap).map(fileId => {
-            const { file_id: id, source: fileName, preview_url: previewUrl, original_url: originUrl, ...other } = fileMap[fileId][0]
+    return Object.keys(fileMap)
+      .map((fileId) => {
+        const {
+          file_id: id,
+          source: fileName,
+          preview_url: previewUrl,
+          original_url: originUrl,
+          ...other
+        } = fileMap[fileId][0];
 
-            const chunks = fileMap[fileId].sort((a, b) => b.score - a.score)
-                .map(chunk => ({
-                    box: chunk.chunk_bboxes,
-                    score: chunk.score
-                }))
-            const score = chunks[0].score
+        const chunks = fileMap[fileId]
+          .sort((a, b) => b.score - a.score)
+          .map((chunk) => ({
+            box: chunk.chunk_bboxes,
+            score: chunk.score,
+          }));
+        const score = chunks[0].score;
 
-            // 兼容后端历史逻辑
-            let fileUrl = ''
-            let suffix = fileName.split('.').pop().toLowerCase()
-            let isNew = false
-            if (['uns', 'local'].includes(other.parse_type)) {
-                fileUrl = other.chunk_bboxes ? previewUrl : originUrl;
-                if (other.chunk_bboxes) {
-                    suffix = 'pdf'
-                }
-            } else if (['etl4lm', 'un_etl4lm', 'mineru', 'mineru_v4'].includes(other.parse_type)) {
-                fileUrl = previewUrl || originUrl
-                isNew = true
-            }
-            return { id, fileName, suffix, isNew, fileUrl, originUrl, chunks, ...other, score }
-        }).sort((a, b) => b.score - a.score)
-    } catch (error) {
-        console.error(error);
-        throw error;
-    }
+        // 兼容后端历史逻辑
+        let fileUrl = "";
+        let suffix = fileName.split(".").pop().toLowerCase();
+        let isNew = false;
+        if (["uns", "local"].includes(other.parse_type)) {
+          fileUrl = other.chunk_bboxes ? previewUrl : originUrl;
+          if (other.chunk_bboxes) {
+            suffix = "pdf";
+          }
+        } else if (["etl4lm", "un_etl4lm", "mineru", "mineru_v4"].includes(other.parse_type)) {
+          fileUrl = previewUrl || originUrl;
+          isNew = true;
+        }
+        return { id, fileName, suffix, isNew, fileUrl, originUrl, chunks, ...other, score };
+      })
+      .sort((a, b) => b.score - a.score);
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
 }
-
 
 export async function updateKnowledge(data): Promise<any[]> {
-    return await axios.post(`/api/v1/knowledge/update_knowledge`, data);
+  return await axios.post(`/api/v1/knowledge/update_knowledge`, data);
 }
-
 
 /**
  * Knowledge Base Upload
  */
-export async function uploadFileApi({ fileKey, knowledgeId, file, onProgress, onFinish, onFail, onAbort }:
-    {
-        fileKey: string,
-        file: File,
-        knowledgeId: string,
-        onProgress?: (progressEvent: number) => void,
-        onFail?: (error: any) => void,
-        onFinish?: (response: any) => void,
-        onAbort?: (abortCtlr: any) => void
-    }): Promise<any> {
-    // 创建新的控制器
-    const abortCtlr = new AbortController();
-    onAbort(abortCtlr);
+export async function uploadFileApi({
+  fileKey,
+  knowledgeId,
+  file,
+  onProgress,
+  onFinish,
+  onFail,
+  onAbort,
+}: {
+  fileKey: string;
+  file: File;
+  knowledgeId: string;
+  onProgress?: (progressEvent: number) => void;
+  onFail?: (error: any) => void;
+  onFinish?: (response: any) => void;
+  onAbort?: (abortCtlr: any) => void;
+}): Promise<any> {
+  // 创建新的控制器
+  const abortCtlr = new AbortController();
+  onAbort(abortCtlr);
 
-    try {
-        const formData = new FormData();
-        formData.append(fileKey, file);
+  try {
+    const formData = new FormData();
+    formData.append(fileKey, file);
 
-        let isFinished = false;
+    let isFinished = false;
 
-        const config = {
-            headers: { 'Content-Type': 'multipart/form-data;charset=utf-8' },
-            onUploadProgress: (progressEvent) => {
-                const { loaded, total } = progressEvent;
-                const progress = Math.min(99.99, (loaded * 100) / total);
-                console.log(`Upload progress: ${file.name} ${progress}%`);
-                // UI with the progress information here
-                !isFinished && onProgress(progress)
-            },
-            signal: abortCtlr.signal,
-        }
-        const response = await axios.post(`/api/v1/knowledge/upload/${knowledgeId}`, formData, config);
-        // 处理成功
-        isFinished = true;
-        onFinish(response);
-    } catch (error) {
-        if (error?.code === "ERR_CANCELED") {
-            console.log('用户取消了上传');
-        } else {
-            onFail(error);
-        }
-    } finally {
-        onAbort(null);
+    const config = {
+      headers: { "Content-Type": "multipart/form-data;charset=utf-8" },
+      onUploadProgress: (progressEvent) => {
+        const { loaded, total } = progressEvent;
+        const progress = Math.min(99.99, (loaded * 100) / total);
+        console.log(`Upload progress: ${file.name} ${progress}%`);
+        // UI with the progress information here
+        !isFinished && onProgress(progress);
+      },
+      signal: abortCtlr.signal,
+    };
+    const response = await axios.post(`/api/v1/knowledge/upload/${knowledgeId}`, formData, config);
+    // 处理成功
+    isFinished = true;
+    onFinish(response);
+  } catch (error) {
+    if (error?.code === "ERR_CANCELED") {
+      console.log("用户取消了上传");
+    } else {
+      onFail(error);
     }
+  } finally {
+    onAbort(null);
+  }
 }

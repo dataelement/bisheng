@@ -2,12 +2,13 @@ import { notification } from '@bisheng/ui';
 
 
 import { publishDashboard } from "@/controllers/API/dashboard";
+import { showApiError } from "@/controllers/request";
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
 import { userContext } from "@/contexts/userContext";
 import { useEditorDashboardStore } from "@/store/dashboardStore";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useMutation, useQueryClient } from "react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Dashboard } from "./types/dataConfig";
 
 export const DashboardsQueryKey = "DashboardsQueryKey"
@@ -189,10 +190,7 @@ export const usePublishDashboard = () => {
             });
             notification.open({ type: "success", description: String(variables.published ? t('unpublishSuccess') : t('publishSuccess') ?? '') });
         },
-        onError: (error) => {
-            console.error("Publish Error:", error);
-            notification.open({ type: "error", description: String(t('operationFailed') ?? '') });
-        },
+        onError: showApiError,
     });
 
     // publish function

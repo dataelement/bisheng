@@ -10,10 +10,13 @@
 //                                when the GET envelope returns
 //                                inherited_from_root=true.
 
-import { Tag } from "@bisheng/ui";
+import { useContext } from "react";
+import { Alert, Tag } from "@bisheng/ui";
 import { useTranslation } from "react-i18next";
+import { locationContext } from "@/contexts/locationContext";
 import { Tenant } from "@/types/api/tenant";
 import { User } from "@/types/api/user";
+import { displayTenantName } from "@/utils/tenantDisplayName";
 
 const ROOT_TENANT_ID = 1;
 
@@ -37,25 +40,37 @@ export function ScopeBanner({
     childTenant,
 }: ScopeBannerProps): JSX.Element | null {
     const { t } = useTranslation('model');
+    const { appConfig } = useContext(locationContext);
     const isRootScope = scopeTenantId === null || scopeTenantId === ROOT_TENANT_ID;
     // Resolve the display name for whichever tenant the banner is about.
     // The fallback chain (name → code → "Root") avoids a blank substitution
     // on the rare deployments where the Root tenant has no display name set.
-    const rootName = rootTenant?.tenant_name || rootTenant?.tenant_code || 'Root';
+    // `displayTenantName` localizes the system-seeded "Default Tenant" so the
+    // banner matches what ScopeBar renders instead of leaking the English seed.
+    const rootName = displayTenantName(rootTenant?.tenant_name) || rootTenant?.tenant_code || 'Root';
+
+    // Single-tenant deployments (`multi_tenant.enabled=false`, the default of a
+    // standard docker install) have no child tenants and no scope switcher, so
+    // every branch below — "children inherit this", "you are editing tenant X"
+    // — describes machinery the operator cannot see and cannot use.
+    if (!appConfig.multiTenantEnabled) return null;
 
     if (isGlobalSuper && isRootScope) {
         return (
-            <div className="mb-4 p-3 rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 text-sm text-blue-900 dark:text-blue-100">
-                {t('model.systemConfigRootBanner', { tenantName: rootName })}
-            </div>
+            <Alert
+                className="mb-4"
+                description={t('model.systemConfigRootBanner', { tenantName: rootName })}
+            />
         );
     }
     if (!isRootScope) {
         const tenantName = childTenant?.tenant_name || childTenant?.tenant_code || '';
         return (
-            <div className="mb-4 p-3 rounded-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-100">
-                {t('model.systemConfigTenantBanner', { tenantName, rootName })}
-            </div>
+            <Alert
+                type="warning"
+                className="mb-4"
+                description={t('model.systemConfigTenantBanner', { tenantName, rootName })}
+            />
         );
     }
     // !isGlobalSuper: Child Admin (or dept admin) on their own tenant. They
@@ -66,9 +81,11 @@ export function ScopeBanner({
     // that super sees in the !isRootScope branch above; do not tell them
     // to "switch view" since that UI does not exist for them.
     return (
-        <div className="mb-4 p-3 rounded-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-100">
-            {t('model.systemConfigChildOwnBanner', { rootName })}
-        </div>
+        <Alert
+            type="warning"
+            className="mb-4"
+            description={t('model.systemConfigChildOwnBanner', { rootName })}
+        />
     );
 }
 
@@ -81,9 +98,11 @@ export function FallbackBlockedBanner({ visible }: { visible: boolean }): JSX.El
     const { t } = useTranslation('model');
     if (!visible) return null;
     return (
-        <div className="mb-3 p-3 rounded-md bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 text-sm text-yellow-900 dark:text-yellow-100">
-            {t('model.systemConfigFallbackBlockedBanner')}
-        </div>
+        <Alert
+            type="warning"
+            className="mb-3"
+            description={t('model.systemConfigFallbackBlockedBanner')}
+        />
     );
 }
 

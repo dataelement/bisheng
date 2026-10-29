@@ -1,7 +1,12 @@
-import react from "@vitejs/plugin-react-swc";
+import { diagramAssetTargets } from '../config/diagramAssets';
+import { createFrontendProxy, frontendEnvDefinitions, loadFrontendEnv, resolveApiTarget } from '../config/vite';
+import react from "@vitejs/plugin-react";
 import fs from "fs";
 import path from "path";
-import { defineConfig, loadEnv } from "vite";
+import { createRequire } from "node:module";
+import postcss from "postcss";
+import tailwindcss from "tailwindcss";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import { createHtmlPlugin } from 'vite-plugin-html';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import svgr from "vite-plugin-svgr";
@@ -14,11 +19,76 @@ import svgr from "vite-plugin-svgr";
  */
 const app_env = { BASE_URL: '' } // /custom
 
+
+/** Compile the public UI preset only inside this feature, preserving the legacy app theme. */
+function dshContentSafetyStyles(): Plugin {
+  const require = createRequire(import.meta.url);
+  const scope = ".dsh-content-safety";
+  const cssFile = path.resolve(__dirname, "src/style/dsh-content-safety.css");
+  const tokensFile = require.resolve("@bisheng/ui/tokens.css");
+  const presetFile = require.resolve("@bisheng/ui/tailwind-preset");
+  const uiDirectory = path.dirname(require.resolve("@bisheng/ui"));
+  const featureDirectory = path.resolve(__dirname, "src/pages/SystemPage/dsh");
+  const preset = require(presetFile) as Partial<import("tailwindcss").Config>;
+  const scopedSelector = (selector: string): string => {
+    if (selector.startsWith(":root")) return selector.replace(":root", scope);
+    // Theme owners live on html; component selectors remain inside the feature.
+    const owner = selector.match(/^(\.dark(?:\.theme-green)?|\.theme-green)(?=\s|$)/);
+    if (owner) return `${owner[0]} ${scope}${selector.slice(owner[0].length)}`;
+    return `${scope} ${selector}`;
+  };
+  return {
+    name: "dsh-content-safety-styles",
+    enforce: "pre",
+    async load(id) {
+      if (id.split("?")[0] !== cssFile) return;
+      this.addWatchFile(tokensFile);
+      this.addWatchFile(presetFile);
+      const tokens = postcss.parse(fs.readFileSync(tokensFile, "utf8"), { from: tokensFile });
+      tokens.walkRules(rule => { rule.selectors = rule.selectors.map(scopedSelector); });
+      const utilities = await postcss([tailwindcss({
+        presets: [preset],
+        content: [`${uiDirectory}/**/*.{ts,tsx}`, `${featureDirectory}/**/*.{ts,tsx}`],
+        important: scope,
+        corePlugins: { preflight: false },
+      })]).process("@tailwind utilities;", { from: cssFile });
+      const animations = new Map<string, string>();
+      utilities.root.walkAtRules(/keyframes$/, rule => {
+        const renamed = `dsh-safety-${rule.params}`;
+        animations.set(rule.params, renamed);
+        rule.params = renamed;
+      });
+      utilities.root.walkDecls(/^(animation|animation-name)$/, declaration => {
+        declaration.value = declaration.value.replace(/[A-Za-z_][\w-]*/g,
+          name => animations.get(name) ?? name);
+      });
+      utilities.root.walkRules(rule => {
+        if (rule.parent?.type === "atrule" && /keyframes$/.test(rule.parent.name)) return;
+        rule.selectors = rule.selectors.map(selector =>
+          selector.includes(scope) ? selector : `${scope} ${selector}`);
+      });
+      // Inherit the shared system font without resetting any controls outside the feature.
+      const families = preset.theme?.fontFamily;
+      const fonts = typeof families === "object" ? families.sans : undefined;
+      const fontFamily = Array.isArray(fonts) && fonts.every(font => typeof font === "string")
+        ? fonts.join(", ") : "inherit";
+      return `${tokens.toString()}\n${scope} { font-family: ${fontFamily}; }\n${utilities.root.toString()}`;
+    },
+    handleHotUpdate({ file, server, modules }) {
+      if (file === tokensFile || file === presetFile || file.startsWith(uiDirectory + path.sep)
+          || file.startsWith(featureDirectory + path.sep)) {
+        const cssModule = server.moduleGraph.getModuleById(cssFile);
+        if (cssModule) {
+          server.moduleGraph.invalidateModule(cssModule);
+          return [...modules, cssModule];
+        }
+      }
+    },
+  };
+}
+
 const commonProxyOptions = {
   changeOrigin: true,
-  // changeOrigin rewrites Host to the backend. HTTP gets X-Forwarded-Host
-  // from xfwd; websocket upgrades need the proxyReqWs hook below.
-  xfwd: true,
   secure: false,
   ws: true
 };
@@ -49,12 +119,6 @@ const createProxyConfig = (target: string, rewrite = true, isMinio = false, verb
     rewrite: (p: string) => p.replace(new RegExp(`^${app_env.BASE_URL}`), '')
   }),
   configure: (proxy: import('http-proxy').ProxyServer) => {
-    // http-proxy writes X-Forwarded-Host only on HTTP. The websocket upgrade
-    // still has Host rewritten by changeOrigin, so copy the browser host here.
-    proxy.on('proxyReqWs', (proxyReq, req) => {
-      const host = req.headers.host;
-      if (host) proxyReq.setHeader('x-forwarded-host', host);
-    });
     // Per-request logging is opt-in (VITE_PROXY_LOG=1): on by default it prints
     // dozens of lines per page load and buries the warnings that matter.
     if (verbose) {
@@ -106,8 +170,8 @@ function resolveMinioProxyTarget(env: Record<string, string>): string {
 export default defineConfig(({ command, mode }) => {
   // 必须从 .env.development.local 等文件加载；仅用 process.env 时配置阶段读不到 VITE_ 变量，会回落到 7860，
   // 导致 /api/department-limit/*（仅 Gateway 提供）打到 bisheng 出现 404。
-  const env = loadEnv(mode, path.resolve(__dirname), "");
-  const target = env.VITE_PROXY_TARGET || "http://127.0.0.1:7860/";
+  const env = loadFrontendEnv(mode, __dirname);
+  const target = resolveApiTarget(env);
   // Gateway-owned `/api/license/*` (F037/F067 status). Must not fall through to
   // FastAPI. Override with VITE_GATEWAY_PROXY_TARGET when 115 is not the lab GW.
   const gatewayTarget = env.VITE_GATEWAY_PROXY_TARGET || "http://127.0.0.1:8098";
@@ -132,13 +196,20 @@ export default defineConfig(({ command, mode }) => {
   };
 
   const proxyLog = env.VITE_PROXY_LOG === '1';
-  const apiProxyConfig = createProxyConfig(target, true, false, proxyLog);
-  const gatewayProxyConfig = createProxyConfig(gatewayTarget, true, false, proxyLog);
-  const fileServiceProxyConfig = createProxyConfig(fileServiceTarget, true, true, proxyLog);
-  const proxyTargets: Record<string, ReturnType<typeof createProxyConfig>> = {};
+  const rewrite = (url: string) => app_env.BASE_URL && url.startsWith(app_env.BASE_URL) ? url.slice(app_env.BASE_URL.length) : url;
+  const apiProxyConfig = createFrontendProxy(target, { rewrite, verbose: proxyLog });
+  const gatewayProxyConfig = createFrontendProxy(gatewayTarget, { rewrite, verbose: proxyLog });
+  const fileServiceProxyConfig = createFrontendProxy(fileServiceTarget, { rewrite, verbose: proxyLog, minioEnvName: 'VITE_MINIO_PROXY_TARGET' });
+  const proxyTargets: Record<string, ReturnType<typeof createFrontendProxy>> = {};
   // More specific than `/api/` and must be registered first, otherwise Vite's
   // prefix match sends `/api/license/status` to FastAPI (404 in open-source).
   proxyTargets[`${app_env.BASE_URL}/api/license`] = gatewayProxyConfig;
+  // This target must expose the app entry (nginx/gateway/app-proxy), not only
+  // FastAPI. Keep the browser URL on the current origin, including WebSockets.
+  proxyTargets[`${app_env.BASE_URL}/apps/`] = createFrontendProxy(
+    env.VITE_APP_PROXY_TARGET || target,
+    { rewrite, verbose: proxyLog },
+  );
   apiRoutes.forEach(route => {
     proxyTargets[`${app_env.BASE_URL}${route}`] = apiProxyConfig;
   });
@@ -168,7 +239,8 @@ export default defineConfig(({ command, mode }) => {
               if (/[\\/](xlsx|mammoth|xmlbuilder|@xmldom|bluebird|lop|underscore)[\\/]/.test(id)) {
                 return 'vendor-xlsx';
               }
-              if (/[\\/](react-ace|ace-builds|react-syntax-highlighter|vditor|refractor|highlight\.js|prismjs)[\\/]/.test(id)) {
+              // lowlight registers languages eagerly; keep it beside highlight.js to avoid a chunk initialization cycle.
+              if (/[\\/](react-ace|ace-builds|react-syntax-highlighter|vditor|refractor|lowlight|highlight\.js|prismjs)[\\/]/.test(id)) {
                 return 'vendor-editor';
               }
               if (
@@ -183,6 +255,8 @@ export default defineConfig(({ command, mode }) => {
         }
       }
     },
+    // Prebundle workspace UI with its own dependency graph; the app pins a different merge version.
+    optimizeDeps: { include: ["@bisheng/ui"] },
     resolve: {
       // Workspace viewers must use the app's initialized i18n hook instance.
       dedupe: ['react-i18next'],
@@ -191,6 +265,7 @@ export default defineConfig(({ command, mode }) => {
       }
     },
     plugins: [
+      dshContentSafetyStyles(),
       react(),
       svgr(),
       createHtmlPlugin({
@@ -206,6 +281,7 @@ export default defineConfig(({ command, mode }) => {
       }),
       viteStaticCopy({
         targets: [
+          ...diagramAssetTargets(),
           {
             src: [
               'node_modules/ace-builds/src-min-noconflict/ace.js',
@@ -232,6 +308,7 @@ export default defineConfig(({ command, mode }) => {
       }),
     ],
     define: {
+      ...frontendEnvDefinitions(env),
       // react-draggable reads this flag on every drag/resize start in the browser.
       'process.env.DRAGGABLE_DEBUG': 'false',
       __APP_ENV__: JSON.stringify(app_env_define)
@@ -239,6 +316,7 @@ export default defineConfig(({ command, mode }) => {
     server: {
       host: '0.0.0.0',
       port: 3001,
+      strictPort: true,
       proxy: {
         ...proxyTargets,
       },

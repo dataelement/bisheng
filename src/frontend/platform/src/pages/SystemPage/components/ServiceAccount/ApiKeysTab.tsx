@@ -1,3 +1,4 @@
+import { useServiceAccountRequestScope } from "./useServiceAccountManagementScope";
 import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { Button, notification } from '@bisheng/ui';
 import { Tag } from "@bisheng/ui";
@@ -20,19 +21,20 @@ listServiceAccountKeysPageApi,
 revokeAllServiceAccountKeysApi,
 revokeServiceAccountKeyApi,
 } from "@/controllers/API/serviceAccount";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import type {
-ApiKeyIssued,
-ApiKeyItem,
-OpenApiScopeItem,
-} from "@/types/api/openApi";
-import { formatIsoDateTime } from "@/util/utils";
-import { useCallback,useEffect,useState } from "react";
-import { useTranslation } from "react-i18next";
-import { OpenApiListFooter } from "../OpenApiList/OpenApiListFooter";
-import { useOpenApiList } from "../OpenApiList/useOpenApiList";
-import { KeyIssueDialog } from "./KeyIssueDialog";
-import { KeyRevealDialog } from "./KeyRevealDialog";
+  ApiKeyIssued,
+  ApiKeyItem,
+  OpenApiScopeItem,
+} from "@/types/api/openApi"
+import { formatIsoDateTime } from "@/util/utils"
+import { useCallback, useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { AccessInfoPanel } from "./AccessInfoPanel"
+import { OpenApiListFooter } from "../OpenApiList/OpenApiListFooter"
+import { useOpenApiList } from "../OpenApiList/useOpenApiList"
+import { KeyIssueDialog } from "./KeyIssueDialog"
+import { KeyRevealDialog } from "./KeyRevealDialog"
 
 export interface ApiKeysTabProps {
   serviceAccountId: number
@@ -47,6 +49,7 @@ export function ApiKeysTab({
   initialIssueOpen = false,
   onKeysChanged,
 }: ApiKeysTabProps) {
+  const requestScope = useServiceAccountRequestScope();
   const { t } = useTranslation()
   const [scopes, setScopes] = useState<OpenApiScopeItem[]>([])
   const [dialogOpen, setDialogOpen] = useState(initialIssueOpen)
@@ -56,8 +59,8 @@ export function ApiKeysTab({
   const [loadingScopes, setLoadingScopes] = useState(true)
 
   const fetchPage = useCallback((page: number, pageSize: number) =>
-    listServiceAccountKeysPageApi(serviceAccountId, { page, page_size: pageSize }),
-  [serviceAccountId])
+    listServiceAccountKeysPageApi(serviceAccountId, { page, page_size: pageSize }, requestScope),
+  [serviceAccountId, requestScope])
   const list = useOpenApiList(fetchPage)
   const keys = list.items
   const loadKeys = list.reload
@@ -65,29 +68,28 @@ export function ApiKeysTab({
 
   useEffect(() => {
     setLoadingScopes(true)
-    void captureAndAlertRequestErrorHoc(listOpenApiScopesApi())
+    void listOpenApiScopesApi()
       .then((catalog) => {
         if (catalog) setScopes(catalog.scopes)
       })
-      .finally(() => setLoadingScopes(false))
+      .catch(showApiError).finally(() => setLoadingScopes(false))
   }, [])
 
   const handleRevoke = (keyId: number) => {
     bsConfirm({
+      signal: requestScope.signal,
       title: t("openApiManagement.keys.revokeConfirmTitle"),
       desc: t("openApiManagement.keys.revokeConfirm"),
       okTxt: t("openApiManagement.actions.revoke"),
       onOk: (close) => {
-        close()
         setLoading(true)
-        void captureAndAlertRequestErrorHoc(
-          revokeServiceAccountKeyApi(serviceAccountId, keyId),
-        )
+        return revokeServiceAccountKeyApi(serviceAccountId, keyId, requestScope)
           .then(async (result) => {
             if (!result) return
             notification.open({ type: "success", title: String(t("openApiManagement.keys.revokeConfirmTitle") ?? ''), description: String(t("openApiManagement.feedback.keyRevoked") ?? '') })
             await loadKeys()
             onKeysChanged?.()
+            close()
           })
           .finally(() => setLoading(false))
       },
@@ -96,15 +98,13 @@ export function ApiKeysTab({
 
   const handleRevokeAll = () => {
     bsConfirm({
+      signal: requestScope.signal,
       title: t("openApiManagement.keys.revokeAllConfirmTitle"),
       desc: t("openApiManagement.keys.revokeAllConfirm"),
       okTxt: t("openApiManagement.actions.revokeAll"),
       onOk: (close) => {
-        close()
         setLoading(true)
-        void captureAndAlertRequestErrorHoc(
-          revokeAllServiceAccountKeysApi(serviceAccountId),
-        )
+        return revokeAllServiceAccountKeysApi(serviceAccountId, requestScope)
           .then(async (result) => {
             if (!result) return
             const { revoked } = result
@@ -113,6 +113,7 @@ export function ApiKeysTab({
               }) ?? '') })
             await loadKeys()
             onKeysChanged?.()
+            close()
           })
           .finally(() => setLoading(false))
       },
@@ -163,6 +164,10 @@ export function ApiKeysTab({
 
   return (
     <div className="space-y-4">
+      {/* AC-44: the access information sits above the key table — it is what an
+          administrator forwards before any key exists. Absent where the
+          open-capability layer is not deployed (the panel decides). */}
+      <AccessInfoPanel />
       <div className="flex justify-end gap-2">
         <Button variant="outlined" disabled={loading || loadingData || !list.response?.active_count} onClick={handleRevokeAll} color="default">
           {t("openApiManagement.actions.revokeAll")}

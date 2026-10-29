@@ -12,12 +12,38 @@ import json
 from hashlib import sha256
 from typing import Any
 
-# v4 was claimed twice in parallel: F053 added the service-account subject
-# and its technical markers, F054 replaced the recursive department subtree
-# with contextual membership. This model carries both, so it is neither of
-# those v4s and gets its own version. The checksum changes with it, which
-# means the model has to be published again wherever either v4 was.
-MODEL_VERSION = "f048-v5"
+# Naming rule on this branch (2026-09-16): the release line owns the model
+# version numbers; `3.0-vibe` never takes one. The name here is the release-line
+# version this model is built on plus `-app`, the only thing this branch adds
+# (the hosted-app `app` resource type). When a release-line model change is
+# merged in, replace the number in front and keep the suffix. The name is only a
+# readable label written into `authorization_model_release.model_version`; the
+# runtime decides by checksum and never compares names, so a rename alone needs
+# no re-publish.
+#
+# Why the rule exists — the numbers collided three times while two lines both
+# bumped them:
+# - v3: `3.0-vibe` (2026-08-18, visibility projection + `app`) and
+#   `feat/3.0.0-beta2` (2026-09-04, F053's `service_account` subject) each named
+#   their own shape v3.
+# - v4: on the beta line, F053's technical markers (f6bf9f51f, beta1,
+#   2026-09-09) and the contextual department membership each claimed a v4.
+#   Two release folders own a feature numbered F054 —
+#   `features/v3.0.0-beta1/054-contextual-department-membership` and
+#   `features/v3.0.0/054-app-domain-runtime` (hosted apps); comments here name
+#   the folder, never the bare number.
+# - v5: `feat/3.0.0-beta1` cut v5 = v4 plus contextual department membership
+#   (07c1c3b3a, 2026-09-11; `department#subtree_member` is `_this()`, supplied
+#   per request by the trusted organization adapter), while `3.0-vibe` had
+#   already called "v4 plus `app`" v5. The merge on 2026-09-15 was named v6.
+#
+# Current shape: release-line `f048-v5` plus `app`. `app` is modelled like the
+# other flat, never-system-shared types (`channel`, `dashboard`), so it inherits
+# the service-account subjects, the technical markers and contextual department
+# membership without special cases. Environments that published it as `f048-v6`
+# (114, 2026-09-15) hold the same model — checksum 3266b35a…, unchanged by the
+# rename — and need no action.
+MODEL_VERSION = "f048-v6-app"
 
 DEFAULT_ACTION_CODES: tuple[str, ...] = (
     "manage_permission",
@@ -42,11 +68,17 @@ MIGRATED_RESOURCE_TYPES: tuple[str, ...] = (
     "workflow",
     "assistant",
     "tool",
+    "linsight_skill",
     "channel",
     "dashboard",
+    # F054 hosted applications. Must be added together with the twin list in
+    # permission/domain/services/catalog_policy.py: this one shapes the OpenFGA
+    # model (miss it and every tuple write 400s), that one validates Catalog
+    # rows on every snapshot load (miss it and Catalog reads raise outright).
+    "app",
 )
 
-OWNER_PROJECTION_RESOURCE_TYPES: tuple[str, ...] = ("linsight_skill",)
+OWNER_PROJECTION_RESOURCE_TYPES: tuple[str, ...] = ()
 
 LEGACY_RESOURCE_TYPES: tuple[str, ...] = ("llm_server", "llm_model")
 
@@ -67,8 +99,10 @@ RESOURCE_ACTION_SCOPES: dict[str, frozenset[str]] = {
             "workflow",
             "assistant",
             "tool",
+            "linsight_skill",
             "channel",
             "dashboard",
+            "app",
         }
     ),
     "create_folder": frozenset({"knowledge_space", "folder"}),
@@ -77,9 +111,9 @@ RESOURCE_ACTION_SCOPES: dict[str, frozenset[str]] = {
     "download": frozenset({"folder", "knowledge_file"}),
     "delete": frozenset(MIGRATED_RESOURCE_TYPES),
     "share": frozenset({"knowledge_space", "knowledge_file", "workflow", "assistant"}),
-    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool"}),
-    "publish": frozenset({"workflow", "assistant"}),
-    "unpublish": frozenset({"workflow", "assistant"}),
+    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool", "app", "linsight_skill"}),
+    "publish": frozenset({"workflow", "assistant", "app"}),
+    "unpublish": frozenset({"workflow", "assistant", "app"}),
 }
 
 PARENT_TYPES: dict[str, tuple[str, ...]] = {
@@ -97,7 +131,7 @@ PARENT_TYPES: dict[str, tuple[str, ...]] = {
 
 SYSTEM_SHARED_ACTION_TYPES: dict[str, frozenset[str]] = {
     "download": frozenset({"knowledge_space", "folder", "knowledge_file"}),
-    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool"}),
+    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool", "linsight_skill"}),
 }
 
 # These resource types are enumerated directly by ListObjects.  Folder and
@@ -315,7 +349,9 @@ def _permission_grant_type(action_codes: tuple[str, ...]) -> dict:
     }
     metadata = {
         "model": {"directly_related_user_types": [{"type": "permission_model"}]},
-        "ordinary_assignee": {"directly_related_user_types": _subject_types()},
+        "ordinary_assignee": {
+            "directly_related_user_types": [*_subject_types(), {"type": "tenant", "relation": "member"}]
+        },
         "protected_assignee": {"directly_related_user_types": [{"type": "user"}]},
     }
     for action in action_codes:

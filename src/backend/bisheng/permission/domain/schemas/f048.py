@@ -238,7 +238,7 @@ class CatalogPublishRequest(StrictRequestModel):
 
 
 class GrantSubjectInput(StrictRequestModel):
-    type: Literal["user", "service_account", "department", "user_group"]
+    type: Literal["user", "service_account", "department", "user_group", "tenant"]
     id: str = Field(min_length=1, max_length=64)
     userset_relation: str | None = Field(default=None, max_length=64)
     include_children: bool = False

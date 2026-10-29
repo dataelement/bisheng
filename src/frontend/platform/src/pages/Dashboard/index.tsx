@@ -2,6 +2,7 @@
 import { notification } from '@bisheng/ui';
 
 import { locationContext } from "@/contexts/locationContext"
+import { showApiError } from "@/controllers/request"
 import {
     getDashboard,
     getDashboards,
@@ -12,7 +13,7 @@ import { useEditorDashboardStore } from "@/store/dashboardStore"
 import { copyText } from "@/utils"
 import { useContext, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useMutation, useQuery, useQueryClient } from "react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "react-router-dom"
 import { DashboardDetail } from "./components/dashboard/DashboardDetail"
 import { DashboardSidebar } from "./components/dashboard/DashboardSidebar"
@@ -50,9 +51,7 @@ export default function DashboardPage() {
                 old.map(el => el.id === id ? { ...el, title } : el));
             notification.open({ type: "success", description: String(t('renameSuccess') ?? '') })
         },
-        onError: () => {
-            notification.open({ type: "error", description: String(t('renameError') ?? '') })
-        },
+        onError: showApiError,
     })
 
     const setDefaultMutation = useMutation({
@@ -63,8 +62,7 @@ export default function DashboardPage() {
                 old.map(el => ({ ...el, is_default: el.id === id })));
             queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, id] })
         },
-        onError: () => {
-        }
+        onError: showApiError,
     })
 
     const handleRename = (id: string, newTitle: string) => {
@@ -92,7 +90,7 @@ export default function DashboardPage() {
         navigator(`/dashboard/${id}`)
     }
 
-    const { data: selectedDashboard, isLoading } = useQuery({
+    const { data: selectedDashboard, isInitialLoading: isLoading } = useQuery({
         queryKey: [DashboardQueryKey, selectedId],
         queryFn: () => getDashboard(selectedId),
         enabled: !!selectedId,

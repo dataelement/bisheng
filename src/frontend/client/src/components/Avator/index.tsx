@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Boxes } from "lucide-react";
 import { useMemo } from "react";
 import { cn } from "~/utils"
 import { AssistantIcon } from "~/components/ui/icon/AssistantIcon";
@@ -39,6 +40,14 @@ export default function AppAvator({ id = 1, flowType = '', url = '', className =
         10: {
             icon: <WorkflowIcon className={cn(iconClassName, "text-primary")} />,
             bgColor: 'rgb(var(--brand-50))'
+        },
+        // F054 hosted application. Same Boxes glyph the platform build page
+        // uses, so one application wears one icon on both sides. Without this
+        // entry the fallback below renders it as an assistant — a wrong icon,
+        // never an error.
+        35: {
+            icon: <Boxes style={{ color: '#00B42A' }} className={iconClassName} />,
+            bgColor: '#E8FFEA'
         }
     }
 

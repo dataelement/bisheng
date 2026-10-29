@@ -1,18 +1,18 @@
 // @ts-strict-ignore
-import { Button, toast } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+import { Pagination, Button, Select, toast } from '@bisheng/ui';
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import UsersSelect from "@/components/bs-comp/selectComponent/Users";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
-import { TableHeadEnumFilter } from "@/components/bs-ui/select/filter";
-import MultiSelect from "@/components/bs-ui/select/multi";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import { userContext } from "@/contexts/userContext";
 import { getChatOnlineApi } from "@/controllers/API/assistant";
 import { createMarkApi, deleteMarkApi, getMarksApi } from "@/controllers/API/log";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -68,9 +68,21 @@ const useAppsOptions = () => {
 function CreateModal({ open, setOpen, onSuccess }) {
     const { t } = useTranslation()
 
+    const selectLabels = useSelectLabels()
     const { options, unmarkedMap, reload, loadMore, search } = useAppsOptions()
     const [apps, setApps] = useState([])
     const [users, setUsers] = useState([])
+
+    // Keep the selected apps' labels known even when the current page/search result lacks them
+    const appOptions = useMemo(() => {
+        const merged = [...options]
+        apps.forEach(app => {
+            if (!merged.some(o => o.value === app.value)) merged.push(app)
+        })
+        return merged
+            .filter(o => o.value != null && o.value !== '')
+            .map(o => ({ value: o.value, label: o.label }))
+    }, [options, apps])
 
     const count = useMemo(() => {
         return apps.reduce((pre, cur) => pre + unmarkedMap[cur.value], 0)
@@ -81,7 +93,7 @@ function CreateModal({ open, setOpen, onSuccess }) {
         if (apps.length > 30) {
             return toast.show({ type: "error", message: String(t('label.maxAppsError') ?? '') })
         }
-        captureAndAlertRequestErrorHoc(createMarkApi({
+        createMarkApi({
             app_list: apps.map(el => el.value),
             user_list: users.map(el => el.value)
         }).then(res => {
@@ -89,7 +101,7 @@ function CreateModal({ open, setOpen, onSuccess }) {
             toast.show({ type: "success", message: String(t('label.createSuccess') ?? '') })
             setOpen(false)
             onSuccess()
-        }))
+        }).catch(showApiError)
     }
 
     return <Dialog open={open} onOpenChange={setOpen}>
@@ -100,18 +112,19 @@ function CreateModal({ open, setOpen, onSuccess }) {
             <div className="flex flex-col gap-4 py-2">
                 <div className="">
                     <label htmlFor="name" className="bisheng-label">{t('label.selectAppsToLabel')}</label>
-                    <MultiSelect
-                        contentClassName=" max-w-[630px]"
+                    <Select
+                        {...selectLabels}
                         multiple
-                        value={apps}
-                        options={options}
+                        showSearch
+                        aria-label={t('label.selectAppsToLabel')}
+                        value={apps.map(app => app.value)}
+                        options={appOptions}
                         placeholder={t('label.selectPlaceholder')}
-                        searchPlaceholder={t('label.searchAppsPlaceholder')}
-                        onChange={setApps}
-                        onLoad={reload}
+                        onChange={(_values, selectedOptions) => setApps(selectedOptions.map(o => ({ label: o.label, value: o.value })))}
+                        onOpenChange={(isOpen) => { if (isOpen) reload() }}
                         onSearch={search}
-                        onScrollLoad={loadMore}
-                    ></MultiSelect>
+                        onLoadMore={loadMore}
+                    />
                 </div>
                 {count ? <p className="text-sm text-gray-500">{t('label.unmarkedConversationCount')}: {count}</p> : null}
                 <div className="">
@@ -133,8 +146,20 @@ function CreateModal({ open, setOpen, onSuccess }) {
     </Dialog>
 }
 
+const TASK_STATUS_OPTIONS = [
+    { labelKey: 'label.all', value: '0' },
+    { labelKey: 'label.notStarted', value: '1' },
+    { labelKey: 'label.completed', value: '2' },
+    { labelKey: 'label.inProgress', value: '3' },
+]
+
 export default function Tasks() {
     const { t } = useTranslation()
+    const paginationLocale = usePaginationLocale();
+    const selectLabels = useSelectLabels()
+    const [statusFilter, setStatusFilter] = useState<string | null>(null)
+    const statusOptions = TASK_STATUS_OPTIONS.map(o => ({ value: o.value, label: t(o.labelKey) }))
+    const statusFilterLabel = statusOptions.find(o => o.value === statusFilter)?.label ?? t('label.all')
     const [open, setOpen] = useState(false);
     const { user } = useContext(userContext);
 
@@ -160,7 +185,7 @@ export default function Tasks() {
     return (
         <div className="relative px-2 pt-4 h-full">
             <div className="h-full overflow-y-auto pb-20">
-                <div className="flex justify-end gap-6">
+                <div className="mr-2 flex justify-end gap-6">
                     {user.role === 'admin' && <Button onClick={() => setOpen(true)}>
                         {t('label.createTask')}
                     </Button>}
@@ -172,13 +197,21 @@ export default function Tasks() {
                             <TableHead>
                                 <div className="flex items-center w-[144px]">
                                     {t('label.taskStatus')}
-                                    <TableHeadEnumFilter options={[
-                                        { label: t('label.all'), value: '0' },
-                                        { label: t('label.notStarted'), value: '1' },
-                                        { label: t('label.completed'), value: '2' },
-                                        { label: t('label.inProgress'), value: '3' },
-                                    ]}
-                                        onChange={(v) => filterData({ status: Number(v) })} />
+                                    <Select
+                                        {...selectLabels}
+                                        options={statusOptions}
+                                        value={statusFilter}
+                                        onChange={(v) => {
+                                            if (v == null) return
+                                            setStatusFilter(String(v))
+                                            filterData({ status: Number(v) })
+                                        }}
+                                        trigger={
+                                            <button type="button" className="outline-none" aria-label={`${t('label.taskStatus')}: ${statusFilterLabel}`}>
+                                                <Outlined.Filter size={16} aria-hidden className={statusFilter ? 'text-primary ml-3' : 'text-gray-400 ml-3'} />
+                                            </button>
+                                        }
+                                    />
                                 </div>
                             </TableHead>
                             <TableHead>{t('label.creationTime')}</TableHead>
@@ -213,9 +246,9 @@ export default function Tasks() {
                 </Table>
             </div>
             <div className="bisheng-table-footer bg-background-login px-2">
-                <AutoPagination
+                <Pagination locale={paginationLocale}
                     className="float-right justify-end w-full mr-6"
-                    page={page}
+                    current={page}
                     pageSize={pageSize}
                     total={total}
                     showTotal={true}

@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { Button } from '@bisheng/ui';
+import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
+import { Alert, Button, Select } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 
 import {
@@ -15,18 +16,15 @@ import {
   type ResourcePermissionContext,
 } from "@/controllers/API/permission"
 import {
-  AlertTriangle,
-  Building2,
   Loader2,
   LockKeyhole,
   Search,
   Trash2,
-  User,
-  Users,
 } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { canMutatePermissionAssignee } from "./assigneePolicy"
+import { PermissionSubjectIdentity } from "./PermissionSubjectLayout"
 import { SourceBadge } from "./SourceBadge"
 import type { SubjectType } from "./types"
 
@@ -41,19 +39,8 @@ interface PermissionListTabProps {
   onMutationSuccess?: (result: MutateResourceGrantsResult) => void
 }
 
-const SUBJECT_ICONS = {
-  user: User,
-  department: Building2,
-  user_group: Users,
-}
-
 function createMutationIdempotencyKey(): string {
   return `grant-mutate-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-}
-
-function getAvatarLabel(assignee: PermissionGrantAssignee): string {
-  const name = assignee.subject.name?.trim() || assignee.subject.id
-  return (name.charAt(0) || "U").toUpperCase()
 }
 
 function getInheritedSourceLabel(
@@ -92,7 +79,7 @@ function RosterRow({
   onRemove,
 }: RosterRowProps) {
   const { t } = useTranslation("permission")
-  const SubjectIcon = SUBJECT_ICONS[assignee.subject.type]
+  const selectLabels = useSelectLabels();
   const editable = canMutatePermissionAssignee(assignee, context, models)
   const displayName =
     assignee.subject.name ||
@@ -107,54 +94,19 @@ function RosterRow({
       data-editable={String(editable)}
       className="flex min-h-[58px] items-center gap-4 border-b border-[#F2F3F5] py-3 last:border-b-0"
     >
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        {assignee.subject.type === "user" ? (
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#C9CDD4] text-sm font-semibold text-white">
-            {getAvatarLabel(assignee)}
-          </span>
-        ) : (
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <SubjectIcon aria-hidden="true" className="size-4" />
-          </span>
-        )}
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-[#212121]">
-            {displayName}
-          </p>
-          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1 text-xs text-[#86909C]">
-            <SourceBadge source={assignee.source} />
-            <span>{t(`scope.${assignee.scope.toLowerCase()}`)}</span>
-            {assignee.inherited_from && (
-              <span className="truncate">
-                · {t("roster.inheritedFrom")}:{" "}
-                {getInheritedSourceLabel(assignee, t)}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
+      <PermissionSubjectIdentity type={assignee.subject.type} name={displayName} metadata={<>
+        <SourceBadge source={assignee.source} />
+        <span>{t(`scope.${assignee.scope.toLowerCase()}`)}</span>
+        {assignee.inherited_from && <span className="truncate">· {t("roster.inheritedFrom")}: {getInheritedSourceLabel(assignee, t)}</span>}
+      </>} />
 
       <div className="flex w-[176px] shrink-0 items-center justify-end gap-1">
         {editable ? (
           <>
-            <select
-              aria-label={`grant.model.${assignee.assignee_id}`}
-              value={assignee.model.key}
-              disabled={pending}
-              onChange={(event) => onMove(assignee, event.target.value)}
-              className="h-8 min-w-0 flex-1 cursor-pointer rounded-[6px] border-0 bg-transparent px-2 text-right text-sm text-[#4E5969] outline-none hover:bg-[#F7F7F7] focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {!currentIsGrantable && (
-                <option value={assignee.model.key}>
-                  {assignee.model.name}
-                </option>
-              )}
-              {models.map((model) => (
-                <option key={model.key} value={model.key}>
-                  {model.name}
-                </option>
-              ))}
-            </select>
+            <Select {...selectLabels} aria-label={`grant.model.${assignee.assignee_id}`} variant="ghost"
+              value={assignee.model.key} disabled={pending} className="min-w-0 flex-1"
+              options={[...(!currentIsGrantable ? [{ value: assignee.model.key, label: assignee.model.name }] : []), ...models.map(model => ({ value: model.key, label: model.name }))]}
+              onChange={value => { if (value != null) onMove(assignee, String(value)); }} />
             <button
               type="button"
               aria-label={`${t("grant.remove")}.${assignee.assignee_id}`}
@@ -217,6 +169,12 @@ export function PermissionListTab({
   const [models, setModels] = useState<GrantablePermissionModel[]>([])
   const [summary, setSummary] = useState<MyResourcePermissions | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [rosterKeyword, setRosterKeyword] = useState("")
+  const rosterRevision = useRef(0)
+  useEffect(() => {
+    const timer = setTimeout(() => setRosterKeyword(searchQuery.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -252,22 +210,26 @@ export function PermissionListTab({
 
   const loadRosterPage = useCallback(
     async (cursor: string | null) => {
+      const revision = rosterRevision.current
       const page = await getResourcePermissionGrantsApi(
         resourceType,
         resourceId,
-        { cursor, page_size: pageSize },
+        { cursor, page_size: pageSize, keyword: rosterKeyword, subject_type: fixedSubjectType },
       )
+      if (revision !== rosterRevision.current) return
       setAssignees((current) =>
         cursor ? [...current, ...page.data] : page.data,
       )
       setNextCursor(page.next_cursor)
       setHasMore(page.has_more)
     },
-    [pageSize, resourceId, resourceType],
+    [pageSize, resourceId, resourceType, rosterKeyword, fixedSubjectType],
   )
 
   useEffect(() => {
     let cancelled = false
+    rosterRevision.current += 1
+    setLoadingMore(false)
     setAssignees([])
     setSummary(null)
     setNextCursor(null)
@@ -279,6 +241,8 @@ export function PermissionListTab({
       ? getResourcePermissionGrantsApi(resourceType, resourceId, {
           cursor: null,
           page_size: pageSize,
+          keyword: rosterKeyword,
+          subject_type: fixedSubjectType,
         })
       : getMyResourcePermissionsApi(resourceType, resourceId)
 
@@ -312,26 +276,13 @@ export function PermissionListTab({
     refreshKey,
     resourceId,
     resourceType,
+    rosterKeyword,
+    fixedSubjectType,
   ])
 
-  const visibleAssignees = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase()
-    return assignees.filter((assignee) => {
-      if (assignee.subject.type !== fixedSubjectType) return false
-      if (!query) return true
-      return [
-        assignee.subject.name,
-        assignee.subject.id,
-        assignee.model.name,
-        assignee.source.type,
-        assignee.inherited_from,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(query)
-    })
-  }, [assignees, fixedSubjectType, searchQuery])
+  const visibleAssignees = useMemo(() => assignees.filter(
+    assignee => assignee.subject.type === fixedSubjectType,
+  ), [assignees, fixedSubjectType])
 
   const mutateAssignee = async (
     assignee: PermissionGrantAssignee,
@@ -427,13 +378,12 @@ export function PermissionListTab({
       </div>
 
       {failed && (
-        <p
-          className="mt-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900"
-          role="alert"
-        >
-          <AlertTriangle aria-hidden="true" className="size-4" />
-          {t("roster.loadFailed")}
-        </p>
+        <Alert
+          type="error"
+          className="mt-3"
+          description={t("roster.loadFailed")}
+          live
+        />
       )}
 
       <div className="mt-3 min-h-0 flex-1 overflow-y-auto">

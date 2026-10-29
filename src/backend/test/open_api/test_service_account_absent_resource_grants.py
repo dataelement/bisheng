@@ -84,7 +84,7 @@ async def test_delete_account_removes_grants_on_deleted_resources(monkeypatch):
 
 
 async def test_delete_account_keeps_failing_when_absence_is_not_confirmed(monkeypatch):
-    """19003 alone may mean cross-tenant or an unauthorizable state: stay fail-closed."""
+    """25022 alone may mean cross-tenant or an unauthorizable state: stay fail-closed."""
 
     registry = _Registry(absent=set())
     remove = AsyncMock()

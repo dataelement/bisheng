@@ -2,7 +2,6 @@ import { Button } from '@bisheng/ui';
 
 import { CardContent } from "@/components/bs-ui/card";
 import { Label } from "@/components/bs-ui/label";
-import { SkillManagement } from "@/components/LinSight/skill/SkillManagement";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
@@ -13,6 +12,7 @@ import ConfigInheritanceBanner from "./ConfigInheritanceBanner";
 import { FormInput } from "./FormInput";
 import { IconUploadSection } from "./IconUploadSection";
 import { useChatConfig } from "./index";
+import { handleUiRequest } from "@/controllers/request";
 import OrgKbConfig from "./OrgKbConfig";
 import Preview from "./Preview";
 import RecommendedAppsConfig from "./RecommendedAppsConfig";
@@ -245,11 +245,7 @@ export function DailyChatConfig({ scopeVersion = 0 }: DailyChatConfigProps) {
 
                         {/* F035 (PRD §4.5): skill management replaces the legacy SOP manual library.
                             The header toggle (default off) gates the client 添加技能 entry. */}
-                        <SkillManagement
-                            scopeVersion={scopeVersion}
-                            entryEnabled={formData.skillEntry.enabled}
-                            onEntryToggle={(enabled) => toggleFeature("skillEntry", enabled)}
-                        />
+
 
                         {/* Recommended Apps */}
                         <RecommendedAppsConfig
@@ -261,7 +257,7 @@ export function DailyChatConfig({ scopeVersion = 0 }: DailyChatConfigProps) {
                     {/* Action Buttons */}
                     <div className="flex justify-end gap-4 absolute bottom-1 right-4">
                         <Preview onBeforView={handleSave} />
-                        <Button onClick={handleSave}>{t("save")}</Button>
+                        <Button onClick={handleUiRequest(handleSave)}>{t("save")}</Button>
                     </div>
                 </CardContent>
             </div>

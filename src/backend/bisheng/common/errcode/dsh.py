@@ -247,7 +247,156 @@ class DshOperationConflictError(BaseErrorCode):
     ErrorType: str = "conflict_error"
 
 
+class DshToolNotFoundError(BaseErrorCode):
+    Code: int = 26142
+    Msg: str = "Tool is not available"
+    HttpStatus: int = 404
+    ClientCode: str = "tool_not_found"
+
+
+class DshToolPermissionDeniedError(BaseErrorCode):
+    Code: int = 26143
+    Msg: str = "Tool access denied"
+    HttpStatus: int = 403
+    ClientCode: str = "tool_permission_denied"
+
+
+class DshToolUnsupportedError(BaseErrorCode):
+    Code: int = 26144
+    Msg: str = "Tool type or saved OpenAPI schema is unsupported"
+    HttpStatus: int = 400
+    ClientCode: str = "tool_unsupported"
+
+
+class DshToolArgumentsInvalidError(BaseErrorCode):
+    Code: int = 26145
+    Msg: str = "Tool arguments are invalid"
+    HttpStatus: int = 400
+    ClientCode: str = "tool_arguments_invalid"
+
+
+class DshToolConcurrencyExceededError(BaseErrorCode):
+    Code: int = 26146
+    Msg: str = "Tool concurrency limit reached"
+    HttpStatus: int = 429
+    ClientCode: str = "tool_concurrency_exceeded"
+
+
+class DshToolUpstreamFailedError(BaseErrorCode):
+    Code: int = 26147
+    Msg: str = "Tool upstream request failed"
+    HttpStatus: int = 502
+    ClientCode: str = "tool_upstream_failed"
+
+
+class DshToolResultInvalidError(BaseErrorCode):
+    Code: int = 26148
+    Msg: str = "Tool result is invalid"
+    HttpStatus: int = 502
+    ClientCode: str = "tool_result_invalid"
+
+
+class DshToolExecutionTimeoutError(BaseErrorCode):
+    Code: int = 26149
+    Msg: str = "Tool execution timed out"
+    HttpStatus: int = 504
+    ClientCode: str = "tool_execution_timeout"
+
+
+class DshToolServiceUnavailableError(BaseErrorCode):
+    Code: int = 26150
+    Msg: str = "Tool service is temporarily unavailable"
+    HttpStatus: int = 503
+    ClientCode: str = "tool_service_unavailable"
+
+
+class DshToolInputTooLargeError(BaseErrorCode):
+    Code: int = 26151
+    Msg: str = "Tool input exceeds the size limit"
+    HttpStatus: int = 413
+    ClientCode: str = "tool_input_too_large"
+
+
+class DshToolOutputTooLargeError(BaseErrorCode):
+    Code: int = 26152
+    Msg: str = "Tool output exceeds the size limit"
+    HttpStatus: int = 502
+    ClientCode: str = "tool_output_too_large"
+
+
+class DshContentSafetyAuthError(BaseErrorCode):
+    Code: int = 26170
+    Msg: str = "Content safety event authentication failed"
+    HttpStatus: int = 401
+    ClientCode: str = "content_safety_authentication_failed"
+    ErrorType: str = "authentication_error"
+
+    @classmethod
+    def tenant_forbidden(cls):
+        """Keep one authentication code while distinguishing a forbidden scope."""
+        error = cls()
+        error.HttpStatus = 403
+        return error
+
+
+class DshContentSafetyInvalidEventError(BaseErrorCode):
+    Code: int = 26171
+    Msg: str = "Content safety event is invalid"
+    HttpStatus: int = 400
+    ClientCode: str = "content_safety_event_invalid"
+    ErrorType: str = "invalid_request_error"
+
+
+class DshContentSafetyConflictError(BaseErrorCode):
+    Code: int = 26172
+    Msg: str = "Content safety event conflicts with a recorded fact"
+    HttpStatus: int = 409
+    ClientCode: str = "content_safety_event_conflict"
+    ErrorType: str = "conflict_error"
+
+
+class DshContentSafetyExpiredError(BaseErrorCode):
+    Code: int = 26173
+    Msg: str = "Content safety event predates the audit retention boundary"
+    HttpStatus: int = 410
+    ClientCode: str = "content_safety_event_expired"
+    ErrorType: str = "invalid_request_error"
+
+
+class DshContentSafetyUnavailableError(BaseErrorCode):
+    Code: int = 26174
+    Msg: str = "Content safety event ingestion is temporarily unavailable"
+    HttpStatus: int = 503
+    ClientCode: str = "content_safety_event_unavailable"
+    ErrorType: str = "service_unavailable_error"
+
+
+class DshContentSafetyTooLargeError(BaseErrorCode):
+    Code: int = 26175
+    Msg: str = "Content safety event exceeds the size limit"
+    HttpStatus: int = 413
+    ClientCode: str = "content_safety_event_too_large"
+    ErrorType: str = "invalid_request_error"
+
+
 DSH_ERROR_TYPES = (
+    DshContentSafetyAuthError,
+    DshContentSafetyInvalidEventError,
+    DshContentSafetyConflictError,
+    DshContentSafetyExpiredError,
+    DshContentSafetyUnavailableError,
+    DshContentSafetyTooLargeError,
+    DshToolNotFoundError,
+    DshToolPermissionDeniedError,
+    DshToolUnsupportedError,
+    DshToolArgumentsInvalidError,
+    DshToolConcurrencyExceededError,
+    DshToolUpstreamFailedError,
+    DshToolResultInvalidError,
+    DshToolExecutionTimeoutError,
+    DshToolServiceUnavailableError,
+    DshToolInputTooLargeError,
+    DshToolOutputTooLargeError,
     DshInvalidRequestError,
     DshUnsupportedParameterError,
     DshContextLengthExceededError,

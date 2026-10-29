@@ -5,7 +5,7 @@ from bisheng.common.errcode.open_api import ServiceAccountInactiveError
 from bisheng.common.errcode.permission import AuthorizationModelMismatchError
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.common.services.config_service import settings
-from bisheng.open_api.api.dependencies import get_service_account_admin
+from bisheng.open_api.api.dependencies import get_service_account_admin, get_service_account_manager
 from bisheng.open_api.domain.models.api_credential import (
     REVOKE_REASON_BATCH,
     REVOKE_REASON_MANUAL,
@@ -22,7 +22,7 @@ from bisheng.open_api.domain.schemas.credential import (
     OpenApiScopeEndpoint,
     OpenApiScopeItem,
 )
-from bisheng.open_api.domain.scopes import OPEN_API_SCOPES
+from bisheng.open_api.domain.scopes import issuable_scopes
 from bisheng.open_api.domain.services.credential_service import CredentialService
 from bisheng.open_api.domain.services.delegate_scope_service import DelegateScopeService
 from bisheng.open_api.domain.services.service_account_service import ServiceAccountService
@@ -34,10 +34,11 @@ scopes_router = APIRouter(prefix="/service-accounts", tags=["ServiceAccount"])
 
 @scopes_router.get("/scopes", response_model=UnifiedResponseModel[OpenApiScopeCatalog])
 async def list_open_api_scopes(_admin: UserPayload = Depends(get_service_account_admin)):
+    # Same per-call issuability CredentialService.validate_scopes enforces, so
+    # the form never offers a scope the issue call would then refuse (and
+    # ``app:manage`` appears exactly when ``open_platform.enabled`` is on).
     items = []
-    for scope in OPEN_API_SCOPES:
-        if not scope.issuable:
-            continue
+    for scope in issuable_scopes():
         items.append(
             OpenApiScopeItem(
                 code=scope.code,
@@ -67,7 +68,7 @@ async def _account(service_account_id: int):
 async def filter_delegate_candidates(
     service_account_id: int,
     data: list[DelegateScopeInput],
-    _admin: UserPayload = Depends(get_service_account_admin),
+    _admin: UserPayload = Depends(get_service_account_manager),
 ):
     account = await _account(service_account_id)
     eligible = await DelegateScopeService.filter_entries(tenant_id=account.tenant_id, entries=data)
@@ -77,7 +78,7 @@ async def filter_delegate_candidates(
 @router.get("/{service_account_id}/keys", response_model=UnifiedResponseModel[list[KeyItem]])
 async def list_keys(
     service_account_id: int,
-    _admin: UserPayload = Depends(get_service_account_admin),
+    _admin: UserPayload = Depends(get_service_account_manager),
 ):
     await _account(service_account_id)
     return resp_200(data=await CredentialService.list_by_subject(SUBJECT_KIND_SERVICE_ACCOUNT, service_account_id))
@@ -88,7 +89,7 @@ async def list_keys_page(
     service_account_id: int,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    _admin: UserPayload = Depends(get_service_account_admin),
+    _admin: UserPayload = Depends(get_service_account_manager),
 ):
     await _account(service_account_id)
     return resp_200(
@@ -102,7 +103,7 @@ async def list_keys_page(
 async def issue_key(
     service_account_id: int,
     data: KeyIssueRequest,
-    admin: UserPayload = Depends(get_service_account_admin),
+    admin: UserPayload = Depends(get_service_account_manager),
 ):
     account = await _account(service_account_id)
     if not account.is_enabled:
@@ -126,7 +127,7 @@ async def update_key(
     service_account_id: int,
     key_id: int,
     data: KeyUpdateRequest,
-    admin: UserPayload = Depends(get_service_account_admin),
+    admin: UserPayload = Depends(get_service_account_manager),
 ):
     await _account(service_account_id)
     item = await CredentialService.update(
@@ -142,7 +143,7 @@ async def update_key(
 @router.post("/{service_account_id}/keys/revoke-all", response_model=UnifiedResponseModel[dict])
 async def revoke_all_keys(
     service_account_id: int,
-    admin: UserPayload = Depends(get_service_account_admin),
+    admin: UserPayload = Depends(get_service_account_manager),
 ):
     await _account(service_account_id)
     count = await CredentialService.revoke_by_subject(
@@ -158,7 +159,7 @@ async def revoke_all_keys(
 async def revoke_key(
     service_account_id: int,
     key_id: int,
-    admin: UserPayload = Depends(get_service_account_admin),
+    admin: UserPayload = Depends(get_service_account_manager),
 ):
     await _account(service_account_id)
     item = await CredentialService.revoke(

@@ -4,7 +4,7 @@ import { Button, notification } from '@bisheng/ui';
 import { FlowControl } from "@/components/Pro/FlowControl";
 import { FlowRadio } from "@/components/Pro/FlowRadio";
 import { getDepartmentLimitDetailApi, saveDepartmentLimitApi } from "@/controllers/API/pro";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { DepartmentTreeNode } from "@/types/api/department";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -23,11 +23,11 @@ export function DepartmentTrafficControl({ dept }: Props) {
 
     useEffect(() => {
         // Load existing limit config
-        captureAndAlertRequestErrorHoc(getDepartmentLimitDetailApi(dept.id)).then((res) => {
+        getDepartmentLimitDetailApi(dept.id).then((res) => {
             if (res) {
                 setDeptLimit(res.dept_limit ?? 0)
             }
-        })
+        }).catch(showApiError)
         // Reset resource refs on dept change
         assistantRef.current = []
         skillRef.current = []
@@ -44,8 +44,8 @@ export function DepartmentTrafficControl({ dept }: Props) {
                 workFlows: workFlowsRef.current
             })
             notification.open({ type: 'success', title: String(t('prompt') ?? ''), description: String(t('save') + t('success')) })
-        } catch {
-            notification.open({ type: 'error', title: String(t('prompt') ?? ''), description: String(t('save') + t('failed')) })
+        } catch (error) {
+            showApiError(error)
         }
     }
 

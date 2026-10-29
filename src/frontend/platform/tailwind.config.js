@@ -1,18 +1,17 @@
 /** @type {import('tailwindcss').Config} */
-const { fontFamily } = require("tailwindcss/defaultTheme");
+const plugin = require('tailwindcss/plugin');
 
-import plugin from "tailwindcss/plugin";
-
-// ! Check if removing the other module.exports made sense
 module.exports = {
   presets: [require('@bisheng/ui/tailwind-preset')],
-  darkMode: ["class"],
   content: [
     "../packages/ui/src/**/*.{ts,tsx}",
-    "app/**/*.{ts,tsx}",
-    "components/**/*.{ts,tsx}",
+    "../packages/chat/src/**/*.{ts,tsx}",
     "./index.html",
     "./src/**/*.{js,ts,tsx,jsx}",
+    // packages/file-viewers is source-shipped and consumed by both apps: its
+    // classes must be scanned here too, or a shared component renders unstyled
+    // except for the utilities this app happens to use elsewhere.
+    "../packages/file-viewers/src/**/*.{ts,tsx}",
   ],
   safelist: [
     "bg-status-blue",
@@ -20,7 +19,6 @@ module.exports = {
     "bg-status-red",
     "bg-status-yellow",
   ],
-  important: true,
   theme: {
     container: {
       center: true,
@@ -134,9 +132,6 @@ module.exports = {
           foreground: "hsl(var(--card-foreground))",
         },
       },
-      fontFamily: {
-        sans: ["var(--font-sans)", ...fontFamily.sans],
-      },
     },
   },
 
@@ -147,16 +142,6 @@ module.exports = {
     }),
     plugin(function ({ addUtilities }) {
       addUtilities({
-        ".scrollbar-hide": {
-          /* IE and Edge */
-          "-ms-overflow-style": "none",
-          /* Firefox */
-          "scrollbar-width": "none",
-          /* Safari and Chrome */
-          "&::-webkit-scrollbar": {
-            display: "none",
-          },
-        },
         ".truncate-multiline": {
           display: "-webkit-box",
           "-webkit-line-clamp":

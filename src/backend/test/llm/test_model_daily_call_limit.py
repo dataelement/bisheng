@@ -12,11 +12,11 @@ import pytest
 @pytest.fixture
 def quota():
     path = Path(__file__).parents[2] / "bisheng/llm/domain/utils.py"
-    names = {"bisheng_model_limit_check", "sync_bisheng_model_limit_check"}
+    names = {"bisheng_model_limit_check", "sync_bisheng_model_limit_check", "LlmProviderDailyLimitExceededError"}
     nodes = [
         n
         for n in ast.parse(path.read_text()).body
-        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in names
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n.name in names
     ]
     counts = {}
 

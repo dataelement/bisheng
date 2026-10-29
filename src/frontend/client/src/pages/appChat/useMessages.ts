@@ -1,92 +1,44 @@
-/**
- * 接收ws event 滚动
- */
-import { useEffect, useRef } from "react";
-import { useParams } from "react-router-dom";
-import { useRecoilState, useRecoilValue } from "recoil";
-import { getChatHistoryApi } from "~/api/apps";
-import { useAutoScroll } from "~/hooks/useAutoScroll";
-import { chatIdState, chatsState, currentChatState } from "./store/atoms";
+import { useMemo, useRef } from 'react';
+import { useRecoilState, useRecoilValue } from 'recoil';
+import { useConversationScroll } from '@bisheng/chat';
+import { messagesForPresentation } from '@bisheng/chat/core';
+import type { ChatMessageType } from '~/@types/chat';
+import { getChatHistoryApi } from '~/api/apps';
+import { chatApiVersionState, chatIdState, chatsState, currentChatState, currentRunningState } from './store/atoms';
+const EMPTY_MESSAGES: ChatMessageType[] = [];
 
-export const useMessage = (shareToken) => {
-    const { conversationId } = useParams();
-    const chatState = useRecoilValue(currentChatState)
-    const [chatId] = useRecoilState(chatIdState)
-
-    const { flow, messages } = chatState || { flow: null, messages: [] }
-
-    const messageScrollRef = useRef<HTMLDivElement>(null)
-    // 自动滚动
-    useAutoScroll(messageScrollRef, messages)
-    useLoadMessage({ chatId, chatState, messageScrollRef, shareToken })
-
-
-    return {
-        chatId: conversationId,
-        messages,
-        messageScrollRef
-    }
-}
-
-
-const useLoadMessage = ({ chatId, chatState, messageScrollRef, shareToken }
-    : { chatId: string, chatState: any, messageScrollRef: React.RefObject<HTMLDivElement>, shareToken: string }) => {
-    const [chats, setChats] = useRecoilState(chatsState)
-    const { flow, messages, running, historyEnd } = chatState || {}
-
-    // 滚动到底部
-    useEffect(() => {
-        if (chatId && messageScrollRef.current) {
-            requestAnimationFrame(() => {
-                if (messageScrollRef.current) {
-                    messageScrollRef.current.scrollTop = messageScrollRef.current.scrollHeight
-                }
-            })
-        }
-    }, [chatId])
-
-    const loadMore = async (chatId: string) => {
-        // 运行中or没有更多 || 最后一条消息id不存在，忽略
-        if (running || historyEnd || !messages?.[0]?.id || !flow) return
-        const messageId = messages[0].id
-        // u-开头的消息表示新建会话，新建会话无需加载历史消息
-        if (typeof messageId === 'string' && messageId.startsWith('u-')) return
-
-        const msgs = await getChatHistoryApi({ flowId: flow.id, chatId, flowType: flow.flow_type, id: messages[0].id || 0, shareToken })
-        setChats((prev) => {
-            const chatData = prev[chatId]
-            const param = msgs.length ?
-                { ...chatData, messages: [...msgs.reverse(), ...chatData!.messages] }
-                : { ...chatData, historyEnd: true }
-
-            return {
-                ...prev,
-                [chatId]: param
-            }
-        })
-    }
-
-    // 滚动加载
-    const queryLockRef = useRef(false)
-    useEffect(() => {
-        function handleScroll() {
-            const scrollElement = messageScrollRef.current
-            if (queryLockRef.current) return
-            if (!scrollElement) return
-            const { scrollTop } = scrollElement
-
-            if (scrollTop <= 90) {
-                console.log('请求 :>> ', 1);
-                queryLockRef.current = true
-                loadMore(chatId)
-                // 临时处理防抖
-                setTimeout(() => {
-                    queryLockRef.current = false
-                }, 1000);
-            }
-        }
-
-        messageScrollRef.current?.addEventListener('scroll', handleScroll);
-        return () => messageScrollRef.current?.removeEventListener('scroll', handleScroll)
-    }, [messageScrollRef.current, chatState, chatId, shareToken]);
+/** Authenticated history requests stay in client; scrolling belongs to chat. */
+export function useMessage(shareToken: string) {
+    const chatId = useRecoilValue(chatIdState);
+    const chatState = useRecoilValue(currentChatState);
+    const running = useRecoilValue(currentRunningState)?.running ?? false;
+    const apiVersion = useRecoilValue(chatApiVersionState);
+    const [, setChats] = useRecoilState(chatsState);
+    const messages = chatState?.messages ?? EMPTY_MESSAGES;
+    const flow = chatState?.flow;
+    const messageScrollRef = useRef<HTMLDivElement>(null);
+    const session = `${chatId}:${flow?.id ?? ''}:${apiVersion}:${shareToken}`;
+    const scope = useRef({ key: session });
+    if (scope.current.key !== session) scope.current = { key: session };
+    const normalized = useMemo(() => messagesForPresentation(messages, { mode: flow?.flow_type === 10 ? 'workflow' : 'assistant', sessionKey: chatId }), [chatId, flow?.flow_type, messages]);
+    const firstId = messages[0]?.id;
+    const canLoadOlder = !!flow && !running && !chatState?.historyEnd && firstId != null && Number.isFinite(Number(firstId));
+    const handleLoadOlder = async () => {
+        if (!flow || !canLoadOlder) return;
+        const origin = scope.current;
+        const older = await getChatHistoryApi({ flowId: flow.id, chatId, flowType: String(flow.flow_type), id: Number(firstId), shareToken, apiVersion }) as ChatMessageType[];
+        if (scope.current !== origin) return;
+        setChats(previous => {
+            const chat = previous[chatId];
+            if (!chat || scope.current !== origin) return previous;
+            const seen = new Set<string>();
+            const merged = [...older.reverse(), ...chat.messages].filter(message => {
+                if (message.id == null) return true;
+                const id = String(message.id); if (seen.has(id)) return false; seen.add(id); return true;
+            });
+            return { ...previous, [chatId]: { ...chat, messages: merged, historyEnd: older.length === 0 } };
+        });
+    };
+    useConversationScroll({ scrollRef: messageScrollRef, sessionKey: chatId, messages: normalized, canLoadOlder, onLoadOlder: handleLoadOlder });
+    return { chatId, messages, messageScrollRef };
 }

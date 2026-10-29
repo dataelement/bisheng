@@ -1,14 +1,12 @@
-import { Button } from '@bisheng/ui';
+import { Button, Select } from '@bisheng/ui';
 
-import {
-Select,
-SelectContent,
-SelectItem,
-SelectTrigger,
-SelectValue,
-} from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
 import { Outlined } from "bisheng-icons";
 import { AlignCenter,AlignLeft,AlignRight,Bold,Italic } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+const FONT_SIZE_OPTIONS = [10, 12, 14, 16, 18, 20, 24, 28].map((v) => ({ value: v, label: String(v) }))
 export interface TextFormatProps {
 colorPicker?: React.ReactNode;
   fontSize: number
@@ -41,14 +39,13 @@ export function TextFormat({
   colorPicker,
 }: TextFormatProps) {
 
-  const alignIcon =
-    align === "left" ? (
-      <AlignLeft className="w-3.5 h-3.5" />
-    ) : align === "center" ? (
-      <AlignCenter className="w-3.5 h-3.5" />
-    ) : (
-      <AlignRight className="w-3.5 h-3.5" />
-    )
+  const { t } = useTranslation("dashboard")
+  const selectLabels = useSelectLabels()
+  const alignOptions = [
+    { value: "left", label: t("styleConfigPanel.textFormat.alignLeft"), icon: <AlignLeft className="w-3.5 h-3.5" /> },
+    { value: "center", label: t("styleConfigPanel.textFormat.alignCenter"), icon: <AlignCenter className="w-3.5 h-3.5" /> },
+    { value: "right", label: t("styleConfigPanel.textFormat.alignRight"), icon: <AlignRight className="w-3.5 h-3.5" /> },
+  ]
   return (
     <div
       className="
@@ -60,38 +57,39 @@ export function TextFormat({
     >
 
       <Select
-        value={String(fontSize)}
-        onValueChange={(v) => setFontSize(Number(v))}
-      >
-        <SelectTrigger className="w-[60px] h-7 px-2 text-xs border-0 bg-background">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {[10, 12, 14, 16, 18, 20, 24, 28].map((v) => (
-            <SelectItem key={v} value={String(v)} className="text-xs">
-              {v}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        {...selectLabels}
+        variant="ghost"
+        size="small"
+        className="w-[60px] mx-1"
+        options={FONT_SIZE_OPTIONS}
+        value={fontSize}
+        onChange={(v) => { if (v != null) setFontSize(Number(v)) }}
+        aria-label={t("styleConfigPanel.textFormat.fontSize")}
+      />
 
 
       {setColor && (
-        <Select
-        >
-          <SelectTrigger className="w-[60px] h-7 px-2 text-xs border-0 bg-background">
-            <div className="size-4 border-[#EBECF0]">
-              <div
-                className="h-full w-full rounded shadow-sm border"
+        // The swatch opens a color picker, not a list of options: a popover, not a Select.
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="text"
+              color="default"
+              size="small"
+              className="mx-1"
+              aria-label={t("styleConfigPanel.textFormat.color")}
+            >
+              <span
+                className="size-4 rounded border shadow-sm"
                 style={{ backgroundColor: color }}
               />
-            </div>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="border-none shadow-none">
+              <Outlined.Down className="size-3 text-text-3" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0 border-none shadow-none bg-transparent">
             {colorPicker}
-          </SelectContent>
-        </Select>
+          </PopoverContent>
+        </Popover>
 
         //   <div className="relative shrink-0 mr-2">
         //   <Input
@@ -109,25 +107,15 @@ export function TextFormat({
 
 
       <Select
+        {...selectLabels}
+        variant="icon"
+        size="small"
+        className="mx-1"
+        options={alignOptions}
         value={align}
-        onValueChange={(v) => setAlign(v as "left" | "center" | "right")}
-      >
-        <SelectTrigger className="w-12 h-7 px-1 border-0 shadow-none bg-background">
-          <SelectValue asChild>{alignIcon}</SelectValue>
-        </SelectTrigger>
-
-        <SelectContent>
-          <SelectItem value="left" className="flex justify-center">
-            <AlignLeft className="w-3 h-3" />
-          </SelectItem>
-          <SelectItem value="center" className="flex justify-center">
-            <AlignCenter className="w-3 h-3" />
-          </SelectItem>
-          <SelectItem value="right" className="flex justify-center">
-            <AlignRight className="w-3 h-3" />
-          </SelectItem>
-        </SelectContent>
-      </Select>
+        onChange={(v) => { if (v != null) setAlign(v as "left" | "center" | "right") }}
+        aria-label={t("styleConfigPanel.textFormat.align")}
+      />
 
 
       <div className="flex w-[88px] m-1 gap-1">

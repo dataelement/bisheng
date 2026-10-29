@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { Button, Input, toast } from '@bisheng/ui';
+import { captureQaOperation, type QaOperation } from '@bisheng/chat/core';
+import { Pagination, Button, Input, toast } from '@bisheng/ui';
 import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
@@ -7,18 +8,19 @@ import { Checkbox } from "@bisheng/ui";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 
 import { Label } from "@/components/bs-ui/label";
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import { addSimilarQa, getQaList } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { useTable } from "@/util/hook";
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AnnotationFormHandle, AnnotationFormProps } from "./annotationTypes";
 
 const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps>(({ onMarked }, ref) => {
     const { t } = useTranslation();
+    const paginationLocale = usePaginationLocale();
     const [open, setOpen] = useState(false);
     const [knowledgeLib, setKnowledgeLib] = useState([]);
     const [selectedItems, setSelectedItems] = useState([]);
@@ -29,9 +31,24 @@ const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps
     );
 
     const qRef = useRef('');
+    const operationRef = useRef<Readonly<QaOperation>>();
+    const generationRef = useRef(0);
+    const pendingRef = useRef(false);
+    const [saving, setSaving] = useState(false);
+    useEffect(() => () => {
+        generationRef.current += 1;
+        pendingRef.current = false;
+        operationRef.current = undefined;
+    }, []);
 
     useImperativeHandle(ref, () => ({
-        open(id, qa) {
+        close,
+        open(_id, qa, operation) {
+            generationRef.current += 1;
+            operationRef.current = operation ? captureQaOperation(operation) : undefined;
+            pendingRef.current = false;
+            setSaving(false);
+            setError(false);
             qRef.current = qa.q;
             setOpen(true);
             setKnowledgeLib([]);
@@ -54,6 +71,7 @@ const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps
 
 
     const handleSubmit = async () => {
+        if (pendingRef.current) return;
         const errors = [];
         if (knowledgeLib.length === 0) {
             errors.push(t('log.qaLibRequired'));
@@ -66,17 +84,29 @@ const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps
             return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') });
         }
 
-        captureAndAlertRequestErrorHoc(addSimilarQa({
+        const generation = generationRef.current;
+        const operation = operationRef.current;
+        pendingRef.current = true;
+        setSaving(true);
+        await addSimilarQa({
             ids: selectedItems,
             question: qRef.current
-        }).then(() => {
-            toast.show({ type: 'success', message: String(t('log.addSuccess') ?? '') });
-            onMarked?.()
-            close();
-        }));
+        }).then(async () => {
+            if (generation === generationRef.current) {
+                toast.show({ type: 'success', message: String(t('log.addSuccess') ?? '') });
+                close();
+            }
+            await onMarked?.(operation);
+        }).catch(showApiError).finally(() => {
+            if (generation === generationRef.current) { pendingRef.current = false; setSaving(false); }
+        });
     };
 
     const close = () => {
+        generationRef.current += 1;
+        operationRef.current = undefined;
+        pendingRef.current = false;
+        setSaving(false);
         qRef.current = '';
         setKnowledgeLib([]);
         setSelectedItems([]);
@@ -143,9 +173,9 @@ const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps
                             </Table>
                         </div>
                         <div className="bisheng-table-footer px-6 bg-transparent">
-                            <AutoPagination
+                            <Pagination locale={paginationLocale} size="small" simple
                                 className="justify-end"
-                                page={page}
+                                current={page}
                                 pageSize={pageSize}
                                 total={total}
                                 onChange={(newPage) => setPage(newPage)}
@@ -156,7 +186,7 @@ const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps
                         <DialogClose asChild>
                             <Button variant="outlined" type="button" onClick={close} color="default">{t('log.cancel')}</Button>
                         </DialogClose>
-                        <Button type="submit" onClick={handleSubmit}>{t('log.confirm')}</Button>
+                        <Button type="submit" loading={saving} disabled={saving} onClick={handleSubmit}>{t('log.confirm')}</Button>
                     </DialogFooter>
                 </div>
             </DialogContent>

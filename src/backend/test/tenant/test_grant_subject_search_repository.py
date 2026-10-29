@@ -10,7 +10,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.group import Group
-from bisheng.database.models.tenant import UserTenant
+from bisheng.database.models.tenant import Tenant, UserTenant
+from bisheng.tenant.domain.repositories import grant_department_repository
 from bisheng.tenant.domain.repositories import grant_subject_search_repository as queries
 from bisheng.tenant.domain.services.f048_permission_subject import TenantPermissionSubjectDirectory
 from bisheng.user.domain.models.user import User
@@ -20,8 +21,12 @@ from bisheng.user.domain.models.user import User
 async def directory(monkeypatch):
     engine = create_async_engine("sqlite+aiosqlite://")
     async with engine.begin() as conn:
-        tables = [model.__table__ for model in (Department, User, UserTenant, UserDepartment, Group)]
+        tables = [model.__table__ for model in (Department, Tenant, User, UserTenant, UserDepartment, Group)]
         await conn.run_sync(lambda db: SQLModel.metadata.create_all(db, tables=tables))
+        await conn.execute(
+            Tenant.__table__.insert(),
+            {"id": 1, "tenant_code": "root", "tenant_name": "Root", "root_dept_id": 1},
+        )
         await conn.execute(
             Department.__table__.insert(),
             [
@@ -127,6 +132,7 @@ async def directory(monkeypatch):
             yield db
 
     monkeypatch.setattr(queries, "get_async_db_session", session)
+    monkeypatch.setattr(grant_department_repository, "get_async_db_session", session)
     yield TenantPermissionSubjectDirectory()
     await engine.dispose()
 
@@ -142,6 +148,37 @@ async def test_grant_identity_scope_dedup_and_exact_before_page(directory):
     rows = await directory.candidate_users(scope(), keyword="jia0100", page=2, page_size=2)
     assert [row.user_id for row in rows] == [2]
     assert await directory.candidate_users(scope(), keyword="0100", page=1, page_size=50) == []
+
+
+async def test_historical_membership_is_not_a_grant_candidate(directory):
+    async with queries.get_async_db_session() as session:
+        session.add(UserTenant(user_id=5, tenant_id=1, status="active", is_active=None))
+        await session.commit()
+    rows = await directory.candidate_users(scope(), keyword="jia-other", page=1, page_size=50)
+    assert rows == []
+    assert await directory.count_candidate_users(scope(), keyword="jia-other") == 0
+
+
+async def test_stale_selected_user_has_a_specific_membership_error(directory, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from bisheng.common.errcode.permission import PermissionSubjectUnavailableError
+    from bisheng.database.models.tenant import UserTenantDao
+
+    monkeypatch.setattr(
+        UserTenantDao,
+        "aget_user_tenants",
+        AsyncMock(
+            return_value=[
+                SimpleNamespace(tenant_id=1, status="active", is_active=None),
+                SimpleNamespace(tenant_id=2, status="active", is_active=1),
+            ]
+        ),
+    )
+    with pytest.raises(PermissionSubjectUnavailableError):
+        await directory.canonical_source(
+            tenant_id=1, source_id=0, subject_type="user", subject_id="5", userset_relation=None, include_children=False
+        )
 
 
 async def test_flat_grants_preserve_mainline_department_and_disabled_scope(directory):

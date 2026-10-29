@@ -27,6 +27,7 @@ import {
   type ApprovalScenarioPreset,
 } from "@/controllers/API/approval";
 import { getRolesApi } from "@/controllers/API/user";
+import { showApiError } from "@/controllers/request";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CONDITION_FIELD_META, normalizeApprovalRoles } from "./approvalMetadata";
@@ -42,6 +43,7 @@ export function useApprovalController() {
   const [flows, setFlows] = useState<ApprovalFlowItem[]>([]);
   const [nodes, setNodes] = useState<ApprovalNodeItem[]>([]);
   const [exceptions, setExceptions] = useState<ApprovalExceptionItem[]>([]);
+  const [loadError, setLoadError] = useState<unknown>(null);
   // node edit mode: changes are staged locally and only committed via set_flow_nodes (creates a new version)
   const [isNodeEditMode, setIsNodeEditMode] = useState(false);
   const [draftNodes, setDraftNodes] = useState<ApprovalNodeItem[]>([]);
@@ -59,7 +61,7 @@ export function useApprovalController() {
         });
         setPageRoleNameMap(map);
       })
-      .catch(() => {});
+      .catch(showApiError);
   }, []);
 
   // ── selection ─────────────────────────────────────────────────────────────
@@ -120,6 +122,11 @@ export function useApprovalController() {
     const presetFields = preset?.condition_fields?.filter((f) => CONDITION_FIELD_META[f]) ?? [];
     return dedup([...ALWAYS_INCLUDED, ...presetFields]);
   }, [selectedScenario, presets]);
+  // Only a preset may withdraw the automatic approval option.
+  const allowPassRoute = useMemo(() => {
+    if (!selectedScenario) return true;
+    return !presets.find(preset => preset.scenario_code === selectedScenario.scenario_code)?.mandatory_approval;
+  }, [selectedScenario, presets]);
   // Approver source types allowed for the selected scenario (drives NodeDialog dropdown)
   const activeSourceTypes = useMemo<string[] | undefined>(() => {
     if (!selectedScenario) return undefined;
@@ -130,44 +137,69 @@ export function useApprovalController() {
 
   // ── data loaders ──────────────────────────────────────────────────────────
   const loadRoutes = async (scenarioId: number) => {
-    setRoutes(await listApprovalRoutesApi(scenarioId));
+    return await listApprovalRoutesApi(scenarioId);
   };
 
   const loadFlows = async (scenarioId: number, keepFlowId?: number | null) => {
     const list = await listApprovalFlowsApi(scenarioId);
-    setFlows(list);
     const nextId = keepFlowId != null && list.some((f) => f.id === keepFlowId) ? keepFlowId : (list[0]?.id ?? null);
-    setSelectedFlowId(nextId);
-    setNodes(nextId ? await listApprovalNodesApi(nextId) : []);
+    const nextNodes = nextId ? await listApprovalNodesApi(nextId) : [];
+    return { flows: list, selectedFlowId: nextId, nodes: nextNodes };
+  };
+
+  const applyFlows = (data: Awaited<ReturnType<typeof loadFlows>>) => {
+    setFlows(data.flows);
+    setSelectedFlowId(data.selectedFlowId);
+    setNodes(data.nodes);
     setIsNodeEditMode(false);
     setDraftNodes([]);
     setIsNodeDirty(false);
   };
 
   const selectScenario = async (scenarioId: number) => {
-    setSelectedScenarioId(scenarioId);
-    await Promise.all([loadRoutes(scenarioId), loadFlows(scenarioId)]);
+    try {
+      const [nextRoutes, nextFlows] = await Promise.all([loadRoutes(scenarioId), loadFlows(scenarioId)]);
+      setRoutes(nextRoutes);
+      applyFlows(nextFlows);
+      setSelectedScenarioId(scenarioId);
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(error);
+      throw error;
+    }
   };
 
   const loadPage = async () => {
-    const [presetList, scenarioList, exceptionList] = await Promise.all([
-      listApprovalScenarioPresetsApi(),
-      listApprovalScenariosApi(),
-      listApprovalExceptionsApi(),
-    ]);
-    setPresets(presetList);
-    setScenarios(scenarioList);
-    setExceptions(exceptionList);
-    const initId = selectedScenarioId ?? scenarioList[0]?.id ?? null;
-    if (initId) {
-      setSelectedScenarioId(initId);
-      await Promise.all([loadRoutes(initId), loadFlows(initId, selectedFlowId)]);
+    try {
+      const [presetList, scenarioList, exceptionList] = await Promise.all([
+        listApprovalScenarioPresetsApi(),
+        listApprovalScenariosApi(),
+        listApprovalExceptionsApi(),
+      ]);
+      const initId = selectedScenarioId ?? scenarioList[0]?.id ?? null;
+      const scenarioData = initId
+        ? await Promise.all([loadRoutes(initId), loadFlows(initId, selectedFlowId)])
+        : null;
+      setPresets(presetList);
+      setScenarios(scenarioList);
+      setExceptions(exceptionList);
+      if (initId) {
+        setSelectedScenarioId(initId);
+      }
+      if (scenarioData) {
+        setRoutes(scenarioData[0]);
+        applyFlows(scenarioData[1]);
+      }
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(error);
+      throw error;
     }
   };
 
   const initialLoad = useRef(loadPage);
   useEffect(() => {
-    void initialLoad.current();
+    void initialLoad.current().catch(showApiError);
   }, []);
 
   // ── scenario actions ──────────────────────────────────────────────────────
@@ -181,7 +213,7 @@ export function useApprovalController() {
       setShowAddScenario(false);
       await loadPage();
     } catch (e) {
-      notification.open({ type: "error", title: String(t("approvalPage.hint") ?? ''), description: String(e || t("approvalPage.genericCreateFailed")) });
+      showApiError(e);
     }
   };
 
@@ -190,7 +222,7 @@ export function useApprovalController() {
       await updateApprovalScenarioApi(scenario.id, { enabled: !scenario.enabled });
       await loadPage();
     } catch (e) {
-      notification.open({ type: "error", title: String(t("approvalPage.hint") ?? ''), description: String(e || t("approvalPage.genericUpdateFailed")) });
+      showApiError(e);
     }
   };
 
@@ -202,7 +234,7 @@ export function useApprovalController() {
       setEditScenarioDialog({ open: false, scenario: null, name: "" });
       await loadPage();
     } catch (e) {
-      notification.open({ type: "error", title: String(t("approvalPage.hint") ?? ''), description: String(e || t("approvalPage.genericSaveFailed")) });
+      showApiError(e);
     }
   };
 
@@ -217,7 +249,7 @@ export function useApprovalController() {
           await loadPage();
           next();
         } catch (e) {
-          notification.open({ type: "error", title: String(t("approvalPage.hint") ?? ''), description: String(e || t("approvalPage.genericDeleteFailed")) });
+          showApiError(e);
         }
       },
     });
@@ -247,9 +279,9 @@ export function useApprovalController() {
         });
       }
       setRouteDialog({ open: false, initial: {} });
-      await loadRoutes(selectedScenarioId);
+      setRoutes(await loadRoutes(selectedScenarioId));
     } catch (e) {
-      notification.open({ type: "error", title: String(t("approvalPage.hint") ?? ''), description: String(e || t("approvalPage.genericSaveFailed")) });
+      showApiError(e);
     }
   };
 
@@ -261,9 +293,9 @@ export function useApprovalController() {
         flow_definition_id: route.flow_definition_id ?? null,
         enabled: route.enabled === false,
       });
-      if (selectedScenarioId) await loadRoutes(selectedScenarioId);
+      if (selectedScenarioId) setRoutes(await loadRoutes(selectedScenarioId));
     } catch (e) {
-      notification.open({ type: "error", title: String(t("approvalPage.hint") ?? ''), description: String(e || t("approvalPage.genericUpdateFailed")) });
+      showApiError(e);
     }
   };
 
@@ -274,10 +306,10 @@ export function useApprovalController() {
       onOk: async (next) => {
         try {
           await deleteApprovalRouteApi(route.id);
-          if (selectedScenarioId) await loadRoutes(selectedScenarioId);
+          if (selectedScenarioId) setRoutes(await loadRoutes(selectedScenarioId));
           next();
         } catch (e) {
-          notification.open({ type: "error", title: String(t("approvalPage.hint") ?? ''), description: String(e || t("approvalPage.genericDeleteFailed")) });
+          showApiError(e);
         }
       },
     });
@@ -294,9 +326,9 @@ export function useApprovalController() {
         selectedScenarioId,
         next.map((r) => r.id),
       );
-      await loadRoutes(selectedScenarioId);
+      setRoutes(await loadRoutes(selectedScenarioId));
     } catch (e) {
-      notification.open({ type: "error", title: String(t("approvalPage.hint") ?? ''), description: String(e || t("approvalPage.genericSortFailed")) });
+      showApiError(e);
     }
   };
 
@@ -312,9 +344,9 @@ export function useApprovalController() {
         newId = created.id;
       }
       setFlowDialog({ open: false, initial: {} });
-      await loadFlows(selectedScenarioId, newId);
+      applyFlows(await loadFlows(selectedScenarioId, newId));
     } catch (e) {
-      notification.open({ type: "error", title: String(t("approvalPage.hint") ?? ''), description: String(e || t("approvalPage.genericSaveFailed")) });
+      showApiError(e);
     }
   };
 
@@ -326,10 +358,10 @@ export function useApprovalController() {
         try {
           await deleteApprovalFlowApi(flow.id);
           if (selectedFlowId === flow.id) setSelectedFlowId(null);
-          if (selectedScenarioId) await loadFlows(selectedScenarioId);
+          if (selectedScenarioId) applyFlows(await loadFlows(selectedScenarioId));
           next();
         } catch (e) {
-          notification.open({ type: "error", title: String(t("approvalPage.hint") ?? ''), description: String(e || t("approvalPage.genericDeleteFailed")) });
+          showApiError(e);
         }
       },
     });
@@ -345,7 +377,7 @@ export function useApprovalController() {
       const nodeList = await listApprovalNodesApi(route.flow_definition_id);
       setFlowPreviewDialog({ open: true, flowName, nodes: nodeList });
     } catch (e) {
-      notification.open({ type: "error", title: String(t("approvalPage.hint") ?? ''), description: String(e || t("approvalPage.genericLoadFailed")) });
+      showApiError(e);
     }
   };
 
@@ -392,7 +424,7 @@ export function useApprovalController() {
       setIsNodeDirty(false);
       notification.open({ type: "success", title: String(t("approvalPage.hint") ?? ''), description: String(t("approvalPage.saveSuccess") ?? '') });
     } catch (e) {
-      notification.open({ type: "error", title: String(t("approvalPage.hint") ?? ''), description: String(e || t("approvalPage.genericSaveFailed")) });
+      showApiError(e);
     }
   };
 
@@ -456,6 +488,7 @@ export function useApprovalController() {
     t,
     setActiveTab,
     loadPage,
+    loadError,
     activeTab,
     setShowAddScenario,
     scenarios,
@@ -510,6 +543,7 @@ export function useApprovalController() {
     handleAddScenario,
     routeDialog,
     activeConditionFields,
+    allowPassRoute,
     handleSaveRoute,
     flowDialog,
     handleSaveFlow,

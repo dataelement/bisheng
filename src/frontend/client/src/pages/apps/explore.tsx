@@ -1,277 +1,353 @@
-import { ArrowLeft } from "lucide-react"
-import { LoadingIcon } from "~/components/ui/icon/Loading"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useNavigate } from "react-router-dom"
-import { useToastContext } from "~/Providers"
-import { getChatOnlineApi, getUncategorized } from "~/api/apps"
-import { NotificationSeverity } from "~/common"
-import { Button } from "~/components/ui/Button"
-import { EmptyStateIllustration } from "~/components/illustrations"
-import { useLocalize, useMediaQuery } from "~/hooks"
-import { useGetBsConfig } from "~/hooks/queries/data-provider"
-import { cn, copyText } from "~/utils"
-import { getAppShareUrl } from './appUtils'
-import { AgentCard } from './components/AgentCard'
-import { AgentNavigation } from './components/AgentNavigation'
-import { AppSearchBar } from './components/AppSearchBar'
+import { ArrowLeft } from "lucide-react";
+import { LoadingIcon } from "~/components/ui/icon/Loading";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useToastContext } from "~/Providers";
+import { getChatOnlineApi, getUncategorized, recordUsedAppApi } from "~/api/apps";
+import { NotificationSeverity } from "~/common";
+import { Button } from "~/components/ui/Button";
+import { EmptyStateIllustration } from "~/components/illustrations";
+import { useLocalize, useMediaQuery } from "~/hooks";
+import { useGetBsConfig } from "~/hooks/queries/data-provider";
+import { cn, copyText } from "~/utils";
+import { getAppShareUrl } from "./appUtils";
+import { AgentCard } from "./components/AgentCard";
+import { AgentNavigation } from "./components/AgentNavigation";
+import { AppSearchBar } from "./components/AppSearchBar";
+import { squareTypePath } from "~/pages/square/squarePaths";
 
 const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
-const appLastOriginKey = 'app-last-origin';
+const appLastOriginKey = "app-last-origin";
+/** F054 hosted application — the one card type that leaves this SPA. */
+const HOSTED_APP_FLOW_TYPE = 35;
+/** Catch-all tab id shared with AgentNavigation — apps carrying no home tag. */
+const UNCATEGORIZED = "uncategorized";
+/** Sentinel understood by `getChatOnlineApi` as "do not filter by tag". */
+const ALL_CATEGORIES = -1;
 
 export default function ExplorePlaza() {
-    // Null until the navigation has its tags and can say which tab is the
-    // default; fetching before that would show one tab's apps and then swap.
-    const [activeTabId, setActiveTabId] = useState<number | string | null>(null)
-    const [searchQuery, setSearchQuery] = useState("")
-    const [agents, setAgents] = useState<any[]>([])
-    const [loading, setLoading] = useState(false)
-    const [loadingMore, setLoadingMore] = useState(false)
-    const [refreshTrigger, setRefreshTrigger] = useState(0)
+  // Null until the navigation has its tags and can say which tab is the
+  // default; fetching before that would show one tab's apps and then swap.
+  const [activeTabId, setActiveTabId] = useState<number | string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [agents, setAgents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-    // --- 游标瀑布流加载状态 ---
-    const [hasMore, setHasMore] = useState(true);
-    const cursorRef = useRef<string | null>(null);
-    const loaderRef = useRef<HTMLDivElement>(null);
-    const loadMoreLockRef = useRef(false);
-    const pageSize = 20;
+  // --- 游标瀑布流加载状态 ---
+  const [hasMore, setHasMore] = useState(true);
+  const cursorRef = useRef<string | null>(null);
+  const loaderRef = useRef<HTMLDivElement>(null);
+  const loadMoreLockRef = useRef(false);
+  // Bumped by every first-page request. A response whose ticket no longer
+  // matches has been superseded by a newer tab/keyword and is discarded.
+  const listSeqRef = useRef(0);
+  const pageSize = 20;
 
-    const navigate = useNavigate()
-    const { showToast } = useToastContext()
-    const localize = useLocalize()
-    const { data: bsConfig } = useGetBsConfig()
-    const isAtLeast768 = useMediaQuery('(min-width: 768px)')
-    const isAtLeast1024 = useMediaQuery('(min-width: 1024px)')
-    const bannerTitle = bsConfig?.applicationCenterWelcomeMessage?.trim() || localize('com_app_center_welcome')
-    const bannerDescription = bsConfig?.applicationCenterDescription?.trim() || localize('com_app_center_description')
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { showToast } = useToastContext();
+  const localize = useLocalize();
+  const { data: bsConfig } = useGetBsConfig();
+  const isAtLeast768 = useMediaQuery("(min-width: 768px)");
+  const isAtLeast1024 = useMediaQuery("(min-width: 1024px)");
+  const bannerTitle = bsConfig?.applicationCenterWelcomeMessage?.trim() || localize("com_app_center_welcome");
+  const bannerDescription =
+    bsConfig?.applicationCenterDescription?.trim() || localize("com_app_center_description");
 
-    const exploreCols = useMemo(() => {
-        // md: 2 列（与应用中心一致）；lg+: 3 列（应用中心 4 列减 1）
-        if (isAtLeast1024) return 3;
-        if (isAtLeast768) return 2;
-        return 1;
-    }, [isAtLeast768, isAtLeast1024]);
+  const exploreCols = useMemo(() => {
+    // md: 2 列（与应用中心一致）；lg+: 3 列（应用中心 4 列减 1）
+    if (isAtLeast1024) return 3;
+    if (isAtLeast768) return 2;
+    return 1;
+  }, [isAtLeast768, isAtLeast1024]);
 
-    // Fetch one cursor page. `cursor === null` starts a fresh list (first page).
-    const fetchAgents = useCallback(async (query: string, categoryId: number | string, cursor: string | null, isAppend: boolean) => {
-        if (loading || loadingMore) return;
-        if (isAppend) setLoadingMore(true);
-        else setLoading(true);
-        try {
-            const result = categoryId === 'uncategorized'
-                ? await getUncategorized(cursor, pageSize, query)
-                : await getChatOnlineApi(cursor, query, categoryId as number, pageSize);
+  // Tab and keyword are alternative filters, never combined: a search spans
+  // every category, so picking a tab drops the keyword and gives the user
+  // that tab's own contents back. Must stay referentially stable —
+  // AgentNavigation keys its initial tag load off this callback.
+  const handleCategoryChange = useCallback((categoryId: number | string) => {
+    setActiveTabId(categoryId);
+    setSearchQuery("");
+  }, []);
 
-            const pageData = result.list || [];
+  // Fetch one cursor page. `cursor === null` starts a fresh list (first page).
+  const fetchAgents = useCallback(
+    async (query: string, categoryId: number | string, cursor: string | null, isAppend: boolean) => {
+      // Infinite scroll stays serialized. A first-page request never is: it
+      // carries a new tab or keyword, and the old shared lock silently dropped
+      // it whenever one was still in flight — the grid then kept showing the
+      // previous filter's apps with the new keyword sitting in the box.
+      if (isAppend && (loading || loadingMore)) return;
+      const seq = isAppend ? listSeqRef.current : ++listSeqRef.current;
+      if (isAppend) setLoadingMore(true);
+      else setLoading(true);
+      try {
+        const keyword = query.trim();
+        // Search spans every category. An app carrying no home tag only ever
+        // shows up under the "uncategorised" tab, so a tag-scoped search made
+        // it unfindable from any other tab — the tab the plaza lands on by
+        // default whenever home tags are configured (F056 AC-08). While a
+        // keyword is present the tab filter is therefore dropped, and the
+        // active tab is un-highlighted so the widened scope is visible.
+        const result = keyword
+          ? await getChatOnlineApi(cursor, keyword, ALL_CATEGORIES, pageSize)
+          : categoryId === UNCATEGORIZED
+            ? await getUncategorized(cursor, pageSize)
+            : await getChatOnlineApi(cursor, "", categoryId as number, pageSize);
 
-            const formattedResults = pageData.map((item: any) => ({
-                ...item,
-                id: item.id || item.agentId || item.flowId,
-                // Normalize so the shared AgentCard (which reads flow_type) renders correctly.
-                flow_type: item.flow_type ?? item.type,
-            }));
+        if (seq !== listSeqRef.current) return;
+        const pageData = result.list || [];
 
-            setAgents(prev => isAppend ? [...prev, ...formattedResults] : formattedResults);
-            cursorRef.current = result.nextCursor;
-            setHasMore(!!result.hasMore);
-        } catch (error) {
-            console.error("Failed to fetch agents:", error);
-            if (!isAppend) setAgents([]);
-        } finally {
-            if (isAppend) setLoadingMore(false);
-            else setLoading(false);
+        const formattedResults = pageData.map((item: any) => ({
+          ...item,
+          id: item.id || item.agentId || item.flowId,
+          // Normalize so the shared AgentCard (which reads flow_type) renders correctly.
+          flow_type: item.flow_type ?? item.type,
+        }));
+
+        setAgents((prev) => (isAppend ? [...prev, ...formattedResults] : formattedResults));
+        cursorRef.current = result.nextCursor;
+        setHasMore(!!result.hasMore);
+      } catch (error) {
+        console.error("Failed to fetch agents:", error);
+        if (seq !== listSeqRef.current) return;
+        if (!isAppend) setAgents([]);
+      } finally {
+        // The append lane owns `loadingMore` alone, so it always clears it.
+        // A superseded first page must NOT clear `loading` — the request
+        // that replaced it is still running and owns the spinner.
+        if (isAppend) setLoadingMore(false);
+        else if (seq === listSeqRef.current) setLoading(false);
+      }
+    },
+    [loading, loadingMore],
+  );
+
+  useEffect(() => {
+    if (activeTabId === null) return;
+    cursorRef.current = null;
+    setHasMore(true);
+    loadMoreLockRef.current = false;
+    fetchAgents(searchQuery, activeTabId, null, false);
+  }, [searchQuery, activeTabId, refreshTrigger]);
+
+  useEffect(() => {
+    if (!loadingMore) {
+      loadMoreLockRef.current = false;
+    }
+  }, [loadingMore]);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const target = entries[0];
+        if (
+          target.isIntersecting &&
+          !loading &&
+          !loadingMore &&
+          hasMore &&
+          activeTabId !== null &&
+          !loadMoreLockRef.current
+        ) {
+          loadMoreLockRef.current = true;
+          fetchAgents(searchQuery, activeTabId, cursorRef.current, true);
         }
-    }, [loading, loadingMore]);
+      },
+      { threshold: 0, rootMargin: "400px 0px" },
+    );
 
-    useEffect(() => {
-        if (activeTabId === null) return;
-        cursorRef.current = null;
-        setHasMore(true);
-        loadMoreLockRef.current = false;
-        fetchAgents(searchQuery, activeTabId, null, false);
-    }, [searchQuery, activeTabId, refreshTrigger]);
-
-    useEffect(() => {
-        if (!loadingMore) {
-            loadMoreLockRef.current = false;
-        }
-    }, [loadingMore]);
-
-    useEffect(() => {
-        const observer = new IntersectionObserver((entries) => {
-            const target = entries[0];
-            if (
-                target.isIntersecting &&
-                !loading &&
-                !loadingMore &&
-                hasMore &&
-                activeTabId !== null &&
-                !loadMoreLockRef.current
-            ) {
-                loadMoreLockRef.current = true;
-                fetchAgents(searchQuery, activeTabId, cursorRef.current, true);
-            }
-        }, { threshold: 0, rootMargin: '400px 0px' });
-
-        if (loaderRef.current) {
-            observer.observe(loaderRef.current);
-        }
-
-        return () => observer.disconnect();
-    }, [loading, loadingMore, hasMore, searchQuery, activeTabId, fetchAgents]);
-
-    // The spinner also covers the wait for the navigation's tags, which decide
-    // the default tab. `loading` itself must stay false until a request is
-    // actually in flight — fetchAgents treats it as a re-entry guard and would
-    // skip the very first fetch, leaving the spinner up for good.
-    const showLoading = loading || activeTabId === null;
-
-    const handleCardClick = (agent: any) => {
-        const flowId = agent.id
-        const flowType = agent.flow_type || agent.type
-        try {
-            sessionStorage.setItem(appFlowOriginKey(String(flowId)), 'explore');
-            sessionStorage.setItem(appLastOriginKey, 'explore');
-        } catch {
-            // ignore storage failures
-        }
-        // Enter without chatId — AppChatEntry will resolve to most recent conversation,
-        // or create a new one if the user has no conversations for this app yet.
-        navigate(`/app/${flowId}/${flowType}?from=explore&returnTo=%2Fapps%2Fexplore`, {
-            state: { appSurfaceReturn: '/apps/explore' as const },
-        });
+    if (loaderRef.current) {
+      observer.observe(loaderRef.current);
     }
 
-    const handleShare = async (agent: any) => {
-        if (agent.can_share !== true) return;
-        const shareUrl = getAppShareUrl(agent.id, agent.flow_type || agent.type);
-        try {
-            await copyText(shareUrl);
-            showToast?.({
-                message: localize('com_app_share_link_copied'),
-                severity: NotificationSeverity.SUCCESS,
-            });
-        } catch {
-            showToast?.({
-                message: localize('com_app_share_link_copy_failed'),
-                severity: NotificationSeverity.WARNING,
-            });
-        }
-    }
+    return () => observer.disconnect();
+  }, [loading, loadingMore, hasMore, searchQuery, activeTabId, fetchAgents]);
 
-    return (
-        <div
-            className={cn(
-                'flex h-full min-h-0 w-full flex-1 flex-col items-center overflow-hidden bg-white',
-                // Mobile explore is not innerScrollShell in MainLayout (h-auto shell) and
-                // html/body scrolling is globally disabled (WebView bottom-strip fix in
-                // index.html), so h-full/flex-1 collapse to content height and nothing can
-                // scroll. Pin the page to one viewport tall on mobile so <main>'s
-                // overflow-y-auto becomes the scroller (also gives empty/loading states a
-                // real height to center against).
-                'max-[767px]:h-[100dvh]',
-            )}
-        >
-            {/* 顶部横幅：与知识广场一致 — 跟随主题的品牌色渐变底（brand-50 → white） */}
-            <div
-                className="relative w-full shrink-0 overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]"
-            >
-                {/* Decorative scattered icons — kept from the original banner art, recolored
+  // The spinner also covers the wait for the navigation's tags, which decide
+  // the default tab. `loading` itself must stay false until a request is
+  // actually in flight — fetchAgents treats it as a re-entry guard and would
+  // skip the very first fetch, leaving the spinner up for good.
+  const showLoading = loading || activeTabId === null;
+
+  const handleCardClick = (agent: any) => {
+    const flowId = agent.id;
+    const flowType = agent.flow_type || agent.type;
+    if (flowType === HOSTED_APP_FLOW_TYPE) {
+      // Hosted apps live outside this SPA at `/apps/{slug}` (served by the
+      // app proxy). Open them in a NEW tab so the app square stays put and
+      // the user can return to it — a same-tab navigation left them with no
+      // way back.
+      //
+      // The URL must be the bare origin-absolute path: no router basename,
+      // no `__APP_ENV__.BASE_URL`, no `/workspace` prefix (each of those
+      // 404s). `noopener` stops the app from reaching back into this tab via
+      // `window.opener` — it may run arbitrary code.
+      //
+      // Open FIRST, synchronously inside the click gesture, or the popup is
+      // blocked. Then record the open for "recently used" as fire-and-forget:
+      // this tab does not navigate, so the request is not cancelled and need
+      // not be awaited (hosted apps have no MessageSession to infer use from).
+      window.open(`/apps/${agent.slug}`, "_blank", "noopener");
+      recordUsedAppApi(String(flowId)).catch(() => {});
+      return;
+    }
+    const returnTo = location.pathname === "/square" ? squareTypePath("apps") : "/apps/explore";
+    try {
+      sessionStorage.setItem(appFlowOriginKey(String(flowId)), "explore");
+      sessionStorage.setItem(appLastOriginKey, "explore");
+    } catch {
+      // ignore storage failures
+    }
+    // Enter without chatId — AppChatEntry will resolve to most recent conversation,
+    // or create a new one if the user has no conversations for this app yet.
+    navigate(`/app/${flowId}/${flowType}?from=explore&returnTo=${encodeURIComponent(returnTo)}`, {
+      state: { appSurfaceReturn: returnTo },
+    });
+  };
+
+  const handleShare = async (agent: any) => {
+    if (agent.can_share !== true) return;
+    const shareUrl = getAppShareUrl(agent.id, agent.flow_type || agent.type);
+    try {
+      await copyText(shareUrl);
+      showToast?.({
+        message: localize("com_app_share_link_copied"),
+        severity: NotificationSeverity.SUCCESS,
+      });
+    } catch {
+      showToast?.({
+        message: localize("com_app_share_link_copy_failed"),
+        severity: NotificationSeverity.WARNING,
+      });
+    }
+  };
+
+  return (
+    <div
+      className={cn(
+        "relative flex h-full min-h-0 w-full flex-1 flex-col items-center overflow-hidden bg-white",
+        // Mobile explore is not innerScrollShell in MainLayout (h-auto shell) and
+        // html/body scrolling is globally disabled (WebView bottom-strip fix in
+        // index.html), so h-full/flex-1 collapse to content height and nothing can
+        // scroll. Pin the page to one viewport tall on mobile so <main>'s
+        // overflow-y-auto becomes the scroller (also gives empty/loading states a
+        // real height to center against).
+        "max-[767px]:h-[100dvh]",
+      )}
+    >
+      {/* 顶部横幅：与知识广场一致 — 跟随主题的品牌色渐变底（brand-50 → white） */}
+      <div className="relative w-full shrink-0 overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]">
+        {/* Decorative scattered icons — kept from the original banner art, recolored
                     via a brand-tinted mask layer so they follow the blue ⇄ green theme. */}
-                <div
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0 bg-blue-200"
-                    style={{
-                        WebkitMaskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/apptab-icons.svg)`,
-                        maskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/apptab-icons.svg)`,
-                        WebkitMaskSize: "cover",
-                        maskSize: "cover",
-                        WebkitMaskPosition: "center",
-                        maskPosition: "center",
-                        WebkitMaskRepeat: "no-repeat",
-                        maskRepeat: "no-repeat",
-                    }}
-                />
-                <div className="absolute left-4 top-4 z-10">
-                    <Button
-                        variant="ghost"
-                        onClick={() => navigate('/apps')}
-                        className="h-8 w-8 rounded-md border border-[#E5E6EB] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F7F8FA] fine-pointer:hover:text-blue-500"
-                    >
-                        <ArrowLeft className="size-3.5" />
-                    </Button>
-                </div>
-                <div className="relative mx-auto flex w-full max-w-[1000px] flex-col items-center justify-center px-5 pb-5 pt-7 text-center">
-                    <h1 className="mb-1 font-['PingFang_SC'] text-[26px] font-semibold text-blue-500">
-                        {bannerTitle}
-                    </h1>
-                    <p className="mb-3 max-w-[640px] font-['PingFang_SC'] text-[13px] leading-[22px] text-[#86909C]">
-                        {bannerDescription}
-                    </p>
-                </div>
-            </div>
-
-            {/* 过滤栏：桌面与原先一致；窄屏搜索独占一行（移动端始终展开搜索） */}
-            <div className="w-full max-w-[1000px] shrink-0 flex items-center justify-between z-10 px-5 py-5 max-[576px]:flex-col max-[576px]:items-stretch max-[576px]:gap-3">
-                <div className="order-2 max-[576px]:order-1 max-[576px]:w-full min-w-0 min-[577px]:shrink-0">
-                    <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
-                </div>
-                <div className="order-1 max-[576px]:order-2 w-full min-w-0">
-                    <AgentNavigation onCategoryChange={setActiveTabId} onRefresh={() => setRefreshTrigger(prev => prev + 1)} />
-                </div>
-            </div>
-
-            {/* 智能体网格：滚动区占满整宽（滚动条贴最右），内容居中约束在 1000px */}
-            <main className="flex min-h-0 w-full flex-1 flex-col items-center overflow-x-hidden overflow-y-auto scrollbar-os">
-                <div className="flex w-full max-w-[1000px] flex-1 flex-col px-5 pb-5">
-                <div
-                    className="grid w-full items-start gap-4"
-                    style={{ gridTemplateColumns: `repeat(${exploreCols}, minmax(0, 1fr))` }}
-                >
-                    {agents.map((agent, idx) => (
-                        <AgentCard
-                            key={`${agent.id}-${idx}`}
-                            agent={agent}
-                            onStartChat={handleCardClick}
-                            onShare={handleShare}
-                        />
-                    ))}
-                </div>
-
-                {/* 滚动触发器 & 加载状态显示 */}
-                <div
-                    ref={loaderRef}
-                    className={cn(
-                        'flex w-full flex-col items-center',
-                        // Empty/loading: fill the region and place content via flex spacers at a
-                        // region-relative height (not viewport vh): ~40% on mobile, ~45% on PC.
-                        (showLoading || agents.length === 0) ? 'flex-1' : 'py-10',
-                    )}
-                >
-                    {(showLoading || agents.length === 0) && <div className="flex-[8] md:flex-[9]" aria-hidden />}
-                    {showLoading ? (
-                        <div className="flex flex-col items-center gap-3 text-blue-500">
-                            <LoadingIcon className="size-20 text-primary" />
-                            <span className="text-sm font-['PingFang_SC'] text-[#999999]">{localize('com_app_explore_loading_more')}</span>
-                        </div>
-                    ) : loadingMore ? (
-                        <div className="flex items-center gap-2 text-blue-500">
-                            <LoadingIcon className="size-6 text-primary" />
-                            <span className="text-sm font-['PingFang_SC'] text-[#999999]">{localize('com_app_explore_loading_more')}</span>
-                        </div>
-                    ) : null}
-                    {!hasMore && agents.length > 0 && (
-                        <p className="text-[#a9aeb8] text-[12px] font-['PingFang_SC'] mt-4">{localize('com_app_explore_end_of_list')}</p>
-                    )}
-                    {!showLoading && agents.length === 0 && (
-                        <div className="flex flex-col items-center">
-                            <EmptyStateIllustration className="size-[120px] mb-4" />
-                            <p className="text-[#a9aeb8] text-[14px] font-['PingFang_SC']">{localize('com_app_explore_no_agents')}</p>
-                        </div>
-                    )}
-                    {(showLoading || agents.length === 0) && <div className="flex-[12] md:flex-[11]" aria-hidden />}
-                </div>
-                </div>
-            </main>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-blue-200"
+          style={{
+            WebkitMaskImage: `url(${__APP_ENV__.BASE_URL || ""}/assets/channel/apptab-icons.svg)`,
+            maskImage: `url(${__APP_ENV__.BASE_URL || ""}/assets/channel/apptab-icons.svg)`,
+            WebkitMaskSize: "cover",
+            maskSize: "cover",
+            WebkitMaskPosition: "center",
+            maskPosition: "center",
+            WebkitMaskRepeat: "no-repeat",
+            maskRepeat: "no-repeat",
+          }}
+        />
+        {/* Desktop hosts this page inside 广场 (~/pages/square), whose tabs are the way
+                    around; the back arrow is the mobile way out. */}
+        <div className="absolute left-4 top-4 z-10 md:hidden">
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/apps")}
+            className="h-8 w-8 rounded-md border border-[#E5E6EB] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F7F8FA] fine-pointer:hover:text-blue-500"
+          >
+            <ArrowLeft className="size-3.5" />
+          </Button>
         </div>
-    )
+        <div className="relative mx-auto flex w-full max-w-[1000px] flex-col items-center justify-center px-5 pb-5 pt-7 text-center">
+          <h1 className="mb-1 font-['PingFang_SC'] text-[26px] font-semibold text-blue-500">{bannerTitle}</h1>
+          <p className="mb-3 max-w-[640px] font-['PingFang_SC'] text-[13px] leading-[22px] text-[#86909C]">
+            {bannerDescription}
+          </p>
+        </div>
+      </div>
+
+      {/* 过滤栏：桌面与原先一致；窄屏搜索独占一行（移动端始终展开搜索） */}
+      <div className="w-full max-w-[1000px] shrink-0 flex items-center justify-between z-10 px-5 py-5 max-[576px]:flex-col max-[576px]:items-stretch max-[576px]:gap-3">
+        <div className="order-2 max-[576px]:order-1 max-[576px]:w-full min-w-0 min-[577px]:shrink-0">
+          <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
+        </div>
+        <div className="order-1 max-[576px]:order-2 w-full min-w-0">
+          <AgentNavigation
+            onCategoryChange={handleCategoryChange}
+            onRefresh={() => setRefreshTrigger((prev) => prev + 1)}
+            searchActive={searchQuery.trim().length > 0}
+          />
+        </div>
+      </div>
+
+      {/* 智能体网格：滚动区占满整宽（滚动条贴最右），内容居中约束在 1000px */}
+      <main className="flex min-h-0 w-full flex-1 flex-col items-center overflow-x-hidden overflow-y-auto scrollbar-os">
+        <div className="flex w-full max-w-[1000px] flex-1 flex-col px-5 pb-5">
+          <div
+            className="grid w-full items-start gap-4"
+            style={{ gridTemplateColumns: `repeat(${exploreCols}, minmax(0, 1fr))` }}
+          >
+            {agents.map((agent, idx) => (
+              <AgentCard
+                key={`${agent.id}-${idx}`}
+                agent={agent}
+                onStartChat={handleCardClick}
+                onShare={handleShare}
+              />
+            ))}
+          </div>
+
+          {/* 滚动触发器 & 加载状态显示 */}
+          <div
+            ref={loaderRef}
+            className={cn(
+              "flex w-full flex-col items-center",
+              // Empty/loading: fill the region and place content via flex spacers at a
+              // region-relative height (not viewport vh): ~40% on mobile, ~45% on PC.
+              showLoading || agents.length === 0 ? "flex-1" : "py-10",
+            )}
+          >
+            {(showLoading || agents.length === 0) && <div className="flex-[8] md:flex-[9]" aria-hidden />}
+            {showLoading ? (
+              <div className="flex flex-col items-center gap-3 text-blue-500">
+                <LoadingIcon className="size-20 text-primary" />
+                <span className="text-sm font-['PingFang_SC'] text-[#999999]">
+                  {localize("com_app_explore_loading_more")}
+                </span>
+              </div>
+            ) : loadingMore ? (
+              <div className="flex items-center gap-2 text-blue-500">
+                <LoadingIcon className="size-6 text-primary" />
+                <span className="text-sm font-['PingFang_SC'] text-[#999999]">
+                  {localize("com_app_explore_loading_more")}
+                </span>
+              </div>
+            ) : null}
+            {!hasMore && agents.length > 0 && (
+              <p className="text-[#a9aeb8] text-[12px] font-['PingFang_SC'] mt-4">
+                {localize("com_app_explore_end_of_list")}
+              </p>
+            )}
+            {!showLoading && agents.length === 0 && (
+              <div className="flex flex-col items-center">
+                <EmptyStateIllustration className="size-[120px] mb-4" />
+                <p className="text-[#a9aeb8] text-[14px] font-['PingFang_SC']">
+                  {localize("com_app_explore_no_agents")}
+                </p>
+              </div>
+            )}
+            {(showLoading || agents.length === 0) && <div className="flex-[12] md:flex-[11]" aria-hidden />}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
 }

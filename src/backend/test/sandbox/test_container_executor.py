@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import json
 import socket
 from pathlib import Path
 
@@ -44,11 +43,13 @@ def test_fake_respects_path_params_across_sessions():
     headers = {"Authorization": "Bearer test-token"}
     a = fake.request("POST", "http://runner-a:8080/v1/sessions", headers=headers).json()
     b = fake.request("POST", "http://runner-a:8080/v1/sessions", headers=headers).json()
+    tar = _tar_gz({"only-a.txt": b"secret-a", "output/sub/nested.txt": b"deep"})
+    manifest = b"{}"
     fake.request(
         "PUT",
         f"http://runner-a:8080/v1/sessions/{a['session_id']}/files",
         headers={"X-Lease-Token": a["lease_token"]},
-        content=_tar_gz({"only-a.txt": b"secret-a", "output/sub/nested.txt": b"deep"}),
+        content=len(manifest).to_bytes(4, "big") + manifest + tar,
     )
     files_a = fake.session_files(a["session_id"])
     files_b = fake.session_files(b["session_id"])
@@ -230,9 +231,11 @@ def test_copy_in_keeps_chinese_paths_and_ascii_manifest(tmp_path):
     result = exe.run("print('ok')")
     assert result["exitcode"] == 0
     assert rel in fake.last_put_members
-    header = json.dumps({rel: "deadbeef"}, ensure_ascii=True)
-    header.encode("ascii")
-    assert "\\u" in header
+    size = int.from_bytes(fake.last_put_body[:4], "big")
+    raw = fake.last_put_body[4 : 4 + size]
+    text = raw.decode("ascii")
+    assert "\\u" in text
+    assert "工作台" not in text
 
 
 def test_execute_code_without_work_dir_does_not_copy_cwd(tmp_path, monkeypatch):
@@ -248,3 +251,28 @@ def test_execute_code_without_work_dir_does_not_copy_cwd(tmp_path, monkeypatch):
     assert "secret-from-cwd.py" not in fake.last_put_members
     assert not any(method == "PUT" and url.endswith("/files") for method, url in fake.calls)
     assert not any(method == "GET" and url.endswith("/files") for method, url in fake.calls)
+
+
+def test_task_artifact_storage_failure_is_reported(tmp_path, monkeypatch):
+    fake = FakeRunnerClient()
+    fake.add_replica("http://runner-a:8080", write_after_exec={"output/report.xlsx": b"artifact"})
+    exe = _exe(fake, local_sync_path=str(tmp_path), workspace_prefix="workspace/task-1")
+    monkeypatch.setattr(LocalExecutor, "sync_to_workspace", lambda *args: 0)
+    with pytest.raises(SandboxProtocolError, match="workspace storage"):
+        exe.run("print('saved')")
+
+
+def test_task_returns_stable_artifact_reference(tmp_path, monkeypatch):
+    fake = FakeRunnerClient()
+    fake.add_replica("http://runner-a:8080", write_after_exec={"output/report.xlsx": b"artifact"})
+    exe = _exe(fake, local_sync_path=str(tmp_path), workspace_prefix="workspace/task-1")
+    saved = []
+
+    def persist(root, files):
+        saved.extend(files)
+        return len(files)
+
+    monkeypatch.setattr(exe, "sync_to_workspace", persist)
+    result = exe.run("print('saved')")
+    assert result["file_list"] == ["/output/report.xlsx"]
+    assert saved == ["output/report.xlsx"]

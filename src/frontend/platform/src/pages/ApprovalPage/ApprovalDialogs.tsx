@@ -5,7 +5,9 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import type { ApproverSource } from "./approvalMetadata";
-import { APPROVER_SOURCE_OPTIONS } from "./approvalMetadata";
+import { approverSourceLabel } from "./approverSources";
+import { useContext } from "react";
+import { locationContext } from "@/contexts/locationContext";
 import { ApproverUserPicker } from "./components/ApproverUserPicker";
 import { FlowDialog } from "./FlowDialog";
 import { NodeDialog } from "./NodeDialog";
@@ -17,6 +19,7 @@ interface ApprovalDialogsProps {
   controller: ReturnType<typeof useApprovalController>;
 }
 export function ApprovalDialogs({ controller }: ApprovalDialogsProps) {
+  const { appConfig } = useContext(locationContext);
   const {
     showAddScenario,
     presets,
@@ -26,6 +29,7 @@ export function ApprovalDialogs({ controller }: ApprovalDialogsProps) {
     routeDialog,
     flows,
     activeConditionFields,
+    allowPassRoute,
     setRouteDialog,
     handleSaveRoute,
     flowDialog,
@@ -70,6 +74,7 @@ export function ApprovalDialogs({ controller }: ApprovalDialogsProps) {
         initial={routeDialog.initial}
         flows={flows}
         conditionFields={activeConditionFields}
+        allowPassRoute={allowPassRoute}
         onClose={() => setRouteDialog({ open: false, initial: {} })}
         onConfirm={(data) => void handleSaveRoute(data)}
       />
@@ -129,7 +134,6 @@ export function ApprovalDialogs({ controller }: ApprovalDialogsProps) {
                                 </Tag>
                               ));
                             }
-                            const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === src.type);
                             return (
                               <Tag
                                 key={src.type}
@@ -137,7 +141,7 @@ export function ApprovalDialogs({ controller }: ApprovalDialogsProps) {
                                 icon={<Outlined.People size={12} />}
                                 className="whitespace-nowrap"
                               >
-                                {opt ? t(opt.labelKey, { defaultValue: src.type }) : (src.label ?? src.type)}
+                                {approverSourceLabel(src.type, t, src.label, !!appConfig.multiTenantEnabled)}
                               </Tag>
                             );
                           })}

@@ -8,7 +8,7 @@ vi.mock('@/contexts/tabsContext', async () => ({ TabsContext: (await import('rea
 vi.mock('./PromptCom', () => ({ default: () => <div>Prompt editor</div> }))
 vi.mock('@/controllers/API/evaluate', () => ({ createEvaluationApi: mock.create }))
 vi.mock('@/controllers/API/flow', () => ({ getAppsApi: mock.apps }))
-vi.mock('@/controllers/request', () => ({ captureAndAlertRequestErrorHoc: (p: Promise<unknown>) => p }))
+vi.mock('@/controllers/request', async (importOriginal) => ({ ...await importOriginal<typeof import('@/controllers/request')>() }))
 vi.mock('@bisheng/ui', async () => {
 const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
 const previous = await (() => ({ useToast: () => ({ toast: mock.toast }) }))();

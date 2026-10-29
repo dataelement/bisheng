@@ -1,0 +1,21 @@
+export const modelProvider = [
+  { name: "OpenAI", value: "openai" },
+  { name: "Azure OpenAI", value: "azure_openai" },
+  { name: "Ollama", value: "ollama" },
+  { name: "xinference", value: "xinference" },
+  { name: "llamacpp", value: "llamacpp" },
+  { name: "vllm", value: "vllm" },
+  { name: "", labelKey: "model.providerNames.qwen", value: "qwen" },
+  { name: "DeepSeek", value: "deepseek" },
+  { name: "", labelKey: "model.providerNames.silicon", value: "silicon" },
+  { name: "", labelKey: "model.providerNames.volcengine", value: "volcengine" },
+  { name: "", labelKey: "model.providerNames.zhipu", value: "zhipu" },
+  { name: "", labelKey: "model.providerNames.spark", value: "spark" },
+  { name: "", labelKey: "model.providerNames.tencent", value: "tencent" },
+  { name: "", labelKey: "model.providerNames.moonshot", value: "moonshot" },
+  { name: "", labelKey: "model.providerNames.qianfan", value: "qianfan" },
+  { name: "Minimax", value: "minimax" },
+  { name: "Anthropic", value: "anthropic" },
+  { name: "MindIE", value: "MindIE" },
+];
+export const bishengModelProvider = { name: "bishengRT", value: "bisheng_rt" };

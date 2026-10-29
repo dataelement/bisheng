@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketException
@@ -17,15 +18,18 @@ from bisheng.api.services.assistant import AssistantService
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import OpenAIChatCompletionReq
 from bisheng.assistant.domain.services.published_assistant_service import PublishedAssistantService
+from bisheng.common.chat.client import ChatMessageExecution
 from bisheng.common.chat.types import WorkType
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
+from bisheng.common.errcode.open_api import OpenApiCredentialInvalidError
 from bisheng.common.schemas.api import PageData, resp_200
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData, ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.core.logger import trace_id_var
-from bisheng.open_api.domain.context import get_current_open_api_principal
+from bisheng.open_api.application.access_context import open_api_access_context, validate_bearer
+from bisheng.open_api.domain.context import OpenApiExecutionSnapshot, get_current_open_api_principal
 from bisheng.open_api.domain.http_status import openai_stream_error
-from bisheng.open_api.domain.scopes import open_api_scope
+from bisheng.open_api.domain.scopes import OpenApiScopeMarker, open_api_scope
 from bisheng.open_api.domain.services.credential_watcher import watch_websocket_credential
 from bisheng.open_api.domain.services.session_subject_service import session_subject_from_principal
 from bisheng.open_endpoints.domain.utils import get_open_api_operator
@@ -163,6 +167,30 @@ async def chat(*, websocket: WebSocket, assistant_id: str, chat_id: str | None =
         if principal is None:
             raise HTTPException(status_code=500, detail="Open API execution identity is missing")
         session_subject = session_subject_from_principal(principal)
+
+        @asynccontextmanager
+        async def message_admission():
+            async with open_api_access_context(
+                authorization=websocket.headers.get("Authorization"),
+                headers=websocket.headers.items(),
+                marker=OpenApiScopeMarker(scope="assistant:invoke", modes=frozenset({"S", "D"}), session=True),
+                on_behalf_of=websocket.headers.get("X-On-Behalf-Of"),
+                end_user=websocket.headers.get("X-End-User"),
+                credential_validator=validate_bearer,
+            ) as refreshed:
+                refreshed_subject = session_subject_from_principal(refreshed)
+                # Compatibility owner may change; the durable session partition may not.
+                for field in ("tenant_id", "subject_type", "subject_id", "external_user_id", "resource_id"):
+                    if getattr(refreshed_subject, field) != getattr(session_subject, field):
+                        raise OpenApiCredentialInvalidError()
+                yield ChatMessageExecution(
+                    operator=get_open_api_operator(),
+                    execution_snapshot=OpenApiExecutionSnapshot.from_principal(
+                        refreshed, trace_id=str(trace_id_var.get() or "")
+                    ).model_dump(),
+                    session_subject=refreshed_subject,
+                )
+
         await PublishedAssistantService.validate_websocket_session(
             assistant_id=assistant_id,
             chat_id=chat_id,
@@ -177,6 +205,7 @@ async def chat(*, websocket: WebSocket, assistant_id: str, chat_id: str | None =
                 WorkType.GPTS,
                 websocket,
                 session_subject=session_subject,
+                message_admission=message_admission,
             )
     except WebSocketException as exc:
         logger.error("websocket exception: {}", exc)

@@ -10,7 +10,7 @@ import { Outlined } from "bisheng-icons";
 
 import { Popover,PopoverContent,PopoverTrigger } from "@/components/bs-ui/popover";
 import { getDepartmentPathTreeApi } from "@/controllers/API/department";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { DepartmentSearchResult,DepartmentTreeNode } from "@/types/api/department";
 import { cn } from "@/utils";
 
@@ -139,7 +139,7 @@ export function TreeDepartmentSelect({
 
   // Reveal (expand + highlight) the current value each time the popover opens.
   useEffect(() => {
-    if (open && value != null) void tree.reveal(value)
+    if (open && value != null) void tree.reveal(value).catch(showApiError)
     if (!open) tree.setKeyword("")
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, value])
@@ -152,9 +152,9 @@ export function TreeDepartmentSelect({
       return
     }
     let cancelled = false
-    captureAndAlertRequestErrorHoc(getDepartmentPathTreeApi(value)).then((res) => {
+    getDepartmentPathTreeApi(value).then((res) => {
       if (!cancelled) setLabelPath(pathLabelOf((res as DepartmentSearchResult | null) ?? null))
-    })
+    }).catch(showApiError)
     return () => {
       cancelled = true
     }

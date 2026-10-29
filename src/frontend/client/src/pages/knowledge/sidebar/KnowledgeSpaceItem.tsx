@@ -4,21 +4,8 @@ import { useEffect, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import { KnowledgeSpace } from "~/api/knowledge";
-import {
-    DropdownMenu,
-    DropdownMenuItem,
-    DropdownMenuTrigger
-} from "~/components/ui/DropdownMenu";
+import { Dropdown, DropdownItem, DropdownSeparator } from "@bisheng/ui";
 import { ActionMenuLoadingRow } from "~/components/ActionMenu";
-import {
-    SidebarListMoreMenuContent,
-    sidebarListMoreMenuDangerIconClassName,
-    sidebarListMoreMenuDangerItemClassName,
-    sidebarListMoreMenuDangerLabelClassName,
-    sidebarListMoreMenuIconClassName,
-    sidebarListMoreMenuItemClassName,
-    sidebarListMoreMenuLabelClassName,
-} from "~/components/SidebarListMoreMenu";
 import { useConfirm } from "~/Providers";
 import { useLocalize } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
@@ -26,256 +13,237 @@ import { KnowledgeFolderTree, type FolderSelectPayload } from "./KnowledgeFolder
 import { DynamicEllipsisName } from "./DynamicEllipsisName";
 
 interface KnowledgeSpaceItemProps {
-    space: KnowledgeSpace;
-    isActive: boolean;
-    type: "created" | "joined" | "department";
-    onSelect: (space: KnowledgeSpace) => void;
-    onUpdate: (space: KnowledgeSpace) => void;
-    onDelete: (id: string) => void;
-    onLeave: (id: string) => void;
-    onPin: (id: string, pinned: boolean) => void;
-    onSettings?: (space: KnowledgeSpace) => void;
-    /** F040: lazily resolve this space's action permissions when its menu opens. */
-    onMenuOpen?: () => void;
-    /** True while the lazy permission lookup is in flight — the menu shows a
-     *  loading row instead of the fail-closed item set so items don't pop in. */
-    permissionsLoading?: boolean;
-    canEditSpace?: boolean;
-    canDeleteSpace?: boolean;
-    canManageMembers?: boolean;
-    /** Hide the per-row "..." menu (e.g. the compact dropdown's tree). */
-    hideMoreMenu?: boolean;
-    /** Compact dropdown styling: 14px space/folder icons, slightly looser tree node spacing. */
-    compact?: boolean;
-    /** Fired after a folder is navigated to (so a host drawer can close itself). */
-    onAfterNavigate?: () => void;
+  space: KnowledgeSpace;
+  isActive: boolean;
+  type: "created" | "joined" | "department";
+  onSelect: (space: KnowledgeSpace) => void;
+  onUpdate: (space: KnowledgeSpace) => void;
+  onDelete: (id: string) => void;
+  onLeave: (id: string) => void;
+  onPin: (id: string, pinned: boolean) => void;
+  onSettings?: (space: KnowledgeSpace) => void;
+  /** F040: lazily resolve this space's action permissions when its menu opens. */
+  onMenuOpen?: () => void;
+  /** True while the lazy permission lookup is in flight — the menu shows a
+   *  loading row instead of the fail-closed item set so items don't pop in. */
+  permissionsLoading?: boolean;
+  canEditSpace?: boolean;
+  canDeleteSpace?: boolean;
+  canManageMembers?: boolean;
+  /** Hide the per-row "..." menu (e.g. the compact dropdown's tree). */
+  hideMoreMenu?: boolean;
+  /** Compact dropdown styling: 14px space/folder icons, slightly looser tree node spacing. */
+  compact?: boolean;
+  /** Fired after a folder is navigated to (so a host drawer can close itself). */
+  onAfterNavigate?: () => void;
 }
 
 export default function KnowledgeSpaceItem({
-    space,
-    isActive,
-    type,
-    onSelect,
-    onDelete,
-    onLeave,
-    onPin,
-    onSettings,
-    onMenuOpen,
-    permissionsLoading = false,
-    canEditSpace = false,
-    canDeleteSpace = false,
-    canManageMembers = false,
-    hideMoreMenu = false,
-    compact = false,
-    onAfterNavigate,
+  space,
+  isActive,
+  type,
+  onSelect,
+  onDelete,
+  onLeave,
+  onPin,
+  onSettings,
+  onMenuOpen,
+  permissionsLoading = false,
+  canEditSpace = false,
+  canDeleteSpace = false,
+  canManageMembers = false,
+  hideMoreMenu = false,
+  compact = false,
+  onAfterNavigate,
 }: KnowledgeSpaceItemProps) {
-    const localize = useLocalize();
-    const [menuOpen, setMenuOpen] = useState(false);
-    // Initial expansion mirrors the mount-time active state (deep link / reload
-    // restores the tree). After mount, clicking the space row only selects it —
-    // expansion is exclusively the chevron's job (same rule as folder rows).
-    const [expanded, setExpanded] = useState(isActive);
-    // Right-click context menu mirrors the "..." action menu, positioned at the cursor.
-    const [contextMenuOpen, setContextMenuOpen] = useState(false);
-    const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
-    const confirm = useConfirm();
-    const navigate = useNavigate();
-    const { spaceId, folderId: urlFolderId } = useParams<{ spaceId?: string; folderId?: string }>();
+  const localize = useLocalize();
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Initial expansion mirrors the mount-time active state (deep link / reload
+  // restores the tree). After mount, clicking the space row only selects it —
+  // expansion is exclusively the chevron's job (same rule as folder rows).
+  const [expanded, setExpanded] = useState(isActive);
+  // Right-click context menu mirrors the "..." action menu, positioned at the cursor.
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const confirm = useConfirm();
+  const navigate = useNavigate();
+  const { spaceId, folderId: urlFolderId } = useParams<{ spaceId?: string; folderId?: string }>();
 
-    const { data: bsConfig } = useGetBsConfig();
-    const treeEnabled =
-        bsConfig?.knowledge_space?.tree_structured_directory_display ?? true;
+  const { data: bsConfig } = useGetBsConfig();
+  const treeEnabled = bsConfig?.knowledge_space?.tree_structured_directory_display ?? true;
 
-    // Only highlight the space row when this space is active AND no folder
-    // inside it is selected — folders take over the active styling once chosen
-    // so only one row in the tree appears active at a time.
-    const isFolderSelectedHere = isActive && !!urlFolderId;
-    // In compact mode (mobile switcher) there's no folder tree to take over the
-    // active styling, so the space row stays highlighted even inside a sub-folder.
-    const showSpaceHighlight = isActive && (compact || !isFolderSelectedHere);
+  // Only highlight the space row when this space is active AND no folder
+  // inside it is selected — folders take over the active styling once chosen
+  // so only one row in the tree appears active at a time.
+  const isFolderSelectedHere = isActive && !!urlFolderId;
+  // In compact mode (mobile switcher) there's no folder tree to take over the
+  // active styling, so the space row stays highlighted even inside a sub-folder.
+  const showSpaceHighlight = isActive && (compact || !isFolderSelectedHere);
 
-    // The URL points into a folder of this space (e.g. back from space settings,
-    // after the list remounted collapsed): expand so the selected folder shows.
-    // Keyed on the folder id, so a manual collapse sticks until the folder changes.
-    // Matched on the URL's space, not `isActive`: jumping to another space's folder
-    // updates the URL before the active space follows, and `isActive` would expand
-    // the previous space for that instant.
-    const urlFolderInThisSpace = !!urlFolderId && spaceId === String(space.id);
-    useEffect(() => {
-        if (urlFolderInThisSpace) setExpanded(true);
-    }, [urlFolderInThisSpace, urlFolderId]);
+  // The URL points into a folder of this space (e.g. back from space settings,
+  // after the list remounted collapsed): expand so the selected folder shows.
+  // Keyed on the folder id, so a manual collapse sticks until the folder changes.
+  // Matched on the URL's space, not `isActive`: jumping to another space's folder
+  // updates the URL before the active space follows, and `isActive` would expand
+  // the previous space for that instant.
+  const urlFolderInThisSpace = !!urlFolderId && spaceId === String(space.id);
+  useEffect(() => {
+    if (urlFolderInThisSpace) setExpanded(true);
+  }, [urlFolderInThisSpace, urlFolderId]);
 
-    const handleSelectFolder = (folder: FolderSelectPayload | null) => {
-        if (folder) {
-            navigate(`/knowledge/space/${space.id}/folder/${folder.id}`);
-        } else {
-            navigate(`/knowledge/space/${space.id}`);
-        }
-        onAfterNavigate?.();
-    };
+  const handleSelectFolder = (folder: FolderSelectPayload | null) => {
+    if (folder) {
+      navigate(`/knowledge/space/${space.id}/folder/${folder.id}`);
+    } else {
+      navigate(`/knowledge/space/${space.id}`);
+    }
+    onAfterNavigate?.();
+  };
 
-    // Shared action-menu items, reused by the "..." dropdown and the right-click menu.
-    // While permissions are still resolving, show a single loading row so the menu
-    // doesn't open with one item and then grow to three once the lookup returns.
-    const moreMenuItems = permissionsLoading ? (
-        <ActionMenuLoadingRow />
-    ) : (
+  // Shared action-menu items, reused by the "..." dropdown and the right-click menu.
+  // While permissions are still resolving, show a single loading row so the menu
+  // doesn't open with one item and then grow to three once the lookup returns.
+  const moreMenuItems = permissionsLoading ? (
+    <ActionMenuLoadingRow />
+  ) : (
+    <>
+      {(canEditSpace || canManageMembers) && (
+        <DropdownItem icon={<Outlined.Edit />} onSelect={() => onSettings?.(space)}>
+          {localize("com_knowledge.space_settings")}
+        </DropdownItem>
+      )}
+      <DropdownItem
+        icon={space.isPinned ? <Outlined.PinOff /> : <Outlined.Pin />}
+        onSelect={() => onPin(space.id, !space.isPinned)}
+      >
+        {space.isPinned ? localize("com_knowledge.unpin") : localize("com_knowledge.pin_space")}
+      </DropdownItem>
+
+      {(canDeleteSpace || type === "joined") && (
         <>
-            {(canEditSpace || canManageMembers) && (
-                <DropdownMenuItem
-                    className={sidebarListMoreMenuItemClassName}
-                    onClick={() => onSettings?.(space)}
-                >
-                    <Outlined.Edit className={sidebarListMoreMenuIconClassName} />
-                    <span className={sidebarListMoreMenuLabelClassName}>
-                        {localize("com_knowledge.space_settings")}
-                    </span>
-                </DropdownMenuItem>
-            )}
-            <DropdownMenuItem
-                onClick={() => onPin(space.id, !space.isPinned)}
-                className={sidebarListMoreMenuItemClassName}
-            >
-                {space.isPinned ? (
-                    <>
-                        <Outlined.PinOff className={sidebarListMoreMenuIconClassName} />
-                        <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.unpin")}</span>
-                    </>
-                ) : (
-                    <>
-                        <Outlined.Pin className={sidebarListMoreMenuIconClassName} />
-                        <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.pin_space")}</span>
-                    </>
-                )}
-            </DropdownMenuItem>
+          <DropdownSeparator />
+          <DropdownItem
+            danger
+            icon={canDeleteSpace ? <Outlined.Delete /> : <Outlined.LogOut />}
+            onSelect={async () => {
+              // Delete-space uses the destructive variant (matches file-delete).
+              // Exit-space keeps the default prompt — it's not destructive.
+              const ok = canDeleteSpace
+                ? await confirm({
+                    description: `${localize("com_knowledge.confirm_delete_space_name", { 0: space.name })}${localize("com_knowledge.delete_irreversible_warning")}`,
+                    variant: "destructive",
+                  })
+                : await confirm({
+                    title: localize("com_knowledge.prompt"),
+                    description: localize("com_knowledge.confirm_exit_space"),
+                    confirmText: localize("com_knowledge.exit"),
+                    cancelText: localize("com_knowledge.cancel"),
+                  });
 
-            {(canDeleteSpace || type === "joined") && (
-                <DropdownMenuItem
-                    onClick={async () => {
-                        // Delete-space uses the destructive variant (matches file-delete).
-                        // Exit-space keeps the default prompt — it's not destructive.
-                        const ok = canDeleteSpace
-                            ? await confirm({
-                                description: `${localize("com_knowledge.confirm_delete_space_name", { 0: space.name })}${localize("com_knowledge.delete_irreversible_warning")}`,
-                                variant: "destructive",
-                            })
-                            : await confirm({
-                                title: localize("com_knowledge.prompt"),
-                                description: localize("com_knowledge.confirm_exit_space"),
-                                confirmText: localize("com_knowledge.exit"),
-                                cancelText: localize("com_knowledge.cancel"),
-                            });
-
-                        if (ok) {
-                            canDeleteSpace ? onDelete(space.id) : onLeave(space.id);
-                        }
-                    }}
-                    className={sidebarListMoreMenuDangerItemClassName}
-                >
-                    {canDeleteSpace ? (
-                        <Outlined.Delete className={sidebarListMoreMenuDangerIconClassName} />
-                    ) : (
-                        <Outlined.LogOut className={sidebarListMoreMenuDangerIconClassName} />
-                    )}
-                    <span className={sidebarListMoreMenuDangerLabelClassName}>
-                        {canDeleteSpace ? localize("com_knowledge.delete_space") : localize("com_knowledge.exit_space_short")}
-                    </span>
-                </DropdownMenuItem>
-            )}
+              if (ok) {
+                canDeleteSpace ? onDelete(space.id) : onLeave(space.id);
+              }
+            }}
+          >
+            {canDeleteSpace
+              ? localize("com_knowledge.delete_space")
+              : localize("com_knowledge.exit_space_short")}
+          </DropdownItem>
         </>
-    );
+      )}
+    </>
+  );
 
-    const handleRowContextMenu = (e: MouseEvent<HTMLDivElement>) => {
-        if (hideMoreMenu) return;
-        e.preventDefault();
-        setContextMenuPosition({ x: e.clientX, y: e.clientY });
-        setContextMenuOpen(true);
-    };
+  const handleRowContextMenu = (e: MouseEvent<HTMLDivElement>) => {
+    if (hideMoreMenu) return;
+    e.preventDefault();
+    setContextMenuPosition({ x: e.clientX, y: e.clientY });
+    setContextMenuOpen(true);
+  };
 
-    return (
-        <div className="flex flex-col gap-0.5">
-            {/* Space row */}
-            <div
-                data-ee-row
-                className={`group flex items-center justify-between ${compact ? "h-9 px-2 rounded-lg" : "h-7 rounded-md"} cursor-pointer border ${showSpaceHighlight
-                    ? "bg-[#EEEEEE] border-transparent"
-                    : "border-transparent hover:bg-[#F4F4F4]"
-                    }`}
-                style={{
-                    transitionProperty: 'background-color',
-                    transitionDuration: '350ms',
-                    transitionTimingFunction: 'ease-in-out'
-                }}
-                onClick={() => onSelect(space)}
-                onContextMenu={handleRowContextMenu}
-            >
-                {/* Right-click menu: an invisible cursor-anchored trigger drives the same
+  return (
+    <div className="flex flex-col gap-0.5">
+      {/* Space row */}
+      <div
+        data-ee-row
+        className={`group flex items-center justify-between ${compact ? "h-9 px-2 rounded-lg" : "h-7 rounded-md"} cursor-pointer border ${
+          showSpaceHighlight ? "bg-[#EEEEEE] border-transparent" : "border-transparent hover:bg-[#F4F4F4]"
+        }`}
+        style={{
+          transitionProperty: "background-color",
+          transitionDuration: "350ms",
+          transitionTimingFunction: "ease-in-out",
+        }}
+        onClick={() => onSelect(space)}
+        onContextMenu={handleRowContextMenu}
+      >
+        {/* Right-click menu: an invisible cursor-anchored trigger drives the same
                     items as the "..." menu. Portaled to <body> so the trigger's
                     `position: fixed` anchors to the viewport — the sidebar scroll container
                     has `container-type: inline-size`, which would otherwise become the
                     trigger's containing block and offset the popup from the cursor (visible
                     in the WeCom WebView). React events still bubble through the component
-                    tree, so the stopPropagation calls below still guard the row's onClick. */}
-                {!hideMoreMenu && createPortal(
-                    <DropdownMenu open={contextMenuOpen} onOpenChange={setContextMenuOpen}>
-                        <DropdownMenuTrigger asChild>
-                            <button
-                                type="button"
-                                aria-hidden="true"
-                                tabIndex={-1}
-                                className="fixed size-0 opacity-0"
-                                style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
-                                onClick={(e) => e.stopPropagation()}
-                            />
-                        </DropdownMenuTrigger>
-                        <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                            {moreMenuItems}
-                        </SidebarListMoreMenuContent>
-                    </DropdownMenu>,
-                    document.body,
-                )}
-                <div className="flex items-center flex-1">
-                    {/* Expand/collapse chevron — only shown when treeEnabled.
+                    tree, so the stopPropagation wrapper below still guards the row's onClick. */}
+        {!hideMoreMenu &&
+          createPortal(
+            <span className="contents" onClick={(e) => e.stopPropagation()}>
+              <Dropdown
+                align="end"
+                open={contextMenuOpen}
+                onOpenChange={setContextMenuOpen}
+                menu={moreMenuItems}
+              >
+                <button
+                  type="button"
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  className="fixed size-0 opacity-0"
+                  style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
+                />
+              </Dropdown>
+            </span>,
+            document.body,
+          )}
+        <div className="flex items-center flex-1">
+          {/* Expand/collapse chevron — only shown when treeEnabled.
                         Hidden in compact (mobile switcher): there the whole row just
                         navigates into the space, with no folder tree. */}
-                    {treeEnabled && !compact && (
-                        <button
-                            type="button"
-                            className="flex size-5 shrink-0 items-center justify-center"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setExpanded((prev) => !prev);
-                            }}
-                            aria-label={expanded ? "Collapse folder tree" : "Expand folder tree"}
-                        >
-                            {expanded ? (
-                                <Outlined.Down className="size-4 text-[#8D93A0]" />
-                            ) : (
-                                <Outlined.Right className="size-4 text-[#8D93A0]" />
-                            )}
-                        </button>
-                    )}
+          {treeEnabled && !compact && (
+            <button
+              type="button"
+              className="flex size-5 shrink-0 items-center justify-center"
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpanded((prev) => !prev);
+              }}
+              aria-label={expanded ? "Collapse folder tree" : "Expand folder tree"}
+            >
+              {expanded ? (
+                <Outlined.Down className="size-4 text-[#8D93A0]" />
+              ) : (
+                <Outlined.Right className="size-4 text-[#8D93A0]" />
+              )}
+            </button>
+          )}
 
-                    <div className="flex-shrink-0 flex items-center justify-center size-5 rounded-md">
-                        {type === "department" ? (
-                            <Outlined.City className={`size-4 ${showSpaceHighlight ? "text-text-1" : "text-text-3"}`} />
-                        ) : (
-                            <Outlined.Notebook className={`size-4 ${showSpaceHighlight ? "text-text-1" : "text-text-3"}`} />
-                        )}
-                    </div>
+          <div className="flex-shrink-0 flex items-center justify-center size-5 rounded-md">
+            {type === "department" ? (
+              <Outlined.City className={`size-4 ${showSpaceHighlight ? "text-text-1" : "text-text-3"}`} />
+            ) : (
+              <Outlined.Notebook className={`size-4 ${showSpaceHighlight ? "text-text-1" : "text-text-3"}`} />
+            )}
+          </div>
 
-                    <DynamicEllipsisName
-                        name={space.name}
-                        textClassName={`${compact ? "text-[14px]" : "text-[12px]"} leading-5 text-text-1 ${showSpaceHighlight ? "font-semibold" : ""}`}
-                        trailing={
-                            space.isPinned ? (
-                                <Outlined.Pin className="size-3 shrink-0 text-text-3" aria-hidden />
-                            ) : null
-                        }
-                    />
-                </div>
+          <DynamicEllipsisName
+            name={space.name}
+            textClassName={`${compact ? "text-[14px]" : "text-[12px]"} leading-5 text-text-1 ${showSpaceHighlight ? "font-semibold" : ""}`}
+            trailing={
+              space.isPinned ? <Outlined.Pin className="size-3 shrink-0 text-text-3" aria-hidden /> : null
+            }
+          />
+        </div>
 
-                {/* More-menu trigger. The button reserves real layout width so the item name
+        {/* More-menu trigger. The button reserves real layout width so the item name
                     ends *before* it — when an item is scrolled to its end the name's tail stays
                     fully visible instead of being hidden under the button. Only the 20px button
                     itself carries an opaque bg (matching the row state) to cover text it floats
@@ -288,52 +256,56 @@ export default function KnowledgeSpaceItem({
                       • sticky right-1 (4px): margin-box right edge sticks 4px from the viewport.
                       • -mr-3 (-12px): negative right margin lets the box extend past the list's
                         right padding so the button can reach its intended offset from the edge. */}
-                {!hideMoreMenu && (
-                <div className="sticky right-1 z-[1] ml-2 -mr-3 pr-3 flex h-5 w-8 flex-shrink-0 items-center justify-start">
-                    <DropdownMenu onOpenChange={(open) => { setMenuOpen(open); if (open) onMenuOpen?.(); }}>
-                        <DropdownMenuTrigger asChild>
-                            <button
-                                className={`
-                                    relative flex size-5 items-center justify-center rounded-md outline-none
-                                    before:absolute before:content-[''] ${compact ? "before:-inset-2" : "before:-inset-1"}
-                                    ${showSpaceHighlight ? "bg-[#EEEEEE] hover:!bg-[#E4E4E4]" : "bg-[#FBFBFB] group-hover:bg-[#F4F4F4] hover:!bg-[#E4E4E4]"}
-                                    ${menuOpen ? "opacity-100" : "coarse-pointer:opacity-100 fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100"}
-                                `}
-                                // Match the row's background-color transition (350ms ease-in-out)
-                                // so the button bg fades in sync with the row; keep opacity at 200ms.
-                                style={{
-                                    transitionProperty: "opacity, background-color",
-                                    transitionDuration: "200ms, 350ms",
-                                    transitionTimingFunction: "ease, ease-in-out",
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <Outlined.More className="size-4 text-text-2" />
-                            </button>
-                        </DropdownMenuTrigger>
+        {!hideMoreMenu && (
+          <div
+            className="sticky right-1 z-[1] ml-2 -mr-3 pr-3 flex h-5 w-8 flex-shrink-0 items-center justify-start"
+            // The menu is portaled, but React events still bubble to the row's onClick.
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Dropdown
+              align="end"
+              onOpenChange={(open) => {
+                setMenuOpen(open);
+                if (open) onMenuOpen?.();
+              }}
+              menu={moreMenuItems}
+            >
+              <button
+                className={`
+                                relative flex size-5 items-center justify-center rounded-md outline-none
+                                before:absolute before:content-[''] ${compact ? "before:-inset-2" : "before:-inset-1"}
+                                ${showSpaceHighlight ? "bg-[#EEEEEE] hover:!bg-[#E4E4E4]" : "bg-[#FBFBFB] group-hover:bg-[#F4F4F4] hover:!bg-[#E4E4E4]"}
+                                ${menuOpen ? "opacity-100" : "coarse-pointer:opacity-100 fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100"}
+                            `}
+                // Match the row's background-color transition (350ms ease-in-out)
+                // so the button bg fades in sync with the row; keep opacity at 200ms.
+                style={{
+                  transitionProperty: "opacity, background-color",
+                  transitionDuration: "200ms, 350ms",
+                  transitionTimingFunction: "ease, ease-in-out",
+                }}
+              >
+                <Outlined.More className="size-4 text-text-2" />
+              </button>
+            </Dropdown>
+          </div>
+        )}
+      </div>
 
-                        <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                            {moreMenuItems}
-                        </SidebarListMoreMenuContent>
-                    </DropdownMenu>
-                </div>
-                )}
-            </div>
-
-            {/* Folder tree — nested under this space row when expanded.
+      {/* Folder tree — nested under this space row when expanded.
                 No wrapper indent: each tree node uses its own paddingLeft
                 ((depth+1)*20) so depth-0 folders align with the space row's
                 icon position, matching the design's 20px-per-level structure. */}
-            {expanded && treeEnabled && !compact && (
-                <div>
-                    <KnowledgeFolderTree
-                        compact={compact}
-                        knowledgeId={space.id}
-                        currentFolderId={urlFolderId && spaceId === space.id ? urlFolderId : undefined}
-                        onSelectFolder={handleSelectFolder}
-                    />
-                </div>
-            )}
+      {expanded && treeEnabled && !compact && (
+        <div>
+          <KnowledgeFolderTree
+            compact={compact}
+            knowledgeId={space.id}
+            currentFolderId={urlFolderId && spaceId === space.id ? urlFolderId : undefined}
+            onSelectFolder={handleSelectFolder}
+          />
         </div>
-    );
+      )}
+    </div>
+  );
 }

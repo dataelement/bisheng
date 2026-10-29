@@ -1,0 +1,777 @@
+"""The publish pipeline: a synchronous receive leg and an asynchronous stage machine (design D1).
+
+One ``bisheng deploy`` is two halves, split where the latency changes by three
+orders of magnitude:
+
+* :meth:`PublishPipelineService.accept` runs **inside the HTTP request** and
+  answers in milliseconds: ownership, the volume gates, unpack safety, the
+  manifest, the two submission gates, the snapshot upload, one ``app_deployment``
+  row. **It issues no RPC** — a single call to an unreachable runtime-manager
+  here would turn "you forgot ``port``" into a request hanging on a socket
+  timeout, and that is exactly what design D1 rejected option A over.
+* :meth:`PublishPipelineService.run_pipeline` runs **on a Celery worker** and
+  takes minutes: dependency build, startup probe, secret scan, metadata,
+  approval request. Each stage is one single-row ``app_deployment`` UPDATE plus
+  one ``app.release.*`` audit row, so "where is my publish" is answerable from
+  either the table or the audit page.
+
+Boundaries this module respects rather than works around:
+
+* **F055 never writes the ``app`` table** (决议-8). A first publish creates the
+  draft through F054's ``AppProvisionService.create_draft``; metadata updates go
+  through ``AppMetaService.update_meta``. Both are imported at call time so this
+  module stays importable while F054's service layer is in flight.
+* **The submission gates are asked before the approval gate.** ``ApprovalGate``
+  answers a duplicate submission by silently returning the existing instance,
+  which would make a second ``deploy`` look successful (design K2 ① / 坑 8).
+* **The stage order is the tuple** :data:`PIPELINE_STAGES`, and the scan comes
+  first. Scanning is a few seconds of regex over the unpacked source; building
+  is minutes plus a capacity slot. Since a hit ends the attempt outright,
+  running the build first means every hit burns a build for nothing. The scan
+  reads ``context["root"]``, which ``run_pipeline`` materialises before the
+  loop, so it has no dependency on any build artifact (design D5, ruled
+  2026-08-17; F055 AC-01 and F053 AC-31a were amended in the same change).
+  Nothing else in the pipeline may assume an order beyond "the scan and both
+  prechecks all pass before a version row exists".
+"""
+
+from __future__ import annotations
+
+import shutil
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from loguru import logger
+
+from bisheng.app_publish.application.release_tenancy import require_release_eligible
+from bisheng.app_publish.domain.constants import AppReleaseAuditAction
+from bisheng.app_publish.domain.models.app_deployment import (
+    STAGE_PRECHECK_BUILD,
+    STAGE_PRECHECK_PROBE,
+    STAGE_PRECHECK_SCHEMA,
+    STAGE_RECEIVED,
+    STAGE_SECRET_SCAN,
+    STATUS_RUNNING,
+    AppDeployment,
+    AppDeploymentDao,
+)
+from bisheng.app_publish.domain.release_notes import normalize_release_notes
+from bisheng.app_publish.domain.schemas.app_manifest import ICON_EXTENSIONS, MAX_ICON_BYTES, AppManifest
+from bisheng.app_publish.domain.schemas.failure import failure_from_error
+from bisheng.app_publish.domain.services import (
+    capability_bus_service,
+    package_service,
+    precheck_service,
+    schema_evolution_service,
+)
+from bisheng.app_publish.domain.services.manifest_validator import validate_manifest
+from bisheng.app_publish.domain.services.release_audit import write_release_audit
+from bisheng.app_publish.domain.services.secret_scanner import scan_package
+from bisheng.app_publish.domain.services.version_service import VersionService
+from bisheng.common.errcode.app_publish import (
+    AppNotOwnedBySubjectError,
+    AppPublishRuntimeLayerDisabledError,
+    AppSecretScanBlockedError,
+)
+from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.common.services.config_service import settings
+from bisheng.core.context.tenant import get_current_tenant_id, set_current_tenant_id
+from bisheng.core.database import get_async_db_session
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
+from bisheng.database.models.app import AppDao
+from bisheng.open_api.application.service_account_tenancy import require_owner_tenant, revalidate_service_account
+from bisheng.utils import generate_uuid
+
+#: The asynchronous stage machine, in order. Reordering this tuple is the whole
+#: mechanical cost of moving the secret scan before the build — and the reason
+#: it must not be done without amending F055 AC-01 and F053 AC-31a (design D5).
+#:
+#: ``precheck_schema`` sits between the scan and the build: it is one database
+#: read, it cannot fail (the gate already answered the upload, see
+#: :meth:`PublishPipelineService.accept`), and its only product — the change
+#: summary — must exist before the approval request is built.
+PIPELINE_STAGES: tuple[tuple[str, str], ...] = (
+    (STAGE_SECRET_SCAN, "_stage_scan"),
+    (STAGE_PRECHECK_SCHEMA, "_stage_schema"),
+    (STAGE_PRECHECK_BUILD, "_stage_build"),
+    (STAGE_PRECHECK_PROBE, "_stage_probe"),
+)
+
+
+@dataclass(slots=True)
+class AcceptResult:
+    """What ``POST /api/v2/apps/deploy`` returns — the CLI polls on ``deployment_id``."""
+
+    deployment_id: str
+    app_id: str
+    version_id: str
+
+
+#: ``app_deployment.submitted_by_user_id`` when no natural person submitted.
+#:
+#: Under the beta2 credential model a service account is **not** a user row
+#: (migration plan M4), so there is no user id to write for a ``bisheng deploy``
+#: run with a service-account key. ``0`` is the platform's documented
+#: "non-person operator" value (``AuditLogDao.ainsert_v2``: "system trigger
+#: (operator_id=0)") and is exactly what beta2's ``OpenApiAuditMiddleware``
+#: stamps on every service-account call. Writing ``principal.actor_id`` here
+#: instead would put a ``service_account.id`` into a user-id column, and the
+#: ``app.release.*`` audit rows that default their operator to this column
+#: would then name whichever *person* happens to share that number.
+NO_NATURAL_PERSON_SUBMITTER = 0
+
+
+def resource_owner_of(principal) -> int:
+    """The natural person the credential creates resources for (伴生 PRD §4.5 定义 6 / M9).
+
+    ``OpenApiPrincipal.resource_owner_user_id`` is typed ``int | None``. beta2's
+    ``service_account.resource_owner_user_id`` column is NOT NULL, so a key
+    resolved today always carries one — but the type admits ``None`` (a future
+    ``hosted_app`` resolver, M10, has no owner), and every consumer in this
+    module used to read it as ``getattr(principal, "resource_owner_user_id", 0)
+    or 0``. That spelling turns "no owner" into owner ``0``: a first publish
+    would create an application owned by nobody, and the ownership comparison
+    would admit any other ownerless row. Refused instead, with the same code an
+    ownership mismatch gets (16205: "``app:manage`` says the key may publish, the
+    resource owner says whose") — a key without an owner may publish nobody's.
+    """
+    owner = getattr(principal, "resource_owner_user_id", None)
+    if owner is None:
+        raise AppNotOwnedBySubjectError(
+            msg="当前密钥未绑定资源归属人, 无法发布应用",
+            details={"reason": "resource_owner_missing"},
+            hints=["请管理员在服务账号详情页为该账号指定资源归属人后重试"],
+        )
+    return int(owner)
+
+
+def submitting_user_id(principal) -> int:
+    """What ``app_deployment.submitted_by_user_id`` records for this principal.
+
+    ``effective_user_id`` is the beta2 field that is a *user* id whenever the
+    caller is one (a personal token, or a delegation target); it is ``None``
+    for a service account acting as itself, which is the only shape that can
+    reach ``/api/v2/apps/*`` this release (INV-31: ``app:manage`` is mode S
+    only and never issued to a personal token). See
+    :data:`NO_NATURAL_PERSON_SUBMITTER` for why that becomes ``0`` rather than
+    the service account's id.
+    """
+    effective = getattr(principal, "effective_user_id", None)
+    return int(effective) if effective is not None else NO_NATURAL_PERSON_SUBMITTER
+
+
+def _actor_audit_fields(principal) -> dict[str, Any]:
+    """The acting credential, in the shape beta2's ``open_api.call`` audit rows use.
+
+    This is where "which service account ran ``deploy``" lives now that the
+    deployment row cannot hold it (see :data:`NO_NATURAL_PERSON_SUBMITTER`).
+    """
+    return {
+        "credential_id": getattr(principal, "credential_id", None),
+        "actor_kind": getattr(principal, "actor_kind", None),
+        "actor_id": getattr(principal, "actor_id", None),
+        "actor_name": getattr(principal, "actor_name", None),
+    }
+
+
+async def enqueue_pipeline(deployment_id: str) -> None:
+    """Hand the attempt to the default Celery queue.
+
+    Imported at call time so that neither the API process nor a unit test pulls
+    in the Celery app just to accept a package. The tenant id rides along in the
+    task header automatically (``worker/tenant_context.py``).
+    """
+    from bisheng.worker.app_publish.tasks import run_publish_pipeline
+
+    run_publish_pipeline.apply_async(args=[deployment_id])
+
+
+class PublishPipelineService:
+    """Both legs of one publish attempt."""
+
+    # ------------------------------------------------------------------
+    # Synchronous leg
+    # ------------------------------------------------------------------
+
+    @classmethod
+    async def accept(
+        cls,
+        *,
+        package_path: Path,
+        principal,
+        app_id: str | None = None,
+        confirm_schema_change: bool = False,
+        tenant_id: int | None = None,
+        release_notes: str | None = None,
+    ) -> AcceptResult:
+        """Receive one package. Fast, local, and it leaves nothing behind when it refuses.
+
+        ``confirm_schema_change`` is the answer to the ``precheck_schema`` gate
+        (AC-09): an iteration whose ``database.tables[]`` drops or modifies a
+        column of the **online** version is refused with 16229 unless it is
+        ``True``. Asked here, on the synchronous leg, for the same reason the
+        manifest is validated here — the CLI turns the refusal into a question
+        and re-sends, which only works while the upload itself is the answer.
+        A first publish has no online version and is never asked.
+        """
+        if not settings.app_runtime.enabled:
+            raise AppPublishRuntimeLayerDisabledError(
+                msg="本环境未启用应用工场运行时层",
+                details={"reason": "runtime_layer_disabled"},
+                hints=["请联系管理员在部署配置中开启 app_runtime"],
+            )
+
+        release_notes = normalize_release_notes(release_notes)
+        tenant = tenant_id if tenant_id is not None else get_current_tenant_id()
+        principal = await revalidate_service_account(principal)
+        if tenant != principal.tenant_id:
+            raise AppNotOwnedBySubjectError()
+        owner_user_id = resource_owner_of(principal)
+        await require_owner_tenant(owner_user_id, tenant)
+        package_service.check_upload_size(Path(package_path).stat().st_size)
+
+        workdir = Path(tempfile.mkdtemp(prefix="bisheng-app-"))
+        try:
+            extracted = package_service.safe_extract(Path(package_path), workdir / "src")
+            validated = await validate_manifest(package_service.read_manifest_bytes(extracted.root))
+
+            if app_id:
+                await cls._assert_owned(app_id, owner_user_id, tenant_id=tenant)
+            else:
+                app_id = await cls._create_draft(validated.manifest, owner_user_id=owner_user_id, tenant_id=tenant)
+
+            if validated.manifest.manifest_version == 2:
+                from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import (
+                    RuntimeDeliveryRepository,
+                )
+                from bisheng.app_runtime.domain.services.runtime_profile_service import validate_offline_references
+
+                await validate_offline_references(RuntimeDeliveryRepository(), app_id, validated.manifest, principal)
+
+            # AC-03's two gates, asked before the approval gate ever sees this.
+            await cls._assert_submittable(app_id)
+
+            # AC-07's capability half. On the synchronous leg because 16224 is a
+            # synchronous-leg code (design §4.2, stage ``precheck_manifest``) and
+            # because the CLI turns it into a message the developer fixes in
+            # ``bisheng-app.yaml`` before re-sending — which only works while the
+            # upload is still the answer. Needs the tenant and the owner, which
+            # is why it sits here rather than inside ``validate_manifest``.
+            await capability_bus_service.validate_capability_refs(
+                validated.manifest.capabilities,
+                tenant_id=tenant,
+                owner_user_id=owner_user_id,
+            )
+
+            # AC-09 — the structure-evolution gate. Still no RPC: one read of
+            # the online version's frozen manifest. The summary is kept for the
+            # audit row so "what was confirmed" survives the attempt.
+            schema_change = await schema_evolution_service.evaluate(app_id, validated.manifest)
+            schema_evolution_service.require_confirmation(schema_change, confirmed=confirm_schema_change)
+
+            version_id = generate_uuid()
+            code_object_key = await package_service.store_package(
+                Path(package_path), app_id=app_id, version_id=version_id
+            )
+
+            deployment = AppDeployment(
+                release_notes=release_notes,
+                tenant_id=tenant,
+                app_id=app_id,
+                owner_user_id=owner_user_id,
+                submitted_by_user_id=submitting_user_id(principal),
+                version_id=version_id,
+                stage=STAGE_RECEIVED,
+                status=STATUS_RUNNING,
+                code_object_key=code_object_key,
+                manifest=validated.manifest.model_dump(),
+                tier_code=validated.tier.code,
+            )
+            async with get_async_db_session() as session:
+                await AppDeploymentDao.acreate(session, deployment)
+                await session.commit()
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
+
+        await write_release_audit(
+            AppReleaseAuditAction.SUBMIT,
+            deployment=deployment,
+            # A service account is not a person: operator 0 + its name, the
+            # convention beta2's ``OpenApiAuditMiddleware`` uses for the very
+            # same call. ``operator_id`` defaults to ``submitted_by_user_id``
+            # either way; the name is what keeps the row attributable.
+            operator_name=getattr(principal, "actor_name", None),
+            metadata={
+                "source": "cli",
+                "tier_code": validated.tier.code,
+                "confirm_schema_change": bool(confirm_schema_change),
+                "schema_change": schema_change.to_payload() if schema_change is not None else None,
+                "manifest_hints": validated.hints,
+                **_actor_audit_fields(principal),
+            },
+        )
+        # Best effort, on the receive leg rather than on a schedule (design D2).
+        try:
+            await package_service.cleanup_orphans(app_id)
+        except Exception:
+            # Best effort by design: the sweep is a housekeeping side errand and
+            # must never be able to refuse somebody's publish.
+            logger.exception(f"app_publish.orphan_sweep_failed app_id={app_id}")
+
+        await enqueue_pipeline(deployment.id)
+        logger.info(
+            f"app_publish.pipeline deployment_id={deployment.id} app_id={app_id} "
+            f"stage={STAGE_RECEIVED} status={STATUS_RUNNING}"
+        )
+        return AcceptResult(deployment_id=deployment.id, app_id=app_id, version_id=version_id)
+
+    @classmethod
+    async def _assert_owned(cls, app_id: str, owner_user_id: int, *, tenant_id: int | None) -> None:
+        """An iteration only proceeds on an app the credential's resource owner owns (AC-04).
+
+        **The tenant is compared as well as the owner, because an equal owner is
+        not enough.** Two facts make "same ``owner_user_id``" reachable across a
+        tenant boundary on this door:
+
+        * ``/api/v2`` seeds ``visible_tenant_ids`` as ``{DEFAULT_TENANT_ID,
+          principal.tenant_id}`` (``open_api/api/dependencies.py``), so the
+          automatic tenant filter still hands a **Root-tenant** application to a
+          child-tenant credential — the IN-list only shuts out leaf-to-leaf.
+        * Under D19 a token survives its holder moving tenants ("令牌随人迁移不
+          失效"), so the owner recorded on an app the person left behind keeps
+          matching the credential that followed them.
+
+        ``AppQueryService._load_visible`` already applies exactly this guard on
+        the platform face; the CLI door must answer alike, or the same
+        application is refused in the UI and accepted by ``bisheng deploy``.
+
+        The mismatch is folded into the refusal below rather than given its own
+        code or message on purpose: a distinguishable answer would tell a caller
+        that the application exists in a tenant they cannot see.
+        """
+        async with get_async_db_session() as session:
+            app_row = await AppDao.aget(session, app_id)
+        if (
+            app_row is None
+            or app_row.owner_user_id != owner_user_id
+            or int(app_row.tenant_id or 0) != int(tenant_id or 0)
+        ):
+            raise AppNotOwnedBySubjectError(
+                msg="该应用归属其他用户, 当前密钥无法发布",
+                details={"app_id": app_id, "reason": "owner_mismatch"},
+                hints=["确认 .bisheng/app_id 指向的是本人名下的应用, 或省略 app_id 以首发一个新应用"],
+            )
+
+    @classmethod
+    async def _create_draft(cls, manifest: AppManifest, *, owner_user_id: int, tenant_id: int) -> str:
+        """First publish: F054 creates the application row, F055 never does (决议-8 / 坑 26)."""
+        from bisheng.app_runtime.domain.services.app_provision_service import AppProvisionService
+
+        return await AppProvisionService.create_draft(
+            name=manifest.name,
+            slug=manifest.slug,
+            description=manifest.description,
+            owner_user_id=owner_user_id,
+            tenant_id=tenant_id,
+        )
+
+    @classmethod
+    async def _assert_submittable(cls, app_id: str) -> None:
+        """16251 / 16252 — asked here, not delegated to the approval gate (design K2 ①)."""
+        from bisheng.app_publish.domain.services import publish_approval_service
+
+        await publish_approval_service.assert_submittable(app_id)
+
+    @classmethod
+    async def get_deployment_status(cls, deployment_id: str, *, principal) -> dict[str, Any]:
+        """What the CLI polls (design §4.2 ①). Read-only, and scoped to the caller's owner.
+
+        Two scoping layers, and both are needed — but **not** the two it is easy
+        to assume. The automatic tenant filter shuts out *leaf-to-leaf* only:
+        ``/api/v2`` seeds ``visible_tenant_ids`` as ``{DEFAULT_TENANT_ID,
+        principal.tenant_id}`` (``open_api/api/dependencies.py``), so a
+        **Root-tenant** attempt is still returned by the SELECT to a
+        child-tenant credential. Crossing tenants is therefore refused by the
+        *explicit* tenant comparison below, not by the filter; the owner
+        comparison beside it is what keeps a second service account inside the
+        same tenant from watching somebody else's publish. Neither is
+        redundant, and the owner one cannot stand in for the tenant one: under
+        D19 a token survives its holder moving tenants, so the owner recorded
+        on an attempt they left behind keeps matching.
+
+        A miss answers 16205 rather than "not found": distinguishing "no such
+        deployment" from "not yours" hands a caller an id oracle for free. The
+        tenant mismatch is folded into that same refusal for the same reason —
+        a distinguishable answer would confirm the attempt exists in a tenant
+        the caller cannot see.
+        """
+        # Before the SELECT: a key without a resource owner has nothing to poll,
+        # and asking the database first would only make the refusal slower.
+        #
+        # Both facts are read off the **credential**, not off the tenant
+        # ContextVar. They are the same value here today — ``verify_open_api_
+        # access`` seeds the ContextVar from this very principal — but the
+        # ContextVar is rewritten by every ``_load``-style helper that pins a
+        # row's own tenant (``AppQueryService._load:242`` and four siblings), so
+        # a later edit that put one above this check would silently turn the
+        # comparison into a row compared against itself.
+        owner_user_id = resource_owner_of(principal)
+        credential_tenant_id = int(getattr(principal, "tenant_id", 0) or 0)
+        async with get_async_db_session() as session:
+            deployment = await AppDeploymentDao.aget(session, deployment_id)
+        if (
+            deployment is None
+            or int(deployment.owner_user_id or 0) != owner_user_id
+            or int(deployment.tenant_id or 0) != credential_tenant_id
+        ):
+            raise AppNotOwnedBySubjectError(
+                msg="该发布记录不存在或不属于当前密钥",
+                details={"deployment_id": deployment_id, "reason": "not_owned"},
+                hints=["确认 deployment_id 来自本人名下应用的发布"],
+            )
+
+        app_state = None
+        version_no = None
+        app_row = None
+        if deployment.app_id:
+            async with get_async_db_session() as session:
+                app_row = await AppDao.aget(session, deployment.app_id)
+            app_state = app_row.state if app_row is not None else None
+        if deployment.version_id and deployment.app_id:
+            version = await VersionService.get_version(deployment.app_id, deployment.version_id)
+            version_no = version.version_no if version is not None else None
+
+        # The address exists as soon as the application row does — it is a
+        # function of the slug, not of the deployment's outcome. Reporting it
+        # while the attempt is still in flight is deliberate: the CLI can print
+        # "this is where it will live" instead of making the developer wait.
+        entry_url = None
+        if app_row is not None and app_row.slug:
+            from bisheng.app_runtime.domain.services.app_query_service import AppQueryService
+
+            entry_url = AppQueryService.entry_url(app_row.slug)
+
+        # The approval block the publish face shows, not just its id. The CLI's
+        # ``deploy --wait`` branches on ``approval.status`` (rejected / withdrawn
+        # / cancelled / exception → exit 20-23) and prints ``reject_reason`` in
+        # full; with only the id it saw a rejection as an unexplained failure
+        # (exit 19), and an exception or a cancellation not at all until its
+        # wait timed out.
+        approval = None
+        if deployment.approval_instance_id:
+            from bisheng.app_publish.domain.services.publish_status_service import PublishStatusService
+            from bisheng.approval.domain.repositories.approval_instance_repository import (
+                ApprovalInstanceRepository,
+            )
+
+            instance = await ApprovalInstanceRepository.get_instance(deployment.approval_instance_id)
+            approval = await PublishStatusService.approval_payload(instance) or {
+                "instance_id": deployment.approval_instance_id
+            }
+
+        return {
+            "deployment_id": deployment.id,
+            "app_id": deployment.app_id,
+            "version_id": deployment.version_id,
+            "version_no": version_no,
+            "stage": deployment.stage,
+            "status": deployment.status,
+            # AC-11's five-tuple, or None. The CLI branches on ``code`` and
+            # prints ``message`` + ``hints``; a partially filled failure is what
+            # turns an actionable error into "something went wrong".
+            "failure": deployment.failure,
+            "approval": approval,
+            "app_state": app_state,
+            # F053 T034 write-back 3. Without it the CLI's ``deploy --wait``
+            # could not print the entry address on success: ``entry_url`` was
+            # only ever in the ``POST /deploy`` response, and at that moment a
+            # first publish is still a draft, so the field was almost always
+            # null exactly when it mattered. Derived from the slug by F054's
+            # single implementation — never composed here, and never in the
+            # browser (AC-25).
+            "entry_url": entry_url,
+            "secret_references": await cls._secret_references(deployment, app_row),
+            "scan_result": deployment.scan_result,
+        }
+
+    @staticmethod
+    async def _secret_references(deployment, app):
+        capabilities = (deployment.manifest or {}).get("capabilities", {})
+        if app is None or not capabilities.get("secrets"):
+            return []
+        from bisheng.app_publish.application.runtime_secrets import secret_reference_status
+
+        return await secret_reference_status(app.id, capabilities)
+
+    # ------------------------------------------------------------------
+    # Asynchronous leg
+    # ------------------------------------------------------------------
+
+    @classmethod
+    async def run_pipeline(cls, deployment_id: str) -> None:
+        """Scan → build → probe → metadata → approval request. One UPDATE and one audit per stage."""
+        async with get_async_db_session() as session:
+            deployment = await AppDeploymentDao.aget(session, deployment_id)
+        if deployment is None:
+            logger.warning(f"app_publish.pipeline deployment_id={deployment_id} vanished before the worker ran")
+            return
+
+        cls._restore_tenant_context(deployment)
+        manifest = AppManifest.model_validate(deployment.manifest or {})
+
+        workdir = Path(tempfile.mkdtemp(prefix="bisheng-app-run-"))
+        try:
+            await require_release_eligible(deployment.app_id, deployment_id=deployment.id)
+            root = await cls._materialise_snapshot(deployment, workdir)
+            context: dict[str, Any] = {"manifest": manifest, "root": root, "image_ref": None}
+            for stage, step in PIPELINE_STAGES:
+                await cls._advance(deployment, stage)
+                await getattr(cls, step)(deployment, context)
+            await cls._update_meta(deployment, context)
+            await cls._record_version(deployment, context)
+        except BaseErrorCode as exc:
+            await cls._fail(deployment, exc)
+            return
+        except Exception as exc:  # unexpected: still leave a readable failure behind
+            logger.exception(f"app_publish.pipeline deployment_id={deployment_id} crashed")
+            await cls._fail(deployment, exc)
+            return
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
+
+    # -- stages ---------------------------------------------------------
+
+    @classmethod
+    async def _stage_build(cls, deployment: AppDeployment, context: dict[str, Any]) -> None:
+        tier = await cls._tier(deployment)
+        context["tier"] = tier
+        from bisheng.common.services.config_service import settings
+
+        if settings.app_runtime.runtime_protocol_version == 2:
+            from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
+
+            frozen = await RuntimeDeliveryCoordinator().prepare(deployment, context["manifest"], tier)
+            context["resolved_delivery"] = frozen.content
+            context["image_ref"] = frozen.content.get("image_ref")
+            return
+        if context["manifest"].manifest_version == 2:
+            from bisheng.common.errcode.app_publish import AppDependencyBuildFailedError
+
+            raise AppDependencyBuildFailedError(msg="新版应用交付需要启用 runtime v2")
+        context["image_ref"] = await precheck_service.precheck_build(
+            deployment, manifest=context["manifest"], tier=tier
+        )
+
+    @classmethod
+    async def _stage_schema(cls, deployment: AppDeployment, context: dict[str, Any]) -> None:
+        """Record the structure change for the approval card — never re-ask (AC-09).
+
+        The gate ran on the receive leg with the caller's confirmation in hand;
+        the worker has no such answer and must not invent one. What it can do is
+        derive the same summary from the same two manifests, so the approval
+        request built a few stages later carries it (``payload_snapshot`` →
+        ``detail_snapshot``, design §4.2 ④) without a second implementation of
+        the diff. The in-flight gate (16251) keeps a second *running* release
+        off this application, so in the common case the reference is the one
+        the gate saw. It is re-derived rather than copied from the audit row
+        on purpose: a parked attempt is ``succeeded`` and does not block a
+        new upload, and if it is brought online while this one is still in
+        the worker, the card must describe the change against what is online
+        *now* — that is what the approver decides on.
+        """
+        change = await schema_evolution_service.evaluate(deployment.app_id, context["manifest"])
+        context["schema_change"] = change.to_payload() if change is not None else None
+        logger.info(
+            f"app_publish.precheck_schema deployment_id={deployment.id} app_id={deployment.app_id} "
+            f"items={len(change.items) if change is not None else 0} "
+            f"breaking={bool(change is not None and change.has_breaking)}"
+        )
+
+    @classmethod
+    async def _stage_probe(cls, deployment: AppDeployment, context: dict[str, Any]) -> None:
+        if context.get("resolved_delivery"):
+            from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
+
+            await RuntimeDeliveryCoordinator().probe(deployment, context["manifest"], context["tier"])
+            return
+        await precheck_service.precheck_probe(deployment, manifest=context["manifest"], image_ref=context["image_ref"])
+
+    @classmethod
+    async def _stage_scan(cls, deployment: AppDeployment, context: dict[str, Any]) -> None:
+        """The secret scan. A hit ends the attempt: no version record, no approval request."""
+        result = scan_package(context["root"])
+        context["scan_result"] = result
+        async with get_async_db_session() as session:
+            await AppDeploymentDao.aadvance_stage(
+                session, deployment.id, stage=STAGE_SECRET_SCAN, scan_result=result.to_dict()
+            )
+            await session.commit()
+        logger.info(
+            f"app_publish.scan deployment_id={deployment.id} files_scanned={result.files_scanned} "
+            f"files_skipped={result.files_skipped} hits={len(result.hits)}"
+        )
+        if not result.blocked:
+            return
+        await write_release_audit(
+            AppReleaseAuditAction.SCAN_BLOCKED,
+            deployment=deployment,
+            metadata={"hits": result.hits, "files_scanned": result.files_scanned},
+        )
+        raise AppSecretScanBlockedError(
+            msg="发布前密钥扫描命中, 已阻断发布",
+            details={"reason": "secret_scan_hit", "hits": result.hits},
+            hints=[
+                "从代码中移除命中的凭据, 改为读环境变量或平台注入的运行期凭据",
+                "凭据一旦进过版本库就应视为已泄漏, 请同时吊销它",
+            ],
+        )
+
+    # -- post-precheck steps --------------------------------------------
+
+    @classmethod
+    async def _update_meta(cls, deployment: AppDeployment, context: dict[str, Any]) -> None:
+        """AC-05: name / description / icon land now, without waiting for approval.
+
+        Delegated to F054's ``AppMetaService`` — the detail page writes metadata
+        through the same method, and a second implementation here would drift
+        from it the first time either side gains a rule.
+        """
+        from bisheng.app_runtime.application.release_metadata import update_meta_for_release
+
+        await require_release_eligible(deployment.app_id, deployment_id=deployment.id)
+        manifest: AppManifest = context["manifest"]
+        logo, hints = await cls._store_icon(manifest, context["root"])
+        await update_meta_for_release(
+            deployment.id,
+            app_id=deployment.app_id,
+            name=manifest.name,
+            description=manifest.description,
+            logo=logo,
+        )
+        if hints:
+            context.setdefault("hints", []).extend(hints)
+        await write_release_audit(
+            AppReleaseAuditAction.CAPABILITY_DECLARED,
+            deployment=deployment,
+            metadata={
+                "capabilities": manifest.capabilities.model_dump(),
+                "tier_code": deployment.tier_code,
+            },
+        )
+
+    @classmethod
+    async def _store_icon(cls, manifest: AppManifest, root: Path) -> tuple[str | None, list[str]]:
+        """Put the icon in the public bucket and return its **object name**.
+
+        Not the helper endpoint's ``file_path``: that is a presigned URL with a
+        seven-day lifetime, so storing it would make every hosted app's icon 403
+        a week later (design 坑 16). Not the package-relative path either — that
+        means nothing outside the tarball.
+
+        An icon that is too big or in the wrong format is skipped with a hint.
+        It is metadata, not a precondition for publishing.
+        """
+        if not manifest.icon:
+            return None, []
+        source = (root / manifest.icon).resolve()
+        try:
+            source.relative_to(root.resolve())
+        except ValueError:
+            return None, [f"图标路径 {manifest.icon} 指向包外, 已跳过"]
+        if not source.is_file():
+            return None, [f"图标文件 {manifest.icon} 不存在, 已跳过"]
+        if source.suffix.lower() not in ICON_EXTENSIONS:
+            return None, [f"图标仅支持 {', '.join(ICON_EXTENSIONS)}, 已跳过 {manifest.icon}"]
+        if source.stat().st_size > MAX_ICON_BYTES:
+            return None, [f"图标超过 {MAX_ICON_BYTES // 1024 // 1024} MB, 已跳过 {manifest.icon}"]
+
+        storage = await get_minio_storage()
+        object_name = f"icon/{generate_uuid()}{source.suffix.lower()}"
+        await storage.put_object(object_name=object_name, file=source, content_type="image/png")
+        return object_name, []
+
+    @classmethod
+    async def _record_version(cls, deployment: AppDeployment, context: dict[str, Any]) -> None:
+        """Approval request first, version record second — design D6, owned by ``VersionService``."""
+        from bisheng.app_publish.domain.services import publish_approval_service
+
+        await require_release_eligible(deployment.app_id, deployment_id=deployment.id)
+        await VersionService.record_version(
+            deployment,
+            approval=publish_approval_service,
+            image_ref=context.get("image_ref"),
+            # Forwarded to ``submit`` as a port kwarg: the approval card shows
+            # what ``precheck_schema`` derived, not a third computation.
+            schema_change=context.get("schema_change"),
+        )
+
+    # -- plumbing --------------------------------------------------------
+
+    @classmethod
+    def _restore_tenant_context(cls, deployment: AppDeployment) -> None:
+        """The worker inherits the tenant through the Celery header; this is the assertion, not the mechanism.
+
+        ``worker/tenant_context.py`` falls back to the default tenant when the
+        header is missing — silently publishing into the wrong tenant is the
+        worst shape this can take, so a mismatch is logged loudly and the row's
+        own tenant wins.
+        """
+        current = get_current_tenant_id()
+        if deployment.tenant_id and current != deployment.tenant_id:
+            logger.warning(
+                f"app_publish.pipeline deployment_id={deployment.id} tenant context {current} != "
+                f"row tenant {deployment.tenant_id}; using the row's tenant"
+            )
+            set_current_tenant_id(deployment.tenant_id)
+
+    @classmethod
+    async def _materialise_snapshot(cls, deployment: AppDeployment, workdir: Path) -> Path:
+        """Fetch and unpack the frozen snapshot — the worker never sees the API process's temp dir."""
+        payload = await package_service.fetch_package(deployment.code_object_key)
+        archive = workdir / "code.tar.gz"
+        archive.write_bytes(payload or b"")
+        return package_service.safe_extract(archive, workdir / "src").root
+
+    @classmethod
+    async def _tier(cls, deployment: AppDeployment):
+        from bisheng.app_publish.domain.services.resource_tier_service import ResourceTierService
+
+        return await ResourceTierService.resolve_spec(deployment.tier_code or "light")
+
+    @classmethod
+    async def _advance(cls, deployment: AppDeployment, stage: str) -> None:
+        async with get_async_db_session() as session:
+            await AppDeploymentDao.aadvance_stage(session, deployment.id, stage=stage, status=STATUS_RUNNING)
+            await session.commit()
+        deployment.stage = stage
+        logger.info(
+            f"app_publish.pipeline deployment_id={deployment.id} app_id={deployment.app_id} "
+            f"stage={stage} status={STATUS_RUNNING}"
+        )
+
+    @classmethod
+    async def _fail(cls, deployment: AppDeployment, exc: Exception) -> None:
+        """Latch the five-tuple. ``record_version`` already latched its own failures — this is idempotent."""
+        if isinstance(exc, BaseErrorCode):
+            failure = failure_from_error(exc, stage=deployment.stage)
+        else:
+            failure = {
+                "stage": deployment.stage,
+                "code": 0,
+                "message": "发布管线异常终止",
+                "details": {"reason": "unexpected_error", "error": str(exc)},
+                "hints": ["请重试发布; 若反复失败请联系管理员查看后端日志"],
+            }
+        async with get_async_db_session() as session:
+            await AppDeploymentDao.aset_failed(session, deployment.id, failure=failure, stage=failure["stage"])
+            await session.commit()
+        if failure["code"] != 16241:  # the scan already wrote its own, more specific audit row
+            await write_release_audit(
+                AppReleaseAuditAction.PRECHECK_FAILED, deployment=deployment, metadata={"failure": failure}
+            )
+        logger.info(
+            f"app_publish.pipeline deployment_id={deployment.id} app_id={deployment.app_id} "
+            f"stage={failure['stage']} status=failed failure_code={failure['code']}"
+        )

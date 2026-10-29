@@ -1,7 +1,7 @@
-import { Button, Input, PasswordInput, notification } from '@bisheng/ui';
+import { Button, Input, PasswordInput, Select, notification } from '@bisheng/ui';
 
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
-import MultiSelect from "@/components/bs-ui/select/multi"
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels"
 
 import { Label } from "@/components/bs-ui/label"
 
@@ -9,7 +9,7 @@ import {
   createDepartmentLocalMemberApi,
   getDepartmentAssignableRolesApi,
 } from "@/controllers/API/department"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { showApiError } from "@/controllers/request"
 import { handleEncrypt, PWD_RULE } from "@/pages/LoginPage/utils"
 import { copyText } from "@/utils"
 import { useCallback, useEffect, useState } from "react"
@@ -29,6 +29,7 @@ export function CreateLocalMemberDialog({
   onCreated,
 }: CreateLocalMemberDialogProps) {
   const { t } = useTranslation()
+  const selectLabels = useSelectLabels()
   const [userName, setUserName] = useState("")
   const [personId, setPersonId] = useState("")
   const [password, setPassword] = useState("")
@@ -37,13 +38,13 @@ export function CreateLocalMemberDialog({
   const [submitting, setSubmitting] = useState(false)
 
   const loadRoles = useCallback(() => {
-    captureAndAlertRequestErrorHoc(getDepartmentAssignableRolesApi(deptId)).then((list) => {
+    getDepartmentAssignableRolesApi(deptId).then((list) => {
       if (list && list.length > 0) {
         setRoles(list.map((r) => ({ id: r.id, role_name: r.role_name })))
       } else {
         setRoles([])
       }
-    })
+    }).catch(showApiError)
   }, [deptId])
 
   useEffect(() => {
@@ -67,14 +68,12 @@ export function CreateLocalMemberDialog({
     setSubmitting(true)
     try {
       const enc = await handleEncrypt(password)
-      const res = await captureAndAlertRequestErrorHoc(
-        createDepartmentLocalMemberApi(deptId, {
+      const res = await createDepartmentLocalMemberApi(deptId, {
           user_name: userName.trim(),
           person_id: personId.trim(),
           password: enc,
           role_ids: Array.from(selected),
         })
-      )
       if (res) {
         const tip = t("bs:department.localUserCreatedTip", {
           name: res.user_name,
@@ -85,6 +84,8 @@ export function CreateLocalMemberDialog({
         onCreated()
         onClose()
       }
+    } catch (error) {
+      showApiError(error)
     } finally {
       setSubmitting(false)
     }
@@ -129,16 +130,18 @@ export function CreateLocalMemberDialog({
                 </Button>
               </div>
             ) : (
-              <MultiSelect
+              <Select
+                {...selectLabels}
                 multiple
+                showSearch
                 className="mt-2"
-                options={roles.map((r) => ({ label: r.role_name, value: String(r.id) }))}
+                aria-label={t("bs:department.assignRoles")}
+                options={roles
+                  .filter((r) => r.id != null)
+                  .map((r) => ({ label: r.role_name, value: String(r.id) }))}
                 value={Array.from(selected).map(String)}
-                onChange={(vals) =>
-                  setSelected(new Set((vals as string[]).map((id) => Number(id))))
-                }
+                onChange={(vals) => setSelected(new Set(vals.map((id) => Number(id))))}
                 placeholder={t("bs:department.multiSelectRolesPlaceholder")}
-                searchPlaceholder={t("system.searchRoles")}
               />
             )}
           </div>

@@ -3,6 +3,7 @@ import { Button } from '@bisheng/ui';
 import KnowledgeUploadComponent from "@/components/bs-comp/knowledgeUploadComponent";
 
 import { locationContext } from "@/contexts/locationContext";
+import { showApiError } from "@/controllers/request";
 import { useContext,useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
@@ -55,8 +56,13 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
         }
 
         setLoading(true)
-        await onSave(params)
-        setLoading(false)
+        try {
+            await onSave(params)
+        } catch (error) {
+            showApiError(error)
+        } finally {
+            setLoading(false)
+        }
     }
     useEffect(() => {
         if (initialFiles.length > 0) {

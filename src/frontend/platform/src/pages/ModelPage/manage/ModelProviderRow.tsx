@@ -1,3 +1,4 @@
+import { showApiError } from "@/controllers/request";
 import { Outlined } from "bisheng-icons";
 import { Button, Switch, Tag, Tooltip, TooltipProvider } from '@bisheng/ui'
 
@@ -51,6 +52,8 @@ function ModelRow({ model, canEdit, probing, onToggle, onVerify }: ModelRowProps
         setPendingOnline(online)
         try {
             await onToggle(model.id, online)
+        } catch (error) {
+            showApiError(error)
         } finally {
             // The caller updates the persisted value only after success. Clearing
             // the optimistic state therefore restores it on a failed request.
@@ -65,6 +68,8 @@ function ModelRow({ model, canEdit, probing, onToggle, onVerify }: ModelRowProps
         setVerifying(true)
         try {
             await onVerify(model.id)
+        } catch (error) {
+            showApiError(error)
         } finally {
             setVerifying(false)
             verifyLock.current = false
@@ -105,9 +110,13 @@ export function ModelProviderRow({ data, canManage, probing, onModel, onToggle, 
 
     return <TooltipProvider>
         <div className="text-sm bs-table-row">
-            <div className="grid grid-cols-2 items-center mt-1 mx-2 min-h-[52px] rounded-sm hover:bg-fill-2">
+            <div className="grid grid-cols-2 items-center mt-1 mx-2 min-h-[52px] cursor-pointer rounded-sm hover:bg-fill-2"
+                onClick={(event) => {
+                    if (event.target instanceof Element && event.target.closest('button')) return;
+                    setExpanded((previous) => !previous);
+                }}>
                 <div className="bs-table-td h-full p-2 flex items-center gap-3 font-medium first:rounded-l-md last:rounded-r-md">
-                    <Button variant="ghost" aria-label={data.name} aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+                    <Button variant="ghost" className="bg-transparent hover:bg-transparent" aria-label={data.name} aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
                         {expanded ? <Outlined.Down className="size-4" /> : <Outlined.Right className="size-4" />}
                         {data.name}
                     </Button>

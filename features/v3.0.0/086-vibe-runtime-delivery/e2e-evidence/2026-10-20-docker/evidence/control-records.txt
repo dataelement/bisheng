@@ -1,0 +1,42 @@
+id	current_version_id	state	tenant_id	owner_user_id
+3192b1ee03c943ce9fd15f91727ccb4d	e7d5b023450d4b4283c727e5cf0211f9	online	1	2
+version_id	execution_mode	profile_id	resolved_platform	env_key	dependency_artifact_id
+4cb7027d873f4df0b7b0852274b92d06	bundle	69f13b135ebc5c3b89234581af0331e9	linux/amd64	559845ad208a10ce95a0192138d65e38e6966a52606c93d07ff3a6a3f56ddb2a	af753af7b48a49e4a6eea7d6c72f36c1
+7b0af37a5bad4bafafd70450e032bdd9	bundle	69f13b135ebc5c3b89234581af0331e9	linux/amd64	559845ad208a10ce95a0192138d65e38e6966a52606c93d07ff3a6a3f56ddb2a	af753af7b48a49e4a6eea7d6c72f36c1
+e7d5b023450d4b4283c727e5cf0211f9	bundle	69f13b135ebc5c3b89234581af0331e9	linux/amd64	f1cbb9ae2e43191e732c2e2109bd398de7cdaef7dacbe99d41bf3e50a165dc33	97174a5b99834d0595f2b04d29527337
+99639ce2d9ac4e9bbcf5ddd02077b351	bundle	69f13b135ebc5c3b89234581af0331e9	linux/amd64	559845ad208a10ce95a0192138d65e38e6966a52606c93d07ff3a6a3f56ddb2a	af753af7b48a49e4a6eea7d6c72f36c1
+kind	status	stage	generation	cleanup_status
+probe	completed	completed	8	complete
+restore	completed	completed	6	complete
+prepare	completed	completed	3	complete
+deploy	completed	completed	1	complete
+preview	cancelled	cancelled	3	complete
+prepare	completed	completed	8	complete
+restore	completed	completed	4	complete
+probe	completed	completed	3	complete
+prepare	completed	completed	1	complete
+prepare	failed	failed	8	complete
+probe	completed	completed	1	complete
+deploy	completed	completed	3	complete
+deploy	completed	completed	8	complete
+deploy	completed	completed	7	complete
+deploy	completed	completed	2	complete
+stop	completed	completed	5	complete
+probe	completed	completed	2	complete
+prepare	completed	completed	2	complete
+kind	size_bytes	state	confirmed_at
+offline	120053	verified	2026-10-20 12:25:24
+compiled	1273	verified	2026-10-20 12:26:50
+source	1392	verified	2026-10-20 12:22:38
+source	1246	verified	2026-10-20 12:06:19
+compiled	1232	verified	2026-10-20 12:11:38
+source	785	verified	2026-10-20 12:01:49
+snapshot	20480	verified	2026-10-20 12:18:13
+compiled	678	verified	2026-10-20 12:02:15
+source	1273	verified	2026-10-20 12:26:23
+dependencies	5208260	verified	2026-10-20 12:26:30
+snapshot	8192	verified	2026-10-20 12:15:01
+compiled	1128	verified	2026-10-20 12:06:21
+dependencies	5086229	verified	2026-10-20 12:01:56
+source	785	verified	2026-10-20 11:55:53
+source	1355	verified	2026-10-20 12:11:36

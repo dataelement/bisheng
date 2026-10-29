@@ -9,10 +9,10 @@ import {
 } from "@/pages/Dashboard/hook"
 import { DashboardListItem } from "@/pages/Dashboard/components/dashboard/DashboardListItem"
 import type { Dashboard } from "@/pages/Dashboard/types/dataConfig"
-import { fireEvent, render, screen, waitFor } from "@/test/test-utils"
+import { render, screen, waitFor } from "@/test/test-utils"
+import userEvent from "@testing-library/user-event"
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
-import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/controllers/API/permission", () => ({
@@ -31,33 +31,6 @@ vi.mock("@/pages/Dashboard/components/editor/EditorCanvas", () => ({
   EditorCanvas: () => <div>dashboard canvas</div>,
 }))
 
-
-
-vi.mock("@/components/bs-ui/dropdownMenu", () => ({
-  DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DropdownMenuTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
-  DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DropdownMenuItem: ({
-    children,
-    className,
-    disabled,
-    onClick,
-  }: {
-    children: ReactNode
-    className?: string
-    disabled?: boolean
-    onClick?: () => void
-  }) => (
-    <button
-      type="button"
-      className={className}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  ),
-}))
 
 const dashboard = {
   id: "dashboard-1",
@@ -109,6 +82,14 @@ function renderItem(
   return callbacks
 }
 
+// The row actions live in a Radix DropdownMenu: items exist only while it is open.
+async function openRowMenu() {
+  const user = userEvent.setup()
+  await user.click(screen.getByRole("button", { name: "dashboard.actions" }))
+  await screen.findByRole("menu")
+  return user
+}
+
 function Probe({ ids }: { ids: string[] }) {
   const result = useDashboardPermissions(ids)
   const permissions: DashboardPermissionMap = result.permissions
@@ -144,17 +125,19 @@ describe("F048 dashboard permission UI", () => {
     })
   })
 
-  it("renders server-visible rows while mutation permissions are unresolved", () => {
+  it("renders server-visible rows while mutation permissions are unresolved", async () => {
     renderItem([])
 
     expect(screen.getByText("Operations")).toBeInTheDocument()
-    expect(screen.queryByText("delete")).toBeNull()
+    await openRowMenu()
+    expect(screen.queryByRole("menuitem", { name: "delete" })).toBeNull()
   })
 
-  it("keeps share, default, and copy behind visibility without implying edit", () => {
+  it("keeps share, default, and copy behind visibility without implying edit", async () => {
     // Visible with no granted action at all — the case an action list can never
     // express, and the one that used to hide every dashboard.
     const callbacks = renderItem([])
+    const user = await openRowMenu()
 
     expect(screen.getByText("share")).toBeInTheDocument()
     expect(screen.getByText("setAsDefault")).toBeInTheDocument()
@@ -163,12 +146,13 @@ describe("F048 dashboard permission UI", () => {
     expect(screen.queryByText("delete")).toBeNull()
     expect(screen.queryByText("managePermission")).toBeNull()
 
-    fireEvent.click(screen.getByText("share"))
+    await user.click(screen.getByRole("menuitem", { name: "share" }))
     expect(callbacks.onShare).toHaveBeenCalledWith("dashboard-1")
   })
 
-  it("uses distinct edit, delete, and manage_permission actions", () => {
+  it("uses distinct edit, delete, and manage_permission actions", async () => {
     renderItem(["edit", "delete", "manage_permission"])
+    await openRowMenu()
 
     expect(screen.getByText("rename")).toBeInTheDocument()
     expect(screen.getByText("delete")).toBeInTheDocument()
@@ -208,10 +192,11 @@ describe("F048 dashboard permission UI", () => {
     expect(screen.queryByText("editDashboard")).toBeNull()
   })
 
-  it("opens every control for an admin, who holds no grants to read", () => {
+  it("opens every control for an admin, who holds no grants to read", async () => {
     // The server waves admins through on identity alone, so their action list
     // comes back empty — reading capability off it hid the whole board.
     renderItem([], { privileged: true })
+    await openRowMenu()
 
     expect(screen.getByText("share")).toBeInTheDocument()
     expect(screen.getByText("rename")).toBeInTheDocument()

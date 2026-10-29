@@ -21,7 +21,7 @@ vi.mock("./ModelDiscovery", () => ({ ModelDiscovery: () => null }));
 vi.mock("./CustomForm", async () => {
   const { forwardRef, useImperativeHandle } = await import("react");
   return {
-    default: forwardRef((_props, ref) => {
+    CustomForm: forwardRef((_props, ref) => {
       useImperativeHandle(ref, () => ({ getData: () => [{ openai_api_key: "fixture" }, ""] }));
       return null;
     }),

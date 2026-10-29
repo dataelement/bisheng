@@ -1,9 +1,11 @@
 """Adapt text/tools through BishengLLM's public governed execution methods."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, SystemMessage, ToolMessage
+from loguru import logger
 from pydantic import ValidationError
 
 from bisheng.common.errcode.dsh import DshInvalidRequestError, DshUnsupportedParameterError, DshUpstreamErrorError
@@ -52,6 +54,20 @@ def normalize_usage(message) -> DshTokenUsage:
     return normalized
 
 
+def accumulate_usage(previous: DshTokenUsage, message) -> DshTokenUsage:
+    """LangChain streaming usage chunks are additive; ordinary results are totals."""
+    current = normalize_usage(message)
+    if current.total_tokens is None:
+        return previous
+    if not isinstance(message, AIMessageChunk) or previous.total_tokens is None:
+        return current
+    values = {}
+    for name in DshTokenUsage.model_fields:
+        old, new = getattr(previous, name), getattr(current, name)
+        values[name] = None if old is None and new is None else (old or 0) + (new or 0)
+    return DshTokenUsage.model_validate(values)
+
+
 class ChatExecution:
     def __init__(self, llm, messages: list, parameters: dict, capabilities: ChatCapabilities):
         self.llm, self.messages, self.parameters, self.capabilities = llm, messages, parameters, capabilities
@@ -60,14 +76,35 @@ class ChatExecution:
         self.provider_request_id: str | None = None
         self.tool_fragments: dict[int, dict] = {}
         self.allowed_tool_names: set[str] = set()
+        self.capture = None
+        self.audit_input = None
+
+    def audit(self, method, value):
+        if self.capture is not None:
+            try:
+                getattr(self.capture, method)(value)
+            except Exception as error:
+                # Audit observers cannot alter unified model execution or its response.
+                logger.warning("DSH audit observer failed ({})", type(error).__name__)
+
+    def input_units(self):
+        request = self.audit_input
+        if request is None:
+            return
+        yield {
+            "parameters": {
+                key: value
+                for key in type(request).model_fields
+                if key not in {"messages", "tools", "tool_choice"}
+                if (value := getattr(request, key)) is not None
+            },
+            "tools": request.tools or [],
+            "tool_choice": request.tool_choice,
+        }
+        yield from request.messages
 
     def _observe(self, message):
-        current = normalize_usage(message)
-        if (
-            getattr(message, "usage_metadata", None) is not None
-            or getattr(message, "response_metadata", {}).get("token_usage") is not None
-        ):
-            self.usage = current
+        self.usage = accumulate_usage(self.usage, message)
         metadata = getattr(message, "response_metadata", {})
         finish = metadata.get("finish_reason") or metadata.get("stop_reason")
         if finish is not None:
@@ -84,6 +121,20 @@ class ChatExecution:
             output["reasoning_content"] = reasoning
 
     async def invoke(self) -> dict:
+        self.audit("entered", self.input_units())
+        try:
+            result = await self._invoke()
+            self.audit("output", result)
+            self.audit("terminal", "SUCCEEDED")
+            return result
+        except asyncio.CancelledError:
+            self.audit("terminal", "CANCELLED")
+            raise
+        except Exception:
+            self.audit("terminal", "FAILED")
+            raise
+
+    async def _invoke(self) -> dict:
         message = await self.llm.ainvoke(self.messages, **self.parameters)
         self._observe(message)
         if not isinstance(message.content, str):
@@ -130,6 +181,24 @@ class ChatExecution:
             ids.add(call.id)
 
     async def stream(self) -> AsyncIterator[dict]:
+        self.audit("entered", self.input_units())
+        source = self._stream()
+        try:
+            async for delta in source:
+                self.audit("output", {"delta": delta})
+                yield delta
+            self.audit("output", {"finish_reason": self.finish_reason})
+            self.audit("terminal", "SUCCEEDED")
+        except (asyncio.CancelledError, GeneratorExit):
+            self.audit("terminal", "CANCELLED")
+            raise
+        except Exception:
+            self.audit("terminal", "FAILED")
+            raise
+        finally:
+            await source.aclose()
+
+    async def _stream(self) -> AsyncIterator[dict]:
         source = self.llm.astream(self.messages, **self.parameters)
         try:
             async for message in source:
@@ -178,6 +247,10 @@ class DshChatAdapter:
     ):
         if (request.stream and not capabilities.streaming) or (request.tools and not capabilities.tools):
             raise DshUnsupportedParameterError()
+        # The enterprise Chat endpoint always produces Chat shapes, even for a
+        # model that also enables native Responses. Copy only this call's SDK view.
+        if hasattr(llm, "llm") and hasattr(llm.llm, "use_responses_api"):
+            llm = llm.model_copy(update={"llm": llm.llm.model_copy(update={"use_responses_api": False})})
         for field in ("max_completion_tokens", "stop", "temperature", "top_p"):
             if getattr(request, field) is not None and not getattr(capabilities, field):
                 raise DshUnsupportedParameterError()
@@ -209,6 +282,13 @@ class DshChatAdapter:
             for key in ("max_tokens", "max_completion_tokens", "temperature", "top_p", "stop")
             if getattr(request, key) is not None
         }
+        effort = request.reasoning_effort
+        if effort is None and capabilities.reasoning is not None:
+            effort = capabilities.reasoning.defaultEffort
+        if effort is not None:
+            if capabilities.reasoning is None or effort not in {item.id for item in capabilities.reasoning.efforts}:
+                raise DshUnsupportedParameterError()
+            parameters["reasoning_effort"] = effort
         if request.tools:
             choice = request.tool_choice or "auto"
             if isinstance(choice, SelectedTool):

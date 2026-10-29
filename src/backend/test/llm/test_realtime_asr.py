@@ -148,12 +148,18 @@ def test_explicit_model_registry_and_region():
 
 async def test_model_config_selects_streaming_and_preserves_file_asr():
     server = SimpleNamespace(type="qwen", config={"openai_api_key": "test-key"})
-    model = SimpleNamespace(model_name="paraformer-realtime-v2", config={})
+    model = SimpleNamespace(model_name="paraformer-realtime-v2", model_type="asr_rt", config={})
     assert isinstance(await BishengASR.init_asr_client(model, server), realtime.RealtimeASRClient)
     model.model_name = "paraformer-v2"
+    model.model_type = "asr"
     assert (await BishengASR.init_asr_client(model, server)).__class__.__name__ == "AliyunASRClient"
     model.model_name = "arbitrary-realtime"
-    with pytest.raises(ValueError):
+    model.model_type = "asr_rt"
+    with pytest.raises(ValueError, match="no registered protocol adapter"):
+        await BishengASR.init_asr_client(model, server)
+    server.type = "openai"
+    model.model_name = "whisper-1"
+    with pytest.raises(ValueError, match="no realtime ASR client"):
         await BishengASR.init_asr_client(model, server)
 
 
@@ -240,8 +246,15 @@ async def test_oversized_audio_is_rejected(monkeypatch):
     assert [event["type"] for event in browser.sent] == ["ready", "error"]
 
 
-@pytest.mark.parametrize("name,expected", [("paraformer-realtime-v2", True), ("paraformer-v2", False)])
-async def test_effective_config_derives_capability_from_model(monkeypatch, name, expected):
+@pytest.mark.parametrize(
+    "model_name,model_type,expected",
+    [
+        ("16k_zh", "asr_rt", True),
+        ("16k_zh", "asr", True),
+        ("whisper-1", "asr", False),
+    ],
+)
+async def test_effective_config_derives_capability_from_model_type(monkeypatch, model_name, model_type, expected):
     config = WorkbenchModelConfig(asr_model=WSModel(id="12", realtime=not expected))
     typed = AsyncMock(return_value=(config, True, False))
     monkeypatch.setattr(LLMService, "_aget_typed_with_meta", typed)
@@ -251,8 +264,8 @@ async def test_effective_config_derives_capability_from_model(monkeypatch, name,
         "get_model_server_info",
         AsyncMock(
             return_value=(
-                SimpleNamespace(model_name=name),
-                SimpleNamespace(type="qwen"),
+                SimpleNamespace(model_name=model_name, model_type=model_type),
+                SimpleNamespace(type="tencent"),
             )
         ),
     )

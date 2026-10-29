@@ -8,7 +8,7 @@ import { getChatOnlineApi, getRecommendedAppsApi } from "@/controllers/API/assis
 import { Outlined } from "bisheng-icons";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DragDropContext, Draggable, Droppable } from "react-beautiful-dnd";
+import { DragDropContext, Draggable, Droppable } from "@hello-pangea/dnd";
 import { useTranslation } from "react-i18next";
 
 const MAX_RECOMMENDED_APPS = 16;
@@ -136,7 +136,7 @@ export default function RecommendedAppsConfig({ selectedAppIds, onSelectedAppsCh
             return;
         }
         if (isAtLimit) {
-            notification.open({ type: "warning", description: String(`平台最多支持配置${MAX_RECOMMENDED_APPS}个推荐应用`) });
+            notification.open({ type: "warning", description: String(t("publicPages.recommendedAppLimit", { max: MAX_RECOMMENDED_APPS })) });
             return;
         }
         onSelectedAppsChange([...selectedAppIds, app.id]);
@@ -149,7 +149,7 @@ export default function RecommendedAppsConfig({ selectedAppIds, onSelectedAppsCh
     };
 
     const handleDragEnd = (result: any) => {
-        if (!result.destination) return;
+        if (!result.destination || result.destination.index === result.source.index) return;
         const next = [...selectedAppIds];
         const [moved] = next.splice(result.source.index, 1);
         next.splice(result.destination.index, 0, moved);
@@ -245,7 +245,7 @@ export default function RecommendedAppsConfig({ selectedAppIds, onSelectedAppsCh
                         <div className="flex-1 overflow-y-auto p-2">
                             <div className="space-y-1">
                                 {APP_TYPE_TABS.map((tab) => (
-                                    <Button type="button" variant="text" key={tab.key} className={`flex items-center w-full text-left p-2 rounded ${
+                                    <Button type="button" variant="text" key={tab.key} className={`flex items-center justify-start w-full text-left p-2 rounded ${
                                             activeTab === tab.key ? "bg-blue-100 text-blue-600" : "hover:bg-gray-100"
                                         }`} onClick={() => setActiveTab(tab.key)} color="default">
                                         <AppAvator
@@ -273,7 +273,7 @@ export default function RecommendedAppsConfig({ selectedAppIds, onSelectedAppsCh
                                 {appList.map((app) => {
                                     const isSelected = selectedIdSet.has(app.id);
                                     const isDisabled = !isSelected && isAtLimit;
-                                    const limitTip = `平台最多支持配置${MAX_RECOMMENDED_APPS}个推荐应用`;
+                                    const limitTip = t("publicPages.recommendedAppLimit", { max: MAX_RECOMMENDED_APPS });
                                     return (
                                         <div
                                             key={app.id}

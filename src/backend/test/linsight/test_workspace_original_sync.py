@@ -1,12 +1,11 @@
 """Cross-turn originals must reach the LOCAL task dir, not just the workspace.
 
-``_init_file_directory`` prefetches originals from THIS turn's ``files``, which is
-empty on a follow-up ("把刚才那个表再算一下") — there, the original only exists in
-the workspace, put there by ``seed_workspace_from_previous``. But the code
-interpreter's file list is built from ``os.walk(file_dir)`` / ``local_sync_path``:
-it never talks to MinIO. Without the sync step the model sees ``uploads/x.xlsx``
-in ``ls``, is told by the pointer block it can compute on it, and then finds
-nothing in the sandbox — the whole point of carrying the original is lost.
+``_init_file_directory`` prefetches originals from THIS turn's ``files``. A later
+round of the same session deletes that local directory. ``output/``, ``uploads/``
+and ``large_tool_results/`` remain in the workspace. The code interpreter's file
+list is built from ``os.walk(file_dir)`` / ``local_sync_path``: it never talks to
+MinIO. Without the sync step ``open('output/金额表.xlsx')`` and
+``open('uploads/x.xlsx')`` find nothing.
 
 Second invariant: the sync lands files AFTER ``_init_file_directory`` took the
 deliverable baseline, so they must be added to it. Otherwise the user's own upload
@@ -88,6 +87,24 @@ async def test_sync_is_idempotent_for_already_prefetched_files(tmp_path):
     assert task._baseline_files == {}
 
 
+async def test_output_synced_from_workspace_and_baselined(tmp_path):
+    """A later round must open output/ files the previous round left in the workspace."""
+    objects = {
+        f"workspace/{SVID}/output/金额表.xlsx": b"PK\x03\x04sheet",
+    }
+    task = _task(str(tmp_path))
+
+    with patch(
+        "bisheng.linsight.domain.task_exec.get_minio_storage",
+        AsyncMock(return_value=_minio(objects)),
+    ):
+        await task._sync_workspace_originals(SimpleNamespace(id=SVID))
+
+    local = tmp_path / "output" / "金额表.xlsx"
+    assert local.read_bytes() == b"PK\x03\x04sheet"
+    assert str(local) in {os.path.normpath(p) for p in task._baseline_files}
+
+
 async def test_large_tool_results_synced_from_workspace_and_baselined(tmp_path):
     """Offloaded tool dumps must reach cwd so open('large_tool_results/<id>') works."""
     objects = {
@@ -117,3 +134,13 @@ async def test_sync_failure_never_blocks_the_turn(tmp_path):
         await task._sync_workspace_originals(SimpleNamespace(id=SVID))  # must not raise
 
     assert task._baseline_files == {}
+
+
+async def test_previous_deliverable_reaches_executor_and_baseline(tmp_path):
+    objects = {f"workspace/{SVID}/output/report.xlsx": b"PK\x03\x04previous-result"}
+    task = _task(str(tmp_path))
+    with patch("bisheng.linsight.domain.task_exec.get_minio_storage", AsyncMock(return_value=_minio(objects))):
+        await task._sync_workspace_originals(SimpleNamespace(id=SVID))
+    local = tmp_path / "output" / "report.xlsx"
+    assert local.read_bytes() == objects[f"workspace/{SVID}/output/report.xlsx"]
+    assert str(local) in {os.path.normpath(p) for p in task._baseline_files}

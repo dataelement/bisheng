@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from bisheng.common.errcode.permission import PermissionInvalidResourceError
+from bisheng.common.errcode.permission import PermissionInvalidResourceError, PermissionSubjectUnavailableError
 from bisheng.database.models.department import (
     DepartmentDao,
     UserDepartmentDao,
@@ -10,6 +10,7 @@ from bisheng.database.models.department import (
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.tenant import UserTenantDao
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.department.domain.services.department_service import _dept_node_dict
 from bisheng.open_api.domain.repositories.service_account_repository import ServiceAccountRepository
 from bisheng.permission.domain.services import grant_subject_service
 from bisheng.permission.domain.services.grant_source_service import (
@@ -20,6 +21,7 @@ from bisheng.permission.domain.services.grant_subject_service import GrantSubjec
 from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
 )
+from bisheng.tenant.domain.repositories.grant_department_repository import GrantDepartmentRepository
 from bisheng.tenant.domain.repositories.grant_subject_search_repository import GrantSubjectSearchRepository
 from bisheng.user.domain.models.user import UserDao
 
@@ -30,6 +32,7 @@ class TenantPermissionSubjectDirectory:
     def __init__(self) -> None:
         self._sources = GrantSourceService()
         self._candidate_queries = GrantSubjectSearchRepository()
+        self._departments = GrantDepartmentRepository()
 
     async def candidate_users(self, scope, *, keyword: str, page: int, page_size: int):
         return await self._candidate_queries.users(scope, keyword=keyword, page=page, page_size=page_size)
@@ -45,6 +48,49 @@ class TenantPermissionSubjectDirectory:
 
     async def candidate_departments(self, scope, *, keyword: str, limit: int):
         return await self._candidate_queries.departments(scope, keyword=keyword, limit=limit)
+
+    async def candidate_department_layer(self, scope, *, parent_id: int | None) -> list[dict]:
+        rows, children = await self._departments.layer(scope, parent_id=parent_id)
+        return [_dept_node_dict(row, has_children=int(row.id) in children) for row in rows]
+
+    async def _department_forest(self, boundary, matches) -> list[dict]:
+        if boundary is None or not matches:
+            return []
+        rows, children = await self._departments.forest(boundary, matches)
+        matched_ids = {int(row.id) for row in matches}
+        nodes = {
+            int(row.id): _dept_node_dict(row, has_children=int(row.id) in children, matched=int(row.id) in matched_ids)
+            for row in rows
+        }
+        roots = []
+        for row in rows:
+            parent = nodes.get(row.parent_id)
+            if parent is None:
+                roots.append(nodes[int(row.id)])
+            else:
+                parent["children"].append(nodes[int(row.id)])
+
+        def sort_layer(layer):
+            layer.sort(key=lambda node: (node["sort_order"], node["id"]))
+            for node in layer:
+                sort_layer(node["children"])
+
+        sort_layer(roots)
+        return roots
+
+    async def search_candidate_departments(self, scope, *, keyword: str, limit: int) -> dict:
+        boundary, rows = await self._departments.search(scope, keyword=keyword, limit=limit + 1)
+        matches = rows[:limit]
+        return {
+            "roots": await self._department_forest(boundary, matches),
+            "total_matches": len(matches),
+            "truncated": len(rows) > limit,
+        }
+
+    async def candidate_department_path(self, scope, *, dept_id: int) -> dict:
+        boundary, row = await self._departments.get(scope, department_id=dept_id)
+        roots = await self._department_forest(boundary, [row] if row is not None else [])
+        return {"roots": roots, "total_matches": int(row is not None), "truncated": False}
 
     @staticmethod
     def _prospective_scope(tenant_id: int, resource_type: str) -> GrantSubjectScope:
@@ -134,7 +180,7 @@ class TenantPermissionSubjectDirectory:
     ) -> frozenset[str]:
         if actor.subject_type == "service_account":
             return frozenset({actor.fga_subject})
-        projected = {actor.fga_subject}
+        projected = {actor.fga_subject, f"tenant:{actor.current_tenant_id}#member"}
         memberships = await UserDepartmentDao.aget_user_departments(actor.user_id)
         departments = await DepartmentDao.aget_by_ids([row.department_id for row in memberships])
         for department in departments:
@@ -169,17 +215,24 @@ class TenantPermissionSubjectDirectory:
         if not normalized_id.isdigit():
             raise PermissionInvalidResourceError()
         identifier = int(normalized_id)
-        if normalized_type == "user":
+        if normalized_type == "tenant":
+            valid = identifier == tenant_id
+            source_type = "TENANT"
+        elif normalized_type == "user":
             rows = await UserTenantDao.aget_user_tenants(identifier)
             valid = any(row.tenant_id == tenant_id and row.status == "active" and row.is_active == 1 for row in rows)
+            if not valid:
+                raise PermissionSubjectUnavailableError()
             source_type = "DIRECT"
         elif normalized_type == "service_account":
             row = await ServiceAccountRepository.get(identifier)
             valid = bool(row and row.is_enabled and row.tenant_id == tenant_id)
             source_type = "DIRECT"
         elif normalized_type == "department":
-            row = await DepartmentDao.aget_by_id(identifier)
-            valid = bool(row and row.status == "active" and row.tenant_id == tenant_id)
+            _, row = await self._departments.get(
+                GrantSubjectScope(tenant_id=tenant_id, department_path=None), department_id=identifier
+            )
+            valid = row is not None
             source_type = "DEPARTMENT"
         elif normalized_type == "user_group":
             row = await GroupDao.aget_by_id(identifier)
@@ -287,6 +340,7 @@ class TenantPermissionSubjectDirectory:
 
         from bisheng.channel.domain.models.channel import Channel
         from bisheng.core.database import get_async_db_session
+        from bisheng.database.models.app import APP_STATE_DELETED, App
         from bisheng.database.models.assistant import Assistant
         from bisheng.database.models.flow import Flow
         from bisheng.telemetry_search.domain.models.dashboard import Dashboard
@@ -294,7 +348,7 @@ class TenantPermissionSubjectDirectory:
 
         ids_by_type = {
             resource_type: tuple(resource_id for item_type, resource_id in resources if item_type == resource_type)
-            for resource_type in ("workflow", "assistant", "channel", "tool", "dashboard")
+            for resource_type in ("workflow", "assistant", "channel", "tool", "dashboard", "app")
         }
         if not any(ids_by_type.values()):
             return {}
@@ -316,6 +370,18 @@ class TenantPermissionSubjectDirectory:
             if ids_by_type["channel"]:
                 rows = (await session.exec(select(Channel).where(col(Channel.id).in_(ids_by_type["channel"])))).all()
                 labels.update({("channel", str(row.id)): row.name for row in rows})
+            if ids_by_type["app"]:
+                # Hosted applications (F054): ``app.id`` is a str like Flow /
+                # Assistant, and "deleted" is a state, not an ``is_delete`` flag.
+                rows = (
+                    await session.exec(
+                        select(App).where(
+                            col(App.id).in_(ids_by_type["app"]),
+                            App.state != APP_STATE_DELETED,
+                        )
+                    )
+                ).all()
+                labels.update({("app", str(row.id)): row.name for row in rows})
 
             tool_ids = tuple(int(value) for value in ids_by_type["tool"] if value.isdigit())
             if tool_ids:

@@ -26,12 +26,72 @@ vi.mock("@/controllers/API/permission", () => ({
 
 vi.mock('@bisheng/ui', async () => {
 const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const React = await import("react")
+interface DropdownContextValue {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+const DropdownContext = React.createContext<DropdownContextValue | null>(null)
+// Row menu item label key -> the action id the assertions below look up.
+const actionByLabel: Record<string, string> = {
+  managePermission: "permission",
+  "lib.copy": "copy",
+  settings: "set",
+  setting: "set",
+  delete: "delete",
+  "knowledgeRowActions.loading": "loading",
+  "knowledgeRowActions.empty": "empty",
+}
+function Dropdown({ children, menu, open, onOpenChange }: {
+  children: ReactNode
+  menu: ReactNode
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  return (
+    <DropdownContext.Provider value={{ open, onOpenChange }}>
+      <span data-testid="row-actions-trigger" onClick={() => onOpenChange(!open)}>{children}</span>
+      {open ? <div data-testid="row-actions-menu">{menu}</div> : null}
+      <button
+        type="button"
+        data-testid="row-actions-close"
+        onClick={(event) => {
+          event.stopPropagation()
+          onOpenChange(false)
+        }}
+      >
+        close
+      </button>
+    </DropdownContext.Provider>
+  )
+}
+function DropdownItem({ children, disabled, onSelect }: {
+  children: ReactNode
+  disabled?: boolean
+  onSelect?: () => void
+}) {
+  const context = React.useContext(DropdownContext)
+  return (
+    <button
+      type="button"
+      data-value={typeof children === "string" ? actionByLabel[children] ?? children : undefined}
+      disabled={disabled}
+      onClick={() => {
+        context?.onOpenChange(false)
+        onSelect?.()
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+const DropdownSeparator = () => null
 const previous = await (() => ({
   toast: permissionError,
   useToast: () => ({ toast: permissionError, message: permissionError }),
 }))();
 const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
-return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+return { ...actual, Dropdown, DropdownItem, DropdownSeparator, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
 })
 
 vi.mock("@/components/bs-icons/knowledge", () => ({
@@ -72,89 +132,6 @@ vi.mock("@/util/hook", () => ({
 vi.mock("@/pages/ModelPage/manage", () => ({
   useModel: () => ({ embeddings: [], isLoading: false }),
 }))
-
-vi.mock("@/components/bs-ui/select/filter", () => ({
-  TableHeadEnumFilter: () => null,
-}))
-
-vi.mock("@/components/bs-ui/select", async () => {
-  const React = await import("react")
-  interface SelectContextValue {
-    open: boolean
-    onOpenChange: (open: boolean) => void
-    onValueChange: (value: string) => void
-  }
-  const SelectContext = React.createContext<SelectContextValue | null>(null)
-
-  function Select({ children, open, onOpenChange, onValueChange }: {
-    children: ReactNode
-    open: boolean
-    onOpenChange: (open: boolean) => void
-    onValueChange: (value: string) => void
-  }) {
-    return (
-      <SelectContext.Provider value={{ open, onOpenChange, onValueChange }}>
-        {children}
-        <button
-          type="button"
-          data-testid="row-actions-close"
-          onClick={(event) => {
-            event.stopPropagation()
-            onOpenChange(false)
-          }}
-        >
-          close
-        </button>
-      </SelectContext.Provider>
-    )
-  }
-
-  function SelectTrigger({ children, disabled, onClick }: {
-    children: ReactNode
-    disabled?: boolean
-    onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void
-  }) {
-    const context = React.useContext(SelectContext)
-    return (
-      <button
-        type="button"
-        data-testid="row-actions-trigger"
-        disabled={disabled}
-        onClick={(event) => {
-          onClick?.(event)
-          context?.onOpenChange(!context.open)
-        }}
-      >
-        {children}
-      </button>
-    )
-  }
-
-  function SelectContent({ children }: { children: ReactNode }) {
-    const context = React.useContext(SelectContext)
-    return context?.open ? <div data-testid="row-actions-menu">{children}</div> : null
-  }
-
-  function SelectItem({ children, value, disabled }: {
-    children: ReactNode
-    value: string
-    disabled?: boolean
-  }) {
-    const context = React.useContext(SelectContext)
-    return (
-      <button
-        type="button"
-        data-value={value}
-        disabled={disabled}
-        onClick={() => context?.onValueChange(value)}
-      >
-        {children}
-      </button>
-    )
-  }
-
-  return { Select, SelectContent, SelectItem, SelectTrigger }
-})
 
 import KnowledgeFile from "@/pages/KnowledgePage/KnowledgeFile"
 import KnowledgeQa from "@/pages/KnowledgePage/KnowledgeQa"

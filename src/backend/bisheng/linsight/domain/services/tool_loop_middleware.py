@@ -266,37 +266,38 @@ def _turn_fingerprint(message: object) -> tuple[tuple[str, str], ...] | None:
 
 
 def _identical_turn_run(messages: list) -> tuple[tuple[tuple[str, str], ...] | None, int]:
-    """``(fingerprint, count)`` of the trailing run of byte-identical model turns.
+    """Return the repeated suffix cycle and its completed repetition count.
 
-    ToolMessages are the CONSEQUENCE of a call and stay transparent. A human turn
-    (new user input) or a text-only AI turn (the model changed course) ends the run.
+    Period one preserves consecutive-call behavior. Periods two through four
+    also recognize alternating write/todo/read cycles. Human input, text-only
+    answers and interactive tools establish a fresh progress boundary.
     """
-    latest: tuple[tuple[str, str], ...] | None = None
-    count = 0
+    turns = []
     for m in reversed(messages):
         role, _, _, _ = _msg_fields(m)
         if role in ("human", "user"):
             break
         if role not in ("ai", "assistant"):
-            continue  # tool results are transparent to the run
+            continue
         fingerprint = _turn_fingerprint(m)
-        if fingerprint is None:
-            break  # the model produced text — no longer repeating
-        if latest is None:
-            latest, count = fingerprint, 1
-        elif fingerprint == latest:
-            count += 1
-        else:
+        if fingerprint is None or any(name in _REPEAT_EXEMPT_TOOLS for name, _ in fingerprint):
             break
-    if latest and any(name in _REPEAT_EXEMPT_TOOLS for name, _ in latest):
+        turns.append(fingerprint)
+    if not turns:
         return None, 0
-    if latest and _is_pure_failure_run(messages, count):
-        # A run where every result came back an error belongs to the FAILURE tier: it
-        # has its own limits and its own user-facing copy ("模型未能正确调用工具").
-        # Claiming it here would abort earlier than that tier intends AND attribute it
-        # wrongly. This tier is for calls that SUCCEED and still get nowhere.
+    best, count, matched = turns[0], 1, 1
+    for period in range(1, min(4, len(turns)) + 1):
+        cycle = turns[:period]
+        length = period
+        while length < len(turns) and turns[length] == cycle[length % period]:
+            length += 1
+        repeats = length // period
+        if repeats > count:
+            best = tuple(sorted({item for turn in cycle for item in turn}))
+            count, matched = repeats, length
+    if _is_pure_failure_run(messages, matched):
         return None, 0
-    return latest, count
+    return best, count
 
 
 def _is_pure_failure_run(messages: list, count: int) -> bool:
@@ -323,7 +324,10 @@ def _corrective_hint(tool_name: str | None) -> str:
         )
     if tool_name:
         return (
-            f"⚠️ 你已连续多次调用 {tool_name} 失败。请检查工具参数（尤其是必填项是否完整），修正后再试；"
+            # Name the causes the error text itself reports: on 2026-10-23 (svid 4c85fb69)
+            # the misses were wrong paths, and "check required fields" pointed away from them.
+            f"⚠️ 你已连续多次调用 {tool_name} 失败。请先读上面报错里给出的原因再修正："
+            "报文件不存在时核对路径，报参数错误时补全必填项；"
             "不要重复完全相同的错误调用。若无法修正，请换一种方式完成该步骤。"
         )
     return "⚠️ 你已连续多次工具调用失败。请修正参数后再试，不要重复相同的错误调用。"

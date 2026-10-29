@@ -61,11 +61,12 @@ from bisheng.common.errcode.workstation import (
     LLMRateLimitError,
 )
 from bisheng.common.image_view import (
+    ImageIdLineConverter,
     ImageRegistry,
     VisionToolBindWrapper,
     annotate,
-    missing_viewed_markdown,
 )
+from bisheng.common.image_view.annotate import has_markdown_image
 from bisheng.common.image_view.loop import IMAGE_VIEW_TOOL_KEY
 from bisheng.common.schemas.telemetry.event_data_schema import (
     ApplicationAliveEventData,
@@ -74,6 +75,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import (
 )
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.llm_error_classifier import ErrorType, label_error, unwrap
+from bisheng.common.utils.message_content import extract_message_reasoning, extract_message_text
 from bisheng.core.cache.utils import async_file_download
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.chat_attachment import promote_chat_attachments
@@ -167,6 +169,11 @@ async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: 
 async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
     """Initialize chat session, message, and llm."""
     ws_config = await WorkStationService.aget_config()
+    from bisheng.common.services.config_service import settings as enterprise_settings
+    from bisheng.dsh.domain.services.model_catalog import authorized_workbench_models
+
+    if enterprise_settings.dsh.enabled:
+        ws_config.models = await authorized_workbench_models(login_user.user_id)
     model_info = next((model for model in ws_config.models if model.id == data.model), None)
     if not model_info:
         raise ValueError(f"Model with id '{data.model}' not found.")
@@ -1237,8 +1244,8 @@ async def _prepare_tools(
             continue
         tool_key = tp.get("tool_key") if isinstance(tp, dict) else getattr(tp, "tool_key", None)
         tool_id = tp.get("id") if isinstance(tp, dict) else getattr(tp, "id", None)
-        # Image View stores which visual model to use. Pixel viewing is wired
-        # separately, so loading this row as a LangChain tool always fails.
+        # Retired builtin row. Saved selections may still name it; loading it
+        # as a LangChain tool fails.
         if tool_key == IMAGE_VIEW_TOOL_KEY:
             continue
 
@@ -1348,6 +1355,11 @@ async def _agent_initialize_chat(
       - `overrideParentMessageId` is ignored (regenerate UI removed)
     """
     ws_config = await WorkStationService.aget_config()
+    from bisheng.common.services.config_service import settings as enterprise_settings
+    from bisheng.dsh.domain.services.model_catalog import authorized_workbench_models
+
+    if enterprise_settings.dsh.enabled:
+        ws_config.models = await authorized_workbench_models(login_user.user_id)
     model_info = next((m for m in ws_config.models if m.id == data.model), None)
     if not model_info:
         raise ValueError(f"Model with id '{data.model}' not found.")
@@ -1683,8 +1695,9 @@ async def _agent_stream_chat_completion(
         # F075: the model cites with [Sn] handles from the session table shared
         # with the task mode; answer text is converted before it is stored or sent.
         citation_scope = DailyCitationScope(conversation_id)
-        stream_converter = HandleStreamConverter(citation_scope.handles)
         image_registry = ImageRegistry()
+        # A line holding only img#N is the model choosing to show that picture.
+        stream_converter = ImageIdLineConverter(image_registry, HandleStreamConverter(citation_scope.handles))
         from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
         from bisheng.common.image_view.loop import image_view_configured, resolve_image_view_llm
 
@@ -1755,23 +1768,12 @@ async def _agent_stream_chat_completion(
                             ev["duration_ms"] = max(0, now_ms - ev["started_at"])
             inflight_tool_idx.clear()
 
-        def splice_viewed_image_markdown() -> str:
-            """Append `![](url)` for images the model already viewed.
-
-            Weak VL models often say they will show img#N without emitting the
-            original markdown the chat bubble needs to render.
-            """
-            nonlocal final_msg
-            extra = missing_viewed_markdown(final_msg, image_registry)
-            if not extra:
-                return ""
-            logger.info("image_view splice markdown viewed_ids={}", image_registry.viewed_ids())
-            final_msg += extra
-            if events and events[-1].get("type") == "text":
-                events[-1]["content"] = events[-1].get("content", "") + extra
-            else:
-                events.append({"type": "text", "content": extra.lstrip()})
-            return extra
+        def log_picture_outcome() -> None:
+            """Record whether the model showed a picture; nothing is filled in for it."""
+            if stream_converter.rendered_ids:
+                logger.info("image_view rendered id lines ids={}", stream_converter.rendered_ids)
+            elif image_registry.viewed_ids() and not has_markdown_image(final_msg):
+                logger.info("image_view answer has no picture viewed_ids={}", image_registry.viewed_ids())
 
         def record_answer_text(text: str) -> str:
             """Append converted answer text to the message and return its SSE delta."""
@@ -1851,7 +1853,7 @@ async def _agent_stream_chat_completion(
             if pending:
                 record_answer_text(pending)
             finalise_dangling_events()
-            splice_viewed_image_markdown()
+            log_picture_outcome()
             try:
                 citation_items = select_cited_items_sync(citation_collector.list_items(), final_msg)
                 log_citation_audit(
@@ -2110,8 +2112,8 @@ async def _agent_stream_chat_completion(
                         chunk = (ev.get("data") or {}).get("chunk")
                         if chunk is None:
                             continue
-                        text = getattr(chunk, "content", "") or ""
-                        reasoning = (getattr(chunk, "additional_kwargs", None) or {}).get("reasoning_content", "")
+                        text = extract_message_text(chunk)
+                        reasoning = extract_message_reasoning(chunk)
                         if reasoning:
                             if current_thinking_idx is None:
                                 start_ms = int(time.time() * 1000)
@@ -2300,8 +2302,8 @@ async def _agent_stream_chat_completion(
                 if sys_prompt:
                     llm_messages.insert(0, SystemMessage(content=sys_prompt))
                 async for chunk in bisheng_llm.astream(llm_messages):
-                    text = getattr(chunk, "content", "") or ""
-                    reasoning = (getattr(chunk, "additional_kwargs", None) or {}).get("reasoning_content", "")
+                    text = extract_message_text(chunk)
+                    reasoning = extract_message_reasoning(chunk)
                     if reasoning:
                         if current_thinking_idx is None:
                             start_ms = int(time.time() * 1000)
@@ -2408,14 +2410,7 @@ async def _agent_stream_chat_completion(
         # mid-reasoning or mid-tool).
         finalise_dangling_events()
 
-        extra_images = splice_viewed_image_markdown()
-        if extra_images and not error_flag:
-            yield _sse_resp(
-                "agent_answer",
-                "stream",
-                {"msg": extra_images},
-                conversation_id,
-            )
+        log_picture_outcome()
 
         if scanner:
             hit = scanner.finish()
@@ -2540,7 +2535,8 @@ async def stream_chat_completion(
     """
     if data.task_mode:
         return await _task_mode_stream_completion(request, data, login_user)
-    return await _agent_stream_chat_completion(request, data, login_user, session_subject)
+    daily_data = data.model_copy(update={"skills": []})
+    return await _agent_stream_chat_completion(request, daily_data, login_user, session_subject)
 
 
 # Upper bound for in-stream title generation (task mode). Matches the gen_title

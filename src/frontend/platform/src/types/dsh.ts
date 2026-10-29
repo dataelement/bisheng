@@ -200,6 +200,7 @@ export type DshSubjectPolicyInput = {
 }
 
 export type DshUsageMetrics = {
+    billed_tokens?: number | null
     message_count: number
     qa_count: number
     failed_count: number

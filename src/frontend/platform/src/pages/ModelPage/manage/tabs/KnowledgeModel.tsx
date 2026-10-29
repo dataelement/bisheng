@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { Button, Textarea, toast } from '@bisheng/ui';
+import { Alert, Button, Cascader, Textarea, toast } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
@@ -7,13 +7,18 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
 
 import { Label } from "@/components/bs-ui/label";
-import Cascader from "@/components/bs-ui/select/cascader";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import {
+    fromModelCascaderValue,
+    toModelCascaderOptions,
+    toModelCascaderValue,
+} from "@/components/bs-comp/formFields/modelOptions";
 import { Switch } from "@bisheng/ui";
 
 import { ModelFieldHint } from "../ModelFieldHint";
 import { Tooltip as Tip } from "@bisheng/ui";
 import { getKnowledgeModelEnvelope, updateKnowledgeModelConfig } from "@/controllers/API/finetune";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,43 +30,42 @@ import {
     normalizeKnowledgeModelIds,
 } from "./knowledgeModelValidation";
 
-export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange, footer = null }) => {
-
-    const defaultValue = useMemo(() => {
-        let _defaultValue = []
-        if (!value) return _defaultValue
-        options.some(option => {
-            const model = option.children.find(el => el.value === value)
-            if (model) {
-                _defaultValue = [{ value: option.value, label: option.label }, { value: model.value, label: model.label }]
-                return true
-            }
-        })
-        return _defaultValue
-    }, [value, options])
+export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange, placeholder = '' }) => {
+    const { t } = useTranslation()
+    const selectLabels = useSelectLabels()
+    const cascaderOptions = useMemo(() => toModelCascaderOptions(options), [options])
+    const cascaderValue = useMemo(() => toModelCascaderValue(value, options), [options, value])
 
     return (
-        <div>
+        <div className="min-w-0">
             <Label className="bisheng-label">
                 <span>{label}</span>
                 {required && <span className="text-red-500 text-xs">*</span>}
                 {tooltipText && <ModelFieldHint className="ml-1" content={tooltipText} />}
             </Label>
             <Cascader
-                defaultValue={defaultValue}
-                options={options}
-                close={close}
-                onChange={(val) => onChange(val[1])}
-                footer={footer}
+                {...selectLabels}
+                className="w-full"
+                options={cascaderOptions}
+                value={cascaderValue}
+                allowClear={close}
+                onChange={(path) => onChange(fromModelCascaderValue(path))}
+                placeholder={placeholder || t('build.selectModel')}
+                aria-label={typeof label === 'string' && label ? label : t('build.selectModel')}
+                backLabel={t('sharedUi.back')}
+                doneLabel={t('sharedUi.done')}
+                searchPlaceholder={t('sharedUi.searchModels')}
             />
         </div>
     );
 };
 
 
-const PromptDialog = ({ value, onChange, onRestore, onSave, label, children }) => {
+export const PromptDialog = ({ value, onChange, onSave, label, children }) => {
     const { t } = useTranslation('model')
     const [open, setOpen] = useState(false)
+    const [saving, setSaving] = useState(false)
+    const savingRef = useRef(false)
     const modifyNotSavedRef = useRef(false)
     const [textValue, setTextValue] = useState(value)
     useEffect(() => {
@@ -85,7 +89,24 @@ const PromptDialog = ({ value, onChange, onRestore, onSave, label, children }) =
     }
 
 
-    return <Dialog open={open} onOpenChange={setOpen}>
+    const handleSave = async () => {
+        if (savingRef.current) return;
+        savingRef.current = true;
+        setSaving(true);
+        try {
+            await onSave(textValue);
+            modifyNotSavedRef.current = false;
+            onChange(textValue);
+            setOpen(false);
+        } catch (error) {
+            showApiError(error);
+        } finally {
+            savingRef.current = false;
+            setSaving(false);
+        }
+    };
+
+    return <Dialog open={open} onOpenChange={(next) => { if (!savingRef.current) setOpen(next); }}>
         <DialogTrigger>
             {children}
         </DialogTrigger>
@@ -101,13 +122,8 @@ const PromptDialog = ({ value, onChange, onRestore, onSave, label, children }) =
                     }} rows={16} textareaClassName={"mt-1"} />
             </div>
             <DialogFooter>
-                <Button variant="outlined" type="button" onClick={handleCancel} color="default">{t('model.cancel')}</Button>
-                <Button disabled={false} type="submit" onClick={() => {
-                    modifyNotSavedRef.current = false
-                    onSave(textValue)
-                    setOpen(false)
-                    onChange(textValue)
-                }}>
+                <Button disabled={saving} variant="outlined" type="button" onClick={handleCancel} color="default">{t('model.cancel')}</Button>
+                <Button disabled={saving} type="submit" onClick={() => { void handleSave(); }}>
                     {t('model.save')}
                 </Button>
             </DialogFooter>
@@ -233,25 +249,29 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
             auto_tag_prompt: autoTagPrompt
         }
         setSaveLoad(true)
-        await captureAndAlertRequestErrorHoc(updateKnowledgeModelConfig(data).then(res => {
-            lastSaveFormDataRef.current = data
-            setUnavailableModelFields([])
-            toast.show({ type: 'success', message: String(t('model.saveSuccess') ?? '') })
-        }))
-        setSaveLoad(false)
+        try {
+            await updateKnowledgeModelConfig(data);
+            lastSaveFormDataRef.current = data;
+            setUnavailableModelFields([]);
+            toast.show({ type: 'success', message: String(t('model.saveSuccess') ?? '') });
+        } catch (error) {
+            showApiError(error);
+        } finally {
+            setSaveLoad(false);
+        }
     };
 
     // Persist a single prompt edit (abstract or auto-tag) without going
     // through the main save flow, mirroring the existing per-prompt save
     // semantics. Caller passes the patch keyed by the backend field name.
     const handleSavePrompt = (patch: { abstract_prompt?: string; auto_tag_prompt?: string }) => {
-        captureAndAlertRequestErrorHoc(updateKnowledgeModelConfig({
+        return updateKnowledgeModelConfig({
             ...lastSaveFormDataRef.current,
             ...patch,
         }).then(res => {
             lastSaveFormDataRef.current = { ...lastSaveFormDataRef.current, ...patch }
             toast.show({ type: 'success', message: String(t('model.promptSaved') ?? '') })
-        }))
+        })
     }
 
     if (loading) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
@@ -262,9 +282,11 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
         <div className="max-w-[520px] mx-auto gap-y-4 flex flex-col mt-16 relative">
             <FallbackBlockedBanner visible={fallbackBlocked} />
             {unavailableModelFields.length > 0 && (
-                <div role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
-                    {t('model.unavailableSelectionsCleared')}
-                </div>
+                <Alert
+                    type="warning"
+                    description={t('model.unavailableSelectionsCleared')}
+                    live
+                />
             )}
             {inheritedFromRoot && (
                 <div className="-mb-2 text-xs text-muted-foreground flex items-center">
@@ -360,7 +382,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
             />
             <div className="mt-10 text-center space-x-6">
                 <Button variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
-                <Button disabled={saveload} onClick={handleSave}>
+                <Button disabled={saveload || !config} onClick={handleSave}>
                     {saveload && <Outlined.Loading className="animate-spin mr-2" />}
                     {t('model.save')}
                 </Button>

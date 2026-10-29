@@ -452,3 +452,11 @@ describe("progressive model discovery", () => {
     expect(screen.queryByLabelText("model.discoveryWorkspace")).toBeNull();
   });
 });
+
+
+it("uses the release structured error payload for missing workspace information", async () => {
+  vi.mocked(discoverModels).mockRejectedValueOnce({ data: { reason: "workspace" } });
+  render(<ModelDiscovery {...props()} provider="qwen" />);
+  fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+  await screen.findByLabelText("model.discoveryWorkspace");
+});

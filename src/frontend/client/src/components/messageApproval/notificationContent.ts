@@ -9,7 +9,7 @@ type MessageWithLegacyBusinessId = MessageItem & { business_id?: string | number
 /**
  * Pure helpers for reading an inbox message's payload: action code, business target,
  * approval-center deep link. Extracted from the old NotificationsDialog so the merged
- * 消息与审批 dialog can share them without dragging the whole component along.
+ * notifications and approvals can share them without importing the whole component.
  */
 
 export const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
@@ -35,6 +35,19 @@ export const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
     approval_exception_route_missing: "com_notifications_action_approval_exception_route_missing",
     approval_exception_approver_empty: "com_notifications_action_approval_exception_approver_empty",
     approval_execute_failed: "com_notifications_action_approval_execute_failed",
+    // The engine has emitted this one since the approval centre shipped, but it
+    // was never mapped — it only became reachable for users when deleting a
+    // hosted application started cancelling its pending publish request.
+    approval_instance_cancelled: "com_notifications_action_approval_instance_cancelled",
+    // hosted application publishing (F055): approval passed, the app did not go
+    // live. Statements only — the manual-publish button lives on the detail page.
+    app_publish_pending_capacity: "com_notifications_action_app_publish_pending_capacity",
+    app_publish_deploy_failed: "com_notifications_action_app_publish_deploy_failed",
+    // hosted application governance (F056 AC-43): an administrator stopped or
+    // resumed the owner's app. Statements only — deliberately NOT in
+    // APPROVAL_CENTER_ACTION_CODES, there is nothing to approve.
+    app_stopped_by_admin: "com_notifications_action_app_stopped_by_admin",
+    app_resumed_by_admin: "com_notifications_action_app_resumed_by_admin",
     menu_grant_revoked: "com_notifications_action_menu_grant_revoked",
     revoked_channel_admin: "com_notifications_action_revoked_channel_admin",
     revoked_knowledge_space_admin: "com_notifications_action_revoked_knowledge_space_admin",
@@ -52,6 +65,7 @@ export const APPROVAL_CENTER_ACTION_CODES = new Set([
     "approval_task_rejected",
     "approval_instance_approved",
     "approval_instance_withdrawn",
+    "approval_instance_cancelled",
     "approval_exception_cancelled",
     "approval_exception_route_missing",
     "approval_exception_approver_empty",
@@ -69,6 +83,7 @@ export const APPROVAL_TASK_SCENARIO_TEXT_KEYS: Record<string, string> = {
     menu_access_request: "com_notifications_action_request_menu_access",
     channel_subscribe_request: "com_notifications_action_request_channel",
     knowledge_space_subscribe_request: "com_notifications_action_request_knowledge_space",
+    app_publish_request: "com_notifications_action_request_app_publish",
 };
 
 export const isKnowledgeSpaceApprovalActionCode = (actionCode?: string) =>
@@ -148,6 +163,10 @@ export const resolveApprovalCenterTarget = (notification: MessageItem) => {
     for (const part of parts) {
         const metadata: PartMetadata = part?.metadata ?? {};
         const data = metadata?.data ?? {};
+        const explicitTask = Number(data.approval_task_id ?? data.task_id);
+        const explicitInstance = Number(data.approval_instance_id ?? data.instance_id);
+        if (Number.isSafeInteger(explicitTask) && explicitTask > 0) taskId = explicitTask;
+        if (Number.isSafeInteger(explicitInstance) && explicitInstance > 0) instanceId = explicitInstance;
         const candidates = [
             [metadata?.business_type, data],
             [metadata?.type, data],
@@ -162,7 +181,7 @@ export const resolveApprovalCenterTarget = (notification: MessageItem) => {
                     metadata?.business_id ??
                     payload?.business_id;
                 const parsedTaskId = Number(rawTaskId);
-                if (Number.isFinite(parsedTaskId)) taskId = parsedTaskId;
+                if (Number.isSafeInteger(parsedTaskId) && parsedTaskId > 0) taskId = parsedTaskId;
             }
             if (!instanceId && /approval_instance_id|instance_id|approval_request_id/i.test(normalizedType)) {
                 const rawInstanceId =
@@ -172,7 +191,7 @@ export const resolveApprovalCenterTarget = (notification: MessageItem) => {
                     metadata?.business_id ??
                     payload?.business_id;
                 const parsedInstanceId = Number(rawInstanceId);
-                if (Number.isFinite(parsedInstanceId)) instanceId = parsedInstanceId;
+                if (Number.isSafeInteger(parsedInstanceId) && parsedInstanceId > 0) instanceId = parsedInstanceId;
             }
         }
     }
@@ -181,13 +200,17 @@ export const resolveApprovalCenterTarget = (notification: MessageItem) => {
     const tab =
         isPendingApprovalStatus(notification.status) ||
             actionCode === "approval_task_pending" ||
+            actionCode === "approval_instance_withdrawn" ||
+            actionCode === "approval_instance_cancelled" ||
             actionCode === "request_menu_access"
             ? "my_tasks"
             : "my_requests";
+    const resolvedInstanceId = instanceId ?? getApprovalRequestId(notification);
     return {
         tab,
         taskId,
-        instanceId: instanceId ?? getApprovalRequestId(notification),
+        instanceId: resolvedInstanceId != null && Number.isSafeInteger(resolvedInstanceId) && resolvedInstanceId > 0
+            ? resolvedInstanceId : null,
     } as const;
 };
 

@@ -1,0 +1,8 @@
+{"id":"sha256:40756e40baa4fbd02f76308dba718244cc5ff0315fe96b98d9301f93361e8c40","tags":["e2e-f086-runtime-manager:20261020"],"os":"linux","architecture":"amd64"}
+{"id":"sha256:448ff4a9b8a84eb9c7f49c4e2fb6688293c180048f46e9dec926bea80117aa7b","tags":["e2e-f086-app-proxy:20261020"],"os":"linux","architecture":"amd64"}
+{"id":"sha256:356862ef889d61162270851952347e78dacd5e1610f85f3b83d68de57ae4fc98","tags":["e2e-f086-app-python:20261020"],"os":"linux","architecture":"amd64"}
+{"id":"sha256:850d68dfba648d0ad8be7b826a1a23df009d0c98d5aac58938a4e05fb1875bda","tags":["e2e-f086-app-python-preparer:20261020"],"os":"linux","architecture":"amd64"}
+{"id":"sha256:ac95b2f352b17a6dab8733f0ab0f47487953f832995e5121ddd7a4034a43535f","tags":["e2e-f086-app-node:20261020"],"os":"linux","architecture":"amd64"}
+{"id":"sha256:ceca4a185dc7ad16c5d6318430d89b8ca04dbc9acdb2d6bf4662b8c4fb5fa11b","tags":["e2e-f086-app-node-preparer:20261020"],"os":"linux","architecture":"amd64"}
+{"id":"sha256:2df72b011ac0db1a4254cbd8e181aec71673e4f85222de22576f64d3645742a9","tags":["e2e-f086-app-static:20261020"],"os":"linux","architecture":"amd64"}
+{"id":"sha256:894de7d3d8f60e22014daf2f3fc296999c994f2788451d5e2b6faec90258a371","tags":["e2e-f086-backend:20261020"],"os":"linux","architecture":"amd64"}

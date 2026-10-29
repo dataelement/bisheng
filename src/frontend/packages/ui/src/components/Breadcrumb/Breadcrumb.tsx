@@ -3,6 +3,7 @@ import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { Outlined } from 'bisheng-icons';
 import cn from '../../utils/cn';
 import { Tooltip } from '../Tooltip/Tooltip';
+import { PHONE_QUERY, useMediaQuery } from '../../utils/useMediaQuery';
 
 /**
  * Breadcrumb — where the current page sits in the structure (组件-Breadcrumb面包屑.md v1).
@@ -44,6 +45,19 @@ export interface BreadcrumbProps {
    * i18n keys.
    */
   expandLabel: (hiddenCount: number) => string;
+  /**
+   * Parent-name width cap in px, overriding §4's 96px. That figure is "about 8
+   * CJK characters" AT the spec's 12px; a caller that renders the chain larger
+   * has to scale it or the same names clip several characters earlier.
+   */
+  parentMaxWidth?: number;
+  /**
+   * Rendered immediately after the root level, before its separator — for an
+   * action that belongs to the structure entry itself (the knowledge space's
+   * own menu, say) rather than to the page you are on. Purely additive: pass
+   * nothing and the chain looks exactly as the spec draws it.
+   */
+  rootTrailing?: React.ReactNode;
   /** `aria-label` of the wrapping `nav` (§7). */
   ariaLabel?: string;
   className?: string;
@@ -60,26 +74,6 @@ const DEFAULT_ITEMS_AFTER_COLLAPSE = 2;
 const NARROW_MAX_ITEMS = 3;
 const NARROW_ITEMS_AFTER_COLLAPSE = 1;
 
-/** §6 — the shared 576px breakpoint (基础-多端适配原则.md), not one of our own. */
-const NARROW_QUERY = '(max-width: 575.98px)';
-
-function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = React.useState(false);
-
-  React.useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-      return;
-    }
-    const list = window.matchMedia(query);
-    const sync = () => setMatches(list.matches);
-    sync();
-    list.addEventListener('change', sync);
-    return () => list.removeEventListener('change', sync);
-  }, [query]);
-
-  return matches;
-}
-
 /** §3 — an icon, never a text `>`: `>` is a maths glyph that sits low next to CJK. */
 function Separator() {
   return <Outlined.Right className="size-4 shrink-0 text-text-4" aria-hidden />;
@@ -93,6 +87,8 @@ function isClipped(el: HTMLElement | null): boolean {
 interface CrumbProps {
   item: BreadcrumbItem;
   className?: string;
+  /** Overrides §4's 96px cap, in px — see BreadcrumbProps.parentMaxWidth. */
+  maxWidth?: number;
 }
 
 /**
@@ -100,7 +96,7 @@ interface CrumbProps {
  * full-name tooltip appears ONLY when the name really is clipped — measured on
  * pointer-enter, so a chain of short names mounts no tooltips at all.
  */
-function Crumb({ item, className }: CrumbProps) {
+function Crumb({ item, className, maxWidth }: CrumbProps) {
   const [clipped, setClipped] = React.useState(false);
   const handleEnter = (event: React.PointerEvent<HTMLElement>) => {
     setClipped(isClipped(event.currentTarget));
@@ -108,6 +104,7 @@ function Crumb({ item, className }: CrumbProps) {
 
   const shared = {
     onPointerEnter: handleEnter,
+    style: maxWidth == null ? undefined : { maxWidth },
     className: cn(
       'block shrink-0 truncate text-text-3 outline-none transition-colors',
       'hover:text-blue-600 focus-visible:ring-2 focus-visible:ring-blue-600/40',
@@ -159,10 +156,12 @@ export function Breadcrumb({
   maxItems = DEFAULT_MAX_ITEMS,
   itemsAfterCollapse = DEFAULT_ITEMS_AFTER_COLLAPSE,
   expandLabel,
+  parentMaxWidth,
+  rootTrailing,
   ariaLabel = 'breadcrumb',
   className,
 }: BreadcrumbProps) {
-  const narrow = useMediaQuery(NARROW_QUERY);
+  const narrow = useMediaQuery(PHONE_QUERY);
   const [menuOpen, setMenuOpen] = React.useState(false);
   // The ellipsis tooltip is driven entirely by pointer enter/leave: Radix would
   // otherwise re-open it from the focus it hands back to the trigger when the
@@ -204,7 +203,8 @@ export function Breadcrumb({
     >
       {head.map((item, index) => (
         <span key={keyOf(item, index)} className="flex shrink-0 items-center gap-0.5">
-          <Crumb item={item} />
+          <Crumb item={item} maxWidth={parentMaxWidth} />
+          {index === 0 && rootTrailing}
           <Separator />
         </span>
       ))}
@@ -287,7 +287,7 @@ export function Breadcrumb({
           key={keyOf(item, 1 + hidden.length + index)}
           className="flex shrink-0 items-center gap-0.5"
         >
-          <Crumb item={item} />
+          <Crumb item={item} maxWidth={parentMaxWidth} />
           <Separator />
         </span>
       ))}

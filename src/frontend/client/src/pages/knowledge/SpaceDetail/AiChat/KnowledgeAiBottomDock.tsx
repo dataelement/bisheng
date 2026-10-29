@@ -1,3 +1,4 @@
+import { ApiRequestFailure } from "~/components/ApiRequestFailure";
 import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 /**
  * KnowledgeAiBottomDock — bottom-anchored AI dock for a single knowledge space.
@@ -23,12 +24,14 @@ import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } fr
 import { useEffect, useRef, useState } from "react";
 import { Outlined } from "bisheng-icons";
 import { useQuery } from "@tanstack/react-query";
-import { useResetRecoilState } from "recoil";
+import { useRecoilValue, useResetRecoilState } from "recoil";
+import store from "~/store";
 import { knowledgeSelectedFilesState } from "../../selectionStore";
 
 import AiChatMessages from "~/components/Chat/AiChatMessages";
 import { ArticleQAIllustration } from "~/components/illustrations";
 import { KnowledgeAiInput } from "./KnowledgeAiInput";
+import { KnowledgeAskBar } from "./KnowledgeAskBar";
 import { ConversationHistory } from "./ConversationHistory";
 import useFolderChat from "~/hooks/useFolderChat";
 import type { FolderChatTag } from "~/hooks/useFolderChat";
@@ -51,9 +54,25 @@ interface KnowledgeAiBottomDockProps {
     folderId?: string;
     /** Welcome text disambiguates space-wide vs folder-scoped Q&A. */
     contextLabel?: string;
+    /** Space name — desktop hands it to the main chat as the mounted space's label. */
+    spaceName?: string;
 }
 
-export function KnowledgeAiBottomDock({
+/**
+ * Entry point. Desktop: KnowledgeAskBar — the question is answered on the 对话 page, so
+ * its history joins the workbench conversation list. Mobile: the in-place dock below,
+ * unchanged (no global conversation list to join there).
+ */
+export function KnowledgeAiBottomDock(props: KnowledgeAiBottomDockProps) {
+    const isH5 = usePrefersMobileLayout();
+    const chatModel = useRecoilValue(store.chatModel);
+    if (!isH5) {
+        return <KnowledgeAskBar spaceId={props.spaceId} spaceName={props.spaceName ?? ""} modelValue={chatModel.id} />;
+    }
+    return <KnowledgeAiInPlaceDock {...props} />;
+}
+
+function KnowledgeAiInPlaceDock({
     spaceId,
     folderId,
 }: KnowledgeAiBottomDockProps) {
@@ -152,6 +171,9 @@ export function KnowledgeAiBottomDock({
         sessions,
         activeChatId,
         isLoading,
+        historyError,
+        isClearing,
+        retryHistory,
         isStreaming,
         sendMessage,
         stopGenerating,
@@ -269,7 +291,7 @@ export function KnowledgeAiBottomDock({
                 <div className="relative min-h-0 flex-1">
                     {/* AiChatMessages owns the empty state; pass the brand ArticleQA
                         illustration so it follows the blue ⇄ green theme. */}
-                    <AiChatMessages
+                    {historyError ? <ApiRequestFailure error={historyError} onRetry={retryHistory} /> : (<AiChatMessages
                         messages={messages}
                         conversationId={activeChatId}
                         title=""
@@ -285,7 +307,7 @@ export function KnowledgeAiBottomDock({
                         emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                         onPresetClick={() => { }}
                         onRegenerate={regenerate}
-                    />
+                    />)}
                     <div
                         aria-hidden
                         className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-10 bg-gradient-to-t from-white to-white/0"
@@ -310,7 +332,7 @@ export function KnowledgeAiBottomDock({
                         onModelChange={selectModel}
                         onModelAutoChange={repairModel}
                         isStreaming={isStreaming}
-                        disabled={!bsConfig?.models?.length}
+                        disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length}
                         onSend={handleSend}
                         onStop={stopGenerating}
                         variant="box"
@@ -443,7 +465,7 @@ export function KnowledgeAiBottomDock({
                             {/* AiChatMessages owns the empty state; pass the brand ArticleQA
                                 illustration so it follows the blue ⇄ green theme. */}
                             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                                <AiChatMessages
+                                {historyError ? <ApiRequestFailure error={historyError} onRetry={retryHistory} /> : (<AiChatMessages
                                     messages={messages}
                                     conversationId={activeChatId}
                                     title=""
@@ -459,7 +481,7 @@ export function KnowledgeAiBottomDock({
                                     emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                                     onPresetClick={() => { }}
                                     onRegenerate={regenerate}
-                                />
+                                />)}
                             </div>
                         </div>
                     </div>
@@ -473,7 +495,7 @@ export function KnowledgeAiBottomDock({
                         onModelChange={selectModel}
                         onModelAutoChange={repairModel}
                         isStreaming={isStreaming}
-                        disabled={!bsConfig?.models?.length}
+                        disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length}
                         onSend={handleSend}
                         onStop={stopGenerating}
                         variant={open ? "line" : "box"}

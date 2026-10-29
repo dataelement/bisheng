@@ -1,7 +1,7 @@
 import { toast } from '@bisheng/ui';
 
 import { updateKnowledgeApi } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { Outlined } from "bisheng-icons";
 import { KnowledgeTooltip } from "./KnowledgeTooltip";
 
@@ -52,11 +52,11 @@ export default function Header({ fileTitle, onBack, showBackButton = true }: Hea
 
 
     const handleSave = (form) => {
-        captureAndAlertRequestErrorHoc(updateKnowledgeApi({
+        updateKnowledgeApi({
             knowledge_id: Number(id),
             name: form.name,
             description: form.desc
-        })).then((res) => {
+        }).then((res) => {
             if (!res) return
             // api
             setLibInfo(form)
@@ -64,7 +64,7 @@ export default function Header({ fileTitle, onBack, showBackButton = true }: Hea
             toast.show({ type: 'success', message: String(t('saved') ?? '') })
             localStorage.setItem('libname', form.name)
             localStorage.setItem('libdesc', form.desc)
-        })
+        }).catch(showApiError)
     }
 
     const { isEditable } = useKnowledgeStore();

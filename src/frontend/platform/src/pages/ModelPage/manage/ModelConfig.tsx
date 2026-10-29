@@ -1,23 +1,20 @@
 // @ts-strict-ignore
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@bisheng/ui";
-import { Input } from "@bisheng/ui";
-import { Label } from "@/components/bs-ui/label";
 import {
+  Alert,
+  Button,
+  Input,
   Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/bs-ui/select";
-import { Switch } from "@bisheng/ui";
-import { toast } from "@bisheng/ui";
+  Switch,
+  toast,
+  Tooltip as ShadTooltip,
+} from "@bisheng/ui";
+import { Label } from "@/components/bs-ui/label";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { isNumberDraftWithinBounds } from "@/utils/fieldValidation";
 import { ModelFieldHint as QuestionTooltip } from "./ModelFieldHint";
 import { generateUUID } from "@/components/bs-ui/utils";
-import { Tooltip as ShadTooltip } from "@bisheng/ui";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import {
@@ -26,42 +23,28 @@ import {
   getLLmServerDetail,
   updateLLmServer,
 } from "@/controllers/API/finetune";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import {
+  captureAndAlertRequestErrorHoc,
+  showApiError,
+} from "@/controllers/request";
 import { useAdminScope } from "@/hooks/useAdminScope";
 import { ArrowLeft, Plus } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import CustomForm from "./CustomForm";
+import { CustomForm } from "./CustomForm";
 import { ModelDiscovery } from "./ModelDiscovery";
 import { ModelItem } from "./ModelItem";
-import { hasDuplicateModelName, hasInvalidModelName, trimModelNames } from "./modelNameTrim";
+import { modelProvider, bishengModelProvider } from "./modelProviders";
+import {
+  hasDuplicateModelName,
+  hasInvalidModelName,
+  trimModelNames,
+} from "./modelNameTrim";
 import { canShareToChildren, isGlobalSuperUser } from "./permissions";
 import { useLinsightConfig } from "./tabs/WorkbenchModel";
 import { useModelProviderInfo } from "./useLink";
 
-export const modelProvider = [
-  { name: "OpenAI", value: "openai" },
-  { name: "Azure OpenAI", value: "azure_openai" },
-  { name: "Ollama", value: "ollama" },
-  { name: "xinference", value: "xinference" },
-  { name: "llamacpp", value: "llamacpp" },
-  { name: "vllm", value: "vllm" },
-  { name: "", labelKey: "model.providerNames.qwen", value: "qwen" },
-  { name: "DeepSeek", value: "deepseek" },
-  { name: "", labelKey: "model.providerNames.silicon", value: "silicon" },
-  { name: "", labelKey: "model.providerNames.volcengine", value: "volcengine" },
-  { name: "", labelKey: "model.providerNames.zhipu", value: "zhipu" },
-  { name: "", labelKey: "model.providerNames.spark", value: "spark" },
-  { name: "", labelKey: "model.providerNames.tencent", value: "tencent" },
-  { name: "", labelKey: "model.providerNames.moonshot", value: "moonshot" },
-  { name: "", labelKey: "model.providerNames.qianfan", value: "qianfan" },
-  { name: "Minimax", value: "minimax" },
-  { name: "Anthropic", value: "anthropic" },
-  { name: "MindIE", value: "MindIE" },
-];
-const bishengModelProvider = { name: "bishengRT", value: "bisheng_rt" };
-
-const defaultForm = {
+export const defaultForm = {
   id: null as any,
   type: "",
   name: "",
@@ -78,21 +61,32 @@ const defaultForm = {
   tenant_id: undefined,
 };
 
+interface ModelConfigProps {
+  id: number;
+  onGetName: (name: string) => string;
+  onBack: () => void;
+  onReload?: () => void;
+  onBerforSave: (id: number | null, name: string) => boolean;
+  onAfterSave: (message: string) => void;
+}
 export default function ModelConfig({
   id,
   onGetName,
   onBack,
-  onReload,
   onBerforSave,
   onAfterSave,
-}) {
+}: ModelConfigProps) {
   const { t } = useTranslation(["bs", "model"]);
+  const selectLabels = useSelectLabels();
   const { refetch: refetchConfig } = useLinsightConfig();
   const { user } = useContext(userContext);
   const { appConfig } = useContext(locationContext);
 
   const [formData, setFormData] = useState({ ...defaultForm });
   const [nameError, setNameError] = useState("");
+  const [detailError, setDetailError] = useState<unknown>(null);
+  const [detailLoading, setDetailLoading] = useState(id !== -1);
+  const [detailReload, setDetailReload] = useState(0);
   const [connectionVersion, setConnectionVersion] = useState(0);
   const [autoFetchVersion, setAutoFetchVersion] = useState(0);
 
@@ -114,11 +108,27 @@ export default function ModelConfig({
   });
 
   useEffect(() => {
+    let active = true;
+    setDetailError(null);
+    setFormData({ ...defaultForm });
+    setDetailLoading(id !== -1);
     if (id === -1) return;
-    getLLmServerDetail(id).then((res) => {
-      setFormData(res);
-    });
-  }, [id]);
+    void getLLmServerDetail(id)
+      .then((res) => {
+        if (active) setFormData(res);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setDetailError(error);
+        showApiError(error);
+      })
+      .finally(() => {
+        if (active) setDetailLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [id, detailReload]);
 
   const handleTypeChange = (val) => {
     const name = onGetName(
@@ -130,7 +140,7 @@ export default function ModelConfig({
 
   const handleAddModel = () => {
     const maxIndex = formData.models.reduce(
-      (max, el, i) =>
+      (max, el) =>
         el.name.match(/model (\d+)/)
           ? Math.max(max, +el.name.match(/model (\d+)/)[1])
           : max,
@@ -187,7 +197,11 @@ export default function ModelConfig({
   const formRef = useRef(null);
   const [isLoading, setIsLoading] = useState(false);
   const handleSave = async () => {
-    if (formData.limit_flag && (!Number.isFinite(Number(formData.limit)) || Number(formData.limit) < 1)) return;
+    if (
+      formData.limit_flag &&
+      (!Number.isFinite(Number(formData.limit)) || Number(formData.limit) < 1)
+    )
+      return;
     setIsLoading(true);
     try {
       const exists = onBerforSave(formData.id, formData.name);
@@ -216,7 +230,10 @@ export default function ModelConfig({
       const hasTTSVoiceError = normalizedModels.some(
         (model) => model.model_type === "tts" && !model.config?.voice,
       );
-      if (hasInvalidModelName(normalizedModels) || normalizedModels.some((model) => !model.model_type)) {
+      if (
+        hasInvalidModelName(normalizedModels) ||
+        normalizedModels.some((model) => !model.model_type)
+      ) {
         return toast.show({
           type: "warning",
           message: t("model.modelNameValidation"),
@@ -242,23 +259,19 @@ export default function ModelConfig({
       };
 
       if (id === -1) {
-        await captureAndAlertRequestErrorHoc(
-          addLLmServer(saveData).then((res) => {
-            onAfterSave(res.code === 10803 ? res.msg : t("model.addSuccess"));
-            onBack();
-          }),
-        );
+        await addLLmServer(saveData).then((res) => {
+          onAfterSave(res.code === 10803 ? res.msg : t("model.addSuccess"));
+          onBack();
+        });
       } else {
-        await captureAndAlertRequestErrorHoc(
-          updateLLmServer(saveData).then((res) => {
-            onAfterSave(t("model.updateSuccess"));
-            onBack();
-          }),
-        );
+        await updateLLmServer(saveData).then(() => {
+          onAfterSave(t("model.updateSuccess"));
+          onBack();
+        });
       }
       refetchConfig();
     } catch (error) {
-      console.error("Save error:", error);
+      showApiError(error);
     } finally {
       setIsLoading(false);
     }
@@ -269,7 +282,7 @@ export default function ModelConfig({
       desc: t("model.deleteConfirmation"),
       onOk(next) {
         captureAndAlertRequestErrorHoc(
-          deleteLLmServer(id).then((res) => {
+          deleteLLmServer(id).then(() => {
             onAfterSave(t("model.deleteSuccess"));
             refetchConfig();
           }),
@@ -298,6 +311,31 @@ export default function ModelConfig({
       </div>
     );
 
+  if (detailLoading)
+    return (
+      <div role="status">
+        <LoadingIcon />
+      </div>
+    );
+  if (detailError)
+    return (
+      <Alert
+        type="error"
+        live
+        description={
+          detailError instanceof Error
+            ? detailError.message
+            : String(t("api_errors:fallback"))
+        }
+        actions={[
+          {
+            label: t("retry", { ns: "knowledge" }),
+            onClick: () => setDetailReload((value) => value + 1),
+          },
+        ]}
+      />
+    );
+
   return (
     <div className="relative size-full py-4">
       <div className="flex ml-6 items-center gap-x-3">
@@ -323,23 +361,17 @@ export default function ModelConfig({
             {t("model.interModelFormat")}
           </Label>
           <Select
-            value={formData.type}
+            {...selectLabels}
+            aria-label={t("model.providerType")}
             disabled={id !== -1}
-            onValueChange={handleTypeChange}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {_modelProvider.map((model) => (
-                  <SelectItem key={model.value} value={model.value}>
-                    {model.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+            value={formData.type || null}
+            onChange={(value) => {
+              if (value) handleTypeChange(value);
+            }}
+            options={_modelProvider
+              .filter((model) => model.value)
+              .map((model) => ({ value: model.value, label: model.name }))}
+          />
         </div>
         <div className="mb-2">
           <Label className="bisheng-label">
@@ -354,17 +386,25 @@ export default function ModelConfig({
             onChange={(e) => {
               const name = e.target.value;
               setFormData({ ...formData, name });
-              setNameError(!name ? t("model.cannotBeEmpty") : name.length > 100 ? t("model.max100Characters") : "");
+              setNameError(
+                !name
+                  ? t("model.cannotBeEmpty")
+                  : name.length > 100
+                    ? t("model.max100Characters")
+                    : "",
+              );
             }}
           ></Input>
-          {nameError && <span className="text-red-500 text-xs">{nameError}</span>}
+          {nameError && (
+            <span className="text-red-500 text-xs">{nameError}</span>
+          )}
         </div>
         <CustomForm
           ref={formRef}
           showDefault={id === -1}
           provider={formData.type}
           formData={formData.config}
-          modelTypes={formData.models.map(model => model.model_type)}
+          modelTypes={formData.models.map((model) => model.model_type)}
           providerName={
             _modelProvider.find((el) => el.value === formData.type)?.name
           }
@@ -436,7 +476,12 @@ export default function ModelConfig({
                     })
                   }
                 />
-                <Button size="small" variant="text" color="default" onClick={handleAddModel}>
+                <Button
+                  size="small"
+                  variant="text"
+                  color="default"
+                  onClick={handleAddModel}
+                >
                   <Plus className="mr-1 size-4" />
                   {t("model.addModelManually", { ns: "model" })}
                 </Button>
@@ -493,8 +538,16 @@ export default function ModelConfig({
                     type="number"
                     value={formData.limit}
                     onChange={(e) => {
-                      if (!isNumberDraftWithinBounds(e.currentTarget.value, { min: 1 })) return;
-                      setFormData({ ...formData, limit: Number(e.target.value) });
+                      if (
+                        !isNumberDraftWithinBounds(e.currentTarget.value, {
+                          min: 1,
+                        })
+                      )
+                        return;
+                      setFormData({
+                        ...formData,
+                        limit: Number(e.target.value),
+                      });
                     }}
                     className="w-24 h-8"
                   ></Input>
@@ -525,10 +578,7 @@ export default function ModelConfig({
       </div>
       <div className="absolute right-0 bottom-0 p-4 flex gap-4">
         {id !== -1 && (
-          <Button
-            variant="outlined" color="danger"
-            onClick={handleModelDel}
-          >
+          <Button variant="outlined" color="danger" onClick={handleModelDel}>
             {t("model.delete")}
           </Button>
         )}

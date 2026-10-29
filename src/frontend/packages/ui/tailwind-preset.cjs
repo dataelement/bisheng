@@ -151,6 +151,8 @@ module.exports = {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+        // Top rung of the ladder (design-token.cjs RADIUS); Tailwind stops at 3xl.
+        '4xl': '2rem',
       },
       // Two shadow tiers only (基础-圆角与阴影规范.mdx §2.1): `shadow-popup` for
       // click-away overlays (dropdown, popover, toast), `shadow-modal` for
@@ -222,6 +224,30 @@ module.exports = {
           from: { opacity: '1' },
           to: { opacity: '0' },
         },
+        // Select / Dropdown panel motion (组件-Select选择器.md §8): fade in while
+        // sliding 4px in from the trigger's side, fade out in place. `translate`
+        // (the standalone property), not `transform`, so it never fights a
+        // positioning transform.
+        'popup-in-down': {
+          from: { opacity: '0', translate: '0 -4px' },
+          to: { opacity: '1', translate: '0 0' },
+        },
+        'popup-in-up': {
+          from: { opacity: '0', translate: '0 4px' },
+          to: { opacity: '1', translate: '0 0' },
+        },
+        'popup-in-right': {
+          from: { opacity: '0', translate: '-4px 0' },
+          to: { opacity: '1', translate: '0 0' },
+        },
+        'popup-in-left': {
+          from: { opacity: '0', translate: '4px 0' },
+          to: { opacity: '1', translate: '0 0' },
+        },
+        'popup-out': {
+          from: { opacity: '1' },
+          to: { opacity: '0' },
+        },
       },
       animation: {
         'tooltip-in': 'tooltip-in 150ms cubic-bezier(0.2, 0, 0, 1)',
@@ -233,10 +259,26 @@ module.exports = {
         'modal-overlay-out': 'modal-overlay-out 160ms cubic-bezier(0.2, 0, 0, 1)',
         'modal-content-in': 'modal-content-in 200ms cubic-bezier(0.2, 0, 0, 1)',
         'modal-content-out': 'modal-content-out 160ms cubic-bezier(0.2, 0, 0, 1)',
+        // Same 150 / 100ms pair as the tooltip.
+        'popup-in-down': 'popup-in-down 150ms cubic-bezier(0.2, 0, 0, 1)',
+        'popup-in-up': 'popup-in-up 150ms cubic-bezier(0.2, 0, 0, 1)',
+        'popup-in-right': 'popup-in-right 150ms cubic-bezier(0.2, 0, 0, 1)',
+        'popup-in-left': 'popup-in-left 150ms cubic-bezier(0.2, 0, 0, 1)',
+        'popup-out': 'popup-out 100ms cubic-bezier(0.2, 0, 0, 1)',
       },
     },
   },
   plugins: [
+    plugin(({ addUtilities }) => {
+      // Shared exception to native scrollbars: hide them without disabling scrolling.
+      addUtilities({
+        '.no-scrollbar, .scrollbar-hide': {
+          'scrollbar-width': 'none',
+          '-ms-overflow-style': 'none',
+          '&::-webkit-scrollbar': { display: 'none', width: '0', height: '0' },
+        },
+      });
+    }),
     plugin(({ addVariant }) => {
       // Primary input: mouse + hover vs touch / coarse pointer.
       addVariant('fine-pointer', '@media (hover: hover) and (pointer: fine)');

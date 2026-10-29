@@ -108,17 +108,6 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
         // loadchunks(fileValue)
     }
 
-    // const handleDeleteChunk = async (data) => {
-    //     await captureAndAlertRequestErrorHoc(delChunkInPreviewApi({
-    //         knowledge_id: id,
-    //         file_path: fileValue,
-    //         text: data.text,
-    //         chunk_index: data.metadata.chunk_index
-    //     }))
-    //     const res = paragraphs.filter(el => el.metadata.chunk_index !== data.metadata.chunk_index)
-    //     setParagraphs(res)
-    // }
-
     if (!open) return null
 
     if (loading) return (

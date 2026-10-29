@@ -10,7 +10,7 @@ BiSheng 前端由两个独立的 React 应用构成：**Platform**（管理端�
 | 包名 | bisheng | bishengchat |
 | 版本 | 2.4.0_beta1 | 2.4.0 |
 | React | 18.3.1 | 18.2.0 |
-| Vite | 5.3.1 (SWC 编译) | 6.3.6 |
+| Vite | 6.4.x（Babel React 插件） | 6.4.x（Babel React 插件） |
 | 开发端口 | 3001 | 4001 |
 | 基础路径 | `/`（可配置） | `/workspace` |
 | 构建输出 | `build/` | `build/` |

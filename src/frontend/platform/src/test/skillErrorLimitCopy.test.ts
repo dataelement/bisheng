@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+import { normalizeApiError } from '@bisheng/api-client'
+import { notification } from '@bisheng/ui'
 
-import { getSkillErrorMessage } from "@/components/LinSight/skill/skillErrors"
+import { getSkillErrorMessage, showSkillError } from "@/components/LinSight/skill/skillErrors"
 import type { SkillUploadLimit } from "@/controllers/API/linsight"
 
 // Minimal i18next stand-in: renders the placeholders the way the real copy does and
@@ -35,3 +37,19 @@ describe("skill size-limit error copy", () => {
         expect(getSkillErrorMessage({ status_code: 11053 }, t)).toBe("skillManage.errors.notFound")
     })
 })
+
+it('presents specialized silent validation once and respects canceled/global/already-presented failures', () => {
+    const notice = vi.spyOn(notification, 'open').mockReturnValue('notice-id');
+    const error = normalizeApiError({ status_code: 11059 }, { message: 'Too large' });
+    showSkillError(error, t, LIMIT);
+    showSkillError(error, t, LIMIT);
+    expect(notice).toHaveBeenCalledTimes(1);
+    expect(notice).toHaveBeenCalledWith({ type: 'error', description: 'unpacked exceeds 300MB' });
+    expect(error.presentation).toBe('toast');
+    const canceled = normalizeApiError({ code: 'ERR_CANCELED' }, { message: 'Canceled' });
+    const global = normalizeApiError({}, { message: 'Session ended' });
+    global.presentation = 'global';
+    showSkillError(canceled, t, LIMIT);
+    showSkillError(global, t, LIMIT);
+    expect(notice).toHaveBeenCalledTimes(1);
+});

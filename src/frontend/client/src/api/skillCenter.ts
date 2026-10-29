@@ -1,5 +1,6 @@
-import request from './request';
-import { SkillRequestError, type SkillRecord } from '~/components/Skills/types';
+import { isApiError, normalizeApiError } from '@bisheng/api-client';
+import request, { translateApiErrorMessage } from './request';
+import { type SkillRecord } from '~/components/Skills/types';
 
 const SKILL_API = '/api/v1/linsight/skill';
 
@@ -17,6 +18,7 @@ interface ApiCard {
   enabled: boolean;
   content_hash: string;
   bundle_missing: boolean;
+  update_time?: string | null;
   preview?: string;
   source_text?: string;
   files?: { path: string }[];
@@ -46,6 +48,7 @@ function toRecord(row: ApiCard, source: SkillRecord['source']): SkillRecord {
     enabled: Boolean(row.enabled),
     contentHash: row.content_hash,
     bundleMissing: Boolean(row.bundle_missing),
+    updatedAt: row.update_time || '',
     preview: row.preview || '',
     sourceText: row.source_text || '',
     files: (row.files || []).map((file) => file.path),
@@ -54,12 +57,7 @@ function toRecord(row: ApiCard, source: SkillRecord['source']): SkillRecord {
 
 function unwrap<T>(body: Envelope<T>): T {
   if (body?.status_code !== 200) {
-    const data = body?.data;
-    throw new SkillRequestError(
-      body?.status_code,
-      data && typeof data === 'object' ? data as Record<string, unknown> : undefined,
-      body?.status_message,
-    );
+    throw normalizeApiError(body, { message: translateApiErrorMessage(body) });
   }
   return body.data;
 }
@@ -93,7 +91,7 @@ export async function getSkillDetail(skillId: number): Promise<SkillRecord> {
 export async function getSkillFile(skillId: number, path: string): Promise<string> {
   const response = await request.get<Envelope<{ path: string; content: string }>>(
     `${SKILL_API}/personal/${skillId}/file`,
-    { params: { path }, skip403Redirect: true, skipMaintenance: true },
+    { params: { path }, showError: false, skip403Redirect: true, skipMaintenance: true },
   );
   return unwrap(response).content ?? '';
 }
@@ -115,11 +113,51 @@ export async function getPersonalSkillUsage(): Promise<SkillUsage> {
 }
 
 export async function findPersonalSkillByImport(importId: string): Promise<SkillRecord | null> {
-  const response = await request.get<Envelope<ApiCard>>(
-    `${SKILL_API}/personal/import/${encodeURIComponent(importId)}`,
-  );
-  if (response?.status_code === 11053) return null;
-  return toRecord(unwrap(response), 'personal');
+  try {
+    const response = await request.get<Envelope<ApiCard>>(
+      `${SKILL_API}/personal/import/${encodeURIComponent(importId)}`,
+      { showError: false },
+    );
+    if (response?.status_code === 11053) return null;
+    return toRecord(unwrap(response), 'personal');
+  } catch (error) {
+    if (isApiError(error) && error.status_code === 11053) return null;
+    throw error;
+  }
+}
+
+export interface SkillUploadCheck {
+  name: string;
+  displayName: string;
+  description: string;
+  size: number;
+  files: string[];
+}
+
+/** Parse and validate one file. A passing result is not saved. */
+export async function checkPersonalSkill(file: File, skillId?: number): Promise<SkillUploadCheck> {
+  const form = new FormData();
+  form.append('file', file);
+  if (skillId) form.append('skill_id', String(skillId));
+  const response = await request.postMultiPart(
+    `${SKILL_API}/personal/check`,
+    form,
+    { showError: false },
+  ) as Envelope<{
+    name: string;
+    display_name: string;
+    description: string;
+    size: number;
+    files?: { path: string }[];
+  }>;
+  const data = unwrap(response);
+  return {
+    name: data.name,
+    displayName: data.display_name || data.name,
+    description: data.description || '',
+    size: data.size,
+    files: (data.files || []).map((item) => item.path),
+  };
 }
 
 function skillForm(file: File, importId: string, expectedHash?: string): FormData {
@@ -167,4 +205,15 @@ export async function setPersonalSkillEnabled(skillId: number, enabled: boolean)
 
 export async function deletePersonalSkill(skillId: number): Promise<void> {
   unwrap(await request.delete<Envelope<Record<string, never>>>(`${SKILL_API}/personal/${skillId}`));
+}
+
+export async function getSkillScope(userId: string): Promise<string> {
+  const body = await request.get<Envelope<{ leaf_tenant_id: number }>>("/api/v1/user/current-tenant");
+  const data = unwrap(body);
+  if (!Number.isSafeInteger(data.leaf_tenant_id)) throw new Error("Invalid tenant identity");
+  return JSON.stringify([data.leaf_tenant_id, String(userId)]);
+}
+
+export async function setSkillAvailability(skill: SkillRecord, enabled: boolean): Promise<void> {
+  unwrap(await request.put(`/api/v1/dsh/skills/${skill.id}/availability`, { enabled }));
 }

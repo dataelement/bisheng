@@ -1,4 +1,4 @@
-import { asrHints } from "./speechConfig";
+import { asrHintKey, speechModelTypes } from "./speechConfig";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@bisheng/ui";
 import {
@@ -11,23 +11,12 @@ import {
 } from "@/components/bs-ui/dialog";
 import { Input, Textarea } from "@bisheng/ui";
 import { Label } from "@/components/bs-ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/bs-ui/select";
+import { Select } from "@bisheng/ui";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { Switch } from "@bisheng/ui";
 import { ModelFieldHint as QuestionTooltip } from "./ModelFieldHint";
 import { ModelType } from "@/controllers/API/modelDiscovery";
-import {
-  ChevronDown,
-  ChevronUp,
-  Settings,
-  Trash2Icon,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Settings, Trash2Icon } from "lucide-react";
 import { ChangeEvent, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { availableModelTypes } from "./modelDiscoveryState";
@@ -61,6 +50,7 @@ export function ModelItem({
   onConfig,
 }: ModelItemProps) {
   const { t } = useTranslation(["bs", "model"]);
+  const selectLabels = useSelectLabels();
   const { t: tModel } = useTranslation("model");
   const controlId = useId();
   const [expanded, setExpanded] = useState(!data.model_name);
@@ -195,11 +185,14 @@ export function ModelItem({
           </p>
         </div>
         <span className="shrink-0 rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
-          {tModel(`model.type_${model.model_type}`)}
+          {model.model_type === "asr_rt"
+            ? t("model.modelTypeLabels.asr_rt")
+            : tModel(`model.type_${model.model_type}`)}
         </span>
         <Button
           size="small"
-          variant="text" color="default"
+          variant="text"
+          color="default"
           aria-expanded={expanded}
           aria-controls={controlId}
           onClick={() => setExpanded((previous) => !previous)}
@@ -214,8 +207,10 @@ export function ModelItem({
           )}
         </Button>
         <Button
-          size="small" iconOnly
-          variant="text" color="default"
+          size="small"
+          iconOnly
+          variant="text"
+          color="default"
           aria-label={tModel("model.removeConfiguredModel", {
             name: model.model_name || model.name,
           })}
@@ -241,7 +236,11 @@ export function ModelItem({
                 onChange={handleInput}
                 className="h-8"
               ></Input>
-              {model.model_type === "asr" && asrHints[type] && <p className="text-xs text-muted-foreground">{t(asrHints[type])}</p>}
+              {asrHintKey(type, model.model_type) && (
+                <p className="text-xs text-muted-foreground">
+                  {t(asrHintKey(type, model.model_type)!)}
+                </p>
+              )}
               {error && <span className="text-red-500 text-xs">{error}</span>}
             </div>
             <div className="w-full shrink-0 sm:w-40">
@@ -249,22 +248,26 @@ export function ModelItem({
                 {t("model.modelType")}
               </Label>
               <Select
+                {...selectLabels}
+                id={`${controlId}-type`}
+                aria-label={t("model.modelType")}
                 value={model.model_type}
-                onValueChange={(value) => handleSelectChange(value as ModelType)}
-              >
-                <SelectTrigger id={`${controlId}-type`} className="h-8">
-                  <SelectValue placeholder="" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {availableModelTypes(type).map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {tModel(`model.type_${value}`)}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+                onChange={(value) => {
+                  if (value) handleSelectChange(value as ModelType);
+                }}
+                options={Array.from(
+                  new Set([
+                    ...availableModelTypes(type),
+                    ...speechModelTypes(),
+                  ]),
+                ).map((value) => ({
+                  value,
+                  label:
+                    value === "asr_rt"
+                      ? t("model.modelTypeLabels.asr_rt")
+                      : tModel(`model.type_${value}`),
+                }))}
+              />
             </div>
             <div className="ml-auto grid min-h-8 w-96 max-w-full shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-6 self-end">
               <div className="flex min-h-8 items-center">
@@ -279,7 +282,9 @@ export function ModelItem({
                       </Label>
                       <QuestionTooltip
                         className="shrink-0"
-                        content={t(`model.webSearchTip${{ qwen: "Qwen", tencent: "Tencent", moonshot: "Moonshot", minimax: "Minimax" }[type]}`)}
+                        content={t(
+                          `model.webSearchTip${{ qwen: "Qwen", tencent: "Tencent", moonshot: "Moonshot", minimax: "Minimax" }[type]}`,
+                        )}
                       />
                       <Switch
                         id={`${controlId}-search`}
@@ -300,7 +305,11 @@ export function ModelItem({
                         aria-label={t("model.advancedParamsConfig")}
                         className="flex min-h-8 items-center gap-1 whitespace-nowrap text-left text-primary text-xs"
                       >
-                        <Settings size={16} strokeWidth={2} className="shrink-0" />
+                        <Settings
+                          size={16}
+                          strokeWidth={2}
+                          className="shrink-0"
+                        />
                         <span>{t("model.advancedParamsConfig")}</span>
                       </button>
                     </DialogTrigger>
@@ -323,8 +332,15 @@ export function ModelItem({
                         )}
                         <div className="flex items-center justify-between gap-4">
                           <Label>{t("model.pasteAdvancedParamsHere")}</Label>
-                          <Button variant="link" size="small" className="h-auto shrink-0 px-0"
-                            onClick={() => { setInputAdvancedParams(advancedParams); setJsonError(false); }}>
+                          <Button
+                            variant="link"
+                            size="small"
+                            className="h-auto shrink-0 px-0"
+                            onClick={() => {
+                              setInputAdvancedParams(advancedParams);
+                              setJsonError(false);
+                            }}
+                          >
                             {t("model.insertParamsExample")}
                           </Button>
                         </div>
@@ -350,7 +366,11 @@ export function ModelItem({
                         )}
                       </div>
                       <DialogFooter className="mt-4">
-                        <Button variant="outlined" color="default" onClick={handleCloseDialog}>
+                        <Button
+                          variant="outlined"
+                          color="default"
+                          onClick={handleCloseDialog}
+                        >
                           {t("model.cancel")}
                         </Button>
                         <Button onClick={handleSaveAdvancedParams}>

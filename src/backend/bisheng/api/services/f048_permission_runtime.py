@@ -10,9 +10,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from loguru import logger
+
 from bisheng.api.services.f048_application_permission import (
     ApplicationDaoPermissionLoader,
     F048ApplicationPermissionAdapter,
+)
+from bisheng.app_runtime.domain.services.f048_app_permission import (
+    AppDaoPermissionLoader,
+    F048AppPermissionAdapter,
+)
+from bisheng.app_runtime.domain.services.visibility_audit import (
+    HostedAppVisibilityAuditListener,
 )
 from bisheng.channel.domain.services.f048_channel_permission import (
     ChannelDaoPermissionLoader,
@@ -25,10 +34,7 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgeContainerDaoPermissionLoader,
     KnowledgeFileDaoPermissionLoader,
 )
-from bisheng.linsight.domain.services.f048_skill_permission import (
-    F048SkillPermissionAdapter,
-    SkillDaoPermissionLoader,
-)
+from bisheng.linsight.domain.services.skill_permission import SkillPermissionAdapter
 from bisheng.linsight.domain.services.skill_service import (
     configure_linsight_skill_owner_projection,
 )
@@ -50,6 +56,7 @@ from bisheng.permission.application.process_runtime import (
 )
 from bisheng.permission.application.resource_api import (
     F048ResourcePermissionApi,
+    GrantChangeListenerRegistry,
 )
 from bisheng.permission.application.resource_authorization import (
     BoundResourceAuthorizationPort,
@@ -109,6 +116,7 @@ class F048IdentityOwnerProjection:
         resource_version: int,
         context_version: str,
         idempotency_key: str,
+        shared_with_tenant: bool = False,
     ):
         target = VerifiedPermissionTarget.from_business_service(
             tenant_id=tenant_id,
@@ -127,6 +135,7 @@ class F048IdentityOwnerProjection:
             owner_user_id=owner_user_id,
             mode="CUSTOM",
             protected=True,
+            shared_with_tenant=shared_with_tenant,
             idempotency_key=idempotency_key,
         )
 
@@ -168,10 +177,11 @@ def build_f048_resource_composition(
         loader=DashboardDaoPermissionLoader(runtime),
         permission=runtime,
     )
-    skill = F048SkillPermissionAdapter(
-        loader=SkillDaoPermissionLoader(runtime),
+    hosted_app = F048AppPermissionAdapter(
+        loader=AppDaoPermissionLoader(runtime),
         permission=runtime,
     )
+    skill = SkillPermissionAdapter(runtime)
     adapters: dict[str, object] = {
         "workflow": application,
         "assistant": application,
@@ -182,6 +192,12 @@ def build_f048_resource_composition(
         "knowledge_file": knowledge_file,
         "tool": tool,
         "dashboard": dashboard,
+        # F054 hosted applications. Registering here rather than in the API
+        # composition alone is the point: Celery and Linsight processes build
+        # the same map, and a type missing from it fails at the first
+        # check_business_action with RuntimeError("F048 resource registry is
+        # not configured") — far from this file.
+        "app": hosted_app,
         "linsight_skill": skill,
     }
     registry = ResourceAuthorizationRegistry()
@@ -203,6 +219,7 @@ def build_f048_resource_composition(
     registry.register("channel", channel)
     registry.register("tool", tool)
     registry.register("dashboard", dashboard)
+    registry.register("app", hosted_app)
     registry.register("linsight_skill", skill)
     return adapters, registry
 
@@ -230,10 +247,18 @@ async def initialize_f048_api_runtime(
         resources=registry,
         permission=runtime,
     )
+    grant_listeners = GrantChangeListenerRegistry()
+    # F056: registered here rather than through a module import side effect, so
+    # that whether the audit hook exists does not depend on router import order.
+    # This composition root is also where ``mutate_grants`` itself is built, so
+    # the two cannot drift apart: no API runtime, no mutation to observe.
+    grant_listeners.register("app", HostedAppVisibilityAuditListener())
+    logger.info("registered visibility-change audit hook for resource_type=app")
     resource_api = F048ResourcePermissionApi(
         resources=registry,
         runtime=runtime,
         subjects=TenantPermissionSubjectDirectory(),
+        grant_listeners=grant_listeners,
     )
     catalog_state = SqlCatalogState()
     catalog_api = F048CatalogApi(

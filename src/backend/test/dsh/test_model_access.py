@@ -160,7 +160,7 @@ async def test_model_users_service_authorizes_tenant_before_any_query():
     reader = AsyncMock(side_effect=view)
     service = DshManagementService(
         repository_scope=None,
-        gateway=None,
+        sessions=None,
         authorize=authorize,
         profiles=None,
         policy=None,
@@ -252,7 +252,7 @@ async def test_model_user_permissions_authorizes_scope_and_validates_result():
     reader = AsyncMock(side_effect=view)
     service = DshManagementService(
         repository_scope=None,
-        gateway=None,
+        sessions=None,
         authorize=AsyncMock(return_value=({}, 2)),
         profiles=None,
         policy=None,

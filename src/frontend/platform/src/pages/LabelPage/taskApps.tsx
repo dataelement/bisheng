@@ -1,22 +1,33 @@
 // @ts-strict-ignore
-import { Button } from '@bisheng/ui';
+import { Pagination, Button, Select } from '@bisheng/ui';
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import ColFilterUser from "@/components/bs-comp/tableComponent/ColFilterUser";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
-import { TableHeadEnumFilter } from "@/components/bs-ui/select/filter";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { Tooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { getMarkChatsApi } from "@/controllers/API/log";
 import { useTable } from "@/util/hook";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
-export default function taskApps() {
+export default function TaskApps() {
     const { id } = useParams()
     const navigator = useNavigate()
     const { t } = useTranslation()
+    const paginationLocale = usePaginationLocale();
+    const selectLabels = useSelectLabels()
+    const [markStatus, setMarkStatus] = useState<string | null>(null)
+    const markStatusOptions = [
+        { label: t('label.all'), value: '0' },
+        { label: t('label.unannotated'), value: '1' },
+        { label: t('label.annotated'), value: '2' },
+        { label: t('label.noAnnotationRequired'), value: '3' }
+    ]
+    const markStatusLabel = markStatusOptions.find(o => o.value === markStatus)?.label ?? t('label.all')
 
     const { page, pageSize, total, data: datalist, loading, setPage, filterData } = useTable({}, (param) =>
         getMarkChatsApi({
@@ -48,13 +59,21 @@ export default function taskApps() {
                             <TableHead className="w-[120px]">
                                 <div className="flex items-center">
                                     {t('label.annotationStatus')}
-                                    <TableHeadEnumFilter options={[
-                                        { label: t('label.all'), value: '0' },
-                                        { label: t('label.unannotated'), value: '1' },
-                                        { label: t('label.annotated'), value: '2' },
-                                        { label: t('label.noAnnotationRequired'), value: '3' }
-                                    ]}
-                                        onChange={(v) => filterData({ mark_status: v })} />
+                                    <Select
+                                        {...selectLabels}
+                                        options={markStatusOptions}
+                                        value={markStatus}
+                                        onChange={(v) => {
+                                            if (v == null) return
+                                            setMarkStatus(String(v))
+                                            filterData({ mark_status: String(v) })
+                                        }}
+                                        trigger={
+                                            <button type="button" className="outline-none" aria-label={`${t('label.annotationStatus')}: ${markStatusLabel}`}>
+                                                <Outlined.Filter size={16} aria-hidden className={markStatus ? 'text-primary ml-3' : 'text-gray-400 ml-3'} />
+                                            </button>
+                                        }
+                                    />
                                 </div>
                             </TableHead>
                             <TableHead className="w-[140px]">
@@ -119,9 +138,9 @@ export default function taskApps() {
                 </Table>
             </div>
             <div className="bisheng-table-footer bg-background-login px-2">
-                <AutoPagination
+                <Pagination locale={paginationLocale}
                     className="float-right justify-end w-full mr-6"
-                    page={page}
+                    current={page}
                     pageSize={pageSize}
                     total={total}
                     onChange={(newPage) => setPage(newPage)}

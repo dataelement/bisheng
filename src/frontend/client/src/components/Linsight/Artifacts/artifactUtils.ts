@@ -18,6 +18,8 @@ import { getShareTokenFromPath } from '~/utils/shareToken';
 
 /** Output file shape of `output_result.final_files` (= store `file_list`). */
 export interface ArtifactFile {
+    /** Original uploaded attachment URL, already authorized by the conversation. */
+    directUrl?: string;
     file_id: string;
     file_name: string;
     file_url: string;
@@ -38,14 +40,16 @@ export interface ArtifactFile {
     previewAsImage?: boolean;
 }
 
-export type PreviewKind = 'markdown' | 'text' | 'image' | 'document' | 'unsupported';
+export type PreviewKind = 'markdown' | 'text' | 'image' | 'document' | 'slides' | 'unsupported';
 
 const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'];
 // Rich file types rendered inline by the shared FilePreview viewer (pdfjs /
-// mammoth / xlsx). Explicitly excludes `doc` (legacy binary mammoth can't parse)
-// and `ppt`/`pptx` (need a backend pptx→pdf conversion) — those stay 'unsupported'
-// so they keep the "download to view" fallback.
-const DOCUMENT_EXTS = ['pdf', 'docx', 'xls', 'xlsx', 'csv'];
+// mammoth / xlsx). Explicitly excludes `doc` (legacy binary mammoth can't parse),
+// which stays 'unsupported' and keeps the "download to view" fallback.
+const DOCUMENT_EXTS = ['pdf', 'docx', 'xls', 'xlsx', 'csv', 'html', 'htm'];
+// F111: slide decks are previewed through a backend pptx→pdf conversion
+// (see useSlidesPreview), then rendered by the same PDF viewer.
+const SLIDES_EXTS = ['ppt', 'pptx'];
 // Deliverable extensions whose bytes are markdown TEXT - the only artifacts
 // fetchArtifactBlob decodes (to strip citation markers); everything else is
 // handed out as raw bytes.
@@ -63,6 +67,7 @@ export function getPreviewKind(fileName: string): PreviewKind {
     if (ext === 'txt') return 'text';
     if (IMAGE_EXTS.includes(ext)) return 'image';
     if (DOCUMENT_EXTS.includes(ext)) return 'document';
+    if (SLIDES_EXTS.includes(ext)) return 'slides';
     return 'unsupported';
 }
 
@@ -176,6 +181,27 @@ export function collectConversationWorkspaceFiles(
     }
 
     return Array.from(collected.values());
+}
+
+export type WorkspaceLoadState = 'loading' | 'failed' | 'ready';
+
+/**
+ * Whether every task turn of the conversation has its detail in the store.
+ * A turn that is neither loaded nor marked failed is still loading; without
+ * this the workspace shows its empty state during the cold load.
+ */
+export function getWorkspaceLoadState(
+    versionIds: string[],
+    loadedIds: { has: (id: string) => boolean },
+    failedIds: { has: (id: string) => boolean },
+): WorkspaceLoadState {
+    let failed = false;
+    for (const id of versionIds) {
+        if (loadedIds.has(id)) continue;
+        if (!failedIds.has(id)) return 'loading';
+        failed = true;
+    }
+    return failed ? 'failed' : 'ready';
 }
 
 /**
@@ -481,7 +507,7 @@ export async function fetchArtifactBlob(
   versionId: string,
   options?: ArtifactBlobOptions,
 ): Promise<{ blob: Blob; fileName: string }> {
-  const url = await resolveArtifactUrl(file.file_url, versionId);
+  const url = file.directUrl || await resolveArtifactUrl(file.file_url, versionId);
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to download file: ${response.status}`);

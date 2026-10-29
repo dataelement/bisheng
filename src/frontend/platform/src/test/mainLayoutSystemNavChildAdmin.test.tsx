@@ -1,5 +1,3 @@
-import type { ReactNode } from "react";
-
 import { darkContext } from "@/contexts/darkContext";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
@@ -41,20 +39,6 @@ vi.mock("@/components/bs-icons/menu/system", () => ({
   DashboardIcon: () => <span aria-hidden="true" />,
 }));
 
-vi.mock("@/components/bs-ui/select/hover", () => ({
-  SelectHover: ({ triagger, children }: { triagger: ReactNode; children: ReactNode }) => (
-    <div>
-      {triagger}
-      <div>{children}</div>
-    </div>
-  ),
-  SelectHoverItem: ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => (
-    <button type="button" onClick={onClick}>
-      {children}
-    </button>
-  ),
-}));
-
 vi.mock("@/components/bs-ui/separator", () => ({
   Separator: () => null,
 }));
@@ -73,7 +57,8 @@ vi.mock("@/controllers/API/tenant", () => ({
   getUserTenantsApi: vi.fn(),
 }));
 
-vi.mock("@/controllers/request", () => ({
+vi.mock("@/controllers/request", async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/controllers/request')>(),
   captureAndAlertRequestErrorHoc: vi.fn((promise: Promise<unknown>) => Promise.resolve(promise)),
 }));
 

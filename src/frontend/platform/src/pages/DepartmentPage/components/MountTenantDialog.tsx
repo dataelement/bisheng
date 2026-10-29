@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { Button, Input, notification } from '@bisheng/ui';
+import { Alert, Button, Input, notification } from '@bisheng/ui';
 
 import {
   Dialog,
@@ -16,7 +16,7 @@ import DepartmentUsersSelect, {
 
 import { mountTenantApi } from "@/controllers/API/department"
 import { grantTenantAdminApi } from "@/controllers/API/tenant"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { showApiError } from "@/controllers/request"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -49,11 +49,9 @@ export function MountTenantDialog({
     if (!canSubmit) return
     setLoading(true)
     try {
-      const mounted = await captureAndAlertRequestErrorHoc(
-        mountTenantApi(deptId, {
+      const mounted = await mountTenantApi(deptId, {
           tenant_name: tenantName.trim(),
         })
-      )
       if (!mounted) return
 
       // Grant admin role to each selected user. Failures are surfaced but the
@@ -78,6 +76,8 @@ export function MountTenantDialog({
           }) ?? '') })
       }
       onMounted()
+    } catch (error) {
+      showApiError(error)
     } finally {
       setLoading(false)
     }
@@ -93,12 +93,13 @@ export function MountTenantDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950 dark:text-amber-100">
-            {t("bs:tenant.mountHint", {
+          <Alert
+            type="warning"
+            description={t("bs:tenant.mountHint", {
               defaultValue:
                 "将该部门及其子树标记为独立子租户。挂载后该子树下的资源、配额、权限独立于 Root，操作不可撤销（解绑可在租户管理中执行）。",
             })}
-          </div>
+          />
 
           <div>
             <Label className="text-sm">
