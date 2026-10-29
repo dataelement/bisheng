@@ -301,6 +301,10 @@ class AppStateService:
     ) -> ActionResult:
         app = await cls._load(app_id)
         await cls._require_operator(app, actor)
+        if not cls._pick_version(app):
+            from bisheng.app_publish.application.version_review import refuse_unapproved_start
+
+            await refuse_unapproved_start(app.id)
         await require_release_eligible(app.id, version_id=str(cls._pick_version(app) or ""))
         return await cls._start_authorized(
             app,

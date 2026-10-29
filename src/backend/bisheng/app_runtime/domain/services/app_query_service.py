@@ -126,6 +126,9 @@ class AppQueryService:
         app = await cls._load_visible(app_id, actor)
         async with get_async_db_session() as session:
             rows = await AppVersionDao.alist_by_app(session, app.id)
+        from bisheng.app_publish.application.version_review import version_approval_states
+
+        approval_states = await version_approval_states(app.id, app.tenant_id, [row.id for row in rows])
         return [
             {
                 "version_id": row.id,
@@ -133,6 +136,7 @@ class AppQueryService:
                 "release_notes": row.release_notes,
                 "kind": row.kind,
                 "terminal_state": row.terminal_state,
+                "approval_status": approval_states.get(row.id),
                 "submitted_at": row.submitted_at,
                 "is_current": row.id == app.current_version_id,
                 "is_pending": row.id == app.pending_version_id,

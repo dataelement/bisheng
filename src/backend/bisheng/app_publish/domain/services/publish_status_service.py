@@ -116,7 +116,7 @@ class PublishStatusService:
                 # AC-06: an application that arrived through the CLI has no
                 # draft workspace on the platform, so there is nothing for a
                 # "提交发布" button to submit. It is false for the whole of this
-                # release, and the front end explains why rather than hiding it.
+                # release; the UI explains the CLI route without an inert action.
                 "submit": False,
             },
         }

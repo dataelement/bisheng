@@ -9,7 +9,7 @@ type MessageWithLegacyBusinessId = MessageItem & { business_id?: string | number
 /**
  * Pure helpers for reading an inbox message's payload: action code, business target,
  * approval-center deep link. Extracted from the old NotificationsDialog so the merged
- * 消息与审批 dialog can share them without dragging the whole component along.
+ * notifications and approvals can share them without importing the whole component.
  */
 
 export const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
@@ -65,6 +65,7 @@ export const APPROVAL_CENTER_ACTION_CODES = new Set([
     "approval_task_rejected",
     "approval_instance_approved",
     "approval_instance_withdrawn",
+    "approval_instance_cancelled",
     "approval_exception_cancelled",
     "approval_exception_route_missing",
     "approval_exception_approver_empty",
@@ -162,6 +163,10 @@ export const resolveApprovalCenterTarget = (notification: MessageItem) => {
     for (const part of parts) {
         const metadata: PartMetadata = part?.metadata ?? {};
         const data = metadata?.data ?? {};
+        const explicitTask = Number(data.approval_task_id ?? data.task_id);
+        const explicitInstance = Number(data.approval_instance_id ?? data.instance_id);
+        if (Number.isSafeInteger(explicitTask) && explicitTask > 0) taskId = explicitTask;
+        if (Number.isSafeInteger(explicitInstance) && explicitInstance > 0) instanceId = explicitInstance;
         const candidates = [
             [metadata?.business_type, data],
             [metadata?.type, data],
@@ -176,7 +181,7 @@ export const resolveApprovalCenterTarget = (notification: MessageItem) => {
                     metadata?.business_id ??
                     payload?.business_id;
                 const parsedTaskId = Number(rawTaskId);
-                if (Number.isFinite(parsedTaskId)) taskId = parsedTaskId;
+                if (Number.isSafeInteger(parsedTaskId) && parsedTaskId > 0) taskId = parsedTaskId;
             }
             if (!instanceId && /approval_instance_id|instance_id|approval_request_id/i.test(normalizedType)) {
                 const rawInstanceId =
@@ -186,7 +191,7 @@ export const resolveApprovalCenterTarget = (notification: MessageItem) => {
                     metadata?.business_id ??
                     payload?.business_id;
                 const parsedInstanceId = Number(rawInstanceId);
-                if (Number.isFinite(parsedInstanceId)) instanceId = parsedInstanceId;
+                if (Number.isSafeInteger(parsedInstanceId) && parsedInstanceId > 0) instanceId = parsedInstanceId;
             }
         }
     }
@@ -195,13 +200,17 @@ export const resolveApprovalCenterTarget = (notification: MessageItem) => {
     const tab =
         isPendingApprovalStatus(notification.status) ||
             actionCode === "approval_task_pending" ||
+            actionCode === "approval_instance_withdrawn" ||
+            actionCode === "approval_instance_cancelled" ||
             actionCode === "request_menu_access"
             ? "my_tasks"
             : "my_requests";
+    const resolvedInstanceId = instanceId ?? getApprovalRequestId(notification);
     return {
         tab,
         taskId,
-        instanceId: instanceId ?? getApprovalRequestId(notification),
+        instanceId: resolvedInstanceId != null && Number.isSafeInteger(resolvedInstanceId) && resolvedInstanceId > 0
+            ? resolvedInstanceId : null,
     } as const;
 };
 

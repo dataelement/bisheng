@@ -680,5 +680,15 @@
   "26173": "The check record is older than the retained reporting range and cannot be accepted again.",
   "26174": "The check record receiving service is temporarily unavailable. Try again later.",
   "26175": "The check record exceeds the size or item limit and cannot be accepted.",
-  "28010": "The task mode code executor configuration is invalid. Contact your administrator to check the local, container, or e2b configuration, then try again."
+  "28010": "The task mode code executor configuration is invalid. Contact your administrator to check the local, container, or e2b configuration, then try again.",
+  "appStartNoApprovedVersion": "This app has no approved version. Submit a release with bisheng deploy and complete approval first.",
+  "appStartApprovalPending": "This release is awaiting approval and cannot go online yet.",
+  "appStartApprovalRejected": "Release approval was rejected. Review the reason, make changes and resubmit with bisheng deploy.",
+  "appStartApprovalWithdrawn": "Release approval was withdrawn. Resubmit with bisheng deploy.",
+  "appStartApprovalCancelled": "Release approval was cancelled. Resubmit with bisheng deploy.",
+  "appStartApprovalException": "Release approval needs attention. Ask a platform administrator to resolve the exception in the approval center.",
+  "appStartApprovalExecuting": "Approval has passed and deployment is being prepared. Refresh the release status shortly.",
+  "appStartApprovalExecuteFailed": "Execution after approval failed. Ask a platform administrator to review and retry it in the approval center.",
+  "appStartPublishFailed": "Release preparation failed; no version can go online. Review the failure and resubmit.",
+  "appStartPublishPreparing": "Release preparation is in progress. Refresh the release status shortly."
 }

@@ -680,5 +680,15 @@
   "personIdAlreadyExists": "Person ID は既に存在します",
   "network_error": "サーバーに接続できません。ネットワーク接続を確認してから再試行してください。",
   "request_timeout": "リクエストがタイムアウトしました。操作が完了しているか確認してから再試行してください。",
-  "fallback": "操作に失敗しました。しばらくしてから再試行してください。"
+  "fallback": "操作に失敗しました。しばらくしてから再試行してください。",
+  "appStartNoApprovedVersion": "承認済みバージョンがありません。bisheng deploy でリリースを申請し、承認を完了してください。",
+  "appStartApprovalPending": "リリースは承認待ちです。承認が完了するまで公開できません。",
+  "appStartApprovalRejected": "リリース申請は却下されました。理由を確認して修正し、bisheng deploy で再申請してください。",
+  "appStartApprovalWithdrawn": "リリース申請は取り下げられました。bisheng deploy で再申請してください。",
+  "appStartApprovalCancelled": "リリース申請はキャンセルされました。bisheng deploy で再申請してください。",
+  "appStartApprovalException": "リリース承認で異常が発生しました。プラットフォーム管理者に承認センターでの対応を依頼してください。",
+  "appStartApprovalExecuting": "承認済みで公開の準備中です。しばらくしてから状態を更新してください。",
+  "appStartApprovalExecuteFailed": "承認後の処理に失敗しました。プラットフォーム管理者に承認センターでの確認と再試行を依頼してください。",
+  "appStartPublishFailed": "公開の準備に失敗しました。失敗理由を確認して再申請してください。",
+  "appStartPublishPreparing": "リリースを準備中です。しばらくしてから状態を更新してください。"
 }

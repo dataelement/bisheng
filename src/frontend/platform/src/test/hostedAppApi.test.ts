@@ -18,6 +18,7 @@ import {
 } from "@/controllers/API/hostedApp"
 import { getAppsApi } from "@/controllers/API/flow"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { normalizeApiError } from "@bisheng/api-client"
 
 const requestMocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -62,7 +63,7 @@ describe("F054 hosted application API", () => {
     expect(requestMocks.patch).toHaveBeenCalledWith("/api/v1/apps/app-1", {
       name: "n",
     })
-    expect(requestMocks.delete).toHaveBeenCalledWith("/api/v1/apps/app-1")
+    expect(requestMocks.delete).toHaveBeenCalledWith("/api/v1/apps/app-1", { showError: false })
     expect(requestMocks.post.mock.calls.map((call) => call[0])).toEqual([
       "/api/v1/apps/app-1/actions/publish",
       "/api/v1/apps/app-1/actions/manual-publish",
@@ -116,6 +117,19 @@ describe("F054 hosted application API", () => {
     expect(getHostedAppErrorMessage("plain string rejection")).toBe(
       "plain string rejection",
     )
+  })
+
+  it("leaves action errors to the confirmation hook instead of toasting twice", async () => {
+    await stopHostedAppApi("app-1")
+    await resumeHostedAppApi("app-1")
+    await manualPublishHostedAppApi("app-1")
+    expect(requestMocks.post.mock.calls.every((call) => call[2]?.showError === false)).toBe(true)
+  })
+
+  it("shows the normalized local copy instead of the raw server message", () => {
+    const error = normalizeApiError({ status_code: 16163, status_message: "raw server detail" }, { message: "Localized explanation" })
+    expect(getHostedAppErrorMessage(error)).toBe("Localized explanation")
+    expect(getHostedAppErrorCode(error)).toBe(16163)
   })
 })
 

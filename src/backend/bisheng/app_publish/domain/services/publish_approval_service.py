@@ -273,7 +273,8 @@ async def _after_gate(deployment, *, app, payload: dict, result: ApprovalGateRes
             approver_user_ids=approver_ids,
             business_name=str(payload.get("app_name") or app.name),
             instance_id=int(result.instance_id),
-            task_id=result.task_ids[0] if result.task_ids else None,
+            # Each recipient resolves their own task from this instance.
+            task_id=None,
         )
 
     if getattr(handler, "last_self_approval", False):

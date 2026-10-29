@@ -680,5 +680,15 @@
   "26173": "チェック記録が再送を受け付ける保存期間より古いため、再度受信できません。",
   "26174": "チェック記録の受信サービスを一時的に利用できません。しばらくしてから再試行してください。",
   "26175": "チェック記録がサイズまたは件数の上限を超えているため、受信できません。",
-  "28010": "タスクモードのコード実行環境の設定が無効です。管理者に local、container、e2b の設定確認を依頼してから再試行してください。"
+  "28010": "タスクモードのコード実行環境の設定が無効です。管理者に local、container、e2b の設定確認を依頼してから再試行してください。",
+  "appStartNoApprovedVersion": "承認済みバージョンがありません。bisheng deploy でリリースを申請し、承認を完了してください。",
+  "appStartApprovalPending": "リリースは承認待ちです。承認が完了するまで公開できません。",
+  "appStartApprovalRejected": "リリース申請は却下されました。理由を確認して修正し、bisheng deploy で再申請してください。",
+  "appStartApprovalWithdrawn": "リリース申請は取り下げられました。bisheng deploy で再申請してください。",
+  "appStartApprovalCancelled": "リリース申請はキャンセルされました。bisheng deploy で再申請してください。",
+  "appStartApprovalException": "リリース承認で異常が発生しました。プラットフォーム管理者に承認センターでの対応を依頼してください。",
+  "appStartApprovalExecuting": "承認済みで公開の準備中です。しばらくしてから状態を更新してください。",
+  "appStartApprovalExecuteFailed": "承認後の処理に失敗しました。プラットフォーム管理者に承認センターでの確認と再試行を依頼してください。",
+  "appStartPublishFailed": "公開の準備に失敗しました。失敗理由を確認して再申請してください。",
+  "appStartPublishPreparing": "リリースを準備中です。しばらくしてから状態を更新してください。"
 }
