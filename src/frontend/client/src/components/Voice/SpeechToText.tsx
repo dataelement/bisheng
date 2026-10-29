@@ -152,7 +152,7 @@ export function SpeechToTextComponent(props: SpeechToTextProps) {
         type="button"
         size="icon"
         variant={recording ? "outline" : "default"}
-        className="rounded-full w-8 h-8"
+        className="dsh-composer-voice rounded-full"
         disabled={!recording && (props.disabled || busy)}
         aria-label={label}
         aria-pressed={recording}

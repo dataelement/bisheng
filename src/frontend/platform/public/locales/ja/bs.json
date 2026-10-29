@@ -195,6 +195,7 @@
     "otherMethods": "その他のログイン方法"
   },
   "menu": {
+    "tenant": "テナント",
     "languageChinese": "中文",
     "languageJapanese": "日本語",
     "user": "ユーザー",
@@ -2085,9 +2086,9 @@
   "com_dropAnyFileToAdd": "ここにファイルをドロップして会話に追加できます",
   "com_ui_upload_file_type_error": "このアプリケーションはこのファイル形式のアップロードに対応していません。",
   "more": "もっと見る",
-  "tenant.management": "テナント管理",
+  "tenant.management": "テナント",
   "tenant.adminScope.label": "管理ビュー",
-  "tenant.adminScope.global": "全ツリー（デフォルト）",
+  "tenant.adminScope.global": "プラットフォーム全体",
   "tenant.adminScope.switched": "管理ビューを {{name}} に切り替えました",
   "tenant.adminScope.cleared": "全ツリービューに戻しました",
   "tenant.adminScope.loading": "読み込み中...",
@@ -2854,7 +2855,7 @@
     },
     "tenantScope": {
       "label": "管理するテナント",
-      "choose": "管理するテナントを選択してください",
+      "choose": "先に右上で管理対象のテナントを選択してください",
       "hint": "サービスアカウントの表示先と作成先を選択します。既存アカウントの所属は変わりません。この選択は他の管理画面と共有されます。",
       "changed": "管理するテナントが変更されました。更新して操作を再確認してください。元のリクエストは自動的に再試行されません。",
       "refresh": "更新"
@@ -3225,7 +3226,8 @@
     },
     "releaseNotes": {
       "title": "リリースノート",
-      "empty": "リリースノートは未入力です"
+      "empty": "リリースノートは未入力です",
+      "column": "バージョンの説明"
     }
   },
   "dsh": {

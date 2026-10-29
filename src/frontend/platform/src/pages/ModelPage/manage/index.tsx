@@ -16,7 +16,6 @@ import { useNavigate, useSearchParams } from "react-router-dom"
 import ModelConfig from "./ModelConfig"
 import { canManageModelSettings } from "./permissions"
 import { isSpeechModelType } from "./speechConfig"
-import { ScopeBar } from "./ScopeBar"
 import { ModelProviderRow } from "./ModelProviderRow"
 import SystemModelConfig from "./SystemModelConfig"
 
@@ -162,7 +161,6 @@ export default function Management() {
                 stays super-admin only regardless of active scope. */}
             <div className="ml-4 mr-2 flex items-center justify-between gap-4">
                 <div>
-                    {appConfig.multiTenantEnabled && <ScopeBar user={user} onScopeChange={reload} />}
                 </div>
                 <div className="flex gap-4">
                     {canManage && <Button onClick={() => setSystemModel(true)} variant="filled"

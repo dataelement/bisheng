@@ -2,7 +2,6 @@ import { useContext } from "react";
 import { userContext } from "@/contexts/userContext";
 import { locationContext } from "@/contexts/locationContext";
 import type { User } from "@/types/api/user";
-import { ServiceAccountScopeBar } from "./ServiceAccountScopeBar";
 import { ServiceAccountRequestScopeContext, useServiceAccountManagementScope } from "./useServiceAccountManagementScope";
 import { useServiceAccountRequestScope } from "./useServiceAccountManagementScope";
 import { Button, SearchInput } from '@bisheng/ui';
@@ -259,8 +258,6 @@ export function ServiceAccount() {
   const management = useServiceAccountManagementScope({ enabled: !!canSelect,
     userId: user?.user_id ?? 0, tenantId: appConfig?.multiTenantEnabled ? user?.tenant_id ?? 0 : 1 })
   return <div className="flex h-full min-h-0 flex-1 flex-col">
-    {canSelect && <ServiceAccountScopeBar tenantId={management.currentTenantId}
-      disabled={management.switching || management.loading} onChange={management.selectScope} />}
     {user?.user_id && management.ready && management.requestScope ? (
       <ServiceAccountRequestScopeContext.Provider key={management.viewKey} value={management.requestScope}>
         <ServiceAccountView />

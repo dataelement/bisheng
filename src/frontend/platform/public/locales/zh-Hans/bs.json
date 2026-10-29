@@ -196,6 +196,7 @@
     "otherMethods": "其他登录方式"
   },
   "menu": {
+    "tenant": "租  户",
     "languageChinese": "中文",
     "languageJapanese": "日本語",
     "user": "用户",
@@ -2085,9 +2086,9 @@
   "com_dropAnyFileToAdd": "将任何文件拖放到此处以添加到对话中",
   "com_ui_upload_file_type_error": "该应用不支持上传此类型文件",
   "more": "更多",
-  "tenant.management": "租户管理",
+  "tenant.management": "租户",
   "tenant.adminScope.label": "管理视图",
-  "tenant.adminScope.global": "全树（默认）",
+  "tenant.adminScope.global": "整个平台",
   "tenant.adminScope.switched": "已切换管理视图：{{name}}",
   "tenant.adminScope.cleared": "已恢复全树视图",
   "tenant.adminScope.loading": "加载中...",
@@ -2854,7 +2855,7 @@
     },
     "tenantScope": {
       "label": "管理租户",
-      "choose": "请选择管理租户",
+      "choose": "请先在右上角选择管理租户",
       "hint": "选择查看和创建服务账号的租户，不改变已有账号的归属。此选择与其他管理页面共享。",
       "changed": "管理租户已变化。请刷新后重新确认操作，原请求不会自动重试。",
       "refresh": "刷新"
@@ -3225,7 +3226,8 @@
     },
     "releaseNotes": {
       "title": "发布说明",
-      "empty": "未填写发布说明"
+      "empty": "未填写发布说明",
+      "column": "版本说明"
     }
   },
   "dsh": {

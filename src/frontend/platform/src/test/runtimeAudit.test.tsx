@@ -60,3 +60,14 @@ it('renders caller and model metadata while leaving missing tokens unknown and e
   expect(screen.getAllByText('log.runtime.unknown').length).toBeGreaterThan(0)
   expect(screen.queryByText('PRIVATE_BODY')).not.toBeInTheDocument()
 })
+
+it('renders zoned runtime timestamps in the viewers local time instead of raw UTC', async () => {
+  const value = '2026-10-29T03:12:06Z'
+  const date = new Date(value)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const expected = `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  mock.records.mockResolvedValue({ items: [{ id: 1, create_time: value }], next_cursor: null, snapshot_id: 'selection' })
+  render(<RuntimeAuditPanel />, { wrapper })
+  expect(await screen.findByText(expected)).toBeVisible()
+  expect(screen.queryByText(value)).toBeNull()
+})

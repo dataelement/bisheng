@@ -12,9 +12,10 @@ import {
   getHostedAppVersionsApi,
   type HostedAppVersion,
 } from "@/controllers/API/hostedApp"
-import { Fragment, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { versionApprovalI18nKey } from "../types"
+import { VersionReleaseNotes } from "../VersionReleaseNotes"
 
 interface VersionsTabProps {
   appId: string
@@ -75,51 +76,44 @@ export function VersionsTab({ appId, contentSlot = null }: VersionsTabProps) {
               <th className="px-3 py-2 text-left">
                 {t("hostedApp.versions.marker")}
               </th>
+              <th className="w-28 px-3 py-2 text-left font-normal">
+                {t("operations")}
+              </th>
             </tr>
           </thead>
           <tbody>
             {versions.map((version) => {
               const outcomeKey = versionApprovalI18nKey(version)
               return (
-                <Fragment key={version.version_id}>
-                  <tr className="border-t">
-                    <td className="px-3 py-2">{`v${version.version_no}`}</td>
-                    <td className="px-3 py-2">
-                      {t(
-                        version.kind === "initial"
-                          ? "hostedApp.versions.kindInitial"
-                          : "hostedApp.versions.kindIteration",
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      {outcomeKey ? t(outcomeKey) : "-"}
-                    </td>
-                    <td className="px-3 py-2">{version.submitted_at || "-"}</td>
-                    <td className="px-3 py-2">
-                      {version.is_current && (
-                        <span className="mr-1 rounded-sm bg-emerald-100 px-1 text-xs text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                          {t("hostedApp.versions.current")}
-                        </span>
-                      )}
-                      {version.is_pending && (
-                        <span className="rounded-sm bg-amber-100 px-1 text-xs text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-                          {t("hostedApp.versions.pending")}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td colSpan={5} className="max-w-0 px-3 py-2">
-                      <div className="text-caption text-text-3">
-                        {t("hostedApp.releaseNotes.title")}
-                      </div>
-                      <p className="max-w-[calc(100vw-6rem)] whitespace-pre-wrap break-words text-body-sm text-text-1 [overflow-wrap:anywhere] sm:max-w-none">
-                        {version.release_notes ||
-                          t("hostedApp.releaseNotes.empty")}
-                      </p>
-                    </td>
-                  </tr>
-                </Fragment>
+                <tr key={version.version_id} className="border-t">
+                  <td className="px-3 py-2">{`v${version.version_no}`}</td>
+                  <td className="px-3 py-2">
+                    {t(
+                      version.kind === "initial"
+                        ? "hostedApp.versions.kindInitial"
+                        : "hostedApp.versions.kindIteration",
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {outcomeKey ? t(outcomeKey) : "-"}
+                  </td>
+                  <td className="px-3 py-2">{version.submitted_at || "-"}</td>
+                  <td className="px-3 py-2">
+                    {version.is_current && (
+                      <span className="mr-1 rounded-sm bg-emerald-100 px-1 text-xs text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                        {t("hostedApp.versions.current")}
+                      </span>
+                    )}
+                    {version.is_pending && (
+                      <span className="rounded-sm bg-amber-100 px-1 text-xs text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                        {t("hostedApp.versions.pending")}
+                      </span>
+                    )}
+                  </td>
+                  <td className="w-28 whitespace-nowrap px-3 py-2">
+                    <VersionReleaseNotes notes={version.release_notes} />
+                  </td>
+                </tr>
               )
             })}
           </tbody>

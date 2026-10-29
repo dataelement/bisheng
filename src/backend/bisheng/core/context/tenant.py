@@ -70,6 +70,18 @@ _admin_scope_tenant_id: ContextVar[int | None] = ContextVar(
     default=None,
 )
 
+_management_all_tenants: ContextVar[bool] = ContextVar("_management_all_tenants", default=False)
+
+
+def is_management_all_tenants() -> bool:
+    """Only verified browser super administrators may select the global view."""
+    return _management_all_tenants.get() and _is_management_api.get()
+
+
+def set_management_all_tenants(value: bool):
+    return _management_all_tenants.set(value)
+
+
 _is_management_api: ContextVar[bool] = ContextVar(
     "_is_management_api",
     default=False,
@@ -220,6 +232,8 @@ def tenant_execution_scope(tenant_id: int):
         (visible_tenant_ids, frozenset({tenant_id})),
         (_admin_scope_tenant_id, None),
         (_bypass_tenant_filter, False),
+        (_is_management_api, False),
+        (_management_all_tenants, False),
     )
     tokens = [(variable, variable.set(value)) for variable, value in bindings]
     try:

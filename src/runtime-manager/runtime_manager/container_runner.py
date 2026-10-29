@@ -10,17 +10,12 @@ from pathlib import Path
 from runtime_manager.bundle_inputs import BundleInputError
 from runtime_manager.config import Config
 from runtime_manager.docker_backend import get_docker_backend
+from runtime_manager.execution_errors import ExecutionError  # Public compatibility export.
 
 logger = logging.getLogger(__name__)
 
 OP_LABEL = "bisheng.runtime.operation"
 PHASE_LABEL = "bisheng.runtime.phase"
-
-
-class ExecutionError(RuntimeError):
-    def __init__(self, reason, tail=""):
-        super().__init__(reason)
-        self.tail = tail
 
 
 def host_path(config: Config, path: Path):
