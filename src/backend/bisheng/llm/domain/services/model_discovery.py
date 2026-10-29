@@ -14,6 +14,7 @@ from bisheng.common.errcode.llm import ModelDiscoveryError
 from .model_discovery_providers import (
     build_plan,
     next_page,
+    prefer_connection_catalog,
     preset_catalog,
     validate_url,
 )
@@ -220,6 +221,17 @@ class ModelDiscoveryService:
 
     @classmethod
     async def _discover(cls, provider: str, config: dict, source: str, options: dict) -> dict:
+        if source == "auto" and prefer_connection_catalog(provider, config, options):
+            try:
+                return await cls._fetch_catalog(provider, config, "live", options)
+            except ModelDiscoveryError as error:
+                if error.kwargs.get("reason") != "unsupported":
+                    raise
+                # An unsupported list route selects the provider's native discovery contract.
+        return await cls._fetch_catalog(provider, config, source, options)
+
+    @classmethod
+    async def _fetch_catalog(cls, provider: str, config: dict, source: str, options: dict) -> dict:
         plan = build_plan(provider, config, source, options)
         if plan.protocol == "preset":
             payload, docs = preset_catalog(provider)

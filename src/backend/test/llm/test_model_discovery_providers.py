@@ -54,7 +54,7 @@ async def test_native_presets_are_explicit_and_make_no_network_calls(monkeypatch
         pytest.fail("A preset catalog must use its bundled snapshot")
 
     transport(monkeypatch, unexpected)
-    result = await ModelDiscoveryService.discover(provider, {})
+    result = await ModelDiscoveryService.discover(provider, {}, source="preset")
     assert result["source"] == "preset"
     assert result["catalog_date"] == "2026-10-21"
     assert result["docs_url"].startswith("https://")
@@ -93,9 +93,8 @@ async def test_native_bailian_pages_and_capabilities(monkeypatch):
 
 async def test_bailian_compatible_mode_and_workspace_validation(monkeypatch):
     transport(monkeypatch, lambda request: httpx.Response(200, json={"data": []}))
-    with pytest.raises(ModelDiscoveryError) as error:
-        await ModelDiscoveryService.discover("qwen", {})
-    assert error.value.kwargs["reason"] == "workspace"
+    result = await ModelDiscoveryService.discover("qwen", {})
+    assert result["models"] == []
     result = await ModelDiscoveryService.discover("qwen", {}, source="live")
     assert result["models"] == []
     with pytest.raises(ModelDiscoveryError):
@@ -153,7 +152,7 @@ def test_signing_is_deterministic_and_covers_body_and_session_token():
 
 
 async def test_ark_management_credentials_are_required(monkeypatch):
-    transport(monkeypatch, lambda request: pytest.fail("Missing credentials must fail before HTTP"))
+    transport(monkeypatch, lambda request: httpx.Response(404))
     with pytest.raises(ModelDiscoveryError) as error:
         await ModelDiscoveryService.discover("volcengine", {"api_key": "inference-fixture"})
     assert error.value.kwargs["reason"] == "credentials"
@@ -295,3 +294,65 @@ async def test_malformed_vendor_errors_are_sanitized(monkeypatch, payload):
 )
 def test_specialized_models_precede_chat_family_names(name, kind):
     assert identify_type({"id": name})[0] == kind
+
+
+@pytest.mark.parametrize("provider", ["qwen", "volcengine", *sorted(PRESETS)])
+async def test_auto_uses_existing_key_before_requesting_extra_information(monkeypatch, provider):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={"data": [{"id": "qwen-max"}]})
+
+    transport(monkeypatch, handler)
+    result = await ModelDiscoveryService.discover(provider, {"api_key": "fixture"})
+    assert result["source"] == "live"
+    assert result["models"][0]["model_name"] == "qwen-max"
+    assert len(requests) == 1
+    assert requests[0].headers["authorization"] == "Bearer fixture"
+
+
+@pytest.mark.parametrize("provider,reason", [("qwen", "workspace"), ("volcengine", "credentials")])
+async def test_requests_extra_information_only_after_unsupported_list(monkeypatch, provider, reason):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(404)
+
+    transport(monkeypatch, handler)
+    with pytest.raises(ModelDiscoveryError) as error:
+        await ModelDiscoveryService.discover(provider, {"api_key": "fixture"})
+    assert error.value.kwargs["reason"] == reason
+    assert len(requests) == 1
+
+
+@pytest.mark.parametrize("provider", ["qwen", "volcengine", "zhipu"])
+@pytest.mark.parametrize("status,reason", [(401, "auth"), (403, "auth"), (429, "rate_limit"), (500, "failure")])
+async def test_auto_preserves_operational_errors(monkeypatch, provider, status, reason):
+    transport(monkeypatch, lambda request: httpx.Response(status))
+    with pytest.raises(ModelDiscoveryError) as error:
+        await ModelDiscoveryService.discover(provider, {"api_key": "fixture"})
+    assert error.value.kwargs["reason"] == reason
+
+
+@pytest.mark.parametrize("provider", sorted(PRESETS))
+async def test_unsupported_official_catalog_uses_labeled_preset(monkeypatch, provider):
+    transport(monkeypatch, lambda request: httpx.Response(404))
+    result = await ModelDiscoveryService.discover(provider, {"api_key": "fixture"})
+    assert result["source"] == "preset"
+    assert result["catalog_date"]
+
+
+async def test_auto_preserves_timeout_and_invalid_payload(monkeypatch):
+    def timeout(request):
+        raise httpx.ReadTimeout("fixture", request=request)
+
+    transport(monkeypatch, timeout)
+    with pytest.raises(ModelDiscoveryError) as error:
+        await ModelDiscoveryService.discover("qwen", {"api_key": "fixture"})
+    assert error.value.kwargs["reason"] == "timeout"
+    transport(monkeypatch, lambda request: httpx.Response(200, json={"unexpected": []}))
+    with pytest.raises(ModelDiscoveryError) as error:
+        await ModelDiscoveryService.discover("qwen", {"api_key": "fixture"})
+    assert error.value.kwargs["reason"] == "format"

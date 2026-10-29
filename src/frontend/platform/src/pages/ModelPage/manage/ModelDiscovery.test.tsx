@@ -199,66 +199,256 @@ describe("model discovery interaction", () => {
 });
 
 describe("provider-specific discovery", () => {
-  beforeEach(() => vi.mocked(discoverModels).mockReset());
+  beforeEach(() => {
+    vi.mocked(discoverModels).mockReset();
+  });
 
-  it.each(["azure_openai", "volcengine", "tencent", "spark", "minimax", "zhipu"])("opens the picker for %s", async (provider) => {
+  it.each([
+    "azure_openai",
+    "volcengine",
+    "tencent",
+    "spark",
+    "minimax",
+    "zhipu",
+  ])("opens the picker for %s", async (provider) => {
     vi.mocked(discoverModels).mockResolvedValue({ models: [], source: "live" });
-    render(<ModelDiscovery {...props()} provider={provider} getConnection={() => ({ provider, config: {} })} />);
+    render(
+      <ModelDiscovery
+        {...props()}
+        provider={provider}
+        getConnection={() => ({ provider, config: {} })}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
-    await waitFor(() => expect(discoverModels).toHaveBeenCalledWith({ provider, config: {}, source: "auto", options: {} }));
+    await waitFor(() =>
+      expect(discoverModels).toHaveBeenCalledWith({
+        provider,
+        config: {},
+        source: "auto",
+        options: {},
+      }),
+    );
   });
 
   it("labels preset catalogs and clears selections when the source changes", async () => {
-    vi.mocked(discoverModels).mockResolvedValue({ models: catalog, source: "preset", catalog_date: "2026-10-21", docs_url: "https://docs.example/models" });
+    vi.mocked(discoverModels).mockResolvedValue({
+      models: catalog,
+      source: "preset",
+      catalog_date: "2026-10-21",
+      docs_url: "https://docs.example/models",
+    });
     render(<ModelDiscovery {...props()} provider="zhipu" existing={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
     await screen.findByText("model.discoveryPresetNotice");
-    expect(screen.getByRole("link", { name: "model.discoveryDocs" })).toHaveAttribute("href", "https://docs.example/models");
+    expect(
+      screen.getByRole("link", { name: "model.discoveryDocs" }),
+    ).toHaveAttribute("href", "https://docs.example/models");
     fireEvent.click(screen.getByRole("checkbox", { name: "gpt-4o" }));
-    fireEvent.click(screen.getByRole("combobox", { name: "model.discoverySource" }));
-    fireEvent.click(screen.getByRole("option", { name: "model.discoverySourceLive" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "model.discoveryAdvancedSettings" }),
+    );
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "model.discoverySource" }),
+    );
+    fireEvent.click(
+      screen.getByRole("option", { name: "model.discoverySourceLive" }),
+    );
     expect(screen.queryByText("gpt-4o")).toBeNull();
-    expect(screen.getByRole("button", { name: "model.addSelectedModels" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "model.refreshModels" }));
-    await waitFor(() => expect(discoverModels).toHaveBeenLastCalledWith(expect.objectContaining({ source: "live" })));
+    expect(
+      screen.getByRole("button", { name: "model.addSelectedModels" }),
+    ).toBeDisabled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "model.refreshModels" }),
+    );
+    await waitFor(() =>
+      expect(discoverModels).toHaveBeenLastCalledWith(
+        expect.objectContaining({ source: "live" }),
+      ),
+    );
   });
 
   it("sends request-only credentials and clears them when closed", async () => {
-    vi.mocked(discoverModels).mockResolvedValue({ models: [], source: "live", scope: "deployments" });
+    vi.mocked(discoverModels).mockResolvedValue({
+      models: [],
+      source: "live",
+      scope: "deployments",
+    });
     render(<ModelDiscovery {...props()} provider="volcengine" />);
     fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
     await screen.findByText("model.emptyModelCatalog");
-    fireEvent.change(screen.getByLabelText("model.discoveryAccessKey"), { target: { value: "ak-fixture" } });
-    fireEvent.change(screen.getByLabelText("model.discoverySecretKey"), { target: { value: "sk-fixture" } });
-    fireEvent.click(screen.getByRole("button", { name: "model.refreshModels" }));
-    await waitFor(() => expect(discoverModels).toHaveBeenLastCalledWith(expect.objectContaining({ options: { access_key_id: "ak-fixture", secret_access_key: "sk-fixture" } })));
+    fireEvent.click(
+      screen.getByRole("button", { name: "model.discoveryAdvancedSettings" }),
+    );
+    fireEvent.change(screen.getByLabelText("model.discoveryAccessKey"), {
+      target: { value: "ak-fixture" },
+    });
+    fireEvent.change(screen.getByLabelText("model.discoverySecretKey"), {
+      target: { value: "sk-fixture" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "model.refreshModels" }),
+    );
+    await waitFor(() =>
+      expect(discoverModels).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          options: {
+            access_key_id: "ak-fixture",
+            secret_access_key: "sk-fixture",
+          },
+        }),
+      ),
+    );
     await screen.findByText("model.emptyModelCatalog");
     fireEvent.click(screen.getByRole("button", { name: "model.cancel" }));
     fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "model.discoveryAdvancedSettings" }),
+    );
     expect(screen.getByLabelText("model.discoveryAccessKey")).toHaveValue("");
     expect(screen.getByLabelText("model.discoverySecretKey")).toHaveValue("");
   });
 
   it("requires Azure deployment names before importing model catalog entries", async () => {
-    vi.mocked(discoverModels).mockResolvedValue({ models: [catalog[0]], source: "live", scope: "azure_models" });
+    vi.mocked(discoverModels).mockResolvedValue({
+      models: [catalog[0]],
+      source: "live",
+      scope: "azure_models",
+    });
     const input = props();
     render(<ModelDiscovery {...input} provider="azure_openai" existing={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
     await screen.findByText("gpt-4o");
     expect(screen.getByRole("checkbox", { name: "gpt-4o" })).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("model.discoveryDeploymentFor"), { target: { value: "production-chat" } });
+    fireEvent.change(screen.getByLabelText("model.discoveryDeploymentFor"), {
+      target: { value: "production-chat" },
+    });
     fireEvent.click(screen.getByRole("checkbox", { name: "gpt-4o" }));
-    fireEvent.click(screen.getByRole("button", { name: "model.addSelectedModels" }));
-    expect(input.onImport).toHaveBeenCalledWith([{ ...catalog[0], model_name: "production-chat" }]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "model.addSelectedModels" }),
+    );
+    expect(input.onImport).toHaveBeenCalledWith([
+      { ...catalog[0], model_name: "production-chat" },
+    ]);
   });
 
   it("invalidates a pending response when management options change", async () => {
     let resolve!: (value: { models: typeof catalog }) => void;
-    vi.mocked(discoverModels).mockReturnValue(new Promise((done) => { resolve = done; }));
+    vi.mocked(discoverModels).mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
     render(<ModelDiscovery {...props()} provider="volcengine" />);
     fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
-    fireEvent.change(screen.getByLabelText("model.discoveryAccessKey"), { target: { value: "changed" } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "model.discoveryAdvancedSettings" }),
+    );
+    fireEvent.change(screen.getByLabelText("model.discoveryAccessKey"), {
+      target: { value: "changed" },
+    });
     await act(async () => resolve({ models: catalog }));
     expect(screen.queryByText("whisper-1")).toBeNull();
+  });
+});
+
+describe("progressive model discovery", () => {
+  beforeEach(() => {
+    vi.mocked(discoverModels).mockReset();
+  });
+
+  it.each(["qwen", "volcengine", "azure_openai", "zhipu"])(
+    "keeps %s extra settings hidden on automatic fetch",
+    async (provider) => {
+      vi.mocked(discoverModels).mockResolvedValue({
+        models: [],
+        source: "live",
+      });
+      render(
+        <ModelDiscovery
+          {...props()}
+          provider={provider}
+          autoFetchVersion={1}
+        />,
+      );
+      await screen.findByText("model.emptyModelCatalog");
+      expect(
+        screen.queryByRole("combobox", { name: "model.discoverySource" }),
+      ).toBeNull();
+      expect(screen.queryByLabelText("model.discoveryWorkspace")).toBeNull();
+      expect(screen.queryByLabelText("model.discoveryAccessKey")).toBeNull();
+      expect(screen.queryByLabelText("model.discoveryResourceId")).toBeNull();
+      expect(discoverModels).toHaveBeenCalledWith(
+        expect.objectContaining({ source: "auto", options: {} }),
+      );
+    },
+  );
+
+  it("requests only a missing workspace and hides it after a successful retry", async () => {
+    vi.mocked(discoverModels).mockRejectedValueOnce({
+      response: { data: { data: { reason: "workspace" } } },
+    });
+    vi.mocked(discoverModels).mockResolvedValue({
+      models: catalog,
+      source: "live",
+    });
+    render(<ModelDiscovery {...props()} provider="qwen" />);
+    fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+    await screen.findByLabelText("model.discoveryWorkspace");
+    expect(screen.queryByLabelText("model.discoveryCatalogUrl")).toBeNull();
+    fireEvent.change(screen.getByLabelText("model.discoveryWorkspace"), {
+      target: { value: "workspace-test" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "model.refreshModels" }),
+    );
+    await screen.findByText("whisper-1");
+    expect(discoverModels).toHaveBeenLastCalledWith(
+      expect.objectContaining({ options: { workspace_id: "workspace-test" } }),
+    );
+    expect(screen.queryByLabelText("model.discoveryWorkspace")).toBeNull();
+  });
+
+  it("shows required management credentials after an unsupported list route", async () => {
+    vi.mocked(discoverModels).mockRejectedValueOnce({ response: { data: { data: { reason: "credentials" } } } });
+    render(<ModelDiscovery {...props()} provider="volcengine" />);
+    fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+    await screen.findByLabelText("model.discoveryAccessKey");
+    expect(screen.getByLabelText("model.discoverySecretKey")).toBeInTheDocument();
+    expect(screen.queryByLabelText("model.discoverySessionToken")).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "model.discoverySource" })).toBeNull();
+  });
+
+  it("keeps credentials hidden for an authentication error", async () => {
+    vi.mocked(discoverModels).mockRejectedValue({
+      response: { data: { data: { reason: "auth" } } },
+    });
+    render(<ModelDiscovery {...props()} provider="volcengine" />);
+    fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "model.discoveryError_auth",
+    );
+    expect(screen.queryByLabelText("model.discoveryAccessKey")).toBeNull();
+  });
+
+  it("discards a late missing-information response after closing", async () => {
+    let reject!: (error: unknown) => void;
+    vi.mocked(discoverModels).mockReturnValueOnce(
+      new Promise((_, fail) => {
+        reject = fail;
+      }),
+    );
+    render(<ModelDiscovery {...props()} provider="qwen" />);
+    fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+    fireEvent.click(screen.getByRole("button", { name: "model.cancel" }));
+    await act(async () =>
+      reject({ response: { data: { data: { reason: "workspace" } } } }),
+    );
+    vi.mocked(discoverModels).mockResolvedValue({ models: [], source: "live" });
+    fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+    await screen.findByText("model.emptyModelCatalog");
+    expect(screen.queryByLabelText("model.discoveryWorkspace")).toBeNull();
   });
 });

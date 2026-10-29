@@ -202,7 +202,8 @@
     "discoveryError_workspace": "Bailian ワークスペース ID または一覧 URL を入力するか、互換 API を選択してください。",
     "discoveryError_resource": "表示形式に従って完全な Azure リソース ID を入力してください。",
     "discoveryError_region": "エンドポイント取得は現在北京に対応しています。他の地域は互換 API または手動追加を使用してください。",
-    "discoveryError_rate_limit": "モデルサービスのレート制限に達しました。後で再試行してください。"
+    "discoveryError_rate_limit": "モデルサービスのレート制限に達しました。後で再試行してください。",
+    "discoveryAdvancedSettings": "接続の詳細設定"
   },
   "finetune": {
     "rtServiceManagement": "FTサービス管理",

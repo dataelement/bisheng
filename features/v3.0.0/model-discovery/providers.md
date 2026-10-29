@@ -1,6 +1,6 @@
 # 模型目录厂商适配
 
-核对日期：2026-10-21。范围为新增服务商表单中的 18 种格式；内部 bishengRT 沿用原配置入口。
+接口依据核对日期：2026-10-21；获取顺序更新：2026-10-29。范围为新增服务商表单中的 18 种格式；内部 bishengRT 沿用原配置入口。
 
 | 格式 | 默认获取方式与保存对象 | 官方依据 |
 | --- | --- | --- |
@@ -10,16 +10,16 @@
 | Xinference | GET /v1/models，运行模型 UID 与类型 | [Client](https://inference.readthedocs.io/en/stable/reference/generated/xinference.client.Client.html) |
 | llama.cpp | GET /v1/models，服务加载的模型 | [Server](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md) |
 | vLLM | GET /v1/models，服务暴露的模型 ID | [Serving](https://docs.vllm.ai/en/stable/serving/online_serving/) |
-| 阿里云百炼 | 原生 /api/v1/models，分页与 capabilities；北京地区补充 Workspace ID；可指定目录 URL | [模型列表](https://help.aliyun.com/zh/model-studio/list-models) |
+| 阿里云百炼 | 北京通用地址先使用现有 API Key 查询兼容列表；接口明确不支持时提示 Workspace ID 并查询原生分页目录。已有空间域名直接复用；目录 URL 在高级设置中配置 | [模型列表](https://help.aliyun.com/zh/model-studio/list-models) |
 | DeepSeek | Bearer Key，GET /v1/models | [List models](https://api-docs.deepseek.com/api/list-models/) |
 | 硅基流动 | GET /v1/models；按 sub_type 补全聊天、向量、重排、语音识别、图像与视频能力 | [Models](https://api-docs.siliconflow.cn/docs/api/models-get) |
-| 火山引擎 | 北京管理接口 ListEndpoints，AK/SK V4 签名，可带 Session Token/项目；分页读取 Running 接入点 ID | [ListEndpoints](https://docs.volcengine.com/docs/ark/list-endpoints-api?lang=zh)、[鉴权](https://docs.volcengine.com/docs/ark/base-url-and-authentication?lang=zh) |
-| 智谱 AI | 官方连接使用预置目录；自定义兼容地址可实时获取 | [模型概览](https://docs.bigmodel.cn/cn/guide/start/model-overview) |
-| 讯飞星火 | 官方连接使用预置目录；兼容查询沿用原连接 API Key/Secret 鉴权组合 | [HTTP API](https://www.xfyun.cn/doc/spark/HTTP调用文档.html) |
-| 腾讯混元 | 当前 Hunyuan 官方连接使用预置目录；自定义兼容地址可实时获取 | [OpenAI 兼容](https://cloud.tencent.com/document/product/1729/111007) |
+| 火山引擎 | 先用 API Key 获取实时列表；接口明确不支持时提示 AK/SK，改用北京 ListEndpoints 分页读取 Running 接入点 ID；Session Token/项目放入高级设置 | [ListEndpoints](https://docs.volcengine.com/docs/ark/list-endpoints-api?lang=zh)、[鉴权](https://docs.volcengine.com/docs/ark/base-url-and-authentication?lang=zh) |
+| 智谱 AI | 官方连接先实时获取，接口明确不支持时使用标注来源的预置目录；自定义兼容地址可实时获取 | [模型概览](https://docs.bigmodel.cn/cn/guide/start/model-overview) |
+| 讯飞星火 | 官方连接先实时获取，接口明确不支持时使用标注来源的预置目录；兼容查询沿用原连接 API Key/Secret 鉴权组合 | [HTTP API](https://www.xfyun.cn/doc/spark/HTTP调用文档.html) |
+| 腾讯混元 | 当前 Hunyuan 官方连接先实时获取，接口明确不支持时使用标注来源的预置目录；自定义兼容地址可实时获取 | [OpenAI 兼容](https://cloud.tencent.com/document/product/1729/111007) |
 | Moonshot | Bearer Key，GET /v1/models | [API troubleshooting](https://www.kimi.com/help/kimi-api/api-troubleshooting) |
 | 百度千帆 | Bearer Key，GET /v2/models | [模型列表](https://cloud.baidu.com/doc/qianfan-api/s/Dmba8k71y) |
-| MiniMax | 官方连接使用预置目录；自定义兼容地址可实时获取 | [OpenAI API](https://platform.minimax.io/docs/api-reference/text-openai-api) |
+| MiniMax | 官方连接先实时获取，接口明确不支持时使用标注来源的预置目录；自定义兼容地址可实时获取 | [OpenAI API](https://platform.minimax.io/docs/api-reference/text-openai-api) |
 | Anthropic | x-api-key + anthropic-version，GET /v1/models，after_id 游标 | [Models](https://platform.claude.com/docs/en/api/models/list) |
 | MindIE | GET /v1/models，部署模型 ID | [模型查询](https://www.hiascend.com/doc_center/source/zh/mindie/300/mindiellm/llmdev/mindie_service0320.html) |
 

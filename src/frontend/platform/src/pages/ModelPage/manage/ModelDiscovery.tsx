@@ -67,6 +67,7 @@ export function ModelDiscovery({
   const [typeFilter, setTypeFilter] = useState("all");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [requiredReason, setRequiredReason] = useState("");
   const triggerRef = useRef<HTMLButtonElement>(null);
   const requestVersion = useRef(0);
   const lastConnection = useRef("");
@@ -135,6 +136,7 @@ export function ModelDiscovery({
     setError("");
     setLoading(false);
     setOpen(false);
+    setRequiredReason("");
     setSource("auto");
     setOptions({});
     return () => {
@@ -163,6 +165,7 @@ export function ModelDiscovery({
       if (version === requestVersion.current) {
         setCatalog(result.models);
         setResultInfo(result);
+        setRequiredReason("");
       }
     } catch (failure: unknown) {
       if (version === requestVersion.current) {
@@ -170,6 +173,13 @@ export function ModelDiscovery({
         const reason = (
           failure as { response?: { data?: { data?: { reason?: string } } } }
         )?.response?.data?.data?.reason;
+        setRequiredReason(
+          ["workspace", "credentials", "resource", "region"].includes(
+            reason || "",
+          )
+            ? reason!
+            : "",
+        );
         const reasons = new Set([
           "auth",
           "timeout",
@@ -208,6 +218,7 @@ export function ModelDiscovery({
   ) => {
     requestVersion.current += 1;
     lastConnection.current = "";
+    if (nextSource !== source) setRequiredReason("");
     setSource(nextSource);
     setOptions(nextOptions);
     setCatalog(null);
@@ -221,7 +232,10 @@ export function ModelDiscovery({
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
     if (!nextOpen) {
+      requestVersion.current += 1;
+      setLoading(false);
       setOptions({});
+      setRequiredReason("");
       lastConnection.current = "";
     }
   };
@@ -233,7 +247,8 @@ export function ModelDiscovery({
       <Button
         ref={triggerRef}
         size="small"
-        variant="outlined" color="default"
+        variant="outlined"
+        color="default"
         onClick={() => {
           if (catalog) setOpen(true);
           else void handleFetch();
@@ -256,6 +271,8 @@ export function ModelDiscovery({
           </DialogHeader>
           <div className="flex flex-col gap-3 min-h-0 overflow-y-auto">
             <ModelDiscoveryOptions
+              key={`${provider}:${open}`}
+              requiredReason={requiredReason}
               provider={provider}
               source={source}
               options={options}
@@ -341,7 +358,8 @@ export function ModelDiscovery({
                 )}
                 <Button
                   size="small"
-                  variant="text" color="default"
+                  variant="text"
+                  color="default"
                   disabled={loading}
                   onClick={() => void handleFetch()}
                 >
@@ -495,7 +513,11 @@ export function ModelDiscovery({
               {t("model.selectedModelCount", { count: eligible.length })}
             </span>
             <div className="flex gap-2">
-              <Button variant="outlined" color="default" onClick={() => handleOpenChange(false)}>
+              <Button
+                variant="outlined"
+                color="default"
+                onClick={() => handleOpenChange(false)}
+              >
                 {t("model.cancel")}
               </Button>
               <Button

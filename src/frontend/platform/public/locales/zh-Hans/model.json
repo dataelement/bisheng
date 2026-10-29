@@ -202,7 +202,8 @@
     "discoveryError_workspace": "请填写百炼业务空间 ID 或模型列表地址，也可选择兼容接口实时获取。",
     "discoveryError_resource": "请填写完整的 Azure 资源 ID，格式见输入提示。",
     "discoveryError_region": "当前接入点列表适配北京地域；其他地域可使用兼容接口或手动添加。",
-    "discoveryError_rate_limit": "模型服务请求频繁，请稍后重新获取。"
+    "discoveryError_rate_limit": "模型服务请求频繁，请稍后重新获取。",
+    "discoveryAdvancedSettings": "高级连接设置"
   },
   "finetune": {
     "rtServiceManagement": "FT服务管理",

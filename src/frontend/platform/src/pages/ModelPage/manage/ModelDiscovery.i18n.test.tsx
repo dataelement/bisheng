@@ -101,13 +101,51 @@ describe("model discovery with actual language resources", () => {
   );
 });
 
-it.each([["zh-Hans", zh], ["en-US", en], ["ja", ja]] as const)("translates provider options and catalog source in %s", async (language, resource) => {
-  const i18n = createInstance();
-  await i18n.use(initReactI18next).init({ lng: language, fallbackLng: false, defaultNS: "bs", resources: { [language]: { bs: {}, model: resource } } });
-  vi.mocked(discoverModels).mockResolvedValue({ models: [], source: "live", scope: "deployments" });
-  render(<I18nextProvider i18n={i18n}><ModelDiscovery provider="volcengine" connectionVersion={0} autoFetchVersion={0} existing={[]} getConnection={() => ({ provider: "volcengine", config: {} })} onImport={vi.fn()} /></I18nextProvider>);
-  fireEvent.click(screen.getByRole("button", { name: resource.model.selectModels }));
-  await screen.findByText(resource.model.discoveryScope_deployments);
-  expect(screen.getByLabelText(resource.model.discoveryAccessKey)).toBeInTheDocument();
-  expect(document.body.textContent).not.toContain("model.");
-});
+it.each([
+  ["zh-Hans", zh],
+  ["en-US", en],
+  ["ja", ja],
+] as const)(
+  "translates provider options and catalog source in %s",
+  async (language, resource) => {
+    const i18n = createInstance();
+    await i18n
+      .use(initReactI18next)
+      .init({
+        lng: language,
+        fallbackLng: false,
+        defaultNS: "bs",
+        resources: { [language]: { bs: {}, model: resource } },
+      });
+    vi.mocked(discoverModels).mockResolvedValue({
+      models: [],
+      source: "live",
+      scope: "deployments",
+    });
+    render(
+      <I18nextProvider i18n={i18n}>
+        <ModelDiscovery
+          provider="volcengine"
+          connectionVersion={0}
+          autoFetchVersion={0}
+          existing={[]}
+          getConnection={() => ({ provider: "volcengine", config: {} })}
+          onImport={vi.fn()}
+        />
+      </I18nextProvider>,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: resource.model.selectModels }),
+    );
+    await screen.findByText(resource.model.discoveryScope_deployments);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: resource.model.discoveryAdvancedSettings,
+      }),
+    );
+    expect(
+      screen.getByLabelText(resource.model.discoveryAccessKey),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("model.");
+  },
+);

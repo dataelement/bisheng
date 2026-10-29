@@ -1,4 +1,5 @@
-import { Input } from "@bisheng/ui";
+import { useState } from "react";
+import { Button, Input } from "@bisheng/ui";
 import { Label } from "@/components/bs-ui/label";
 import {
   Select,
@@ -19,6 +20,7 @@ export const presetProviders = new Set([
 
 interface ModelDiscoveryOptionsProps {
   provider: string;
+  requiredReason: string;
   source: DiscoverySource;
   options: Record<string, string>;
   onChange: (source: DiscoverySource, options: Record<string, string>) => void;
@@ -63,49 +65,75 @@ const providerFields: Record<string, OptionField[]> = {
 
 export function ModelDiscoveryOptions({
   provider,
+  requiredReason,
   source,
   options,
   onChange,
 }: ModelDiscoveryOptionsProps) {
   const { t } = useTranslation("model");
+  const [advanced, setAdvanced] = useState(false);
   const presets = presetProviders.has(provider);
-  const fields = source === "auto" ? providerFields[provider] || [] : [];
+  const needsFields = source === "auto" && !!requiredReason;
+  const fields =
+    source === "auto" && (advanced || needsFields)
+      ? (providerFields[provider] || []).filter(
+          (field) =>
+            advanced ||
+            (provider === "qwen"
+              ? field.key === "workspace_id"
+              : provider === "volcengine"
+                ? ["access_key_id", "secret_access_key"].includes(field.key)
+                : true),
+        )
+      : [];
   if (!presets && !providerFields[provider]) return null;
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <Label htmlFor="discovery-source">{t("model.discoverySource")}</Label>
-        <Select
-          value={source}
-          onValueChange={(value) => onChange(value as DiscoverySource, {})}
-        >
-          <SelectTrigger
-            id="discovery-source"
-            className="w-48"
-            aria-label={t("model.discoverySource")}
+      <Button
+        type="button"
+        variant="text"
+        color="default"
+        size="small"
+        aria-expanded={advanced}
+        onClick={() => setAdvanced((value) => !value)}
+      >
+        {t("model.discoveryAdvancedSettings")}
+      </Button>
+      {advanced && (
+        <div className="flex items-center gap-3">
+          <Label htmlFor="discovery-source">{t("model.discoverySource")}</Label>
+          <Select
+            value={source}
+            onValueChange={(value) => onChange(value as DiscoverySource, {})}
           >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="auto">
-              {t("model.discoverySourceAuto")}
-            </SelectItem>
-            <SelectItem value="live">
-              {t("model.discoverySourceLive")}
-            </SelectItem>
-            {presets && (
-              <SelectItem value="preset">
-                {t("model.discoverySourcePreset")}
+            <SelectTrigger
+              id="discovery-source"
+              className="w-48"
+              aria-label={t("model.discoverySource")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">
+                {t("model.discoverySourceAuto")}
               </SelectItem>
-            )}
-          </SelectContent>
-        </Select>
-      </div>
+              <SelectItem value="live">
+                {t("model.discoverySourceLive")}
+              </SelectItem>
+              {presets && (
+                <SelectItem value="preset">
+                  {t("model.discoverySourcePreset")}
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       {fields.length > 0 && (
-        <details open={provider === "volcengine" || provider === "qwen"}>
-          <summary className="cursor-pointer text-sm text-muted-foreground">
+        <div className="rounded-md border p-3">
+          <p className="text-sm font-medium">
             {t(`model.discoveryOptions_${provider}`)}
-          </summary>
+          </p>
           <p className="mt-2 text-xs text-muted-foreground">
             {t(`model.discoveryOptionsHint_${provider}`)}
           </p>
@@ -131,7 +159,7 @@ export function ModelDiscoveryOptions({
               </div>
             ))}
           </div>
-        </details>
+        </div>
       )}
     </div>
   );

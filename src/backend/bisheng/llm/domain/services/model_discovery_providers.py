@@ -172,6 +172,18 @@ class CatalogPlan:
         return "GET", self.next_url or self.url, {"headers": self.headers, "params": self.params or None}
 
 
+def prefer_connection_catalog(provider: str, config: dict, options: dict) -> bool:
+    """Try inference credentials before optional native catalog administration."""
+    if any(value.strip() for value in options.values()):
+        return False
+    host = urlsplit(base_url(provider, config)).hostname
+    return (
+        (provider == "qwen" and host == "dashscope.aliyuncs.com")
+        or (provider == "volcengine" and host == "ark.cn-beijing.volces.com")
+        or (provider in PRESETS and host in PRESETS[provider]["hosts"])
+    )
+
+
 def build_plan(provider: str, config: dict, source: str, options: dict) -> CatalogPlan:
     base = base_url(provider, config)
     host = urlsplit(base).hostname

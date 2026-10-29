@@ -204,7 +204,8 @@
     "discoveryError_workspace": "Enter a Bailian workspace ID or catalog URL, or choose the compatible API.",
     "discoveryError_resource": "Enter a complete Azure resource ID using the format shown.",
     "discoveryError_region": "Endpoint discovery currently supports Beijing. Use a compatible API or manual entry for other regions.",
-    "discoveryError_rate_limit": "The model service rate limit was reached. Retry later."
+    "discoveryError_rate_limit": "The model service rate limit was reached. Retry later.",
+    "discoveryAdvancedSettings": "Advanced connection settings"
   },
   "finetune": {
     "rtServiceManagement": "FT Service Management",
