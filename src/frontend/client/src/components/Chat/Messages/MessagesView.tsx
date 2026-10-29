@@ -105,11 +105,8 @@ export default function MessagesView({
               onClick={() => {
                 setSelectedOrgKbs([]);
                 setEnableOrgKb(false);
-                document.getElementById("create-convo-btn")?.click();
-                // hack
-                setTimeout(() => {
-                  document.getElementById("create-convo-btn")?.click();
-                }, 300);
+                newConvo();
+                navigate('/c/new');
               }}
               aria-label={localize("com_ui_new_chat")}
             >

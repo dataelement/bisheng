@@ -69,7 +69,7 @@ const DocxPreview = ({ filePath }) => {
     }
 
     return (
-        <div className="border rounded-lg overflow-hidden bg-white">
+        <div data-document-canvas className="document-canvas border rounded-lg overflow-hidden">
             {/* 注入自定义样式 */}
             <style dangerouslySetInnerHTML={{ __html: docxStyles }} />
 

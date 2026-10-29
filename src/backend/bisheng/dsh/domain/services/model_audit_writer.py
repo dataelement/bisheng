@@ -169,7 +169,7 @@ class DshModelAuditWriter:
             else:
                 row.content_status = "PARTIAL"
         # Body and control consumers can finish in either order.
-        if event.observed_at.replace(tzinfo=UTC) >= row.last_write_at.replace(tzinfo=UTC):
+        if row.last_write_at is None or event.observed_at.replace(tzinfo=UTC) >= row.last_write_at.replace(tzinfo=UTC):
             row.last_write_at = event.observed_at
         refresh_audit_status(row)
         row.state_version += 1

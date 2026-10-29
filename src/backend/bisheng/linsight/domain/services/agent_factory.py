@@ -465,8 +465,13 @@ def _build_linsight_system_prompt(
             "- 反向同理：**不要**把代码里看到的宿主机绝对路径（形如 /root/.cache/…/<8位任务号>/output/a.png）"
             "传给 read_file / edit_file，去掉前缀只传 output/a.png。\n"
             "- 执行器写完会把本轮产出同步到工作区，随后 ls / glob 一般就能看到它们。"
-            "但**判定成功的依据是执行结果本身**：只要 exitcode 0 且 file_list 里出现了目标文件，"
-            "就视为交付物已产出，继续下一步，不要反复 ls / glob 找它。\n"
+            "exitcode 0 且 file_list 出现目标文件代表文件已产出，接下来按用户要求验收内容与功能。"
+            "Excel 的公式、计算结果和格式，Word/PPT 的可编辑结构与排版，均以实际文件检查为准。"
+            "用户要求的公式应保留并重算缓存值；验收脚本报告 ERROR 时先修复再检查。"
+            "最终使用 file_list 返回的 /output/ 路径引用交付文件，由平台提供预览和下载。\n"
+            "- 调用技能中的辅助函数前先读取对应定义或检查函数签名，按真实参数调用。"
+            "通过 subprocess.run 启动生成和验收脚本时使用 check=True，并读取 stdout/stderr；"
+            "子进程失败时先根据异常修复，实际文件通过验收后再标记完成。\n"
             "- 若日志被截断、你看不到 file_list：可以 ls output/ **核实一次**；"
             "若结果提示「Tool result too large … /large_tool_results/…」，用 read_file 读那个路径取回内容"
             "（必要时配合 offset/limit 分页，或用 grep 在 /large_tool_results/ 下定位关键字）。"
@@ -1160,6 +1165,8 @@ async def create_linsight_agent(
     # active_skills config is threaded.
     skills_advertised = bool(skills_present and file_dir)
     if skills_advertised:
+        from bisheng.linsight.domain.services.skill_availability_middleware import SkillAvailabilityMiddleware
+        middlewares.append(SkillAvailabilityMiddleware(session_model.user_id, getattr(session_model, "skills", None) or []))
         from deepagents.backends.filesystem import FilesystemBackend
         from deepagents.middleware.skills import SkillsMiddleware
 
@@ -1251,6 +1258,9 @@ async def create_linsight_agent(
         # note above for why it goes last).
         build_invalid_tool_call_repair_middleware(tools=researcher.get("tools"), is_subagent=True),
     ]
+    if skills_advertised:
+        researcher["middleware"].append(SkillAvailabilityMiddleware(session_model.user_id, getattr(session_model, "skills", None) or []))
+
     # Same lockstep for skills: the skill-priority lines are advertised IFF
     # SkillsMiddleware was actually attached above (``skills_advertised``), so the
     # prompt never points at an "Available Skills" section that does not exist.
@@ -1299,6 +1309,9 @@ async def _resolve_model(session_model, model_id: str | None) -> tuple[BaseChatM
     ``get_workbench_llm`` re-validates model refs and is not free to call twice.
     """
     workbench_conf = await LLMService.get_workbench_llm(tenant_id=session_model.tenant_id)
+    from bisheng.dsh.domain.services.model_catalog import project_workbench_config
+
+    workbench_conf = await project_workbench_config(workbench_conf, session_model.user_id)
     linsight_conf = settings.get_linsight_conf()
 
     resolved_id = model_id

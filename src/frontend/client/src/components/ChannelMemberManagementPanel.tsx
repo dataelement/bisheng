@@ -168,7 +168,7 @@ export function ChannelMemberManagementPanel({
         } catch {
             showToast({
                 message: localize("update_role_failed") || "角色更新失败，请稍后重试",
-                severity: NotificationSeverity.ERROR,
+                severity: NotificationSeverity.WARNING,
             });
         }
     };
@@ -186,7 +186,7 @@ export function ChannelMemberManagementPanel({
         } catch {
             showToast({
                 message: localize("update_role_failed") || "角色更新失败，请稍后重试",
-                severity: NotificationSeverity.ERROR,
+                severity: NotificationSeverity.WARNING,
             });
         }
     };
@@ -199,7 +199,7 @@ export function ChannelMemberManagementPanel({
         } catch {
             showToast({
                 message: localize("remove_failed") || "移除失败，请稍后重试",
-                severity: NotificationSeverity.ERROR,
+                severity: NotificationSeverity.WARNING,
             });
         }
     };

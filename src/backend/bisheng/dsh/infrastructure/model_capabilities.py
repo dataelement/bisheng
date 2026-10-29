@@ -14,6 +14,7 @@ async def desktop_model_capabilities(model, server) -> ChatCapabilities:
 
 def model_capabilities(model, server) -> ChatCapabilities:
     from langchain_core.language_models import BaseChatModel
+    from langchain_openai.chat_models.base import BaseChatOpenAI
 
     from bisheng.llm.domain.llm.llm import _llm_node_type
 
@@ -32,7 +33,9 @@ def model_capabilities(model, server) -> ChatCapabilities:
         streaming=server.type != "moonshot",
         tools=tools,
         reasoning_content=True,
-        max_completion_tokens=server.type in {"openai", "azure_openai"},
+        # OpenAI SDK adapters accept this input natively or translate it in
+        # their existing payload builder (for example ChatQwen -> max_tokens).
+        max_completion_tokens=client is not None and issubclass(client, BaseChatOpenAI),
         reasoning=reasoning,
         responses=server.type in {"openai", "azure_openai"}
         and model_parameters(model.config or {}).get("use_responses_api") is True,

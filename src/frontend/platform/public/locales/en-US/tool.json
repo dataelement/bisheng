@@ -1,5 +1,9 @@
 {
   "categories": {
+    "知识库检索": {
+      "name": "Knowledge base search",
+      "desc": "Search knowledge bases available to the current account."
+    },
     "代码执行器": {
       "name": "Code Interpreter",
       "desc": "Execute code to perform chart plotting, file processing, and other programming-related tasks"
@@ -354,6 +358,10 @@
       "name": "Current Time",
       "desc": "Return the current time (defaults to UTC+8)",
       "params": {}
+    },
+    "bisheng_knowledge_search": {
+      "name": "$t(tool:categories.知识库检索.name)",
+      "desc": "$t(tool:categories.知识库检索.desc)"
     }
   },
   "addMcpServer": "Add MCP Server",

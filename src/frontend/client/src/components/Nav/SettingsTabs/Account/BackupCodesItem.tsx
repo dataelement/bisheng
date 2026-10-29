@@ -58,7 +58,7 @@ const BackupCodesItem: React.FC = () => {
       onError: () =>
         showToast({
           message: localize('com_ui_backup_codes_regenerate_error'),
-          status: 'error',
+          status: 'warning',
         }),
     });
   };

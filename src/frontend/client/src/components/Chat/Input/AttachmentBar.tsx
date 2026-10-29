@@ -1,17 +1,4 @@
-/**
- * Attachment bar shown at the top of the chat input box once a knowledge space
- * or file is mounted. Figma 12841:46839.
- *
- * Layout: a full-bleed light-gray strip with rounded top corners, sitting above
- * the textarea inside the input box. Cards are a single non-wrapping row that
- * scrolls horizontally:
- *  - items appear in insertion order (oldest left, newest right);
- *  - mouse wheel scrolls the row horizontally;
- *  - left / right chevron buttons page-scroll (one viewport per click) and only
- *    occupy width while their direction has more content — at an edge the arrow
- *    disappears and the cards sit flush;
- *  - a right-edge gradient hints at hidden overflow.
- */
+/** Native-style attachment rail. References are owned by the writing area. */
 import {
     useCallback,
     useEffect,
@@ -21,19 +8,17 @@ import {
     useState,
 } from "react";
 import { Outlined } from "bisheng-icons";
-import BookOpen from "~/components/ui/icon/BookOpen";
-import BooksIcon from "~/components/ui/icon/Books";
 import { OGDialog, OGDialogContent } from "~/components/ui";
 import { cn } from "~/utils";
+import { formatBytes } from "~/utils/files";
 import { isMediaChipFile, MediaAttachmentChip } from "~/components/Chat/attachments/MediaAttachmentChip";
-import { FileUploadThumbnail } from "~/components/Chat/attachments/UploadAttachmentThumbnail";
+import { ContextResourceCard } from "./ContextResourceCard";
+import { Loader2 } from "lucide-react";
 import { isMediaAttachmentFile } from "~/utils/mediaAttachmentUtils";
 import { resolveKnowledgePreviewUrl } from "~/pages/knowledge/FilePreview/previewUrlUtils";
 import { groupAttachmentsByFolder } from "~/components/Linsight/Input/ContextChips";
 import { useLocalize } from "~/hooks";
-
-/** Fixed card geometry from the design (Figma 12841:47405). */
-const CARD_WIDTH = 148;
+import { getFileTypeIcon } from "~/components/ui/icon/File/FileIcon";
 
 /** Stable sequence key for a file attachment across upload → completed transition. */
 function attachmentSeqKey(clientId: string | undefined): string | undefined {
@@ -55,83 +40,31 @@ function resolveFilePreviewUrl(file: {
     return resolveKnowledgePreviewUrl(remote);
 }
 
-/** Shared card shell: fixed width, white surface, optional hover-only remove. */
-const CardShell = ({
-    icon,
-    label,
-    title,
-    onRemove,
-    onClick,
-}: {
-    icon: React.ReactNode;
-    label: string;
-    title?: string;
-    onRemove?: () => void;
-    onClick?: () => void;
-}) => (
-    <div
-        className={cn(
-            "group flex h-[30px] shrink-0 items-center gap-1 rounded-md bg-white px-2 text-xs text-text-1",
-            onClick && "cursor-pointer",
-        )}
-        style={{ width: CARD_WIDTH }}
-        onClick={onClick}
-    >
-        <span className="flex size-4 shrink-0 items-center justify-center text-text-3">{icon}</span>
-        <span className="min-w-0 flex-1 truncate text-left" title={title ?? label}>
-            {label}
-        </span>
-        {onRemove && (
-            <button
-                type="button"
-                // Stop propagation so removing a card never triggers the card's
-                // own click (e.g. opening the image preview).
-                onClick={(e) => { e.stopPropagation(); onRemove(); }}
-                // Hover-reveal on hover-capable pointers; always visible where the
-                // pointer can't hover (touch) — gated by CSS hover capability, not
-                // screen width, so a small-screen PC still gets the hover behaviour.
-                className="hidden size-4 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:text-slate-600 group-hover:flex coarse-pointer:flex"
-                aria-label="Remove"
-            >
-                <Outlined.Close size={12} />
-            </button>
-        )}
-    </div>
-);
-
-const KbCard = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => (
-    <CardShell
-        icon={kb.type === "space"
-            ? <BookOpen className="size-4" />
-            : <BooksIcon className="size-4" />}
-        label={kb.name ?? ""}
-        onRemove={onRemove}
-    />
-);
-
 const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
     const fileName = file.name || file.file_name || file.filename || 'File';
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const TypeIcon = getFileTypeIcon(fileName);
 
     if (isMediaChipFile({ ...file, name: fileName })) {
         return (
             <MediaAttachmentChip
                 file={{ ...file, name: fileName }}
                 onRemove={onRemove}
-                variant="bar"
+                variant="resource"
             />
         );
     }
 
     const previewUrl = resolveFilePreviewUrl(file);
-    const [previewOpen, setPreviewOpen] = useState(false);
     const isImagePreview = !!previewUrl && /\.(png|jpe?g|bmp|gif|webp)$/i.test(fileName);
 
     return (
         <>
-            <FileUploadThumbnail
-                fileName={fileName}
-                previewUrl={isImagePreview ? previewUrl : undefined}
-                variant="bar"
+            <ContextResourceCard
+                label={fileName}
+                description={[fileName.split('.').pop()?.toUpperCase(), Number(file.size) >= 0 ? formatBytes(Number(file.size), 1, true) : ''].filter(Boolean).join(' · ')}
+                thumbnail={isImagePreview}
+                icon={isImagePreview ? <img src={previewUrl} alt="" /> : <TypeIcon size={28} />}
                 onRemove={onRemove}
                 onClick={isImagePreview ? () => setPreviewOpen(true) : undefined}
             />
@@ -167,7 +100,7 @@ const FolderCard = ({
     const localize = useLocalize();
     const label = `${folderName} (${localize('com_folder_upload_file_count', { 0: fileCount })})`;
     return (
-        <CardShell
+        <ContextResourceCard
             icon={<Outlined.FolderClose size={16} />}
             label={label}
             title={label}
@@ -175,14 +108,6 @@ const FolderCard = ({
         />
     );
 };
-
-const SkillCard = ({ skill, onRemove }: { skill: any; onRemove?: () => void }) => (
-    <CardShell
-        icon={<Outlined.Skill size={16} className="text-blue-500" />}
-        label={skill?.display_name || skill?.name || ""}
-        onRemove={onRemove}
-    />
-);
 
 const UploadingCard = ({
     name,
@@ -198,18 +123,13 @@ const UploadingCard = ({
             <MediaAttachmentChip
                 file={{ name, isUploading: true, ...file }}
                 onRemove={onRemove}
-                variant="bar"
+                variant="resource"
             />
         );
     }
     return (
-        <FileUploadThumbnail
-            fileName={name}
-            previewUrl={file?.previewUrl}
-            variant="bar"
-            isUploading
-            onRemove={onRemove}
-        />
+        <ContextResourceCard label={name} icon={<Loader2 className="size-6 animate-spin" />}
+            onRemove={onRemove} />
     );
 };
 
@@ -229,8 +149,8 @@ const ArrowButton = ({
             // 8px gap only on the outer side (strip edge); the side facing the cards
             // stays flush at 0.
             className={cn(
-                "flex size-4 shrink-0 items-center justify-center text-[#666] transition-colors hover:text-text-1",
-                direction === "left" ? "ml-2" : "mr-2",
+                "dsh-attachment-arrow",
+                direction === "left" ? "dsh-attachment-arrow-left" : "dsh-attachment-arrow-right",
             )}
         >
             <Icon size={16} />
@@ -252,36 +172,18 @@ interface AttachmentBarProps {
         relative_path?: string;
     }>;
     files: any[];
-    kbs: any[];
-    skills: any[];
-    /**
-     * `strip` is the gray band stacked ABOVE the input box (Figma 12841:47449):
-     * it overlaps the box by its 16px corner radius so the white box appears to
-     * emerge from it. `inline` is the plain row that sits inside the box.
-     * Knowledge spaces use the strip; attachments stay inline.
-     */
-    appearance?: "inline" | "strip";
     onRemoveFile?: (file: any) => void;
-    onRemoveKb?: (kb: any) => void;
-    onRemoveSkill?: (skill: any) => void;
 }
 
 type Entry =
     | { kind: "uploading"; key: string; data: AttachmentBarProps['uploadingFiles'][number] }
     | { kind: "file"; key: string; data: any }
-    | { kind: "folder"; key: string; data: { folderName: string; files: unknown[]; isUploading: boolean } }
-    | { kind: "kb"; key: string; data: any }
-    | { kind: "skill"; key: string; data: any };
+    | { kind: "folder"; key: string; data: { folderName: string; files: unknown[]; isUploading: boolean } };
 
 export const AttachmentBar = ({
     uploadingFiles,
     files,
-    kbs,
-    skills,
-    appearance = "inline",
     onRemoveFile,
-    onRemoveKb,
-    onRemoveSkill,
 }: AttachmentBarProps) => {
     const scrollRef = useRef<HTMLDivElement>(null);
     // Insertion sequence per item key — oldest first, newest appended to the right.
@@ -342,24 +244,14 @@ export const AttachmentBar = ({
                 : { kind: "file" as const, key: only.__key, data: only.__data };
         });
 
-        const all: Entry[] = [
-            ...fileEntries,
-            // Knowledge selections are stored newest-first (the picker prepends),
-            // the opposite of the file arrays. Feed them in oldest-first so the
-            // sequence below means the same thing for every source: without this,
-            // a set that first appears all at once — restoring a conversation from
-            // localStorage — hands the newest item the lowest sequence and the row
-            // comes back reversed, even though picking them one by one is correct.
-            ...[...kbs].reverse().map((k) => ({ kind: "kb" as const, key: `kb-${k.id}`, data: k })),
-            ...skills.map((s) => ({ kind: "skill" as const, key: `skill-${s.name}`, data: s })),
-        ];
+        const all: Entry[] = fileEntries;
         const { map } = seqRef.current;
         for (const it of all) {
             if (!map.has(it.key)) map.set(it.key, seqRef.current.n++);
         }
         // Oldest (lowest sequence) first → leftmost; newest appended on the right.
         return all.sort((a, b) => (map.get(a.key) ?? 0) - (map.get(b.key) ?? 0));
-    }, [uploadingFiles, files, kbs, skills]);
+    }, [uploadingFiles, files]);
 
     const updateEdges = useCallback(() => {
         const el = scrollRef.current;
@@ -412,23 +304,14 @@ export const AttachmentBar = ({
     }, []);
 
     return (
-        <div
-            className={cn(
-                appearance === "strip"
-                    // The -mb-4 is the overlap: the box's rounded top corner
-                    // reaches the edge exactly at the strip's bottom, so the two
-                    // read as one continuous shape rather than stacked cards.
-                    ? "relative -mb-4 w-full overflow-hidden rounded-t-2xl bg-[rgba(244,244,244,0.55)] px-2 pb-6 pt-2"
-                    : "w-full pb-2 mb-1",
-            )}
-        >
-            <div className="flex items-center">
+        <div className="dsh-composer-attachments w-full">
+            <div className="relative flex items-center">
                 {canLeft && <ArrowButton direction="left" onClick={() => pageScroll("left")} />}
                 <div className="relative min-w-0 flex-1">
                     <div
                         ref={scrollRef}
                         onScroll={updateEdges}
-                        className="flex gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+                        className="dsh-attachment-rail flex overflow-x-auto [&::-webkit-scrollbar]:hidden"
                         style={{ scrollbarWidth: "none" }}
                     >
                         {entries.map((entry) => {
@@ -467,38 +350,20 @@ export const AttachmentBar = ({
                                             }
                                         />
                                     );
-                                case "kb":
-                                    return (
-                                        <KbCard
-                                            key={entry.key}
-                                            kb={entry.data}
-                                            onRemove={onRemoveKb ? () => onRemoveKb(entry.data) : undefined}
-                                        />
-                                    );
-                                case "skill":
-                                    return (
-                                        <SkillCard
-                                            key={entry.key}
-                                            skill={entry.data}
-                                            onRemove={onRemoveSkill ? () => onRemoveSkill(entry.data) : undefined}
-                                        />
-                                    );
-                                default:
-                                    return null;
                             }
                         })}
                     </div>
                     {/* Left-edge fade hinting at content scrolled off to the left. */}
                     <div
                         className={cn(
-                            "pointer-events-none absolute left-0 top-0 h-full w-6 bg-gradient-to-r from-white from-[49%] to-transparent transition-opacity",
+                            "pointer-events-none absolute left-0 top-0 h-full w-6 bg-gradient-to-r from-[rgb(var(--dsh-composer-bg,255_255_255))] from-[49%] to-transparent transition-opacity",
                             canLeft ? "opacity-100" : "opacity-0",
                         )}
                     />
                     {/* Right-edge fade hinting at hidden overflow (Figma gradient). */}
                     <div
                         className={cn(
-                            "pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-white from-[49%] to-transparent transition-opacity",
+                            "pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-[rgb(var(--dsh-composer-bg,255_255_255))] from-[49%] to-transparent transition-opacity",
                             canRight ? "opacity-100" : "opacity-0",
                         )}
                     />

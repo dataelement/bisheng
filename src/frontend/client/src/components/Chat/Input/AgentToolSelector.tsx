@@ -8,12 +8,12 @@
  */
 import { Settings2Icon, WebhookIcon } from "lucide-react";
 import { Outlined } from "bisheng-icons";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRecoilState } from "recoil";
 import { Switch } from "~/components/ui";
 import ApiAppIcon from "~/components/ui/icon/ApiApp";
 import { Select, SelectContent, SelectTrigger } from "~/components/ui/Select";
-import { useLocalize } from "~/hooks";
+import { useAuthContext, useLocalize } from "~/hooks";
 import store from "~/store";
 import { cn } from "~/utils";
 
@@ -22,13 +22,13 @@ interface ChildTool {
   id: number;
   name?: string;
   tool_key: string;
+  enabled?: boolean;
   desc?: string;
   description?: string;
 }
 
 // Shape of each parent group in bsConfig.tools (workstation config), mirrors
-// linsight_config.tools: hierarchical parent with selected children + a single
-// `default_checked` flag applied to the whole group.
+// safe user-facing catalog: hierarchical parent with available children.
 export interface AvailableToolGroup {
   id: number;
   name: string;
@@ -40,6 +40,7 @@ export interface AvailableToolGroup {
 
 interface Props {
   availableTools: AvailableToolGroup[];
+  selection: AgentToolSelection;
   disabled?: boolean;
   /** Toolbar out of room (see useContainerCompact): collapse label to icon. */
   compact?: boolean;
@@ -59,47 +60,63 @@ function labelForGroup(group: AvailableToolGroup, localize: (key: string) => str
   return group.name;
 }
 
-export default function AgentToolSelector({ availableTools, disabled, compact = false }: Props) {
-  const localize = useLocalize();
+export function isToolGroupEnabled(group: AvailableToolGroup) {
+  return !group.children?.length || group.children.some(child => child.enabled !== false);
+}
+
+export interface AgentToolSelection {
+  /** At least one tool group is switched on. */
+  isActive: boolean;
+  isChecked: (id: number) => boolean;
+  toggle: (group: AvailableToolGroup) => void;
+}
+
+/**
+ * Keep per-task tool choices while either picker presentation is closed.
+ * Share per-account preferences between the composer and capability details.
+ */
+/** Mounted once by the authenticated layout, above cached and uncached pages. */
+export function useAgentToolPreferences() {
   const [selected, setSelected] = useRecoilState(store.selectedAgentTools);
-  const [initialized, setInitialized] = useRecoilState(store.agentToolsInitialized);
-
-  // One-shot initialisation from admin-configured default_checked set.
-  // Ignores subsequent bsConfig changes within the same session so a user's
-  // manual toggles aren't overwritten when the config gets refetched.
+  const { user } = useAuthContext();
+  const userId = user?.id === undefined ? undefined : String(user.id);
+  const restoring = useRef<{ userId: string; value: typeof selected }>();
+  const hydratedUser = useRef<string>();
   useEffect(() => {
-    if (initialized || !availableTools || availableTools.length === 0) return;
-    const defaults = availableTools
-      .filter((g) => g.default_checked)
-      .map((g) => ({
-        id: g.id,
-        name: g.name,
-        description: g.description,
-        children: (g.children || []).map((c) => ({
-          id: c.id,
-          tool_key: c.tool_key,
-          name: c.name,
-          desc: c.desc || c.description,
-        })),
-      }));
-    if (defaults.length) setSelected(defaults);
-    setInitialized(true);
-  }, [availableTools, initialized, setSelected, setInitialized]);
+    if (!userId) return;
+    let restored: typeof selected = [];
+    try {
+      const value = JSON.parse(localStorage.getItem(`bs:${userId}:selectedAgentTools`) || '[]');
+      if (Array.isArray(value)) restored = value;
+    } catch { /* An unavailable snapshot starts with an empty selection. */ }
+    restoring.current = { userId, value: restored };
+    hydratedUser.current = userId;
+    setSelected(restored);
+  }, [userId, setSelected]);
+  useEffect(() => {
+    if (!userId || hydratedUser.current !== userId) return;
+    if (restoring.current) {
+      if (restoring.current.value !== selected) return;
+      restoring.current = undefined;
+    }
+    try { localStorage.setItem(`bs:${userId}:selectedAgentTools`, JSON.stringify(selected)); }
+    catch { /* Keep the in-session choice when browser storage is unavailable. */ }
+  }, [userId, selected]);
+}
 
-  // Prune selections for groups that no longer exist in the admin config
-  // (e.g., admin removed a tool between sessions).
+export function useAgentToolSelection(availableTools: AvailableToolGroup[] | undefined): AgentToolSelection {
+  const [selected, setSelected] = useRecoilState(store.selectedAgentTools);
+  // Revalidate the user selection when the authorized catalog changes.
   useEffect(() => {
     if (!availableTools || selected.length === 0) return;
-    const validIds = new Set(availableTools.map((g) => g.id));
+    const validIds = new Set(availableTools.filter(isToolGroupEnabled).map((g) => g.id));
     const pruned = selected.filter((g) => validIds.has(g.id));
     if (pruned.length !== selected.length) setSelected(pruned);
   }, [availableTools, selected, setSelected]);
 
-  const activeCount = selected.length;
-  const isActive = activeCount > 0;
-
   const isChecked = (id: number) => selected.some((g) => g.id === id);
   const toggle = (group: AvailableToolGroup) => {
+    if (!isToolGroupEnabled(group)) return;
     if (isChecked(group.id)) {
       setSelected(selected.filter((g) => g.id !== group.id));
     } else {
@@ -109,7 +126,7 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
           id: group.id,
           name: group.name,
           description: group.description,
-          children: (group.children || []).map((c) => ({
+          children: (group.children || []).filter(c => c.enabled !== false).map((c) => ({
             id: c.id,
             tool_key: c.tool_key,
             name: c.name,
@@ -119,6 +136,54 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
       ]);
     }
   };
+
+  return { isActive: selected.length > 0, isChecked, toggle };
+}
+
+export { iconForGroup, labelForGroup };
+
+interface AgentToolListProps {
+  availableTools: AvailableToolGroup[];
+  selection: AgentToolSelection;
+  disabled?: boolean;
+}
+
+/** One switch row per tool group — the body of both the pill's panel and the "+" submenu. */
+export function AgentToolList({ availableTools, selection, disabled }: AgentToolListProps) {
+  const localize = useLocalize();
+  return (
+    <>
+      {availableTools.map((group) => {
+        const label = labelForGroup(group, localize);
+        return (
+          <div key={group.id} className="flex h-8 shrink-0 justify-between items-center rounded-lg px-2">
+            <div className="flex gap-2 items-center min-w-0">
+              {iconForGroup(group)}
+              <span
+                className="max-w-40 text-sm font-normal line-clamp-1 flex-1 truncate"
+                title={group.description || label}
+              >
+                {label}
+              </span>
+            </div>
+            <Switch
+              variant="tool"
+              aria-label={label}
+              className="shrink-0"
+              disabled={disabled}
+              checked={selection.isChecked(group.id)}
+              onCheckedChange={() => selection.toggle(group)}
+            />
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+export default function AgentToolSelector({ availableTools, selection, disabled, compact = false }: Props) {
+  const localize = useLocalize();
+  const isActive = selection.isActive;
 
   if (!availableTools || availableTools.length === 0) return null;
 
@@ -130,7 +195,7 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
           // Radix keeps the trigger in [data-placeholder] state; without this the
           // base `data-[placeholder]:text-gray-500` would override to #595959 and
           // mismatch the knowledge/model selects. Pin it to the shared #4E5969.
-          "h-8 min-w-0 max-w-[min(52vw,220px)] rounded-lg border-none bg-transparent shadow-none hover:bg-fill-1 px-2 text-text-2 data-[placeholder]:text-text-2 focus:ring-0 outline-none w-auto gap-1",
+          "dsh-composer-control h-8 min-w-0 max-w-[min(52vw,220px)] rounded-lg border-none bg-transparent shadow-none hover:bg-fill-2 px-2 text-text-2 data-[placeholder]:text-text-2 focus:ring-0 outline-none w-auto gap-1",
         )}
       >
         <div className="flex min-w-0 gap-1.5 items-center">
@@ -149,32 +214,10 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
         </div>
       </SelectTrigger>
       <SelectContent
-        className="bg-white rounded-2xl w-[200px] max-h-[320px] overflow-y-auto"
+        className="dsh-chat-menu bg-page rounded-2xl w-[200px] max-h-[320px] overflow-y-auto"
         viewportClassName="flex flex-col gap-1 p-3"
       >
-        {availableTools.map((group) => {
-          const label = labelForGroup(group, localize);
-          return (
-            <div key={group.id} className="flex h-8 justify-between items-center rounded-lg px-2">
-              <div className="flex gap-2 items-center min-w-0">
-                {iconForGroup(group)}
-                <span
-                  className="max-w-40 text-sm font-normal line-clamp-1 flex-1 truncate"
-                  title={group.description || label}
-                >
-                  {label}
-                </span>
-              </div>
-              <Switch
-                variant="tool"
-                className="shrink-0"
-                disabled={disabled}
-                checked={isChecked(group.id)}
-                onCheckedChange={() => toggle(group)}
-              />
-            </div>
-          );
-        })}
+        <AgentToolList availableTools={availableTools} selection={selection} disabled={disabled} />
       </SelectContent>
     </Select>
   );

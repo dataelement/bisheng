@@ -1,3 +1,4 @@
+import { refreshChannelState, useChannelStateRefresh } from "./hooks/useChannelStateRefresh";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { NoPermissionIllustration } from "~/components/illustrations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -50,22 +51,13 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
     const { showToast } = useToastContext();
     const { user } = useAuthContext();
     const queryClient = useQueryClient();
-    const [subscribeStatus, setSubscribeStatus] = useState<SubscribeStatus>("none");
     const [subscribing, setSubscribing] = useState(false);
     const [articles, setArticles] = useState<any[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [hasMore, setHasMore] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
 
-    // 切换频道/关闭抽屉时，重置本地订阅交互态，避免状态串到下一条频道
-    useEffect(() => {
-        if (!open) {
-            setSubscribeStatus("none");
-            setSubscribing(false);
-            return;
-        }
-        setSubscribeStatus("none");
-    }, [channelId, open]);
+    useChannelStateRefresh(() => { void refreshChannelState(queryClient); }, open);
 
     // Fetch channel detail
     const {
@@ -90,7 +82,6 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
         Boolean(user?.username) && Boolean(channelDetail?.creator_name) && user?.username === channelDetail?.creator_name;
 
     const effectiveSubscribeStatus: SubscribeStatus = (() => {
-        if (subscribeStatus !== "none") return subscribeStatus;
         const sub = String(channelDetail?.subscription_status ?? "").toLowerCase();
         if (sub === "subscribed") return "subscribed";
         if (sub === "pending") return "pending";
@@ -174,7 +165,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
         } catch (e: any) {
             showToast({
                 message: e?.message || localize("com_subscription.article_load_failed"),
-                severity: NotificationSeverity.ERROR,
+                severity: NotificationSeverity.WARNING,
             });
             setHasMore(false);
         } finally {
@@ -185,7 +176,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
     // Handle subscribe action
     const handleSubscribe = async () => {
         if (!channelId || subscribing) return;
-        if (subscribeStatus === "subscribed" || subscribeStatus === "pending") return;
+        if (effectiveSubscribeStatus === "subscribed" || effectiveSubscribeStatus === "pending") return;
 
         setSubscribing(true);
         try {
@@ -200,18 +191,14 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                 throw new Error(msg);
             }
 
-            if (channelDetail?.visibility === "review") {
-                setSubscribeStatus("pending");
+            if ((res?.data ?? res) === "pending") {
                 showToast({ message: localize("com_subscription.subscribe_application_sent"), severity: NotificationSeverity.SUCCESS });
             } else {
-                setSubscribeStatus("subscribed");
                 showToast({ message: localize("com_subscription.subscribe_success"), severity: NotificationSeverity.SUCCESS });
             }
 
             // Refresh background channel lists (sidebar uses ["channels","subscribed",sort])
-            queryClient.invalidateQueries({ queryKey: ["channels", "subscribed"] });
-            queryClient.invalidateQueries({ queryKey: ["channels"] });
-            queryClient.invalidateQueries({ queryKey: ["channelPreviewDetail", channelId] });
+            await refreshChannelState(queryClient);
             queryClient.invalidateQueries({ queryKey: ["channelPreviewArticles", channelId] });
             onSubscriptionChanged?.();
         } catch (e: any) {
@@ -219,7 +206,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                 e?.response?.data?.status_message ||
                 e?.message ||
                 localize("com_subscription.subscribe_failed_retry");
-            showToast({ message: msg, severity: NotificationSeverity.ERROR });
+            showToast({ message: msg, severity: NotificationSeverity.WARNING });
         } finally {
             setSubscribing(false);
         }
@@ -349,7 +336,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                             {hideArticles ? (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
                                     <NoPermissionIllustration className="size-[120px] mb-4" />
-                                    <div className="text-[14px] font-normal text-text-3">{localize("com_subscription.channel_content_needs_approval")}</div>
+                                    <div className="text-[14px] font-normal text-text-3">{localize("com_subscription.channel_content_access_required")}</div>
                                 </div>
                             ) : articles.length > 0 ? (
                                 <InfiniteScroll

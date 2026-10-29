@@ -1,5 +1,9 @@
 {
   "categories": {
+    "知识库检索": {
+      "name": "ナレッジベース検索",
+      "desc": "現在のアカウントがアクセスできるナレッジベースを検索します。"
+    },
     "代码执行器": {
       "name": "コード実行器",
       "desc": "コードを実行して、グラフの描画やファイル処理などのプログラム関連操作を完了します"
@@ -354,6 +358,10 @@
       "name": "現在の時間",
       "desc": "現在の時間を取得します。タイムゾーンが指定されていない場合、UTC+8の時間が使用されます。",
       "params": {}
+    },
+    "bisheng_knowledge_search": {
+      "name": "$t(tool:categories.知识库检索.name)",
+      "desc": "$t(tool:categories.知识库检索.desc)"
     }
   },
   "addMcpServer": "MCPサーバーを追加",

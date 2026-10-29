@@ -8,11 +8,17 @@
  * reply. These tests pin the two properties that fix depends on: leaving a
  * conversation neither closes its stream nor refetches over its live bucket.
  */
+import { useLayoutEffect, useState } from "react";
+import store from "~/store";
+import { parkChatAsk, useChatAskHandoff } from "~/components/Chat/chatAskHandoff";
 import { act, renderHook, waitFor } from "@testing-library/react";
 
 import type { SSESubmission } from "./useAiChatSSE";
 
 /** Every SSE turn opened during a test, in order. */
+jest.mock("react-activation", () => ({ useActivate: jest.fn() }));
+
+let mockSelectedSkills: Array<{ name: string }> = [];
 const mockOpenedStreams: Array<{ submission: SSESubmission; close: jest.Mock }> = [];
 
 jest.mock("./useAiChatSSE", () => ({
@@ -39,15 +45,16 @@ jest.mock("~/store", () => ({
     __esModule: true,
     default: {
         chatModel: { __testValue: { id: 1, name: "test-model" } },
-        selectedOrgKbs: { __testValue: [] },
         searchType: { __testValue: "" },
         selectedAgentTools: { __testValue: [] },
     },
 }));
 jest.mock("~/store/linsight", () => ({
     SopStatus: { Running: "running", Stoped: "stoped", SopGenerating: "sop_generating" },
-    taskModeSkillsState: () => ({ __testValue: [] }),
+    taskModeSkillsState: () => ({ __testValue: mockSelectedSkills }),
 }));
+
+jest.mock("~/hooks/AuthContext", () => ({ useAuthContext: () => ({ user: { id: "test-user" } }) }));
 
 jest.mock("~/hooks", () => ({ useLocalize: () => (key: string) => key }));
 jest.mock("~/Providers", () => ({ useToastContext: () => ({ showToast: jest.fn() }) }));
@@ -102,7 +109,9 @@ const renderChat = (conversationId: string) =>
 const latestStream = () => mockOpenedStreams[mockOpenedStreams.length - 1];
 
 beforeEach(() => {
+    localStorage.clear();
     mockOpenedStreams.length = 0;
+    mockSelectedSkills = [];
     mockGetAgentMessages.mockImplementation((cid: string) => Promise.resolve(historyOf(cid)));
     mockGetSessionName.mockResolvedValue("");
 });
@@ -293,6 +302,8 @@ describe("useAiChat adopts a new conversation id", () => {
             turn.submission.onStart();
             turn.submission.onCreated?.("c-real", {
                 messageId: "42",
+                parentMessageId: "",
+                sender: "user",
                 conversationId: "c-real",
                 text: "blocked keyword",
             });
@@ -339,4 +350,201 @@ describe("useAiChat adopts a new conversation id", () => {
         await waitFor(() => expect(result.current.conversationId).toBe("new"));
         expect(result.current.messages).toHaveLength(0);
     });
+});
+
+
+describe('task mode owns skill execution', () => {
+    it.each([false, true])('sends the mode-scoped skill selection when taskMode=%s', async (taskMode) => {
+        mockSelectedSkills = [{ name: 'writing' }];
+        const { result } = renderChat('c1');
+        await waitFor(() => expect(result.current.messages).toHaveLength(1));
+        act(() => result.current.sendMessage('Use this skill', null, { taskMode }));
+        expect(latestStream().submission.payload).toMatchObject({
+            task_mode: taskMode,
+            skills: taskMode ? ['writing'] : [],
+        });
+    });
+});
+
+
+test('an incomplete upload rejects submission before starting a stream', async () => {
+  const { result } = renderChat('c1');
+  await waitFor(() => expect(result.current.messages).toHaveLength(1));
+  let accepted;
+  act(() => {
+    accepted = result.current.sendMessage('Use this file', [{ name: 'draft.txt', valid: false }], { taskMode: true });
+  });
+  expect(accepted).toBe(false);
+  expect(mockOpenedStreams).toHaveLength(0);
+});
+
+describe('conversation knowledge isolation', () => {
+    const k1 = [{ id: '101', name: 'K1', type: 'space' }];
+    const k2 = [{ id: '202', name: 'K2', type: 'space' }];
+    const scope = () => latestStream().submission.payload.use_knowledge_base;
+
+    it('restores C1 and C2 independently and sends their saved scopes after reopening', async () => {
+        const chat = renderChat('c1');
+        await waitFor(() => expect(chat.result.current.isLoading).toBe(false));
+        act(() => chat.result.current.setSelectedOrgKbs(k1));
+        chat.rerender({ cid: 'c2' });
+        expect(chat.result.current.selectedOrgKbs).toEqual([]);
+        act(() => chat.result.current.setSelectedOrgKbs(k2));
+        for (const [cid, knowledge] of [['c1', k1], ['c2', k2], ['c1', k1]] as const) {
+            chat.rerender({ cid });
+            expect(chat.result.current.selectedOrgKbs).toEqual(knowledge);
+        }
+        chat.unmount();
+        const reopened = renderChat('c1');
+        await waitFor(() => expect(reopened.result.current.isLoading).toBe(false));
+        expect(reopened.result.current.selectedOrgKbs).toEqual(k1);
+        act(() => reopened.result.current.sendMessage('search C1'));
+        expect(scope()).toMatchObject({ knowledge_space_ids: [101], organization_knowledge_ids: [] });
+        reopened.rerender({ cid: 'c2' });
+        await waitFor(() => expect(reopened.result.current.isLoading).toBe(false));
+        expect(reopened.result.current.selectedOrgKbs).toEqual(k2);
+        act(() => reopened.result.current.sendMessage('search C2'));
+        expect(scope()).toMatchObject({ knowledge_space_ids: [202] });
+    });
+
+    it('commits the destination conversation and selection together on a route switch', async () => {
+        const commits: Array<{ route: string; active: string; ids: string[] }> = [];
+        const chat = renderHook(({ cid }) => {
+            const value = useAiChat(cid);
+            useLayoutEffect(() => {
+                commits.push({ route: cid, active: value.conversationId,
+                    ids: value.selectedOrgKbs.map((item) => item.id) });
+            });
+            return value;
+        }, { initialProps: { cid: 'c1' } });
+        await waitFor(() => expect(chat.result.current.isLoading).toBe(false));
+        act(() => chat.result.current.setSelectedOrgKbs(k1));
+        chat.rerender({ cid: 'c2' });
+        expect(commits.filter((entry) => entry.route === 'c2')).toEqual(
+            expect.arrayContaining([{ route: 'c2', active: 'c2', ids: [] }]),
+        );
+        expect(commits.every((entry) => entry.route === entry.active)).toBe(true);
+        expect(commits.filter((entry) => entry.route === 'c2').every((entry) => entry.ids.length === 0)).toBe(true);
+        await waitFor(() => expect(chat.result.current.isLoading).toBe(false));
+    });
+
+    it('regenerates from the current conversation and persists an explicit empty scope', async () => {
+        const chat = renderChat('c1');
+        await waitFor(() => expect(chat.result.current.messages).toHaveLength(1));
+        act(() => chat.result.current.setSelectedOrgKbs(k1));
+        chat.rerender({ cid: 'c2' });
+        await waitFor(() => expect(chat.result.current.messages[0]?.messageId).toBe('c2-q'));
+        act(() => chat.result.current.setSelectedOrgKbs(k2));
+        chat.rerender({ cid: 'c1' });
+        await waitFor(() => expect(chat.result.current.messages[0]?.messageId).toBe('c1-q'));
+        act(() => chat.result.current.regenerate('c1-q'));
+        expect(scope()).toMatchObject({ knowledge_space_ids: [101] });
+        act(() => {
+            latestStream().submission.onEnd();
+            chat.result.current.setSelectedOrgKbs([]);
+        });
+        chat.unmount();
+        const reopened = renderChat('c1');
+        await waitFor(() => expect(reopened.result.current.isLoading).toBe(false));
+        expect(reopened.result.current.selectedOrgKbs).toEqual([]);
+        act(() => reopened.result.current.sendMessage('empty selection'));
+        expect(scope()).toMatchObject({ knowledge_space_ids: [], organization_knowledge_ids: [] });
+    });
+
+    it('carries the first turn scope into its server id while C2 stays selected', async () => {
+        const chat = renderChat('new');
+        act(() => chat.result.current.setSelectedOrgKbs(k1));
+        act(() => chat.result.current.sendMessage('first turn'));
+        const first = latestStream();
+        chat.rerender({ cid: 'c2' });
+        await waitFor(() => expect(chat.result.current.isLoading).toBe(false));
+        act(() => chat.result.current.setSelectedOrgKbs(k2));
+        act(() => first.submission.onFinal({ conversation: { conversationId: 'created-c1' } }));
+        expect(chat.result.current.conversationId).toBe('c2');
+        expect(chat.result.current.selectedOrgKbs).toEqual(k2);
+        chat.rerender({ cid: 'created-c1' });
+        expect(chat.result.current.selectedOrgKbs).toEqual(k1);
+        chat.rerender({ cid: 'new' });
+        expect(chat.result.current.selectedOrgKbs).toEqual([]);
+    });
+
+    it('starts historical sessions with their own scope when only legacy account memory exists', async () => {
+        localStorage.setItem('bs:test-user:selectedOrgKbs', JSON.stringify(k2));
+        const chat = renderChat('c1');
+        await waitFor(() => expect(chat.result.current.isLoading).toBe(false));
+        expect(chat.result.current.selectedOrgKbs).toEqual([]);
+    });
+});
+
+describe('knowledge-space asks across cached conversations', () => {
+    it.each([
+        ['same space after completion', '101', true],
+        ['same space during generation', '101', false],
+        ['different space after completion', '102', true],
+        ['different space during generation', '102', false],
+    ] as const)('starts a fresh second conversation: %s', async (_case, spaceId, finishFirst) => {
+        parkChatAsk({ text: 'first question', space: { id: '101', name: 'Space one' } });
+        const { result, rerender } = renderHook(({ cid, locationKey }) => {
+            const chat = useAiChat(cid);
+            useChatAskHandoff({
+                conversationId: cid,
+                activeConversationId: chat.conversationId,
+                locationKey,
+                selectedKbs: chat.selectedOrgKbs,
+                setSelectedKbs: chat.setSelectedOrgKbs,
+                sendMessage: chat.sendMessage,
+                ready: true, selectedModelId: 1, selectModel: jest.fn(() => true), onModelUnavailable: jest.fn(),
+            });
+            return chat;
+        }, { initialProps: { cid: 'new', locationKey: 'first' } });
+
+        expect(mockOpenedStreams).toHaveLength(1);
+        const first = latestStream();
+        act(() => {
+            first.submission.onCreated('first-chat', {
+                ...first.submission.userMessage, conversationId: 'first-chat',
+            });
+            if (finishFirst) first.submission.onEnd();
+        });
+        rerender({ cid: 'first-chat', locationKey: 'first-rewrite' });
+        parkChatAsk({ text: 'second question', space: { id: spaceId, name: spaceId } });
+        rerender({ cid: 'new', locationKey: 'second' });
+
+        await waitFor(() => expect(mockOpenedStreams).toHaveLength(2));
+        expect(latestStream().submission.payload).toMatchObject({
+            conversationId: null,
+            use_knowledge_base: { knowledge_space_ids: [Number(spaceId)] },
+        });
+        expect(result.current.messages[0].text).toBe('second question');
+        if (!finishFirst) expect(first.close).not.toHaveBeenCalled();
+        rerender({ cid: 'new', locationKey: 'second-again' });
+        expect(mockOpenedStreams).toHaveLength(2);
+    });
+});
+
+test("knowledge handoff submits the chosen model ID and space in the real chat payload", () => {
+    const modelAtom = store.chatModel as unknown as { __testValue: { id: number; name: string } };
+    const initialModel = modelAtom.__testValue;
+    parkChatAsk({ text: "Count entries", modelId: 2, space: { id: "28", name: "Knowledge" } });
+    try {
+        renderHook(() => {
+            const [model, setModel] = useState(initialModel);
+            modelAtom.__testValue = model;
+            const chat = useAiChat("new");
+            useChatAskHandoff({
+                conversationId: "new", activeConversationId: chat.conversationId, locationKey: "knowledge", selectedKbs: chat.selectedOrgKbs, setSelectedKbs: chat.setSelectedOrgKbs,
+                sendMessage: chat.sendMessage, ready: true, selectedModelId: model.id,
+                selectModel: (id) => { setModel({ id, name: "Beta" }); return true; },
+                onModelUnavailable: jest.fn(),
+            });
+        });
+        expect(mockOpenedStreams).toHaveLength(1);
+        expect(latestStream().submission.payload).toEqual(expect.objectContaining({
+            text: "Count entries", model: "2", task_mode: false,
+            use_knowledge_base: { personal_knowledge_enabled: false, organization_knowledge_ids: [], knowledge_space_ids: [28] },
+        }));
+        expect(latestStream().submission.userMessage.text).toBe("Count entries");
+    } finally {
+        modelAtom.__testValue = initialModel;
+    }
 });

@@ -9,10 +9,14 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.api import SSEResponse, resp_200
 from bisheng.knowledge.api.dependencies import (
+    get_knowledge_document_version_repository,
     get_knowledge_space_chat_service,
     get_knowledge_space_service,
 )
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileOrderField, SpaceFileOrderSort
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
+    KnowledgeDocumentVersionRepository,
+)
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     BatchDeleteReq,
     BatchDownloadReq,
@@ -31,6 +35,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceUpdateReq,
     WebLinkCreateReq,
 )
+from bisheng.knowledge.domain.schemas.work_retrieval import WorkRetrievalRequest
 from bisheng.knowledge.domain.services.department_knowledge_space_service import (
     DepartmentKnowledgeSpaceService,
 )
@@ -40,12 +45,27 @@ from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
 from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceService,
 )
+from bisheng.knowledge.domain.services.work_retrieval import retrieve_workspace_chunks
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 router = APIRouter(prefix="/knowledge/space", tags=["knowledge_space"])
 
-SPACE_FILE_PREVIEW_PERMISSION_ACTION = None
+SPACE_FILE_PREVIEW_PERMISSION_ACTION = "visible"
 SPACE_FILE_DOWNLOAD_PERMISSION_ACTION = "download"
+
+
+@router.post("/retrieve")
+async def retrieve_workspace_context(
+    req: WorkRetrievalRequest,
+    svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
+    version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
+) -> Any:
+    """Return permission-filtered context to an authenticated workspace task."""
+    from bisheng.dsh.domain.services.work_capabilities import WorkCapabilitiesService
+
+    await WorkCapabilitiesService(svc.login_user).ensure_tool_key_enabled("bisheng_knowledge_search")
+    svc.version_repo = version_repo
+    return resp_200(await retrieve_workspace_chunks(svc, req))
 
 
 # ──────────────────────────── Space CRUD ──────────────────────────────────────
@@ -327,7 +347,7 @@ async def batch_create_department_spaces(
 async def get_knowledge_square(
     page: int = 1,
     page_size: int = 20,
-    keyword: str = None,
+    keyword: str | None = None,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.get_knowledge_square(keyword, page, page_size)
@@ -578,7 +598,7 @@ async def get_file_preview(
     file_id: int,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    urls = await svc.get_file_preview(file_id)
+    urls = await svc.get_file_preview(file_id, space_id=space_id)
     return resp_200(urls)
 
 
@@ -671,7 +691,7 @@ async def subscribe_space(
 
 
 @router.post("/{space_id}/unsubscribe", response_model=None)
-async def subscribe_space(
+async def unsubscribe_space(
     space_id: int,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
@@ -744,7 +764,7 @@ async def create_chat_folder_session(
 
 
 @router.delete("/{space_id}/chat/folder/session")
-async def create_chat_folder_session(
+async def delete_chat_folder_session(
     space_id: int,
     folder_id: int = Body(default=0, description="folder id"),
     chat_id: str = Body(..., description="Chat ID"),
@@ -767,7 +787,7 @@ async def get_chat_folder_history(
 
 
 @router.delete("/{space_id}/chat/folder/history")
-async def get_chat_folder_history(
+async def delete_chat_folder_history(
     space_id: int,
     folder_id: int = Query(default=0, description="folder id"),
     chat_id: str = Query(..., description="Chat ID"),

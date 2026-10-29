@@ -82,3 +82,18 @@ def test_independent_evidence_failure_does_not_drop_valid_originals():
     cap.terminal("SUCCEEDED")
     assert queue.events[-1].metadata["input_complete"]
     assert not queue.events[-1].metadata["capture_failed"]
+
+
+def test_response_diagnostics_are_bounded_and_optional():
+    cap, queue = capture("METADATA")
+    cap.entered([])
+    cap.response("INTERRUPTED", "peer_disconnected")
+    assert queue.events[-1].kind == "evidence"
+    assert queue.events[-1].metadata["event_type"] == "RESPONSE_FAILURE"
+    assert queue.events[-1].metadata["reason"] == "peer_disconnected"
+    assert queue.events[-1].body is None
+    cap.response("ERROR", "private-provider-body")
+    assert queue.events[-1].kind == "response"
+    off, queue = capture("OFF")
+    off.response("ERROR", "error_response")
+    assert not queue.events

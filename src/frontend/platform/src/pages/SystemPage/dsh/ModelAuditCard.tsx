@@ -1,16 +1,19 @@
 import { Button } from "@/components/bs-ui/button";
+import "@/style/dsh-content-safety.css";
+import { Button as SafetyButton, Tag } from "@bisheng/ui";
 import type { ModelAuditRecord } from "@/types/dshModelAudit";
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dshTime } from "./common";
+import { auditFailure } from "./auditFailures";
 import { ModelAuditBody } from "./ModelAuditBody";
+import { ContentSafetyDetails, safetyTagColor } from "./ContentSafetyDetails";
 
 interface ModelAuditCardProps {
   row: ModelAuditRecord;
   tenantId?: number;
   expanded: boolean;
   onToggle: () => void;
-  onNavigate: (userId: number, conversationId: string) => void;
 }
 
 const statusAxes = [
@@ -40,6 +43,25 @@ export function ModelAuditCard({
 }: ModelAuditCardProps) {
   const { t } = useTranslation();
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [safetyOpen, setSafetyOpen] = useState(false);
+  const safetyId = useId();
+  const external = row.record_origin === "EXTERNAL_SAFETY";
+  const modelDisplay = row.model_name?.trim()
+    ? row.model_name
+    : `${t("dsh.auditHistory.fields.model_id")}: ${row.model_id}`;
+  const canShowOriginal = !external && row.model_entered !== false;
+  const safetyStates = {
+    summary: row.content_safety_state ?? "UNREPORTED",
+    input: row.stage_results?.input ?? "UNREPORTED",
+    output: row.stage_results?.output ?? "UNREPORTED",
+  } as const;
+  const canShowSafetyDetails =
+    row.has_sensitive_hit === true ||
+    row.input_sensitive_hit === true ||
+    row.output_sensitive_hit === true ||
+    safetyStates.summary !== "PASSED" ||
+    safetyStates.input !== "PASSED" ||
+    safetyStates.output !== "PASSED";
   const detailsId = useId();
   const bodyId = useId();
   const originalButton = useRef<HTMLButtonElement>(null);
@@ -49,9 +71,9 @@ export function ModelAuditCard({
       <header className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
         <p
           className="w-full min-w-0 truncate font-medium text-foreground md:w-auto md:flex-1"
-          title={row.model_name}
+          title={modelDisplay}
         >
-          {row.model_name}
+          {modelDisplay}
         </p>
         <time
           className="whitespace-nowrap tabular-nums"
@@ -62,12 +84,6 @@ export function ModelAuditCard({
         <span className="max-w-48 truncate" title={row.user_name || undefined}>
           {row.user_name || t("dsh.modelAuditView.user_unavailable")}
         </span>
-        <span className="whitespace-nowrap font-medium text-primary dark:text-foreground">
-          {t("dsh.modelAuditView.kinds." + (row.request_kind || "unknown"))}
-        </span>
-        <span className="whitespace-nowrap">
-          {t("dsh.modelAuditView.sources.origin." + (row.session_origin || "unknown"))}
-        </span>
         <Button
           variant="link"
           className="h-7 p-0 text-xs dark:text-foreground [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:text-sm"
@@ -77,66 +93,142 @@ export function ModelAuditCard({
         >
           {t("dsh.modelAuditView.request_details")}
         </Button>
-        <Button
-          ref={originalButton}
-          variant="outline"
-          size="sm"
-          className="text-xs [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:text-sm"
-          aria-expanded={expanded}
-          aria-controls={expanded ? bodyId : undefined}
-          disabled={
-            row.content_status === "NOT_CAPTURED" ||
-            row.effective_mode !== "CONTENT"
-          }
-          onClick={onToggle}
-        >
-          {t(
-            expanded
-              ? "dsh.modelAuditView.collapse"
-              : "dsh.modelAuditView.original",
-          )}
-        </Button>
+        {canShowOriginal && (
+          <Button
+            ref={originalButton}
+            variant="outline"
+            size="sm"
+            className="text-xs [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:text-sm"
+            aria-expanded={expanded}
+            aria-controls={expanded ? bodyId : undefined}
+            disabled={
+              row.content_status === "NOT_CAPTURED" ||
+              row.effective_mode !== "CONTENT"
+            }
+            onClick={onToggle}
+          >
+            {t(
+              expanded
+                ? "dsh.modelAuditView.collapse"
+                : "dsh.modelAuditView.original",
+            )}
+          </Button>
+        )}
       </header>
-      {detailsOpen && (
-        <dl
-          id={detailsId}
-          className="space-y-1 border-t bg-muted/30 px-4 py-2 text-xs text-muted-foreground"
-        >
-          <div className="flex gap-2">
-            <dt className="shrink-0">
-              {t("dsh.modelAuditView.filters.request_id")}
-            </dt>
-            <dd className="min-w-0 break-all font-mono">{row.request_id}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="shrink-0">{t("dsh.modelAuditView.conversation")}</dt>
-            <dd className="min-w-0 break-all font-mono">
-              {row.conversation_id ??
-                t("dsh.modelAuditView.states.UNASSOCIATED")}
-            </dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="shrink-0">
-              {t("dsh.modelAuditView.filters.model_name")}
-            </dt>
-            <dd className="min-w-0 break-all">{row.model_name}</dd>
-          </div>
-          {statusAxes.map((key) => (
-            <div key={key} className="flex gap-2">
-              <dt>{t("dsh.modelAuditView.axes." + key)}</dt>
-              <dd className={statusColor(row[key])}>
-                {t("dsh.modelAuditView.states." + row[key])}
-              </dd>
-            </div>
+      <div className="dsh-content-safety">
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2">
+          {(["summary", "input", "output"] as const).map((stage) => (
+            <Tag
+              key={stage}
+              size="small"
+              color={safetyTagColor(safetyStates[stage])}
+            >
+              {t("dsh.contentSafety.details." + stage) +
+                ": " +
+                t("dsh.contentSafety.states." + safetyStates[stage])}
+            </Tag>
           ))}
+          {canShowSafetyDetails && (
+            <SafetyButton
+              type="button"
+              variant="text"
+              size="small"
+              className="text-xs [@media(pointer:coarse)]:min-h-11"
+              aria-expanded={safetyOpen}
+              aria-controls={safetyOpen ? safetyId : undefined}
+              onClick={() => setSafetyOpen((old) => !old)}
+            >
+              {t("dsh.contentSafety.actions.view_details")}
+            </SafetyButton>
+          )}
+        </div>
+      </div>
+      {canShowSafetyDetails && safetyOpen && (
+        <div id={safetyId}>
+          <ContentSafetyDetails
+            requestId={row.request_id}
+            tenantId={tenantId}
+            detailsStatus={row.details_status}
+          />
+        </div>
+      )}
+      {detailsOpen && (
+        <section
+          id={detailsId}
+          aria-labelledby={detailsId + "-title"}
+          className="dsh-content-safety space-y-3 border-t p-4"
+        >
+          <h3 id={detailsId + "-title"} className="text-sm font-medium">
+            {t("dsh.modelAuditView.request_details")}
+          </h3>
+          <dl className="grid min-w-0 gap-4 rounded-lg border p-3 text-xs sm:grid-cols-2">
+            {statusAxes.map((key) => {
+              let statusKey = "dsh.modelAuditView.states." + (row[key] ?? "UNKNOWN");
+              if (row[key] == null && external) {
+                if (key === "model_result") {
+                  statusKey = "dsh.contentSafety.model_entry." +
+                    (row.model_entered === false ? "NOT_ENTERED" : "UNOBSERVED");
+                } else if (row.model_entered === false) {
+                  statusKey = "dsh.contentSafety.model_entry.NOT_APPLICABLE";
+                }
+              }
+              return (
+                <div key={key} className="min-w-0 space-y-1">
+                  <dt className="text-muted-foreground">{t("dsh.modelAuditView.axes." + key)}</dt>
+                  <dd className={"break-all " + statusColor(row[key] ?? "UNKNOWN")}>
+                    {t(statusKey)}
+                  </dd>
+                </div>
+              );
+            })}
+            {(
+              [
+                [
+                  "model",
+                  row.model_error_code,
+                  ["FAILED", "CANCELLED", "UNKNOWN"].includes(
+                    row.model_result ?? "",
+                  ),
+                ],
+                [
+                  "response",
+                  row.response_error_code,
+                  ["ERROR", "INTERRUPTED", "UNKNOWN"].includes(
+                    row.response_result ?? "",
+                  ),
+                ],
+              ] as const
+            ).map(([axis, code, failed]) => {
+              if (!failed) return null;
+              const reason = auditFailure(code, axis);
+              return (
+                <div key={axis} className="flex gap-2">
+                  <dt className="shrink-0">
+                    {t("dsh.modelAuditView.failures." + axis)}
+                  </dt>
+                  <dd className="min-w-0 break-all">
+                    {t("dsh.modelAuditView.failures." + reason.key)}
+                    {reason.status && (
+                      <span className="whitespace-nowrap">
+                        {" · " +
+                          t("dsh.modelAuditView.failures.http_status", {
+                            status: reason.status,
+                          })}
+                      </span>
+                    )}
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
           {(row.status_reasons || []).map((reason) => (
-            <div key={reason}>
+            <p key={reason} className="text-xs text-muted-foreground">
               {t("dsh.modelAuditView.reasons." + reason.replace(":", "_"), {
                 defaultValue: t("dsh.modelAuditView.reasons.INVALID_STATE"),
               })}
-            </div>
+            </p>
           ))}
-        </dl>
+        </section>
       )}
       {row.context_invalid && (
         <p
@@ -146,7 +238,7 @@ export function ModelAuditCard({
           {t("dsh.modelAuditView.invalidContext")}
         </p>
       )}
-      {expanded && (
+      {expanded && canShowOriginal && (
         <div
           id={bodyId}
           className="border-t"
@@ -184,8 +276,10 @@ export function ModelAuditCard({
               }
             >
               {t(
-                "dsh.modelAuditView.summary." +
-                  (row.audit_status || "PREPARING"),
+                row.audit_status === "NOT_APPLICABLE"
+                  ? "dsh.contentSafety.model_entry.NOT_APPLICABLE"
+                  : "dsh.modelAuditView.summary." +
+                      (row.audit_status || "PREPARING"),
               )}
             </dd>
             {row.status_pending && (

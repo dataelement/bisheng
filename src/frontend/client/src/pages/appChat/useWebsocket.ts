@@ -21,6 +21,7 @@ import {
 import type { WorkflowCloseAction } from "./workflowAutoRerun"
 
 export const AppLostMessage = '11111'
+const unavailableCodes = new Set(['10421', '13002', '13010', AppLostMessage])
 const wsMap = new Map<string, WebSocket>()
 // 会话运行时信息
 const sessionInfoMap = new Map<string, any>()
@@ -77,6 +78,10 @@ export const useWebSocket = (helpers) => {
     const activationRef = useRef(createWorkflowActivation(helpers.chatId))
     activationRef.current = syncWorkflowActivation(activationRef.current, helpers.chatId)
 
+    const unavailableRef = useRef<Record<string, string>>({})
+    const isUnavailable = () => unavailableCodes.has(String(helpers.appLost))
+        || !!unavailableRef.current[helpers.chatId]
+
     const websocket = wsMap.get(helpers.chatId)
     const currentChatId = useCurrentChatId(helpers.chatId)
 
@@ -119,6 +124,7 @@ export const useWebSocket = (helpers) => {
 
     // 连接WebSocket
     const connect = (callBack) => {
+        if (isUnavailable()) return
         const replacingExistingSocket = !!websocket
         if (websocket) {
             if (!callBack) {
@@ -135,7 +141,6 @@ export const useWebSocket = (helpers) => {
             }
         }
         if (!helpers.wsUrl) return
-        if (helpers.appLost === AppLostMessage) return
 
         const isSecureProtocol = window.location.protocol === "https:";
         const webSocketProtocol = isSecureProtocol ? "wss" : "ws";
@@ -210,11 +215,16 @@ export const useWebSocket = (helpers) => {
         }
 
         ws.onerror = (error) => {
-            console.error('链接异常error', helpers.chatId, error);
-            helpers.handleMsgError({ code: '', data: null })
+            console.error('WebSocket error', helpers.chatId, error);
+            helpers.handleMsgError({
+                code: isUnavailable() ? unavailableRef.current[helpers.chatId] || String(helpers.appLost) : '',
+                data: null,
+            })
         }
     }
     const handleMessages = (data, _ws) => {
+        // Keep terminal availability errors stable across queued close/input frames.
+        if (isUnavailable()) return
         // 过滤无效数据
         if ((data.category === 'end_cover' && data.type !== 'end_cover')) {
             return
@@ -261,13 +271,18 @@ export const useWebSocket = (helpers) => {
                 code = data.message.status_code
                 message = data.message.status_message
             }
+            if (unavailableCodes.has(String(code))) {
+                unavailableRef.current[helpers.chatId] = String(code)
+                restartCallbacks.delete(helpers.chatId)
+                sessionInfoMap.delete(helpers.chatId)
+                helpers.handleMsgError({ code: String(code), data: data.message?.data })
+                helpers.message.closeAllLogMsg(helpers.chatId)
+            }
             if (![10421, 13002].includes(code)) {
                 showToast({
                     message: code === 500 ? message : localize(`api_errors.${String(code)}`, { ...(data.message?.data || {}), defaultValue: localize('api_errors.fallback') }),
-                    severity: NotificationSeverity.ERROR,
+                    severity: NotificationSeverity.WARNING,
                 })
-            } else {
-                helpers.handleMsgError({ code, data: data.message?.data })
             }
             return helpers.message.closeAllMsg(helpers.chatId)
         } else if (data.category === 'node_run') {
@@ -364,13 +379,20 @@ export const useWebSocket = (helpers) => {
         } catch (error: any) {
             showToast({
                 message: error.message,
-                severity: NotificationSeverity.ERROR,
+                severity: NotificationSeverity.WARNING,
             })
         }
     }
 
     // 监听submitData变化，发送消息（必须在当前会话调用）
     useEffect(() => {
+        if (submitData && isUnavailable()) {
+            helpers.handleMsgError({
+                code: unavailableRef.current[helpers.chatId] || String(helpers.appLost), data: null,
+            })
+            setSubmitData(null)
+            return
+        }
         if (submitData
             && (submitData.action === 'skill_input' || websocket && websocket.readyState === WebSocket.OPEN)) {
             const action = submitData.action

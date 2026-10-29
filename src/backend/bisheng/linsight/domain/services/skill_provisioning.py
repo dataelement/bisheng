@@ -30,7 +30,6 @@ from typing import NamedTuple
 
 from loguru import logger
 
-from bisheng.linsight.domain.models.linsight_skill import LinsightSkillDao
 from bisheng.linsight.domain.services.skill_store import SkillStore
 
 WORKSPACE_SKILLS_DIR = "skills"
@@ -80,6 +79,7 @@ async def materialize_session_skills(
     store: SkillStore | None = None,
     *,
     strict: bool = False,
+    user_id: int | None = None,
 ) -> SkillProvisionResult:
     """Copy allowed skill bundles into the workspace ``/skills/`` subtree.
 
@@ -115,7 +115,9 @@ async def materialize_session_skills(
     # uses strict_tenant_filter); the worker has already restored tenant context.
     # Keep the whole row: it carries the content_hash that locates the bundle, so
     # resolving one costs no extra query.
-    enabled = {skill.name: skill for skill in await LinsightSkillDao.list_enabled()}
+    from bisheng.linsight.domain.services.user_skills import UserSkillsService
+
+    enabled = {skill.name: skill for skill, _ in await UserSkillsService(user_id).records()}
     wanted = sorted(name for name in selected if name in enabled)
     if strict:
         missing = [name for name in selected if name not in enabled]

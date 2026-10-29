@@ -67,7 +67,7 @@ export const ChatToolDown = ({
           )}
         </div>
       </SelectTrigger>
-      <SelectContent className="bg-white rounded-lg w-52">
+      <SelectContent className="dsh-chat-menu bg-white rounded-lg w-52">
         {config?.webSearch.enabled && (
           <div className="flex justify-between items-center px-2 py-[5px]">
             <div className="flex gap-2 items-center">
@@ -140,7 +140,7 @@ export const LinsiTools = ({ tools, setTools }) => {
           </span>
         </div>
       </SelectTrigger>
-      <SelectContent className="bg-white rounded-xl p-2 w-64">
+      <SelectContent className="dsh-chat-menu bg-white rounded-xl p-2 w-64">
         {tools.map((tool) => {
           return (
             <div key={tool.name} className="flex justify-between mb-3.5">

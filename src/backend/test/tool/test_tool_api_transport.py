@@ -138,6 +138,43 @@ async def test_number_arguments_keep_integer_precision(monkeypatch):
     assert requests[0].url.params["id"] == "9007199254740993"
 
 
+@pytest.mark.parametrize("authentication_location", ["header", "query"])
+async def test_body_parameter_does_not_override_same_named_saved_credential(monkeypatch, authentication_location):
+    import json
+
+    requests = []
+
+    def handle(request):
+        requests.append(request)
+        return httpx.Response(200, text="ok")
+
+    original = httpx.AsyncClient
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.bounded_openapi.httpx.AsyncClient",
+        lambda **kwargs: original(transport=httpx.MockTransport(handle), **kwargs),
+    )
+    credential = "fixture-private-credential"
+    impl = BoundedOpenApiTools(
+        url="https://fixture.example",
+        params={
+            "path": "/search",
+            "method": "post",
+            "parameters": [{"name": "token", "in": "body", "schema": {"type": "string"}}],
+            "api_location": authentication_location,
+            "parameter_name": "token",
+        },
+        headers={"token": credential} if authentication_location == "header" else {},
+        api_key=credential,
+        max_output_bytes=100,
+    )
+    assert await impl.arun(token="business-value") == "ok"
+    assert json.loads(requests[0].content) == {"token": "business-value"}
+    if authentication_location == "header":
+        assert requests[0].headers["token"] == credential and "token" not in requests[0].url.params
+    else:
+        assert requests[0].url.params["token"] == credential
+
+
 async def test_nested_json_body_is_sent_without_transformation_or_defaults(monkeypatch):
     import json
 

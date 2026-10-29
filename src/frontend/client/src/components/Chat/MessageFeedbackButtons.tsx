@@ -4,8 +4,8 @@
  * Reused by every AI answer surface (daily chat, knowledge-space 知源, channel
  * subscription via AiMessageBubble; linsight task mode via ResultPanel; appChat
  * workflow/assistant via MessageButtons). The button visuals match the
- * AiMessageBubble action row (size-6 hit area, 14px bisheng-icons Outlined
- * glyph, text-3 idle / brand-500 active) so the whole action row reads as one
+ * DSH Work action row (28px hit area, 15px DSH glyph,
+ * tertiary idle / filled active) so the whole action row reads as one
  * consistent set.
  *
  * Dislike is deferred: clicking thumbs-down only opens the reason dialog
@@ -22,7 +22,7 @@
  * it, so a failed request shows only the interceptor's error toast (never both).
  */
 import { useEffect, useState } from "react";
-import { Outlined } from "bisheng-icons";
+import { DshMessageActionIcon } from "./DshMessageActionIcon";
 import { CommentDialog } from "~/components";
 import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
@@ -32,7 +32,7 @@ import { cn } from "~/utils";
 type ThumbsState = 0 | 1 | 2;
 
 const ACTION_BTN =
-    "flex size-6 items-center justify-center rounded-md transition-colors hover:bg-fill-1";
+    "dsh-message-action";
 
 interface MessageFeedbackButtonsProps {
     /** Initial / persisted verdict: 0 none, 1 up, 2 down. */
@@ -96,32 +96,26 @@ export function MessageFeedbackButtons({
 
     return (
         <>
-            <div className={cn("flex gap-1", className)}>
+            <div className={cn("dsh-message-feedback", className)}>
                 <button
                     type="button"
                     className={ACTION_BTN}
                     onClick={() => handleClick(1)}
-                    title="点赞"
-                    aria-label="点赞"
+                    title={localize("com_feedback_like")}
+                    aria-label={localize("com_feedback_like")}
                     aria-pressed={state === 1}
                 >
-                    <Outlined.ThumbsUp
-                        size={14}
-                        className={cn(state === 1 ? "text-blue-500" : "text-text-3")}
-                    />
+                    <DshMessageActionIcon kind="like" filled={state === 1} />
                 </button>
                 <button
                     type="button"
                     className={ACTION_BTN}
                     onClick={() => handleClick(2)}
-                    title="点踩"
-                    aria-label="点踩"
+                    title={localize("com_feedback_dislike")}
+                    aria-label={localize("com_feedback_dislike")}
                     aria-pressed={state === 2}
                 >
-                    <Outlined.ThumbsDown
-                        size={14}
-                        className={cn(state === 2 ? "text-blue-500" : "text-text-3")}
-                    />
+                    <DshMessageActionIcon kind="dislike" filled={state === 2} />
                 </button>
             </div>
 

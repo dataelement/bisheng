@@ -1,4 +1,8 @@
-import { Building2, GitBranch, UserRound, UsersRound } from "lucide-react";
+import { Tag } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+// `GitBranch` stays on lucide: bisheng-icons has no "inherited / branch" glyph,
+// so this is the documented no-matching-semantic-icon fallback.
+import { GitBranch } from "lucide-react";
 import type { PermissionGrantSource } from "~/api/permission";
 import { useLocalize } from "~/hooks";
 
@@ -6,10 +10,14 @@ interface SourceBadgeProps {
   source: PermissionGrantSource;
 }
 
+// Entity icons match SUBJECT_ICONS in PermissionListTab — the badge sits in the
+// same row as the subject icon, so the two must not draw two different people.
 const SOURCE_ICONS = {
-  direct: UserRound,
-  department: Building2,
-  user_group: UsersRound,
+  direct: Outlined.People,
+  department: Outlined.City,
+  user_group: Outlined.PeopleGroup,
+  // The space's creator — a person with a shield, not the branch fallback.
+  creator: Outlined.PeopleSafe,
   inherited: GitBranch,
 };
 
@@ -19,23 +27,18 @@ export function SourceBadge({ source }: SourceBadgeProps) {
   const SourceIcon =
     SOURCE_ICONS[normalizedType as keyof typeof SOURCE_ICONS] ?? GitBranch;
 
+  // 组件-Tag标签.md: a roster line takes the small rung (§4); `brand` keeps the
+  // 7% brand tint the badge already had (and it follows the blue⇄green theme).
+  // The icon is sized by the Tag itself (12px on small, §5) — no className here.
   return (
-    <span
-      data-source-type={source.type}
-      className="inline-flex items-center gap-1 rounded-full bg-blue-500/[0.07] px-2 py-0.5 text-xs font-medium text-blue-500"
-    >
-      <SourceIcon aria-hidden="true" className="size-3" />
+    <Tag size="small" color="brand" icon={<SourceIcon aria-hidden="true" />}>
       {localize(`f048_permission.source.${normalizedType}`)}
       {source.include_children && (
-        <span className="font-normal">
-          · {localize("f048_permission.source.include_children")}
-        </span>
+        <> · {localize("f048_permission.source.include_children")}</>
       )}
       {source.userset_relation === "admin" && (
-        <span className="font-normal">
-          · {localize("f048_permission.source.user_group_admin")}
-        </span>
+        <> · {localize("f048_permission.source.user_group_admin")}</>
       )}
-    </span>
+    </Tag>
   );
 }

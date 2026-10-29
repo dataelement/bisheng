@@ -1,14 +1,7 @@
+import { permissionModelLabel } from "./permissionModelLabel";
 import { Outlined } from "bisheng-icons";
-import {
-  AlertTriangle,
-  Building2,
-  Loader2,
-  LockKeyhole,
-  Search,
-  Trash2,
-  User,
-  Users,
-} from "lucide-react";
+// `LockKeyhole` stays on lucide: bisheng-icons has no lock glyph.
+import { LockKeyhole } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   getGrantablePermissionModels,
@@ -29,6 +22,7 @@ import { Button } from "~/components/ui";
 import { useLocalize } from "~/hooks";
 import { useConfirm } from "~/Providers";
 import { canMutatePermissionAssignee } from "./assigneePolicy";
+import { PermissionEmptyState } from "./PermissionEmptyState";
 import { SourceBadge } from "./SourceBadge";
 
 interface PermissionListTabProps {
@@ -43,9 +37,9 @@ interface PermissionListTabProps {
 }
 
 const SUBJECT_ICONS = {
-  user: User,
-  department: Building2,
-  user_group: Users,
+  user: Outlined.People,
+  department: Outlined.City,
+  user_group: Outlined.PeopleGroup,
 };
 
 function createMutationIdempotencyKey(): string {
@@ -160,12 +154,12 @@ function RosterRow({
               >
                 {!currentIsGrantable && (
                   <option value={assignee.model.key}>
-                    {assignee.model.name}
+                    {permissionModelLabel(assignee.model.key, assignee.model.name, localize)}
                   </option>
                 )}
                 {models.map((model) => (
                   <option key={model.key} value={model.key}>
-                    {model.name}
+                    {permissionModelLabel(model.key, model.name, localize)}
                   </option>
                 ))}
               </select>
@@ -183,12 +177,12 @@ function RosterRow({
               className="flex size-8 shrink-0 items-center justify-center rounded-md text-[#86909C] transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:cursor-not-allowed disabled:opacity-50"
               onClick={() => onRemove(assignee)}
             >
-              <Trash2 aria-hidden="true" className="size-4" />
+              <Outlined.Delete aria-hidden="true" className="size-4" />
             </button>
           </>
         ) : (
           <span className="inline-flex items-center gap-1 truncate text-sm text-[#86909C]">
-            {assignee.model.name}
+            {permissionModelLabel(assignee.model.key, assignee.model.name, localize)}
             {assignee.protected && (
               <LockKeyhole
                 aria-label={localize("f048_permission.roster.protected")}
@@ -346,7 +340,7 @@ export function PermissionListTab({
       return [
         assignee.subject.name,
         assignee.subject.id,
-        assignee.model.name,
+        permissionModelLabel(assignee.model.key, assignee.model.name, localize),
         assignee.source.type,
         assignee.inherited_from,
       ]
@@ -355,7 +349,7 @@ export function PermissionListTab({
         .toLowerCase()
         .includes(query);
     });
-  }, [assignees, fixedSubjectType, searchQuery]);
+  }, [assignees, fixedSubjectType, localize, searchQuery]);
 
   const mutateAssignee = async (
     assignee: PermissionGrantAssignee,
@@ -430,7 +424,7 @@ export function PermissionListTab({
         className="flex min-h-40 items-center justify-center gap-2 text-sm text-[#818181]"
         role="status"
       >
-        <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+        <Outlined.Loading aria-hidden="true" className="size-4 animate-spin" />
         {localize("f048_permission.roster.loading")}
       </div>
     );
@@ -442,7 +436,7 @@ export function PermissionListTab({
     <>
       <div className="flex h-full min-h-0 flex-col">
         <div className="relative shrink-0">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
+          <Outlined.Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-3" />
           <input
             type="search"
             value={searchQuery}
@@ -458,7 +452,7 @@ export function PermissionListTab({
             className="mt-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
             role="alert"
           >
-            <AlertTriangle aria-hidden="true" className="size-4" />
+            <Outlined.Attention aria-hidden="true" className="size-4" />
             {localize("f048_permission.roster.load_failed")}
           </div>
         )}
@@ -481,11 +475,13 @@ export function PermissionListTab({
             />
           ))}
           {visibleAssignees.length === 0 && (
-            <p className="py-10 text-center text-sm text-[#818181]">
-              {searchQuery.trim()
-                ? localize("com_permission.empty_search")
-                : localize("com_permission.list_empty_for_subject")}
-            </p>
+            <PermissionEmptyState
+              message={localize(
+                searchQuery.trim()
+                  ? "com_permission.empty_search"
+                  : "com_permission.list_empty_for_subject",
+              )}
+            />
           )}
           {hasMore && (
             <Button

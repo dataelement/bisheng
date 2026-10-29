@@ -1,4 +1,10 @@
 {
+  "26170": "Check record authentication failed. Contact an administrator.",
+  "26171": "The check record format is invalid. Ask an administrator to check the sending service.",
+  "26172": "The check record conflicts with saved information. Ask an administrator to review it.",
+  "26173": "The check record is older than the retained reporting range and cannot be accepted again.",
+  "26174": "The check record receiving service is temporarily unavailable. Try again later.",
+  "26175": "The check record exceeds the size or item limit and cannot be accepted.",
   "26131": "Invalid audit query. Reapply the filters.",
   "26132": "The audit request is unavailable or outside this tenant scope.",
   "26133": "The original is unavailable. Ask an administrator to check storage and keys.",
@@ -525,5 +531,14 @@
   "26205": "Workbench archive validation failed",
   "26206": "Workbench identity or version conflict; refresh and retry",
   "26207": "Workbench or current version not found",
-  "26208": "Workbench file is missing or failed integrity checks"
+  "26208": "Workbench file is missing or failed integrity checks",
+  "28001": "Cannot connect to the isolated code execution environment. Try again later or contact your administrator.",
+  "28002": "The isolated code execution environment is at capacity. Try again later.",
+  "28003": "Code execution timed out without producing a deliverable.",
+  "28004": "The file is too large and was not copied into the isolated code execution environment.",
+  "28005": "The code node result cannot be converted to JSON. Check the data types returned.",
+  "28006": "The isolated code execution environment returned invalid data. Try again later or contact your administrator.",
+  "28007": "The code node result is too large. Reduce the output.",
+  "28008": "The code node finished, but the main function did not return a result.",
+  "28009": "The task mode code executor configuration is invalid. Contact your administrator to check the local, container, or e2b configuration, then try again."
 }

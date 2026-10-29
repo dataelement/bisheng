@@ -33,6 +33,11 @@ export function UsageSummaryView({ summary }: UsageSummaryProps) {
             : formatUsageTokens(totals.output_tokens, i18n.language)
     return (
         <div className="space-y-5">
+            <p className="text-sm text-muted-foreground">
+                {t('dsh.unified.usedCredits', { value: totals.total_tokens == null
+                    ? t('dsh.unavailable')
+                    : ((totals.billed_tokens ?? totals.total_tokens) / 1000000).toLocaleString(i18n.language, { maximumFractionDigits: 6 }) })}
+            </p>
             <section
                 className="space-y-4 rounded-lg border p-4"
                 data-usage-calendar-card

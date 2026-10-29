@@ -23,6 +23,9 @@ import MenuApprovalPluginGate from '@/layouts/MenuApprovalPluginGate';
 import { appsSectionLinkTarget } from '@/layouts/appModuleNavPaths';
 import { canOpenWorkbench } from '@/utils/platformAccess';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
+import { skillCenterPreviewEnabled } from '~/components/Skills/types';
+import { usePrefersMobileLayout } from '~/hooks';
+import { squareTypePath } from '~/pages/square/squarePaths';
 
 // Route-level code splitting (ledger #27): only the primary landing path
 // (login + main layout + chat home) ships in the entry chunk; every other
@@ -52,6 +55,13 @@ const DevLogin = lazy(() => import('~/pages/DevLogin'));
 const StandaloneChatPage = lazy(() => import('~/pages/standaloneChat/StandaloneChatPage'));
 const MediaPlaybackPage = lazy(() => import('~/pages/media/MediaPlaybackPage'));
 const SettingsPage = lazy(() => import('~/pages/settings/SettingsPage'));
+const SquarePage = lazy(() =>
+  import('~/pages/square/SquarePage').then((module) => ({ default: module.SquarePage })),
+);
+const CapabilityCenterPage = lazy(() => import('~/pages/capabilities/CapabilityCenterPage').then(module => ({ default: module.CapabilityCenterPage })));
+const SkillCenterPage = lazy(() =>
+  import('~/pages/skills/SkillCenterPage').then((module) => ({ default: module.SkillCenterPage })),
+);
 
 function RouteLoading() {
   return (
@@ -105,6 +115,12 @@ function HomeEntryRedirect() {
     return <Navigate to="/menu-unavailable?plugin=home" replace />;
   }
   return <Navigate to="/menu-unavailable" replace />;
+}
+
+/** 应用广场: desktop has it as a tab of 广场; mobile keeps the standalone page. */
+function AppsExploreRoute() {
+  const isMobile = usePrefersMobileLayout();
+  return isMobile ? <ExplorePlaza /> : <Navigate to={squareTypePath('apps')} replace />;
 }
 
 const AuthLayout = () => (
@@ -207,9 +223,22 @@ export const router = createBrowserRouter([
             path: 'apps/explore',
             element: suspended(
               <MenuApprovalPluginGate pluginId="apps">
-                <ExplorePlaza />
+                <AppsExploreRoute />
               </MenuApprovalPluginGate>
             ),
+          },
+          // 广场 — every module's discover view behind one entry (tabs follow the module
+          // grants, so the page needs no plugin gate of its own).
+          { path: 'square', element: suspended(<SquarePage />) },
+          { path: 'capabilities', element: suspended(<MenuApprovalPluginGate pluginId="home"><CapabilityCenterPage /></MenuApprovalPluginGate>) },
+          {
+            // 技能 module home (我的技能 / 技能广场) — preview-gated, rides on 首页's menu grant.
+            path: 'skills',
+            element: skillCenterPreviewEnabled ? suspended(
+              <MenuApprovalPluginGate pluginId="home">
+                <SkillCenterPage />
+              </MenuApprovalPluginGate>
+            ) : <Navigate to="/404" replace />,
           },
           { path: 'channel', element: suspended(
             <MenuApprovalPluginGate pluginId="subscription">

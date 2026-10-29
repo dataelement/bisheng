@@ -16,6 +16,9 @@
 - AC-09 — THE SYSTEM SHALL 保留历史用量及事件读取，且新调用无需席位字段。
 - AC-10 — THE SYSTEM SHALL 移除席位和商业授权页面、后台远程验席、资料同步及 Gateway 配置依赖。
 - AC-11 — WHEN 旧客户端重新登录，THE SYSTEM SHALL 通过 Python 兼容路由提供相同响应契约。
+- AC-12 — WHEN 已准入的模型调用失败，THE SYSTEM SHALL 在审计详情显示可确认的上游 HTTP 状态、超时或连接失败原因；不展示凭据、上游原始报文或推测历史原因。
+- AC-13 — WHEN 响应返回错误或传输中断，THE SYSTEM SHALL 独立记录响应阶段可观察的原因；模型结果、用量和正文完整性保持各自事实。
+- AC-14 — WHEN 查看原文，THE SYSTEM SHALL 默认完整倒序展示消息，先排序再分页；不反转单条消息的文本和工具参数片段，不过滤压缩上下文或历史消息。
 
 ## 边界
 

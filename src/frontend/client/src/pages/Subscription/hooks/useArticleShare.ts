@@ -13,7 +13,7 @@ export function useArticleShare() {
         copyText(shareText).then(() => {
             showToast({ message: localize("com_subscription.share_link_copied"), status: 'success' });
         }).catch(() => {
-            showToast({ message: localize("com_subscription.copy_failed_retry"), status: 'error' });
+            showToast({ message: localize("com_subscription.copy_failed_retry"), status: 'warning' });
         });
     }, [showToast]);
 

@@ -1,3 +1,4 @@
+import { ContextResourceCard } from '../Input/ContextResourceCard';
 import { Loader2, Play, Video } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -42,7 +43,7 @@ interface MediaAttachmentChipProps {
     /** Input bar chips may remove; sent-message chips are read-only. */
     onRemove?: () => void;
     /** Compact row in message bubble vs wider input-bar card. */
-    variant?: UploadThumbnailVariant;
+    variant?: UploadThumbnailVariant | 'resource';
     className?: string;
 }
 
@@ -106,6 +107,16 @@ export function MediaAttachmentChip({
         }
         setPlaybackOpen(true);
     };
+
+    if (variant === 'resource') {
+        return <>
+            <ContextResourceCard label={fileName}
+                description={isParsing ? parsingLabel : [getMediaFileExtensionLabel(fileName), durationLabel].filter(Boolean).join(' · ')}
+                icon={isUploading ? <Loader2 className="size-6 animate-spin" /> : <Play className="size-6" />}
+                onClick={canPlay ? handlePlay : undefined} onRemove={onRemove} />
+            {playbackDialog}
+        </>;
+    }
 
     if (isSquareCard && kind === 'video') {
         const extensionLabel = getMediaFileExtensionLabel(fileName);

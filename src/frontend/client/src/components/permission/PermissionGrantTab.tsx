@@ -1,4 +1,7 @@
-import { Loader2, LockKeyhole, Plus, Trash2 } from "lucide-react";
+import { permissionModelLabel } from "./permissionModelLabel";
+import { Outlined } from "bisheng-icons";
+// `LockKeyhole` stays on lucide: bisheng-icons has no lock glyph.
+import { LockKeyhole } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   getGrantablePermissionModels,
@@ -153,13 +156,13 @@ export function PermissionGrantTab({
       if (assignee.subject.type !== subjectType) continue;
       if (assignee.scope !== "LOCAL") continue;
       const id = String(assignee.subject.id);
-      const modelName = assignee.model.name || assignee.model.key;
+      const modelName = permissionModelLabel(assignee.model.key, assignee.model.name, localize);
       (names[id] ??= []).push(modelName);
     }
     return Object.fromEntries(
       Object.entries(names).map(([id, list]) => [id, list.join(", ")]),
     ) as Record<string, string>;
-  }, [assignees, subjectType]);
+  }, [assignees, localize, subjectType]);
 
   const pendingChanges = useMemo<PermissionGrantMutationChange[]>(() => {
     const changes: PermissionGrantMutationChange[] = [];
@@ -336,7 +339,7 @@ export function PermissionGrantTab({
             >
               {models.map((model) => (
                 <option key={model.key} value={model.key}>
-                  {model.name}
+                  {permissionModelLabel(model.key, model.name, localize)}
                 </option>
               ))}
             </select>
@@ -360,7 +363,7 @@ export function PermissionGrantTab({
             onClick={() => void handleSubmit(selectedAddChanges)}
           >
             {submitting && (
-              <Loader2 aria-hidden="true" className="animate-spin" />
+              <Outlined.Loading aria-hidden="true" className="animate-spin" />
             )}
             {localize("f048_permission.grant.submit")}
           </Button>
@@ -433,12 +436,12 @@ export function PermissionGrantTab({
                 >
                   {!currentIsGrantable && (
                     <option value={assignee.model.key}>
-                      {assignee.model.name}
+                      {permissionModelLabel(assignee.model.key, assignee.model.name, localize)}
                     </option>
                   )}
                   {models.map((model) => (
                     <option key={model.key} value={model.key}>
-                      {model.name}
+                      {permissionModelLabel(model.key, model.name, localize)}
                     </option>
                   ))}
                 </select>
@@ -464,7 +467,7 @@ export function PermissionGrantTab({
                     })
                   }
                 >
-                  <Trash2 aria-hidden="true" />
+                  <Outlined.Delete aria-hidden="true" />
                 </Button>
               </div>
             );
@@ -523,7 +526,7 @@ export function PermissionGrantTab({
               >
                 {models.map((model) => (
                   <option key={model.key} value={model.key}>
-                    {model.name}
+                    {permissionModelLabel(model.key, model.name, localize)}
                   </option>
                 ))}
               </select>
@@ -538,7 +541,7 @@ export function PermissionGrantTab({
               }
               onClick={handleAdd}
             >
-              <Plus aria-hidden="true" />
+              <Outlined.Plus aria-hidden="true" />
               {localize("f048_permission.grant.add")}
             </Button>
           </div>
@@ -557,7 +560,7 @@ export function PermissionGrantTab({
           onClick={() => void handleSubmit()}
         >
           {submitting && (
-            <Loader2 aria-hidden="true" className="animate-spin" />
+            <Outlined.Loading aria-hidden="true" className="animate-spin" />
           )}
           {localize("f048_permission.grant.submit")}
         </Button>

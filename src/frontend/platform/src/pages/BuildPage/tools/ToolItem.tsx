@@ -44,7 +44,7 @@ export default function ToolItem({
                 <div className="flex-1 min-w-0">
                     <div className="w-full text-sm font-medium leading-none flex items-center gap-2 min-w-0">
                         <span className="truncate">
-                            {type ? data.name : t(`categories.${data.name}.name`)}
+                            {type ? data.name : t(`categories.${data.name}.name`, { defaultValue: data.name })}
                         </span>
                         {permissionBadge}
                         {
@@ -66,7 +66,7 @@ export default function ToolItem({
                             ><SettingIcon /></div>
                         }
                     </div>
-                    <p className="text-sm text-muted-foreground mt-2">{type ? data.description : t(`categories.${data.name}.desc`)}</p>
+                    <p className="text-sm text-muted-foreground mt-2">{type ? data.description : t(`categories.${data.name}.desc`, { defaultValue: data.description || '' })}</p>
                 </div>
             </div>
         </AccordionTrigger>
@@ -74,8 +74,8 @@ export default function ToolItem({
             <div className="px-6 mb-4">
                 {sortData.map(api => (
                     <div key={api.name} className="relative p-4 rounded-sm  border-t">
-                        <h1 className="text-sm font-medium leading-none">{type ? api.name : t(`tools.${api.tool_key}.name`)}</h1>
-                        <p className="text-sm text-muted-foreground mt-2">{type ? api.name : t(`tools.${api.tool_key}.desc`)}</p>
+                        <h1 className="text-sm font-medium leading-none">{type ? api.name : t(`tools.${api.tool_key}.name`, { defaultValue: api.name })}</h1>
+                        <p className="text-sm text-muted-foreground mt-2">{type ? api.name : t(`tools.${api.tool_key}.desc`, { defaultValue: api.description || '' })}</p>
                         {
                             api.api_params?.length > 0 && <p className="text-sm text-muted-foreground mt-2 flex gap-2">
                                 <TooltipProvider>
@@ -85,8 +85,8 @@ export default function ToolItem({
                                         </TooltipTrigger>
                                         <TooltipContent side="right" className="bg-gray-50 border shadow-md p-4 text-gray-950 max-w-[520px]">
                                             {/* todo  JSON.parse(api.extra) move to api ctr */}
-                                            <p className="flex gap-2 items-center"><Badge>{JSON.parse(api.extra)?.method || 'http'}</Badge><span className="text-xl">{type ? api.name : t(`tools.${api.tool_key}.name`)}</span></p>
-                                            <p className="text-sm mt-2 text-gray-500">{type ? api.name : t(`tools.${api.tool_key}.desc`)}</p>
+                                            <p className="flex gap-2 items-center"><Badge>{JSON.parse(api.extra)?.method || 'http'}</Badge><span className="text-xl">{type ? api.name : t(`tools.${api.tool_key}.name`, { defaultValue: api.name })}</span></p>
+                                            <p className="text-sm mt-2 text-gray-500">{type ? api.name : t(`tools.${api.tool_key}.desc`, { defaultValue: api.description || '' })}</p>
                                             {
                                                 api.api_params.map(param => (
                                                     <div key={param.name}>

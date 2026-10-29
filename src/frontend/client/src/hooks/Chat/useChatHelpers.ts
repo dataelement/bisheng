@@ -235,7 +235,7 @@ const useLinsighFiles = (index) => {
                 });
               } else if (status === 'failed') {
                 updatedFiles.delete(key);
-                showToast({ message: localize('com_file_parse_failed_auto_removed', { 0: file.filename }), status: 'error' });
+                showToast({ message: localize('com_file_parse_failed_auto_removed', { 0: file.filename }), status: 'warning' });
               }
             }
           });

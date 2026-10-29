@@ -1,6 +1,7 @@
 """DSH's frozen real-HTTP error envelope; legacy business codes remain internal."""
 
-from uuid import uuid4
+import asyncio
+from uuid import UUID, uuid4
 
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
@@ -14,12 +15,25 @@ from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.dsh import DshInternalErrorError, DshInvalidRequestError
 
 
+def http_request_id(request: Request) -> str:
+    """Reuse one canonical UUID; ambiguous or invalid headers get a fresh ID."""
+    values = request.headers.getlist("X-Request-ID")
+    if len(values) == 1 and len(values[0]) == 36:
+        try:
+            value = UUID(values[0])
+        except ValueError:
+            value = None
+        if value is not None and value.int and str(value) == values[0].lower():
+            return str(value)
+    return str(uuid4())
+
+
 class DshRoute(APIRoute):
     def get_route_handler(self):
         handler = super().get_route_handler()
 
         async def route(request: Request):
-            request.state.request_id = str(uuid4())
+            request.state.request_id = http_request_id(request)
             try:
                 response = await handler(request)
             except RequestValidationError:
@@ -59,15 +73,19 @@ class AuditObservedResponse(Response):
         self.raw_headers, self.status_code = response.raw_headers, response.status_code
         self.background = None
 
-    def notify(self, result):
+    def notify(self, result, reason=None):
         try:
-            self.capture.response(result)
+            if reason is None:
+                self.capture.response(result)
+            else:
+                self.capture.response(result, reason)
         except Exception as error:
             # Optional audit observation cannot change transport behavior.
             logger.warning("DSH audit response observer failed ({})", type(error).__name__)
 
     async def __call__(self, scope, receive, send):
         completed = False
+        failure_reason = None
         error_frame = self.status_code >= 400
 
         async def observed_send(message):
@@ -77,13 +95,25 @@ class AuditObservedResponse(Response):
             await send(message)
             if message["type"] == "http.response.body" and not message.get("more_body", False):
                 completed = True
-                self.notify("ERROR" if error_frame else "COMPLETED")
+                if error_frame:
+                    self.notify("ERROR", "error_response")
+                else:
+                    self.notify("COMPLETED")
 
         try:
             await self.response(scope, receive, observed_send)
+        except asyncio.CancelledError:
+            failure_reason = "response_cancelled"
+            raise
+        except (ClientDisconnect, ConnectionResetError, BrokenPipeError):
+            failure_reason = "peer_disconnected"
+            raise
+        except Exception:
+            failure_reason = "send_failed"
+            raise
         finally:
             if not completed:
-                self.notify("INTERRUPTED")
+                self.notify("INTERRUPTED", failure_reason or "response_interrupted")
 
 
 class ToolInvocationRoute(DshRoute):

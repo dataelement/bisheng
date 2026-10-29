@@ -42,7 +42,7 @@ function advanced() {
   );
 }
 function renderRequests() {
-  render(<ModelAuditRequests tenantId={2} initialView="requests" />);
+  render(<ModelAuditRequests tenantId={2} initialView="unassociated" />);
 }
 function model() {
   return screen.getByRole("combobox", {
@@ -263,7 +263,7 @@ describe("unified audit filters", () => {
         total: 21,
       };
     });
-    render(<ModelAuditRequests tenantId={2} initialView="requests" />);
+    render(<ModelAuditRequests tenantId={2} initialView="unassociated" />);
     fireEvent.click(
       screen.getByRole("button", { name: "dsh.modelAuditView.selectUser" }),
     );
@@ -344,12 +344,29 @@ describe("unified audit filters", () => {
     api.users
       .mockRejectedValueOnce(new Error("unavailable"))
       .mockResolvedValueOnce({ data: [], total: 0 });
-    render(<ModelAuditRequests tenantId={2} initialView="requests" />);
+    render(<ModelAuditRequests tenantId={2} initialView="unassociated" />);
     fireEvent.click(
       screen.getByRole("button", { name: "dsh.modelAuditView.selectUser" }),
     );
     await screen.findByText("dsh.modelAuditView.userLoadError");
     fireEvent.click(screen.getByRole("option", { name: "dsh.refresh" }));
     await screen.findByText("dsh.modelAuditView.noUsers");
+  });
+});
+
+// Coverage AC: AC-68.
+describe("simplified audit layout keeps all advanced filters", () => {
+  it("removes query explanations while preserving the seven advanced fields", async () => {
+    renderRequests();
+    await waitFor(() => expect(api.page).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "dsh.modelAuditView.query_info" })).toBeNull();
+    expect(screen.queryByText("dsh.modelAuditView.scopeHint")).toBeNull();
+    advanced();
+    expect(screen.getByRole("combobox", { name: "dsh.modelAuditView.filters.model_name" })).toBeVisible();
+    expect(await screen.findByRole("combobox", { name: "dsh.modelAuditView.summary_status" })).toBeVisible();
+    for (const key of ["has_hit", "direction", "state"])
+      expect(screen.getByRole("combobox", { name: "dsh.contentSafety.filters." + key })).toBeVisible();
+    for (const key of ["request_id", "conversation_id"])
+      expect(screen.getByLabelText("dsh.modelAuditView.filters." + key)).toBeVisible();
   });
 });

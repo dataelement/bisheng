@@ -1,3 +1,4 @@
+import { permissionModelLabel } from "./permissionModelLabel";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -5,7 +6,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
-import { ChevronDown } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import type { RelationModelOption } from "./RelationSelect";
@@ -18,7 +19,7 @@ interface PermissionLevelMenuProps {
   /** When false the level items are hidden — the menu then only offers removal. */
   canChangeLevel: boolean;
   onChange: (modelId: string) => void;
-  /** Renders the destructive "移除" item. Omit to hide it. */
+  /** Renders the destructive "Remove" item. Omit to hide it. */
   onRemove?: () => void;
   className?: string;
 }
@@ -64,7 +65,7 @@ export function PermissionLevelMenu({
           )}
         >
           <span className="truncate">{label}</span>
-          <ChevronDown className="size-3.5 shrink-0 text-text-3" />
+          <Outlined.Down className="size-3.5 shrink-0 text-text-3" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -84,7 +85,7 @@ export function PermissionLevelMenu({
               )}
               onSelect={() => onChange(model.id)}
             >
-              {model.name}
+              {permissionModelLabel(model.id, model.name, localize)}
             </DropdownMenuItem>
           );
         })}

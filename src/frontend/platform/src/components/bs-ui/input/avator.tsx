@@ -1,10 +1,21 @@
-// @ts-strict-ignore
 import { Camera, X } from "lucide-react";
+import type { ChangeEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "../toast/use-toast";
 import { cname } from "../utils";
 
-// 头像
+interface AvatorProps {
+    size?: number;
+    accept?: string;
+    value?: string;
+    close?: boolean;
+    className?: string;
+    onChange: (file: File | null) => void;
+    children?: ReactNode;
+    disabled?: boolean;
+    label?: string;
+}
+
 export default function Avator({
     size = 5 * 1024 * 1024,
     accept = "image/jpeg,image/png",
@@ -12,19 +23,22 @@ export default function Avator({
     close = false,
     className,
     onChange,
-    children
-}) {
+    children,
+    disabled = false,
+    label = undefined,
+}: AvatorProps) {
     const { message } = useToast();
     const { t } = useTranslation()
-    const defaultButtonName = t('build.uploadAvator');
 
-    const handleFileChange = (event) => {
-        const file = event.target.files[0];
+    const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (disabled) return;
         if (file) {
             const isValidSize = file.size <= size;
             const isValidType = accept.split(',').some(type => file.type === type);
 
-            const errormgs = []
+            const errormgs: string[] = []
             if (!isValidSize) errormgs.push(`${t('build.fileSizeLimit')} ${size / 1024 / 1024}MB`)
             if (!isValidType) errormgs.push(`${t('build.fileTypeLimit')} ${accept}`)
 
@@ -45,20 +59,14 @@ export default function Avator({
                     className="absolute top-0 left-0 inset-0 w-full h-full opacity-0 cursor-pointer"
                     type="file"
                     accept={accept}
+                    disabled={disabled}
+                    aria-busy={disabled}
+                    aria-label={label}
                     onChange={handleFileChange}
                 />
                 <Camera className="text-gray-50 w-6 h-6" />
-                {close && value && <div className="absolute -top-3 -right-3 bg-gray-50 rounded-full p-1 cursor-pointer border border-gray-300" onClick={() => onChange(null)}><X size={14} /></div>}
+                {close && value && <div className="absolute -top-3 -right-3 bg-gray-50 rounded-full p-1 cursor-pointer border border-gray-300" onClick={() => { if (!disabled) onChange(null); }}><X size={14} /></div>}
             </div>
         </div>
-        {/* <Button variant="outline" className="relative">
-            {buttonName || defaultButtonName}
-            <input
-                className=" absolute top-0 left-0 inset-0 w-full h-full opacity-0 cursor-pointer"
-                type="file"
-                accept={accept}
-                onChange={handleFileChange}
-            />
-        </Button> */}
     </div>
 };

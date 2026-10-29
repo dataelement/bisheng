@@ -133,6 +133,57 @@ it("uses readable source labels, deduplicates forms, and never exposes unknown t
 });
 
 describe("audit body NDJSON-to-message UI", () => {
+  it.each(["chat-json", "responses-json", "responses-stream"])(
+    "renders %s replies through the original-access stream",
+    async (protocol) => {
+      const text = "Protocol reply shown once";
+      const message = {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text, annotations: [] }],
+      };
+      const response = {
+        object: "response",
+        status: "completed",
+        output: [message],
+      };
+      const units: unknown[] =
+        protocol === "chat-json"
+          ? [
+              {
+                message: { role: "assistant", content: text },
+                finish_reason: "stop",
+              },
+            ]
+          : protocol === "responses-json"
+            ? [response]
+            : [
+                {
+                  type: "response.output_text.delta",
+                  output_index: 0,
+                  content_index: 0,
+                  delta: text,
+                },
+                { type: "response.completed", response },
+              ];
+      source(
+        frames(units.map((value) => ({ channel: "output" as const, value }))),
+      );
+      render(<ModelAuditBody requestId="request" />);
+      await screen.findByText("dsh.modelAuditView.transfer.completed");
+      expect(screen.getAllByText(text)).toHaveLength(1);
+      expect(screen.getAllByRole("article")).toHaveLength(1);
+      expect(
+        screen.queryByText("dsh.modelAuditView.messages.unparsed"),
+      ).toBeNull();
+      expect(
+        screen.queryByText(
+          /finish_reason|response.output_text.delta|response.completed/,
+        ),
+      ).toBeNull();
+    },
+  );
+
   it("AC-10, AC-12: displays decoded roles and merged reply, hiding invocation settings and raw delta wrappers", async () => {
     source(
       frames([
@@ -218,7 +269,7 @@ describe("audit body NDJSON-to-message UI", () => {
     );
     render(<ModelAuditBody requestId="request" />);
     await screen.findByText("dsh.modelAuditView.transfer.completed");
-    const [input, output] = screen.getAllByRole("article");
+    const [output, input] = screen.getAllByRole("article");
     expect(within(input).getByText(/roles.tool/)).toBeInTheDocument();
     expect(within(input).getByText(/call-old/)).toBeInTheDocument();
     expect(within(output).getByText("lookup")).toBeInTheDocument();
@@ -346,4 +397,41 @@ describe("audit body NDJSON-to-message UI", () => {
     expect(signal.aborted).toBe(true);
     expect(screen.queryByText(/First live piece/)).toBeNull();
   });
+});
+
+it("AC-14: reverses the complete message list before pagination and retains compacted history", async () => {
+  source(
+    frames([
+      {
+        channel: "input",
+        value: { role: "system", content: "Compacted session summary" },
+      },
+      ...Array.from({ length: 101 }, (_, i) => ({
+        channel: "input" as const,
+        value: { role: "user", content: `Synthetic history ${i}` },
+      })),
+      { channel: "output", value: { delta: { content: "Newest answer" } } },
+    ]),
+  );
+  render(<ModelAuditBody requestId="request" />);
+  await screen.findByText("dsh.modelAuditView.transfer.completed");
+  expect(screen.getByText("dsh.modelAuditView.newest_first")).toBeVisible();
+  const articles = screen.getAllByRole("article");
+  expect(articles).toHaveLength(100);
+  expect(within(articles[0]).getByText("Newest answer")).toBeVisible();
+  expect(within(articles[1]).getByText("Synthetic history 100")).toBeVisible();
+  expect(screen.queryByText("Compacted session summary")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "dsh.next" }));
+  expect(screen.getAllByRole("article")).toHaveLength(3);
+  expect(
+    within(screen.getAllByRole("article")[2]).getByText(
+      "Compacted session summary",
+    ),
+  ).toBeVisible();
+  expect(screen.getByText("Synthetic history 0")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "dsh.previous" }));
+  expect(
+    within(screen.getAllByRole("article")[0]).getByText("Newest answer"),
+  ).toBeVisible();
+  expect(api.stream).toHaveBeenCalledOnce();
 });

@@ -27,6 +27,7 @@ from bisheng.dsh.domain.schemas.usage import UsageEvent
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
 from bisheng.dsh.domain.services.model_display import model_display_name
 from bisheng.dsh.infrastructure.chat_adapter import DshChatAdapter
+from bisheng.dsh.infrastructure.model_errors import model_failure_code
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
 from bisheng.dsh.infrastructure.responses_adapter import DshResponsesAdapter
 from bisheng.dsh.infrastructure.telemetry import record_settlement, request_trace
@@ -67,6 +68,7 @@ class DshModelService:
         now,
         billing_timezone: str = "Asia/Shanghai",
         audit_factory=None,
+        display_names_reader=None,
     ):
         self.policy_reader, self.model_loader, self.llm_builder = policy_reader, model_loader, llm_builder
         self.capabilities_for, self.usage, self.now = capabilities_for, usage, now
@@ -75,10 +77,12 @@ class DshModelService:
         self.adapter = DshChatAdapter()
         self.responses_adapter = DshResponsesAdapter()
         self.audit_factory = audit_factory
+        self.display_names_reader = display_names_reader
 
     async def list_models(self, principal: DshPrincipal) -> dict:
         with principal_scope(principal):
             policy = await self.policy_reader(int(principal.user_id))
+            names = await self.display_names_reader() if self.display_names_reader else {}
             result = []
             for model_id in policy.allowed_model_ids if policy else []:
                 try:
@@ -106,7 +110,7 @@ class DshModelService:
                         "object": "model",
                         "created": created,
                         "owned_by": "bisheng",
-                        "display_name": model_display_name(model, server),
+                        "display_name": model_display_name(model, server, names.get(str(model.id))),
                         "capabilities": capabilities.client_fields(),
                         **(
                             {"reasoning": capabilities.reasoning.model_dump(exclude_none=True)}
@@ -164,10 +168,9 @@ class DshModelService:
                 trace_id=request_id,
                 tenant_id=int(principal.tenant_id),
                 user_id=int(principal.user_id),
-                seat_id=principal.seat_id,
                 session_id=principal.session_id,
-                grant_version=principal.grant_version,
                 model_id=request.model_id,
+                credit_rate=selected_policy.credit_rate,
                 usage_month=started.astimezone(self.timezone).strftime("%Y-%m"),
                 billing_timezone=self.billing_timezone,
                 policy_version=selected_policy.version,
@@ -177,7 +180,7 @@ class DshModelService:
                 started_at=started,
             )
             try:
-                event = await self.usage.check_and_start(event, monthly_token_limit=selected_policy.monthly_token_limit)
+                event = await self.usage.check_and_start(event, monthly_token_limit=policy.monthly_token_limit)
             except QuotaRejected as error:
                 if error.reason == "quota_exceeded":
                     raise DshMonthlyTokenLimitExceededError() from error
@@ -203,7 +206,7 @@ class DshModelService:
                 await asyncio.shield(self._settle(event, execution, "CANCELLED", "cancelled"))
                 raise
             except Exception as error:
-                await self._settle(event, execution, "FAILED", "upstream_error")
+                await self._settle(event, execution, "FAILED", model_failure_code(error))
                 raise self._public_error(error) from error
             await self._settle(event, execution, getattr(execution, "status", "SUCCEEDED"))
             if native:
@@ -236,7 +239,21 @@ class DshModelService:
         return DshUpstreamErrorError()
 
     async def _settle(self, event, execution, status, error_code=None):
-        usage = execution.usage
+        try:
+            terminal = await self.settle_usage(
+                event,
+                execution.usage,
+                status,
+                error_code or getattr(execution, "failure_code", None),
+                provider_request_id=execution.provider_request_id,
+            )
+        except DshUsageUnavailableError:
+            execution.audit("usage", "UNCERTAIN")
+            raise
+        execution.audit("usage", "SETTLED" if terminal.total_tokens is not None else "USAGE_UNKNOWN")
+
+    async def settle_usage(self, event, usage, status, error_code=None, *, provider_request_id=None):
+        """Settle the shared ledger for platform Chat and desktop model calls."""
         now = self.now()
         now = now.replace(tzinfo=UTC) if now.tzinfo is None else now
         terminal = UsageEvent.model_validate(
@@ -248,7 +265,7 @@ class DshModelService:
                     "usage_source": "PROVIDER" if usage.total_tokens is not None else None,
                     "ended_at": now,
                     "settled_at": now if usage.total_tokens is not None else None,
-                    "provider_request_id": execution.provider_request_id,
+                    "provider_request_id": provider_request_id,
                     "error_code": error_code or ("usage_missing" if usage.total_tokens is None else None),
                     "latency_ms": max(0, int((now - event.started_at).total_seconds() * 1000)),
                 }
@@ -262,13 +279,11 @@ class DshModelService:
                 current = await self.usage.get_request(event)
             except Exception:
                 logger.exception("DSH settlement could not be confirmed for request {}", event.request_id)
-                execution.audit("usage", "UNCERTAIN")
                 raise DshUsageUnavailableError() from error
             if current is None or current.model_dump() != terminal.model_dump():
-                execution.audit("usage", "UNCERTAIN")
                 raise DshUsageUnavailableError() from error
-        execution.audit("usage", "SETTLED" if usage.total_tokens is not None else "USAGE_UNKNOWN")
         record_settlement(terminal)
+        return terminal
 
     async def _stream(self, principal, request, execution, event):
         if isinstance(request, DshResponsesRequest):
@@ -300,7 +315,7 @@ class DshModelService:
             raise
         except Exception as error:
             try:
-                await self._settle(event, execution, "FAILED", "upstream_error")
+                await self._settle(event, execution, "FAILED", model_failure_code(error))
                 public = self._public_error(error)
             except DshUsageUnavailableError as settlement_error:
                 public = settlement_error
@@ -332,7 +347,7 @@ class DshModelService:
             raise
         except Exception as error:
             try:
-                await self._settle(event, execution, "FAILED", "upstream_error")
+                await self._settle(event, execution, "FAILED", model_failure_code(error))
                 public = self._public_error(error)
             except DshUsageUnavailableError as settlement_error:
                 public = settlement_error
