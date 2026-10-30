@@ -202,7 +202,7 @@ const AiChatInput = memo(
         // viewport's) runs short — e.g. once the sidebar opens on a mid-size screen.
         const { ref: toolbarRef } = useContainerCompact(TOOLBAR_COMPACT_THRESHOLD);
 
-        // Skills belong to the current draft, shared by the landing and conversation inputs.
+        // Keep selected task skills across sends, shared by the landing and conversation inputs.
         const [dailySkills, setDailySkills] = useRecoilState(taskModeSkillsState('new'));
         const skillCatalog = useQuery({ queryKey: ['linsightSelectableSkills'], queryFn: getSelectableSkills,
             enabled: taskMode && !isLingsi, refetchOnWindowFocus: true, staleTime: 0 });
@@ -397,7 +397,6 @@ const AiChatInput = memo(
             )) ?? chatFiles);
             if (accepted === false) return;
             setText("");
-            if (taskMode && !isLingsi) setDailySkills([]);
             setChatFiles(null);
             setUploadingFiles([]);
             inputFilesRef.current?.clear();
@@ -411,7 +410,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, setDailySkills, supportsVision, supportsImageParsing, showToast, localize]);
+        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, supportsVision, supportsImageParsing, showToast, localize]);
 
         // ── Handed-over ask (chatAskHandoff): upload its file, then send unattended ──
         const startedAskKeyRef = useRef<string | null>(null);

@@ -186,7 +186,7 @@ test('returning to ordinary chat clears selected task skills', () => {
 });
 
 
-test.each([true, false])('send acceptance %s controls the entire skill draft reset', (accepted) => {
+test.each([true, false])('send acceptance %s preserves selected skills while resetting accepted message drafts', (accepted) => {
   const input = props();
   input.onSend.mockReturnValue(accepted);
   render(<AiChatInput {...input} />);
@@ -197,11 +197,16 @@ test.each([true, false])('send acceptance %s controls the entire skill draft res
   fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
   expect(input.onSend).toHaveBeenCalledWith('Prepare a report', [{ name: 'notes.txt', filepath: '/notes.txt' }]);
   if (accepted) {
-    expect(mockSetSkills).toHaveBeenCalledWith([]);
-    expect(mockSetSkills.mock.invocationCallOrder[0]).toBeGreaterThan(input.onSend.mock.invocationCallOrder[0]);
+    expect(mockSetSkills).not.toHaveBeenCalled();
     expect(editor).not.toHaveTextContent('Prepare a report');
-    expect(editor).not.toHaveTextContent('research');
+    expect(editor).toHaveTextContent('research');
     expect(screen.queryByText('notes.txt')).toBeNull();
+    editor.append(document.createTextNode('Continue the report'));
+    fireEvent.input(editor);
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    expect(input.onSend).toHaveBeenLastCalledWith('Continue the report', null);
+    expect(editor).toHaveTextContent('research');
+    expect(mockSetSkills).not.toHaveBeenCalled();
   } else {
     expect(mockSetSkills).not.toHaveBeenCalled();
     expect(editor).toHaveTextContent('research');
