@@ -12,7 +12,7 @@ import type { User } from "@/types/api/user"
  * picked version back as the app's current version, and the `version_list` the
  * list endpoint attaches is always empty for a hosted application — reusing it
  * would give an empty dropdown that mutates a *workflow* when clicked. So this
- * file has its own select: it loads `app_version` lazily on open and does
+ * file has its own select: it loads `app_version` when the card mounts and does
  * nothing at all when an item is picked.
  */
 import CardComponent from "@/components/bs-comp/cardComponent"
@@ -32,7 +32,7 @@ import {
   type HostedAppVersion,
 } from "@/controllers/API/hostedApp"
 import { AppType } from "@/types/app"
-import { useCallback, useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
 import {
@@ -69,37 +69,43 @@ interface HostedAppVersionSelectProps {
 /**
  * Read-only version dropdown (AC-52).
  *
- * Loads on first open rather than on mount: a page of 14 cards would otherwise
- * fire 14 requests nobody asked for. Picking an item is deliberately inert —
- * there is no version switch for hosted applications.
+ * Load on entry so the current version is visible even when an online app's
+ * dropdown is disabled. Picking an item remains inert; hosted applications
+ * do not support switching versions here.
  */
 function HostedAppVersionSelect({ appId, disabled = false }: HostedAppVersionSelectProps) {
   const { t } = useTranslation()
   const [versions, setVersions] = useState<HostedAppVersion[] | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
+  const [retryAttempt, setRetryAttempt] = useState(0)
 
-  const handleOpenChange = useCallback(
-    (open: boolean) => {
-      if (!open || versions !== null || loading) return
-      setLoading(true)
-      getHostedAppVersionsApi(appId)
-        .then((rows) => {
-          // An empty `value` throws inside Radix's SelectItem and takes the
-          // whole card list down with it; drop such a row instead.
-          setVersions((rows || []).filter((row) => !!row.version_id))
-          setFailed(false)
-        })
-        .catch(() => setFailed(true))
-        .finally(() => setLoading(false))
-    },
-    [appId, loading, versions],
-  )
+  useEffect(() => {
+    let cancelled = false
+    setVersions(null)
+    setLoading(true)
+    setFailed(false)
+    getHostedAppVersionsApi(appId)
+      .then((rows) => {
+        if (cancelled) return
+        // An empty `value` throws inside Radix's SelectItem and takes the
+        // whole card list down with it; drop such a row instead.
+        setVersions((rows || []).filter((row) => !!row.version_id))
+        setFailed(false)
+      })
+      .catch(() => { if (!cancelled) setFailed(true) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [appId, retryAttempt])
+
+  const handleOpenChange = (open: boolean) => {
+    if (open && failed && !loading) setRetryAttempt(attempt => attempt + 1)
+  }
 
   const current = versions?.find((item) => item.is_current)
   const label = current
     ? `v${current.version_no}`
-    : t("hostedApp.version.placeholder")
+    : t(loading ? "hostedApp.version.loading" : failed ? "hostedApp.version.loadFailed" : "hostedApp.version.placeholder")
 
   return (
     <Select value="" disabled={disabled} onOpenChange={handleOpenChange}>

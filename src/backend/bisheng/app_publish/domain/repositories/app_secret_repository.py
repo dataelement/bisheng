@@ -7,8 +7,9 @@ from sqlmodel import select, update
 
 from bisheng.app_publish.domain.models.app_deployment import ACTIVE_STATUSES, AppDeployment
 from bisheng.app_publish.domain.models.app_secret_config import AppSecretConfig
+from bisheng.common.errcode.app_factory import AppNotFoundError
 from bisheng.common.errcode.app_publish import AppPublishOwnerOnlyError, AppSecretRevisionConflictError
-from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
+from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter, tenant_execution_scope
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.app import App
 from bisheng.database.models.app_version import AppVersion
@@ -29,6 +30,20 @@ class AppSecretConfigRepository:
             except Exception:
                 await session.rollback()
                 raise
+
+    @asynccontextmanager
+    async def read_transaction(self, app_id):
+        """Locate within the request's management view, then isolate dependent reads.
+
+        The service must authorize the returned application before reading its
+        configuration. Owner writes continue to use the strict transaction.
+        """
+        async with self._factory() as session:
+            app = (await session.exec(select(App).where(App.id == app_id))).first()
+            if app is None:
+                raise AppNotFoundError(app_id=app_id)
+            with tenant_execution_scope(int(app.tenant_id)), strict_tenant_filter():
+                yield session, app
 
     async def app(self, session, app_id, *, lock=False):
         statement = select(App).where(App.id == app_id)

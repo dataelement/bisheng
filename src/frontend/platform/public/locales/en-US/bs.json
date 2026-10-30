@@ -2909,6 +2909,7 @@
       "revokeConfirmBody": "The key stops working immediately and the holder's AI assistant loses access; the holder can generate a new one at any time."
     },
     "tenantScope": {
+      "globalReadonlyHint": "Showing service accounts from all tenants. Select a specific tenant to manage them.",
       "label": "Tenant to manage",
       "choose": "Select a management tenant in the top-right corner first",
       "hint": "Choose where to view and create service accounts. Existing accounts stay in their tenant. This selection is shared with other administration pages.",
