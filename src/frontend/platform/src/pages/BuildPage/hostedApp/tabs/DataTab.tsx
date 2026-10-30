@@ -10,8 +10,9 @@
  * either: the app simply has not created its database yet, which is the
  * empty state.
  *
- * Reads go through `useState + useEffect` (react-query is lint-frozen in this
- * app). Ordering is server-side with the row key as tiebreaker, so paging
+ * Reads retain the existing local effect flow and serialize per-tab requests
+ * because the manager locks each app during a helper call. Ordering uses the
+ * row key as a server-side tiebreaker, so paging
  * never repeats or skips a row.
  */
 import { Button, Pagination } from "@bisheng/ui"
@@ -67,7 +68,15 @@ interface DataTabProps {
   appName: string
 }
 
-type TableListState = "loading" | "ready" | "forbidden" | "not_ready" | "failed"
+type TableListState = "loading" | "ready" | "forbidden" | "not_ready" | "busy" | "failed"
+
+type DataReadQueue = { tail: Promise<unknown> }
+
+function queuedRead<T>(queue: DataReadQueue, operation: () => Promise<T>): Promise<T> {
+  const result = queue.tail.then(operation, operation)
+  queue.tail = result.then(() => undefined, () => undefined)
+  return result
+}
 
 export function DataTab({ appId, appName }: DataTabProps) {
   const { t } = useTranslation()
@@ -94,7 +103,7 @@ export function DataTab({ appId, appName }: DataTabProps) {
   const [order, setOrder] = useState("")
   const [rowsLoading, setRowsLoading] = useState(false)
   /** `gone`: the table vanished under us; `failed`: anything else, with the backend's message. */
-  const [rowsFailure, setRowsFailure] = useState<{ kind: "gone" } | { kind: "failed"; message: string } | null>(
+  const [rowsFailure, setRowsFailure] = useState<{ kind: "gone" } | { kind: "busy" } | { kind: "failed"; message: string } | null>(
     null,
   )
   const [editing, setEditing] = useState<HostedAppRow | null>(null)
@@ -103,11 +112,14 @@ export function DataTab({ appId, appName }: DataTabProps) {
   // latest is dropped, so a slow page 3 of the previous table cannot land on
   // top of page 1 of the one the owner just opened.
   const rowsTicket = useRef(0)
+  const readQueue = useRef<DataReadQueue>({ tail: Promise.resolve() })
+  const schemaCache = useRef<{ appId: string; table: string; shape: HostedAppTableSchema } | null>(null)
 
   // Selecting a table (by click, or because the list was re-read) starts it at
   // page 1 with no order — the previous table's cursor means nothing here. One
   // batched update, so the rows loader fires once, not once per reset state.
   const selectTable = useCallback((name: string | null) => {
+    schemaCache.current = null
     setSelected(name)
     setPage(1)
     setOrder("")
@@ -118,7 +130,8 @@ export function DataTab({ appId, appName }: DataTabProps) {
 
   const loadTables = useCallback(() => {
     setListState("loading")
-    getHostedAppTablesApi(appId)
+    schemaCache.current = null
+    queuedRead(readQueue.current, () => getHostedAppTablesApi(appId))
       .then((data) => {
         const list = data?.tables || []
         setTables(list)
@@ -134,6 +147,8 @@ export function DataTab({ appId, appName }: DataTabProps) {
         const code = getHostedAppErrorCode(error)
         if (code === HOSTED_APP_ERROR.DATA_FORBIDDEN) {
           setListState("forbidden")
+        } else if (code === HOSTED_APP_ERROR.DATA_BUSY) {
+          setListState("busy")
         } else if (code === HOSTED_APP_ERROR.DATA_NOT_READY) {
           setListState("not_ready")
         } else {
@@ -147,30 +162,40 @@ export function DataTab({ appId, appName }: DataTabProps) {
     loadTables()
   }, [loadTables])
 
-  const loadRows = useCallback(() => {
+  const loadRows = useCallback((refreshSchema = false) => {
     if (!selected) return
     const ticket = ++rowsTicket.current
     const isCurrent = () => ticket === rowsTicket.current
     setRowsLoading(true)
-    Promise.all([
-      getHostedAppTableSchemaApi(appId, selected),
-      getHostedAppTableRowsApi(appId, selected, {
+    queuedRead(readQueue.current, async () => {
+      if (!isCurrent()) return null
+      const cached = schemaCache.current
+      const shape = !refreshSchema && cached?.appId === appId && cached.table === selected
+        ? cached.shape
+        : await getHostedAppTableSchemaApi(appId, selected)
+      if (!isCurrent()) return null
+      schemaCache.current = { appId, table: selected, shape }
+      const rows = await getHostedAppTableRowsApi(appId, selected, {
         page,
         size: DATA_PAGE_SIZE,
         order: order || undefined,
-      }),
-    ])
-      .then(([shape, rows]) => {
-        if (!isCurrent()) return
-        setSchema(shape)
-        setPageData(rows)
+      })
+      return { shape, rows }
+    })
+      .then((result) => {
+        if (!isCurrent() || !result) return
+        setSchema(result.shape)
+        setPageData(result.rows)
         setRowsFailure(null)
       })
       .catch((error) => {
         if (!isCurrent()) return
         setPageData(null)
         const code = getHostedAppErrorCode(error)
-        if (code === HOSTED_APP_ERROR.DATA_TABLE_NOT_FOUND) {
+        if (code === HOSTED_APP_ERROR.DATA_BUSY) {
+          setRowsFailure({ kind: "busy" })
+        } else if (code === HOSTED_APP_ERROR.DATA_TABLE_NOT_FOUND) {
+          schemaCache.current = null
           // The app dropped the table since the list was read; the list is
           // the thing that is stale, so re-read it rather than complain.
           setRowsFailure({ kind: "gone" })
@@ -233,10 +258,10 @@ export function DataTab({ appId, appName }: DataTabProps) {
   if (listState === "not_ready") {
     return <Notice text={t("hostedApp.data.notReady")} />
   }
-  if (listState === "failed") {
+  if (listState === "failed" || listState === "busy") {
     return (
       <Notice
-        text={listFailure || t("hostedApp.data.loadFailed")}
+        text={listState === "busy" ? t("api_errors:16167") : listFailure || t("hostedApp.data.loadFailed")}
         retry={loadTables}
         retryLabel={t("hostedApp.data.refresh")}
       />
@@ -287,7 +312,7 @@ export function DataTab({ appId, appName }: DataTabProps) {
             </span>
           )}
           <div className="ml-auto flex gap-2">
-            <Button variant="outline" size="sm" disabled={rowsLoading} onClick={loadRows}>
+            <Button variant="outline" size="sm" disabled={rowsLoading} onClick={() => loadRows(true)}>
               <RefreshCw className={cname("mr-1 size-3.5", rowsLoading && "animate-spin")} />
               {t("hostedApp.data.refresh")}
             </Button>
@@ -305,7 +330,9 @@ export function DataTab({ appId, appName }: DataTabProps) {
             <p className="p-4 text-sm text-muted-foreground">
               {rowsFailure.kind === "gone"
                 ? t("hostedApp.data.tableGone")
-                : rowsFailure.message || t("hostedApp.data.loadFailed")}
+                : rowsFailure.kind === "busy"
+                  ? t("api_errors:16167")
+                  : rowsFailure.message || t("hostedApp.data.loadFailed")}
             </p>
           ) : !schema || !pageData ? (
             <p className="p-4 text-sm text-muted-foreground">{t("hostedApp.data.loading")}</p>

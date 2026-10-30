@@ -6,8 +6,12 @@ vi.mock('@/components/bs-icons/loading', () => ({ LoadingIcon: () => null, LoadI
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: mocks.t }) }))
 vi.mock('@/hooks/useDshBrowserConfig', () => ({ useDshBrowserConfig: () => ({ config: { enabled: true } }) }))
 vi.mock('@/components/bs-ui/toast/use-toast', () => ({ useToast: () => ({ message: mocks.message }) }))
+vi.mock('@bisheng/ui', async (importOriginal) => ({
+    ...await importOriginal<typeof import('@bisheng/ui')>(),
+    toast: { show: mocks.message },
+}))
 vi.mock('@/controllers/API/finetune', () => ({ getLinsightModelEnvelope: mocks.get, updateLinsightModelConfig: mocks.save }))
-vi.mock('@/controllers/request', () => ({ captureAndAlertRequestErrorHoc: (promise: Promise<unknown>) => promise.catch(() => false) }))
+vi.mock('@/controllers/request', () => ({ showApiError: vi.fn() }))
 vi.mock('..', () => ({ useModel: () => ({ llmOptions: [], embeddings: [], asrModel: [], ttsModel: [] }) }))
 vi.mock('@/components/bs-ui/select/cascader', () => ({ default: () => null }))
 vi.mock('../dsh/ModelVisionSwitch', () => ({ ModelVisionSwitch: () => null }))

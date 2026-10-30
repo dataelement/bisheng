@@ -7,11 +7,11 @@ component: Segmented
 
 让**同一份内容换个看法**——列表还是卡片、按日还是按周,点完**立刻生效**。它本质是个即时生效的单选控件(`role="radiogroup"`,方向键在段间移动并即时选中)。切完「你在哪」变了的,是[标签页](/components/tabs);要随表单提交才生效的,用单选框。组件库 `@bisheng/ui` 导出 **`Segmented`**。规范全文见「文档 → 组件规范 → 分段控制器 Segmented」。
 
-**壳把规范写死的部分**:灰底槽(fill-2)+ 白色浮块,浮块不加投影、200ms 滑到选中段;**选中不用品牌色**——它只回答「当前在哪个看法」;三档高度 28/32/36,槽内边距 3px、浮块圆角嵌套同心;各段等宽取最长段;选中字重 500、未选中 400;总有一段被选中,不存在「都不选」;触屏热区 ≥44px。这些没有 prop。段数守住 **2～5 段**,超出就不是「几个看法」而是「一堆选项」了。
+**壳把规范写死的部分**:底槽浅色为深灰主文字色的 4% 不透明度、深色为柔白主文字色的 8% 不透明度;浮块不加投影、200ms 滑到选中段并适配段宽;**浅色选中为页面色底配主题色文字和图标,深色选中为 20% 不透明度主题色底配主文字色（柔白）文字和图标**;三档高度 28/32/36,字号统一 14px,默认圆角 6/8/8px,槽内边距 3px、浮块圆角嵌套同心;默认各段按内容宽度显示,仅 `block` 撑满时各段平分;字重默认 400,仅深色启用选中项提高至 500;未选中项 hover 使用主题色文字和图标;总有一段被选中,不存在「都不选」;触屏热区 ≥44px。段数守住 **2～5 段**,超出就不是「几个看法」而是「一堆选项」了。
 
 ## 基础用法
 
-`options` 传字符串数组即可;不传 `defaultValue` 默认选中第一段。文案 2～4 个字、各段等长最好——一段特别长会把整个控件撑得松垮。
+`options` 传字符串数组即可;不传 `defaultValue` 默认选中第一段。文案保持简短,各段按自身内容加水平内边距确定宽度,不要求等长。
 
 ```tsx
 import { Segmented } from '@bisheng/ui';
@@ -21,7 +21,7 @@ export default () => <Segmented options={['日', '周', '月']} aria-label="统�
 
 ## 三档尺寸
 
-默认 `medium`(32px),与旁边的按钮、输入框同高对齐;small / large 为 28 / 36,比控件阶梯收敛半档——整块灰底的视觉分量比按钮重,档差小一点更协调。
+默认 `medium`(32px),与旁边的按钮、输入框同高对齐;small / large 为 28 / 36px。三档文字均为 14px,靠高度和水平内边距 8 / 12 / 20px 拉开尺寸差异;small / medium 默认圆角保持 6 / 8px,仅 large 恢复为 8px。
 
 ```tsx
 import { Segmented } from '@bisheng/ui';
@@ -35,6 +35,16 @@ export default () => (
 );
 ```
 
+## 内容宽度
+
+默认各段随内容宽度显示,短文案不会被最长的一段拉宽。选中浮块随当前段的位置和宽度一起过渡。
+
+```tsx
+import { Segmented } from '@bisheng/ui';
+
+export default () => <Segmented options={['全部', '进行中', '最近更新']} aria-label="内容宽度示例" />;
+```
+
 ## block 撑满
 
 `block` 撑满父容器、各段平分。窄屏下优先用它——悬空的小控件在手机上难点中。
@@ -44,8 +54,26 @@ import { Segmented } from '@bisheng/ui';
 
 export default () => (
   <div style={{ maxWidth: 360 }}>
-    <Segmented block options={['全部', '进行中', '已完成']} aria-label="任务筛选" />
+    <Segmented block options={['全部', '进行中', '最近更新']} aria-label="任务筛选" />
   </div>
+);
+```
+
+## 主题色
+
+浅色模式下,选中项使用页面色底和主题色文字、图标,字重保持 400;深色模式下,选中项使用 20% 不透明度的主题色底,文字与图标用主文字色（柔白 `#F6F6F6`）,字重提高一档至 500。在当前深色页面底上,蓝 / 绿主题的选中文字对比度约为 11.16:1 / 10.36:1。深浅色跟随整站,主题色随蓝 / 绿主题切换;未选中项 hover 使用主题色文字和图标,选中项 hover 保持当前 active 样式;禁用项保持禁用色和默认字重。
+
+```tsx
+import { Segmented } from '@bisheng/ui';
+import { Outlined } from 'bisheng-icons';
+
+const options = [
+  { value: 'list', label: '列表', icon: <Outlined.List /> },
+  { value: 'card', label: '卡片', icon: <Outlined.ViewGridCard /> },
+];
+
+export default () => (
+  <Segmented options={options} aria-label="当前主题示例" />
 );
 ```
 
@@ -89,7 +117,7 @@ export default () => (
 
 ## 禁用
 
-单段禁用:该段灰字 + 禁止光标,其余段照常可点。整体禁用:全部灰字,浮块保持在当前段——禁用也要能看出停在哪个看法上。
+单段禁用:该段灰字 + 禁止光标,其余段照常可点。整体禁用:全部灰字,浮块保持在当前段,深色下使用禁用背景色——禁用也要能看出停在哪个看法上。
 
 ```tsx
 import { Segmented } from '@bisheng/ui';
@@ -104,7 +132,7 @@ export default () => (
         { value: 'month', label: '月' },
       ]}
     />
-    <Segmented disabled defaultValue="week" options={['日', '周', '月']} aria-label="整体禁用" />
+    <Segmented disabled defaultValue="周" options={['日', '周', '月']} aria-label="整体禁用" />
   </div>
 );
 ```

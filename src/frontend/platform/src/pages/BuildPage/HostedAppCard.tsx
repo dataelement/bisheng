@@ -1,3 +1,4 @@
+import type { User } from "@/types/api/user"
 /**
  * The build page's third card type (AC-51 / AC-52 / AC-53).
  *
@@ -50,6 +51,8 @@ export interface HostedAppListItem {
   description?: string
   logo?: string
   user_name?: string
+  user_id?: number
+  owner_active?: boolean
   /** Projected 2 (online) / 1 (everything else) so the shared switch works. */
   status?: number
   flow_type?: number
@@ -141,7 +144,7 @@ function HostedAppVersionSelect({ appId, disabled = false }: HostedAppVersionSel
 
 interface HostedAppCardProps {
   item: HostedAppListItem
-  currentUser: unknown
+  currentUser: Partial<User> | null
   isAdmin: boolean
   canDelete: boolean
   canSwitch: boolean
@@ -182,6 +185,9 @@ export function HostedAppCard({
   const state =
     item.app_state ?? (item.status === 2 ? "online" : undefined)
   const online = isOnline(state) || item.status === 2
+  const mayDelete = Boolean(currentUser?.is_global_super)
+    || Number(item.user_id) === Number(currentUser?.user_id)
+    || (item.owner_active === false && Boolean(currentUser?.is_child_admin))
   const appRef = { appId: String(item.id), name: item.name, state }
 
   const handleCheckedChange = async (checked: boolean) => {
@@ -214,7 +220,7 @@ export function HostedAppCard({
       onAddTemp={undefined}
       showCopy={false}
       onPermission={canManagePermission ? onPermission : undefined}
-      onDelete={canDelete ? handleDelete : undefined}
+      onDelete={canDelete && mayDelete ? handleDelete : undefined}
       deleteDisabledHint={
         isDeleteBlockedByState(state) || online
           ? t("hostedApp.actions.deleteBlockedHint")

@@ -51,6 +51,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         libreoffice-writer libreoffice-impress libreoffice-calc \
         libreoffice-java-common default-jre-headless \
         fonts-wqy-zenhei fontconfig \
+        tini \
         ffmpeg \
         libglib2.0-0 libsm6 libxrender1 libxext6 libgl1 \
     && fc-cache -f
@@ -81,8 +82,29 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY --chmod=0555 src/sandbox-runner /opt/sandbox-runner
 ENV PYTHONPATH="/opt/sandbox-runner"
 
+# Session uids (10000-10999) need passwd / group entries, or getpass.getuser()
+# and pwd.getpwuid() raise KeyError inside user code. Written at build time:
+# the runtime root filesystem is read-only.
+RUN for uid in $(seq 10000 10999); do \
+      echo "sandbox${uid}:x:${uid}:${uid}::/nonexistent:/usr/sbin/nologin" >> /etc/passwd; \
+      echo "sandbox${uid}:x:${uid}:" >> /etc/group; \
+    done
+
+# matplotlib's default sans-serif list has no CJK glyphs, so Chinese titles
+# render as boxes. The runner passes MATPLOTLIBRC through to user code.
+RUN printf '%s\n' \
+      'font.family: sans-serif' \
+      'font.sans-serif: WenQuanYi Zen Hei, DejaVu Sans' \
+      'axes.unicode_minus: False' \
+      > /etc/matplotlibrc && chmod 0644 /etc/matplotlibrc
+ENV MATPLOTLIBRC=/etc/matplotlibrc
+
 WORKDIR /opt/sandbox-runner
 USER 65534
 
-# Runner is PID 1. Compose must not publish 8080 to the host.
+# tini is PID 1 and reaps orphans that user code leaves behind (soffice's gpg
+# helpers, fork loops); python as PID 1 never reaps them and the pids limit
+# fills up. Compose must not set init: true on top (that would make tini PID 2).
+# Compose must not publish 8080 to the host.
+ENTRYPOINT ["tini", "--"]
 CMD ["python", "serve.py"]

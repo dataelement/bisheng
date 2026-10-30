@@ -4,7 +4,7 @@ import { Button } from "@bisheng/ui";
 import { Checkbox } from "@bisheng/ui";
 import { Input } from "@bisheng/ui";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/bs-ui/select'
-import { Tabs } from "@bisheng/ui"
+import { Segmented } from "@bisheng/ui"
 import { getCreditRules, getPolicySubjects, saveCreditRule, type CreditRule, type PolicySubject, type PolicySubjectOption } from '@/controllers/API/dshUnified'
 import { getDshRequestErrorKey } from '@/utils/dshRequestError'
 import { MAX_MONTHLY_CREDITS, isValidMonthlyCredits } from '@/utils/dshCreditAmount'
@@ -82,12 +82,14 @@ export function CreditRulesView() {
     </div>
     return <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
-            <Tabs activeKey={kind} onChange={value => {
+            <Segmented value={kind} disabled={pending} onChange={value => {
               if (value === 'USER' || value === 'DEPARTMENT' || value === 'ROLE') { setKind(value); cancel(); }
             }} aria-label={t('dsh.unified.scope')}
-              items={(['USER', 'DEPARTMENT', 'ROLE'] as const).map(value => ({
-                key: value, disabled: pending, label: t(value === 'USER' ? 'dsh.unified.userTab' : `dsh.unified.${value}`),
-              }))} />
+              options={[
+                { value: 'USER', label: t('dsh.byUser') },
+                { value: 'DEPARTMENT', label: t('dsh.byDepartment') },
+                { value: 'ROLE', label: t('dsh.byRole') },
+              ]} />
             <div className="flex gap-2">
                 <Button variant="outlined" disabled={pending} onClick={() => { cancel(); setRevision(old => old + 1) }}>{t('dsh.refresh')}</Button>
                 <Button disabled={pending || !loaded} onClick={() => {

@@ -196,6 +196,7 @@
     "otherMethods": "其他登录方式"
   },
   "menu": {
+    "tenant": "租  户",
     "languageChinese": "中文",
     "languageJapanese": "日本語",
     "user": "用户",
@@ -2150,9 +2151,9 @@
   "com_dropAnyFileToAdd": "将任何文件拖放到此处以添加到对话中",
   "com_ui_upload_file_type_error": "该应用不支持上传此类型文件",
   "more": "更多",
-  "tenant.management": "租户管理",
+  "tenant.management": "租户",
   "tenant.adminScope.label": "管理视图",
-  "tenant.adminScope.global": "全树（默认）",
+  "tenant.adminScope.global": "整个平台",
   "tenant.adminScope.switched": "已切换管理视图：{{name}}",
   "tenant.adminScope.cleared": "已恢复全树视图",
   "tenant.adminScope.loading": "加载中...",
@@ -2926,7 +2927,7 @@
     },
     "tenantScope": {
       "label": "管理租户",
-      "choose": "请选择管理租户",
+      "choose": "请先在右上角选择管理租户",
       "hint": "选择查看和创建服务账号的租户，不改变已有账号的归属。此选择与其他管理页面共享。",
       "changed": "管理租户已变化。请刷新后重新确认操作，原请求不会自动重试。",
       "refresh": "刷新"
@@ -3297,7 +3298,8 @@
     },
     "releaseNotes": {
       "title": "发布说明",
-      "empty": "未填写发布说明"
+      "empty": "未填写发布说明",
+      "column": "版本说明"
     }
   },
   "dsh": {
@@ -3868,6 +3870,7 @@
     "usageScope": "选择当前租户的用户，查看指定时间范围内的 Token 用量、消息数和问答次数。",
     "byDepartment": "按部门",
     "byUser": "按用户",
+    "byRole": "按角色",
     "selectDepartment": "选择部门",
     "selectDepartmentForUsage": "选择一个部门，查看该部门及下级部门的汇总用量和用户明细。",
     "timeUsage": "时间范围用量",
@@ -4169,7 +4172,7 @@
       "userTab": "用户",
       "addCredits": "新增分配",
       "emptyCredits": "暂无积分配置",
-      "ruleHelp": "按用户、部门或角色设置每人每月积分。同时命中多条有效配置时取最高值，Chat 和 Work 共用。",
+      "ruleHelp": "按用户、部门或角色设置每人每月积分。同时命中多条有效配置时取最高值，Chat 和 Work 共用。未命中任何有效配置的人员不限额度。",
       "scope": "适用范围",
       "monthlyCredits": "每人每月积分",
       "creditRangeHint": "请输入 0 至 {{max}} 之间的积分，最多保留 6 位小数。",

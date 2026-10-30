@@ -453,9 +453,11 @@ services:
   code-runner-1: &code_runner
     image: dataelement/bisheng-sandbox:${SANDBOX_IMAGE_TAG:-v3.0.0-beta1}
     container_name: bisheng-code-runner-1
-    # Isolation mode (sessions > 1): PID 1 is root so it can chown/setuid per session.
+    # Isolation mode (sessions > 1): the runner is root so it can chown/setuid per session.
     # User code still drops via SETUID. DAC_OVERRIDE is required while the runner
     # chowns the session dir at lease create (copy-in into 0700/uid 10000).
+    # KILL lets the runner signal a session uid's process group on timeout / delete.
+    # PID 1 is tini from the image (reaps orphans); do not add init: true.
     user: "0"
     read_only: true
     cap_drop:
@@ -465,17 +467,38 @@ services:
       - SETGID
       - CHOWN
       - DAC_OVERRIDE
+      - KILL
     security_opt:
       - no-new-privileges:true
     mem_limit: 2g
+    # Shared by every session on this runner; RLIMIT_CPU caps each process on top.
+    # Must not exceed the host CPU count: the daemon refuses to start the
+    # container otherwise (set SANDBOX_CPUS=1 on a 1-vCPU host).
+    cpus: ${SANDBOX_CPUS:-2}
     pids_limit: 256
     tmpfs:
       # 0755 root:root — session uids cannot plant files in /tmp (not Docker's 1777).
       - /tmp:mode=755
+    # Session work dirs and the copy-in spool live on disk, not on /tmp: tmpfs
+    # pages are charged to mem_limit and are not freed by killing processes, so
+    # two near-cap copy-ins (512 MiB spool + 512 MiB extracted each) would let
+    # the OOM killer take the runner and every session on it.
+    # Each replica needs its own directory (code-runner-2 overrides this).
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/sandbox/code-runner-1:/sessions
+    # Leases live in runner memory only, so dirs left by a previous run are
+    # orphans. Clear them before the runner starts (tini stays PID 1).
+    command:
+      - sh
+      - -c
+      - "find /sessions -mindepth 1 -delete || echo 'sandbox: stale session cleanup failed' >&2; exec python serve.py"
     environment:
       TZ: Asia/Shanghai
       SANDBOX_TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
+      SANDBOX_SESSIONS_ROOT: /sessions
       SANDBOX_MAX_SESSIONS: "50"
+      # Total bytes copied into one session (512 MiB); files past it are skipped and reported.
+      SANDBOX_MAX_COPY_IN_TOTAL_BYTES: "536870912"
       SANDBOX_ENABLE_UID_ISOLATION: "true"
       SANDBOX_LEASE_TTL_S: "900"
     networks:
@@ -485,6 +508,8 @@ services:
   code-runner-2:
     <<: *code_runner
     container_name: bisheng-code-runner-2
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/sandbox/code-runner-2:/sessions
 
 # ── 托管应用专用网络 ────────────────────────────────────────────────────
 # runtime-manager 只**读**这张网（docker_backend.py:161-166「网络由部署方创建」），

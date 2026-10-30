@@ -9,9 +9,9 @@ import { Badge } from '../Badge';
  * Groups PEER content blocks into one area — switching changes WHERE you are,
  * so it is navigation. The same content shown a different way is a Segmented
  * (判别表 in 组件-Segmented分段控制器.md §1). Line type ONLY — no card tabs, no
- * closable tabs (§2). Baked in per spec: left-aligned tab row over a full-width
- * 1px divider (optional — `divider={false}`), 24px between tabs, first tab
- * flush with the content edge (§2);
+ * closable tabs (§2). Baked in per spec: left-aligned tab row over a content-width
+ * 1px divider (optional — `divider={false}`), 24px between tabs, 4px horizontal
+ * padding per tab, first tab box flush with the content edge (§2);
  * three sizes on the 24/32/40 ladder; unselected weight 400, selected 500 —
  * every tab reserves its width at 500 via an invisible bold copy of the label
  * (antd's trick), so bolding never moves the neighbors or the indicator (§3);
@@ -117,7 +117,8 @@ export interface TabsProps {
    */
   variant?: TabsVariant;
   /**
-   * §2 — the 1px divider under the whole row. Default on. Turn it off when
+   * §2 — the 1px divider under the tabs, sized to their content, excluding
+   * the extra area. Default on. Turn it off when
    * the surrounding container already draws that edge (a card border, a
    * section rule) — two hairlines 1px apart read as a rendering bug.
    */
@@ -201,84 +202,86 @@ function Tabs({
 
   return (
     <TabsPrimitive.Root value={current} onValueChange={handleChange} activationMode="automatic" className={className}>
-      {/* §2 — one 1px divider under the WHOLE row, extra area included;
-          `divider={false}` drops it when the container already draws that edge. */}
-      <div className={cn('flex items-end', divider && 'border-b border-border-base')}>
-        <TabsPrimitive.List
-          aria-label={ariaLabel}
-          ref={listRef}
-          onScroll={updateFade}
-          className={cn(
-            // §4 — overflow scrolls, never wraps; the scrollbar itself is
-            // hidden (the fading edges are the affordance).
-            'relative flex min-w-0 flex-1 items-center gap-6 overflow-x-auto',
-            // -mb-px sinks the list 1px onto the wrapper's border-b so the
-            // bottom-0 indicator paints OVER the gray divider instead of
-            // stacking above it (the indicator can't use -bottom-px itself:
-            // overflow-x-auto forces overflow-y to auto, which would clip it).
-            // Without a divider there is nothing to sink onto — keeping it
-            // would just pull the row 1px past the wrapper's own bottom.
-            divider && '-mb-px',
-            '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
-            ROW_SIZE[size],
-          )}
-          style={{ maskImage: EDGE_FADE[fade], WebkitMaskImage: EDGE_FADE[fade] }}
-        >
-          {items.map((item) => (
-            <TabsPrimitive.Trigger
-              key={item.key}
-              value={item.key}
-              disabled={item.disabled}
-              ref={(el) => {
-                if (el) tabRefs.current.set(item.key, el);
-                else tabRefs.current.delete(item.key);
-              }}
-              className={cn(
-                // relative anchors the ≥44px touch hot zone (§6); rounded only
-                // softens the keyboard focus ring (§5 — 2px gray, input's ring).
-                'btn-touch-hit relative inline-flex h-full shrink-0 cursor-pointer items-center whitespace-nowrap rounded font-normal outline-none transition-colors focus-visible:shadow-focus',
-                // §5 — unselected text-2, hover deepens to text-1, selected
-                // speaks per variant (brand color or ink — see VARIANT), one
-                // weight step up (the label box already reserves this width).
-                'text-text-2 hover:text-text-1 data-[state=active]:font-medium',
-                VARIANT[variant].tab,
-                'disabled:cursor-not-allowed disabled:text-btn-disabled-text',
-                TAB_SIZE[size],
-              )}
-            >
-              {item.icon}
-              {/* §3 — the box is sized by an invisible 500-weight copy, so the
-                  400⇄500 flip never widens the tab (pure-CJK labels would not
-                  move anyway — CJK advances are weight-independent — but Latin
-                  and digits do). The visible copy centers in the reserved box. */}
-              <span className="relative whitespace-nowrap">
-                <span aria-hidden className="invisible font-medium">
-                  {item.label}
+      <div className="flex items-end">
+        {/* §2 — the divider fits the tabs and stops before the extra area.
+            The wrapper shrinks with the viewport so the list can still scroll. */}
+        <div className={cn('min-w-0 max-w-full', divider && 'border-b border-border-base')}>
+          <TabsPrimitive.List
+            aria-label={ariaLabel}
+            ref={listRef}
+            onScroll={updateFade}
+            className={cn(
+              // §4 — overflow scrolls, never wraps; the scrollbar itself is
+              // hidden (the fading edges are the affordance).
+              'relative flex min-w-0 items-center gap-6 overflow-x-auto',
+              // -mb-px sinks the list 1px onto the wrapper's border-b so the
+              // bottom-0 indicator paints OVER the gray divider instead of
+              // stacking above it (the indicator can't use -bottom-px itself:
+              // overflow-x-auto forces overflow-y to auto, which would clip it).
+              // Without a divider there is nothing to sink onto — keeping it
+              // would just pull the row 1px past the wrapper's own bottom.
+              divider && '-mb-px',
+              '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+              ROW_SIZE[size],
+            )}
+            style={{ maskImage: EDGE_FADE[fade], WebkitMaskImage: EDGE_FADE[fade] }}
+          >
+            {items.map((item) => (
+              <TabsPrimitive.Trigger
+                key={item.key}
+                value={item.key}
+                disabled={item.disabled}
+                ref={(el) => {
+                  if (el) tabRefs.current.set(item.key, el);
+                  else tabRefs.current.delete(item.key);
+                }}
+                className={cn(
+                  // relative anchors the ≥44px touch hot zone (§6). The inset
+                  // focus ring stays inside the scroll viewport instead of clipping.
+                  'btn-touch-hit relative inline-flex h-full shrink-0 cursor-pointer items-center whitespace-nowrap rounded px-1 font-normal outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:rgb(var(--shadow-focus-ring))]',
+                  // §5 — unselected text-2, hover deepens to text-1, selected
+                  // speaks per variant (brand color or ink — see VARIANT), one
+                  // weight step up (the label box already reserves this width).
+                  'text-text-2 hover:text-text-1 data-[state=active]:font-medium',
+                  VARIANT[variant].tab,
+                  'disabled:cursor-not-allowed disabled:text-btn-disabled-text',
+                  TAB_SIZE[size],
+                )}
+              >
+                {item.icon}
+                {/* §3 — the box is sized by an invisible 500-weight copy, so the
+                    400⇄500 flip never widens the tab (pure-CJK labels would not
+                    move anyway — CJK advances are weight-independent — but Latin
+                    and digits do). The visible copy centers in the reserved box. */}
+                <span className="relative whitespace-nowrap">
+                  <span aria-hidden className="invisible font-medium">
+                    {item.label}
+                  </span>
+                  <span className="absolute inset-0 flex items-center justify-center">{item.label}</span>
                 </span>
-                <span className="absolute inset-0 flex items-center justify-center">{item.label}</span>
-              </span>
-              {/* §4 — count badge, drawn by the Badge component's standalone form
-                  (组件-Badge徽标.md §2): same 16px pill, same caption-sm/500, so
-                  the 400⇄500 flip on selection cannot resize it and the row
-                  cannot shift. Sits in the trigger's flex gap (4px small / 8px
-                  otherwise), same as the icon. The color comes from the VARIANT,
-                  not from Badge's own default, so a neutral row stays neutral. */}
-              <Badge count={item.badge} className={cn('shrink-0', VARIANT[variant].badge)} />
-            </TabsPrimitive.Trigger>
-          ))}
-          {/* §5 — 2px brand indicator on the divider, text-wide, 200ms slide. */}
-          {indicator && (
-            <span
-              aria-hidden
-              className={cn(
-                'absolute bottom-0 left-0 h-0.5 transition-[transform,width] duration-200',
-                VARIANT[variant].indicator,
-              )}
-              style={{ width: indicator.width, transform: `translateX(${indicator.left}px)` }}
-            />
-          )}
-        </TabsPrimitive.List>
-        {extra !== undefined && <div className="flex shrink-0 items-center self-center pl-6">{extra}</div>}
+                {/* §4 — count badge, drawn by the Badge component's standalone form
+                    (组件-Badge徽标.md §2): same 16px pill, same caption-sm/500, so
+                    the 400⇄500 flip on selection cannot resize it and the row
+                    cannot shift. Sits in the trigger's flex gap (4px small / 8px
+                    otherwise), same as the icon. The color comes from the VARIANT,
+                    not from Badge's own default, so a neutral row stays neutral. */}
+                <Badge count={item.badge} className={cn('shrink-0', VARIANT[variant].badge)} />
+              </TabsPrimitive.Trigger>
+            ))}
+            {/* §5 — 2px brand indicator with rounded top corners, tab-wide, 200ms slide. */}
+            {indicator && (
+              <span
+                aria-hidden
+                className={cn(
+                  'absolute bottom-0 left-0 h-0.5 rounded-t-sm transition-[transform,width] duration-200',
+                  VARIANT[variant].indicator,
+                )}
+                style={{ width: indicator.width, transform: `translateX(${indicator.left}px)` }}
+              />
+            )}
+          </TabsPrimitive.List>
+        </div>
+        {extra !== undefined && <div className="ml-auto flex shrink-0 items-center self-center pl-6">{extra}</div>}
       </div>
       {/* §5 — the panel swaps instantly; no transition on content. */}
       {items
