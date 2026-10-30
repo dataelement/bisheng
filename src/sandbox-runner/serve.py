@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 import uvicorn
-from app import create_app
+from app import DEFAULT_MAX_COPY_IN_TOTAL_BYTES, create_app
 from logutil import configure, get_logger
 
 
@@ -24,6 +24,9 @@ def build_app():
         max_sessions=int(os.environ.get("SANDBOX_MAX_SESSIONS") or "50"),
         lease_ttl_s=float(os.environ.get("SANDBOX_LEASE_TTL_S") or "900"),
         max_copy_in_bytes=int(os.environ.get("SANDBOX_MAX_COPY_IN_BYTES") or str(50 * 1024 * 1024)),
+        max_copy_in_total_bytes=int(
+            os.environ.get("SANDBOX_MAX_COPY_IN_TOTAL_BYTES") or str(DEFAULT_MAX_COPY_IN_TOTAL_BYTES)
+        ),
         enable_uid_isolation=_bool_env("SANDBOX_ENABLE_UID_ISOLATION", True),
     )
 
@@ -43,6 +46,8 @@ def main() -> None:
         app,
         host="0.0.0.0",
         port=port,
+        # Leases live in this process's memory, so there must be exactly one
+        # worker process; concurrency comes from worker threads in app.py.
         workers=1,
         log_level=(os.environ.get("SANDBOX_LOG_LEVEL") or "info").lower(),
     )
