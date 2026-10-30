@@ -1,4 +1,5 @@
 import { Switch } from "@/components/bs-ui/switch"
+import { generateUUID } from "@/components/bs-ui/utils"
 import { mutateResourceGrantsApi, type ResourcePermissionContext, type PermissionResourceType, type PermissionGrantMutationChange } from "@/controllers/API/permission"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { useState } from "react"
@@ -24,7 +25,7 @@ export function AllMembersPermission({ resourceType, resourceId, context, onChan
       : sources.map(source => ({ op: "REMOVE", assignee_id: source.assignee_id, expected_assignee_version: source.assignee_version }))
     try {
       await captureAndAlertRequestErrorHoc(mutateResourceGrantsApi(resourceType, resourceId, {
-        idempotency_key: crypto.randomUUID(),
+        idempotency_key: generateUUID(32),
         expected_resource_version: context.resource_version,
         expected_catalog_release_id: context.catalog_release_id,
         changes,
