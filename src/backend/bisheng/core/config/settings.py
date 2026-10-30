@@ -10,6 +10,7 @@ from celery.schedules import crontab
 from cryptography.fernet import Fernet
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from sqlalchemy.engine.url import make_url
 
 from bisheng.core.config.app_runtime import AppRuntimeConf
 from bisheng.core.config.dsh import DshSettings
@@ -30,6 +31,19 @@ def encrypt_token(token: str):
 
 def decrypt_token(token: str):
     return Fernet(secret_key).decrypt(token).decode()
+
+
+def decrypt_database_url(value: str) -> str:
+    """Replace the Fernet ciphertext in a database URL password with the plaintext.
+
+    The plaintext is set on the SQLAlchemy URL and rendered once. Callers must not
+    quote the password first. A missing or empty password is left untouched.
+    """
+    parsed = make_url(value)
+    if not parsed.password:
+        return value
+    plain_password = decrypt_token(parsed.password)
+    return parsed.set(password=plain_password).render_as_string(hide_password=False)
 
 
 class LoggerConf(BaseModel):
@@ -1042,16 +1056,7 @@ class Settings(BaseModel):
                 logger.debug("No DATABASE_URL env variable, using sqlite database")
                 value = "sqlite:///./bisheng.db"
         else:
-            # Encrypt password
-            import re
-
-            pattern = r"(?<=:)[^:]+(?=@)"  # Match colon after to@Any character before the symbol
-            match = re.search(pattern, value)
-            if match:
-                password = match.group(0)
-                new_password = decrypt_token(password)
-                new_mysql_url = re.sub(pattern, f"{new_password}", value)
-                value = new_mysql_url
+            value = decrypt_database_url(value)
 
         return value
 
