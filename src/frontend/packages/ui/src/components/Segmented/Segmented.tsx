@@ -4,7 +4,7 @@ import cn from '../../utils/cn';
 import { Tooltip } from '../Tooltip';
 
 /**
- * Segmented — design-system base component (组件-Segmented分段控制器.md v1).
+ * Segmented — design-system base component (组件-Segmented分段控制器.md v1.1).
  *
  * Switches HOW the same content is shown — list vs cards, day vs week — and
  * applies IMMEDIATELY. Navigation between content blocks is Tabs; a choice
@@ -12,7 +12,7 @@ import { Tooltip } from '../Tooltip';
  * radio group (§落地 2): `role="radiogroup"` / `role="radio"`, arrow keys move
  * AND select. Baked in per spec: gray track (fill-2) with a floating
  * page-colored thumb, no shadow (§2); 3px track inset with concentric radii;
- * equal-width segments sized by the widest, `block` fills the container (§2);
+ * content-sized segments, `block` fills the container with equal widths (§2);
  * three sizes 28/32/36 — medium sits on the control ladder, small/large pull
  * in half a step (§3); selection never uses brand color, selected weight 500
  * over unselected 400 (§5); 200ms thumb slide; the gray keyboard-only
@@ -80,6 +80,13 @@ const Segmented = React.forwardRef<HTMLDivElement, SegmentedProps>(
     { options, size = 'medium', block = false, value, defaultValue, onChange, disabled, className, ...props },
     ref,
   ) => {
+    const trackRef = React.useRef<HTMLDivElement | null>(null);
+    const segmentRefs = React.useRef(new Map<string, HTMLButtonElement>());
+    const handleTrackRef = React.useCallback((node: HTMLDivElement | null) => {
+      trackRef.current = node;
+      if (typeof ref === 'function') ref(node);
+      else if (ref) ref.current = node;
+    }, [ref]);
     const items = React.useMemo(
       () => options.map((o) => (typeof o === 'string' ? ({ value: o, label: o } as SegmentedOption) : o)),
       [options],
@@ -91,7 +98,25 @@ const Segmented = React.forwardRef<HTMLDivElement, SegmentedProps>(
     const fallback = defaultValue ?? items.find((o) => !o.disabled)?.value;
     const [innerValue, setInnerValue] = React.useState(fallback);
     const current = value !== undefined ? value : innerValue;
-    const activeIndex = items.findIndex((o) => o.value === current);
+    const [thumb, setThumb] = React.useState<{ left: number; width: number } | null>(null);
+
+    React.useLayoutEffect(() => {
+      const track = trackRef.current;
+      const measure = () => {
+        const active = current != null ? segmentRefs.current.get(current) : undefined;
+        const next = active ? { left: active.offsetLeft, width: active.offsetWidth } : null;
+        setThumb((previous) =>
+          previous?.left === next?.left && previous?.width === next?.width ? previous : next,
+        );
+      };
+      measure();
+      // Any segment can move the selected one when its content width changes.
+      // Observe all segments as well as the track for fonts and container resizes.
+      const observer = new ResizeObserver(measure);
+      if (track) observer.observe(track);
+      segmentRefs.current.forEach((segment) => observer.observe(segment));
+      return () => observer.disconnect();
+    }, [current, items, size, block]);
 
     const handleChange = (next: string) => {
       setInnerValue(next);
@@ -100,16 +125,16 @@ const Segmented = React.forwardRef<HTMLDivElement, SegmentedProps>(
 
     return (
       <RadioGroupPrimitive.Root
-        ref={ref}
+        ref={handleTrackRef}
         orientation="horizontal"
         value={current}
         onValueChange={handleChange}
         disabled={disabled}
         className={cn(
-          // §2 — equal-width segments, all sized by the widest (auto-cols-fr on
-          // a content-sized grid); `relative` anchors the sliding thumb.
-          'relative grid-flow-col auto-cols-fr select-none bg-fill-2 p-[3px] font-normal',
-          block ? 'grid w-full' : 'inline-grid',
+          // §2 — hug each segment's content; only block uses equal columns.
+          // `relative` anchors the measured sliding thumb.
+          'relative grid-flow-col select-none bg-fill-2 p-[3px] font-normal',
+          block ? 'grid w-full auto-cols-fr' : 'inline-grid auto-cols-max',
           // §5 — keyboard-only gray ring around the WHOLE control (2px gray-2,
           // same as the input focus ring).
           'has-[:focus-visible]:shadow-focus',
@@ -119,22 +144,21 @@ const Segmented = React.forwardRef<HTMLDivElement, SegmentedProps>(
         {...props}
       >
         {/* §2/§5 — the floating thumb: one absolute element sliding 200ms to
-            the selected segment. Equal columns make its geometry pure CSS —
-            width = one column, translateX = index × own width. Light: the
+            the selected segment, matching its measured position and width. Light: the
             spec's white block = bg-bg-page. Dark: elevation LIGHTENS on
             #121212 (same direction as the button fills), so the page color
             would sink BELOW the track — float it two ramp steps above fill-2
             instead (fill-4, the iOS dark-segmented contrast). */}
-        {activeIndex >= 0 && (
+        {thumb && (
           <span
             aria-hidden
             className={cn(
-              'absolute bottom-[3px] left-[3px] top-[3px] bg-bg-page transition-transform duration-200 dark:bg-fill-4',
+              'absolute bottom-[3px] left-0 top-[3px] bg-bg-page transition-[transform,width] duration-200 dark:bg-fill-4',
               THUMB_RADIUS[size],
             )}
             style={{
-              width: `calc((100% - 6px) / ${items.length})`,
-              transform: `translateX(${activeIndex * 100}%)`,
+              width: thumb.width,
+              transform: `translateX(${thumb.left}px)`,
             }}
           />
         )}
@@ -143,6 +167,10 @@ const Segmented = React.forwardRef<HTMLDivElement, SegmentedProps>(
             <RadioGroupPrimitive.Item
               key={option.value}
               value={option.value}
+              ref={(node) => {
+                if (node) segmentRefs.current.set(option.value, node);
+                else segmentRefs.current.delete(option.value);
+              }}
               disabled={option.disabled}
               // §4 — an icon-only segment still needs an accessible name.
               aria-label={option.label === undefined ? option.tooltip : undefined}
@@ -152,9 +180,8 @@ const Segmented = React.forwardRef<HTMLDivElement, SegmentedProps>(
                 'btn-touch-hit relative z-[1] inline-flex cursor-pointer items-center justify-center whitespace-nowrap outline-none transition-colors',
                 // §5 — selected text-1 at weight 500 on the thumb, unselected
                 // text-3 at 400, hover deepens to text-1 (background
-                // untouched). CJK glyphs keep their advance across weights and
-                // labels are 2–4 chars (§4), so the bolder selected segment
-                // does not widen the equal-width columns.
+                // untouched). Re-measure if the selected font weight changes
+                // a segment's content width.
                 'text-text-3 hover:text-text-1 data-[state=checked]:font-medium data-[state=checked]:text-text-1',
                 'disabled:cursor-not-allowed disabled:text-btn-disabled-text',
                 SEGMENT_SIZE[size],
