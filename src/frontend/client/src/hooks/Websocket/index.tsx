@@ -94,7 +94,6 @@ export const useLinsightWebSocket = (versionId) => {
 
         websocket.onmessage = (event) => {
             const taskData = JSON.parse(event.data);
-            console.log('ws data :>> ', taskData);
             /**
              * 生成一级任务list
              * 生成当前一级任务下的二级任务list

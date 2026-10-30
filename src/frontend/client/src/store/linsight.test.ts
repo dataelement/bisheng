@@ -1,4 +1,12 @@
-import { isLinsightParked } from './linsight';
+// eslint-disable-next-line no-restricted-imports -- test drives the existing selector; adds no new Recoil state
+import { snapshot_UNSTABLE } from 'recoil';
+import {
+    conversationTaskRunningState,
+    isLinsightParked,
+    LinsightInfo,
+    linsightMapState,
+    SopStatus,
+} from './linsight';
 
 // isLinsightParked detects a session waiting on an UNANSWERED ask_user clarify,
 // the signal that drives the sidebar spinner OFF (a parked session is not
@@ -70,5 +78,43 @@ describe('store/linsight — isLinsightParked', () => {
                 ],
             }),
         ).toBe(false);
+    });
+});
+
+// The sidebar selector must not retain old versions of linsightMapState: the WS
+// pump publishes a new map per streamed frame, and a keep-all cache held every
+// one of them (quadratic memory growth on long tasks).
+describe('store/linsight — conversationTaskRunningState cache', () => {
+    // Recoil deep-freezes atom values in development, so the read counter lives
+    // outside the map instead of on it.
+    const reads = new WeakMap<Map<string, LinsightInfo>, number>();
+    class CountingMap extends Map<string, LinsightInfo> {
+        values() {
+            reads.set(this, (reads.get(this) ?? 0) + 1);
+            return super.values();
+        }
+    }
+
+    const makeMap = (status: string) =>
+        new CountingMap([['svid', { session_id: 'conv-1', status } as LinsightInfo]]);
+
+    const evaluate = (map: Map<string, LinsightInfo>) =>
+        snapshot_UNSTABLE(({ set }) => set(linsightMapState, map))
+            .getLoadable(conversationTaskRunningState('conv-1'))
+            .getValue();
+
+    it('reflects the current map value', () => {
+        expect(evaluate(makeMap(SopStatus.Running))).toBe(true);
+        expect(evaluate(makeMap('completed'))).toBe(false);
+    });
+
+    it('keeps only the most recent dependency value in its cache', () => {
+        const first = makeMap(SopStatus.Running);
+        const second = makeMap(SopStatus.Running);
+        evaluate(first);
+        evaluate(second);
+        evaluate(first);
+        // A keep-all cache would still hold `first` and skip the second read.
+        expect(reads.get(first)).toBe(2);
     });
 });
