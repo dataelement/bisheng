@@ -83,7 +83,10 @@ def map_gateway_payload(payload: dict[str, Any], *, today: date | None = None) -
     today = today or date.today()
     expire_date = _parse_date(payload.get("expire_day"))
     days_remaining = payload.get("days_remaining")
-    if days_remaining is not None:
+    # Gateway serializes absent numeric fields as empty strings.
+    if days_remaining == "":
+        days_remaining = None
+    elif days_remaining is not None:
         days_remaining = int(days_remaining)
     display_state = compute_display_state(expire_date, days_remaining, today)
     return {
