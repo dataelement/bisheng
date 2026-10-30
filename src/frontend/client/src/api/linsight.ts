@@ -1,6 +1,7 @@
 // @ts-strict-ignore
 import {LinsightInfo} from "~/store/linsight";
 import request from "./request";
+import { getShareTokenFromPath } from "~/utils/shareToken";
 
 // 获取灵思会话信息
 export function getLinsightSessionVersionList(ConversationId: string, shareToken: string): Promise<any> {
@@ -218,12 +219,32 @@ export function getCaseDetail(sop_id: string): Promise<any> {
 export function getMdDownload(file_info: {
     file_url: string;
     file_name: string
-}, to_type: 'pdf' | 'docx'): Promise<any> {
+}, to_type: 'pdf' | 'docx', sessionVersionId?: string): Promise<any> {
+    const shareToken = getShareTokenFromPath();
     return request.post('/api/v1/linsight/workbench/download-md-to-pdf-or-docx', {
             file_info: file_info,
-            to_type: to_type
+            to_type: to_type,
+            // Lets the backend embed the md's workspace images into the document.
+            session_version_id: sessionVersionId || null,
         }
         , {
-            responseType: 'blob' // 确保这里设置了 responseType
+            responseType: 'blob', // 确保这里设置了 responseType
+            headers: shareToken ? { 'share-token': shareToken } : {},
         })
+}
+
+/**
+ * Markdown deliverable with the workspace images it references: a zip
+ * (`application/zip`) when at least one image resolves, else the md itself.
+ */
+export function getMdBundle(params: {
+    session_version_id: string;
+    file_url: string;
+    file_name: string;
+}): Promise<Blob> {
+    const shareToken = getShareTokenFromPath();
+    return request.post('/api/v1/linsight/workbench/download-md-bundle', params, {
+        responseType: 'blob',
+        headers: shareToken ? { 'share-token': shareToken } : {},
+    });
 }

@@ -33,57 +33,23 @@ contract as ``linsight_knowledge.SearchKnowledgeBase``).
 
 from __future__ import annotations
 
-import base64
-import mimetypes
 import os
-import posixpath
-import re
 import tempfile
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote
 
 from langchain_core.tools import BaseTool
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from bisheng.citation.domain.services.citation_export_service import bake_citations_for_export
+from bisheng.linsight.domain.services.md_image_refs import inline_local_images
 from bisheng.utils import util
 
 
 class _ExportInput(BaseModel):
     source_path: str = Field(..., description="工作区内的源 markdown 路径, 例如 output/report.md 或 scratch/draft.md")
     dest_path: str = Field(default="", description="目标文件路径; 留空则自动用源文件名替换扩展名")
-
-
-# ![alt](src "title") — group 2 is the src; <img ... src="..."> — group 2 likewise.
-_MD_IMAGE_RE = re.compile(r"(!\[[^\]]*\]\(\s*<?)([^)\s>]+)")
-_HTML_IMG_RE = re.compile(r"(<img\b[^>]*?\bsrc\s*=\s*[\"'])([^\"']+)", re.IGNORECASE)
-_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
-
-
-def _image_path_candidates(src: str, source_path: str) -> list[str]:
-    """Workspace-relative paths an image src may point at, most specific first.
-
-    ``/output/a.png`` is workspace-rooted. A bare ``charts/a.png`` is tried
-    relative to the md's directory first (``output/report.md`` -> ``output/charts/a.png``),
-    then from the workspace root, because the workspace contract treats a
-    slash-less path as workspace-rooted (``output/charts/a.png`` written inside
-    ``output/report.md``). Candidates escaping the root are dropped.
-    """
-    # Models sometimes percent-encode non-ASCII names (中文.png -> %E4%B8%AD...).
-    src = unquote(src)
-    if src.startswith("/"):
-        joined = [src.lstrip("/")]
-    else:
-        joined = [posixpath.join(posixpath.dirname(source_path.lstrip("/")), src), src]
-    candidates: list[str] = []
-    for path in joined:
-        rel = posixpath.normpath(path)
-        if rel in (".", "..") or rel.startswith("../") or rel in candidates:
-            continue
-        candidates.append(rel)
-    return candidates
 
 
 def _swap_ext(path: str, new_ext: str) -> str:
@@ -157,44 +123,21 @@ class _ExportToolBase(BaseTool):
     async def _inline_workspace_images(self, md: str, source_path: str) -> tuple[str, list[str]]:
         """Inline workspace images as data URIs; return (md, srcs that could not be inlined).
 
-        Remote (``http(s):``) and already-inline (``data:``) srcs are left alone.
         A missing image is reported back rather than silently dropped, so the
         agent sees its broken reference.
         """
         if not hasattr(self.backend, "adownload_files"):
             return md, []
-        srcs: dict[str, list[str]] = {}
-        for pattern in (_MD_IMAGE_RE, _HTML_IMG_RE):
-            for m in pattern.finditer(md):
-                src = m.group(2)
-                if not _SCHEME_RE.match(src):
-                    srcs.setdefault(src, _image_path_candidates(src, source_path))
-        if not srcs:
-            return md, []
 
-        paths = sorted({p for candidates in srcs.values() for p in candidates})
-        data_uris: dict[str, str] = {}
-        if paths:
+        async def _fetch(paths: list[str]) -> dict[str, bytes]:
             responses = await self.backend.adownload_files(paths)
-            for path, res in zip(paths, responses, strict=False):
-                content = getattr(res, "content", None)
-                mime = mimetypes.guess_type(path)[0] or ""
-                if getattr(res, "error", None) or not content or not mime.startswith("image/"):
-                    continue
-                data_uris[path] = f"data:{mime};base64,{base64.b64encode(bytes(content)).decode('ascii')}"
+            return {
+                path: bytes(res.content)
+                for path, res in zip(paths, responses, strict=False)
+                if not getattr(res, "error", None) and getattr(res, "content", None)
+            }
 
-        resolved = {
-            src: next((data_uris[p] for p in candidates if p in data_uris), None) for src, candidates in srcs.items()
-        }
-        missing = [src for src, uri in resolved.items() if uri is None]
-
-        def _sub(m: re.Match) -> str:
-            uri = resolved.get(m.group(2))
-            return m.group(1) + uri if uri else m.group(0)
-
-        for pattern in (_MD_IMAGE_RE, _HTML_IMG_RE):
-            md = pattern.sub(_sub, md)
-        return md, missing
+        return await inline_local_images(md, source_path, _fetch)
 
     @staticmethod
     def _missing_images_note(missing: list[str]) -> str:
