@@ -28,7 +28,9 @@ async def authorized_workbench_models(user_id: int, config=None):
                 id=str(model_id),
                 key=str(model_id),
                 name=model_display_name(model, server, names.get(str(model.id))),
-                displayName=model_display_name(model, server, names.get(str(model.id))),
+                displayName=names.get(str(model.id)) or model.model_name.strip() or model.name.strip(),
+                provider_id=str(server.id),
+                provider_name=server.name.strip() or server.type,
                 visual=capabilities.client_fields().get("vision", False),
             )
         )

@@ -503,8 +503,24 @@ export type TStartupConfig = {
 };
 
 export type BsConfig = {
+  /** Admin-curated tool groups and their initial checked state. */
+  tools?: Array<{
+    id: number;
+    name: string;
+    description?: string;
+    is_preset?: number;
+    default_checked?: boolean;
+    children?: Array<{
+      id: number;
+      tool_key: string;
+      name?: string;
+      desc?: string;
+      description?: string;
+      enabled?: boolean;
+    }>;
+  }>;
   /** Visible organization knowledge bases configured as new-chat defaults. */
-  orgKbs?: Array<{ id: string | number; name: string; default_checked?: boolean }>;
+  orgKbs?: Array<{ id: string | number; name: string; default_checked?: boolean; sort_order?: number }>;
   applicationCenterWelcomeMessage: string;
   applicationCenterDescription: string;
   /**
@@ -532,6 +548,8 @@ export type BsConfig = {
     displayName: string;
     /** Optional admin-configured intro shown under the name in model pickers. */
     description?: string;
+    provider_id?: string | null;
+    provider_name?: string | null;
     visual?: boolean;
   }>;
   voiceInput: {

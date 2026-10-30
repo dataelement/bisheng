@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.common.chat.utils import SourceType, process_source_document
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.utils.think_tags import ThinkBlockStreamFilter
 from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
@@ -302,6 +303,7 @@ def _format_new_message(msg: ChatMessage) -> dict:
         message_content = msg.message or ""
     if msg.category == "agent_answer" and isinstance(message_content, dict):
         message_content = _normalise_agent_message_content(message_content)
+        message_content["msg"] = ThinkBlockStreamFilter().feed(message_content.get("msg") or "")
     # F035 Track J: task turns carry the execution-detail pointer in `extra`
     # (`linsight_session_version_id`). Surface it so the inline task bubble can
     # lazy-load the rich panel by SV. `message` stays the plain answer string.
@@ -378,7 +380,7 @@ def _convert_legacy_message(msg: ChatMessage) -> dict:
 
         return {
             **base,
-            "message": {"msg": text.strip(), "events": events},
+            "message": {"msg": ThinkBlockStreamFilter().feed(text).strip(), "events": events},
             "category": "agent_answer",
             "type": "end",
         }

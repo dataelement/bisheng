@@ -1,4 +1,5 @@
 import { Segmented } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 
 import { userContext } from "@/contexts/userContext";
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
@@ -27,18 +28,19 @@ export function HeaderMenu() {
         ["/build/apps", "/build/tools", "/build/client"].includes(location.pathname.replace(__APP_ENV__.BASE_URL, ""))
     ) {
         return (
-            <div className="build-tab flex justify-center h-[65px] items-center relative">
+            <div className="build-tab flex justify-center h-16 items-center relative">
                 <Segmented
                     size="large"
+                    className="rounded-full [&>span[aria-hidden]]:rounded-full"
                     aria-label={t("menu.skills")}
                     value={location.pathname.replace(__APP_ENV__.BASE_URL, "").split("/").pop()}
                     onChange={(value) => navigate(`/build/${value}`)}
                     options={[
                         ...(canOpenBuild ? [
-                            { value: "apps", label: t("build.app") },
-                            { value: "tools", label: t("build.tools") },
+                            { value: "apps", label: t("build.app"), icon: <Outlined.Application aria-hidden="true" /> },
+                            { value: "tools", label: t("build.tools"), icon: <Outlined.Hammer aria-hidden="true" /> },
                         ] : []),
-                        ...(canManageWorkbench ? [{ value: "client", label: t("build.workbench") }] : []),
+                        ...(canManageWorkbench ? [{ value: "client", label: t("build.workbench"), icon: <Outlined.DeviceDesktopExchange aria-hidden="true" /> }] : []),
                     ]}
                 />
             </div>
@@ -47,15 +49,16 @@ export function HeaderMenu() {
 
     if (["/model/management", "/model/finetune"].includes(location.pathname.replace(__APP_ENV__.BASE_URL, ""))) {
         return (
-            <div className="build-tab flex justify-center h-[65px] items-center relative">
+            <div className="build-tab flex justify-center h-16 items-center relative">
                 <Segmented
                     size="large"
+                    className="rounded-full [&>span[aria-hidden]]:rounded-full"
                     aria-label={t("model.modelManagement")}
                     value={location.pathname.replace(__APP_ENV__.BASE_URL, "").split("/").pop()}
                     onChange={(value) => navigate(`/model/${value}`)}
                     options={[
-                        { value: "management", label: t("model.modelManagement") },
-                        { value: "finetune", label: t("model.modelFineTune") },
+                        { value: "management", label: t("model.modelManagement"), icon: <Outlined.BlocksAndArrows aria-hidden="true" /> },
+                        { value: "finetune", label: t("model.modelFineTune"), icon: <Outlined.Setting aria-hidden="true" /> },
                     ]}
                 />
             </div>
@@ -63,7 +66,7 @@ export function HeaderMenu() {
     }
 
     if (location.pathname.replace(__APP_ENV__.BASE_URL, "") === "/approval") {
-        return <div id="approval-header-menu" className="flex h-[65px] items-center justify-center" />;
+        return <div id="approval-header-menu" className="flex h-16 items-center justify-center" />;
     }
 
     return null;

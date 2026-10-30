@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from bisheng.api.v1.schemas import OrgKbConfig, WorkstationConfig
+from bisheng.dsh.domain.services.capability_catalog import CapabilityCatalogService
 from bisheng.workstation.api.endpoints import config as config_endpoint
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
@@ -13,10 +14,11 @@ def _login_user():
 async def test_public_config_keeps_only_visible_org_kbs(monkeypatch):
     login_user = _login_user()
     daily_config = WorkstationConfig(
+        tools=[{"id": 362, "name": "curated", "default_checked": True, "children": [{"id": 2125}]}],
         orgKbs=[
             OrgKbConfig(id=12, name="hidden", default_checked=True, sort_order=0),
             OrgKbConfig(id=13, name="visible", default_checked=True, sort_order=1),
-        ]
+        ],
     )
 
     async def fake_batch(user, *, resource_type, resource_ids, actions):
@@ -55,14 +57,19 @@ async def test_public_config_keeps_only_visible_org_kbs(monkeypatch):
         config_endpoint,
         "bisheng_settings",
         SimpleNamespace(
+            dsh=SimpleNamespace(enabled=False),
             async_get_knowledge=AsyncMock(return_value=SimpleNamespace(image_parser_enabled=False)),
             aget_all_config=AsyncMock(return_value={}),
             aget_linsight_conf=AsyncMock(return_value=SimpleNamespace(waiting_list_url=None)),
         ),
     )
+    picker = AsyncMock(return_value=[{"id": 362, "default_checked": True}])
+    monkeypatch.setattr(CapabilityCatalogService, "picker_tools", picker)
 
     response = await config_endpoint.get_config(request=None, login_user=login_user)
 
+    picker.assert_awaited_once_with(configured_tools=daily_config.model_dump(exclude_unset=True)["tools"])
+    assert response.data["tools"][0]["default_checked"] is True
     assert [item["id"] for item in response.data["orgKbs"]] == [13]
     assert response.data["orgKbs"][0]["default_checked"] is True
 

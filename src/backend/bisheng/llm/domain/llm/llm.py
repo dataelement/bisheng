@@ -271,6 +271,8 @@ _llm_node_type: dict = {
     LLMServerType.VOLCENGINE.value: {"client": ChatVoiceEngine, "params_handler": _get_openai_params},
     LLMServerType.SILICON.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},
     LLMServerType.MIND_IE.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},
+    # Generic OpenAI-protocol servers: send max_tokens, which older third-party servers still require
+    LLMServerType.OPENAI_COMPATIBLE.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},
 }
 
 

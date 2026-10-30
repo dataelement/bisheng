@@ -14,6 +14,7 @@ import useSelectCopy from "~/hooks/useSelectCopy";
 import ApiAppIcon from "~/components/ui/icon/ApiApp";
 import { useAuthContext, useLocalize } from "~/hooks";
 import store from "~/store";
+import type { SelectedAgentTool } from "~/store/modeltype";
 import { cn } from "~/utils";
 
 // Shape of a leaf tool inside a parent group's `children[]`.
@@ -63,6 +64,20 @@ export function isToolGroupEnabled(group: AvailableToolGroup) {
   return !group.children?.length || group.children.some(child => child.enabled !== false);
 }
 
+function selectedToolGroup(group: AvailableToolGroup): SelectedAgentTool {
+  return {
+    id: group.id,
+    name: group.name,
+    description: group.description,
+    children: (group.children || []).filter(child => child.enabled !== false).map(child => ({
+      id: child.id,
+      tool_key: child.tool_key,
+      name: child.name,
+      desc: child.desc || child.description,
+    })),
+  };
+}
+
 export interface AgentToolSelection {
   /** At least one tool group is switched on. */
   isActive: boolean;
@@ -75,23 +90,27 @@ export interface AgentToolSelection {
  * Share per-account preferences between the composer and capability details.
  */
 /** Mounted once by the authenticated layout, above cached and uncached pages. */
-export function useAgentToolPreferences() {
+export function useAgentToolPreferences(availableTools?: AvailableToolGroup[]) {
   const [selected, setSelected] = useRecoilState(store.selectedAgentTools);
   const { user } = useAuthContext();
   const userId = user?.id === undefined ? undefined : String(user.id);
   const restoring = useRef<{ userId: string; value: typeof selected }>();
   const hydratedUser = useRef<string>();
   useEffect(() => {
-    if (!userId) return;
-    let restored: typeof selected = [];
+    if (!userId || hydratedUser.current === userId) return;
+    let restored: typeof selected | undefined;
     try {
-      const value = JSON.parse(localStorage.getItem(`bs:${userId}:selectedAgentTools`) || '[]');
+      const value = JSON.parse(localStorage.getItem(`bs:${userId}:selectedAgentTools`) ?? 'null');
       if (Array.isArray(value)) restored = value;
-    } catch { /* An unavailable snapshot starts with an empty selection. */ }
+    } catch { /* Invalid snapshots resolve from the configured defaults. */ }
+    if (restored === undefined) {
+      if (!availableTools) return;
+      restored = availableTools.filter(group => group.default_checked && isToolGroupEnabled(group)).map(selectedToolGroup);
+    }
     restoring.current = { userId, value: restored };
     hydratedUser.current = userId;
     setSelected(restored);
-  }, [userId, setSelected]);
+  }, [userId, availableTools, setSelected]);
   useEffect(() => {
     if (!userId || hydratedUser.current !== userId) return;
     if (restoring.current) {
@@ -108,9 +127,12 @@ export function useAgentToolSelection(availableTools: AvailableToolGroup[] | und
   // Revalidate the user selection when the authorized catalog changes.
   useEffect(() => {
     if (!availableTools || selected.length === 0) return;
-    const validIds = new Set(availableTools.filter(isToolGroupEnabled).map((g) => g.id));
-    const pruned = selected.filter((g) => validIds.has(g.id));
-    if (pruned.length !== selected.length) setSelected(pruned);
+    const byId = new Map(availableTools.filter(isToolGroupEnabled).map(group => [group.id, group]));
+    const pruned = selected.flatMap(group => {
+      const current = byId.get(group.id);
+      return current ? [selectedToolGroup(current)] : [];
+    });
+    if (JSON.stringify(pruned) !== JSON.stringify(selected)) setSelected(pruned);
   }, [availableTools, selected, setSelected]);
 
   const isChecked = (id: number) => selected.some((g) => g.id === id);
@@ -121,17 +143,7 @@ export function useAgentToolSelection(availableTools: AvailableToolGroup[] | und
     } else {
       setSelected([
         ...selected,
-        {
-          id: group.id,
-          name: group.name,
-          description: group.description,
-          children: (group.children || []).filter(c => c.enabled !== false).map((c) => ({
-            id: c.id,
-            tool_key: c.tool_key,
-            name: c.name,
-            desc: c.desc || c.description,
-          })),
-        },
+        selectedToolGroup(group),
       ]);
     }
   };

@@ -105,7 +105,7 @@ export function useServiceAccountManagementScope({
   }, [controller, refetch]);
   const requestScope = useMemo<ServiceAccountRequestScope | null>(
     () =>
-      currentTenantId == null
+      currentTenantId == null || !Number.isInteger(currentTenantId) || currentTenantId <= 0
         ? null
         : {
             tenantId: currentTenantId,
@@ -147,7 +147,7 @@ export function useServiceAccountManagementScope({
   }, [controller, refetch]);
   const ready =
     !!requestScope &&
-    requestScope.tenantId > 0 &&
+    Number.isInteger(requestScope.tenantId) && requestScope.tenantId > 0 &&
     !switching &&
     !refreshRequired &&
     (!enabled || (!scope.isLoading && !scope.isError));

@@ -372,8 +372,6 @@ const AiChatInput = memo(
             }
         }, [externalValue, isControlled]);
 
-        const hasAttachedFiles =
-            (chatFiles?.length ?? 0) > 0 || uploadingFiles.length > 0;
         const filesParsing = (chatFiles ?? []).some(
             (file) => file?.parsing_status && !['completed', 'failed'].includes(file.parsing_status),
         );
@@ -653,6 +651,7 @@ const AiChatInput = memo(
                             {/* Add files and knowledge spaces to the conversation context. */}
                             {!isLingsi && onSelectedOrgKbsChange && (
                                 <ChatResourceMenu
+                                    config={bsConfig}
                                     availableTools={agentMode ? bsConfig.tools : undefined}
                                     showTools={!!showToolPicker && agentMode}
                                     showWebSearch={!!showToolPicker && !agentMode}
@@ -664,7 +663,7 @@ const AiChatInput = memo(
                                             onSelectedOrgKbsChange?.([]);
                                         }
                                     }}
-                                    showResearch={allowConfiguration && taskModeEntry}
+                                    showResearch={taskModeEntry}
                                     researchActive={taskMode}
                                     onResearchChange={onToggleTaskMode ?? (() => navigate('/c/new'))}
                                     showKnowledgeSelection={knowledgeBase}

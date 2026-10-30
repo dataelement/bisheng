@@ -35,6 +35,7 @@ def _card(service: PersonalSkillService, skill) -> dict:
         "display_name": skill.display_name,
         "description": skill.description,
         "source": skill.source,
+        "builtin_key": skill.name if skill.source == "builtin" else None,
         "enabled": bool(skill.enabled),
         "content_hash": skill.content_hash,
         "bundle_missing": service.is_bundle_missing(skill),

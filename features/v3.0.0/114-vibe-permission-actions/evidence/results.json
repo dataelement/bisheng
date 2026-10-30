@@ -81,7 +81,26 @@
     "e2e-collection-only": {
       "path": "evidence/e2e-collection-only.txt",
       "sha256": "dc43a2d49217eb07a1f5e30c42679a1f07b79284d67ec9673453d3d6094fc1cf"
+    },
+    "merge-secret-scope": {
+      "path": "evidence/merge-secret-scope.txt",
+      "sha256": "4396e84900456008c54bdf71bee6fd0523a681ed0b283bdc2af8f9f6b2292978"
+    },
+    "merge-targeted-summary": {
+      "path": "evidence/merge-targeted-summary.txt",
+      "sha256": "194ea3fdc24fc18c482419bd266cfbbbc2ceda974e1a71073d6f08445c0a4e96"
+    },
+    "merge-static-quality": {
+      "path": "evidence/merge-static-quality.txt",
+      "sha256": "aab161f8ff2924e4ef7ce698e1c0bc1dbb1edcda27e345bda27cd843c822a235"
     }
   },
-  "implementation_commit": "6ac7704998087267af69b72adf542895b2694ff1"
+  "implementation_commit": "6ac7704998087267af69b72adf542895b2694ff1",
+  "integration": {
+    "local_release_head": "ac2b09c8a2789021652d585f25d519888cfd0c0f",
+    "fetched_remote_head": "56f543e6ee631d000071352baba8ebccd2a69427",
+    "merge_before_e2e": "explicit user request; user deploys 116",
+    "remote_e2e_executed": false,
+    "full_suite_executed": false
+  }
 }

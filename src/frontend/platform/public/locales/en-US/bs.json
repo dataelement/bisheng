@@ -836,12 +836,17 @@
       "spark": "iFLYTEK Spark",
       "tencent": "Tencent Cloud",
       "moonshot": "Moonshot AI",
-      "qianfan": "Baidu Qianfan"
+      "qianfan": "Baidu Qianfan",
+      "openaiCompatible": "OpenAI-compatible"
     },
-    "sectionConnection": "Connection",
     "sectionUsage": "Usage",
     "providerType": "Provider type",
-    "providerTypeTip": "Decides how the API is called and which connection fields to fill in below. It cannot be changed after saving.",
+    "providerTypeTip": "Can't be changed after saving",
+    "providerGroups": {
+      "cloud": "Cloud services",
+      "local": "Self-hosted frameworks"
+    },
+    "openaiCompatibleSearchWords": "custom,compatible,gateway,proxy,relay",
     "dailyCallLimitTip": "Limits the total calls per day across all models of this provider. Calls over the limit fail for the rest of the day; the count resets at midnight.",
     "dailyLimitPrefix": "At most",
     "dailyLimitSuffix": "calls per day",
@@ -1706,6 +1711,9 @@
       "invalidRange": "Choose a valid start and end time.",
       "loadFailed": "Records could not be loaded. Try again.",
       "exportFailed": "The export could not be retrieved. Try again.",
+      "exportBackground": "Closing this window keeps the export running. Click Export all again to view its progress.",
+      "exportCreateFailed": "Could not create the export. Please try again.",
+      "exportRows": "Records: {{count}}",
       "loading": "Loading…",
       "unknown": "Unknown",
       "empty": "No matching records",
@@ -2909,6 +2917,7 @@
       "revokeConfirmBody": "The key stops working immediately and the holder's AI assistant loses access; the holder can generate a new one at any time."
     },
     "tenantScope": {
+      "globalReadonlyHint": "Showing service accounts from all tenants. Select a specific tenant to manage them.",
       "label": "Tenant to manage",
       "choose": "Select a management tenant in the top-right corner first",
       "hint": "Choose where to view and create service accounts. Existing accounts stay in their tenant. This selection is shared with other administration pages.",
@@ -2944,13 +2953,12 @@
       "failed": "Failed"
     },
     "version": {
-      "placeholder": "Version",
       "loading": "Loading…",
-      "empty": "No versions yet",
       "loadFailed": "Failed to load versions",
-      "current": "Running",
-      "pending": "Pending",
-      "readonlyTip": "Versions are read-only; a hosted app cannot be switched here"
+      "noCode": "No code uploaded",
+      "latest": "Latest version {{version}}",
+      "running": "Running version {{version}}",
+      "currentUnavailable": "Running version unknown"
     },
     "actions": {
       "stopTitle": "Take this application offline?",
@@ -4161,7 +4169,7 @@
       "ruleHelp": "Set monthly credits per member by user, department or role. The highest matching enabled allowance applies, shared by Chat and Work. Members no enabled allowance matches are not capped.",
       "scope": "Scope",
       "monthlyCredits": "Credits per member / month",
-      "creditRangeHint": "Enter credits from 0 to {{max}}, with up to 6 decimal places.",
+      "creditRangeHint": "0–{{max}} credits per month, with up to 1 decimal place.",
       "enabled": "Enable rule",
       "selectSubject": "Select a subject",
       "save": "Save",

@@ -45,6 +45,11 @@ afterEach(cleanup);
 beforeEach(() => vi.resetAllMocks());
 
 describe("service account request scope", () => {
+  it.each([null, 0, -1, 1.5, Number.NaN])("rejects invalid runtime tenant scope %s before HTTP", async tenantId => {
+    const scope = { tenantId, signal: new AbortController().signal, onScopeChanged: vi.fn() };
+    await expect(api.listServiceAccountsApi({ page: 1, page_size: 20 }, scope as api.ServiceAccountRequestScope)).rejects.toThrow("concrete tenant");
+    expect(request.get).not.toHaveBeenCalled();
+  });
   it("binds every mutation to the form snapshot, including explicit Root", async () => {
     const controller = new AbortController();
     const scope = {
@@ -132,7 +137,7 @@ describe("service account request scope", () => {
 });
 
 describe("management scope lifecycle", () => {
-  it("does not select Root or allow writes when shared scope is absent", async () => {
+  it("rejects absent scope instead of selecting a global view", async () => {
     vi.mocked(request.get).mockResolvedValue({ scope_tenant_id: null });
     const { result } = renderHook(
       () => useServiceAccountManagementScope(options),
@@ -140,6 +145,7 @@ describe("management scope lifecycle", () => {
     );
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.ready).toBe(false);
+    expect(result.current.requestScope).toBeNull();
     expect(request.put).not.toHaveBeenCalled();
     await act(async () => {
       vi.mocked(request.put).mockResolvedValueOnce({ scope_tenant_id: 1 });

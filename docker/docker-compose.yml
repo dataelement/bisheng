@@ -15,9 +15,55 @@ x-runtime-platform-env: &runtime-platform-env
   BISHENG_RUNTIME_SERVICE_KEYS: '{"manager-node-1":{"secret":"${BISHENG_RUNTIME_MANAGER_SECRET:-}","node_id":"${BISHENG_RUNTIME_NODE_ID:-docker-node-1}","roles":["manager"]},"egress-node-1":{"secret":"${BISHENG_RUNTIME_EGRESS_SECRET:-}","node_id":"${BISHENG_RUNTIME_NODE_ID:-docker-node-1}","roles":["egress"]},"host-isolation-node-1":{"secret":"${BISHENG_RUNTIME_HOST_ISOLATION_SECRET:-}","node_id":"${BISHENG_RUNTIME_NODE_ID:-docker-node-1}","roles":["host-isolation"]},"entry-reader":{"secret":"${BISHENG_RUNTIME_ENTRY_SECRET:-}","roles":["entry"]}}'
 
 services:
+  gateway-db-init:
+    profiles: [gateway]
+    image: ${MYSQL_IMAGE:?set MYSQL_IMAGE in docker/.env (see .env.example)}
+    environment:
+      MYSQL_PWD: "1234"
+      GATEWAY_DATABASE_PASSWORD: ${BISHENG_GATEWAY_DB_PASSWORD:-}
+    volumes:
+      - ./gateway/init.sql:/schema.sql:ro
+      - ./gateway/init.sh:/init.sh:ro
+    entrypoint: ["bash", "/init.sh"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  gateway:
+    profiles: [gateway]
+    image: ${BISHENG_GATEWAY_IMAGE:?run bash docker/install.sh to create docker/.env}
+    container_name: bisheng-gateway
+    environment:
+      TZ: Asia/Shanghai
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      # install.sh validates these values only when the gateway profile is enabled.
+      BISHENG_LICENSE: ${BISHENG_GATEWAY_LICENSE:-}
+      BISHENG_GATEWAY_HMAC_SECRET: ${BISHENG_GATEWAY_HMAC_SECRET:-}
+      BISHENG_PUBLIC_URL: ${BISHENG_PUBLIC_URL:-}
+      GATEWAY_DATABASE_PASSWORD: ${BISHENG_GATEWAY_DB_PASSWORD:-}
+      SPRING_CONFIG_LOCATION: file:/application.yml
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/gateway/config/application.yml:/application.yml:ro
+      # A real user-provided file is required even with direct Compose commands.
+      - type: bind
+        source: ${BISHENG_GATEWAY_LICENSE_FILE:-./gateway/license.required}
+        target: /run/secrets/bisheng-license
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      gateway-db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    restart: on-failure
+
   mysql:
     container_name: bisheng-mysql
-    image: mysql:8.0
+    image: ${MYSQL_IMAGE:?set MYSQL_IMAGE in docker/.env (see .env.example)}
     
     ports:
       - "3306:3306"
@@ -38,7 +84,7 @@ services:
 
   openfga-migrate:
     container_name: bisheng-openfga-migrate
-    image: cr.dataelem.com/dataelement/openfga:v1.15.2-dm
+    image: ${OPENFGA_IMAGE:?set OPENFGA_IMAGE in docker/.env (see .env.example)}
     command: migrate
     environment:
       OPENFGA_DATASTORE_ENGINE: mysql
@@ -49,7 +95,7 @@ services:
 
   openfga:
     container_name: bisheng-openfga
-    image: cr.dataelem.com/dataelement/openfga:v1.15.2-dm
+    image: ${OPENFGA_IMAGE:?set OPENFGA_IMAGE in docker/.env (see .env.example)}
     command: run
     environment:
       OPENFGA_DATASTORE_METRICS_ENABLED: "true"
@@ -82,7 +128,7 @@ services:
 
   redis:
     container_name: bisheng-redis
-    image: redis:7.0.4
+    image: ${REDIS_IMAGE:?set REDIS_IMAGE in docker/.env (see .env.example)}
     ports:
       - "6379:6379"
     environment:
@@ -100,12 +146,14 @@ services:
 
   backend:
     container_name: bisheng-backend
-    image: dataelement/bisheng-backend:v3.0.0-beta6
+    image: ${BISHENG_BACKEND_IMAGE:?set BISHENG_BACKEND_IMAGE in docker/.env (see .env.example)}
     ports:
       - "7860:7860"
     environment:
       <<: *runtime-platform-env
       TZ: Asia/Shanghai
+      BISHENG_PRO: ${BISHENG_PRO:-false}
+      BISHENG_GATEWAY_HMAC_SECRET: ${BISHENG_GATEWAY_HMAC_SECRET:-}
       BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
       BS_MILVUS_IS_PARTITION: 'true'
       BS_MILVUS_PARTITION_SUFFIX: '1'
@@ -141,6 +189,9 @@ services:
       timeout: 30s
       retries: 3
     depends_on:
+      # Application context initialization connects to object storage.
+      minio:
+        condition: service_healthy
       mysql:
         condition: service_healthy
       redis:
@@ -151,10 +202,12 @@ services:
 
   backend_worker:
     container_name: bisheng-backend-worker
-    image: dataelement/bisheng-backend:v3.0.0-beta6
+    image: ${BISHENG_BACKEND_IMAGE:?set BISHENG_BACKEND_IMAGE in docker/.env (see .env.example)}
     environment:
       <<: *runtime-platform-env
       TZ: Asia/Shanghai
+      BISHENG_PRO: ${BISHENG_PRO:-false}
+      BISHENG_GATEWAY_HMAC_SECRET: ${BISHENG_GATEWAY_HMAC_SECRET:-}
       BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
       BS_MILVUS_IS_PARTITION: 'true'
       BS_MILVUS_PARTITION_SUFFIX: '1'
@@ -184,6 +237,9 @@ services:
       - default
       - sandbox_net
     depends_on:
+      # Application context initialization connects to object storage.
+      minio:
+        condition: service_healthy
       mysql:
         condition: service_healthy
       redis:
@@ -195,21 +251,21 @@ services:
 
   frontend:
     container_name: bisheng-frontend
-    image: dataelement/bisheng-frontend:v3.0.0-beta6
+    image: ${BISHENG_FRONTEND_IMAGE:?set BISHENG_FRONTEND_IMAGE in docker/.env (see .env.example)}
     ports:
       - "3001:3001"
     environment:
       TZ: Asia/Shanghai
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/nginx/nginx.conf:/etc/nginx/nginx.conf
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/nginx/conf.d:/etc/nginx/conf.d
+      - ${BISHENG_NGINX_CONF_DIR:-./nginx/conf.d}:/etc/nginx/conf.d
     restart: on-failure
     depends_on:
       - backend
 
   elasticsearch:
     container_name: bisheng-es
-    image: docker.io/bitnamilegacy/elasticsearch:8.12.0
+    image: ${ELASTICSEARCH_IMAGE:?set ELASTICSEARCH_IMAGE in docker/.env (see .env.example)}
     user: root
     ports:
       - "9200:9200"
@@ -222,7 +278,7 @@ services:
 
   etcd:
     container_name: bisheng-milvus-etcd
-    image: quay.io/coreos/etcd:v3.5.5
+    image: ${ETCD_IMAGE:?set ETCD_IMAGE in docker/.env (see .env.example)}
     environment:
       ETCD_AUTO_COMPACTION_MODE: revision
       ETCD_AUTO_COMPACTION_RETENTION: "1000"
@@ -241,7 +297,7 @@ services:
 
   minio:
     container_name: bisheng-milvus-minio
-    image: cr.dataelem.com/minio/minio:RELEASE.2023-03-20T20-16-18Z
+    image: ${MINIO_IMAGE:?set MINIO_IMAGE in docker/.env (see .env.example)}
     environment:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}
@@ -269,7 +325,7 @@ services:
 
   milvus:
     container_name: bisheng-milvus-standalone
-    image: milvusdb/milvus:v2.5.10
+    image: ${MILVUS_IMAGE:?set MILVUS_IMAGE in docker/.env (see .env.example)}
     command: ["milvus", "run", "standalone"]
     security_opt:
     - seccomp:unconfined
@@ -308,7 +364,7 @@ services:
   runtime-manager:
     container_name: bisheng-runtime-manager
     profiles: [app-runtime]
-    image: ${BISHENG_RUNTIME_MANAGER_IMAGE:-dataelement/bisheng-runtime-manager:v3.0.0}
+    image: ${BISHENG_RUNTIME_MANAGER_IMAGE:?set BISHENG_RUNTIME_MANAGER_IMAGE in docker/.env (see .env.example)}
     environment:
       TZ: Asia/Shanghai
       RTM_HOST: '0.0.0.0'
@@ -325,7 +381,7 @@ services:
       RTM_HOST_DATA_ROOT: ${BISHENG_APP_DATA_ROOT:-/opt/bisheng/app-data}
       RTM_DOCKER_HOST: 'tcp://docker-socket-proxy:2375'
       RTM_NETWORK: bisheng-apps
-      RTM_DATA_HELPER_IMAGE: ${BISHENG_RUNTIME_MANAGER_IMAGE:-dataelement/bisheng-runtime-manager:v3.0.0}
+      RTM_DATA_HELPER_IMAGE: ${BISHENG_RUNTIME_MANAGER_IMAGE:?set BISHENG_RUNTIME_MANAGER_IMAGE in docker/.env (see .env.example)}
       RTM_EGRESS_PROXY: 'egress-proxy:3128'
       RTM_BUILD_NETWORK: bisheng-build
       RTM_RESERVE_MB: ${BISHENG_RTM_RESERVE_MB:-2048}
@@ -365,7 +421,7 @@ services:
   docker-socket-proxy:
     container_name: bisheng-docker-socket-proxy
     profiles: [app-runtime]
-    image: tecnativa/docker-socket-proxy:0.3.0
+    image: ${DOCKER_SOCKET_PROXY_IMAGE:?set DOCKER_SOCKET_PROXY_IMAGE in docker/.env (see .env.example)}
     environment:
       ALLOW_RESTARTS: "0"
       ALLOW_START: "1"
@@ -408,7 +464,7 @@ services:
   egress-proxy:
     container_name: bisheng-egress-proxy
     profiles: [app-runtime]
-    image: ${BISHENG_RUNTIME_MANAGER_IMAGE:-dataelement/bisheng-runtime-manager:v3.0.0}
+    image: ${BISHENG_RUNTIME_MANAGER_IMAGE:?set BISHENG_RUNTIME_MANAGER_IMAGE in docker/.env (see .env.example)}
     command: ["python", "-m", "runtime_manager.egress_proxy"]
     user: '10001:10001'
     read_only: true
@@ -427,7 +483,7 @@ services:
   app-proxy:
     container_name: bisheng-app-proxy
     profiles: [app-runtime]
-    image: ${BISHENG_APP_PROXY_IMAGE:-dataelement/bisheng-app-proxy:v3.0.0}
+    image: ${BISHENG_APP_PROXY_IMAGE:?set BISHENG_APP_PROXY_IMAGE in docker/.env (see .env.example)}
     environment:
       TZ: Asia/Shanghai
       APP_PROXY_HOST: '0.0.0.0'
@@ -451,11 +507,13 @@ services:
   # Named replicas (not deploy.replicas). Platform endpoints list each of these.
   # No ports: — isolation is network unreachability, not hiding a host port.
   code-runner-1: &code_runner
-    image: dataelement/bisheng-sandbox:${SANDBOX_IMAGE_TAG:-v3.0.0-beta1}
+    image: ${BISHENG_SANDBOX_IMAGE:?set BISHENG_SANDBOX_IMAGE in docker/.env (see .env.example)}
     container_name: bisheng-code-runner-1
-    # Isolation mode (sessions > 1): PID 1 is root so it can chown/setuid per session.
+    # Isolation mode (sessions > 1): the runner is root so it can chown/setuid per session.
     # User code still drops via SETUID. DAC_OVERRIDE is required while the runner
     # chowns the session dir at lease create (copy-in into 0700/uid 10000).
+    # KILL lets the runner signal a session uid's process group on timeout / delete.
+    # PID 1 is tini from the image (reaps orphans); do not add init: true.
     user: "0"
     read_only: true
     cap_drop:
@@ -465,17 +523,38 @@ services:
       - SETGID
       - CHOWN
       - DAC_OVERRIDE
+      - KILL
     security_opt:
       - no-new-privileges:true
     mem_limit: 2g
+    # Shared by every session on this runner; RLIMIT_CPU caps each process on top.
+    # Must not exceed the host CPU count: the daemon refuses to start the
+    # container otherwise (set SANDBOX_CPUS=1 on a 1-vCPU host).
+    cpus: ${SANDBOX_CPUS:-2}
     pids_limit: 256
     tmpfs:
       # 0755 root:root — session uids cannot plant files in /tmp (not Docker's 1777).
       - /tmp:mode=755
+    # Session work dirs and the copy-in spool live on disk, not on /tmp: tmpfs
+    # pages are charged to mem_limit and are not freed by killing processes, so
+    # two near-cap copy-ins (512 MiB spool + 512 MiB extracted each) would let
+    # the OOM killer take the runner and every session on it.
+    # Each replica needs its own directory (code-runner-2 overrides this).
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/sandbox/code-runner-1:/sessions
+    # Leases live in runner memory only, so dirs left by a previous run are
+    # orphans. Clear them before the runner starts (tini stays PID 1).
+    command:
+      - sh
+      - -c
+      - "find /sessions -mindepth 1 -delete || echo 'sandbox: stale session cleanup failed' >&2; exec python serve.py"
     environment:
       TZ: Asia/Shanghai
       SANDBOX_TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
+      SANDBOX_SESSIONS_ROOT: /sessions
       SANDBOX_MAX_SESSIONS: "50"
+      # Total bytes copied into one session (512 MiB); files past it are skipped and reported.
+      SANDBOX_MAX_COPY_IN_TOTAL_BYTES: "536870912"
       SANDBOX_ENABLE_UID_ISOLATION: "true"
       SANDBOX_LEASE_TTL_S: "900"
     networks:
@@ -485,6 +564,8 @@ services:
   code-runner-2:
     <<: *code_runner
     container_name: bisheng-code-runner-2
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/sandbox/code-runner-2:/sessions
 
 # ── 托管应用专用网络 ────────────────────────────────────────────────────
 # runtime-manager 只**读**这张网（docker_backend.py:161-166「网络由部署方创建」），
@@ -507,6 +588,9 @@ services:
 # `application_network_internal` 会判红并给出重建命令。删网前要先停掉全部
 # 托管应用（网络在用时删不掉）。
 networks:
+  default:
+    name: ${BISHENG_NETWORK_NAME:-bisheng-network}
+    driver: bridge
   runtime-control:
     name: bisheng-runtime-control
     driver: bridge
@@ -528,4 +612,6 @@ networks:
   # `internal` only when the network is created; an existing internal
   # sandbox_net stays closed until it is recreated.
   sandbox_net:
+    name: bisheng-sandbox
+    driver: bridge
     internal: false

@@ -127,8 +127,7 @@ class AppSecretService:
             return {"revision": revision, "present": value is not None and value != "", "updated_at": now.isoformat()}
 
     async def get(self, app_id, *, actor):
-        async with self.repo.transaction() as session:
-            app = await self.repo.app(session, app_id)
+        async with self.repo.read_transaction(app_id) as (session, app):
             await self._require_editor(app, actor)
             row = await self.repo.config(session, app.id)
             entries = self._entries(row, app)

@@ -15,6 +15,12 @@ Both converters are synchronous/blocking (python-docx + a ``soffice``
 subprocess), so they run via ``util.sync_func_to_async`` (a thread-pool
 executor) to avoid blocking the worker's asyncio loop thread.
 
+Workspace images referenced by the markdown (``![](charts/a.png)``, relative to
+the md file, or ``/output/...``) are read from the workspace and inlined as
+``data:image/*`` URIs before conversion: the converters run in the worker, not in
+the sandbox, and ``sanitize_html_for_pdf`` drops scheme-less ``src`` values (it
+blocks ``file://``-style local reads), so a plain path can never resolve.
+
 The session ``WorkspaceBackend`` is **closure-injected** via the factory below:
 deepagents tools cannot reach the FilesystemMiddleware backend through
 ``ToolRuntime``, so the only reliable path is to bind the backend onto the tool
@@ -37,11 +43,12 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from bisheng.citation.domain.services.citation_export_service import bake_citations_for_export
+from bisheng.linsight.domain.services.md_image_refs import inline_local_images
 from bisheng.utils import util
 
 
 class _ExportInput(BaseModel):
-    source_path: str = Field(..., description="工作区 output/ 下的源 markdown 路径, 例如 output/report.md")
+    source_path: str = Field(..., description="工作区内的源 markdown 路径, 例如 output/report.md 或 scratch/draft.md")
     dest_path: str = Field(default="", description="目标文件路径; 留空则自动用源文件名替换扩展名")
 
 
@@ -113,6 +120,34 @@ class _ExportToolBase(BaseTool):
         # FileData is a TypedDict (dict at runtime); tolerate an attr-style impl too.
         return fd["content"] if isinstance(fd, dict) else getattr(fd, "content", None)
 
+    async def _inline_workspace_images(self, md: str, source_path: str) -> tuple[str, list[str]]:
+        """Inline workspace images as data URIs; return (md, srcs that could not be inlined).
+
+        A missing image is reported back rather than silently dropped, so the
+        agent sees its broken reference.
+        """
+        if not hasattr(self.backend, "adownload_files"):
+            return md, []
+
+        async def _fetch(paths: list[str]) -> dict[str, bytes]:
+            responses = await self.backend.adownload_files(paths)
+            return {
+                path: bytes(res.content)
+                for path, res in zip(paths, responses, strict=False)
+                if not getattr(res, "error", None) and getattr(res, "content", None)
+            }
+
+        return await inline_local_images(md, source_path, _fetch)
+
+    @staticmethod
+    def _missing_images_note(missing: list[str]) -> str:
+        if not missing:
+            return ""
+        return (
+            f"\n注意: {len(missing)} 张图片未找到, 未嵌入: {', '.join(missing)}"
+            "(图片路径相对 md 所在目录, 或写成 /output/... 这样的工作区路径)"
+        )
+
     async def _write_bytes(self, dest_path: str, data: bytes) -> str:
         res = await self.backend.awrite(dest_path, data)
         return getattr(res, "path", None) or ("/" + dest_path)
@@ -121,8 +156,10 @@ class _ExportToolBase(BaseTool):
 class ExportDocxTool(_ExportToolBase):
     name: str = "export_docx"
     description: str = (
-        "把工作区 output/ 下的 markdown 文件转换为 Word(.docx)交付物。\n"
+        "把工作区内的 markdown 文件转换为 Word(.docx)交付物。\n"
         "用法: 先用 write_file 写好 output/<name>.md, 再调用本工具(source_path 指向该 md)。\n"
+        "只有 output/ 下的文件会作为交付物交给用户; 试验性的转换请把源文件和 dest_path 都放在 scratch/。\n"
+        "markdown 里引用的工作区图片(相对 md 所在目录, 或 /output/... 写法)会自动嵌入文档。\n"
         "仅当用户在澄清阶段选择了 docx 输出格式时才调用。"
     )
 
@@ -137,19 +174,22 @@ class ExportDocxTool(_ExportToolBase):
             # section, filtered by the exporter's permissions; anything that cannot
             # be resolved is stripped as before (no marker / id / [S99] leaks).
             md = await bake_citations_for_export(md, self.export_user)
+            md, missing = await self._inline_workspace_images(md, source_path)
             docx_bytes = await util.sync_func_to_async(_md_to_docx_bytes)(md)
         except Exception as e:
             logger.exception("export_docx convert failed")
             return f"导出失败: markdown 转 docx 出错: {e}"
         path = await self._write_bytes(dest_path or _swap_ext(source_path, ".docx"), docx_bytes)
-        return f"已生成 Word 文档: {path}"
+        return f"已生成 Word 文档: {path}" + self._missing_images_note(missing)
 
 
 class ExportPdfTool(_ExportToolBase):
     name: str = "export_pdf"
     description: str = (
-        "把工作区 output/ 下的 markdown 文件转换为 PDF 交付物。\n"
+        "把工作区内的 markdown 文件转换为 PDF 交付物。\n"
         "用法: 先用 write_file 写好 output/<name>.md, 再调用本工具(source_path 指向该 md)。\n"
+        "只有 output/ 下的文件会作为交付物交给用户; 试验性的转换请把源文件和 dest_path 都放在 scratch/。\n"
+        "markdown 里引用的工作区图片(相对 md 所在目录, 或 /output/... 写法)会自动嵌入文档。\n"
         "仅当用户在澄清阶段选择了 pdf 输出格式时才调用。"
     )
 
@@ -162,12 +202,13 @@ class ExportPdfTool(_ExportToolBase):
         try:
             # Same as export_docx: bake resolvable citations, strip the rest.
             md = await bake_citations_for_export(md, self.export_user)
+            md, missing = await self._inline_workspace_images(md, source_path)
             pdf_bytes = await util.sync_func_to_async(_md_to_pdf_bytes_via_libreoffice)(md)
         except Exception as e:
             logger.exception("export_pdf convert failed")
             return f"导出失败: markdown 转 pdf 出错(可能是 PDF 渲染环境缺失): {e}"
         path = await self._write_bytes(dest_path or _swap_ext(source_path, ".pdf"), pdf_bytes)
-        return f"已生成 PDF 文档: {path}"
+        return f"已生成 PDF 文档: {path}" + self._missing_images_note(missing)
 
 
 def init_linsight_export_tools(backend, export_user: Any = None) -> list[BaseTool]:

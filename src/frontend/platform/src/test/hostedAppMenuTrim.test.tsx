@@ -144,6 +144,7 @@ describe("⚙️ menu — hosted application keeps two entries (AC-16 / F054 AC-
     name: "Alpha",
     description: "hosted",
     user_name: "owner",
+    user_id: 1,
     flow_type: 35,
   }
 
@@ -209,9 +210,10 @@ describe("⚙️ menu — hosted application keeps two entries (AC-16 / F054 AC-
 
     expect(menuItemTexts()).toEqual([MENU_LABELS.delete])
   })
-  it("disables the version dropdown of an online hosted app", () => {
+  it("shows version information without a dropdown for an online hosted app", async () => {
     renderHosted({ item: { app_state: "online", status: 2 } })
-    expect(screen.getByRole("combobox")).toBeDisabled()
+    await screen.findByText("hostedApp.version.noCode")
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument()
   })
 
 })

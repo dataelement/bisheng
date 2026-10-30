@@ -6,7 +6,7 @@ import type { SelectOption } from '../Select/types';
 import { SELECTION_CHEVRON_SIZE, type SelectionVariant } from '../shared/SelectionTrigger';
 import { Tooltip } from '../Tooltip/Tooltip';
 import type { CascaderPath } from './types';
-import { shortestLabels, type CascaderEntry } from './utils';
+import type { CascaderEntry } from './utils';
 
 interface TruncatedValueProps {
   value: string;
@@ -43,11 +43,11 @@ export interface CascaderTriggerContentProps {
   hasValue: boolean;
   disabled: boolean;
   placeholder?: string;
-  separator: string;
   removeLabel: string;
   selectedEntries: CascaderEntry[];
   singleLabel: string;
   searchableInTrigger: boolean;
+  autoWidth?: boolean;
   searchInput: React.ReactNode;
   open: boolean;
   onRemove: (path: CascaderPath) => void;
@@ -60,11 +60,11 @@ export function CascaderTriggerContent({
   hasValue,
   disabled,
   placeholder,
-  separator,
   removeLabel,
   selectedEntries,
   singleLabel,
   searchableInTrigger,
+  autoWidth = false,
   searchInput,
   open,
   onRemove,
@@ -83,12 +83,10 @@ export function CascaderTriggerContent({
   }
 
   if (multiple && hasValue) {
-    const labels = shortestLabels(selectedEntries, separator);
     const paths = new Map(selectedEntries.map((entry) => [entry.key, entry.path]));
     const options: SelectOption[] = selectedEntries.map((entry) => ({
       value: entry.key,
       label:
-        labels.get(entry.key) ??
         entry.options[entry.options.length - 1]?.label ??
         String(entry.path[entry.path.length - 1] ?? ''),
     }));
@@ -107,14 +105,19 @@ export function CascaderTriggerContent({
   }
 
   if (searchableInTrigger) {
-    return (
+    const content = (
       <span className="grid min-w-0 flex-1 items-center">
+        {autoWidth && <span aria-hidden="true" data-label={singleLabel || placeholder || ''}
+          className="pointer-events-none invisible truncate [grid-area:1/1] after:content-[attr(data-label)]" />}
         {searchInput}
         {!open && singleLabel && (
           <span className="pointer-events-none truncate [grid-area:1/1]">{singleLabel}</span>
         )}
       </span>
     );
+    return autoWidth && singleLabel
+      ? <Tooltip content={singleLabel} disabled={open}>{content}</Tooltip>
+      : content;
   }
 
   return <TruncatedValue value={singleLabel} placeholder={placeholder} />;

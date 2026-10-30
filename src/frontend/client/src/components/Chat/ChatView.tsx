@@ -1,15 +1,13 @@
 import { isApiError } from "@bisheng/api-client";
 import { ApiRequestFailure } from "~/components/ApiRequestFailure";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useUnactivate } from "react-activation";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useRecoilState } from "recoil";
-import { getRecommendedAppsApi } from "~/api/apps";
-import { writeAppChatOrigin, writeAppChatReturnTo } from "~/pages/appChat/appChatOrigin";
 import AiChatInput from "~/components/Chat/AiChatInput";
-import { resolveTaskModeOnNavigation } from "~/components/Chat/resolveTaskMode";
+import { preserveTaskModeChoice, resolveTaskModeOnNavigation } from "~/components/Chat/resolveTaskMode";
 import AiChatMessages from "~/components/Chat/AiChatMessages";
 import { PinnedTaskPanel } from "~/components/Linsight/Execution/PinnedTaskPanel";
 import { WorkspacePanel } from "~/components/Linsight/Artifacts/WorkspacePanel";
@@ -43,12 +41,11 @@ import {
 import { useChatAskHandoff, type ChatAsk } from "./chatAskHandoff";
 import useLocalize from "~/hooks/useLocalize";
 import store from "~/store";
-import { addConversation, cn, generateUUID } from "~/utils";
-import { Card, CardContent } from "../ui/Card";
+import { cn } from "~/utils";
 import Landing from "./Landing";
+import { DailyFeaturedApps } from "./DailyFeaturedApps";
 import Presentation from "./Presentation";
-import { ConversationData, QueryKeys } from "~/types/chat";
-import AppAvator from "../Avator";
+import { QueryKeys } from "~/types/chat";
 import { importMessagesToKnowledgeApi, listUploadableSpacesApi } from "~/api/messageExport";
 import { showApiError } from "~/api/request";
 import { ExportFormatSheet, MessageSelectionToolbar } from "~/components/Chat/MessageSelection";
@@ -423,17 +420,19 @@ const ChatView = ({
   // ended — so the drop was invisible and the NEXT turn silently went daily.
   // Placed after isTaskConversation on purpose: it is in the dep array.
   useEffect(() => {
-    // A manual toggle only binds to the conversation it was made in.
-    if (lastConversationIdRef.current !== conversationId) {
-      lastConversationIdRef.current = conversationId;
-      userToggledRef.current = false;
-    }
     // Only consumable once we are ON the rewritten URL. This effect is declared
     // AFTER the effect that raises the flag (it has to be — isTaskConversation is
     // in its dep array), so within the commit that raises it we would otherwise
     // eat the flag while still on /c/new and then derive `false` on the real
     // landing, knocking the user out of the mode they just submitted in.
     const isSelfRewrite = conversationId !== "new" && keepTaskModeOnRewriteRef.current;
+    userToggledRef.current = preserveTaskModeChoice(
+      lastConversationIdRef.current,
+      conversationId,
+      isSelfRewrite,
+      userToggledRef.current,
+    );
+    lastConversationIdRef.current = conversationId;
     if (isSelfRewrite) {
       keepTaskModeOnRewriteRef.current = false;
     }
@@ -1140,119 +1139,5 @@ const ChatView = ({
   );
 };
 
-const DailyFeaturedApps = ({ t }: { t: (k: string) => string }) => {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { setConversation } = store.useCreateConversationAtom(0);
-  const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
-  const appLastOriginKey = "app-last-origin";
-
-  const { data: dailyApps = [] } = useQuery<any[]>(
-    ["recommendedApps"],
-    () => getRecommendedAppsApi().then((res: any) => res?.data ?? []),
-    { staleTime: 5 * 60 * 1000, refetchOnWindowFocus: false },
-  );
-
-  const handleCardClick = (agent: any) => {
-    const _chatId = generateUUID(32);
-    const flowId = agent.id;
-    const flowType = agent.flow_type || agent.type;
-    const homeReturnTo = "/c/new";
-    writeAppChatOrigin(_chatId, "home");
-    writeAppChatReturnTo(_chatId, homeReturnTo);
-    try {
-      sessionStorage.setItem(`app-chat-entry:${_chatId}`, "home");
-      sessionStorage.setItem(appFlowOriginKey(String(flowId)), "home");
-      sessionStorage.setItem(appLastOriginKey, "home");
-    } catch {
-      // ignore storage failures
-    }
-    queryClient.setQueryData<ConversationData>([QueryKeys.allConversations], (convoData) => {
-      if (!convoData) return convoData;
-      return addConversation(convoData, {
-        conversationId: _chatId,
-        createdAt: "",
-        endpoint: null,
-        endpointType: null,
-        model: "",
-        flowId,
-        flowType,
-        title: agent.name,
-        tools: [],
-        updatedAt: "",
-      } as any);
-    });
-    setConversation((prevState: any) => ({ ...prevState, conversationId: _chatId }));
-    navigate(
-      `/app/${_chatId}/${flowId}/${flowType}?from=home-recommended&entry=home&returnTo=${encodeURIComponent(homeReturnTo)}`,
-      {
-        state: { appSurfaceReturn: homeReturnTo },
-      },
-    );
-  };
-  const displayApps = dailyApps;
-
-  if (dailyApps.length === 0) return null;
-
-  return (
-    <div className="relative z-10 w-full pb-24">
-      <div className="flex justify-between items-center mb-3 text-sm text-gray-500 max-w-[800px] mx-auto px-4">
-        <h2 className="text-sm text-gray-400">推荐应用</h2>
-      </div>
-      <div className="relative max-w-[800px] mx-auto px-4">
-        <div className="pr-1">
-          <div className="grid grid-cols-2 touch-desktop:grid-cols-4 gap-3 mb-3">
-            {displayApps.map((appItem) => (
-              <Card
-                key={appItem.id}
-                className="group flex flex-col py-0 rounded-lg shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-border-base overflow-hidden cursor-pointer hover:border-blue-500 hover:shadow-[0_4px_14px_rgb(var(--brand-500)/0.12)] transition-all duration-300 h-[142px] hover:-translate-y-1"
-                style={{
-                  background:
-                    "linear-gradient(135deg, rgb(var(--brand-500)/0.04) 0%, #fff 50%, rgb(var(--brand-500)/0.04) 100%)",
-                }}
-                onClick={() => handleCardClick(appItem)}
-              >
-                <CardContent className="h-full p-2 flex flex-col relative w-full">
-                  <div className="flex items-center gap-2.5 mb-2 shrink-0">
-                    <AppAvator
-                      id={appItem.name}
-                      url={appItem.logo}
-                      flowType={appItem.flow_type || appItem.type}
-                      className={`size-[32px] min-w-[32px] !rounded-lg`}
-                      iconClassName="w-5 h-5"
-                    />
-                    <div className="text-[15px] font-medium text-text-1 line-clamp-1 break-all">
-                      {appItem.name}
-                    </div>
-                  </div>
-                  <div className="text-[13px] text-text-3 line-clamp-2 break-all font-normal leading-[1.5]">
-                    {appItem.description}
-                  </div>
-
-                  <div className="mt-auto pt-2 relative h-[30px] shrink-0 w-full overflow-hidden">
-                    <div className="absolute inset-x-0 bottom-0 top-1 flex gap-1.5 flex-wrap overflow-hidden opacity-100 fine-pointer:group-hover:opacity-0 transition-opacity duration-200 pointer-events-none coarse-pointer:opacity-0">
-                      {appItem.tags &&
-                        appItem.tags.map((tag: any) => (
-                          <div
-                            key={tag.id || tag.name || tag}
-                            className="bg-fill-2 text-text-2 text-[12px] px-2 py-[2px] rounded-[4px] font-normal whitespace-nowrap"
-                          >
-                            {tag.name || tag}
-                          </div>
-                        ))}
-                    </div>
-                    <div className="absolute inset-x-0 bottom-0 top-1 flex items-center justify-center bg-blue-500 rounded-md text-white text-[13px] font-medium opacity-0 fine-pointer:group-hover:opacity-100 transform translate-y-2 fine-pointer:group-hover:translate-y-0 transition-all duration-300 coarse-pointer:opacity-100 coarse-pointer:translate-y-0">
-                      开始对话
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 export default memo(ChatView);

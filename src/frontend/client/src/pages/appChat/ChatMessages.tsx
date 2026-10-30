@@ -160,7 +160,7 @@ export default function ChatMessages({
                   <ClientUserActions
                     createTime={displayText(message.raw.create_time)}
                     text={message.text}
-                    canResend={!error && !inputDisabled && chatState?.flow.flow_type !== 10}
+                    canResend={!error?.code && !inputDisabled && chatState?.flow.flow_type !== 10}
                     searchUrl={!disabledSearch ? config?.dialog_quick_search : undefined}
                   />
                 )
@@ -176,7 +176,7 @@ export default function ChatMessages({
           }}
         />
 
-        {guideWord && !error && !inputDisabled && !inputForm && !readOnly && (
+        {guideWord && !error?.code && !inputDisabled && !inputForm && !readOnly && (
           <SuggestedQuestions
             questions={guideWord}
             canExecute={!readOnly}
@@ -184,7 +184,7 @@ export default function ChatMessages({
           />
         )}
         {!readOnly &&
-          !error && inputForm &&
+          !error?.code && inputForm &&
           (chatState?.flow.flow_type === 10 ? (
             <InputForm data={inputForm} flow={chatState.flow} logo={logo} />
           ) : (

@@ -29,6 +29,9 @@ def scope_ports(monkeypatch):
 
 
 async def test_verified_scope_overrides_stale_middleware_and_restores_it(scope_ports):
+    from bisheng.core.context.tenant import set_is_management_api
+
+    management_token = set_is_management_api(True)
     old = set_admin_scope_tenant_id(9)
     try:
         async with service.ServiceAccountScopeService.bind_request(
@@ -43,6 +46,7 @@ async def test_verified_scope_overrides_stale_middleware_and_restores_it(scope_p
         assert service.ServiceAccountScopeService.admitted_tenant() is None
     finally:
         old.var.reset(old)
+        management_token.var.reset(management_token)
 
 
 @pytest.mark.parametrize("selected,expected", [(None, "1"), (2, None), (2, "1"), (2, "0"), (2, "invalid")])
@@ -142,6 +146,7 @@ async def test_management_api_creation_follows_selected_tenant_and_rejects_old_f
     from fastapi import FastAPI
 
     from bisheng.common.dependencies.user_deps import UserPayload
+    from bisheng.core.context.tenant import tenant_execution_scope
     from bisheng.database.models.tenant import UserTenant
     from bisheng.open_api.api.dependencies import get_service_account_admin
     from bisheng.open_api.api.endpoints.service_account import router as accounts
@@ -185,9 +190,10 @@ async def test_management_api_creation_follows_selected_tenant_and_rejects_old_f
             "/api/v1/service-accounts", json={"name": "no-scope", "resource_owner_user_id": 21}
         )
         assert no_header.json()["status_code"] == 26073
-    async with open_api_db() as session:
-        stored = await session.get(ServiceAccount, item["id"])
-        assert stored.name == "F113-child" and stored.tenant_id == 2
+    with tenant_execution_scope(2):
+        async with open_api_db() as session:
+            stored = await session.get(ServiceAccount, item["id"])
+            assert stored.name == "F113-child" and stored.tenant_id == 2
 
 
 async def test_management_scope_http_requires_super_and_keeps_selection_when_target_unavailable(monkeypatch):
@@ -236,3 +242,64 @@ async def test_management_scope_http_requires_super_and_keeps_selection_when_tar
         for response in (await client.get(url), await client.put(url, json={"tenant_id": 2})):
             assert response.json()["status_code"] == 26022
     assert current["scope_tenant_id"] == 1
+
+
+@pytest.mark.parametrize("super_admin,writing", [(True, False), (True, True), (False, False)])
+async def test_global_list_scope_is_retired_for_every_actor(scope_ports, super_admin, writing):
+    from bisheng.core.context.tenant import is_tenant_filter_bypassed
+
+    scope_ports[0].return_value = None
+    with pytest.raises(ServiceAccountManagementScopeChangedError):
+        async with service.ServiceAccountScopeService.bind_request(
+            caller(super_admin=super_admin), expected_tenant="all", writing=writing
+        ):
+            pytest.fail("Retired global scope was admitted")
+    assert not is_tenant_filter_bypassed()
+    scope_ports[0].assert_not_awaited()
+    scope_ports[1].assert_not_awaited()
+
+
+async def test_list_http_is_concrete_and_rejects_legacy_global_requests(open_api_db, scope_ports):
+    import httpx
+    from fastapi import FastAPI
+
+    from bisheng.common.dependencies.user_deps import UserPayload
+    from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.database.models.tenant import Tenant
+    from bisheng.open_api.api.dependencies import get_service_account_admin
+    from bisheng.open_api.api.endpoints.service_account import router
+    from bisheng.open_api.api.exception_handlers import register_open_api_exception_handlers
+    from bisheng.open_api.domain.models.service_account import ServiceAccount
+
+    with bypass_tenant_filter():
+        async with open_api_db() as db:
+            db.add_all([
+                Tenant(id=1, tenant_code="root", tenant_name="Root organization"),
+                Tenant(id=2, tenant_code="department", tenant_name="Department tenant"),
+                ServiceAccount(id=1, tenant_id=1, name="root-account", resource_owner_user_id=21),
+                ServiceAccount(id=2, tenant_id=2, name="department-account", resource_owner_user_id=22),
+            ])
+            await db.commit()
+    operator = UserPayload(user_id=21, user_name="admin", tenant_id=1, user_role=[], is_global_super=True)
+    app = FastAPI()
+    app.dependency_overrides[get_service_account_admin] = lambda: operator
+    app.include_router(router, prefix="/api/v1")
+    register_open_api_exception_handlers(app)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as client:
+        url = "/api/v1/service-accounts"
+        blocked = await client.get(url, headers={"X-Service-Account-Tenant": "all"})
+        assert blocked.json()["status_code"] == ServiceAccountManagementScopeChangedError.Code
+        for selected in (1, 2):
+            scope_ports[0].return_value = selected
+            response = await client.get(url, headers={"X-Service-Account-Tenant": str(selected)})
+            assert response.json()["status_code"] == 200
+            assert response.json()["data"]["total"] == 1
+            assert {row["tenant_id"] for row in response.json()["data"]["data"]} == {selected}
+            assert response.json()["data"]["data"][0]["tenant_name"]
+        operator.is_global_super = False
+        operator.tenant_id = 2
+        denied = await client.get(url, headers={"X-Service-Account-Tenant": "1"})
+        assert denied.json()["status_code"] == ServiceAccountManagementScopeChangedError.Code
+        own = await client.get(url, headers={"X-Service-Account-Tenant": "2"})
+        assert own.json()["data"]["total"] == 1
+        assert own.json()["data"]["data"][0]["tenant_id"] == 2

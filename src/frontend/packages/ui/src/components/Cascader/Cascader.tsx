@@ -41,6 +41,7 @@ export function Cascader(props: CascaderProps) {
     checkStrictly = false,
     expandTrigger = 'click',
     showSearch,
+    autoWidth = false,
     onSearch,
     filterOption,
     loadData,
@@ -396,7 +397,7 @@ export function Cascader(props: CascaderProps) {
 
   const selectedEntries = selected.map(resolveEntry);
   const singleEntry = multiple ? undefined : selectedEntries[0];
-  const singleLabel = singleEntry?.options.map((option) => option.label).join(separator) ?? '';
+  const singleLabel = singleEntry?.options[singleEntry.options.length - 1]?.label ?? '';
   const hasValue = selected.length > 0;
   const searchableInTrigger = searchable && !phone;
   const comboboxProps: React.HTMLAttributes<HTMLElement> = {
@@ -422,6 +423,7 @@ export function Cascader(props: CascaderProps) {
       {...comboboxProps}
       aria-autocomplete="list"
       autoComplete="off"
+      size={autoWidth ? 1 : undefined}
       disabled={disabled}
       readOnly={readOnly}
       value={keyword}
@@ -441,11 +443,11 @@ export function Cascader(props: CascaderProps) {
       hasValue={hasValue}
       disabled={disabled}
       placeholder={placeholder}
-      separator={separator}
       removeLabel={removeLabel}
       selectedEntries={selectedEntries}
       singleLabel={singleLabel}
       searchableInTrigger={searchableInTrigger}
+      autoWidth={autoWidth}
       searchInput={searchInput}
       open={isOpen}
       onRemove={(path) => commit(selected.filter((item) => cascaderPathKey(item) !== cascaderPathKey(path)))}
@@ -470,7 +472,7 @@ export function Cascader(props: CascaderProps) {
       body={body}
       hasMultipleTags={multiple && hasValue}
       customTrigger={trigger}
-      className={className}
+      className={cn(autoWidth && 'w-fit', className)}
       comboboxProps={ownCombobox}
       onTriggerClick={handleTriggerClick}
       onClear={handleClear}

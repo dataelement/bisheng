@@ -1,6 +1,7 @@
 // @ts-strict-ignore
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { getLinsightSessionVersionList, userInputLinsightEvent, userStopLinsightEvent } from "~/api/linsight";
+import { appendStepFrame } from "~/components/Linsight/Execution/stepFold";
 import { SopStatus } from "~/store/linsight";
 import { useToastContext } from "~/Providers";
 import { toggleNav } from "~/utils";
@@ -94,7 +95,6 @@ export const useLinsightWebSocket = (versionId) => {
 
         websocket.onmessage = (event) => {
             const taskData = JSON.parse(event.data);
-            console.log('ws data :>> ', taskData);
             /**
              * 生成一级任务list
              * 生成当前一级任务下的二级任务list
@@ -291,6 +291,9 @@ export const useLinsightWebSocket = (versionId) => {
                     });
                     break;
                 case 'task_execute_step':
+                    // Fold same-call_id frames (token-delta thinking, tool start+end)
+                    // into one entry so history grows per step, not per token — see
+                    // stepFold.ts. Matches the per-call_id shape the backend persists.
                     updateLinsight(id, (prev) => {
                         let matched = false;
                         const newTasks = prev.tasks.map(task => {
@@ -298,7 +301,7 @@ export const useLinsightWebSocket = (versionId) => {
                                 matched = true;
                                 return {
                                     ...task,
-                                    history: [...(task.history || []), taskData.data]
+                                    history: appendStepFrame(task.history, taskData.data)
                                 };
                             } else {
                                 return {
@@ -308,7 +311,7 @@ export const useLinsightWebSocket = (versionId) => {
                                             matched = true;
                                             return {
                                                 ...child,
-                                                history: [...(child.history || []), taskData.data]
+                                                history: appendStepFrame(child.history, taskData.data)
                                             };
                                         }
                                         return child;
@@ -321,7 +324,7 @@ export const useLinsightWebSocket = (versionId) => {
                         // F035 Track H: session-level steps (task_id == session_version_id,
                         // e.g. planning-stage tool calls) live at flow level
                         return {
-                            sessionSteps: [...(prev.sessionSteps || []), taskData.data]
+                            sessionSteps: appendStepFrame(prev.sessionSteps, taskData.data)
                         };
                     });
                     break;

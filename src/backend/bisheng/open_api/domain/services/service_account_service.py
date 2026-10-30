@@ -19,6 +19,7 @@ from bisheng.core.context.tenant import (
     visible_tenant_ids,
 )
 from bisheng.database.models.audit_log import AuditLogDao
+from bisheng.database.models.tenant import TenantDao
 from bisheng.open_api.domain.models.api_credential import (
     REVOKE_REASON_SUBJECT_DELETED,
     SUBJECT_KIND_SERVICE_ACCOUNT,
@@ -177,14 +178,16 @@ class ServiceAccountService:
             page=page,
             page_size=page_size,
         )
+        tenants = await TenantDao.aget_by_ids(list({row.tenant_id for row in rows})) if rows else []
+        tenant_names = {tenant.id: tenant.tenant_name for tenant in tenants}
         return ServiceAccountPage(
-            data=[await cls._to_item(row) for row in rows],
+            data=[await cls._to_item(row, tenant_name=tenant_names.get(row.tenant_id)) for row in rows],
             total=total,
             idle_days=settings.open_api.service_account_idle_days,
         )
 
     @classmethod
-    async def _to_item(cls, row: ServiceAccount) -> ServiceAccountItem:
+    async def _to_item(cls, row: ServiceAccount, *, tenant_name: str | None = None) -> ServiceAccountItem:
         owner = await OwnerRepository.get_active_natural_person(row.resource_owner_user_id)
         keys = await CredentialService.list_by_subject(SUBJECT_KIND_SERVICE_ACCOUNT, row.id)
         active_keys = [key for key in keys if key.is_valid]
@@ -209,6 +212,7 @@ class ServiceAccountService:
         return ServiceAccountItem(
             id=row.id,
             tenant_id=row.tenant_id,
+            tenant_name=tenant_name,
             name=row.name,
             description=row.description,
             status=cls.status(row),

@@ -1,7 +1,7 @@
 services:
   office:
     container_name: bisheng-office
-    image: onlyoffice/documentserver:7.1.1
+    image: ${ONLYOFFICE_IMAGE:?set ONLYOFFICE_IMAGE in docker/.env (see .env.example)}
     ports:
       - "8701:80"
     environment:

@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { getServiceAccountApi, listServiceAccountsApi } from "@/controllers/API/serviceAccount";
 import { handleUiRequest, showApiError } from "@/controllers/request";
 import type { ServiceAccountItem } from "@/types/api/openApi";
+import { displayTenantName } from "@/utils/tenantDisplayName";
 import { formatIsoDateTime } from "@/util/utils";
 import { Tabs } from "@bisheng/ui";
 
@@ -28,6 +29,8 @@ import { ResourceGrantsTab } from "./ResourceGrantsTab";
 
 function ServiceAccountView() {
   const requestScope = useServiceAccountRequestScope();
+  const { appConfig } = useContext(locationContext);
+  const showTenant = !!appConfig?.multiTenantEnabled;
   const { t } = useTranslation();
   const [selected, setSelected] = useState<ServiceAccountItem | null>(null);
   const [keyword, setKeyword] = useState("");
@@ -150,6 +153,7 @@ function ServiceAccountView() {
         <TableHeader>
           <TableRow>
             <TableHead>{t("openApiManagement.fields.name")}</TableHead>
+            {showTenant && <TableHead>{t("openApiManagement.fields.tenant")}</TableHead>}
             <TableHead>{t("openApiManagement.fields.status")}</TableHead>
             <TableHead>{t("openApiManagement.fields.activeKeys")}</TableHead>
             <TableHead>{t("openApiManagement.fields.owner")}</TableHead>
@@ -167,6 +171,7 @@ function ServiceAccountView() {
                     <span className="truncate">{account.name}</span>
                   </Button>
                 </TableCell>
+                {showTenant && <TableCell>{displayTenantName(account.tenant_name) || "-"}</TableCell>}
                 <TableCell>
                   <Tag size="small" dot color={isEnabled ? "success" : "danger"}>
                     {t(isEnabled ? "openApiManagement.status.enabled" : "openApiManagement.status.disabled")}
@@ -225,7 +230,7 @@ function ServiceAccountView() {
           })}
           {list.isEmpty ? (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
+              <TableCell colSpan={showTenant ? 7 : 6} className="text-center text-muted-foreground">
                 {t("openApiManagement.empty")}
               </TableCell>
             </TableRow>

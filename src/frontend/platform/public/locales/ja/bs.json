@@ -672,12 +672,17 @@
       "spark": "iFLYTEK Spark",
       "tencent": "Tencent Cloud",
       "moonshot": "Moonshot AI",
-      "qianfan": "Baidu Qianfan"
+      "qianfan": "Baidu Qianfan",
+      "openaiCompatible": "OpenAI 互換"
     },
-    "sectionConnection": "接続情報",
     "sectionUsage": "利用設定",
     "providerType": "プロバイダーの種類",
-    "providerTypeTip": "API の呼び出し方式と、下に入力する接続情報を決めます。保存後は変更できません。",
+    "providerTypeTip": "保存後は変更できません",
+    "providerGroups": {
+      "cloud": "クラウドサービス",
+      "local": "セルフホスト型フレームワーク"
+    },
+    "openaiCompatibleSearchWords": "カスタム,互換,ゲートウェイ,プロキシ,custom",
     "dailyCallLimitTip": "このプロバイダーのすべてのモデルを合計した 1 日の呼び出し回数を制限します。上限を超えるとその日の呼び出しはエラーになり、翌日 0 時にリセットされます。",
     "dailyLimitPrefix": "1 日最大",
     "dailyLimitSuffix": "回",
@@ -1651,6 +1656,9 @@
       "invalidRange": "有効な開始日時と終了日時を選択してください。",
       "loadFailed": "記録を読み込めませんでした。再試行してください。",
       "exportFailed": "エクスポート結果を取得できませんでした。",
+      "exportBackground": "この画面を閉じてもエクスポートは継続します。「すべてエクスポート」を再度クリックすると進捗を確認できます。",
+      "exportCreateFailed": "エクスポートを開始できませんでした。再試行してください。",
+      "exportRows": "レコード数：{{count}}",
       "loading": "読み込み中…",
       "unknown": "不明",
       "empty": "該当する記録がありません",
@@ -2854,6 +2862,7 @@
       "revokeConfirmBody": "キーは直ちに使えなくなり、所有者の AI アシスタントはアクセスできなくなります。所有者はいつでも再生成できます。"
     },
     "tenantScope": {
+      "globalReadonlyHint": "すべてのテナントのサービスアカウントを表示しています。管理するにはテナントを選択してください。",
       "label": "管理するテナント",
       "choose": "先に右上で管理対象のテナントを選択してください",
       "hint": "サービスアカウントの表示先と作成先を選択します。既存アカウントの所属は変わりません。この選択は他の管理画面と共有されます。",
@@ -2889,13 +2898,12 @@
       "failed": "失敗"
     },
     "version": {
-      "placeholder": "バージョン",
       "loading": "読み込み中…",
-      "empty": "バージョンがありません",
       "loadFailed": "バージョンの読み込みに失敗しました",
-      "current": "実行中",
-      "pending": "適用待ち",
-      "readonlyTip": "バージョンは閲覧のみです。ホスティングアプリはここで切り替えできません"
+      "noCode": "コード未アップロード",
+      "latest": "最新バージョン {{version}}",
+      "running": "実行バージョン {{version}}",
+      "currentUnavailable": "実行バージョン不明"
     },
     "actions": {
       "stopTitle": "アプリをオフラインにしますか？",
@@ -4106,7 +4114,7 @@
       "ruleHelp": "ユーザー・部門・ロールごとに月間クレジットを設定します。有効な設定が複数該当する場合は最大値が適用され、Chat と Work で共有されます。有効な設定に該当しないメンバーは上限なしになります。",
       "scope": "対象範囲",
       "monthlyCredits": "1 人あたりの月間クレジット",
-      "creditRangeHint": "0 から {{max}} までのクレジットを、小数点以下 6 桁以内で入力してください。",
+      "creditRangeHint": "月あたり 0～{{max}} クレジット、小数点以下 1 桁まで。",
       "enabled": "ルールを有効化",
       "selectSubject": "対象を選択",
       "save": "保存",

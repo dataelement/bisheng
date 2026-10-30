@@ -677,12 +677,17 @@
       "spark": "讯飞星火",
       "tencent": "腾讯云",
       "moonshot": "月之暗面",
-      "qianfan": "百度千帆"
+      "qianfan": "百度千帆",
+      "openaiCompatible": "OpenAI 兼容"
     },
-    "sectionConnection": "连接信息",
     "sectionUsage": "使用设置",
     "providerType": "服务提供商类型",
-    "providerTypeTip": "决定调用接口的方式和下面需要填写的连接信息，保存后不能修改。",
+    "providerTypeTip": "保存后不能修改",
+    "providerGroups": {
+      "cloud": "云服务",
+      "local": "本地部署框架"
+    },
+    "openaiCompatibleSearchWords": "自定义,兼容,网关,代理,中转",
     "dailyCallLimitTip": "限制这个服务提供商下所有模型每天合计的调用次数。超出后当天的调用会直接报错，次日 0 点重新计数。",
     "dailyLimitPrefix": "每天最多",
     "dailyLimitSuffix": "次",
@@ -1651,6 +1656,9 @@
       "invalidRange": "请选择有效的开始和结束时间。",
       "loadFailed": "记录加载失败，请重试。",
       "exportFailed": "无法获取导出结果，请重试。",
+      "exportBackground": "关闭窗口不会取消导出，可再次点击“导出全部”查看进度。",
+      "exportCreateFailed": "导出任务创建失败，请重试。",
+      "exportRows": "记录数：{{count}}",
       "loading": "加载中…",
       "unknown": "未知",
       "empty": "没有符合条件的记录",
@@ -2854,6 +2862,7 @@
       "revokeConfirmBody": "吊销后立即失效，持有人的 AI 助手将无法访问平台知识；持有人可自行重新生成。"
     },
     "tenantScope": {
+      "globalReadonlyHint": "当前展示所有租户的服务账户；如需管理，请先选择具体租户。",
       "label": "管理租户",
       "choose": "请先在右上角选择管理租户",
       "hint": "选择查看和创建服务账号的租户，不改变已有账号的归属。此选择与其他管理页面共享。",
@@ -2889,13 +2898,12 @@
       "failed": "已失败"
     },
     "version": {
-      "placeholder": "版本",
       "loading": "加载中…",
-      "empty": "暂无版本",
       "loadFailed": "版本加载失败",
-      "current": "运行中",
-      "pending": "待生效",
-      "readonlyTip": "版本仅供查看，托管应用不支持在此切换版本"
+      "noCode": "未上传代码",
+      "latest": "最新版本 {{version}}",
+      "running": "运行版本 {{version}}",
+      "currentUnavailable": "运行版本未知"
     },
     "actions": {
       "stopTitle": "确认下线应用",
@@ -4106,7 +4114,7 @@
       "ruleHelp": "按用户、部门或角色设置每人每月积分。同时命中多条有效配置时取最高值，Chat 和 Work 共用。未命中任何有效配置的人员不限额度。",
       "scope": "适用范围",
       "monthlyCredits": "每人每月积分",
-      "creditRangeHint": "请输入 0 至 {{max}} 之间的积分，最多保留 6 位小数。",
+      "creditRangeHint": "每月 0～{{max}} 积分，最多 1 位小数。",
       "enabled": "启用规则",
       "selectSubject": "选择对象",
       "save": "保存",

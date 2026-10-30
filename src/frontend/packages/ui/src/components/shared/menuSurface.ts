@@ -143,9 +143,12 @@ export const OPTION_DESCRIPTION =
 /** §7.2 — the selected check: 16px, brand, at the right end of the row. */
 export const OPTION_CHECK = 'ml-auto size-4 shrink-0 text-blue-500';
 
-/** §5.3 — group title: 12/20 hint gray, 4px top/bottom, never selectable. */
+/**
+ * §5.3 — group title: 12/20 hint gray, 4px top/bottom, never selectable. A title that
+ * follows other rows gets 8px more above it, so each group visibly starts a new block.
+ */
 export const GROUP_LABEL =
-  'select-none px-1.5 py-1 text-[length:var(--font-size-1)] leading-[var(--line-height-1)] text-text-3';
+  'select-none px-1.5 py-1 text-[length:var(--font-size-1)] leading-[var(--line-height-1)] text-text-3 [&:not(:first-child)]:mt-2';
 
 /**
  * §5.3 — 1px `border-base`, as wide as the rows: it sits inside the panel's

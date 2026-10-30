@@ -1,7 +1,11 @@
-import { StrictMode, useCallback, useEffect, useState } from 'react';
-import { act, renderHook } from '@testing-library/react';
+import { StrictMode, useCallback, useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
+import { act, render, renderHook } from '@testing-library/react';
 import { parkChatAsk, useChatAskHandoff, type ChatAsk } from './chatAskHandoff';
 import { useChatModelResolution, readConversationModel } from '~/hooks/useChatModelResolution';
+import modelState from '~/store/modeltype';
+import { useConversationKnowledge } from '~/hooks/useConversationKnowledge';
+
+const { RecoilRoot, useRecoilState } = jest.requireActual<typeof import('recoil')>('recoil');
 
 let mockActivate: () => void;
 jest.mock('react-activation', () => ({ useActivate: (callback: () => void) => { mockActivate = callback; } }));
@@ -58,6 +62,42 @@ test('the same model still gets persisted for the new conversation', () => {
   renderHook(useLanding);
   expect(send).toHaveBeenCalledTimes(1);
   expect(readConversationModel('tester', 'daily', 'new')).toBe('1');
+});
+
+test.each([1, 2])('a knowledge ask settles once with shared model %s and survives consecutive asks', (modelId) => {
+  parkChatAsk({ ...question, modelId });
+  const select = jest.fn();
+  const view = renderHook(() => {
+    const [model, setModel] = useRecoilState(modelState.chatModel);
+    const { selectedOrgKbs, setSelectedOrgKbs } = useConversationKnowledge('tester', 'new');
+    const { persistPick } = useChatModelResolution({
+      userId: 'tester', conversationId: 'new', mode: 'daily', models, adminDefaultId: '1', ready: true,
+      onResolved: (value) => setModel({ id: Number(value.id), name: value.name || '' }),
+    });
+    const selectModel = useCallback((id: number) => {
+      select(id);
+      persistPick(id);
+      setModel({ id, name: 'Beta', manual: true, mode: 'daily' });
+      return true;
+    }, [persistPick, setModel]);
+    const sendMessage = useCallback((text: string) => send({ text, model: model.id, kbs: selectedOrgKbs }), [model, selectedOrgKbs]);
+    useChatAskHandoff({
+      conversationId: 'new', activeConversationId: 'new', locationKey: 'landing', selectedKbs: selectedOrgKbs,
+      setSelectedKbs: setSelectedOrgKbs, sendMessage, ready: true, selectedModelId: model.id,
+      selectModel, onModelUnavailable: rejected,
+    });
+  }, { wrapper: ({ children }) => <StrictMode><RecoilRoot>{children}</RecoilRoot></StrictMode> });
+  expect(select).toHaveBeenCalledTimes(1);
+  expect(send).toHaveBeenCalledTimes(1);
+  expect(send).toHaveBeenCalledWith({ text: 'Count entries', model: modelId, kbs: [{ id: 'space-1', name: 'Knowledge', type: 'space' }] });
+  parkChatAsk({ ...question, text: 'Another question', modelId });
+  act(() => mockActivate());
+  expect(select).toHaveBeenCalledTimes(2);
+  expect(send).toHaveBeenCalledTimes(2);
+  expect(send).toHaveBeenLastCalledWith({ text: 'Another question', model: modelId, kbs: [{ id: 'space-1', name: 'Knowledge', type: 'space' }] });
+  act(() => mockActivate());
+  expect(send).toHaveBeenCalledTimes(2);
+  view.unmount();
 });
 
 test('an unavailable model returns the question for editing and requires a fresh pick', () => {
@@ -192,4 +232,54 @@ test.each([
   }
   act(() => { mockActivate(); mockActivate(); });
   expect(sendMessage).toHaveBeenCalledTimes('attachment' in ask ? 0 : 1);
+});
+
+// The production model atom notifies subscribers synchronously. The composer
+// also publishes selection presence during layout, which flushes passive effects.
+test.each([1, 2])('prepares once when a synchronous model store publishes model %s during layout', (modelId) => {
+  let model = { id: 1 };
+  const listeners = new Set<() => void>();
+  const subscribe = (listener: () => void) => {
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+  };
+  const readModel = () => model;
+  const selectModel = jest.fn((id: number) => {
+    model = { id };
+    listeners.forEach((listener) => listener());
+    return true;
+  });
+  const sendMessage = jest.fn<boolean, [string]>(() => true);
+  const asks = [
+    { text: 'first question', modelId, space: { id: '11', name: 'First space' } },
+    { text: 'second question', modelId, space: { id: '12', name: 'Second space' } },
+  ];
+  function SelectionPresence({ selected, onChange }: { selected: boolean; onChange: (value: boolean) => void }) {
+    useLayoutEffect(() => { onChange(selected); }, [selected, onChange]);
+    return null;
+  }
+  function SynchronousLanding() {
+    const selectedModel = useSyncExternalStore(subscribe, readModel);
+    const [kbs, setKbs] = useState<Kb[]>([]);
+    const [, setHasSelection] = useState(false);
+    useChatAskHandoff({
+      conversationId: 'new', activeConversationId: 'new', locationKey: 'landing',
+      selectedKbs: kbs, setSelectedKbs: setKbs, selectedModelId: selectedModel.id,
+      selectModel, sendMessage: (text) => {
+        expect(selectedModel.id).toBe(modelId);
+        expect(kbs).toEqual([{ ...asks[sendMessage.mock.calls.length].space, type: 'space' }]);
+        return sendMessage(text);
+      },
+      ready: true, onModelUnavailable: rejected,
+    });
+    return <SelectionPresence selected={kbs.length > 0} onChange={setHasSelection} />;
+  }
+  parkChatAsk(asks[0]);
+  render(<StrictMode><SynchronousLanding /></StrictMode>);
+  expect(selectModel).toHaveBeenCalledTimes(1);
+  expect(sendMessage).toHaveBeenCalledTimes(1);
+  parkChatAsk(asks[1]);
+  act(() => mockActivate());
+  expect(selectModel).toHaveBeenCalledTimes(2);
+  expect(sendMessage).toHaveBeenCalledTimes(2);
 });

@@ -39,6 +39,7 @@ class ServiceAccountDelegateScope(BaseModel):
 class ServiceAccountItem(BaseModel):
     id: int
     tenant_id: int
+    tenant_name: str | None = None
     name: str
     description: str | None
     status: str

@@ -1,6 +1,6 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>F114 · 本地开发与提测进度</title><style>
 :root{color-scheme:light;--ink:#172238;--muted:#52647a;--line:#dbe2ec;--brand:#3155cc}*{box-sizing:border-box}body{margin:0;background:#f3f5fa;color:var(--ink);font:15px/1.8 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}main{max-width:1360px;margin:28px auto;padding:34px 42px;background:#fff;border:1px solid var(--line);border-radius:12px}h1{font-size:28px;line-height:1.4}h2{font-size:21px;border-bottom:1px solid var(--line);padding-bottom:8px;margin-top:38px;scroll-margin-top:16px}h3{font-size:17px}p,li{overflow-wrap:anywhere}blockquote{border-left:4px solid var(--brand);background:#f0f4ff;margin:12px 0;padding:6px 18px;color:var(--muted)}table{border-collapse:collapse;width:100%;font-size:14px;margin:18px 0}th,td{border:1px solid var(--line);padding:10px 12px;vertical-align:top;text-align:left}th{background:#eef2f8;color:#233852}tbody tr:nth-child(even){background:#fafbfe}code{font:13px/1.6 ui-monospace,SFMono-Regular,monospace;background:#eef1f6;border-radius:3px;padding:2px 4px;overflow-wrap:anywhere}a{color:var(--brand)}nav{padding:14px 18px;background:#f7f9fc;border:1px solid var(--line);border-radius:8px}nav a{display:inline-block;margin-right:18px;text-decoration:none;font-size:14px}.note{color:var(--muted);font-size:13px} @media(max-width:760px){body{font-size:14px}main{margin:0;padding:18px 14px;border:0;border-radius:0}h1{font-size:23px}th,td{padding:8px 6px;font-size:12px}table{display:block;overflow-x:auto}nav a{display:block}} @media print{@page{size:A4 landscape;margin:12mm}body{background:#fff;font-size:11px}main{border:0;padding:0;margin:0;max-width:none}h1{font-size:22px}h2{font-size:16px;break-after:avoid}h3{break-after:avoid}table{font-size:10px}th,td{padding:5px 7px}thead{display:table-header-group}tr{break-inside:avoid}nav{display:none}a{color:inherit;text-decoration:none}code{font-size:10px}blockquote{background:#f8f8f8}}
-pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow-x:auto}pre code{display:block;padding:12px}hr{border:0;border-top:1px solid var(--line);margin:30px 0}</style></head><body><main><h1>F114 · 本地开发与提测进度</h1><blockquote><strong>规格与设计均已确认；本地102/104任务完成。</strong>六动作、具体租户、真实提交主体、预览事务与v2阶段授权已接线。只执行必要定向验证；真实部署E2E、最终L2和工作区质量门禁仍待完成。未推送或部署116/189。下方历史设计复审是当时的静态记录。</blockquote><nav aria-label="目录"><a href="#verification-document">verification.md</a><a href="#task-document">tasks.md</a><a href="#code-review-document">code-review.md</a><a href="#ac-evidence-document">ac-evidence.md</a><a href="#design-document">design.md</a><a href="#review-document">design-review.md</a><a href="#critic-followup-document">architecture-critique-r4-r6.md</a><a href="#task-review-document">tasks-review.md</a></nav><section id="verification-document"><div class="toc">
+pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow-x:auto}pre code{display:block;padding:12px}hr{border:0;border-top:1px solid var(--line);margin:30px 0}</style></head><body><main><h1>F114 · 本地开发与提测进度</h1><blockquote><strong>规格与设计均已确认；本地102/104任务完成。</strong>六动作、具体租户、真实提交主体、预览事务与v2阶段授权已接线。只执行必要定向验证；真实部署E2E、最终L2和工作区质量门禁仍待完成。用户明确要求先本地合入feat/3.0.0，自行部署116后再验收；未推送或部署116/189。下方历史设计复审是当时的静态记录。</blockquote><nav aria-label="目录"><a href="#verification-document">verification.md</a><a href="#task-document">tasks.md</a><a href="#code-review-document">code-review.md</a><a href="#ac-evidence-document">ac-evidence.md</a><a href="#design-document">design.md</a><a href="#review-document">design-review.md</a><a href="#critic-followup-document">architecture-critique-r4-r6.md</a><a href="#task-review-document">tasks-review.md</a></nav><section id="verification-document"><div class="toc">
 <ul>
 <li><a href="#verification-f114">F114 开发与必要定向验证</a><ul>
 <li><a href="#verification-1">1. 当前结论</a></li>
@@ -12,14 +12,15 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow-x:auto}pre code{display
 </ul>
 </li>
 <li><a href="#verification-6-l1">6. L1、预审与交接</a></li>
+<li><a href="#verification-7-2026-10-30">7. 用户授权的先合入交接（2026-10-30）</a></li>
 </ul>
 </li>
 </ul>
 </div>
 <h1 id="verification-f114">F114 开发与必要定向验证</h1>
 <h2 id="verification-1">1. 当前结论</h2>
-<p>2026-10-30，用户已分别确认规格和设计，已完成任务拆解与本地实现。<strong>102/104 项代码、文档及 L1 任务完成；T063 真实部署 E2E、T064 最终 L2 和质量门禁仍未完成</strong>。不能宣称已部署、全部验收或可以合入。未执行 backend/前端全量测试，未更新 116/189、迁移存量资源、补历史 Grant、公开推送或发行镜像。</p>
-<p>本地实现提交：<code>6ac7704998087267af69b72adf542895b2694ff1</code>；该提交之后只补充此证据定位与HTML。工作树：<code>codex/114-vibe-permission-actions</code>。开发起点：<code>bb62790ad22a3204493e7dce5878e0a4f7109599</code>。当前本地发版线为 <code>ac2b09c8a2789021652d585f25d519888cfd0c0f</code>，新增三条 license/skill picker/sandbox 修复；本次不覆盖或回退这些增强，最终集成须从发版线合并下来后核对。</p>
+<p>2026-10-30，用户已分别确认规格和设计，已完成任务拆解与本地实现。<strong>102/104 项代码、文档及 L1 任务完成；T063 真实部署 E2E、T064 最终 L2 和质量门禁仍未完成</strong>。用户随后明确要求先提交合入 feat/3.0.0，由用户手动部署116后再做E2E；此次按该授权调整交付顺序，不代表验收通过。未执行 backend/前端全量测试，未更新 116/189、迁移存量资源、补历史 Grant、公开推送或发行镜像。</p>
+<p>本地实现提交：<code>6ac7704998087267af69b72adf542895b2694ff1</code>；该提交之后先补充证据定位与HTML，再按用户要求集成发版线；本次集成范围和定向结果见§7。工作树：<code>codex/114-vibe-permission-actions</code>。开发起点：<code>bb62790ad22a3204493e7dce5878e0a4f7109599</code>。集成前本地发版线为 <code>ac2b09c8a2789021652d585f25d519888cfd0c0f</code>，已于 <code>5d04b8290</code> 合并继承；随后获取远端 <code>56f543e6ee631d000071352baba8ebccd2a69427</code> 并集成，保留双方历史与兼容增强。</p>
 <h2 id="verification-2">2. 本地实现范围</h2>
 <ul>
 <li>复用六动作；基础管理五动作 OR；内容、数据、日志、配置与私有依赖 edit；确认配置重建 edit AND publish；删除不再加 owner 状态限制。</li>
@@ -148,7 +149,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow-x:auto}pre code{display
 </tr>
 </tbody>
 </table>
-<p>类型检查失败不能自动等同代码没有问题。合入前须在正确安装/构建依赖的工作区或 CI 重新完成门禁，只定位新增错误；T064 保持未完成。</p>
+<p>类型检查失败不能自动等同代码没有问题。上述为6ac770499实现阶段的工作区结果，不能当作最新集成线的质量结论。用户要求先合入供手动部署；正式验收仍须在正确安装/构建依赖的工作区或 CI 完成门禁，只定位新增错误；T064 保持未完成。</p>
 <h2 id="verification-5-e2e">5. 真实部署 E2E 待办（专用对象、必要范围）</h2>
 <p>依 AGENTS.md §6、已确认设计 §6.5/§7 和 e2e-test，真实 E2E 仍是必需项。本轮设计确认只授权开发；更新 116/189、重启服务和创建真实测试对象尚未获得本轮具体授权。</p>
 <h3 id="verification-51">5.1 自动化入口与当前缺口</h3>
@@ -217,7 +218,15 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow-x:auto}pre code{display
 </table>
 <p>DM8仅静态使用JsonType、关系列和500个ID分批，不宣称真实数据库或跨节点/arm验证通过。正式CI镜像发行、公开推送和tag均独立记录。</p>
 <h2 id="verification-6-l1">6. L1、预审与交接</h2>
-<p><a href="../../features/v3.0.0/114-vibe-permission-actions/task-reviews.md">task-reviews.md</a> 记录104项的L1范围、配对与依赖；<a href="../../features/v3.0.0/114-vibe-permission-actions/code-review.md">code-review.md</a> 仅为当前预审，最终 L2 待真实E2E和门禁后执行。原独立设计复审保留，不冒充独立代码审查。当前仍有验收缺口，不标整体完成、不请求合入。</p></section><hr><section id="task-document"><div class="toc">
+<p><a href="../../features/v3.0.0/114-vibe-permission-actions/task-reviews.md">task-reviews.md</a> 记录104项的L1范围、配对与依赖；<a href="../../features/v3.0.0/114-vibe-permission-actions/code-review.md">code-review.md</a> 仅为当前预审，最终 L2 待真实E2E和门禁后执行。原独立设计复审保留，不冒充独立代码审查。当前仍有验收缺口，不标整体完成；依用户后续明确授权先本地合入发版线，116部署由用户执行，之后再补真实E2E与最终审查。</p>
+<h2 id="verification-7-2026-10-30">7. 用户授权的先合入交接（2026-10-30）</h2>
+<p>用户原话：“先提交合并到feat/3.0.0 分支。我来手动部署到116环境，之后在进行e2e的验收测试”；随后“继续”。本次只办理本地提交与合并，不更新116/189，不发行镜像或tag，不把T063/T064改成完成。未新获得远端推送授权。</p>
+<p>详细冲突处理、保留内容、必要测试及部署前置见 <a href="../../features/v3.0.0/114-vibe-permission-actions/integration.md">integration.md</a>。合并包含本地发版线ac2b09c8a及本轮获取的远端56f543e6e；原工作区两份代码草稿与一份未跟踪文档均先存SHA-256并核对内容，不能覆盖。</p>
+<ul>
+<li>环境变量摘要读取继续用Repository严格过滤到当前具体租户；授权保留管理上下文并检查真实主体edit，不恢复owner/admin快捷放行。</li>
+<li>远端新增的服务账号全平台只读入口与AC-09至AC-18冲突，按已确认“仅具体租户”收敛；保留租户名称、取消/失效控制和其它兼容增强。</li>
+<li>定向结果：后端首轮22项通过、13项测试夹具不兼容；只复跑这13项后全部通过。前端27项通过；变更文件Ruff/ESLint通过。没有重跑全量测试，也没有进行真实部署验收。</li>
+</ul></section><hr><section id="task-document"><div class="toc">
 <ul>
 <li><a href="#tasks-tasks-vibe">Tasks: Vibe 全操作权限动作统一与具体租户管理视角</a><ul>
 <li><a href="#tasks-_1">状态</a></li>
@@ -240,6 +249,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow-x:auto}pre code{display
 <li><a href="#tasks-_6">必要接线补充（按已确认设计，不扩展产品范围）</a></li>
 </ul>
 </li>
+<li><a href="#tasks-104">集成记录（不改变104项功能任务完成口径）</a></li>
 </ul>
 </li>
 </ul>
@@ -279,8 +289,8 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow-x:auto}pre code{display
 </tr>
 <tr>
 <td>实现</td>
-<td>🚧 本地开发收尾</td>
-<td>102 / 104；T063真实E2E、T064最终L2/质量门禁仍未完成</td>
+<td>🚧 代码收尾并获先合入授权</td>
+<td>102 / 104；用户手动部署116后补T063真实E2E，T064最终L2/质量门禁仍未完成</td>
 </tr>
 </tbody>
 </table>
@@ -1251,7 +1261,9 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow-x:auto}pre code{display
   <strong>依赖</strong>：T101
   <strong>配对测试</strong>：T006</p>
 </li>
-</ul></section><hr><section id="code-review-document"><div class="toc">
+</ul>
+<h2 id="tasks-104">集成记录（不改变104项功能任务完成口径）</h2>
+<p>2026-10-30用户明确要求先提交合入feat/3.0.0，再自行部署116并继续E2E。冲突处理仅落实已确认的权限动作与具体租户合同，未新增产品范围。对应T006–T009范围准入、T014/环境变量编辑接线及T050前端范围防护，补充允许/拒绝测试与L1见integration.md。原T063/T064保持未完成；不把合入或已有设计自审当作验收通过。</p></section><hr><section id="code-review-document"><div class="toc">
 <ul>
 <li><a href="#code-review-f114">F114 代码与验收预审</a><ul>
 <li><a href="#code-review-_1">本轮发现及修复</a></li>
@@ -1262,7 +1274,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow-x:auto}pre code{display
 </div>
 <h1 id="code-review-f114">F114 代码与验收预审</h1>
 <p><strong>阶段</strong>：本地实现后的预审，尚非 SDD 第8步最终L2。</p>
-<p><strong>目标分支</strong>：feat/3.0.0。起点bb62790ad22a3204493e7dce5878e0a4f7109599；目标线后续三条无关增强保持。</p>
+<p><strong>目标分支</strong>：feat/3.0.0。起点bb62790ad22a3204493e7dce5878e0a4f7109599；已集成本地ac2b09c8a及本轮获取的远端56f543e6e，保留兼容增强，冲突按已确认F114具体租户与六动作解决。</p>
 <p><strong>审查范围</strong>：任务声明的实际接线、失败/事务边界及必要定向输出；真实E2E未运行，不给合入PASS。</p>
 <table>
 <thead>
@@ -1318,7 +1330,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow-x:auto}pre code{display
 <li>旧NULL用途预览不能被新身份协议收养，可能占满过期批次：新扫描只处理明确用途，部署前旧版回收并确认停止作为明确前置；未部署就不宣称旧环境已处理。</li>
 </ol>
 <h2 id="code-review-_2">当前结论</h2>
-<p><strong>NEEDS_FIX / NOT_READY_FOR_MERGE（验收与质量门禁尚未完成）</strong>。未发现仍需改变已确认产品口径的本地代码问题；这不是对未知部署行为的保证。下一步是取得专用环境更新/fixture授权后执行必要真实E2E，补证据并在满足依赖的工作区/CI完成门禁，然后按sdd-code-review执行正式L2。未擅自推送、合并或部署。</p></section><hr><section id="ac-evidence-document"><div class="toc">
+<p><strong>NEEDS_FIX / NOT_READY_FOR_ACCEPTANCE（验收与质量门禁尚未完成）</strong>。用户后续明确要求先提交合入feat/3.0.0，自行部署116后再验收；本次按该授权调整合入顺序。定向集成检查不替代真实E2E、CI或正式L2，T063/T064仍开放。未变更环境、发行镜像或新增推送授权。详见integration.md。</p></section><hr><section id="ac-evidence-document"><div class="toc">
 <ul>
 <li><a href="#ac-f114-ac">F114 AC 到当前本地证据</a></li>
 </ul>

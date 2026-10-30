@@ -10,6 +10,7 @@ import { SkillDetails } from '~/components/Skills/SkillDetails';
 import { SkillUploadDialog } from '~/components/Skills/SkillUploadDialog';
 import { type SkillRecord } from '~/components/Skills/types';
 import { useSkillCenter } from '~/components/Skills/useSkillCenter';
+import { matchesSkillSearch } from '~/components/Skills/localization';
 import { useLocalize } from '~/hooks';
 
 import { useToastContext } from '~/Providers';
@@ -40,7 +41,7 @@ export function SkillCenterPane({ search, uploadOpen, onUploadOpenChange: setUpl
   const requestedId = Number(params.get('skill'));
   const selected = Number.isInteger(requestedId) ? skills.find((skill) => skill.id === requestedId) : undefined;
   const keyword = search.trim().toLocaleLowerCase();
-  const filtered = skills.filter((skill) => `${skill.displayName} ${skill.name} ${skill.description}`.toLocaleLowerCase().includes(keyword));
+  const filtered = skills.filter((skill) => matchesSkillSearch(skill, keyword));
   const loading = personal.isLoading || personal.isFetching;
   const failed = personal.isError;
 

@@ -1,8 +1,11 @@
 """Credential-free capability discovery and audited, read-only demo execution."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 from time import monotonic
+from types import SimpleNamespace
 
 import jsonschema
 from fastapi import HTTPException
@@ -88,8 +91,40 @@ class CapabilityCatalogService:
             )
         return {"items": sorted(rows, key=lambda row: (row["kind"], row["id"]))}
 
-    async def picker_tools(self):
-        """Safe grouped catalog for per-task selection, independent of workbench curation."""
+    async def picker_tools(self, *, configured_tools: list[dict] | None = None):
+        """Project safe metadata; daily chat additionally restricts it to admin curation."""
+        if configured_tools is not None:
+            from bisheng.workstation.domain.services.workstation_service import WorkStationService
+
+            configured = await WorkStationService.afilter_tools_by_use_permission(configured_tools, self.user)
+            disabled = await UserToolAvailabilityService(self.user.user_id).disabled_ids(
+                [
+                    SimpleNamespace(id=child["id"], is_preset=group.get("is_preset") or 0)
+                    for group in configured
+                    for child in group.get("children") or []
+                ]
+            )
+            return [
+                {
+                    "id": group["id"],
+                    "name": group["name"],
+                    "description": group.get("description") or "",
+                    "is_preset": group.get("is_preset"),
+                    "default_checked": bool(group.get("default_checked")),
+                    "children": [
+                        {
+                            "id": child["id"],
+                            "name": child.get("name"),
+                            "tool_key": child.get("tool_key"),
+                            "desc": child.get("desc") or child.get("description") or "",
+                            "enabled": child["id"] not in disabled,
+                        }
+                        for child in group.get("children") or []
+                    ],
+                }
+                for group in configured
+                if group.get("children")
+            ]
         from bisheng.tool.domain.services.tool import ToolServices
 
         groups = await ToolServices(login_user=self.user).get_tool_list(action="use")
