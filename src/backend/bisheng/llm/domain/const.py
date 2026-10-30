@@ -25,6 +25,7 @@ class LLMServerType(Enum):
     VOLCENGINE = "volcengine"  # Large model of a volcanic engine
     SILICON = "silicon"  # Silicon-based flow
     MIND_IE = "MindIE"  # Ascendant Inference Engine MindIE
+    OPENAI_COMPATIBLE = "openai_compatible"  # Any server speaking the OpenAI API (gateways, One API, ...)
 
 
 # Model Type Enumeration

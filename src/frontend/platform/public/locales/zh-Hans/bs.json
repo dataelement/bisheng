@@ -677,12 +677,20 @@
       "spark": "讯飞星火",
       "tencent": "腾讯云",
       "moonshot": "月之暗面",
-      "qianfan": "百度千帆"
+      "qianfan": "百度千帆",
+      "openaiCompatible": "OpenAI 兼容"
     },
     "sectionConnection": "连接信息",
     "sectionUsage": "使用设置",
     "providerType": "服务提供商类型",
-    "providerTypeTip": "决定调用接口的方式和下面需要填写的连接信息，保存后不能修改。",
+    "providerTypeTip": "决定调用接口的方式和下面需要填写的连接信息，保存后不能修改。列表里没有你的服务、但它提供 OpenAI 格式接口时，选「OpenAI 兼容」。",
+    "providerGroups": {
+      "generic": "通用协议",
+      "cloud": "云服务",
+      "local": "本地部署框架"
+    },
+    "openaiCompatibleDesc": "适用于任何提供 OpenAI 格式接口的服务，如 One API、自建网关",
+    "openaiCompatibleSearchWords": "自定义,兼容,网关,代理,中转",
     "dailyCallLimitTip": "限制这个服务提供商下所有模型每天合计的调用次数。超出后当天的调用会直接报错，次日 0 点重新计数。",
     "dailyLimitPrefix": "每天最多",
     "dailyLimitSuffix": "次",

@@ -17,7 +17,7 @@ import { userContext } from "@/contexts/userContext";
 import { addLLmServer, deleteLLmServer, getLLmServerDetail, updateLLmServer } from "@/controllers/API/finetune";
 import { showApiError } from "@/controllers/request";
 import { useAdminScope } from "@/hooks/useAdminScope";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CustomForm } from "./CustomForm";
 import { canShareToChildren, isGlobalSuperUser } from "./permissions";
@@ -26,27 +26,32 @@ import { useModelProviderInfo } from "./useLink";
 import { ModelItem } from "./ModelItem";
 import { hasDuplicateModelName, hasInvalidModelName, trimModelNames } from "./modelNameTrim";
 
+// `group` is an i18n key under model.providerGroups; the dropdown groups options in first-appearance order.
 export const modelProvider = [
-    { "name": "OpenAI", "value": "openai" },
-    { "name": "Azure OpenAI", "value": "azure_openai" },
-    { "name": "Ollama", "value": "ollama" },
-    { "name": "xinference", "value": "xinference" },
-    { "name": "llamacpp", "value": "llamacpp" },
-    { "name": "vllm", "value": "vllm" },
-    { "name": "", "labelKey": "model.providerNames.qwen", "value": "qwen" },
-    { "name": "DeepSeek", "value": "deepseek" },
-    { "name": "", "labelKey": "model.providerNames.silicon", "value": "silicon" },
-    { "name": "", "labelKey": "model.providerNames.volcengine", "value": "volcengine" },
-    { "name": "", "labelKey": "model.providerNames.zhipu", "value": "zhipu" },
-    { "name": "", "labelKey": "model.providerNames.spark", "value": "spark" },
-    { "name": "", "labelKey": "model.providerNames.tencent", "value": "tencent" },
-    { "name": "", "labelKey": "model.providerNames.moonshot", "value": "moonshot" },
-    { "name": "", "labelKey": "model.providerNames.qianfan", "value": "qianfan" },
-    { "name": "Minimax", "value": "minimax" },
-    { "name": "Anthropic", "value": "anthropic" },
-    { "name": "MindIE", "value": "MindIE" },
+    { "name": "", "labelKey": "model.providerNames.openaiCompatible", "value": "openai_compatible", "group": "generic", "descriptionKey": "model.openaiCompatibleDesc" },
+    { "name": "OpenAI", "value": "openai", "group": "cloud" },
+    { "name": "Azure OpenAI", "value": "azure_openai", "group": "cloud" },
+    { "name": "", "labelKey": "model.providerNames.qwen", "value": "qwen", "group": "cloud" },
+    { "name": "DeepSeek", "value": "deepseek", "group": "cloud" },
+    { "name": "", "labelKey": "model.providerNames.silicon", "value": "silicon", "group": "cloud" },
+    { "name": "", "labelKey": "model.providerNames.volcengine", "value": "volcengine", "group": "cloud" },
+    { "name": "", "labelKey": "model.providerNames.zhipu", "value": "zhipu", "group": "cloud" },
+    { "name": "", "labelKey": "model.providerNames.spark", "value": "spark", "group": "cloud" },
+    { "name": "", "labelKey": "model.providerNames.tencent", "value": "tencent", "group": "cloud" },
+    { "name": "", "labelKey": "model.providerNames.moonshot", "value": "moonshot", "group": "cloud" },
+    { "name": "", "labelKey": "model.providerNames.qianfan", "value": "qianfan", "group": "cloud" },
+    { "name": "Minimax", "value": "minimax", "group": "cloud" },
+    { "name": "Anthropic", "value": "anthropic", "group": "cloud" },
+    { "name": "Ollama", "value": "ollama", "group": "local" },
+    { "name": "xinference", "value": "xinference", "group": "local" },
+    { "name": "llamacpp", "value": "llamacpp", "group": "local" },
+    { "name": "vllm", "value": "vllm", "group": "local" },
+    { "name": "MindIE", "value": "MindIE", "group": "local" },
 ]
-const bishengModelProvider = { "name": "bishengRT", "value": "bisheng_rt" }
+const bishengModelProvider = { "name": "bishengRT", "value": "bisheng_rt", "group": "local" }
+
+// Admins looking for a "custom" provider search for these words; they all lead to the OpenAI-compatible type.
+const OPENAI_COMPATIBLE_SEARCH_WORDS = ['custom', 'compatible', 'one api', 'oneapi', 'gateway', 'proxy']
 
 // Providers with a localized display name carry `labelKey`; the rest use `name` as-is.
 const providerLabel = (provider, translate) => provider?.labelKey ? translate(provider.labelKey) : (provider?.name || '')
@@ -239,6 +244,14 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         })
     }
 
+    const filterProvider = useCallback((keyword: string, option: { value: string | number, label: string }) => {
+        const word = keyword.trim().toLowerCase()
+        if (option.label.toLowerCase().includes(word)) return true
+        if (option.value !== 'openai_compatible') return false
+        const localized = t('model.openaiCompatibleSearchWords').split(',')
+        return [...OPENAI_COMPATIBLE_SEARCH_WORDS, ...localized].some(w => w.trim().toLowerCase().includes(word))
+    }, [t])
+
     const _modelProvider = useMemo(() => {
         return id === -1 ? modelProvider : [...modelProvider, bishengModelProvider]
     }, [id])
@@ -277,7 +290,13 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                         disabled={id !== -1}
                         options={_modelProvider
                             .filter(model => model.value != null && model.value !== '')
-                            .map(model => ({ value: model.value, label: providerLabel(model, t) }))}
+                            .map(model => ({
+                                value: model.value,
+                                label: providerLabel(model, t),
+                                group: t(`model.providerGroups.${model.group}`),
+                                description: model.descriptionKey ? t(model.descriptionKey) : undefined,
+                            }))}
+                        filterOption={filterProvider}
                         value={formData.type || null}
                         onChange={(val) => { if (val != null) handleTypeChange(val) }}
                     />

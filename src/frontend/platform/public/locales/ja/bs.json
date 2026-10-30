@@ -672,12 +672,20 @@
       "spark": "iFLYTEK Spark",
       "tencent": "Tencent Cloud",
       "moonshot": "Moonshot AI",
-      "qianfan": "Baidu Qianfan"
+      "qianfan": "Baidu Qianfan",
+      "openaiCompatible": "OpenAI 互換"
     },
     "sectionConnection": "接続情報",
     "sectionUsage": "利用設定",
     "providerType": "プロバイダーの種類",
-    "providerTypeTip": "API の呼び出し方式と、下に入力する接続情報を決めます。保存後は変更できません。",
+    "providerTypeTip": "API の呼び出し方式と、下に入力する接続情報を決めます。保存後は変更できません。一覧にないサービスでも OpenAI 形式の API を提供していれば、「OpenAI 互換」を選んでください。",
+    "providerGroups": {
+      "generic": "汎用プロトコル",
+      "cloud": "クラウドサービス",
+      "local": "セルフホスト型フレームワーク"
+    },
+    "openaiCompatibleDesc": "OpenAI 形式の API を提供するあらゆるサービスに対応（One API、自社ゲートウェイなど）",
+    "openaiCompatibleSearchWords": "カスタム,互換,ゲートウェイ,プロキシ,custom",
     "dailyCallLimitTip": "このプロバイダーのすべてのモデルを合計した 1 日の呼び出し回数を制限します。上限を超えるとその日の呼び出しはエラーになり、翌日 0 時にリセットされます。",
     "dailyLimitPrefix": "1 日最大",
     "dailyLimitSuffix": "回",
