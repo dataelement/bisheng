@@ -3291,6 +3291,9 @@
       "title": "Release notes",
       "empty": "No release notes provided",
       "column": "Version notes"
+    },
+    "permissions": {
+      "managementPreviewTitle": "Management preview"
     }
   },
   "dsh": {

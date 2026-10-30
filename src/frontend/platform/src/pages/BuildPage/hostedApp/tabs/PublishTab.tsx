@@ -19,6 +19,7 @@
  * The backend's configured address remains available to API/CLI consumers.
  * Local development forwards `/apps/` to the installed app entry via Vite.
  */
+import { appActionState } from "../appActions"
 import { Button } from "@bisheng/ui"
 import { notification } from "@bisheng/ui"
 import type {
@@ -99,6 +100,7 @@ export function PublishTab({
   })
 
   const appRef = { appId: app.app_id, name: app.name, state: app.state }
+  const actions = appActionState(app.allowed_actions)
   const online = app.state === "online"
   const stopped = app.state === "stopped"
   const parked = app.state === "pending_capacity"
@@ -160,11 +162,11 @@ export function PublishTab({
         title={t("hostedApp.publish.overviewTitle")}
         actions={
           <>
-            {online && actionButton("stop", stopApp, t("hostedApp.publish.stop"))}
-            {stopped &&
+            {online && actions.unpublish && actionButton("stop", stopApp, t("hostedApp.publish.stop"))}
+            {stopped && actions.publish &&
               actionButton("resume", resumeApp, t("hostedApp.publish.resume"))}
-            {parked &&
-              canManualPublish !== false &&
+            {parked && actions.publish &&
+              canManualPublish === true &&
               actionButton(
                 "manualPublish",
                 manualPublishApp,

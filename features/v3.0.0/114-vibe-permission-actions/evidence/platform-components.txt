@@ -1,0 +1,10 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v3.2.7 <f114-worktree>/src/frontend/platform
+
+ ✓ src/test/f114AppActions.test.tsx (3 tests) 50ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  18:07:41
+   Duration  1.68s (transform 677ms, setup 175ms, collect 921ms, tests 50ms, environment 324ms, prepare 55ms)

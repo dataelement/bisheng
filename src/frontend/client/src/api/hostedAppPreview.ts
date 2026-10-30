@@ -32,7 +32,7 @@ interface ApiResponse<T> {
  * nullable session. 「拉起中」 is the client's own: the platform answers only
  * once the instance is ready, so there is no half-started state to report.
  */
-export type PreviewState = "absent" | "running" | "reclaimed";
+export type PreviewState = "absent" | "starting" | "running" | "reclaimed";
 
 /**
  * Which of the three reclaim triggers ended it — the panel says so, because
@@ -77,7 +77,7 @@ const base = (appId: string, versionId: string) =>
 
 /** This approver's own instance, if there is one, plus whether one is possible. */
 export async function getPreviewStatusApi(appId: string, versionId: string): Promise<PreviewStatus> {
-  return unwrap(await request.get<ApiResponse<PreviewStatus>>(base(appId, versionId)));
+  return unwrap(await request.get<ApiResponse<PreviewStatus>>((base(appId, versionId) + "?purpose=approval")));
 }
 
 /** Raise one. An instance that is already running comes back unchanged. */
@@ -85,7 +85,7 @@ export async function startPreviewApi(appId: string, versionId: string): Promise
   // `request.post` is untyped (it returns `response.data` as `any`), so the
   // envelope type is asserted here rather than at the call — the alternative is
   // an `any` leaking into every caller of this module.
-  return unwrap((await request.post(base(appId, versionId), {})) as ApiResponse<PreviewStatus>);
+  return unwrap((await request.post(base(appId, versionId) + "?purpose=approval", {})) as ApiResponse<PreviewStatus>);
 }
 
 /** 「手动回收」. Only one's own instance; the backend refuses anybody else's. */
@@ -96,7 +96,7 @@ export async function reclaimPreviewApi(
 ): Promise<PreviewStatus> {
   return unwrap(
     await request.delete<ApiResponse<PreviewStatus>>(
-      `${base(appId, versionId)}/${encodeURIComponent(sessionId)}`,
+      `${base(appId, versionId)}/${encodeURIComponent(sessionId)}?purpose=approval`,
     ),
   );
 }

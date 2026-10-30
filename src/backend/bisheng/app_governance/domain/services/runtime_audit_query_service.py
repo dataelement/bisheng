@@ -52,8 +52,14 @@ class RuntimeAuditQueryService:
         enabled()
         if not 1 <= limit <= 100:
             raise RuntimeAuditFilterInvalidError()
-        scope = await self.scope_resolver(user, tenant_id)
         requested, frozen = normalize(kind, filters)
+        scope = (
+            await self.scope_resolver(user, tenant_id, app_id=requested["app_id"])
+            if requested.get("app_id")
+            else await self.scope_resolver(user, tenant_id)
+        )
+        if scope.authorized_app_ids is not None:
+            frozen["authorized_app_ids"] = list(scope.authorized_app_ids)
         fingerprint = digest([kind, scope.digest, requested])
         after = None
         if cursor:
@@ -119,8 +125,14 @@ class RuntimeAuditQueryService:
         enabled()
         if not 1 <= limit <= 100 or offset < 0 or len(query) > 128:
             raise RuntimeAuditFilterInvalidError()
-        scope = await self.scope_resolver(user, tenant_id)
         requested, frozen = normalize(kind, filters)
+        scope = (
+            await self.scope_resolver(user, tenant_id, app_id=requested["app_id"])
+            if requested.get("app_id")
+            else await self.scope_resolver(user, tenant_id)
+        )
+        if scope.authorized_app_ids is not None:
+            frozen["authorized_app_ids"] = list(scope.authorized_app_ids)
         for key in ("app_id", "visitor_id", "credential_id"):
             if key in requested and not await self.repo.selector_exists(scope, kind, frozen, key, requested[key]):
                 raise RuntimeAuditFilterInvalidError()

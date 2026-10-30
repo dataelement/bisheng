@@ -63,6 +63,7 @@ async def open_api_access_context(
 ) -> AsyncIterator[OpenApiPrincipal]:
     """Authenticate and install the same execution context for HTTP or MCP."""
 
+    headers = tuple(headers)
     principal = await credential_validator(authorization)
     tenant_token = current_tenant_id.set(principal.tenant_id)
     visible_token = visible_tenant_ids.set(frozenset({DEFAULT_TENANT_ID, principal.tenant_id}))
@@ -112,6 +113,27 @@ async def open_api_access_context(
             on_behalf_of=on_behalf_of,
             end_user=end_user,
         )
+        if principal.actor_kind == HOSTED_APP_ACTOR_KIND:
+            from bisheng.open_api.domain.services.model_range_policy import (
+                ACCESS_TOKEN_HEADER,
+                get_access_subject_verifier,
+            )
+            from bisheng.open_api.domain.services.preview_context import bind_preview_principal
+
+            token = next((value for key, value in headers if key.lower() == ACCESS_TOKEN_HEADER.lower()), None)
+            verified = (
+                get_access_subject_verifier().verify(
+                    token, app_id=principal.subject_ref or "", tenant_id=principal.tenant_id
+                )
+                if token
+                else None
+            )
+            # Invalid signed identity is never downgraded to app_self.
+            if token and verified is None:
+                from bisheng.common.errcode.open_api import OpenApiCredentialInvalidError
+
+                raise OpenApiCredentialInvalidError()
+            principal = await bind_preview_principal(principal, verified)
         if connection_scope is not None:
             connection_scope[OPEN_API_PRINCIPAL_SCOPE_KEY] = principal
         if principal.mode not in marker.modes:

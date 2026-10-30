@@ -12,7 +12,7 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
 from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import RuntimeConflict
-from bisheng.app_runtime.domain.schemas.runtime_delivery import ExecutionFactInput, UploadInput
+from bisheng.app_runtime.domain.schemas.runtime_delivery import ExecutionFactInput, StageAuthorizationInput, UploadInput
 from bisheng.app_runtime.domain.services.runtime_operation_service import RuntimeOperationService, consume_runtime_nonce
 from bisheng.app_runtime.domain.services.runtime_protocol import ProtocolRejected, authenticate
 from bisheng.common.services.config_service import settings
@@ -93,6 +93,14 @@ async def node_plan(identity=Depends(role("manager")), svc=Depends(service)):
 async def operation(operation_id: str, identity=Depends(role("manager")), svc=Depends(service)):
     async with svc.scope(identity, operation_id=operation_id) as op:
         return await svc.describe(op)
+
+
+@router.post("/operations/{operation_id}/authorize-step")
+async def authorize_step(
+    operation_id: str, body: StageAuthorizationInput, identity=Depends(role("manager")), svc=Depends(service)
+):
+    async with svc.scope(identity, operation_id=operation_id) as op:
+        return await svc.authorize_step(op, identity, body)
 
 
 class Claim(BaseModel):

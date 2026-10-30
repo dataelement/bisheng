@@ -3,6 +3,11 @@ import { AppPreviewPanel } from "./AppPreviewPanel";
 import type { LocalizeFn } from "./approvalPresentation";
 import type { PreviewStatus } from "~/api/hostedAppPreview";
 
+jest.mock('bisheng-icons',()=>{
+  const actual=jest.requireActual('bisheng-icons');
+  return {...actual,Outlined:{...actual.Outlined,Eye:()=>null,ViewOnNewTab:()=>null}};
+});
+jest.mock('~/utils/apiStatusError',()=>({extractApiErrorMessage:(error:Error)=>error.message}));
 const mockGetPreviewStatusApi = jest.fn();
 const mockStartPreviewApi = jest.fn();
 const mockReclaimPreviewApi = jest.fn();
@@ -200,4 +205,12 @@ test("a failed status read is reported rather than drawn as 'nothing raised'", a
   await waitFor(() =>
     expect(screen.getByText("com_approval_preview_start").closest("button")).toBeDisabled(),
   );
+});
+
+
+test('a durable starting preview cannot enqueue another start',async()=>{
+  mockGetPreviewStatusApi.mockResolvedValue(status({state:'starting',session_id:'pending'}));
+  renderPanel();
+  await waitFor(()=>expect(screen.getByText('com_approval_preview_start').closest('button')).toBeDisabled());
+  expect(mockStartPreviewApi).not.toHaveBeenCalled();
 });

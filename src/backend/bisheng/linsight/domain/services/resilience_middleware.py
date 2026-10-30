@@ -78,6 +78,42 @@ _TRUNCATION_FINISH_REASONS = frozenset({"length", "max_tokens", "max_output_toke
 
 
 # ---------------------------------------------------------------------------
+# Truncated-turn guard
+#
+# The counterpart of the L2 guard for a cut-off turn that carries NO tool call.
+# deepagents reads a tool-call-less AIMessage as "the agent is done", so a model
+# that spends its whole output budget on reasoning ends the graph as if it had
+# finished: the task then closes COMPLETED through the direct-answer fallback,
+# with whatever narration an EARLIER turn emitted as its answer.
+#
+# Measured on a community beta6 run (2026-10-30, PDF→docx): one main-graph call
+# reasoned for 32000 tokens and hit the limit with ``content_len=0`` and no tool
+# call; the task completed "successfully" with the answer "Let me read the rest of
+# the helpers…" (an earlier turn's text) and a fallback ``报告.md`` instead of a
+# docx. Re-send once with a nudge to reason less; if it truncates again, fail the
+# main graph honestly / degrade the subagent. Partial TEXT is not exempt: a final
+# answer cut mid-sentence is just as unfinished.
+# ---------------------------------------------------------------------------
+
+_TRUNCATED_TURN_NUDGE = (
+    "⚠️ 你上一次的输出因过长被截断（finish_reason=length），没有给出任何工具调用或完整答复。"
+    "请大幅缩短思考过程，直接调用下一步需要的工具；如果任务已经完成，请简短给出最终答复。"
+)
+
+# One retry only: every attempt re-sends the whole request (79k input tokens in the
+# measured case) and may burn the full output budget again.
+_TRUNCATED_TURN_RETRY_LIMIT = 1
+
+
+class ModelOutputTruncatedError(RuntimeError):
+    """The model hit its output-token limit without producing a tool call or answer.
+
+    ``llm_error_classifier`` matches this by class name (``common`` must not import
+    ``linsight``) to label it ``output_truncated``.
+    """
+
+
+# ---------------------------------------------------------------------------
 # Incomplete-stream guard
 #
 # A provider can close the SSE stream mid-turn WITHOUT raising anything: httpx
@@ -259,6 +295,27 @@ def _is_truncated_tool_call(response: object) -> bool:
     if finish not in _TRUNCATION_FINISH_REASONS:
         return False
     return bool(getattr(ai, "tool_calls", None)) or bool(getattr(ai, "invalid_tool_calls", None))
+
+
+def _is_truncated_turn(response: object) -> bool:
+    """True when the model was cut off by the token limit WITHOUT any tool call.
+
+    The disjoint twin of ``_is_truncated_tool_call`` — see the truncated-turn block
+    above for why such a turn must not be read as a finished one.
+    """
+    ai = _response_ai_message(response)
+    if ai is None:
+        return False
+    meta = getattr(ai, "response_metadata", None) or {}
+    finish = meta.get("finish_reason") or meta.get("stop_reason")
+    if finish not in _TRUNCATION_FINISH_REASONS:
+        return False
+    return not (getattr(ai, "tool_calls", None) or getattr(ai, "invalid_tool_calls", None))
+
+
+def _with_truncated_turn_nudge(request: ModelRequest) -> ModelRequest:
+    """A new request with the reason-less nudge appended (ephemeral — retry only)."""
+    return request.override(messages=[*request.messages, HumanMessage(content=_TRUNCATED_TURN_NUDGE)])
 
 
 def _is_incomplete_stream_response(response: object) -> bool:
@@ -645,6 +702,7 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         current, budget_key = self._apply_turn_budget(request)
         exc_attempts = 0
         trunc_attempts = 0
+        truncated_turn_attempts = 0
         incomplete_attempts = 0
         while True:
             try:
@@ -678,6 +736,23 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
                 )
                 current = _with_truncation_nudge(current)
                 continue
+            # Truncated-turn guard: cut off with no tool call → the graph would END as
+            # if finished. Nudge + retry once, then fail (main) / degrade (subagent).
+            if _is_truncated_turn(response):
+                if truncated_turn_attempts < _TRUNCATED_TURN_RETRY_LIMIT:
+                    truncated_turn_attempts += 1
+                    logger.warning(
+                        "[linsight-resilience] truncated turn without tool call (finish_reason=length); "
+                        f"nudging to reason less (retry {truncated_turn_attempts}/{_TRUNCATED_TURN_RETRY_LIMIT})"
+                    )
+                    current = _with_truncated_turn_nudge(current)
+                    continue
+                return self._degrade_or_raise(
+                    ModelOutputTruncatedError(
+                        "model output hit the token limit without a tool call or answer "
+                        f"({_TRUNCATED_TURN_RETRY_LIMIT + 1} attempts)"
+                    )
+                )
             # Incomplete-stream guard: a stream closed mid-turn yields a tool-call-less
             # AIMessage that the graph reads as a clean finish. Re-send the call; only
             # when it keeps coming back incomplete do we fail (main graph) / degrade
@@ -723,6 +798,7 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         current, budget_key = self._apply_turn_budget(request)
         exc_attempts = 0
         trunc_attempts = 0
+        truncated_turn_attempts = 0
         incomplete_attempts = 0
         while True:
             try:
@@ -743,6 +819,18 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
                 trunc_attempts += 1
                 current = _with_truncation_nudge(current)
                 continue
+            # Truncated-turn guard — see the async twin above.
+            if _is_truncated_turn(response):
+                if truncated_turn_attempts < _TRUNCATED_TURN_RETRY_LIMIT:
+                    truncated_turn_attempts += 1
+                    current = _with_truncated_turn_nudge(current)
+                    continue
+                return self._degrade_or_raise(
+                    ModelOutputTruncatedError(
+                        "model output hit the token limit without a tool call or answer "
+                        f"({_TRUNCATED_TURN_RETRY_LIMIT + 1} attempts)"
+                    )
+                )
             # Incomplete-stream guard — see the async twin above.
             if _is_incomplete_stream_response(response):
                 if incomplete_attempts < _INCOMPLETE_STREAM_RETRY_LIMIT:

@@ -13,8 +13,7 @@
  * which lands here as an inline notice. The alternative — a real 403 — makes
  * the platform interceptor navigate the whole SPA to `/403`.
  */
-import { useContext } from "react"
-import { userContext } from "@/contexts/userContext"
+import { appActionState } from "./appActions"
 import { AppSecretSettings } from "./publish/AppSecretSettings"
 import { LoadingIcon } from "@/components/bs-icons/loading"
 import { Tabs } from "@bisheng/ui"
@@ -45,9 +44,7 @@ export function HostedAppDetail() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   const requested = searchParams.get("tab") || ""
-  const activeTab = (TABS as readonly string[]).includes(requested)
-    ? requested
-    : "publish"
+  const requestedTab = (TABS as readonly string[]).includes(requested) ? requested : "publish"
 
   const {
     app,
@@ -72,7 +69,8 @@ export function HostedAppDetail() {
     reload: reloadPublishStatus,
   } = usePublishStatus(appId)
 
-  const { user } = useContext(userContext)
+  const actions = appActionState(app?.allowed_actions)
+  const activeTab = !actions.edit && ['data','logs'].includes(requestedTab) ? 'publish' : requestedTab
 
   const handleTabChange = (value: string) => {
     // `replace` so the back button leaves the page instead of walking the tabs.
@@ -153,11 +151,11 @@ export function HostedAppDetail() {
                       whenever the read model loaded: an application that
                       declares nothing says so, because a section that
                       disappears reads as "the page failed to load it". */}
-                  {!!publishStatus && (
+                  {actions.edit && !!publishStatus && (
                     <CapabilityListCard capabilities={publishStatus.capabilities} />
                   )}
-                  <AppSecretSettings appId={app.app_id} canManage={Number(user?.user_id) === Number(app.owner_user_id)} />
-                  <VisibilityScopeSection app={app} />
+                  {actions.edit && <AppSecretSettings appId={app.app_id} canManage={actions.edit} canRebuild={actions.rebuild} />}
+                  {actions.managePermission && <VisibilityScopeSection app={app} />}
                 </div>
               </Panel>
             }
@@ -174,20 +172,20 @@ export function HostedAppDetail() {
             dangerZoneSlot={<DangerZoneCard app={app} />}
           />
           </div> },
-          { key: "data", label: t("hostedApp.detail.tabs.data"), children: <div className="min-h-0 flex-1 overflow-hidden">
+          ...(actions.edit ? [{ key: "data", label: t("hostedApp.detail.tabs.data"), children: <div className="min-h-0 flex-1 overflow-hidden">
           <DataTab appId={app.app_id} appName={app.slug || app.name} />
           </div> },
           { key: "logs", label: t("hostedApp.detail.tabs.logs"), children: <div className="min-h-0 flex-1 overflow-hidden">
           <LogsTab appId={app.app_id} />
-          </div> },
+          </div> }] : []),
           { key: "versions", label: t("hostedApp.detail.tabs.versions"), children: <div className="min-h-0 flex-1 overflow-y-auto">
           <VersionsTab
             appId={app.app_id}
             contentSlot={
-              <VersionDiff
+              actions.edit ? <VersionDiff
                 appId={app.app_id}
                 reloadKey={`${app.state}|${app.current_version_id || ""}|${app.pending_version_id || ""}`}
-              />
+              /> : null
             }
           />
           </div> },

@@ -20,7 +20,7 @@ import type {
 } from "./permission";
 
 export interface ServiceAccountRequestScope {
-  readonly tenantId: number | null;
+  readonly tenantId: number;
   readonly signal: AbortSignal;
   readonly onScopeChanged: () => void;
 }
@@ -56,9 +56,11 @@ async function scopedRequest<T>(
   try {
     if (controller.signal.aborted)
       throw Object.assign(new Error("Canceled"), { code: "ERR_CANCELED" });
+    if (scope && (!Number.isInteger(scope.tenantId) || scope.tenantId <= 0))
+      throw new Error("Service account requests require a concrete tenant");
     const result = await run({
       headers: scope
-        ? { "X-Service-Account-Tenant": scope.tenantId === null ? "all" : String(scope.tenantId) }
+        ? { "X-Service-Account-Tenant": String(scope.tenantId) }
         : undefined,
       signal: controller.signal,
     });

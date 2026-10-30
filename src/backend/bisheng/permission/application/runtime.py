@@ -522,7 +522,7 @@ class F048PermissionRuntime:
         owner_user_id: int,
     ) -> None:
         """Undo a fresh file/folder creation using its frozen projection ledger."""
-        if target.resource_type not in {"folder", "knowledge_file"} or target.resource_version != 0:
+        if target.resource_type not in {"folder", "knowledge_file", "app"} or target.resource_version != 0:
             raise PermissionInvalidResourceError()
         repository = CreationRollbackRepository()
         creation = await repository.aget_operation_by_idempotency(

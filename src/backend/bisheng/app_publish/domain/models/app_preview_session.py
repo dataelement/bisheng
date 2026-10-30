@@ -38,7 +38,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, DateTime, Index, Integer, String, text, update
+from sqlalchemy import BigInteger, Column, DateTime, Index, Integer, String, text, update
 from sqlmodel import Field, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -46,12 +46,16 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 from bisheng.utils import generate_uuid
 
+#: Preparation is registered, but entry and capabilities remain unavailable.
+PREVIEW_STATUS_STARTING = "starting"
 #: The instance is up and the approver may open it.
 PREVIEW_STATUS_RUNNING = "running"
 #: It has been torn down. ``reclaim_reason`` says which of the three triggers.
 PREVIEW_STATUS_RECLAIMED = "reclaimed"
 
-PREVIEW_STATUSES: frozenset[str] = frozenset({PREVIEW_STATUS_RUNNING, PREVIEW_STATUS_RECLAIMED})
+PREVIEW_STATUSES: frozenset[str] = frozenset(
+    {PREVIEW_STATUS_STARTING, PREVIEW_STATUS_RUNNING, PREVIEW_STATUS_RECLAIMED}
+)
 
 #: ``reclaim_reason`` values. The first three are the three reclaim triggers and
 #: read as three different sentences in the panel — an approver who pressed
@@ -73,6 +77,9 @@ class AppPreviewSession(SQLModelSerializable, table=True):
     __table_args__ = (
         Index("ix_app_preview_session_version_approver", "version_id", "approver_user_id", "status"),
         Index("ix_app_preview_session_status_expires", "status", "expires_at"),
+        Index("ux_app_preview_credential", "credential_id", unique=True),
+        Index("ux_app_preview_operation", "operation_id", unique=True),
+        Index("ix_app_preview_reuse", "version_id", "approver_user_id", "purpose", "approval_task_id", "status"),
     )
 
     #: Also the ``/apps/preview/{session}`` segment — generated, never derived.
@@ -96,8 +103,13 @@ class AppPreviewSession(SQLModelSerializable, table=True):
             comment="The approver this preview was raised for; the only identity injected into it (AC-27)",
         ),
     )
+    purpose: str | None = Field(default=None, sa_column=Column(String(16), nullable=True))
+    approval_instance_id: int | None = Field(default=None, sa_column=Column(Integer, nullable=True))
+    approval_task_id: int | None = Field(default=None, sa_column=Column(Integer, nullable=True))
+    credential_id: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
+    operation_id: str | None = Field(default=None, sa_column=Column(String(36), nullable=True))
     status: str = Field(
-        sa_column=Column(String(16), nullable=False, comment="running | reclaimed"),
+        sa_column=Column(String(16), nullable=False, comment="starting | running | reclaimed"),
     )
     reclaim_reason: str | None = Field(
         default=None,

@@ -1,45 +1,25 @@
-"""F019-admin-tenant-scope HTTP middleware.
-
-Consumes the Redis ``admin_scope:{user_id}`` key on management-API calls
-and injects the effective scope into the request's ContextVars so
-downstream tenant-filtering logic (via ``get_current_tenant_id``) can
-read it without knowing about F019.
-
-**Where in the stack**: this middleware is registered in ``main.py``
-*before* ``CustomMiddleware`` in source order, which makes it the
-*inner* middleware at runtime — its ``dispatch`` runs *after* the
-CustomMiddleware has decoded the JWT and populated the
-``visible_tenant_ids`` ContextVar. That ordering matters because:
-
-  1. Only global super admins may have an active scope (INV-T14). This
-     middleware deliberately re-verifies that with ``_check_is_global_super``
-     so a caller cannot flip a scope-looking Redis key for someone else
-     and have it honoured here.
-  2. Non-management paths (business APIs like ``/api/v1/chat``) must be
-     untouched by scope — we set ``_is_management_api`` to False and
-     return immediately, which is the hot path for most requests.
-
-**Sliding TTL**: every management API hit refreshes the scope's Redis TTL
-to ``settings.multi_tenant.admin_scope_ttl_seconds`` (default 14400s). A
-super admin who is actively managing a Child cannot be kicked out by
-inactivity; a super admin who steps away for 4h loses the scope.
-"""
+"""Bind a concrete browser management view; execution identities remain independent."""
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 
 from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
+from starlette.responses import JSONResponse
 
+from bisheng.common.errcode.admin_scope import AdminScopeUnavailableError
+from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.common.errcode.open_api import ServiceAccountManagementScopeChangedError
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import (
+    management_tenant_scope,
     set_admin_scope_tenant_id,
     set_is_management_api,
     set_management_all_tenants,
-    set_visible_tenant_ids,
 )
 from bisheng.utils.http_middleware import (
     _check_is_global_super,
@@ -47,9 +27,6 @@ from bisheng.utils.http_middleware import (
     _extract_http_access_token,
 )
 
-# Browser management views share one scope for global platform administrators.
-# Other users keep their own tenant scope; RPC and execution retain their
-# independently bound tenant identities.
 MANAGEMENT_API_PREFIXES: tuple[str, ...] = (
     "/api/v1/llm",
     "/api/v1/workstation",
@@ -82,85 +59,99 @@ MANAGEMENT_API_PREFIXES: tuple[str, ...] = (
 )
 
 
+# Explicit mutating management routes only: shared reads and calls need no new header.
+_EXPECTED_SCOPE_WRITES = (
+    (frozenset({"PATCH", "DELETE"}), r"/api/v1/apps/[^/]+"),
+    (frozenset({"POST"}), r"/api/v1/apps/[^/]+/actions/[^/]+"),
+    (frozenset({"PUT", "DELETE", "POST"}), r"/api/v1/apps/[^/]+/secrets/[^/]+"),
+    (frozenset({"PATCH"}), r"/api/v1/apps/[^/]+/data/tables/[^/]+/rows(?:/[^/]+)?"),
+    (
+        frozenset({"POST", "PATCH"}),
+        r"/api/v1/apps/[^/]+/runtime/(?:materials(?:/[^/]+)?|restore|operations/[^/]+/cancel)",
+    ),
+    (frozenset({"POST"}), r"/api/v1/apps/[^/]+/(?:withdraw|publish/manual-publish)"),
+    (frozenset({"POST", "DELETE"}), r"/api/v1/apps/[^/]+/versions/[^/]+/preview(?:/[^/]+)?"),
+    (frozenset({"POST", "PUT", "PATCH", "DELETE"}), r"/api/v1/(?:roles|user-groups)(?:/[^/]+)?"),
+    (frozenset({"POST"}), r"/api/v1/workflow/(?:create|versions|change_version)"),
+    (frozenset({"PATCH"}), r"/api/v1/workflow/(?:update/[^/]+|status)"),
+    (frozenset({"PUT", "DELETE"}), r"/api/v1/workflow/versions/[^/]+"),
+    (frozenset({"DELETE"}), r"/api/v1/flows/[^/]+"),
+    (frozenset({"POST", "PUT"}), r"/api/v1/assistant"),
+    (frozenset({"POST"}), r"/api/v1/assistant/(?:delete|status|flow|tool)"),
+    (frozenset({"POST"}), r"/api/v1/knowledge/(?:create|copy|qa/copy|upload(?:/[^/]+)?|tags|file/tags(?:/batch)?)"),
+)
+
+
 def _is_management_api_path(path: str, prefixes: Iterable[str] = MANAGEMENT_API_PREFIXES) -> bool:
-    return any(path == p or path.startswith(p + "/") for p in prefixes)
+    return any(path == value or path.startswith(value + "/") for value in prefixes)
 
 
-def _redis_key(user_id: int) -> str:
-    return f"admin_scope:{user_id}"
+def requires_expected_management_tenant(method: str, path: str) -> bool:
+    return any(
+        method in methods and re.fullmatch(pattern, path.rstrip("/")) for methods, pattern in _EXPECTED_SCOPE_WRITES
+    )
+
+
+def _scope_error(exc: BaseErrorCode, tenant_id: int | None = None):
+    status = 503 if isinstance(exc, AdminScopeUnavailableError) else 409
+    if exc.code == 19703:
+        status = 400
+    response = JSONResponse(exc.return_resp_instance().model_dump(), status_code=status)
+    if tenant_id is not None:
+        response.headers["X-Management-Tenant"] = str(tenant_id)
+    return response
 
 
 class AdminScopeMiddleware(BaseHTTPMiddleware):
-    """Inject F019 admin-scope into ContextVars on management-API hits."""
-
     async def dispatch(self, request: Request, call_next):
-        is_mgmt = _is_management_api_path(request.url.path)
+        from bisheng.admin.application.tenant_scope import (
+            require_expected_management_tenant,
+            resolve_management_scope,
+        )
+
+        path = request.url.path
+        personal_preview = (
+            bool(re.fullmatch(r"/api/v1/apps/[^/]+/versions/[^/]+/preview(?:/[^/]+)?", path))
+            and request.query_params.get("purpose") == "approval"
+        )
+        is_mgmt = _is_management_api_path(path) and not personal_preview
         set_is_management_api(is_mgmt)
         set_admin_scope_tenant_id(None)
         set_management_all_tenants(False)
-
         if not is_mgmt:
-            # Business APIs are unaffected by scope (AC-07). Fast path: no
-            # JWT decode, no Redis read, no FGA check.
             return await call_next(request)
-
         token = _extract_http_access_token(request)
-        if not token:
+        subject = _decode_jwt_subject(token) if token else None
+        if not subject or not subject.get("user_id"):
             return await call_next(request)
-
-        subject = _decode_jwt_subject(token)
-        if not subject:
-            return await call_next(request)
-        user_id = subject.get("user_id")
-        if not user_id:
-            return await call_next(request)
-
-        tenant_id = int(subject.get("tenant_id", 0) or 0)
-        if tenant_id > 0:
-            # Management lists never inherit the readable root-tenant union.
-            set_visible_tenant_ids(frozenset({tenant_id}))
+        user_id = int(subject["user_id"])
+        writing = requires_expected_management_tenant(request.method, path)
+        scope = None
         try:
-            is_super = await _check_is_global_super(int(user_id))
-        except Exception as exc:
-            logger.debug("AdminScopeMiddleware: super check failed: {}", exc)
-            return await call_next(request)
-
-        if not is_super:
-            # Redis key may exist (left behind by a prior super admin session
-            # whose role was revoked before the Celery sweep caught up); do
-            # NOT read it — that would let a non-super be proxied into a
-            # scope view. Fail-closed. Eventual consistency via AC-12 hook.
-            return await call_next(request)
-
-        try:
-            redis = await get_redis_client()
-            key = _redis_key(int(user_id))
-            raw = await redis.aget(key)
-        except Exception as exc:
-            logger.debug("AdminScopeMiddleware: Redis read failed: {}", exc)
-            return await call_next(request)
-
-        if raw is None:
-            set_management_all_tenants(True)
-            return await call_next(request)
-
-        try:
-            selected = int(raw)
-            if selected <= 0:
-                raise ValueError("invalid management tenant")
-            set_admin_scope_tenant_id(selected)
-            set_visible_tenant_ids(frozenset({selected}))
-        except (TypeError, ValueError):
-            # Corrupt value (non-numeric) — skip injection and move on.
-            return await call_next(request)
-
-        # Sliding refresh. Do NOT block the request on a TTL update failure.
-        try:
-            await redis.aexpire_key(
-                key,
-                settings.multi_tenant.admin_scope_ttl_seconds,
-            )
-        except Exception as exc:
-            logger.debug("AdminScopeMiddleware: TTL refresh failed: %s", exc)
-
-        return await call_next(request)
+            is_super = await _check_is_global_super(user_id)
+            scope = await resolve_management_scope(user_id, is_super=is_super, for_write=writing)
+            if writing:
+                require_expected_management_tenant(request.headers.get("X-Management-Tenant"), scope)
+            old_header = request.headers.get("X-Service-Account-Tenant")
+            new_header = request.headers.get("X-Management-Tenant")
+            if path.startswith("/api/v1/service-accounts") and new_header is not None:
+                if (old_header is not None and new_header != old_header) or new_header != str(scope.tenant_id):
+                    raise ServiceAccountManagementScopeChangedError()
+        except BaseErrorCode as exc:
+            return _scope_error(exc, scope.tenant_id if scope else None)
+        except Exception:
+            logger.opt(exception=True).warning("Management scope admission failed")
+            return _scope_error(AdminScopeUnavailableError())
+        request.state.management_tenant_id = scope.tenant_id
+        with management_tenant_scope(scope.tenant_id):
+            response = await call_next(request)
+        response.headers["X-Management-Tenant"] = str(scope.tenant_id)
+        response.headers["X-Management-Tenant-Source"] = scope.source
+        if scope.source == "selected":
+            try:
+                redis = await get_redis_client()
+                await redis.aexpire_key(f"admin_scope:{user_id}", settings.multi_tenant.admin_scope_ttl_seconds)
+            except Exception:
+                # Refresh is optional; the next request revalidates an expired selection.
+                logger.opt(exception=True).warning("Management scope TTL refresh failed")
+        return response

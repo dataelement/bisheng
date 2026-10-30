@@ -66,3 +66,28 @@ class _AsyncSpaceChannelMembershipAdapter:
         async with get_async_db_session() as session:
             repository = SpaceChannelMemberRepositoryImpl(session)
             return await repository.delete(membership_id)
+
+
+async def eligible_scenario_candidates(instance, candidate_ids):
+    if instance.scenario_code != "app_publish_request":
+        return list(candidate_ids)
+    from types import SimpleNamespace
+
+    handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
+    req = SimpleNamespace(
+        tenant_id=instance.tenant_id,
+        applicant_user_id=instance.applicant_user_id,
+        business_key=instance.business_key,
+        payload_snapshot=instance.payload_snapshot or {},
+    )
+    result = await handler.validate_approver_candidates(req, candidate_ids)
+    return result
+
+
+async def validate_scenario_candidates(instance, candidate_ids):
+    from bisheng.common.errcode.approval import ApprovalRequestPermissionDeniedError
+
+    result = await eligible_scenario_candidates(instance, candidate_ids)
+    if set(result) != set(candidate_ids):
+        raise ApprovalRequestPermissionDeniedError()
+    return result

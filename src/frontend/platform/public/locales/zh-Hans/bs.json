@@ -3236,6 +3236,9 @@
       "title": "发布说明",
       "empty": "未填写发布说明",
       "column": "版本说明"
+    },
+    "permissions": {
+      "managementPreviewTitle": "管理预览"
     }
   },
   "dsh": {

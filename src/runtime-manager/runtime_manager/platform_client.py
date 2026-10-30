@@ -158,6 +158,19 @@ class PlatformClient:
         result = self.request("POST", PREFIX + "/nonces", document={"key": key, "ttl": ttl})
         return bool(result["accepted"])
 
+    def authorize_step(self, operation, phase, *, controller=None):
+        return self.request(
+            "POST",
+            PREFIX + f"/operations/{operation['operation_id']}/authorize-step",
+            document={
+                "node_id": self.config.node_id,
+                "generation": operation["generation"],
+                "owner_epoch": operation["owner_epoch"],
+                "phase": phase,
+                "controller": controller or {},
+            },
+        )
+
     def fact(self, operation, sequence, phase, *, exec_ref="", detail=None):
         return self.request(
             "POST",

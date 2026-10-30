@@ -129,12 +129,12 @@ export function OwnerPreviewCard({ appId, versionId }: OwnerPreviewCardProps) {
       ? RECLAIM_REASON_KEY[status.reclaim_reason]
       : undefined
   const expiry = entryUrl ? formatExpiry(status?.expires_at ?? null) : ""
-  const busy = pending !== null
+  const busy = pending !== null || status?.state === "starting"
 
   let hint: string
   if (failure) {
     hint = failure.message || t(`${KEY}.previewActionFailed`)
-  } else if (pending === "start") {
+  } else if (pending === "start" || status?.state === "starting") {
     hint = t(`${KEY}.previewStarting`)
   } else if (blockedKey) {
     hint = t(blockedKey)
@@ -155,7 +155,7 @@ export function OwnerPreviewCard({ appId, versionId }: OwnerPreviewCardProps) {
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Eye aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-        <h3 className="text-sm font-medium">{t(`${KEY}.previewTitle`)}</h3>
+        <h3 className="text-sm font-medium">{t("hostedApp.permissions.managementPreviewTitle")}</h3>
         <div className="ml-auto flex items-center gap-2">
           {entryUrl ? (
             <>

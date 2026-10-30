@@ -162,46 +162,9 @@ async def precheck_build(
     timeout: float = BUILD_POLL_TIMEOUT_SECONDS,
 ) -> str:
     """Re-check the runtime, build the image, wait for the result. Returns ``image_ref``."""
-    client = _client()
+    from bisheng.common.errcode.app_factory import AppOrchestratorUnavailableError
 
-    try:
-        runtime_status = await client.runtime_status()
-    except BaseErrorCode as exc:
-        raise _as_build_failure(exc, "无法连接运行环境管理器") from exc
-
-    supported = list(runtime_status.get("supported_runtimes") or [])
-    if manifest.runtime not in supported:
-        raise AppRuntimeUnsupportedError(
-            msg=f"运行时 {manifest.runtime} 在本环境不可用",
-            details={
-                "field": "runtime",
-                "value": manifest.runtime,
-                "reason": "not_supported_by_manager",
-                "supported_runtimes": supported,
-            },
-            hints=[f"本环境当前支持的运行时: {', '.join(supported) or '(无)'}"],
-        )
-
-    code_url = await _presign(deployment.code_object_key)
-    slug, version_no = await _build_identity(deployment, manifest)
-    payload = {
-        "app_id": deployment.app_id,
-        "version_id": deployment.version_id,
-        "slug": slug,
-        "version_no": version_no,
-        "runtime": manifest.runtime,
-        "port": manifest.port,
-        "code_url": code_url,
-        "code_object_key": deployment.code_object_key,
-        "tier": tier_payload(tier),
-    }
-    try:
-        started = await client.build(**payload)
-    except BaseErrorCode as exc:
-        raise _as_build_failure(exc, "构建请求被拒绝") from exc
-
-    build_id = started.get("build_id")
-    return await _await_build(client, build_id, poll_interval=poll_interval, timeout=timeout)
+    raise AppOrchestratorUnavailableError(reason="runtime_v1_retired")
 
 
 async def _await_build(client, build_id: str, *, poll_interval: float, timeout: float) -> str:
@@ -260,43 +223,9 @@ async def precheck_probe(deployment: AppDeployment, *, manifest: AppManifest, im
     naming the app would consume the real instance slot and, for an iteration,
     disturb the version that is currently serving traffic.
     """
-    client = _client()
-    slug, _ = await _build_identity(deployment, manifest)
-    payload = {
-        "image_ref": image_ref,
-        "port": manifest.port,
-        # The base path the instance will have once it is online. Without it an
-        # app that builds links or mounts its routes from the variable starts
-        # here at a different path than in production, and the probe judges a
-        # start-up the real instance will never have.
-        "env": {
-            "PORT": str(manifest.port),
-            "BISHENG_APP_PORT": str(manifest.port),
-            "BISHENG_APP_BASE_PATH": f"/apps/{slug}",
-        },
-        "health": {"path": "/", "interval": 10, "timeout": 5, "retries": 3, "start_period": 20},
-    }
-    try:
-        result = await client.probe(**payload)
-    except BaseErrorCode as exc:
-        raise _as_probe_failure(exc, "启动探活失败") from exc
+    from bisheng.common.errcode.app_factory import AppOrchestratorUnavailableError
 
-    if result.get("ready"):
-        return
-    tail = result.get("log_tail") or []
-    raise AppStartupProbeFailedError(
-        msg=f"应用启动探活失败: {result.get('reason') or ''}".strip(),
-        details={
-            "reason": "probe_not_ready",
-            "probe_reason": result.get("reason"),
-            "port": manifest.port,
-            # The probe instance is already gone; its last output is the only
-            # place a start-up traceback survives. Same key as a build failure,
-            # so the CLI prints it the same way.
-            "tail": list(tail) if isinstance(tail, (list, tuple)) else [str(tail)],
-        },
-        hints=list(PROBE_HINTS),
-    )
+    raise AppOrchestratorUnavailableError(reason="runtime_v1_retired")
 
 
 # ---------------------------------------------------------------------------

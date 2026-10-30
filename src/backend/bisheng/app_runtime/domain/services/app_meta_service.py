@@ -24,9 +24,7 @@ from __future__ import annotations
 from loguru import logger
 
 from bisheng.app_runtime.domain.constants import AppAuditAction, AppState
-from bisheng.app_runtime.domain.services.tenant_access import require_app_request_tenant
-from bisheng.common.errcode.app_factory import AppManageForbiddenError, AppNotFoundError
-from bisheng.common.permission_identity import check_tenant_admin
+from bisheng.common.errcode.app_factory import AppNotFoundError
 from bisheng.core.context.tenant import set_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.app import App, AppDao
@@ -101,10 +99,6 @@ class AppMetaService:
 
     @staticmethod
     async def _require_editor(app: App, actor) -> None:
-        require_app_request_tenant(app.tenant_id, actor, allow_global_super=True)
-        user_id = int(getattr(actor, "user_id", 0) or 0)
-        if user_id == int(app.owner_user_id or 0) or bool(getattr(actor, "is_global_super", False)):
-            return
-        if await check_tenant_admin(user_id, int(app.tenant_id or 0)):
-            return
-        raise AppManageForbiddenError(app_id=app.id)
+        from bisheng.app_runtime.domain.services.app_authorization_service import AppAuthorizationService
+
+        await AppAuthorizationService.authorize_loaded_app(actor, app, "metadata_edit")

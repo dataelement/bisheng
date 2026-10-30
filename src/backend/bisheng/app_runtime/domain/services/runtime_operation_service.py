@@ -437,6 +437,132 @@ class RuntimeOperationService:
             ):
                 raise RuntimeConflict("runtime_ready_target_unconfirmed")
 
+    async def _authorize_effect(self, op, identity, phase, *, controller=None):
+        from bisheng.app_runtime.domain.services.runtime_authorization_service import RuntimeAuthorizationService
+        from bisheng.common.errcode.base import BaseErrorCode
+
+        node = await self.repo.get(RuntimeNode, op.node_id, lock=True)
+        if identity.node_id != op.node_id or "manager" not in identity.roles or node is None:
+            raise RuntimeConflict("node_identity_mismatch")
+        if op.status in TERMINAL or op.deadline <= self.clock() or op.payload.get("cancel_requested"):
+            raise RuntimeConflict("operation_expired")
+        phases = {
+            "prepare": ({"prepare"}, {"queued", "admitted", "preparing"}),
+            "probe": ({"probe"}, {"queued", "admitted", "preparing", "starting"}),
+            "preview": ({"preview"}, {"queued", "admitted", "preparing", "starting", "ready"}),
+            "maintenance": ({"deploy", "restore", "migrate"}, {"queued", "admitted", "preparing", "maintenance"}),
+            "data_write": ({"deploy", "restore", "migrate"}, {"maintenance", "snapshot_confirmed", "migrating"}),
+            "starting": (
+                {"deploy", "restore", "migrate", "probe", "preview"},
+                {
+                    "queued",
+                    "admitted",
+                    "preparing",
+                    "maintenance",
+                    "snapshot_confirmed",
+                    "migrating",
+                    "starting",
+                    "ready",
+                },
+            ),
+        }
+        if phase not in phases or op.kind not in phases[phase][0] or op.stage not in phases[phase][1]:
+            raise RuntimeConflict("runtime_phase_refused")
+        if phase == "starting" and op.kind in {"probe", "preview"} and op.stage == "admitted":
+            pass
+        elif phase == "starting" and op.stage not in {
+            "maintenance",
+            "snapshot_confirmed",
+            "migrating",
+            "starting",
+            "ready",
+        }:
+            raise RuntimeConflict("runtime_phase_refused")
+        if (
+            node.status != "ready"
+            or (self.clock() - node.heartbeat_at).total_seconds() > settings.app_runtime.runtime_node_max_age_seconds
+        ):
+            raise RuntimeConflict("node_stale")
+        if node.executor_kind == "kubernetes" and (
+            node.lease_until is None
+            or node.lease_until <= self.clock()
+            or controller != {"holder_id": node.controller_holder, "controller_epoch": node.controller_epoch}
+        ):
+            raise RuntimeConflict("controller_fact_fence_stale")
+        try:
+            await RuntimeAuthorizationService.validate_operation(self.repo, op)
+        except BaseErrorCode as exc:
+            raise RuntimeConflict("runtime_authorization_refused") from exc
+        return node
+
+    async def authorize_step(self, operation, identity, body):
+        async with self.repo.transaction():
+            op = await self.repo.get(RuntimeOperation, operation.id, lock=True)
+            if op is None or (body.node_id, body.generation, body.owner_epoch) != (
+                op.node_id,
+                op.generation,
+                op.owner_epoch,
+            ):
+                raise RuntimeConflict("execution_fence_mismatch")
+            node = await self._authorize_effect(op, identity, body.phase, controller=body.controller)
+            if op.kind in {"deploy", "restore", "migrate"}:
+                assignments = await self.repo.find(RuntimeAssignment, app_id=op.app_id, lock=True)
+                if not assignments or (
+                    assignments[0].active_operation_id,
+                    assignments[0].node_id,
+                    assignments[0].generation,
+                    assignments[0].owner_epoch,
+                ) != (op.id, op.node_id, op.generation, op.owner_epoch):
+                    raise RuntimeConflict("execution_fence_stale")
+            expiry = min(self.clock() + timedelta(seconds=5), op.deadline)
+            if node.executor_kind == "kubernetes":
+                expiry = min(expiry, node.lease_until)
+            return {
+                "operation_id": op.id,
+                "tenant_id": op.tenant_id,
+                "app_id": op.app_id,
+                "version_id": op.version_id,
+                "node_id": op.node_id,
+                "generation": op.generation,
+                "owner_epoch": op.owner_epoch,
+                "phase": body.phase,
+                "stage": op.stage,
+                "valid_until": expiry.isoformat(),
+            }
+
+    async def _maintenance_projection(self, op, sequence):
+        from bisheng.app_runtime.domain.services.runtime_authorization_service import RuntimeAuthorizationService
+        from bisheng.app_runtime.domain.services.runtime_projection_service import RuntimeProjectionService
+
+        existing = op.payload.get("maintenance_transition")
+        if existing:
+            if existing.get("fact_sequence") != sequence:
+                raise RuntimeConflict("maintenance_transition_conflict")
+            return
+        routes = await self.repo.find(RuntimeRoute, route_key=f"app:{op.app_id}", lock=True)
+        route = routes[0] if routes else None
+        before = RuntimeAuthorizationService.route_snapshot(route)
+        if op.payload.get("purpose") == "config_restart":
+            await RuntimeProjectionService(self.repo).verify_config_restart_origin(op)
+        await RuntimeProjectionService(self.repo).block(op.app_id, "maintenance")
+        routes = await self.repo.find(RuntimeRoute, route_key=f"app:{op.app_id}", lock=True)
+        after = RuntimeAuthorizationService.route_snapshot(routes[0] if routes else None)
+        op.payload = {
+            **op.payload,
+            "maintenance_transition": {
+                "operation_id": op.id,
+                "generation": op.generation,
+                "owner_epoch": op.owner_epoch,
+                "fact_sequence": sequence,
+                "before": before,
+                "after": after,
+                "route_id": before["id"] if before else None,
+                "before_epoch": before["route_epoch"] if before else None,
+                "after_epoch": after["route_epoch"] if after else None,
+            },
+        }
+        await self.repo.save(op)
+
     async def fact(self, op, identity, body):
         if body.phase in {"preparing", "starting", "ready", "serving"} and op.kind in {
             "prepare",
@@ -470,7 +596,34 @@ class RuntimeOperationService:
             from bisheng.app_runtime.domain.services.runtime_secret_diagnostics import safe_diagnostic_tail
 
             body.detail["diagnostic_tail"] = safe_diagnostic_tail(body.detail["diagnostic_tail"], op)
-        async with self.repo.transaction():
+        async with self.repo.transaction() as session:
+            if op.kind == "preview":
+                from bisheng.app_publish.application.preview_runtime import lock_operation_version
+
+                await lock_operation_version(session, op)
+            existing = await self.repo.find(RuntimeExecutionFact, operation_id=op.id, sequence=body.sequence)
+            if existing:
+                fact = await self.repo.record_fact(op.id, **body.model_dump())
+                return fact.model_dump(mode="json")
+            op = await self.repo.get(RuntimeOperation, op.id, lock=True)
+            if op is None or (op.node_id, op.generation, op.owner_epoch) != (
+                body.node_id,
+                body.generation,
+                body.owner_epoch,
+            ):
+                raise RuntimeConflict("execution_fence_mismatch")
+            phase = None
+            if op.kind in {"prepare", "probe", "preview", "deploy", "restore", "migrate"}:
+                if body.phase == "maintenance":
+                    phase = "maintenance"
+                elif body.phase == "preparing" and op.kind == "prepare":
+                    phase = "prepare"
+                elif body.phase in {"snapshot_confirmed", "migrating"}:
+                    phase = "data_write"
+                elif body.phase in {"starting", "ready"}:
+                    phase = "starting"
+            if phase:
+                await self._authorize_effect(op, identity, phase, controller=body.detail.get("controller"))
             await self._guard_kubernetes_fact(op, identity, body)
             fact = await self.repo.record_fact(op.id, **body.model_dump())
             if body.detail.get("legacy_build_state"):
@@ -488,17 +641,16 @@ class RuntimeOperationService:
                     raise RuntimeConflict("legacy_build_state_refused")
                 op.payload = {**op.payload, "legacy_build_state": state}
                 await self.repo.save(op)
-            if body.phase == "maintenance":
-                from bisheng.app_runtime.domain.services.runtime_projection_service import RuntimeProjectionService
+            if body.phase == "maintenance" and op.kind in {"deploy", "restore", "migrate"}:
+                await self._maintenance_projection(op, body.sequence)
 
-                if op.payload.get("purpose") == "config_restart":
-                    await RuntimeProjectionService(self.repo).block_for_config_restart(op, sequence=body.sequence)
-                else:
-                    await RuntimeProjectionService(self.repo).block(op.app_id, "maintenance")
             if body.phase == "ready" and op.kind == "preview":
                 from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeRoute
 
                 op = await self.repo.get(RuntimeOperation, op.id, lock=True)
+                from bisheng.app_publish.application.preview_runtime import activate
+
+                await activate(session, op)
                 expiry = datetime.fromisoformat(op.payload["preview_expires_at"])
                 op.deadline = expiry
                 from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeStorageBinding
@@ -528,6 +680,10 @@ class RuntimeOperationService:
                 )
 
             if body.phase in TERMINAL:
+                if op.kind == "preview":
+                    from bisheng.app_publish.application.preview_runtime import close
+
+                    await close(session, op, reason=body.phase)
                 op = await self.repo.get(RuntimeOperation, op.id, lock=True)
                 op.status = body.phase
                 op.cleanup_status = (
@@ -720,5 +876,18 @@ class RuntimeOperationService:
                 return {"accepted": False}
             from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
 
-            await RuntimeDeliveryCoordinator(self.repo).recover(app, route, running=body.running)
+            await RuntimeDeliveryCoordinator(self.repo).recover(
+                app,
+                route,
+                running=body.running,
+                observation={
+                    "key_id": identity.key_id,
+                    "node_id": identity.node_id,
+                    "operation_id": body.operation_id,
+                    "exec_ref": body.exec_ref,
+                    "generation": body.generation,
+                    "owner_epoch": route.owner_epoch,
+                    "route_epoch": body.route_epoch,
+                },
+            )
             return {"accepted": True}

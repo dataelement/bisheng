@@ -128,7 +128,7 @@ class ApprovalExceptionService:
         elif exception.exception_type == "approver_empty":
             from bisheng.common.errcode.approval import ApprovalApproverEmptyError
 
-            route_rule, flow_version_id, node = await service._resolve_retry_route(instance)
+            _route_rule, _flow_version_id, node = await service._resolve_retry_route(instance)
             handler = await service._build_handler(instance.scenario_code)
             req = service._build_gate_request(instance)
             approver_user_ids = await handler.resolve_approvers(getattr(node, "approver_config", {}) or {}, req)
@@ -238,6 +238,10 @@ class ApprovalExceptionService:
     ) -> None:
         exception = await self._get_exception(exception_id)
         instance = await self._get_instance(exception.instance_id)
+        from bisheng.approval.domain.services.approval_runtime_handler_factory import validate_scenario_candidates
+
+        approver_user_ids = await validate_scenario_candidates(instance, approver_user_ids)
+
         instance.status = ApprovalInstanceStatus.PENDING
         instance.flow_version_id = flow_version_id
         instance.route_rule_id = route_rule_id
@@ -269,6 +273,10 @@ class ApprovalExceptionService:
     ) -> None:
         exception = await self._get_exception(exception_id)
         instance = await self._get_instance(exception.instance_id)
+        from bisheng.approval.domain.services.approval_runtime_handler_factory import validate_scenario_candidates
+
+        approver_user_ids = await validate_scenario_candidates(instance, approver_user_ids)
+
         if node is None:
             node = await self._resolve_exception_node(instance, exception)
         created_tasks = await self._create_tasks(
@@ -523,7 +531,7 @@ class ApprovalExceptionService:
         handler = await self._build_handler(scenario_code)
         try:
             await handler.on_approved(instance.id, outbox.payload_snapshot)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             outbox.status = ApprovalOutboxStatus.FAILED
             outbox.retry_count += 1
             outbox.error_summary = str(exc)

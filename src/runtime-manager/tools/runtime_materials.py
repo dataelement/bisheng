@@ -157,7 +157,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise ValueError("management_redirect_refused")
 
 
-def request(base, path, *, document=None, file=None, method="POST"):
+def request(base, path, *, document=None, file=None, method="POST", _scope_only=False):
     address = urlsplit(base)
     if address.scheme not in {"http", "https"} or not address.netloc or address.username or address.password:
         raise ValueError("invalid_management_url")
@@ -165,6 +165,16 @@ def request(base, path, *, document=None, file=None, method="POST"):
     if not token:
         raise ValueError("set BISHENG_MANAGEMENT_TOKEN to the authorized human session token")
     headers = {"Cookie": "access_token_cookie=" + token}
+    parts = urlsplit(path).path.strip("/").split("/")
+    if (
+        method != "GET"
+        and len(parts) == 6
+        and parts[:3] == ["api", "v1", "apps"]
+        and parts[4:] == ["runtime", "materials"]
+    ):
+        # Freeze the server-verified view before opening or uploading the archive.
+        scope = request(base, f"/api/v1/apps/{parts[3]}/runtime/state", method="GET", _scope_only=True)
+        headers["X-Management-Tenant"] = str(scope)
     if file:
         stream = open(file, "rb")
         body = stream
@@ -178,8 +188,13 @@ def request(base, path, *, document=None, file=None, method="POST"):
         req = urllib.request.Request(base.rstrip("/") + path, data=body, headers=headers, method=method)
         with urllib.request.build_opener(NoRedirect()).open(req, timeout=120) as response:
             answer = json.load(response)
+            scope = response.headers.get("X-Management-Tenant")
         if answer.get("status_code", 200) not in {0, 200}:
             raise ValueError("platform import refused: " + str(answer.get("status_message", "unknown")))
+        if _scope_only:
+            if not scope or not scope.isdecimal() or int(scope) <= 0:
+                raise ValueError("management_scope_unavailable")
+            return int(scope)
         return answer.get("data", answer)
     finally:
         if stream:

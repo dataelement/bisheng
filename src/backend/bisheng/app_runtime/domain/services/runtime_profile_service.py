@@ -1,4 +1,4 @@
-"""Global immutable environment catalog; application data stays owner-only."""
+"""Global immutable catalog and application materials authorized by F048."""
 
 from __future__ import annotations
 
@@ -12,15 +12,6 @@ from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import 
 from bisheng.app_runtime.domain.schemas.runtime_delivery import RuntimeProfileDefinition
 from bisheng.app_runtime.domain.services.runtime_protocol import content_digest
 from bisheng.permission.application.identity import resolve_permission_actor
-
-
-def require_natural_owner(app, identity):
-    if (
-        identity.subject_type != "user"
-        or identity.subject_id != app.owner_user_id
-        or identity.tenant_id != app.tenant_id
-    ):
-        raise RuntimeConflict("natural_owner_required")
 
 
 async def require_platform_super(actor):
@@ -288,7 +279,7 @@ class RuntimeDependencyService:
 
 
 async def validate_offline_references(repository, app_id, manifest, principal):
-    """Private selection is a human owner action; normal SAK publishing uses owner-bound materials."""
+    """Keep material ownership fixed while authorizing the actual app editor."""
     delivery = manifest.delivery
     if delivery is None or not hasattr(delivery, "dependencies"):
         return
@@ -296,6 +287,7 @@ async def validate_offline_references(repository, app_id, manifest, principal):
     if not identifiers:
         return
     from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeArtifact
+    from bisheng.app_runtime.domain.services.app_authorization_service import AppAuthorizationService
     from bisheng.common.errcode.app_publish import AppNotOwnedBySubjectError
     from bisheng.core.context.tenant import bypass_tenant_filter
 
@@ -307,10 +299,6 @@ async def validate_offline_references(repository, app_id, manifest, principal):
             raise AppNotOwnedBySubjectError(details={"reason": "offline_material_unavailable"})
         if row.visibility == "public":
             continue
-        if (
-            (row.tenant_id, row.app_id) != (app.tenant_id, app.id)
-            or getattr(principal, "actor_kind", None) != "natural_person"
-            or int(getattr(principal, "actor_id", 0)) != app.owner_user_id
-            or int(getattr(principal, "tenant_id", 0)) != app.tenant_id
-        ):
-            raise AppNotOwnedBySubjectError(details={"reason": "private_material_owner_selection_required"})
+        if app is None or (row.tenant_id, row.app_id) != (app.tenant_id, app.id):
+            raise AppNotOwnedBySubjectError(details={"reason": "private_material_scope_mismatch"})
+        await AppAuthorizationService.authorize_loaded_app(principal, app, "content_read")

@@ -1,39 +1,17 @@
-"""The read side of a hosted application: detail, instance, logs, versions, list.
-
-Writes nothing. What it does own is the **permission dispatch by entry**, which
-is easy to get wrong in a way that only shows up as a security bug:
-
-* the platform detail page admits granted editors/managers as well as the
-  owner and administrators — the people who operate the app;
-* the CLI (F053) and the MCP tools (F052) are *owner only*, because they run on
-  a credential that acts for its resource owner. Letting an administrator's key
-  read every app's logs would quietly widen the open-API surface past what the
-  credential's holder was granted.
-
-The platform management read uses the concrete F048 edit action after tenant
-eligibility. Credential doors and private data keep their original owner-only
-business pre-checks; administrator shortcuts cannot replace those checks.
-
-Refusals raise 161xx business codes, never HTTP 403/404. The platform request
-interceptor turns a GET answered with those statuses into a full-page redirect
-to ``/403``, so a user without log access would lose the whole detail page
-instead of one tab (design pit 25).
-"""
+"""Safe management summaries and edit-only content, using exact F048 actions."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from bisheng.app_runtime.domain.constants import AppState
+from bisheng.app_runtime.domain.services.app_authorization_service import AppAuthorizationService
 from bisheng.app_runtime.domain.services.orchestrator_client import orchestrator_client
 from bisheng.common.errcode.app_factory import (
-    AppLogForbiddenError,
     AppManageForbiddenError,
     AppNotFoundError,
 )
-from bisheng.common.permission_identity import check_tenant_admin
 from bisheng.common.services.config_service import settings
-from bisheng.core.context.tenant import set_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.app import App, AppDao
 from bisheng.database.models.app_instance import PHASE_STOPPED, AppInstanceDao
@@ -45,10 +23,7 @@ LOG_ENTRY_DETAIL = "detail"
 LOG_ENTRY_CLI = "cli"
 LOG_ENTRY_MCP = "mcp"
 
-#: Entries that act on a credential rather than a session, and are therefore
-#: bounded by the credential's resource owner. Public because F052 applies the
-#: same rule to the publish-status read (``PublishStatusService._require_viewer``)
-#: — one spelling of "which doors are credential doors", not two.
+#: Kept as a transport classification for older callers; it grants no owner exception.
 OWNER_ONLY_ENTRIES = frozenset({LOG_ENTRY_CLI, LOG_ENTRY_MCP})
 
 
@@ -60,7 +35,8 @@ class AppQueryService:
     @classmethod
     async def get_detail(cls, app_id: str, *, actor) -> dict[str, Any]:
         app = await cls._load_visible(app_id, actor)
-        return cls._detail_payload(app)
+        actions = await AppAuthorizationService.management_actions(actor, [app])
+        return cls._detail_payload(app, allowed_actions=actions.get(app.id, frozenset()))
 
     @classmethod
     async def get_instance(cls, app_id: str, *, actor, entry: str = LOG_ENTRY_DETAIL) -> dict[str, Any]:
@@ -75,7 +51,17 @@ class AppQueryService:
         """
         app = await cls._load_visible(app_id, actor, entry=entry)
         try:
-            return await orchestrator_client.status(app_id=app.id)
+            status = await orchestrator_client.status(app_id=app.id)
+            public_fields = {
+                "instance_id",
+                "phase",
+                "health",
+                "current_version_id",
+                "started_at",
+                "restart_count",
+                "last_probe_at",
+            }
+            return {key: value for key, value in status.items() if key in public_fields}
         except AppNotFoundError:
             async with get_async_db_session() as session:
                 row = await AppInstanceDao.aget_by_app(session, app.id)
@@ -177,39 +163,17 @@ class AppQueryService:
 
     @classmethod
     async def list_apps(cls, *, actor, tenant_id: int | None = None) -> list[dict[str, Any]]:
-        """AC-57 — an owner's own apps, or a tenant administrator's whole tenant.
+        from bisheng.core.context.tenant import get_admin_scope_tenant_id, get_is_management_api
 
-        The tenant predicate is written out rather than left to the auto filter:
-        that listener rewrites SELECTs only, and a management list that silently
-        depended on it would return the wrong set the day it runs on a code path
-        without tenant context.
-        """
-        from sqlmodel import select
-
-        from bisheng.core.context.tenant import get_admin_scope_tenant_id, is_management_all_tenants
-
-        is_super = bool(getattr(actor, "is_global_super", False))
-        scope = get_admin_scope_tenant_id() if is_super else None
-        scope_tenant = int(tenant_id if tenant_id is not None else scope or getattr(actor, "tenant_id", 0) or 0)
-        user_id = int(getattr(actor, "user_id", 0) or 0)
-        all_tenants = tenant_id is None and is_super and is_management_all_tenants()
-        is_admin = is_super or await check_tenant_admin(user_id, scope_tenant)
+        permission_actor = await AppAuthorizationService.resolve_actor(actor)
+        scope = get_admin_scope_tenant_id() if get_is_management_api() else None
+        scope_tenant = scope if scope is not None else permission_actor.tenant_id
+        if tenant_id is not None and tenant_id != scope_tenant:
+            raise AppNotFoundError()
         async with get_async_db_session() as session:
-            if all_tenants:
-                rows = (await session.exec(select(App))).all()
-            else:
-                rows = (
-                    await AppDao.alist_by_tenant(session, scope_tenant)
-                    if is_admin
-                    else await AppDao.alist_by_owner(session, user_id)
-                )
-        return [
-            cls._detail_payload(row)
-            for row in rows
-            if row.state != AppState.DELETED.value and (all_tenants or int(row.tenant_id or 0) == scope_tenant)
-        ]
-
-    # -- runtime status --------------------------------------------------
+            rows = await AppDao.alist_by_tenant(session, scope_tenant)
+        actions = await AppAuthorizationService.management_actions(actor, rows)
+        return [cls._detail_payload(row, allowed_actions=actions[row.id]) for row in rows if row.id in actions]
 
     @classmethod
     async def get_runtime_status(cls, *, actor) -> dict[str, Any]:
@@ -225,9 +189,10 @@ class AppQueryService:
     # -- helpers ---------------------------------------------------------
 
     @staticmethod
-    def _detail_payload(app: App) -> dict[str, Any]:
+    def _detail_payload(app: App, *, allowed_actions=frozenset()) -> dict[str, Any]:
         return {
             "app_id": app.id,
+            "allowed_actions": sorted(allowed_actions),
             "slug": app.slug,
             "name": app.name,
             "description": app.description,
@@ -259,81 +224,15 @@ class AppQueryService:
             row = await AppDao.aget(session, app_id)
         if row is None or row.state == AppState.DELETED.value:
             raise AppNotFoundError(app_id=app_id)
-        set_current_tenant_id(int(row.tenant_id or 0))
         return row
 
     @classmethod
     async def _load_visible(cls, app_id: str, actor, *, entry: str = LOG_ENTRY_DETAIL) -> App:
+        del entry  # A transport entry never changes the resource action requirement.
         app = await cls._load(app_id)
-        from bisheng.app_runtime.domain.services.tenant_access import require_app_request_tenant
-
-        require_app_request_tenant(app.tenant_id, actor, allow_global_super=entry not in OWNER_ONLY_ENTRIES)
-        user_id = int(getattr(actor, "user_id", 0) or 0)
-        actor_tenant = int(getattr(actor, "tenant_id", 0) or 0)
-        is_super = bool(getattr(actor, "is_global_super", False))
-        if entry in OWNER_ONLY_ENTRIES:
-            # A credential door: tenant first, then owner, and no administrator
-            # bypass at all — the same judgement ``_require_log_access`` makes,
-            # for the same reason (AC-34 / AC-35). ``is_global_super`` is not
-            # consulted even to widen the tenant comparison.
-            #
-            # Both halves answer "no such application" rather than splitting
-            # into 16101 / 16161 the way the log path does: this method is the
-            # one that already speaks that way, and the MCP face folds either
-            # code into the same 26305 anyway — so the pair cannot be used to
-            # probe whether an application exists.
-            if int(app.tenant_id or 0) != actor_tenant or user_id != int(app.owner_user_id or 0):
-                raise AppNotFoundError(app_id=app_id)
-            return app
-        if int(app.tenant_id or 0) != actor_tenant and not is_super:
-            # Same answer as "does not exist": telling a caller that an app they
-            # cannot see exists in another tenant is the leak AC-29 forbids on
-            # the entry path, and it applies to the API surface too.
-            raise AppNotFoundError(app_id=app_id)
-        if user_id == int(app.owner_user_id or 0) or is_super:
-            return app
-        if await check_tenant_admin(user_id, int(app.tenant_id or 0)):
-            return app
-        from bisheng.permission.application.business_authorization import check_business_action
-
-        if await check_business_action(actor, resource_type="app", resource_id=app.id, action="edit"):
-            return app
-        raise AppManageForbiddenError(app_id=app_id)
+        return await AppAuthorizationService.authorize_loaded_app(actor, app, "management_read")
 
     @staticmethod
     async def _require_log_access(app: App, actor, *, entry: str) -> None:
-        from bisheng.app_runtime.domain.services.tenant_access import require_app_request_tenant
-
-        require_app_request_tenant(app.tenant_id, actor, allow_global_super=entry not in OWNER_ONLY_ENTRIES)
-        user_id = int(getattr(actor, "user_id", 0) or 0)
-        if entry in OWNER_ONLY_ENTRIES and int(app.tenant_id or 0) != int(getattr(actor, "tenant_id", 0) or 0):
-            # **Owner equality is not enough on a credential door**, so the
-            # tenant is compared before it. ``/api/v2`` seeds
-            # ``visible_tenant_ids`` as ``{DEFAULT_TENANT_ID, principal.
-            # tenant_id}`` (``open_api/api/dependencies.py``), so the automatic
-            # filter still returns a **Root-tenant** application to a
-            # child-tenant key — only leaf-to-leaf is shut out by the IN-list;
-            # and under D19 a token survives its holder moving tenants, so the
-            # ``owner_user_id`` on an app they left behind keeps matching.
-            # Unlike the platform entries, ``get_logs`` reaches here through
-            # ``_load`` rather than ``_load_visible``, so this is the only
-            # place the comparison gets made on this path.
-            #
-            # Read off the *actor*, the same spelling ``_load_visible`` uses —
-            # and not ``get_current_tenant_id()``, which ``_load`` has already
-            # overwritten with the application's own tenant two lines earlier,
-            # making a ContextVar comparison trivially true.
-            #
-            # Answered as "no such application": the same answer
-            # ``_load_visible`` gives the platform face, and the one that does
-            # not confirm the app exists in a tenant the caller cannot see.
-            raise AppNotFoundError(app_id=app.id)
-        if user_id == int(app.owner_user_id or 0):
-            return
-        if entry in OWNER_ONLY_ENTRIES:
-            raise AppLogForbiddenError(app_id=app.id, entry=entry)
-        if bool(getattr(actor, "is_global_super", False)):
-            return
-        if await check_tenant_admin(user_id, int(app.tenant_id or 0)):
-            return
-        raise AppLogForbiddenError(app_id=app.id, entry=entry)
+        del entry
+        await AppAuthorizationService.authorize_loaded_app(actor, app, "log_read")
