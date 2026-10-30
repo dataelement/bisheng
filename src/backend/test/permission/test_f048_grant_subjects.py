@@ -44,6 +44,7 @@ def test_resource_types_cover_every_grantable_container() -> None:
         "workflow",
         "assistant",
         "tool",
+        "linsight_skill",
         "channel",
         "dashboard",
     } <= GRANT_SUBJECT_RESOURCE_TYPES
