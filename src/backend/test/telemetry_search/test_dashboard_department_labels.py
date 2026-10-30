@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 
 from bisheng.telemetry_search.domain.schemas.component import ComponentDataConfig
 from bisheng.telemetry_search.domain.services import component, department_label_resolver
+from bisheng.telemetry_search.domain.services.department_label_resolver import relabel_organization_rows
 
 
 async def test_query_displays_department_short_names_without_changing_group_values(monkeypatch):
@@ -64,3 +65,42 @@ async def test_query_displays_department_short_names_without_changing_group_valu
         names[3]: names[3],
     }
     repository.find_all.assert_awaited_once_with()
+
+
+async def test_relabel_organization_rows_uses_short_names_for_every_org_level(monkeypatch):
+    async def fake_labels(_fields, _rows):
+        return {
+            "belonging_company_name": {"北京首钢股份有限公司": "股份"},
+            "belonging_department_name": {"制造部全称": "制造部"},
+            "belonging_office_name": {"安全管理室": "安全室"},
+            "belonging_squad_name": {"甲班全称": "甲班"},
+            "file_name": {"a.pdf": "不应改文件名"},
+        }
+
+    monkeypatch.setattr(department_label_resolver, "resolve_dimension_labels", fake_labels)
+    rows = await relabel_organization_rows(
+        [
+            {
+                "belonging_company_name": "北京首钢股份有限公司",
+                "belonging_department_name": "制造部全称",
+                "belonging_office_name": "安全管理室",
+                "belonging_squad_name": "甲班全称",
+                "file_name": "a.pdf",
+            },
+            {"belonging_department_name": None, "file_name": "b.pdf"},
+        ],
+        [
+            "belonging_company_name",
+            "belonging_department_name",
+            "belonging_office_name",
+            "belonging_squad_name",
+            "file_name",
+        ],
+    )
+
+    assert rows[0]["belonging_company_name"] == "股份"
+    assert rows[0]["belonging_department_name"] == "制造部"
+    assert rows[0]["belonging_office_name"] == "安全室"
+    assert rows[0]["belonging_squad_name"] == "甲班"
+    assert rows[0]["file_name"] == "a.pdf"
+    assert rows[1]["belonging_department_name"] is None

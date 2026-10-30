@@ -9,6 +9,11 @@ export interface ChartDataResponse {
 
   // 系列数据（纯数据，不包含配置）
   series: ChartSeries[]
+
+  // 组织维度原值到简称的展示映射。坐标和点击导出仍使用原值。
+  dimensionLabels?: Record<string, Record<string, string>>
+  categoryFieldIds?: string[]
+  seriesFieldId?: string
 }
 
 export interface ChartSeries {
