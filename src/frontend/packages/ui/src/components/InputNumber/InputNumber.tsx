@@ -311,7 +311,7 @@ export const InputNumber = React.forwardRef<HTMLInputElement, InputNumberProps>(
               the box instead of floating before a blank strip. */}
           <div
             className={cn(
-              'flex w-5 shrink-0 flex-col [@media(hover:none)and(pointer:coarse)]:hidden',
+              'flex w-5 shrink-0 flex-col [@media(hover:none)_and_(pointer:coarse)]:hidden',
               editable &&
                 'border-l border-border-base opacity-0 transition-opacity group-hover:opacity-100',
               editable && suffix !== undefined && 'border-r',

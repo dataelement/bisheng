@@ -921,7 +921,7 @@
   },
   "src/modals/formModal/chatMessage/index.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 8
+      "count": 4
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
