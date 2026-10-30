@@ -27,6 +27,13 @@ def _get_common_params(params: dict, server_config: dict, model_config: dict) ->
     return params
 
 
+def _get_openai_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    # OpenAI-compatible gateways expose /v1/rerank; the base URL field is optional in the provider form.
+    params = _get_common_params(params, server_config, model_config)
+    params['base_url'] = params['base_url'] or 'https://api.openai.com/v1'
+    return params
+
+
 def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params['dashscope_api_key'] = server_config.get('openai_api_key', '')
     params['top_n'] = None  # return all documents
@@ -41,6 +48,7 @@ _node_type: Dict = {
     LLMServerType.VLLM.value: {'client': CommonRerank, 'params_handler': _get_common_params},
 
     # OfficalapiSERVICES
+    LLMServerType.OPENAI.value: {'client': CommonRerank, 'params_handler': _get_openai_params},
     LLMServerType.QWEN.value: {'client': DashScopeRerank, 'params_handler': _get_qwen_params},
     LLMServerType.QIAN_FAN.value: {'client': CommonRerank, 'params_handler': _get_common_params},
     LLMServerType.SILICON.value: {'client': CommonRerank, 'params_handler': _get_common_params},

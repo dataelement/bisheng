@@ -31,10 +31,10 @@ beforeEach(() => {
 
 test('picking a model updates the trigger and hands its ID to the fresh conversation', async () => {
   render(<KnowledgeAskBar spaceId="space-1" spaceName="Knowledge" modelValue={1} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Provider / Alpha' }));
+  fireEvent.click(screen.getByRole('combobox', { name: 'com_ui_select_model' }));
   fireEvent.click(await screen.findByRole('option', { name: mockModels[1].displayName }));
-  const trigger = screen.getByRole('button', { name: mockModels[1].displayName });
-  expect(trigger).toHaveAttribute('title', mockModels[1].displayName);
+  const trigger = screen.getByRole('combobox', { name: 'com_ui_select_model' });
+  expect(trigger).toHaveTextContent(mockModels[1].displayName);
   fireEvent.change(screen.getByTestId('knowledge-ai-input'), { target: { value: '  Count the entries  ' } });
   fireEvent.click(screen.getByTestId('send-button'));
   expect(parkChatAsk).toHaveBeenCalledWith({ text: 'Count the entries', modelId: 2, space: { id: 'space-1', name: 'Knowledge' } });
@@ -49,7 +49,7 @@ test('catalog arrival repairs an unavailable initial model and sends the display
   expect(screen.getByTestId('knowledge-ai-input')).toBeDisabled();
   mockModels = models;
   view.rerender(<KnowledgeAskBar spaceId="space-1" spaceName="Knowledge" modelValue={99} />);
-  await waitFor(() => expect(screen.getByRole('button', { name: models[1].displayName })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('combobox', { name: 'com_ui_select_model' })).toHaveTextContent(models[1].displayName));
   fireEvent.change(screen.getByTestId('knowledge-ai-input'), { target: { value: 'Count' } });
   fireEvent.keyDown(screen.getByTestId('knowledge-ai-input'), { key: 'Enter' });
   expect(parkChatAsk).toHaveBeenCalledWith(expect.objectContaining({ modelId: 2 }));

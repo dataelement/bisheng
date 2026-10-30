@@ -1,5 +1,5 @@
 import { useServiceAccountRequestScope } from "./useServiceAccountManagementScope";
-import { Button, Input, notification } from '@bisheng/ui';
+import { Button, Input, notification, Tooltip as QuestionTooltip } from '@bisheng/ui';
 import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect";
 import DepartmentUsersSelect,{
 type DepartmentUserOption,
@@ -21,7 +21,6 @@ DialogTitle,
 import { Label } from "@/components/bs-ui/label";
 
 
-import { QuestionHint as QuestionTooltip } from '@/components/bs-comp/QuestionHint';
 import {
 issueServiceAccountKeyApi,
 updateServiceAccountKeyApi,
@@ -279,6 +278,7 @@ export function KeyIssueDialog({
             {t(scope.label_key)}
             {endpointText ? (
               <QuestionTooltip
+                contentClassName="w-[375px] max-w-[calc(100vw-2rem)]"
                 content={
                   <span className="whitespace-pre-line">
                     {t("openApiManagement.keys.endpointsTitle")}\n{endpointText}

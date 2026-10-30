@@ -320,14 +320,27 @@ class ApprovalCenterService:
         return {"data": data, "total": len(data)}
 
     @classmethod
-    async def get_instance_detail(cls, *, instance_id: int, login_user):
+    async def get_instance_detail(cls, *, instance_id: int, login_user, management: bool = False):
         instance = await ApprovalInstanceRepository.get_instance(instance_id)
         if instance is None:
             raise ApprovalRequestNotFoundError()
-        if instance.tenant_id != login_user.tenant_id:
+        from bisheng.core.context.tenant import get_admin_scope_tenant_id, is_management_all_tenants
+        from bisheng.permission.application import is_tenant_admin
+
+        global_admin = bool(getattr(login_user, "is_global_super", False))
+        selected = (
+            (get_admin_scope_tenant_id() or login_user.tenant_id)
+            if management and global_admin
+            else login_user.tenant_id
+        )
+        all_tenants = management and global_admin and is_management_all_tenants()
+        if not all_tenants and instance.tenant_id != selected:
             raise ApprovalRequestPermissionDeniedError()
         tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
-        if not login_user.is_admin():
+        management_reader = management and (
+            global_admin or await is_tenant_admin(login_user.user_id, instance.tenant_id)
+        )
+        if not management_reader and not login_user.is_admin():
             visible_task_owner = any(task.approver_user_id == login_user.user_id for task in tasks)
             if instance.applicant_user_id != login_user.user_id and not visible_task_owner:
                 raise ApprovalRequestPermissionDeniedError()

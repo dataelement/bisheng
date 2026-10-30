@@ -204,7 +204,7 @@ export default function RuleFile({
                         {hasPdf && (
                             <>
                                 <p className="text-sm text-[#999999]">
-                                    {t('pdfOptionsHint', { defaultValue: '检测到上传文件包含 PDF 文件，以下选项可用：' })}
+                                    {t('pdfOptionsHint')}
                                 </p>
                                 <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
                                     <div className="flex items-center gap-2">
@@ -276,34 +276,7 @@ export default function RuleFile({
                         ))}
                     </div>
 
-                    <div className="flex flex-col gap-5 rounded-[10px] border border-[#e4e8ee] bg-white p-4 sm:p-5">
-                        {internalValues.splitMode === 'auto' && (
-                            <div className="flex flex-wrap gap-8">
-                                <div className="flex items-center gap-3">
-                                    <Label className="whitespace-nowrap text-sm text-gray-600 min-w-[90px]">{t('splitLength')}</Label>
-                                    <div className="flex h-9 overflow-hidden rounded-md border border-input bg-white">
-                                        <Input type="number" step="100" min={0} value={internalValues.chunkSize} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, { min: 0 })) return; return handleSettingChange('chunkSize', e); }} onBlur={(e) => {
-                                                if (!e.target.value) handleSettingChange('chunkSize', { target: { value: '1000' } });
-                                            }} className={["w-[150px]", "h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"].filter(Boolean).join(" ")} />
-                                        <div className="pointer-events-none flex items-center border-l border-[#ebecf0] bg-white px-3 text-sm text-[#9ca3af]">
-                                            {t('characters')}
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <Label className="whitespace-nowrap text-sm text-gray-600 min-w-[90px]">{t('chunkOverlap')}</Label>
-                                    <div className="flex h-9 overflow-hidden rounded-md border border-input bg-white">
-                                        <Input type="number" step="10" min={0} value={internalValues.chunkOverlap} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, { min: 0 })) return; return handleSettingChange('chunkOverlap', e); }} onBlur={(e) => {
-                                                if (!e.target.value) handleSettingChange('chunkOverlap', { target: { value: '0' } });
-                                            }} className={["w-[150px]", "h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"].filter(Boolean).join(" ")} />
-                                        <div className="pointer-events-none flex items-center border-l border-[#ebecf0] bg-white px-3 text-sm text-[#9ca3af]">
-                                            {t('characters')}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
+                    {internalValues.splitMode !== 'auto' && <div className="flex flex-col gap-5 rounded-[10px] border border-[#e4e8ee] bg-white p-4 sm:p-5">
                         {internalValues.splitMode === 'custom' && (
                             <div className="space-y-6">
                                 <div className="flex flex-wrap gap-8">
@@ -397,7 +370,7 @@ export default function RuleFile({
                                 </div>
                             </div>
                         )}
-                    </div>
+                    </div>}
                 </div>
             </div>
         </div>

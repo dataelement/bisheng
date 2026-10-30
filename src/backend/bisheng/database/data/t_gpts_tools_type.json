@@ -87,6 +87,7 @@
     "is_delete": 0,
     "create_time": "2024-04-30 10:26:07",
     "update_time": "2024-04-30 10:26:07",
+    "extra": "{\"type\": \"container\"}",
     "openapi_schema": null
   },
   {
@@ -261,7 +262,7 @@
     "openapi_schema": null
   },
   {
-    "id": 18,
+    "id": 19,
     "name": "知识库检索",
     "logo": "",
     "description": "按当前用户权限检索文档知识库和知识空间，返回相关片段及来源。",

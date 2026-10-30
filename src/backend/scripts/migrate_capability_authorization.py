@@ -26,7 +26,11 @@ from bisheng.core.database import get_async_db_session  # noqa: E402
 from bisheng.core.openfga.runtime_heartbeat import list_runtime_heartbeats  # noqa: E402
 from bisheng.linsight.domain.models.linsight_skill import LinsightSkill  # noqa: E402
 from bisheng.permission.application.runtime import build_f048_permission_runtime  # noqa: E402
-from bisheng.permission.domain.models import PermissionGrant, PermissionGrantAssignee, ResourcePermissionMode  # noqa: E402
+from bisheng.permission.domain.models import (  # noqa: E402
+    PermissionGrant,
+    PermissionGrantAssignee,
+    ResourcePermissionMode,
+)
 from bisheng.permission.domain.repositories.projection_repository import ProjectionRepository  # noqa: E402
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget  # noqa: E402
 from bisheng.permission.domain.services.permission_action_service import PermissionActor  # noqa: E402
@@ -59,8 +63,7 @@ async def inventory():
             skills = (await session.exec(select(LinsightSkill).where(LinsightSkill.source != "personal"))).all()
     result = []
     for row in tools:
-        if row.user_id is not None:
-            raise RuntimeError(f"Preset tool {row.id} has an unexpected user owner")
+        # Preset classification is authoritative; historical creator metadata stays intact.
         result.append((row.tenant_id, "tool", str(row.id), None))
     result.extend((row.tenant_id, "linsight_skill", str(row.id), row.created_by) for row in skills)
     return sorted(result)

@@ -230,8 +230,13 @@ class RoleService:
                 else:
                     permission_level = "regular"
 
+        from bisheng.core.context.tenant import get_admin_scope_tenant_id, is_management_all_tenants
+
+        view_tenant = login_user.tenant_id
+        if bool(getattr(login_user, "is_global_super", False)):
+            view_tenant = None if is_management_all_tenants() else get_admin_scope_tenant_id() or view_tenant
         roles = await RoleDao.aget_visible_roles(
-            tenant_id=login_user.tenant_id,
+            tenant_id=view_tenant,
             keyword=keyword,
             page=page,
             limit=limit,
@@ -239,7 +244,7 @@ class RoleService:
             tenant_custom_roles_only=tenant_custom_roles_only,
         )
         total = await RoleDao.acount_visible_roles(
-            tenant_id=login_user.tenant_id,
+            tenant_id=view_tenant,
             keyword=keyword,
             department_ids=department_ids,
             tenant_custom_roles_only=tenant_custom_roles_only,
@@ -388,7 +393,7 @@ class RoleService:
             role.quota_config = req.quota_config
         if req.remark is not None:
             role.remark = req.remark
-        # 允许显式清空为全局作用域（null）；不能仅用 ``is not None`` 否则无法从部门改回全局
+        # An explicit null clears department scope; absence keeps the previous scope.
         if "department_id" in req.model_fields_set:
             role.department_id = req.department_id
 
@@ -543,7 +548,7 @@ class RoleService:
             role_ids=[role_id],
             access_type=AccessType.WEB_MENU,
         )
-        # system_config 仅超管/部门管理员通过身份下发，不可通过自定义角色分配
+        # System configuration is identity-granted and cannot be assigned by custom roles.
         return [r.third_id for r in records if r.third_id != "system_config"]
 
     # ── Permission helpers ──
@@ -554,8 +559,9 @@ class RoleService:
 
         Returns: 'admin', 'tenant_admin', 'dept_admin', or 'regular'.
 
-        **部门管理员优先于租户管理员**：若先判 ``tenant:admin``，则兼任部门管理员的账号
-        会拿到租户级角色列表（全租户自定义角色可编辑），与「按部门子树管理角色」PRD 冲突。
+        Department administration takes precedence over tenant administration.
+        Checking tenant administration first would expose editable tenant-wide
+        roles to an operator whose role management is limited to a department subtree.
         """
         if login_user.is_admin():
             return "admin"

@@ -2132,9 +2132,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "src/pages/KnowledgePage/components/RuleTable.tsx": {
@@ -2434,9 +2431,6 @@
   },
   "src/pages/ModelPage/manage/tabs/WorkbenchModel.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {

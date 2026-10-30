@@ -372,8 +372,6 @@ const AiChatInput = memo(
             }
         }, [externalValue, isControlled]);
 
-        const hasAttachedFiles =
-            (chatFiles?.length ?? 0) > 0 || uploadingFiles.length > 0;
         const filesParsing = (chatFiles ?? []).some(
             (file) => file?.parsing_status && !['completed', 'failed'].includes(file.parsing_status),
         );
@@ -746,17 +744,16 @@ const AiChatInput = memo(
                                         />
                                     </svg>
                                 </button>
-                            ) : showVoice && !text?.trim() && !hasAttachedFiles ? (
-                                // Empty input → voice button (default); typing any
-                                // text flips it to the send button below.
-                                // When files are attached, keep the send button visible
-                                // (disabled until text is entered).
-                                <SpeechToTextComponent
- {...voice.props}
-                                    disabled={disabled}
-
-                                />
                             ) : (
+                                <div className="flex items-center gap-2">
+                                {showVoice && (
+                                    <SpeechToTextComponent
+                                        {...voice.props}
+                                        disabled={disabled || isParsingMedia}
+                                        realtime={!!modelData?.asr_model?.realtime}
+                                        modelId={modelData?.asr_model?.id}
+                                    />
+                                )}
                                 <button
                                     type="button"
                                     onClick={handleSend}
@@ -768,14 +765,13 @@ const AiChatInput = memo(
                                         fileUploading ||
                                         filesParsing
                                     }
-                                    className="dsh-composer-submit btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-fill-3 disabled:text-text-3 disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-text-2"
+                                    className="dsh-composer-submit btn-brand-primary"
                                     aria-label="Send message"
                                     data-testid="send-button"
                                 >
-                                    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                                        <path fill="currentColor" d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" />
-                                    </svg>
+                                    <Outlined.ArrowUp size={18} />
                                 </button>
+                                </div>
                             )}
                         </div>
                     </div>

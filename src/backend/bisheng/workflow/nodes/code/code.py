@@ -1,5 +1,6 @@
 from typing import Any
 
+from bisheng.common.errcode.sandbox import SandboxCodeNodeNoResultError
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.nodes.base import BaseNode
@@ -75,6 +76,10 @@ class CodeNode(BaseNode):
         return ret
 
     def _parse_code_output(self, result: dict) -> dict:
+        # main() without a return (or ``return None``) serializes to JSON null.
+        # That is a missing result, not a wrong type, so it gets its own code.
+        if result is None:
+            raise SandboxCodeNodeNoResultError()
         if not isinstance(result, dict):
             raise Exception(f"CodeNode {self.name} main function output must be dict")
         ret = {}

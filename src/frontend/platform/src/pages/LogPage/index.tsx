@@ -3,6 +3,7 @@ import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { RuntimeAuditPanel } from "./runtime/RuntimeAuditPanel";
 import { Tabs } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 import { useTranslation } from "react-i18next";
 import SystemLog from "./systemLog";
 import AppUseLog from "./useAppLog";
@@ -15,9 +16,9 @@ export function LogPage() {
 
     return <div id="model-scroll" className="w-full h-full px-2 pt-4">
         <Tabs defaultActiveKey="app" className="w-full mb-10 [&>div:first-child]:mx-2" items={[
-            { key: 'app', label: t('log.appUsage'), children: <div className="pt-2"><AppUseLog /></div> },
-            { key: 'system', label: t('log.systemOperations'), children: <div className="pt-2"><SystemLog /></div> },
-            ...(showRuntime ? [{ key: "runtime", label: t("log.runtime.title"), children: <RuntimeAuditPanel /> }] : []),
+            { key: 'app', label: t('log.appUsage'), icon: <Outlined.Application aria-hidden="true" />, children: <div className="pt-2"><AppUseLog /></div> },
+            { key: 'system', label: t('log.systemOperations'), icon: <Outlined.History aria-hidden="true" />, children: <div className="pt-2"><SystemLog /></div> },
+            ...(showRuntime ? [{ key: "runtime", label: t("log.runtime.title"), icon: <Outlined.DeviceDesktopExchange aria-hidden="true" />, children: <RuntimeAuditPanel /> }] : []),
         ]} />
     </div>
 };

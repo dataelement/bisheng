@@ -92,8 +92,9 @@ _LINSIGHT_RESEARCHER_PROMPT_TEMPLATE_ZH = """你是调研子代理（researcher�
 __KB_RESEARCH_LINE__
 - 多轮逐步细化查询：先广后窄，根据已检索到的内容不断调整下一轮查询，直到信息足够支撑结论。
 - 中间产物（草稿、笔记、原始检索摘录）只写入工作区 scratch/ 目录，绝不写 output/。最终交付物的撰写与拼装由主智能体负责，不归你管。
+- 笔记写入约定：把完整笔记（关键摘录、数据、出处）用 write_file 写入 description 指定的笔记目录（形如 scratch/<目录>/notes.md）；description 没有指定目录时，用资料文件名去掉扩展名作为目录名。笔记中的每条信息同样标明出处。
 - 你**没有** ask_user 工具，也不得以任何方式向用户提问；遇到信息不足时基于已掌握的资料给出最佳结论并说明不确定性，而不是停下来等待澄清。
-- 调用方（主智能体）只能看到你的**最后一条消息**。因此请把蒸馏后的结论（含关键事实、出处/来源标识、必要的不确定性说明）作为最后一条消息完整回传，不要把结论只留在中间步骤里。
+- 调用方（主智能体）只能看到你的**最后一条消息**。因此请把蒸馏后的结论（含关键事实、出处/来源标识、必要的不确定性说明）作为最后一条消息完整回传，不要把结论只留在中间步骤里；写了笔记时，在最后一条消息末尾写明笔记文件路径，供主智能体按需查阅细节。
 __CITATION_HANDOFF_LINE__
 请全程使用与任务描述一致的语言（默认简体中文）——这**包括你的思考与推理过程（thinking）**、调研旁白与最终回传，绝不允许“用英文思考、再用中文回传”。"""
 
@@ -132,7 +133,11 @@ _LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH = """你是深度研究任务智能体，负
 
 2. 【执行】按清单逐项推进，选用合适工具：
 __SKILL_EXEC_LINE____KB_EXEC_LINE__
-   - 对“独立、需多轮检索/阅读、产出可蒸馏为一段摘要”的子任务，可用 task 委派给 "general-purpose" 子代理做隔离调研（它在独立上下文检索/阅读，只把蒸馏后的有出处摘要回传给你）；同一时刻并行委派不超过 2~3 个。
+   - 对“独立、需多轮检索/阅读、产出可蒸馏为一段摘要”的子任务，可用 task 委派给 "general-purpose" 子代理做隔离调研（它在独立上下文检索/阅读，只把蒸馏后的有出处摘要回传给你）。
+   - 【多份资料按份委派】当资料（上传文件、知识库文档或调研对象）有 3 份及以上、每份都需要多轮阅读、且各份结论彼此独立、最后才汇总时，优先按份委派：一份资料对应一个 task。资料篇幅短，或者必须交叉比对才能得出结论时，由你自己阅读，不委派。
+     · 同一轮最多同时发出 5 个 task；资料更多时，等这一批返回后再发下一批。
+     · 每个 description 写明：资料路径或标识、要提取的字段或要回答的问题、返回格式，以及该子代理的笔记目录 scratch/<子任务短名>/；各子代理的笔记目录不得重名。
+     · 汇总时先根据各子代理交回的摘要撰写交付物；需要细节时用 read_file 读对应笔记，不要回头重读原始资料。
 __KB_DELEGATE_LINE__   更新待办时只翻转 status（pending/in_progress/completed），不改写已有文案，以保证任务标识稳定。
 
 3. 【产出交付物】按用户在澄清时选择的输出格式产出，docx / pdf 由 markdown 派生：
@@ -169,11 +174,11 @@ __SKILL_DELIVERABLE_LINE__   - 3a__MD_DELIVERABLE_CONDITION__：write_file 写 o
 
 - ask_user(reason, questions)：第 0 步澄清；整个会话最多调用一次。
 - write_todos(todos)：维护有编号的待办清单；只翻转 status，不改写已有文案。
-__KB_TOOL_LINE__- write_file / read_file / edit_file / ls / glob / grep：工作区文件工具；交付物写 output/，中间产物写 scratch/（工具回显的 /output/x 与 output/x 是同一个文件）。read_file 支持 offset/limit 分块读取大文件；grep 可在整个工作区按关键字定位内容。
+__KB_TOOL_LINE__- write_file / read_file / edit_file / ls / glob / grep：工作区文件工具；交付物写 output/，中间产物写 scratch/（工具回显的 /output/x 与 output/x 是同一个文件）。read_file 支持 offset/limit 分块读取大文件；grep 可在整个工作区按关键字定位内容，按字面匹配、不支持正则；要同时搜几个关键词，用 | 分隔写在同一次 grep 里（如 "营业收入|售电收入"，任一命中即返回）。
 - export_docx(source_path, dest_path)：把 output/ 下的 markdown 转 Word(.docx)，必须在对应 .md 写好之后。
 - export_pdf(source_path, dest_path)：把 output/ 下的 markdown 转 PDF，必须在对应 .md 写好之后。
 - check_html(path)：检查 output/ 下的 html 能否在离线环境和预览框里正常显示，写完 html 后调用。
-- task(description, subagent_type="general-purpose")：把独立、可隔离、较重的调研子任务委派给子代理。description 必须自包含——子代理看不到你的对话历史与上下文，只能读到 description，因此完成该子任务所需的全部背景、目标、约束与必要标识都要写进去；不得委派最终交付物撰写，也不得委派“问用户/澄清”。
+- task(description, subagent_type="general-purpose")：把独立、可隔离、较重的调研子任务委派给子代理。description 必须自包含——子代理看不到你的对话历史与上下文，只能读到 description，因此完成该子任务所需的全部背景、目标、约束与必要标识都要写进去；按份委派时还要指定该子代理在 scratch/ 下的笔记目录；不得委派最终交付物撰写，也不得委派“问用户/澄清”。
 
 # 超大工具结果
 
@@ -1091,7 +1096,8 @@ def _build_researcher_subagent(tools: Sequence[BaseTool], citation_handles: bool
         "name": "general-purpose",
         "description": (
             "用于隔离的调研/分析子任务：在独立上下文中多轮检索与阅读资料，"
-            "返回蒸馏后的、有出处的结构化摘要。它不能向用户提问，也不负责最终交付物的撰写与拼装。"
+            "返回蒸馏后的、有出处的结构化摘要；多份资料各自独立调研时，适合一份资料交给一个子代理。"
+            "它不能向用户提问，也不负责最终交付物的撰写与拼装。"
         ),
         "system_prompt": _with_citation_rules(
             _build_researcher_prompt(has_kb, has_web_search=has_web, citation_handles=citation_handles),
@@ -1434,7 +1440,10 @@ async def create_linsight_agent(
     skills_advertised = bool(skills_present and file_dir)
     if skills_advertised:
         from bisheng.linsight.domain.services.skill_availability_middleware import SkillAvailabilityMiddleware
-        middlewares.append(SkillAvailabilityMiddleware(session_model.user_id, getattr(session_model, "skills", None) or []))
+
+        middlewares.append(
+            SkillAvailabilityMiddleware(session_model.user_id, getattr(session_model, "skills", None) or [])
+        )
         from deepagents.backends.filesystem import FilesystemBackend
 
         from bisheng.linsight.domain.services.skill_provisioning import WORKSPACE_SKILLS_DIR
@@ -1540,7 +1549,9 @@ async def create_linsight_agent(
         build_invalid_tool_call_repair_middleware(tools=researcher.get("tools"), is_subagent=True),
     ]
     if skills_advertised:
-        researcher["middleware"].append(SkillAvailabilityMiddleware(session_model.user_id, getattr(session_model, "skills", None) or []))
+        researcher["middleware"].append(
+            SkillAvailabilityMiddleware(session_model.user_id, getattr(session_model, "skills", None) or [])
+        )
 
     # Same lockstep for skills: the skill-priority lines are advertised IFF
     # SkillsMiddleware was actually attached above (``skills_advertised``), so the

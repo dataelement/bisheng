@@ -104,6 +104,7 @@ describe("resolveRoutePermissions", () => {
       "build",
       "create_app",
       "knowledge",
+      "dataset",
       "model",
       "evaluation",
       "mark_task",

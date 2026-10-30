@@ -45,6 +45,9 @@ interface ChatErrorCardProps {
 const KNOWN_TYPES = new Set([
     'content_filter',
     'quota_exhausted',
+    // The user's own monthly credits on this platform (client module) are used
+    // up — the remedy is the admin's credit settings, not the provider account.
+    'credit_exhausted',
     'rate_limit',
     'service_unavailable',
     'network_timeout',

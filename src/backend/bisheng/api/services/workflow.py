@@ -196,6 +196,7 @@ class WorkFlowService(BaseService):
         # Get user information in the list
         user_infos = UserDao.get_user_by_ids(user_ids)
         user_dict = {one.user_id: one.user_name for one in user_infos}
+        owner_activity = {one.user_id: int(getattr(one, "delete", 0) or 0) != 1 for one in user_infos}
 
         # Get version information in the list
         version_infos = FlowVersionDao.get_list_by_flow_ids(resource_ids)
@@ -211,6 +212,9 @@ class WorkFlowService(BaseService):
         # Add additional information (F008: removed group_ids, AC-08)
         for one in data:
             one["user_name"] = user_dict.get(one["user_id"], one["user_id"])
+            if int(one.get("flow_type") or 0) == FlowType.HOSTED_APP.value:
+                # A Catalog delete grant does not bypass the hosted-app owner rule.
+                one["owner_active"] = owner_activity.get(one["user_id"], False)
             one["write"] = managed or str(one["id"]) in writeable_ids
             one["version_list"] = flow_versions.get(one["id"], [])
             one["tags"] = resource_tag_dict.get(one["id"], [])

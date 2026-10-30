@@ -383,7 +383,7 @@ export default function KnowledgeFile({ toolbarTarget }: KnowledgeFileProps) {
                                 >
                                     <div className="flex items-center gap-2">
                                         <div className="flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-fill-2 group-odd:bg-white dark:group-odd:bg-fill-2 text-text-2">
-                                            <Outlined.BookOpenText size={16} className="shrink-0" />
+                                            <Outlined.Books size={16} className="shrink-0" aria-hidden="true" />
                                         </div>
                                         <div>
                                             <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2">

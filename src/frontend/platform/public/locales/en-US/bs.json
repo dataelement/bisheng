@@ -196,6 +196,7 @@
     "bottomText": "Bisheng"
   },
   "menu": {
+    "tenant": "Tenant",
     "languageChinese": "中文",
     "languageJapanese": "日本語",
     "user": "User",
@@ -2137,7 +2138,7 @@
   "more": "more",
   "tenant.management": "Tenant",
   "tenant.adminScope.label": "Admin View",
-  "tenant.adminScope.global": "Full tree (default)",
+  "tenant.adminScope.global": "Entire platform",
   "tenant.adminScope.switched": "Switched admin view to {{name}}",
   "tenant.adminScope.cleared": "Restored full tree view",
   "tenant.adminScope.loading": "Loading...",
@@ -2908,8 +2909,9 @@
       "revokeConfirmBody": "The key stops working immediately and the holder's AI assistant loses access; the holder can generate a new one at any time."
     },
     "tenantScope": {
+      "globalReadonlyHint": "Showing service accounts from all tenants. Select a specific tenant to manage them.",
       "label": "Tenant to manage",
-      "choose": "Select a tenant to manage",
+      "choose": "Select a management tenant in the top-right corner first",
       "hint": "Choose where to view and create service accounts. Existing accounts stay in their tenant. This selection is shared with other administration pages.",
       "changed": "The management tenant has changed. Refresh and confirm your action again. The original request will not be retried automatically.",
       "refresh": "Refresh"
@@ -3280,7 +3282,8 @@
     },
     "releaseNotes": {
       "title": "Release notes",
-      "empty": "No release notes provided"
+      "empty": "No release notes provided",
+      "column": "Version notes"
     }
   },
   "dsh": {
@@ -3851,6 +3854,7 @@
     "usageScope": "Select a user in the current tenant to view token usage, messages, and completed Q&A over a time range.",
     "byDepartment": "By department",
     "byUser": "By user",
+    "byRole": "By role",
     "selectDepartment": "Select department",
     "selectDepartmentForUsage": "Select a department to view aggregate usage and user details for it and its descendants.",
     "timeUsage": "Time-range usage",
@@ -4152,7 +4156,7 @@
       "userTab": "Users",
       "addCredits": "Add allowance",
       "emptyCredits": "No credit allowances yet",
-      "ruleHelp": "Set monthly credits per member by user, department or role. The highest matching enabled allowance applies, shared by Chat and Work.",
+      "ruleHelp": "Set monthly credits per member by user, department or role. The highest matching enabled allowance applies, shared by Chat and Work. Members no enabled allowance matches are not capped.",
       "scope": "Scope",
       "monthlyCredits": "Credits per member / month",
       "creditRangeHint": "Enter credits from 0 to {{max}}, with up to 6 decimal places.",
