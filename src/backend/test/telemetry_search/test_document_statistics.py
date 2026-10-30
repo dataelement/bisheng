@@ -83,6 +83,105 @@ def test_category_codes_are_normalized_without_mutating_input():
     assert records[0]["file_category_code"] == " pol "
 
 
+def _legacy_aggregate(stats, dimensions, metric, start=None, end=None):
+    """改计数方式之前的集合扫描，只留在测试里做对拍。"""
+    from bisheng.telemetry_search.domain.services.knowledge_document_statistics import (
+        bucket_start,
+        milliseconds,
+        next_bucket,
+        validated_end,
+    )
+
+    end = validated_end(metric, end)
+    if start is not None and start > end:
+        return []
+    time_dimensions = [(i, grain or "day") for i, (field, grain) in enumerate(dimensions) if field == "timestamp"]
+    groups = {}
+    all_first = {}
+    source = stats._contribution_rows() if metric == "knowledge_contribution_ratio" else stats.records
+    for row in source:
+        created = milliseconds(row["timestamp"])
+        if created > end:
+            continue
+        key = tuple(row.get(field) for field, _ in dimensions if field != "timestamp")
+        identity = row["knowledge_identity"]
+        bucket = groups.setdefault(key, {})
+        bucket[identity] = min(bucket.get(identity, created), created)
+        all_first[identity] = min(all_first.get(identity, created), created)
+    if not dimensions or (time_dimensions and len(dimensions) == 1):
+        groups.setdefault((), {})
+    spans = [(None, start, end)]
+    if time_dimensions:
+        _, grain = time_dimensions[0]
+        first = start if start is not None else min(all_first.values(), default=end)
+        spans = []
+        cursor = bucket_start(first, grain)
+        while cursor <= end:
+            following = next_bucket(cursor, grain)
+            spans.append((cursor, max(first, cursor), min(end, following - 1)))
+            cursor = following
+    result = []
+    for key, firsts in sorted(groups.items(), key=lambda item: tuple(str(value or "") for value in item[0])):
+        for timestamp, lower, upper in spans:
+            documents = {identity for identity, created in firsts.items() if created <= upper}
+            used = {identity for identity in documents if stats.called_at.get(identity, upper + 1) <= upper}
+            if metric == "new_file_count":
+                value = sum(lower is None or firsts[identity] >= lower for identity in documents)
+            elif metric == "called_document_count":
+                value = len(used)
+            elif metric == "document_usage_ratio":
+                value = len(used) / len(documents) if documents else 0.0
+            elif metric == "knowledge_contribution_ratio":
+                denominator = sum(created <= upper for created in all_first.values())
+                value = len(documents) / denominator if denominator else 0.0
+            else:
+                value = len(documents)
+            values = list(key)
+            if time_dimensions:
+                values.insert(time_dimensions[0][0], timestamp)
+            result.append([*values, value])
+    return result
+
+
+def test_bisect_matches_previous_scan_on_random_records():
+    import random
+
+    random.seed(7)
+    records = []
+    called = {}
+    for index in range(48):
+        identity = f"document:{index % 17}"
+        records.append(
+            {
+                "knowledge_identity": identity,
+                "file_id": index + 1,
+                "timestamp": ts("2026-08-01") / 1000 + index * 86400,
+                "org": "A" if index % 2 == 0 else "B",
+                "level": "公共库" if index % 3 else "科室库",
+            }
+        )
+        if index % 4 == 0:
+            called[identity] = ts("2026-08-01") + (index % 20) * 86_400_000
+    stats = DocumentStatistics(records, called)
+    start, end = ts("2026-08-01"), ts("2026-09-20T23:59:59")
+    cases = [
+        ([], "total_file_count"),
+        ([("org", None)], "new_file_count"),
+        ([("timestamp", "day")], "total_file_count"),
+        ([("timestamp", "week")], "new_file_count"),
+        ([("level", None)], "knowledge_contribution_ratio"),
+        ([("org", None), ("timestamp", "month")], "called_document_count"),
+        ([("timestamp", "day")], "document_usage_ratio"),
+        ([], "document_usage_ratio"),
+    ]
+    for dimensions, metric in cases:
+        assert stats.aggregate(dimensions, metric, start=start, end=end) == _legacy_aggregate(
+            stats, dimensions, metric, start, end
+        )
+    again = stats.aggregate([("timestamp", "day")], "total_file_count", start=start, end=end)
+    assert again == stats.aggregate([("timestamp", "day")], "total_file_count", start=start, end=end)
+
+
 def test_time_boundaries_contribution_and_call_union():
     import pytest
 

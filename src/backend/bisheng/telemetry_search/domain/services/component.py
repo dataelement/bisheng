@@ -1,6 +1,6 @@
 import copy
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Literal, Union
+from typing import Any, Literal, Union
 
 from loguru import logger
 from pydantic import BaseModel, Field, PrivateAttr
@@ -68,8 +68,8 @@ class DataQueryService(BaseModel):
     _document_bounds: tuple = PrivateAttr(default=(None, None))
     dataset_code: str = Field(description="dataset code")
     data_config: ComponentDataConfig = Field(description="component data configuration")
-    time_filters: List[TimeFilter] | None = Field(default=None, description="time filters")
-    dimension_filters: List[DimensionQueryFilter] = Field(
+    time_filters: list[TimeFilter] | None = Field(default=None, description="time filters")
+    dimension_filters: list[DimensionQueryFilter] = Field(
         default_factory=list,
         description="runtime dimension filters from linked filter components",
     )
@@ -77,7 +77,8 @@ class DataQueryService(BaseModel):
     @property
     def uses_login_participation(self) -> bool:
         return self.dataset_code in USER_STAT_DATASETS and any(
-            metric.field_id in LOGIN_FIELDS or metric.field_id == "active_user_count" for metric in self.data_config.metrics
+            metric.field_id in LOGIN_FIELDS or metric.field_id == "active_user_count"
+            for metric in self.data_config.metrics
         )
 
     async def query_telemetry_data(self) -> DataQueryResult:
@@ -137,19 +138,24 @@ class DataQueryService(BaseModel):
                 timestamp_dimension_index = dimension_index
                 timestamp_dimension = stack_dimension
 
-        query_result = await self.query_all_metrics(metric_map, dimension_index,
-                                                    index_name=dataset_config.es_index_name,
-                                                    dimensions=query_dimensions,
-                                                    stack_dimension=stack_dimension,
-                                                    filters=query_filters if query_filters else None)
+        query_result = await self.query_all_metrics(
+            metric_map,
+            dimension_index,
+            index_name=dataset_config.es_index_name,
+            dimensions=query_dimensions,
+            stack_dimension=stack_dimension,
+            filters=query_filters if query_filters else None,
+        )
 
-        res.dimensions, res.value = await self.sort_metrics(dimension_index, query_result, timestamp_dimension_index,
-                                                            timestamp_dimension, time_range)
+        res.dimensions, res.value = await self.sort_metrics(
+            dimension_index, query_result, timestamp_dimension_index, timestamp_dimension, time_range
+        )
         if self._document_statistics is not None:
             res.rollups = await self.document_rollups(query_dimensions, stack_dimension)
         all_dimensions = [*query_dimensions, *([stack_dimension] if stack_dimension else [])]
         res.dimension_labels = await resolve_dimension_labels(
-            [dimension.field for dimension in all_dimensions], res.dimensions,
+            [dimension.field for dimension in all_dimensions],
+            res.dimensions,
         )
         return res
 
@@ -181,9 +187,15 @@ class DataQueryService(BaseModel):
                 result.append({"metric_index": metric_index, "dimension_indexes": list(indices), "rows": rendered})
         return result
 
-    async def query_all_metrics(self, metric_map: Dict[str, MetricConfig], dimension_index: int, index_name: str,
-                                dimensions: List[AggregationExpression], stack_dimension: AggregationExpression | None,
-                                filters: List[FilterExpression]) -> List[List]:
+    async def query_all_metrics(
+        self,
+        metric_map: dict[str, MetricConfig],
+        dimension_index: int,
+        index_name: str,
+        dimensions: list[AggregationExpression],
+        stack_dimension: AggregationExpression | None,
+        filters: list[FilterExpression],
+    ) -> list[list]:
         all_dimensions = {}
         res = []
         login_population = None
@@ -191,7 +203,7 @@ class DataQueryService(BaseModel):
         from bisheng.common.constants.telemetry import KNOWLEDGE_SPACE_CONTENT_STAT_INDEX
         from bisheng.core.context.tenant import get_current_tenant_id
 
-        from .knowledge_document_reader import document_reader, split_time_filters
+        from .knowledge_document_reader import chart_source_fields, document_reader, split_time_filters
         from .knowledge_document_statistics import DOCUMENT_METRICS, uses_category_fields
 
         self._document_statistics = None
@@ -199,18 +211,24 @@ class DataQueryService(BaseModel):
             metric.field_id in DOCUMENT_METRICS for metric in self.data_config.metrics
         ):
             document_filters, start, end = split_time_filters(filters or [])
-            document_filters.extend([
-                {"term": {"tenant_id": get_current_tenant_id() or 1}},
-                {"terms": {"space_level": ["public", "department", "team", "team_ks", "personal"]}},
-            ])
-            async with document_reader(index_name) as reader:
-                self._document_statistics = await reader.load(
-                    document_filters,
-                    include_usage=any(metric.field_id in {"called_document_count", "document_usage_ratio"} for metric in self.data_config.metrics),
-                )
+            document_filters.extend(
+                [
+                    {"term": {"tenant_id": get_current_tenant_id() or 1}},
+                    {"terms": {"space_level": ["public", "department", "team", "team_ks", "personal"]}},
+                ]
+            )
             fields = [dimension.field for dimension in dimensions]
             if stack_dimension is not None:
                 fields.append(stack_dimension.field)
+            async with document_reader(index_name) as reader:
+                self._document_statistics = await reader.load(
+                    document_filters,
+                    include_usage=any(
+                        metric.field_id in {"called_document_count", "document_usage_ratio"}
+                        for metric in self.data_config.metrics
+                    ),
+                    source_fields=chart_source_fields(fields),
+                )
             if uses_category_fields(fields, filters):
                 self._document_statistics.validate_categories()
             self._document_bounds = (start, end)
@@ -218,30 +236,43 @@ class DataQueryService(BaseModel):
             metric_config = metric_map.get(metric.field_id)
             if not metric_config:
                 raise QueryMetricNotFoundError()
-            if self.dataset_code in USER_STAT_DATASETS and metric.field_id in {"participation_rate", "active_user_count"}:
+            if self.dataset_code in USER_STAT_DATASETS and metric.field_id in {
+                "participation_rate",
+                "active_user_count",
+            }:
                 if active_rows is None:
                     active_rows = await query_active_users(
-                        index_name=index_name, dimensions=dimensions, stack_dimension=stack_dimension, filters=filters,
+                        index_name=index_name,
+                        dimensions=dimensions,
+                        stack_dimension=stack_dimension,
+                        filters=filters,
                     )
             # metric filters、dimensions、stack_dimension、index_name copy from search_kwargs
             if metric_config.calculation == VirtualMetricCalculationEnum.LOGIN_PARTICIPATION:
                 if login_population is None:
                     login_population = await load_login_population(
-                        index_name=index_name, dimensions=dimensions, stack_dimension=stack_dimension, filters=filters,
+                        index_name=index_name,
+                        dimensions=dimensions,
+                        stack_dimension=stack_dimension,
+                        filters=filters,
                     )
                 one_metric_result = login_population.rows(metric_config.field, active_rows=active_rows)
             elif self.dataset_code in USER_STAT_DATASETS and metric.field_id == "active_user_count":
                 one_metric_result = active_rows
             else:
-                one_metric_result = await self.query_one_metric(metric_config, metric.aggregation, dimension_index,
-                                                                index_name=index_name,
-                                                                dimensions=copy.deepcopy(dimensions),
-                                                                stack_dimension=copy.deepcopy(stack_dimension),
-                                                                filters=copy.deepcopy(filters) if filters else None)
+                one_metric_result = await self.query_one_metric(
+                    metric_config,
+                    metric.aggregation,
+                    dimension_index,
+                    index_name=index_name,
+                    dimensions=copy.deepcopy(dimensions),
+                    stack_dimension=copy.deepcopy(stack_dimension),
+                    filters=copy.deepcopy(filters) if filters else None,
+                )
             # complete all dimensions
             if dimension_index >= 0:
                 for one in one_metric_result:
-                    one_dimension = one[:dimension_index + 1]
+                    one_dimension = one[: dimension_index + 1]
                     key = tuple(one_dimension)
                     if key not in all_dimensions:
                         all_dimensions[key] = [0] * len(self.data_config.metrics)
@@ -259,7 +290,7 @@ class DataQueryService(BaseModel):
         return res
 
     @staticmethod
-    def merge_filters(filters: List[FilterExpression] | None, new_filter: FilterExpression) -> List[FilterExpression]:
+    def merge_filters(filters: list[FilterExpression] | None, new_filter: FilterExpression) -> list[FilterExpression]:
         if not new_filter:
             return filters
         if filters is None:
@@ -268,8 +299,9 @@ class DataQueryService(BaseModel):
         filters.append(new_filter)
         return filters
 
-    async def query_one_metric(self, metric_config: MetricConfig, aggregation: AggregationType,
-                               dimension_index: int, **search_kwargs) -> List[List]:
+    async def query_one_metric(
+        self, metric_config: MetricConfig, aggregation: AggregationType, dimension_index: int, **search_kwargs
+    ) -> list[list]:
         from .knowledge_document_statistics import DOCUMENT_METRICS
 
         if self._document_statistics is not None and metric_config.field in DOCUMENT_METRICS:
@@ -279,7 +311,9 @@ class DataQueryService(BaseModel):
             start, end = self._document_bounds
             return self._document_statistics.aggregate(
                 [(item.field, item.time_interval) for item in dimensions],
-                metric_config.field, start=start, end=end,
+                metric_config.field,
+                start=start,
+                end=end,
             )
         if metric_config.is_virtual:
             if metric_config.calculation == VirtualMetricCalculationEnum.LOGIN_PARTICIPATION:
@@ -301,23 +335,19 @@ class DataQueryService(BaseModel):
             elif metric_config.index is not None:
                 return await self.query_index_metric(metric_config, dimension_index, **search_kwargs)
             else:
-                filters = search_kwargs.pop('filters', None)
+                filters = search_kwargs.pop("filters", None)
                 filters = self.merge_filters(filters, metric_config.filter)
-                search_params = SearchParameters(
-                    metrics=metric_config.aggregations,
-                    filters=filters,
-                    **search_kwargs
-                )
+                search_params = SearchParameters(metrics=metric_config.aggregations, filters=filters, **search_kwargs)
                 return await SearchEngineService(search_params).search()
 
         agg_type = self.convert_metric_aggregation(aggregation)
-        filters = search_kwargs.pop('filters', None)
+        filters = search_kwargs.pop("filters", None)
         filters = self.merge_filters(filters, metric_config.filter)
         # search data from telemetry mid table
         search_params = SearchParameters(
             metrics=[AggregationExpression(name=metric_config.field, field=metric_config.field, type=agg_type)],
             filters=filters,
-            **search_kwargs
+            **search_kwargs,
         )
         # eg. [[dim1, dim2, metric1, metric2], [...]]
         return await SearchEngineService(search_params).search()
@@ -327,9 +357,9 @@ class DataQueryService(BaseModel):
         metric_config: MetricConfig,
         dimension_index: int,
         **search_kwargs,
-    ) -> List[List]:
+    ) -> list[list]:
         """Calculate each complete dimension bucket's share of the filtered total."""
-        filters = search_kwargs.pop('filters', None)
+        filters = search_kwargs.pop("filters", None)
         filters = self.merge_filters(filters, metric_config.filter)
 
         numerator_params = SearchParameters(
@@ -350,48 +380,41 @@ class DataQueryService(BaseModel):
         )
         denominator_result = await SearchEngineService(denominator_params).search()
 
-        denominator = (
-            denominator_result[0][0]
-            if denominator_result and denominator_result[0]
-            else 0
-        )
+        denominator = denominator_result[0][0] if denominator_result and denominator_result[0] else 0
         dimension_count = dimension_index + 1
-        result: List[List] = []
+        result: list[list] = []
         for row in numerator_result:
             numerator = row[dimension_count]
             ratio = numerator / denominator if denominator else 0
             result.append([*row[:dimension_count], ratio])
         return result
 
-    async def query_formula_metric(self, metric_config: MetricConfig, dimension_index: int, **search_kwargs) \
-            -> List[List]:
-        filters = search_kwargs.pop('filters', None)
+    async def query_formula_metric(
+        self, metric_config: MetricConfig, dimension_index: int, **search_kwargs
+    ) -> list[list]:
+        filters = search_kwargs.pop("filters", None)
 
         # merge filters
         first_filters = copy.deepcopy(filters)
         second_filters = copy.deepcopy(filters)
         if metric_config.filter is not None:
-            first_filters = self.merge_filters(first_filters,
-                                               FilterExpression(bool_operator="must",
-                                                                filters=metric_config.filter.filters[:1]))
-            second_filters = self.merge_filters(second_filters,
-                                                FilterExpression(bool_operator="must",
-                                                                 filters=metric_config.filter.filters[1:]))
+            first_filters = self.merge_filters(
+                first_filters, FilterExpression(bool_operator="must", filters=metric_config.filter.filters[:1])
+            )
+            second_filters = self.merge_filters(
+                second_filters, FilterExpression(bool_operator="must", filters=metric_config.filter.filters[1:])
+            )
 
         # query first value
         search_params = SearchParameters(
-            metrics=metric_config.aggregations[0:1],
-            filters=first_filters,
-            **search_kwargs
+            metrics=metric_config.aggregations[0:1], filters=first_filters, **search_kwargs
         )
         # query result eg. [[dim1, dim2, metric1, metric2], [...]]
         first_result = await SearchEngineService(search_params).search()
 
         # query second value
         search_params = SearchParameters(
-            metrics=metric_config.aggregations[1:],
-            filters=second_filters,
-            **search_kwargs
+            metrics=metric_config.aggregations[1:], filters=second_filters, **search_kwargs
         )
         # query result eg. [[dim1, dim2, metric1, metric2], [...]]
         second_result = await SearchEngineService(search_params).search()
@@ -401,13 +424,14 @@ class DataQueryService(BaseModel):
         if dimension_index >= 0:
             all_dimensions = {}
             for one in first_result:
-                one_dimension = one[:dimension_index + 1]
+                one_dimension = one[: dimension_index + 1]
                 all_dimensions[tuple(one_dimension)] = one[dimension_index + 1]
             for one in second_result:
-                one_dimension = one[:dimension_index + 1]
+                one_dimension = one[: dimension_index + 1]
                 first_value = all_dimensions.pop(tuple(one_dimension), 0)
                 one_dimension.append(
-                    self.calc_formula_value(metric_config.formula, first_value, one[dimension_index + 1]))
+                    self.calc_formula_value(metric_config.formula, first_value, one[dimension_index + 1])
+                )
                 res.append(one_dimension)
             for one, value in all_dimensions.items():
                 one_dimension = list(one[0])
@@ -415,9 +439,7 @@ class DataQueryService(BaseModel):
                 res.append(one_dimension)
         else:
             for index, one in enumerate(first_result):
-                res.append([
-                    self.calc_formula_value(metric_config.formula, one[0], second_result[index][0])
-                ])
+                res.append([self.calc_formula_value(metric_config.formula, one[0], second_result[index][0])])
         return res
 
     @staticmethod
@@ -433,10 +455,9 @@ class DataQueryService(BaseModel):
                 return 0
             return first_value / second_value
         else:
-            raise ValueError('Unknown formula')
+            raise ValueError("Unknown formula")
 
-    async def query_sum_metric(self, metric_config: MetricConfig, dimension_index: int, **search_kwargs) \
-            -> List[List]:
+    async def query_sum_metric(self, metric_config: MetricConfig, dimension_index: int, **search_kwargs) -> list[list]:
         # judge timestamp dimensions exist
         timestamp_dimension_exists = False
         dimensions = search_kwargs.get("dimensions", [])
@@ -467,22 +488,19 @@ class DataQueryService(BaseModel):
         search_params = SearchParameters(
             metrics=[AggregationExpression(field=metric_config.sum_field, type=metric_config.sum_type)],
             filters=filters,
-            **search_kwargs
+            **search_kwargs,
         )
         # query result eg. [[dim1, dim2, metric1, metric2], [...]]
         return await SearchEngineService(search_params).search()
 
-    async def query_index_metric(self, metric_config: MetricConfig, dimension_index: int, **search_kwargs) \
-            -> List[List]:
+    async def query_index_metric(
+        self, metric_config: MetricConfig, dimension_index: int, **search_kwargs
+    ) -> list[list]:
         # merge filters
-        filters = search_kwargs.pop('filters', None)
+        filters = search_kwargs.pop("filters", None)
         filters = self.merge_filters(filters, metric_config.filter)
 
-        search_params = SearchParameters(
-            metrics=metric_config.aggregations,
-            filters=filters,
-            **search_kwargs
-        )
+        search_params = SearchParameters(metrics=metric_config.aggregations, filters=filters, **search_kwargs)
         # query result eg. [[dim1, dim2, metric1, metric2], [...]]
         query_result = await SearchEngineService(search_params).search()
 
@@ -491,16 +509,21 @@ class DataQueryService(BaseModel):
         for one in query_result:
             one_result = []
             if dimension_index >= 0:
-                one_result.extend(one[:dimension_index + 1])
-                one_result.append(one[dimension_index + 1:][metric_config.index])
+                one_result.extend(one[: dimension_index + 1])
+                one_result.append(one[dimension_index + 1 :][metric_config.index])
             else:
                 one_result.append(one[metric_config.index])
             res.append(one_result)
         return res
 
-    async def sort_metrics(self, dimension_index: int, query_result: List[List], time_dimension_index: int,
-                           timestamp_dimension: AggregationExpression, time_range: List[int]) -> (List[List],
-                                                                                                  List[List]):
+    async def sort_metrics(
+        self,
+        dimension_index: int,
+        query_result: list[list],
+        time_dimension_index: int,
+        timestamp_dimension: AggregationExpression,
+        time_range: list[int],
+    ) -> (list[list], list[list]):
         res = query_result
 
         # sort and limit
@@ -542,18 +565,25 @@ class DataQueryService(BaseModel):
         for one in res:
             if dimension_index >= 0:
                 # need filter some data by time range
-                if self._document_statistics is None and time_dimension_index >= 0 and not self.in_time_range(time_range, one[time_dimension_index],
-                                                                        timestamp_dimension):
+                if (
+                    self._document_statistics is None
+                    and time_dimension_index >= 0
+                    and not self.in_time_range(time_range, one[time_dimension_index], timestamp_dimension)
+                ):
                     continue
-                one_dimension = one[:dimension_index + 1]
+                one_dimension = one[: dimension_index + 1]
 
                 if time_dimension_index >= 0:
                     one_dimension[time_dimension_index] = self.format_timestamp(
-                        one_dimension[time_dimension_index], timestamp_dimension,
-                        timezone=CHINA if self.uses_login_participation or self._document_statistics is not None else None)
+                        one_dimension[time_dimension_index],
+                        timestamp_dimension,
+                        timezone=CHINA
+                        if self.uses_login_participation or self._document_statistics is not None
+                        else None,
+                    )
 
                 final_dimensions.append(one_dimension)
-                final_values.append(one[dimension_index + 1:])
+                final_values.append(one[dimension_index + 1 :])
             else:
                 final_values.append(one)
 
@@ -565,8 +595,8 @@ class DataQueryService(BaseModel):
 
         return final_dimensions, final_values
 
-    def in_time_range(self, time_range: List[int], timestamp: int, timestamp_dimension: AggregationExpression) -> bool:
-        """ judge data timestamp whether in time range"""
+    def in_time_range(self, time_range: list[int], timestamp: int, timestamp_dimension: AggregationExpression) -> bool:
+        """judge data timestamp whether in time range"""
         if not time_range:
             return True
         timezone = CHINA if self.uses_login_participation else None
@@ -593,17 +623,17 @@ class DataQueryService(BaseModel):
     def format_timestamp(timestamp: int, timestamp_dimension: AggregationExpression, timezone=None) -> str:
         dt_object = datetime.fromtimestamp(timestamp / 1000, timezone)
         if timestamp_dimension.time_interval == "year":
-            return dt_object.strftime('%Y')
+            return dt_object.strftime("%Y")
         elif timestamp_dimension.time_interval == "month":
-            return dt_object.strftime('%Y-%m')
+            return dt_object.strftime("%Y-%m")
         elif timestamp_dimension.time_interval == "week":
             week_end = dt_object + timedelta(days=6)
-            return dt_object.strftime('%Y-%m-%d') + ' ~ ' + week_end.strftime('%Y-%m-%d')
+            return dt_object.strftime("%Y-%m-%d") + " ~ " + week_end.strftime("%Y-%m-%d")
         elif timestamp_dimension.time_interval == "day":
-            return dt_object.strftime('%Y-%m-%d')
+            return dt_object.strftime("%Y-%m-%d")
         elif timestamp_dimension.time_interval == "hour":
-            return dt_object.strftime('%Y-%m-%d %H')
-        return dt_object.strftime('%Y-%m-%d %H:%M:%S')
+            return dt_object.strftime("%Y-%m-%d %H")
+        return dt_object.strftime("%Y-%m-%d %H:%M:%S")
 
     @staticmethod
     def convert_metric_aggregation(agg_type: AggregationType) -> AggsTypeEnum:
@@ -622,8 +652,9 @@ class DataQueryService(BaseModel):
         raise QueryAggregationNotFoundError()
 
     @staticmethod
-    async def convert_dimensions(dimensions: List[DimensionField], dimension_map: Dict[str, DimensionConfig]) \
-            -> List[AggregationExpression]:
+    async def convert_dimensions(
+        dimensions: list[DimensionField], dimension_map: dict[str, DimensionConfig]
+    ) -> list[AggregationExpression]:
         res = []
         for dimension in dimensions:
             dimension_config = dimension_map.get(dimension.field_id)
@@ -652,22 +683,20 @@ class DataQueryService(BaseModel):
             res.append(agg)
         return res
 
-    async def convert_filters(self, dimension_map: Dict[str, DimensionConfig], metric_map: Dict[str, MetricConfig]) \
-            -> (List[FilterExpression], List[int]):
+    async def convert_filters(
+        self, dimension_map: dict[str, DimensionConfig], metric_map: dict[str, MetricConfig]
+    ) -> (list[FilterExpression], list[int]):
         """
         return:
             filter expression: some filed filter,
             time_range: [start, end]: have time intersection or not time filters; None: no time intersection, don`t need query data
         """
-        all_time_filters: List[TimeFilter] = []
+        all_time_filters: list[TimeFilter] = []
         if self.data_config.time_filter:
             all_time_filters.append(self.data_config.time_filter)
         if self.time_filters:
             all_time_filters.extend(self.time_filters)
-        if (
-            not all_time_filters
-            and self.dataset_code == "mid_user_daily_participation"
-        ):
+        if not all_time_filters and self.dataset_code == "mid_user_daily_participation":
             all_time_filters.append(
                 TimeFilter(
                     type="recent_days",
@@ -678,7 +707,7 @@ class DataQueryService(BaseModel):
 
         filters = []
         filter_expressions = []
-        filter_ope: Literal['must', 'should', 'must_not', 'filter']
+        filter_ope: Literal["must", "should", "must_not", "filter"]
         if self.data_config.filters_logic == LogicType.AND:
             filter_ope = "must"
         else:
@@ -716,46 +745,55 @@ class DataQueryService(BaseModel):
                 alternatives.append(TermsOp(field=dimension_config.field, value=values))
             if any(value is None for value in runtime_filter.values):
                 # 空值分组必须匹配缺失字段, 不能用展示名称或 null 做 terms 查询。
-                alternatives.append(FilterExpression(
-                    bool_operator="must_not",
-                    filters=[ExistsOp(field=dimension_config.field)],
-                ))
+                alternatives.append(
+                    FilterExpression(
+                        bool_operator="must_not",
+                        filters=[ExistsOp(field=dimension_config.field)],
+                    )
+                )
             runtime_filters.append(
-                alternatives[0] if len(alternatives) == 1 else FilterExpression(
-                    bool_operator="should", filters=alternatives,
+                alternatives[0]
+                if len(alternatives) == 1
+                else FilterExpression(
+                    bool_operator="should",
+                    filters=alternatives,
                 )
             )
         if runtime_filters:
-            filter_expressions.append(
-                FilterExpression(bool_operator="must", filters=runtime_filters)
-            )
+            filter_expressions.append(FilterExpression(bool_operator="must", filters=runtime_filters))
 
         time_range = []
         for one in all_time_filters:
             start_date, end_date = one.get_start_end_date(
                 include_today=self.dataset_code in REALTIME_TEMPORAL_DATASETS or self.uses_login_participation,
-                timezone=CHINA if self.uses_login_participation or self.dataset_code == "mid_knowledge_space_content_stat" else None,
+                timezone=CHINA
+                if self.uses_login_participation or self.dataset_code == "mid_knowledge_space_content_stat"
+                else None,
             )
             if start_date and end_date:
                 time_range.append([start_date, end_date])
         finally_time_range = self.find_intersection(time_range)
         if finally_time_range:
             filter_expressions.append(
-                FilterExpression(bool_operator="must",
-                                 filters=[RangeOp(field="timestamp",
-                                                  value=RangeValue(
-                                                      gte=finally_time_range[0],
-                                                      lte=finally_time_range[1]))]))
+                FilterExpression(
+                    bool_operator="must",
+                    filters=[
+                        RangeOp(
+                            field="timestamp", value=RangeValue(gte=finally_time_range[0], lte=finally_time_range[1])
+                        )
+                    ],
+                )
+            )
 
         return filter_expressions, finally_time_range if time_range else []
 
     @staticmethod
     def find_intersection(intervals):
-        """ find multi timestamp intervals intersection
+        """find multi timestamp intervals intersection
         params:
             intervals: [[start, end], [start2, end2]]。
         return:
-            if exist: [max_start, min_end]；else None。
+            if exist: [max_start, min_end]; else None。
         """
         if not intervals:
             return None
@@ -775,8 +813,9 @@ class DataQueryService(BaseModel):
             return None
 
     @staticmethod
-    def convert_filter_operator(field: str, operator: OperatorType, value: Any, field_type) -> Union[
-        AtomFilter, FilterExpression]:
+    def convert_filter_operator(
+        field: str, operator: OperatorType, value: Any, field_type
+    ) -> Union[AtomFilter, FilterExpression]:
         if field_type == "number":
             try:
                 value = float(value)
@@ -785,9 +824,12 @@ class DataQueryService(BaseModel):
         if operator == OperatorType.EQUAL:
             return TermOp(field=field, value=value)
         elif operator == OperatorType.NOT_EQUAL:
-            return FilterExpression(bool_operator="must_not", filters=[
-                TermOp(field=field, value=value),
-            ])
+            return FilterExpression(
+                bool_operator="must_not",
+                filters=[
+                    TermOp(field=field, value=value),
+                ],
+            )
         elif operator == OperatorType.GREATER_THAN:
             return RangeOp(field=field, value=RangeValue(gt=value))
         elif operator == OperatorType.LESS_THAN:
@@ -799,15 +841,21 @@ class DataQueryService(BaseModel):
         elif operator == OperatorType.CONTAINS:
             return MatchPhraseOp(field=field, value=value)
         elif operator == OperatorType.NOT_CONTAINS:
-            return FilterExpression(bool_operator="must_not", filters=[
-                MatchPhraseOp(field=field, value=value),
-            ])
+            return FilterExpression(
+                bool_operator="must_not",
+                filters=[
+                    MatchPhraseOp(field=field, value=value),
+                ],
+            )
         elif operator == OperatorType.IS_EMPTY:
             return TermOp(field=field, value="null")
         elif operator == OperatorType.IS_NOT_EMPTY:
-            return FilterExpression(bool_operator="must_not", filters=[
-                TermOp(field=field, value="null"),
-            ])
+            return FilterExpression(
+                bool_operator="must_not",
+                filters=[
+                    TermOp(field=field, value="null"),
+                ],
+            )
         elif operator == OperatorType.IN:
             return TermsOp(field=field, value=value)
         raise QueryOperatorNotFoundError()
