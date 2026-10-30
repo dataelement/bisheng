@@ -2595,5 +2595,19 @@
     "scenario_time": "現在の時刻",
     "scenario_order": "注文照会",
     "scenario_inventory": "在庫照会"
+  },
+  "com_builtin_skills": {
+    "bisheng-docx": {
+      "name": "Word 文書作成",
+      "description": "報告書、提案書、議事録、通知、契約書の草案、履歴書などの Word 文書（.docx）を作成・閲覧・編集します。見出し、目次、ページ番号、表、グラフを整え、納品前にレイアウトを確認します。"
+    },
+    "bisheng-pptx": {
+      "name": "PowerPoint プレゼンテーション作成",
+      "description": "会社紹介、業務報告、プロジェクト提案、製品発表、研修用の PowerPoint プレゼンテーション（.pptx）を作成・閲覧・編集します。提供された .pptx または .potx テンプレートを使用し、納品前にスライドのレイアウトを確認します。"
+    },
+    "bisheng-xlsx": {
+      "name": "Excel スプレッドシート作成",
+      "description": "データ表、集計表、予算表、財務モデル、見積書、台帳などの Excel ブック（.xlsx）を作成・編集します。.xlsx、.xls、.csv データの読み込みと整形、数式や書式の設定を行い、納品前にブックを再計算して確認します。"
+    }
   }
 }
