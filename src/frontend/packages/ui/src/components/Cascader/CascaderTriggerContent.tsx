@@ -6,7 +6,7 @@ import type { SelectOption } from '../Select/types';
 import { SELECTION_CHEVRON_SIZE, type SelectionVariant } from '../shared/SelectionTrigger';
 import { Tooltip } from '../Tooltip/Tooltip';
 import type { CascaderPath } from './types';
-import { shortestLabels, type CascaderEntry } from './utils';
+import type { CascaderEntry } from './utils';
 
 interface TruncatedValueProps {
   value: string;
@@ -43,7 +43,6 @@ export interface CascaderTriggerContentProps {
   hasValue: boolean;
   disabled: boolean;
   placeholder?: string;
-  separator: string;
   removeLabel: string;
   selectedEntries: CascaderEntry[];
   singleLabel: string;
@@ -60,7 +59,6 @@ export function CascaderTriggerContent({
   hasValue,
   disabled,
   placeholder,
-  separator,
   removeLabel,
   selectedEntries,
   singleLabel,
@@ -83,12 +81,10 @@ export function CascaderTriggerContent({
   }
 
   if (multiple && hasValue) {
-    const labels = shortestLabels(selectedEntries, separator);
     const paths = new Map(selectedEntries.map((entry) => [entry.key, entry.path]));
     const options: SelectOption[] = selectedEntries.map((entry) => ({
       value: entry.key,
       label:
-        labels.get(entry.key) ??
         entry.options[entry.options.length - 1]?.label ??
         String(entry.path[entry.path.length - 1] ?? ''),
     }));
