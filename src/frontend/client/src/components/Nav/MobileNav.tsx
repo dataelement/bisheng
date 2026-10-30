@@ -27,6 +27,8 @@ type MobileNavProps = {
   persistNavVisibleInLocalStorage?: boolean;
   navigateToNewChatPath?: string | false;
   onNewChat?: () => void;
+  /** The containing shell owns its sidebar; mobile pages use the system drawer. */
+  onMenuClick?: () => void;
   preferBackButton?: boolean;
   onBack?: () => void;
   /** 应用内对话：无合并标题时与侧栏并排展示「返回」；有会话标题时返回在侧栏内，顶栏仅抽屉 */
@@ -49,6 +51,7 @@ export default function MobileNav({
   persistNavVisibleInLocalStorage = true,
   navigateToNewChatPath = '/c/new',
   onNewChat,
+  onMenuClick,
   preferBackButton = false,
   onBack,
   appSurfaceBackAction,
@@ -163,12 +166,18 @@ export default function MobileNav({
           <button
             type="button"
             data-testid="mobile-header-left-action"
-            aria-label={preferBackButton ? localize('com_ui_go_back') : localize('com_nav_open_sidebar')}
+            aria-label={preferBackButton ? localize('com_ui_go_back') : localize(onMenuClick && navVisible ? 'com_nav_close_sidebar' : 'com_nav_open_sidebar')}
+            aria-expanded={onMenuClick ? navVisible : undefined}
             className={cn(
               mobileHeadIconBtnClassName,
-              (historyDropdownOpen || appHistoryDropdownOpen) && 'pointer-events-none text-text-4',
+              !onMenuClick && (historyDropdownOpen || appHistoryDropdownOpen) && 'pointer-events-none text-text-4',
             )}
-            onClick={preferBackButton ? (onBack ?? toggleSidebar) : () => { setHistoryDropdownOpen(false); setSystemMenuOpen(true); }}
+            onClick={preferBackButton ? (onBack ?? toggleSidebar) : () => {
+              setHistoryDropdownOpen(false);
+              if (appHistoryDropdownOpen) onToggleAppHistoryDropdown?.();
+              if (onMenuClick) onMenuClick();
+              else setSystemMenuOpen(true);
+            }}
           >
             {preferBackButton ? (
               <ChevronLeft className="size-4" strokeWidth={2} />
