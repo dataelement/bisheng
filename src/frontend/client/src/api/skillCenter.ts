@@ -14,7 +14,7 @@ export async function getSkillScope(userId: string): Promise<string> {
 interface SkillRecord {
   id: number; name: string; display_name: string; description: string; enabled: boolean;
   source: 'platform' | 'personal'; content_hash: string; updated_at: string;
-  instructions?: string; files?: string[];
+  builtin_key?: string | null; instructions?: string; files?: string[];
 }
 
 export async function getCenterSkills(): Promise<CenterSkill[]> {
@@ -23,7 +23,7 @@ export async function getCenterSkills(): Promise<CenterSkill[]> {
   return response.data.map(row => {
     const shared = { id: `${row.source}:${row.source === 'platform' ? row.name : row.id}`, resourceId: row.id,
       name: row.name, displayName: row.display_name, description: row.description, enabled: row.enabled };
-    return row.source === 'platform' ? { ...shared, source: 'platform' } : { ...shared, source: 'personal',
+    return row.source === 'platform' ? { ...shared, source: 'platform', builtinKey: row.builtin_key } : { ...shared, source: 'personal',
       scope: '', updatedAt: row.updated_at, revision: row.content_hash, instructions: row.instructions ?? '',
       files: row.files ?? [], fileName: `${row.display_name}.zip`, size: 0, file: new Blob() };
   });

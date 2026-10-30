@@ -37,6 +37,8 @@ export interface PlatformSkill {
   displayName: string;
   description: string;
   source: 'platform';
+  builtinKey?: string | null;
+  searchText?: string;
   enabled: boolean;
 }
 
