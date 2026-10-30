@@ -20,7 +20,7 @@ import type {
 } from "./permission";
 
 export interface ServiceAccountRequestScope {
-  readonly tenantId: number;
+  readonly tenantId: number | null;
   readonly signal: AbortSignal;
   readonly onScopeChanged: () => void;
 }
@@ -58,7 +58,7 @@ async function scopedRequest<T>(
       throw Object.assign(new Error("Canceled"), { code: "ERR_CANCELED" });
     const result = await run({
       headers: scope
-        ? { "X-Service-Account-Tenant": String(scope.tenantId) }
+        ? { "X-Service-Account-Tenant": scope.tenantId === null ? "all" : String(scope.tenantId) }
         : undefined,
       signal: controller.signal,
     });

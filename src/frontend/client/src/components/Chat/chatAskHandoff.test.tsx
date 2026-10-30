@@ -2,6 +2,10 @@ import { StrictMode, useCallback, useEffect, useState } from 'react';
 import { act, renderHook } from '@testing-library/react';
 import { parkChatAsk, useChatAskHandoff, type ChatAsk } from './chatAskHandoff';
 import { useChatModelResolution, readConversationModel } from '~/hooks/useChatModelResolution';
+import modelState from '~/store/modeltype';
+import { useConversationKnowledge } from '~/hooks/useConversationKnowledge';
+
+const { RecoilRoot, useRecoilState } = jest.requireActual<typeof import('recoil')>('recoil');
 
 let mockActivate: () => void;
 jest.mock('react-activation', () => ({ useActivate: (callback: () => void) => { mockActivate = callback; } }));
@@ -58,6 +62,42 @@ test('the same model still gets persisted for the new conversation', () => {
   renderHook(useLanding);
   expect(send).toHaveBeenCalledTimes(1);
   expect(readConversationModel('tester', 'daily', 'new')).toBe('1');
+});
+
+test.each([1, 2])('a knowledge ask settles once with shared model %s and survives consecutive asks', (modelId) => {
+  parkChatAsk({ ...question, modelId });
+  const select = jest.fn();
+  const view = renderHook(() => {
+    const [model, setModel] = useRecoilState(modelState.chatModel);
+    const { selectedOrgKbs, setSelectedOrgKbs } = useConversationKnowledge('tester', 'new');
+    const { persistPick } = useChatModelResolution({
+      userId: 'tester', conversationId: 'new', mode: 'daily', models, adminDefaultId: '1', ready: true,
+      onResolved: (value) => setModel({ id: Number(value.id), name: value.name || '' }),
+    });
+    const selectModel = useCallback((id: number) => {
+      select(id);
+      persistPick(id);
+      setModel({ id, name: 'Beta', manual: true, mode: 'daily' });
+      return true;
+    }, [persistPick, setModel]);
+    const sendMessage = useCallback((text: string) => send({ text, model: model.id, kbs: selectedOrgKbs }), [model, selectedOrgKbs]);
+    useChatAskHandoff({
+      conversationId: 'new', activeConversationId: 'new', locationKey: 'landing', selectedKbs: selectedOrgKbs,
+      setSelectedKbs: setSelectedOrgKbs, sendMessage, ready: true, selectedModelId: model.id,
+      selectModel, onModelUnavailable: rejected,
+    });
+  }, { wrapper: ({ children }) => <StrictMode><RecoilRoot>{children}</RecoilRoot></StrictMode> });
+  expect(select).toHaveBeenCalledTimes(1);
+  expect(send).toHaveBeenCalledTimes(1);
+  expect(send).toHaveBeenCalledWith({ text: 'Count entries', model: modelId, kbs: [{ id: 'space-1', name: 'Knowledge', type: 'space' }] });
+  parkChatAsk({ ...question, text: 'Another question', modelId });
+  act(() => mockActivate());
+  expect(select).toHaveBeenCalledTimes(2);
+  expect(send).toHaveBeenCalledTimes(2);
+  expect(send).toHaveBeenLastCalledWith({ text: 'Another question', model: modelId, kbs: [{ id: 'space-1', name: 'Knowledge', type: 'space' }] });
+  act(() => mockActivate());
+  expect(send).toHaveBeenCalledTimes(2);
+  view.unmount();
 });
 
 test('an unavailable model returns the question for editing and requires a fresh pick', () => {

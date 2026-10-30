@@ -132,14 +132,17 @@ describe("service account request scope", () => {
 });
 
 describe("management scope lifecycle", () => {
-  it("does not select Root or allow writes when shared scope is absent", async () => {
+  it("allows the global list without selecting Root", async () => {
     vi.mocked(request.get).mockResolvedValue({ scope_tenant_id: null });
     const { result } = renderHook(
       () => useServiceAccountManagementScope(options),
       { wrapper: wrapper() },
     );
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.ready).toBe(false);
+    expect(result.current.ready).toBe(true);
+    expect(result.current.requestScope?.tenantId).toBeNull();
+    await api.listServiceAccountsApi({ page: 1, page_size: 20 }, result.current.requestScope!);
+    expect(request.get).toHaveBeenLastCalledWith("/api/v1/service-accounts", expect.objectContaining({ headers: { "X-Service-Account-Tenant": "all" } }));
     expect(request.put).not.toHaveBeenCalled();
     await act(async () => {
       vi.mocked(request.put).mockResolvedValueOnce({ scope_tenant_id: 1 });
