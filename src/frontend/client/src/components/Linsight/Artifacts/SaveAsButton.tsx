@@ -46,6 +46,7 @@ import {
     getFileExtension,
     saveConvertedBlob,
 } from './artifactUtils';
+import { downloadMarkdownArtifact } from './markdownBundle';
 import { useSaveArtifactToKnowledge } from './useSaveArtifactToKnowledge';
 
 type SaveAsVariant = 'labeled' | 'inline' | 'toolbar';
@@ -126,7 +127,16 @@ export function SaveAsButton({ file, versionId, variant = 'labeled', className, 
         if (busy) return;
         setBusy(true);
         try {
-            await downloadArtifactFile(file, versionId, { citations });
+            // A deliverable md that references workspace images goes out as a zip
+            // (md + images); an uploaded source has no workspace images to carry.
+            if (isMarkdown && file.source !== 'upload') {
+                const kind = await downloadMarkdownArtifact(file, versionId, { citations });
+                if (kind === 'zip') {
+                    showToast?.({ message: localize('com_linsight_md_bundled_zip'), severity: NotificationSeverity.SUCCESS });
+                }
+            } else {
+                await downloadArtifactFile(file, versionId, { citations });
+            }
         } catch (e) {
             console.error('artifact download failed:', e);
             if (isApiError(e)) showApiError(e);
@@ -141,7 +151,7 @@ export function SaveAsButton({ file, versionId, variant = 'labeled', className, 
         setBusy(true);
         showToast?.({ message: localize('com_linsight_exporting'), severity: NotificationSeverity.SUCCESS });
         try {
-            const res = await getMdDownload({ file_url: file.file_url, file_name: file.file_name }, toType);
+            const res = await getMdDownload({ file_url: file.file_url, file_name: file.file_name }, toType, versionId);
             const errMsg = res instanceof Blob ? await readBlobError(res) : null;
             if (errMsg) throw new Error(errMsg);
             const mime =

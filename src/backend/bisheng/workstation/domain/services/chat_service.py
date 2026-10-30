@@ -77,6 +77,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import (
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.llm_error_classifier import ErrorType, label_error, unwrap
 from bisheng.common.utils.message_content import extract_message_reasoning, extract_message_text
+from bisheng.common.utils.think_tags import ThinkBlockStreamFilter
 from bisheng.core.cache.utils import async_file_download
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.chat_attachment import promote_chat_attachments
@@ -1724,6 +1725,15 @@ async def _agent_stream_chat_completion(
         image_registry = ImageRegistry()
         # A line holding only img#N is the model choosing to show that picture.
         stream_converter = ImageIdLineConverter(image_registry, HandleStreamConverter(citation_scope.handles))
+        inline_thinking_filter = ThinkBlockStreamFilter()
+
+        def feed_answer(text: str) -> str:
+            return stream_converter.feed(inline_thinking_filter.feed(text))
+
+        def flush_answer() -> str:
+            inline_thinking_filter.flush()
+            return stream_converter.flush()
+
         from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
         from bisheng.common.image_view.loop import image_view_configured, resolve_image_view_llm
 
@@ -1875,7 +1885,7 @@ async def _agent_stream_chat_completion(
             persisted = True
             error_flag = True
             error_msg = error_msg or reason
-            pending = stream_converter.flush()
+            pending = flush_answer()
             if pending:
                 record_answer_text(pending)
             finalise_dangling_events()
@@ -2169,7 +2179,7 @@ async def _agent_stream_chat_completion(
                                     {"duration_ms": d},
                                     conversation_id,
                                 )
-                            text = stream_converter.feed(text)
+                            text = feed_answer(text)
                             if not text:
                                 continue
                             yield record_answer_text(text)
@@ -2193,7 +2203,7 @@ async def _agent_stream_chat_completion(
 
                         # A text run ends here: release whatever the handle
                         # converter was still holding back.
-                        pending = stream_converter.flush()
+                        pending = flush_answer()
                         if pending:
                             yield record_answer_text(pending)
                             if scanner:
@@ -2359,7 +2369,7 @@ async def _agent_stream_chat_completion(
                                 {"duration_ms": d},
                                 conversation_id,
                             )
-                        text = stream_converter.feed(text)
+                        text = feed_answer(text)
                         if not text:
                             continue
                         yield record_answer_text(text)
@@ -2377,7 +2387,7 @@ async def _agent_stream_chat_completion(
             # Release whatever the handle converter was still holding back.
             # Inside the try: a client hang-up on this yield must still reach
             # the interruption branch that persists the turn.
-            pending = stream_converter.flush()
+            pending = flush_answer()
             if pending:
                 yield record_answer_text(pending)
                 if scanner:
@@ -2437,7 +2447,7 @@ async def _agent_stream_chat_completion(
         # Error paths skip the in-try flush above; keep the held-back tail in
         # the stored answer (nothing is yielded out here — a client hang-up on
         # a yield outside the try would lose the whole turn).
-        pending = stream_converter.flush()
+        pending = flush_answer()
         if pending:
             record_answer_text(pending)
 
@@ -2495,6 +2505,15 @@ async def _agent_stream_chat_completion(
         )
         yield _sse_resp("processing", "close", "", conversation_id)
 
+        # Schedule BEFORE final: the client closes the stream on that event.
+        # Retain the task so disconnecting cannot cancel conversation naming.
+        if is_new_conv or (conversation.name in (None, "", "New Chat")):
+            title_task = asyncio.create_task(
+                gen_title(data.text or "", bisheng_llm, conversation_id, login_user, request)
+            )
+            _BACKGROUND_TASKS.add(title_task)
+            title_task.add_done_callback(_BACKGROUND_TASKS.discard)
+
         # Terminal `final` sentinel so the frontend SSE hook's onEnd() fires
         # reliably (it listens for `data.final != null`). Without this the send
         # button stays stuck in "stop" state until the TCP stream closes.
@@ -2508,16 +2527,6 @@ async def _agent_stream_chat_completion(
         }
         yield f"data: {json.dumps(final_payload, ensure_ascii=False)}\n\n"
 
-        # Title generation runs in the background (fire-and-forget) so it survives
-        # the frontend closing this stream on `final`. The client then reads the
-        # title via the gen_title poll endpoint, which waits until the background
-        # task has persisted a real name (slow models take >5s).
-        if is_new_conv or (conversation.name in (None, "", "New Chat")):
-            title_task = asyncio.create_task(
-                gen_title(data.text or "", bisheng_llm, conversation_id, login_user, request)
-            )
-            _BACKGROUND_TASKS.add(title_task)
-            title_task.add_done_callback(_BACKGROUND_TASKS.discard)
         await log_telemetry_events(str(login_user.user_id), conversation_id, start_time)
 
     async def event_stream():
@@ -2572,11 +2581,6 @@ async def stream_chat_completion(
         return await _task_mode_stream_completion(request, data, login_user)
     daily_data = data.model_copy(update={"skills": []})
     return await _agent_stream_chat_completion(request, daily_data, login_user, session_subject)
-
-
-# Upper bound for in-stream title generation (task mode). Matches the gen_title
-# poll endpoint deadline so a hung LLM can't hold the handoff stream open forever.
-_TITLE_GEN_TIMEOUT_S = 30.0
 
 
 async def _task_mode_stream_completion(request: Request, data: APIChatCompletion, login_user: UserPayload):
@@ -2641,6 +2645,15 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
         user_id=login_user.user_id,
     )
 
+    # Naming must outlive the short handoff connection. Keep a strong reference
+    # just as in daily mode; the shared generator bounds the model call.
+    if _session.name in (None, "", "New Chat"):
+        title_task = asyncio.create_task(
+            gen_title(data.text or "", title_llm, session_version.session_id, login_user, request)
+        )
+        _BACKGROUND_TASKS.add(title_task)
+        title_task.add_done_callback(_BACKGROUND_TASKS.discard)
+
     async def _handoff_event():
         payload = {
             "event": "linsight_task_handoff",
@@ -2650,42 +2663,6 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
             },
         }
         yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-
-        # Persist the title AFTER the handoff is emitted (so the task panel isn't
-        # blocked on the LLM) but WITHIN this generator — a fire-and-forget
-        # asyncio task would be garbage-collected once this short-lived request
-        # returns, before the LLM call completes, leaving the name as "New Chat".
-        # Task mode has no `final` event, so the stream stays open until this
-        # completes. The client reads the title via the gen_title poll endpoint,
-        # which waits until a real name is persisted (slow models take >5s).
-        #
-        # Bounded by a timeout: a hung LLM would otherwise hold this stream open
-        # forever, leaving the frontend's send button stuck in the streaming
-        # state (onEnd only fires when the server closes the stream). On timeout
-        # we just close — the name keeps its "New Chat" default.
-        try:
-            await asyncio.wait_for(
-                gen_title(
-                    data.text or "",
-                    title_llm,
-                    session_version.session_id,
-                    login_user,
-                    request,
-                ),
-                timeout=_TITLE_GEN_TIMEOUT_S,
-            )
-            persisted = await MessageSessionDao.async_get_one(session_version.session_id)
-            logger.info(
-                f"[TASK_TITLE] done chat_id={session_version.session_id} "
-                f"persisted_name={(persisted.name if persisted else None)!r}"
-            )
-        except TimeoutError:
-            logger.warning(
-                f"[TASK_TITLE] timed out after {_TITLE_GEN_TIMEOUT_S}s "
-                f"chat_id={session_version.session_id}; keeping default name"
-            )
-        except Exception as exc:
-            logger.exception(f"[TASK_TITLE] failed chat_id={session_version.session_id}: {exc}")
 
     return StreamingResponse(_handoff_event(), media_type="text/event-stream")
 

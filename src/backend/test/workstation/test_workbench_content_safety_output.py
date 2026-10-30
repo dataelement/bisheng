@@ -122,6 +122,26 @@ async def _drain(response) -> list[str]:
     return [chunk async for chunk in response.body_iterator]
 
 
+async def test_daily_title_survives_disconnect_at_final(stream_env, monkeypatch):
+    import asyncio
+
+    completed = asyncio.Event()
+
+    async def generate(*_args):
+        completed.set()
+
+    monkeypatch.setattr(chat_service, "gen_title", generate)
+    monkeypatch.setattr(
+        chat_service.SensitiveWordPolicyService, "is_workbench_content_safety_active", lambda *_a: False
+    )
+    response = await chat_service._agent_stream_chat_completion(MagicMock(), _data(), MagicMock())
+    async for chunk in response.body_iterator:
+        if '"final": true' in chunk:
+            break
+    await response.body_iterator.aclose()
+    await asyncio.wait_for(completed.wait(), 0.1)
+
+
 def _answer_rows(inserted: list):
     return [row for row in inserted if row.category == "agent_answer"]
 
@@ -229,11 +249,14 @@ async def test_tools_astream_events_branch_also_scans(stream_env, monkeypatch):
 
 
 @pytest.mark.parametrize("with_tools", [False, True])
-async def test_responses_blocks_stream_answer_and_reasoning_separately(stream_env, monkeypatch, with_tools):
+@pytest.mark.parametrize("inline_thinking", [False, True])
+async def test_model_content_keeps_thinking_out_of_answer(stream_env, monkeypatch, with_tools, inline_thinking):
     chunks = [
         AIMessageChunk(content=[{"type": "reasoning", "summary": [{"type": "summary_text", "text": "Plan first"}]}]),
         AIMessageChunk(content=[{"type": "text", "text": "Safe answer", "index": 1}]),
     ]
+    if inline_thinking:
+        chunks = [AIMessageChunk(content=text) for text in ["<thi", "nk>Private secret", "</thi", "nk>Safe answer"]]
 
     class BlockLLM:
         async def astream(self, _messages):
@@ -272,5 +295,9 @@ async def test_responses_blocks_stream_answer_and_reasoning_separately(stream_en
     body = json.loads(_answer_rows(stream_env.inserted)[0].message)
     assert body["msg"] == "Safe answer"
     assert scanners[0].fed == ["Safe answer"]
-    assert any('"agent_thinking"' in event and "Plan first" in event for event in events)
+    if not inline_thinking:
+        assert any('"agent_thinking"' in event and "Plan first" in event for event in events)
+    assert "Private secret" not in "".join(events)
+    assert "Private secret" not in json.dumps(body)
+    assert "<think>" not in "".join(events)
     assert not any('"code": 500' in event for event in events)

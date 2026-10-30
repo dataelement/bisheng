@@ -514,6 +514,7 @@
   "com_linsight_download_failed": "下载失败，请稍后重试",
   "com_linsight_exporting": "正在导出，请稍候…",
   "com_linsight_export_success": "文件下载成功",
+  "com_linsight_md_bundled_zip": "这份 Markdown 引用了图片，已连同图片打包成 zip 下载",
   "com_linsight_export_failed": "导出失败，请稍后重试",
   "com_linsight": {
     "downloadAs": "下载为 {{format}}",
@@ -2617,6 +2618,16 @@
   "com_skill_center_menu": "技能",
   "com_skill_center_manage": "管理技能",
   "com_skill_center_menu_available": "可用技能",
+  "knowledgeBasePicker": {
+    "search": "搜索组织知识库",
+    "column": "知识库",
+    "selected": "已选择 {{count}} 个知识库",
+    "loadError": "组织知识库加载失败",
+    "loading": "正在加载知识库…",
+    "noMatch": "没有匹配的知识库",
+    "empty": "暂无可用的组织知识库",
+    "limit": "最多选择 50 个知识库"
+  },
   "modelPicker": {
     "unknownProvider": "其他提供方",
     "back": "返回"
@@ -2661,6 +2672,7 @@
     "modifiedColumn": "修改时间",
     "addContext": "添加上下文",
     "selectKnowledge": "选择知识空间",
+    "selectKnowledgeBases": "选择知识库",
     "searchKnowledge": "搜索知识空间",
     "selectedKnowledge": "已选 {{count}} 个知识空间",
     "confirmKnowledge": "确认添加",

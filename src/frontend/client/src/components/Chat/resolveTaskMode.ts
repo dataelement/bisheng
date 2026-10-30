@@ -25,6 +25,16 @@ export interface TaskModeNavigationInput {
   userToggled: boolean;
 }
 
+/** Keep the composing choice when a new conversation receives its real id. */
+export function preserveTaskModeChoice(
+  previousConversationId: string | undefined,
+  conversationId: string,
+  isSelfRewrite: boolean,
+  userToggled: boolean,
+): boolean {
+  return isSelfRewrite || (previousConversationId === conversationId && userToggled);
+}
+
 /**
  * Returns the mode to apply, or `null` to leave the toggle untouched.
  */

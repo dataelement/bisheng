@@ -80,6 +80,7 @@ const AiModelSelect = memo(({ options, value, disabled, onChange, onAutoChange }
       value={modelPaths.get(String(value)) ?? null}
       disabled={disabled}
       showSearch
+      autoWidth
       filterOption={(keyword, path) => {
         const query = keyword.toLowerCase();
         const modelId = path[path.length - 1]?.value;

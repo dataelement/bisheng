@@ -38,6 +38,8 @@ interface CascaderBaseProps {
   checkStrictly?: boolean;
   expandTrigger?: CascaderExpandTrigger;
   showSearch?: boolean;
+  /** Size the trigger to its selected label, within the caller's width constraints. */
+  autoWidth?: boolean;
   onSearch?: (keyword: string) => void;
   /** `true` uses case-insensitive full-path matching; `false` leaves filtering to the caller. */
   filterOption?: boolean | CascaderFilter;

@@ -8,7 +8,18 @@
     print(r.stderr[-2000:] if r.stderr else "(no stderr)")
 
 Flags: ``--content-only`` (dump only), ``--check-only`` (checks only),
-``--max-paras N``.
+``--max-paras N``, ``--reference uploads/模板.docx`` (follow-a-reference mode:
+report how the output's layout differs from the reference instead of grading
+it against the built-in profile).
+
+The content dump prints every paragraph's *effective* layout (face, size, bold,
+alignment, indent, line spacing), resolved through the style chain. Customer
+templates usually set all of it as direct run formatting under ``Normal``, so a
+dump that shows only the style name tells the model nothing about the template.
+
+A file under ``uploads/`` is the user's original and is never health-checked:
+grading a customer template against GB/T 9704 reports its own layout as
+defects, and the model then "fixes" the template it was asked to follow.
 
 Replaces two things the official skill relies on and this environment lacks:
 ``pandoc -t markdown`` for reading (pandoc exists in the release image but not
@@ -62,11 +73,18 @@ GONGWEN_ONLY_FONTS = ("方正小标宋简体", "小标宋", "仿宋_GB2312", "�
 # GONGWEN_ONLY_FONTS finds nothing.
 GONGWEN_TITLE_RE = re.compile(r"^关于.{2,60}的(通知|报告|请示|函|意见|批复|决定|通报|纪要|公告|通告)$")
 
-findings: list[tuple[str, str]] = []
+# Findings that grade a document against the built-in profile rather than
+# against itself. A reference document is the authority on these, so in
+# --reference mode they are not reported at all.
+PROFILE_KEYS = {"normal-eastasia", "normal-size", "profile-fonts", "no-headings"}
+
+ALIGN_NAMES = {0: "左对齐", 1: "居中", 2: "右对齐", 3: "两端对齐", 4: "分散对齐"}
+
+findings: list[tuple[str, str, str]] = []
 
 
-def add(level: str, message: str) -> None:
-    findings.append((level, message))
+def add(level: str, message: str, key: str | None = None) -> None:
+    findings.append((level, message, key or message))
 
 
 def has_cjk(text: str) -> bool:
@@ -157,6 +175,126 @@ def field_instructions(doc) -> list[str]:
     return [element.text or "" for element in doc.element.iter(qn("w:instrText"))]
 
 
+def _style_chain(style):
+    depth = 0
+    while style is not None and depth < 8:
+        yield style
+        try:
+            style = style.base_style
+        except (KeyError, AttributeError):
+            return
+        depth += 1
+
+
+def _first_set(values):
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def _indent_chars(paragraph, attr: str, font_pt: float | None) -> float | None:
+    """Indent in characters. Word honours ``w:firstLineChars`` over the twips value."""
+    for owner in [paragraph._p, *(s.element for s in _style_chain(paragraph.style))]:
+        ppr = owner.find(qn("w:pPr"))
+        ind = None if ppr is None else ppr.find(qn("w:ind"))
+        if ind is None:
+            continue
+        chars = ind.get(qn(f"w:{attr}Chars"))
+        if chars is not None:
+            return int(chars) / 100
+        twips = ind.get(qn(f"w:{attr}"))
+        if twips is not None:
+            return int(twips) / 20 / (font_pt or 12)
+    return None
+
+
+def _line_spacing_label(paragraph) -> str | None:
+    formats = [paragraph.paragraph_format, *(s.paragraph_format for s in _style_chain(paragraph.style))]
+    for pf in formats:
+        spacing = pf.line_spacing
+        if spacing is None:
+            continue
+        rule = str(pf.line_spacing_rule or "")
+        if hasattr(spacing, "pt"):
+            prefix = "最小行距" if "AT_LEAST" in rule else "固定行距"
+            return f"{prefix}{spacing.pt:g}pt"
+        return None if spacing == 1 else f"{spacing:g}倍行距"
+    return None
+
+
+def paragraph_format(paragraph) -> dict:
+    """The layout a reader actually sees, resolved through runs and the style chain.
+
+    The first run carrying text is the paragraph's own face: templates put the
+    specimen first and a filling note after it (「一、XX（各级标题注意加粗）」), and
+    the longest run would be the note. Every other distinct face/size is listed
+    too, so a mixed paragraph reads as mixed.
+    """
+    runs = [r for r in paragraph.runs if r.text.strip()]
+    chain = list(_style_chain(paragraph.style))
+    style_face = inherited_east_asia(paragraph.style)
+    style_size = _first_set(s.font.size for s in chain)
+    style_bold = _first_set(s.font.bold for s in chain)
+    faces: list[tuple[str | None, float | None]] = []
+    for run in runs or [None]:
+        face = (run_east_asia(run) if run is not None else None) or style_face
+        size = _first_set([run.font.size if run is not None else None, style_size])
+        pair = (face, None if size is None else size.pt)
+        if pair not in faces:
+            faces.append(pair)
+    bolds = [bool(_first_set([r.font.bold, style_bold])) for r in runs]
+    align = _first_set([paragraph.alignment, *(s.paragraph_format.alignment for s in chain)])
+    text = paragraph.text
+    face, size_pt = faces[0]
+    if len(set(bolds)) > 1:
+        bold = "首段加粗" if bolds[0] else "部分加粗"
+    else:
+        bold = "加粗" if bolds and bolds[0] else None
+    return {
+        "face": face,
+        "pt": size_pt,
+        "faces": faces,
+        "bold": bold,
+        "align": ALIGN_NAMES.get(int(align)) if align is not None else None,
+        "first": _indent_chars(paragraph, "firstLine", size_pt),
+        "left": _indent_chars(paragraph, "left", size_pt),
+        "spacing": _line_spacing_label(paragraph),
+        "lead": len(text) - len(text.lstrip(" \u3000")),
+        "tab": "\t" in text.strip(),
+    }
+
+
+def format_label(fmt: dict) -> str:
+    parts = [" + ".join(f"{face or '字体未设'} {f'{pt:g}pt' if pt else '字号未设'}" for face, pt in fmt["faces"])]
+    if fmt["bold"]:
+        parts.append(fmt["bold"])
+    if fmt["align"] and fmt["align"] != "两端对齐":
+        parts.append(fmt["align"])
+    for key, name in (("first", "首行缩进"), ("left", "左缩进")):
+        if fmt[key] and abs(fmt[key]) >= 0.5:
+            parts.append(f"{name}{fmt[key]:.1f}字")
+    if fmt["spacing"]:
+        parts.append(fmt["spacing"])
+    if fmt["lead"]:
+        parts.append(f"行首{fmt['lead']}个空格")
+    if fmt["tab"]:
+        parts.append("含制表符")
+    return "{" + " ".join(parts) + "}"
+
+
+def format_signature(fmt: dict) -> tuple:
+    """What has to match a reference paragraph: face, size, weight, spacing."""
+    return fmt["face"], fmt["pt"], fmt["bold"] in ("加粗", "首段加粗"), fmt["spacing"]
+
+
+def margins_cm(section) -> tuple[float, ...]:
+    return tuple(
+        round(x / 360000, 1)
+        for x in (section.top_margin, section.bottom_margin, section.left_margin, section.right_margin)
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Content read-out
 # --------------------------------------------------------------------------- #
@@ -186,8 +324,9 @@ def dump_content(path: str, max_paras: int) -> None:
             print("   … 其余段落未显示（--max-paras 可调）")
             break
         style = paragraph.style.name if paragraph.style is not None else "?"
-        tag = f"[{style}]" if style != "Normal" else ""
-        print(f"P{index:<4} {tag} {text if len(text) <= 110 else text[:107] + '…'}")
+        tag = f"[{style}] " if style != "Normal" else ""
+        body = text if len(text) <= 80 else text[:77] + "…"
+        print(f"P{index:<4} {tag}{format_label(paragraph_format(paragraph))} {body}")
         shown += 1
 
     for t_index, table in enumerate(doc.tables):
@@ -195,6 +334,10 @@ def dump_content(path: str, max_paras: int) -> None:
         for row in table.rows[:8]:
             cells = [c.text.strip().replace("\n", " ")[:24] for c in row.cells]
             print("   | " + " | ".join(cells) + " |")
+        for label, row in (("首行", table.rows[0]), ("第二行", table.rows[1] if len(table.rows) > 1 else None)):
+            cell_paras = [p for c in row.cells for p in c.paragraphs if p.text.strip()] if row is not None else []
+            if cell_paras:
+                print(f"   {label}版式 {format_label(paragraph_format(cell_paras[0]))}")
         if len(table.rows) > 8:
             print(f"   … 其余 {len(table.rows) - 8} 行未显示")
 
@@ -266,6 +409,7 @@ def check_profile_fonts(doc, faces: set[str], is_gongwen: bool) -> None:
         "调 apply_chinese_defaults(doc)（默认就是公文档）而不是逐处写字体名；"
         "「用户机器可能没装」不成立 —— 字体名只写进 XML，渲染在用户的 Word 里完成。"
         "若这是本单位模板要求的字体，忽略本条。",
+        key="profile-fonts",
     )
 
 
@@ -276,6 +420,7 @@ def check_fonts(doc, profile=None) -> None:
             "WARN",
             "Normal 样式没有设置 w:eastAsia 中文字体 —— 中文会退回主题字体（通常是等线/宋体），"
             "和你指定的西文字体对不上。在构建脚本里调 apply_chinese_defaults(doc) 一次性设好。",
+            key="normal-eastasia",
         )
 
     uncovered: list[str] = []  # 完全没有中文字体可继承
@@ -324,6 +469,7 @@ def check_fonts(doc, profile=None) -> None:
             "WARN",
             f"{len(mismatched)} 处中文 run 写的是西文字体、中文实际用的是样式继承来的另一种字体：{items}。"
             "同一段中西文字体不一致会看出明显断层 —— 用 set_run_font() 把三个字段一起设。",
+            key="mixed-latin-face",
         )
     if checked == 0:
         add("INFO", "文档里没有中文 run（纯英文文档？）")
@@ -342,6 +488,7 @@ def check_fonts(doc, profile=None) -> None:
             f"{len(small)} 处文字字号小于 {MIN_RUN_PT:g}pt：{', '.join(small[:6])}"
             f"{' …' if len(small) > 6 else ''}。打印后基本读不清 —— "
             f"正文 11pt、表格 10pt、图注 9pt，最小不要低于 {MIN_RUN_PT:g}pt。",
+            key="small-font",
         )
     expected_pt = (profile or MODERN or {}).get("body", {}).get("pt", 11)
     normal_pt = style_size_pt(doc.styles["Normal"])
@@ -350,6 +497,7 @@ def check_fonts(doc, profile=None) -> None:
             "WARN",
             f"Normal 样式字号 {normal_pt:g}pt 偏小（当前版式档的正文是 {expected_pt:g}pt）。"
             f"在 apply_chinese_defaults(doc, body_pt={expected_pt:g}) 里调回来。",
+            key="normal-size",
         )
 
 
@@ -360,6 +508,7 @@ def check_headings(doc) -> None:
             "WARN",
             "文档里没有用内置 Heading 样式的标题 —— 目录生成不出来，导航窗格也是空的。"
             "用 add_heading_cn(doc, '一、xxx', 2)，不要用加粗的普通段落冒充标题。",
+            key="no-headings",
         )
         return
     previous = 0
@@ -424,6 +573,7 @@ def check_tables(doc, section) -> None:
                 "WARN",
                 f"表 {index + 1} 首行不像表头（既没有加粗也没有底纹）—— 读者分不清表头和数据。"
                 "用 add_table(doc, headers=[…], rows=[…])，它会自动加深底白字加粗。",
+                key="table-header",
             )
         if len(table.rows) > REPEAT_HEADER_ROWS and not _row_repeats_as_header(header):
             add(
@@ -460,7 +610,11 @@ def check_text(doc, is_gongwen: bool = False) -> None:
         if not text:
             empty_streak += 1
             if empty_streak == 3:
-                add("INFO", "有连续 3 个以上空段落 —— 改用段前段后间距（space_before/space_after）分隔内容")
+                add(
+                    "INFO",
+                    "有连续 3 个以上空段落 —— 改用段前段后间距（space_before/space_after）分隔内容",
+                    key="empty-streak",
+                )
         else:
             empty_streak = 0
 
@@ -512,8 +666,8 @@ def check_fields(doc) -> None:
         )
 
 
-def run_checks(path: str) -> None:
-    doc = Document(path)
+def collect_findings(doc) -> tuple[bool, list[tuple[str, str, str]]]:
+    findings.clear()
     section = doc.sections[0]
     faces = document_faces(doc)
     is_gongwen = looks_like_gongwen(doc, faces)
@@ -525,16 +679,71 @@ def run_checks(path: str) -> None:
     check_images(doc, section)
     check_text(doc, is_gongwen)
     check_fields(doc)
+    return is_gongwen, list(findings)
+
+
+def check_against_reference(doc, ref) -> None:
+    """Follow-a-reference mode: the reference's layout is the spec, report drift from it."""
+    ref_margins = margins_cm(ref.sections[0])
+    out_margins = margins_cm(doc.sections[0])
+    if any(abs(a - b) > 0.2 for a, b in zip(ref_margins, out_margins, strict=True)):
+        add(
+            "WARN",
+            f"页边距和参照文档不一致：参照 上下左右 {'/'.join(f'{x:g}' for x in ref_margins)}cm，"
+            f"当前 {'/'.join(f'{x:g}' for x in out_margins)}cm。"
+            "以参照文档为底稿（Document(参照文档)）就会原样继承，不要调 setup_page()。",
+        )
+
+    ref_signatures = {format_signature(paragraph_format(p)) for p in ref.paragraphs if p.text.strip()}
+    drifted: list[str] = []
+    for index, paragraph in enumerate(doc.paragraphs):
+        if not paragraph.text.strip():
+            continue
+        fmt = paragraph_format(paragraph)
+        if format_signature(fmt) not in ref_signatures:
+            drifted.append(f"P{index}「{paragraph.text.strip()[:12]}」{format_label(fmt)}")
+    if drifted:
+        add(
+            "WARN",
+            f"{len(drifted)} 个段落的字体/字号/加粗/行距组合在参照文档里找不到："
+            f"{'; '.join(drifted[:6])}{' …' if len(drifted) > 6 else ''}。"
+            "对照参照文档同类段落的版式（inspect_docx.py --content-only 读参照文档）；"
+            "用 clone_paragraph() 复制参照段落再换文字，不要用 add_body / add_heading_cn 新建。",
+        )
+
+
+def is_upload(path: str) -> bool:
+    return "uploads" in os.path.normpath(path).replace("\\", "/").split("/")
+
+
+def run_checks(path: str, reference: str | None = None) -> None:
+    doc = Document(path)
+    ref_doc = Document(reference) if reference else None
+    if ref_doc is not None:
+        # Whatever the reference itself would be flagged for is the user's own
+        # layout, not a defect the build introduced.
+        _, ref_findings = collect_findings(ref_doc)
+        inherited = {key for _, _, key in ref_findings} | PROFILE_KEYS
+    else:
+        inherited = set()
+    is_gongwen, current = collect_findings(doc)
+    findings.clear()
+    findings.extend(f for f in current if f[2] not in inherited)
+    if ref_doc is not None:
+        check_against_reference(doc, ref_doc)
 
     print()
     print("=== 体检 ===")
-    print(f"（按「{'公文' if is_gongwen else '非公文'}」版式档校验）")
+    if ref_doc is not None:
+        print(f"（按参照文档 {os.path.basename(reference)} 校验：只报和它不一致的地方，不套内置版式档）")
+    else:
+        print(f"（按「{'公文' if is_gongwen else '非公文'}」版式档校验）")
 
     order = {"ERROR": 0, "WARN": 1, "INFO": 2}
     counts = {"ERROR": 0, "WARN": 0, "INFO": 0}
-    for level, _ in findings:
+    for level, _, _ in findings:
         counts[level] += 1
-    for level, message in sorted(findings, key=lambda f: order[f[0]]):
+    for level, message, _ in sorted(findings, key=lambda f: order[f[0]]):
         print(f"[{level}] {message}")
     if not findings:
         print("（无发现）")
@@ -553,18 +762,31 @@ def main() -> None:
     parser.add_argument("--content-only", action="store_true")
     parser.add_argument("--check-only", action="store_true")
     parser.add_argument("--max-paras", type=int, default=80)
+    parser.add_argument("--reference", help="参照文档（用户给的模板/范文）；给了就只报和它的版式差异")
     args = parser.parse_args()
 
     if not os.path.exists(args.path):
         print(f"[FATAL] 文件不存在: {args.path}")
         print("提示：代码执行器 cwd 就是工作区根，用相对路径 `output/x.docx`，不要写 `/output/x.docx`。")
         return
+    if args.reference and not os.path.exists(args.reference):
+        print(f"[FATAL] 参照文档不存在: {args.reference}")
+        return
 
     try:
         if not args.check_only:
             dump_content(args.path, args.max_paras)
-        if not args.content_only:
-            run_checks(args.path)
+        if args.content_only:
+            return
+        if is_upload(args.path):
+            print()
+            print("=== 体检 ===")
+            print(
+                "（跳过：uploads/ 下是用户原件。用户让你照它的格式写时，上面逐段的版式就是要照抄的规格，"
+                "不要拿内置版式档去「纠正」它；交付前体检产物时加 --reference 指向它。）"
+            )
+            return
+        run_checks(args.path, args.reference)
     except Exception:
         print("[FATAL] 体检过程本身出错：")
         traceback.print_exc(file=sys.stdout)
