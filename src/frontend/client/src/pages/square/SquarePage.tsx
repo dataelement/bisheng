@@ -41,8 +41,9 @@ export function SquarePage() {
         <div className="flex w-full shrink-0 justify-center bg-blue-500/[0.05] px-3 pb-[14px] pt-[18px]">
           <div className={cn(MODULE_HOME_COLUMN, 'flex h-9 items-center justify-center')}>
             <Segmented
+              block
               size="large"
-              className={MODULE_HOME_PILL}
+              className={cn(MODULE_HOME_PILL, 'max-w-fit')}
               aria-label={localize('com_workbench_sidebar.square')}
               options={types.map((item) => ({ value: item.type, label: item.label, icon: item.icon }))}
               value={active.type}

@@ -372,8 +372,6 @@ const AiChatInput = memo(
             }
         }, [externalValue, isControlled]);
 
-        const hasAttachedFiles =
-            (chatFiles?.length ?? 0) > 0 || uploadingFiles.length > 0;
         const filesParsing = (chatFiles ?? []).some(
             (file) => file?.parsing_status && !['completed', 'failed'].includes(file.parsing_status),
         );

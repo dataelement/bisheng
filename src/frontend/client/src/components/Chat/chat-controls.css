@@ -33,7 +33,9 @@ body[data-dsh-chat-theme] .dsh-add-menu [role^="menuitem"]:not(.dsh-command-skil
 .dsh-chat-surface .dsh-composer-submit:disabled { background:rgb(var(--fill-3)); color:rgb(var(--text-3)); opacity:1; }
 .dsh-chat-surface .dsh-composer-voice {
   display:inline-flex; flex:none; align-items:center; justify-content:center;
-  width:34px; height:34px; padding:0; border:0; border-radius:50%;
+  width:34px !important; height:34px !important; min-width:34px; min-height:34px;
+  padding:0 !important; border:0 !important; border-radius:50% !important;
+  corner-shape:round; aspect-ratio:1;
   transform:translateY(-2px); color:white; background:rgb(var(--brand-500));
   box-shadow:none;
 }

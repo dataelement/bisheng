@@ -80,6 +80,9 @@ beforeEach(() => {
 describe('unified usage selection', () => {
     it('loads the entire tenant on switching to departments and restores it after clearing selection', async () => {
         render(<PolicyView />)
+        expect(screen.getByLabelText('dsh.usageFilters').parentElement).toContainElement(
+            screen.getByRole('button', { name: 'dsh.refresh' }),
+        )
         fireEvent.click(screen.getByRole('radio', { name: 'dsh.byDepartment' }), {
             button: 0,
             ctrlKey: false,

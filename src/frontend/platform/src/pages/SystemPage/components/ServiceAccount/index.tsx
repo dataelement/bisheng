@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { getServiceAccountApi, listServiceAccountsApi } from "@/controllers/API/serviceAccount";
 import { handleUiRequest, showApiError } from "@/controllers/request";
 import type { ServiceAccountItem } from "@/types/api/openApi";
+import { displayTenantName } from "@/utils/tenantDisplayName";
 import { formatIsoDateTime } from "@/util/utils";
 import { Tabs } from "@bisheng/ui";
 
@@ -28,6 +29,9 @@ import { ResourceGrantsTab } from "./ResourceGrantsTab";
 
 function ServiceAccountView() {
   const requestScope = useServiceAccountRequestScope();
+  const { appConfig } = useContext(locationContext);
+  const showTenant = !!appConfig?.multiTenantEnabled;
+  const isGlobalView = requestScope.tenantId === null;
   const { t } = useTranslation();
   const [selected, setSelected] = useState<ServiceAccountItem | null>(null);
   const [keyword, setKeyword] = useState("");
@@ -137,6 +141,7 @@ function ServiceAccountView() {
 
   return (
     <div className="h-full min-h-0 flex-1 overflow-y-auto pb-8">
+      {isGlobalView && <p className="mb-4 text-sm text-muted-foreground">{t("openApiManagement.tenantScope.globalReadonlyHint")}</p>}
       <div className="mb-4 flex items-center justify-end gap-3">
         <SearchInput value={keyword} placeholder={t("openApiManagement.serviceAccount.search")} onChange={(event) => setKeyword(event.target.value)} onKeyDown={(event) => {
             if (event.key === "Enter") {
@@ -144,12 +149,13 @@ function ServiceAccountView() {
               else setSearchKeyword(keyword.trim());
             }
           }} className={"w-56"} />
-        <Button onClick={() => setCreateOpen(true)}>{t("openApiManagement.serviceAccount.create")}</Button>
+        <Button disabled={isGlobalView} onClick={() => setCreateOpen(true)}>{t("openApiManagement.serviceAccount.create")}</Button>
       </div>
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>{t("openApiManagement.fields.name")}</TableHead>
+            {showTenant && <TableHead>{t("openApiManagement.fields.tenant")}</TableHead>}
             <TableHead>{t("openApiManagement.fields.status")}</TableHead>
             <TableHead>{t("openApiManagement.fields.activeKeys")}</TableHead>
             <TableHead>{t("openApiManagement.fields.owner")}</TableHead>
@@ -163,10 +169,11 @@ function ServiceAccountView() {
             return (
               <TableRow key={account.id}>
                 <TableCell>
-                  <Button variant="link" className="h-auto max-w-56 px-0 font-medium" onClick={handleUiRequest(() => openDetail(account.id))}>
+                  {isGlobalView ? <span className="block max-w-56 truncate font-medium">{account.name}</span> : <Button variant="link" className="h-auto max-w-56 px-0 font-medium" onClick={handleUiRequest(() => openDetail(account.id))}>
                     <span className="truncate">{account.name}</span>
-                  </Button>
+                  </Button>}
                 </TableCell>
+                {showTenant && <TableCell>{displayTenantName(account.tenant_name) || "-"}</TableCell>}
                 <TableCell>
                   <Tag size="small" dot color={isEnabled ? "success" : "danger"}>
                     {t(isEnabled ? "openApiManagement.status.enabled" : "openApiManagement.status.disabled")}
@@ -225,7 +232,7 @@ function ServiceAccountView() {
           })}
           {list.isEmpty ? (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
+              <TableCell colSpan={showTenant ? 7 : 6} className="text-center text-muted-foreground">
                 {t("openApiManagement.empty")}
               </TableCell>
             </TableRow>
@@ -238,14 +245,14 @@ function ServiceAccountView() {
         onLoadMore={list.loadMore}
         onRetry={list.retry}
       />
-      <CreateServiceAccountDialog
+      {!isGlobalView && <CreateServiceAccountDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreated={(id) => {
           void list.reload();
           void openDetail(id, "keys").catch(showApiError);
         }}
-      />
+      />}
     </div>
   );
 }

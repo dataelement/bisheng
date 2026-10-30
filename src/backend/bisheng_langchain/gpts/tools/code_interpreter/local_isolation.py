@@ -32,6 +32,7 @@ from typing import Any
 from loguru import logger
 
 from bisheng_langchain.gpts.tools.code_interpreter import local_run_registry, local_uid_pool, workspace_copy
+from bisheng_langchain.gpts.tools.code_interpreter.base_executor import OUTPUT_DIR_NAME, SCRATCH_DIR_NAME
 
 DATA_DIR = "/app/data"
 # Head holds a code-node result line (4 MiB of JSON plus a short prefix).
@@ -364,6 +365,29 @@ def _make_run_dir(run_root: str, uid: int) -> str:
     return run_dir
 
 
+WORK_SUBDIRS = (OUTPUT_DIR_NAME, SCRATCH_DIR_NAME)
+
+
+def ensure_work_subdirs(run_dir: str, uid: int | None, chown: Callable[[str, int, int], None] = os.lchown) -> None:
+    """Create ``output/`` and ``scratch/`` in ``run_dir`` before the script runs.
+
+    The container runner creates both before each exec, so a first write to
+    ``output/x`` must not fail here either. An existing entry of that name is
+    left alone: a directory is already right, and anything else is the
+    script's own file. ``os.mkdir`` does not follow a symlink planted at the
+    name, and the new dir is handed to the pool uid with ``lchown``.
+    Empty dirs are never harvested: snapshots and copy-out list regular files only.
+    """
+    for name in WORK_SUBDIRS:
+        path = os.path.join(run_dir, name)
+        try:
+            os.mkdir(path, 0o755)
+        except FileExistsError:
+            continue
+        if uid is not None:
+            chown(path, uid, uid)
+
+
 def _write_script(path: str, code: str, uid: int) -> None:
     # The run dir was just filled by root and the uid has not run yet, so
     # nothing under it can be a planted symlink; O_NOFOLLOW is belt and braces.
@@ -636,6 +660,7 @@ def run_isolated(
             copied.copied_bytes,
             time.monotonic() - started,
         )
+        ensure_work_subdirs(run_dir, uid)
         if lang.startswith("python"):
             _seed_font_cache(run_dir, uid)
         _write_script(os.path.join(run_dir, filename), rewrite_paths(code, work_dir, run_dir), uid)
@@ -756,6 +781,7 @@ def _run_retained_once(
         time.monotonic() - started,
         len(synced.index),
     )
+    ensure_work_subdirs(run_dir, uid)
     if lang.startswith("python"):
         _seed_font_cache(run_dir, uid)
     script = os.path.join(run_dir, filename)

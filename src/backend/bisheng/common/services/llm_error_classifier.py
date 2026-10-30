@@ -33,6 +33,7 @@ import openai
 from langchain_core.exceptions import ContextOverflowError
 from langgraph.errors import GraphRecursionError
 
+from bisheng.common.errcode.dsh import DshMonthlyTokenLimitExceededError
 from bisheng.common.errcode.linsight import (
     LinsightBishengLLMError,
     LinsightContextCompressFailedError,
@@ -60,6 +61,10 @@ class ErrorType(str, enum.Enum):
 
     CONTENT_FILTER = "content_filter"
     QUOTA_EXHAUSTED = "quota_exhausted"
+    # The user's own monthly credits on this platform (client module / DSH) are
+    # used up. Distinct from QUOTA_EXHAUSTED, which is the provider account's
+    # balance: the remedy here is the platform admin's credit settings.
+    CREDIT_EXHAUSTED = "credit_exhausted"
     AUTH_ERROR = "auth_error"
     RATE_LIMIT = "rate_limit"
     SERVICE_UNAVAILABLE = "service_unavailable"
@@ -268,6 +273,11 @@ def _status_code(exc: BaseException) -> int | None:
     return status if isinstance(status, int) else None
 
 
+def _is_credit_exhausted(exc: BaseException) -> bool:
+    """The platform's own per-user monthly credit check rejected the call."""
+    return isinstance(exc, DshMonthlyTokenLimitExceededError)
+
+
 def _is_quota(exc: BaseException) -> bool:
     text = _exc_text(exc)
     return any(sig in text for sig in _QUOTA_SIGNATURES)
@@ -363,7 +373,7 @@ def classify_behavior(exc: BaseException) -> Behavior:
     # degrading it would hide it from that middleware (design decision 9).
     if _is_context_overflow(exc) or _is_context_compress_failed(exc):
         return Behavior.FAIL_FAST
-    if _is_quota(exc):
+    if _is_credit_exhausted(exc) or _is_quota(exc):
         return Behavior.FAIL_FAST
     if isinstance(exc, (openai.AuthenticationError, openai.PermissionDeniedError)):
         return Behavior.FAIL_FAST
@@ -430,6 +440,8 @@ def label_error(exc: BaseException) -> ErrorType:
     # content_filter is independent of the behaviour bucket (it lives in DEGRADABLE).
     if _is_content_filter(exc):
         return ErrorType.CONTENT_FILTER
+    if _is_credit_exhausted(exc):
+        return ErrorType.CREDIT_EXHAUSTED
     if _is_quota(exc):
         return ErrorType.QUOTA_EXHAUSTED
     if isinstance(exc, (openai.AuthenticationError, openai.PermissionDeniedError)) or _status_code(exc) in (401, 403):
@@ -483,4 +495,5 @@ def classify_for_event(error: BaseException | str) -> ClassifiedError:
 _ERROR_CODES: dict[ErrorType, int] = {
     ErrorType.CONTEXT_OVERFLOW: LinsightContextOverflowError.Code,
     ErrorType.CONTEXT_COMPRESS_FAILED: LinsightContextCompressFailedError.Code,
+    ErrorType.CREDIT_EXHAUSTED: DshMonthlyTokenLimitExceededError.Code,
 }

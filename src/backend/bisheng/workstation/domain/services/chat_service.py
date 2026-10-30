@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 import time
 from datetime import datetime
 from typing import Annotated, Any
@@ -429,6 +430,31 @@ def _annotate_retrieved_chunk(
     if image_registry is None:
         return chunk
     return annotate(chunk, image_registry)
+
+
+def _close_quietly(executor: Any) -> None:
+    try:
+        executor.close()
+    except Exception:
+        logger.exception("Agent chat: failed to stop the code executor of an interrupted turn")
+
+
+def _stop_code_executors(tools: list[BaseTool]) -> None:
+    """Stop sandbox runs of a torn-down turn without blocking the event loop.
+
+    A cancelled turn leaves its code-interpreter thread blocked on the runner's
+    exec call. ``ContainerExecutor.close`` deletes the session, and the runner
+    then kills the running process group, so the code does not run on to its
+    own timeout. Each close runs on its own daemon thread: the cancel path must
+    not wait for an HTTP round trip.
+    """
+    from bisheng_langchain.gpts.tools.code_interpreter.container_executor import ContainerExecutor
+
+    for tool in tools:
+        inner = getattr(tool, "tool_instance", tool)
+        executor = getattr(inner, "executor", None)
+        if isinstance(executor, ContainerExecutor):
+            threading.Thread(target=_close_quietly, args=(executor,), name="code-executor-stop", daemon=True).start()
 
 
 def _attach_kb_image_stage(tool: BaseTool, stage: KbImageStage) -> None:
@@ -1889,6 +1915,7 @@ async def _agent_stream_chat_completion(
             is_bot=False,
         )
 
+        langchain_tools: list[BaseTool] = []
         try:
             # ---- Step 1: resolve user-selected KBs ----
             knowledge_bases_info = await _resolve_user_kb_selection(data)
@@ -2368,7 +2395,14 @@ async def _agent_stream_chat_completion(
             error_flag = True
             error_msg = str(exc)
             logger.exception("Agent chat BaseErrorCode")
-            yield exc.to_sse_event_instance_str()
+            # Out of platform credits: tag the type so the bubble renders the
+            # credit card (who to ask, when it resets) rather than the bare line.
+            if label_error(exc) == ErrorType.CREDIT_EXHAUSTED:
+                yield exc.to_sse_event_instance_str(
+                    data={"exception": str(exc), "error_type": ErrorType.CREDIT_EXHAUSTED.value, "detail": str(exc)}
+                )
+            else:
+                yield exc.to_sse_event_instance_str()
         except Exception as exc:
             error_flag = True
             error_msg = str(exc)
@@ -2396,6 +2430,7 @@ async def _agent_stream_chat_completion(
             # the conversation reloads showing only the question, even though the
             # user watched a full answer stream in.
             logger.warning("Agent chat stream interrupted; persisting partial answer")
+            _stop_code_executors(langchain_tools)
             persist_interrupted_turn("stream interrupted")
             raise
 

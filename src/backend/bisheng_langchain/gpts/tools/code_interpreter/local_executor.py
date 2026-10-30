@@ -16,7 +16,6 @@ from loguru import logger
 from bisheng_langchain.gpts.tools.code_interpreter import local_run_registry
 from bisheng_langchain.gpts.tools.code_interpreter.base_executor import (
     EXECUTION_BOUNDARY_RULES,
-    OUTPUT_DIR_NAME,
     BaseExecutor,
     clip_middle,
     path_namespace_rules,
@@ -25,6 +24,7 @@ from bisheng_langchain.gpts.tools.code_interpreter.local_isolation import (
     IsolatedOutcome,
     LocalIsolationUnavailable,
     RunClosed,
+    ensure_work_subdirs,
     isolation_mode,
     run_isolated,
     run_retained,
@@ -329,7 +329,8 @@ class LocalExecutor(BaseExecutor):
         filepath = os.path.join(work_dir, filename)
         file_dir = os.path.dirname(filepath)
         os.makedirs(file_dir, exist_ok=True)
-        (Path(file_dir) / OUTPUT_DIR_NAME).mkdir(exist_ok=True, parents=True)
+        # Same layout the isolated and container modes give a run: output/ and scratch/ exist.
+        ensure_work_subdirs(file_dir, None)
         if code is not None:
             with open(filepath, "w", encoding="utf-8") as fout:
                 fout.write(code)

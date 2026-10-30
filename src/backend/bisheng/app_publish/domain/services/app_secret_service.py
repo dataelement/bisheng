@@ -14,6 +14,7 @@ from bisheng.app_publish.domain.secret_security import (
     validate_value,
 )
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.app_factory import AppManageForbiddenError
 from bisheng.common.errcode.app_publish import (
     AppPublishOwnerOnlyError,
     AppPublishStateConflictError,
@@ -129,19 +130,18 @@ class AppSecretService:
             return {"revision": revision, "present": value is not None and value != "", "updated_at": now.isoformat()}
 
     async def get(self, app_id, *, actor):
-        async with self.repo.transaction() as session:
-            app = await self.repo.app(session, app_id)
+        async with self.repo.read_transaction(app_id) as (session, app):
             from bisheng.app_runtime.application.tenant_access import require_app_request_tenant
 
             if not isinstance(actor, UserPayload):
-                raise AppPublishOwnerOnlyError()
+                raise AppManageForbiddenError()
             require_app_request_tenant(app.tenant_id, actor, allow_global_super=True)
             owner = actor.tenant_id == app.tenant_id and actor.user_id == app.owner_user_id
             if not owner and not actor.is_global_super and not await check_tenant_admin(actor.user_id, app.tenant_id):
                 from bisheng.permission.application.business_authorization import check_business_action
 
                 if not await check_business_action(actor, resource_type="app", resource_id=app.id, action="edit"):
-                    raise AppPublishOwnerOnlyError()
+                    raise AppManageForbiddenError()
             row = await self.repo.config(session, app.id)
             entries = self._entries(row, app)
             current = await self.repo.version(session, app.id, app.current_version_id)
