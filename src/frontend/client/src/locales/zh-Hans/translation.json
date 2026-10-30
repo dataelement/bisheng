@@ -1935,6 +1935,8 @@
     "empty_departments": "暂无部门数据",
     "empty_permissions": "当前还没有权限记录",
     "empty_search": "暂无匹配用户",
+    "empty_search_departments": "暂无匹配部门",
+    "empty_search_user_groups": "暂无匹配用户组",
     "empty_user_groups": "暂无用户组",
     "already_granted": "已授权",
     "already_granted_as": "已授权：{{model}}",

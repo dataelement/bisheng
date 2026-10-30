@@ -2006,6 +2006,8 @@
     "empty_departments": "No departments found",
     "empty_permissions": "No permission entries yet",
     "empty_search": "No matching users",
+    "empty_search_departments": "No matching departments",
+    "empty_search_user_groups": "No matching user groups",
     "empty_user_groups": "No user groups found",
     "already_granted": "Granted",
     "already_granted_as": "Granted: {{model}}",

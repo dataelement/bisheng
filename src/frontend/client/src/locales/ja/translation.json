@@ -1929,6 +1929,8 @@
     "empty_departments": "部署データがありません",
     "empty_permissions": "権限設定はまだありません",
     "empty_search": "一致するユーザーがいません",
+    "empty_search_departments": "一致する部門がありません",
+    "empty_search_user_groups": "一致するユーザーグループがありません",
     "empty_user_groups": "ユーザーグループがありません",
     "already_granted": "付与済み",
     "already_granted_as": "付与済み：{{model}}",
