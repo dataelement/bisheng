@@ -1,3 +1,11 @@
+## 2026-10-30 — 桌面内弹窗保留页面原色
+
+- 用户确认桌面内弹窗采用透明背景；技能上传、旧版弹窗和二次确认三套 Client 共用壳通过既有 `isDesktopEmbedded()` 识别桌面，统一设置透明背景。Radix 继续负责焦点、滚动隔离和关闭交互，普通浏览器沿用现有展示。
+- 基线 `feat/bisheng-work-120-main@1954f60c4acba5de5cca5e9385b76fc6b21effc0`。新增真实组件回归覆盖两种主题、SPA 跳转、浏览器范围、Tab 焦点与 Esc 关闭；恢复原蒙版行为时 3 项透明背景断言失败，修复后通过。
+- 弹窗相关扩展回归 7 组中 6 组通过，共 47 项通过、1 项失败；失败为现有 `PermissionDraftPickerDialog.test.tsx` 的 `value="department"` 源码字符串断言，对应组件与测试均保持基线内容。
+- Client ESLint、1503 个严格类型文件、生产构建通过；Platform、UI 和 file-viewers ESLint、file-viewers 类型检查通过。Platform 严格类型检查在现有 DSH 内容安全页面报告 6 项缺失 `@bisheng/ui` / `@tanstack/react-query` 的依赖解析错误，全仓类型门禁待验证。
+- Desktop 配套变更将知识空间颜色交回网页组件，保留窗口范围与关闭恢复。测试环境部署、真实账号技能上传、Windows 安装客户端验收待执行。
+
 ## 2026-10-30 — 知识空间问答跳转新会话崩溃修复
 
 - 知识空间提问跳转新聊天时，模型状态的同步订阅刷新会在准备完成状态提交前重新执行交接逻辑，反复设置模型并触发 `Maximum update depth exceeded`。真实 ChatView、输入框和模型状态组合夹具已复现。
