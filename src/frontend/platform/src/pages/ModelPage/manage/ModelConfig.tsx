@@ -26,9 +26,9 @@ import { useModelProviderInfo } from "./useLink";
 import { ModelItem } from "./ModelItem";
 import { hasDuplicateModelName, hasInvalidModelName, trimModelNames } from "./modelNameTrim";
 
-// `group` is an i18n key under model.providerGroups; the dropdown groups options in first-appearance order.
+// `group` is an i18n key under model.providerGroups; ungrouped entries stay on top, groups follow in first-appearance order.
 export const modelProvider = [
-    { "name": "", "labelKey": "model.providerNames.openaiCompatible", "value": "openai_compatible", "group": "generic", "descriptionKey": "model.openaiCompatibleDesc" },
+    { "name": "", "labelKey": "model.providerNames.openaiCompatible", "value": "openai_compatible" },
     { "name": "OpenAI", "value": "openai", "group": "cloud" },
     { "name": "Azure OpenAI", "value": "azure_openai", "group": "cloud" },
     { "name": "", "labelKey": "model.providerNames.qwen", "value": "qwen", "group": "cloud" },
@@ -278,9 +278,8 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         </div>
         <div className="mx-auto mt-6 h-[calc(100vh-220px-var(--license-banner-h,0px))] w-full max-w-[720px] overflow-y-auto px-4 pb-10">
             <section className="space-y-4">
-                <h3 className="text-sm font-medium">{t('model.sectionConnection')}</h3>
                 <div className="space-y-2">
-                    <Label className="bisheng-label">
+                    <Label className="bisheng-label inline-flex items-center">
                         <span>{t('model.providerType')}</span>
                         <ModelFieldHint className="ml-1" content={t('model.providerTypeTip')} />
                     </Label>
@@ -293,8 +292,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                             .map(model => ({
                                 value: model.value,
                                 label: providerLabel(model, t),
-                                group: t(`model.providerGroups.${model.group}`),
-                                description: model.descriptionKey ? t(model.descriptionKey) : undefined,
+                                group: model.group ? t(`model.providerGroups.${model.group}`) : undefined,
                             }))}
                         filterOption={filterProvider}
                         value={formData.type || null}
@@ -302,7 +300,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     />
                 </div>
                 <div className="space-y-2">
-                    <Label className="bisheng-label">
+                    <Label className="bisheng-label inline-flex items-center">
                         <span>{t('model.serviceProviderName')}</span>
                         <span className="text-red-500">*</span>
                         <ModelFieldHint className="ml-1" content={t('model.serviceProviderNameTooltip')} />
@@ -329,7 +327,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     <h3 className="text-sm font-medium">{t('model.sectionUsage')}</h3>
                     <div className="space-y-3">
                         <div className="flex items-center justify-between gap-4">
-                            <Label className="bisheng-label">
+                            <Label className="bisheng-label inline-flex items-center">
                                 <span>{t('model.dailyCallLimit')}</span>
                                 <ModelFieldHint className="ml-1" content={t('model.dailyCallLimitTip')} />
                             </Label>
@@ -346,7 +344,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     </div>
                     {showShareToggle && (
                         <div className="flex items-center justify-between gap-4">
-                            <Label className="bisheng-label">
+                            <Label className="bisheng-label inline-flex items-center">
                                 <span>{t('model.shareToChildren')}</span>
                                 <ModelFieldHint className="ml-1" content={t('model.shareToChildrenTip')} />
                             </Label>

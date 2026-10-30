@@ -44,7 +44,7 @@ export const ModelSelect = ({
 
   return (
     <div className="min-w-0">
-      <Label className="bisheng-label">
+      <Label className="bisheng-label inline-flex items-center">
         <span>{label}</span>
         {required && <span className="text-red-500 text-xs">*</span>}
         {tooltipText && <ModelFieldHint className="ml-1" content={tooltipText}></ModelFieldHint>}

@@ -28,7 +28,7 @@ export function HeaderMenu() {
         ["/build/apps", "/build/tools", "/build/client"].includes(location.pathname.replace(__APP_ENV__.BASE_URL, ""))
     ) {
         return (
-            <div className="build-tab flex justify-center h-[65px] items-center relative">
+            <div className="build-tab flex justify-center h-16 items-center relative">
                 <Segmented
                     size="large"
                     className="rounded-full [&>span[aria-hidden]]:rounded-full"
@@ -49,7 +49,7 @@ export function HeaderMenu() {
 
     if (["/model/management", "/model/finetune"].includes(location.pathname.replace(__APP_ENV__.BASE_URL, ""))) {
         return (
-            <div className="build-tab flex justify-center h-[65px] items-center relative">
+            <div className="build-tab flex justify-center h-16 items-center relative">
                 <Segmented
                     size="large"
                     className="rounded-full [&>span[aria-hidden]]:rounded-full"
@@ -66,7 +66,7 @@ export function HeaderMenu() {
     }
 
     if (location.pathname.replace(__APP_ENV__.BASE_URL, "") === "/approval") {
-        return <div id="approval-header-menu" className="flex h-[65px] items-center justify-center" />;
+        return <div id="approval-header-menu" className="flex h-16 items-center justify-center" />;
     }
 
     return null;
