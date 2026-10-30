@@ -29,6 +29,28 @@ This directory contains manual maintenance and migration scripts for the backend
 - 必须在维护窗口暂停相关上传、移动、编辑、发布/分享、版本切换和组织同步；脚本不停止服务，也不取得全局维护锁。各文档独立提交，中断或失败前的成功组保留，以写入报告定向回退。未知提交结果需保留日志人工核对，不能直接视为全部回滚。
 - 容器临时目录会随重建丢失；正式操作应使用持久化路径保存计划和写入日志。退出码：0正常结束（预览可能含跳过），3实际执行有跳过需核对，2参数/报告错误，1数据库或执行失败，130人工中断。
 
+### `reassign_admin_upload_owners.py`
+
+按纠错表把管理员上传的文件改挂到表中姓名对应的用户。只改表内「关联文件入口ID」对应的 `knowledgefile.user_id`、`user_name`、`belonging_organization_id`。所属组织取该用户当前唯一有效主部门，计算规则与 `backfill_knowledge_file_organization.py` 相同，但会覆盖已有值。姓名按 `user.user_name` 精确匹配。对不上的行跳过，通过的行同一次提交。同一 `document:` 的其它入口只写入报告，不修改。
+
+```bash
+# 在 src/backend 执行。默认只读；报告必须是新文件。
+.venv/bin/python scripts/reassign_admin_upload_owners.py \
+  --tenant-id 1 --output /tmp/reassign-plan.jsonl
+# 审核 would_update、skipped_by_reason 和 sibling 后，再按这份计划写入。
+.venv/bin/python scripts/reassign_admin_upload_owners.py \
+  --plan /tmp/reassign-plan.jsonl --apply --output /tmp/reassign-write.jsonl
+# 回退先预览；确认后再加 --apply。
+.venv/bin/python scripts/reassign_admin_upload_owners.py \
+  --rollback /tmp/reassign-write.jsonl --output /tmp/reassign-rollback.jsonl
+```
+
+- 纠错表是同目录的 `scripts/纠错2.xlsx`，随后端镜像发布。预览默认读它，不必再往生产机器单独传文件。
+- 改写前核对文件名、`document:` 身份，且当前 `user_name` 必须是「管理员」。用户须恰好一个在职账号，并有一条本租户、有效、未删除的主部门。已离职、重名、没有唯一主部门、文件不存在或身份对不上都跳过。
+- 不改 `original_uploader_id`、更新人、积分、权限和 Elasticsearch。显式保留原 `update_time`。写入以预览计划为准，不会重新读表格；表格或用户主部门变了要重新预览。
+- 计划绑定数据库地址/库名摘要。执行时逐行重新核对，漂移的行跳过，其余行仍提交。退出码 3 表示本次有跳过，已经写入的行不会因此回滚。
+- JSONL 报告独占创建、权限 0600。只有同时存在 `prepared` 和 `committed` 才回退。只有 `prepared` 时记 `commit_outcome_unknown`，不自动改库。正式报告不要放在会随容器重建消失的临时目录。退出码：0 正常，3 实际写入有跳过，2 参数或报告错误，1 执行失败，130 人工中断。
+
 ### `backfill_dashboard_original_organizations.py`
 
 补齐指定租户看板现有文件统计的“原始上传库、原始所属公司/部门/科室/班组”空值。复用当前投影规则；原始库ID缺失回退当前库并单独计数。原始组织按原始库当前组织映射，不能恢复首次上传时的组织历史。已有非空值不同则整条跳过；不写数据库、不新增统计记录、不改历史事件和计数，也不更新索引结构。
