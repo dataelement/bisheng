@@ -1,9 +1,10 @@
 """Opt-in F114 smoke against an isolated, already published e2e-f114 app.
 
 F114_E2E=1, E2E_API_BASE, F114_APP_ID, F114_TENANT_ID, and four in-memory
-tokens F114_EDITOR_TOKEN, F114_PUBLISHER_TOKEN, F114_USE_TOKEN,
+tokens F114_EDITOR_TOKEN, F114_SUMMARY_TOKEN, F114_USE_TOKEN,
 F114_FOREIGN_TOKEN. These are dedicated non-admin users, pre-granted exact
-F048 actions. The editor has edit only, the publisher publish only, the user
+F048 actions. The editor has edit without publish, the summary reader has a
+management action without edit (legacy F114_PUBLISHER_TOKEN is accepted), the user
 use only, and the foreign actor belongs to another tenant. Credentials never
 enter fixtures, reports or Git. Only E2E_F114_TEMP is changed and cleaned.
 New application/user provisioning is outside this smoke and must be separately
@@ -28,10 +29,9 @@ KEY = "E2E_F114_TEMP"
 async def target():
     app_id = os.environ["F114_APP_ID"]
     tenant = int(os.environ["F114_TENANT_ID"])
-    headers = {
-        kind: auth_headers(os.environ[f"F114_{kind.upper()}_TOKEN"])
-        for kind in ["editor", "publisher", "use", "foreign"]
-    }
+    headers = {kind: auth_headers(os.environ[f"F114_{kind.upper()}_TOKEN"]) for kind in ["editor", "use", "foreign"]}
+    summary_token = os.environ.get("F114_SUMMARY_TOKEN") or os.environ["F114_PUBLISHER_TOKEN"]
+    headers["summary"] = auth_headers(summary_token)
     async with httpx.AsyncClient(timeout=90, follow_redirects=False) as client:
         app = assert_resp_200(await client.get(f"{API_BASE}/apps/{app_id}", headers=headers["editor"]))
         assert app["tenant_id"] == tenant and app["slug"].startswith("e2e-f114-")
@@ -58,12 +58,13 @@ async def target():
 
 
 async def test_management_summary_and_private_content_pair(target):
-    """AC-06、AC-07、AC-21、AC-24、AC-61: publish-only sees metadata, never private settings."""
+    """AC-06、AC-07、AC-21、AC-24、AC-61: any management action without edit sees metadata, never private settings."""
     client, h, app_id, _ = target
-    data = assert_resp_200(await client.get(f"{API_BASE}/apps/{app_id}", headers=h["publisher"]))
-    assert "publish" in data["allowed_actions"] and "edit" not in data["allowed_actions"]
+    data = assert_resp_200(await client.get(f"{API_BASE}/apps/{app_id}", headers=h["summary"]))
+    assert {"publish", "unpublish", "delete", "manage_permission"}.intersection(data["allowed_actions"])
+    assert "edit" not in data["allowed_actions"]
     assert_resp_200(await client.get(f"{API_BASE}/apps/{app_id}/secrets", headers=h["editor"]))
-    assert_resp_error(await client.get(f"{API_BASE}/apps/{app_id}/secrets", headers=h["publisher"]), 19000)
+    assert_resp_error(await client.get(f"{API_BASE}/apps/{app_id}/secrets", headers=h["summary"]), 19000)
     assert_resp_error(await client.get(f"{API_BASE}/apps/{app_id}", headers=h["use"]), 19000)
     assert_resp_error(await client.get(f"{API_BASE}/apps/{app_id}", headers=h["foreign"]), 16101)
 

@@ -56,6 +56,49 @@ async def test_registration_is_not_committed_by_public_port(db):
         assert (await session.exec(select(AppPreviewSession))).all() == []
 
 
+@pytest.mark.parametrize(
+    ("tenant_id", "app_id", "version_id", "allowed"),
+    [
+        (3, "app", "version", True),
+        (4, "app", "version", False),
+        (3, "other", "version", False),
+        (3, "app", "missing", False),
+    ],
+)
+async def test_version_lock_derives_tenant_from_application(tenant_id, app_id, version_id, allowed):
+    """AC-50/AC-69: real version rows have no tenant column; lock through their owning app."""
+    from bisheng.app_publish.domain.repositories.preview_runtime_repository import PreviewRuntimeRepository
+    from bisheng.database.models.app import App
+    from bisheng.database.models.app_version import AppVersion
+
+    engine = create_async_engine("sqlite+aiosqlite://")
+    try:
+        async with engine.begin() as connection:
+            for model in (App, AppVersion):
+                await connection.run_sync(model.__table__.create)
+        async with AsyncSession(engine) as session:
+            session.add(App(id="app", tenant_id=3, owner_user_id=42, slug="app", name="App", state="draft"))
+            session.add(
+                AppVersion(
+                    id="version",
+                    app_id="app",
+                    version_no=1,
+                    kind="initial",
+                    code_object_key="source",
+                    tier_id="light",
+                    runtime="python3.11",
+                )
+            )
+            await session.flush()
+            if allowed:
+                await PreviewRuntimeRepository.lock_version(session, tenant_id, app_id, version_id)
+            else:
+                with pytest.raises(AppPreviewForbiddenError):
+                    await PreviewRuntimeRepository.lock_version(session, tenant_id, app_id, version_id)
+    finally:
+        await engine.dispose()
+
+
 async def test_reuse_key_separates_purpose_and_task(db):
     from bisheng.app_publish.application import preview_runtime as port
 

@@ -53,10 +53,13 @@ class PreviewRuntimeRepository:
     async def lock_version(session, tenant_id, app_id, version_id):
         row = (
             await session.exec(
-                select(AppVersion).where(AppVersion.id == version_id, AppVersion.app_id == app_id).with_for_update()
+                select(AppVersion)
+                .join(App, App.id == AppVersion.app_id)
+                .where(AppVersion.id == version_id, AppVersion.app_id == app_id, App.tenant_id == tenant_id)
+                .with_for_update()
             )
         ).first()
-        if row is None or row.tenant_id != tenant_id:
+        if row is None:
             raise AppPreviewForbiddenError(reason="preview_version_mismatch")
 
     @staticmethod
