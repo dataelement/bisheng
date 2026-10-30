@@ -274,7 +274,7 @@ export default function KnowledgeQa({ toolbarTarget }: KnowledgeQaProps) {
                                 <TableCell className="font-medium max-w-[280px]">
                                     <div className="flex items-center gap-2">
                                             <div className="flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-fill-2 group-odd:bg-white dark:group-odd:bg-fill-2 text-text-2">
-                                                <Outlined.Books size={16} className="shrink-0" />
+                                                <Outlined.BookOpenText size={16} className="shrink-0" aria-hidden="true" />
                                             </div>
                                             <div className="min-w-0">
                                                 <div className="flex w-[264px] max-w-full items-center gap-1 pt-2 text-[14px] font-medium">

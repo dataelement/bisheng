@@ -4,6 +4,7 @@ import pytest
 from sqlmodel import select
 
 from bisheng.common.errcode.open_api import (
+    ServiceAccountManagementScopeChangedError,
     ServiceAccountNameTakenError,
     ServiceAccountNotFoundError,
     ServiceAccountOwnerInvalidError,
@@ -58,17 +59,17 @@ async def test_owner_must_be_active_and_in_same_tenant(open_api_db, fake_redis, 
         )
 
 
-async def test_global_super_without_scope_derives_tenant_from_owner(open_api_db, fake_redis, audit_events):
+async def test_global_super_without_scope_cannot_create_from_owner(open_api_db, fake_redis, audit_events):
     await seed_user(open_api_db, 10, 2)
     token = current_tenant_id.set(None)
     try:
-        row = await ServiceAccountService.create(
-            actor(tenant_id=1, is_global_super=True),
-            ServiceAccountCreate(name="child-integration", resource_owner_user_id=10),
-        )
+        with pytest.raises(ServiceAccountManagementScopeChangedError):
+            await ServiceAccountService.create(
+                actor(tenant_id=1, is_global_super=True),
+                ServiceAccountCreate(name="child-integration", resource_owner_user_id=10),
+            )
     finally:
         current_tenant_id.reset(token)
-    assert row.tenant_id == 2
 
 
 async def test_update_disable_enable_delete_and_key_invalidation(open_api_db, fake_redis, audit_events):
@@ -177,10 +178,10 @@ async def test_the_same_name_is_free_in_another_tenant(open_api_db, fake_redis, 
     await seed_user(open_api_db, 10, 1)
     await seed_user(open_api_db, 20, 2)
     await ServiceAccountService.create(actor(), ServiceAccountCreate(name="sync", resource_owner_user_id=10))
-    token = current_tenant_id.set(None)
+    token = current_tenant_id.set(2)
     try:
         other = await ServiceAccountService.create(
-            actor(tenant_id=1, is_global_super=True),
+            actor(tenant_id=2),
             ServiceAccountCreate(name="sync", resource_owner_user_id=20),
         )
     finally:

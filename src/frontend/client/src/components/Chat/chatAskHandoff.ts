@@ -80,6 +80,7 @@ export function useChatAskHandoff({
 }: UseChatAskHandoffParams) {
   const [mountedAsk, setMountedAsk] = useState<ChatAsk | null>(null);
   const submittedAskRef = useRef<ChatAsk | null>(null);
+  const preparingAskRef = useRef<ChatAsk | null>(null);
   const [preparedAsk, setPreparedAsk] = useState<ChatAsk | null>(null);
   const [attachmentAsk, setAttachmentAsk] = useState<AttachmentAsk | null>(null);
 
@@ -88,6 +89,7 @@ export function useChatAskHandoff({
     if (!pendingAsk || conversationId !== 'new' || activeConversationId !== 'new') return;
     const ask = pendingAsk;
     pendingAsk = null;
+    preparingAskRef.current = null;
     setPreparedAsk(null);
     onTake?.();
     setMountedAsk(ask);
@@ -101,6 +103,10 @@ export function useChatAskHandoff({
     if (!ask || submittedAskRef.current === ask) return;
     if (conversationId !== 'new' || activeConversationId !== 'new' || !ready) return;
     if (preparedAsk !== ask) {
+      // The shared model store can synchronously re-enter this effect before
+      // React commits preparedAsk. Claim the ask before changing selections.
+      if (preparingAskRef.current === ask) return;
+      preparingAskRef.current = ask;
       setSelectedKbs(ask.space
         ? [{ id: ask.space.id, name: ask.space.name, type: 'space' }]
         : []);

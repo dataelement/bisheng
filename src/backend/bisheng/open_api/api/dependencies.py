@@ -119,6 +119,7 @@ async def get_service_account_manager(
         admin,
         expected_tenant=request.headers.get("X-Service-Account-Tenant"),
         writing=is_service_account_write(request.method, request.url.path),
+        allow_all_tenants=request.method == "GET" and request.url.path.rstrip("/") == "/api/v1/service-accounts",
     ):
         yield admin
 

@@ -1,6 +1,9 @@
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { Tabs } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+// TODO(bisheng-icons): Replace these fallbacks when AI assistant and appearance icons are available.
+import { Bot, Palette } from "lucide-react";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import Config from "./components/Config";
@@ -63,6 +66,7 @@ export default function SystemPage() {
                 {
                   key: "organization",
                   label: <> {t("system.orgAndMembers")} </>,
+                  icon: <Outlined.City aria-hidden="true" />,
                   children: (
                     <>
                       {" "}
@@ -79,6 +83,7 @@ export default function SystemPage() {
                 {
                   key: "user",
                   label: <> {t("system.userManagement")} </>,
+                  icon: <Outlined.PeopleRound aria-hidden="true" />,
                   children: (
                     <>
                       {" "}
@@ -95,6 +100,7 @@ export default function SystemPage() {
                 {
                   key: "userGroup",
                   label: <> {t("system.userGroupsM")} </>,
+                  icon: <Outlined.PeopleGroup aria-hidden="true" />,
                   children: (
                     <>
                       {" "}
@@ -111,6 +117,7 @@ export default function SystemPage() {
                 {
                   key: "role",
                   label: <> {t("system.roleAndPermissions")} </>,
+                  icon: <Outlined.PeopleSafe aria-hidden="true" />,
                   children: (
                     <>
                       {" "}
@@ -127,6 +134,7 @@ export default function SystemPage() {
                 {
                   key: "orgSync",
                   label: <> {t("orgSync:title")} </>,
+                  icon: <Outlined.Exchange aria-hidden="true" />,
                   children: (
                     <>
                       {" "}
@@ -143,6 +151,7 @@ export default function SystemPage() {
                 {
                   key: "serviceAccount",
                   label: <> {t("openApiManagement.serviceAccount.title")} </>,
+                  icon: <Outlined.ApiApp aria-hidden="true" />,
                   children: (
                     <>
                       {" "}
@@ -159,6 +168,7 @@ export default function SystemPage() {
                 {
                   key: "personalToken",
                   label: <> {t("openApiManagement.personalToken.title")} </>,
+                  icon: <Bot aria-hidden="true" />,
                   children: (
                     <>
                       {" "}
@@ -173,6 +183,7 @@ export default function SystemPage() {
           ...(showResourceTierTab ? [{
             key: "resourceTier",
             label: t("hostedApp.tierAdmin.title"),
+            icon: <Outlined.Layer aria-hidden="true" />,
             children: <div className="min-h-0 flex-1 overflow-hidden"><ResourceTierTab /></div>,
           }] : []),
           ...(canAccessSystemConfig
@@ -180,6 +191,7 @@ export default function SystemPage() {
                 {
                   key: "system",
                   label: <> {t("system.systemConfiguration")} </>,
+                  icon: <Outlined.Setting aria-hidden="true" />,
                   children: (
                     <>
                       {" "}
@@ -196,6 +208,7 @@ export default function SystemPage() {
                 {
                   key: "theme",
                   label: <> {t("system.appearanceSettings")} </>,
+                  icon: <Palette aria-hidden="true" />,
                   children: (
                     <>
                       {" "}
