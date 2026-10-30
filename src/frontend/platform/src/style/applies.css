@@ -1019,6 +1019,38 @@
   .bisheng-table-footer {
     @apply flex justify-between items-center absolute bottom-0 right-0 h-16 w-full bg-[#fff] dark:bg-[#1b1b1b] [&>.desc]:whitespace-nowrap [&>.desc]:text-sm [&>.desc]:text-muted-foreground [&>.desc]:break-keep
   }
+
+  /* Audit lists: table body scrolls inside the viewport so the horizontal bar stays on screen. */
+  .audit-pane {
+    @apply relative flex h-full min-h-0 min-w-0 flex-1 flex-col;
+  }
+  .audit-pane-filters {
+    @apply shrink-0 px-2 pt-4;
+  }
+  .audit-pane-table {
+    @apply flex min-h-0 min-w-0 flex-1 flex-col px-2 pb-16;
+  }
+  .audit-table-scroll {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: scroll;
+    overflow-y: auto;
+  }
+  /* `th` also has Tailwind `relative`; sticky must win so the header stays put while rows scroll. */
+  .audit-table-scroll thead th {
+    position: sticky !important;
+    top: 0;
+    z-index: 30;
+    background-color: #F3F4F6 !important;
+    box-shadow: inset 0 -1px 0 #e5e6eb;
+  }
+  .dark .audit-table-scroll thead th {
+    background-color: #27272a !important;
+    box-shadow: inset 0 -1px 0 #3f3f46;
+  }
   .bisheng-bg {
     @apply bg-[#f4f5f8] dark:bg-[#111]
   }
@@ -1094,4 +1126,30 @@
     content: '';
     @apply size-full rounded-full absolute bg-primary top-0 animate-ping pointer-events-none
   } */
+}
+
+/* Unlayered so it beats the global hover-only scrollbar thumb. */
+.audit-table-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(107 114 128 / 0.95) #eef0f3;
+}
+.audit-table-scroll::-webkit-scrollbar {
+  height: 12px;
+  width: 10px;
+}
+.audit-table-scroll::-webkit-scrollbar-track {
+  background: #eef0f3;
+}
+.audit-table-scroll::-webkit-scrollbar-thumb {
+  background-color: rgb(107 114 128 / 0.95);
+  border-radius: 9999px;
+}
+.dark .audit-table-scroll {
+  scrollbar-color: rgb(161 161 170 / 0.95) #27272a;
+}
+.dark .audit-table-scroll::-webkit-scrollbar-track {
+  background: #27272a;
+}
+.dark .audit-table-scroll::-webkit-scrollbar-thumb {
+  background-color: rgb(161 161 170 / 0.95);
 }

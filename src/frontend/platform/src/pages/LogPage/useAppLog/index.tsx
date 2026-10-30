@@ -336,11 +336,11 @@ export default function AppUseLog() {
     };
 
 
-    return <div className="relative">
+    return <div className="audit-pane">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
         </div>}
-        <div className="h-[calc(100vh-128px)] overflow-y-auto px-2 py-4 pb-20">
+        <div className="audit-pane-filters">
             <div className="mb-4 flex flex-wrap gap-4">
                 <FilterByApp value={filters.appName} initialOptions={restored?.appOptions} onOptionsLoad={handleAppOptionsLoad} placeholder={t('log.appName')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['appName']: value } })} />
                 <ClearableFilter hasValue={filters.userName.length > 0} label={t('log.userName')} onClear={() => dispatch({ type: 'SET_FILTER', payload: { userName: [] } })}>
@@ -417,11 +417,12 @@ export default function AppUseLog() {
                 <Button onClick={handleExport} disabled={auditing}>
                     {auditing && <LoadIcon className="mr-1" />}{t('log.exportButton')}</Button>
             </div>
+        </div>
+        <div className="audit-pane-table">
             <TooltipProvider delayDuration={200}>
                 <Table
-                    noScroll
                     variant="filelist"
-                    className="mb-[50px]"
+                    containerClassName="audit-table-scroll"
                     style={{ tableLayout: "fixed", width: rc.totalWidth, minWidth: "100%" }}
                 >
                     <TableHeader>
@@ -507,7 +508,7 @@ export default function AppUseLog() {
                 </Table>
             </TooltipProvider>
         </div>
-        <div className="bisheng-table-footer px-6 bg-background-login">
+        <div className="bisheng-table-footer z-20 px-6 bg-background-login">
             <p className="desc"></p>
             <div>
                 <AutoPagination

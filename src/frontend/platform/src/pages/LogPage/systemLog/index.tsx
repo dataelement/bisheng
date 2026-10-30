@@ -182,13 +182,13 @@ export default function SystemLog() {
         loadUsers()
     }, [])
 
-    return <div className="relative">
+    return <div className="audit-pane">
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <LoadingIcon />
             </div>
         )}
-        <div className="h-[calc(100vh-128px)] overflow-y-auto px-2 py-4 pb-10">
+        <div className="audit-pane-filters">
             <div className="mb-4 flex flex-wrap gap-4">
                 <ClearableFilter className="w-[240px]" hasValue={keys.userIds.length > 0} label={t('log.selectUser')} onClear={() => setKeys({ ...keys, userIds: [] })}>
                     <MultiSelect contentClassName="overflow-y-auto max-w-[240px]" multiple
@@ -263,11 +263,12 @@ export default function SystemLog() {
                     </Button>
                 </div>
             </div>
+        </div>
+        <div className="audit-pane-table">
             <TooltipProvider delayDuration={200}>
                 <Table
-                    noScroll
                     variant="filelist"
-                    className="mb-[50px]"
+                    containerClassName="audit-table-scroll"
                     style={{ tableLayout: "fixed", width: rc.totalWidth, minWidth: "100%" }}
                 >
                 <TableHeader>
@@ -311,11 +312,10 @@ export default function SystemLog() {
                 </TableFooter>}
                 </Table>
             </TooltipProvider>
-            {!logs.length && <div className="h-[700px]"></div>}
         </div>
         {/* Pagination */}
         {/* <Pagination count={10}></Pagination> */}
-        <div className="bisheng-table-footer px-6 bg-background-login">
+        <div className="bisheng-table-footer z-20 px-6 bg-background-login">
             <div className="flex items-center gap-2">
                 <p className="desc">{t('log.auditManagement')}</p>
             </div>
