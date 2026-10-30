@@ -32,7 +32,9 @@ export interface PlatformSkill {
   name: string;
   displayName: string;
   description: string;
-  source: "platform";
+  source: 'platform';
+  builtinKey?: string | null;
+  searchText?: string;
   enabled: boolean;
 }
 
@@ -46,6 +48,8 @@ export interface SkillRecord {
   description: string;
   source: "personal" | "platform";
   enabled: boolean;
+  builtinKey?: string | null;
+  searchText?: string;
   contentHash: string;
   bundleMissing: boolean;
   /** Last change, or the creation time when a row has never been updated. */

@@ -1,0 +1,150 @@
+{
+  "license_http": 200,
+  "license": {
+    "version": "pro",
+    "expired": false,
+    "checked_at": "2026-10-29T21:03:00.507744355+08:00",
+    "expire_day": "",
+    "days_remaining": "",
+    "severity": "unknown"
+  },
+  "gateway_image": "cr.dataelem.com/dataelement/gateway:v1.8.0",
+  "gateway_image_id": "sha256:d17be79b2e72d043f34187b196e886f912a6d9a6a09155fd30fb03c0a0bbd66a",
+  "gateway_state": "running",
+  "gateway_restarts": 0,
+  "gateway_db_init_exit": 0,
+  "hmac_shared_nonempty": true,
+  "license_matches_file": true,
+  "license_file_mode": "0o600",
+  "env_file_mode": "0o600",
+  "license_mount_read_only": true,
+  "gateway_published_ports": {},
+  "nginx_config_test": true,
+  "gateway_table_count": 6,
+  "backend_health": "{\"status\":\"OK\"}",
+  "office_unchanged": true,
+  "services": [
+    {
+      "Service": "backend",
+      "State": "running",
+      "Health": "healthy",
+      "ExitCode": 0
+    },
+    {
+      "Service": "backend_worker",
+      "State": "running",
+      "Health": "",
+      "ExitCode": 0
+    },
+    {
+      "Service": "code-runner-1",
+      "State": "running",
+      "Health": "",
+      "ExitCode": 0
+    },
+    {
+      "Service": "code-runner-2",
+      "State": "running",
+      "Health": "",
+      "ExitCode": 0
+    },
+    {
+      "Service": "elasticsearch",
+      "State": "running",
+      "Health": "",
+      "ExitCode": 0
+    },
+    {
+      "Service": "frontend",
+      "State": "running",
+      "Health": "",
+      "ExitCode": 0
+    },
+    {
+      "Service": "gateway",
+      "State": "running",
+      "Health": "",
+      "ExitCode": 0
+    },
+    {
+      "Service": "gateway-db-init",
+      "State": "exited",
+      "Health": "",
+      "ExitCode": 0
+    },
+    {
+      "Service": "etcd",
+      "State": "running",
+      "Health": "healthy",
+      "ExitCode": 0
+    },
+    {
+      "Service": "minio",
+      "State": "running",
+      "Health": "healthy",
+      "ExitCode": 0
+    },
+    {
+      "Service": "milvus",
+      "State": "running",
+      "Health": "healthy",
+      "ExitCode": 0
+    },
+    {
+      "Service": "mysql",
+      "State": "running",
+      "Health": "healthy",
+      "ExitCode": 0
+    },
+    {
+      "Service": "openfga",
+      "State": "running",
+      "Health": "healthy",
+      "ExitCode": 0
+    },
+    {
+      "Service": "openfga-migrate",
+      "State": "exited",
+      "Health": "",
+      "ExitCode": 0
+    },
+    {
+      "Service": "redis",
+      "State": "running",
+      "Health": "healthy",
+      "ExitCode": 0
+    }
+  ],
+  "hmac_unsigned_invalid_payload": {
+    "http": 200,
+    "status_code": 19301
+  },
+  "hmac_signed_invalid_payload": {
+    "http": 200,
+    "status_code": 422
+  },
+  "gateway_db_user_connection": [
+    "bisheng_gateway@%",
+    "6"
+  ],
+  "/": 200,
+  "/workspace/": 200,
+  "/api/v1/env": {
+    "http": 200,
+    "status_code": 200,
+    "bisheng_pro": true
+  },
+  "/workspace/api/v1/env": {
+    "http": 200,
+    "status_code": 200,
+    "bisheng_pro": true
+  },
+  "/api/oauth2/list": {
+    "http": 200,
+    "status_code": 200
+  },
+  "/api/getkey": {
+    "http": 200,
+    "status_code": 200
+  }
+}

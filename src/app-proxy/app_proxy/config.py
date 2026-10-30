@@ -61,7 +61,7 @@ DEFAULT_SQUARE_URL = "/workspace/apps/explore"
 #: ``127.0.0.1`` (in a container, that is the container), and both secrets
 #: default to empty, which is **fail closed** — the process still starts, still
 #: reports healthy, and renders the fallback page on every single request.
-#: ``docker/verify-app-runtime-compose.sh`` asserts the compose file sets them.
+#: ``scripts/tests/compose/verify-app-runtime-compose.sh`` asserts the compose file sets them.
 REQUIRED_ENV: tuple[str, ...] = (
     "APP_PROXY_HOST",
     "APP_PROXY_PORT",

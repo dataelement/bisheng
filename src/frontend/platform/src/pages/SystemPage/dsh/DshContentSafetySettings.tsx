@@ -22,7 +22,7 @@ interface DshContentSafetySettingsProps {
 function draftOf(policy: DshSensitivePolicy): DshSensitivePolicyCommand {
   return {
     expected_version: policy.version,
-    enabled: policy.enabled,
+    enabled: policy.input_enabled || policy.output_enabled,
     input_enabled: policy.input_enabled,
     output_enabled: policy.output_enabled,
     words_types: [...policy.words_types],
@@ -75,7 +75,11 @@ function DshContentSafetyForm({
   const disabled = !canConfigure || busy || !controls.ready;
   const handleChange = (changes: Partial<DshSensitivePolicyCommand>) => {
     if (disabled || locked.current) return;
-    setDraft((old) => (old ? { ...old, ...changes } : old));
+    setDraft((old) => {
+      if (!old) return old;
+      const next = { ...old, ...changes };
+      return { ...next, enabled: next.input_enabled || next.output_enabled };
+    });
     setFeedback(null);
   };
   async function handleRefresh() {
@@ -170,14 +174,6 @@ function DshContentSafetyForm({
           }}
         >
           <fieldset disabled={disabled} className="space-y-4">
-            <Checkbox
-              disabled={disabled}
-              label={t("dsh.contentSafety.settings.enabled")}
-              checked={draft.enabled}
-              onCheckedChange={(checked) =>
-                handleChange({ enabled: checked === true })
-              }
-            />
             <CheckboxGroup
               direction="vertical"
               aria-label={t("dsh.contentSafety.filters.direction")}

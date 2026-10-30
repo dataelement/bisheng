@@ -1,5 +1,7 @@
 from datetime import UTC, date
 
+import pytest
+
 from bisheng.commercial_license.domain.mappers import (
     compute_display_state,
     map_etl_payload,
@@ -51,10 +53,45 @@ def test_gateway_maps_expire_day_and_strips_secrets():
     assert mapped["extra"]["version"] == "trial"
 
 
-def test_gateway_pro_without_expire_is_normal():
-    mapped = map_gateway_payload({"version": "pro", "expire_day": None, "days_remaining": None}, today=TODAY)
+@pytest.mark.parametrize("empty_value", [None, ""])
+def test_gateway_pro_without_expire_is_normal(empty_value):
+    mapped = map_gateway_payload(
+        {"version": "pro", "expire_day": empty_value, "days_remaining": empty_value}, today=TODAY
+    )
     assert mapped["display_state"] == "normal"
     assert mapped["expire_date"] is None
+    assert mapped["days_remaining"] is None
+
+
+def test_gateway_pro_without_optional_fields_is_normal():
+    mapped = map_gateway_payload({"version": "pro"}, today=TODAY)
+    assert mapped["display_state"] == "normal"
+    assert mapped["expire_date"] is None
+    assert mapped["days_remaining"] is None
+
+
+@pytest.mark.parametrize(
+    ("days", "expected_days", "expected_state"),
+    [
+        (0, 0, "expired"),
+        ("0", 0, "expired"),
+        (-1, -1, "expired"),
+        ("-1", -1, "expired"),
+        (24, 24, "expiring"),
+        ("24", 24, "expiring"),
+        (31, 31, "normal"),
+    ],
+)
+def test_gateway_numeric_days_keep_their_existing_meaning(days, expected_days, expected_state):
+    mapped = map_gateway_payload({"version": "trial", "days_remaining": days}, today=TODAY)
+    assert mapped["days_remaining"] == expected_days
+    assert mapped["display_state"] == expected_state
+
+
+@pytest.mark.parametrize("invalid_days", ["invalid", " "])
+def test_gateway_invalid_days_are_not_treated_as_perpetual(invalid_days):
+    with pytest.raises(ValueError):
+        map_gateway_payload({"version": "trial", "days_remaining": invalid_days}, today=TODAY)
 
 
 def test_etl_unix_expiration_and_zero_remaining():
