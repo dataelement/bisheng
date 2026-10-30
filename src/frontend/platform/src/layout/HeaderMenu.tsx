@@ -52,12 +52,13 @@ export function HeaderMenu() {
             <div className="build-tab flex justify-center h-[65px] items-center relative">
                 <Segmented
                     size="large"
+                    className="rounded-full [&>span[aria-hidden]]:rounded-full"
                     aria-label={t("model.modelManagement")}
                     value={location.pathname.replace(__APP_ENV__.BASE_URL, "").split("/").pop()}
                     onChange={(value) => navigate(`/model/${value}`)}
                     options={[
-                        { value: "management", label: t("model.modelManagement") },
-                        { value: "finetune", label: t("model.modelFineTune") },
+                        { value: "management", label: t("model.modelManagement"), icon: <Outlined.BlocksAndArrows aria-hidden="true" /> },
+                        { value: "finetune", label: t("model.modelFineTune"), icon: <Outlined.Setting aria-hidden="true" /> },
                     ]}
                 />
             </div>
