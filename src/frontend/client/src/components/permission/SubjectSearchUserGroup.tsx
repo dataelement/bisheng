@@ -109,7 +109,7 @@ export function SubjectSearchUserGroup({
         )}
         {!loading && filtered.length === 0 && (
           <PermissionEmptyState
-            message={localize(keyword ? "com_permission.empty_search" : "com_permission.empty_user_groups")}
+            message={localize(keyword ? "com_permission.empty_search_user_groups" : "com_permission.empty_user_groups")}
           />
         )}
         {!loading && filtered.length > 0 && (
