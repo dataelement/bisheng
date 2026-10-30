@@ -32,7 +32,7 @@ docker compose exec backend sh entrypoint.sh upgrade-work-knowledge
 docker compose exec backend sh entrypoint.sh upgrade-work-knowledge --apply --confirm-store-id <store-id-from-preview> --operator-id <user-id>
 ```
 
-For repository-managed Compose updates, `docker/deploy.sh update` includes this
+For repository-managed Compose updates, `scripts/deploy.sh update` includes this
 operation as a required release stage whenever `backend` is selected. It requires
 the confirmed Store and audit operator, waits for backend readiness, runs the
 upgrade, then updates the remaining services. See the
@@ -203,7 +203,7 @@ For an existing F048 installation, run the model publisher below in the release
 maintenance window even when its dry-run says the model is already current.
 Model equality does not establish that historical service-account resource
 markers exist. This is an explicit deployment operation: container startup,
-`alembic upgrade head`, and `docker/deploy.sh update` do not run data repairs.
+`alembic upgrade head`, and `scripts/deploy.sh update` do not run data repairs.
 
 For a first migration from pre-F048 ReBAC, use `migrate_f048_permission_data.py`;
 its resource projection already writes both `user:*` and `service_account:*`

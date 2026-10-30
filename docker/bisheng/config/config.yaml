@@ -214,7 +214,7 @@ logger_conf:
 # 这一层可以整层不装：enabled 保持 false 时，平台其余部分零变化，
 # /apps/{slug} 会落到"本环境未启用应用工场"引导页，CLI 部署被 16207 明确拒绝。
 # compose 形态下这两个服务挂在 `app-runtime` profile 后面，不带
-# `--profile app-runtime` 启动就根本不创建（docker/deploy.sh 已自动处理）。
+# `--profile app-runtime` 启动就根本不创建（scripts/deploy.sh 已自动处理）。
 # app_runtime:
   # 本机（本部署）是否安装了工场运行时层
 #   enabled: false

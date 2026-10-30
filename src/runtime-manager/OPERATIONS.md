@@ -41,7 +41,7 @@ OBO secret 必须独立于平台 JWT secret。manager/entry/egress/control 的 v
 | 完整应用镜像 | `delivery.mode: image` 加仓库 digest 或本地 `sha256:<image-id>`；可指定 argv command，或沿用镜像 Entrypoint/Cmd。须满足非 root UID 10001、监听地址/端口、只读根和 `/data` 约定 |
 | 网络依赖来源 | manager 的 `RTM_BUILD_INDEX_URL`、`RTM_BUILD_EXTRA_INDEX_URL`、`RTM_BUILD_NPM_REGISTRY`；严格离线时 `BISHENG_RUNTIME_OFFLINE=true` |
 
-正式 Compose 只有 `image:`。开发时可叠加 `docker/docker-compose.runtime-dev.yml` 的 `build:`；不将现场构建作为客户安装步骤。
+正式 Compose 只有 `image:`。开发时可叠加 `scripts/dev/docker-compose.runtime-dev.yml` 的 `build:`；不将现场构建作为客户安装步骤。
 
 ## 3. 镜像与目录发行
 

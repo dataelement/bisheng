@@ -2,7 +2,7 @@
 # Record Compose calls; never start the application stack in this test.
 set -euo pipefail
 umask 077
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../docker" && pwd)"
 source "${SCRIPT_DIR}/lib/install-env.sh"
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/bisheng-install-tests.XXXXXX")"
 trap 'rm -rf -- "$TEST_ROOT"' EXIT
@@ -23,6 +23,11 @@ new_case() {
 set -euo pipefail
 printf '%s\t' "$@" >> "$INSTALL_TEST_LOG"; printf '\n' >> "$INSTALL_TEST_LOG"
 if [[ "$*" = 'compose version' && "${INSTALL_TEST_LEGACY:-}" = yes ]]; then exit 1; fi
+if [[ "${1:-}" = login ]]; then
+  IFS= read -r supplied_password
+  [[ "$supplied_password" = "${INSTALL_TEST_EXPECTED_PASSWORD:-dataelem}" ]] || exit 18
+  [[ "${INSTALL_TEST_FAIL:-}" != login ]] || exit 19
+fi
 if [[ "${INSTALL_TEST_FAIL:-}" = pull && " $* " = *' pull '* ]]; then exit 17; fi
 DOCKER
   cp "${CASE_ROOT}/bin/docker" "${CASE_ROOT}/bin/docker-compose"
@@ -38,7 +43,7 @@ run_install() {
   : > "${CASE_ROOT}/calls"
   if PATH="${CASE_ROOT}/bin:$PATH" INSTALL_TEST_LOG="${CASE_ROOT}/calls" \
     INSTALL_TEST_PYTHON="${CASE_ROOT}/python-called" INSTALL_TEST_FAIL="${TEST_FAIL:-}" \
-    INSTALL_TEST_LEGACY="${TEST_LEGACY:-}" \
+    INSTALL_TEST_LEGACY="${TEST_LEGACY:-}" INSTALL_TEST_EXPECTED_PASSWORD="${TEST_PASSWORD:-dataelem}" \
     /bin/bash "${CASE_DIR}/install.sh" "$@" </dev/null >"${CASE_ROOT}/out" 2>"${CASE_ROOT}/err"; then result=0; else result=$?; fi
 }
 ok() { [[ $result = 0 ]] || { cat "${CASE_ROOT}/err" >&2; fail 'Installer failed'; }; }
@@ -52,6 +57,7 @@ cmp "${SCRIPT_DIR}/.env.example" "${CASE_DIR}/.env" || fail 'Default configurati
 [[ "$(env_get "${CASE_DIR}/.env" MINIO_ROOT_USER)" = minioadmin ]] || fail 'Wrong MinIO user'
 [[ "$(env_get "${CASE_DIR}/.env" MINIO_ROOT_PASSWORD)" = minioadmin ]] || fail 'Wrong MinIO password'
 [[ "$(ls -l "${CASE_DIR}/.env" | awk '{print substr($1, 1, 10)}')" = -rw------- ]] || fail 'Unsafe .env permissions'
+absent "${CASE_ROOT}/calls" $'login\t'
 absent "${CASE_ROOT}/calls" $'pull\t'
 absent "${CASE_ROOT}/calls" $'up\t'
 pass 'Default setup copies the template exactly, uses legacy MinIO values, and does not deploy in prepare-only'
@@ -68,11 +74,43 @@ pass 'Existing .env, credentials, image addresses and unknown settings remain by
 new_case
 run_install
 ok
-awk '/pull\t/ { pull = NR } /up\t-d\t$/ { up = NR } END { exit !(pull && up > pull) }' "${CASE_ROOT}/calls" || fail 'Default deploy is not pull then up -d'
+awk '/^login\t/ { login = NR } /pull\t/ { pull = NR } /up\t-d\t$/ { up = NR } END { exit !(login && pull > login && up > pull) }' "${CASE_ROOT}/calls" || fail 'Default deploy is not pull then up -d'
 absent "${CASE_ROOT}/calls" $'exec\t'
 absent "${CASE_ROOT}/calls" $'--wait\t'
 [[ ! -f "${CASE_ROOT}/python-called" ]] || fail 'Host Python called'
-pass 'Ordinary deployment only validates, pulls and runs Compose up -d, without Python or readiness orchestration'
+contains "${CASE_ROOT}/calls" $'login\tcr.dataelem.com\t--username\tdocker\t--password-stdin\t'
+absent "${CASE_ROOT}/calls" $'\tdataelem\t'
+absent "${CASE_ROOT}/out" dataelem
+absent "${CASE_ROOT}/err" dataelem
+pass 'Ordinary deployment logs in via stdin before pull and up -d, without Python'
+
+new_case
+run_install --prepare-only
+ok
+env_set "${CASE_DIR}/.env" CR_REGISTRY_USERNAME custom-user
+env_set "${CASE_DIR}/.env" CR_REGISTRY_PASSWORD 'custom-password$literal'
+TEST_PASSWORD='custom-password$literal' run_install
+ok
+contains "${CASE_ROOT}/calls" $'--username\tcustom-user\t--password-stdin\t'
+absent "${CASE_ROOT}/calls" 'custom-password$literal'
+absent "${CASE_ROOT}/out" 'custom-password$literal'
+absent "${CASE_ROOT}/err" 'custom-password$literal'
+pass 'Existing registry credentials override defaults without shell evaluation or argument exposure'
+
+new_case
+TEST_FAIL=login run_install
+failed
+absent "${CASE_ROOT}/calls" $'pull\t'
+absent "${CASE_ROOT}/calls" $'up\t'
+contains "${CASE_ROOT}/err" 'CR 镜像源登录失败'
+pass 'Failed registry login stops before pull or service changes'
+
+new_case
+printf 'COMPOSE_PROFILES=\n' > "${CASE_DIR}/.env"
+run_install
+ok
+contains "${CASE_ROOT}/calls" $'--username\tdocker\t--password-stdin\t'
+pass 'Existing env files without registry settings use public defaults'
 
 new_case
 TEST_FAIL=pull run_install

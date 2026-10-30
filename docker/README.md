@@ -1,174 +1,55 @@
-# Deploy BiSheng
+# BiSheng 全新部署
 
-Run from the `docker/` directory:
+需要已启动的 Docker 和 Docker Compose。推荐 Compose V2；也支持具备 profiles 和完成依赖能力的 `docker-compose`。
+
+从代码根目录执行：
 
 ```bash
-cp .env.example .env
-# Log in first if this host has not authenticated to the default registry:
-docker login cr.dataelem.com
-docker compose pull
-docker compose up -d
+bash docker/install.sh
 ```
 
-`docker-compose` can be used in place of `docker compose` if the installed
-version supports this Compose file (profiles and completion dependencies).
-Compose V2 is recommended. `up -d` starts containers in the background; use
-`ps` and `logs` to check readiness.
+脚本首次将 `.env.example` 复制为 `.env`，校验配置，使用默认公共账号登录 `cr.dataelem.com`，拉取镜像并执行 `up -d`。默认不启用 Gateway，也不会询问是否启用。已有 `.env` 会保留，不自动覆盖或合并。部署需要 Bash 和常用系统命令，无需宿主机 Python。
 
-The optional wrapper is `bash docker/install.sh` from the checkout root. It
-copies the template only when `.env` does not exist, validates configuration,
-pulls images and runs `up -d`. Existing `.env` contents are preserved; there is
-no automatic variable merge, mirror rewrite, architecture guess or credential
-rotation. Deployment needs Bash and common system tools, not host Python or jq.
-`--prepare-only` generates configuration without pulling or starting services.
-For a first deployment, run `bash docker/install.sh` without arguments: Gateway
-is disabled and there is no enable/disable prompt. An existing Gateway profile
-in `.env` is preserved on subsequent runs; use `--no-gateway` to disable it.
+账号在 `.env` 的 `CR_REGISTRY_USERNAME` / `CR_REGISTRY_PASSWORD` 中配置；默认使用提供的公共账号，密码通过 `--password-stdin` 传入 Docker。`--prepare-only` 只生成、校验配置，不登录、不拉取、不启动服务。
 
-All template images use `cr.dataelem.com`. Change complete `*_IMAGE` values in
-`.env` to use another registry or an architecture-specific tag. MinIO retains
-`minioadmin/minioadmin`, MySQL retains the existing `1234` password, and the
-sandbox retains its existing development token. Keep existing deployment
-credentials when upgrading. Image versions remain pinned; downloading a newer
-source checkout does not rebuild the backend/frontend images.
+## Gateway（可选）
 
-Compose creates the platform bridge as `bisheng-network` (configurable with
-`BISHENG_NETWORK_NAME`) and the sandbox bridge as `bisheng-sandbox`. The logical
-Compose key `default` is explicitly named; no project-derived `*_default`
-network is created. Existing application-runtime isolation networks remain
-separate. Changing the network of an existing installation recreates attached
-containers and can interrupt requests.
-
-## Gateway (optional)
-
-Gateway and its one-time database initializer are in the same Compose file,
-behind the `gateway` profile. To configure and deploy:
+准备可读、非空的 license 文件后执行：
 
 ```bash
 bash docker/install.sh --gateway \
   --license-file /secure/path/license.txt \
-  --public-url https://bisheng.example.com
+  --public-url http://服务器IP:3001
 ```
 
-Gateway requires a readable user-supplied **license file path**, passed through
-`--license-file` or recorded in `.env` as `BISHENG_GATEWAY_LICENSE_FILE`. When Gateway is explicitly enabled, an
-interactive installation can ask for this path; leaving it empty skips Gateway
-and restores direct routing, even if an old license string is cached in `.env`.
-Direct license-text input is not supported. A supplied but missing/unreadable or
-empty file is an error. The original file is also mounted read-only, with host
-path creation disabled, so an unknown path cannot silently create a directory.
-Missing Gateway HMAC/database secrets are generated only for this
-optional mode and are preserved on later runs. MySQL's existing health check,
-`gateway-db-init`, and `depends_on` initialize the six Gateway tables and its
-dedicated user before Gateway starts. The script starts Gateway before
-recreating frontend and selects generated Nginx snippets for browser APIs and
-WebSocket. Internal, app and MinIO routes keep their original targets. SSO
-providers are configured separately in `gateway/config/application.yml`.
+Gateway 与基础服务位于同一个 Compose 文件，通过 `gateway` profile 启用。脚本配置 license、共享密钥、数据库初始化及 Nginx 的 API/WebSocket 转发。没有 license 文件路径则跳过 Gateway；提供了不存在、不可读或空文件则停止。license 的有效性和期限由 Gateway 校验。
 
-`--no-gateway` restores direct backend routing and removes only the `gateway`
-profile from `.env`. Other profiles and database contents are preserved. It
-does not stop an already-running Gateway; use `docker compose --profile gateway
-stop gateway` if that is also required.
+后续重复执行会保留 `.env` 中的 Gateway 配置。使用 `--no-gateway` 可恢复直接转发；该选项不会删除数据，也不停止已经运行的 Gateway。
 
-The wrapper checks that a license file was supplied and is readable. Gateway itself validates its
-authenticity and expiry; inspect Gateway logs and the product before declaring
-installation successful. The installer no longer parses license-status JSON or
-performs full API readiness tests.
+## 镜像与部署配置
 
-## Known prerequisites and gaps
+所有镜像地址集中在 `.env.example`，默认使用 `cr.dataelem.com`。需要修改镜像时，先执行 `bash docker/install.sh --prepare-only`，编辑生成的 `.env` 中完整的 `*_IMAGE` 地址，再执行安装脚本。下载源码不会重新构建镜像。
 
-- The registry requires authentication. A `401` is not proof that a tag is
-  missing; authenticate and pull using your authorized registry account.
-- The user-supplied temporary sandbox image is
-  `cr.dataelem.com/dataelement/bisheng-sandbox:feat_3.0.0`. The authenticated
-  2026-10-29 check found it and the other base-stack defaults present as AMD64.
-  Sandbox ARM CI is still being developed; this deployment test is AMD64 only.
-- ARM needs compatible images for every enabled service. Multi-architecture
-  tags are selected by Docker automatically; single-architecture tags need
-  explicit replacement. Gateway v1.8.0 uses `v1.8.0-arm64`. Current base-stack
-  CR defaults were observed as AMD64, not multi-architecture indexes.
-- VibeApp's default CR runtime-manager/app-proxy/socket-proxy addresses are
-  not published at the configured tags and return 404. Older Docker Hub
-  `v3.0.0-test-vibe-{amd64,arm64}` images exist for all seven Docker runtime
-  component families; they are not substituted automatically for the current
-  release. See the [image audit](../features/v3.0.0/114-compose-install/vibe-image-audit.md).
-- Port conflicts, host resources, Elasticsearch host settings, startup/migration
-  errors and unavailable external model/document services can still prevent a
-  working product. First registration and model configuration remain required.
+ARM 主机需要将每个启用服务的镜像替换为兼容 ARM 的 tag 或多架构镜像。Gateway ARM tag 为 `v1.8.0-arm64`。Socket proxy 的 AMD64 tag 为 `0.3.0`，ARM64 部署需设置 `DOCKER_SOCKET_PROXY_IMAGE=cr.dataelem.com/tecnativa/docker-socket-proxy:0.3.0-arm64`；沙箱必须使用可用的对应架构镜像。
 
-A real empty-data AMD64 deployment on 192.168.106.166 passed base-service, first
-registration/login and both sandbox execution checks. Image downloading needed
-verified cache preloading due to that host's Docker transport problems; see the
-[deployment record](../features/v3.0.0/114-compose-install/deployment-166.md) for scope.
+MinIO 默认账号密码为 `minioadmin/minioadmin`，MySQL 沿用 `1234`。数据目录默认位于 `docker/` 下，由 `DOCKER_VOLUME_DIRECTORY` 控制。平台使用专用网络 `bisheng-network`（可通过 `BISHENG_NETWORK_NAME` 修改），沙箱使用 `bisheng-sandbox`。
 
-## VibeApp image publishing
+端口和资源需要满足 Compose 配置；Elasticsearch 的宿主机配置、外部模型及文档服务按实际环境准备。首次启动后仍需注册用户、配置模型。
 
-The Runtime delivery images workflow publishes nine BiSheng image families to
-both Docker Hub and `cr.dataelem.com`, using native AMD64/ARM64 runners. It runs
-on `v*` tag pushes or a manual dispatch with a new `version`; branch pushes and
-PRs do not publish images. The four service images also receive a two-platform
-version index. `runtime-profiles-cr` contains the CR release/profile catalogs.
-This change does not backfill missing releases or mirror third-party
-socket-proxy images. See the [CI/CD flow](../features/v3.0.0/114-compose-install/runtime-image-cicd.md)
-for the build order, credentials, tags and failure behavior.
-
-## Existing-environment updates
-
-Compose image references live in `.env`; use the template when adding new
-settings manually. `BISHENG_SANDBOX_IMAGE` replaces `SANDBOX_IMAGE_TAG`.
-
-Use `deploy.sh` from the matching release checkout to update an existing Compose
-deployment. Keep the release's Compose file, mounted entrypoint and image versions
-together. Run one deployment job in a maintenance window; control ingress and
-queue consumers according to the environment's release procedure.
-
-## Work knowledge retrieval
-
-The backend image must include the Work knowledge registration script from PR
-#2546. Set the intended image version with `bash docker/deploy.sh version <tag>`,
-then preview the target image against the service's existing configuration:
+## 查看启动状态
 
 ```bash
-bash docker/deploy.sh upgrade-preview
+cd docker
+docker compose ps
+docker compose logs -f backend backend_worker
+# 启用 Gateway 时检查授权结果：
+docker compose logs gateway
 ```
 
-This pulls the configured backend image and runs a read-only catalog/permission
-preview in a disposable container with the backend service's mounts, environment
-and network. Existing infrastructure must be running. The preview requires a
-compatible database schema and CURRENT F048 permission runtime; complete their
-version-specific prerequisites when the preview reports an error.
+`up -d` 返回表示已执行后台启动，服务是否就绪需查看状态和日志。默认入口为 `http://服务器IP:3001`。
 
-Use the preview's Store ID and the actual audit operator's user ID to update:
+## 其他部署方式
 
-```bash
-bash docker/deploy.sh update --confirm-store-id <store-id> --operator-id <user-id>
-# To update only the backend:
-bash docker/deploy.sh update backend --confirm-store-id <store-id> --operator-id <user-id>
-```
-
-For an update containing `backend`, the release script:
-
-1. Validates the required confirmation arguments before Docker operations.
-2. Pulls the selected images, starts the backend and waits up to 180 seconds for
-   readiness. The API entrypoint owns the schema migration.
-3. Executes the knowledge tool's registration and permission reconciliation using
-   the running backend's configuration. Apply exits successfully only after the
-   tool exists and its permission projection is CURRENT.
-4. Updates the remaining selected services, waits for readiness, and reports
-   completion after the service status command succeeds.
-
-Any failed stage returns a nonzero exit status and stops subsequent stages. If
-knowledge maintenance fails, the backend has already been updated; maintain the
-release window, resolve the reported error and repeat the same update command.
-Registration and permission reconciliation support repeated execution. The
-deployment script leaves schema/data recovery to the release operator.
-
-Worker-only and frontend-only updates retain their selected service scope.
-`restart` restarts the existing deployment. Direct `docker compose up` and external
-deployment pipelines must explicitly run the same maintenance operation and
-require its successful exit before declaring their release complete; see
-[`src/backend/scripts/README.md`](../src/backend/scripts/README.md).
-
-After deployment, verify ordinary-user tool discovery and single-space plus K1/K2
-multi-space retrieval with the expected document citations. Deployment checks and
-real-account acceptance are recorded separately.
+- VibeApp 运行环境是独立的 `app-runtime` profile，需要额外配置，见[应用工场部署说明](../docs/architecture/14-app-factory-deployment.md)。
+- Kubernetes 部署见 [Helm 说明](helm/README.md)。
+- Office 可选服务使用 `docker-compose-office.yml`。

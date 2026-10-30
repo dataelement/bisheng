@@ -21,14 +21,14 @@ on:
       - "docker/docker-compose.yml"
       - "docker/.env.example"
       - "docker/install.sh"
-      - "docker/deploy.sh"
-      - "docker/test-install.sh"
+      - "scripts/deploy.sh"
+      - "scripts/tests/compose/test-install.sh"
       - "docker/lib/**"
       - "docker/gateway/**"
       - "docker/nginx/**"
       - "docker/bisheng/config/config.yaml"
-      - "docker/verify-app-runtime-compose.sh"
-      - "docker/verify_app_runtime_compose.py"
+      - "scripts/tests/compose/verify-app-runtime-compose.sh"
+      - "scripts/tests/compose/verify_app_runtime_compose.py"
       - ".github/workflows/app-runtime-quality.yml"
       - ".github/workflows/runtime-images.yml"
       - "scripts/build_runtime_images.sh"
@@ -48,7 +48,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Installer command-boundary tests
-        run: bash docker/test-install.sh
+        run: bash scripts/tests/compose/test-install.sh
 
       - name: Validate generated Compose configurations
         run: |
@@ -73,7 +73,7 @@ jobs:
         env:
           MINIO_ROOT_USER: ci-minio-user
           MINIO_ROOT_PASSWORD: ci-minio-password
-        run: bash docker/verify-app-runtime-compose.sh
+        run: bash scripts/tests/compose/verify-app-runtime-compose.sh
 
   unit:
     name: Lint & Test (${{ matrix.package }})

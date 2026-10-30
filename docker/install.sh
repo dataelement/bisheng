@@ -93,8 +93,15 @@ if [[ -n "$GATEWAY_CHOICE" ]]; then
 fi
 compose config --quiet
 if [[ "$PREPARE_ONLY" = true ]]; then printf '配置已生成并通过 Compose 校验。\n'; exit 0; fi
+# Authenticate with the public defaults; existing deployments may override them.
+registry_user="$(env_get "$ENV_FILE" CR_REGISTRY_USERNAME)"
+registry_password="$(env_get "$ENV_FILE" CR_REGISTRY_PASSWORD)"
+printf '%s\n' "${registry_password:-dataelem}" | \
+  docker login cr.dataelem.com --username "${registry_user:-docker}" --password-stdin \
+  || die "CR 镜像源登录失败，请检查网络或 .env 中的 CR_REGISTRY_USERNAME / CR_REGISTRY_PASSWORD"
+unset registry_password
 # Pull first so missing images stop deployment before existing services change.
-compose pull || die "镜像拉取失败；请先 docker login cr.dataelem.com，或补充 .env 中可用的 *_IMAGE 地址。不会自动构建。"
+compose pull || die "镜像拉取失败；请检查网络、镜像权限或 .env 中的 *_IMAGE 地址。不会自动构建。"
 case ",$(env_get "$ENV_FILE" COMPOSE_PROFILES)," in
   *,gateway,*) compose up -d gateway ;;
 esac

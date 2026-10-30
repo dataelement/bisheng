@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # =============================================================
 # BiSheng 运维管理脚本
-# 用法: ./bisheng.sh <命令> [参数]
+# Usage: bash scripts/deploy.sh <command> [arguments]
 # =============================================================
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../docker" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
 ENV_FILE="${SCRIPT_DIR}/.env"
 COMPOSE_CMD=(docker compose -f "${COMPOSE_FILE}")
