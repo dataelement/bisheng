@@ -64,6 +64,8 @@ class BaseTelemetryEvent(BaseModel, Generic[T_EventData]):
         if event_name == BaseTelemetryTypeEnum.PORTAL_SEARCH:
             return dict_data
 
-        dict_data['event_data'] = {f"{event_name}_{k}": v for k, v in dict_data['event_data'].items()}
+        # str(Enum) on Python 3.11 is the member name, not the stored event type.
+        prefix = event_name.value if isinstance(event_name, BaseTelemetryTypeEnum) else event_name
+        dict_data["event_data"] = {f"{prefix}_{k}": v for k, v in dict_data["event_data"].items()}
 
         return dict_data

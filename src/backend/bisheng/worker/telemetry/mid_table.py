@@ -19,6 +19,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import (
     PortalDocumentDownloadEventData,
     PortalDocumentReadEventData,
     PortalFavoriteEventData,
+    PortalQaCitationEventData,
 )
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -1587,6 +1588,7 @@ def _content_stat_event_data(envelope):
         BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ: PortalDocumentReadEventData,
         BaseTelemetryTypeEnum.PORTAL_DOCUMENT_DOWNLOAD: PortalDocumentDownloadEventData,
         BaseTelemetryTypeEnum.PORTAL_FAVORITE: PortalFavoriteEventData,
+        BaseTelemetryTypeEnum.PORTAL_QA_CITATION: PortalQaCitationEventData,
     }[event_type]
     return event_type, data_cls(
         source_app=envelope.source_app,

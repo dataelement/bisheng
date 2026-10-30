@@ -173,6 +173,16 @@ convention = "google"
 # Clinic bind helper/tests use Chinese full-width punctuation in docs.
 "bisheng/knowledge/domain/services/clinic_department_bind.py" = ["RUF001", "RUF002", "RUF003"]
 "test/knowledge/test_clinic_*.py" = ["RUF001", "RUF002", "RUF003"]
+# Workstation chat service: Chinese user-facing copy and mid-file tool imports.
+"bisheng/workstation/domain/services/chat_service.py" = [
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    "E402",
+    "B007",
+    "RUF005",
+    "RUF006",
+]
 
 [tool.ruff.format]
 quote-style = "double"
