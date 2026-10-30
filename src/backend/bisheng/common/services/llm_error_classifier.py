@@ -60,6 +60,9 @@ class ErrorType(str, enum.Enum):
     SERVICE_UNAVAILABLE = "service_unavailable"
     NETWORK_TIMEOUT = "network_timeout"
     TASK_ABORTED = "task_aborted"
+    # The model spent its whole output budget (usually on reasoning) without a
+    # tool call or an answer, twice in a row.
+    OUTPUT_TRUNCATED = "output_truncated"
     UNKNOWN = "unknown"
 
 
@@ -292,6 +295,15 @@ def _is_task_aborted(exc: BaseException) -> bool:
     return isinstance(exc, GraphRecursionError) or type(exc).__name__ == "LinsightToolLoopError"
 
 
+def _is_output_truncated(exc: BaseException) -> bool:
+    """The model hit its output-token limit without a tool call or answer.
+
+    Matched by class name (``ModelOutputTruncatedError``) to avoid a
+    ``common -> linsight`` import, like ``_is_task_aborted``.
+    """
+    return type(exc).__name__ == "ModelOutputTruncatedError"
+
+
 def _is_content_filter(exc: BaseException) -> bool:
     if isinstance(exc, openai.ContentFilterFinishReasonError):
         return True
@@ -329,6 +341,10 @@ def classify_behavior(exc: BaseException) -> Behavior:
     the generic rate-limit retry branch.
     """
     # 1) FAIL_FAST — unrecoverable, do not retry and do not waste degrade budget.
+    # Already retried once by the resilience middleware; re-sending the same
+    # request would just burn another full output budget.
+    if _is_output_truncated(exc):
+        return Behavior.FAIL_FAST
     if _is_quota(exc):
         return Behavior.FAIL_FAST
     if isinstance(exc, (openai.AuthenticationError, openai.PermissionDeniedError)):
@@ -389,6 +405,8 @@ def label_error(exc: BaseException) -> ErrorType:
     # friendly label instead of falling through to the generic UNKNOWN card.
     if _is_task_aborted(exc):
         return ErrorType.TASK_ABORTED
+    if _is_output_truncated(exc):
+        return ErrorType.OUTPUT_TRUNCATED
     # content_filter is independent of the behaviour bucket (it lives in DEGRADABLE).
     if _is_content_filter(exc):
         return ErrorType.CONTENT_FILTER
