@@ -151,6 +151,7 @@
     "type_embedding": "Embedding",
     "type_rerank": "Rerank",
     "type_asr": "ASR",
+    "type_asr_rt": "ASR RT",
     "type_tts": "TTS",
     "unnamedModel": "モデル名を入力",
     "configurationRequired": "設定が必要",

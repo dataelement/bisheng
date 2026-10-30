@@ -20,6 +20,25 @@ describe('catalog import', () => {
 });
 
 it.each(['volcengine', 'tencent'])('uses the current ASR adapter boundary for %s', provider => {
-    expect(availableModelTypes(provider)).toContain('asr');
+    expect(availableModelTypes(provider)).toContain('asr_rt');
+    expect(availableModelTypes(provider)).not.toContain('asr');
     expect(availableModelTypes(provider)).not.toContain('tts');
+});
+
+it('keeps file ASR on OpenAI and both speech types on Qwen', () => {
+    expect(availableModelTypes('openai')).toContain('asr');
+    expect(availableModelTypes('openai')).not.toContain('asr_rt');
+    expect(availableModelTypes('qwen')).toEqual(expect.arrayContaining(['asr', 'asr_rt']));
+});
+
+it('imports a confirmed speech row only after a type is chosen', () => {
+    const speech: DiscoveredModel = {
+        model_name: 'paraformer-v2',
+        display_name: 'Paraformer',
+        model_type: null,
+        type_source: 'speech',
+    };
+    expect(importableModels([speech], new Set(['paraformer-v2']), {}, [], 'qwen')).toEqual([]);
+    expect(importableModels([speech], new Set(['paraformer-v2']), { 'paraformer-v2': 'asr_rt' }, [], 'qwen')
+        .map(model => model.model_type)).toEqual(['asr_rt']);
 });

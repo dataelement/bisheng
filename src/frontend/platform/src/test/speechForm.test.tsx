@@ -10,7 +10,11 @@ describe('speech credentials form', () => {
         const config = { speech_app_id: '123', speech_api_key: '********' };
         const props = { ref, showDefault: true, provider: 'qianfan', formData: config, modelTypes: ['asr'] };
         const { rerender } = render(<CustomForm {...props} />);
-        expect(ref.current?.getData()).toEqual([config, '']);
+        expect(ref.current?.getData()).toEqual([{
+            ...config,
+            base_url: 'https://qianfan.baidubce.com/v2',
+            api_key: '',
+        }, '']);
         rerender(<CustomForm {...props} modelTypes={['asr', 'llm']} />);
         expect(ref.current?.getData()[1]).toBe('API Key');
         expect(ref.current?.getData()[0].base_url).toBe('https://qianfan.baidubce.com/v2');
@@ -22,8 +26,8 @@ describe('speech credentials form', () => {
             <CustomForm ref={ref} showDefault={true} provider="tencent" formData={config} modelTypes={['asr_rt']} />,
         );
         expect(getByText('model.speechCredentials')).toBeTruthy();
-        expect(queryByText('API Key')).toBeNull();
-        expect(queryByText('Base URL')).toBeNull();
+        expect(getByText('API Key')).toBeTruthy();
+        expect(getByText('Base URL')).toBeTruthy();
         expect(ref.current?.getData()[1]).toBe('');
     });
     it('preserves existing chat credentials when only ASR fields are displayed', () => {

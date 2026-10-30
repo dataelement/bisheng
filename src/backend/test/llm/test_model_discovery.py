@@ -19,8 +19,13 @@ path = Path(__file__).parents[2] / "bisheng/llm/domain/services/model_discovery.
     "item,kind,source",
     [
         ({"id": "private-alias", "model_type": "ASR"}, "asr", "metadata"),
+        ({"id": "private-realtime", "capabilities": ["Realtime-ASR"]}, "asr", "metadata"),
         ({"id": "gpt-4o", "model_info": {"mode": "embedding"}}, "embedding", "metadata"),
-        ({"id": "whisper-1"}, "asr", "registry"),
+        ({"id": "whisper-1"}, None, "unknown"),
+        ({"id": "glm-asr-2512"}, None, "unknown"),
+        ({"id": "gpt-4o-transcribe"}, None, "unknown"),
+        ({"id": "gpt-4o-mini-transcribe"}, None, "unknown"),
+        ({"id": "paraformer-realtime-v2"}, None, "unknown"),
         ({"id": "Qwen/Qwen3-Reranker-8B"}, "rerank", "registry"),
         ({"id": "Qwen/Qwen3-Embedding-8B"}, "embedding", "registry"),
         ({"id": "qwen3.7-plus"}, "llm", "registry"),
@@ -41,6 +46,68 @@ path = Path(__file__).parents[2] / "bisheng/llm/domain/services/model_discovery.
 )
 def test_capabilities_precede_model_family(item, kind, source):
     assert catalog.identify_type(item) == (kind, source)
+
+
+def test_speech_marker_follows_the_provider_client_not_the_model_name():
+    file_only = {"model_type": "asr", "type_source": "metadata", "_transports": {"websocket"}}
+    catalog.assign_speech_type(file_only, "openai")
+    assert file_only == {"model_type": "asr", "type_source": "metadata"}
+
+    both = {"model_type": "asr", "type_source": "metadata", "_transports": {"file", "websocket"}}
+    catalog.assign_speech_type(both, "qwen")
+    assert both == {"model_type": None, "type_source": "speech"}
+
+    realtime_only = {"model_type": "asr", "type_source": "metadata"}
+    catalog.assign_speech_type(realtime_only, "tencent")
+    assert realtime_only == {"model_type": "asr_rt", "type_source": "metadata"}
+
+    unsupported = {"model_type": "asr", "type_source": "metadata"}
+    catalog.assign_speech_type(unsupported, "zhipu")
+    assert unsupported == {"model_type": None, "type_source": "unsupported"}
+
+
+def test_bailian_capabilities_split_file_and_realtime_asr():
+    rows = catalog.normalize_catalog(
+        {
+            "data": [
+                {"id": "fun-asr-flash-2026-06-15", "capabilities": ["ASR"]},
+                {"id": "qwen-audio-3.0-asr-flash", "capabilities": ["ASR"]},
+                {"id": "qwen3-asr-flash-realtime", "capabilities": ["Realtime-ASR"]},
+                {"id": "private-both", "capabilities": ["ASR", "Realtime-ASR"]},
+            ]
+        },
+        "openai",
+    )
+    catalog._publish_speech_types(rows, "qwen")
+    by_name = {row["model_name"]: row for row in rows}
+    assert by_name["fun-asr-flash-2026-06-15"]["model_type"] == "asr"
+    assert by_name["qwen-audio-3.0-asr-flash"]["model_type"] == "asr"
+    assert by_name["qwen3-asr-flash-realtime"]["model_type"] == "asr_rt"
+    assert by_name["qwen3-asr-flash-realtime"]["type_source"] == "metadata"
+    assert by_name["private-both"]["model_type"] is None
+    assert by_name["private-both"]["type_source"] == "speech"
+
+
+def test_qwen_id_only_rows_follow_transport_words_in_the_model_id():
+    rows = catalog.normalize_catalog(
+        {
+            "data": [
+                {"id": "fun-asr-flash-2026-06-15"},
+                {"id": "qwen-audio-3.0-asr-flash"},
+                {"id": "qwen3-asr-flash-realtime"},
+                {"id": "qwen-audio-3.0-asr-flash-streaming"},
+                {"id": "qwen-plus"},
+            ]
+        },
+        "openai",
+    )
+    catalog._publish_speech_types(rows, "qwen")
+    by_name = {row["model_name"]: row for row in rows}
+    assert by_name["fun-asr-flash-2026-06-15"]["model_type"] == "asr"
+    assert by_name["qwen-audio-3.0-asr-flash"]["model_type"] == "asr"
+    assert by_name["qwen3-asr-flash-realtime"]["model_type"] == "asr_rt"
+    assert by_name["qwen-audio-3.0-asr-flash-streaming"]["model_type"] == "asr_rt"
+    assert by_name["qwen-plus"]["model_type"] == "llm"
 
 
 @pytest.mark.parametrize(

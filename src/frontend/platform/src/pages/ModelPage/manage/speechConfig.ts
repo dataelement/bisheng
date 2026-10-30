@@ -12,7 +12,8 @@ export interface ConfigField {
 }
 export type ProviderConfig = Record<string, string>;
 export const speechProviders = ['volcengine', 'qianfan', 'tencent'];
-export const asrProviders = ['openai', 'azure_openai', 'qwen', ...speechProviders];
+export const fileAsrProviders = ['openai', 'azure_openai', 'qwen'];
+export const realtimeAsrProviders = ['volcengine', 'qianfan', 'tencent', 'qwen'];
 export const ttsProviders = ['openai', 'azure_openai', 'qwen', 'qianfan'];
 export const speechDocs: Record<string, string> = {
     volcengine: 'https://docs.volcengine.com/docs/DoubaoVoice/LargemodelstreamingautomaticspeechrecognitionAPI?lang=zh',
@@ -31,9 +32,12 @@ export function isSpeechModelType(modelType: string): boolean {
     return modelType === 'asr' || modelType === 'asr_rt';
 }
 
-/** Every provider can pick either mode. Save-time calls decide whether it works. */
-export function speechModelTypes(): string[] {
-    return ['asr', 'asr_rt'];
+/** Speech types follow the clients this provider actually has. */
+export function speechModelTypes(provider: string): string[] {
+    const types: string[] = [];
+    if (fileAsrProviders.includes(provider)) types.push('asr');
+    if (realtimeAsrProviders.includes(provider)) types.push('asr_rt');
+    return types;
 }
 
 /** Realtime engine names stay on asr_rt rows. File rows use a separate hint. */

@@ -153,6 +153,7 @@
     "type_embedding": "Embedding",
     "type_rerank": "Rerank",
     "type_asr": "ASR",
+    "type_asr_rt": "ASR RT",
     "type_tts": "TTS",
     "unnamedModel": "Enter a model name",
     "configurationRequired": "Configuration required",

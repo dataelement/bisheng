@@ -21,7 +21,13 @@ describe('discovery connection and speech configuration', () => {
   it('validates speech-only connections with their own fields', () => {
     const ref = createRef<CustomFormHandle>();
     render(<CustomForm ref={ref} showDefault={true} provider="volcengine" modelTypes={['asr']} formData={{ speech_api_key: 'speech-key' }} />);
-    expect(ref.current?.getData()).toEqual([expect.objectContaining({ speech_api_key: 'speech-key', speech_resource_id: 'volc.seedasr.sauc.duration' }), '']);
-    expect(screen.queryByLabelText('Base URL')).toBeNull();
+    expect(ref.current?.getData()).toEqual([expect.objectContaining({
+      speech_api_key: 'speech-key',
+      speech_resource_id: 'volc.seedasr.sauc.duration',
+      base_url: 'https://ark.cn-beijing.volces.com/api/v3',
+      api_key: '',
+    }), '']);
+    expect(screen.getByLabelText('Base URL')).toBeInTheDocument();
+    expect(screen.getByLabelText('API Key')).toBeInTheDocument();
   });
 });

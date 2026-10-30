@@ -1,4 +1,4 @@
-import { asrProviders, ttsProviders } from "./speechConfig";
+import { fileAsrProviders, realtimeAsrProviders, ttsProviders } from "./speechConfig";
 import { rerankProviders } from "./modelProviderFields";
 import { DiscoveredModel, ModelType } from "@/controllers/API/modelDiscovery";
 
@@ -27,12 +27,14 @@ export const modelTypes: ModelType[] = [
   "embedding",
   "rerank",
   "asr",
+  "asr_rt",
   "tts",
 ];
 export function availableModelTypes(provider: string): ModelType[] {
   return modelTypes.filter(
     (type) =>
-      (type !== "asr" || asrProviders.includes(provider)) &&
+      (type !== "asr" || fileAsrProviders.includes(provider)) &&
+      (type !== "asr_rt" || realtimeAsrProviders.includes(provider)) &&
       (type !== "tts" || ttsProviders.includes(provider)) &&
       (type !== "rerank" || rerankProviders.includes(provider)),
   );

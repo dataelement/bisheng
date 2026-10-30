@@ -57,7 +57,11 @@ export const CustomForm = forwardRef<CustomFormHandle, CustomFormProps>(function
     const [form, setForm] = useState(formData);
     const hasSpeech = speechProviders.includes(provider) && modelTypes.some(isSpeechModelType);
     const speechOnly = hasSpeech && modelTypes.every(isSpeechModelType);
-    const commonFields = speechOnly ? [] : getModelProviders()[provider] || [];
+    // Speech-only rows still need the catalog API key to list models. Saving
+    // does not require it until a non-speech model is added.
+    const commonFields = (getModelProviders()[provider] || []).map((field) =>
+        speechOnly ? { ...field, required: false } : field,
+    );
     const speechFields = hasSpeech ? getSpeechFields(provider, form, t) : [];
     const fields = [...commonFields, ...speechFields];
     const values = configWithDefaults(form, fields, showDefault);

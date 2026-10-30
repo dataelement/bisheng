@@ -5,7 +5,7 @@ export interface DiscoveredModel {
   model_name: string;
   display_name: string;
   model_type: ModelType | null;
-  type_source: "metadata" | "registry" | "unknown" | "unsupported";
+  type_source: "metadata" | "registry" | "unknown" | "unsupported" | "speech";
 }
 export type DiscoverySource = "auto" | "live" | "preset";
 export interface DiscoveryResult {

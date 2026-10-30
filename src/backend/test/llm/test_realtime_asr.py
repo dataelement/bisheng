@@ -250,7 +250,7 @@ async def test_oversized_audio_is_rejected(monkeypatch):
     "model_name,model_type,expected",
     [
         ("16k_zh", "asr_rt", True),
-        ("16k_zh", "asr", True),
+        ("16k_zh", "asr", False),
         ("whisper-1", "asr", False),
     ],
 )

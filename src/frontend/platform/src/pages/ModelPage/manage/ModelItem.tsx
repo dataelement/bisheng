@@ -185,9 +185,7 @@ export function ModelItem({
           </p>
         </div>
         <span className="shrink-0 rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
-          {model.model_type === "asr_rt"
-            ? t("model.modelTypeLabels.asr_rt")
-            : tModel(`model.type_${model.model_type}`)}
+          {tModel(`model.type_${model.model_type}`)}
         </span>
         <Button
           size="small"
@@ -222,11 +220,14 @@ export function ModelItem({
       {expanded && (
         <div id={controlId} className="space-y-3 border-t bg-muted/20 p-3">
           <div className="flex flex-wrap items-start gap-3">
-            <div className="min-w-0 flex-[1_1_16rem]">
-              <Label htmlFor={`${controlId}-name`} className="bisheng-label">
+            <div className="min-w-0 flex-[1_1_16rem] space-y-2">
+              <Label
+                htmlFor={`${controlId}-name`}
+                className="bisheng-label flex h-8 items-center"
+              >
                 <span>{t("model.modelName")}</span>
                 <QuestionTooltip
-                  className="relative top-0.5 ml-1"
+                  className="ml-1"
                   content={t("model.modelNameTooltip")}
                 />
               </Label>
@@ -243,8 +244,11 @@ export function ModelItem({
               )}
               {error && <span className="text-red-500 text-xs">{error}</span>}
             </div>
-            <div className="w-full shrink-0 sm:w-40">
-              <Label htmlFor={`${controlId}-type`} className="bisheng-label">
+            <div className="w-full shrink-0 space-y-2 sm:w-40">
+              <Label
+                htmlFor={`${controlId}-type`}
+                className="bisheng-label flex h-8 items-center"
+              >
                 {t("model.modelType")}
               </Label>
               <Select
@@ -258,16 +262,13 @@ export function ModelItem({
                 options={Array.from(
                   new Set([
                     ...availableModelTypes(type),
-                    ...speechModelTypes(),
+                    ...speechModelTypes(type),
                     // Keep the option on existing rerank rows so their current value still renders.
                     ...(model.model_type === "rerank" ? ["rerank"] : []),
                   ]),
                 ).map((value) => ({
                   value,
-                  label:
-                    value === "asr_rt"
-                      ? t("model.modelTypeLabels.asr_rt")
-                      : tModel(`model.type_${value}`),
+                  label: tModel(`model.type_${value}`),
                 }))}
               />
             </div>

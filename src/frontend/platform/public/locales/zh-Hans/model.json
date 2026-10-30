@@ -151,6 +151,7 @@
     "type_embedding": "Embedding",
     "type_rerank": "Rerank",
     "type_asr": "ASR",
+    "type_asr_rt": "ASR RT",
     "type_tts": "TTS",
     "unnamedModel": "待填写模型名称",
     "configurationRequired": "待完善配置",

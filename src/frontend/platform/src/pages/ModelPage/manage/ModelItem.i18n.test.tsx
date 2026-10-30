@@ -51,7 +51,7 @@ it.each([
     expect(screen.queryByRole("spinbutton")).toBeNull();
     expect(screen.getByRole("combobox")).toHaveTextContent("LLM");
     fireEvent.click(screen.getByRole("combobox"));
-    for (const name of ["LLM", "Embedding", "Rerank", "ASR", "TTS"]) {
+    for (const name of ["LLM", "Embedding", "Rerank", "ASR", "ASR RT", "TTS"]) {
       expect(screen.getByRole("option", { name })).toBeInTheDocument();
     }
     fireEvent.click(screen.getByRole("option", { name: "LLM" }));

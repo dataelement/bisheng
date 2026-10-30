@@ -451,9 +451,10 @@ export function ModelDiscovery({
                           }
                         />
                       )}
-                      {model.type_source === "unknown" &&
-                      !added &&
-                      !unsupported ? (
+                      {((model.type_source === "unknown" ||
+                        model.type_source === "speech") &&
+                        !added &&
+                        !unsupported) ? (
                         <Select
                           {...selectLabels}
                           aria-label={t("model.confirmModelTypeFor", {
@@ -469,7 +470,10 @@ export function ModelDiscovery({
                                 [model.model_name]: value as ModelType,
                               }));
                           }}
-                          options={allowedTypes.map((value) => ({
+                          options={(model.type_source === "speech"
+                            ? (["asr", "asr_rt"] as const)
+                            : allowedTypes
+                          ).map((value) => ({
                             value,
                             label: t(`model.type_${value}`),
                           }))}

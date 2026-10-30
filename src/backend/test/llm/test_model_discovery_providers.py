@@ -61,6 +61,14 @@ async def test_native_presets_are_explicit_and_make_no_network_calls(monkeypatch
     assert result["models"]
 
 
+async def test_zhipu_preset_speech_row_is_unsupported():
+    result = await ModelDiscoveryService.discover("zhipu", {}, source="preset")
+    speech = next(model for model in result["models"] if model["model_name"] == "glm-asr-2512")
+    assert speech["model_type"] is None
+    assert speech["type_source"] == "unsupported"
+    assert "_transports" not in speech
+
+
 async def test_custom_gateway_failures_never_turn_into_vendor_presets(monkeypatch):
     transport(monkeypatch, lambda request: httpx.Response(401, text="private failure"))
     with pytest.raises(ModelDiscoveryError) as error:
@@ -89,6 +97,7 @@ async def test_native_bailian_pages_and_capabilities(monkeypatch):
     assert [r.url.params["page_no"] for r in requests] == ["1", "2"]
     assert requests[1].headers["authorization"] == "Bearer fixture"
     assert [m["model_type"] for m in result["models"]] == ["asr", "embedding"]
+    assert result["models"][0]["type_source"] == "metadata"
 
 
 async def test_bailian_compatible_mode_and_workspace_validation(monkeypatch):
@@ -281,6 +290,27 @@ async def test_silicon_classifies_aliases_using_native_subtype_filters(monkeypat
     assert len(requests) == 8
 
 
+async def test_silicon_speech_only_rows_stay_unsupported(monkeypatch):
+    def handler(request):
+        subtype = request.url.params.get("sub_type")
+        if subtype is None:
+            rows = [{"id": "private-speech"}, {"id": "private-chat"}]
+        elif subtype == "speech-to-text":
+            rows = [{"id": "private-speech"}]
+        elif subtype == "chat":
+            rows = [{"id": "private-chat"}]
+        else:
+            rows = []
+        return httpx.Response(200, json={"data": rows})
+
+    transport(monkeypatch, handler)
+    result = await ModelDiscoveryService.discover("silicon", {"api_key": "fixture"})
+    rows = {model["model_name"]: model for model in result["models"]}
+    assert rows["private-speech"]["model_type"] is None
+    assert rows["private-speech"]["type_source"] == "unsupported"
+    assert rows["private-chat"]["model_type"] == "llm"
+
+
 @pytest.mark.parametrize("payload", [{"ResponseMetadata": "bad"}, {"data": [], "error": "private-body"}])
 async def test_malformed_vendor_errors_are_sanitized(monkeypatch, payload):
     transport(monkeypatch, lambda request: httpx.Response(200, json=payload))
@@ -290,7 +320,7 @@ async def test_malformed_vendor_errors_are_sanitized(monkeypatch, payload):
 
 
 @pytest.mark.parametrize(
-    "name,kind", [("glm-asr-2512", "asr"), ("glm-tts", "tts"), ("hunyuan-embedding", "embedding"), ("glm-image", None)]
+    "name,kind", [("glm-asr-2512", None), ("glm-tts", "tts"), ("hunyuan-embedding", "embedding"), ("glm-image", None)]
 )
 def test_specialized_models_precede_chat_family_names(name, kind):
     assert identify_type({"id": name})[0] == kind
