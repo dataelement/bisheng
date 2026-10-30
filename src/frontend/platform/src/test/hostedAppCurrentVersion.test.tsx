@@ -70,6 +70,17 @@ it("ignores an old app response after the card changes to another application", 
   expect(screen.getByText("Latest version v4")).toBeInTheDocument()
 })
 
+it("refreshes the running version after an offline app goes online", async () => {
+  vi.mocked(getHostedAppVersionsApi)
+    .mockResolvedValueOnce([version(1), { ...version(2), is_current: false, is_pending: true }])
+    .mockResolvedValueOnce([{ ...version(1), is_current: false }, version(2)])
+  const view = render(card("app", false))
+  expect(await screen.findByText("Latest version v2")).toBeInTheDocument()
+  view.rerender(card("app", true))
+  expect(await screen.findByText("Running version v2")).toBeInTheDocument()
+  expect(getHostedAppVersionsApi).toHaveBeenCalledTimes(2)
+})
+
 it("keeps failures distinct from an empty version list and allows retrying", async () => {
   vi.mocked(getHostedAppVersionsApi).mockRejectedValueOnce(new Error("unavailable")).mockResolvedValueOnce([version(5)])
   render(card())

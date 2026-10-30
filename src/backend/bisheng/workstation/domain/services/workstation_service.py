@@ -782,10 +782,10 @@ class WorkStationService(BaseService):
             ret.tools = cls.sync_tool_info(ret.tools)
         if inherited:
             ret = await cls._aproject_daily_config_for_current_tenant(ret, DEFAULT_TENANT_ID)
-        return cls._apply_workbench_models(ret, await LLMService.get_workbench_llm_for_picker())
+        return cls._apply_workbench_models(ret, await LLMService.get_workbench_llm())
 
     @classmethod
-    async def get_daily_chat_config(cls) -> WorkstationConfig | None:
+    async def get_daily_chat_config(cls, *, for_picker: bool = False) -> WorkstationConfig | None:
         """Get the default workstation configuration for daily chat."""
         value, inherited, _, _ = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION)
         config = type("TenantConfigValue", (), {"value": value}) if value else None
@@ -796,7 +796,10 @@ class WorkStationService(BaseService):
             ret.tools = cls.sync_tool_info(ret.tools)
         if inherited:
             ret = await cls._aproject_daily_config_for_current_tenant(ret, DEFAULT_TENANT_ID)
-        return cls._apply_workbench_models(ret, await LLMService.get_workbench_llm())
+        workbench_config = await (
+            LLMService.get_workbench_llm_for_picker() if for_picker else LLMService.get_workbench_llm()
+        )
+        return cls._apply_workbench_models(ret, workbench_config)
 
     @classmethod
     async def get_open_api_daily_config(cls, login_user: UserPayload) -> dict[str, list]:

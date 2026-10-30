@@ -1,8 +1,11 @@
 import { userContext } from "@/contexts/userContext";
 import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig";
 import { Tabs } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+// TODO(bisheng-icons): Replace these fallbacks when credit, content moderation, and plugin icons are available.
+import { Coins, Plug, ShieldAlert } from "lucide-react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { DshManagement } from "@/pages/SystemPage/dsh";
 import { DshContentSafetySettings } from "@/pages/SystemPage/dsh/DshContentSafetySettings";
@@ -10,6 +13,17 @@ import { ModelAuditTenantSelect } from "@/pages/SystemPage/dsh/ModelAuditTenantS
 import { displayTenantName } from "@/utils/tenantDisplayName";
 import { PluginMarketPage } from "@/pages/BuildPage/dsh/PluginMarketPage";
 import { DSH_SECTIONS, resolveDshSection, type DshSection } from "./sections";
+
+const SECTION_ICONS: Record<DshSection, ReactNode> = {
+  credits: <Coins aria-hidden="true" />,
+  usage: <Outlined.Dashboard aria-hidden="true" />,
+  models: <Outlined.BlocksAndArrows aria-hidden="true" />,
+  "model-audit": <Outlined.FileSearch aria-hidden="true" />,
+  "content-safety": <ShieldAlert aria-hidden="true" />,
+  operations: <Outlined.History aria-hidden="true" />,
+  access: <Outlined.DeviceDesktopExchange aria-hidden="true" />,
+  plugins: <Plug aria-hidden="true" />,
+};
 
 export function DshPage() {
   const { user } = useContext(userContext);
@@ -45,8 +59,8 @@ export function DshPage() {
             data-dsh-header
           >
             <Tabs activeKey={section} onChange={(value) => navigate(`/dsh?tab=${value}`)}
-              aria-label={t("dsh.title")} items={sections.map(({ value, labelKey }) => ({ key: value, label: t(labelKey) }))}
-              className="min-w-0 shrink-0 self-start" />
+              aria-label={t("dsh.title")} items={sections.map(({ value, labelKey }) => ({ key: value, label: t(labelKey), icon: SECTION_ICONS[value] }))}
+              className="min-w-0 max-w-full self-start" />
             {section === "plugins" && <div ref={setMarketToolbarTarget} className="shrink-0" />}
           </div>
         )}

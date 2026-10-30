@@ -106,36 +106,3 @@ export function descendantLeaves(
   }
   return leaves;
 }
-
-export function shortestLabels(entries: CascaderEntry[], separator: string): Map<string, string> {
-  const labels = new Map<string, string>();
-  const byLeaf = new Map<string, CascaderEntry[]>();
-  for (const entry of entries) {
-    const leaf =
-      entry.options[entry.options.length - 1]?.label ??
-      String(entry.path[entry.path.length - 1] ?? '');
-    const group = byLeaf.get(leaf) ?? [];
-    group.push(entry);
-    byLeaf.set(leaf, group);
-  }
-  for (const group of byLeaf.values()) {
-    for (const entry of group) {
-      let count = 1;
-      if (group.length > 1) {
-        while (
-          count < entry.options.length &&
-          group.some(
-            (other) =>
-              other !== entry &&
-              other.options.slice(-count).map((item) => item.label).join(separator) ===
-                entry.options.slice(-count).map((item) => item.label).join(separator),
-          )
-        ) {
-          count += 1;
-        }
-      }
-      labels.set(entry.key, entry.options.slice(-count).map((item) => item.label).join(separator));
-    }
-  }
-  return labels;
-}

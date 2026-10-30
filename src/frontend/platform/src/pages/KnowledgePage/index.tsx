@@ -1,5 +1,6 @@
 // @ts-strict-ignore
 import { Tabs } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -22,8 +23,8 @@ export default function KnowledgePage() {
             <Tabs defaultActiveKey={defaultValue}
                 extra={<div ref={setToolbarTarget} />}
                 className="w-full mb-10 [&>div:first-child]:mx-2 [&>div:first-child]:mb-2" items={[
-                { key: 'file', label: t('lib.fileData'), children: <KnowledgeFile toolbarTarget={toolbarTarget} /> },
-                { key: 'qa', label: t('lib.qaData'), children: <KnowledgeQa toolbarTarget={toolbarTarget} /> },
+                { key: 'file', label: t('lib.fileData'), icon: <Outlined.Books aria-hidden="true" />, children: <KnowledgeFile toolbarTarget={toolbarTarget} /> },
+                { key: 'qa', label: t('lib.qaData'), icon: <Outlined.BookOpenText aria-hidden="true" />, children: <KnowledgeQa toolbarTarget={toolbarTarget} /> },
             ]} />
         </div>
     );

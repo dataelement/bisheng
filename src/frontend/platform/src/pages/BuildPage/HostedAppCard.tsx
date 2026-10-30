@@ -65,7 +65,7 @@ function HostedAppVersionLabel({ appId, online }: HostedAppVersionLabelProps) {
       .catch(() => { if (!cancelled) setFailed(true) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [appId, retryAttempt])
+  }, [appId, online, retryAttempt])
 
   const current = versions?.find((item) => item.is_current)
   const latest = versions?.reduce<HostedAppVersion | undefined>((newest, version) =>

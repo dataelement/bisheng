@@ -19,7 +19,7 @@ router = APIRouter()
 
 @router.get("/config", summary="Get workbench configuration", response_model=UnifiedResponseModel)
 async def get_config(request: Request, login_user=LoginUserDep):
-    ret = await WorkStationService.get_daily_chat_config()
+    ret = await WorkStationService.get_daily_chat_config(for_picker=True)
     if bisheng_settings.dsh.enabled:
         from bisheng.dsh.domain.services.model_catalog import authorized_workbench_models
 
