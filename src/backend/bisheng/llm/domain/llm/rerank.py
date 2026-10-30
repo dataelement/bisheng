@@ -52,6 +52,7 @@ _node_type: Dict = {
     LLMServerType.QWEN.value: {'client': DashScopeRerank, 'params_handler': _get_qwen_params},
     LLMServerType.QIAN_FAN.value: {'client': CommonRerank, 'params_handler': _get_common_params},
     LLMServerType.SILICON.value: {'client': CommonRerank, 'params_handler': _get_common_params},
+    LLMServerType.OPENAI_COMPATIBLE.value: {'client': CommonRerank, 'params_handler': _get_common_params},
 }
 
 

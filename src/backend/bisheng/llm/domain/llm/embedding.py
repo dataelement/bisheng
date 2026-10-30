@@ -123,6 +123,7 @@ _node_type: dict = {
     LLMServerType.TENCENT.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
     LLMServerType.VOLCENGINE.value: {"client": VolcengineEmbeddings, "params_handler": _get_openai_params},
     LLMServerType.SILICON.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
+    LLMServerType.OPENAI_COMPATIBLE.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
 }
 
 

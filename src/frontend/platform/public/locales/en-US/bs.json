@@ -836,12 +836,20 @@
       "spark": "iFLYTEK Spark",
       "tencent": "Tencent Cloud",
       "moonshot": "Moonshot AI",
-      "qianfan": "Baidu Qianfan"
+      "qianfan": "Baidu Qianfan",
+      "openaiCompatible": "OpenAI-compatible"
     },
     "sectionConnection": "Connection",
     "sectionUsage": "Usage",
     "providerType": "Provider type",
-    "providerTypeTip": "Decides how the API is called and which connection fields to fill in below. It cannot be changed after saving.",
+    "providerTypeTip": "Decides how the API is called and which connection fields to fill in below. It cannot be changed after saving. If your service is not listed but exposes an OpenAI-format API, choose \"OpenAI-compatible\".",
+    "providerGroups": {
+      "generic": "Generic protocol",
+      "cloud": "Cloud services",
+      "local": "Self-hosted frameworks"
+    },
+    "openaiCompatibleDesc": "For any service that exposes an OpenAI-format API, such as One API or a self-hosted gateway",
+    "openaiCompatibleSearchWords": "custom,compatible,gateway,proxy,relay",
     "dailyCallLimitTip": "Limits the total calls per day across all models of this provider. Calls over the limit fail for the rest of the day; the count resets at midnight.",
     "dailyLimitPrefix": "At most",
     "dailyLimitSuffix": "calls per day",
