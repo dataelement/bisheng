@@ -1089,9 +1089,6 @@
     },
     "no-restricted-imports": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
     }
   },
   "src/components/Nav/MobileNav.tsx": {

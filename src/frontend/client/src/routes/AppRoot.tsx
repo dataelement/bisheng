@@ -88,7 +88,6 @@ export default function AppRoot() {
             },
             ...prev,
         ]);
-        setSidebarVisible(false);
         navigate(`/app/${chatId}/${flowId}/${flowType}`, { state: location.state });
     };
 
@@ -204,6 +203,7 @@ export default function AppRoot() {
                                     persistNavVisibleInLocalStorage={false}
                                     navigateToNewChatPath={false}
                                     onNewChat={handleCreateNewAppChat}
+                                    onMenuClick={isTabletOrMobile ? undefined : toggleSidebar}
                                     appSurfaceBackAction={handleGoBack}
                                     appHistoryDropdownOpen={appHistoryOpen}
                                     onToggleAppHistoryDropdown={() => setAppHistoryOpen((o) => !o)}
