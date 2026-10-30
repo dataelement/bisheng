@@ -4,6 +4,7 @@ import os
 import re
 import ssl
 from typing import Union
+from urllib.parse import quote, urlparse, urlunparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from celery.schedules import crontab
@@ -31,6 +32,25 @@ def encrypt_token(token: str):
 
 def decrypt_token(token: str):
     return Fernet(secret_key).decrypt(token).decode()
+
+
+def decrypt_redis_url(value: str) -> str:
+    """Replace the Fernet ciphertext in a Redis URL password and quote the plaintext once.
+
+    The username is the raw text before the first colon in the userinfo. It is not
+    quoted again. The host is the original netloc after the last ``@``, so IPv6
+    brackets stay in place. A missing or empty password is left untouched.
+    """
+    parsed = urlparse(value)
+    if not parsed.password:
+        return value
+    plain_password = decrypt_token(parsed.password)
+    userinfo, separator, hostport = parsed.netloc.rpartition("@")
+    if not separator:
+        return value
+    username = userinfo.partition(":")[0]
+    netloc = f"{username}:{quote(plain_password, safe='')}@{hostport}"
+    return urlunparse(parsed._replace(netloc=netloc))
 
 
 def decrypt_database_url(value: str) -> str:
@@ -1070,15 +1090,7 @@ class Settings(BaseModel):
                         v = v[8:-1]
                         values["redis_url"][k] = decrypt_token(v)
             else:
-                import re
-
-                pattern = r"(?<=:)[^:]+(?=@)"  # Match colon after to@Any character before the symbol
-                match = re.search(pattern, values["redis_url"])
-                if match:
-                    password = match.group(0)
-                    new_password = decrypt_token(password)
-                    new_redis_url = re.sub(pattern, f"{new_password}", values["redis_url"])
-                    values["redis_url"] = new_redis_url
+                values["redis_url"] = decrypt_redis_url(values["redis_url"])
         return values
 
     @model_validator(mode="before")
@@ -1091,15 +1103,7 @@ class Settings(BaseModel):
                         v = v[8:-1]
                         values["celery_redis_url"][k] = decrypt_token(v)
             else:
-                import re
-
-                pattern = r"(?<=:)[^:]+(?=@)"  # Match colon after to@Any character before the symbol
-                match = re.search(pattern, values["celery_redis_url"])
-                if match:
-                    password = match.group(0)
-                    new_password = decrypt_token(password)
-                    new_redis_url = re.sub(pattern, f"{new_password}", values["celery_redis_url"])
-                    values["celery_redis_url"] = new_redis_url
+                values["celery_redis_url"] = decrypt_redis_url(values["celery_redis_url"])
         return values
 
     @model_validator(mode="before")
