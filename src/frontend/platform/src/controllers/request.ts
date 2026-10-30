@@ -112,6 +112,21 @@ function isEnvelope(data: any): boolean {
     return data && typeof data === "object" && typeof data.status_code === "number"
 }
 
+// Dashboard view reads fail at the gateway (nginx HTML 502/503/504, no BiSheng
+// envelope). Leave the board on its existing empty state. Writes, exports,
+// and other pages still toast.
+function isQuietDashboardGatewayFailure(error: any): boolean {
+    const status = error?.response?.status
+    if (status !== 502 && status !== 503 && status !== 504) return false
+    const config = error?.config
+    const method = String(config?.method || "get").toLowerCase()
+    const raw = `${config?.baseURL || ""}${config?.url || ""}`.split("?")[0]
+    const path = raw.replace(/\/platform(?=\/)/, "").replace(/\/{2,}/g, "/")
+    if (method === "get" && /^\/api\/v1\/telemetry\/dashboard\/?$/.test(path)) return true
+    if (method === "get" && /^\/api\/v1\/telemetry\/dashboard\/[^/]+$/.test(path)) return true
+    return method === "post" && path === "/api/v1/telemetry/dashboard/component/query"
+}
+
 function showServerBusyNotice(envelope: any): void {
     const message = coerceErrorMessage(envelope?.status_message)
         || i18next.t("system.apiRateLimit.defaultMessage")
@@ -208,6 +223,9 @@ customAxios.interceptors.response.use(function (response) {
     }
     // Silent mode: skip toast, let the caller handle it
     if (error.config?.silent) return Promise.reject(error);
+    if (!isEnvelope(envelope) && isQuietDashboardGatewayFailure(error)) {
+        return Promise.reject(null);
+    }
     // Backend may return our unified envelope on HTTP 4xx/5xx (e.g. F011
     // tenant mount maps TenantTreeNestingForbiddenError → HTTP 400 with a
     // structured body). Decode the envelope before falling back to the raw
