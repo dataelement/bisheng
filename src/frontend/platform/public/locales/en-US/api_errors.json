@@ -110,6 +110,7 @@
   "10804": "Volcengine rejected this Resource ID. Check the speech resource granted to these credentials.",
   "10810": "Please configure the workbench embedding model.",
   "10811": "The daily mode default model must be one of the configured workbench chat models. Please select again.",
+  "10812": "Model discovery failed. Check the connection settings and retry, or configure models manually.",
   "10900": "Knowledge base name already exists",
   "10901": "Embedding model required",
   "10902": "Summary model invalid. Reconfigure in system model settings.",

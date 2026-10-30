@@ -2384,10 +2384,7 @@
   },
   "src/pages/ModelPage/manage/ModelConfig.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 3
+      "count": 1
     }
   },
   "src/pages/ModelPage/manage/SystemConfigBanners.tsx": {

@@ -640,6 +640,7 @@
   "26202": "Plugin state changed; refresh and retry",
   "26203": "Plugin or published version not found",
   "26204": "Tenant administrator access is required",
+  "10812": "Model discovery failed. Check the connection settings and retry, or configure models manually.",
   "16280": "The application environment variable is invalid",
   "16281": "The application environment variables have changed; refresh and try again",
   "16282": "The application environment variables cannot be decrypted; contact an administrator",

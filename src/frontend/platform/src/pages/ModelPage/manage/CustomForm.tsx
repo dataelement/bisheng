@@ -11,7 +11,9 @@ interface CustomFormProps {
     showDefault: boolean;
     provider: string;
     formData: ProviderConfig;
-    modelTypes: string[];
+    modelTypes?: string[];
+    onConnectionChange?: () => void;
+    onConnectionBlur?: () => void;
     providerName?: string;
     apiKeySite?: string;
 }
@@ -49,7 +51,7 @@ function FormField({ field, value, providerName, apiKeySite, onChange }: FormFie
 }
 
 export const CustomForm = forwardRef<CustomFormHandle, CustomFormProps>(function CustomForm(
-    { showDefault, provider, formData, modelTypes, providerName, apiKeySite }, ref,
+    { showDefault, provider, formData, modelTypes = [], providerName, apiKeySite, onConnectionChange, onConnectionBlur }, ref,
 ) {
     const { t } = useTranslation();
     const [form, setForm] = useState(formData);
@@ -59,12 +61,15 @@ export const CustomForm = forwardRef<CustomFormHandle, CustomFormProps>(function
     const speechFields = hasSpeech ? getSpeechFields(provider, form, t) : [];
     const fields = [...commonFields, ...speechFields];
     const values = configWithDefaults(form, fields, showDefault);
-    const handleChange = (key: string, value: string) => setForm(previous => ({ ...previous, [key]: value }));
+    const handleChange = (key: string, value: string) => {
+        setForm(previous => ({ ...previous, [key]: value }));
+        onConnectionChange?.();
+    };
     useEffect(() => { setForm(formData); }, [formData]);
     useImperativeHandle(ref, () => ({
         getData: () => [values, getConfigError(values, fields)],
     }));
-    return <div className="space-y-4">
+    return <div className="space-y-4" onBlur={onConnectionBlur}>
         {commonFields.map(field => <FormField key={field.key} field={field} value={values[field.key] || ''}
             providerName={providerName} apiKeySite={apiKeySite} onChange={handleChange} />)}
         {hasSpeech && <div className="my-3 rounded border p-3">
@@ -75,3 +80,5 @@ export const CustomForm = forwardRef<CustomFormHandle, CustomFormProps>(function
         </div>}
     </div>;
 });
+
+export default CustomForm;

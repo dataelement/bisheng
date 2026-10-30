@@ -24,6 +24,7 @@ from ..domain.schemas import (
     WorkbenchModelConfig,
 )
 from ..domain.services.asr_realtime import run_realtime_asr
+from ..domain.services.model_discovery import ModelDiscoveryRequest
 
 router = APIRouter(prefix="/llm", tags=["LLM"])
 
@@ -197,6 +198,15 @@ async def get_one_llm(
 ):
     ret = await LLMService.get_one_llm(server_id, operator=login_user)
     return resp_200(data=ret)
+
+
+@router.post("/models/discover")
+async def discover_provider_models(
+    data: ModelDiscoveryRequest,
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+):
+    result = await LLMService.discover_models(data, login_user)
+    return resp_200(data=result)
 
 
 @router.post("/online")
