@@ -8,8 +8,8 @@ from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead
 from bisheng.knowledge.domain.schemas.knowledge_space_file_change_schema import FileChangeApprovalView
-from bisheng.permission.domain.schemas.permission_schema import AuthorizationItemResult, AuthorizeGrantItem
 from bisheng.permission.domain.schemas import GrantSubjectInput
+from bisheng.permission.domain.schemas.permission_schema import AuthorizationItemResult
 
 
 class InitialPermissionGrant(BaseModel):
@@ -97,7 +97,11 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
     user_name: str = Field(default="", description="Knowledge Space creator name")
     actions: list[str] | None = Field(
         default=None,
-        description="Effective F048 actions the current identity holds on this space",
+        description=(
+            "On /info, an entry access hint only: ['visible'] for content access, "
+            "[] for preview-only access. Full actions come from the resource my-permissions endpoint. "
+            "Other space listings may leave this field unset."
+        ),
     )
     avatar: str | None = Field(default=None, description="Knowledge Space creator avatar")
     download_action_enabled: bool = Field(

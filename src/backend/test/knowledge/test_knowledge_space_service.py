@@ -470,15 +470,26 @@ async def test_joined_visibility_does_not_expand_super_admin_identity(
 @pytest.mark.parametrize(
     "status",
     [
+        SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED,
         SpaceSubscriptionStatusEnum.SUBSCRIBED,
         SpaceSubscriptionStatusEnum.PENDING,
         SpaceSubscriptionStatusEnum.REJECTED,
     ],
 )
-def test_visible_permission_preserves_non_default_subscription_status(
+def test_visible_permission_takes_precedence_over_application_status(
     status: SpaceSubscriptionStatusEnum,
 ) -> None:
-    assert KnowledgeSpaceService._resolve_effective_subscription_status(status, has_visible=True) == status
+    assert (
+        KnowledgeSpaceService._resolve_effective_subscription_status(status, has_visible=True)
+        == SpaceSubscriptionStatusEnum.SUBSCRIBED
+    )
+
+
+@pytest.mark.parametrize("status", list(SpaceSubscriptionStatusEnum))
+def test_without_visible_permission_preserves_application_status(
+    status: SpaceSubscriptionStatusEnum,
+) -> None:
+    assert KnowledgeSpaceService._resolve_effective_subscription_status(status, has_visible=False) == status
 
 
 async def test_private_space_info_still_requires_visible_permission(

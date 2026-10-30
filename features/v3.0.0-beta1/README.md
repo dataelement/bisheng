@@ -11,6 +11,7 @@
 
 | # | Feature | 优先级 | 状态 | 依赖 |
 |---|---------|--------|------|------|
+| F079 | [cofco-space-info-read-optimization](./079-cofco-space-info-read-optimization/) | P1 | 实现及本地专项验证完成，真实环境待验收 | F048、F042、既有知识空间 |
 | F043 | [report-node-optimization](./043-report-node-optimization/) | P1 | Spec 已存在 | 无 |
 | F044 | [model-status-manual-verify](./044-model-status-manual-verify/) | P1 | Spec 已存在 | 无 |
 | F045 | [chat-image-preview](./045-chat-image-preview/) | P1 | Spec 已存在 | 无 |

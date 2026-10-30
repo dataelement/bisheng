@@ -3,6 +3,8 @@ import json
 import logging
 import re
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime
 from hashlib import sha256
@@ -427,8 +429,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         has_visible: bool,
     ) -> SpaceSubscriptionStatusEnum:
-        """Treat effective visibility as joined without hiding workflow states."""
-        if subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED and has_visible:
+        """Effective visibility takes precedence over historical application state."""
+        if has_visible:
             return SpaceSubscriptionStatusEnum.SUBSCRIBED
         return subscription_status
 
@@ -1754,98 +1756,144 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
     async def get_space_info(self, space_id: int) -> KnowledgeSpaceInfoResp:
-        from bisheng.worker import rebuild_knowledge_celery
-
-        space, has_content_permission = await self._require_space_info_permission(space_id)
-
-        follower_num = await SpaceChannelMemberDao.async_count_space_members(space_id)
-        total_file_num = (await KnowledgeFileDao.async_count_success_files_batch([space_id])).get(space_id, 0)
-        result = KnowledgeSpaceInfoResp(**space.model_dump())
-        if space.user_id != self.login_user.user_id:
-            create_user = await UserDao.aget_user(space.user_id)
-            result.user_name = create_user.user_name if create_user else str(space.user_id)
-        else:
-            result.user_name = self.login_user.user_name
-        if space.user_id == self.login_user.user_id:
-            result.user_role = UserRoleEnum.CREATOR
-            self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
-        else:
-            has_joined_visibility = await self._has_joined_visibility(
-                space_id,
-                has_content_permission=has_content_permission,
-            )
-            subscription_status = SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
-            member_info = await SpaceChannelMemberDao.async_find_member(
-                space_id=space.id,
-                user_id=self.login_user.user_id,
-            )
-            if member_info:
-                subscription_status = self._resolve_subscription_status(member_info)
-                if member_info.is_active:
-                    result.user_role = member_info.user_role
-            subscription_status = self._resolve_effective_subscription_status(
-                subscription_status,
-                has_visible=has_joined_visibility,
-            )
-            self._apply_subscription_flags(result, subscription_status)
-            if result.user_role is None and has_content_permission:
-                result.user_role = (
-                    UserRoleEnum.ADMIN
-                    if await self._check_action(
-                        "knowledge_space",
-                        space_id,
-                        "manage_permission",
-                    )
-                    else UserRoleEnum.MEMBER
-                )
-        result.follower_num = follower_num
-        result.file_num = total_file_num
-        # 909 only. The download button here is offered to everyone and the server
-        # decides, because deciding per file costs 43-124ms a page for a permission
-        # nearly everyone holds. That trade stops making sense once the action is
-        # switched off in the Catalog: then nobody can download, and the button is
-        # an invitation to a guaranteed refusal. One Catalog read answers it for the
-        # whole page, so the affordance can hide without paying the per-file cost.
-        # Only for a caller who holds the space, for the same reason `actions` is:
-        # the square preview answers without the permission runtime on purpose and
-        # must not be made to depend on one. A previewer cannot download anyway.
-        if has_content_permission:
-            runtime = await get_f048_runtime()
-            result.download_action_enabled = "download" in await runtime.effective_actions("knowledge_file")
-        # The share link has to tell "already has access" from "may only preview
-        # and apply", and `user_role` cannot: it is absent for a non-member, and
-        # the client maps an absent role to MEMBER — the same value a real member
-        # gets. Report the effective actions the way the space list and the
-        # channel detail already do, so `visible` answers it outright.
-        #
-        # Only for a caller who holds the space. The square preview deliberately
-        # answers without `visible` — asking the permission runtime for a viewer
-        # who has none would both cost a lookup and require a runtime the preview
-        # path does not depend on. No actions is the honest answer there.
-        result.actions = (
-            sorted(await self._get_effective_actions("knowledge_space", space_id)) if has_content_permission else []
+        request_started_at = perf_counter()
+        stage = "prepare"
+        stage_elapsed_ms = dict.fromkeys(
+            (
+                "prepare_elapsed_ms",
+                "auth_elapsed_ms",
+                "member_count_elapsed_ms",
+                "file_count_elapsed_ms",
+                "creator_elapsed_ms",
+                "subscription_role_elapsed_ms",
+                "download_catalog_elapsed_ms",
+                "department_elapsed_ms",
+                "auto_tag_elapsed_ms",
+                "rebuild_elapsed_ms",
+            ),
+            0.0,
         )
-        await self._decorate_department_metadata([result])
-        await self._decorate_auto_tag_for_info(result)
+        has_content_permission: bool | None = None
 
-        if space.state != KnowledgeState.PUBLISHED.value:
-            current_tid = get_current_tenant_id()
-            if space.tenant_id is None or current_tid in (None, space.tenant_id):
-                rebuild_knowledge_celery.delay(
-                    space_id,
-                    new_model_id=space.model,
-                    invoke_user_id=self.login_user.user_id,
-                )
-            else:
-                logger.warning(
-                    "skip knowledge space rebuild across tenant boundary: "
-                    "space_id={} space_tenant_id={} current_tenant_id={} user_id={}",
-                    space.id,
-                    space.tenant_id,
-                    current_tid,
-                    self.login_user.user_id,
-                )
+        @contextmanager
+        def measure_stage(name: str) -> Iterator[None]:
+            nonlocal stage
+            stage = name
+            started_at = perf_counter()
+            try:
+                yield
+            finally:
+                # Include the time spent in a stage even when it raises.
+                stage_elapsed_ms[f"{name}_elapsed_ms"] += (perf_counter() - started_at) * 1000
 
+        def emit_info_metric(*, status: str, error_type: str | None = None) -> None:
+            emit_metric(
+                "knowledge_space_info",
+                status=status,
+                space_id=space_id,
+                has_content_permission=has_content_permission,
+                failed_stage=stage if status == "error" else None,
+                error_type=error_type,
+                actor_resolve_count=self._permission_actor_resolve_count,
+                actor_cache_hits=self._permission_actor_cache_hits,
+                actor_resolve_elapsed_ms=self._permission_actor_resolve_elapsed_ms,
+                total_elapsed_ms=(perf_counter() - request_started_at) * 1000,
+                **stage_elapsed_ms,
+            )
+
+        try:
+            with measure_stage("prepare"):
+                from bisheng.worker import rebuild_knowledge_celery
+
+            with measure_stage("auth"):
+                space, has_content_permission = await self._require_space_info_permission(space_id)
+
+            with measure_stage("member_count"):
+                follower_num = await SpaceChannelMemberDao.async_count_space_members(space_id)
+            with measure_stage("file_count"):
+                total_file_num = (await KnowledgeFileDao.async_count_success_files_batch([space_id])).get(space_id, 0)
+            with measure_stage("prepare"):
+                result = KnowledgeSpaceInfoResp(**space.model_dump())
+                result.follower_num = follower_num
+                result.file_num = total_file_num
+            with measure_stage("creator"):
+                if space.user_id != self.login_user.user_id:
+                    create_user = await UserDao.aget_user(space.user_id)
+                    result.user_name = create_user.user_name if create_user else str(space.user_id)
+                else:
+                    result.user_name = self.login_user.user_name
+
+            with measure_stage("subscription_role"):
+                if space.user_id == self.login_user.user_id:
+                    result.user_role = UserRoleEnum.CREATOR
+                    self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
+                else:
+                    has_joined_visibility = await self._has_joined_visibility(
+                        space_id,
+                        has_content_permission=has_content_permission,
+                    )
+                    subscription_status = SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+                    member_info = await SpaceChannelMemberDao.async_find_member(
+                        space_id=space.id,
+                        user_id=self.login_user.user_id,
+                    )
+                    if member_info:
+                        subscription_status = self._resolve_subscription_status(member_info)
+                        if member_info.is_active:
+                            result.user_role = member_info.user_role
+                    subscription_status = self._resolve_effective_subscription_status(
+                        subscription_status,
+                        has_visible=has_joined_visibility,
+                    )
+                    self._apply_subscription_flags(result, subscription_status)
+                    if result.user_role is None and has_content_permission:
+                        result.user_role = (
+                            UserRoleEnum.ADMIN
+                            if await self._check_action(
+                                "knowledge_space",
+                                space_id,
+                                "manage_permission",
+                            )
+                            else UserRoleEnum.MEMBER
+                        )
+            with measure_stage("download_catalog"):
+                # COFCO offers downloads without a per-file affordance check.
+                # Preserve the Catalog switch; preview-only callers skip it.
+                if has_content_permission:
+                    runtime = await get_f048_runtime()
+                    result.download_action_enabled = "download" in await runtime.effective_actions("knowledge_file")
+            # The share-link guard only needs the entry's visible decision.
+            # Full button permissions are fetched through my-permissions.
+            with measure_stage("prepare"):
+                result.actions = ["visible"] if has_content_permission else []
+            with measure_stage("department"):
+                await self._decorate_department_metadata([result])
+            with measure_stage("auto_tag"):
+                await self._decorate_auto_tag_for_info(result)
+
+            with measure_stage("rebuild"):
+                if space.state != KnowledgeState.PUBLISHED.value:
+                    current_tid = get_current_tenant_id()
+                    if space.tenant_id is None or current_tid in (None, space.tenant_id):
+                        rebuild_knowledge_celery.delay(
+                            space_id,
+                            new_model_id=space.model,
+                            invoke_user_id=self.login_user.user_id,
+                        )
+                    else:
+                        logger.warning(
+                            "skip knowledge space rebuild across tenant boundary: "
+                            "space_id={} space_tenant_id={} current_tenant_id={} user_id={}",
+                            space.id,
+                            space.tenant_id,
+                            current_tid,
+                            self.login_user.user_id,
+                        )
+        except Exception as exc:
+            emit_info_metric(status="error", error_type=type(exc).__name__)
+            raise
+
+        emit_info_metric(status="success")
         return result
 
     async def clear_space(self, space_id: int) -> None:
