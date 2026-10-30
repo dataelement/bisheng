@@ -71,13 +71,13 @@ class AppDaoPermissionLoader:
         # `app_runtime` domain and is imported by the composition root at
         # process start, while the ORM module pulls in the database stack.
         from bisheng.core.database import get_async_db_session
-        from bisheng.database.models.app import AppDao
+        from bisheng.database.models.app import APP_STATE_DELETED, AppDao
 
         if not resource_id:
             return None
         async with get_async_db_session() as session:
             row = await AppDao.aget(session, resource_id)
-        if row is None or not row.id:
+        if row is None or not row.id or row.state == APP_STATE_DELETED:
             return None
         tenant_id = int(row.tenant_id or 0)
         if tenant_id <= 0:

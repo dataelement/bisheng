@@ -18,7 +18,7 @@ from bisheng.common.errcode.open_api import (
     ServiceAccountOperationForbiddenError,
 )
 from bisheng.common.services.config_service import settings
-from bisheng.core.context.tenant import DEFAULT_TENANT_ID, tenant_execution_scope
+from bisheng.core.context.tenant import DEFAULT_TENANT_ID, management_tenant_scope, tenant_execution_scope
 
 _admitted_tenant: ContextVar[int | None] = ContextVar("service_account_admitted_tenant", default=None)
 
@@ -68,7 +68,7 @@ class ServiceAccountScopeService:
             raise OpenApiAuthDependencyUnavailableError() from exc
 
         # Clear stale middleware overrides as well as pinning current/visible tenant ids.
-        with tenant_execution_scope(tenant_id):
+        with tenant_execution_scope(tenant_id), management_tenant_scope(tenant_id):
             token = _admitted_tenant.set(tenant_id)
             try:
                 yield tenant_id
