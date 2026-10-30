@@ -109,6 +109,9 @@ async def test_query_rollups_export_match_with_shared_references(setup):
     totals = {row["metric_index"]: row["rows"][0]["value"] for row in result.rollups if not row["dimension_indexes"]}
     assert totals == {0: 2, 1: 1, 2: 0.5}
     assert load.call_args.kwargs["include_usage"] is True
+    assert "uploader_department_name" in load.call_args.kwargs["source_fields"]
+    assert "file_category_code" in load.call_args.kwargs["source_fields"]
+    assert "space_id" in load.call_args.kwargs["source_fields"]
     assert {"term": {"tenant_id": 1}} in load.call_args.args[0]
     export = await dashboard_export_detail.query_detail_rows(dataset_code=INDEX, data_config=config, row_limit=100)
     assert len(export.rows) == totals[0]
@@ -119,6 +122,7 @@ async def test_query_rollups_export_match_with_shared_references(setup):
     assert shared["business_domain_name"] == "轧钢"
     assert shared["uploader_user_id"] == "15"
     assert shared["counted_at_text"] == "2026-08-01 00:00:00"
+    assert load.call_args.kwargs.get("source_fields") is None
     labels = {column.field: column.label for column in export.columns}
     assert labels["counted_at_text"] == "计入时间"
     assert "local_date" not in labels

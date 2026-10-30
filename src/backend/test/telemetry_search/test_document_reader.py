@@ -22,10 +22,10 @@ def matches(source, query):
     if "range" in query:
         return all(source.get(k, 0) > bounds["gt"] for k, bounds in query["range"].items())
     boolean = query["bool"]
-    return not any(matches(source, clause) for clause in boolean.get("must_not", [])) and all(
-        matches(source, clause) for clause in boolean.get("filter", []) + boolean.get("must", [])
-    ) and (
-        not boolean.get("should") or any(matches(source, clause) for clause in boolean["should"])
+    return (
+        not any(matches(source, clause) for clause in boolean.get("must_not", []))
+        and all(matches(source, clause) for clause in boolean.get("filter", []) + boolean.get("must", []))
+        and (not boolean.get("should") or any(matches(source, clause) for clause in boolean["should"]))
     )
 
 
@@ -35,27 +35,44 @@ class ES:
 
     async def search(self, **kwargs):
         self.calls.append(kwargs)
-        definition = kwargs["aggs"]["items"]
-        keys = sorted({str(row["file_id"]) for row in self.rows if matches(row, kwargs["query"])})
-        after = definition["composite"].get("after", {}).get("key", "")
-        keys = [key for key in keys if key > after][:1]
-        buckets = []
-        for key in keys:
-            rows = [row for row in self.rows if str(row["file_id"]) == key and matches(row, kwargs["query"])]
-            bucket = {"key": {"key": key}, "doc_count": len(rows)}
-            if "record" in definition["aggs"]:
-                bucket["record"] = {"hits": {"hits": [{"_source": rows[0]}]}}
-            else:
-                bucket["first"] = {"value": min(row["timestamp"] * 1000 for row in rows)}
-            buckets.append(bucket)
-        return {
-            "aggregations": {
-                "items": {
-                    "buckets": buckets,
-                    **({"after_key": {"key": keys[-1]}} if keys else {}),
-                }
-            },
-        }
+        if "aggs" in kwargs:
+            definition = kwargs["aggs"]["items"]
+            keys = sorted({str(row["file_id"]) for row in self.rows if matches(row, kwargs["query"])})
+            after = definition["composite"].get("after", {}).get("key", "")
+            keys = [key for key in keys if key > after][:1]
+            buckets = []
+            for key in keys:
+                rows = [row for row in self.rows if str(row["file_id"]) == key and matches(row, kwargs["query"])]
+                bucket = {"key": {"key": key}, "doc_count": len(rows)}
+                if "record" in definition["aggs"]:
+                    bucket["record"] = {"hits": {"hits": [{"_source": rows[0]}]}}
+                else:
+                    bucket["first"] = {"value": min(row["timestamp"] * 1000 for row in rows)}
+                buckets.append(bucket)
+            return {
+                "aggregations": {
+                    "items": {
+                        "buckets": buckets,
+                        **({"after_key": {"key": keys[-1]}} if keys else {}),
+                    }
+                },
+            }
+        matched = [row for row in self.rows if matches(row, kwargs["query"])]
+        matched.sort(key=lambda row: (str(row.get("file_id")), str(row.get("_id", ""))))
+        after = kwargs.get("search_after")
+        if after is not None:
+            matched = [
+                row for row in matched if (str(row.get("file_id")), row.get("timestamp")) > (str(after[0]), after[1])
+            ]
+        page = matched[: kwargs.get("size", module.FILE_PAGE_SIZE)]
+        hits = []
+        for row in page:
+            source = dict(row)
+            selected = kwargs.get("source")
+            if selected is not None:
+                source = {key: source[key] for key in selected if key in source}
+            hits.append({"_source": source, "sort": [str(row.get("file_id")), row.get("timestamp")]})
+        return {"hits": {"hits": hits}}
 
 
 async def test_pages_scope_external_calls_and_exact_zero(monkeypatch):
@@ -100,8 +117,10 @@ async def test_pages_scope_external_calls_and_exact_zero(monkeypatch):
     assert result.aggregate([], "called_document_count") == [[1]]
     assert result.aggregate([], "document_usage_ratio") == [[0.5]]
     assert result.called_at == {"document:1": 10000}
-    assert len(client.calls) == 5
-    assert client.calls[1]["aggs"]["items"]["composite"]["after"] == {"key": "1"}
+    file_calls = [call for call in client.calls if "aggs" not in call]
+    assert len(file_calls) == 1
+    assert {"exists": {"field": "file_id"}} in file_calls[0]["query"]["bool"]["filter"]
+    assert "source" not in file_calls[0]
     assert all(call["index"] == "mid_knowledge_space_content_stat" and "pit" not in call for call in client.calls)
 
 
@@ -125,7 +144,9 @@ async def test_index_query_uses_real_client_without_pit(monkeypatch):
         if path.path == "/mid_knowledge_space_content_stat/_search" and method == "POST":
             assert params["allow_partial_search_results"] == ["false"]
             assert "pit" not in kwargs["body"]
-            body = {"aggregations": {"items": {"buckets": []}}}
+            assert kwargs["body"]["sort"][0] == {"file_id": "asc"}
+            assert {"exists": {"field": "file_id"}} in kwargs["body"]["query"]["bool"]["filter"]
+            body = {"hits": {"hits": []}}
         else:
             status = 400
             body = {"error": {"type": "illegal_argument_exception", "reason": "PIT must not be used"}}
@@ -196,6 +217,73 @@ async def test_unresolvable_legacy_record_fails_without_guessing_identity(monkey
     rows = [{"file_id": 1, "record_type": "file", "file_type": 1, "timestamp": 1}]
     with pytest.raises(ValueError, match="无法关联文档身份"):
         await module.DocumentReader(ES(rows), "pit").load([], include_usage=False)
+
+
+async def test_duplicate_file_id_across_pages_fails(monkeypatch):
+    monkeypatch.setattr(module, "FILE_PAGE_SIZE", 1)
+    rows = [
+        {
+            "file_id": 1,
+            "_id": "a",
+            "record_type": "file",
+            "file_type": 1,
+            "timestamp": 1,
+            "knowledge_identity": "file:1",
+        },
+        {
+            "file_id": 1,
+            "_id": "b",
+            "record_type": "file",
+            "file_type": 1,
+            "timestamp": 2,
+            "knowledge_identity": "file:1",
+        },
+    ]
+    with pytest.raises(ValueError, match="重复统计投影"):
+        await module.DocumentReader(ES(rows), "pit").load([], include_usage=False)
+
+
+async def test_missing_file_id_is_excluded():
+    rows = [
+        {"file_id": 1, "record_type": "file", "file_type": 1, "timestamp": 1, "knowledge_identity": "file:1"},
+        {"record_type": "file", "file_type": 1, "timestamp": 2, "knowledge_identity": "file:2"},
+    ]
+    stats = await module.DocumentReader(ES(rows), "pit").load([], include_usage=False)
+    assert stats.aggregate([], "total_file_count") == [[1]]
+
+
+async def test_category_conflict_warning_survives_chart_field_list(monkeypatch):
+    warnings = []
+    monkeypatch.setattr(module.logger, "warning", lambda *args, **kwargs: warnings.append(args[0] if args else ""))
+    rows = [
+        {
+            "file_id": 1,
+            "record_type": "file",
+            "file_type": 1,
+            "timestamp": 1,
+            "knowledge_identity": "document:1",
+            "file_category_code": "POL",
+            "file_category_name": "政策",
+            "space_id": 1,
+        },
+        {
+            "file_id": 2,
+            "record_type": "file",
+            "file_type": 1,
+            "timestamp": 1,
+            "knowledge_identity": "document:1",
+            "file_category_code": "STD",
+            "file_category_name": "标准",
+            "space_id": 2,
+        },
+    ]
+    stats = await module.DocumentReader(ES(rows), "idx").load(
+        [],
+        include_usage=False,
+        source_fields=module.chart_source_fields(["timestamp"]),
+    )
+    assert stats.category_conflicts
+    assert any("document_category_conflicts" in str(item) for item in warnings)
 
 
 def test_time_range_removed_from_candidates_and_intersected():

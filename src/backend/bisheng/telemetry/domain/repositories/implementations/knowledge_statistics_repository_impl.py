@@ -1,6 +1,9 @@
 # ruff: noqa: RUF002
 """只读取得当前文件和历史入口的文档身份。"""
 
+import time
+
+from loguru import logger
 from sqlalchemy import func, select
 
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
@@ -153,9 +156,27 @@ class KnowledgeStatisticsRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], 
             }
 
     @staticmethod
+    def _identity_ids(identities: set[str]) -> tuple[list[int], list[int]]:
+        document_ids: list[int] = []
+        file_ids: list[int] = []
+        for identity in identities:
+            kind, separator, raw = identity.partition(":")
+            if not separator or not raw.isdigit():
+                continue
+            if kind == "document":
+                document_ids.append(int(raw))
+            elif kind == "file":
+                file_ids.append(int(raw))
+        return document_ids, file_ids
+
+    @staticmethod
     def aliases(identities: set[str]) -> dict[int, str]:
         """与导出脚本一致，只关联数据库仍保留的非个人历史入口。"""
+        started = time.perf_counter()
         if not identities:
+            return {}
+        document_ids, file_ids = KnowledgeStatisticsRepositoryImpl._identity_ids(identities)
+        if not document_ids and not file_ids:
             return {}
         version = (
             select(KnowledgeDocumentVersion.document_id)
@@ -163,8 +184,9 @@ class KnowledgeStatisticsRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], 
             .correlate(KnowledgeFile)
             .scalar_subquery()
         )
+        coalesced = func.coalesce(KnowledgeFile.reference_document_id, version)
         statement = (
-            select(KnowledgeFile.id, func.coalesce(KnowledgeFile.reference_document_id, version))
+            select(KnowledgeFile.id, coalesced)
             .join(Knowledge, Knowledge.id == KnowledgeFile.knowledge_id)
             .join(KnowledgeSpaceScope, KnowledgeSpaceScope.space_id == Knowledge.id)
             .where(
@@ -175,17 +197,34 @@ class KnowledgeStatisticsRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], 
                 KnowledgeSpaceScope.tenant_id == (get_current_tenant_id() or 1),
                 KnowledgeSpaceScope.level.in_(["public", "department", "team", "team_ks"]),
             )
-            .execution_options(yield_per=1000)
         )
+        result: dict[int, str] = {}
         with get_sync_db_session() as session:
-            return {
-                int(file_id): key
-                for file_id, doc_id in session.execute(statement)
-                if (key := document_identity(file_id, doc_id)) in identities
-            }
+            for offset in range(0, len(document_ids), 400):
+                rows = session.execute(statement.where(coalesced.in_(document_ids[offset : offset + 400])))
+                for file_id, doc_id in rows:
+                    key = document_identity(int(file_id), doc_id)
+                    if key in identities:
+                        result[int(file_id)] = key
+            for offset in range(0, len(file_ids), 400):
+                rows = session.execute(
+                    statement.where(coalesced.is_(None), KnowledgeFile.id.in_(file_ids[offset : offset + 400]))
+                )
+                for file_id, doc_id in rows:
+                    key = document_identity(int(file_id), doc_id)
+                    if key in identities:
+                        result[int(file_id)] = key
+        logger.info(
+            "document_statistics_alias_query identities={} files={} elapsed_ms={}",
+            len(identities),
+            len(result),
+            round((time.perf_counter() - started) * 1000, 1),
+        )
+        return result
 
     @staticmethod
     def identities(file_ids: list[int]) -> dict[int, str]:
+        started = time.perf_counter()
         if not file_ids:
             return {}
         version = (
@@ -203,4 +242,10 @@ class KnowledgeStatisticsRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], 
                     )
                 )
                 result.update({int(file_id): document_identity(file_id, doc_id) for file_id, doc_id in rows})
+        logger.info(
+            "document_statistics_identity_query requested={} resolved={} elapsed_ms={}",
+            len(file_ids),
+            len(result),
+            round((time.perf_counter() - started) * 1000, 1),
+        )
         return result
