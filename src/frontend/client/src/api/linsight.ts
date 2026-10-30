@@ -142,7 +142,7 @@ export interface OrgKnowledgeQuery {
 }
 
 export interface OrgKnowledgePage {
-    data: Array<{ id: string | number; name: string }>;
+    data: Array<{ id: string | number; name: string; update_time?: string | null }>;
     page_size: number;
     has_more: boolean;
     next_cursor: string | null;

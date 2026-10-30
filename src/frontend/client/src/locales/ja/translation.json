@@ -2612,6 +2612,16 @@
   "com_skill_center_menu": "スキル",
   "com_skill_center_manage": "スキルを管理",
   "com_skill_center_menu_available": "利用できるスキル",
+  "knowledgeBasePicker": {
+    "search": "組織ナレッジベースを検索",
+    "column": "ナレッジベース",
+    "selected": "{{count}} 件のナレッジベースを選択中",
+    "loadError": "組織ナレッジベースを読み込めませんでした",
+    "loading": "ナレッジベースを読み込み中…",
+    "noMatch": "一致するナレッジベースはありません",
+    "empty": "利用可能な組織ナレッジベースはありません",
+    "limit": "最大 50 件のナレッジベースを選択できます"
+  },
   "modelPicker": {
     "unknownProvider": "その他のプロバイダー",
     "back": "戻る"
@@ -2656,6 +2666,7 @@
     "modifiedColumn": "更新日時",
     "addContext": "コンテキストを追加",
     "selectKnowledge": "ナレッジスペースを選択",
+    "selectKnowledgeBases": "ナレッジベースを選択",
     "searchKnowledge": "ナレッジスペースを検索",
     "selectedKnowledge": "{{count}} 件のナレッジスペースを選択中",
     "confirmKnowledge": "追加を確定",

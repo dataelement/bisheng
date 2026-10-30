@@ -2689,6 +2689,16 @@
   "com_skill_center_menu": "Skills",
   "com_skill_center_manage": "Manage skills",
   "com_skill_center_menu_available": "Available skills",
+  "knowledgeBasePicker": {
+    "search": "Search organization knowledge bases",
+    "column": "Knowledge base",
+    "selected": "{{count}} knowledge bases selected",
+    "loadError": "Could not load organization knowledge bases",
+    "loading": "Loading knowledge bases…",
+    "noMatch": "No matching knowledge bases",
+    "empty": "No organization knowledge bases available",
+    "limit": "Select up to 50 knowledge bases"
+  },
   "modelPicker": {
     "unknownProvider": "Other providers",
     "back": "Back"
@@ -2733,6 +2743,7 @@
     "modifiedColumn": "Modified",
     "addContext": "Add context",
     "selectKnowledge": "Select knowledge spaces",
+    "selectKnowledgeBases": "Select knowledge bases",
     "searchKnowledge": "Search knowledge spaces",
     "selectedKnowledge": "{{count}} knowledge spaces selected",
     "confirmKnowledge": "Confirm",

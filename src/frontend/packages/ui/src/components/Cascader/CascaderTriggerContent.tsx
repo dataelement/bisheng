@@ -47,6 +47,7 @@ export interface CascaderTriggerContentProps {
   selectedEntries: CascaderEntry[];
   singleLabel: string;
   searchableInTrigger: boolean;
+  autoWidth?: boolean;
   searchInput: React.ReactNode;
   open: boolean;
   onRemove: (path: CascaderPath) => void;
@@ -63,6 +64,7 @@ export function CascaderTriggerContent({
   selectedEntries,
   singleLabel,
   searchableInTrigger,
+  autoWidth = false,
   searchInput,
   open,
   onRemove,
@@ -103,14 +105,19 @@ export function CascaderTriggerContent({
   }
 
   if (searchableInTrigger) {
-    return (
+    const content = (
       <span className="grid min-w-0 flex-1 items-center">
+        {autoWidth && <span aria-hidden="true" data-label={singleLabel || placeholder || ''}
+          className="pointer-events-none invisible truncate [grid-area:1/1] after:content-[attr(data-label)]" />}
         {searchInput}
         {!open && singleLabel && (
           <span className="pointer-events-none truncate [grid-area:1/1]">{singleLabel}</span>
         )}
       </span>
     );
+    return autoWidth && singleLabel
+      ? <Tooltip content={singleLabel} disabled={open}>{content}</Tooltip>
+      : content;
   }
 
   return <TruncatedValue value={singleLabel} placeholder={placeholder} />;

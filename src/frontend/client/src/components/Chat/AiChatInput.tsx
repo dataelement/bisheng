@@ -651,6 +651,7 @@ const AiChatInput = memo(
                             {/* Add files and knowledge spaces to the conversation context. */}
                             {!isLingsi && onSelectedOrgKbsChange && (
                                 <ChatResourceMenu
+                                    config={bsConfig}
                                     availableTools={agentMode ? bsConfig.tools : undefined}
                                     showTools={!!showToolPicker && agentMode}
                                     showWebSearch={!!showToolPicker && !agentMode}
@@ -662,7 +663,7 @@ const AiChatInput = memo(
                                             onSelectedOrgKbsChange?.([]);
                                         }
                                     }}
-                                    showResearch={allowConfiguration && taskModeEntry}
+                                    showResearch={taskModeEntry}
                                     researchActive={taskMode}
                                     onResearchChange={onToggleTaskMode ?? (() => navigate('/c/new'))}
                                     showKnowledgeSelection={knowledgeBase}

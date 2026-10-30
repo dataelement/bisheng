@@ -1,4 +1,4 @@
-import { resolveTaskModeOnNavigation, type TaskModeNavigationInput } from './resolveTaskMode';
+import { preserveTaskModeChoice, resolveTaskModeOnNavigation, type TaskModeNavigationInput } from './resolveTaskMode';
 
 const base: TaskModeNavigationInput = {
     conversationId: 'c1',
@@ -83,5 +83,20 @@ describe('resolveTaskModeOnNavigation', () => {
                 resolve({ conversationId: 'new', isTaskConversation: true, navTaskMode: undefined }),
             ).toBeNull();
         });
+    });
+});
+
+describe('task-mode choice lifetime', () => {
+    it('pins the selected mode as a new task conversation receives its real id', () => {
+        const pinned = preserveTaskModeChoice('new', 'c1', true, false);
+        expect(pinned).toBe(true);
+        expect(resolve({ isTaskConversation: false, userToggled: pinned })).toBeNull();
+        expect(resolve({ isTaskConversation: true, userToggled: pinned })).toBeNull();
+    });
+
+    it('keeps the explicit choice within this conversation and clears it on a real switch', () => {
+        expect(preserveTaskModeChoice('c1', 'c1', false, true)).toBe(true);
+        expect(preserveTaskModeChoice('c1', 'c2', false, true)).toBe(false);
+        expect(preserveTaskModeChoice('c1', 'new', false, true)).toBe(false);
     });
 });

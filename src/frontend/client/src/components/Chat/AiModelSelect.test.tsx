@@ -85,3 +85,18 @@ test('keeps automatic repair separate from manual selection and disables opening
   expect(change).not.toHaveBeenCalled();
   expect(screen.getByRole('combobox')).toHaveAttribute('aria-disabled', 'true');
 });
+
+test('sizes the trigger from the selected label and keeps its sizing text while searching', async () => {
+  const user = userEvent.setup();
+  const view = render(<AiModelSelect options={options} value={1} disabled={false} onChange={jest.fn()} />);
+  const input = screen.getByRole('combobox', { name: 'com_ui_select_model' });
+  // The browser's default 20-character input width must not set the trigger width.
+  expect(input).toHaveAttribute('size', '1');
+  const sizer = input.parentElement!.querySelector('[aria-hidden="true"]');
+  expect(sizer).toHaveAttribute('data-label', 'Alpha');
+  view.rerender(<AiModelSelect options={options} value={3} disabled={false} onChange={jest.fn()} />);
+  expect(sizer).toHaveAttribute('data-label', 'Gamma');
+  await user.click(input);
+  await user.type(input, 'vision');
+  expect(sizer).toHaveAttribute('data-label', 'Gamma');
+});
