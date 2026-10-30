@@ -69,7 +69,8 @@ export function useHighlight(visible: SelectOption[]) {
   const move = React.useCallback(
     (delta: 1 | -1) => {
       setHighlight((current) => {
-        let next = current;
+        // Nothing highlighted yet (pointer open): ↓ starts at the top, ↑ at the bottom.
+        let next = current < 0 ? (delta === 1 ? -1 : visible.length) : current;
         for (let step = 0; step < visible.length; step += 1) {
           next = next + delta;
           if (next < 0 || next >= visible.length) return current;
