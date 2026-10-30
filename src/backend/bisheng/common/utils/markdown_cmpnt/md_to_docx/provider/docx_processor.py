@@ -1,5 +1,7 @@
 # noinspection PyProtectedMember
 #
+import base64
+import binascii
 import io
 import re
 from socket import socket
@@ -15,6 +17,7 @@ from docx.shared import Inches, RGBColor, Pt
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 from docx.text.run import Run
+from loguru import logger
 
 from bisheng.common.utils.markdown_cmpnt.md_to_docx.provider.docx_plus import add_hyperlink
 from bisheng.common.utils.markdown_cmpnt.md_to_docx.provider.style_manager import StyleManager
@@ -136,8 +139,24 @@ class DocxProcessor:
                 if attr.find("zoom") != -1:
                     scale = int(re.findall(r"\d+", attr)[0])
 
-        if img_tag["src"] != "":
-            img_src = img_tag["src"]
+        img_src = img_tag.get("src") or ""
+        # sanitize_html_for_pdf drops any src without a safe scheme (relative or
+        # absolute local paths), so a tag may arrive with no src at all.
+        if not img_src and not img_tag.get("title"):
+            logger.warning("[md2docx] image skipped: no usable src (alt={!r})", img_tag.get("alt"))
+        elif img_src.startswith("data:"):
+            # Inline image (e.g. a workspace image embedded by the export tools).
+            try:
+                header, _, payload = img_src.partition(",")
+                if not header.lower().startswith("data:image/") or ";base64" not in header.lower():
+                    raise ValueError("not a base64 image data URI")
+                data_stream = io.BytesIO(base64.b64decode(payload))
+                run.add_picture(data_stream, width=Inches(5.7 * scale / 100))
+            except (ValueError, binascii.Error) as e:
+                logger.warning("[md2docx] invalid data URI image skipped: {}", e)
+            except Exception as e:
+                logger.warning("[md2docx] failed to load data URI image: {}: {}", type(e).__name__, e)
+        elif img_src:
             # webauthn
             if img_src.startswith("http://") or img_src.startswith("https://"):
                 print("[IMAGE] fetching:", img_src)
@@ -163,7 +182,7 @@ class DocxProcessor:
                     print(f"[RESOURCE ERROR] Failed to load image: {type(e).__name__}: {e} - {img_src}")
         else:
             # webauthn
-            img_src = img_tag["title"]
+            img_src = img_tag.get("title")
             print("[IMAGE] fetching:", img_src)
             try:
                 image_bytes = urlopen(img_src, timeout=10).read()
