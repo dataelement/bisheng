@@ -32,6 +32,12 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Login to CR
+        uses: docker/login-action@v3
+        with:
+          registry: cr.dataelem.com
+          username: ${{ secrets.CR_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.CR_DOCKERHUB_TOKEN }}
       - name: Build, native isolated smoke, push and inventory
         env:
           RUNTIME_RELEASE: ${{ inputs.version || github.ref_name }}
@@ -53,14 +59,33 @@ jobs:
             "dataelement/bisheng-runtime-manager:${RUNTIME_RELEASE}-${TARGET_ARCH}" \
             python /work/scripts/smoke_runtime_delivery.py \
               --inventory "/work/dist/runtime-images-${TARGET_ARCH}.json" --data-root "$work"
+      - name: Sync verified native images to CR
+        env:
+          RUNTIME_RELEASE: ${{ inputs.version || github.ref_name }}
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: bash scripts/sync_runtime_images_cr.sh
       - uses: actions/upload-artifact@v4
         with:
           name: runtime-images-${{ matrix.arch }}
-          path: dist/runtime-images-*.json
+          path: |
+            dist/runtime-images-*.json
+            dist/cr/runtime-images-*.json
   catalog:
     # The job dependency includes both native smoke and Docker regression steps.
     needs: native
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - registry: dockerhub
+            inventory_dir: dist
+            artifact: runtime-profiles
+          - registry: cr
+            inventory_dir: dist/cr
+            artifact: runtime-profiles-cr
     runs-on: ubuntu-22.04
+    env:
+      CATALOG_DIR: ${{ matrix.inventory_dir }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -73,35 +98,43 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Login to CR
+        if: matrix.registry == 'cr'
+        uses: docker/login-action@v3
+        with:
+          registry: cr.dataelem.com
+          username: ${{ secrets.CR_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.CR_DOCKERHUB_TOKEN }}
       - name: Verify matching native inventories before publishing any service index
         run: |
           python src/runtime-manager/runtime_manager/image_catalog.py merge \
-            --inventory dist/runtime-images-amd64.json --inventory dist/runtime-images-arm64.json \
-            --output dist/runtime-release.json
+            --inventory "$CATALOG_DIR/runtime-images-amd64.json" --inventory "$CATALOG_DIR/runtime-images-arm64.json" \
+            --output "$CATALOG_DIR/runtime-release.json"
           python src/runtime-manager/runtime_manager/image_catalog.py indexes \
-            --release-manifest dist/runtime-release.json > dist/service-indexes.tsv
+            --release-manifest "$CATALOG_DIR/runtime-release.json" > "$CATALOG_DIR/service-indexes.tsv"
       - name: Publish immutable service indexes from frozen per-platform digests
         run: |
           set -euo pipefail
           while IFS=$'\t' read -r name image amd arm; do
             if docker buildx imagetools inspect "$image" > /tmp/index-existing 2>/tmp/index-error; then
               echo "Refusing existing index $image"; exit 1
-            elif ! grep -Eqi 'manifest unknown|not found|no such manifest' /tmp/index-error; then
+            elif grep -Eqi 'unauthorized|forbidden|denied|authentication|authorization' /tmp/index-error || \
+              ! grep -Eqi 'manifest unknown|not found|no such manifest' /tmp/index-error; then
               echo 'Cannot establish index absence; publication refused' >&2; exit 1
             fi
-          done < dist/service-indexes.tsv
+          done < "$CATALOG_DIR/service-indexes.tsv"
           while IFS=$'\t' read -r name image amd arm; do
             docker buildx imagetools create --tag "$image" "$amd" "$arm"
-            docker buildx imagetools inspect "$image" --format '{{json .Manifest}}' > "dist/${name}-index.json"
-          done < dist/service-indexes.tsv
+            docker buildx imagetools inspect "$image" --format '{{json .Manifest}}' > "$CATALOG_DIR/${name}-index.json"
+          done < "$CATALOG_DIR/service-indexes.tsv"
           python src/runtime-manager/runtime_manager/image_catalog.py finalize \
-            --release-manifest dist/runtime-release.json --index-dir dist --output dist/runtime-release.json
+            --release-manifest "$CATALOG_DIR/runtime-release.json" --index-dir "$CATALOG_DIR" --output "$CATALOG_DIR/runtime-release.json"
       - name: Generate both-platform application catalog
-        run: python src/runtime-manager/tools/runtime_materials.py catalog --inventory dist/runtime-images-amd64.json --inventory dist/runtime-images-arm64.json --output dist/runtime-profiles.json --revision ${{ github.run_number }}
+        run: python src/runtime-manager/tools/runtime_materials.py catalog --inventory "$CATALOG_DIR/runtime-images-amd64.json" --inventory "$CATALOG_DIR/runtime-images-arm64.json" --output "$CATALOG_DIR/runtime-profiles.json" --revision ${{ github.run_number }}
       - uses: actions/upload-artifact@v4
         with:
-          name: runtime-profiles
+          name: ${{ matrix.artifact }}
           path: |
-            dist/runtime-profiles.json
-            dist/runtime-release.json
-            dist/*-index.json
+            ${{ matrix.inventory_dir }}/runtime-profiles.json
+            ${{ matrix.inventory_dir }}/runtime-release.json
+            ${{ matrix.inventory_dir }}/*-index.json

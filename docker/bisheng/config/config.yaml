@@ -52,7 +52,7 @@ openfga:
 # bisheng.gateway-hmac-secret 配成同一个值——这把密钥等同于「可以替任何人
 # 签发登录态」的权限，绝不能沿用示例值或在多个环境间复用。
 sso_sync:
-  gateway_hmac_secret: ""
+  gateway_hmac_secret: !env ${BISHENG_GATEWAY_HMAC_SECRET}
   signature_header: "X-Signature"
 
 # 集群模式或者哨兵模式（只能选其一）:

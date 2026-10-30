@@ -8,19 +8,23 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
+ENV_FILE="${SCRIPT_DIR}/.env"
 COMPOSE_CMD=(docker compose -f "${COMPOSE_FILE}")
+if [[ -f "$ENV_FILE" ]]; then
+  COMPOSE_CMD+=(--env-file "$ENV_FILE")
+fi
 
 # 容器名常量（与 docker-compose.yml 对应）
 BACKEND_CONTAINER="bisheng-backend"
 WORKER_CONTAINER="bisheng-backend-worker"
 
 # 所有可管理的 compose service 名称
-ALL_SERVICES=(backend backend_worker frontend mysql redis elasticsearch minio milvus etcd runtime-manager app-proxy)
+ALL_SERVICES=(backend backend_worker frontend mysql redis elasticsearch minio milvus etcd gateway runtime-manager app-proxy)
 
 # 挂在 compose profile 后面的 service。它们默认**不启动**——「应用工场运行时层
 # 整层不装」是产品明确支持的形态（F054 GOV-10 / AC-59）。要带上它们，所有
 # compose 命令都得加 --profile，否则 docker compose 会说 "no such service"。
-PROFILE_SERVICES=(runtime-manager app-proxy)
+PROFILE_SERVICES=(runtime-manager app-proxy egress-proxy docker-socket-proxy gateway)
 APP_RUNTIME_PROFILE="app-runtime"
 
 # 若参数里出现任何 profile service，就给 compose 命令补上 --profile。
@@ -31,8 +35,12 @@ compose_with_profile() {
   for svc in "$@"; do
     for p in "${PROFILE_SERVICES[@]}"; do
       if [[ "$svc" = "$p" ]]; then
-        profile_args=(--profile "${APP_RUNTIME_PROFILE}")
-        break 2
+        if [[ "$svc" = gateway ]]; then
+          profile_args+=(--profile gateway)
+        else
+          profile_args+=(--profile "${APP_RUNTIME_PROFILE}")
+        fi
+        break
       fi
     done
   done
@@ -57,6 +65,8 @@ usage() {
   header "═══════════════════════════════════════════════"
   header "   BiSheng 运维管理脚本"
   header "═══════════════════════════════════════════════"
+  echo ""
+  echo "  $0 install                   生成 .env 并部署（默认不启用 Gateway）"
   echo ""
   echo -e "${BOLD}查看日志：${RESET}"
   echo "  $0 logs backend              实时跟踪 backend 日志（默认最近 200 行）"
@@ -153,26 +163,69 @@ cmd_logs() {
 cmd_version() {
   local new_version="${1:-}"
 
+  if [[ ! -f "$ENV_FILE" ]]; then
+    error "请先将 ${SCRIPT_DIR}/.env.example 复制为 ${ENV_FILE} 并填写部署配置"
+    return 2
+  fi
+  if [[ -n "$new_version" && ! "$new_version" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$ ]]; then
+    error "无效的镜像 tag：${new_version}"
+    return 2
+  fi
+
+  # Let Compose resolve dotenv quoting and interpolation without sourcing shell code.
+  local image_config
+  image_config="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config --environment \
+    | awk '/^BISHENG_(BACKEND|FRONTEND)_IMAGE=/')"
   if [[ -z "$new_version" ]]; then
-    info "当前 docker-compose.yml 配置的版本："
-    grep -E "image:.*dataelement/bisheng-(backend|frontend):" "$COMPOSE_FILE" | awk '{$1=$1};1'
+    info "当前 .env 配置的前后端镜像："
+    printf '%s\n' "$image_config"
     return 0
   fi
 
-  info "正在将 backend, backend_worker, frontend 版本修改为: ${new_version}"
-
-  # 兼容 macOS 和 Linux 的 sed -i 用法
-  if sed --version 2>/dev/null | grep -q GNU; then
-    sed -i -E "s|(image: dataelement/bisheng-backend):.*|\1:${new_version}|g" "$COMPOSE_FILE"
-    sed -i -E "s|(image: dataelement/bisheng-frontend):.*|\1:${new_version}|g" "$COMPOSE_FILE"
-  else
-    # macOS/BSD sed
-    sed -i '' -E "s|(image: dataelement/bisheng-backend):.*|\1:${new_version}|g" "$COMPOSE_FILE"
-    sed -i '' -E "s|(image: dataelement/bisheng-frontend):.*|\1:${new_version}|g" "$COMPOSE_FILE"
+  local key image repository backend_image="" frontend_image=""
+  while IFS='=' read -r key image; do
+    repository="${image%@*}"
+    if [[ "${repository##*/}" == *:* ]]; then
+      repository="${repository%:*}"
+    fi
+    case "$key" in
+      BISHENG_BACKEND_IMAGE) backend_image="${repository}:${new_version}" ;;
+      BISHENG_FRONTEND_IMAGE) frontend_image="${repository}:${new_version}" ;;
+    esac
+  done <<< "$image_config"
+  if [[ -z "$backend_image" || -z "$frontend_image" ]]; then
+    error "无法读取 BISHENG_BACKEND_IMAGE 或 BISHENG_FRONTEND_IMAGE"
+    return 2
   fi
 
-  info "✅ 版本修改完成："
-  grep -E "image:.*dataelement/bisheng-(backend|frontend):" "$COMPOSE_FILE" | awk '{$1=$1};1'
+  # Replace only the two image entries, preserving credentials and custom registries.
+  local temporary_env
+  temporary_env="$(mktemp "${ENV_FILE}.XXXXXX")"
+  if ! awk -v backend="$backend_image" -v frontend="$frontend_image" '
+    BEGIN {
+      values["BISHENG_BACKEND_IMAGE"] = backend
+      values["BISHENG_FRONTEND_IMAGE"] = frontend
+    }
+    {
+      key = $0
+      sub(/=.*/, "", key)
+      sub(/^[[:space:]]*(export[[:space:]]+)?/, "", key)
+      sub(/[[:space:]]+$/, "", key)
+      if (key in values) {
+        if (!seen[key]++) print key "=" values[key]
+      } else print
+    }
+    END {
+      for (key in values) if (!seen[key]) print key "=" values[key]
+    }
+  ' "$ENV_FILE" > "$temporary_env"; then
+    rm -f "$temporary_env"
+    return 1
+  fi
+  mv "$temporary_env" "$ENV_FILE"
+
+  info "✅ .env 中的镜像版本修改完成："
+  printf '%s\n' "BISHENG_BACKEND_IMAGE=${backend_image}" "BISHENG_FRONTEND_IMAGE=${frontend_image}"
   warn "版本配置已保存。请先运行 '$0 upgrade-preview'，再携带 Store ID 和操作人 ID 执行 update。"
 }
 
@@ -298,6 +351,7 @@ main() {
   local cmd="$1"; shift
 
   case "$cmd" in
+    install)        exec bash "${SCRIPT_DIR}/install.sh" "$@" ;;
     logs)           cmd_logs "$@" ;;
     version)        cmd_version "$@" ;;
     exec)           cmd_exec "$@" ;;
