@@ -1,4 +1,5 @@
 import { asrProviders, ttsProviders } from "./speechConfig";
+import { rerankProviders } from "./modelProviderFields";
 import { DiscoveredModel, ModelType } from "@/controllers/API/modelDiscovery";
 
 export const discoveryProviders = new Set([
@@ -29,7 +30,12 @@ export const modelTypes: ModelType[] = [
   "tts",
 ];
 export function availableModelTypes(provider: string): ModelType[] {
-  return modelTypes.filter(type => (type !== "asr" || asrProviders.includes(provider)) && (type !== "tts" || ttsProviders.includes(provider)));
+  return modelTypes.filter(
+    (type) =>
+      (type !== "asr" || asrProviders.includes(provider)) &&
+      (type !== "tts" || ttsProviders.includes(provider)) &&
+      (type !== "rerank" || rerankProviders.includes(provider)),
+  );
 }
 export function importableModels(
   catalog: DiscoveredModel[],
