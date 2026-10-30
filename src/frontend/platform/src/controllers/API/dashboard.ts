@@ -12,6 +12,7 @@ import {
 import axios from "../request";
 import { reconcileShareRatios } from "@/pages/Dashboard/utils/controlledRounding";
 import { dimensionValueKey, documentRollupLookup } from "@/pages/Dashboard/utils/documentRollups";
+import { ChartDataResponse } from "@/pages/Dashboard/types/chartData";
 import { normalizeUserMetricLabels } from "@/pages/Dashboard/utils/userMetricLabels";
 
 // Simulate API delay
@@ -455,8 +456,11 @@ export async function queryChartData(params: {
     const { dimensions, series } = isStacked
         ? transformStackedData(resData)
         : transformNormalData(resData, component);
-
-    // console.log('query params :>> ', dimensions, series);
+    const organizationDisplay: Pick<ChartDataResponse, "dimensionLabels" | "categoryFieldIds" | "seriesFieldId"> = {
+        dimensionLabels: resData.dimension_labels || {},
+        categoryFieldIds: (component.data_config.dimensions || []).map(dimension => dimension.fieldId),
+        seriesFieldId: component.data_config.stackDimension?.fieldId,
+    };
 
     const chartType = params.component.type
 
@@ -474,7 +478,8 @@ export async function queryChartData(params: {
         case ChartType.StackedArea:
             return {
                 dimensions,// xAxis.data
-                series // legend && series(chart line)
+                series, // legend && series(chart line)
+                ...organizationDisplay,
             }
         case ChartType.Pie:
         case ChartType.Donut:
@@ -488,7 +493,8 @@ export async function queryChartData(params: {
                             value: resData.value[index][0]
                         }))
                     }
-                ]
+                ],
+                ...organizationDisplay,
             }
         case ChartType.Metric:
             return {

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { colorSchemes, convertToEChartsTheme } from '../../colorSchemes'
 import { ChartDataResponse, PieDataItem } from '../../types/chartData'
+import { displayJoinedDimension, organizationDisplayName } from '../../utils/organizationLabels'
 import { useComponentExport } from '../export/useComponentExport'
 import { unitConversion } from './MetricCard'
 import { applyPieResultLimit } from './pieChartData'
@@ -75,6 +76,18 @@ export const getTruncatedAxisLabelText = (params: any) => {
   return formatCategoryAxisLabel(text) === text ? null : text
 }
 
+const displayCategory = (data: ChartDataResponse, value: unknown) => displayJoinedDimension(
+  String(value ?? ""),
+  data.categoryFieldIds || [],
+  data.dimensionLabels,
+)
+
+const displaySeriesName = (data: ChartDataResponse, value: unknown) => organizationDisplayName(
+  data.dimensionLabels,
+  data.seriesFieldId,
+  value,
+)
+
 export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig, dashboardId, componentId }: BaseChartProps) {
   const { t } = useTranslation("dashboard")
 
@@ -144,7 +157,10 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig, da
       chartRef.current = echartsLibRef.current.init(domRef.current, themeName)
 
       const handleAxisLabelMouseOver = (params: any) => {
-        const text = getTruncatedAxisLabelText(params)
+        const text = getTruncatedAxisLabelText({
+          ...params,
+          value: displayCategory(data, params?.value),
+        })
         if (!text || !domRef.current) {
           setAxisLabelTooltip(null)
           return
@@ -307,7 +323,7 @@ const getPieChartOption = (
   };
 
   const tooltipFormatter = (params: any) => {
-    const name = params.name.replaceAll('\n', '<br/>');
+    const name = displayCategory(data, params.name).replaceAll('\n', '<br/>');
     const formattedValue = formatMetricValue(params.value);
     return isPercentMetric
       ? `${name}: ${formattedValue}`
@@ -315,13 +331,19 @@ const getPieChartOption = (
   };
 
   const dataLabelFormatter = isPercentMetric
-    ? (params: any) => `${params.name}: ${formatMetricValue(params.value)}`
-    : '{b}: {d}%';
+    ? (params: any) => `${displayCategory(data, params.name)}: ${formatMetricValue(params.value)}`
+    : (params: any) => `${displayCategory(data, params.name)}: ${params.percent}%`;
+
+  const legendOption = buildLegendOption(styleConfig)
+  const legend = legendOption && {
+    ...legendOption,
+    formatter: (name: string) => displayCategory(data, name),
+  }
 
   return {
     backgroundColor: styleConfig.bgColor,
     // title: buildTitleOption(styleConfig),
-    legend: buildLegendOption(styleConfig),
+    legend,
     tooltip: buildTooltipOption('item', tooltipFormatter),
     series: series.map((s) => ({
       name: s.name,
@@ -385,11 +407,12 @@ const getCartesianChartOption = (
 
   // Tooltip
   const tooltipFormatter = (params: any[]) => {
-    const originName = params[0]?.name || '';
+    const originName = displayCategory(data, params[0]?.name || '');
     const shortName = originName.replace(/(.{50})/g, '$1<br/>');
     let res = shortName.replaceAll('\n', '<br/>') + '<br/>';
     params.forEach((item) => {
-      res += item.value === undefined ? '' : `${item.marker} ${item.seriesName}: <b>${unitConversion(item.value, dataConfig).join('')}</b><br/>`;
+      const seriesName = displaySeriesName(data, item.seriesName)
+      res += item.value === undefined ? '' : `${item.marker} ${seriesName}: <b>${unitConversion(item.value, dataConfig).join('')}</b><br/>`;
     });
     return res;
   };
@@ -417,7 +440,7 @@ const getCartesianChartOption = (
       show: styleConfig.showAxis ?? true,
       rotate: 0,
       interval: 'auto',
-      formatter: formatCategoryAxisLabel,
+      formatter: (value: unknown) => formatCategoryAxisLabel(displayCategory(data, value)),
       hideOverlap: true,
       color: '#666'
       // interval: 0,
@@ -538,7 +561,14 @@ const getCartesianChartOption = (
   return {
     backgroundColor: styleConfig.bgColor,
     // title: buildTitleOption(styleConfig),
-    legend: buildLegendOption(styleConfig, series.map(s => s.name)),
+    legend: (() => {
+      const legend = buildLegendOption(styleConfig, series.map(s => s.name))
+      if (!legend || !data.seriesFieldId) return legend
+      return {
+        ...legend,
+        formatter: (name: string) => displaySeriesName(data, name),
+      }
+    })(),
     tooltip: buildTooltipOption('axis', tooltipFormatter),
     grid,
     xAxis: isHorizontal ? valueAxis : categoryAxis,

@@ -25,6 +25,7 @@ from bisheng.utils import generate_uuid
 from ..schemas.component import ComponentDataConfig, DimensionQueryFilter, PivotSheet, TimeFilter
 from .dashboard import DashboardService
 from .dashboard_export_detail import DetailRows, query_detail_rows
+from .department_label_resolver import relabel_organization_rows
 
 EXPORT_ROW_LIMIT_PER_SHEET = 50_000
 # 画面最多 500 行数据加 100 列. 分组小计最多再占一倍, 再加表头, 合计和提示行.
@@ -40,6 +41,11 @@ _INVALID_SHEET_NAME_CHARS = re.compile(r"[:\\/?*\[\]]")
 def _sanitize_sheet_name(name: str) -> str:
     name = _INVALID_SHEET_NAME_CHARS.sub("_", str(name)).strip() or "Sheet1"
     return name[:31]
+
+
+async def _display_detail(detail: DetailRows) -> DetailRows:
+    rows = await relabel_organization_rows(detail.rows, [column.field for column in detail.columns])
+    return DetailRows(columns=detail.columns, rows=rows)
 
 
 def _build_dataframe(detail: DetailRows, row_indices: list[int] | None = None) -> pd.DataFrame:
@@ -142,7 +148,7 @@ class DashboardExportService:
         if len(detail.rows) > EXPORT_ROW_LIMIT_PER_SHEET:
             raise DashboardExportLimitExceededError()
 
-        df = _build_dataframe(detail)
+        df = _build_dataframe(await _display_detail(detail))
         bio = BytesIO()
         with pd.ExcelWriter(bio, engine="openpyxl") as writer:
             df.to_excel(writer, sheet_name="Sheet1", index=False)
@@ -195,6 +201,7 @@ class DashboardExportService:
 
         if len(detail.rows) > EXPORT_ROW_LIMIT_PER_SHEET:
             raise DashboardExportLimitExceededError()
+        detail = await _display_detail(detail)
         if is_pivot:
             if pivot_sheet is None or (not pivot_sheet.has_table and not detail.rows):
                 raise DashboardExportEmptyError()
