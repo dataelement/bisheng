@@ -12,6 +12,7 @@ import { getTenantsApi } from '@/controllers/API/tenant'
 import { cancelRuntimeAuditExport, createRuntimeAuditExport, downloadRuntimeAuditExport, getRuntimeAuditCandidates } from '@/controllers/API/runtimeAudit'
 import type { RuntimeAuditFilters, RuntimeAuditKind } from '@/controllers/API/runtimeAudit'
 import { useRuntimeAudit } from './useRuntimeAudit'
+import { formatTimestamp } from '@/utils/displayTimestamp'
 
 interface CandidateProps {
   kind: RuntimeAuditKind
@@ -94,12 +95,12 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey }: RecordProps) {
     {query.isError ? <div role="alert">{t('log.runtime.loadFailed')} <Button onClick={() => void query.refetch()}>{t('log.runtime.refresh')}</Button></div>
       : query.isInitialLoading ? <p role="status">{t('log.runtime.loading')}</p>
         : <div className="overflow-x-auto"><Table><TableHeader><TableRow>{fields.map(field => <TableHead key={field}>{t(`log.runtime.fields.${field}`)}</TableHead>)}</TableRow></TableHeader><TableBody>
-          {query.data?.items.map(row => <TableRow key={String(row.id)}>{fields.map(field => <TableCell key={field}>{row[field] == null ? t('log.runtime.unknown') : ['actor_kind', 'subject_kind', 'result', 'capability'].includes(field) ? t(`log.runtime.values.${String(row[field])}`, { defaultValue: String(row[field]) }) : String(row[field])}</TableCell>)}</TableRow>)}
+          {query.data?.items.map(row => <TableRow key={String(row.id)}>{fields.map(field => <TableCell key={field}>{row[field] == null ? t('log.runtime.unknown') : ['actor_kind', 'subject_kind', 'result', 'capability'].includes(field) ? t(`log.runtime.values.${String(row[field])}`, { defaultValue: String(row[field]) }) : ['entry_time', 'create_time'].includes(field) ? formatTimestamp(String(row[field])) : String(row[field])}</TableCell>)}</TableRow>)}
           {query.data?.items.length === 0 && <TableRow><TableCell colSpan={fields.length}>{t('log.runtime.empty')}</TableCell></TableRow>}
         </TableBody></Table></div>}
     <div className="flex items-center gap-2"><Button disabled={page === 1 || query.isFetching} onClick={previous}>{t('log.runtime.previous')}</Button><span>{page}</span><Button disabled={!query.data?.next_cursor || query.isFetching} onClick={next}>{t('log.runtime.next')}</Button><Button onClick={() => void query.refetch()}>{t('log.runtime.refresh')}</Button></div>
     {exportQuery.isError && <p role="alert">{t('log.runtime.exportFailed')}</p>}
-    {job && <div role="status" className="flex flex-wrap items-center gap-2"><span>{t(`log.runtime.status.${job.status}`)} · {job.final_count ?? job.processed_rows ?? 0}</span>{job.selection_started_at && <span>{t('log.runtime.selectedAt')}: {job.selection_started_at}</span>}
+    {job && <div role="status" className="flex flex-wrap items-center gap-2"><span>{t(`log.runtime.status.${job.status}`)} · {job.final_count ?? job.processed_rows ?? 0}</span>{job.selection_started_at && <span>{t('log.runtime.selectedAt')}: {formatTimestamp(job.selection_started_at)}</span>}
       {job.status === 'ready' && <Button disabled={busy} onClick={handleDownload}>{t('log.runtime.download')}</Button>}
       {['pending', 'running'].includes(job.status) && <Button onClick={handleCancel}>{t('log.runtime.cancel')}</Button>}
     </div>}

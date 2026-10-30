@@ -1,5 +1,5 @@
 /**
- * Danger zone of the publish tab — explicit deletion, owner only (AC-61 / AC-62).
+ * Danger zone of the publish tab — explicit deletion by owner or platform super admin.
  *
  * The action itself is F054's `useHostedAppActions.deleteApp`, reused rather
  * than re-implemented: the confirmation copy *is* part of the contract (it has
@@ -8,12 +8,9 @@
  *
  * Two guards, and they are not the same guard:
  *
- * - **Owner only.** A tenant administrator may stop and resume somebody's
- *   application but may not delete it, and the permission runtime cannot say so
- *   — it short-circuits administrators to ALLOW. The section is therefore not
- *   rendered at all for a non-owner: there is nothing here they can do, and a
- *   greyed-out "delete everything" button is an invitation to go looking for
- *   the way around it.
+ * - **Owner or platform super admin.** A tenant administrator may not delete
+ *   an active owner's application; administrator permission shortcuts cannot
+ *   replace this business rule.
  * - **Online blocks deletion** (AC-42). Disabled with the remedy spelled out
  *   ("take it offline first") rather than hidden, because that one *is*
  *   reachable — the owner simply has to do something first.
@@ -51,7 +48,7 @@ export function DangerZoneCard({ app }: DangerZoneCardProps) {
   const isOwner = Number(user?.user_id) === Number(app.owner_user_id)
   const blocked = isDeleteBlockedByState(app.state)
 
-  if (!isOwner) return null
+  if (!isOwner && !user?.is_global_super) return null
 
   const handleDelete = async () => {
     if (blocked) return

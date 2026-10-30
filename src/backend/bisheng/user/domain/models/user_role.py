@@ -1,47 +1,14 @@
-from datetime import datetime
-from typing import List, Optional
-
 from pydantic import BaseModel
-from sqlalchemy import Column, DateTime, Integer, text, delete, INT
-from sqlmodel import Field, select
+from sqlalchemy import delete
+from sqlmodel import select
 
-from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.database.constants import AdminRole
-
-
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
-
-class UserRoleBase(SQLModelSerializable):
-    user_id: Optional[int] = Field(
-        default=None,
-        foreign_key="user.user_id",
-        primary_key=True,
-        ondelete="CASCADE"
-    )
-    role_id: int = Field(
-        default=None,
-        foreign_key="role.id",
-        primary_key=True,
-        ondelete="CASCADE"
-    )
-    tenant_id: Optional[int] = Field(
-        default=None,
-        sa_column=Column(Integer, nullable=False, server_default=text('1'),
-                         index=True, comment='Tenant ID'),
-    )
-    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
-
-
-class UserRole(UserRoleBase, table=True):
-    id: Optional[int] = Field(default=None, sa_column=Column(INT, primary_key=True, autoincrement=True))
+from bisheng.database.models.user_role import UserRole, UserRoleBase
 
 
 class UserRoleRead(UserRoleBase):
-    id: Optional[int] = None
+    id: int | None = None
 
 
 class UserRoleCreate(BaseModel):
@@ -50,20 +17,19 @@ class UserRoleCreate(BaseModel):
 
 
 class UserRoleDao(UserRoleBase):
-
     @classmethod
-    def get_user_roles(cls, user_id: int) -> List[UserRole]:
+    def get_user_roles(cls, user_id: int) -> list[UserRole]:
         with get_sync_db_session() as session:
             return session.exec(select(UserRole).where(UserRole.user_id == user_id)).all()
 
     @classmethod
-    async def aget_user_roles(cls, user_id: int) -> List[UserRole]:
+    async def aget_user_roles(cls, user_id: int) -> list[UserRole]:
         async with get_async_db_session() as session:
             result = await session.exec(select(UserRole).where(UserRole.user_id == user_id))
             return result.all()
 
     @classmethod
-    def get_roles_user(cls, role_ids: List[int], page: int = 0, limit: int = 0) -> List[UserRole]:
+    def get_roles_user(cls, role_ids: list[int], page: int = 0, limit: int = 0) -> list[UserRole]:
         """
         Get the user for the role
         """
@@ -74,13 +40,13 @@ class UserRoleDao(UserRoleBase):
             return session.exec(statement).all()
 
     @classmethod
-    async def aget_roles_user(cls, role_ids: List[int]) -> List[UserRole]:
+    async def aget_roles_user(cls, role_ids: list[int]) -> list[UserRole]:
         async with get_async_db_session() as session:
             result = await session.exec(select(UserRole).where(UserRole.role_id.in_(role_ids)))
             return result.all()
 
     @classmethod
-    def get_admins_user(cls) -> List[UserRole]:
+    def get_admins_user(cls) -> list[UserRole]:
         """
         Get all super-managed accounts
         """
@@ -101,7 +67,7 @@ class UserRoleDao(UserRoleBase):
             return user_role
 
     @classmethod
-    def add_user_roles(cls, user_id: int, role_ids: List[int]) -> List[UserRole]:
+    def add_user_roles(cls, user_id: int, role_ids: list[int]) -> list[UserRole]:
         """
         Add roles to users in bulk
         """
@@ -112,7 +78,7 @@ class UserRoleDao(UserRoleBase):
             return user_roles
 
     @classmethod
-    def delete_user_roles(cls, user_id: int, role_ids: List[int]) -> None:
+    def delete_user_roles(cls, user_id: int, role_ids: list[int]) -> None:
         """
         Remove users from certain roles
         """

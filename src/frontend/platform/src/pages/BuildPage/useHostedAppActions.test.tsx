@@ -2,13 +2,13 @@ import { act, renderHook } from "@testing-library/react"
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { useHostedAppActions } from "./useHostedAppActions"
 
-const mocks = vi.hoisted(() => ({ confirm: vi.fn(), stop: vi.fn(), resume: vi.fn(), notify: vi.fn(), t: (key: string) => key }))
+const mocks = vi.hoisted(() => ({ confirm: vi.fn(), stop: vi.fn(), resume: vi.fn(), remove: vi.fn(), notify: vi.fn(), t: (key: string) => key }))
 vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({ bsConfirm: mocks.confirm }))
 vi.mock("@bisheng/ui", () => ({ notification: { open: mocks.notify } }))
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: mocks.t }) }))
 vi.mock("@/controllers/API/hostedApp", () => ({
   stopHostedAppApi: mocks.stop, resumeHostedAppApi: mocks.resume,
-  deleteHostedAppApi: vi.fn(), manualPublishHostedAppApi: vi.fn(),
+  deleteHostedAppApi: mocks.remove, manualPublishHostedAppApi: vi.fn(),
   getHostedAppErrorCode: (error: { status_code?: number }) => error.status_code,
   getHostedAppErrorMessage: () => "fallback",
 }))
@@ -17,6 +17,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.stop.mockResolvedValue({ ok: true, state: "stopped" })
   mocks.resume.mockResolvedValue({ ok: true, state: "online" })
+  mocks.remove.mockResolvedValue({ ok: true, state: "deleted" })
 })
 
 const app = { appId: "app", name: "demo", state: "stopped" as const }
@@ -50,4 +51,21 @@ describe("shared list/detail confirmation", () => {
     await act(async () => { mocks.confirm.mock.calls[0][0].onOk(vi.fn()); await completion })
     expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ description: "api_errors:appStartApprovalWithdrawn" }))
   })
+  it("delete requires confirmation and cancel never calls the API", async () => {
+    const { result } = renderHook(() => useHostedAppActions())
+    let completion!: Promise<boolean>
+    act(() => { completion = result.current.deleteApp(app) })
+    expect(mocks.remove).not.toHaveBeenCalled()
+    expect(mocks.confirm.mock.calls[0][0].desc).toBe("hostedApp.actions.deleteDesc")
+    await act(async () => { mocks.confirm.mock.calls[0][0].onCancel(); await completion })
+    expect(await completion).toBe(false)
+    expect(mocks.remove).not.toHaveBeenCalled()
+
+    act(() => { completion = result.current.deleteApp(app) })
+    expect(mocks.remove).not.toHaveBeenCalled()
+    await act(async () => { mocks.confirm.mock.calls[1][0].onOk(vi.fn()); await completion })
+    expect(await completion).toBe(true)
+    expect(mocks.remove).toHaveBeenCalledExactlyOnceWith("app")
+  })
+
 })

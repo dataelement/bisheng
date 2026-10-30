@@ -153,7 +153,7 @@ No `password` / `secret_key` / `api_key` / `access_token` literals in code. Use 
 ## C7. Frontend Store Must Not Call HTTP Directly (RULE-6)
 
 A frontend store must not call HTTP directly — go through `controllers/API/` (platform) or `api/` (client).
-All other frontend conventions (state library, UI library, path aliases, i18n, Toast, etc.) live in `.claude/rules/platform-frontend.md` and `.claude/rules/client-frontend.md` (see also `AGENTS.md §4`).
+All other frontend conventions (state library, UI library, path aliases, i18n, Toast, etc.) live in `.claude/rules/platform-frontend.md` and `.claude/rules/client-frontend.md` (see also `src/frontend/AGENTS.md`).
 
 ## C8. No Shared State on the Local Filesystem ⚠️
 

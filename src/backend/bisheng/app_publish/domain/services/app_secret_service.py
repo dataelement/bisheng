@@ -131,11 +131,17 @@ class AppSecretService:
     async def get(self, app_id, *, actor):
         async with self.repo.transaction() as session:
             app = await self.repo.app(session, app_id)
-            if not isinstance(actor, UserPayload) or actor.tenant_id != app.tenant_id:
+            from bisheng.app_runtime.application.tenant_access import require_app_request_tenant
+
+            if not isinstance(actor, UserPayload):
                 raise AppPublishOwnerOnlyError()
-            owner = actor.user_id == app.owner_user_id
+            require_app_request_tenant(app.tenant_id, actor, allow_global_super=True)
+            owner = actor.tenant_id == app.tenant_id and actor.user_id == app.owner_user_id
             if not owner and not actor.is_global_super and not await check_tenant_admin(actor.user_id, app.tenant_id):
-                raise AppPublishOwnerOnlyError()
+                from bisheng.permission.application.business_authorization import check_business_action
+
+                if not await check_business_action(actor, resource_type="app", resource_id=app.id, action="edit"):
+                    raise AppPublishOwnerOnlyError()
             row = await self.repo.config(session, app.id)
             entries = self._entries(row, app)
             current = await self.repo.version(session, app.id, app.current_version_id)

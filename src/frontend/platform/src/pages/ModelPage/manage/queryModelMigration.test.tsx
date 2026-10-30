@@ -8,7 +8,6 @@ import { useModel } from './index';
 const mock = vi.hoisted(() => ({ llm: vi.fn(), assistant: vi.fn() }));
 vi.mock('@/controllers/API/finetune', () => ({ getModelListApi: mock.llm, getAssistantModelList: mock.assistant, changeLLmServerStatus: vi.fn(), verifyLLmModelStatus: vi.fn() }));
 vi.mock('./ModelConfig', () => ({ default: () => null }));
-vi.mock('./ScopeBar', () => ({ ScopeBar: () => null }));
 vi.mock('./ModelProviderRow', () => ({ ModelProviderRow: () => null }));
 vi.mock('./SystemModelConfig', () => ({ default: () => null }));
 beforeEach(() => {

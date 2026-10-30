@@ -15,10 +15,9 @@ import { ModelAuditPanel } from './ModelAuditPanel'
 
 interface DshManagementProps {
     section?: DshSection
-    usageToolbarTarget?: HTMLDivElement | null
 }
 
-export function DshManagement({ section = 'credits', usageToolbarTarget }: DshManagementProps) {
+export function DshManagement({ section = 'credits' }: DshManagementProps) {
     const { t } = useTranslation()
     const { user } = useContext(userContext)
     const { config, failed } = useDshBrowserConfig()
@@ -29,7 +28,7 @@ export function DshManagement({ section = 'credits', usageToolbarTarget }: DshMa
         <div className="min-h-0 flex-1 overflow-y-auto">
             {activeSection === 'models' && <DshModelsView />}
             {activeSection === 'credits' && <CreditRulesView />}
-            {activeSection === 'usage' && <PolicyView toolbarTarget={usageToolbarTarget} />}
+            {activeSection === 'usage' && <PolicyView />}
             {activeSection === 'model-audit' && <ModelAuditPanel />}
             {activeSection === 'operations' && <AuditHistory revision={0} />}
             {activeSection === 'access' && <SettingsPanel settings={config} canEdit={user?.role === 'admin' || !!user?.is_global_super} />}

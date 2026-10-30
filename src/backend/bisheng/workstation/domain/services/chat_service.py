@@ -2368,7 +2368,14 @@ async def _agent_stream_chat_completion(
             error_flag = True
             error_msg = str(exc)
             logger.exception("Agent chat BaseErrorCode")
-            yield exc.to_sse_event_instance_str()
+            # Out of platform credits: tag the type so the bubble renders the
+            # credit card (who to ask, when it resets) rather than the bare line.
+            if label_error(exc) == ErrorType.CREDIT_EXHAUSTED:
+                yield exc.to_sse_event_instance_str(
+                    data={"exception": str(exc), "error_type": ErrorType.CREDIT_EXHAUSTED.value, "detail": str(exc)}
+                )
+            else:
+                yield exc.to_sse_event_instance_str()
         except Exception as exc:
             error_flag = True
             error_msg = str(exc)

@@ -3,11 +3,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from bisheng.approval.domain.services.approval_center_service import ApprovalCenterService
 from bisheng.approval.domain.services.approval_exception_service import ApprovalExceptionService
 from bisheng.approval.domain.services.approval_scenario_admin_service import ApprovalScenarioAdminService
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.admin_scope import AdminScopeTenantRequiredError
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.schemas.api import resp_200
+from bisheng.core.context.tenant import get_admin_scope_tenant_id, is_management_all_tenants
 from bisheng.utils import get_request_ip
 
 router = APIRouter(prefix="/approval/admin", tags=["approval"])
@@ -65,8 +68,21 @@ class NodeListReq(BaseModel):
     nodes: list[dict]
 
 
+def _tenant(login_user, *, allow_all=False):
+    if login_user.is_global_super:
+        selected = get_admin_scope_tenant_id()
+        if selected is not None:
+            return selected
+        if is_management_all_tenants():
+            if allow_all:
+                return None
+            # A global list is not an implicit write target for child scenarios.
+            raise AdminScopeTenantRequiredError()
+    return login_user.tenant_id
+
+
 async def _ensure_admin(login_user: UserPayload) -> None:
-    if login_user.is_admin():
+    if login_user.is_global_super:
         return
     from bisheng.permission.application import is_tenant_admin
 
@@ -84,7 +100,7 @@ async def list_scenario_presets(login_user: UserPayload = Depends(UserPayload.ge
 @router.get("/scenarios")
 async def list_scenarios(login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
-    return resp_200(await ApprovalScenarioAdminService.list_scenarios(tenant_id=login_user.tenant_id))
+    return resp_200(await ApprovalScenarioAdminService.list_scenarios(tenant_id=_tenant(login_user, allow_all=True)))
 
 
 @router.post("/scenarios")
@@ -92,7 +108,7 @@ async def create_scenario(req: ScenarioUpsertReq, login_user: UserPayload = Depe
     await _ensure_admin(login_user)
     return resp_200(
         await ApprovalScenarioAdminService.create_scenario(
-            tenant_id=login_user.tenant_id,
+            tenant_id=_tenant(login_user),
             payload=req.model_dump(),
             operator_user_id=login_user.user_id,
             operator_user_name=login_user.user_name,
@@ -110,7 +126,7 @@ async def update_scenario(
     await _ensure_admin(login_user)
     return resp_200(
         await ApprovalScenarioAdminService.update_scenario(
-            tenant_id=login_user.tenant_id,
+            tenant_id=_tenant(login_user),
             scenario_id=scenario_id,
             payload=req.model_dump(exclude_none=True),
             operator_user_id=login_user.user_id,
@@ -124,7 +140,9 @@ async def update_scenario(
 async def list_routes(scenario_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
     return resp_200(
-        await ApprovalScenarioAdminService.list_routes(tenant_id=login_user.tenant_id, scenario_id=scenario_id)
+        await ApprovalScenarioAdminService.list_routes(
+            tenant_id=_tenant(login_user, allow_all=True), scenario_id=scenario_id
+        )
     )
 
 
@@ -137,7 +155,7 @@ async def create_route(
     await _ensure_admin(login_user)
     return resp_200(
         await ApprovalScenarioAdminService.create_route(
-            tenant_id=login_user.tenant_id,
+            tenant_id=_tenant(login_user),
             scenario_id=scenario_id,
             payload=req.model_dump(),
         )
@@ -153,7 +171,7 @@ async def update_route(
     await _ensure_admin(login_user)
     return resp_200(
         await ApprovalScenarioAdminService.update_route(
-            tenant_id=login_user.tenant_id,
+            tenant_id=_tenant(login_user),
             route_rule_id=route_rule_id,
             payload=req.model_dump(exclude_none=True),
         )
@@ -164,7 +182,9 @@ async def update_route(
 async def list_flows(scenario_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
     return resp_200(
-        await ApprovalScenarioAdminService.list_flows(tenant_id=login_user.tenant_id, scenario_id=scenario_id)
+        await ApprovalScenarioAdminService.list_flows(
+            tenant_id=_tenant(login_user, allow_all=True), scenario_id=scenario_id
+        )
     )
 
 
@@ -177,7 +197,7 @@ async def create_flow(
     await _ensure_admin(login_user)
     return resp_200(
         await ApprovalScenarioAdminService.create_flow(
-            tenant_id=login_user.tenant_id,
+            tenant_id=_tenant(login_user),
             scenario_id=scenario_id,
             payload=req.model_dump(),
         )
@@ -193,7 +213,7 @@ async def update_flow(
     await _ensure_admin(login_user)
     return resp_200(
         await ApprovalScenarioAdminService.update_flow(
-            tenant_id=login_user.tenant_id,
+            tenant_id=_tenant(login_user),
             flow_definition_id=flow_definition_id,
             payload=req.model_dump(exclude_none=True),
         )
@@ -205,7 +225,7 @@ async def list_nodes(flow_definition_id: int, login_user: UserPayload = Depends(
     await _ensure_admin(login_user)
     try:
         data = await ApprovalScenarioAdminService.list_nodes(
-            tenant_id=login_user.tenant_id, flow_definition_id=flow_definition_id
+            tenant_id=_tenant(login_user, allow_all=True), flow_definition_id=flow_definition_id
         )
     except ValueError:
         from bisheng.common.errcode.approval import ApprovalFlowNotFoundError
@@ -217,14 +237,14 @@ async def list_nodes(flow_definition_id: int, login_user: UserPayload = Depends(
 @router.delete("/scenarios/{scenario_id}")
 async def delete_scenario(scenario_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
-    await ApprovalScenarioAdminService.delete_scenario(tenant_id=login_user.tenant_id, scenario_id=scenario_id)
+    await ApprovalScenarioAdminService.delete_scenario(tenant_id=_tenant(login_user), scenario_id=scenario_id)
     return resp_200({"deleted": scenario_id})
 
 
 @router.delete("/routes/{route_rule_id}")
 async def delete_route(route_rule_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
-    await ApprovalScenarioAdminService.delete_route(tenant_id=login_user.tenant_id, route_rule_id=route_rule_id)
+    await ApprovalScenarioAdminService.delete_route(tenant_id=_tenant(login_user), route_rule_id=route_rule_id)
     return resp_200({"deleted": route_rule_id})
 
 
@@ -236,7 +256,7 @@ async def reorder_routes(
 ):
     await _ensure_admin(login_user)
     await ApprovalScenarioAdminService.reorder_routes(
-        tenant_id=login_user.tenant_id,
+        tenant_id=_tenant(login_user),
         scenario_id=scenario_id,
         ordered_route_ids=req.ordered_route_ids,
     )
@@ -246,9 +266,7 @@ async def reorder_routes(
 @router.delete("/flows/{flow_definition_id}")
 async def delete_flow(flow_definition_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
-    await ApprovalScenarioAdminService.delete_flow(
-        tenant_id=login_user.tenant_id, flow_definition_id=flow_definition_id
-    )
+    await ApprovalScenarioAdminService.delete_flow(tenant_id=_tenant(login_user), flow_definition_id=flow_definition_id)
     return resp_200({"deleted": flow_definition_id})
 
 
@@ -261,7 +279,7 @@ async def get_flow_version(
     await _ensure_admin(login_user)
     return resp_200(
         await ApprovalScenarioAdminService.get_flow_version(
-            tenant_id=login_user.tenant_id,
+            tenant_id=_tenant(login_user),
             flow_definition_id=flow_definition_id,
             flow_version_id=flow_version_id,
         )
@@ -278,7 +296,7 @@ async def set_flow_nodes(
     await _ensure_admin(login_user)
     return resp_200(
         await ApprovalScenarioAdminService.set_flow_nodes(
-            tenant_id=login_user.tenant_id,
+            tenant_id=_tenant(login_user),
             flow_definition_id=flow_definition_id,
             nodes_payload=req.nodes,
             operator_user_id=login_user.user_id,
@@ -291,7 +309,9 @@ async def set_flow_nodes(
 @router.get("/exceptions")
 async def list_exceptions(login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
-    return resp_200(await ApprovalScenarioAdminService.list_open_exceptions(tenant_id=login_user.tenant_id))
+    return resp_200(
+        await ApprovalScenarioAdminService.list_open_exceptions(tenant_id=_tenant(login_user, allow_all=True))
+    )
 
 
 class CancelExceptionReq(BaseModel):
@@ -333,5 +353,17 @@ async def cancel_exception(
             operator_user_id=login_user.user_id,
             reason=req.reason,
             ip_address=get_request_ip(request),
+        )
+    )
+
+
+@router.get("/instances/{instance_id}")
+async def get_admin_instance_detail(instance_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    await _ensure_admin(login_user)
+    return resp_200(
+        await ApprovalCenterService.get_instance_detail(
+            instance_id=instance_id,
+            login_user=login_user,
+            management=True,
         )
     )

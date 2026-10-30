@@ -66,11 +66,14 @@ describe('DshPage navigation', () => {
 
         const tablist = screen.getByRole('tablist', { name: 'dsh.title' })
         expect(tablist.closest('.px-2')).toBeTruthy()
-        expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual([
+        const tabs = screen.getAllByRole('tab')
+        const labels = [
             'dsh.unified.credits', 'dsh.unified.usage', 'dsh.unified.models',
             'dsh.auditTab', 'dsh.contentSafety.title', 'dsh.accessSettings',
             'dsh.enterprisePlugins',
-        ])
+        ]
+        expect(tabs).toHaveLength(labels.length)
+        labels.forEach((label, index) => expect(tabs[index]).toHaveAccessibleName(label))
         expect(screen.queryByRole('tab', { name: 'dsh.operations' })).toBeNull()
         expect(screen.getByRole('tab', { name: 'dsh.unified.usage' })).toHaveAttribute(
             'data-state',
