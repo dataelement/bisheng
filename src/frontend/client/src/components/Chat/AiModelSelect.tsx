@@ -1,4 +1,4 @@
-import { Select } from "@bisheng/ui";
+import { Cascader, type CascaderOption, type CascaderPath } from "@bisheng/ui";
 import { memo, useEffect, useMemo } from "react";
 import { useLocalize } from "~/hooks";
 import useSelectCopy from "~/hooks/useSelectCopy";
@@ -8,7 +8,7 @@ interface AiModelSelectProps {
   options?: BsConfig["models"];
   value: number;
   disabled: boolean;
-  /** User-initiated selection (Select onChange). */
+  /** User-initiated model selection. */
   onChange: (value: string) => void;
   /**
    * Programmatic value repairs from the effect below (invalid/ mismatched
@@ -39,15 +39,22 @@ const AiModelSelect = memo(({ options, value, disabled, onChange, onAutoChange }
     });
   }, [options]);
 
-  const selectOptions = useMemo(
-    () =>
-      uniqueOptions.map((opt) => ({
-        value: String(opt.id),
-        label: opt.displayName,
-        description: opt.description || undefined,
-      })),
-    [uniqueOptions],
-  );
+  const unknownProvider = localize("modelPicker.unknownProvider");
+  const { cascaderOptions, modelPaths } = useMemo(() => {
+    const groups = new Map<string, CascaderOption>();
+    const paths = new Map<string, CascaderPath>();
+    for (const model of uniqueOptions) {
+      const providerName = model.provider_name?.trim() || unknownProvider;
+      const providerKey = `provider:${model.provider_id ?? model.provider_name?.trim() ?? "unknown"}`;
+      if (!groups.has(providerKey)) {
+        groups.set(providerKey, { value: providerKey, label: providerName, children: [] });
+      }
+      const id = String(model.id);
+      groups.get(providerKey)!.children!.push({ value: id, label: model.displayName?.trim() || model.name });
+      paths.set(id, [providerKey, id]);
+    }
+    return { cascaderOptions: [...groups.values()], modelPaths: paths };
+  }, [uniqueOptions, unknownProvider]);
 
   // Auto-select first option when current value is invalid
   useEffect(() => {
@@ -66,19 +73,26 @@ const AiModelSelect = memo(({ options, value, disabled, onChange, onAutoChange }
   }, [uniqueOptions, value, onAutoChange, onChange]);
 
   return (
-    // Width bounds are layout only: the panel sizes to the longest
-    // model name (narrow ghost trigger), and the model list is already
-    // in memory via `options`, so there is no flash on open.
-    <Select
+    <Cascader
       {...selectCopy}
       variant="ghost"
-      options={selectOptions}
-      value={value == null ? null : String(value)}
+      options={cascaderOptions}
+      value={modelPaths.get(String(value)) ?? null}
       disabled={disabled}
-      onChange={(next) => next != null && onChange(String(next))}
+      displayRender={(labels) => labels[labels.length - 1] ?? ""}
+      showSearch
+      filterOption={(keyword, path) => {
+        const query = keyword.toLowerCase();
+        const modelId = path[path.length - 1]?.value;
+        const model = uniqueOptions.find(option => String(option.id) === String(modelId));
+        return [...path.map(option => option.label), model?.description ?? ""]
+          .some(label => label.toLowerCase().includes(query));
+      }}
+      onChange={(path) => { if (path?.length === 2) onChange(String(path[1])); }}
+      backLabel={localize("modelPicker.back")}
+      searchPlaceholder={localize("com_ui_select_search_model")}
       aria-label={localize("com_ui_select_model")}
       className="min-w-0 max-w-[min(50vw,288px)] touch-mobile:max-w-[min(60vw,200px)]"
-      panelClassName="max-w-[240px]"
     />
   );
 });

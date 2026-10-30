@@ -2890,13 +2890,12 @@
       "failed": "已失败"
     },
     "version": {
-      "placeholder": "版本",
       "loading": "加载中…",
-      "empty": "暂无版本",
       "loadFailed": "版本加载失败",
-      "current": "运行中",
-      "pending": "待生效",
-      "readonlyTip": "版本仅供查看，托管应用不支持在此切换版本"
+      "noCode": "未上传代码",
+      "latest": "最新版本 {{version}}",
+      "running": "运行版本 {{version}}",
+      "currentUnavailable": "运行版本未知"
     },
     "actions": {
       "stopTitle": "确认下线应用",

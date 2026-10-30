@@ -201,6 +201,7 @@ export default function Apps() {
             tag_id: param.tag_id,
             type: param.type,
             status: param.status,
+            app_state: param.app_state,
             managed: param.managed,
         }),
     )

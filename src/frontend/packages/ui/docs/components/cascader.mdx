@@ -190,6 +190,7 @@ export default () => (
 | `multiple` | 多选，默认父子联动 | `boolean` | `false` |
 | `value` / `defaultValue` | 单选为路径，多选为路径数组 | `CascaderPath \| null` / `CascaderPath[]` | — |
 | `onChange` | 返回结构化路径和对应选项路径 | `(value, options) => void` | — |
+| `displayRender` | 自定义单选回显文字，不改变完整路径值 | `(labels, options) => string` | 完整路径 |
 | `checkStrictly` | 任意层级独立可选 | `boolean` | `false` |
 | `expandTrigger` | 桌面端展开方式；手机始终轻点进入 | `'click' \| 'hover'` | `'click'` |
 | `showSearch` / `onSearch` / `filterOption` | 本地或服务端路径搜索 | — | 可选节点 > 10 时开启 |

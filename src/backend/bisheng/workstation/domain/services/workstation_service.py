@@ -782,7 +782,7 @@ class WorkStationService(BaseService):
             ret.tools = cls.sync_tool_info(ret.tools)
         if inherited:
             ret = await cls._aproject_daily_config_for_current_tenant(ret, DEFAULT_TENANT_ID)
-        return cls._apply_workbench_models(ret, await LLMService.get_workbench_llm())
+        return cls._apply_workbench_models(ret, await LLMService.get_workbench_llm_for_picker())
 
     @classmethod
     async def get_daily_chat_config(cls) -> WorkstationConfig | None:

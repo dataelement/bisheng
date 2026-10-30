@@ -1,31 +1,8 @@
 import type { User } from "@/types/api/user"
-/**
- * The build page's third card type (AC-51 / AC-52 / AC-53).
- *
- * Split out of `apps.tsx` because that file is already at the 600-line ceiling,
- * but also because the card and the detail page have to agree on three things
- * and only will if they share code: the state badge, the confirmation copy
- * (via `useHostedAppActions`) and the fact that the version dropdown is
- * **read-only**.
- *
- * That last one is the trap. The workflow card's `CardSelectVersion` writes the
- * picked version back as the app's current version, and the `version_list` the
- * list endpoint attaches is always empty for a hosted application — reusing it
- * would give an empty dropdown that mutates a *workflow* when clicked. So this
- * file has its own select: it loads `app_version` when the card mounts and does
- * nothing at all when an item is picked.
- */
+/** Hosted application cards share state badges and actions with the detail page. */
 import CardComponent from "@/components/bs-comp/cardComponent"
 import AppAvator from "@/components/bs-comp/cardComponent/avatar"
-import { Tag } from "@bisheng/ui"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/bs-ui/select"
+import { Button, Tag } from "@bisheng/ui"
 import {
   getHostedAppVersionsApi,
   type HostedAppActionResult,
@@ -61,19 +38,13 @@ export interface HostedAppListItem {
   write?: boolean
 }
 
-interface HostedAppVersionSelectProps {
+interface HostedAppVersionLabelProps {
   appId: string
-  disabled?: boolean
+  online: boolean
 }
 
-/**
- * Read-only version dropdown (AC-52).
- *
- * Load on entry so the current version is visible even when an online app's
- * dropdown is disabled. Picking an item remains inert; hosted applications
- * do not support switching versions here.
- */
-function HostedAppVersionSelect({ appId, disabled = false }: HostedAppVersionSelectProps) {
+/** Hosted applications show version information; history lives on the detail page. */
+function HostedAppVersionLabel({ appId, online }: HostedAppVersionLabelProps) {
   const { t } = useTranslation()
   const [versions, setVersions] = useState<HostedAppVersion[] | null>(null)
   const [loading, setLoading] = useState(true)
@@ -88,8 +59,6 @@ function HostedAppVersionSelect({ appId, disabled = false }: HostedAppVersionSel
     getHostedAppVersionsApi(appId)
       .then((rows) => {
         if (cancelled) return
-        // An empty `value` throws inside Radix's SelectItem and takes the
-        // whole card list down with it; drop such a row instead.
         setVersions((rows || []).filter((row) => !!row.version_id))
         setFailed(false)
       })
@@ -98,53 +67,38 @@ function HostedAppVersionSelect({ appId, disabled = false }: HostedAppVersionSel
     return () => { cancelled = true }
   }, [appId, retryAttempt])
 
-  const handleOpenChange = (open: boolean) => {
-    if (open && failed && !loading) setRetryAttempt(attempt => attempt + 1)
-  }
-
   const current = versions?.find((item) => item.is_current)
-  const label = current
-    ? `v${current.version_no}`
-    : t(loading ? "hostedApp.version.loading" : failed ? "hostedApp.version.loadFailed" : "hostedApp.version.placeholder")
+  const latest = versions?.reduce<HostedAppVersion | undefined>((newest, version) =>
+    !newest || version.version_no > newest.version_no ? version : newest, undefined)
+  const displayedVersion = online ? current : latest
+  const label = loading
+    ? t("hostedApp.version.loading")
+    : failed
+      ? t("hostedApp.version.loadFailed")
+      : !versions?.length
+        ? t("hostedApp.version.noCode")
+        : displayedVersion
+          ? t(online ? "hostedApp.version.running" : "hostedApp.version.latest", { version: `v${displayedVersion.version_no}` })
+          : t("hostedApp.version.currentUnavailable")
 
   return (
-    <Select value="" disabled={disabled} onOpenChange={handleOpenChange}>
-      <SelectTrigger
-        className="w-[120px] h-6"
-        onClick={(event) => event.stopPropagation()}
-        title={t("hostedApp.version.readonlyTip")}
-      >
-        <SelectValue placeholder={label}>{label}</SelectValue>
-      </SelectTrigger>
-      <SelectContent onClick={(event) => event.stopPropagation()}>
-        <SelectGroup>
-          {loading && (
-            <div className="px-2 py-1.5 text-xs text-muted-foreground">
-              {t("hostedApp.version.loading")}
-            </div>
-          )}
-          {!loading && failed && (
-            <div className="px-2 py-1.5 text-xs text-muted-foreground">
-              {t("hostedApp.version.loadFailed")}
-            </div>
-          )}
-          {!loading && !failed && versions !== null && versions.length === 0 && (
-            <div className="px-2 py-1.5 text-xs text-muted-foreground">
-              {t("hostedApp.version.empty")}
-            </div>
-          )}
-          {!loading &&
-            !failed &&
-            (versions || []).map((version) => (
-              <SelectItem key={version.version_id} value={version.version_id}>
-                {`v${version.version_no}`}
-                {version.is_current ? ` · ${t("hostedApp.version.current")}` : ""}
-                {version.is_pending ? ` · ${t("hostedApp.version.pending")}` : ""}
-              </SelectItem>
-            ))}
-        </SelectGroup>
-      </SelectContent>
-    </Select>
+    <span className="inline-flex h-6 max-w-40 items-center gap-1 whitespace-nowrap text-caption text-text-2">
+      <span className="truncate" title={label}>{label}</span>
+      {!loading && failed && (
+        <Button
+          color="primary"
+          variant="link"
+          size="small"
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            setRetryAttempt(attempt => attempt + 1)
+          }}
+        >
+          {t("build.retry")}
+        </Button>
+      )}
+    </span>
   )
 }
 
@@ -234,7 +188,7 @@ export function HostedAppCard({
       }
       showSwitch={canSwitch}
       canSwitch={canSwitch}
-      headSelecter={<HostedAppVersionSelect appId={String(item.id)} disabled={online} />}
+      headSelecter={<HostedAppVersionLabel appId={String(item.id)} online={online} />}
       labelPannel={labelPannel}
       footer={
         <div className="absolute right-0 bottom-0 flex items-center gap-1">

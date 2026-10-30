@@ -54,6 +54,8 @@ interface CascaderBaseProps {
   panelClassName?: string;
   id?: string;
   separator?: string;
+  /** Customize the single-selection label without changing the selected path. */
+  displayRender?: (labels: string[], options: CascaderOption[]) => string;
   'aria-label'?: string;
   'aria-labelledby'?: string;
   emptyText?: React.ReactNode;

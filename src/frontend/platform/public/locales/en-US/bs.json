@@ -2945,13 +2945,12 @@
       "failed": "Failed"
     },
     "version": {
-      "placeholder": "Version",
       "loading": "Loading…",
-      "empty": "No versions yet",
       "loadFailed": "Failed to load versions",
-      "current": "Running",
-      "pending": "Pending",
-      "readonlyTip": "Versions are read-only; a hosted app cannot be switched here"
+      "noCode": "No code uploaded",
+      "latest": "Latest version {{version}}",
+      "running": "Running version {{version}}",
+      "currentUnavailable": "Running version unknown"
     },
     "actions": {
       "stopTitle": "Take this application offline?",

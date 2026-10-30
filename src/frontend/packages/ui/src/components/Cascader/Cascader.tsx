@@ -56,6 +56,7 @@ export function Cascader(props: CascaderProps) {
     panelClassName,
     id,
     separator = ' / ',
+    displayRender,
     emptyText = 'No data',
     noMatchText = 'No matches',
     loadingText = 'Loading…',
@@ -396,7 +397,10 @@ export function Cascader(props: CascaderProps) {
 
   const selectedEntries = selected.map(resolveEntry);
   const singleEntry = multiple ? undefined : selectedEntries[0];
-  const singleLabel = singleEntry?.options.map((option) => option.label).join(separator) ?? '';
+  const singleLabels = singleEntry?.options.map((option) => option.label) ?? [];
+  const singleLabel = singleEntry
+    ? displayRender?.(singleLabels, singleEntry.options) ?? singleLabels.join(separator)
+    : '';
   const hasValue = selected.length > 0;
   const searchableInTrigger = searchable && !phone;
   const comboboxProps: React.HTMLAttributes<HTMLElement> = {
