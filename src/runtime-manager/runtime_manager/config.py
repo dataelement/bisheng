@@ -99,8 +99,7 @@ LABEL_PREVIEW_SESSION = "bisheng.preview.session"
 LABEL_PREVIEW_EXPIRES_AT = "bisheng.preview.expires_at"
 
 #: Variables a deployment must set explicitly — the dataclass defaults below are
-#: development conveniences, not deployment values. ``docker/verify-app-runtime-
-#: compose.sh`` asserts the compose file provides every one of them, which is the
+#: development conveniences, not deployment values. ``scripts/tests/compose/verify-app-runtime-compose.sh`` asserts the compose file provides every one of them, which is the
 #: gate that would have caught the 3.0 compose file shipping ``APP_PROXY_*``
 #: names nothing reads.
 REQUIRED_ENV: tuple[str, ...] = (

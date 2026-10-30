@@ -1,4 +1,6 @@
 # Explicit developer-only source build override. Production uses published images.
+# Keep docker/docker-compose.yml first: all relative paths use its directory.
+# docker compose -f docker/docker-compose.yml -f scripts/dev/docker-compose.runtime-dev.yml --profile app-runtime build
 services:
   runtime-manager:
     build: {context: ../src/runtime-manager}

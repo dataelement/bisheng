@@ -184,9 +184,7 @@ export function SubjectSearchDepartment({
         )}
         {!busy && !loadError && roots.length === 0 && (
           <PermissionEmptyState
-            message={localize(
-              searchMode ? "com_permission.empty_search" : "com_permission.empty_departments",
-            )}
+            message={localize(searchMode ? "com_permission.empty_search_departments" : "com_permission.empty_departments")}
           />
         )}
         {!busy && !loadError && roots.length > 0 && (

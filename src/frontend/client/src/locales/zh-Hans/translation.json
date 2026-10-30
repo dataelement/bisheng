@@ -1730,7 +1730,10 @@
     "continue_editing": "继续编辑",
     "copy": "复制",
     "copy_failed_retry": "复制失败，请重试",
-    "crawl_error_19003": "解析失败，请重试或提交人工需求",
+    "crawl_error_invalid_url": "请填写完整的 HTTP 或 HTTPS 网站地址，例如 https://www.example.com/news。",
+    "crawl_error_network": "连接抓取服务失败。请检查网络连接后重试。",
+    "crawl_error_timeout": "抓取请求超时。请稍后重试。",
+    "crawl_error_19003": "网站内容解析失败。请确认链接完整、页面可正常访问，并使用新闻或政策等栏目列表页重试；仍有问题时可联系管理员。",
     "crawl_error_19004": "被网站权限拒绝。请提供有效的「栏目列表页」链接（例如，新闻或政策列表页）",
     "crawl_error_19005": "检测到为单篇文章或非列表页。请提供有效的「栏目列表页」链接（例如，新闻或政策列表页）",
     "crawling_please_wait": "爬取中,可能需要1-2分钟,请耐心等待...",
@@ -1803,7 +1806,7 @@
     "search": "搜索",
     "search_articles_of_interest": "搜索你感兴趣的文章",
     "search_knowledge_space_placeholder": "输入知识空间名称进行搜索",
-    "send_crawl_requirement_to_email": "请将您的网站爬取需求发送至邮箱：XXXX@XX",
+    "send_crawl_requirement_to_email": "请联系管理员，提供网站链接和需要抓取的内容，由管理员协助处理。",
     "share": "分享",
     "share_link_copied": "分享链接已复制到粘贴板",
     "show_unread_only": "仅看未读",
@@ -1975,7 +1978,9 @@
     "dialog_title": "成员管理",
     "empty_departments": "暂无部门数据",
     "empty_permissions": "当前还没有权限记录",
-    "empty_search": "未找到可授权对象，请核对名称或 ID",
+    "empty_search": "暂无匹配用户",
+    "empty_search_departments": "暂无匹配部门",
+    "empty_search_user_groups": "暂无匹配用户组",
     "empty_user_groups": "暂无用户组",
     "already_granted": "已授权",
     "already_granted_as": "已授权：{{model}}",
@@ -2779,5 +2784,19 @@
     "scenario_time": "当前时间",
     "scenario_order": "订单查询",
     "scenario_inventory": "库存查询"
+  },
+  "com_builtin_skills": {
+    "bisheng-docx": {
+      "name": "Word 文档制作",
+      "description": "创建、读取和修改 Word 文档（.docx），适用于报告、方案、纪要、通知、合同初稿和简历等。支持标题层级、目录、页码、表格和图表，并在交付前检查排版。"
+    },
+    "bisheng-pptx": {
+      "name": "PPT 制作",
+      "description": "创建、读取和修改 PowerPoint 演示文稿（.pptx），适用于企业介绍、工作汇报、项目方案、产品发布和培训课件。支持套用提供的 .pptx 或 .potx 模板，并在交付前检查幻灯片排版。"
+    },
+    "bisheng-xlsx": {
+      "name": "Excel 表格制作",
+      "description": "创建和修改 Excel 工作簿（.xlsx），适用于数据表、汇总表、预算表、财务模型、报价单和台账。支持读取和清洗 .xlsx、.xls、.csv 数据，设置公式与格式，并在交付前重算和检查工作簿。"
+    }
   }
 }

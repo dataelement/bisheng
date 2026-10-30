@@ -15,8 +15,8 @@
 # 这个脚本把「compose 写的」和「config.py 读的」对起来，不需要起任何容器。
 #
 # 用法：
-#   bash docker/verify-app-runtime-compose.sh            # 跑静态校验
-#   bash docker/verify-app-runtime-compose.sh --howto    # 打印最小真机验证步骤
+#   bash scripts/tests/compose/verify-app-runtime-compose.sh            # 跑静态校验
+#   bash scripts/tests/compose/verify-app-runtime-compose.sh --howto    # 打印最小真机验证步骤
 # 退出码：0 = 全部通过；1 = 有断言失败；2 = 环境不满足（缺 docker compose 等）
 #
 # 静态校验管不到的部分（bind 真落在哪、两张网真通不通）照 --howto 跑一遍即可：
@@ -26,9 +26,9 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 # 允许覆盖，方便对着改坏的副本做「这个门确实拦得住」的反向自测。
-COMPOSE_FILE="${COMPOSE_FILE:-${SCRIPT_DIR}/docker-compose.yml}"
+COMPOSE_FILE="${COMPOSE_FILE:-${REPO_ROOT}/docker/docker-compose.yml}"
 PROFILE="app-runtime"
 
 # 不带 profile 的 service 数 / 带 profile 的 service 数。
@@ -70,10 +70,10 @@ if [ "${1:-}" = "--howto" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; t
   cd docker
 
 # 0) 静态门先过
-  bash verify-app-runtime-compose.sh
+  bash ../scripts/tests/compose/verify-app-runtime-compose.sh
 
 # 1) 只构建这两个（build context 是 ../src/{runtime-manager,app-proxy}，都很小）
-  docker compose --profile app-runtime build runtime-manager app-proxy
+  docker compose -f docker-compose.yml -f ../scripts/dev/docker-compose.runtime-dev.yml --profile app-runtime build runtime-manager app-proxy
 
 # 2) 只起这两个。--no-deps 是关键：app-proxy depends_on backend，
 #    不加的话 compose 会把 backend 连同 mysql/redis/openfga 一起拖起来。

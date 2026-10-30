@@ -102,10 +102,9 @@ export function useChatAskHandoff({
     const ask = mountedAsk;
     if (!ask || submittedAskRef.current === ask) return;
     if (conversationId !== 'new' || activeConversationId !== 'new' || !ready) return;
-    if (preparedAsk !== ask) {
-      // The shared model store can synchronously re-enter this effect before
-      // React commits preparedAsk. Claim the ask before changing selections.
-      if (preparingAskRef.current === ask) return;
+    if (preparingAskRef.current !== ask) {
+      // Claim preparation before publishing to external stores: their synchronous
+      // subscribers can flush this effect again during the same commit.
       preparingAskRef.current = ask;
       setSelectedKbs(ask.space
         ? [{ id: ask.space.id, name: ask.space.name, type: 'space' }]
@@ -120,6 +119,8 @@ export function useChatAskHandoff({
       setPreparedAsk(ask);
       return;
     }
+    // A reentrant commit observes the claim and waits for preparation to finish.
+    if (preparedAsk !== ask) return;
     if (ask.modelId !== undefined && selectedModelId !== ask.modelId) return;
     const mounted = ask.space
       ? selectedKbs.length === 1 && selectedKbs[0].type === 'space' && String(selectedKbs[0].id) === ask.space.id

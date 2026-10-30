@@ -1,0 +1,62 @@
+[
+  {
+    "image": "cr.dataelem.com/dataelement/bisheng-backend:v3.0.0-beta6",
+    "manifest": "sha256:0a9ce22db4a1c494fa6b8011bb724f2f4a623c5710c4f6dfdf707bcbf12c00bc",
+    "config": "sha256:55c0061e8cee11064d1e780e6716927ba32d7a9a7cb05a85f8e0c54ceb275c7a",
+    "result": "loaded and verified"
+  },
+  {
+    "image": "cr.dataelem.com/mysql:8.0",
+    "manifest": "sha256:42932c891d186025011bf6721ef8fb7979a129b49739c63144bf307ae4d81dcf",
+    "config": "sha256:af332304d0c65ad3469204d2b0a79f81ea20c1582bd6153d69ef65f8b48dd333",
+    "result": "loaded and verified"
+  },
+  {
+    "image": "cr.dataelem.com/dataelement/openfga:v1.15.2-dm",
+    "manifest": "sha256:3e625401a261d104f9c8275826286b18822ea11e6d2b45664a428cda0c97a253",
+    "config": "sha256:31744344bbb1b3f00e62f0d1f2358e071d812c1b71093b712dffb50fca3eadd3",
+    "result": "existing exact config tagged"
+  },
+  {
+    "image": "cr.dataelem.com/redis:7.0.4",
+    "manifest": "sha256:f3be7cc42282295cdd2ccaafd10e6f315df4d3ce6f27f6d00946b294395966f1",
+    "config": "sha256:2460522297a148c1bcb477b126451ed44cca05c916694367313be1a91c69f793",
+    "result": "existing exact config tagged"
+  },
+  {
+    "image": "cr.dataelem.com/bitnami/elasticsearch:8.12.0",
+    "manifest": "sha256:d066a5dc06d1d3d1fda21dda0aed80bc575f1806f0b12641f9e713b2b6a339e9",
+    "config": "sha256:9523903650c44aa8398f85cc53dc10795625f2a58d6c8044ee4853ecebb15735",
+    "result": "existing exact config tagged"
+  },
+  {
+    "image": "cr.dataelem.com/quay.io/coreos/etcd:v3.5.5",
+    "manifest": "sha256:9344cfb9cbe4df0635478b6a2b62765330128fbdf3ca8fc9f2edac262552f700",
+    "config": "sha256:673f29d03de9f5d46158b4cfc3e4c1d69b72d31a800825b4c5e9e6b1ed553acb",
+    "result": "existing exact config tagged"
+  },
+  {
+    "image": "cr.dataelem.com/minio/minio:RELEASE.2023-03-20T20-16-18Z",
+    "manifest": "sha256:b36662dc531302f93d0ac2f4f05ae36b877e8d0d1e9b52d5c5d8f17e955b6789",
+    "config": "sha256:400c20c8aac03024d00a34603f5445dd4679b97712e062727190a8462c6a34b5",
+    "result": "existing exact config tagged"
+  },
+  {
+    "image": "cr.dataelem.com/milvusdb/milvus:v2.5.10",
+    "manifest": "sha256:8059b2097d27de4636c0180d016acd3f5cadbff755eb6d1c00dfb18d372a95df",
+    "config": "sha256:d500060a18e831d28ecc83833160ffe87f2ae95f8a60ec23982478496b25c5ed",
+    "result": "existing exact config tagged"
+  },
+  {
+    "image": "cr.dataelem.com/dataelement/bisheng-sandbox:feat_3.0.0",
+    "manifest": "sha256:b63538c05a1d1e4e80f2dbbf4f7472f56693dfba697ec7ec03667c8c1d7b1fc1",
+    "config": "sha256:b3718657209c1b78c7a8fdebd1d786611e3a3f2bc62a36070f8d7b55c3299dcc",
+    "result": "loaded and verified"
+  },
+  {
+    "image": "cr.dataelem.com/dataelement/bisheng-frontend:v3.0.0-beta6",
+    "manifest": "sha256:f3975be7880ad4a9e9d2085666366c04056d5f0221044ced730d6fec8fb22f65",
+    "config": "sha256:2787c8b09afac41d0ab1e29e8f4a5d871657f7bbfb78c4b7465014d7288ffd25",
+    "result": "loaded and verified"
+  }
+]

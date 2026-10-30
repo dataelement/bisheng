@@ -265,3 +265,21 @@ class TestPersonalSkillApi:
         assert gone["status_code"] == 11053
         assert "个人报告" not in json.dumps(gone, ensure_ascii=False)
         assert api.client.delete(f"{BASE}/personal/{saved['id']}").json()["data"] == {}
+
+
+@pytest.mark.parametrize("source,expected", [("builtin", "bisheng-docx"), ("manual", None), ("personal", None)])
+def test_center_card_retains_builtin_provenance(source, expected):
+    skill = SimpleNamespace(
+        id=1,
+        name="bisheng-docx",
+        display_name="Configured name",
+        description="Description",
+        source=source,
+        enabled=True,
+        content_hash="revision",
+        update_time=None,
+        create_time=None,
+    )
+    card = personal_endpoints._card(SimpleNamespace(is_bundle_missing=lambda _: False), skill)
+    assert card["builtin_key"] == expected
+    assert card["display_name"] == "Configured name"

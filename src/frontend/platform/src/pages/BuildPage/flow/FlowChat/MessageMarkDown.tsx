@@ -8,7 +8,7 @@ import { transformPrivateCitations } from "@/components/bs-comp/chatComponent/ci
 import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
 import { type ChatCitation } from "@/controllers/API";
 import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
-import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
+import { useWorkbenchRuntimeConfig } from "@/hooks/useWorkbenchRuntimeConfig";
 import Echarts from "@/workspace/markdown/Echarts";
 import MermaidBlock from "@/workspace/markdown/Mermaid";
 
@@ -49,7 +49,7 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, 
     allowRemoteCitationResolve?: boolean;
 }) {
 
-    const { data: linsightConfig } = useLinsightConfig();
+    const { data: linsightConfig } = useWorkbenchRuntimeConfig();
     const [documentPreview, setDocumentPreview] = useState<CitationDocumentPreviewState | null>(null);
     const [activeCitationPopoverKey, setActiveCitationPopoverKey] = useState<string | null>(null);
     const handleCloseCitationPopover = useCallback((popoverKey: string) => {

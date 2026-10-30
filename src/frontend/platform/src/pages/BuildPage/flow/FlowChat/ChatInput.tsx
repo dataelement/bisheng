@@ -11,7 +11,7 @@ import { useFileLoading } from "../hooks/useFileLoading";
 // import { useMessageStore } from "./messageStore";
 import { useAudioStore } from "@/components/voiceFunction/audioPlayerStore";
 import SpeechToTextComponent from "@/components/voiceFunction/speechToText";
-import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
+import { useWorkbenchRuntimeConfig } from "@/hooks/useWorkbenchRuntimeConfig";
 import { fileAcceptToInputAccept,normalizeFileAccept } from "@/util/fileAcceptUtils";
 import useFlowStore from "../flowStore";
 import ChatFiles from "./ChatFiles";
@@ -34,7 +34,7 @@ export default function ChatInput({ autoRun, wsUrl, onBeforSend, onLoad }) {
     const messageIdRef = useRef('') // 当前输入框节点messageId
     const [accepts, setAccepts] = useState('*') // 接受文件类型
     const [uploadLock, setUploadLock] = useState(false) // 上传锁
-    const { data: linsightConfig } = useLinsightConfig();
+    const { data: linsightConfig } = useWorkbenchRuntimeConfig();
     const { isLoading: audioOpening } = useAudioStore()
     const [showWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
     const __store: any = useMessageStore() as any

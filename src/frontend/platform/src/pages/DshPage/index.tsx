@@ -1,3 +1,4 @@
+import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig";
 import { Tabs } from "@bisheng/ui";
@@ -27,13 +28,14 @@ const SECTION_ICONS: Record<DshSection, ReactNode> = {
 
 export function DshPage() {
   const { user } = useContext(userContext);
+  const { appConfig } = useContext(locationContext);
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const { config, failed } = useDshBrowserConfig();
   const [marketToolbarTarget, setMarketToolbarTarget] = useState<HTMLDivElement | null>(null);
   const canManageDsh = user?.role === "admin" || !!user?.is_global_super || !!user?.is_child_admin;
-  const canManageSafety = canManageDsh;
+  const canManageSafety = canManageDsh && appConfig.isPro === true;
   const sections = DSH_SECTIONS.filter(({ value }) =>
     config?.enabled === false ? value === "access" : value !== "content-safety" || canManageSafety,
   );
@@ -44,12 +46,21 @@ export function DshPage() {
 
   const [safetyVisited, setSafetyVisited] = useState(section === "content-safety");
   useEffect(() => {
-    if (!canManageDsh || config?.enabled === false || config?.management_enabled === false)
+    if (
+      !canManageSafety ||
+      config?.enabled === false ||
+      config?.management_enabled === false
+    )
       setSafetyVisited(false);
     else if (section === "content-safety") setSafetyVisited(true);
-  }, [section, canManageDsh, config?.enabled, config?.management_enabled]);
+  }, [section, canManageSafety, config?.enabled, config?.management_enabled]);
 
   if (!canManageDsh) return <Navigate to="/403" replace />;
+  if (
+    appConfig.isPro === false &&
+    new URLSearchParams(location.search).get("tab") === "content-safety"
+  )
+    return <Navigate to={`/dsh?tab=${section}`} replace />;
   return (
     <div className="flex h-full w-full flex-col px-2 pt-4">
       <div className="flex min-h-0 w-full flex-1 flex-col">
@@ -65,19 +76,26 @@ export function DshPage() {
           </div>
         )}
         <div className="min-h-0 flex-1 overflow-hidden">
-          {(section === "content-safety" || safetyVisited) && config?.enabled !== false && (
-            <div hidden={section !== "content-safety"} className="h-full min-h-0 overflow-y-auto px-6 py-5">
-              {!config ? (
-                <p role={failed ? "alert" : "status"}>{t(failed ? "dsh.unavailable" : "dsh.loading")}</p>
-              ) : !config.management_enabled ? (
-                <p>{t("dsh.managementUnavailable")}</p>
-              ) : (
-                <DshContentSafetyTenantPanel
-                  key={`${user?.user_id ?? "unknown"}:${user?.leaf_tenant_id ?? user?.tenant_id ?? "unknown"}:${!!user?.is_global_super}:${!!user?.is_child_admin}`}
-                />
-              )}
-            </div>
-          )}
+          {canManageSafety &&
+            (section === "content-safety" || safetyVisited) &&
+            config?.enabled !== false && (
+              <div
+                hidden={section !== "content-safety"}
+                className="h-full min-h-0 overflow-y-auto px-6 py-5"
+              >
+                {!config ? (
+                  <p role={failed ? "alert" : "status"}>
+                    {t(failed ? "dsh.unavailable" : "dsh.loading")}
+                  </p>
+                ) : !config.management_enabled ? (
+                  <p>{t("dsh.managementUnavailable")}</p>
+                ) : (
+                  <DshContentSafetyTenantPanel
+                    key={`${user?.user_id ?? "unknown"}:${user?.leaf_tenant_id ?? user?.tenant_id ?? "unknown"}:${!!user?.is_global_super}:${!!user?.is_child_admin}`}
+                  />
+                )}
+              </div>
+            )}
           {section !== "content-safety" &&
             (section === "plugins" ? (
               <PluginMarketPage toolbarTarget={marketToolbarTarget} />
