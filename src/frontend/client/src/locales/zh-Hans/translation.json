@@ -514,6 +514,7 @@
   "com_linsight_download_failed": "下载失败，请稍后重试",
   "com_linsight_exporting": "正在导出，请稍候…",
   "com_linsight_export_success": "文件下载成功",
+  "com_linsight_md_bundled_zip": "这份 Markdown 引用了图片，已连同图片打包成 zip 下载",
   "com_linsight_export_failed": "导出失败，请稍后重试",
   "com_linsight": {
     "downloadAs": "下载为 {{format}}",

@@ -511,6 +511,7 @@
   "com_linsight_download_failed": "ダウンロードに失敗しました。後でもう一度お試しください",
   "com_linsight_exporting": "エクスポート中です。しばらくお待ちください…",
   "com_linsight_export_success": "ファイルをダウンロードしました",
+  "com_linsight_md_bundled_zip": "この Markdown は画像を使用しているため、画像と一緒に zip でダウンロードしました",
   "com_linsight_export_failed": "エクスポートに失敗しました。後でもう一度お試しください",
   "com_linsight": {
     "downloadAs": "{{format}} 形式でダウンロード",
