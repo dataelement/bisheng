@@ -1,31 +1,8 @@
-"""The application's own data — the platform's *only* way to read or write it (AC-56, D10-C).
+"""Edit-authorized application data, preserving identifier, export and audit limits.
 
-Five operations, mirroring the manager's data-plane RPC one to one: table list,
-table shape, one page of rows, one-row update, CSV export. What this layer adds
-and the manager cannot:
-
-* **Owner narrowing.** The data tab and the F052 MCP data tools are for the
-  person who owns the app — not the tenant administrator, not the platform
-  super admin. Like the delete action this is a *business* pre-check, because
-  the permission runtime short-circuits administrators to ALLOW and "only the
-  owner" is inexpressible there (constitution C4 note). Refusals are 16162
-  inside a 200 envelope, never HTTP 403: the platform SPA turns a 403 on a GET
-  into a full-page redirect (design pit 25).
-* **Audit.** A row edit is ``app.data_row_edit`` with table / key / before /
-  after; an export is ``app.data_export``. The manager knows neither the
-  operator nor the tenant, so the row can only be written here.
-* **Backend-side identifier hygiene.** The manager checks every name against
-  the live schema; this layer refuses anything that is not a plain identifier
-  *before* it leaves the process, so a ``DROP TABLE`` smuggled into a table
-  name is refused twice and the second check never has to be the only one.
-
-What it does **not** do is open the file. The database lives on the manager's
-host (``{data_root}/apps/{app_id}/db/app.db``); backend does not know that
-layout (K1) and in the multi-node shape is not even on that machine. Every
-call uses the existing manager data RPC. Docker retains the original client;
-Kubernetes uses RuntimeDataSessionService for the owner grant and durable mutex. The F052 MCP data tools call
-*these* methods — never the client directly — so that the owner rule and the
-audit row hold for every door (``test_mcp_face_reuses_same_service_method``).
+Backend never opens the runtime database. Docker and Kubernetes retain their
+existing data transports and writer/session fences; all user doors share this
+resource-action check before any data is read or changed.
 """
 
 from __future__ import annotations
@@ -34,19 +11,14 @@ import re
 from pathlib import Path
 from typing import Any
 
-from bisheng.app_runtime.domain.constants import AppAuditAction, AppState
+from bisheng.app_runtime.domain.constants import AppAuditAction
+from bisheng.app_runtime.domain.services.app_authorization_service import AppAuthorizationService
 from bisheng.app_runtime.domain.services.orchestrator_client import orchestrator_client
-from bisheng.app_runtime.domain.services.tenant_access import require_app_request_tenant
 from bisheng.common.errcode.app_factory import (
-    AppDataForbiddenError,
     AppDataInvalidError,
     AppDataNotReadyError,
-    AppNotFoundError,
 )
-from bisheng.common.services.config_service import settings
-from bisheng.core.context.tenant import set_current_tenant_id
-from bisheng.core.database import get_async_db_session
-from bisheng.database.models.app import App, AppDao
+from bisheng.database.models.app import App
 from bisheng.database.models.audit_log import AuditLogDao
 
 #: A table, column or order column. The manager re-checks against
@@ -70,14 +42,14 @@ class AppDataService:
     @classmethod
     async def list_tables(cls, app_id: str, *, actor) -> dict[str, Any]:
         """``{tables: [{name, column_count}]}`` — ``[]`` is a legitimate answer."""
-        app = await cls._load_owned(app_id, actor)
+        app = await cls._load_authorized(app_id, actor)
         if not app.current_version_id and not app.pending_version_id:
             raise AppDataNotReadyError(app_id=app.id)
         return await cls._call(app, actor, "tables", {}, lambda: orchestrator_client.db_tables(app_id=app.id))
 
     @classmethod
     async def get_table_schema(cls, app_id: str, table: str, *, actor) -> dict[str, Any]:
-        app = await cls._load_owned(app_id, actor)
+        app = await cls._load_authorized(app_id, actor)
         table = cls._identifier(table, what="table")
         return await cls._call(
             app, actor, "schema", {"table": table}, lambda: orchestrator_client.db_schema(app_id=app.id, table=table)
@@ -95,7 +67,7 @@ class AppDataService:
         order: str | None = None,
     ) -> dict[str, Any]:
         """One page in a stable order — the manager appends the row key as tiebreaker."""
-        app = await cls._load_owned(app_id, actor)
+        app = await cls._load_authorized(app_id, actor)
         parameters = {
             "table": cls._identifier(table, what="table"),
             "page": cls._page(page),
@@ -117,7 +89,7 @@ class AppDataService:
         not what a second read — possibly already overtaken by the app's own
         next write — would have shown.
         """
-        app = await cls._load_owned(app_id, actor)
+        app = await cls._load_authorized(app_id, actor)
         table = cls._identifier(table, what="table")
         cls._row_key(key)
         cls._values(values)
@@ -143,7 +115,7 @@ class AppDataService:
     @classmethod
     async def export_table(cls, app_id: str, table: str, *, actor) -> tuple[str, bytes | Path]:
         """Return bytes for Docker or a private CSV cache for K8s, with the same audit."""
-        app = await cls._load_owned(app_id, actor)
+        app = await cls._load_authorized(app_id, actor)
         table = cls._identifier(table, what="table")
         content = await cls._call(
             app, actor, "export", {"table": table}, lambda: orchestrator_client.db_export(app_id=app.id, table=table)
@@ -175,50 +147,29 @@ class AppDataService:
 
     @classmethod
     async def recover_result(cls, app_id, operation_id, *, actor):
-        app = await cls._load_owned(app_id, actor)
+        app = await cls._load_authorized(app_id, actor)
         from bisheng.app_runtime.domain.services.runtime_data_session_service import RuntimeDataSessionService
 
         return await RuntimeDataSessionService().recover(app, actor, operation_id)
 
     @staticmethod
     async def _call(app, actor, action, parameters, legacy):
-        if settings.app_runtime.runtime_protocol_version == 2:
-            from bisheng.app_runtime.domain.services.runtime_data_session_service import RuntimeDataSessionService
+        from bisheng.app_runtime.domain.services.runtime_data_session_service import RuntimeDataSessionService
 
-            sessions = RuntimeDataSessionService()
-            if await sessions.supports(app):
-                return await sessions.execute(app, actor, action, parameters)
+        sessions = RuntimeDataSessionService()
+        if await sessions.supports(app):
+            return await sessions.execute(app, actor, action, parameters)
         return await legacy()
 
     # -- helpers --------------------------------------------------------
 
     @classmethod
-    async def _load_owned(cls, app_id: str, actor) -> App:
-        """The app, or 16101 — then the owner rule, or 16162.
-
-        Order matters: a non-owner of a deleted app gets "does not exist", the
-        same answer a stranger gets, so the refusal leaks nothing about which
-        apps exist.
-        """
-        async with get_async_db_session() as session:
-            row = await AppDao.aget(session, app_id)
-        if row is None or row.state == AppState.DELETED.value:
-            raise AppNotFoundError(app_id=app_id)
-        set_current_tenant_id(int(row.tenant_id or 0))
-        cls._require_owner(row, actor)
-        return row
+    async def _load_authorized(cls, app_id: str, actor) -> App:
+        return await AppAuthorizationService.authorize_app(actor, app_id, "data_read")
 
     @staticmethod
-    def _require_owner(app: App, actor) -> None:
-        """Owner only — administrators included in the refusal (AC-56).
-
-        Deliberately does not consult ``is_global_super`` or the tenant-admin
-        check: this is the one surface where an administrator's reach ends,
-        and the check must not have a branch that could widen it.
-        """
-        require_app_request_tenant(app.tenant_id, actor)
-        if int(getattr(actor, "user_id", 0) or 0) != int(app.owner_user_id or 0):
-            raise AppDataForbiddenError(app_id=app.id)
+    async def _require_editor(app: App, actor) -> None:
+        await AppAuthorizationService.authorize_loaded_app(actor, app, "data_edit")
 
     @staticmethod
     def _identifier(name: Any, *, what: str) -> str:

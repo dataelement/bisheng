@@ -133,6 +133,10 @@ def register() -> None:
     # "defined and registered by F055"). Until this runs, a ``hosted_app``
     # credential is refused with 26002 by ``_resolve_from_database`` — which is
     # the fail-closed behaviour we want in a process that did not wire F055.
+    from bisheng.app_publish.application.preview_access import PreviewCapabilityProvider
+    from bisheng.open_api.domain.services.preview_context import register_preview_provider
+
+    register_preview_provider(PreviewCapabilityProvider())
     SUBJECT_RESOLVERS[SUBJECT_KIND_HOSTED_APP] = resolve_hosted_app
     # The same registration for the asynchronous leg. **Both or neither** — a
     # process that resolves the subject at admission but cannot re-check it at

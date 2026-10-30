@@ -119,6 +119,8 @@ class AppPermissionPort(Protocol):
 
     async def project_delete(self, **kwargs): ...
 
+    async def rollback_created(self, **kwargs): ...
+
 
 class F048AppPermissionAdapter:
     """Validate hosted-application facts, then invoke the sole permission facade."""
@@ -226,6 +228,11 @@ class F048AppPermissionAdapter:
             protected=True,
         )
 
+    async def rollback_created(self, *, record, actor):
+        return await self._permission.rollback_created(
+            actor=actor, target=self._record_target(record, actor), owner_user_id=record.owner_user_id
+        )
+
     async def project_delete(
         self,
         *,
@@ -254,12 +261,16 @@ class F048AppPermissionAdapter:
         *,
         action: str | None = None,
     ) -> VerifiedPermissionTarget:
-        del action  # every app action is uniform; no preset/system variant exists
+        del action
+        from bisheng.core.context.tenant import get_admin_scope_tenant_id, get_is_management_api
+
+        scope = get_admin_scope_tenant_id() if get_is_management_api() else actor.current_tenant_id
         if (
             record is None
             or record.resource_id != resource_id
             or record.state not in PERMISSION_VISIBLE_STATES
-            or (record.tenant_id != actor.current_tenant_id and not actor.super_admin)
+            or record.tenant_id != scope
+            or (scope != actor.current_tenant_id and not actor.super_admin)
             or record.owner_user_id is None
             or record.owner_user_id <= 0
         ):

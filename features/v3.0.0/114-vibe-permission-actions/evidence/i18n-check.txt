@@ -1,0 +1,6 @@
+
+> bisheng-frontend@ check-i18n <f114-worktree>/src/frontend
+> node scripts/check-i18n.mjs
+
+[check-i18n] info: 84 frontend-only error code(s) (dead-key candidates / gateway codes)
+[check-i18n] OK — no new i18n drift

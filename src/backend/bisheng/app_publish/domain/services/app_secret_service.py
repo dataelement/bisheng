@@ -1,4 +1,4 @@
-"""Owner environment assets. Save/delete have no orchestration dependency."""
+"""Encrypted environment assets guarded by edit; saves never orchestrate instances."""
 
 import hashlib
 import json
@@ -13,15 +13,12 @@ from bisheng.app_publish.domain.secret_security import (
     validate_name,
     validate_value,
 )
-from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.app_publish import (
-    AppPublishOwnerOnlyError,
     AppPublishStateConflictError,
     AppSecretEncryptionUnavailableError,
     AppSecretInvalidError,
     AppSecretRevisionConflictError,
 )
-from bisheng.common.permission_identity import check_tenant_admin
 
 
 @dataclass(frozen=True)
@@ -52,9 +49,10 @@ class AppSecretService:
         return self._cipher or AppSecretCipher.configured()
 
     @staticmethod
-    def _require_owner(app, actor):
-        if not isinstance(actor, UserPayload) or actor.tenant_id != app.tenant_id or actor.user_id != app.owner_user_id:
-            raise AppPublishOwnerOnlyError()
+    async def _require_editor(app, actor):
+        from bisheng.app_runtime.application.authorization import authorize_app
+
+        await authorize_app(actor, app.id, "secret_edit")
 
     @staticmethod
     def _require_live(app):
@@ -87,7 +85,7 @@ class AppSecretService:
     async def _change(self, app_id, name, *, value, expected_revision, actor, confirm_online_impact=False):
         async with self.repo.transaction() as session:
             app = await self.repo.app(session, app_id, lock=True)
-            self._require_owner(app, actor)
+            await self._require_editor(app, actor)
             self._require_live(app)
             row = await self.repo.config(session, app_id, lock=True)
             if (row.revision if row else 0) != expected_revision:
@@ -131,24 +129,14 @@ class AppSecretService:
     async def get(self, app_id, *, actor):
         async with self.repo.transaction() as session:
             app = await self.repo.app(session, app_id)
-            from bisheng.app_runtime.application.tenant_access import require_app_request_tenant
-
-            if not isinstance(actor, UserPayload):
-                raise AppPublishOwnerOnlyError()
-            require_app_request_tenant(app.tenant_id, actor, allow_global_super=True)
-            owner = actor.tenant_id == app.tenant_id and actor.user_id == app.owner_user_id
-            if not owner and not actor.is_global_super and not await check_tenant_admin(actor.user_id, app.tenant_id):
-                from bisheng.permission.application.business_authorization import check_business_action
-
-                if not await check_business_action(actor, resource_type="app", resource_id=app.id, action="edit"):
-                    raise AppPublishOwnerOnlyError()
+            await self._require_editor(app, actor)
             row = await self.repo.config(session, app.id)
             entries = self._entries(row, app)
             current = await self.repo.version(session, app.id, app.current_version_id)
             pending = await self.repo.pending_version(session, app)
             approved = set(secret_names(current.capabilities if current else {}))
             proposed = set(secret_names(pending.capabilities if pending else {}))
-            names = approved | proposed | (set(entries) if owner else set())
+            names = approved | proposed | set(entries)
             items = []
             for name in sorted(names):
                 entry = entries.get(name)
@@ -159,8 +147,7 @@ class AppSecretService:
                     "approved_reference": name in approved,
                     "pending_reference": name in proposed,
                 }
-                if owner:
-                    item.update(mask="••••••" if present else None, updated_at=entry["updated_at"] if entry else None)
+                item.update(mask="••••••" if present else None, updated_at=entry["updated_at"] if entry else None)
                 items.append(item)
             runtime = {
                 "comparison": "not_running" if app.state != "online" else "unknown",

@@ -115,7 +115,7 @@ class Config:
     manager_base: str = "http://127.0.0.1:8091"
     backend_secret: str = ""
     manager_secret: str = ""
-    protocol_version: int = 1
+    protocol_version: int = 2
     route_key_id: str = ""
     route_secret: str = ""
     signature_header: str = "X-Signature"
@@ -157,6 +157,10 @@ class Config:
     #: for a node the backend's close push did not reach). Deny → close.
     ws_reauthorize_interval_seconds: float = 30.0
 
+    def __post_init__(self):
+        if self.protocol_version != 2:
+            raise ValueError("entry_requires_protocol_v2")
+
     def with_overrides(self, **kwargs) -> Config:
         return replace(self, **kwargs)
 
@@ -171,7 +175,7 @@ def load_config() -> Config:
         manager_base=_env_str("APP_PROXY_MANAGER_BASE", "http://127.0.0.1:8091") or "http://127.0.0.1:8091",
         backend_secret=_env_str("APP_PROXY_BACKEND_SECRET"),
         manager_secret=_env_str("APP_PROXY_MANAGER_SECRET"),
-        protocol_version=int(_env_str("APP_PROXY_PROTOCOL_VERSION", "1")),
+        protocol_version=int(_env_str("APP_PROXY_PROTOCOL_VERSION", "2")),
         route_key_id=_env_str("APP_PROXY_ROUTE_KEY_ID"),
         route_secret=_env_str("APP_PROXY_ROUTE_SECRET"),
         signature_header=_env_str("APP_PROXY_SIGNATURE_HEADER", "X-Signature") or "X-Signature",

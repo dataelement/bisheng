@@ -13,10 +13,11 @@ class AuthorizedRuntimeAuditScope:
     creator_user_id: int
     owner_tenant_id: int
     tenant_id: int | None
+    authorized_app_ids: tuple[str, ...] | None = None
 
     @property
     def digest(self):
-        return digest([self.creator_user_id, self.owner_tenant_id, self.tenant_id])
+        return digest([self.creator_user_id, self.owner_tenant_id, self.tenant_id, self.authorized_app_ids])
 
 
 def digest(value):

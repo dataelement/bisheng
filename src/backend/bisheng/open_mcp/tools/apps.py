@@ -23,11 +23,9 @@ the second lock.
 
 from __future__ import annotations
 
-from bisheng.app_publish.domain.services.publish_pipeline_service import resource_owner_of
 from bisheng.app_publish.domain.services.publish_status_service import PublishStatusService
 from bisheng.app_runtime.domain.services.app_data_service import AppDataService
 from bisheng.app_runtime.domain.services.app_query_service import LOG_ENTRY_MCP, AppQueryService
-from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.app_factory import AppLogForbiddenError, AppNotFoundError
 from bisheng.common.errcode.app_publish import (
     AppNotOwnedBySubjectError,
@@ -36,7 +34,6 @@ from bisheng.common.errcode.app_publish import (
 )
 from bisheng.common.errcode.mcp_face import McpAppNotOwnedError
 from bisheng.common.services.config_service import settings
-from bisheng.open_api.domain.context import get_current_open_api_principal
 from bisheng.open_mcp.contracts import (
     AppDataResult,
     AppIdInput,
@@ -59,31 +56,24 @@ _NOT_YOURS = (
 )
 
 
-def _actor() -> UserPayload:
-    """The natural person this credential creates and reaches resources for.
+def _actor():
+    """The authenticated subject itself; a resource owner is never an actor."""
+    from bisheng.common.errcode.permission import PermissionDeniedError
+    from bisheng.permission.application.identity import get_current_permission_actor
 
-    Built exactly like the CLI deploy face's actor, and deliberately carrying no
-    field that could widen the verdict: no roles, no ``is_global_super``. A key
-    with no resource owner raises 16205 rather than silently becoming user 0 —
-    a personal access token cannot hold ``app:manage`` anyway, so the registry's
-    scope check fires first and this is the second lock.
-    """
-
-    principal = get_current_open_api_principal()
-    return UserPayload(
-        user_id=resource_owner_of(principal),
-        user_name=getattr(principal, "actor_name", "") or "",
-        user_role=[],
-        tenant_id=principal.tenant_id,
-    )
+    actor = get_current_permission_actor()
+    if actor is None:
+        raise PermissionDeniedError(reason="authenticated_actor_unavailable")
+    return actor
 
 
 def _fold_not_yours(exc: Exception, app_id: str) -> Exception:
     """One answer for absent / another tenant's / somebody else's."""
 
     from bisheng.common.errcode.app_factory import AppDataForbiddenError
+    from bisheng.common.errcode.permission import PermissionDeniedError
 
-    if isinstance(exc, (*_NOT_YOURS, AppDataForbiddenError)):
+    if isinstance(exc, (*_NOT_YOURS, AppDataForbiddenError, PermissionDeniedError)):
         return McpAppNotOwnedError(app_id=app_id)
     return exc
 

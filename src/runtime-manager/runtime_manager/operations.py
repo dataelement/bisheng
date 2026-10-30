@@ -86,6 +86,27 @@ class OperationExecutor:
             raise ExecutionError("operation_timeout")
         return current
 
+    def _permit(self, operation, phase):
+        current = self.checkpoint(operation)
+        receipt = self.runtime._controller() if self.config.executor_kind == "kubernetes" else {}
+        permit = self.platform.authorize_step(current, phase, controller=receipt)
+        keys = ("operation_id", "tenant_id", "app_id", "version_id", "node_id", "generation", "owner_epoch")
+        if (
+            any(permit.get(key) != current.get(key) for key in keys)
+            or permit.get("phase") != phase
+            or permit.get("stage") != current["stage"]
+        ):
+            raise ExecutionError("stage_permit_mismatch")
+        try:
+            expiry = datetime.fromisoformat(permit["valid_until"].replace("Z", "+00:00"))
+            if expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=UTC)
+            if datetime.fromtimestamp(self.clock.time(), UTC) >= expiry:
+                raise ValueError("expired")
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ExecutionError("stage_permit_expired") from exc
+        return permit
+
     def report(self, operation, phase, *, exec_ref="", detail=None):
         # Retries query the committed sequence, never guess whether a fact was accepted.
         current = self.platform.operation(operation["operation_id"])
@@ -95,9 +116,22 @@ class OperationExecutor:
                 detail[key] = current["result"][key]
         if self.config.executor_kind == "kubernetes":
             detail["controller"] = self.runtime._controller()
-        return self.platform.fact(
-            operation, int(current.get("fact_sequence", 0)) + 1, phase, exec_ref=exec_ref, detail=detail
-        )
+        sequence = int(current.get("fact_sequence", 0)) + 1
+        try:
+            return self.platform.fact(operation, sequence, phase, exec_ref=exec_ref, detail=detail)
+        except PlatformError:
+            if phase != "maintenance":
+                raise
+            committed = self.platform.operation(operation["operation_id"])
+            transition = committed.get("payload", {}).get("maintenance_transition") or {}
+            if (
+                transition.get("operation_id"),
+                transition.get("generation"),
+                transition.get("owner_epoch"),
+                transition.get("fact_sequence"),
+            ) != (operation["operation_id"], operation["generation"], operation["owner_epoch"], sequence):
+                raise
+            return {"operation_id": operation["operation_id"], "phase": phase, "sequence": sequence}
 
     def _wait_cleanup(self, operation, cleanup):
         while True:
@@ -213,6 +247,7 @@ class OperationExecutor:
                 self.platform.claim(operation_id)
                 kind, body = operation["kind"], operation["payload"]
                 if kind == "prepare":
+                    self._permit(operation, "prepare")
                     delivery = self._prepared_delivery(operation)
                     self._wait_cleanup(operation, lambda: self.runtime.cleanup(operation))
                     self.report(
@@ -229,6 +264,7 @@ class OperationExecutor:
                         return
                     current = self.checkpoint(operation)
                     if kind != "probe" or current["stage"] != "ready":
+                        self._permit(operation, "probe" if kind == "probe" else "preview")
                         self.report(operation, "starting")
                         outcome = self._launch(operation, preview=(kind == "preview"))
                         self.report(operation, "ready", exec_ref=outcome["exec_ref"], detail=outcome)
@@ -304,16 +340,22 @@ class OperationExecutor:
     def _deploy(self, operation, runner=None):
         body, kind = operation["payload"], operation["kind"]
         current = self.checkpoint(operation)
-        if current["stage"] not in {"ready", "serving", "retiring"} and (
+        if current["stage"] not in {"starting", "ready", "serving", "retiring"} and (
             body.get("uses_sqlite", True) or kind in {"restore", "migrate"}
         ):
-            self.report(operation, "maintenance")
+            if not current.get("payload", {}).get("maintenance_transition"):
+                self._permit(operation, "maintenance")
+                self.report(operation, "maintenance")
+            self.checkpoint(operation)
             self.stop_instances(operation, include_current=False)
             if kind == "restore":
+                self._permit(operation, "data_write")
                 self.runtime.data(operation, "restore", {"snapshot_id": body["snapshot_id"]})
             elif body.get("migration_plan"):
+                self._permit(operation, "data_write")
                 snapshot = self.runtime.data(operation, "backup", {})
                 self.report(operation, "snapshot_confirmed", detail={"snapshot": snapshot})
+                self._permit(operation, "data_write")
                 self.report(operation, "migrating")
                 self.runtime.data(operation, "migrate", {"plan": body["migration_plan"], "snapshot": snapshot})
         if kind == "migrate" or (kind == "restore" and not body.get("resume_after_restore", True)):
@@ -322,6 +364,7 @@ class OperationExecutor:
         current = self.checkpoint(operation)
         if current["stage"] not in {"serving", "retiring"}:
             if current["stage"] != "ready":
+                self._permit(operation, "starting")
                 self.report(operation, "starting")
             self.stop_instances(operation, include_current=False)
             outcome = self._launch(operation, runner)

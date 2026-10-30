@@ -31,6 +31,12 @@ class OpenApiPrincipal(BaseModel):
     authorization_subject_type: Literal["service_account", "user"]
     authorization_subject_id: int
     effective_user_id: int | None
+    preview_session_id: str | None = None
+    preview_version_id: str | None = None
+    preview_purpose: str | None = None
+    preview_viewer_user_id: int | None = None
+    preview_capability_user_id: int | None = None
+    preview_obo_expires_at: int | None = None
     on_behalf_of_user_id: int | None = None
     end_user_id: str | None = None
 
@@ -49,6 +55,12 @@ class OpenApiExecutionSnapshot(BaseModel):
     authorization_subject_id: int
     resource_owner_user_id: int | None
     effective_user_id: int | None
+    preview_session_id: str | None = None
+    preview_version_id: str | None = None
+    preview_purpose: str | None = None
+    preview_viewer_user_id: int | None = None
+    preview_capability_user_id: int | None = None
+    preview_obo_expires_at: int | None = None
     mode: Literal["S", "D"]
     credential_id: int | None
     trace_id: str
@@ -76,6 +88,12 @@ class OpenApiExecutionSnapshot(BaseModel):
             credential_id=principal.credential_id,
             trace_id=trace_id,
             channel="open_api_v2",
+            preview_session_id=principal.preview_session_id,
+            preview_version_id=principal.preview_version_id,
+            preview_purpose=principal.preview_purpose,
+            preview_viewer_user_id=principal.preview_viewer_user_id,
+            preview_capability_user_id=principal.preview_capability_user_id,
+            preview_obo_expires_at=principal.preview_obo_expires_at,
         )
 
 

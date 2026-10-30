@@ -214,6 +214,28 @@ class AppRuntimeCredentialService:
         return issued.plaintext
 
     @classmethod
+    async def preview_in_transaction(cls, app_id, *, operation, session, scopes=(), expires_at):
+        """An independent key, never a formal generation binding or subject reissue."""
+        app = await AppDao.aget(session, app_id)
+        if app is None or (app.id, app.tenant_id) != (operation.app_id, operation.tenant_id):
+            raise AppRuntimeSubjectUnavailableError(reason="app_missing")
+        requested = CredentialService.validate_scopes(list(scopes))
+        if DELEGATE_SCOPE_CODE in requested:
+            raise OpenApiDelegateConfigurationInvalidError()
+        subject = await HostedAppSubjectDao.aget_by_app(session, app_id)
+        if subject is None:
+            subject = await HostedAppSubjectDao.acreate(session, app_id)
+        return await CredentialService.issue_in_transaction(
+            session=session,
+            tenant_id=app.tenant_id,
+            subject_kind=SUBJECT_KIND_HOSTED_APP,
+            subject_id=int(subject.id),
+            request=KeyIssueRequest(name=("preview:" + operation.id)[:128], scopes=requested, expires_at=expires_at),
+            created_by=None,
+            audit_operator=SYSTEM_AUDIT_OPERATOR,
+        )
+
+    @classmethod
     async def stage_in_transaction(cls, app_id, *, operation, session, scopes=()):
         """Subject, candidate credential, binding and issue audit commit together."""
         from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeCredentialBinding
@@ -337,6 +359,24 @@ async def resolve_hosted_app(row: ApiCredential) -> OpenApiPrincipal:
     app = await load_subject_app(subject.app_id)
     if app is None or int(app.tenant_id or 0) != int(row.tenant_id or 0):
         raise OpenApiCredentialInvalidError()
+    from bisheng.app_publish.application.preview_access import resolve_preview_context
+
+    preview = await resolve_preview_context(credential_id=row.id)
+    if preview is not None:
+        return OpenApiPrincipal(
+            credential_id=row.id,
+            actor_kind=SUBJECT_KIND_HOSTED_APP,
+            actor_id=int(subject.id),
+            actor_name=app.name,
+            subject_ref=app.id,
+            tenant_id=row.tenant_id,
+            resource_owner_user_id=app.owner_user_id,
+            scopes=frozenset(row.scopes or []),
+            mode="S",
+            authorization_subject_type="user",
+            authorization_subject_id=preview.capability_user_id,
+            effective_user_id=None,
+        )
     if app.state != AppState.ONLINE.value:
         # AC-58: offline is subject deactivation. The key is still on file and
         # starts working again the moment the application resumes.
@@ -378,6 +418,35 @@ def assert_hosted_app_executable(credential: ApiCredential, snapshot: OpenApiExe
     three refusals as the admission path, same ``26002``, and — like the
     admission path — nothing here reads the ``user`` row (AC-60).
     """
+    from bisheng.app_publish.application.preview_access import resolve_preview_context
+    from bisheng.utils.async_utils import run_async_safe
+
+    preview = run_async_safe(resolve_preview_context(credential_id=credential.id))
+    if preview is not None:
+        if (
+            (
+                preview.tenant_id,
+                preview.session_id,
+                preview.version_id,
+                preview.viewer_user_id,
+                preview.capability_user_id,
+                preview.purpose,
+            )
+            != (
+                snapshot.tenant_id,
+                snapshot.preview_session_id,
+                snapshot.preview_version_id,
+                snapshot.preview_viewer_user_id,
+                snapshot.preview_capability_user_id,
+                snapshot.preview_purpose,
+            )
+            or not snapshot.preview_obo_expires_at
+            or snapshot.preview_obo_expires_at <= __import__("time").time()
+        ):
+            raise OpenApiCredentialInvalidError()
+        return
+    if snapshot.preview_session_id:
+        raise OpenApiCredentialInvalidError()
     with bypass_tenant_filter(), get_sync_db_session() as session:
         subject = session.exec(
             select(HostedAppSubject).where(HostedAppSubject.id == int(credential.subject_id))

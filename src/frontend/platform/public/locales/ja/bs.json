@@ -3228,6 +3228,9 @@
       "title": "リリースノート",
       "empty": "リリースノートは未入力です",
       "column": "バージョンの説明"
+    },
+    "permissions": {
+      "managementPreviewTitle": "管理プレビュー"
     }
   },
   "dsh": {

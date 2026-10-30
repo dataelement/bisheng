@@ -83,6 +83,9 @@ async def qualify_approved_release(instance_id: int, payload_snapshot: dict) -> 
             for key, value in expected.items()
         ):
             raise _invalid_source()
+        from bisheng.app_runtime.application.runtime_authorization import validate_user_authorization
+
+        await validate_user_authorization(rows.deployment.authorization_context, app_id, version_id=version_id)
         return ApprovedReleaseSource(
             approval_instance_id=instance_id,
             deployment_id=deployment_id,
@@ -90,6 +93,7 @@ async def qualify_approved_release(instance_id: int, payload_snapshot: dict) -> 
             version_id=version_id,
             tenant_id=rows.deployment.tenant_id,
             owner_user_id=rows.deployment.owner_user_id,
+            authorization_context=__import__("copy").deepcopy(rows.deployment.authorization_context),
         )
     except BaseErrorCode:
         raise

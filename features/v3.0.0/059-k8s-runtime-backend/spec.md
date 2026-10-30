@@ -1,5 +1,7 @@
 # Feature: F059 K8s 应用托管执行后端
 
+> **当前后继合同（F114，2026-10-30，本地实现，未部署）**：Kubernetes 仍沿原执行租约、准入、PVC/SQLite 独占及停止证明；统一使用 v2 的当前授权来源与阶段许可。预览原子登记在平台，helper/数据围栏不放宽。 详见 [F114 已确认规格](../114-vibe-permission-actions/spec.md) 与 [验证记录](../114-vibe-permission-actions/verification.md)。下文保留原 Feature 的 AC 编号、当时口径及历史证据，不将历史通过记录当作 F114 部署证明。
+
 > **状态：2026-10-21 修订草案，R1、R2、R3 已修复，sdd-review 复审通过，用户已确认，进入设计阶段。** 本文只定义 What，不表示已经实现或部署验收通过。沿用原 AC-01 至 AC-43，AC-38 保留退役；新增 AC-44 至 AC-56 承接 F086。原有 AC 没有重新编号。
 
 **关联 PRD**：[PRD-1](../../../docs/PRD/3.0-release/3.0%20应用工场%20PRD-1%20专业开发者通道与应用运行时.md) GOV-10、GOV-03、RT-01、RT-07、RT-08；[技术架构方案](../../../docs/PRD/3.0-release/3.0%20应用工场%20技术架构方案.md)；[F086 spec](../086-vibe-runtime-delivery/spec.md)与已确认的应用包交付合同。

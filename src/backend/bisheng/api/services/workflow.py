@@ -213,9 +213,13 @@ class WorkFlowService(BaseService):
         for one in data:
             one["user_name"] = user_dict.get(one["user_id"], one["user_id"])
             if int(one.get("flow_type") or 0) == FlowType.HOSTED_APP.value:
-                # A Catalog delete grant does not bypass the hosted-app owner rule.
+                # Owner activity is informational; exact actions decide management.
                 one["owner_active"] = owner_activity.get(one["user_id"], False)
-            one["write"] = managed or str(one["id"]) in writeable_ids
+            one["write"] = (
+                "edit" in one.get("allowed_actions", ())
+                if int(one.get("flow_type") or 0) == FlowType.HOSTED_APP.value and managed
+                else managed or str(one["id"]) in writeable_ids
+            )
             one["version_list"] = flow_versions.get(one["id"], [])
             one["tags"] = resource_tag_dict.get(one["id"], [])
             one["logo"] = cls.get_logo_share_link(one["logo"])
@@ -393,7 +397,17 @@ class WorkFlowService(BaseService):
                 data,
                 tuple(dict.fromkeys((required_action, "edit"))),
             )
-            data = [one for one in data if required_action in permission_map.get(str(one.get("id")), frozenset())]
+            if managed:
+                await cls._managed_hosted_actions(user, data)
+            data = [
+                one
+                for one in data
+                if (
+                    cls._managed_visible(one, permission_map, required_action)
+                    if managed
+                    else required_action in permission_map.get(str(one.get("id")), frozenset())
+                )
+            ]
             writeable_ids = {str(app_id) for app_id, action_codes in permission_map.items() if "edit" in action_codes}
             logger.info(
                 "[perf][workflow.list.permission_map] user_id={} flow_type={} rows={} kept={} writeable={} "
@@ -430,6 +444,23 @@ class WorkFlowService(BaseService):
             (perf_counter() - total_start) * 1000,
         )
         return data, has_more
+
+    @classmethod
+    async def _managed_hosted_actions(cls, user, rows):
+        from bisheng.app_runtime.application.authorization import management_actions_for_ids
+
+        ids = [str(row["id"]) for row in rows if int(row.get("flow_type") or 0) == FlowType.HOSTED_APP.value]
+        actions = await management_actions_for_ids(user, ids)
+        for row in rows:
+            if int(row.get("flow_type") or 0) == FlowType.HOSTED_APP.value:
+                row["allowed_actions"] = sorted(actions.get(str(row["id"]), ()))
+        return actions
+
+    @classmethod
+    def _managed_visible(cls, item, permission_map, required_action):
+        if int(item.get("flow_type") or 0) == FlowType.HOSTED_APP.value:
+            return bool(set(item.get("allowed_actions", ())) - {"use"})
+        return required_action in permission_map.get(str(item.get("id")), frozenset())
 
     @classmethod
     async def _scan_visible_flows_cursor(
@@ -499,11 +530,24 @@ class WorkFlowService(BaseService):
             if not batch:
                 return visible[:page_size], False, writeable_ids
 
+            if managed:
+                await cls._managed_hosted_actions(user, batch)
             if admin_bypass:
                 # Admin sees everything and edits everything — no BatchCheck,
                 # every row is kept and every id counts toward writeable_ids.
-                kept = batch
-                writeable_ids |= {str(one.get("id")) for one in batch}
+                kept = [
+                    one
+                    for one in batch
+                    if not managed
+                    or int(one.get("flow_type") or 0) != FlowType.HOSTED_APP.value
+                    or bool(set(one.get("allowed_actions", ())) - {"use"})
+                ]
+                writeable_ids |= {
+                    str(one.get("id"))
+                    for one in kept
+                    if int(one.get("flow_type") or 0) != FlowType.HOSTED_APP.value
+                    or "edit" in one.get("allowed_actions", ())
+                }
             else:
                 permission_map_start = perf_counter()
                 permission_map = await cls._application_action_map(
@@ -511,7 +555,15 @@ class WorkFlowService(BaseService):
                     batch,
                     tuple(dict.fromkeys((required_action, "edit"))),
                 )
-                kept = [one for one in batch if required_action in permission_map.get(str(one.get("id")), frozenset())]
+                kept = [
+                    one
+                    for one in batch
+                    if (
+                        cls._managed_visible(one, permission_map, required_action)
+                        if managed
+                        else required_action in permission_map.get(str(one.get("id")), frozenset())
+                    )
+                ]
                 writeable_ids |= {
                     str(app_id) for app_id, action_codes in permission_map.items() if "edit" in action_codes
                 }

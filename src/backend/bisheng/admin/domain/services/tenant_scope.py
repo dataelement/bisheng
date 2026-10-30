@@ -1,40 +1,26 @@
-"""F019-admin-tenant-scope (v2.5.1) — TenantScopeService.
-
-The admin tenant-scope is a Redis-backed, 4h-sliding, JWT-independent
-mechanism that lets a global super admin temporarily narrow the set of
-tenants visible to *management* APIs (``/llm``, ``/roles``, ``/audit_log``,
-``/admin/*``). Normal business APIs are not affected.
-
-**Why not JWT?** Spec §5.1.5: the deprecated ``POST /user/switch-tenant``
-returned 410 Gone (INV-T4 — user leaf is derived from primary department,
-not chosen). admin-scope is orthogonal: it does not change user membership,
-only the *management view*.
-
-**Lifecycle**:
-  - ``set_scope(user_id, tenant_id, ctx)`` writes/deletes the Redis key and
-    records an ``admin.scope_switch`` audit row.
-  - ``get_scope(user_id)`` reads the key and its remaining TTL.
-  - ``clear_on_logout`` / ``clear_on_token_version_bump`` /
-    ``clear_on_role_revoke`` are hook methods consumed by AuthService,
-    UserTenantSyncService and RoleService respectively.
-
-See ``features/v2.5.1/019-admin-tenant-scope/spec.md`` §5.2.
-"""
+"""A management view always names one active tenant, independently of identity."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from typing import Any, Mapping, Optional
+from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from bisheng.common.errcode.admin_scope import AdminScopeTenantNotFoundError
+from loguru import logger
+
+from bisheng.admin.domain.repositories.tenant_scope_repository import TenantScopeRepository
+from bisheng.common.errcode.admin_scope import (
+    AdminScopeTenantNotFoundError,
+    AdminScopeTenantRequiredError,
+    AdminScopeUnavailableError,
+)
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.database.models.audit_log import AuditLogDao
-from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
+from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.tenant.domain.constants import TenantAuditAction
 
-
-REDIS_KEY_TEMPLATE = 'admin_scope:{user_id}'
+REDIS_KEY_TEMPLATE = "admin_scope:{user_id}"
 
 
 def _redis_key(user_id: int) -> str:
@@ -42,85 +28,90 @@ def _redis_key(user_id: int) -> str:
 
 
 def _iso_expiry(ttl_seconds: int) -> str:
-    """Return an ISO-8601 UTC timestamp for now + ttl (for client display)."""
-    return (datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)).isoformat()
+    return (datetime.now(UTC) + timedelta(seconds=ttl_seconds)).isoformat()
+
+
+def _selected_id(raw) -> int | None:
+    if isinstance(raw, bytes):
+        try:
+            raw = raw.decode("ascii")
+        except UnicodeDecodeError:
+            return None
+    if isinstance(raw, str) and raw.isascii() and raw.isdigit():
+        raw = int(raw)
+    return raw if type(raw) is int and raw > 0 else None
 
 
 class TenantScopeService:
-    """Redis-backed admin-scope state + hook entry points (INV-T14)."""
+    """Redis selection is a view preference, never a tenant or permission grant."""
 
-    # Exposed so tests and callers can reference the same template.
-    REDIS_KEY_TEMPLATE: str = REDIS_KEY_TEMPLATE
+    REDIS_KEY_TEMPLATE = REDIS_KEY_TEMPLATE
 
     @classmethod
-    async def set_scope(
-        cls,
-        user_id: int,
-        tenant_id: Optional[int],
-        request_context: Optional[Mapping[str, Any]] = None,
-    ) -> dict:
-        """Set, clear (``tenant_id=None``), or replace a scope for ``user_id``.
+    async def _own_tenant(cls, user_id: int) -> int:
+        try:
+            tenants = (
+                await TenantScopeRepository.own_tenant_ids(user_id)
+                if settings.multi_tenant.enabled
+                else (ROOT_TENANT_ID,)
+            )
+            if len(tenants) == 1 and await TenantScopeRepository.status(tenants[0]) == "active":
+                return tenants[0]
+        except Exception as exc:
+            logger.opt(exception=True).warning("Management identity membership lookup failed")
+            raise AdminScopeUnavailableError() from exc
+        raise AdminScopeUnavailableError()
 
-        Writes an ``admin.scope_switch`` audit row carrying both the previous
-        and new scope values so operators can reconstruct who viewed what.
+    @classmethod
+    async def get_scope(cls, user_id: int, *, is_super: bool | None = None, for_write: bool = False) -> dict:
+        if is_super is None:
+            from bisheng.utils.http_middleware import _check_is_global_super
 
-        Raises ``AdminScopeTenantNotFoundError`` (19702) if ``tenant_id`` is
-        not None and does not match any ``tenant.id`` (AC-15).
-        """
-        ctx = dict(request_context or {})
-        key = _redis_key(user_id)
+            is_super = await _check_is_global_super(user_id)
+        if is_super:
+            try:
+                redis = await get_redis_client()
+                key = _redis_key(user_id)
+                selected = _selected_id(await redis.aget(key))
+                if selected is not None:
+                    ttl = await redis.attl(key)
+                    if ttl is not None and ttl > 0 and await TenantScopeRepository.status(selected) == "active":
+                        return {"scope_tenant_id": selected, "expires_at": _iso_expiry(ttl), "source": "selected"}
+            except Exception as exc:
+                # A read can use independently verified membership; an uncertain write cannot.
+                logger.opt(exception=True).warning("Management tenant selection unavailable")
+                if for_write:
+                    raise AdminScopeUnavailableError() from exc
+        own_tenant = await cls._own_tenant(user_id)
+        return {"scope_tenant_id": own_tenant, "expires_at": None, "source": "own"}
+
+    @classmethod
+    async def set_scope(cls, user_id: int, tenant_id: int, request_context: Mapping[str, Any] | None = None) -> dict:
+        # Callers authenticate the global-super role before invoking this mutation.
+        if type(tenant_id) is not int or tenant_id <= 0:
+            raise AdminScopeTenantRequiredError()
+        if await TenantScopeRepository.status(tenant_id) != "active":
+            raise AdminScopeTenantNotFoundError()
+        previous = await cls.get_scope(user_id, is_super=True, for_write=True)
+        own_tenant = await cls._own_tenant(user_id)
+        ttl = settings.multi_tenant.admin_scope_ttl_seconds
         redis = await get_redis_client()
-
-        old_raw = await redis.aget(key)
-        old_scope = int(old_raw) if old_raw else None
-
-        if tenant_id is None:
-            await redis.adelete(key)
-            expires_at: Optional[str] = None
-        else:
-            if not await TenantDao.aexists(tenant_id):
-                raise AdminScopeTenantNotFoundError()
-            ttl = settings.multi_tenant.admin_scope_ttl_seconds
-            await redis.aset(key, str(tenant_id), expiration=ttl)
-            expires_at = _iso_expiry(ttl)
-
-        # Audit. operator_tenant_id is ROOT_TENANT_ID because the caller is
-        # always the global super admin (enforced at the endpoint layer) and
-        # INV-T11 guarantees Root is the only always-present tenant.
+        await redis.aset(_redis_key(user_id), str(tenant_id), expiration=ttl)
+        ctx = dict(request_context or {})
         await AuditLogDao.ainsert_v2(
-            tenant_id=tenant_id if tenant_id is not None else ROOT_TENANT_ID,
+            tenant_id=tenant_id,
             operator_id=user_id,
-            operator_tenant_id=ROOT_TENANT_ID,
+            operator_tenant_id=own_tenant,
             action=TenantAuditAction.ADMIN_SCOPE_SWITCH.value,
             metadata={
-                'from_scope': old_scope,
-                'to_scope': tenant_id,
-                'ip': ctx.get('ip'),
-                'user_agent': ctx.get('ua'),
+                "from_scope": previous["scope_tenant_id"],
+                "to_scope": tenant_id,
+                "ip": ctx.get("ip"),
+                "user_agent": ctx.get("ua"),
             },
-            ip_address=ctx.get('ip'),
+            ip_address=ctx.get("ip"),
         )
-        return {'scope_tenant_id': tenant_id, 'expires_at': expires_at}
-
-    @classmethod
-    async def get_scope(cls, user_id: int) -> dict:
-        """Return the current scope + accurate remaining TTL for ``user_id``.
-
-        Missing key → both fields ``None``. Key exists without TTL (``-1``)
-        or not found (``-2``) also returns ``None`` for ``expires_at``.
-        """
-        key = _redis_key(user_id)
-        redis = await get_redis_client()
-        raw = await redis.aget(key)
-        if raw is None:
-            return {'scope_tenant_id': None, 'expires_at': None}
-
-        ttl = await redis.attl(key)
-        if ttl is None or ttl < 0:
-            expires_at: Optional[str] = None
-        else:
-            expires_at = _iso_expiry(ttl)
-        return {'scope_tenant_id': int(raw), 'expires_at': expires_at}
+        return {"scope_tenant_id": tenant_id, "expires_at": _iso_expiry(ttl), "source": "selected"}
 
     # ------------------------------------------------------------------
     # Hook entry points (idempotent DEL on the user's key).

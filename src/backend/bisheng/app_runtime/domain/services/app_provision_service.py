@@ -71,6 +71,7 @@ class AppProvisionService:
         description: str | None = None,
         owner_user_id: int,
         tenant_id: int,
+        actor: PermissionActor,
     ) -> str:
         """Register a new hosted application and return its id.
 
@@ -101,9 +102,15 @@ class AppProvisionService:
             app_id = row.id
 
         try:
-            await cls._project_owner(app_id=app_id, owner_user_id=owner_user_id, tenant_id=tenant_id)
+            await cls._project_owner(app_id=app_id, owner_user_id=owner_user_id, tenant_id=tenant_id, actor=actor)
+            from bisheng.app_runtime.domain.services.app_authorization_service import AppAuthorizationService
+
+            await AppAuthorizationService.authorize_app(actor, app_id, "release_submit")
         except Exception:
             logger.exception("app_runtime.create_draft owner projection failed app_id={} — rolling back", app_id)
+            # Replay and invert the durable creation ledger before removing its business row.
+            # An uncertain projection/rollback deliberately leaves the row fenced for recovery.
+            await cls._rollback_owner(app_id, actor)
             await cls._remove_orphan(app_id)
             raise
         logger.info(
@@ -158,7 +165,7 @@ class AppProvisionService:
     # -- owner projection -----------------------------------------------
 
     @staticmethod
-    async def _project_owner(*, app_id: str, owner_user_id: int, tenant_id: int) -> None:
+    async def _project_owner(*, app_id: str, owner_user_id: int, tenant_id: int, actor: PermissionActor) -> None:
         adapter = await get_f048_resource_adapter("app")
         # Creation path: build a version-0 record without asking for the CURRENT
         # projected version. ``load_permission_record`` would query that version
@@ -169,8 +176,16 @@ class AppProvisionService:
             raise RuntimeError(f"app {app_id} vanished before its owner grant was written")
         await adapter.authorize_created(
             record=record,
-            actor=PermissionActor(user_id=owner_user_id, current_tenant_id=tenant_id),
+            actor=actor,
         )
+
+    @staticmethod
+    async def _rollback_owner(app_id, actor):
+        adapter = await get_f048_resource_adapter("app")
+        record = await adapter.build_creation_record(app_id)
+        if record is None:
+            raise RuntimeError("creation_rollback_target_unavailable")
+        await adapter.rollback_created(record=record, actor=actor)
 
     @staticmethod
     async def _remove_orphan(app_id: str) -> None:

@@ -1,0 +1,657 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>F114 · 已确认规格与开发状态</title><style>
+:root{color-scheme:light;--ink:#172238;--muted:#52647a;--line:#dbe2ec;--brand:#3155cc}*{box-sizing:border-box}body{margin:0;background:#f3f5fa;color:var(--ink);font:15px/1.8 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}main{max-width:1360px;margin:28px auto;padding:34px 42px;background:#fff;border:1px solid var(--line);border-radius:12px}h1{font-size:28px;line-height:1.4}h2{font-size:21px;border-bottom:1px solid var(--line);padding-bottom:8px;margin-top:38px;scroll-margin-top:16px}h3{font-size:17px}p,li{overflow-wrap:anywhere}blockquote{border-left:4px solid var(--brand);background:#f0f4ff;margin:12px 0;padding:6px 18px;color:var(--muted)}table{border-collapse:collapse;width:100%;font-size:14px;margin:18px 0}th,td{border:1px solid var(--line);padding:10px 12px;vertical-align:top;text-align:left}th{background:#eef2f8;color:#233852}tbody tr:nth-child(even){background:#fafbfe}code{font:13px/1.6 ui-monospace,SFMono-Regular,monospace;background:#eef1f6;border-radius:3px;padding:2px 4px;overflow-wrap:anywhere}a{color:var(--brand)}nav{padding:14px 18px;background:#f7f9fc;border:1px solid var(--line);border-radius:8px}nav a{display:inline-block;margin-right:18px;text-decoration:none;font-size:14px}.note{color:var(--muted);font-size:13px} @media(max-width:760px){body{font-size:14px}main{margin:0;padding:18px 14px;border:0;border-radius:0}h1{font-size:23px}th,td{padding:8px 6px;font-size:12px}table{display:block;overflow-x:auto}nav a{display:block}} @media print{@page{size:A4 landscape;margin:12mm}body{background:#fff;font-size:11px}main{border:0;padding:0;margin:0;max-width:none}h1{font-size:22px}h2{font-size:16px;break-after:avoid}h3{break-after:avoid}table{font-size:10px}th,td{padding:5px 7px}thead{display:table-header-group}tr{break-inside:avoid}nav{display:none}a{color:inherit;text-decoration:none}code{font-size:10px}blockquote{background:#f8f8f8}}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow-x:auto}pre code{display:block;padding:12px}hr{border:0;border-top:1px solid var(--line);margin:30px 0}</style></head><body><main><h1>F114 · 已确认规格与开发状态</h1><blockquote><strong>规格与设计均已确认；本地102/104任务完成。</strong>六动作、具体租户、真实提交主体、预览事务与v2阶段授权已接线。只执行必要定向验证；真实部署E2E、最终L2和工作区质量门禁仍待完成。未推送或部署116/189。下方历史设计复审是当时的静态记录。</blockquote><nav aria-label="目录"><a href="#spec-document">spec.md</a><a href="#review-document">spec-review.md</a></nav><section id="spec-document"><div class="toc">
+<ul>
+<li><a href="#feature-vibe">Feature: Vibe 全操作权限动作统一与具体租户管理视角</a><ul>
+<li><a href="#1">1. 用户故事</a></li>
+<li><a href="#2">2. 验收标准</a><ul>
+<li><a href="#21">2.1 统一授权与管理可见性</a></li>
+<li><a href="#22">2.2 必须绑定具体租户的管理视角</a></li>
+<li><a href="#23-edit">2.3 应用管理内容统一映射到 edit</a></li>
+<li><a href="#24">2.4 生命周期、授权与记录查询</a></li>
+<li><a href="#25">2.5 发布管线与发布代行</a></li>
+<li><a href="#26">2.6 开放通道、首次创建与存量兼容</a></li>
+<li><a href="#27">2.7 审批资格与可信内部执行</a></li>
+<li><a href="#28">2.8 运行管理与产品一致性</a></li>
+<li><a href="#29">2.9 前端一致性、拒绝与审计</a></li>
+<li><a href="#210">2.10 代发布、预览与取消的补充边界</a></li>
+<li><a href="#211">2.11 运行控制协议统一</a></li>
+</ul>
+</li>
+<li><a href="#3">3. 动作与业务范围</a><ul>
+<li><a href="#31">3.1 取消操作所需动作</a></li>
+</ul>
+</li>
+<li><a href="#4">4. 与现行合同的变更关系</a></li>
+<li><a href="#5">5. 边界情况</a></li>
+<li><a href="#6">6. 需求发现映射追溯</a></li>
+<li><a href="#7">7. 设计与验证边界</a></li>
+<li><a href="#_1">相关文档</a></li>
+<li><a href="#8">8. 本轮收敛记录</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<h1 id="feature-vibe">Feature: Vibe 全操作权限动作统一与具体租户管理视角</h1>
+<blockquote>
+<p><strong>规格已确认，修订设计已于2026-10-30单独确认；当前实施中，不是全部已交付。</strong> 原 70 条 AC 已由用户确认，确认时全文 SHA-256：<code>f9feba32cc67bd812908f5a3d369ec942ede8955e15ca6206101c5a62305c45b</code>。随后用户明确共用接口维持原权限，并在了解 v1/v2 后要求“收敛统一一下”。本次据此新增 AC-71；用户在收敛稿评审后明确“按照建议修改”，进一步将 AC-57 收窄为旧绑定导入/升级/重绑退役，已有配置确认重建和新版本发布分别复用原条款。本轮只修改 AC-57，其余 70 条 AC 正文不变；当前共 71 条。该修订设计现已单独确认，任务和编码进行中，完整交付仍待后续验收。</p>
+</blockquote>
+<p><strong>Feature</strong>：F114 · <strong>版本</strong>：v3.0.0 · <strong>发版线</strong>：feat/3.0.0 · <strong>优先级</strong>：P0（资源授权一致性与租户隔离）。</p>
+<p><strong>关联需求</strong>：<a href="../../features/v3.0.0/114-vibe-permission-actions/discovery.md">已确认需求映射</a> §3–§6及本次具体租户视角要求；<a href="../PRD/3.0-release/3.0%20%E5%BA%94%E7%94%A8%E5%B7%A5%E5%9C%BA%20PRD-1%20%E4%B8%93%E4%B8%9A%E5%BC%80%E5%8F%91%E8%80%85%E9%80%9A%E9%81%93%E4%B8%8E%E5%BA%94%E7%94%A8%E8%BF%90%E8%A1%8C%E6%97%B6.md">应用工场 PRD-1</a>的角色与动作、生命周期、管理数据和开放通道场景为既有背景。本文按用户新增要求替换其中创建人特判及全平台管理视角，不沿用已被明确改变的旧限制。</p>
+<p><strong>依赖与归属</strong>：F048 拥有资源授权；F019 拥有管理视角；F054 拥有应用状态与数据/日志；F055 拥有发布与环境变量；F056 拥有广场及记录查询；F049/F052/F053 的既有开放通道、F086/F059 的现有运行能力及 F113 的租户资格继续适用。本特性统一这些既有能力的操作资格，不重建其领域对象。</p>
+<p><strong>纳入</strong>：全部现有 Vibe 用户操作映射到六个现有动作，移除原创建人/创建人失效的额外限制；界面、API、CLI/MCP 及异步续办的一致性；数据、日志、密钥配置、预览、运行管理的资格；具体租户单选及相应管理数据范围；真实操作者审计；唯一运行控制协议 v2 与旧 v1 执行入口退役。</p>
+<p><strong>排除</strong>：新增权限动作/模型体系、移交/迁租户/存量授权补齐、PAT 新通道或凭据轮换、密钥明文读取、新的界面创建/提交入口、回滚/版本切换、未支持的数据 CRUD/DDL、通用审批系统重写、平台运维降权、独立通用实例重建功能、重新实现 Docker/K8s 编排及全量回归。</p>
+<h2 id="1">1. 用户故事</h2>
+<ul>
+<li>作为应用管理者，我希望只按已授予的具体动作管理他人的应用，以免列表可见却被创建人特判阻止。</li>
+<li>作为应用使用者，我希望 use 只用于业务访问，不使应用内部管理数据暴露。</li>
+<li>作为集成开发者，我希望 CLI/MCP 按真实主体和应用授权执行，而不借用资源归属人身份。</li>
+<li>作为租户管理员，我希望始终只看到本租户管理数据；作为超管，我希望明确选择一个租户并在该范围操作，避免误操作其它租户。</li>
+<li>作为审批人和运维人员，我希望资源权限统一后仍保留审批资格、发布安全条件、运行隔离及可追溯记录。</li>
+</ul>
+<h2 id="2">2. 验收标准</h2>
+<blockquote>
+<p>所有动作均针对同一目标 app；组合动作使用 AND。基础管理信息的“任一管理动作”不含 use。权限模型以其当前生效动作集合为准。</p>
+</blockquote>
+<h3 id="21">2.1 统一授权与管理可见性</h3>
+<ul>
+<li><strong>AC-01</strong> — THE SYSTEM SHALL 对 Vibe 应用复用 <code>use</code>、<code>edit</code>、<code>manage_permission</code>、<code>delete</code>、<code>publish</code>、<code>unpublish</code> 六个现有 F048 动作，不新增 app.read、app.log、app.export、app.secret 等动作，也不改变其它资源的有效动作集合。</li>
+<li><strong>AC-02</strong> — WHEN 任意主体发起应用操作，THE SYSTEM SHALL 根据该操作要求的具体动作决定资格；原创建人、平台超管、租户管理员及普通授权用户不得由应用业务层另设角色或创建人放行/拒绝分支覆盖 F048 的判定。F048 自身的身份短路、数据范围及模式规则保持有效。</li>
+<li><strong>AC-03</strong> — WHEN 用户的授权仅适用于某个应用，THE SYSTEM SHALL 只允许在该应用上使用对应动作，不因模型名称为所有者、管理者或编辑者而推定其它应用或未包含动作的权限。</li>
+<li><strong>AC-04</strong> — WHEN 一项操作要求多个动作，THE SYSTEM SHALL 要求全部满足；任一动作缺失或不可判定时拒绝整项操作，且不执行其写入、部署或数据导出。</li>
+<li><strong>AC-05</strong> — WHEN 非原创建人通过有效授权操作应用，THE SYSTEM SHALL 保持应用原归属人与所属租户不变，并将实际操作者与资源归属人分别记录；本期不提供移交或迁租户。</li>
+<li><strong>AC-06</strong> — WHERE 用户仅持 <code>use</code>，THE SYSTEM SHALL 允许其按应用状态使用应用，不授予构建管理页、源码、环境变量、运行日志、平台生产数据或管理审计记录的读取/修改能力。</li>
+<li><strong>AC-07</strong> — WHEN 用户在当前租户视角内具有某应用的任一管理动作（<code>edit</code>、<code>publish</code>、<code>unpublish</code>、<code>delete</code>、<code>manage_permission</code>），THE SYSTEM SHALL 在构建管理列表和基础详情中呈现该应用及确认操作对象所需的名称、状态、实例状态、版本号、发布说明和发布/审批结果；仅有某个管理动作不能使响应夹带需要其它动作的内容。</li>
+<li><strong>AC-08</strong> — IF 应用权限评估失败、不可判定、目标不存在或已删除，THEN THE SYSTEM SHALL 拒绝相应操作，不返回未过滤的数据、不变更资源或启动新的执行体，并遵守原资源存在性保密规则。</li>
+</ul>
+<h3 id="22">2.2 必须绑定具体租户的管理视角</h3>
+<ul>
+<li><strong>AC-09</strong> — THE SYSTEM SHALL 从顶部租户选择中移除“整个平台/全部租户”选项，管理视角必须限定一个具体租户；Root 也是一个具体租户，选择 Root 不得显示其它租户的业务资源。</li>
+<li><strong>AC-10</strong> — WHEN 非平台超管访问管理模块，THE SYSTEM SHALL 将其管理视角限定为当前所属租户；伪造租户参数、使用历史选择或缓存状态不得改变该范围。</li>
+<li><strong>AC-11</strong> — WHEN 平台超管切换管理视角，THE SYSTEM SHALL 仅接受存在且可用的具体租户，显示实际生效的租户，并记录从原视角到新视角的切换。</li>
+<li><strong>AC-12</strong> — WHEN 平台超管首次访问且没有有效选择，THE SYSTEM SHALL 将有效管理视角设为该登录人当前所属租户；不得把“没有选择”解释为全平台。</li>
+<li><strong>AC-13</strong> — WHEN 已选租户不再可用、选择已过期或选择内容无效，THE SYSTEM SHALL 回到登录人当前所属租户并显示实际生效范围；IF 无法确定一个合法的默认租户，THEN THE SYSTEM SHALL 拒绝加载管理数据，不选择任意租户或扩大为全平台。</li>
+<li><strong>AC-14</strong> — WHEN 调用方请求空租户、全平台或其它不能唯一确定具体租户的切换，THE SYSTEM SHALL 拒绝切换并保留原有效范围；切换校验失败不得清除原范围。</li>
+<li><strong>AC-15</strong> — WHEN 加载知识库、模型、工作流、助手、托管应用、审批管理、审计、用户组及租户自定义角色等管理资源，THE SYSTEM SHALL 根据同一个有效视角过滤列表、基础详情和可操作目标；选择租户 A 时不能列出或操作租户 B 的业务资源。现有公共预置目录的合法共享可读性保留，不把其解释为跨租户业务资源访问。</li>
+<li><strong>AC-16</strong> — WHEN 管理视角切换或失效回退，THE SYSTEM SHALL 清除前一范围的页面数据与可提交表单状态；旧页面或旧表单不得在新范围下操作原租户的资源，多个页面不得展示与请求实际生效范围不一致的数据。</li>
+<li><strong>AC-17</strong> — WHEN 管理视角改变，THE SYSTEM SHALL 保持用户真实所属租户、登录身份、服务账号身份、凭据 scope 与已有授权不变；管理视角不是迁租户或取得权限的途径。</li>
+<li><strong>AC-18</strong> — WHERE 后台任务、开放 API、应用 SDK 或内部运行时请求未使用浏览器管理视角，THE SYSTEM SHALL 按其已经验证的主体及目标租户执行，不继承超管的页面选择，也不得因没有页面选择而扩大范围。</li>
+</ul>
+<h3 id="23-edit">2.3 应用管理内容统一映射到 edit</h3>
+<ul>
+<li><strong>AC-19</strong> — WHEN 用户修改名称、描述、图标等元信息，THE SYSTEM SHALL 要求 <code>edit</code> 并记录操作；不得仅因与原创建人不同而拒绝。</li>
+<li><strong>AC-20</strong> — WHEN 用户读取源码快照、源码文件、完整声明、版本内容或内容差异，THE SYSTEM SHALL 要求 <code>edit</code>；只有发布/下线/删除等其它动作时仅能获得 AC-07 的基础信息。审批任务的临时审读按 AC-50。</li>
+<li><strong>AC-21</strong> — WHEN 用户查看应用运行输出、错误栈、构建或预检详细诊断，THE SYSTEM SHALL 要求 <code>edit</code>，并保留脱敏、筛选、截断及留存限制；界面、CLI 与 MCP 不得另按原创建人身份限制。</li>
+<li><strong>AC-22</strong> — WHEN 用户读取生产数据的表清单、结构、行数据或导出数据，THE SYSTEM SHALL 要求 <code>edit</code>，并保留表范围、分页、行数及导出数据范围限制；其它动作不包含该管理数据读取资格。</li>
+<li><strong>AC-23</strong> — WHEN 用户编辑现有生产数据行，THE SYSTEM SHALL 要求 <code>edit</code>、二次确认并记录审计；不开放任意 SQL、表结构修改或本期原本不支持的行级操作。</li>
+<li><strong>AC-24</strong> — WHEN 用户查看环境变量的名称、配置状态、引用或运行配置差异，THE SYSTEM SHALL 要求 <code>edit</code>；获授权管理者可查看完整配置项的管理信息，但已保存密钥明文仍不允许读取或回显。</li>
+<li><strong>AC-25</strong> — WHEN 用户新增、替换或删除环境变量值，THE SYSTEM SHALL 要求 <code>edit</code>，保留加密保存、并发冲突提示和审计，不自动重启、停止或重建实例；删除某个值不要求删除整个应用的 <code>delete</code> 动作。</li>
+<li><strong>AC-26</strong> — WHEN 用户确认使用最新环境变量配置重建正式实例，THE SYSTEM SHALL 要求 <code>edit</code> 与 <code>publish</code>，保留同版本、当前运行配置和确认对象一致性检查；取消确认不创建重建操作。</li>
+<li><strong>AC-27</strong> — WHEN 用户管理应用私有离线依赖、启停该依赖的可用状态，或读取已有应用数据库快照内容/列表，THE SYSTEM SHALL 要求 <code>edit</code> 并限定该应用的资产，不因创建人账号状态改变结果，也不授予公共依赖或全局运行环境的维护权限。</li>
+<li><strong>AC-28</strong> — WHEN 用户恢复应用数据快照，THE SYSTEM SHALL 要求 <code>edit</code> 并确认数据覆盖影响；IF 恢复操作包含正式实例启动，THEN THE SYSTEM SHALL 同时要求 <code>publish</code>；保留旧写入者停止确认、独占维护及恢复验证。</li>
+</ul>
+<h3 id="24">2.4 生命周期、授权与记录查询</h3>
+<ul>
+<li><strong>AC-29</strong> — WHEN 用户上线、手动上线或重新上线已有已批准版本，THE SYSTEM SHALL 要求 <code>publish</code>，继续满足审批结论、应用状态、容量准入与运行健康条件，不另要求是原创建人。</li>
+<li><strong>AC-30</strong> — WHEN 用户下线正式应用，THE SYSTEM SHALL 要求 <code>unpublish</code>、二次确认并记录审计，停止执行体而保留代码、数据库及附件资产。</li>
+<li><strong>AC-31</strong> — WHEN 用户显式删除整个应用，THE SYSTEM SHALL 要求 <code>delete</code>；普通获授权用户、租户管理员、原创建人和平台超管均以 F048 结果为准，不再判断原创建人是否有效或已停用。</li>
+<li><strong>AC-32</strong> — WHEN 用户删除应用，THE SYSTEM SHALL 继续拒绝在线态直接删除并提示先下线；非在线可删除状态须二次确认，明确代码、对话历史及生产数据的删除范围，取消不得执行删除；确认后保留资产清理、授权清理、在途审批取消和实际操作者审计。</li>
+<li><strong>AC-33</strong> — WHEN 用户读取授权主体详情、增删授权、选择权限模型或设置可见范围，THE SYSTEM SHALL 要求 <code>manage_permission</code>，沿用既有授权入口；基础摘要可显示是否已设置范围，但不能向缺少该动作的用户返回完整授权主体清单。</li>
+<li><strong>AC-34</strong> — WHEN 用户查看或导出某个应用的模型/能力调用、访问等运行记录，THE SYSTEM SHALL 要求该应用的 <code>edit</code> 并限制数据范围；跨应用审计页仍要求其既有审计入口资格且受当前具体租户视角限制。</li>
+</ul>
+<h3 id="25">2.5 发布管线与发布代行</h3>
+<ul>
+<li><strong>AC-35</strong> — WHEN 用户上传新的应用内容并提交首发后的迭代发布，THE SYSTEM SHALL 要求 <code>edit</code> 与 <code>publish</code>，不再以调用者是否等于原创建人为资格条件。</li>
+<li><strong>AC-36</strong> — WHEN 用户更改资源档位、运行环境、启动配置或平台能力声明并使其通过新版本发布生效，THE SYSTEM SHALL 要求 <code>edit</code> 与 <code>publish</code>，继续扫描、预检、冻结待审内容，不直接修改历史版本或正式实例。</li>
+<li><strong>AC-37</strong> — WHEN 有 <code>publish</code> 的用户主动撤回某应用的发布，THE SYSTEM SHALL 允许其代行并记录实际撤回者；仅限该应用可撤回的在途发布，不更改其它业务审批或已进入不可撤回终态的记录。</li>
+<li><strong>AC-38</strong> — WHEN 有 <code>edit</code> 的管理者查看当前在审提交的应用管理预览，THE SYSTEM SHALL 允许其使用受控预览能力，不要求原创建人；注入实际预览者本人身份，平台能力同时受该版本声明和预览者本人权限限制，不借用应用归属人权限；预览仍绑定该提交内容、隔离执行且受原时限和生命周期约束。</li>
+<li><strong>AC-39</strong> — WHEN 非原创建人提交、撤回或重试发布，THE SYSTEM SHALL 保留资源归属事实，继续以应用归属人为审批申请人并保留既有审批路由依据；分别记录实际自然人或服务账号操作者，通知与审批展示区分审批申请人、实际提交主体和应用归属人；发布自审排除按 AC-67、AC-68 执行，不把服务账号调用记成已验证的归属人自然人操作。</li>
+<li><strong>AC-40</strong> — WHEN 在途发布或恢复操作继续执行到新的扩权、正式启动或新路由生效阶段，THE SYSTEM SHALL 再验证该操作所需授权及凭据仍有效；失效时拒绝新增效果并保留可解释状态，不影响仍正常提供服务的旧版本，也不阻止必要的失败清理。</li>
+<li><strong>AC-41</strong> — WHERE 首发、迭代或配置声明按原产品合同需要发布审批，THE SYSTEM SHALL 继续在审批通过后才能上线；具备 <code>publish</code>、管理员身份或代行资格都不能跳过审批。</li>
+<li><strong>AC-42</strong> — WHEN 用户查看历史版本、发布说明及提交记录，THE SYSTEM SHALL 保留只读冻结内容和版本切换限制；本次不新增界面造应用、未实现的“提交发布”按钮、任意回滚或版本切换能力。</li>
+</ul>
+<h3 id="26">2.6 开放通道、首次创建与存量兼容</h3>
+<ul>
+<li><strong>AC-43</strong> — WHEN CLI/MCP/开放 API 调用已有的应用操作，THE SYSTEM SHALL 同时检查该通道原有的 scope、身份模式及对应 F048 动作；服务账号以自身授权主体判定，已支持的自然人凭据以其真实身份判定，不模拟资源归属人。</li>
+<li><strong>AC-44</strong> — WHEN 经既有创建资格首次创建应用并提交发布，THE SYSTEM SHALL 保留单命令首发体验，在新应用上为真实创建主体登记本次所需且仅限该应用的初始管理授权，使其能查看提交进度并在具备 <code>edit</code> 与 <code>publish</code> 后完成提交；初始授权应可查询、可审计，不授予全租户权限，也不覆盖归属人的既有受保护所有者授权。权限初始化失败不得报告发布成功或遗留无法按既有治理方式管理的应用。</li>
+<li><strong>AC-45</strong> — WHEN 调用者在 F048 上获得其它人应用的相应动作，THE SYSTEM SHALL 允许通过已支持的 CLI/MCP 操作该应用，不要求服务账号资源归属人与应用原归属人为同一人；缺少动作则拒绝。</li>
+<li><strong>AC-46</strong> — WHEN 开放通道查询应用列表、基础详情、发布状态、日志或数据，THE SYSTEM SHALL 按各内容相应动作过滤或拒绝，不仅返回“资源归属人的应用”，也不因为持有粗粒度 scope 而返回全部应用。</li>
+<li><strong>AC-47</strong> — WHERE 服务账号归属人资格、账号/应用租户一致性、凭据有效性、身份模式或 scope 不符合既有要求，THE SYSTEM SHALL 继续拒绝；本次不新增 PAT 的 app:manage 签发或未支持通道，不放宽 delegate 互斥或凭据失效规则。</li>
+<li><strong>AC-48</strong> — WHEN 存量凭据只有通道 scope 而没有目标应用所需的 F048 授权，THE SYSTEM SHALL 拒绝并提示需要对应应用动作；不得为了兼容继续按 owner 身份放行。历史资源不迁租户、不移交、不批量补授权，服务账号补授权沿用既有主体侧入口。</li>
+</ul>
+<h3 id="27">2.7 审批资格与可信内部执行</h3>
+<ul>
+<li><strong>AC-49</strong> — WHEN 用户同意/驳回审批任务或处理异常审批，THE SYSTEM SHALL 继续要求既有审批任务或审批管理资格；app.publish 等资源动作不替代审批人或异常管理资格，也不使其取得其它场景的审批权。</li>
+<li><strong>AC-50</strong> — WHEN 具有该次有效审批任务资格的审批人审读冻结内容或访问审批预览，THE SYSTEM SHALL 保留限于该审批任务/应用/版本/期限的业务授权，不要求原创建人或长期 app 管理授权；审批预览注入审批人本人身份，平台能力继续按该版本声明与应用归属人权限限定并计审计，不把临时审批资格转换成通用管理权限。</li>
+<li><strong>AC-51</strong> — WHERE 执行预检、管理预览或审批预览，THE SYSTEM SHALL 继续不注入真实环境变量密钥；管理预览按 AC-38 的本人身份与权限执行，审批预览仅按 AC-50 的任务资格使用既有审批例外，不因权限统一扩大模型/知识库或其它底层资源访问。</li>
+<li><strong>AC-52</strong> — WHEN 审批管理展示应用异常记录、进度或执行允许的异常处理，THE SYSTEM SHALL 限定当前具体租户，保留个人审批与管理审批不同的查看/处理资格，不因删除全平台选项而使同租户合格管理员无法查看进度。</li>
+<li><strong>AC-53</strong> — WHEN 后台或运行层为已授权操作获取源码、快照、数据或执行生命周期步骤，THE SYSTEM SHALL 验证请求确实属于该应用、版本、操作及用途；前端声称有某动作、仅知道应用标识或持有其它操作的内部凭据均不能代替授权。</li>
+<li><strong>AC-54</strong> — WHEN 应用被删除或在途发布取消，THE SYSTEM SHALL 继续按原生命周期处理审批与运行资源，保留幂等、终态保护及失败审计；权限统一不得使重复处理恢复已经失效的版本或授权。</li>
+</ul>
+<h3 id="28">2.8 运行管理与产品一致性</h3>
+<ul>
+<li><strong>AC-55</strong> — WHEN 用户读取运行操作的基础状态，THE SYSTEM SHALL 按任一管理动作提供确认对象和进度所需的信息；详细日志、私有依赖及快照内容仍按 <code>edit</code> 控制。</li>
+<li><strong>AC-56</strong> — WHEN 用户取消运行管理操作，THE SYSTEM SHALL 按该操作的原业务用途，对当前取消者检查原业务操作要求的全部动作，具体集合见 §3.1；取消者可以不同于发起者，不以原发起者仍有权限代替当前判定，也不因操作统称为“部署”而省略组合动作；不得使单个 edit 或 publish 动作能够取消所有种类的操作。</li>
+<li><strong>AC-57</strong> — WHEN 用户请求已退役的旧运行绑定导入、升级或重绑操作，THE SYSTEM SHALL 拒绝请求，且不创建执行体、不变更路由或存储资产；同版本环境变量确认重建继续按 AC-26 执行，代码、镜像或运行环境变更通过 AC-35、AC-36 的正常新版本发布生效，本次不新增独立通用实例重建功能。</li>
+<li><strong>AC-58</strong> — WHEN 用户维护公共运行环境、公共依赖、默认运行环境、宿主隔离或集群能力，THE SYSTEM SHALL 保留现有平台运维资格，不把拥有某一个应用的 <code>edit</code> 或其它动作视为全局编排和平台配置权限。</li>
+<li><strong>AC-59</strong> — WHEN 应用 SDK 调用平台能力或附件服务，THE SYSTEM SHALL 继续使用可信运行身份、访问者身份、能力声明和底层资源授权限定请求；SDK 业务附件操作不被错误映射成删除整个应用，客户端伪造身份或应用标识必须被拒绝。</li>
+<li><strong>AC-60</strong> — WHEN 正常运行应用发生既有实例自愈或旧执行体清理，THE SYSTEM SHALL 按已验证的运行意图执行，不模拟原创建人，不因某个历史操作者个人撤权自动停用应用，也不借自愈修改已授权版本或增加能力；Docker 与 K8s 的产品权限语义应一致。</li>
+</ul>
+<h3 id="29">2.9 前端一致性、拒绝与审计</h3>
+<ul>
+<li><strong>AC-61</strong> — WHEN 界面呈现应用卡片、详情、数据、日志、配置和操作按钮，THE SYSTEM SHALL 根据同一动作映射与有效状态显示、隐藏或禁用；不得在动作允许之后另叠加原创建人或创建人停用条件，也不得只在前端检查而使直接调用绕过。</li>
+<li><strong>AC-62</strong> — WHEN 权限、模型有效动作或凭据资格发生变化，THE SYSTEM SHALL 在后续请求按最新生效结果决定；旧页面缓存、已打开表单或按钮状态不能维持已失去的资格。</li>
+<li><strong>AC-63</strong> — WHEN 操作被拒绝，THE SYSTEM SHALL 区分缺少具体动作、应用状态不允许、审批/运行前置条件未满足等原因；不得继续把已获授权管理者的失败笼统描述为“仅创建人可操作”。</li>
+<li><strong>AC-64</strong> — WHEN 应用管理动作或租户切换成功、失败、取消或由后台继续执行，THE SYSTEM SHALL 按既有留痕合同记录真实操作者、目标租户/应用、相关版本/操作、结果与成因，区分资源归属、提交者和审批者，不记录密钥明文或凭据原文。</li>
+<li><strong>AC-65</strong> — WHERE 存在原有二次确认、密钥保护、脱敏、数据和附件隔离、资源配额、审批及运行围栏，THE SYSTEM SHALL 保持其作用；权限统一不删除这些非创建人资格类条件。</li>
+<li><strong>AC-66</strong> — THE SYSTEM SHALL 保持未纳入本需求的工作流、助手、知识库等资源动作语义不变；具体租户管理视角按 AC-09 至 AC-18 统一收窄，不能由此改变这些资源的授权模型或数据归属。</li>
+</ul>
+<h3 id="210">2.10 代发布、预览与取消的补充边界</h3>
+<ul>
+<li><strong>AC-67</strong> — WHEN 解析应用发布的审批候选，THE SYSTEM SHALL 排除应用归属人，以及与该次实际提交关联的自然人；自然人直接提交时排除该本人，服务账号提交时排除提交时固定的服务账号归属人并保留真实服务账号主体记录；二者为同一人时不重复排除，服务账号随后改绑不能改写该次自审关联人，按 AC-68 满足单管理员例外时除外。</li>
+<li><strong>AC-68</strong> — IF 按 AC-67 排除后没有合格审批人且不满足原产品“全租户仅一名管理员且无其他候选”条件，THEN THE SYSTEM SHALL 进入异常审批处理并保留原因，不直接通过；WHERE 满足该单管理员条件，THE SYSTEM SHALL 仅允许该管理员按原规则自审并明确审计，不把“仅配置一名候选”或“过滤后仅剩一名”视为符合例外。这一排除与例外同样约束后续节点及异常处理中的重试、指定审批人，不改变其它审批场景的资格规则。</li>
+<li><strong>AC-69</strong> — WHEN 同一人同时具有应用 edit 和该次审批任务资格，THE SYSTEM SHALL 按本次预览用途分别执行 AC-38 或 AC-50；管理预览不能继承审批预览的能力例外，两种用途的身份、数据和访问资格保持隔离；缺少该次有效审批任务资格时，即使拥有管理员身份、edit 或声明自己在审批，也不得获得审批例外。</li>
+<li><strong>AC-70</strong> — WHEN 当前取消者已失去原业务操作所需任一动作，THE SYSTEM SHALL 拒绝其取消请求且不改变在途操作；仍具全部所需动作的其它主体可以按原规则取消。已生效或按既有规则不可取消的阶段继续拒绝取消，不借取消回退已生效版本或重放已完成效果；必要的失败清理不依赖原操作者继续持有权限。</li>
+</ul>
+<h3 id="211">2.11 运行控制协议统一</h3>
+<ul>
+<li><strong>AC-71</strong> — THE SYSTEM SHALL 仅支持统一运行控制协议 v2 承载 Docker 与 K8s 应用运行管理，拒绝旧 v1 控制配置及请求，不通过旧控制入口或自动回退继续执行；协议收敛不得取消既有应用交付、数据、附件及平台能力，也不得擅自删除或迁移测试应用的资产与归属。</li>
+</ul>
+<h2 id="3">3. 动作与业务范围</h2>
+<table>
+<thead>
+<tr>
+<th>现有动作</th>
+<th>业务范围</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>use</td>
+<td>业务入口与应用使用</td>
+</tr>
+<tr>
+<td>edit</td>
+<td>管理内容读写：元信息、源码、日志、生产数据、环境变量、私有依赖与快照</td>
+</tr>
+<tr>
+<td>publish</td>
+<td>提交/撤回发布及正式启动；改内容后发布、配置重建等需同时有 edit</td>
+</tr>
+<tr>
+<td>unpublish</td>
+<td>下线正式应用</td>
+</tr>
+<tr>
+<td>delete</td>
+<td>显式删除整个应用</td>
+</tr>
+<tr>
+<td>manage_permission</td>
+<td>授权和可见范围管理</td>
+</tr>
+</tbody>
+</table>
+<p>审批任务资格、平台运维资格、运行身份可信性是不同业务边界，不由单个 app 动作代替。新应用尚无资源授权时的受控创建与初始授权按 AC-44；不是持有 app:manage 就自动有历史应用权限。</p>
+<h3 id="31">3.1 取消操作所需动作</h3>
+<p>本表描述可取消阶段的业务资格；不扩大任何操作原有的可取消阶段或效果。所有动作针对被取消操作所属的同一应用，由当前取消者满足；同一运行操作名称可能对应不同业务用途。</p>
+<table>
+<thead>
+<tr>
+<th>被取消的原业务操作</th>
+<th>当前取消者所需的全部动作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>启动、手动上线或恢复已有已批准版本</td>
+<td><code>publish</code></td>
+</tr>
+<tr>
+<td>新内容发布准备（含代码、镜像或运行环境变更）、确认环境变量配置重建</td>
+<td><code>edit AND publish</code></td>
+</tr>
+<tr>
+<td>数据快照恢复，不包含正式实例启动</td>
+<td><code>edit</code></td>
+</tr>
+<tr>
+<td>数据快照恢复，包含正式实例启动</td>
+<td><code>edit AND publish</code></td>
+</tr>
+<tr>
+<td>下线正式应用</td>
+<td><code>unpublish</code></td>
+</tr>
+<tr>
+<td>显式删除整个应用</td>
+<td><code>delete</code></td>
+</tr>
+<tr>
+<td>其它现有运行管理操作</td>
+<td>其原业务操作已定义的全部动作，不从操作名称或发起者身份推断</td>
+</tr>
+</tbody>
+</table>
+<h2 id="4">4. 与现行合同的变更关系</h2>
+<table>
+<thead>
+<tr>
+<th>现行内容</th>
+<th>本稿的明确替换目标</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F019 的空选择/全平台视角</td>
+<td>AC-09 至 AC-18：只能具体租户，默认/回退为所属租户；空或全平台切换拒绝</td>
+</tr>
+<tr>
+<td>F054 删除、日志、数据额外 owner 资格</td>
+<td>AC-21、AC-22、AC-23、AC-31、AC-32；状态与资产保护不变</td>
+</tr>
+<tr>
+<td>F055 CLI 迭代、撤回、手动上线及环境变量 owner 资格</td>
+<td>AC-24 至 AC-26、AC-29、AC-35 至 AC-48；必审和身份资格不变</td>
+</tr>
+<tr>
+<td>F055 AC-16、AC-17 申请人与自审排除</td>
+<td>AC-39、AC-67、AC-68：审批申请人及路由仍基于应用归属人；另排除实际提交关联自然人，限定原单管理员自审例外</td>
+</tr>
+<tr>
+<td>F055 AC-27 / INV-36 的预览能力例外</td>
+<td>AC-38、AC-50、AC-51、AC-69：管理预览使用本人权限；审批任务预览保留既有归属人权限例外，两种用途不互用</td>
+</tr>
+<tr>
+<td>F056 运行记录及管理展示差异</td>
+<td>AC-07、AC-34、AC-61 至 AC-64</td>
+</tr>
+<tr>
+<td>F086/F059 运行管理 natural_owner 限制</td>
+<td>AC-27、AC-28、AC-55 至 AC-60</td>
+</tr>
+<tr>
+<td>F086 的 v1 长期兼容、旧控制状态及绑定导入</td>
+<td>AC-57、AC-71：只保留 v2，旧导入/升级/重绑均退役；配置确认重建沿 AC-26，代码/镜像/运行环境变更沿 AC-35、AC-36；共用能力和测试资产保留</td>
+</tr>
+<tr>
+<td>release-contract INV-35 的 owner-only 删除措辞</td>
+<td>改为 app.delete 资格的显式删除；在线不可删除和资产持久不变</td>
+</tr>
+<tr>
+<td>F113 服务账号/应用租户资格</td>
+<td>保留；管理视角不等于真实租户改变，也不为凭据提供 owner 身份</td>
+</tr>
+</tbody>
+</table>
+<p>这些是用户明确授权的业务变更目标，本文待确认期间不把现有合同或实现视为已经改变。正式设计需同步当前版本受影响的合同引用；不恢复旧实现、不修改其它版本线。</p>
+<h2 id="5">5. 边界情况</h2>
+<ul>
+<li>创建人名称、owner 事实或权限模型名称不等于某项动作的授权结果；后台也不能以 owner 代行补足丢失的权限。</li>
+<li>用户在设计阶段再次明确：创建资源仍归属服务账号配置的自然人，owner 与租户按既有规则写入；真实服务账号用于动作判定、初始授权及操作者审计。本期保持这一归属逻辑和自然人的受保护所有者授权。</li>
+<li>一个人在租户 A 的 app 有动作，不代表迁到租户 B 后仍能在 A 操作；存量资源与授权保持原归属，具体租户视角和主体资格继续约束请求。</li>
+<li>本轮退役运行控制协议 v1，以及旧绑定导入/升级/重绑链路。前端 <code>/api/v1</code>、开放 API <code>/api/v2</code> 和应用包的 manifest_version 是各自独立合同，不按相同数字一并删除；已有源码交付仍可由统一运行层承载。</li>
+<li>助手、工作流、知识库共用读取/调用保持现有可见性及 use/业务条件，不新增 Vibe 管理动作或统一必填管理头；专用管理写保持原写入资格。</li>
+<li>Root 是具体租户；公共预置角色等共享目录的读取不代表可以查看/修改其它租户业务对象。</li>
+<li>编辑者可以管理该应用全部已纳入的管理数据；这是采用现有六动作的明确粒度，不能再以隐藏的 owner 特判分拆 edit。更细的只读/导出/密钥专用动作不在本期。</li>
+<li>同一版本保存环境变量与确认应用到正式实例是两个不同操作；保存只需 edit，确认生效需 edit 与 publish。</li>
+<li>删除配置项、编辑数据行和操作 SDK 业务附件不是删除整个应用；不能误用 app.delete 导致一般编辑能力缺失。</li>
+<li>持 publish 不代表有 edit，持 manage_permission 也不直接替代其它动作；具体模型是否同时包含多个动作由 F048 的生效定义决定。</li>
+<li>自动清理、终态回调和自愈不应因操作者撤权卡住旧 writer 停止，但也不能借内部操作产生新的未授权启动或扩权。</li>
+<li>代发布保留应用归属人作为审批申请人与路由依据；实际提交主体另记，自审排除同时考虑应用归属人与提交关联自然人；服务账号关联自然人不是已验证的实际用钥人身份。</li>
+<li>管理预览与审批预览是两种受控用途：即使同一人具备两种资格，管理预览也只能使用本人底层权限；两者都不注入真实密钥。</li>
+<li>取消资格取决于原业务用途和当前取消者的全部有效动作；配置重建取消不能仅凭 publish，原发起者资格与旧按钮状态也不能替代当前判定。</li>
+<li>旧客户端请求全平台视角、旧页面跨租户提交和仅持粗 scope 的历史凭据均按新规则拒绝或回退具体范围；不会自动扩大授权以保持旧体验。</li>
+</ul>
+<h2 id="6">6. 需求发现映射追溯</h2>
+<p>本表保留原 36 项操作盘点编号；M22 按用户采纳的收敛建议标为退役入口，不再分配可执行权限，也不新增运行迁移或通用实例重建功能。租户单选由 AC-09 至 AC-18 覆盖，唯一运行控制协议由 AC-71 覆盖。</p>
+<table>
+<thead>
+<tr>
+<th>需求发现条目</th>
+<th>正式验收标准</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>M01</td>
+<td>AC-06、AC-09、AC-59</td>
+</tr>
+<tr>
+<td>M02</td>
+<td>AC-07、AC-15</td>
+</tr>
+<tr>
+<td>M03</td>
+<td>AC-07、AC-20、AC-46</td>
+</tr>
+<tr>
+<td>M04</td>
+<td>AC-19</td>
+</tr>
+<tr>
+<td>M05</td>
+<td>AC-20、AC-50</td>
+</tr>
+<tr>
+<td>M06</td>
+<td>AC-21</td>
+</tr>
+<tr>
+<td>M07</td>
+<td>AC-22</td>
+</tr>
+<tr>
+<td>M08</td>
+<td>AC-23</td>
+</tr>
+<tr>
+<td>M09</td>
+<td>AC-24</td>
+</tr>
+<tr>
+<td>M10</td>
+<td>AC-25</td>
+</tr>
+<tr>
+<td>M11</td>
+<td>AC-26</td>
+</tr>
+<tr>
+<td>M12</td>
+<td>AC-27</td>
+</tr>
+<tr>
+<td>M13</td>
+<td>AC-27</td>
+</tr>
+<tr>
+<td>M14</td>
+<td>AC-28</td>
+</tr>
+<tr>
+<td>M15</td>
+<td>AC-35、AC-43</td>
+</tr>
+<tr>
+<td>M16</td>
+<td>AC-44</td>
+</tr>
+<tr>
+<td>M17</td>
+<td>AC-36</td>
+</tr>
+<tr>
+<td>M18</td>
+<td>AC-29</td>
+</tr>
+<tr>
+<td>M19</td>
+<td>AC-30</td>
+</tr>
+<tr>
+<td>M20</td>
+<td>AC-37</td>
+</tr>
+<tr>
+<td>M21</td>
+<td>AC-56、AC-70</td>
+</tr>
+<tr>
+<td>M22</td>
+<td>AC-57、AC-71；旧导入/升级/重绑均退役，无授权动作；配置确认重建及新版本发布分别见 M11、M15、M17</td>
+</tr>
+<tr>
+<td>M23</td>
+<td>AC-31、AC-32</td>
+</tr>
+<tr>
+<td>M24</td>
+<td>AC-33</td>
+</tr>
+<tr>
+<td>M25</td>
+<td>AC-33</td>
+</tr>
+<tr>
+<td>M26</td>
+<td>AC-49、AC-50、AC-69</td>
+</tr>
+<tr>
+<td>M27</td>
+<td>AC-38、AC-51、AC-69</td>
+</tr>
+<tr>
+<td>M28</td>
+<td>AC-49、AC-52、AC-67、AC-68</td>
+</tr>
+<tr>
+<td>M29</td>
+<td>AC-34</td>
+</tr>
+<tr>
+<td>M30</td>
+<td>AC-15、AC-34</td>
+</tr>
+<tr>
+<td>M31</td>
+<td>AC-43、AC-45、AC-46、AC-47、AC-48</td>
+</tr>
+<tr>
+<td>M32</td>
+<td>AC-59</td>
+</tr>
+<tr>
+<td>M33</td>
+<td>AC-53、AC-54</td>
+</tr>
+<tr>
+<td>M34</td>
+<td>AC-58</td>
+</tr>
+<tr>
+<td>M35</td>
+<td>AC-39、AC-40、AC-41、AC-53、AC-64、AC-67、AC-68</td>
+</tr>
+<tr>
+<td>M36</td>
+<td>AC-60</td>
+</tr>
+</tbody>
+</table>
+<h2 id="7">7. 设计与验证边界</h2>
+<p>原 70 条规格已获确认；本轮按用户明确的 v2 收敛决定补充 AC-71，并按“按照建议修改”将 AC-57 收窄为旧绑定导入/升级/重绑退役，既有配置确认重建和正常新版本发布不扩展。身份解析、接口兼容、首次创建授权、审批代行衔接、后台阶段重校验、旧客户端失效与范围回退的一致性由 design.md 说明，不在本规格中提前定实现。设计仍须单独评审确认。</p>
+<p>后续仅做本功能必要的允许/拒绝配对、六动作与组合、租户范围、真实主体、异步续办、前端/API 一致、确认/审计及专用临时对象 E2E；重点覆盖代发布的双重自审排除及单管理员例外、无候选异常、管理/审批双用途预览、撤权后取消与不可取消阶段；不运行 Vibe 全量或编排故障全量。只验证 v2 的 Docker/K8s 主流程及本次权限边界，补旧 v1 配置/接口拒绝、源码/应用包/完整镜像功能保留及数据不误清理的必要定向检查；不再运行 v1 成功路径或旧协议迁移验收。Docker/K8s 使用相同产品验收标准，DM8 按既定口径仅静态核对。未执行的部署、测试和发行不记为通过。</p>
+<h2 id="_1">相关文档</h2>
+<ul>
+<li><a href="../../features/v3.0.0/114-vibe-permission-actions/discovery.md">需求发现及映射</a></li>
+<li><a href="../../features/v3.0.0/114-vibe-permission-actions/spec-review.md">规格自审记录</a></li>
+<li><a href="../../features/v3.0.0/release-contract.md">版本合同</a></li>
+<li><a href="../SDD-Guide.md">SDD 指南</a></li>
+<li><a href="../constitution.md">架构宪法</a></li>
+<li><a href="../architecture/10-permission-rbac.md">权限架构</a></li>
+</ul>
+<h2 id="8">8. 本轮收敛记录</h2>
+<p>用户在评审讨论中明确：共用接口按原最小权限维持；Vibe 尚未正式对外发布，运行协议统一保留 v2。已按“收敛统一一下”更新本稿。除 AC-57 的退役范围修订和新增 AC-71 外，原 AC 正文不变；不重新定义工作流/助手等资源动作。</p>
+<p><strong>R3 收窄决定</strong>：用户在收敛稿实质评审后回复“按照建议修改”，明确旧绑定导入、升级和重绑一并退役；同版本环境变量生效复用 AC-26，代码/镜像/运行环境变更复用 AC-35、AC-36，不增加独立通用实例重建。本轮仅 AC-57 正文改变，另外 70 条 AC 正文保持。</p>
+<p><strong>当前阶段</strong>：原规格、v2方向与R3收窄已明确；2026-10-30用户单独确认修订设计，已进入tasks与编码。71条AC原文不变，完成状态及运行证据见tasks/verification。</p></section><hr><section id="review-document"><div class="toc">
+<ul>
+<li><a href="#review-f114">F114 规格收敛复审记录</a><ul>
+<li><a href="#review-1">1. 审查结果</a></li>
+<li><a href="#review-2">2. 修订追溯</a></li>
+<li><a href="#review-3-sdd-review">3. sdd-review 清单</a></li>
+<li><a href="#review-4">4. 场景推演（静态，未执行）</a></li>
+<li><a href="#review-5">5. 同步与状态</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<h1 id="review-f114">F114 规格收敛复审记录</h1>
+<p><strong>日期</strong>：2026-10-30。<strong>结果</strong>：LGTM（同一代理按 sdd-review 复审；仅静态结论）。用户原已确认 70 条 AC，并在本轮明确共用接口维持原权限、运行控制统一 v2。本稿将该收敛方向补充为 AC-71，并收窄 AC-57 的退役入口范围；其余 69 条原 AC 正文保持不变。当前共 71 条，36 项盘点编号保留，其中 M22 明确为退役入口。本轮用户已采纳 R3 建议，只进一步修改 AC-57，其余 70 条正文保持。</p>
+<p><strong>确认状态</strong>：原 70 条规格已获确认；本轮“收敛统一一下”明确了 v2 取舍，用户随后以“按照建议修改”明确采纳 R3 收窄范围：旧绑定导入/升级/rebind 退役、现有配置确认重建/新版本发布保留；不将此视为整份设计已获单独确认。修订设计仍需用户确认后才能拆任务、编码；本轮仅改文档。</p>
+<p><strong>依据</strong>：spec.md、用户原映射与本轮指令、PRD-1、release-contract、F048 权限架构、后端模块架构、constitution 和当前 <code>bb62790ad22a3204493e7dce5878e0a4f7109599</code> 调用链。未运行单测、业务回归、部署或镜像发行。</p>
+<h2 id="review-1">1. 审查结果</h2>
+<p>LGTM</p>
+<p>本轮取舍取消旧运行控制协议及其绑定导入/升级/重绑兼容，明确不增加独立通用重建；已有配置确认重建和新版本发布分别有原条款承接。保留原业务能力、六动作、自然人归属、审批及数据保护，不新增编排后端或自动迁移功能。spec 仅定义支持策略与允许/拒绝行为，配置字段、路由、工具复用和处置顺序在 design。</p>
+<h2 id="review-2">2. 修订追溯</h2>
+<table>
+<thead>
+<tr>
+<th>内容</th>
+<th>原确认/本轮决定</th>
+<th>当前条款</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>代发布、自审与实际主体</td>
+<td>原三项规格问题已关闭，条款保持</td>
+<td>AC-39、AC-67、AC-68</td>
+</tr>
+<tr>
+<td>管理/审批预览隔离</td>
+<td>声明与本人/审批例外分开，环境密钥为空</td>
+<td>AC-38、AC-50、AC-51、AC-69</td>
+</tr>
+<tr>
+<td>取消的当前主体与全部动作</td>
+<td>原业务用途、当前取消者、不可取消阶段及清理规则保持</td>
+<td>AC-56、AC-70、§3.1</td>
+</tr>
+<tr>
+<td>共用接口维持原逻辑</td>
+<td>助手/工作流等读取/使用不附加 Vibe 动作；管理租户范围继续收窄</td>
+<td>AC-15、AC-18、AC-66；spec §5</td>
+</tr>
+<tr>
+<td>旧 v1 控制兼容退役</td>
+<td>用户明确统一 v2；不为旧链再补阶段授权</td>
+<td>AC-71；AC-40 的阶段要求保持</td>
+</tr>
+<tr>
+<td>R3 收窄范围</td>
+<td>M22/AC-57 为旧绑定导入/升级/rebind 退役，无权限可恢复该入口；配置确认重建/新版本发布沿原条款，本次不新增通用重建</td>
+<td>AC-57、AC-71、AC-26、AC-35、AC-36</td>
+</tr>
+<tr>
+<td>共用能力与资产</td>
+<td>协议收敛不误删源码/SQLite/附件/SDK；不改 owner/tenant 或自动处置测试资产</td>
+<td>AC-05、AC-59、AC-65、AC-71</td>
+</tr>
+</tbody>
+</table>
+<h2 id="review-3-sdd-review">3. sdd-review 清单</h2>
+<p>按当前 spec-checklist 实际 10 项执行（技能说明中的 14 项为旧数量）。</p>
+<table>
+<thead>
+<tr>
+<th>检查项</th>
+<th>结论</th>
+<th>核对依据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 需求覆盖</td>
+<td>PASS</td>
+<td>M01 至 M36 均追溯，M22 明确退役；AC-57、AC-71 覆盖旧重绑和协议取舍</td>
+</tr>
+<tr>
+<td>2 边界与失败</td>
+<td>PASS</td>
+<td>旧控制配置/请求拒绝、无自动回退、资产与能力保留；原权限失效和清理场景保持</td>
+</tr>
+<tr>
+<td>3 排除范围</td>
+<td>PASS</td>
+<td>不重写助手、审批引擎或编排，不新增迁移能力，不全量回归</td>
+</tr>
+<tr>
+<td>4 AC 唯一及追溯</td>
+<td>PASS</td>
+<td>AC-01 至 AC-71 连续唯一；R3 仅修改 AC-57，其余 70 条与上一收敛稿正文一致；原确认规格的其它 69 条仍保持</td>
+</tr>
+<tr>
+<td>5 可测试</td>
+<td>PASS</td>
+<td>可观察支持/拒绝结果、运行副作用、原能力可用性和资产保留</td>
+</tr>
+<tr>
+<td>6 EARS</td>
+<td>PASS</td>
+<td>所有 AC 有 THE SYSTEM SHALL；新增条款为支持范围的普遍约束</td>
+</tr>
+<tr>
+<td>7 错误行为</td>
+<td>PASS</td>
+<td>规格仅要求明确拒绝，无错误码或技术接口详表</td>
+</tr>
+<tr>
+<td>8 领域归属</td>
+<td>PASS</td>
+<td>F048/F019/F054/F055/F056/F086/F059 归属不变；只改变既有运行协议支持策略</td>
+</tr>
+<tr>
+<td>9 不变量/宪法</td>
+<td>PASS</td>
+<td>版本合同明确替代 F086 的旧兼容目标，数据/必审/真实主体/C1–C8 保留</td>
+</tr>
+<tr>
+<td>10 纯 What</td>
+<td>PASS</td>
+<td>规范字段、模块拆分、配置默认值、路由和处置实现归 design D9/§4.11</td>
+</tr>
+</tbody>
+</table>
+<h2 id="review-4">4. 场景推演（静态，未执行）</h2>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>唯一预期</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Docker/K8s 发起新运行操作</td>
+<td>仅 v2，仍按原业务动作与状态条件执行</td>
+</tr>
+<tr>
+<td>旧 v1 配置或控制请求</td>
+<td>拒绝、不产生新业务/容器效果、不回退旧控制循环</td>
+</tr>
+<tr>
+<td>用户持有 edit AND publish 请求旧导入/升级/rebind</td>
+<td>仍拒绝且无执行体/路由/存储副作用，不因权限足够而恢复退役入口</td>
+</tr>
+<tr>
+<td>同版本最新环境变量确认生效</td>
+<td>按 AC-26 保留确认重建；保存不重启，不借旧 rebind</td>
+</tr>
+<tr>
+<td>代码、镜像或运行环境改变</td>
+<td>按 AC-35、AC-36 走新版本发布及审批，不新增通用重建</td>
+</tr>
+<tr>
+<td>已有源码包或 SDK 调用</td>
+<td>原交付/使用能力保持；协议数字不混同为应用包/API 版本</td>
+</tr>
+<tr>
+<td>发现旧测试资产或已导入的旧执行体</td>
+<td>不自动收养/删除；保持归属与数据，按实际授权处置后再切换</td>
+</tr>
+<tr>
+<td>原生 v2 在线应用，其历史发布人被撤权</td>
+<td>不主动停止旧服务；新增效果按当前资格复核，自愈/必要清理继续</td>
+</tr>
+<tr>
+<td>同一人同时有 edit 和审批任务</td>
+<td>两种预览用途仍隔离；不能靠管理员或 edit 取得审批例外</td>
+</tr>
+</tbody>
+</table>
+<h2 id="review-5">5. 同步与状态</h2>
+<p>已同步 spec、design、discovery、release-contract、两份复审记录及三份离线 HTML。原 F086/F059 历史实现与验收证据不被改写成新目标已交付；当前变更替代关系由本版本合同集中登记。</p>
+<p>原确认全文 SHA-256 为 <code>f9feba32cc67bd812908f5a3d369ec942ede8955e15ca6206101c5a62305c45b</code>，仅作为历史确认锚点。当前修订不再声称原 70 条全未改变：仅 AC-57 收窄，新增 AC-71，其余 69 条保持。设计待用户单独确认，无 tasks、业务代码、提交、推送或远端操作。</p>
+<p><strong>本轮 R3 修订核对</strong>：仅 AC-57 正文改变，M22 的退役状态和 AC-26、AC-35、AC-36 的承接关系已同步到 discovery/spec/design/release-contract。以上为静态场景推演，未运行真实拒绝、重建或发布测试。</p>
+<p><strong>本轮复审结果</strong>：10 项规格检查通过。71 条 AC 编号、M01 至 M36（含退役的 M22）及正文差异已核对，仅 AC-57 改变；其余 70 条与上一收敛稿一致。未发现新增未关闭问题；设计仍待单独确认，未编码或部署。</p></section><hr></main></body></html>

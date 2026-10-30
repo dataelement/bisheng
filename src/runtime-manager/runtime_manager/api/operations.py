@@ -22,7 +22,7 @@ def executor():
 
 async def authorized(request: Request):
     config = get_config()
-    if config.protocol_version != 2 and not request.url.path.startswith("/v2/upgrade/"):
+    if config.protocol_version != 2:
         raise HTTPException(404)
     # Inbound platform identity is separate from this node's outbound identity.
     keys = {config.inbound_key_id: {"secret": config.inbound_secret, "roles": ["platform"], "node_id": config.node_id}}

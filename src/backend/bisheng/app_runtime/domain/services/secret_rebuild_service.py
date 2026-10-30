@@ -1,4 +1,4 @@
-"""Explicit owner-confirmed same-version rebuild, using the existing operation ledger."""
+"""Explicitly confirmed same-version configuration apply via the existing ledger."""
 
 import hashlib
 from copy import deepcopy
@@ -19,8 +19,7 @@ from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import 
 )
 from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
 from bisheng.app_runtime.domain.services.runtime_protocol import content_digest
-from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.app_publish import AppPublishOwnerOnlyError, AppSecretRebuildConflictError
+from bisheng.common.errcode.app_publish import AppSecretRebuildConflictError
 from bisheng.common.services.config_service import settings
 from bisheng.database.models.app import App
 from bisheng.database.models.app_version import AppVersion
@@ -32,19 +31,15 @@ class AppSecretRebuildService:
         self.coordinator = RuntimeDeliveryCoordinator(self.repo)
 
     @staticmethod
-    def _owner(app, actor):
-        if (
-            app is None
-            or not isinstance(actor, UserPayload)
-            or app.tenant_id != actor.tenant_id
-            or actor.user_id != app.owner_user_id
-        ):
-            raise AppPublishOwnerOnlyError()
+    async def _require_rebuild(app, actor):
+        from bisheng.app_runtime.domain.services.app_authorization_service import AppAuthorizationService
+
+        await AppAuthorizationService.authorize_loaded_app(actor, app, "config_restart")
 
     async def rebuild_current(self, app_id, *, request, actor):
         # Replay is checked after current authorization, before new-attempt CAS.
         app = await self.repo.get(App, app_id)
-        self._owner(app, actor)
+        await self._require_rebuild(app, actor)
         from bisheng.app_publish.application.release_tenancy import require_release_eligible
 
         key = "secret-rebuild:" + hashlib.sha256(request.request_id.encode()).hexdigest()
@@ -58,7 +53,7 @@ class AppSecretRebuildService:
         try:
             async with self.repo.transaction() as session:
                 app = await self.repo.get(App, app_id, lock=True)
-                self._owner(app, actor)
+                await self._require_rebuild(app, actor)
                 # A concurrent identical confirmation may have committed while
                 # this request waited for App. Replay it before fresh-attempt CAS.
                 replay = await self.repo.find(
@@ -127,7 +122,15 @@ class AppSecretRebuildService:
                 snapshot = await formal_snapshot(
                     app, version, session=session, expected_revision=request.expected_config_revision
                 )
+                from bisheng.app_runtime.domain.services.runtime_authorization_service import (
+                    RuntimeAuthorizationService,
+                )
+
+                authorization_context = await RuntimeAuthorizationService.capture_user(
+                    actor, app, "config_restart", version_id=version.id
+                )
                 payload = {
+                    "authorization_context": authorization_context,
                     "purpose": "config_restart",
                     "auto_commit": True,
                     "confirmation_digest": digest,
