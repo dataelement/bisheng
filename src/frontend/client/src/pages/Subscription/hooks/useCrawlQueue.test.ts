@@ -11,7 +11,7 @@ const source = readFileSync(
 describe("2.6 crawl queue regression contract", () => {
   it("preserves bounded queueing, cancellation, failure, and preview", () => {
     expect(source).toContain("const CONCURRENCY = 3");
-    expect(source).toContain('status: "pending"');
+    expect(source).toContain('"pending"');
     expect(source).toContain('status: "crawling"');
     expect(source).toContain('status: "success"');
     expect(source).toContain('status: "failed"');

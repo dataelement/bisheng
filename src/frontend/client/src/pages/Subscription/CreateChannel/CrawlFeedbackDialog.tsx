@@ -19,22 +19,28 @@ interface CrawlFeedbackDialogProps {
 
 export function CrawlFeedbackDialog({ open, onOpenChange }: CrawlFeedbackDialogProps) {
     const localize = useLocalize();
-    const [tips, setTips] = useState<string>(
-        localize("com_subscription.send_crawl_requirement_to_email")
-    );
+    const [tips, setTips] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         if (!open) return;
+        let active = true;
+        setTips(null);
+        setLoading(true);
         (async () => {
             try {
                 const resp = await getFeedbackTips();
                 const data = resp?.data ?? resp ?? {};
                 const next = data.feedback_tips ?? data.feedbackTips;
-                if (typeof next === "string" && next.trim()) setTips(next);
+                if (active && typeof next === "string" && next.trim() &&
+                    /\bx+@x+\b/i.test(next) === false) setTips(next.trim());
             } catch {
-                // 失败保持默认文案
+                // Configuration failures use the localized administrator guidance.
+            } finally {
+                if (active) setLoading(false);
             }
         })();
+        return () => { active = false; };
     }, [open]);
 
     return (
@@ -45,7 +51,8 @@ export function CrawlFeedbackDialog({ open, onOpenChange }: CrawlFeedbackDialogP
                         {localize("com_subscription.submit_manual_crawl_request")}
                     </AlertDialogTitle>
                     <AlertDialogDescription className="whitespace-pre-line text-[14px] leading-6 text-text-2">
-                        {tips}
+                        {loading ? localize("com_subscription.loading") :
+                            tips ?? localize("com_subscription.send_crawl_requirement_to_email")}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
