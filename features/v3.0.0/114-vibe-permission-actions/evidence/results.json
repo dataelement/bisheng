@@ -82,5 +82,6 @@
       "path": "evidence/e2e-collection-only.txt",
       "sha256": "dc43a2d49217eb07a1f5e30c42679a1f07b79284d67ec9673453d3d6094fc1cf"
     }
-  }
+  },
+  "implementation_commit": "6ac7704998087267af69b72adf542895b2694ff1"
 }

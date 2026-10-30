@@ -19,7 +19,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow-x:auto}pre code{display
 <h1 id="verification-f114">F114 开发与必要定向验证</h1>
 <h2 id="verification-1">1. 当前结论</h2>
 <p>2026-10-30，用户已分别确认规格和设计，已完成任务拆解与本地实现。<strong>102/104 项代码、文档及 L1 任务完成；T063 真实部署 E2E、T064 最终 L2 和质量门禁仍未完成</strong>。不能宣称已部署、全部验收或可以合入。未执行 backend/前端全量测试，未更新 116/189、迁移存量资源、补历史 Grant、公开推送或发行镜像。</p>
-<p>工作树：<code>codex/114-vibe-permission-actions</code>。开发起点：<code>bb62790ad22a3204493e7dce5878e0a4f7109599</code>。当前本地发版线为 <code>ac2b09c8a2789021652d585f25d519888cfd0c0f</code>，新增三条 license/skill picker/sandbox 修复；本次不覆盖或回退这些增强，最终集成须从发版线合并下来后核对。</p>
+<p>本地实现提交：<code>6ac7704998087267af69b72adf542895b2694ff1</code>；该提交之后只补充此证据定位与HTML。工作树：<code>codex/114-vibe-permission-actions</code>。开发起点：<code>bb62790ad22a3204493e7dce5878e0a4f7109599</code>。当前本地发版线为 <code>ac2b09c8a2789021652d585f25d519888cfd0c0f</code>，新增三条 license/skill picker/sandbox 修复；本次不覆盖或回退这些增强，最终集成须从发版线合并下来后核对。</p>
 <h2 id="verification-2">2. 本地实现范围</h2>
 <ul>
 <li>复用六动作；基础管理五动作 OR；内容、数据、日志、配置与私有依赖 edit；确认配置重建 edit AND publish；删除不再加 owner 状态限制。</li>
