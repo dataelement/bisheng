@@ -79,7 +79,7 @@ class KnowledgeSpaceContentRecord(BaseModel):
     belonging_department_name: str | None = None
     belonging_office_name: str | None = None
     belonging_squad_name: str | None = None
-    # 上传人组织只读 knowledgefile.belonging_organization_id, 空值不回退到当前主组织.
+    # 上传人组织读 knowledgefile.user_id 的同步当时主部门。所属组织读 belonging_organization_id。
 
     def model_dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         kwargs.setdefault("exclude_none", True)
