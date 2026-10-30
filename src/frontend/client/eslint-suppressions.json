@@ -1001,11 +1001,6 @@
       "count": 1
     }
   },
-  "src/components/Nav/Nav.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 3
-    }
-  },
   "src/components/Nav/NewChat.tsx": {
     "no-restricted-imports": {
       "count": 1
@@ -2058,9 +2053,6 @@
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
     "no-restricted-imports": {
       "count": 1
     },
@@ -2172,11 +2164,6 @@
     },
     "no-useless-escape": {
       "count": 2
-    }
-  },
-  "src/pages/Subscription/ArticleList/ArticleList.tsx": {
-    "no-restricted-imports": {
-      "count": 1
     }
   },
   "src/pages/Subscription/ChannelDiscoveryHome.tsx": {

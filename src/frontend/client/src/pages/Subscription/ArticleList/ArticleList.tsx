@@ -1,6 +1,5 @@
 import { useArticleList } from "./useArticleList";
 import { ApiRequestFailure } from "~/components/ApiRequestFailure";
-import { Tooltip as SharedTooltip } from "@bisheng/ui";
 import { Tabs } from "@bisheng/ui";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { EmptyStateIllustration } from "~/components/illustrations";
@@ -17,11 +16,9 @@ import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { Outlined } from "bisheng-icons";
 import { useNavigate } from "react-router-dom";
 import { cn } from "~/utils";
-import { useEffect, useRef, useState } from "react";
+import { TruncatedTabLabel } from "./TruncatedTabLabel";
 
 
-import { useSetRecoilState } from "recoil";
-import { subscriptionMobileChannelDropdownOpenState } from "~/store/subscriptionLayout";
 
 export { stripHtmlTags, stripMarkdown, mapToArticle } from "./useArticleList";
 
@@ -32,47 +29,10 @@ interface ArticleListProps {
   /** PC：顶部标题下拉切换频道（替代左侧 ChannelSidebar） */
   onChannelSelect?: (channel: Channel | null) => void;
   onChannelSettings?: (channel: Channel) => void;
-  /** H5：打开「我的频道」侧栏（订阅页抽屉） */
-  onOpenChannelNav?: () => void;
   onGoChannelSquare?: () => void;
   onCreateChannel?: () => void;
 }
 
-/**
- * Sub-channel tab label with a tooltip that only opens when the name is actually
- * truncated (max-w-[240px]). Rendered inside the @bisheng/ui Tabs items — the tab
- * button chrome, indicator and count badge all come from the library component.
- */
-function TruncatedTabLabel({ name }: { name: string }) {
-  const labelRef = useRef<HTMLSpanElement>(null);
-  const [isTruncated, setIsTruncated] = useState(false);
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    const el = labelRef.current;
-    if (!el) return;
-    const check = () => setIsTruncated(el.scrollWidth > el.clientWidth);
-    check();
-    const ro = new ResizeObserver(check);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [name]);
-
-  return (
-    <SharedTooltip
-      open={open}
-      onOpenChange={(next) => {
-        if (next && !isTruncated) return;
-        setOpen(next);
-      }}
-      content={name}
-    >
-      <span ref={labelRef} className="block max-w-[240px] truncate">
-        {name}
-      </span>
-    </SharedTooltip>
-  );
-}
 
 export function ArticleList({
   channel,
@@ -80,7 +40,6 @@ export function ArticleList({
   onArticleSelect,
   onChannelSelect,
   onChannelSettings,
-  onOpenChannelNav,
   onGoChannelSquare,
   onCreateChannel,
 }: ArticleListProps) {
@@ -103,8 +62,6 @@ export function ArticleList({
     onlyUnread,
     selectedSources,
     isListScrolling,
-    mobileDropdownOpen,
-    setMobileDropdownOpen,
     mobileSearchOpen,
     setMobileSearchOpen,
     mobileSourceFilterOpen,
@@ -123,62 +80,40 @@ export function ArticleList({
     handleListScroll,
     handleSubChannelChange,
   } = useArticleList({ channel, onArticleSelect });
-  // Publish the H5 dropdown-open state so the persistent 频道/广场 tab (rendered
-  // above this view in Subscription/index) can grey itself out while it's open.
-  const setMobileChannelDropdownOpen = useSetRecoilState(subscriptionMobileChannelDropdownOpenState);
-  useEffect(() => {
-    setMobileChannelDropdownOpen(mobileDropdownOpen);
-  }, [mobileDropdownOpen, setMobileChannelDropdownOpen]);
-  // Reset on unmount so leaving the channel view never leaves the tab stuck greyed.
-  useEffect(() => () => setMobileChannelDropdownOpen(false), [setMobileChannelDropdownOpen]);
-
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-hidden">
       {isH5 ? (
         /* === H5 header === */
         <>
           <div className="sticky top-0 z-30 shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
-            {/* Row 1: hamburger | 频道/广场 切换 | search | menu */}
+            {/* Back to home | current channel | search | menu */}
             <div className="relative flex h-11 items-center gap-3 px-4">
               {/* Left group — fixed width that mirrors the right group, so the
                                 center toggle stays screen-centered.
                                 76px = search(32) + gap(12) + actions(32). */}
               <div className="flex min-w-[76px] shrink-0 items-center justify-start">
-                {onOpenChannelNav ? (
-                  <button
-                    type="button"
-                    onClick={onOpenChannelNav}
-                    disabled={mobileDropdownOpen}
-                    aria-label={localize("com_nav_open_sidebar")}
-                    className={cn(
-                      mobileHeadIconBtnClassName,
-                      mobileDropdownOpen && "pointer-events-none opacity-20",
-                    )}
-                  >
-                    <Outlined.SidebarMenu className="size-5" />
-                  </button>
-                ) : (
-                  <div className="size-5 shrink-0" aria-hidden />
-                )}
+                <button
+                  type="button"
+                  onClick={() => onChannelSelect ? onChannelSelect(null) : navigate("/channel")}
+                  aria-label={localize("com_ui_go_back")}
+                  className={cn(mobileHeadIconBtnClassName, "workbench-menu-trigger relative")}
+                >
+                  <Outlined.ArrowLeft className="size-5" />
+                </button>
               </div>
-              {/* Center group — spacer. The 频道/广场 toggle is a single
-                                persistent instance rendered above both views (Subscription/index),
-                                screen-centered over this gap, so switching slides smoothly. */}
-              <div className="flex min-w-0 flex-1 items-center justify-center" />
+              <h1 className="pointer-events-none absolute left-1/2 max-w-[calc(100%-208px)] -translate-x-1/2 truncate text-h4 font-medium text-text-1">{channelDetail?.name || channel.name}</h1>
+              <div className="min-w-0 flex-1" aria-hidden />
               {/* Right group — same fixed width as the left group */}
               <div className="flex min-w-[76px] shrink-0 items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => {
-                    setMobileDropdownOpen(false);
                     setMobileSearchOpen((o) => !o);
                   }}
-                  disabled={mobileDropdownOpen}
                   aria-label={localize("com_subscription.search_articles_of_interest")}
                   aria-pressed={mobileSearchOpen}
                   className={cn(
                     mobileHeadIconBtnClassName,
-                    mobileDropdownOpen && "pointer-events-none opacity-20",
                   )}
                 >
                   <Outlined.Search className="size-5" />
@@ -199,8 +134,7 @@ export function ArticleList({
                         : undefined
                     }
                     triggerClassName={mobileHeadIconBtnClassName}
-                    disabled={mobileDropdownOpen}
-                  />
+                    />
                 ) : null}
               </div>
               {/* Source picker — absolute-positioned anchor at the right edge so the popover opens beneath the actions menu without consuming flex space */}
@@ -229,47 +163,20 @@ export function ArticleList({
                 />
               </div>
             ) : null}
-            {/* Row 2: 频道名称（左，纯标题） + 切换频道 / 仅看未读（右） */}
-            <div className="flex h-11 items-center justify-between gap-3 px-4">
-              <h1 className="min-w-0 flex-1 truncate text-[16px] font-medium leading-6 text-text-1">
-                {channelDetail?.name || channel.name}
-              </h1>
-              <div className="flex shrink-0 items-center gap-3">
-                {onChannelSelect ? (
-                  <ChannelSwitcher
-                    variant="mobile"
-                    activeChannelId={channel.id}
-                    channelName={channelDetail?.name || channel.name}
-                    onChannelSelect={onChannelSelect}
-                    onCreateChannel={onCreateChannel}
-                    onChannelSquare={onGoChannelSquare}
-                    open={mobileDropdownOpen}
-                    onOpenChange={(next) => {
-                      if (next) setMobileSearchOpen(false);
-                      setMobileDropdownOpen(next);
-                    }}
-                    mobileTopOffset={
-                      mobileSearchOpen
-                        ? "calc(env(safe-area-inset-top, 0px) + 148px)"
-                        : "calc(env(safe-area-inset-top, 0px) + 96px)"
-                    }
-                  />
-                ) : null}
-                <button
-                  type="button"
-                  onClick={handleToggleUnread}
-                  disabled={mobileDropdownOpen}
-                  className={cn(
-                    "shrink-0 rounded-md border px-3 py-[3px] text-sm transition-colors whitespace-nowrap",
-                    onlyUnread
-                      ? "border-transparent bg-primary/20 text-primary"
-                      : "border-border-base bg-white text-gray-800",
-                    mobileDropdownOpen && "pointer-events-none opacity-20",
-                  )}
-                >
-                  {localize("com_subscription.show_unread_only")}
-                </button>
-              </div>
+            <div className="flex h-11 items-center justify-end px-4">
+              <button
+                type="button"
+                onClick={handleToggleUnread}
+                aria-pressed={onlyUnread}
+                className={cn(
+                  "shrink-0 rounded-md border px-3 py-[3px] text-sm transition-colors whitespace-nowrap",
+                  onlyUnread
+                    ? "border-transparent bg-primary/20 text-primary"
+                    : "border-border-base bg-white text-gray-800",
+                )}
+              >
+                {localize("com_subscription.show_unread_only")}
+              </button>
             </div>
             {/* Row 3: 子频道页签。无子频道时整行隐藏。横滚、两端渐隐、
                             未读数徽标与底部通栏分隔线都由 @bisheng/ui Tabs 提供。 */}

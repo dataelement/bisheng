@@ -166,6 +166,7 @@ export default function MobileNav({
             aria-label={preferBackButton ? localize('com_ui_go_back') : localize('com_nav_open_sidebar')}
             className={cn(
               mobileHeadIconBtnClassName,
+              'workbench-menu-trigger relative',
               (historyDropdownOpen || appHistoryDropdownOpen) && 'pointer-events-none text-text-4',
             )}
             onClick={preferBackButton ? (onBack ?? toggleSidebar) : () => { setHistoryDropdownOpen(false); setSystemMenuOpen(true); }}
@@ -271,37 +272,10 @@ export default function MobileNav({
           </>
         ) : (
           <>
-            {variant === 'app' ? (
-              <>
-                <div className="min-w-0 flex-1" aria-hidden />
-                <span className="sr-only">{localize('com_ui_new_chat')}</span>
-              </>
-            ) : (
-              // Wrapper centers within the bar; the button itself is content-width so only
-              // the title + caret is tappable (avoids mis-tapping the ≡ / + on the edges).
-              <div className="flex min-w-0 flex-1 justify-center px-1">
-                <button
-                  type="button"
-                  onClick={() => setHistoryDropdownOpen((o) => !o)}
-                  aria-expanded={historyDropdownOpen}
-                  className="flex min-w-0 max-w-full items-center justify-center gap-1 outline-none"
-                >
-                  <span className="truncate text-[16px] font-medium leading-6 text-text-1">
-                    {localize('com_ui_chat_list')}
-                  </span>
-                  <Outlined.Down
-                    className={cn(
-                      'size-4 shrink-0 text-text-3 transition-transform',
-                      historyDropdownOpen && 'rotate-180',
-                    )}
-                  />
-                </button>
-              </div>
-            )}
-            {/* No active conversation here (new-chat landing / chat list): the user is
-                already in a fresh chat, so the new-chat "+" would be a no-op — hide it.
-                A same-width spacer keeps the centered title from shifting right.
-                (The list dropdown still offers a "+ 新对话" entry as a fallback.) */}
+            <div className="min-w-0 flex-1" aria-hidden />
+            {variant === 'app' && <span className="sr-only">{localize('com_ui_new_chat')}</span>}
+            {/* The landing page uses the global sidebar for history and already starts a
+                fresh chat, so it needs neither a history title nor a new-chat action. */}
             <div className="size-5 shrink-0" aria-hidden />
           </>
         )}

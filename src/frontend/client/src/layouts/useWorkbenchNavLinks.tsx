@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { matchPath, useLocation } from 'react-router-dom';
 import { skillCenterPath } from '~/components/Skills/types';
-import { useAuthContext, useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from '~/hooks';
+import { useAuthContext, useLocalize, useWorkbenchMenuNames } from '~/hooks';
 import { canOpenWorkbench, canShowPlatformAdminEntry } from '~/utils/platformAccess';
 import { appsSectionLinkTarget, lastSectionPaths } from './appModuleNavPaths';
 
@@ -41,7 +41,6 @@ export function useWorkbenchNavLinks(): { links: WorkbenchNavLink[]; showAdminEn
   const menuNames = useWorkbenchMenuNames();
   const localize = useLocalize();
   const skillCenterLabel = localize('com_skill_center_title');
-  const isMobile = usePrefersMobileLayout();
   const workbenchUser = user as (typeof user & WorkbenchUser) | undefined;
 
   // On the menu-unavailable placeholder the URL carries the originating menu as
@@ -112,9 +111,8 @@ export function useWorkbenchNavLinks(): { links: WorkbenchNavLink[]; showAdminEn
       {
         section: 'channel',
         plugin: 'subscription',
-        // Desktop opens the module home, like 知识空间; mobile has no channel home and
-        // keeps restoring the last-visited channel.
-        to: target('subscription', isMobile ? lastSectionPaths.channel || '/channel' : '/channel'),
+        // Both shells enter the module home, never the last-visited channel.
+        to: target('subscription', '/channel'),
         icon: <Outlined.Rss />,
         activeIcon: <Filled.Rss />,
         label: menuNames.channel,
@@ -149,7 +147,7 @@ export function useWorkbenchNavLinks(): { links: WorkbenchNavLink[]; showAdminEn
     ];
     return all.filter((link) => canShow(link.plugin));
     // Menu names are read field-by-field: the hook returns a fresh object each render.
-  }, [canOpenWorkbenchEntry, pathname, menuUnavailablePlugin, isMobile, menuApprovalMode, pluginsKey,
+  }, [canOpenWorkbenchEntry, pathname, menuUnavailablePlugin, menuApprovalMode, pluginsKey,
     menuNames.home, menuNames.knowledge, menuNames.channel, menuNames.apps, skillCenterLabel]);
 
   return { links, showAdminEntry };

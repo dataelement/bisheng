@@ -55,22 +55,22 @@ export function CapabilityCenterPage() {
     setParams(next, { replace: true });
   };
   return <div className={MODULE_HOME_FRAME}>
-    <ModuleHomeHeader title={t('title')}>
-      <SearchInput className="w-48 min-[576px]:w-64" value={search} onChange={event => setSearch(event.target.value)} onClear={() => setSearch('')} placeholder={t('search')} aria-label={t('search')} />
+    <ModuleHomeHeader title={t('title')} mobileTitleInShell>
+      <SearchInput className="w-full min-w-0 min-[768px]:w-64" value={search} onChange={event => setSearch(event.target.value)} onClear={() => setSearch('')} placeholder={t('search')} aria-label={t('search')} />
     </ModuleHomeHeader>
-    <div className={`${MODULE_HOME_COLUMN} mt-4 flex shrink-0 items-center justify-between gap-4`}>
-      <Tabs className="min-w-0 flex-1" size="large" variant="neutral" activeKey={active} items={CAPABILITY_TABS.map(tab => ({ key: tab, label: t(tab), badge: counts[tab] }))}
+    <div className={`${MODULE_HOME_COLUMN} mt-4 flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-3`}>
+      <Tabs className="min-w-0 flex-1 max-[575px]:basis-full" size="large" variant="neutral" activeKey={active} items={CAPABILITY_TABS.map(tab => ({ key: tab, label: t(tab), badge: counts[tab] }))}
         onChange={key => { const next = new URLSearchParams(); next.set('type', key); setParams(next, { replace: true }); }} />
-      {active !== 'tool' && <Button disabled={!identity.data} onClick={() => setUploadOpen(true)}><Outlined.Plus />{localize('com_skill_center_upload')}</Button>}
+      {active !== 'tool' && <Button className="max-[575px]:w-full" disabled={!identity.data} onClick={() => setUploadOpen(true)}><Outlined.Plus />{localize('com_skill_center_upload')}</Button>}
     </div>
-    <main className="scroll-on-scroll flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto">
-      <div className={`${MODULE_HOME_COLUMN} flex flex-1 flex-col pb-3 pt-4`}>
+    <main className="scroll-on-scroll flex min-h-0 min-w-0 w-full flex-1 flex-col items-center overflow-y-auto">
+      <div className={`${MODULE_HOME_COLUMN} flex min-w-0 flex-1 flex-col pb-3 pt-4`}>
         {active !== 'tool' && <SkillCenterPane onSearchClear={() => setSearch('')} search={search} uploadOpen={uploadOpen} onUploadOpenChange={setUploadOpen} />}
         {availability.isError && <p role="alert" className="text-body-sm text-danger">{t('availability_failed')}</p>}
         {active !== 'skill' && ((identity.isError || catalog.isError) ? <StateView title={t('failed')} description={t('retry_hint')} action={<Button color="default" variant="outlined" onClick={() => { void identity.refetch(); void catalog.refetch(); }}>{t('retry')}</Button>} />
         : (identity.isLoading || catalog.isLoading) ? <SkillListSkeleton />
-        : filtered.length ? <ul className="flex w-full flex-col">
-          {filtered.map(item => <li key={item.id} className="relative flex w-full items-center gap-4 border-b-[0.5px] border-border-base px-2 py-3 transition-colors hover:bg-fill-1">
+        : filtered.length ? <ul className="flex min-w-0 w-full flex-col">
+          {filtered.map(item => <li key={item.id} className="relative flex min-w-0 w-full items-center gap-4 border-b-[0.5px] border-border-base px-2 py-3 transition-colors hover:bg-fill-1">
             <button type="button" aria-label={item.name} onClick={() => handleSelect(item.id)}
               className="absolute inset-0 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500" />
             <CapabilityIcon item={item} />

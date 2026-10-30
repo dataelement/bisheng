@@ -2,7 +2,7 @@ import { Badge, Button } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import type { Channel } from "~/api/channels";
 import { MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader } from "~/components/ModuleHome";
-import { useLocalize, useWorkbenchMenuNames } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
 import { DemoTag } from "~/mock/demo/DemoTag";
 import { cn } from "~/utils";
 import { formatTimeCard } from "~/pages/knowledge/knowledgeUtils";
@@ -12,6 +12,7 @@ interface ChannelHomePageProps {
     subscribedChannels: Channel[];
     onChannelSelect: (channel: Channel) => void;
     onCreateChannel: () => void;
+    onOpenMobileNav?: () => void;
 }
 
 interface ChannelCardProps {
@@ -88,9 +89,11 @@ export function ChannelHomePage({
     subscribedChannels,
     onChannelSelect,
     onCreateChannel,
+    onOpenMobileNav,
 }: ChannelHomePageProps) {
     const localize = useLocalize();
     const menuNames = useWorkbenchMenuNames();
+    const isMobile = usePrefersMobileLayout();
 
     const sections = [
         { key: "created", title: localize("com_subscription.created_by_me"), channels: createdChannels },
@@ -100,15 +103,34 @@ export function ChannelHomePage({
     return (
         // The scroll area spans the full width so its scrollbar sits at the page edge, not
         // beside the column.
-        <div className={MODULE_HOME_FRAME}>
-            <ModuleHomeHeader title={menuNames.channel}>
-                <Button onClick={onCreateChannel}>
-                    <Outlined.Plus />
-                    {localize("com_subscription.create_channel")}
-                </Button>
-            </ModuleHomeHeader>
+        <div className={cn(MODULE_HOME_FRAME, isMobile && "px-0 py-0")}>
+            {isMobile ? (
+                <>
+                    {/* Global navigation remains available without a duplicate square switcher. */}
+                    <header className="w-full shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                        <div className="relative flex h-11 items-center px-4">
+                            <button
+                                type="button"
+                                aria-label={localize("com_nav_open_sidebar")}
+                                onClick={onOpenMobileNav}
+                                className="workbench-menu-trigger relative inline-flex size-5 shrink-0 items-center justify-center text-text-1"
+                            >
+                                <Outlined.SidebarMenu className="size-5" />
+                            </button>
+                            <h1 className="pointer-events-none absolute left-1/2 max-w-[calc(100%-112px)] -translate-x-1/2 truncate text-h4 font-medium text-text-1">{menuNames.channel}</h1>
+                        </div>
+                    </header>
+                </>
+            ) : (
+                <ModuleHomeHeader title={menuNames.channel}>
+                    <Button onClick={onCreateChannel}>
+                        <Outlined.Plus />
+                        {localize("com_subscription.create_channel")}
+                    </Button>
+                </ModuleHomeHeader>
+            )}
             <div className="scroll-on-scroll flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto">
-                <div className={cn(MODULE_HOME_COLUMN, "flex flex-col gap-6 pb-3 pt-4")}>
+                <div className={cn(MODULE_HOME_COLUMN, "flex min-w-0 flex-col gap-6 pb-3 pt-4", isMobile && "px-4")}>
                     {sections.map((section) => (
                         <section key={section.key} className="flex flex-col gap-3">
                             <h2 className="flex h-8 min-w-0 items-center truncate text-body font-medium text-text-1">{section.title}</h2>
@@ -120,7 +142,7 @@ export function ChannelHomePage({
                                 // inset rule falls outside and its content lines up with the section title,
                                 // whatever the auto-fill column count is.
                                 <div className="overflow-hidden border-y border-border-deep">
-                                    <div className="-mb-px -ml-4 grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))]">
+                                    <div className="-mb-px -ml-4 grid grid-cols-3 max-[768px]:grid-cols-2 max-[575px]:grid-cols-1">
                                         {section.channels.map((channel, i) => (
                                             <ChannelCard key={channel.id} channel={channel} index={i + 1} onSelect={onChannelSelect} />
                                         ))}
@@ -135,6 +157,14 @@ export function ChannelHomePage({
                     ))}
                 </div>
             </div>
+            {isMobile && (
+                <footer className="w-full shrink-0 bg-white px-4 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
+                    <Button color="default" variant="outlined" className="w-full" onClick={onCreateChannel}>
+                        <Outlined.Plus />
+                        {localize("com_subscription.create_channel")}
+                    </Button>
+                </footer>
+            )}
         </div>
     );
 }

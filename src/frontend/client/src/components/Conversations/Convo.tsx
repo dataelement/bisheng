@@ -2,7 +2,7 @@
 import { Outlined } from "bisheng-icons";
 import type { FocusEvent, KeyboardEvent, MouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useRecoilValue } from "recoil";
 import { NotificationSeverity } from "~/common";
 import {
@@ -40,10 +40,11 @@ export default function Conversation({
   className,
 }: ConversationProps) {
   const params = useParams();
+  const { pathname } = useLocation();
 
   const currentConvoId = useMemo(
-    () => params.conversationId,
-    [params.conversationId]
+    () => params.conversationId ?? pathname.match(/^\/(?:c|linsight|app)\/([^/]+)/)?.[1],
+    [params.conversationId, pathname]
   );
   const updateConvoMutation = useUpdateConversationMutation(
     currentConvoId ?? ""
@@ -77,11 +78,12 @@ export default function Conversation({
 
     event.preventDefault();
 
-    if (currentConvoId === conversationId || isPopoverActive) {
+    if (isPopoverActive) {
       return;
     }
 
     toggleNav();
+    if (currentConvoId === conversationId) return;
 
     // set document title
     if (typeof title === "string" && title.length > 0) {
@@ -195,7 +197,7 @@ export default function Conversation({
       onPointerEnter={titleReveal.reveal} onPointerLeave={titleReveal.reset}
       onFocus={titleReveal.reveal} onBlur={titleReveal.reset}
       className={cn(
-        "dsh-history-row group relative w-full content-stretch flex gap-[8px] items-center mb-1 rounded-lg shrink-0 transition-colors",
+        "dsh-history-row group relative w-full content-stretch flex gap-[8px] items-center mb-1 rounded-lg shrink-0 transition-colors coarse-pointer:min-h-11 coarse-pointer:py-0",
         // Mobile rows: 8px left / 6px right, 8px vertical (desktop nav uses 12px/6px).
         isSmallScreen
           ? "pl-[8px] pr-[6px] py-[8px]"
@@ -253,7 +255,7 @@ export default function Conversation({
           data-testid="convo-item"
           onClick={clickHandler}
           className={cn(
-            "flex grow cursor-pointer items-center gap-[8px] overflow-hidden whitespace-nowrap break-all"
+            "flex grow cursor-pointer items-center gap-[8px] overflow-hidden whitespace-nowrap break-all coarse-pointer:min-h-11"
           )}
           title={title ?? ""}
         >

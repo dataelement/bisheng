@@ -2,7 +2,7 @@ import { useState, useRef, memo } from "react";
 import { Ellipsis } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 
-import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize } from "~/hooks";
 import { useChatContext } from "~/Providers";
 import { Dropdown, DropdownItem, DropdownSeparator, DropdownSub } from "@bisheng/ui";
 import {
@@ -42,9 +42,7 @@ function ConvoOptions({
   const projects = useSidebarProjects();
   const projectChats = useMockProjectChats();
   const currentProjectId = conversationId ? projectChats[conversationId] : undefined;
-  // 项目 only exists in the desktop workbench sidebar, so mobile hides the row
-  // rather than filing a conversation into a folder it cannot show.
-  const isSmallScreen = usePrefersMobileLayout();
+  // Projects are accessible from the global workbench sidebar on every width.
 
   const handleMoveToProject = (projectId: string) => {
     if (!conversationId) {
@@ -81,7 +79,6 @@ function ConvoOptions({
               <DropdownItem icon={<Outlined.Edit />} onSelect={renameHandler}>
                 {localize("com_ui_rename")}
               </DropdownItem>
-              {!isSmallScreen && (
                 <DropdownSub label={localize("com_workbench_sidebar.move_to_project")} icon={<Outlined.MoveToFolder />}>
                   {projects.map((project) => (
                     <DropdownItem key={project.id} icon={<Outlined.FolderClose />} onSelect={() => handleMoveToProject(project.id)}>
@@ -94,7 +91,6 @@ function ConvoOptions({
                     </DropdownItem>
                   )}
                 </DropdownSub>
-              )}
               <DropdownSeparator />
               <DropdownItem danger icon={<Outlined.Delete />} onSelect={handleDelete}>
                 {localize("com_ui_delete")}
@@ -108,7 +104,7 @@ function ConvoOptions({
             id={`conversation-menu-${conversationId}`}
             aria-label={localize("com_nav_convo_menu_options")}
             className={cn(
-              "z-30 inline-flex h-4 w-4 items-center justify-center gap-2 rounded-md border-none p-0 text-sm font-medium text-text-3 ring-ring-primary transition-all duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 fine-pointer:hover:text-text-1",
+              "z-30 inline-flex h-4 w-4 items-center justify-center gap-2 rounded-md border-none p-0 text-sm font-medium text-text-3 ring-ring-primary transition-all duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:text-text-1 coarse-pointer:size-11",
               isActiveConvo
                 ? "opacity-100"
                 : "opacity-0 focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100 coarse-pointer:opacity-100",

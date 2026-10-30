@@ -17,8 +17,6 @@ interface ChannelLayoutProps {
     /** PC：顶部标题下拉切换频道 */
     onChannelSelect?: (channel: Channel | null) => void;
     onChannelSettings?: (channel: Channel) => void;
-    /** H5：打开左侧「我的频道」抽屉（由订阅页挂载） */
-    onOpenChannelNav?: () => void;
     onGoChannelSquare?: () => void;
     onCreateChannel?: () => void;
 }
@@ -53,7 +51,6 @@ export function ChannelLayout({
     onFullScreen,
     onChannelSelect,
     onChannelSettings,
-    onOpenChannelNav,
     onGoChannelSquare,
     onCreateChannel,
 }: ChannelLayoutProps) {
@@ -181,7 +178,6 @@ export function ChannelLayout({
                     selectedArticleId={selectedArticle?.id}
                     onChannelSelect={onChannelSelect}
                     onChannelSettings={onChannelSettings}
-                    onOpenChannelNav={onOpenChannelNav}
                     onGoChannelSquare={onGoChannelSquare}
                     onCreateChannel={onCreateChannel}
                 />

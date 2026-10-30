@@ -11,7 +11,7 @@ import {
 import type { ContextType } from '~/common';
 import { Banner } from '~/components/Banners';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
-import { MobileNav, Nav } from '~/components/Nav';
+import { MobileNav } from '~/components/Nav';
 import { useAgentsMap, useAssistantsMap, useAuthContext, useFileMap, useSearch } from '~/hooks';
 import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import store from '~/store';
@@ -73,10 +73,7 @@ export default function Root() {
                 <Banner onHeightChange={setBannerHeight} />
                 <div className="flex min-h-0 flex-1 overflow-hidden">
                   <div className="relative z-0 flex min-h-0 w-full flex-1 overflow-hidden">
-                    {/* Desktop lists conversations in the workbench sidebar (MainLayout);
-                        the chat-local nav is the mobile history drawer only. Hidden entirely
-                        when embedded in the desktop client. */}
-                    {!embedded && isSmallScreen ? <Nav navVisible={navVisible} setNavVisible={setNavVisible} /> : null}
+                    {/* Global conversation navigation belongs to MainLayout on every width. */}
                     <div className="relative flex min-h-0 max-w-full flex-1 flex-col overflow-hidden">
                       {!embedded && showMobileNav && isSmallScreen && !mobileNavHidden ? (
                         // 勿用 fixed 贴视口：会盖住 MainLayout 白卡 rounded-xl 上沿与两侧灰底留白（与知识库 H5、StandaloneChat 一致）

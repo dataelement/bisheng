@@ -228,8 +228,7 @@ export function ChannelDiscoveryHome({
                         >
                             <Outlined.SidebarMenu className="size-5" />
                         </button>
-                        {/* 频道/广场 切换器为跨视图常驻单实例（见 Subscription/index），
-                            屏幕居中悬浮在此行之上，这里不再各自渲染。 */}
+                        <h1 className="pointer-events-none absolute left-1/2 max-w-[calc(100%-112px)] -translate-x-1/2 truncate text-h4 font-medium text-text-1">{menuNames.channel}</h1>
                     </div>
                 </div>
             );
