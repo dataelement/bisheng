@@ -2617,6 +2617,10 @@
   "com_skill_center_menu": "技能",
   "com_skill_center_manage": "管理技能",
   "com_skill_center_menu_available": "可用技能",
+  "modelPicker": {
+    "unknownProvider": "其他提供方",
+    "back": "返回"
+  },
   "com_select": {
     "empty": "暂无数据",
     "no_match": "无匹配结果",

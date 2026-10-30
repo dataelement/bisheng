@@ -210,10 +210,10 @@ describe("⚙️ menu — hosted application keeps two entries (AC-16 / F054 AC-
 
     expect(menuItemTexts()).toEqual([MENU_LABELS.delete])
   })
-  it("disables the version dropdown of an online hosted app", async () => {
+  it("shows version information without a dropdown for an online hosted app", async () => {
     renderHosted({ item: { app_state: "online", status: 2 } })
-    await screen.findByText("hostedApp.version.placeholder")
-    expect(screen.getByRole("combobox")).toBeDisabled()
+    await screen.findByText("hostedApp.version.noCode")
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument()
   })
 
 })

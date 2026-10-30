@@ -2612,6 +2612,10 @@
   "com_skill_center_menu": "スキル",
   "com_skill_center_manage": "スキルを管理",
   "com_skill_center_menu_available": "利用できるスキル",
+  "modelPicker": {
+    "unknownProvider": "その他のプロバイダー",
+    "back": "戻る"
+  },
   "com_select": {
     "empty": "データがありません",
     "no_match": "一致する結果がありません",

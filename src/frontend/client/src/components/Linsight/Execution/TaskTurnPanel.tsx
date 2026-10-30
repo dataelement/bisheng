@@ -144,12 +144,9 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
     // Does the session timeline already have content to render? Once deep-thinking
     // starts streaming, ExecutionTimeline owns the "working" signal (+ live-tail
     // through the gap), so the planning row must not run concurrently. Memo keyed
-    // on a composite signature because the WS pump mutates sessionSteps in place.
-    const hasSessionTimeline = useMemo(
-        () => hasRenderableTimeline(sessionSteps),
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- composite key over the in-place-mutated sessionSteps array
-        [sessionSteps.length, sessionSteps[sessionSteps.length - 1]?.status, sessionSteps[sessionSteps.length - 1]?.call_id],
-    );
+    // on the array reference: the WS pump replaces sessionSteps immutably per frame
+    // (appendStepFrame folds same-call_id frames, so the length alone is no signal).
+    const hasSessionTimeline = useMemo(() => hasRenderableTimeline(sessionSteps), [sessionSteps]);
 
     // Attachment ingest was moved off the submit request into the worker, which
     // claims the session (IN_PROGRESS ⇒ running) BEFORE parsing uploads/*. For a

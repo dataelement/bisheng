@@ -1,4 +1,5 @@
 import { Alert, Segmented } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { showApiError } from '@/controllers/request';
@@ -23,6 +24,7 @@ export function ApprovalPageView({ controller }: ApprovalPageViewProps) {
       {headerTarget && createPortal(
         <Segmented
           size="large"
+          className="rounded-full [&>span[aria-hidden]]:rounded-full"
           aria-label={t("approvalPage.title")}
           value={activeTab}
           onChange={(value) => {
@@ -30,8 +32,8 @@ export function ApprovalPageView({ controller }: ApprovalPageViewProps) {
             void loadPage().catch(showApiError);
           }}
           options={[
-            { value: "flow", label: t("approvalPage.tabFlow") },
-            { value: "exception", label: t("approvalPage.tabException") },
+            { value: "flow", label: t("approvalPage.tabFlow"), icon: <Outlined.ListTree aria-hidden="true" /> },
+            { value: "exception", label: t("approvalPage.tabException"), icon: <Outlined.Attention aria-hidden="true" /> },
           ]}
         />,
         headerTarget,

@@ -396,7 +396,7 @@ export function Cascader(props: CascaderProps) {
 
   const selectedEntries = selected.map(resolveEntry);
   const singleEntry = multiple ? undefined : selectedEntries[0];
-  const singleLabel = singleEntry?.options.map((option) => option.label).join(separator) ?? '';
+  const singleLabel = singleEntry?.options[singleEntry.options.length - 1]?.label ?? '';
   const hasValue = selected.length > 0;
   const searchableInTrigger = searchable && !phone;
   const comboboxProps: React.HTMLAttributes<HTMLElement> = {
@@ -441,7 +441,6 @@ export function Cascader(props: CascaderProps) {
       hasValue={hasValue}
       disabled={disabled}
       placeholder={placeholder}
-      separator={separator}
       removeLabel={removeLabel}
       selectedEntries={selectedEntries}
       singleLabel={singleLabel}

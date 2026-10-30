@@ -7,6 +7,7 @@
  * Pick the concrete module when adding code:
  *   execTypes  — frame / step / node type contracts (start here)
  *   stepTree   — frame merge + flow/timeline grouping
+ *   stepFold   — ingest-time fold of same-call_id frames (WS pump)
  *   narration  — firstLine + the group narration aside
  *   activity   — tool-call activity buckets
  *   clarify    — user_input parsing / answer composition
@@ -14,6 +15,7 @@
  */
 export * from './execTypes';
 export * from './stepTree';
+export * from './stepFold';
 export * from './narration';
 export * from './activity';
 export * from './clarify';
