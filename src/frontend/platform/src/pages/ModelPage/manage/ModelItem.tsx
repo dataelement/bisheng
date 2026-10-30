@@ -1,4 +1,10 @@
 import { asrHintKey, speechModelTypes } from "./speechConfig";
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Button, Input, Select, Textarea } from '@bisheng/ui';
+import { Switch, Tag } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+import { asrHintKey, speechModelTypes, ttsProviders } from "./speechConfig";
+import { rerankProviders } from "./modelProviderFields";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@bisheng/ui";
 import {
@@ -268,6 +274,35 @@ export function ModelItem({
                       : tModel(`model.type_${value}`),
                 }))}
               />
+
+            <div className="mt-3 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+                <div className="space-y-2">
+                    <Label className="bisheng-label flex h-8 items-center">
+                        <span>{t('model.modelName')}</span>
+                        <ModelFieldHint className="ml-1" content={t('model.modelNameTooltip')} />
+                    </Label>
+                    <Input aria-label={t('model.modelName')} value={data.model_name} onChange={handleNameChange} className={"h-8"} />
+                    {nameError && <span className="text-xs text-red-500">{nameError}</span>}
+                    {hintKey && <p className="text-xs text-muted-foreground">{t(hintKey)}</p>}
+                </div>
+                <div className="space-y-2">
+                    <Label className="bisheng-label flex h-8 items-center">{t('model.modelType')}</Label>
+                    <Select
+                        {...selectLabels}
+                        aria-label={t('model.modelType')}
+                        options={[
+                            { value: 'llm', label: 'LLM' },
+                            { value: 'embedding', label: 'Embedding' },
+                            // Keep the option on existing rerank rows so their current value still renders.
+                            ...(rerankProviders.includes(type) || modelType === 'rerank' ? [{ value: 'rerank', label: 'Rerank' }] : []),
+                            ...(typeOptions.includes('asr') ? [{ value: 'asr', label: 'ASR' }] : []),
+                            ...(typeOptions.includes('asr_rt') ? [{ value: 'asr_rt', label: 'ASR Realtime' }] : []),
+                            ...(ttsProviders.includes(type) ? [{ value: 'tts', label: 'TTS' }] : []),
+                        ]}
+                        value={modelType || null}
+                        onChange={(val) => { if (val != null) onInput(data.model_name, String(val)) }}
+                    />
+                </div>
             </div>
             <div className="ml-auto grid min-h-8 w-96 max-w-full shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-6 self-end">
               <div className="flex min-h-8 items-center">

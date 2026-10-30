@@ -165,3 +165,21 @@ async def test_snapshot_requires_current_route_instance_and_operation(secret_run
     await repo.save(route)
     async with repo.transaction() as session:
         assert await running_environment_snapshot(app.id, session=session) is None
+
+
+async def test_completed_deploy_keeps_comparison_available(secret_runtime):
+    from bisheng.app_runtime.application.runtime_secrets import running_environment_snapshot
+    from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeOperation
+
+    repo, app, _ = secret_runtime
+    operation = await repo.get(RuntimeOperation, "origin")
+    operation.stage = "completed"
+    await repo.save(operation)
+    async with repo.transaction() as session:
+        snapshot = await running_environment_snapshot(app.id, session=session)
+        assert snapshot is not None
+        assert snapshot.env == {"API_KEY": "old-value"}
+    operation.status = "failed"
+    await repo.save(operation)
+    async with repo.transaction() as session:
+        assert await running_environment_snapshot(app.id, session=session) is None

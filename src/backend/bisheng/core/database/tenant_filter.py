@@ -18,6 +18,7 @@ from bisheng.core.context.tenant import (
     DEFAULT_TENANT_ID,
     get_current_tenant_id,
     get_visible_tenant_ids,
+    is_management_all_tenants,
     is_strict_tenant_filter,
     is_tenant_filter_bypassed,
 )
@@ -217,6 +218,8 @@ def register_tenant_filter_events() -> None:
 
         if not orm_execute_state.is_select:
             return
+        if is_management_all_tenants() and not is_strict_tenant_filter():
+            return
 
         stmt = orm_execute_state.statement
 
@@ -314,7 +317,7 @@ def build_tenant_filter_clause(tenant_col):
         ``None`` — the latter only when multi_tenant is disabled and no
         context exists). Callers should treat ``None`` as "skip this WHERE".
     """
-    if is_tenant_filter_bypassed():
+    if is_tenant_filter_bypassed() or (is_management_all_tenants() and not is_strict_tenant_filter()):
         return None
 
     visible = _resolve_visible_tenant_ids()

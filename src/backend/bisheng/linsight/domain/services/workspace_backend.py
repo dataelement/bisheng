@@ -303,6 +303,25 @@ def normalize_workspace_path(path: str, file_dir: str | None = None) -> str:
     return "/".join(parts)
 
 
+def _grep_terms(pattern: str) -> tuple[str, ...]:
+    """Literal terms a grep ``pattern`` matches; a line matching any one is a hit.
+
+    The framework's grep is literal, but models keep writing ``A|B|C`` to search
+    several keywords at once (10-29 on 106: 5 of 7 greps in one session, every one
+    "No matches" although each keyword was in the file). Splitting on ``|`` makes
+    that one call work instead of costing a failed round plus a retry. Nothing else
+    is treated as regex — ``.``, ``(``, ``[`` stay literal.
+
+    The whole pattern is always kept as a term, so every line the literal match
+    found is still found. If any segment is blank (``| col |`` table rows,
+    ``a || b``), the ``|`` is clearly literal and the pattern is not split.
+    """
+    parts = [p.strip() for p in pattern.split("|")]
+    if len(parts) < 2 or not all(parts):
+        return (pattern,)
+    return (pattern, *dict.fromkeys(parts))
+
+
 def _decode_workspace_text(data: bytes, rel_path: str = "") -> str | None:
     """Decode workspace bytes as text, or return ``None`` when they are binary.
 
@@ -1052,6 +1071,7 @@ class WorkspaceBackend(FilesystemBackend):
         prefix = f"/{WORKSPACE_PREFIX}/{self.svid}/"
         matches: list = []
 
+        terms = _grep_terms(pattern)
         skipped_large = 0
         skipped_binary = 0
         for entry in ls_res.entries or []:
@@ -1075,7 +1095,7 @@ class WorkspaceBackend(FilesystemBackend):
                 skipped_binary += 1
                 continue
             for lineno, line in enumerate(text.splitlines(), start=1):
-                if pattern in line:
+                if any(term in line for term in terms):
                     matches.append(GrepMatch(path=full, line=lineno, text=line))
         if skipped_large or skipped_binary:
             # Never let a bounded scan look like a complete one.

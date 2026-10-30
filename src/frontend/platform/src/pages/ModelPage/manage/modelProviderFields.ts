@@ -345,3 +345,6 @@ export function getModelProviders(): Record<string, ConfigField[]> {
     ]
 };
 }
+
+/** Providers the backend can serve rerank models for (backend: bisheng/llm/domain/llm/rerank.py). */
+export const rerankProviders = ['openai', 'xinference', 'llamacpp', 'vllm', 'qwen', 'qianfan', 'silicon'];

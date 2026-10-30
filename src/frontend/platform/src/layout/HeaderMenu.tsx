@@ -1,4 +1,5 @@
 import { Segmented } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 
 import { userContext } from "@/contexts/userContext";
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
@@ -30,15 +31,16 @@ export function HeaderMenu() {
             <div className="build-tab flex justify-center h-[65px] items-center relative">
                 <Segmented
                     size="large"
+                    className="rounded-full [&>span[aria-hidden]]:rounded-full"
                     aria-label={t("menu.skills")}
                     value={location.pathname.replace(__APP_ENV__.BASE_URL, "").split("/").pop()}
                     onChange={(value) => navigate(`/build/${value}`)}
                     options={[
                         ...(canOpenBuild ? [
-                            { value: "apps", label: t("build.app") },
-                            { value: "tools", label: t("build.tools") },
+                            { value: "apps", label: t("build.app"), icon: <Outlined.Application aria-hidden="true" /> },
+                            { value: "tools", label: t("build.tools"), icon: <Outlined.Hammer aria-hidden="true" /> },
                         ] : []),
-                        ...(canManageWorkbench ? [{ value: "client", label: t("build.workbench") }] : []),
+                        ...(canManageWorkbench ? [{ value: "client", label: t("build.workbench"), icon: <Outlined.DeviceDesktopExchange aria-hidden="true" /> }] : []),
                     ]}
                 />
             </div>

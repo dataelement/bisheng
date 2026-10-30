@@ -89,6 +89,11 @@ export const skillApi = {
     return axios.post(`${SKILL_BASE}/import-github`, { url }, { silent: true } as any);
   },
 
+  // Import a skill from a public Gitee directory URL (must contain SKILL.md at root).
+  importSkillFromGitee: (url: string): Promise<SkillDetail> => {
+    return axios.post(`${SKILL_BASE}/import-gitee`, { url }, { silent: true } as any);
+  },
+
   updateSkillForm: (name: string, data: SkillFormPayload): Promise<SkillDetail> => {
     const form = new FormData();
     Object.entries(data).forEach(([k, v]) => form.append(k, v));

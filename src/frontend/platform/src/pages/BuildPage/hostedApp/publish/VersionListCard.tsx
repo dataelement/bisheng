@@ -30,9 +30,10 @@ import {
   type HostedAppVersion,
 } from "@/controllers/API/hostedApp"
 import { useTable } from "@/util/hook"
-import { Fragment, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { versionOutcomeI18nKey } from "../types"
+import { VersionReleaseNotes } from "../VersionReleaseNotes"
 import { formatTimestamp, Panel, StatusTag } from "./Panel"
 
 const PAGE_SIZE = 10
@@ -130,46 +131,39 @@ function VersionHistory({ appId, reloadKey = "" }: VersionListCardProps) {
               <th className="px-3 py-2 text-left font-normal">
                 {t("hostedApp.versionList.outcome")}
               </th>
+              <th className="w-28 px-3 py-2 text-left font-normal">
+                {t("operations")}
+              </th>
             </tr>
           </thead>
           <tbody>
             {rows.map((version) => (
-              <Fragment key={version.version_id}>
-                <tr className="border-t">
-                  <td className="px-3 py-2">
-                    <span className="mr-2">{`v${version.version_no}`}</span>
-                    {version.is_current && (
-                      <StatusTag className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                        {t("hostedApp.versionList.current")}
-                      </StatusTag>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    {t(
-                      version.kind === "initial"
-                        ? "hostedApp.versionList.kindInitial"
-                        : "hostedApp.versionList.kindIteration",
-                    )}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {formatTimestamp(version.submitted_at)}
-                  </td>
-                  <td className="px-3 py-2">
-                    {t(versionOutcomeI18nKey(version))}
-                  </td>
-                </tr>
-                <tr>
-                  <td colSpan={4} className="max-w-0 px-3 py-2">
-                    <div className="text-caption text-text-3">
-                      {t("hostedApp.releaseNotes.title")}
-                    </div>
-                    <p className="max-w-[calc(100vw-6rem)] whitespace-pre-wrap break-words text-body-sm text-text-1 [overflow-wrap:anywhere] sm:max-w-none">
-                      {version.release_notes ||
-                        t("hostedApp.releaseNotes.empty")}
-                    </p>
-                  </td>
-                </tr>
-              </Fragment>
+              <tr key={version.version_id} className="border-t">
+                <td className="px-3 py-2">
+                  <span className="mr-2">{`v${version.version_no}`}</span>
+                  {version.is_current && (
+                    <StatusTag className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                      {t("hostedApp.versionList.current")}
+                    </StatusTag>
+                  )}
+                </td>
+                <td className="px-3 py-2">
+                  {t(
+                    version.kind === "initial"
+                      ? "hostedApp.versionList.kindInitial"
+                      : "hostedApp.versionList.kindIteration",
+                  )}
+                </td>
+                <td className="px-3 py-2 tabular-nums">
+                  {formatTimestamp(version.submitted_at)}
+                </td>
+                <td className="px-3 py-2">
+                  {t(versionOutcomeI18nKey(version))}
+                </td>
+                <td className="w-28 whitespace-nowrap px-3 py-2">
+                  <VersionReleaseNotes notes={version.release_notes} />
+                </td>
+              </tr>
             ))}
           </tbody>
         </table>

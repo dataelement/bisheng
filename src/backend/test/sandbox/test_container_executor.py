@@ -7,7 +7,8 @@ import socket
 from pathlib import Path
 
 import pytest
-from fake_runner import FakeRunnerClient, _tar_gz
+from fake_runner import FakeRunnerClient as _BaseFakeRunnerClient
+from fake_runner import _tar_gz
 
 from bisheng.common.errcode.sandbox import (
     SandboxCapacityExceededError,
@@ -19,6 +20,15 @@ from bisheng_langchain.gpts.tools.code_interpreter.container_executor import Con
 from bisheng_langchain.gpts.tools.code_interpreter.local_executor import LocalExecutor
 
 _SHUFFLE_MODULE = "bisheng_langchain.gpts.tools.code_interpreter.container_executor.random.shuffle"
+
+
+class FakeRunnerClient(_BaseFakeRunnerClient):
+    """The executor streams copy-in bodies; join them before the shared fake parses them."""
+
+    def request(self, method, url, *, content=None, **kwargs):
+        if content is not None and not isinstance(content, (bytes, bytearray)):
+            content = b"".join(content)
+        return super().request(method, url, content=content, **kwargs)
 
 
 def _exe(fake: FakeRunnerClient, **kwargs) -> ContainerExecutor:

@@ -195,6 +195,7 @@
     "otherMethods": "その他のログイン方法"
   },
   "menu": {
+    "tenant": "テナント",
     "languageChinese": "中文",
     "languageJapanese": "日本語",
     "user": "ユーザー",
@@ -2150,9 +2151,9 @@
   "com_dropAnyFileToAdd": "ここにファイルをドロップして会話に追加できます",
   "com_ui_upload_file_type_error": "このアプリケーションはこのファイル形式のアップロードに対応していません。",
   "more": "もっと見る",
-  "tenant.management": "テナント管理",
+  "tenant.management": "テナント",
   "tenant.adminScope.label": "管理ビュー",
-  "tenant.adminScope.global": "全ツリー（デフォルト）",
+  "tenant.adminScope.global": "プラットフォーム全体",
   "tenant.adminScope.switched": "管理ビューを {{name}} に切り替えました",
   "tenant.adminScope.cleared": "全ツリービューに戻しました",
   "tenant.adminScope.loading": "読み込み中...",
@@ -2577,6 +2578,7 @@
       "title": "スキルをインポート",
       "tabFile": "ローカルファイル",
       "tabGithub": "GitHub URL",
+      "tabGitee": "Gitee URL",
       "dropHint": "ドラッグ＆ドロップまたはクリック",
       "dropSub": ".md ファイル、.zip / .skill アーカイブに対応（ルートに SKILL.md 必須）",
       "selected": "選択済み",
@@ -2589,6 +2591,9 @@
       "githubUrlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill",
       "githubHint": "スキルディレクトリを指す GitHub URL を貼り付け（SKILL.md を含むこと）",
       "githubReqHost": "公開 github.com リポジトリのみ対応",
+      "giteeUrlPlaceholder": "https://gitee.com/owner/repo/tree/master/path/to/skill",
+      "giteeHint": "スキルディレクトリを指す Gitee URL を貼り付け（SKILL.md を含むこと）",
+      "giteeReqHost": "公開 gitee.com リポジトリのみ対応",
       "githubReqDir": "URL は SKILL.md を含むディレクトリを指すこと。スラッシュを含むブランチ名は非対応",
       "unsupported": "未対応のファイル形式です（.md / .zip / .skill）",
       "confirm": "インポート",
@@ -2611,6 +2616,9 @@
       "githubUrlInvalid": "GitHub URL の形式が不正です（例: https://github.com/{owner}/{repo}/tree/{branch}/{path}）",
       "githubFetch": "GitHub からの取得に失敗：リポジトリ / ブランチ / パスが存在しないか、ネットワークエラーです。URL を確認して再試行してください",
       "githubRateLimit": "GitHub のレート制限に達しました。しばらくしてから再試行してください",
+      "giteeUrlInvalid": "Gitee URL の形式が不正です（例: https://gitee.com/{owner}/{repo}/tree/{branch}/{path}）",
+      "giteeFetch": "Gitee からの取得に失敗：リポジトリ / ブランチ / パスが存在しないか、ネットワークエラーです。URL を確認して再試行してください",
+      "giteeRateLimit": "Gitee のレート制限に達しました。しばらくしてから再試行してください",
       "unknown": "操作に失敗しました。再試行してください"
     },
     "catalogHint": "保存したスキルは企業権限に従って提供され、タスクごとに選択します。無効化すると提供を停止します。"
@@ -2919,7 +2927,7 @@
     },
     "tenantScope": {
       "label": "管理するテナント",
-      "choose": "管理するテナントを選択してください",
+      "choose": "先に右上で管理対象のテナントを選択してください",
       "hint": "サービスアカウントの表示先と作成先を選択します。既存アカウントの所属は変わりません。この選択は他の管理画面と共有されます。",
       "changed": "管理するテナントが変更されました。更新して操作を再確認してください。元のリクエストは自動的に再試行されません。",
       "refresh": "更新"
@@ -3290,7 +3298,8 @@
     },
     "releaseNotes": {
       "title": "リリースノート",
-      "empty": "リリースノートは未入力です"
+      "empty": "リリースノートは未入力です",
+      "column": "バージョンの説明"
     }
   },
   "dsh": {
@@ -3861,6 +3870,7 @@
     "usageScope": "現在のテナントからユーザーを選択し、期間内のトークン使用量、メッセージ数、完了した Q&A を確認します。",
     "byDepartment": "部門別",
     "byUser": "ユーザー別",
+    "byRole": "ロール別",
     "selectDepartment": "部門を選択",
     "selectDepartmentForUsage": "部門を選択すると、その部門と配下部門の集計使用量とユーザー明細を表示します。",
     "timeUsage": "期間別使用量",
@@ -4162,7 +4172,7 @@
       "userTab": "ユーザー",
       "addCredits": "割り当てを追加",
       "emptyCredits": "クレジット設定がありません",
-      "ruleHelp": "ユーザー・部門・ロールごとに月間クレジットを設定します。有効な設定が複数該当する場合は最大値が適用され、Chat と Work で共有されます。",
+      "ruleHelp": "ユーザー・部門・ロールごとに月間クレジットを設定します。有効な設定が複数該当する場合は最大値が適用され、Chat と Work で共有されます。有効な設定に該当しないメンバーは上限なしになります。",
       "scope": "対象範囲",
       "monthlyCredits": "1 人あたりの月間クレジット",
       "creditRangeHint": "0 から {{max}} までのクレジットを、小数点以下 6 桁以内で入力してください。",

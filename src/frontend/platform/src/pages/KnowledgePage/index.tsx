@@ -19,9 +19,9 @@ export default function KnowledgePage() {
 
     return (
         <div className="w-full h-full px-2 pt-4 relative">
-            <Tabs defaultActiveKey={defaultValue} divider={false}
+            <Tabs defaultActiveKey={defaultValue}
                 extra={<div ref={setToolbarTarget} />}
-                className="w-full mb-10 [&>div:first-child]:mx-2 [&>div:first-child]:mb-2 [&>div:first-child]:justify-between [&>div:first-child>[role=tablist]]:flex-initial [&>div:first-child>[role=tablist]]:border-b [&>div:first-child>[role=tablist]]:border-border-base" items={[
+                className="w-full mb-10 [&>div:first-child]:mx-2 [&>div:first-child]:mb-2" items={[
                 { key: 'file', label: t('lib.fileData'), children: <KnowledgeFile toolbarTarget={toolbarTarget} /> },
                 { key: 'qa', label: t('lib.qaData'), children: <KnowledgeQa toolbarTarget={toolbarTarget} /> },
             ]} />

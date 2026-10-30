@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Convo from '~/components/Conversations/Convo';
 import { Spinner } from '~/components/svg';
-import { useAuthContext, useLocalize, useNavScrolling } from '~/hooks';
+import { useAuthContext, useLocalize, useNavScrolling, useScrollRevealRef } from '~/hooks';
 import { useConversationsInfiniteQuery } from '~/hooks/queries/data-provider';
 import type { ConversationListResponse } from '~/types/chat';
 import { cn } from '~/utils';
@@ -38,6 +38,12 @@ export function SidebarConversationList({ leading }: SidebarConversationListProp
     fetchNextPage,
     isFetchingNextPage,
   });
+
+  const scrollRevealRef = useScrollRevealRef<HTMLDivElement>();
+  const setHistoryScrollRef = useCallback((node: HTMLDivElement | null) => {
+    containerRef.current = node;
+    scrollRevealRef(node);
+  }, [containerRef, scrollRevealRef]);
 
   // MOCK: a conversation moved into a project leaves the flat list and shows up
   // under its folder above (see projectsStore).
@@ -83,11 +89,11 @@ export function SidebarConversationList({ leading }: SidebarConversationListProp
           )}
         />
         <div
-          ref={containerRef}
+          ref={setHistoryScrollRef}
           onScroll={updateScrollShadows}
           // -mx-1/px-1 widens the scrollport past the rows' edges so the rename
           // ring (a 1px shadow) isn't clipped.
-          className="scroll-no-hover -mx-1 min-h-0 flex-1 overflow-y-auto px-1"
+          className="scrollbar-on-scroll -mx-1 min-h-0 flex-1 overflow-y-auto px-1"
         >
           {leading}
           <SidebarSectionLabel>{localize('com_workbench_sidebar.conversations')}</SidebarSectionLabel>

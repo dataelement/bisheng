@@ -1143,7 +1143,7 @@
     "logo": null,
     "desc": "按当前执行用户权限检索文档知识库和知识空间，返回片段及文档来源。",
     "tool_key": "bisheng_knowledge_search",
-    "type": 18,
+    "type": 19,
     "is_preset": 1,
     "is_delete": 0,
     "user_id": null,

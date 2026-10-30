@@ -1,6 +1,6 @@
 import { Pagination, Button, SearchInput, Select, notification } from "@bisheng/ui";
 // F035 (PRD §4.5): tenant custom skill management section, mounted in the
-// merged 日常 tab of 构建-工作台配置 (replaces the legacy SOP manual library).
+// merged Daily tab of Build / Workbench Config (replaces the legacy SOP manual library).
 // List shows display_name only — the skill ID stays detail-level; no
 // migration-source badge (FR-5.1).
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
@@ -237,7 +237,7 @@ export function SkillManagement({ scopeVersion = 0 }: SkillManagementProps) {
                 </TableCell>
                 <TableCell onClick={(event) => event.stopPropagation()}>
                   {hasResourceAction(actions, skill.id, "manage_permission") && (
-                    <Button variant="ghost" size="sm" onClick={() => setPermissionSkill(skill)}>
+                    <Button variant="text" color="default" size="small" onClick={() => setPermissionSkill(skill)}>
                       {t("permission:dialog.tabGrant")}
                     </Button>
                   )}

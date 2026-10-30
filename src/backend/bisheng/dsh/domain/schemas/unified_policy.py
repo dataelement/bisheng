@@ -7,6 +7,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 TOKENS_PER_CREDIT = 1_000_000
 MAX_TOKEN_LIMIT = 9_223_372_036_854_775_807
+# A user no enabled credit rule reaches is not capped. The ledger compares
+# counters as int64 strings, so the int64 ceiling admits every call while every
+# int-typed consumer keeps working unchanged.
+UNLIMITED_TOKEN_LIMIT = MAX_TOKEN_LIMIT
 
 
 def credits_from_tokens(tokens: int) -> str:
@@ -67,12 +71,17 @@ class CreditRuleInput(BaseModel):
 
 
 def effective_token_limit(*, user_id: int, departments: set[int], roles: set[int], rules: list[dict]) -> int:
-    """Use the highest enabled allowance across matching users, departments and roles."""
+    """Use the highest enabled allowance across matching users, departments and roles.
+
+    No matching enabled rule means no cap: enabling the client module must not
+    cut off daily chat and task mode for everyone the admin has not configured.
+    Once any rule matches it applies as written, including an explicit zero.
+    """
     memberships = {"USER": {user_id}, "DEPARTMENT": departments, "ROLE": roles}
     matching = [
         rule for rule in rules if rule["enabled"] and rule["subject_id"] in memberships.get(rule["subject_type"], set())
     ]
-    return max((rule["monthly_token_limit"] for rule in matching), default=0)
+    return max((rule["monthly_token_limit"] for rule in matching), default=UNLIMITED_TOKEN_LIMIT)
 
 
 def credit_balance(*, limit: int, used: int | None) -> dict:
@@ -81,4 +90,7 @@ def credit_balance(*, limit: int, used: int | None) -> dict:
         "used": credits_from_tokens(used) if used is not None else None,
         "remaining": credits_from_tokens(max(0, limit - used)) if used is not None else None,
         "tokens_per_credit": TOKENS_PER_CREDIT,
+        # limit/remaining stay numeric strings for existing clients; a client that
+        # knows this flag shows "unlimited" instead of the int64 ceiling.
+        "unlimited": limit == UNLIMITED_TOKEN_LIMIT,
     }

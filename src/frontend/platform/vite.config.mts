@@ -255,8 +255,8 @@ export default defineConfig(({ command, mode }) => {
         }
       }
     },
-    // Prebundle workspace UI with its own dependency graph; the app pins a different merge version.
-    optimizeDeps: { include: ["@bisheng/ui"] },
+    // Serve workspace UI as source so component edits participate in HMR.
+    optimizeDeps: { exclude: ["@bisheng/ui"] },
     resolve: {
       // Workspace viewers must use the app's initialized i18n hook instance.
       dedupe: ['react-i18next'],

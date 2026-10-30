@@ -346,7 +346,7 @@ manager 的 appdb 继续执行受控表清单/模式/分页/单行编辑/CSV 导
 
 数据卷要求本机支持锁和持久化的文件系统；默认 SQLite WAL，不把 NFS/SMB 多节点共享盘视为可写生产部署。K8s 后续由 F059 定义 PVC/调度单写合同，RWO 不等于应用多 Pod 单写，需验证 CSI 与 SQLite 锁语义；本轮不做 PVC 交付承诺。
 
-数据界面调用仍经 backend owner/权限检查，但 manager 不在宿主进程打开运行中应用可控的 SQLite 链接：通过同一个 manager 镜像启动短命禁网 helper，只挂目标 app 的 DB 和一次性导出目录；readonly 根、cap-drop、非 root、每个128 MiB/100mCPU、最多两个、30秒期限，GC按节点标签回收。不是新增常驻进程或额外镜像；RTM_DATA_HELPER_IMAGE 必须本地可用，系统保留资源≥256 MiB。备份/迁移在停写后仍本地执行，检查 app.db 与 WAL/SHM/journal 链接，restore 后按冻结 UID/GID 交还目录。
+数据界面调用仍经 backend owner/权限检查，但 manager 不在宿主进程打开运行中应用可控的 SQLite 链接：通过同一个 manager 镜像启动短命禁网 helper，只挂目标 app 的 DB 和一次性导出目录；readonly 根、cap-drop、非 root、每个128 MiB/100mCPU、最多两个、30秒期限，GC按节点标签回收。不是新增常驻进程或额外镜像；RTM_DATA_HELPER_IMAGE 必须本地可用，系统保留资源≥256 MiB。辅助进程的导入链保持轻量：共享异常使用 Starlette HTTPException，执行错误放入独立 execution_errors 模块，不经 appdb 导入 FastAPI/Pydantic 或 Docker 编排模块。数据页对同一页面的读取串行化，首次取表结构后复用到翻页/排序；切表与显式刷新重新取结构。锁竞争仍返回 data_busy，不再把普通并发读描述为维护。备份/迁移在停写后仍本地执行，检查 app.db 与 WAL/SHM/journal 链接，restore 后按冻结 UID/GID 交还目录。
 
 ### 4.10 访问、策略及服务配置
 
@@ -393,6 +393,7 @@ Compose 的 Engine 控制网络为 internal 的 `runtime-control`，只有 manag
 | 只按 version_id 允许网络凭据 | 同版本重建时旧 operation 凭据复活 | operation+当前归属/route fencing |
 | node plan 先 limit 再过滤历史 | 发布多次后新操作不再被发现 | Repository 在 SQL 过滤活跃/待清理/当前归属 |
 | 数据行接口只校验主文件路径 | 运行中应用切换 SQLite 链接访问其他目录 | 单应用挂载的数据 helper；停写维护检查所有 sidecar |
+| 数据 helper 导入控制面，且 UI 并发读取 schema/rows | 100m CPU 下启动耗时十余秒，并发请求被误报维护 | 轻量异常模块、按页面排队和表结构复用；§4.9 |
 
 
 ## 6. 对外契约与依赖
@@ -612,3 +613,7 @@ GitHub原生runner不保证安装ripgrep；镜像存在性及服务索引的错�
 ### 2026-10-23 开发整合
 
 公共租户修复已先进入发布线并由 F059 继承；BIGINT 修复保留原迁移并显式汇合父链，保留 K8s 后续 tenant=None/资源 UID 约束。manager/app-proxy/egress-proxy 及 SDK/平台存储合同保持。测试 Tag 只证明旧 F086 版本发行，不证明当前 F059 镜像已发行；新完整验收门仍在。当前七维代码合入审查见 code-review.md。
+
+### 2026-10-29 数据页延迟修复
+
+在不变更 helper 128 MiB/100m CPU、禁网、非 root、单应用挂载及互斥语义的前提下精简导入链；页面读取排队并复用表结构，16167 使用现有三语文案。116 原镜像与修复临时镜像的单次只读对比见 [定向验证记录](../../../docs/reviews/vibe-data-latency-fix-2026-10-29.md)。临时镜像实验不等于正式服务更新，也不证明 K8s 性能。

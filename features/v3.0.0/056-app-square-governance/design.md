@@ -263,3 +263,7 @@ F056-S1 修订：运行绑定的真实撤销生产者由凭据 Owner 公共协�
 - SQLite 本地定向结果不代替 MySQL/DM8 驱动或真实 MinIO/worker/FGA 验收。DM8 按用户口径仅检查模型/DDL 静态兼容。提测与低概率组合清单见 closeout-validation.md。
 
 2026-10-25 部署热修：运行凭据事务写入后显式加载服务器默认字段，修复 MySQL 上 KeyItem 读取 create_time 的 MissingGreenlet；不改变授权、API 或事务提交边界。
+
+### 2026-10-29 运行记录时间显示修复
+
+源日志按既有 source_timezone 转 UTC 的查询/导出合同保持。平台表格将 create_time/entry_time 和导出选取时间等带时区时间转换为浏览器本地时间显示，复用 displayTimestamp 格式化函数；不直接显示 UTC 原文，不对无时区时间擅自加减八小时。116 宿主与 backend 为 UTC+8，未调整服务器时间或改写历史记录。
