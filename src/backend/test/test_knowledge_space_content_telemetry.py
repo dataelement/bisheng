@@ -208,6 +208,11 @@ def _stub_file_dimension_lookups(worker_module, monkeypatch):
         lambda _user_ids: {},
     )
     monkeypatch.setattr(
+        worker_module,
+        "_load_unique_primary_departments",
+        lambda _user_ids: ({}, set()),
+    )
+    monkeypatch.setattr(
         worker_module.FileClassificationLabelService,
         "get_label_lookup_for_tenant",
         lambda _tenant_id: ({}, {}),
@@ -408,7 +413,7 @@ def test_content_sync_keeps_team_and_clinic_levels_separate(
 
 
 def test_original_upload_organization_follows_original_space_not_current_uploader_department(monkeypatch):
-    """原始上传库部门跟原始知识库走. 上传人部门只读文件登记组织, 不读搬运者当前主组织."""
+    """原始上传库名称跟原始知识库走. 所属组织读登记组织, 上传人组织读搬运者主部门."""
     worker_module = _import_worker_mid_table()
     monkeypatch.setattr(
         worker_module,
@@ -428,7 +433,7 @@ def test_original_upload_organization_follows_original_space_not_current_uploade
         lambda _departments: {101: department_a, 102: department_b, 103: current_department},
     )
 
-    # 文件现在在部门 B 的库, 搬运者当前主组织是「当前部门」. 上传人组织必须来自登记的部门 B.
+    # 文件现在在部门 B 的库. 所属组织来自登记的部门 B, 上传人组织来自搬运者主部门.
     file_record = SimpleNamespace(
         id=11,
         tenant_id=1,
@@ -459,7 +464,7 @@ def test_original_upload_organization_follows_original_space_not_current_uploade
 
     record = records[0]
     assert "original_upload_department_name" not in record.model_dump()
-    assert record.uploader_department_name == "部门B"
+    assert record.uploader_department_name == "当前部门"
     assert record.belonging_department_name == "部门B"
 
 

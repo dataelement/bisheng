@@ -104,6 +104,11 @@ def service_module(monkeypatch):
 
     monkeypatch.setattr(export_module, "DashboardService", _model_construct_factory)
 
+    async def _keep_organization_names(rows, _fields):
+        return rows
+
+    monkeypatch.setattr(export_module, "relabel_organization_rows", _keep_organization_names)
+
     return export_module, dashboard_module
 
 
@@ -192,6 +197,57 @@ async def test_export_detail_writes_one_row_per_record(monkeypatch, service_modu
     ]
     # the clicked category must be appended as an extra filter, not replace the caller's
     assert query_mock.await_args.kwargs["dimension_filters"][-1].field_id == "belonging_department_name"
+
+
+async def test_export_detail_writes_organization_short_names(monkeypatch, service_module):
+    export_module, dashboard_module = service_module
+    detail = _detail(
+        columns=[
+            ("file_name", "文件名"),
+            ("belonging_department_name", "所属部门"),
+            ("belonging_company_name", "所属公司"),
+        ],
+        rows=[
+            {
+                "file_name": "冷轧带钢.pdf",
+                "belonging_department_name": "制造部全称",
+                "belonging_company_name": "北京首钢股份有限公司",
+            }
+        ],
+    )
+    login_user, _query_mock = _patch_common(
+        monkeypatch,
+        dashboard_module,
+        dashboard=_dashboard(),
+        component=_component(),
+        detail=detail,
+    )
+
+    async def _shorten(rows, _fields):
+        copied = dict(rows[0])
+        copied["belonging_department_name"] = "制造部"
+        copied["belonging_company_name"] = "股份"
+        return [copied]
+
+    monkeypatch.setattr(export_module, "relabel_organization_rows", _shorten)
+    captured: list = []
+    monkeypatch.setattr(export_module.pd, "ExcelWriter", lambda *_a, **_k: _FakeWriter())
+    monkeypatch.setattr(
+        export_module.pd.DataFrame,
+        "to_excel",
+        lambda self_df, writer, sheet_name, index: captured.append(self_df.values.tolist()),
+    )
+    monkeypatch.setattr(export_module, "_upload_excel", AsyncMock(return_value="https://minio/detail.xlsx"))
+
+    service = export_module.DashboardExportService(request=None, login_user=login_user)
+    await service.export_component_detail(
+        dashboard_id=1,
+        component_id="comp-1",
+        dimension_field="belonging_department_name",
+        dimension_value="制造部全称",
+    )
+
+    assert captured == [[["冷轧带钢.pdf", "制造部", "股份"]]]
 
 
 async def test_export_all_groups_rows_by_outer_dimension(monkeypatch, service_module):

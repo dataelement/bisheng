@@ -189,6 +189,12 @@ class PortalQaEventData(PortalEventData):
     question_id: str | None = None
 
 
+class PortalQaCitationEventData(PortalEventData):
+    """A knowledge file marked in a portal QA or writing answer. Does not count as a question."""
+
+    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.PORTAL_QA_CITATION
+
+
 class PortalDocumentReadEventData(PortalEventData):
     """Data model for Shougang portal document preview/read success events."""
 

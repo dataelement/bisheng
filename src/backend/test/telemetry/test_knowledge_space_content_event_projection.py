@@ -5,7 +5,11 @@ from unittest.mock import AsyncMock
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.schemas.telemetry.base_telemetry_schema import BaseTelemetryEvent, UserContext
-from bisheng.common.schemas.telemetry.event_data_schema import PortalDocumentReadEventData
+from bisheng.common.schemas.telemetry.event_data_schema import (
+    PortalDocumentReadEventData,
+    PortalFavoriteEventData,
+    PortalQaCitationEventData,
+)
 from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
     ContentStatEventEnvelope,
     KnowledgeSpaceContentStat,
@@ -56,6 +60,48 @@ def test_raw_event_serialization_contains_versioned_dimension_snapshot():
         "file_id": 11,
         "uploader_company_name": "首钢",
     }
+
+
+def test_qa_citation_event_does_not_use_the_question_event_type():
+    citation = BaseTelemetryEvent(
+        event_id="event-citation",
+        event_type=BaseTelemetryTypeEnum.PORTAL_QA_CITATION,
+        timestamp=1_776_000_000,
+        user_context=UserContext(user_id=7, user_name="张三"),
+        event_data=PortalQaCitationEventData(
+            source_app="shougang_portal",
+            scene="smart_qa",
+            entry_point="portal_qa_citation",
+            file_id=11,
+            content_stat_schema_version=2,
+            content_stat_local_date="2026-10-30",
+            content_stat_daily_id="qa_citation_daily:11:2026-10-30:digest",
+            content_stat_snapshot={"file_id": 11},
+        ),
+    )
+    favorite = BaseTelemetryEvent(
+        event_id="event-favorite",
+        event_type=BaseTelemetryTypeEnum.PORTAL_FAVORITE,
+        timestamp=1_776_000_000,
+        user_context=UserContext(user_id=7, user_name="张三"),
+        event_data=PortalFavoriteEventData(
+            source_app="shougang_portal",
+            scene="favorite",
+            entry_point="detail",
+            file_id=11,
+            content_stat_schema_version=2,
+            content_stat_local_date="2026-10-30",
+            content_stat_daily_id="favorite_daily:11:2026-10-30:digest",
+            content_stat_snapshot={"file_id": 11},
+        ),
+    )
+    citation_data = citation.model_dump()
+    favorite_data = favorite.model_dump()
+    assert citation_data["event_type"] == "portal_qa_citation"
+    assert citation_data["event_type"] != BaseTelemetryTypeEnum.PORTAL_QA.value
+    assert citation_data["event_data"]["portal_qa_citation_file_id"] == 11
+    assert favorite_data["event_data"]["portal_favorite_file_id"] == 11
+    assert "portal_qa_file_id" not in citation_data["event_data"]
 
 
 def test_daily_projection_uses_monotonic_absolute_count(monkeypatch):

@@ -148,10 +148,14 @@ class LoginSelection:
             bounds["gte"] = midnight(self.start)
         conditions = [
             *self.business,
-            *([
-                {"term": {"metric_source": "participation"}},
-                {"term": {"logged_in": True}},
-            ] if successful_only else []),
+            *(
+                [
+                    {"term": {"metric_source": "participation"}},
+                    {"term": {"logged_in": True}},
+                ]
+                if successful_only
+                else []
+            ),
             {"range": {"timestamp": bounds}},
         ]
         if not history:
@@ -177,19 +181,37 @@ class LoginSelection:
         """活跃查询保留业务范围, 将年月等日期选择转换为实际期间."""
         filters = [
             *self.business_filters,
-            FilterExpression(bool_operator="must", filters=[RangeOp(
-                field="timestamp", value=RangeValue(
-                    gte=midnight(self.start) if self.start else None,
-                    lt=midnight(self.end + timedelta(days=1)),
-                ),
-            )]),
+            FilterExpression(
+                bool_operator="must",
+                filters=[
+                    RangeOp(
+                        field="timestamp",
+                        value=RangeValue(
+                            gte=midnight(self.start) if self.start else None,
+                            lt=midnight(self.end + timedelta(days=1)),
+                        ),
+                    )
+                ],
+            ),
         ]
         for spans in self.selections:
-            filters.append(FilterExpression(bool_operator="must", filters=[FilterExpression(
-                bool_operator="should", filters=[RangeOp(
-                    field="timestamp", value=RangeValue(gte=midnight(start), lt=midnight(end + timedelta(days=1))),
-                ) for start, end in spans],
-            )]))
+            filters.append(
+                FilterExpression(
+                    bool_operator="must",
+                    filters=[
+                        FilterExpression(
+                            bool_operator="should",
+                            filters=[
+                                RangeOp(
+                                    field="timestamp",
+                                    value=RangeValue(gte=midnight(start), lt=midnight(end + timedelta(days=1))),
+                                )
+                                for start, end in spans
+                            ],
+                        )
+                    ],
+                )
+            )
         return filters
 
 
@@ -337,6 +359,43 @@ async def load_login_population(
     stack_dimension: AggregationExpression | None,
     filters: list[FilterExpression] | None,
 ) -> LoginPopulation:
+    from bisheng.core.context.tenant import get_current_tenant_id
+
+    from .query_singleflight import shared_call, stable_key
+
+    population_dimensions = [*dimensions, *([stack_dimension] if stack_dimension else [])]
+    key = stable_key(
+        {
+            "kind": "login",
+            "index": index_name,
+            "tenant": get_current_tenant_id() or 1,
+            "filters": filters,
+            "dimensions": [
+                {"field": item.field, "type": str(item.type), "interval": item.time_interval}
+                for item in population_dimensions
+            ],
+        }
+    )
+    return await shared_call(
+        key,
+        lambda index_name=index_name, dimensions=dimensions, stack_dimension=stack_dimension, filters=filters: (
+            _load_login_population(
+                index_name=index_name,
+                dimensions=dimensions,
+                stack_dimension=stack_dimension,
+                filters=filters,
+            )
+        ),
+    )
+
+
+async def _load_login_population(
+    *,
+    index_name: str,
+    dimensions: list,
+    stack_dimension: AggregationExpression | None,
+    filters: list[FilterExpression] | None,
+) -> LoginPopulation:
     selection = LoginSelection(filters)
     population = LoginPopulation([*dimensions, *([stack_dimension] if stack_dimension else [])], selection)
     fields = {"timestamp", "user_id", "metric_source", "logged_in"}
@@ -360,10 +419,15 @@ async def query_active_users(**search_kwargs) -> list[list]:
     parameters["filters"] = LoginSelection(parameters.get("filters")).activity_filters()
     if metric.filter is not None:
         parameters["filters"].append(metric.filter)
-    for dimension in [*parameters.get("dimensions", []), *([parameters["stack_dimension"]] if parameters.get("stack_dimension") else [])]:
+    for dimension in [
+        *parameters.get("dimensions", []),
+        *([parameters["stack_dimension"]] if parameters.get("stack_dimension") else []),
+    ]:
         if dimension.type == "date_histogram":
             dimension.custom_params["time_zone"] = "+08:00"
-    return await SearchEngineService(SearchParameters(
-        metrics=metric.aggregations,
-        **parameters,
-    )).search()
+    return await SearchEngineService(
+        SearchParameters(
+            metrics=metric.aggregations,
+            **parameters,
+        )
+    ).search()

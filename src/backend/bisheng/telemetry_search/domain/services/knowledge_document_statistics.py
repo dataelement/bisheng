@@ -3,11 +3,15 @@
 
 from __future__ import annotations
 
+import time
+from bisect import bisect_left, bisect_right
 from collections import defaultdict
 from collections.abc import Iterable
 from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
+
+from loguru import logger
 
 from bisheng.common.errcode.telemetry import DocumentCategoryConflictError
 from bisheng.knowledge.domain.constants import normalize_file_category_code
@@ -110,6 +114,7 @@ class DocumentStatistics:
             if len(categories) > 1 or len(names) > 1:
                 self.category_conflicts[identity] = rows
         self.called_at = called_at
+        self._aggregate_cache: dict[tuple, list[list]] = {}
 
     def _contribution_rows(self) -> list[dict]:
         # 一份知识只按最早的有效入口归入一个分组, 后发布或分享的入口不再把占比重复加进别的组.
@@ -162,7 +167,12 @@ class DocumentStatistics:
         if uses_category_fields(field for field, _ in dimensions):
             self.validate_categories()
         end = validated_end(metric, end)
+        cache_key = (metric, tuple(dimensions), start, end)
+        cached = self._aggregate_cache.get(cache_key)
+        if cached is not None:
+            return cached
         if start is not None and start > end:
+            self._aggregate_cache[cache_key] = []
             return []
         time_dimensions = [(i, grain or "day") for i, (field, grain) in enumerate(dimensions) if field == "timestamp"]
         if metric in {"called_document_count", "document_usage_ratio"} and any(
@@ -194,26 +204,47 @@ class DocumentStatistics:
                 following = next_bucket(cursor, grain)
                 spans.append((cursor, max(first, cursor), min(end, following - 1)))
                 cursor = following
-        result = []
+        started = time.perf_counter()
+        prepared = []
         for key, firsts in sorted(groups.items(), key=lambda item: tuple(str(value or "") for value in item[0])):
+            created_times = sorted(firsts.values())
+            # 调用必须同时不晚于入库。缺失调用日的身份永远不算被调用。
+            used_times = sorted(
+                max(created, self.called_at[identity])
+                for identity, created in firsts.items()
+                if identity in self.called_at
+            )
+            prepared.append((key, created_times, used_times))
+        all_times = sorted(all_first.values())
+        result = []
+        for key, created_times, used_times in prepared:
             for timestamp, lower, upper in spans:
-                documents = {identity for identity, created in firsts.items() if created <= upper}
-                used = {identity for identity in documents if self.called_at.get(identity, upper + 1) <= upper}
+                document_count = bisect_right(created_times, upper)
+                used_count = bisect_right(used_times, upper)
                 if metric == "new_file_count":
-                    value = sum(lower is None or firsts[identity] >= lower for identity in documents)
+                    value = document_count if lower is None else document_count - bisect_left(created_times, lower)
                 elif metric == "called_document_count":
-                    value = len(used)
+                    value = used_count
                 elif metric == "document_usage_ratio":
-                    value = len(used) / len(documents) if documents else 0.0
+                    value = used_count / document_count if document_count else 0.0
                 elif metric == "knowledge_contribution_ratio":
-                    denominator = sum(created <= upper for created in all_first.values())
-                    value = len(documents) / denominator if denominator else 0.0
+                    denominator = bisect_right(all_times, upper)
+                    value = document_count / denominator if denominator else 0.0
                 else:
-                    value = len(documents)
+                    value = document_count
                 values = list(key)
                 if time_dimensions:
                     values.insert(time_dimensions[0][0], timestamp)
                 result.append([*values, value])
+        logger.info(
+            "document_statistics_aggregate metric={} records={} groups={} buckets={} elapsed_ms={}",
+            metric,
+            len(source),
+            len(prepared),
+            len(spans),
+            round((time.perf_counter() - started) * 1000, 1),
+        )
+        self._aggregate_cache[cache_key] = result
         return result
 
     def detail(self, metric: str, *, start: int | None, end: int | None) -> list[dict]:

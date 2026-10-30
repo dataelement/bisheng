@@ -39,6 +39,28 @@ This directory contains manual maintenance and migration scripts for the backend
 - 必须在维护窗口暂停相关上传、移动、编辑、发布/分享、版本切换和组织同步；脚本不停止服务，也不取得全局维护锁。各文档独立提交，中断或失败前的成功组保留，以写入报告定向回退。未知提交结果需保留日志人工核对，不能直接视为全部回滚。
 - 容器临时目录会随重建丢失；正式操作应使用持久化路径保存计划和写入日志。退出码：0正常结束（预览可能含跳过），3实际执行有跳过需核对，2参数/报告错误，1数据库或执行失败，130人工中断。
 
+### `reassign_admin_upload_owners.py`
+
+按纠错表把管理员上传的文件改挂到表中姓名对应的用户。只改表内「关联文件入口ID」对应的 `knowledgefile.user_id`、`user_name`、`belonging_organization_id`。所属组织取该用户当前唯一有效主部门，计算规则与 `backfill_knowledge_file_organization.py` 相同，但会覆盖已有值。姓名按 `user.user_name` 精确匹配。对不上的行跳过，通过的行同一次提交。同一 `document:` 的其它入口只写入报告，不修改。
+
+```bash
+# 在 src/backend 执行。默认只读；报告必须是新文件。
+.venv/bin/python scripts/reassign_admin_upload_owners.py \
+  --tenant-id 1 --output /tmp/reassign-plan.jsonl
+# 审核 would_update、skipped_by_reason 和 sibling 后，再按这份计划写入。
+.venv/bin/python scripts/reassign_admin_upload_owners.py \
+  --plan /tmp/reassign-plan.jsonl --apply --output /tmp/reassign-write.jsonl
+# 回退先预览；确认后再加 --apply。
+.venv/bin/python scripts/reassign_admin_upload_owners.py \
+  --rollback /tmp/reassign-write.jsonl --output /tmp/reassign-rollback.jsonl
+```
+
+- 纠错表是同目录的 `scripts/纠错2.xlsx`，随后端镜像发布。预览默认读它，不必再往生产机器单独传文件。
+- 改写前核对文件名、`document:` 身份，且当前 `user_name` 必须是「管理员」。用户须恰好一个在职账号，并有一条本租户、有效、未删除的主部门。已离职、重名、没有唯一主部门、文件不存在或身份对不上都跳过。
+- 不改 `original_uploader_id`、更新人、积分、权限和 Elasticsearch。显式保留原 `update_time`。写入以预览计划为准，不会重新读表格；表格或用户主部门变了要重新预览。
+- 计划绑定数据库地址/库名摘要。执行时逐行重新核对，漂移的行跳过，其余行仍提交。退出码 3 表示本次有跳过，已经写入的行不会因此回滚。
+- JSONL 报告独占创建、权限 0600。只有同时存在 `prepared` 和 `committed` 才回退。只有 `prepared` 时记 `commit_outcome_unknown`，不自动改库。正式报告不要放在会随容器重建消失的临时目录。退出码：0 正常，3 实际写入有跳过，2 参数或报告错误，1 执行失败，130 人工中断。
+
 ### `backfill_dashboard_original_organizations.py`
 
 补齐指定租户看板现有文件统计的“原始上传库、原始所属公司/部门/科室/班组”空值。复用当前投影规则；原始库ID缺失回退当前库并单独计数。原始组织按原始库当前组织映射，不能恢复首次上传时的组织历史。已有非空值不同则整条跳过；不写数据库、不新增统计记录、不改历史事件和计数，也不更新索引结构。
@@ -413,8 +435,10 @@ employee001,技术员
   排除个人空间；个人来源知识已发布到非个人空间的有效引用仍计入。
   此为运维全量盘点，不模拟某个登录用户权限，也不按 `portal_discovery_enabled` 过滤。
 - 调用判定读取看板“知识空间内容统计”数据集 `mid_knowledge_space_content_stat`，
-  按 `file_id` 合并 `preview_daily` 的 `preview_count`、`download_daily` 的 `download_count`。
+  按 `file_id` 合并 `preview_daily` 的 `preview_count`、`download_daily` 的 `download_count`、
+  `qa_citation_daily` 的 `qa_citation_count`。
   任一累计值大于零即为已调用，同一知识无论次数多少均计 1；不是把次数相加作为知识数量。
+  问答引用只含规则生效后门户智能问答和写作模板回答正文里的引用标记，生效前不回补。
   只取非个人空间记录，忽略 `file`、`favorite_daily`、`portal_engagement_daily` 等其他类型。
   保留的非个人空间历史版本/旧引用记录也关联到当前文档；个人空间入口的调用排除。
   数据集已合并调用来源，包含看板已采集的门户及毕昇工作台等来源，不再限定 `shougang_portal`。
@@ -423,7 +447,7 @@ employee001,技术员
   数据库按严格租户上下文读取，ES 只查这些文件 ID（全库唯一主键），不依赖日统计是否具有租户字段。
   ES 按 400 个候选文件 ID 分批精确聚合，避免 Top N 截断及近似去重误差。
 - **历史留存限制**：未采集、未同步、统计被清理、上报失败、物理删除的历史入口无法还原。
-  “成功”表示服务记录了提供预览或下载，不保证用户读完或下载保存完成。
+  “成功”表示服务记录了提供预览、下载，或规则生效后的门户问答正文引用，不保证用户读完或下载保存完成。
   使用查询时已落库的全部历史日统计，不按日期筛选，也不保证秒级截止快照。
   数据库与 ES 不具备跨系统一致快照，建议低峰期执行；最近事件可能受看板同步和 ES 刷新延迟影响。
 - 不更新数据库、不创建 ES 索引、不调用文件详情或下载接口；仅生成本地报告。

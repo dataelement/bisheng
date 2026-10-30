@@ -19,6 +19,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import (
     PortalDocumentDownloadEventData,
     PortalDocumentReadEventData,
     PortalFavoriteEventData,
+    PortalQaCitationEventData,
 )
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -706,9 +707,9 @@ def _get_departments_by_ids(department_ids: list[int]) -> dict[int, Department]:
 
 
 def _registered_uploader_department(department, tenant_id: int):
-    """文件登记组织仍有效且属于文件租户时才用于上传人组织.
+    """组织仍有效且属于文件租户时才展开名称.
 
-    空值, 跨租户, 停用或已删除都不改用当前主组织.
+    空值, 跨租户, 停用或已删除都留空, 不改用别的部门.
     """
     if department is None:
         return None
@@ -720,6 +721,34 @@ def _registered_uploader_department(department, tenant_id: int):
     if getattr(department, "is_deleted", 0):
         return None
     return department
+
+
+def _load_unique_primary_departments(user_ids: list[int]) -> tuple[dict[int, Department], set[int]]:
+    """每个用户恰好一条主部门才返回. 多条主部门视为无效, 避免后写覆盖先写."""
+    normalized_user_ids = sorted({int(user_id) for user_id in user_ids if user_id})
+    if not normalized_user_ids:
+        return {}, set()
+    with bypass_tenant_filter():
+        with get_sync_db_session() as session:
+            rows = session.exec(
+                select(UserDepartment.user_id, Department)
+                .join(Department, Department.id == UserDepartment.department_id)
+                .where(
+                    UserDepartment.user_id.in_(normalized_user_ids),
+                    UserDepartment.is_primary == 1,
+                )
+            ).all()
+    grouped: dict[int, list[Department]] = {}
+    for user_id, department in rows:
+        grouped.setdefault(int(user_id), []).append(department)
+    unique: dict[int, Department] = {}
+    ambiguous: set[int] = set()
+    for user_id, departments in grouped.items():
+        if len(departments) == 1:
+            unique[user_id] = departments[0]
+        else:
+            ambiguous.add(user_id)
+    return unique, ambiguous
 
 
 def _get_dimension_department_map(start_departments: list[Department | None]) -> dict[int, Department]:
@@ -844,10 +873,10 @@ def _build_knowledge_space_content_records(
             all_user_ids.add(int(scope.owner_id))
     all_user_ids = sorted(all_user_ids)
     missing_primary_user_ids = [user_id for user_id in all_user_ids if user_id not in primary_department_map]
+    ambiguous_primary_user_ids: set[int] = set()
     if missing_primary_user_ids:
-        primary_department_map.update(
-            UserDepartmentDao.get_primary_department_map_by_user_ids(missing_primary_user_ids)
-        )
+        unique_primaries, ambiguous_primary_user_ids = _load_unique_primary_departments(missing_primary_user_ids)
+        primary_department_map.update(unique_primaries)
     organization_ids = sorted(
         {
             int(getattr(file_record, "belonging_organization_id", 0) or 0)
@@ -863,14 +892,8 @@ def _build_knowledge_space_content_records(
 
     departments_by_id = _get_dimension_department_map(
         list(primary_department_map.values())
-        + list(space_department_map.values())
         + [registered_organization_map.get(organization_id) for organization_id in organization_ids]
     )
-    company_departments = [
-        department
-        for department in departments_by_id.values()
-        if str(getattr(department, "org_level", "") or "") == "company"
-    ]
 
     records = []
     for file_record, space in rows:
@@ -880,20 +903,21 @@ def _build_knowledge_space_content_records(
             category_label_cache[tenant_id] = FileClassificationLabelService.get_label_lookup_for_tenant(tenant_id)
         category_labels, subcategory_labels = category_label_cache[tenant_id]
         scope = space_scope_map.get(int(space.id))
-        # 上传人组织只读文件登记的 belonging_organization_id. 空值或组织失效时留空.
+        # 所属组织只读文件登记的 belonging_organization_id。上传人组织只读该行 user_id 的主部门。
         organization_id = int(getattr(file_record, "belonging_organization_id", 0) or 0)
-        uploader_department = _registered_uploader_department(
+        belonging_department = _registered_uploader_department(
             registered_organization_map.get(organization_id),
             tenant_id,
         )
+        uploader_user_id = int(file_record.user_id or 0)
+        uploader_department = None
+        if uploader_user_id not in ambiguous_primary_user_ids:
+            uploader_department = _registered_uploader_department(
+                primary_department_map.get(uploader_user_id),
+                tenant_id,
+            )
         original_space_id = _original_space_id_for(file_record, space)
         origin = original_space_name_map.get(original_space_id)
-        belonging_department = _resolve_belonging_start_department(
-            scope=scope,
-            space_department=space_department_map.get(int(space.id)),
-            primary_department_map=primary_department_map,
-            company_departments=company_departments,
-        )
         records.append(
             KnowledgeSpaceContentStat.build_file_record(
                 file_record=file_record,
@@ -1564,6 +1588,7 @@ def _content_stat_event_data(envelope):
         BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ: PortalDocumentReadEventData,
         BaseTelemetryTypeEnum.PORTAL_DOCUMENT_DOWNLOAD: PortalDocumentDownloadEventData,
         BaseTelemetryTypeEnum.PORTAL_FAVORITE: PortalFavoriteEventData,
+        BaseTelemetryTypeEnum.PORTAL_QA_CITATION: PortalQaCitationEventData,
     }[event_type]
     return event_type, data_cls(
         source_app=envelope.source_app,

@@ -33,6 +33,16 @@ from bisheng.telemetry.domain.mid_table.knowledge_space_content_dimensions impor
 from bisheng.telemetry.domain.mid_table.retry_budget import MAX_ATTEMPTS, checkpoint
 from bisheng.utils import generate_uuid
 
+# Absolute daily counters. qa_citation_count is a knowledge-file citation, not a QA question count.
+_DAILY_COUNT_FIELDS = {
+    "preview_daily": "preview_count",
+    "download_daily": "download_count",
+    "favorite_daily": "favorite_count",
+    "qa_citation_daily": "qa_citation_count",
+}
+_CALLED_SPACE_LEVELS = frozenset({"public", "department", "team", "team_ks"})
+_PORTAL_QA_CITATION_EVENT = "portal_qa_citation"
+
 CHINA_STANDARD_TIME = timezone(timedelta(hours=8))
 
 SPACE_LEVEL_LABELS = {
@@ -79,7 +89,7 @@ class KnowledgeSpaceContentRecord(BaseModel):
     belonging_department_name: str | None = None
     belonging_office_name: str | None = None
     belonging_squad_name: str | None = None
-    # 上传人组织只读 knowledgefile.belonging_organization_id, 空值不回退到当前主组织.
+    # 上传人组织读 knowledgefile.user_id 的同步当时主部门。所属组织读 belonging_organization_id。
 
     def model_dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         kwargs.setdefault("exclude_none", True)
@@ -244,6 +254,7 @@ return removed
         "preview_count": {"type": "long"},
         "download_count": {"type": "long"},
         "favorite_count": {"type": "long"},
+        "qa_citation_count": {"type": "long"},
         "space_id": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
         "space_name": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
         "space_level": {"type": "keyword"},
@@ -488,6 +499,51 @@ return removed
                 record_type,
             )
             return False
+
+    @classmethod
+    async def enqueue_portal_qa_citations_async(
+        cls,
+        *,
+        file_ids: Iterable[int],
+        user_id: int,
+        record_builder=None,
+    ) -> int:
+        """Queue daily citations for non-personal files. A failure here does not fail the answer."""
+        if record_builder is None:
+            try:
+                from bisheng.worker.telemetry.mid_table import (
+                    build_knowledge_space_content_event_record as record_builder,
+                )
+            except Exception:
+                logger.exception("Portal QA citation enqueue is unavailable.")
+                return 0
+        queued = 0
+        seen: set[int] = set()
+        for raw in file_ids:
+            try:
+                file_id = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if file_id <= 0 or file_id in seen:
+                continue
+            seen.add(file_id)
+            try:
+                record = await asyncio.to_thread(record_builder, file_id)
+                if record is None or str(getattr(record, "space_level", "") or "") not in _CALLED_SPACE_LEVELS:
+                    continue
+                accepted = await cls.enqueue_success_event_async(
+                    file_id=file_id,
+                    user_id=int(user_id),
+                    event_type=_PORTAL_QA_CITATION_EVENT,
+                    record_type="qa_citation_daily",
+                    source_app="shougang_portal",
+                    scene="smart_qa",
+                    entry_point="portal_qa_citation",
+                )
+                queued += int(bool(accepted))
+            except Exception:
+                logger.exception("Portal QA citation enqueue failed. file_id={}", file_id)
+        return queued
 
     @classmethod
     def enqueue_file_stat_sync(cls, file_ids: Iterable[int]) -> bool:
@@ -818,11 +874,7 @@ return removed
             return {}
         operations, ids = [], []
         for envelope, count in groups:
-            field = {
-                "preview_daily": "preview_count",
-                "download_daily": "download_count",
-                "favorite_daily": "favorite_count",
-            }[envelope.record_type]
+            field = _DAILY_COUNT_FIELDS[envelope.record_type]
             day = datetime.strptime(envelope.local_date, "%Y-%m-%d").date()
             document = {
                 **envelope.dimensions,
@@ -976,11 +1028,7 @@ return removed
         envelope: ContentStatEventEnvelope,
         absolute_count: int,
     ) -> None:
-        metric_field = {
-            "preview_daily": "preview_count",
-            "download_daily": "download_count",
-            "favorite_daily": "favorite_count",
-        }[envelope.record_type]
+        metric_field = _DAILY_COUNT_FIELDS[envelope.record_type]
         local_day = datetime.strptime(envelope.local_date, "%Y-%m-%d").date()
         day_start = datetime.combine(local_day, datetime.min.time(), tzinfo=CHINA_STANDARD_TIME)
         upsert = {

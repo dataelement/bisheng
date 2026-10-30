@@ -56,6 +56,32 @@ async def resolve_dimension_labels(fields: list[str], rows: list[list]) -> dict[
     return labels
 
 
+async def relabel_organization_rows(rows: list[dict], fields: list[str]) -> list[dict]:
+    """Replace organization name cells with the current short name when it is unique."""
+
+    org_fields = [field for field in fields if field in ORGANIZATION_DIMENSIONS]
+    if not rows or not org_fields:
+        return rows
+    labels = await resolve_dimension_labels(
+        org_fields,
+        [[row.get(field) for field in org_fields] for row in rows],
+    )
+    if not labels:
+        return rows
+    rewritten: list[dict] = []
+    for row in rows:
+        copied = dict(row)
+        for field in org_fields:
+            raw = copied.get(field)
+            if raw is None:
+                continue
+            replacement = labels.get(field, {}).get(str(raw))
+            if replacement is not None:
+                copied[field] = replacement
+        rewritten.append(copied)
+    return rewritten
+
+
 async def resolve_short_name(department_id: int | None, name_text: str | None) -> str:
     if department_id is not None:
         dept = await DepartmentDao.aget_by_id(department_id)
