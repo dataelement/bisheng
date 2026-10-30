@@ -80,6 +80,7 @@ export function useChatAskHandoff({
 }: UseChatAskHandoffParams) {
   const [mountedAsk, setMountedAsk] = useState<ChatAsk | null>(null);
   const submittedAskRef = useRef<ChatAsk | null>(null);
+  const preparingAskRef = useRef<ChatAsk | null>(null);
   const [preparedAsk, setPreparedAsk] = useState<ChatAsk | null>(null);
   const [attachmentAsk, setAttachmentAsk] = useState<AttachmentAsk | null>(null);
 
@@ -88,6 +89,7 @@ export function useChatAskHandoff({
     if (!pendingAsk || conversationId !== 'new' || activeConversationId !== 'new') return;
     const ask = pendingAsk;
     pendingAsk = null;
+    preparingAskRef.current = null;
     setPreparedAsk(null);
     onTake?.();
     setMountedAsk(ask);
@@ -100,7 +102,10 @@ export function useChatAskHandoff({
     const ask = mountedAsk;
     if (!ask || submittedAskRef.current === ask) return;
     if (conversationId !== 'new' || activeConversationId !== 'new' || !ready) return;
-    if (preparedAsk !== ask) {
+    if (preparingAskRef.current !== ask) {
+      // Claim preparation before publishing to external stores: their synchronous
+      // subscribers can flush this effect again during the same commit.
+      preparingAskRef.current = ask;
       setSelectedKbs(ask.space
         ? [{ id: ask.space.id, name: ask.space.name, type: 'space' }]
         : []);
@@ -114,6 +119,8 @@ export function useChatAskHandoff({
       setPreparedAsk(ask);
       return;
     }
+    // A reentrant commit observes the claim and waits for preparation to finish.
+    if (preparedAsk !== ask) return;
     if (ask.modelId !== undefined && selectedModelId !== ask.modelId) return;
     const mounted = ask.space
       ? selectedKbs.length === 1 && selectedKbs[0].type === 'space' && String(selectedKbs[0].id) === ask.space.id
