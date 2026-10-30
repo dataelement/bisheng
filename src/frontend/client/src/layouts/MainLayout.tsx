@@ -27,7 +27,8 @@ import { WorkbenchSidebar } from "./WorkbenchSidebar";
 export default function MainLayout() {
   const { pathname, search } = useLocation();
   const outlet = useOutlet();
-  useAgentToolPreferences();
+  const { data: bsConfig } = useGetBsConfig();
+  useAgentToolPreferences(bsConfig?.tools);
   const { user, logout, isUserLoading } = useAuthContext();
   const localize = useLocalize();
   const menuNames = useWorkbenchMenuNames();

@@ -1,4 +1,4 @@
-import { Tooltip as SharedTooltip } from '@bisheng/ui';
+import { Button, Tooltip } from "@bisheng/ui";
 // src/frontend/client/src/pages/Subscription/CreateChannel/CrawlQueuePanel.tsx
 import { Loader2, X, ArrowRight, TriangleAlert, CircleCheck, ChevronDown, ChevronUp } from "lucide-react";
 import { useLocalize } from "~/hooks";
@@ -102,23 +102,27 @@ export function CrawlQueuePanel({
                         }
                         // failed
                         return (
-                            <SharedTooltip key={item.id} content={localize(crawlErrorMessageKey(item.errorCode))} side="top" ><div
-                                        role="button"
-                                        tabIndex={0}
-                                        onClick={onOpenFeedback}
-                                        onKeyDown={e => {
-                                            if (e.key === "Enter" || e.key === " ") {
-                                                e.preventDefault();
-                                                onOpenFeedback();
-                                            }
-                                        }}
-                                        className="flex items-center gap-[8px] rounded-md px-[12px] py-[6px] cursor-pointer hover:bg-fill-1"
-                                    >
-                                        <TriangleAlert className="size-4 shrink-0 text-[#FF7D00]" />
-                                        <span className="flex-1 truncate text-[14px] leading-[22px] text-text-1">
-                                            {truncate(item.url)}
-                                        </span>
-                                    </div></SharedTooltip>
+                            <div key={item.id} className="rounded-md px-[12px] py-[6px]">
+                                <div className="flex items-center gap-[8px]">
+                                    <TriangleAlert className="size-4 shrink-0 text-warning" />
+                                    <span className="flex-1 truncate text-body text-text-1" title={item.url}>
+                                        {item.url}
+                                    </span>
+                                    <Tooltip content={localize("cancel")}>
+                                        <Button type="button" variant="text" size="small" iconOnly
+                                            onClick={() => onAbort(item.id)} aria-label={localize("cancel")}>
+                                            <X className="size-3.5" />
+                                        </Button>
+                                    </Tooltip>
+                                </div>
+                                <p role="status" className="mt-1 text-body-sm text-text-2">
+                                    {localize(crawlErrorMessageKey(item.errorCode))}
+                                </p>
+                                <Button type="button" color="primary" variant="link" size="small"
+                                    onClick={onOpenFeedback}>
+                                    {localize("com_subscription.submit_manual_crawl_request")}
+                                </Button>
+                            </div>
                         );
                     })}
                 </div>

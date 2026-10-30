@@ -151,6 +151,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+!docker/lib/
+!docker/lib/**
 lib64/
 sdist/
 var/
@@ -276,6 +278,7 @@ sftp-config.json
 sftp-config.json
 
 # Docker local files
+docker/.generated/
 docker/data/*
 docker/mysql/data/*
 docker/office/bisheng/*.gz

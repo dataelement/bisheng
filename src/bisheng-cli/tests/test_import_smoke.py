@@ -13,6 +13,9 @@ bounds in pyproject.toml and this file are the two halves of that fix.
 
 from __future__ import annotations
 
+import tomllib
+from pathlib import Path
+
 import httpx
 import yaml
 
@@ -52,4 +55,8 @@ def test_version_is_declared_once() -> None:
     # is not the one inside the wheel.
     assert bisheng_cli.cli.__version__ is bisheng_cli.__version__
     assert bisheng_cli.http.__version__ is bisheng_cli.__version__
-    assert bisheng_cli.__version__.count(".") == 2
+    # Compare with the declared package version rather than counting dots:
+    # valid post releases such as 3.0.0.post1 contain more than two.
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    metadata = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    assert bisheng_cli.__version__ == metadata["project"]["version"]

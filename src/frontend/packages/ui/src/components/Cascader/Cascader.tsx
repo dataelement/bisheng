@@ -41,6 +41,7 @@ export function Cascader(props: CascaderProps) {
     checkStrictly = false,
     expandTrigger = 'click',
     showSearch,
+    autoWidth = false,
     onSearch,
     filterOption,
     loadData,
@@ -422,6 +423,7 @@ export function Cascader(props: CascaderProps) {
       {...comboboxProps}
       aria-autocomplete="list"
       autoComplete="off"
+      size={autoWidth ? 1 : undefined}
       disabled={disabled}
       readOnly={readOnly}
       value={keyword}
@@ -445,6 +447,7 @@ export function Cascader(props: CascaderProps) {
       selectedEntries={selectedEntries}
       singleLabel={singleLabel}
       searchableInTrigger={searchableInTrigger}
+      autoWidth={autoWidth}
       searchInput={searchInput}
       open={isOpen}
       onRemove={(path) => commit(selected.filter((item) => cascaderPathKey(item) !== cascaderPathKey(path)))}
@@ -469,7 +472,7 @@ export function Cascader(props: CascaderProps) {
       body={body}
       hasMultipleTags={multiple && hasValue}
       customTrigger={trigger}
-      className={className}
+      className={cn(autoWidth && 'w-fit', className)}
       comboboxProps={ownCombobox}
       onTriggerClick={handleTriggerClick}
       onClear={handleClear}

@@ -32,7 +32,7 @@ docker compose exec backend sh entrypoint.sh upgrade-work-knowledge
 docker compose exec backend sh entrypoint.sh upgrade-work-knowledge --apply --confirm-store-id <store-id-from-preview> --operator-id <user-id>
 ```
 
-For repository-managed Compose updates, `docker/deploy.sh update` includes this
+For repository-managed Compose updates, `scripts/deploy.sh update` includes this
 operation as a required release stage whenever `backend` is selected. It requires
 the confirmed Store and audit operator, waits for backend readiness, runs the
 upgrade, then updates the remaining services. See the
@@ -251,7 +251,7 @@ For an existing F048 installation, run the model publisher below in the release
 maintenance window even when its dry-run says the model is already current.
 Model equality does not establish that historical service-account resource
 markers exist. This is an explicit deployment operation: container startup,
-`alembic upgrade head`, and `docker/deploy.sh update` do not run data repairs.
+`alembic upgrade head`, and `scripts/deploy.sh update` do not run data repairs.
 
 For a first migration from pre-F048 ReBAC, use `migrate_f048_permission_data.py`;
 its resource projection already writes both `user:*` and `service_account:*`
@@ -588,12 +588,10 @@ excluded: they are ordinary resources owned by the first super administrator.
 The reconciler does not infer system ownership from the resource-type
 allowlist alone.
 
-The default dry-run reports missing/non-current modes and checks actual
-`user:*` system tuples at higher consistency for `CURRENT` categories. A
-`CURRENT` mode alone does not prove that system authorization is complete.
-`MISSING_TUPLES` lists missing `visible` / `system_use_marker` relations;
-`incomplete_count` counts affected existing resources and `missing_tuple_count`
-counts their missing relations. `missing_count` counts resources without a mode.
+The default dry-run reports missing/non-current modes. CURRENT resources retain
+their current authorization, including a revoked all-member grant. Bootstrap
+never requires or restores legacy public `user:*` visibility/use markers.
+`missing_count` counts resources without a mode.
 Dry-run writes no permission modes, operations, grants, or tuples:
 
 ```bash
@@ -613,27 +611,15 @@ PYTHONPATH=./ .venv/bin/python \
   --operator-id 1
 ```
 
-Apply calls `authorize_system_owned` for absent modes and `repair_system_owned`
-for `CURRENT` preset tools with missing system relations. The repair only adds
-the missing relations through a durable `RESOURCE_SYSTEM_REPAIR` operation,
-claims the existing resource version, and finalizes the next version after
-OpenFGA verification. Existing Grant/assignee rows, visibility contributions,
-and permission mode are preserved. A second run with complete tuples performs
-no writes; later tuple loss can be repaired at the new resource version. An existing
-non-`CURRENT` mode is a blocker and remains owned by the ordinary
-operation/FAILED_CLOSED recovery scripts.
+Apply calls `authorize_system_owned` only for absent modes, creating a revocable
+all-member grant for the owning tenant through the durable projection protocol.
+CURRENT resources are not changed. Non-CURRENT resources remain blocked and
+must be recovered through the ordinary operation/FAILED_CLOSED recovery scripts.
 
-Run this explicit maintenance procedure after deploying the classifier fix to
-repair historical presets migrated as user-owned resources. Restarting the
-service does not repair all existing presets, and resuming a completed F048
-migration does not refresh its frozen resource classification. Review the
-dry-run against the target environment before applying; deploying this code
-alone does not mutate production permissions.
-
-The general projection-operation reconciler cannot invent missing system
-tuples for a historical resource: no operation describing that correction
-exists yet. The visible reconciler only rebuilds ordinary Grant sources;
-system authorization has a separate canonical business predicate.
+For an existing installation upgrading from public markers, use the explicit
+`migrate_capability_authorization.py` procedure after publishing the matching
+authorization model and Catalog. This bootstrap command does not migrate or
+reset existing grants and does not audit actual tuples against the SQL ledger.
 
 ### `recover_f048_failed_closed_projection.py`
 

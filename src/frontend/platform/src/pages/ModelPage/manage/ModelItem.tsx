@@ -388,11 +388,11 @@ export function ModelItem({
           </div>
           {model.model_type === "tts" && (
             <div className="sm:max-w-sm">
-              <Label className="bisheng-label">
+              <Label className="bisheng-label inline-flex items-center">
                 <span>{t("model.voiceType")}</span>
                 <span className="text-red-500">*</span>
                 <QuestionTooltip
-                  className="relative top-0.5 ml-1"
+                  className="ml-1"
                   content={t("model.voiceTypeTooltip")}
                 />
               </Label>

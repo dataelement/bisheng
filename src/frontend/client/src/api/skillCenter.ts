@@ -18,6 +18,7 @@ interface ApiCard {
   enabled: boolean;
   content_hash: string;
   bundle_missing: boolean;
+  builtin_key?: string | null;
   update_time?: string | null;
   preview?: string;
   source_text?: string;
@@ -46,6 +47,7 @@ function toRecord(row: ApiCard, source: SkillRecord['source']): SkillRecord {
     description: row.description || '',
     source,
     enabled: Boolean(row.enabled),
+    ...(source === 'platform' ? { builtinKey: row.builtin_key } : {}),
     contentHash: row.content_hash,
     bundleMissing: Boolean(row.bundle_missing),
     updatedAt: row.update_time || '',

@@ -268,3 +268,41 @@ async def test_attachment_manifest_scan_includes_more_than_1000_messages(databas
         assert "original.pdf" in messages[0].files
     finally:
         await engine.dispose()
+
+
+def test_daily_session_retains_parsed_images_with_the_existing_manifest(database, monkeypatch):
+    """Daily sessions have an empty flow id but keep the same image ownership contract."""
+    with Session(database) as session:
+        owner = session.exec(select(MessageSession)).one()
+        owner.flow_id = ""
+        owner.flow_type = 15
+        session.add(owner)
+        session.commit()
+    storage = SimpleNamespace(bucket="main", tmp_bucket="temp")
+    monkeypatch.setattr(
+        "bisheng.chat_session.domain.services.workflow_file_service.get_minio_storage_sync", lambda: storage
+    )
+    context = WorkflowFileService.image_storage(
+        chat_id="c1",
+        user_id=7,
+        tenant_id=99,
+        workflow_id="",
+        run_id="daily-turn",
+        node_id="daily-attachment",
+        source_url="http://storage/tmp/a.pdf?old",
+        file_name="a.pdf",
+    )
+    context.before_upload(["page_0_image_4.jpg"])
+    context.after_upload()
+    with Session(database) as session:
+        manifest = session.exec(select(WorkflowFileManifest)).one()
+        asset = json.loads(manifest.files)[0]["derived_assets"][0]
+        owner = session.exec(select(MessageSession)).one()
+    assert asset["state"] == "ready"
+    assert context.url_builder("page_0_image_4.jpg") == f"/api/v1/chat/c1/files/{asset['file_id']}/content"
+    assert WorkflowFileService.is_owned_image(asset, 1, 7)
+    assert not WorkflowFileService.is_owned_image(asset, 99, 7)
+    assert asset in [
+        {k: v for k, v in item.items() if k != "_workflow_image"}
+        for item in ChatSessionService._attachment_objects([manifest], owner)
+    ]

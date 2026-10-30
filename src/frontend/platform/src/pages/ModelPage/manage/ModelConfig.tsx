@@ -34,7 +34,7 @@ import { useTranslation } from "react-i18next";
 import { CustomForm } from "./CustomForm";
 import { ModelDiscovery } from "./ModelDiscovery";
 import { ModelItem } from "./ModelItem";
-import { modelProvider, bishengModelProvider } from "./modelProviders";
+import { bishengModelProvider, matchesProviderSearch, modelProvider, providerSelectOptions } from "./modelProviders";
 import {
   hasDuplicateModelName,
   hasInvalidModelName,
@@ -298,7 +298,7 @@ export default function ModelConfig({
       id === -1 ? modelProvider : [...modelProvider, bishengModelProvider]
     ).map((provider) => ({
       ...provider,
-      name: "labelKey" in provider ? t(provider.labelKey) : provider.name,
+      name: provider.labelKey ? t(provider.labelKey) : provider.name,
     }));
   }, [id, t]);
 
@@ -368,16 +368,17 @@ export default function ModelConfig({
             onChange={(value) => {
               if (value) handleTypeChange(value);
             }}
-            options={_modelProvider
-              .filter((model) => model.value)
-              .map((model) => ({ value: model.value, label: model.name }))}
+            filterOption={(keyword, option) =>
+              matchesProviderSearch(keyword, option, t("model.openaiCompatibleSearchWords"))}
+            options={providerSelectOptions(_modelProvider, (group) =>
+              t(`model.providerGroups.${group}`))}
           />
         </div>
         <div className="mb-2">
-          <Label className="bisheng-label">
+          <Label className="bisheng-label inline-flex items-center">
             <span>{t("model.serviceProviderName")}</span>
             <QuestionTooltip
-              className="relative top-0.5 ml-1"
+              className="ml-1"
               content={t("model.serviceProviderNameTooltip")}
             />
           </Label>

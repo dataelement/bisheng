@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deletePersonalSkill, getSkillCenter, setPersonalSkillEnabled, setSkillAvailability, getSkillScope } from '~/api/skillCenter';
-import { useAuthContext } from "~/hooks";
+import { useAuthContext, useLocalize } from "~/hooks";
+import { localizeSkill } from "./localization";
 import type { SkillRecord } from './types';
 
 type SkillChange = { kind: 'toggle'; target: SkillRecord; enabled: boolean } | { kind: 'delete'; target: SkillRecord };
 
 
 export function useSkillCenter() {
+  const localize = useLocalize();
   const client = useQueryClient();
   const { user } = useAuthContext();
   const identity = useQuery(["skill-center", "scope", user?.id], () => getSkillScope(String(user?.id)), {
@@ -39,7 +41,7 @@ export function useSkillCenter() {
     center,
     identity,
     personal: queryOf(center.data?.personal),
-    platform: queryOf(center.data?.enterprise),
+    platform: queryOf(center.data?.enterprise.map((skill) => localizeSkill(skill, localize))),
     personalCount: center.data?.personalCount ?? 0,
     enterpriseCount: center.data?.enterpriseCount ?? 0,
     mutation,

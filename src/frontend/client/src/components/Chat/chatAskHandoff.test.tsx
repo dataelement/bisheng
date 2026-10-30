@@ -1,5 +1,5 @@
-import { StrictMode, useCallback, useEffect, useState } from 'react';
-import { act, renderHook } from '@testing-library/react';
+import { StrictMode, useCallback, useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
+import { act, render, renderHook } from '@testing-library/react';
 import { parkChatAsk, useChatAskHandoff, type ChatAsk } from './chatAskHandoff';
 import { useChatModelResolution, readConversationModel } from '~/hooks/useChatModelResolution';
 import modelState from '~/store/modeltype';
@@ -232,4 +232,54 @@ test.each([
   }
   act(() => { mockActivate(); mockActivate(); });
   expect(sendMessage).toHaveBeenCalledTimes('attachment' in ask ? 0 : 1);
+});
+
+// The production model atom notifies subscribers synchronously. The composer
+// also publishes selection presence during layout, which flushes passive effects.
+test.each([1, 2])('prepares once when a synchronous model store publishes model %s during layout', (modelId) => {
+  let model = { id: 1 };
+  const listeners = new Set<() => void>();
+  const subscribe = (listener: () => void) => {
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+  };
+  const readModel = () => model;
+  const selectModel = jest.fn((id: number) => {
+    model = { id };
+    listeners.forEach((listener) => listener());
+    return true;
+  });
+  const sendMessage = jest.fn<boolean, [string]>(() => true);
+  const asks = [
+    { text: 'first question', modelId, space: { id: '11', name: 'First space' } },
+    { text: 'second question', modelId, space: { id: '12', name: 'Second space' } },
+  ];
+  function SelectionPresence({ selected, onChange }: { selected: boolean; onChange: (value: boolean) => void }) {
+    useLayoutEffect(() => { onChange(selected); }, [selected, onChange]);
+    return null;
+  }
+  function SynchronousLanding() {
+    const selectedModel = useSyncExternalStore(subscribe, readModel);
+    const [kbs, setKbs] = useState<Kb[]>([]);
+    const [, setHasSelection] = useState(false);
+    useChatAskHandoff({
+      conversationId: 'new', activeConversationId: 'new', locationKey: 'landing',
+      selectedKbs: kbs, setSelectedKbs: setKbs, selectedModelId: selectedModel.id,
+      selectModel, sendMessage: (text) => {
+        expect(selectedModel.id).toBe(modelId);
+        expect(kbs).toEqual([{ ...asks[sendMessage.mock.calls.length].space, type: 'space' }]);
+        return sendMessage(text);
+      },
+      ready: true, onModelUnavailable: rejected,
+    });
+    return <SelectionPresence selected={kbs.length > 0} onChange={setHasSelection} />;
+  }
+  parkChatAsk(asks[0]);
+  render(<StrictMode><SynchronousLanding /></StrictMode>);
+  expect(selectModel).toHaveBeenCalledTimes(1);
+  expect(sendMessage).toHaveBeenCalledTimes(1);
+  parkChatAsk(asks[1]);
+  act(() => mockActivate());
+  expect(selectModel).toHaveBeenCalledTimes(2);
+  expect(sendMessage).toHaveBeenCalledTimes(2);
 });

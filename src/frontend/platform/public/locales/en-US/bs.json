@@ -845,7 +845,7 @@
     "save": "Save",
     "saveSuccess": "Save Success",
     "serviceProviderName": "Service Provider Name",
-    "serviceProviderNameTooltip": "Give a name to this service provider configuration for easy identification",
+    "serviceProviderNameTooltip": "Shown in the model list to tell providers apart",
     "shareToChildren": "Share with child tenants",
     "tenantSharedReadonly": "Shared by {{tenantName}} · Read-only",
     "silicon": "Silicon Flow",
@@ -901,16 +901,21 @@
       "spark": "iFLYTEK Spark",
       "tencent": "Tencent Cloud",
       "moonshot": "Moonshot AI",
-      "qianfan": "Baidu Qianfan"
+      "qianfan": "Baidu Qianfan",
+      "openaiCompatible": "OpenAI-compatible"
     },
-    "sectionConnection": "Connection",
     "sectionUsage": "Usage",
     "providerType": "Provider type",
-    "providerTypeTip": "Decides how the API is called and which connection fields to fill in below. It cannot be changed after saving.",
-    "dailyCallLimitTip": "Limits the total calls per day across all models of this provider. Calls over the limit fail for the rest of the day; the count resets at midnight.",
+    "providerTypeTip": "Can't be changed after saving",
+    "providerGroups": {
+      "cloud": "Cloud services",
+      "local": "Self-hosted frameworks"
+    },
+    "openaiCompatibleSearchWords": "custom,compatible,gateway,proxy,relay",
+    "dailyCallLimitTip": "Total across all models, resets at 00:00",
     "dailyLimitPrefix": "At most",
     "dailyLimitSuffix": "calls per day",
-    "shareToChildrenTip": "When on, child tenants can use the models of this provider but cannot view or change its configuration.",
+    "shareToChildrenTip": "Child tenants can use these models but can't see the settings",
     "getApiKey": "Get a {{provider}} API key",
     "formatExample": "Example: {{example}}",
     "streamingAsrHint": "Streaming speech recognition supports paraformer-realtime-v2 and qwen3-asr-flash-realtime. Save and test the model, then select it as the workbench ASR model.",
@@ -1771,6 +1776,9 @@
       "invalidRange": "Choose a valid start and end time.",
       "loadFailed": "Records could not be loaded. Try again.",
       "exportFailed": "The export could not be retrieved. Try again.",
+      "exportBackground": "Closing this window keeps the export running. Click Export all again to view its progress.",
+      "exportCreateFailed": "Could not create the export. Please try again.",
+      "exportRows": "Records: {{count}}",
       "loading": "Loading…",
       "unknown": "Unknown",
       "empty": "No matching records",
@@ -3017,13 +3025,12 @@
       "failed": "Failed"
     },
     "version": {
-      "placeholder": "Version",
       "loading": "Loading…",
-      "empty": "No versions yet",
       "loadFailed": "Failed to load versions",
-      "current": "Running",
-      "pending": "Pending",
-      "readonlyTip": "Versions are read-only; a hosted app cannot be switched here"
+      "noCode": "No code uploaded",
+      "latest": "Latest version {{version}}",
+      "running": "Running version {{version}}",
+      "currentUnavailable": "Running version unknown"
     },
     "actions": {
       "stopTitle": "Take this application offline?",
@@ -4231,7 +4238,7 @@
       "ruleHelp": "Set monthly credits per member by user, department or role. The highest matching enabled allowance applies, shared by Chat and Work. Members no enabled allowance matches are not capped.",
       "scope": "Scope",
       "monthlyCredits": "Credits per member / month",
-      "creditRangeHint": "Enter credits from 0 to {{max}}, with up to 6 decimal places.",
+      "creditRangeHint": "0–{{max}} credits per month, with up to 1 decimal place.",
       "enabled": "Enable rule",
       "selectSubject": "Select a subject",
       "save": "Save",

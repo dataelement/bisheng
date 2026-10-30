@@ -1,15 +1,20 @@
-import { cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { PropsWithChildren } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useRuntimeAudit } from '@/pages/LogPage/runtime/useRuntimeAudit'
 import { RuntimeAuditPanel } from '@/pages/LogPage/runtime/RuntimeAuditPanel'
+import userEvent from '@testing-library/user-event'
 
-const mock = vi.hoisted(() => ({ records: vi.fn(), candidates: vi.fn(), exportJob: vi.fn(), createExport: vi.fn() }))
-vi.mock('@/controllers/API/runtimeAudit', () => ({ getRuntimeAuditRecords: mock.records, getRuntimeAuditCandidates: mock.candidates, getRuntimeAuditExport: mock.exportJob, createRuntimeAuditExport: mock.createExport, cancelRuntimeAuditExport: vi.fn(), downloadRuntimeAuditExport: vi.fn() }))
+const mock = vi.hoisted(() => ({ records: vi.fn(), candidates: vi.fn(), exportJob: vi.fn(), createExport: vi.fn(), cancelExport: vi.fn() }))
+vi.mock('@/controllers/API/runtimeAudit', () => ({ getRuntimeAuditRecords: mock.records, getRuntimeAuditCandidates: mock.candidates, getRuntimeAuditExport: mock.exportJob, createRuntimeAuditExport: mock.createExport, cancelRuntimeAuditExport: mock.cancelExport, downloadRuntimeAuditExport: vi.fn() }))
 vi.mock('@/hooks/useAdminScope', () => ({ useAdminScope: () => ({ scope: { scope_tenant_id: null }, loading: false }) }))
 vi.mock('@/controllers/API/tenant', () => ({ getTenantsApi: vi.fn().mockResolvedValue({ data: [] }) }))
 vi.mock('@/controllers/request', () => ({ showApiError: vi.fn() }))
+vi.mock('@/components/bs-ui/calendar/datePicker', () => ({
+  DatePicker: ({ placeholder, onChange }: { placeholder: string; onChange: (date: Date) => void }) =>
+    <button onClick={() => onChange(new Date(placeholder.endsWith('start') ? '2026-10-20T09:15:30' : '2026-10-21T18:45:00'))}>{placeholder}</button>,
+}))
 const wrapper = ({ children }: PropsWithChildren) => <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, cacheTime: 0 } } })}>{children}</QueryClientProvider>
 afterEach(cleanup)
 beforeEach(() => {
@@ -50,6 +55,13 @@ it('submits full export using the current frozen selection rather than current p
   fireEvent.click(screen.getByRole('button', { name: 'log.runtime.export' }))
   await waitFor(() => expect(mock.createExport).toHaveBeenCalledWith('selection', undefined))
   expect(await screen.findByRole('button', { name: 'log.runtime.download' })).toBeVisible()
+  const dialog = screen.getByRole('dialog')
+  expect(within(dialog).getByRole('button', { name: 'log.runtime.download' })).toBeVisible()
+  await userEvent.click(within(dialog).getAllByRole('button', { name: 'close' })[0])
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  fireEvent.click(screen.getByRole('button', { name: 'log.runtime.export' }))
+  expect(await screen.findByRole('dialog')).toBeVisible()
+  expect(mock.createExport).toHaveBeenCalledTimes(1)
 })
 
 it('renders caller and model metadata while leaving missing tokens unknown and excluding bodies', async () => {
@@ -61,6 +73,39 @@ it('renders caller and model metadata while leaving missing tokens unknown and e
   expect(screen.queryByText('PRIVATE_BODY')).not.toBeInTheDocument()
 })
 
+it('keeps a pending export on close and cancels only through the explicit cancel action', async () => {
+  const user = userEvent.setup()
+  mock.createExport.mockResolvedValue({ export_id: 'pending-job', status: 'pending' })
+  mock.exportJob.mockResolvedValue({ export_id: 'pending-job', status: 'running' })
+  mock.cancelExport.mockResolvedValue({ export_id: 'pending-job', status: 'expired' })
+  render(<RuntimeAuditPanel />, { wrapper })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'log.runtime.export' })).toBeEnabled())
+  await user.click(screen.getByRole('button', { name: 'log.runtime.export' }))
+  await screen.findByRole('button', { name: 'log.runtime.cancel' })
+  await user.click(within(screen.getByRole('dialog')).getAllByRole('button', { name: 'close' })[0])
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(mock.cancelExport).not.toHaveBeenCalled()
+  await user.click(screen.getByRole('button', { name: 'log.runtime.export' }))
+  expect(mock.createExport).toHaveBeenCalledTimes(1)
+  mock.exportJob.mockResolvedValue({ export_id: 'pending-job', status: 'expired' })
+  await user.click(await screen.findByRole('button', { name: 'log.runtime.cancel' }))
+  await waitFor(() => expect(mock.cancelExport).toHaveBeenCalledWith('pending-job', undefined))
+  expect(await screen.findByText('log.runtime.status.expired')).toBeVisible()
+})
+
+it('shows creation failures inside the dialog and can retry the export', async () => {
+  const user = userEvent.setup()
+  mock.createExport.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ export_id: 'retry-job', status: 'pending' })
+  mock.exportJob.mockResolvedValue({ export_id: 'retry-job', status: 'ready', final_count: 2 })
+  render(<RuntimeAuditPanel />, { wrapper })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'log.runtime.export' })).toBeEnabled())
+  await user.click(screen.getByRole('button', { name: 'log.runtime.export' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('log.runtime.exportCreateFailed')
+  await user.click(screen.getByRole('button', { name: 'build.retry' }))
+  expect(await screen.findByRole('button', { name: 'log.runtime.download' })).toBeVisible()
+  expect(mock.createExport).toHaveBeenCalledTimes(2)
+})
+
 it('renders zoned runtime timestamps in the viewers local time instead of raw UTC', async () => {
   const value = '2026-10-29T03:12:06Z'
   const date = new Date(value)
@@ -70,4 +115,20 @@ it('renders zoned runtime timestamps in the viewers local time instead of raw UT
   render(<RuntimeAuditPanel />, { wrapper })
   expect(await screen.findByText(expected)).toBeVisible()
   expect(screen.queryByText(value)).toBeNull()
+})
+
+it('applies custom dates selected through the platform picker and rejects incomplete ranges', async () => {
+  const user = userEvent.setup()
+  render(<RuntimeAuditPanel />, { wrapper })
+  await waitFor(() => expect(mock.records).toHaveBeenCalled())
+  await user.click(screen.getByRole('combobox', { name: 'log.runtime.timeRange' }))
+  await user.click(screen.getByRole('option', { name: 'log.runtime.custom' }))
+  await user.click(screen.getByRole('button', { name: 'log.runtime.apply' }))
+  expect(screen.getByRole('alert')).toHaveTextContent('log.runtime.invalidRange')
+  await user.click(screen.getByRole('button', { name: 'log.runtime.start' }))
+  await user.click(screen.getByRole('button', { name: 'log.runtime.end' }))
+  await user.click(screen.getByRole('button', { name: 'log.runtime.apply' }))
+  await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', expect.objectContaining({
+    time_range: 'custom', start_time: new Date('2026-10-20T09:15:30').toISOString(), end_time: new Date('2026-10-21T18:45:00').toISOString(),
+  }), undefined))
 })
