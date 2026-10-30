@@ -87,6 +87,7 @@
     "is_delete": 0,
     "create_time": "2024-04-30 10:26:07",
     "update_time": "2024-04-30 10:26:07",
+    "extra": "{\"type\": \"container\"}",
     "openapi_schema": null
   },
   {
