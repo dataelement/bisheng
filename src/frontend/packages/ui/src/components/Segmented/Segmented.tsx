@@ -4,18 +4,20 @@ import cn from '../../utils/cn';
 import { Tooltip } from '../Tooltip';
 
 /**
- * Segmented — design-system base component (组件-Segmented分段控制器.md v1.1).
+ * Segmented — design-system base component (组件-Segmented分段控制器.md v1.6).
  *
  * Switches HOW the same content is shown — list vs cards, day vs week — and
  * applies IMMEDIATELY. Navigation between content blocks is Tabs; a choice
  * that travels with a form is a Radio (判别表 in the spec §1). Semantically a
  * radio group (§落地 2): `role="radiogroup"` / `role="radio"`, arrow keys move
- * AND select. Baked in per spec: gray track (fill-2) with a floating
- * page-colored thumb, no shadow (§2); 3px track inset with concentric radii;
+ * AND select. Baked in per spec: translucent neutral track and one
+ * floating thumb, no shadow (§2); 3px track inset with concentric radii;
  * content-sized segments, `block` fills the container with equal widths (§2);
  * three sizes 28/32/36 — medium sits on the control ladder, small/large pull
- * in half a step (§3); selection never uses brand color, selected weight 500
- * over unselected 400 (§5); 200ms thumb slide; the gray keyboard-only
+ * in half a step (§3), all using 14px text; selection uses brand text in light
+ * and a translucent brand fill with primary text in dark; only dark selection
+ * raises the font weight to 500 (§5);
+ * 200ms thumb slide; the gray keyboard-only
  * focus ring around the whole control; ≥44px touch hot zones (§6). Always has
  * a selected segment — with no `value`/`defaultValue` the first enabled
  * option is selected (§1).
@@ -42,22 +44,22 @@ export interface SegmentedOption {
  * Font sizes reference the PRIMITIVE scale vars (control text must not follow
  * the ≤768px body remap — same rationale as Button §3). */
 const TRACK_SIZE: Record<SegmentedSize, string> = {
-  small: 'h-7 rounded text-[length:var(--font-size-3)] leading-[var(--line-height-3)]',
-  medium: 'h-8 rounded-md text-[length:var(--font-size-3)] leading-[var(--line-height-3)]',
-  large: 'h-9 rounded-lg text-[length:var(--font-size-4)] leading-[var(--line-height-4)]',
+  small: 'h-7 rounded-md text-[length:var(--font-size-3)] leading-[var(--line-height-3)]',
+  medium: 'h-8 rounded-lg text-[length:var(--font-size-3)] leading-[var(--line-height-3)]',
+  large: 'h-9 rounded-lg text-[length:var(--font-size-3)] leading-[var(--line-height-3)]',
 };
 
-/** §4 — segment padding 8/12/16, icon 14/16/18 with 8px gap (4px on small). */
+/** §4 — segment padding 8/12/20, icon 14/16/18 with 8px gap (4px on small). */
 const SEGMENT_SIZE: Record<SegmentedSize, string> = {
   small: 'gap-1 px-2 [&_svg]:size-3.5',
   medium: 'gap-2 px-3 [&_svg]:size-4',
-  large: 'gap-2 px-4 [&_svg]:size-[18px]',
+  large: 'gap-2 px-5 [&_svg]:size-[18px]',
 };
 
 /** §2 — thumb radius = outer radius − 3px inset (concentric nesting). */
 const THUMB_RADIUS: Record<SegmentedSize, string> = {
-  small: 'rounded-[1px]',
-  medium: 'rounded-[3px]',
+  small: 'rounded-[3px]',
+  medium: 'rounded-[5px]',
   large: 'rounded-[5px]',
 };
 
@@ -98,6 +100,7 @@ const Segmented = React.forwardRef<HTMLDivElement, SegmentedProps>(
     const fallback = defaultValue ?? items.find((o) => !o.disabled)?.value;
     const [innerValue, setInnerValue] = React.useState(fallback);
     const current = value !== undefined ? value : innerValue;
+    const activeDisabled = disabled || items.find((option) => option.value === current)?.disabled;
     const [thumb, setThumb] = React.useState<{ left: number; width: number } | null>(null);
 
     React.useLayoutEffect(() => {
@@ -133,7 +136,7 @@ const Segmented = React.forwardRef<HTMLDivElement, SegmentedProps>(
         className={cn(
           // §2 — hug each segment's content; only block uses equal columns.
           // `relative` anchors the measured sliding thumb.
-          'relative grid-flow-col select-none bg-fill-2 p-[3px] font-normal',
+          'relative grid-flow-col select-none bg-text-1/[0.04] p-[3px] font-normal dark:bg-text-1/[0.08]',
           block ? 'grid w-full auto-cols-fr' : 'inline-grid auto-cols-max',
           // §5 — keyboard-only gray ring around the WHOLE control (2px gray-2,
           // same as the input focus ring).
@@ -143,17 +146,14 @@ const Segmented = React.forwardRef<HTMLDivElement, SegmentedProps>(
         )}
         {...props}
       >
-        {/* §2/§5 — the floating thumb: one absolute element sliding 200ms to
-            the selected segment, matching its measured position and width. Light: the
-            spec's white block = bg-bg-page. Dark: elevation LIGHTENS on
-            #121212 (same direction as the button fills), so the page color
-            would sink BELOW the track — float it two ramp steps above fill-2
-            instead (fill-4, the iOS dark-segmented contrast). */}
+        {/* §2/§5 — one thumb follows the selected segment's measured geometry.
+            Dark mode uses a translucent brand fill, with a muted fill when disabled. */}
         {thumb && (
           <span
             aria-hidden
             className={cn(
-              'absolute bottom-[3px] left-0 top-[3px] bg-bg-page transition-[transform,width] duration-200 dark:bg-fill-4',
+              'absolute bottom-[3px] left-0 top-[3px] bg-bg-page transition-[transform,width,background-color] duration-200',
+              activeDisabled ? 'dark:bg-btn-disabled-bg' : 'dark:bg-blue-500/20',
               THUMB_RADIUS[size],
             )}
             style={{
@@ -178,11 +178,11 @@ const Segmented = React.forwardRef<HTMLDivElement, SegmentedProps>(
                 // z-index lifts the label above the thumb; btn-touch-hit is the
                 // ≥44px touch hot zone (§6), anchored by `relative`.
                 'btn-touch-hit relative z-[1] inline-flex cursor-pointer items-center justify-center whitespace-nowrap outline-none transition-colors',
-                // §5 — selected text-1 at weight 500 on the thumb, unselected
-                // text-3 at 400, hover deepens to text-1 (background
-                // untouched). Re-measure if the selected font weight changes
-                // a segment's content width.
-                'text-text-3 hover:text-text-1 data-[state=checked]:font-medium data-[state=checked]:text-text-1',
+                // §5 — brand text in light, primary text over the translucent brand fill in dark.
+                // Hover uses brand text; only dark selection raises the weight to 500.
+                // Disabled items keep the disabled color and normal weight.
+                // Tooltip owns data-state on icon-only triggers; aria-checked stays the selection source.
+                'text-text-3 hover:text-blue-500 enabled:aria-checked:text-blue-500 dark:enabled:aria-checked:text-text-1 dark:enabled:aria-checked:font-medium',
                 'disabled:cursor-not-allowed disabled:text-btn-disabled-text',
                 SEGMENT_SIZE[size],
               )}
