@@ -7,7 +7,7 @@ of this that stays correct without row locks.
 
 The shape of every action is the same, and the order matters:
 
-1. load the app and check the **business** rules (owner-only delete, owner  or
+1. load the app and check the **business** rules (AC-44 deletion eligibility, owner or
    tenant admin or super admin for the rest). These cannot be F048 checks — the
    permission runtime short-circuits administrators to ALLOW, so "owner only"
    is inexpressible there (constitution C4 note).
@@ -212,7 +212,7 @@ class AppStateService:
     async def delete(cls, app_id: str, *, actor) -> ActionResult:
         """Explicit deletion — the **only** path that destroys an app's data (AC-40).
 
-        Owner-only (AC-44, administrators once the owner is gone) and blocked
+        Owner or platform super admin (AC-44, tenant admins once the owner is gone), blocked
         while online (AC-42): stopping first is
         what guarantees the container and its host volume are torn down by a
         state action instead of orphaned by a row that disappeared.
@@ -244,10 +244,14 @@ class AppStateService:
         else:
             await orchestrator_client.destroy(app_id=app_id, purge_volume=True)
 
-        # The audit remark names who actually deleted it: an administrator may
-        # now delete an app whose owner is gone (_require_deleter).
+        # Keep administrator deletion distinguishable from the original owner's action.
         by_owner = int(getattr(actor, "user_id", 0) or 0) == int(app.owner_user_id or 0)
-        reason = "deleted by owner" if by_owner else "deleted by administrator (owner account inactive)"
+        if by_owner:
+            reason = "deleted by owner"
+        elif bool(getattr(actor, "is_global_super", False)):
+            reason = "deleted by platform super administrator"
+        else:
+            reason = "deleted by administrator (owner account inactive)"
         won = await cls._transition(
             app_id, to_state=AppState.DELETED, from_states=(app.state,), reason=reason, actor=actor
         )
@@ -778,18 +782,12 @@ class AppStateService:
 
     @classmethod
     async def _require_deleter(cls, app: App, actor) -> None:
-        """Owner-only, unless the owner's account is gone.
-
-        Delete stays owner-only (AC-44): an administrator must not remove an
-        application whose owner can still look after it. But once the owner is
-        disabled or removed, nobody could delete the application at all — it
-        would sit in the list forever (found on 114, 2026-10-10). Then the
-        administrators who may already stop it (``_require_operator``) may also
-        delete it.
-        """
+        """Owner or platform super admin; tenant admins require an inactive owner (AC-44)."""
         from bisheng.app_runtime.domain.services.tenant_access import require_app_request_tenant
 
         require_app_request_tenant(app.tenant_id, actor, allow_global_super=True)
+        if bool(getattr(actor, "is_global_super", False)):
+            return
         if int(getattr(actor, "user_id", 0) or 0) == int(app.owner_user_id or 0):
             return
         owner = await UserDao.aget_user(int(app.owner_user_id or 0))

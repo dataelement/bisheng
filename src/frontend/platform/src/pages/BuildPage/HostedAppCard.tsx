@@ -185,8 +185,9 @@ export function HostedAppCard({
   const state =
     item.app_state ?? (item.status === 2 ? "online" : undefined)
   const online = isOnline(state) || item.status === 2
-  const ownerMayDelete = Number(item.user_id) === Number(currentUser?.user_id)
-    || (item.owner_active === false && Boolean(currentUser?.is_global_super || currentUser?.is_child_admin))
+  const mayDelete = Boolean(currentUser?.is_global_super)
+    || Number(item.user_id) === Number(currentUser?.user_id)
+    || (item.owner_active === false && Boolean(currentUser?.is_child_admin))
   const appRef = { appId: String(item.id), name: item.name, state }
 
   const handleCheckedChange = async (checked: boolean) => {
@@ -219,7 +220,7 @@ export function HostedAppCard({
       onAddTemp={undefined}
       showCopy={false}
       onPermission={canManagePermission ? onPermission : undefined}
-      onDelete={canDelete && ownerMayDelete ? handleDelete : undefined}
+      onDelete={canDelete && mayDelete ? handleDelete : undefined}
       deleteDisabledHint={
         isDeleteBlockedByState(state) || online
           ? t("hostedApp.actions.deleteBlockedHint")

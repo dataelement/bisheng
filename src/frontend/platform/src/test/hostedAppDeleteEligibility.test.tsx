@@ -6,10 +6,10 @@ vi.mock('@/pages/BuildPage/useHostedAppActions',()=>({useHostedAppActions:()=>({
 vi.mock('@/components/bs-comp/cardComponent',()=>({default:({onDelete}:{onDelete?:()=>void})=>onDelete?<button>delete</button>:null}))
 it.each([
   [7,false,false,true],
-  [8,false,true,false],
+  [8,false,true,true],
   [8,false,false,false],
   [8,true,true,true],
-])('keeps the original-owner rule alongside the permission grant (%s, %s, %s)',(uid,inactive,admin,allowed)=>{
+])('allows platform super admins alongside the original owner (%s, %s, %s)',(uid,inactive,admin,allowed)=>{
  render(<HostedAppCard item={{id:'app',name:'App',user_id:7,owner_active:!inactive}} currentUser={{user_id:uid,is_global_super:admin}} isAdmin={admin} canDelete canSwitch={false} canManagePermission={false} onPermission={vi.fn()} onChanged={vi.fn()} />)
  expect(Boolean(screen.queryByRole('button',{name:'delete'}))).toBe(allowed)
 })
