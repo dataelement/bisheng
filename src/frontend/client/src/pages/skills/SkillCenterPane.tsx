@@ -4,6 +4,7 @@ import { Button, StateView } from '@bisheng/ui';
 import { SkillDetails } from '~/components/Skills/SkillDetails';
 import { SkillUploadDialog } from '~/components/Skills/SkillUploadDialog';
 import { useSkillCenter } from '~/components/Skills/useSkillCenter';
+import { matchesSkillSearch } from '~/components/Skills/localization';
 import type { PersonalSkill } from '~/components/Skills/types';
 import { useLocalize } from '~/hooks';
 import { SkillList, SkillListSkeleton } from './SkillList';
@@ -15,7 +16,7 @@ export function SkillCenterPane({ search, uploadOpen, onUploadOpenChange }: Prop
   const [target, setTarget] = useState<PersonalSkill>();
   const skills = [...platform.data ?? [], ...personal.data ?? []];
   const keyword = search.trim().toLocaleLowerCase();
-  const filtered = skills.filter(skill => `${skill.displayName} ${skill.description}`.toLocaleLowerCase().includes(keyword));
+  const filtered = skills.filter(skill => matchesSkillSearch(skill, keyword));
   const selected = skills.find(skill => skill.id === params.get('skill'));
   const select = (id?: string) => { const next = new URLSearchParams(params); if (id) next.set('skill', id); else next.delete('skill'); setParams(next, { replace: true }); };
   const pendingId = mutation.isLoading ? mutation.variables?.target?.id : undefined;

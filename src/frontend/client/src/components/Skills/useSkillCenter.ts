@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAuthContext } from '~/hooks';
+import { useAuthContext, useLocalize } from '~/hooks';
+import { localizeSkill } from './localization';
 import { getCenterSkills, getSkillScope, setSkillAvailability, uploadPersonalSkill, deletePersonalSkill } from '~/api/skillCenter';
 import { changePersonalSkill, listPersonalSkills } from './skillPreviewStore';
 import { SkillError, type PersonalSkill, type PlatformSkill, type CenterSkill } from './types';
@@ -18,11 +19,12 @@ async function loadSkills(scope: string) {
 type Change = Parameters<typeof changePersonalSkill>[1] | { kind: 'toggle'; target: CenterSkill; enabled: boolean };
 export function useSkillCenter() {
   const { user } = useAuthContext();
+  const localize = useLocalize();
   const client = useQueryClient();
   const identity = useQuery(['skill-center', 'scope', user?.id], () => getSkillScope(String(user?.id)), { enabled: !!user?.id, retry: false, staleTime: 0 });
   const scope = identity.data;
   const catalog = useQuery(['skill-center', scope, 'catalog'], () => loadSkills(scope ?? ''), { enabled: !!scope, retry: false, refetchOnWindowFocus: true });
-  const platform = { ...catalog, data: catalog.data?.filter((row): row is PlatformSkill => row.source === 'platform') };
+  const platform = { ...catalog, data: catalog.data?.filter((row): row is PlatformSkill => row.source === 'platform').map(row => localizeSkill(row, localize)) };
   const personal = { ...catalog, data: catalog.data?.filter((row): row is PersonalSkill => row.source === 'personal') };
   const mutation = useMutation({
     mutationFn: async (change: Change) => {

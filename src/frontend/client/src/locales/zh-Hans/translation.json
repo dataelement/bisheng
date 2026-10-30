@@ -2606,5 +2606,19 @@
     "scenario_time": "当前时间",
     "scenario_order": "订单查询",
     "scenario_inventory": "库存查询"
+  },
+  "com_builtin_skills": {
+    "bisheng-docx": {
+      "name": "Word 文档制作",
+      "description": "创建、读取和修改 Word 文档（.docx），适用于报告、方案、纪要、通知、合同初稿和简历等。支持标题层级、目录、页码、表格和图表，并在交付前检查排版。"
+    },
+    "bisheng-pptx": {
+      "name": "PPT 制作",
+      "description": "创建、读取和修改 PowerPoint 演示文稿（.pptx），适用于企业介绍、工作汇报、项目方案、产品发布和培训课件。支持套用提供的 .pptx 或 .potx 模板，并在交付前检查幻灯片排版。"
+    },
+    "bisheng-xlsx": {
+      "name": "Excel 表格制作",
+      "description": "创建和修改 Excel 工作簿（.xlsx），适用于数据表、汇总表、预算表、财务模型、报价单和台账。支持读取和清洗 .xlsx、.xls、.csv 数据，设置公式与格式，并在交付前重算和检查工作簿。"
+    }
   }
 }

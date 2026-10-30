@@ -2677,5 +2677,19 @@
     "scenario_time": "Current time",
     "scenario_order": "Order lookup",
     "scenario_inventory": "Inventory lookup"
+  },
+  "com_builtin_skills": {
+    "bisheng-docx": {
+      "name": "Word document creation",
+      "description": "Create, read and edit Word documents (.docx), including reports, proposals, meeting minutes, notices, draft contracts and resumes. Organize content with headings, tables of contents, page numbers, tables and charts, and check the layout before delivery."
+    },
+    "bisheng-pptx": {
+      "name": "PowerPoint presentation creation",
+      "description": "Create, read and edit PowerPoint presentations (.pptx) for company introductions, work reports, project proposals, product launches and training. Use provided .pptx or .potx templates and check slide layout before delivery."
+    },
+    "bisheng-xlsx": {
+      "name": "Excel spreadsheet creation",
+      "description": "Create and edit Excel workbooks (.xlsx), including data tables, summaries, budgets, financial models, quotations and registers. Read and clean .xlsx, .xls and .csv data, apply formulas and formatting, and recalculate and check the workbook before delivery."
+    }
   }
 }
