@@ -718,7 +718,7 @@ DASHBOARD_DATASET = [
                 DimensionConfig(name="二级知识分类", field="file_subcategory_name"),
                 DimensionConfig(name="业务域编码", field="business_domain_code"),
                 DimensionConfig(name="业务域", field="business_domain_name"),
-                # 上传人组织读 knowledgefile.belonging_organization_id, 空值不回退到当前主组织.
+                # 上传人组织读 knowledgefile.user_id 的同步当时主部门。所属组织读 belonging_organization_id。
                 DimensionConfig(name="上传人公司", field="uploader_company_name"),
                 DimensionConfig(name="上传人部门", field="uploader_department_name"),
                 DimensionConfig(name="上传人科室", field="uploader_office_name"),

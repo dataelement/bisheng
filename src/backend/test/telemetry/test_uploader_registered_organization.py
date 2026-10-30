@@ -1,4 +1,4 @@
-"""上传人组织只读 knowledgefile.belonging_organization_id."""
+"""所属组织读登记组织, 上传人组织读该行 user_id 的主部门."""
 
 from types import SimpleNamespace
 
@@ -66,8 +66,8 @@ def worker(monkeypatch):
     return module
 
 
-def test_uploader_organization_expands_registered_department(monkeypatch, worker):
-    """有效登记组织展开四级名称, 不用当前主组织."""
+def test_belonging_organization_expands_registered_department(monkeypatch, worker):
+    """登记组织展开四级名称, 所属部门含上级部门. 上传人组织用主部门."""
     departments = {
         1: _department(1, "首钢", "company", "/1"),
         2: _department(2, "制造部", "dept", "/1/2"),
@@ -81,17 +81,18 @@ def test_uploader_organization_expands_registered_department(monkeypatch, worker
 
     record = _build(worker, _file(belonging_organization_id=4), departments, {4: departments[4]}, departments[9])
 
-    assert record.uploader_company_name == "首钢"
-    assert record.uploader_department_name == "制造部"
-    assert record.uploader_office_name == "炼铁科"
-    assert record.uploader_squad_name == "一班"
+    assert record.belonging_company_name == "首钢"
     assert record.belonging_department_name == "制造部"
+    assert record.belonging_office_name == "炼铁科"
+    assert record.belonging_squad_name == "一班"
+    assert record.uploader_department_name == "当前部门"
+    assert record.uploader_office_name is None
     assert "original_upload_squad_name" not in record.model_dump()
     assert loaded == []
 
 
 def test_missing_registered_organization_stays_empty(monkeypatch, worker):
-    """登记组织为空时上传人组织留空, 所属和原始所属仍按库计算."""
+    """登记组织为空时所属组织留空. 上传人组织仍用主部门, 不跟着所在库."""
     departments = {
         2: _department(2, "制造部", "dept", "/2"),
         4: _department(4, "一班", "squad", "/4"),
@@ -101,11 +102,11 @@ def test_missing_registered_organization_stays_empty(monkeypatch, worker):
 
     record = _build(worker, _file(belonging_organization_id=None), departments, {}, departments[9])
 
-    assert record.uploader_company_name is None
-    assert record.uploader_department_name is None
-    assert record.uploader_office_name is None
-    assert record.uploader_squad_name is None
-    assert record.belonging_department_name == "制造部"
+    assert record.belonging_company_name is None
+    assert record.belonging_department_name is None
+    assert record.belonging_office_name is None
+    assert record.belonging_squad_name is None
+    assert record.uploader_department_name == "当前部门"
     assert "original_upload_squad_name" not in record.model_dump()
 
 
@@ -119,7 +120,7 @@ def test_missing_registered_organization_stays_empty(monkeypatch, worker):
     ],
 )
 def test_unusable_registered_organization_stays_empty(monkeypatch, worker, overrides):
-    """停用, 已删除或跨租户的登记组织不写入上传人组织."""
+    """停用、已删除或跨租户的登记组织不写入所属组织。"""
     registered = _department(4, "一班", "squad", "/4", **overrides)
     departments = {
         2: _department(2, "制造部", "dept", "/2"),
@@ -130,12 +131,13 @@ def test_unusable_registered_organization_stays_empty(monkeypatch, worker, overr
 
     record = _build(worker, _file(belonging_organization_id=4), departments, {4: registered}, departments[9])
 
-    assert record.uploader_department_name is None
-    assert record.uploader_squad_name is None
+    assert record.belonging_department_name is None
+    assert record.belonging_squad_name is None
+    assert record.uploader_department_name == "当前部门"
 
 
 def test_unknown_registered_organization_id_stays_empty(monkeypatch, worker):
-    """登记组织 ID 找不到部门行时上传人组织留空."""
+    """登记组织 ID 找不到部门行时所属组织留空。"""
     departments = {
         2: _department(2, "制造部", "dept", "/2"),
         4: _department(4, "原始班组", "squad", "/4"),
@@ -146,7 +148,32 @@ def test_unknown_registered_organization_id_stays_empty(monkeypatch, worker):
 
     record = _build(worker, _file(belonging_organization_id=4), departments, {}, departments[9])
 
+    assert record.belonging_department_name is None
+    assert record.uploader_department_name == "当前部门"
+
+
+def test_multiple_primary_departments_leave_uploader_empty(monkeypatch, worker):
+    """多条主部门时上传人组织留空, 所属组织仍按登记组织展开."""
+    departments = {
+        2: _department(2, "制造部", "dept", "/1/2"),
+        9: _department(9, "当前部门", "dept", "/9"),
+    }
+    monkeypatch.setattr(worker, "_get_dimension_department_map", lambda _departments: departments)
+    monkeypatch.setattr(worker, "_load_unique_primary_departments", lambda user_ids: ({}, set(user_ids)))
+
+    record = worker._build_knowledge_space_content_records(
+        [(_file(belonging_organization_id=2), SimpleNamespace(id=20, tenant_id=1, name="当前库"))],
+        {},
+        space_scope_map={20: SimpleNamespace(level="department")},
+        space_department_map={20: departments[2]},
+        primary_department_map={},
+        registered_organization_map={2: departments[2]},
+        category_label_cache={1: ({}, {})},
+    )[0][0]
+
+    assert record.belonging_department_name == "制造部"
     assert record.uploader_department_name is None
+    assert record.uploader_company_name is None
 
 
 def test_registered_organization_lookup_is_cached_on_the_caller_map(monkeypatch, worker):
