@@ -189,6 +189,9 @@ services:
       timeout: 30s
       retries: 3
     depends_on:
+      # Application context initialization connects to object storage.
+      minio:
+        condition: service_healthy
       mysql:
         condition: service_healthy
       redis:
@@ -234,6 +237,9 @@ services:
       - default
       - sandbox_net
     depends_on:
+      # Application context initialization connects to object storage.
+      minio:
+        condition: service_healthy
       mysql:
         condition: service_healthy
       redis:
