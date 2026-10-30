@@ -1725,7 +1725,10 @@
     "continue_editing": "編集を続ける",
     "copy": "コピー",
     "copy_failed_retry": "コピーに失敗しました。再試行してください",
-    "crawl_error_19003": "解析に失敗しました。再試行するか、手動対応を依頼してください。",
+    "crawl_error_invalid_url": "https://www.example.com/news のような、完全な HTTP または HTTPS のウェブサイト URL を入力してください。",
+    "crawl_error_network": "クロールサービスへの接続に失敗しました。ネットワーク接続を確認して再試行してください。",
+    "crawl_error_timeout": "クロール要求がタイムアウトしました。しばらくしてから再試行してください。",
+    "crawl_error_19003": "ウェブサイトの内容を解析できませんでした。リンクが完全でページにアクセスできることを確認し、ニュースや政策の一覧ページで再試行してください。問題が続く場合は管理者にご相談ください。",
     "crawl_error_19004": "サイト側の権限により拒否されました。有効な「カテゴリ一覧ページ」のリンク（例：ニュースや政策の一覧ページ）を入力してください。",
     "crawl_error_19005": "単一記事または一覧ページ以外と判定されました。有効な「カテゴリ一覧ページ」のリンク（例：ニュースや政策の一覧ページ）を入力してください。",
     "crawled_content_preview": "クロール内容のプレビュー",
@@ -1800,7 +1803,7 @@
     "search": "検索",
     "search_articles_of_interest": "興味のある記事を検索",
     "search_knowledge_space_placeholder": "ナレッジスペース名を入力して検索",
-    "send_crawl_requirement_to_email": "ウェブサイトのクロール要件をXXXX@XXに送信してください",
+    "send_crawl_requirement_to_email": "ウェブサイトの URL と収集したい内容を管理者に伝え、対応をご相談ください。",
     "set_article_filter_conditions": "記事フィルター条件を設定:",
     "share": "共有",
     "share_link_copied": "共有リンクがクリップボードにコピーされました",
@@ -1969,7 +1972,9 @@
     "dialog_title": "メンバー管理",
     "empty_departments": "部署データがありません",
     "empty_permissions": "権限設定はまだありません",
-    "empty_search": "権限を付与できる対象が見つかりません。名前または ID を確認してください",
+    "empty_search": "一致するユーザーがいません",
+    "empty_search_departments": "一致する部門がありません",
+    "empty_search_user_groups": "一致するユーザーグループがありません",
     "empty_user_groups": "ユーザーグループがありません",
     "already_granted": "付与済み",
     "already_granted_as": "付与済み：{{model}}",
@@ -2758,5 +2763,19 @@
     "scenario_time": "現在の時刻",
     "scenario_order": "注文照会",
     "scenario_inventory": "在庫照会"
+  },
+  "com_builtin_skills": {
+    "bisheng-docx": {
+      "name": "Word 文書作成",
+      "description": "報告書、提案書、議事録、通知、契約書の草案、履歴書などの Word 文書（.docx）を作成・閲覧・編集します。見出し、目次、ページ番号、表、グラフを整え、納品前にレイアウトを確認します。"
+    },
+    "bisheng-pptx": {
+      "name": "PowerPoint プレゼンテーション作成",
+      "description": "会社紹介、業務報告、プロジェクト提案、製品発表、研修用の PowerPoint プレゼンテーション（.pptx）を作成・閲覧・編集します。提供された .pptx または .potx テンプレートを使用し、納品前にスライドのレイアウトを確認します。"
+    },
+    "bisheng-xlsx": {
+      "name": "Excel スプレッドシート作成",
+      "description": "データ表、集計表、予算表、財務モデル、見積書、台帳などの Excel ブック（.xlsx）を作成・編集します。.xlsx、.xls、.csv データの読み込みと整形、数式や書式の設定を行い、納品前にブックを再計算して確認します。"
+    }
   }
 }

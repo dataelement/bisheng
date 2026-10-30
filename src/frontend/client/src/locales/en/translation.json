@@ -1802,7 +1802,10 @@
     "continue_editing": "Continue editing",
     "copy": "Copy",
     "copy_failed_retry": "Copy failed, please try again",
-    "crawl_error_19003": "Parse failed. Please try again or submit a manual request.",
+    "crawl_error_invalid_url": "Enter a complete HTTP or HTTPS website URL, such as https://www.example.com/news.",
+    "crawl_error_network": "Could not connect to the crawl service. Check your network connection and try again.",
+    "crawl_error_timeout": "The crawl request timed out. Please try again later.",
+    "crawl_error_19003": "Website content could not be parsed. Check that the link is complete and accessible, then retry with a news or policy listing page. Contact your administrator if the issue continues.",
     "crawl_error_19004": "The site denied access. Please provide a valid “section list page” link (for example, a news or policy listing page).",
     "crawl_error_19005": "Detected as a single article or a non-list page. Please provide a valid “section list page” link (for example, a news or policy listing page).",
     "crawled_content_preview": "Crawled content preview",
@@ -1877,7 +1880,7 @@
     "search": "Search",
     "search_articles_of_interest": "Search for articles you're interested in",
     "search_knowledge_space_placeholder": "Enter knowledge space name to search",
-    "send_crawl_requirement_to_email": "Please send your website crawl requiremnt to: XXXX@XX",
+    "send_crawl_requirement_to_email": "Contact your administrator with the website URL and the content you want to collect for assistance.",
     "set_article_filter_conditions": "Set article filter conditions:",
     "share": "Share",
     "share_link_copied": "Share link copied to clipboard",
@@ -2046,7 +2049,9 @@
     "dialog_title": "Member Management",
     "empty_departments": "No departments found",
     "empty_permissions": "No permission entries yet",
-    "empty_search": "No grantable subjects found. Check the name or ID.",
+    "empty_search": "No matching users",
+    "empty_search_departments": "No matching departments",
+    "empty_search_user_groups": "No matching user groups",
     "empty_user_groups": "No user groups found",
     "already_granted": "Granted",
     "already_granted_as": "Granted: {{model}}",
@@ -2835,5 +2840,19 @@
     "scenario_time": "Current time",
     "scenario_order": "Order lookup",
     "scenario_inventory": "Inventory lookup"
+  },
+  "com_builtin_skills": {
+    "bisheng-docx": {
+      "name": "Word document creation",
+      "description": "Create, read and edit Word documents (.docx), including reports, proposals, meeting minutes, notices, draft contracts and resumes. Organize content with headings, tables of contents, page numbers, tables and charts, and check the layout before delivery."
+    },
+    "bisheng-pptx": {
+      "name": "PowerPoint presentation creation",
+      "description": "Create, read and edit PowerPoint presentations (.pptx) for company introductions, work reports, project proposals, product launches and training. Use provided .pptx or .potx templates and check slide layout before delivery."
+    },
+    "bisheng-xlsx": {
+      "name": "Excel spreadsheet creation",
+      "description": "Create and edit Excel workbooks (.xlsx), including data tables, summaries, budgets, financial models, quotations and registers. Read and clean .xlsx, .xls and .csv data, apply formulas and formatting, and recalculate and check the workbook before delivery."
+    }
   }
 }

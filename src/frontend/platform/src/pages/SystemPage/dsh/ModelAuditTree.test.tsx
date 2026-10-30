@@ -158,8 +158,8 @@ it("AC-H05: incomplete summary is not shown as zero or normal", () => {
     ),
   );
   expect(
-    screen.getByText("dsh.modelAuditView.tree.summary_pending"),
-  ).toBeTruthy();
+    screen.queryByText("dsh.modelAuditView.tree.summary_pending"),
+  ).toBeNull();
   expect(screen.queryByText("dsh.modelAuditView.summary.NORMAL")).toBeNull();
 });
 

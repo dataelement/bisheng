@@ -28,6 +28,10 @@ export function ModelAuditGroup({
 }: ModelAuditGroupProps) {
   const { t } = useTranslation();
   const id = useId();
+  const summaryReady =
+    progress?.status_ready === true &&
+    progress.name_ready === true &&
+    progress.indexing_pending === false;
   return (
     <article className="min-w-0 overflow-hidden rounded-xl border">
       <header className="flex flex-wrap items-center gap-2 bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
@@ -47,22 +51,18 @@ export function ModelAuditGroup({
         <span>
           {t("dsh.modelAuditView.group_last")}: {dshTime(group.last_request_at)}
         </span>
-        <span>
-          {t("dsh.modelAuditView.group_count", { count: group.request_count })}
-        </span>
-        <span
-          className={
-            group.abnormal_count
-              ? "text-destructive"
-              : "text-success-foreground"
-          }
-        >
-          {group.abnormal_count
-            ? t("dsh.modelAuditView.group_abnormal", {
-                count: group.abnormal_count,
-              })
-            : t("dsh.modelAuditView.summary.NORMAL")}
-        </span>
+        {summaryReady && (
+          <>
+            <span>
+              {t("dsh.modelAuditView.group_count", { count: group.request_count })}
+            </span>
+            <span className={group.abnormal_count ? "text-destructive" : "text-success-foreground"}>
+              {group.abnormal_count
+                ? t("dsh.modelAuditView.group_abnormal", { count: group.abnormal_count })
+                : t("dsh.modelAuditView.summary.NORMAL")}
+            </span>
+          </>
+        )}
       </header>
       <ModelAuditSafetySummary
         progress={progress}
@@ -123,6 +123,7 @@ export function ModelAuditSafetySummary({
   const knownHit = counts.some((value) =>
     value.hasHit === true || (knownSafetyCount(value.count) && value.count > 0),
   );
+  if (!ready) return null;
   const watermark = progress?.safety_summary_as_of;
   return (
     <div className="dsh-content-safety">
@@ -138,7 +139,7 @@ export function ModelAuditSafetySummary({
             />
           </span>
         ))}
-        {ready && knownSafetyCount(matchingCount) && (
+        {knownSafetyCount(matchingCount) && (
           <span className="inline-flex items-center gap-2">
             {t(prefix + "matching_hits")}
             <Badge
@@ -149,12 +150,9 @@ export function ModelAuditSafetySummary({
             />
           </span>
         )}
-        <span
-          role={ready ? undefined : "status"}
-          title={ready ? undefined : t(prefix + "pending")}
-        >
-          <Tag size="small" color={ready ? "success" : "warning"}>
-            {t(ready ? prefix + "ready" : "dsh.modelAuditView.summary.PREPARING")}
+        <span>
+          <Tag size="small" color="success">
+            {t(prefix + "ready")}
           </Tag>
         </span>
         {knownHit && (

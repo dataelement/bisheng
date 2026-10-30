@@ -30,6 +30,7 @@ async def list_skills(user=Depends(UserPayload.get_login_user)):
             "enabled": enabled,
             "content_hash": skill.content_hash,
             "source": "personal" if skill.source == "personal" or skill.owner_user_id else "platform",
+            "builtin_key": skill.name if skill.source == "builtin" else None,
             "updated_at": skill.update_time or skill.create_time,
         }
         if skill.owner_user_id:

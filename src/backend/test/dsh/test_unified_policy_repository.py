@@ -75,7 +75,15 @@ def test_conflict_keeps_committed_rule_and_other_tenant_private(store):
         current_tenant_id.reset(token)
 
 
-def test_legacy_import_exact_sum_and_idempotence(store):
+@pytest.mark.parametrize(
+    "limits,credits,total",
+    [
+        ([999999, 2], "1.000001", 1000001),
+        ([1000000000000, 1], "1000000.000001", 1000000000001),
+        ([9223372036854775806, 1], "9223372036854.775807", 9223372036854775807),
+    ],
+)
+def test_legacy_import_exact_sum_and_idempotence(store, limits, credits, total):
     with Session(store) as session, session.begin():
         session.add_all(
             [
@@ -90,17 +98,17 @@ def test_legacy_import_exact_sum_and_idempotence(store):
                     quota_epoch=7,
                     quota_sync_state="READY",
                 )
-                for model, limit in [(7, 999999), (8, 2)]
+                for model, limit in zip([7, 8], limits, strict=True)
             ]
         )
     with Session(store) as session, session.begin():
         preview = migrate_legacy_credits(session, actor_id=20)
-        assert preview["total_credits"] == "1.000001"
+        assert preview["total_credits"] == credits
         assert session.exec(select(CreditRule)).first() is None
         applied = migrate_legacy_credits(session, actor_id=20, apply=True)
         assert applied["state"] == "applied"
         assert UnifiedPolicyRepository(session).effective(20).quota_epoch == 7
-        assert UnifiedPolicyRepository(session).effective(20).monthly_token_limit == 1000001
+        assert UnifiedPolicyRepository(session).effective(20).monthly_token_limit == total
         assert migrate_legacy_credits(session, actor_id=20, apply=True)["state"] == "already_applied"
 
 

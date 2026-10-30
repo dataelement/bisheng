@@ -4159,7 +4159,7 @@
       "ruleHelp": "Set monthly credits per member by user, department or role. The highest matching enabled allowance applies, shared by Chat and Work. Members no enabled allowance matches are not capped.",
       "scope": "Scope",
       "monthlyCredits": "Credits per member / month",
-      "creditRangeHint": "Enter credits from 0 to {{max}}, with up to 6 decimal places.",
+      "creditRangeHint": "0–{{max}} credits per month, with up to 1 decimal place.",
       "enabled": "Enable rule",
       "selectSubject": "Select a subject",
       "save": "Save",

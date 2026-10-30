@@ -42,6 +42,12 @@ const SUBJECT_ICONS = {
   user_group: Outlined.PeopleGroup,
 };
 
+const SUBJECT_SEARCH_EMPTY_KEYS = {
+  user: "com_permission.empty_search",
+  department: "com_permission.empty_search_departments",
+  user_group: "com_permission.empty_search_user_groups",
+} as const;
+
 function createMutationIdempotencyKey(): string {
   return `grant-mutate-${Date.now()}-${Math.random()
     .toString(36)
@@ -478,7 +484,7 @@ export function PermissionListTab({
             <PermissionEmptyState
               message={localize(
                 searchQuery.trim()
-                  ? "com_permission.empty_search"
+                  ? SUBJECT_SEARCH_EMPTY_KEYS[fixedSubjectType]
                   : "com_permission.list_empty_for_subject",
               )}
             />
