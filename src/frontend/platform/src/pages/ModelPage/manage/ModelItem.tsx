@@ -3,6 +3,7 @@ import { Button, Input, Select, Textarea } from '@bisheng/ui';
 import { Switch, Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { asrHintKey, speechModelTypes, ttsProviders } from "./speechConfig";
+import { rerankProviders } from "./modelProviderFields";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
@@ -201,7 +202,8 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                         options={[
                             { value: 'llm', label: 'LLM' },
                             { value: 'embedding', label: 'Embedding' },
-                            { value: 'rerank', label: 'Rerank' },
+                            // Keep the option on existing rerank rows so their current value still renders.
+                            ...(rerankProviders.includes(type) || modelType === 'rerank' ? [{ value: 'rerank', label: 'Rerank' }] : []),
                             ...(typeOptions.includes('asr') ? [{ value: 'asr', label: 'ASR' }] : []),
                             ...(typeOptions.includes('asr_rt') ? [{ value: 'asr_rt', label: 'ASR Realtime' }] : []),
                             ...(ttsProviders.includes(type) ? [{ value: 'tts', label: 'TTS' }] : []),
