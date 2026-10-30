@@ -677,12 +677,17 @@
       "spark": "讯飞星火",
       "tencent": "腾讯云",
       "moonshot": "月之暗面",
-      "qianfan": "百度千帆"
+      "qianfan": "百度千帆",
+      "openaiCompatible": "OpenAI 兼容"
     },
-    "sectionConnection": "连接信息",
     "sectionUsage": "使用设置",
     "providerType": "服务提供商类型",
-    "providerTypeTip": "决定调用接口的方式和下面需要填写的连接信息，保存后不能修改。",
+    "providerTypeTip": "保存后不能修改",
+    "providerGroups": {
+      "cloud": "云服务",
+      "local": "本地部署框架"
+    },
+    "openaiCompatibleSearchWords": "自定义,兼容,网关,代理,中转",
     "dailyCallLimitTip": "限制这个服务提供商下所有模型每天合计的调用次数。超出后当天的调用会直接报错，次日 0 点重新计数。",
     "dailyLimitPrefix": "每天最多",
     "dailyLimitSuffix": "次",
@@ -4106,7 +4111,7 @@
       "ruleHelp": "按用户、部门或角色设置每人每月积分。同时命中多条有效配置时取最高值，Chat 和 Work 共用。未命中任何有效配置的人员不限额度。",
       "scope": "适用范围",
       "monthlyCredits": "每人每月积分",
-      "creditRangeHint": "请输入 0 至 {{max}} 之间的积分，最多保留 6 位小数。",
+      "creditRangeHint": "每月 0～{{max}} 积分，最多 1 位小数。",
       "enabled": "启用规则",
       "selectSubject": "选择对象",
       "save": "保存",

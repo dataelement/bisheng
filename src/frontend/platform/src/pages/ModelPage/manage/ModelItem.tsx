@@ -216,7 +216,7 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
 
             {modelType === 'tts' && (
                 <div className="mt-4 space-y-2">
-                    <Label className="bisheng-label">
+                    <Label className="bisheng-label inline-flex items-center">
                         <span>{t('model.voiceType')}</span>
                         <span className="text-red-500">*</span>
                         <ModelFieldHint className="ml-1" content={t('model.voiceTypeTooltip')} />
@@ -227,7 +227,7 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
 
             {modelType === 'llm' && (
                 <div className="mt-4 space-y-2">
-                    <Label className="bisheng-label">
+                    <Label className="bisheng-label inline-flex items-center">
                         <span>{paramName === 'num_ctx' ? t('model.contextLength') : t('model.maxOutputTokens')}</span>
                         <ModelFieldHint
                             className="ml-1"
@@ -240,7 +240,7 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
 
             {webSearchTipKey && (
                 <div className="mt-4 flex items-center justify-between gap-4 border-t pt-4">
-                    <Label className="bisheng-label">
+                    <Label className="bisheng-label inline-flex items-center">
                         <span>{t('model.webSearch')}</span>
                         <ModelFieldHint className="ml-1" content={t(webSearchTipKey)} />
                     </Label>

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Button, SearchInput, StateView } from '@bisheng/ui';
 import { SkillDetails } from '~/components/Skills/SkillDetails';
 import { useSkillCenter } from '~/components/Skills/useSkillCenter';
+import { matchesSkillSearch } from '~/components/Skills/localization';
 import { useLocalize } from '~/hooks';
 import { SkillGrid, SkillGridSkeleton } from './SkillGrid';
 import { SkillSquareBanner } from './SkillSquareBanner';
@@ -22,7 +23,7 @@ export function SkillSquarePane() {
 
   const skills = [...(platform.data ?? [])].sort((left, right) => left.displayName.localeCompare(right.displayName));
   const keyword = search.trim().toLocaleLowerCase();
-  const filtered = skills.filter((skill) => `${skill.displayName} ${skill.name} ${skill.description}`.toLocaleLowerCase().includes(keyword));
+  const filtered = skills.filter(skill => matchesSkillSearch(skill, keyword));
   const selected = skills.find((skill) => String(skill.id) === params.get('skill'));
   const loading = identity.isLoading || platform.isFetching;
   const failed = identity.isError || platform.isError;

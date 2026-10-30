@@ -121,6 +121,32 @@ def test_invalid_gateway_body_returns_27001():
     assert response.json()["status_code"] == 27001
 
 
+def test_super_post_gateway_pro_with_empty_strings_upserts_null_expiry():
+    with (
+        patch(f"{ENDPOINT_MOD}.LicenseInfoRepository"),
+        patch(f"{ENDPOINT_MOD}.upsert_mapped", new_callable=AsyncMock) as upsert,
+    ):
+        client = TestClient(_build_app(_mk_user(is_global_super=True)))
+        response = client.post(
+            "/api/v1/commercial-licenses/gateway",
+            json={
+                "version": "pro",
+                "expire_day": "",
+                "days_remaining": "",
+                "severity": "unknown",
+                "expired": False,
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["status_code"] == 200
+    upsert.assert_awaited_once()
+    mapped = upsert.await_args.args[1]
+    assert mapped["license_code"] == "gateway"
+    assert mapped["expire_date"] is None
+    assert mapped["days_remaining"] is None
+    assert mapped["display_state"] == "normal"
+
+
 def test_unauthenticated_uses_existing_auth():
     from bisheng.commercial_license.api.router import router
 

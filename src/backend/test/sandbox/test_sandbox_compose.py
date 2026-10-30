@@ -173,3 +173,20 @@ def test_compose_sessions_root_is_disk_backed_per_replica():
 def test_env_example_documents_sandbox_cpus():
     text = (_REPO / "docker" / ".env.example").read_text(encoding="utf-8")
     assert "SANDBOX_CPUS" in text
+
+
+def test_gateway_startup_includes_object_storage_ready_for_api_and_worker():
+    services = yaml.safe_load(_COMPOSE.read_text(encoding="utf-8"))["services"]
+    pending = ["gateway"]
+    reachable = set()
+    while pending:
+        name = pending.pop()
+        if name in reachable:
+            continue
+        reachable.add(name)
+        pending.extend(services[name].get("depends_on") or [])
+
+    assert "minio" in reachable
+    assert services["minio"]["healthcheck"]["test"]
+    for name in ("backend", "backend_worker"):
+        assert services[name]["depends_on"]["minio"]["condition"] == "service_healthy"

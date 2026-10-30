@@ -16,8 +16,8 @@
 #   · AC-47 的限额生效——那是 `docker inspect` 的静态核对，属于 T075 的上线自检。
 #
 # 用法（在部署机上，如 114）：
-#   bash docker/verify-app-runtime-stability.sh --slug <应用slug> --token <访问者的access_token> --yes
-#   bash docker/verify-app-runtime-stability.sh --howto
+#   bash scripts/tests/compose/verify-app-runtime-stability.sh --slug <应用slug> --token <访问者的access_token> --yes
+#   bash scripts/tests/compose/verify-app-runtime-stability.sh --howto
 # 可选：--base-url https://127.0.0.1:4101（默认读 APP_ENTRY_BASE_URL 或 http://127.0.0.1:8090）
 #
 # **--token 是必需的**（也可用环境变量 BISHENG_ACCESS_TOKEN）：应用入口的第二步就是
@@ -89,7 +89,7 @@ HOWTO
 fi
 
 if [ -z "$SLUG" ]; then
-  echo "用法：bash docker/verify-app-runtime-stability.sh --slug <应用slug> --token <access_token> --yes" >&2
+  echo "用法：bash scripts/tests/compose/verify-app-runtime-stability.sh --slug <应用slug> --token <access_token> --yes" >&2
   exit 2
 fi
 if [ -z "$TOKEN" ]; then

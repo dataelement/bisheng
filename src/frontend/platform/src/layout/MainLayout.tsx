@@ -137,8 +137,9 @@ export default function MainLayout() {
         <div className="flex">
             <div className="bg-[#f8f8f8] dark:bg-background-main w-full h-screen flex flex-col">
                 {isGlobalSuper && <LicenseBanner />}
-                <div className="flex justify-between h-[64px] shrink-0 bg-[#f8f8f8] dark:bg-background-main relative z-[21]">
-                    <div className="flex h-9 my-[14px]">
+                {/* 1fr / auto / 1fr keeps the page tabs centered even though the logo and the right cluster differ in width */}
+                <div className="grid h-[64px] shrink-0 grid-cols-[1fr_auto_1fr] items-center bg-[#f8f8f8] dark:bg-background-main relative z-[21]">
+                    <div className="flex h-9">
                         <div className="inline-block">
                             {/* @ts-ignore */}
                             <img
@@ -156,9 +157,9 @@ export default function MainLayout() {
                     <div>
                         <HeaderMenu />
                     </div>
-                    <div className="flex w-fit relative z-10">
+                    <div className="relative z-10 flex items-center justify-self-end gap-x-4 pr-8">
                         {isGlobalSuper && appConfig.multiTenantEnabled && <HeaderTenantScope user={user} />}
-                        <div className="flex">
+                        <div className="flex items-center gap-x-1">
                             <TooltipProvider>
                                 <Tooltip
                                     content={
@@ -167,7 +168,7 @@ export default function MainLayout() {
                                         </>
                                     }
                                 >
-                                    <Button type="button" size="medium" variant="text" iconOnly className="my-4" aria-label={t("menu.themeSwitch")} onClick={() => setDark(!dark)}>
+                                    <Button type="button" size="medium" variant="text" color="default" iconOnly aria-label={t("menu.themeSwitch")} onClick={() => setDark(!dark)}>
                                         <div className="">
                                             {dark ? (
                                                 <Sun className="side-bar-button-size dark:text-slate-50 mx-auto w-[13px] h-[13px]" />
@@ -178,11 +179,10 @@ export default function MainLayout() {
                                     </Button>
                                 </Tooltip>
                             </TooltipProvider>
-                            <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
                             <Select
                                 {...selectLabels}
                                 variant="ghost"
-                                className="my-4 w-auto"
+                                className="w-auto"
                                 aria-label={t("system.language")}
                                 options={languageOptions}
                                 value={language}
@@ -190,15 +190,12 @@ export default function MainLayout() {
                                     if (value != null) changLanguage(String(value));
                                 }}
                             />
-                            <Separator
-                                className="mx-[23px] h-6 border-l my-5 border-[#dddddd]"
-                                orientation="vertical"
-                            />
                         </div>
-                        <div className="flex items-center h-7 my-4">
+                        <Separator className="h-5 border-l border-[#dddddd]" orientation="vertical" />
+                        <div className="flex items-center gap-x-2">
                             {/* @ts-ignore */}
                             <img
-                                className="h-7 w-7 rounded-2xl mr-4"
+                                className="h-7 w-7 rounded-2xl"
                                 src={__APP_ENV__.BASE_URL + (user.avatar || "/assets/user.png")}
                                 alt=""
                             />
@@ -222,7 +219,7 @@ export default function MainLayout() {
                                     </>
                                 }
                             >
-                                <Button type="button" variant="text" color="default" className="mr-8 max-w-40">
+                                <Button type="button" variant="text" color="default" className="max-w-40">
                                     <span className="truncate">{user.user_name}</span>
                                     <DropdownChevron />
                                 </Button>

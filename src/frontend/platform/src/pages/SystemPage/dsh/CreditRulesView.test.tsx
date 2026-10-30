@@ -38,12 +38,12 @@ it('keeps the exact credit draft on conflict and rejects excessive precision', a
     render(<CreditRulesView />)
     await addDepartment()
     const input = screen.getByLabelText('dsh.unified.monthlyCredits')
-    fireEvent.change(input, { target: { value: '0.0000001' } })
+    fireEvent.change(input, { target: { value: '0.01' } })
     expect(screen.getByRole('button', { name: 'dsh.unified.save' })).toBeDisabled()
-    fireEvent.change(input, { target: { value: '0.000001' } })
+    fireEvent.change(input, { target: { value: '0.1' } })
     fireEvent.click(screen.getByRole('button', { name: 'dsh.unified.save' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('dsh.conflict')
-    expect(input).toHaveValue('0.000001')
+    expect(input).toHaveValue('0.1')
 })
 it('separates scopes and saves edits within their original row', async () => {
     vi.mocked(getCreditRules).mockResolvedValue([
@@ -79,8 +79,8 @@ it('cancels a row edit without changing the saved allowance', async () => {
     expect(saveCreditRule).not.toHaveBeenCalled()
 })
 
-// Boundary precision must match backend accounting without rounding through Number.
-it.each(['9999999999999', '9223372036854.775808', '9223372036855'])('blocks an overflowing credit allowance %s before saving', async credits => {
+// Allowance bounds and decimal precision match the backend input contract.
+it.each(['1000000.1', '1000001', '9999999999999'])('blocks an overflowing credit allowance %s before saving', async credits => {
     render(<CreditRulesView />)
     await addDepartment()
     const input = screen.getByLabelText('dsh.unified.monthlyCredits')
@@ -96,14 +96,14 @@ it('saves the exact maximum and recovers from an overflowing draft', async () =>
     render(<CreditRulesView />)
     await addDepartment()
     const input = screen.getByLabelText('dsh.unified.monthlyCredits')
-    fireEvent.change(input, { target: { value: '9223372036854.775808' } })
+    fireEvent.change(input, { target: { value: '1000000.1' } })
     expect(screen.getByRole('button', { name: 'dsh.unified.save' })).toBeDisabled()
-    fireEvent.change(input, { target: { value: '9223372036854.775807' } })
+    fireEvent.change(input, { target: { value: '1000000' } })
     expect(input).toHaveAttribute('aria-invalid', 'false')
     expect(screen.getByRole('button', { name: 'dsh.unified.save' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: 'dsh.unified.save' }))
     await waitFor(() => expect(saveCreditRule).toHaveBeenCalledWith({ kind: 'DEPARTMENT', id: 10 }, {
-        version: 0, enabled: true, monthly_credits: '9223372036854.775807',
+        version: 0, enabled: true, monthly_credits: '1000000',
     }))
 })
 

@@ -43,7 +43,6 @@ bisheng-milvus-standalone
 
 | 文件 | 容器名 | 镜像 | 端口 | 用途 |
 |------|--------|------|------|------|
-| `docker-compose-ft.yml` | `bisheng-ft-server` | `dataelement/bisheng-ft:v0.5.0` | 8000 | 模型微调服务，需要 GPU（nvidia driver） |
 | `docker-compose-uns.yml` | `bisheng-unstructured` | `dataelement/bisheng-unstructured:v0.0.3.14` | 10001 | 非结构化文档解析服务 |
 | `docker-compose-office.yml` | `bisheng-office` | `onlyoffice/documentserver:7.1.1` | 8701:80 | OnlyOffice 文档预览与编辑 |
 
@@ -274,17 +273,78 @@ npm start -- --host 0.0.0.0   # 端口 3001，API 代理到 localhost:7860
 
 ## 运维管理脚本
 
-`docker/deploy.sh` 提供常用运维操作的快捷命令：
+`scripts/deploy.sh` 提供常用运维操作的快捷命令：
 
 | 命令 | 用法 | 说明 |
 |------|------|------|
-| `logs` | `./deploy.sh logs backend [-n 200]` | 实时跟踪容器日志 |
-| `version` | `./deploy.sh version [v3.0.0]` | 查看或修改镜像版本号 |
-| `exec` | `./deploy.sh exec backend` | 进入容器 Shell |
-| `update` | `./deploy.sh update [backend]` | 拉取最新镜像并重启 |
-| `restart` | `./deploy.sh restart [backend worker]` | 重启指定服务 |
+| `logs` | `bash scripts/deploy.sh logs backend [-n 200]` | 实时跟踪容器日志 |
+| `version` | `bash scripts/deploy.sh version [v3.0.0]` | 查看或修改镜像版本号 |
+| `exec` | `bash scripts/deploy.sh exec backend` | 进入容器 Shell |
+| `update` | `bash scripts/deploy.sh update [backend]` | 拉取最新镜像并重启 |
+| `restart` | `bash scripts/deploy.sh restart [backend worker]` | 重启指定服务 |
 
 支持的 service 别名：`backend`、`worker`（backend_worker）、`frontend`、`mysql`、`redis`、`es`（elasticsearch）、`minio`、`milvus`、`etcd`。
+
+### Existing-environment updates
+
+Compose image references live in `.env`; use the template when adding new
+settings manually. `BISHENG_SANDBOX_IMAGE` replaces `SANDBOX_IMAGE_TAG`.
+
+Use `bash scripts/deploy.sh` from the matching release checkout to update an existing Compose
+deployment. Keep the release's Compose file, mounted entrypoint and image versions
+together. Run one deployment job in a maintenance window; control ingress and
+queue consumers according to the environment's release procedure.
+
+### Work knowledge retrieval
+
+The backend image must include the Work knowledge registration script from PR
+#2546. Set the intended image version with `bash scripts/deploy.sh version <tag>`,
+then preview the target image against the service's existing configuration:
+
+```bash
+bash scripts/deploy.sh upgrade-preview
+```
+
+This pulls the configured backend image and runs a read-only catalog/permission
+preview in a disposable container with the backend service's mounts, environment
+and network. Existing infrastructure must be running. The preview requires a
+compatible database schema and CURRENT F048 permission runtime; complete their
+version-specific prerequisites when the preview reports an error.
+
+Use the preview's Store ID and the actual audit operator's user ID to update:
+
+```bash
+bash scripts/deploy.sh update --confirm-store-id <store-id> --operator-id <user-id>
+# To update only the backend:
+bash scripts/deploy.sh update backend --confirm-store-id <store-id> --operator-id <user-id>
+```
+
+For an update containing `backend`, the release script:
+
+1. Validates the required confirmation arguments before Docker operations.
+2. Pulls the selected images, starts the backend and waits up to 180 seconds for
+   readiness. The API entrypoint owns the schema migration.
+3. Executes the knowledge tool's registration and permission reconciliation using
+   the running backend's configuration. Apply exits successfully only after the
+   tool exists and its permission projection is CURRENT.
+4. Updates the remaining selected services, waits for readiness, and reports
+   completion after the service status command succeeds.
+
+Any failed stage returns a nonzero exit status and stops subsequent stages. If
+knowledge maintenance fails, the backend has already been updated; maintain the
+release window, resolve the reported error and repeat the same update command.
+Registration and permission reconciliation support repeated execution. The
+deployment script leaves schema/data recovery to the release operator.
+
+Worker-only and frontend-only updates retain their selected service scope.
+`restart` restarts the existing deployment. Direct `docker compose up` and external
+deployment pipelines must explicitly run the same maintenance operation and
+require its successful exit before declaring their release complete; see
+[`src/backend/scripts/README.md`](../../src/backend/scripts/README.md).
+
+After deployment, verify ordinary-user tool discovery and single-space plus K1/K2
+multi-space retrieval with the expected document citations. Deployment checks and
+real-account acceptance are recorded separately.
 
 ## 升级 checklist
 

@@ -672,12 +672,17 @@
       "spark": "iFLYTEK Spark",
       "tencent": "Tencent Cloud",
       "moonshot": "Moonshot AI",
-      "qianfan": "Baidu Qianfan"
+      "qianfan": "Baidu Qianfan",
+      "openaiCompatible": "OpenAI 互換"
     },
-    "sectionConnection": "接続情報",
     "sectionUsage": "利用設定",
     "providerType": "プロバイダーの種類",
-    "providerTypeTip": "API の呼び出し方式と、下に入力する接続情報を決めます。保存後は変更できません。",
+    "providerTypeTip": "保存後は変更できません",
+    "providerGroups": {
+      "cloud": "クラウドサービス",
+      "local": "セルフホスト型フレームワーク"
+    },
+    "openaiCompatibleSearchWords": "カスタム,互換,ゲートウェイ,プロキシ,custom",
     "dailyCallLimitTip": "このプロバイダーのすべてのモデルを合計した 1 日の呼び出し回数を制限します。上限を超えるとその日の呼び出しはエラーになり、翌日 0 時にリセットされます。",
     "dailyLimitPrefix": "1 日最大",
     "dailyLimitSuffix": "回",
@@ -4106,7 +4111,7 @@
       "ruleHelp": "ユーザー・部門・ロールごとに月間クレジットを設定します。有効な設定が複数該当する場合は最大値が適用され、Chat と Work で共有されます。有効な設定に該当しないメンバーは上限なしになります。",
       "scope": "対象範囲",
       "monthlyCredits": "1 人あたりの月間クレジット",
-      "creditRangeHint": "0 から {{max}} までのクレジットを、小数点以下 6 桁以内で入力してください。",
+      "creditRangeHint": "月あたり 0～{{max}} クレジット、小数点以下 1 桁まで。",
       "enabled": "ルールを有効化",
       "selectSubject": "対象を選択",
       "save": "保存",

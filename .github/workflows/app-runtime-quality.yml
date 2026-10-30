@@ -19,9 +19,20 @@ on:
       - "src/runtime-manager/**"
       - "src/app-proxy/**"
       - "docker/docker-compose.yml"
-      - "docker/verify-app-runtime-compose.sh"
-      - "docker/verify_app_runtime_compose.py"
+      - "docker/.env.example"
+      - "docker/install.sh"
+      - "scripts/deploy.sh"
+      - "scripts/tests/compose/test-install.sh"
+      - "docker/lib/**"
+      - "docker/gateway/**"
+      - "docker/nginx/**"
+      - "docker/bisheng/config/config.yaml"
+      - "scripts/tests/compose/verify-app-runtime-compose.sh"
+      - "scripts/tests/compose/verify_app_runtime_compose.py"
       - ".github/workflows/app-runtime-quality.yml"
+      - ".github/workflows/runtime-images.yml"
+      - "scripts/build_runtime_images.sh"
+      - "scripts/sync_runtime_images_cr.sh"
   workflow_dispatch:
 
 concurrency:
@@ -29,6 +40,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  installer-contract:
+    name: Compose installer
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Installer command-boundary tests
+        run: bash scripts/tests/compose/test-install.sh
+
+      - name: Validate generated Compose configurations
+        run: |
+          bash docker/install.sh --prepare-only
+          printf '%s\n' 'ci-configuration-check-only' > "$RUNNER_TEMP/gateway-license.txt"
+          bash docker/install.sh --prepare-only --gateway \
+            --license-file "$RUNNER_TEMP/gateway-license.txt" --public-url https://example.invalid
+
   compose-contract:
     name: Compose ↔ config.py contract
     runs-on: ubuntu-latest
@@ -38,8 +66,14 @@ jobs:
 
       # ubuntu-latest ships docker compose v2; the script needs it only to
       # resolve the compose document, never to start anything.
+      - name: Prepare Compose configuration
+        run: cp docker/.env.example docker/.env
+
       - name: Verify the app-runtime compose wiring
-        run: bash docker/verify-app-runtime-compose.sh
+        env:
+          MINIO_ROOT_USER: ci-minio-user
+          MINIO_ROOT_PASSWORD: ci-minio-password
+        run: bash scripts/tests/compose/verify-app-runtime-compose.sh
 
   unit:
     name: Lint & Test (${{ matrix.package }})

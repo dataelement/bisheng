@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -9,6 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from bisheng.common.errcode.permission import AuthorizationModelMismatchError
+from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.context.base import BaseContextManager
 from bisheng.core.openfga.authorization_model_f048 import (
@@ -17,7 +19,7 @@ from bisheng.core.openfga.authorization_model_f048 import (
 )
 from bisheng.core.openfga.client import FGAClient
 from bisheng.core.openfga.contextual import dependent_relations
-from bisheng.core.openfga.discovery import discover_openfga_runtime
+from bisheng.core.openfga.discovery import OpenFGARuntimePin, discover_openfga_runtime
 from bisheng.core.openfga.runtime_heartbeat import (
     RedisRuntimeHeartbeatStore,
     RuntimeHeartbeatStorePort,
@@ -70,11 +72,7 @@ class FGAManager(BaseContextManager[FGAClient]):
         if production:
             config.validate_production_runtime()
         if not production and config.force_write_model:
-            pin = await discover_openfga_runtime(
-                config,
-                expected_model=expected_model,
-                allow_bootstrap=True,
-            )
+            pin = await self._bootstrap_runtime(expected_model)
         else:
             try:
                 pin = await discover_openfga_runtime(
@@ -85,11 +83,7 @@ class FGAManager(BaseContextManager[FGAClient]):
             except AuthorizationModelMismatchError:
                 if production:
                     raise
-                pin = await discover_openfga_runtime(
-                    config,
-                    expected_model=expected_model,
-                    allow_bootstrap=True,
-                )
+                pin = await self._bootstrap_runtime(expected_model)
 
         client = FGAClient(
             api_url=config.api_url,
@@ -124,6 +118,36 @@ class FGAManager(BaseContextManager[FGAClient]):
             self._instance_role,
         )
         return client
+
+    async def _bootstrap_runtime(self, expected_model: dict[str, Any]) -> OpenFGARuntimePin:
+        """Serialize startup writes, then rediscover after the previous starter."""
+
+        try:
+            async with asyncio.timeout(self.timeout):
+                redis = await get_redis_client()
+                # All starters share Redis and the Store name. Keep the lease
+                # longer than the whole bounded operation; no renewal is needed.
+                lock = redis.async_connection.lock(
+                    f"openfga:bootstrap:{self._config.store_name}",
+                    timeout=self.timeout * 2,
+                    blocking_timeout=self.timeout,
+                    thread_local=False,
+                )
+                if not await lock.acquire():
+                    raise TimeoutError
+                try:
+                    # Discovery rechecks both Store and model under the lock.
+                    return await discover_openfga_runtime(
+                        self._config,
+                        expected_model=expected_model,
+                        allow_bootstrap=True,
+                    )
+                finally:
+                    await lock.release()
+        except TimeoutError as exc:
+            raise TimeoutError(
+                f"OpenFGA bootstrap timed out after {self.timeout:g}s for Store {self._config.store_name}"
+            ) from exc
 
     def _is_production(self) -> bool:
         environment = self._environment
