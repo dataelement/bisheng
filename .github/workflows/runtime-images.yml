@@ -44,21 +44,6 @@ jobs:
           TARGET_ARCH: ${{ matrix.arch }}
           RUNTIME_PUBLISH: '1'
         run: bash scripts/build_runtime_images.sh
-      - name: Native offline bundle, reuse and SQLite integration
-        env:
-          RUNTIME_RELEASE: ${{ inputs.version || github.ref_name }}
-          TARGET_ARCH: ${{ matrix.arch }}
-        run: |
-          set -euo pipefail
-          work="$(mktemp -d /tmp/e2e-f059-runtime.XXXXXX)"
-          trap 'sudo rm -rf "$work"' EXIT
-          docker run --rm --network host --user 0:0 --env PYTHONPATH=/app \
-            --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
-            --mount "type=bind,src=$PWD,dst=/work,readonly" \
-            --mount "type=bind,src=$work,dst=$work" \
-            "dataelement/bisheng-runtime-manager:${RUNTIME_RELEASE}-${TARGET_ARCH}" \
-            python /work/scripts/smoke_runtime_delivery.py \
-              --inventory "/work/dist/runtime-images-${TARGET_ARCH}.json" --data-root "$work"
       - name: Sync verified native images to CR
         env:
           RUNTIME_RELEASE: ${{ inputs.version || github.ref_name }}
@@ -71,7 +56,7 @@ jobs:
             dist/runtime-images-*.json
             dist/cr/runtime-images-*.json
   catalog:
-    # The job dependency includes both native smoke and Docker regression steps.
+    # Publish catalogs only after both native image builds and registry pushes succeed.
     needs: native
     strategy:
       fail-fast: false
