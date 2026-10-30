@@ -1,3 +1,4 @@
+import modelDefaults from "../../../../../public/locales/zh-Hans/model.json";
 import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig";
 // @ts-strict-ignore
 import { shouldRetryApiError } from "@bisheng/api-client";
@@ -123,10 +124,10 @@ export default function WorkbenchModel({ data, onBack }) {
         linsight_default_model_id: linsightDefaultModelId ? String(linsightDefaultModelId) : null,
         // Daily-mode default model: independent sibling of the Linsight default.
         chat_default_model_id: chatDefaultModelId ? String(chatDefaultModelId) : null,
-        asr_model: asrModelId ? { id: String(asrModelId) } : null, // 支持空值
-        tts_model: ttsModelId ? { id: String(ttsModelId) } : null, // 支持空值
-        // “应用会话标题生成模型”
-        chat_title_llm: chatTitleLlmId ? { id: String(chatTitleLlmId) } : null, // 支持空值
+        asr_model: asrModelId ? { id: String(asrModelId) } : null, // Accept an empty value.
+        tts_model: ttsModelId ? { id: String(ttsModelId) } : null, // Accept an empty value.
+        // Model used to generate app conversation titles.
+        chat_title_llm: chatTitleLlmId ? { id: String(chatTitleLlmId) } : null, // Accept an empty value.
         image_read_model: imageReadModelId ? { id: String(imageReadModelId) } : null,
       };
 
@@ -176,7 +177,7 @@ export default function WorkbenchModel({ data, onBack }) {
     }
   };
 
-  // 检查是否修改了 embedding 模型
+  // Check whether the embedding model changed.
   const checkEmbeddingModified = () => {
     const lastEmbeddingId = lastSaveFormDataRef.current?.embedding_model?.id;
     const currentEmbeddingId = form.sourceModelId;
@@ -226,7 +227,7 @@ export default function WorkbenchModel({ data, onBack }) {
       return;
     }
 
-    // 2. 配置数据就绪后，更新表单和缓存（添加 defalutPrompt 到依赖）
+    // Update the form and cache once the configuration is ready.
     if (linsightConfig) {
       setForm({
         sourceModelId: linsightConfig.embedding_model?.id || null,
@@ -326,10 +327,10 @@ export default function WorkbenchModel({ data, onBack }) {
         </div>
       </details>
       <div className="mt-6 flex justify-end gap-4">
-        <Button className="px-6" variant="outlined" onClick={onBack}>
+        <Button variant="outlined" color="default" onClick={onBack}>
           {t("model.cancel")}
         </Button>
-        <Button className="px-10" disabled={saveload || !linsightConfig} onClick={handleSave}>
+        <Button disabled={saveload || !linsightConfig} onClick={handleSave}>
           {saveload && <Outlined.Loading className="mr-2 animate-spin" />}
           {t("model.save")}
         </Button>
@@ -369,19 +370,5 @@ export function useLinsightConfig() {
   });
 }
 
-export const defalutPrompt = `# role
-你是一名经验丰富的“文档摘要专家”，擅长针对不同类型的文档（例如：书籍、论文、标书、研究报告、规章制度、合同协议、会议纪要、产品手册、运维手册、需求说明书等）进行精准识别，并根据文档类型灵活调整摘要风格，例如：
-- 报告类文档需强调研究发现或核心观点；
-- 制度类文档需突出制度目的及适用范围；
-- 合同类文档需明确合同主体及关键条款；
-- 会议纪要需聚焦会议议题与决策结果；
-- 产品说明需提炼产品功能与使用场景。
-
-# task
-接下来你将收到一篇文档的主要内容，请你：
-1. 判断并简要说明该文档属于上述哪种类型；
-2. 使用2～3句话概括文档的核心内容和关键结论，强调信息的准确性、完整性与清晰度。
-
-# result example
-【文档类型】：会议纪要
-【摘要】：本文档为公司季度业务会议纪要，会议围绕本季度销售目标的达成情况展开，最终决定下一季度加强市场推广投入，并设立专门团队负责新产品上市工作，以改善销售表现。`;
+// Keep the persisted default prompt in its original language, independent of the admin UI locale.
+export const defalutPrompt = modelDefaults.model.defaultSummaryPrompt;

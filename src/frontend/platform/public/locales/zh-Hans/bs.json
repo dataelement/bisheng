@@ -3798,6 +3798,7 @@
     "usageScope": "选择当前租户的用户，查看指定时间范围内的 Token 用量、消息数和问答次数。",
     "byDepartment": "按部门",
     "byUser": "按用户",
+    "byRole": "按角色",
     "selectDepartment": "选择部门",
     "selectDepartmentForUsage": "选择一个部门，查看该部门及下级部门的汇总用量和用户明细。",
     "timeUsage": "时间范围用量",

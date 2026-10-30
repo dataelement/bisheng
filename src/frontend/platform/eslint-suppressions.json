@@ -2433,9 +2433,6 @@
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     },
-    "no-restricted-syntax": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }

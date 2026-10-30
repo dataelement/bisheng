@@ -1,4 +1,3 @@
-import { createPortal } from "react-dom";
 import { Button } from '@bisheng/ui';
 import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect";
 
@@ -18,7 +17,7 @@ import { usageGranularity, usagePresetRange, type UsagePreset, type UsageRange }
 
 type Dimension = "user" | "department";
 
-export function PolicyView({ toolbarTarget }: { toolbarTarget?: HTMLDivElement | null }) {
+export function PolicyView() {
   const { t } = useTranslation();
   const { user: currentUser } = useContext(userContext);
   const [dimension, setDimension] = useState<Dimension>("user");
@@ -140,7 +139,7 @@ export function PolicyView({ toolbarTarget }: { toolbarTarget?: HTMLDivElement |
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {toolbarTarget ? createPortal(toolbar, toolbarTarget) : toolbar}
+        {toolbar}
         <Button size="medium" variant="outlined" onClick={() => setRange(usagePresetRange(preset))} color="default">
           {t("dsh.refresh")}
         </Button>

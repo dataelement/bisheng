@@ -1,9 +1,11 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ContextType } from "react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { userContext } from "@/contexts/userContext";
 import { PluginMarketPage } from "@/pages/BuildPage/dsh/PluginMarketPage";
+import { DshPage } from "@/pages/DshPage";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { notification } from "@bisheng/ui";
 import { previewMarketBundle, deleteMarketPlugin, getMarketContext, getMarketInstallPolicy, getMarketPlugin, importMarketBundle, listMarketImports, listMarketPlugins, setMarketInstallPolicy } from "@/controllers/API/dshMarket";
@@ -13,6 +15,10 @@ import { getMarketWorkbench, importWorkbenchBundle, listMarketWorkbenches, listW
 vi.mock("@/controllers/API/dshMarket", () => ({ previewMarketBundle: vi.fn(), deleteMarketPlugin: vi.fn(), getMarketContext: vi.fn(), getMarketInstallPolicy: vi.fn(), getMarketPlugin: vi.fn(), importMarketBundle: vi.fn(), listMarketImports: vi.fn(), listMarketPlugins: vi.fn(), resumeMarketImport: vi.fn(), setMarketInstallPolicy: vi.fn() }));
 vi.mock("@/controllers/API/dshWorkbenches", () => ({ getMarketWorkbench: vi.fn(), importWorkbenchBundle: vi.fn(), listMarketWorkbenches: vi.fn(), listWorkbenchImports: vi.fn(), previewWorkbenchBundle: vi.fn(), resumeWorkbenchImport: vi.fn() }));
 vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({ bsConfirm: vi.fn() }));
+vi.mock("@/hooks/useDshBrowserConfig", () => ({
+    useDshBrowserConfig: () => ({ config: { enabled: true, management_enabled: true } }),
+}));
+vi.mock("@/pages/SystemPage/dsh", () => ({ DshManagement: () => <div data-testid="dsh-management" /> }));
 vi.mock('@bisheng/ui', async () => {
 const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
 const previous = await (() => ({ toast: vi.fn() }))();
@@ -67,6 +73,30 @@ beforeEach(() => {
 });
 
 describe("DSH market administration", () => {
+    it("keeps the market selector beside the page tabs and removes it when leaving the market", async () => {
+        const { container } = render(
+            <MemoryRouter initialEntries={["/dsh?tab=plugins"]}>
+                <userContext.Provider value={{ user: { user_id: 20, tenant_id: 2, role: "admin" } } as ContextType<typeof userContext>}>
+                    <DshPage />
+                </userContext.Provider>
+            </MemoryRouter>,
+        );
+        await screen.findByText("Company Demo");
+        const header = container.querySelector("[data-dsh-header]");
+        const selector = screen.getByRole("radiogroup", { name: "marketSections" });
+        expect(header).toContainElement(selector);
+        expect(header).toContainElement(screen.getByRole("tab", { name: "dsh.enterprisePlugins" }));
+        expect(screen.getAllByRole("radiogroup", { name: "marketSections" })).toHaveLength(1);
+
+        await userEvent.setup().click(screen.getByRole("radio", { name: "workbenchSection" }));
+        await screen.findByText("Workbench Demo");
+        expect(header).toContainElement(selector);
+        expect(screen.queryByText("Company Demo")).not.toBeInTheDocument();
+
+        await userEvent.setup().click(screen.getByRole("tab", { name: "dsh.unified.usage" }));
+        expect(screen.getByTestId("dsh-management")).toBeInTheDocument();
+        expect(screen.queryByRole("radiogroup", { name: "marketSections" })).not.toBeInTheDocument();
+    });
     it("saves each installation setting for the current tenant", async () => {
         render(view());
         const plugins = await screen.findByRole("switch", { name: "allow_third_party_plugins" });

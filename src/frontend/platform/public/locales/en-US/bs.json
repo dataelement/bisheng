@@ -3853,6 +3853,7 @@
     "usageScope": "Select a user in the current tenant to view token usage, messages, and completed Q&A over a time range.",
     "byDepartment": "By department",
     "byUser": "By user",
+    "byRole": "By role",
     "selectDepartment": "Select department",
     "selectDepartmentForUsage": "Select a department to view aggregate usage and user details for it and its descendants.",
     "timeUsage": "Time-range usage",

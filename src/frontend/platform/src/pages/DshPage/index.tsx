@@ -17,7 +17,7 @@ export function DshPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { config, failed } = useDshBrowserConfig();
-  const [usageToolbarTarget, setUsageToolbarTarget] = useState<HTMLDivElement | null>(null);
+  const [marketToolbarTarget, setMarketToolbarTarget] = useState<HTMLDivElement | null>(null);
   const canManageDsh = user?.role === "admin" || !!user?.is_global_super || !!user?.is_child_admin;
   const canManageSafety = canManageDsh;
   const sections = DSH_SECTIONS.filter(({ value }) =>
@@ -45,8 +45,9 @@ export function DshPage() {
             data-dsh-header
           >
             <Tabs activeKey={section} onChange={(value) => navigate(`/dsh?tab=${value}`)}
-              aria-label={t("dsh.title")} items={sections.map(({ value, labelKey }) => ({ key: value, label: t(labelKey) }))} />
-            <div ref={setUsageToolbarTarget} className="ml-auto max-w-full" />
+              aria-label={t("dsh.title")} items={sections.map(({ value, labelKey }) => ({ key: value, label: t(labelKey) }))}
+              className="min-w-0 shrink-0 self-start" />
+            {section === "plugins" && <div ref={setMarketToolbarTarget} className="shrink-0" />}
           </div>
         )}
         <div className="min-h-0 flex-1 overflow-hidden">
@@ -65,9 +66,9 @@ export function DshPage() {
           )}
           {section !== "content-safety" &&
             (section === "plugins" ? (
-              <PluginMarketPage />
+              <PluginMarketPage toolbarTarget={marketToolbarTarget} />
             ) : (
-              <DshManagement section={section} usageToolbarTarget={usageToolbarTarget} />
+              <DshManagement section={section} />
             ))}
         </div>
       </div>
