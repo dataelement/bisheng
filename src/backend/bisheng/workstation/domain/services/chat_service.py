@@ -127,7 +127,7 @@ NO_SPEECH_PLACEHOLDER = "(No recognizable speech was detected in this audio/vide
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
 
 
-async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: int):
+async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: int, *, image_storage=None):
     """Extract uploaded file content for prompt building."""
     from bisheng.api.v1.schemas import FileProcessBase
     from bisheng.knowledge.rag.temp_file_pipeline import TempFilePipeline
@@ -144,6 +144,7 @@ async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: 
         local_file_path=filepath_local,
         file_name=file_name,
         file_rule=file_rule,
+        image_storage=image_storage,
     )
     try:
         result = await pipeline.arun()
@@ -1487,7 +1488,15 @@ _TRUNCATION_NOTICE = (
 )
 
 
-async def _extract_doc_text(filepath: str, filename: str, invoke_user_id: int) -> str:
+async def _extract_doc_text(
+    filepath: str,
+    filename: str,
+    invoke_user_id: int,
+    *,
+    chat_id: str | None = None,
+    source_url: str = "",
+    tenant_id: int = 0,
+) -> str:
     """Extract one attachment's text, turning a parser failure into a domain error.
 
     Without this the raw ``EtlException`` reached the generic handler and the user
@@ -1496,10 +1505,28 @@ async def _extract_doc_text(filepath: str, filename: str, invoke_user_id: int) -
     OCR service be told apart from a genuinely unparseable file.
     """
     try:
+        image_storage = None
+        if chat_id:
+            from bisheng.chat_session.domain.services.workflow_file_service import WorkflowFileService
+
+            # The existing attachment store also accepts daily sessions (empty flow_id).
+            # Its manifests retain images, refresh signed links and own deletion cleanup.
+            image_storage = await asyncio.to_thread(
+                WorkflowFileService.image_storage,
+                chat_id=chat_id,
+                user_id=invoke_user_id,
+                tenant_id=tenant_id,
+                workflow_id="",
+                run_id=uuid4().hex,
+                node_id="daily-attachment",
+                source_url=source_url,
+                file_name=filename,
+            )
         return await get_file_content(
             filepath_local=filepath,
             file_name=filename,
             invoke_user_id=invoke_user_id,
+            image_storage=image_storage,
         )
     except Exception as exc:
         logger.exception(f"[process_agent_files] parse failed for {filename}")
@@ -1511,7 +1538,7 @@ async def _extract_doc_text(filepath: str, filename: str, invoke_user_id: int) -
         ) from exc
 
 
-async def _process_agent_files(data: APIChatCompletion, model_info, login_user, ws_config):
+async def _process_agent_files(data: APIChatCompletion, model_info, login_user, ws_config, *, conversation_id=None):
     """Split uploaded files into visual (image base64 data URLs) and doc
     (extracted text chunks concatenated up to maxTokens).
 
@@ -1530,12 +1557,21 @@ async def _process_agent_files(data: APIChatCompletion, model_info, login_user, 
     downloaded_files = await asyncio.gather(*download_tasks)
 
     visual_tasks, doc_tasks = [], []
-    for filepath, filename in downloaded_files:
+    for file_item, (filepath, filename) in zip(valid_files, downloaded_files, strict=True):
         ext = filename.split(".")[-1].lower()
         if model_info.visual and ext in VISUAL_MODEL_FILE_TYPES:
             visual_tasks.append(read_image_as_data_url(filepath=filepath, filename=filename))
         else:
-            doc_tasks.append(_extract_doc_text(filepath, filename, login_user.user_id))
+            image_context = (
+                {
+                    "chat_id": conversation_id,
+                    "source_url": file_item["filepath"],
+                    "tenant_id": workbench_tenant_id(login_user),
+                }
+                if conversation_id
+                else {}
+            )
+            doc_tasks.append(_extract_doc_text(filepath, filename, login_user.user_id, **image_context))
     visual_results, doc_results = await asyncio.gather(
         asyncio.gather(*visual_tasks),
         asyncio.gather(*doc_tasks),
@@ -1983,6 +2019,7 @@ async def _agent_stream_chat_completion(
                 model_info,
                 login_user,
                 ws_config,
+                conversation_id=conversation_id,
             )
             if merged_files and any(
                 merged.get("cover_filepath") and not (orig or {}).get("cover_filepath")
