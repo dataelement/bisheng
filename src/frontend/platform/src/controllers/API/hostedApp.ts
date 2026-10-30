@@ -33,7 +33,10 @@ export type HostedAppPhase =
   | "stopped"
   | "failed"
 
+export type HostedAppAction = 'use' | 'edit' | 'manage_permission' | 'delete' | 'publish' | 'unpublish'
+
 export interface HostedAppDetail {
+  allowed_actions?: HostedAppAction[]
   app_id: string
   slug: string
   name: string
@@ -436,12 +439,13 @@ export async function manualPublishViaPipelineApi(
  * pydantic model without a default, so a bodyless POST is a 422.
  */
 export async function withdrawApprovalApi(
+  appId: string,
   instanceId: number,
   reason?: string,
 ): Promise<unknown> {
   return await axios.post(
-    `/api/v1/approval/instances/${instanceId}/withdraw`,
-    reason ? { reason } : {},
+    `${APPS_BASE}/${appId}/withdraw`,
+    { expected_instance_id: instanceId, ...(reason ? { reason } : {}) },
   )
 }
 

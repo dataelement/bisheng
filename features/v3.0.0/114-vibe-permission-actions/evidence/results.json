@@ -1,0 +1,106 @@
+{
+  "feature": "F114",
+  "date": "2026-10-30",
+  "kind": "local-targeted-only",
+  "source_base": "bb62790ad22a3204493e7dce5878e0a4f7109599",
+  "tasks": {
+    "completed": 102,
+    "total": 104,
+    "pending": [
+      "T063",
+      "T064"
+    ]
+  },
+  "remote_e2e_executed": false,
+  "full_suite_executed": false,
+  "evidence": {
+    "backend-initial": {
+      "path": "evidence/backend-initial.txt",
+      "sha256": "71463408b64de5650fe47b3889104760d24cddcc0863d0eae30f2d2bf5cd3efa"
+    },
+    "backend-repository-regression": {
+      "path": "evidence/backend-repository-regression.txt",
+      "sha256": "d86088a9f08bfd261684c04c471adde3080536f0b7e311cf7d1d644d08b7e6b1"
+    },
+    "backend-preview-credential-sql": {
+      "path": "evidence/backend-preview-credential-sql.txt",
+      "sha256": "fa412bafb1ca4a18dccdab10966820c5455408a7074ba7cf8fa26c89ecd4b464"
+    },
+    "backend-private-materials-red": {
+      "path": "evidence/backend-private-materials-red.txt",
+      "sha256": "2a48295ae8ad26d1dfdc7678fabc4c0cba5ca623e1b8df4f68435b12501cf0d4"
+    },
+    "backend-private-materials": {
+      "path": "evidence/backend-private-materials.txt",
+      "sha256": "294f172b9c21cb71db47c6302c95b73bdc81f0ad1c73631dfaf00139fa2d9bc3"
+    },
+    "backend-legacy-preview-gate": {
+      "path": "evidence/backend-legacy-preview-gate.txt",
+      "sha256": "95879a88a7855ef60763c24f2c5c083d0d9e4a4bdbc57e847ed2de9fd6164097"
+    },
+    "manager-stage-and-v2": {
+      "path": "evidence/manager-stage-and-v2.txt",
+      "sha256": "7548474fb14d06939e7c5c04118884c7575e481e66341dcb60a44054161cc931"
+    },
+    "material-tool": {
+      "path": "evidence/material-tool.txt",
+      "sha256": "0ce606a8625dfb51bce33a1f2b5df9360011c92c68ec0baa58fd1247d3a98c5c"
+    },
+    "platform-components": {
+      "path": "evidence/platform-components.txt",
+      "sha256": "1952038861b08c924851f2c0396ca79a3a6a8e6aeb19ce3dea427f2368a0f65b"
+    },
+    "client-review-preview": {
+      "path": "evidence/client-review-preview.txt",
+      "sha256": "bd44dfbb23c9c756a6bd3d4af6dda2d2d21262d65c96a909e8e13223e75c3623"
+    },
+    "backend-quality": {
+      "path": "evidence/backend-quality.txt",
+      "sha256": "c5006060b4f317e5993c3017671ab7cb333b8aa223d4cb1015fb6206626cf93e"
+    },
+    "runtime-proxy-quality": {
+      "path": "evidence/runtime-proxy-quality.txt",
+      "sha256": "8e52033bd9d4cc2372273839cf1505c2fb8cbb648aea8201514763342ceb8ccb"
+    },
+    "frontend-lint": {
+      "path": "evidence/frontend-lint.txt",
+      "sha256": "b6adb4e077d4210006d027ae0f34300aa849200f126593e70894b759944078d3"
+    },
+    "platform-typecheck": {
+      "path": "evidence/platform-typecheck.txt",
+      "sha256": "31988a25d3324e7d2bbd3fc6c9bb3fc03014cf1cad9d67ffb1d7a60992297fc9"
+    },
+    "client-typecheck": {
+      "path": "evidence/client-typecheck.txt",
+      "sha256": "5efd19539b078731cbbb5115467d6750216cbc672464173cfa377b125c5241e6"
+    },
+    "i18n-check": {
+      "path": "evidence/i18n-check.txt",
+      "sha256": "4be4f42ef6db7b9d604bfecf4c6b34ea0f55e2c310fd8b373307548b24f57b09"
+    },
+    "e2e-collection-only": {
+      "path": "evidence/e2e-collection-only.txt",
+      "sha256": "dc43a2d49217eb07a1f5e30c42679a1f07b79284d67ec9673453d3d6094fc1cf"
+    },
+    "merge-secret-scope": {
+      "path": "evidence/merge-secret-scope.txt",
+      "sha256": "4396e84900456008c54bdf71bee6fd0523a681ed0b283bdc2af8f9f6b2292978"
+    },
+    "merge-targeted-summary": {
+      "path": "evidence/merge-targeted-summary.txt",
+      "sha256": "194ea3fdc24fc18c482419bd266cfbbbc2ceda974e1a71073d6f08445c0a4e96"
+    },
+    "merge-static-quality": {
+      "path": "evidence/merge-static-quality.txt",
+      "sha256": "aab161f8ff2924e4ef7ce698e1c0bc1dbb1edcda27e345bda27cd843c822a235"
+    }
+  },
+  "implementation_commit": "6ac7704998087267af69b72adf542895b2694ff1",
+  "integration": {
+    "local_release_head": "ac2b09c8a2789021652d585f25d519888cfd0c0f",
+    "fetched_remote_head": "56f543e6ee631d000071352baba8ebccd2a69427",
+    "merge_before_e2e": "explicit user request; user deploys 116",
+    "remote_e2e_executed": false,
+    "full_suite_executed": false
+  }
+}

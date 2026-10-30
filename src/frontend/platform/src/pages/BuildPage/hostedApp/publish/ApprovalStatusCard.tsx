@@ -82,7 +82,7 @@ export function ApprovalStatusCard({
   const runWithdraw = async (instanceId: number) => {
     setWithdrawing(true)
     try {
-      await withdrawApprovalApi(instanceId)
+      await withdrawApprovalApi(app.app_id, instanceId)
       notification.open({
         title: t("prompt"),
         type: "success",
@@ -109,9 +109,9 @@ export function ApprovalStatusCard({
       title: t("hostedApp.publishStatus.withdrawTitle"),
       desc: t("hostedApp.publishStatus.withdrawDesc", { name: app.name }),
       okTxt: t("hostedApp.publishStatus.withdraw"),
-      onOk(next: () => void) {
+      async onOk(next: () => void) {
+        await runWithdraw(instanceId)
         next()
-        void runWithdraw(instanceId)
       },
     })
   }

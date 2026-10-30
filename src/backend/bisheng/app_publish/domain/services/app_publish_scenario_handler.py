@@ -115,6 +115,8 @@ class AppPublishScenarioHandler:
             "owner_user_id": payload.get("owner_user_id"),
             "owner_user_name": payload.get("owner_user_name"),
             "source": payload.get("source") or "cli",
+            "submission_actor": payload.get("submission_actor"),
+            "self_review_user_id": payload.get("self_review_user_id"),
             "release_kind": release_kind,
             "version_id": payload.get("version_id"),
             "version_no": payload.get("version_no"),
@@ -162,20 +164,24 @@ class AppPublishScenarioHandler:
             raw = node_config.get("approver_user_ids") or node_config.get("user_ids") or []
             candidates = [int(one) for one in raw]
 
-        applicant = int(getattr(req, "applicant_user_id", 0) or 0)
-        filtered = [user_id for user_id in candidates if user_id != applicant]
-        if filtered or not candidates:
-            return filtered
+        return await self.validate_approver_candidates(req, candidates)
 
-        # Everybody who resolved *is* the applicant. Filtering them out too
-        # would deadlock a deployment with a single administrator — which is
-        # what a single-tenant install is — so self-approval is allowed here
-        # and audited by the caller (AC-17).
-        self.last_self_approval = True
-        logger.info(
-            f"app_publish.self_approval applicant={applicant} business_key={getattr(req, 'business_key', None)}"
+    async def validate_approver_candidates(self, req, candidates):
+        from bisheng.approval.application.app_candidates import qualify_app_candidates
+
+        payload = _payload(req)
+        result = await qualify_app_candidates(
+            int(getattr(req, "tenant_id", 0) or 0),
+            int(payload.get("owner_user_id") or 0),
+            payload.get("self_review_user_id"),
+            candidates,
         )
-        return [applicant]
+        self.last_self_approval = result.self_approval
+        if result.self_approval:
+            logger.info(
+                "app_publish.self_approval verified_single_admin business_key={}", getattr(req, "business_key", None)
+            )
+        return list(result.user_ids)
 
     # ------------------------------------------------------------------
     # Terminal callbacks

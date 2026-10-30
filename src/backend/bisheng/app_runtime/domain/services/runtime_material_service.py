@@ -13,7 +13,6 @@ import re
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from types import SimpleNamespace
 from uuid import UUID
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -66,23 +65,9 @@ def _refused(reason="material_scope_refused", status=403):
 
 
 async def _preview(session_id):
-    from bisheng.app_publish.domain.services.preview_instance_service import PreviewInstanceService
-    from bisheng.app_publish.domain.services.version_service import VersionService
+    from bisheng.app_publish.application.preview_access import preview_material
 
-    row = await PreviewInstanceService.resolve_entry(session_id)
-    if row is None:
-        return None
-    version = await VersionService.get_version(row.app_id, row.version_id)
-    return SimpleNamespace(
-        id=row.id,
-        tenant_id=row.tenant_id,
-        app_id=row.app_id,
-        version_id=row.version_id,
-        approver_user_id=row.approver_user_id,
-        status=row.status,
-        expires_at=row.expires_at,
-        approval_active=bool(version is not None and not version.terminal_state),
-    )
+    return await preview_material(session_id)
 
 
 class RuntimeMaterialService:
@@ -152,9 +137,10 @@ class RuntimeMaterialService:
                     preview.tenant_id,
                     preview.app_id,
                     preview.version_id,
-                    preview.status,
                 )
-                != (op.tenant_id, op.app_id, op.version_id, "running")
+                != (op.tenant_id, op.app_id, op.version_id)
+                or preview.status not in {"starting", "running"}
+                or getattr(preview, "operation_id", None) != op.id
                 or (not preview.approval_active or preview.approver_user_id <= 0 or preview.expires_at <= now)
             ):
                 _refused("material_preview_expired")

@@ -231,10 +231,13 @@ class RuntimeDataSessionService:
             if serving:
                 profile.update(serving.payload.get("resolved_delivery", {}).get("profile", {}))
         helper = (node.capabilities or {}).get("helper_image", "")
+        from bisheng.app_runtime.domain.services.app_authorization_service import AppAuthorizationService
+
+        actual_actor = await AppAuthorizationService.resolve_actor(actor)
         payload = {
             "tenant_id": app.tenant_id,
             "request_id": request_id,
-            "actor_ref": "user:" + str(actor.user_id),
+            "actor_ref": actual_actor.fga_subject,
             "action": action,
             "parameters_digest": content_digest(parameters),
             "online": online,
@@ -301,7 +304,7 @@ class RuntimeDataSessionService:
     async def execute(self, app, actor, action, parameters):
         from bisheng.app_runtime.domain.services.app_data_service import AppDataService
 
-        AppDataService._require_owner(app, actor)
+        await AppDataService._require_editor(app, actor)
         parameters = self._parameters(action, parameters)
         op = await self._start(app, actor, action, parameters)
         await self._wake(op.id)
@@ -342,7 +345,7 @@ class RuntimeDataSessionService:
     async def recover(self, app, actor, operation_id):
         from bisheng.app_runtime.domain.services.app_data_service import AppDataService
 
-        AppDataService._require_owner(app, actor)
+        await AppDataService._require_editor(app, actor)
         previous = await self.repo.get(RuntimeOperation, operation_id)
         if (
             previous is None

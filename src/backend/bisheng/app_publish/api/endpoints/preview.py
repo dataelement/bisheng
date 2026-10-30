@@ -23,7 +23,9 @@ preview carries the identity of the approver it was raised for (AC-27), so
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from typing import Literal
+
+from fastapi import APIRouter, Depends, Query
 
 from bisheng.app_publish.api.endpoints.deploy import require_app_runtime_enabled
 from bisheng.app_publish.domain.services.preview_instance_service import PreviewInstanceService
@@ -41,10 +43,11 @@ router = APIRouter(prefix="/apps", tags=["HostedAppPreview"])
 async def get_preview(
     app_id: str,
     version_id: str,
+    purpose: Literal["management", "approval"] | None = Query(default=None),
     user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """``{state, session_id, entry_url, expires_at, reclaim_reason, runnable, not_runnable_reason}``."""
-    return resp_200(data=await PreviewInstanceService.describe(app_id, version_id, actor=user))
+    return resp_200(data=await PreviewInstanceService.describe(app_id, version_id, actor=user, purpose=purpose))
 
 
 @router.post(
@@ -55,6 +58,7 @@ async def get_preview(
 async def start_preview(
     app_id: str,
     version_id: str,
+    purpose: Literal["management", "approval"] | None = Query(default=None),
     user: UserPayload = Depends(UserPayload.get_login_user),
     _enabled: None = Depends(require_app_runtime_enabled),
 ):
@@ -67,7 +71,7 @@ async def start_preview(
     read and the reclaim stay ungated on purpose — switching the layer off
     while a trial is up must not strand its row with no way to close it.
     """
-    return resp_200(data=await PreviewInstanceService.start(app_id, version_id, actor=user))
+    return resp_200(data=await PreviewInstanceService.start(app_id, version_id, actor=user, purpose=purpose))
 
 
 @router.delete(

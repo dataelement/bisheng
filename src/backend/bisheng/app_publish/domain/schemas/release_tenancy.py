@@ -12,3 +12,4 @@ class ApprovedReleaseSource:
     tenant_id: int
     owner_user_id: int
     audit_source: str = "approval_outbox"
+    authorization_context: dict | None = None

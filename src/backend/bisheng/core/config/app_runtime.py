@@ -84,7 +84,10 @@ class AppRuntimeConf(BaseModel):
         default_factory=lambda: json.loads(os.environ.get("BISHENG_RUNTIME_HOST_ISOLATION_NODES") or "{}")
     )
     runtime_protocol_version: int = Field(
-        default_factory=lambda: int(os.environ.get("BISHENG_RUNTIME_PROTOCOL_VERSION", "1")), ge=1, le=2
+        default_factory=lambda: int(os.environ.get("BISHENG_RUNTIME_PROTOCOL_VERSION", "2")),
+        ge=2,
+        le=2,
+        validate_default=True,
     )
     runtime_payload_key: str = Field(
         default_factory=lambda: os.environ.get("BISHENG_RUNTIME_PAYLOAD_KEY", ""), repr=False

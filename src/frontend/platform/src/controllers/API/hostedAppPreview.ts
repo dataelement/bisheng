@@ -25,7 +25,7 @@ import { APPS_BASE } from "./hostedApp"
  * start call answers only once the instance is ready, so there is no
  * half-started state to read.
  */
-export type PreviewState = "absent" | "running" | "reclaimed"
+export type PreviewState = "absent" | "starting" | "running" | "reclaimed"
 
 /** What ended the instance. `start_failed` means it never came up. */
 export type PreviewReclaimReason =
@@ -90,7 +90,7 @@ export async function getPreviewStatusApi(
   versionId: string,
 ): Promise<PreviewStatus> {
   return call(() =>
-    axios.get(previewBase(appId, versionId), { silent: true }),
+    axios.get(previewBase(appId, versionId) + "?purpose=management", { silent: true }),
   )
 }
 
@@ -100,7 +100,7 @@ export async function startPreviewApi(
   versionId: string,
 ): Promise<PreviewStatus> {
   return call(() =>
-    axios.post(previewBase(appId, versionId), {}, { silent: true }),
+    axios.post(previewBase(appId, versionId) + "?purpose=management", {}, { silent: true }),
   )
 }
 
@@ -112,7 +112,7 @@ export async function reclaimPreviewApi(
 ): Promise<PreviewStatus> {
   return call(() =>
     axios.delete(
-      `${previewBase(appId, versionId)}/${encodeURIComponent(sessionId)}`,
+      `${previewBase(appId, versionId)}/${encodeURIComponent(sessionId)}?purpose=management`,
       { silent: true },
     ),
   )

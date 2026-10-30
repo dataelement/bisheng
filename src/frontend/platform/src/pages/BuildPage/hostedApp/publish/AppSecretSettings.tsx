@@ -10,8 +10,9 @@ import { AppSecretEditor } from './AppSecretEditor'
 interface AppSecretSettingsProps {
   appId: string
   canManage: boolean
+  canRebuild?: boolean
 }
-export function AppSecretSettings({ appId, canManage }: AppSecretSettingsProps) {
+export function AppSecretSettings({ appId, canManage, canRebuild = false }: AppSecretSettingsProps) {
   const { t } = useTranslation()
   const state = useAppSecrets(appId)
   const [editing, setEditing] = useState<string | null | undefined>(undefined)
@@ -73,7 +74,7 @@ export function AppSecretSettings({ appId, canManage }: AppSecretSettingsProps) 
       <p role="status" className="text-sm text-muted-foreground">{t(`hostedApp.secrets.comparison.${state.data.runtime.comparison}`)}</p>
       {!!state.data.runtime.changed_names.length && <p className="break-all text-xs text-muted-foreground">{state.data.runtime.changed_names.join(', ')}</p>}
       {operation && <p role="status" className="text-xs text-muted-foreground">{t(active ? 'hostedApp.secrets.rebuilding' : operation.status === 'completed' ? 'hostedApp.secrets.rebuilt' : 'hostedApp.secrets.rebuildFailed')}</p>}
-      {canManage && state.data.runtime.comparison === 'different' && <div><Button size="small" onClick={handleRebuild} disabled={state.busy || Boolean(active)}>{t('hostedApp.secrets.rebuild')}</Button></div>}
+      {canManage && canRebuild && state.data.runtime.comparison === 'different' && <div><Button size="small" onClick={handleRebuild} disabled={state.busy || Boolean(active)}>{t('hostedApp.secrets.rebuild')}</Button></div>}
     </>}
   </section>
 }

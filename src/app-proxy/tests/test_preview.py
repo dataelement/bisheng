@@ -60,7 +60,7 @@ def test_the_upstream_is_resolved_by_session_not_by_app_id(logged_in, preview_re
 
     logged_in.get(f"{BASE}/", headers=NAVIGATE_HEADERS)
 
-    assert manager.paths == [f"/v1/previews/{SESSION}/route"]
+    assert manager.paths == [f"/api/v1/internal/app-runtime/v2/routes/previews/{SESSION}"]
 
 
 def test_a_refused_preview_renders_the_not_found_page(logged_in, fake_backend):
@@ -204,8 +204,8 @@ def test_a_missing_preview_upstream_renders_the_transitional_page(logged_in, fak
     assert "text/html" in response.headers["content-type"]
     assert response.headers["Retry-After"]
     # Only the route lookup happened: no intent was sent to bring anything up.
-    assert fake_manager.paths == [f"/v1/previews/{SESSION}/route"]
-    assert all(path.endswith("/route") for path in fake_manager.paths)
+    assert fake_manager.paths == [f"/api/v1/internal/app-runtime/v2/routes/previews/{SESSION}"]
+    assert all(path.startswith("/api/v1/internal/app-runtime/v2/routes/") for path in fake_manager.paths)
 
 
 def test_the_preview_and_the_application_caches_do_not_cross_serve(logged_in, preview_ready, fake_manager):
@@ -215,8 +215,8 @@ def test_the_preview_and_the_application_caches_do_not_cross_serve(logged_in, pr
     logged_in.get(f"{BASE}/", headers=NAVIGATE_HEADERS)
     logged_in.get("/apps/sales/", headers=NAVIGATE_HEADERS)
 
-    assert f"/v1/previews/{SESSION}/route" in fake_manager.paths
-    assert "/v1/apps/app-0001/route" in fake_manager.paths
+    assert f"/api/v1/internal/app-runtime/v2/routes/previews/{SESSION}" in fake_manager.paths
+    assert "/api/v1/internal/app-runtime/v2/routes/apps/app-0001" in fake_manager.paths
 
 
 def test_an_application_slug_named_preview_cannot_shadow_the_entry(logged_in, preview_ready, fake_backend):

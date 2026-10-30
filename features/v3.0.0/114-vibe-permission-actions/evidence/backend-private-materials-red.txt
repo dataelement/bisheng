@@ -1,0 +1,39 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_____ test_granted_non_owner_can_select_private_materials[natural_person] ______
+test/app_runtime/test_f114_private_materials.py:24: in test_granted_non_owner_can_select_private_materials
+    await runtime_profile_service.validate_offline_references(repo, "app", manifest, actor)
+bisheng/app_runtime/domain/services/runtime_profile_service.py:316: in validate_offline_references
+    raise AppNotOwnedBySubjectError(details={"reason": "private_material_owner_selection_required"})
+E   bisheng.common.errcode.app_publish.AppNotOwnedBySubjectError: This application belongs to another owner
+_____ test_granted_non_owner_can_select_private_materials[service_account] _____
+test/app_runtime/test_f114_private_materials.py:24: in test_granted_non_owner_can_select_private_materials
+    await runtime_profile_service.validate_offline_references(repo, "app", manifest, actor)
+bisheng/app_runtime/domain/services/runtime_profile_service.py:316: in validate_offline_references
+    raise AppNotOwnedBySubjectError(details={"reason": "private_material_owner_selection_required"})
+E   bisheng.common.errcode.app_publish.AppNotOwnedBySubjectError: This application belongs to another owner
+=============================== warnings summary ===============================
+bisheng/core/ai/__init__.py:2
+  <f114-worktree>/src/backend/bisheng/core/ai/__init__.py:2: DeprecationWarning: `langchain-community` is being sunset and is no longer actively maintained. See https://github.com/langchain-ai/langchain-community/issues/674 for details and migration guidance toward standalone integration packages.
+    from langchain_community.chat_models import ChatTongyi, ChatZhipuAI, MoonshotChat
+
+<frozen importlib._bootstrap>:241
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/jieba/_compat.py:18
+  <local-workspace>/src/backend/.venv/lib/python3.11/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+    import pkg_resources
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED test/app_runtime/test_f114_private_materials.py::test_granted_non_owner_can_select_private_materials[natural_person]
+FAILED test/app_runtime/test_f114_private_materials.py::test_granted_non_owner_can_select_private_materials[service_account]
+2 failed, 7 warnings in 0.56s

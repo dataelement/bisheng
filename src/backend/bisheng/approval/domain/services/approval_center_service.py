@@ -457,6 +457,16 @@ class ApprovalCenterService:
         # leaves the instance, its tasks and its action log untouched.
         if instance.status != ApprovalInstanceStatus.PENDING:
             raise ApprovalInstanceNotPendingError()
+        if instance.scenario_code == "app_publish_request":
+            from bisheng.admin.application.tenant_scope import resolve_management_scope
+            from bisheng.app_runtime.application.authorization import authorize_app
+            from bisheng.common.dependencies.user_deps import UserPayload
+
+            own = await resolve_management_scope(operator_user_id, is_super=False)
+            actor = await UserPayload.init_login_user(
+                user_id=operator_user_id, user_name=operator_user_name or "", tenant_id=own.tenant_id
+            )
+            await authorize_app(actor, instance.business_resource_id, "withdraw")
         tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
         for task in tasks:
             if task.status == ApprovalTaskStatus.PENDING:
@@ -475,6 +485,49 @@ class ApprovalCenterService:
                 detail={"reason": reason},
             )
         )
+        return await cls._after_withdrawal(
+            instance,
+            tasks,
+            operator_user_id=operator_user_id,
+            operator_user_name=operator_user_name,
+            reason=reason,
+            ip_address=ip_address,
+        )
+
+    @classmethod
+    async def withdraw_app_publish(cls, expected, *, operator_user_id, operator_user_name, reason, actor_metadata):
+        from bisheng.approval.domain.repositories.app_publish_withdrawal_repository import (
+            AppPublishWithdrawalRepository,
+        )
+
+        instance, tasks = await AppPublishWithdrawalRepository().withdraw(
+            expected,
+            operator_user_id=operator_user_id,
+            operator_user_name=operator_user_name,
+            reason=reason,
+            actor_metadata=actor_metadata,
+        )
+        return await cls._after_withdrawal(
+            instance,
+            tasks,
+            operator_user_id=operator_user_id,
+            operator_user_name=operator_user_name,
+            reason=reason,
+            return_detail=False,
+        )
+
+    @classmethod
+    async def _after_withdrawal(
+        cls,
+        instance,
+        tasks,
+        *,
+        operator_user_id,
+        operator_user_name=None,
+        reason=None,
+        ip_address=None,
+        return_detail=True,
+    ):
         await cls._write_audit_log(
             tenant_id=instance.tenant_id,
             operator_user_id=operator_user_id,
@@ -514,6 +567,8 @@ class ApprovalCenterService:
             logging.getLogger(__name__).exception(
                 "withdraw_instance: on_withdrawn hook failed for instance %s", instance.id
             )
+        if not return_detail:
+            return {"instance_id": instance.id, "status": "withdrawn"}
         return await cls.get_instance_detail(
             instance_id=instance.id,
             login_user=_SystemLoginUser(operator_user_id, tenant_id=instance.tenant_id),
@@ -829,6 +884,15 @@ class ApprovalCenterService:
 
         sibling_tasks = await self.instance_repository.list_tasks(instance.id)
         same_node_tasks = [one for one in sibling_tasks if one.node_code == task.node_code]
+        if action == "approve" and instance.scenario_code == "app_publish_request":
+            from bisheng.approval.domain.services.approval_runtime_handler_factory import eligible_scenario_candidates
+
+            candidates = [one.approver_user_id for one in same_node_tasks if one.status == ApprovalTaskStatus.PENDING]
+            if operator_is_admin:
+                candidates.append(operator_user_id)
+            allowed = await eligible_scenario_candidates(instance, candidates)
+            if operator_user_id not in allowed:
+                raise ApprovalRequestPermissionDeniedError()
 
         if action == "reject":
             task.status = ApprovalTaskStatus.REJECTED

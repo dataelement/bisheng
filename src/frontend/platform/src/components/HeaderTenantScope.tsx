@@ -64,7 +64,7 @@ function SuperAdminScopeSwitcher({
         }
     }, [])
 
-    const handleSelect = async (next: number | null) => {
+    const handleSelect = async (next: number) => {
         if (scopeLoading) return
         if (next === scope.scope_tenant_id) return
         try {
@@ -75,9 +75,7 @@ function SuperAdminScopeSwitcher({
             // Reload effect-owned pages as well as query caches; discard old forms.
             if (onScopeChange) await onScopeChange()
             else window.location.reload()
-            notification.open({ type: "success", description: String(next === null
-                    ? t("tenant.adminScope.cleared")
-                    : t("tenant.adminScope.switched", {
+            notification.open({ type: "success", description: String(t("tenant.adminScope.switched", {
                         name: tenants.find((r) => r.id === next)?.tenant_name || "",
                     }) ?? '') })
         } catch {
@@ -87,9 +85,8 @@ function SuperAdminScopeSwitcher({
 
     const options = useMemo(() => {
         const list = [
-            { value: "global", label: t("tenant.adminScope.global"), disabled: false },
             ...tenants
-                .filter((row) => row.id != null && String(row.id) !== "")
+                .filter((row) => row.id != null && String(row.id) !== "" && Number.isSafeInteger(row.id) && row.id > 0 && row.status === "active")
                 .map((row) => ({
                     value: row.id,
                     label: displayTenantName(row.tenant_name) || row.tenant_code,
@@ -115,13 +112,13 @@ function SuperAdminScopeSwitcher({
                 aria-labelledby={labelId}
                 className="w-48"
                 options={options}
-                value={scope.scope_tenant_id ?? "global"}
+                value={scope.scope_tenant_id ?? undefined}
                 loading={tenantsLoading}
                 disabled={scopeLoading}
                 onChange={(value) => {
                     if (value == null) return
-                    const next = value === "global" ? null : Number(value)
-                    if (next === null || (Number.isSafeInteger(next) && next > 0)) void handleSelect(next)
+                    const next = Number(value)
+                    if (Number.isSafeInteger(next) && next > 0) void handleSelect(next)
                 }}
             />
         </div>

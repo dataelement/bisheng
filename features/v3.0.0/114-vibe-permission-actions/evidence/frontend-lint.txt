@@ -1,0 +1,22 @@
+
+> bisheng-frontend@ lint <f114-worktree>/src/frontend
+> pnpm --filter bisheng lint && pnpm --filter bishengchat lint && pnpm --filter @bisheng/ui lint && pnpm --filter @bisheng/file-viewers lint && pnpm --filter @bisheng/chat lint && pnpm --filter @bisheng/api-client lint
+
+
+> bisheng@3.0.0 lint <f114-worktree>/src/frontend/platform
+> eslint . --suppressions-location eslint-suppressions.json
+
+
+> bishengchat@3.0.0 lint <f114-worktree>/src/frontend/client
+> eslint . --suppressions-location eslint-suppressions.json
+
+
+<f114-worktree>/src/frontend/client/src/components/Chat/AiChatInput.tsx
+  375:15  error  'hasAttachedFiles' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+✖ 1 problem (1 error, 0 warnings)
+
+<f114-worktree>/src/frontend/client:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  bishengchat@3.0.0 lint: `eslint . --suppressions-location eslint-suppressions.json`
+Exit status 1
+ ELIFECYCLE  Command failed with exit code 1.

@@ -116,6 +116,10 @@ ApprovalCenterService.decide_task()
 | `approval/api/endpoints/approval_admin.py` | Platform 管理 API（`/api/v1/approval/admin/...`） | — |
 | `approval/api/endpoints/approval.py` | 旧系统 legacy API（`/api/v1/approval/requests/...`），**已废弃** | — |
 
+### 应用审读窄端口（F114）
+
+`approval/application/app_review.py::pending_app_reviews` 返回冻结的 tenant/app/version/instance/task 值对象；仓储 `app_review_repository.py` 只查询指定真实自然人、指定 app、实例和任务均 pending 的记录。该个人任务查询不继承页面管理视角，源码读取随后在验证过的任务租户内执行并恢复调用前上下文。服务账号不能借其归属人的审批任务，临时资格只覆盖待审版本和当前正式比较基线；普通长期源码读取改用 app edit，不变成长期授权。
+
 ### 四个场景 Handler
 
 | 文件 | 类 |
@@ -442,6 +446,15 @@ cd src/backend && uv run pytest test/approval test/app_publish
 
 ## 2026-10-29 管理视角与异常进度修复
 
-平台右上角复用 F019 管理视角：非超管管理查询严格限定所属租户，超管可选全平台或指定租户；不改变 JWT 的人员归属和 SDK/RPC 身份。`approval/admin` 加入共享管理查询范围。管理列表按当前视角读取，创建/更新仍携带具体租户；个人审批接口不使用管理视角。`list_scenarios` 和异常列表允许受信管理端传 `tenant_id=None` 读取全平台。
+平台右上角复用 F019 管理视角：非超管管理查询严格限定所属租户，超管只能选择一个有效的具体租户，未选择或失效时回到经验证的所属租户；不改变 JWT 的人员归属和 SDK/RPC 身份。`approval/admin` 加入共享管理查询范围。管理列表按当前视角读取，创建/更新仍携带具体租户；个人审批接口不使用管理视角。F114 管理 middleware 不再向管理列表提供全平台语义；个人任务不受管理视角影响。
 
 异常列表进度改用 `GET /api/v1/approval/admin/instances/{instance_id}`：先 `_ensure_admin`，再 `ApprovalCenterService.get_instance_detail(management=True)` 复核选中租户和超管/该租户管理员资格；不要求管理员必须是申请人或审批任务持有人。原个人实例详情仍检查申请/任务归属；新增只读入口不授予同意/拒绝权限。API 锚点：`approval_admin.get_admin_instance_detail`。配对测试：`test/approval/test_admin_instance_progress.py` 与 `test/admin/test_management_view_filtering.py`；未改审批人来源解析和节点流转。
+
+
+### F114 应用发布候选与业务撤回（2026-10-30，本地实现）
+
+- `approval/application/app_candidates.py` 与所属仓储核对当前有效自然人及真实管理员全集；应用 handler 消费冻结的归属人和 self_review_user_id，双重排除，仅真实单管理员例外允许自审。
+- `approval_runtime_handler_factory.py::eligible_scenario_candidates` / `validate_scenario_candidates` 仅对应用发布调用候选校验；引擎通过任务、异常指定流程/人和后续节点复用，其他场景沿原候选来源，不改 approver_resolver 通用语义。
+- `approval/application/app_publish.py::withdraw_app_publish` → `ApprovalCenterService.withdraw_app_publish` → `app_publish_withdrawal_repository.py` 在一个事务内锁定目标实例、取消任务、写 withdrawn 动作。目标由发布模块基于冻结 tenant/app/deployment/version/instance 生成；发布模块先重验当前 publish，实际操作者计审计。通用 `withdraw_instance` 仍要求申请人。
+- 平台 Vibe 管理页使用 `POST /api/v1/apps/{app_id}/withdraw`，body 含 expected_instance_id 和可选 reason；不拿申请人身份代发通用撤回。完整确认和终态保护不变。
+- 双用途预览由 F055 public `preview_access` 当前资格端口消费 pending task；临时资格不会写入长期 F048 Grant。真实部署 E2E 尚未执行，以 F114 verification 为准。
