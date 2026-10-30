@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ruff: noqa: RUF001, RUF002, RUF003
-"""只读统计非个人知识空间的一级分类知识数及历史预览/下载覆盖率。
+"""只读统计非个人知识空间的一级分类知识数及历史预览、下载、问答引用覆盖率。
 
 在 src/backend 执行：
     .venv/bin/python scripts/export_portal_category_usage.py --tenant-id 1
@@ -190,7 +190,7 @@ def create_dashboard_es_client(settings: Any) -> Any:
 
 
 def called_file_ids(client: Any, index: str, file_ids: list[int], *, verbose: bool = False) -> set[int]:
-    """合并看板预览、下载日统计，只返回任一累计次数大于零的文件 ID。"""
+    """合并预览、下载和问答引用日统计，只返回任一累计次数大于零的文件 ID。"""
     trace(f"准备检查数据集索引={index} 候选文件数={len(file_ids)}", enabled=verbose)
     if not client.indices.exists(index=index):
         raise ValueError("知识空间内容统计数据集索引不存在；无法把缺少数据解释为从未调用")
@@ -199,7 +199,7 @@ def called_file_ids(client: Any, index: str, file_ids: list[int], *, verbose: bo
     for offset in range(0, len(file_ids), BATCH_SIZE):
         batch = file_ids[offset : offset + BATCH_SIZE]
         filters = [
-            {"terms": {"record_type": ["preview_daily", "download_daily"]}},
+            {"terms": {"record_type": ["preview_daily", "download_daily", "qa_citation_daily"]}},
             {"terms": {"space_level": NON_PERSONAL_LEVELS}},
             {"terms": {"file_id": [str(file_id) for file_id in batch]}},
         ]
@@ -222,6 +222,10 @@ def called_file_ids(client: Any, index: str, file_ids: list[int], *, verbose: bo
                             "filter": {"term": {"record_type": "download_daily"}},
                             "aggs": {"count": {"sum": {"field": "download_count"}}},
                         },
+                        "qa_citation": {
+                            "filter": {"term": {"record_type": "qa_citation_daily"}},
+                            "aggs": {"count": {"sum": {"field": "qa_citation_count"}}},
+                        },
                     },
                 }
             },
@@ -238,7 +242,11 @@ def called_file_ids(client: Any, index: str, file_ids: list[int], *, verbose: bo
         used = {
             int(bucket["key"])
             for bucket in aggregation["buckets"]
-            if (bucket["preview"]["count"]["value"] or 0) > 0 or (bucket["download"]["count"]["value"] or 0) > 0
+            if (
+                (bucket["preview"]["count"]["value"] or 0) > 0
+                or (bucket["download"]["count"]["value"] or 0) > 0
+                or (bucket["qa_citation"]["count"]["value"] or 0) > 0
+            )
         }
         trace(
             f"已收到 ES 响应：批次={batch_no} 有统计记录文件数={len(aggregation['buckets'])} 已调用文件数={len(used)}",
@@ -383,7 +391,11 @@ def main() -> int:
             "统计单位": "知识文件；同一文档的版本、发布和分享引用去重，独立上传不按名称或内容去重",
             "库存范围": "指定租户全部非个人知识空间；当前解析成功、未软删除的有效知识，排除历史版本及退役空间",
             "发现范围": "不按某个用户权限或空间 portal_discovery_enabled 开关过滤",
-            "调用口径": "preview_daily 的 preview_count 累计大于 0，或 download_daily 的 download_count 累计大于 0 即计 1；同一知识最多计 1",
+            "调用口径": (
+                "preview_daily 的 preview_count、download_daily 的 download_count、"
+                "qa_citation_daily 的 qa_citation_count，任一累计大于 0 即计 1；同一知识最多计 1。"
+                "问答引用只含规则生效后门户智能问答和写作模板正文中的引用标记，生效前不回补"
+            ),
             "统计时间": "查询时数据集已落库的全部历史日统计，不按日期筛选，无法提供秒级截止快照",
             "个人库排除": "排除个人空间中的库存与调用入口；个人知识发布到非个人空间后，公开引用可计入",
             "分类口径": "与看板一致，优先 split_rule.file_category_code，缺失时解析文件编码；汇总全部二级分类",
@@ -395,7 +407,7 @@ def main() -> int:
             "限制": [
                 "只能识别数据集已落库的统计，未采集、未同步、已清理或上报失败的调用无法还原",
                 "预览和下载日统计已合并来源，不再单独限定 shougang_portal",
-                "被调用指系统记录成功提供预览或下载，不代表用户已读完或实际保存完成",
+                "被调用指成功预览、成功下载，或规则生效后的门户问答正文引用；不代表用户已读完或实际保存完成",
                 "历史入口已物理删除或迁入个人空间时，该入口日统计不能关联计入",
                 "数据库和 ES 无跨系统一致快照；建议在低峰期运行，ES 刷新延迟可能影响刚发生的调用",
             ],

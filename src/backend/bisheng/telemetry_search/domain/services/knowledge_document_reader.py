@@ -298,6 +298,14 @@ class DocumentReader:
                                                 ]
                                             }
                                         },
+                                        {
+                                            "bool": {
+                                                "filter": [
+                                                    {"term": {"record_type": "qa_citation_daily"}},
+                                                    {"range": {"qa_citation_count": {"gt": 0}}},
+                                                ]
+                                            }
+                                        },
                                     ],
                                 }
                             },

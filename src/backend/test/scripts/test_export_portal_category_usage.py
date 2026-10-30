@@ -321,8 +321,15 @@ def test_dataset_merges_daily_counts_excludes_personal_and_unrelated_records():
         doc(10, "file", preview_count=99),
         doc(11, "preview_daily", preview_count=99, space_level=None),
         doc(12, "preview_daily", preview_count=99),
+        doc(13, "qa_citation_daily", qa_citation_count=2),
+        doc(14, "qa_citation_daily", qa_citation_count=0),
+        doc(15, "qa_citation_daily", qa_citation_count=4, space_level="personal"),
     ]
-    assert called_file_ids(FakeES(documents=documents), "dataset", list(range(1, 12))) == {1, 2}
+    assert called_file_ids(
+        FakeES(documents=documents),
+        "dataset",
+        [*range(1, 12), 13, 14, 15],
+    ) == {1, 2, 13}
 
 
 def test_verbose_distinguishes_request_start_and_received_response(capsys):

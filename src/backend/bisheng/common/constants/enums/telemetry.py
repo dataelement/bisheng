@@ -92,6 +92,9 @@ class BaseTelemetryTypeEnum(str, Enum):
     # Shougang portal QA success event
     PORTAL_QA = "portal_qa"
 
+    # One knowledge file cited in a portal QA or writing answer. Not a question count.
+    PORTAL_QA_CITATION = "portal_qa_citation"
+
     # Shougang portal document preview/read success event
     PORTAL_DOCUMENT_READ = "portal_document_read"
 

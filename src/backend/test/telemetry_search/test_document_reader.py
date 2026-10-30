@@ -124,6 +124,163 @@ async def test_pages_scope_external_calls_and_exact_zero(monkeypatch):
     assert all(call["index"] == "mid_knowledge_space_content_stat" and "pit" not in call for call in client.calls)
 
 
+async def test_qa_citation_daily_counts_once_and_ignores_zero_or_personal(monkeypatch):
+    rows = [
+        {
+            "file_id": 1,
+            "record_type": "file",
+            "file_type": 1,
+            "tenant_id": 1,
+            "timestamp": 1,
+            "knowledge_identity": "document:1",
+        },
+        {
+            "file_id": 2,
+            "record_type": "file",
+            "file_type": 1,
+            "tenant_id": 1,
+            "timestamp": 1,
+            "knowledge_identity": "document:2",
+        },
+        {
+            "file_id": 21,
+            "record_type": "qa_citation_daily",
+            "qa_citation_count": 3,
+            "space_level": "public",
+            "timestamp": 12,
+        },
+        {
+            "file_id": 22,
+            "record_type": "qa_citation_daily",
+            "qa_citation_count": 0,
+            "space_level": "department",
+            "timestamp": 13,
+        },
+        {
+            "file_id": 23,
+            "record_type": "qa_citation_daily",
+            "qa_citation_count": 4,
+            "space_level": "personal",
+            "timestamp": 14,
+        },
+    ]
+    monkeypatch.setattr(
+        module.KnowledgeStatisticsRepository,
+        "aliases",
+        lambda ids: {1: "document:1", 21: "document:1", 2: "document:2", 22: "document:2", 23: "document:2"},
+    )
+    result = await module.DocumentReader(ES(rows), "mid_knowledge_space_content_stat").load([], include_usage=True)
+    assert result.aggregate([], "total_file_count") == [[2]]
+    assert result.aggregate([], "called_document_count") == [[1]]
+    assert result.called_at == {"document:1": 12000}
+
+
+async def test_citation_outside_current_inventory_is_not_called(monkeypatch):
+    rows = [
+        {
+            "file_id": 1,
+            "record_type": "file",
+            "file_type": 1,
+            "tenant_id": 1,
+            "timestamp": 1,
+            "knowledge_identity": "document:1",
+        },
+        {
+            "file_id": 99,
+            "record_type": "qa_citation_daily",
+            "qa_citation_count": 5,
+            "space_level": "public",
+            "timestamp": 20,
+        },
+    ]
+    monkeypatch.setattr(module.KnowledgeStatisticsRepository, "aliases", lambda ids: {1: "document:1"})
+    result = await module.DocumentReader(ES(rows), "mid_knowledge_space_content_stat").load([], include_usage=True)
+    assert result.aggregate([], "total_file_count") == [[1]]
+    assert result.aggregate([], "called_document_count") == [[0]]
+
+
+async def test_preview_and_citation_of_the_same_document_count_once(monkeypatch):
+    rows = [
+        {
+            "file_id": 1,
+            "record_type": "file",
+            "file_type": 1,
+            "tenant_id": 1,
+            "timestamp": 1,
+            "knowledge_identity": "document:1",
+        },
+        {
+            "file_id": 1,
+            "record_type": "preview_daily",
+            "preview_count": 2,
+            "space_level": "public",
+            "timestamp": 4,
+        },
+        {
+            "file_id": 1,
+            "record_type": "qa_citation_daily",
+            "qa_citation_count": 6,
+            "space_level": "department",
+            "timestamp": 9,
+        },
+    ]
+    monkeypatch.setattr(module.KnowledgeStatisticsRepository, "aliases", lambda ids: {1: "document:1"})
+    result = await module.DocumentReader(ES(rows), "mid_knowledge_space_content_stat").load([], include_usage=True)
+    assert result.aggregate([], "called_document_count") == [[1]]
+    assert result.called_at == {"document:1": 4000}
+
+
+async def test_dashboard_reader_and_export_select_the_same_called_files(monkeypatch):
+    from scripts.export_portal_category_usage import called_file_ids
+    from test.scripts.test_export_portal_category_usage import FakeES
+
+    daily = [
+        {"file_id": "1", "record_type": "preview_daily", "preview_count": 1, "space_level": "public"},
+        {"file_id": "2", "record_type": "qa_citation_daily", "qa_citation_count": 2, "space_level": "department"},
+        {
+            "file_id": "3",
+            "record_type": "qa_citation_daily",
+            "qa_citation_count": 1,
+            "preview_count": 4,
+            "space_level": "team",
+        },
+        {"file_id": "3", "record_type": "preview_daily", "preview_count": 4, "space_level": "team"},
+        {"file_id": "4", "record_type": "qa_citation_daily", "qa_citation_count": 0, "space_level": "public"},
+        {"file_id": "5", "record_type": "qa_citation_daily", "qa_citation_count": 3, "space_level": "personal"},
+        {"file_id": "6", "record_type": "download_daily", "download_count": 1, "space_level": "team_ks"},
+    ]
+    exported = called_file_ids(FakeES(documents=daily), "dataset", [1, 2, 3, 4, 5, 6])
+    inventory = [
+        {
+            "file_id": file_id,
+            "record_type": "file",
+            "file_type": 1,
+            "tenant_id": 1,
+            "timestamp": 1,
+            "knowledge_identity": f"document:{file_id}",
+        }
+        for file_id in range(1, 7)
+    ]
+    usage = []
+    for row in daily:
+        copied = dict(row)
+        copied["file_id"] = int(row["file_id"])
+        copied["timestamp"] = 3
+        usage.append(copied)
+    monkeypatch.setattr(
+        module.KnowledgeStatisticsRepository,
+        "aliases",
+        lambda ids: {file_id: f"document:{file_id}" for file_id in range(1, 7)},
+    )
+    result = await module.DocumentReader(ES([*inventory, *usage]), "mid_knowledge_space_content_stat").load(
+        [],
+        include_usage=True,
+    )
+    called_identities = {identity for identity, _ in result.called_at.items()}
+    assert exported == {1, 2, 3, 6}
+    assert called_identities == {f"document:{file_id}" for file_id in exported}
+
+
 @pytest.mark.parametrize("response", [{"timed_out": True}, {"terminated_early": True}, {"_shards": {"failed": 1}}])
 async def test_partial_responses_are_errors(response):
     client = type("ES", (), {"search": AsyncMock(return_value=response)})()

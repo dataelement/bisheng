@@ -2,7 +2,7 @@ import asyncio
 import json
 import time
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from uuid import uuid4
 
 from fastapi import Request
@@ -14,16 +14,15 @@ from loguru import logger
 
 from bisheng.api.services import knowledge_imp
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.attachment import (AttachmentQuestionError, attachment_context, attachment_error)
+from bisheng.common.errcode.attachment import AttachmentQuestionError, attachment_context, attachment_error
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.common.errcode.workstation import (
     ConversationNotFoundError,
     DepartmentDailyChatConcurrentLimitError,
 )
-from bisheng.department.domain.services.department_flow_service import DepartmentFlowService
 from bisheng.common.schemas.telemetry.event_data_schema import (
     ApplicationAliveEventData,
     ApplicationProcessEventData,
@@ -38,21 +37,23 @@ from bisheng.common.stream_errors import (
 )
 from bisheng.core.cache.utils import async_file_download
 from bisheng.core.logger import trace_id_var
-from bisheng.database.models.flow import FlowType
 from bisheng.database.models.answer_failure import tool_output_error
+from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
+from bisheng.department.domain.services.department_flow_service import DepartmentFlowService
 from bisheng.llm.domain import LLMService
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.tool.domain.services.executor import ToolExecutor
+
 from .chat_helpers import (
+    # insert a placeholder entry in the sidebar conversation list
+    # the moment a new chat is created (title updated later via
+    # gen_title). Must be emitted *before* any category event.
+    _sse_resp,  # v2.5 Agent-mode SSE builder
     gen_title,
     read_image_as_data_url,
     user_message,  # legacy `{created: true}` envelope — tells the client to
-                   # insert a placeholder entry in the sidebar conversation list
-                   # the moment a new chat is created (title updated later via
-                   # gen_title). Must be emitted *before* any category event.
-    _sse_resp,  # v2.5 Agent-mode SSE builder
 )
 from .constants import VISUAL_MODEL_FILE_TYPES
 from .workstation_service import WorkStationService
@@ -65,8 +66,8 @@ async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: 
 
     file_rule = FileProcessBase(
         knowledge_id=0,
-        separator=['\n\n', '\n'],
-        separator_rule=['after', 'after'],
+        separator=["\n\n", "\n"],
+        separator_rule=["after", "after"],
         chunk_size=1000,
         chunk_overlap=0,
     )
@@ -87,10 +88,17 @@ async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: 
     if state is not None and not any(text.strip() for text in raw_texts):
         if state.get("parsed_text_nonempty") is False:
             state = {**state, "provider": state.get("parser_provider", state["provider"]), "stage": "parse"}
-        raise AttachmentQuestionError([attachment_error(state, code="PARSER_CONTENT_EMPTY",
-            reason="未提取到可用于问答的文本，该附件未用于回答。",
-            suggestion="请检查文件正文或更换文件后重新上传。")])
-    return knowledge_imp.KnowledgeUtils.chunk2promt(''.join(raw_texts), {'source': file_name})
+        raise AttachmentQuestionError(
+            [
+                attachment_error(
+                    state,
+                    code="PARSER_CONTENT_EMPTY",
+                    reason="未提取到可用于问答的文本，该附件未用于回答。",
+                    suggestion="请检查文件正文或更换文件后重新上传。",
+                )
+            ]
+        )
+    return knowledge_imp.KnowledgeUtils.chunk2promt("".join(raw_texts), {"source": file_name})
 
 
 async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
@@ -110,7 +118,7 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
         await MessageSessionDao.async_insert_one(
             MessageSession(
                 chat_id=conversation_id,
-                name='New Chat',
+                name="New Chat",
                 flow_type=FlowType.WORKSTATION.value,
                 user_id=login_user.user_id,
             )
@@ -122,7 +130,7 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
             event_data=NewMessageSessionEventData(
                 session_id=conversation_id,
                 app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-                source='platform',
+                source="platform",
                 app_name=ApplicationTypeEnum.DAILY_CHAT.value,
                 app_type=ApplicationTypeEnum.DAILY_CHAT,
             ),
@@ -143,14 +151,14 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
             ChatMessage(
                 user_id=login_user.user_id,
                 chat_id=conversation_id,
-                flow_id='',
-                type='human',
+                flow_id="",
+                type="human",
                 is_bot=False,
-                sender='User',
+                sender="User",
                 files=json.dumps(data.files) if data.files else None,
-                extra=json.dumps({'parentMessageId': data.parentMessageId}),
+                extra=json.dumps({"parentMessageId": data.parentMessageId}),
                 message=data.text,
-                category='question',
+                category="question",
                 source=0,
             )
         )
@@ -179,11 +187,14 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
 #   - _prepare_tools: Entry point function; integrates tool_payloads + knowledge_bases_info -> List[BaseTool].
 # --------------------------------------------------------------------------- #
 
-from pydantic import BaseModel as PydanticBaseModel, Field as PydanticField, SkipValidation
+from typing import Annotated
 
 from langchain_core.tools import ArgsSchema, BaseTool, StructuredTool
-from typing_extensions import Annotated
+from pydantic import BaseModel as PydanticBaseModel
+from pydantic import Field as PydanticField
+from pydantic import SkipValidation
 
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
     CITATION_PROMPT_RULES,
     CitationRegistryCollector,
@@ -193,10 +204,10 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
     collect_web_citation_registry_items,
+    portal_answer_called_file_ids,
     save_message_citations,
     select_registry_items_for_persistence,
 )
-from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
@@ -213,7 +224,7 @@ class DailyChatCitationToolWrapper(BaseTool):
 
     name: str
     description: str
-    args_schema: Annotated[Optional[ArgsSchema], SkipValidation()] = PydanticField(default=None)
+    args_schema: Annotated[ArgsSchema | None, SkipValidation()] = PydanticField(default=None)
     tool: BaseTool
     citation_collector: CitationRegistryCollector = PydanticField(exclude=True)
 
@@ -228,10 +239,10 @@ class DailyChatCitationToolWrapper(BaseTool):
         )
 
     def _is_web_search_tool(self) -> bool:
-        return self.tool.name == 'web_search' or getattr(self.tool, 'tool_name', None) == 'web_search'
+        return self.tool.name == "web_search" or getattr(self.tool, "tool_name", None) == "web_search"
 
     def _has_knowledge_rag_tool(self) -> bool:
-        return hasattr(self.tool, 'knowledge_retriever_tool')
+        return hasattr(self.tool, "knowledge_retriever_tool")
 
     def _append_web_citation(self, output: Any) -> Any:
         if not isinstance(output, str):
@@ -270,18 +281,18 @@ class DailyChatCitationToolWrapper(BaseTool):
         source_documents = list(retrieval_result or [])
         source_documents = annotate_rag_documents_with_citations(source_documents)
         self._extend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
-        inputs = {'context': source_documents}
-        if 'question' in self.tool.chat_prompt.input_variables:
-            inputs['question'] = query
+        inputs = {"context": source_documents}
+        if "question" in self.tool.chat_prompt.input_variables:
+            inputs["question"] = query
         return inputs
 
     async def _abuild_knowledge_inputs(self, query: str, retrieval_result: Any) -> dict:
         source_documents = list(retrieval_result or [])
         source_documents = annotate_rag_documents_with_citations(source_documents)
         await self._aextend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
-        inputs = {'context': source_documents}
-        if 'question' in self.tool.chat_prompt.input_variables:
-            inputs['question'] = query
+        inputs = {"context": source_documents}
+        if "question" in self.tool.chat_prompt.input_variables:
+            inputs["question"] = query
         return inputs
 
     def _extend_citation_registry_items(self, items: list[CitationRegistryItemSchema]) -> None:
@@ -294,32 +305,32 @@ class DailyChatCitationToolWrapper(BaseTool):
 
     def _run(self, query: str, config=None, **kwargs: Any) -> Any:
         if self._is_web_search_tool():
-            return self._append_web_citation(self.tool.invoke({'query': query}, config=config))
+            return self._append_web_citation(self.tool.invoke({"query": query}, config=config))
         if not self._has_knowledge_rag_tool():
-            return self.tool.invoke({'query': query}, config=config)
+            return self.tool.invoke({"query": query}, config=config)
 
-        retrieval_result = self.tool.knowledge_retriever_tool.invoke({'query': query}, config=config)
+        retrieval_result = self.tool.knowledge_retriever_tool.invoke({"query": query}, config=config)
         llm_inputs = self._build_knowledge_inputs(query, retrieval_result)
         qa_chain = create_stuff_documents_chain(llm=self.tool.llm, prompt=self._build_knowledge_prompt())
         return qa_chain.invoke(llm_inputs, config=config)
 
     async def _arun(self, query: str, config=None, **kwargs: Any) -> Any:
         if self._is_web_search_tool():
-            return await self._aappend_web_citation(await self.tool.ainvoke({'query': query}, config=config))
+            return await self._aappend_web_citation(await self.tool.ainvoke({"query": query}, config=config))
         if not self._has_knowledge_rag_tool():
-            return await self.tool.ainvoke({'query': query}, config=config)
+            return await self.tool.ainvoke({"query": query}, config=config)
 
-        retrieval_result = await self.tool.knowledge_retriever_tool.ainvoke({'query': query}, config=config)
+        retrieval_result = await self.tool.knowledge_retriever_tool.ainvoke({"query": query}, config=config)
         llm_inputs = await self._abuild_knowledge_inputs(query, retrieval_result)
         qa_chain = create_stuff_documents_chain(llm=self.tool.llm, prompt=self._build_knowledge_prompt())
         return await qa_chain.ainvoke(llm_inputs, config=config)
 
 
 def _wrap_daily_chat_citation_tool(
-        tool: BaseTool,
-        citation_collector: CitationRegistryCollector,
+    tool: BaseTool,
+    citation_collector: CitationRegistryCollector,
 ) -> BaseTool:
-    if tool.name == 'web_search' or hasattr(tool, 'knowledge_retriever_tool'):
+    if tool.name == "web_search" or hasattr(tool, "knowledge_retriever_tool"):
         return DailyChatCitationToolWrapper.wrap(tool, citation_collector)
     return tool
 
@@ -334,11 +345,12 @@ async def _get_agent_max_iterations() -> int:
     """
     try:
         from bisheng.common.services.config_service import settings as bisheng_settings
+
         conf = await bisheng_settings.aget_daily_chat_conf()
         n = int(conf.agent_max_iterations)
         return n if n > 0 else DEFAULT_AGENT_MAX_ITERATIONS
     except Exception as exc:
-        logger.warning(f'Failed to read agent_max_iterations, falling back to 50: {exc}')
+        logger.warning(f"Failed to read agent_max_iterations, falling back to 50: {exc}")
         return DEFAULT_AGENT_MAX_ITERATIONS
 
 
@@ -356,14 +368,12 @@ async def _get_history_max_tokens() -> int:
     """
     try:
         from bisheng.common.services.config_service import settings as bisheng_settings
+
         conf = await bisheng_settings.aget_daily_chat_conf()
         n = int(conf.history_max_tokens)
         return n if n > 0 else DEFAULT_HISTORY_MAX_TOKENS
     except Exception as exc:
-        logger.warning(
-            f'Failed to read history_max_tokens, falling back to '
-            f'{DEFAULT_HISTORY_MAX_TOKENS}: {exc}'
-        )
+        logger.warning(f"Failed to read history_max_tokens, falling back to {DEFAULT_HISTORY_MAX_TOKENS}: {exc}")
         return DEFAULT_HISTORY_MAX_TOKENS
 
 
@@ -387,11 +397,10 @@ def _count_tokens(text: str) -> int:
     if _HISTORY_TOKENIZER is None:
         try:
             import tiktoken  # already a transitive dep via assistant_base
-            _HISTORY_TOKENIZER = tiktoken.get_encoding('cl100k_base')
+
+            _HISTORY_TOKENIZER = tiktoken.get_encoding("cl100k_base")
         except Exception as exc:
-            logger.warning(
-                f'tiktoken unavailable, falling back to char/2 estimator: {exc}'
-            )
+            logger.warning(f"tiktoken unavailable, falling back to char/2 estimator: {exc}")
             _HISTORY_TOKENIZER = False  # sentinel: never retry
     if _HISTORY_TOKENIZER is False:
         # Rough estimator: ~2 chars per token for Chinese-heavy text.
@@ -403,10 +412,10 @@ def _count_tokens(text: str) -> int:
 
 
 def _build_user_content(
-        question: str,
-        file_context: str = '',
-        knowledge_bases_info: list[dict] | None = None,
-        retrieved_knowledge_context: str = '',
+    question: str,
+    file_context: str = "",
+    knowledge_bases_info: list[dict] | None = None,
+    retrieved_knowledge_context: str = "",
 ) -> str:
     """组装发送给模型的用户消息内容。
 
@@ -419,40 +428,33 @@ def _build_user_content(
     has_retrieved_kb = bool(retrieved_knowledge_context)
 
     if not has_file and not has_retrieved_kb:
-        logger.info(
-            f'[build_user_content] scenario=plain question_len={len(question)}'
-            f' preview={question[:120]!r}'
-        )
+        logger.info(f"[build_user_content] scenario=plain question_len={len(question)} preview={question[:120]!r}")
         return question
 
     parts: list[str] = []
     if has_retrieved_kb:
-        parts.append(
-            '<retrieved_knowledge_context>\n'
-            f'{retrieved_knowledge_context}\n'
-            '</retrieved_knowledge_context>'
-        )
+        parts.append(f"<retrieved_knowledge_context>\n{retrieved_knowledge_context}\n</retrieved_knowledge_context>")
     if has_file:
-        parts.append(f'<uploaded_file_content>\n{file_context}\n</uploaded_file_content>')
-    parts.append(f'<user_question>\n{question}\n</user_question>')
-    final_content = '\n\n'.join(parts)
+        parts.append(f"<uploaded_file_content>\n{file_context}\n</uploaded_file_content>")
+    parts.append(f"<user_question>\n{question}\n</user_question>")
+    final_content = "\n\n".join(parts)
 
     # 调试日志用于复现实际发送给模型的提示词。
     scenario_parts = []
     if has_retrieved_kb:
-        scenario_parts.append('retrieved')
+        scenario_parts.append("retrieved")
     if has_file:
-        scenario_parts.append('file')
-    scenario = '+'.join(scenario_parts) or 'plain'
+        scenario_parts.append("file")
+    scenario = "+".join(scenario_parts) or "plain"
     logger.info(
-        f'[build_user_content] scenario={scenario}'
-        f' kb_count={len(knowledge_bases_info or [])}'
-        f' file_context_len={len(file_context or "")}'
-        f' retrieved_knowledge_context_len={len(retrieved_knowledge_context or "")}'
-        f' question_len={len(question)}'
-        f' final_len={len(final_content)}'
+        f"[build_user_content] scenario={scenario}"
+        f" kb_count={len(knowledge_bases_info or [])}"
+        f" file_context_len={len(file_context or '')}"
+        f" retrieved_knowledge_context_len={len(retrieved_knowledge_context or '')}"
+        f" question_len={len(question)}"
+        f" final_len={len(final_content)}"
     )
-    logger.info(f'[build_user_content] final_content=\n{final_content}')
+    logger.info(f"[build_user_content] final_content=\n{final_content}")
     return final_content
 
 
@@ -473,14 +475,14 @@ def _parse_tool_results(raw_output, tool_name: str):
         try:
             return json.loads(s)
         except (json.JSONDecodeError, ValueError):
-            return [{'text': raw_output}]
-    content = getattr(raw_output, 'content', None)
+            return [{"text": raw_output}]
+    content = getattr(raw_output, "content", None)
     if content is not None and content is not raw_output:
         return _parse_tool_results(content, tool_name)
-    return [{'text': str(raw_output)}]
+    return [{"text": str(raw_output)}]
 
 
-_WEB_SEARCH_TOOL_NAMES = {'web_search', 'search_web', 'bing_search', 'tavily_search'}
+_WEB_SEARCH_TOOL_NAMES = {"web_search", "search_web", "bing_search", "tavily_search"}
 
 
 def _build_tool_meta(tool: BaseTool) -> dict:
@@ -491,17 +493,17 @@ def _build_tool_meta(tool: BaseTool) -> dict:
     the client maps known keys (search_knowledge_bases, web_search) to
     translated labels and falls back to tool.name for everything else.
     """
-    name = tool.name or ''
+    name = tool.name or ""
     lname = name.lower()
-    if name == 'search_knowledge_bases':
-        tool_type = 'knowledge'
-    elif lname in _WEB_SEARCH_TOOL_NAMES or 'web_search' in lname:
-        tool_type = 'web'
+    if name == "search_knowledge_bases":
+        tool_type = "knowledge"
+    elif lname in _WEB_SEARCH_TOOL_NAMES or "web_search" in lname:
+        tool_type = "web"
     else:
-        tool_type = 'tool'
+        tool_type = "tool"
     return {
-        'display_name': name,
-        'tool_type': tool_type,
+        "display_name": name,
+        "tool_type": tool_type,
     }
 
 
@@ -512,10 +514,10 @@ async def _build_web_search_tool(user_id: int, tool_id: int | None = None) -> tu
     """
     try:
         if tool_id is None:
-            web_search_info = GptsToolsDao.get_tool_by_tool_key('web_search')
+            web_search_info = GptsToolsDao.get_tool_by_tool_key("web_search")
             if not web_search_info:
-                msg = '联网搜索工具未注册到 GptsTools'
-                logger.warning(f'{msg}, skipping.')
+                msg = "联网搜索工具未注册到 GptsTools"
+                logger.warning(f"{msg}, skipping.")
                 return None, msg
             tool_id = web_search_info.id
         t = await ToolExecutor.init_by_tool_id(
@@ -529,18 +531,18 @@ async def _build_web_search_tool(user_id: int, tool_id: int | None = None) -> tu
     except Exception as exc:
         err = str(exc)
         # Typical symptom for fresh installs: admin hasn't picked a provider.
-        if 'requires some parameters' in err and 'config' in err:
+        if "requires some parameters" in err and "config" in err:
             err = '联网搜索未配置：请在平台管理的"内置工具 → 联网搜索"设置服务商（Bing/Tavily/…）及 API Key'
-        logger.warning(f'Failed to initialise web_search tool: {err}')
+        logger.warning(f"Failed to initialise web_search tool: {err}")
         return None, err
 
 
 async def _build_knowledge_search_tool(
-        knowledge_bases_info: list[dict],
-        login_user: UserPayload,
-        max_token: int,
-        citation_collector: CitationRegistryCollector,
-        file_ids_by_space: dict[int, list[int]] | None = None,
+    knowledge_bases_info: list[dict],
+    login_user: UserPayload,
+    max_token: int,
+    citation_collector: CitationRegistryCollector,
+    file_ids_by_space: dict[int, list[int]] | None = None,
 ) -> StructuredTool | None:
     """StructuredTool wrapper around WorkStationService.queryChunksFromDB.
 
@@ -559,104 +561,89 @@ async def _build_knowledge_search_tool(
     if not knowledge_bases_info:
         return None
 
-    kb_id_whitelist = [str(kb['id']) for kb in knowledge_bases_info]
+    kb_id_whitelist = [str(kb["id"]) for kb in knowledge_bases_info]
     # Space-type KBs skip auth check in queryChunksFromDB; org-type go
     # through KnowledgeDao.ajudge_knowledge_permission. Preserve the
     # distinction the caller captured in `source` so a single LLM-chosen
     # subset still routes each id through the correct path.
-    space_id_set: set[int] = {
-        int(kb['id']) for kb in knowledge_bases_info
-        if kb.get('source') == 'space'
-    }
+    space_id_set: set[int] = {int(kb["id"]) for kb in knowledge_bases_info if kb.get("source") == "space"}
     # kb_id (str) → display name. Used by _format_chunk to embed the source KB
     # name on every chunk, so the frontend can group/dedupe by KB instead of
     # surfacing one chip per file.
-    kb_name_by_id: dict[str, str] = {
-        str(kb['id']): (kb.get('name') or '') for kb in knowledge_bases_info
-    }
+    kb_name_by_id: dict[str, str] = {str(kb["id"]): (kb.get("name") or "") for kb in knowledge_bases_info}
     desc_lines = []
     for kb in knowledge_bases_info:
-        tags = kb.get('tags') or []
-        tag_hint = f" tags={tags}" if tags else ''
+        tags = kb.get("tags") or []
+        tag_hint = f" tags={tags}" if tags else ""
         desc_lines.append(
-            f"  - id={kb.get('id')} name={kb.get('name', '')}"
-            f" desc={kb.get('description', '') or ''}{tag_hint}"
+            f"  - id={kb.get('id')} name={kb.get('name', '')} desc={kb.get('description', '') or ''}{tag_hint}"
         )
     description = (
-            'Search content in the user-selected knowledge bases. Supports querying '
-            'one or more of the available knowledge bases, with optional per-KB tag '
-            'filtering (tag_match_mode=ANY|ALL). Call this tool when the user '
-            'question can be answered by information in these knowledge bases.\n'
-            'Available knowledge bases (with file-level tags you may filter by):\n'
-            + '\n'.join(desc_lines)
+        "Search content in the user-selected knowledge bases. Supports querying "
+        "one or more of the available knowledge bases, with optional per-KB tag "
+        "filtering (tag_match_mode=ANY|ALL). Call this tool when the user "
+        "question can be answered by information in these knowledge bases.\n"
+        "Available knowledge bases (with file-level tags you may filter by):\n" + "\n".join(desc_lines)
     )
 
     class _KbFilter(PydanticBaseModel):
         knowledge_base_id: str = PydanticField(
-            description='Which KB this filter applies to. Must appear in knowledge_base_ids.',
+            description="Which KB this filter applies to. Must appear in knowledge_base_ids.",
         )
         tags: list[str] = PydanticField(
-            description='Tag names to filter files inside this KB.',
+            description="Tag names to filter files inside this KB.",
         )
         tag_match_mode: str = PydanticField(
-            default='ANY',
-            description='ANY: match any tag; ALL: must carry every tag.',
+            default="ANY",
+            description="ANY: match any tag; ALL: must carry every tag.",
         )
 
     class _Filters(PydanticBaseModel):
         knowledge_base_filters: list[_KbFilter] | None = PydanticField(
             default=None,
-            description='Per-KB tag filters.',
+            description="Per-KB tag filters.",
         )
 
     class _SearchKbArgs(PydanticBaseModel):
         knowledge_base_ids: list[str] = PydanticField(
             default_factory=lambda: list(kb_id_whitelist),
             description=(
-                'Subset of knowledge base IDs (as strings) to search; defaults '
-                'to all available. Must be a subset of the advertised IDs.'
+                "Subset of knowledge base IDs (as strings) to search; defaults "
+                "to all available. Must be a subset of the advertised IDs."
             ),
         )
         query: str = PydanticField(
-            description='Search query in natural language — typically derived from the user question.',
+            description="Search query in natural language — typically derived from the user question.",
         )
         filters: _Filters | None = PydanticField(
             default=None,
-            description='Optional search filters (per-KB tag filters).',
+            description="Optional search filters (per-KB tag filters).",
         )
 
     def _format_chunk(doc) -> str:
-        meta = getattr(doc, 'metadata', {}) or {}
-        doc_id = meta.get('document_id') or ''
-        chunk_idx = meta.get('chunk_index', '')
-        chunk_id = (
-                meta.get('chunk_id')
-                or (f'{doc_id}-{chunk_idx}' if doc_id != '' else str(chunk_idx))
-        )
-        file_title = (
-                meta.get('document_name')
-                or meta.get('source')
-                or meta.get('file_name')
-                or ''
-        )
-        file_abstract = meta.get('file_abstract') or meta.get('abstract') or ''
-        content = (getattr(doc, 'page_content', '') or '').strip()
-        kb_id_raw = meta.get('knowledge_id') or meta.get('kb_id') or ''
-        kb_id = str(kb_id_raw) if kb_id_raw not in (None, '') else ''
-        kb_name = kb_name_by_id.get(kb_id, '')
+        meta = getattr(doc, "metadata", {}) or {}
+        doc_id = meta.get("document_id") or ""
+        chunk_idx = meta.get("chunk_index", "")
+        chunk_id = meta.get("chunk_id") or (f"{doc_id}-{chunk_idx}" if doc_id != "" else str(chunk_idx))
+        file_title = meta.get("document_name") or meta.get("source") or meta.get("file_name") or ""
+        file_abstract = meta.get("file_abstract") or meta.get("abstract") or ""
+        content = (getattr(doc, "page_content", "") or "").strip()
+        kb_id_raw = meta.get("knowledge_id") or meta.get("kb_id") or ""
+        kb_id = str(kb_id_raw) if kb_id_raw not in (None, "") else ""
+        kb_name = kb_name_by_id.get(kb_id, "")
         return (
-            '{'
-            f'<knowledge_base_id>{kb_id}</knowledge_base_id>\n'
-            f'<knowledge_base_name>{kb_name}</knowledge_base_name>\n'
-            f'<chunk_id>{chunk_id}</chunk_id>\n'
-            f'<file_title>{file_title}</file_title>\n'
-            f'<file_abstract>{file_abstract}</file_abstract>\n'
-            f'<paragraph_content>{content}</paragraph_content>'
-            '}'
+            "{"
+            f"<knowledge_base_id>{kb_id}</knowledge_base_id>\n"
+            f"<knowledge_base_name>{kb_name}</knowledge_base_name>\n"
+            f"<chunk_id>{chunk_id}</chunk_id>\n"
+            f"<file_title>{file_title}</file_title>\n"
+            f"<file_abstract>{file_abstract}</file_abstract>\n"
+            f"<paragraph_content>{content}</paragraph_content>"
+            "}"
         )
 
     async def _resolve_tag_filter_file_ids(
-            kb_filters: list[_KbFilter],
+        kb_filters: list[_KbFilter],
     ) -> dict[int, set[int]] | None:
         """Resolve {kb_id: allowed_file_ids_set} from tag-name filters.
 
@@ -666,11 +653,11 @@ async def _build_knowledge_search_tool(
         if not kb_filters:
             return {}
         try:
-            from bisheng.database.models.tag import TagDao
             from bisheng.database.models.group_resource import ResourceTypeEnum
+            from bisheng.database.models.tag import TagDao
             from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
         except Exception as exc:
-            logger.warning(f'[search_kb] tag-filter unavailable: {exc}')
+            logger.warning(f"[search_kb] tag-filter unavailable: {exc}")
             return {}
 
         allowed: dict[int, set[int]] = {}
@@ -687,7 +674,9 @@ async def _build_knowledge_search_tool(
             # name against all tags and intersect with the KB's file set.
             try:
                 files = await KnowledgeFileDao.aget_file_by_filters(
-                    knowledge_id=kb_id, page=1, page_size=10000,
+                    knowledge_id=kb_id,
+                    page=1,
+                    page_size=10000,
                 )
             except Exception:
                 files = []
@@ -699,20 +688,17 @@ async def _build_knowledge_search_tool(
             # KNOWLEDGE_FILE. get_tags_by_resource is strict on resource_type,
             # so route per source — otherwise the LLM's tag filter silently
             # returns zero files for org KBs.
-            resource_type = (
-                ResourceTypeEnum.SPACE_FILE
-                if kb_id in space_id_set
-                else ResourceTypeEnum.KNOWLEDGE_FILE
-            )
+            resource_type = ResourceTypeEnum.SPACE_FILE if kb_id in space_id_set else ResourceTypeEnum.KNOWLEDGE_FILE
             tag_map = TagDao.get_tags_by_resource(
-                resource_type, kb_file_ids,
+                resource_type,
+                kb_file_ids,
             )
             wanted = set(tag_names)
-            mode = (f.tag_match_mode or 'ANY').upper()
+            mode = (f.tag_match_mode or "ANY").upper()
             matching: set[int] = set()
             for fid, tags in tag_map.items():
                 names = {t.name for t in tags if t.name}
-                if mode == 'ALL':
+                if mode == "ALL":
                     if wanted.issubset(names):
                         try:
                             matching.add(int(fid))
@@ -728,16 +714,16 @@ async def _build_knowledge_search_tool(
         return allowed
 
     async def _search(
-            knowledge_base_ids: list[str],
-            query: str,
-            filters: _Filters | None = None,
+        knowledge_base_ids: list[str],
+        query: str,
+        filters: _Filters | None = None,
     ) -> str:
         from bisheng.api.v1.schema.chat_schema import UseKnowledgeBaseParam
 
         logger.info(
-            f'[search_kb] invoke user={login_user.user_id}'
-            f' kb_ids={knowledge_base_ids} query={query!r}'
-            f' filters={filters.model_dump() if filters else None}'
+            f"[search_kb] invoke user={login_user.user_id}"
+            f" kb_ids={knowledge_base_ids} query={query!r}"
+            f" filters={filters.model_dump() if filters else None}"
         )
 
         allowed = set(kb_id_whitelist)
@@ -750,9 +736,7 @@ async def _build_knowledge_search_tool(
                     continue
         if not kb_ids_int:
             kb_ids_int = [int(k) for k in kb_id_whitelist]
-            logger.info(
-                f'[search_kb] hallucinated kb_ids; falling back to whitelist={kb_ids_int}'
-            )
+            logger.info(f"[search_kb] hallucinated kb_ids; falling back to whitelist={kb_ids_int}")
 
         # Resolve tag filters into {kb_id: allowed_file_ids}. Applied as a
         # post-retrieval filter on the docs returned by queryChunksFromDB so
@@ -762,7 +746,7 @@ async def _build_knowledge_search_tool(
                 (filters.knowledge_base_filters if filters else None) or [],
             )
         except Exception as exc:
-            logger.warning(f'[search_kb] tag resolution failed: {exc}')
+            logger.warning(f"[search_kb] tag resolution failed: {exc}")
             file_filter = {}
 
         # Split back into the two buckets so queryChunksFromDB picks the
@@ -782,16 +766,17 @@ async def _build_knowledge_search_tool(
                 file_ids_by_space=file_ids_by_space,
             )
         except Exception as exc:
-            logger.exception(f'[search_kb] queryChunksFromDB failed: {exc}')
+            logger.exception(f"[search_kb] queryChunksFromDB failed: {exc}")
             return json.dumps([], ensure_ascii=False)
 
         docs = list(finally_docs or [])
         if file_filter:
+
             def _doc_allowed(doc) -> bool:
-                meta = getattr(doc, 'metadata', {}) or {}
+                meta = getattr(doc, "metadata", {}) or {}
                 try:
-                    kb_id = int(meta.get('knowledge_id') or meta.get('kb_id') or 0)
-                    file_id = int(meta.get('document_id') or meta.get('file_id') or 0)
+                    kb_id = int(meta.get("knowledge_id") or meta.get("kb_id") or 0)
+                    file_id = int(meta.get("document_id") or meta.get("file_id") or 0)
                 except (TypeError, ValueError):
                     return True
                 if kb_id not in file_filter:
@@ -801,9 +786,9 @@ async def _build_knowledge_search_tool(
             pre = len(docs)
             docs = [d for d in docs if _doc_allowed(d)]
             logger.info(
-                f'[search_kb] tag-filter applied docs={pre}->{len(docs)}'
-                f' allow_map={{kb: [n_files]}}='
-                f'{ {k: len(v) for k, v in file_filter.items()} }'
+                f"[search_kb] tag-filter applied docs={pre}->{len(docs)}"
+                f" allow_map={{kb: [n_files]}}="
+                f"{ {k: len(v) for k, v in file_filter.items()} }"
             )
 
         docs = annotate_rag_documents_with_citations(docs)
@@ -817,30 +802,30 @@ async def _build_knowledge_search_tool(
         # chip in an error state with the error message, so users see which
         # KB failed and why instead of the tool silently dropping them.
         for f in failures or []:
-            kb_name = f.get('name') or ''
+            kb_name = f.get("name") or ""
             if not kb_name:
                 # fall back to the name we resolved earlier
-                kb_name = kb_name_by_id.get(str(f.get('id', '')), '')
-            err_text = str(f.get('error') or '').replace('</retrieval_error>', '')
+                kb_name = kb_name_by_id.get(str(f.get("id", "")), "")
+            err_text = str(f.get("error") or "").replace("</retrieval_error>", "")
             results.append(
-                '{'
-                f'<knowledge_base_id>{f.get("id", "")}</knowledge_base_id>\n'
-                f'<knowledge_base_name>{kb_name}</knowledge_base_name>\n'
-                f'<retrieval_error>{err_text}</retrieval_error>'
-                '}'
+                "{"
+                f"<knowledge_base_id>{f.get('id', '')}</knowledge_base_id>\n"
+                f"<knowledge_base_name>{kb_name}</knowledge_base_name>\n"
+                f"<retrieval_error>{err_text}</retrieval_error>"
+                "}"
             )
 
         logger.info(
-            f'[search_kb] returning {len(results)} chunks'
-            f' (ok={len(results) - len(failures or [])} failed={len(failures or [])})'
-            f' total_chars={sum(len(r) for r in results)}'
+            f"[search_kb] returning {len(results)} chunks"
+            f" (ok={len(results) - len(failures or [])} failed={len(failures or [])})"
+            f" total_chars={sum(len(r) for r in results)}"
         )
         return json.dumps(results, ensure_ascii=False)
 
     return StructuredTool.from_function(
         func=None,
         coroutine=_search,
-        name='search_knowledge_bases',
+        name="search_knowledge_bases",
         description=description,
         args_schema=_SearchKbArgs,
     )
@@ -853,14 +838,14 @@ def _kb_field(kb, field: str, default=None):
 
 
 def _is_knowledge_space_kb(kb) -> bool:
-    kb_type = _kb_field(kb, 'type')
+    kb_type = _kb_field(kb, "type")
     if kb_type is not None:
-        raw_type = getattr(kb_type, 'value', kb_type)
+        raw_type = getattr(kb_type, "value", kb_type)
         try:
             return int(raw_type) == KnowledgeTypeEnum.SPACE.value
         except (TypeError, ValueError):
-            return str(raw_type).lower() == 'space'
-    return _kb_field(kb, 'source') == 'space'
+            return str(raw_type).lower() == "space"
+    return _kb_field(kb, "source") == "space"
 
 
 def _split_selected_knowledge_ids(knowledge_bases_info: list[dict]) -> tuple[list[int], list[int]]:
@@ -868,7 +853,7 @@ def _split_selected_knowledge_ids(knowledge_bases_info: list[dict]) -> tuple[lis
     organization_ids: list[int] = []
     for kb in knowledge_bases_info or []:
         try:
-            kb_id = int(kb.get('id'))
+            kb_id = int(kb.get("id"))
         except (TypeError, ValueError):
             continue
         if _is_knowledge_space_kb(kb):
@@ -891,12 +876,12 @@ def _join_retrieval_blocks_with_limit(blocks: list[str], max_chars: int) -> str:
     except (TypeError, ValueError):
         content_limit = 0
     if content_limit <= 0:
-        return ''
+        return ""
 
     selected: list[str] = []
     used_chars = 0
     for block in blocks:
-        text = str(block or '')
+        text = str(block or "")
         if not text:
             continue
         separator_chars = 1 if selected else 0
@@ -907,7 +892,7 @@ def _join_retrieval_blocks_with_limit(blocks: list[str], max_chars: int) -> str:
         if not selected:
             selected.append(text[:content_limit])
         break
-    return '\n'.join(selected)
+    return "\n".join(selected)
 
 
 async def _retrieve_selected_knowledge_context(
@@ -925,17 +910,17 @@ async def _retrieve_selected_knowledge_context(
     部分 OpenAI 兼容模型服务会把工具调用 JSON 当作普通文本输出。
     """
     if not knowledge_bases_info:
-        return ''
+        return ""
     # None means unrestricted retrieval; an empty mapping is an explicit empty scope.
     if file_ids_by_space == {}:
-        logger.info('[pre_retrieve_kb] empty resolved file scope, skip retrieval')
-        return ''
+        logger.info("[pre_retrieve_kb] empty resolved file scope, skip retrieval")
+        return ""
 
     from bisheng.api.v1.schema.chat_schema import UseKnowledgeBaseParam
 
     space_ids, organization_ids = _split_selected_knowledge_ids(knowledge_bases_info)
     if not space_ids and not organization_ids:
-        return ''
+        return ""
 
     formatted_results: list[str] = []
     failures: list[dict] = []
@@ -952,8 +937,8 @@ async def _retrieve_selected_knowledge_context(
             request=request,
         )
     except Exception as exc:
-        logger.exception(f'[pre_retrieve_kb] queryChunksFromDB failed: {exc}')
-        return '知识库检索失败，请稍后重试。'
+        logger.exception(f"[pre_retrieve_kb] queryChunksFromDB failed: {exc}")
+        return "知识库检索失败，请稍后重试。"
 
     docs = list(finally_docs or [])
     if docs:
@@ -967,22 +952,20 @@ async def _retrieve_selected_knowledge_context(
         citation_collector.extend(citation_items)
 
     for failure in failures or []:
-        kb_name = failure.get('name') or failure.get('id') or ''
-        error_text = str(failure.get('error') or '').replace('</retrieval_error>', '')
-        formatted_results.append(
-            f'[knowledge base]:{kb_name}\n[retrieval error]:{error_text}\n'
-        )
+        kb_name = failure.get("name") or failure.get("id") or ""
+        error_text = str(failure.get("error") or "").replace("</retrieval_error>", "")
+        formatted_results.append(f"[knowledge base]:{kb_name}\n[retrieval error]:{error_text}\n")
 
     if not formatted_results:
-        return '没有找到相关内容。'
+        return "没有找到相关内容。"
 
     context = _join_retrieval_blocks_with_limit(formatted_results, max_token)
     if not context:
-        return '没有找到相关内容。'
+        return "没有找到相关内容。"
     logger.info(
-        f'[pre_retrieve_kb] retrieved context chars={len(context)}'
-        f' docs={len(docs)} failures={len(failures or [])}'
-        f' kb_ids={space_ids + organization_ids}'
+        f"[pre_retrieve_kb] retrieved context chars={len(context)}"
+        f" docs={len(docs)} failures={len(failures or [])}"
+        f" kb_ids={space_ids + organization_ids}"
     )
     return context
 
@@ -1001,40 +984,40 @@ async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
     try:
         kbs = await KnowledgeDao.aget_list_by_ids(ids)
     except Exception as exc:
-        logger.warning(f'Failed to load Knowledge rows for {ids}: {exc}')
+        logger.warning(f"Failed to load Knowledge rows for {ids}: {exc}")
         return []
     actual_space_id_set = {int(kb.id) for kb in kbs if _is_knowledge_space_kb(kb)}
 
     resolved = [
         {
-            'id': kb.id,
-            'type': kb.type,
-            'source': 'space' if int(kb.id) in actual_space_id_set else 'organization',
+            "id": kb.id,
+            "type": kb.type,
+            "source": "space" if int(kb.id) in actual_space_id_set else "organization",
         }
         for kb in kbs
     ]
     logger.info(
-        f'[resolve_user_kb] resolved {len(resolved)} kbs'
-        f' ids={[kb["id"] for kb in resolved]}'
-        f' request_space_ids={list(request_space_id_set)}'
+        f"[resolve_user_kb] resolved {len(resolved)} kbs"
+        f" ids={[kb['id'] for kb in resolved]}"
+        f" request_space_ids={list(request_space_id_set)}"
     )
     return resolved
 
 
 async def _resolve_user_kb_file_filters(
-        request: Request,
-        data: APIChatCompletion,
-        login_user: UserPayload,
+    request: Request,
+    data: APIChatCompletion,
+    login_user: UserPayload,
 ) -> dict[int, list[int]] | None:
     """Resolve explicit file scopes for non-portal workstation requests."""
     ukb = data.use_knowledge_base
-    scope = getattr(ukb, 'knowledge_scope', None) if ukb else None
-    if not scope or scope.mode != 'files':
+    scope = getattr(ukb, "knowledge_scope", None) if ukb else None
+    if not scope or scope.mode != "files":
         return None
     folder_refs = list(scope.folder_refs or [])
     file_refs = list(scope.file_refs or [])
     if not folder_refs and not file_refs:
-        raise ValueError('请选择可用于问答的文件。')
+        raise ValueError("请选择可用于问答的文件。")
 
     service = KnowledgeSpaceService(request, login_user)
     return await service.resolve_qa_scope_file_ids(
@@ -1048,19 +1031,25 @@ async def _unified_portal_context(request, data, login_user, department_access, 
     from bisheng.knowledge.domain.services.portal_qa_retrieval_service import build_portal_qa_plan, retrieve_portal_qa
 
     async def retrieve():
-        plan = await build_portal_qa_plan(request=request, user=login_user,
-            knowledge_base=data.use_knowledge_base, department_access=department_access)
+        plan = await build_portal_qa_plan(
+            request=request,
+            user=login_user,
+            knowledge_base=data.use_knowledge_base,
+            department_access=department_access,
+        )
         if not plan.space_ids:
             from bisheng.knowledge.domain.contracts.qa_retrieval import QaRetrievalResult
-            return '', QaRetrievalResult()
-        documents, result = await retrieve_portal_qa(request=request, user=login_user,
-            plan=plan, query=data.text or '', config=config[0], max_chars=config[1])
+
+            return "", QaRetrievalResult()
+        documents, result = await retrieve_portal_qa(
+            request=request, user=login_user, plan=plan, query=data.text or "", config=config[0], max_chars=config[1]
+        )
         documents = annotate_rag_documents_with_citations(documents)
         blocks, documents = WorkStationService._truncate_ranked_documents_by_chars(documents, config[1])
         citations = collect_rag_citation_registry_items(documents)
         await cache_citation_registry_items(citations)
         collector.extend(citations)
-        return _join_retrieval_blocks_with_limit(blocks, config[1]) or '没有找到相关内容。', result
+        return _join_retrieval_blocks_with_limit(blocks, config[1]) or "没有找到相关内容。", result
 
     # 范围、召回、授权、重排、最终复核共享同一期限。
     try:
@@ -1068,15 +1057,16 @@ async def _unified_portal_context(request, data, login_user, department_access, 
         return await asyncio.wait_for(retrieve(), timeout=remaining)
     except asyncio.TimeoutError as exc:
         from bisheng.knowledge.domain.contracts.qa_retrieval import QaRetrievalError, QaRetrievalErrorKind
-        raise QaRetrievalError(QaRetrievalErrorKind.DEADLINE, 'retrieval budget exhausted') from exc
+
+        raise QaRetrievalError(QaRetrievalErrorKind.DEADLINE, "retrieval budget exhausted") from exc
 
 
 async def _prepare_tools(
-        tool_payloads: list[dict] | None,
-        login_user: UserPayload,
-        ws_config,  # WorkstationConfig; kept untyped to avoid circular import cost
-        citation_collector: CitationRegistryCollector,
-        knowledge_bases_info: list[dict] | None = None,
+    tool_payloads: list[dict] | None,
+    login_user: UserPayload,
+    ws_config,  # WorkstationConfig; kept untyped to avoid circular import cost
+    citation_collector: CitationRegistryCollector,
+    knowledge_bases_info: list[dict] | None = None,
 ) -> tuple[list[BaseTool], list[dict]]:
     """组装传给 LangGraph create_react_agent 的 BaseTool 列表。
 
@@ -1091,15 +1081,15 @@ async def _prepare_tools(
     failures: list[dict] = []
 
     for tp in tool_payloads or []:
-        tool_type = (tp.get('type') if isinstance(tp, dict) else getattr(tp, 'type', None)) or 'tool'
-        if tool_type != 'tool':
+        tool_type = (tp.get("type") if isinstance(tp, dict) else getattr(tp, "type", None)) or "tool"
+        if tool_type != "tool":
             continue
-        tool_key = tp.get('tool_key') if isinstance(tp, dict) else getattr(tp, 'tool_key', None)
-        tool_id = tp.get('id') if isinstance(tp, dict) else getattr(tp, 'id', None)
+        tool_key = tp.get("tool_key") if isinstance(tp, dict) else getattr(tp, "tool_key", None)
+        tool_id = tp.get("id") if isinstance(tp, dict) else getattr(tp, "id", None)
 
         t = None
         err: str | None = None
-        if tool_key == 'web_search':
+        if tool_key == "web_search":
             t, err = await _build_web_search_tool(login_user.user_id, int(tool_id) if tool_id else None)
         elif tool_id:
             try:
@@ -1112,18 +1102,20 @@ async def _prepare_tools(
                 )
             except Exception as exc:
                 err = str(exc)
-                logger.warning(f'Failed to initialise tool id={tool_id} key={tool_key}: {err}')
+                logger.warning(f"Failed to initialise tool id={tool_id} key={tool_key}: {err}")
 
         if t is not None:
             tools.append(_wrap_daily_chat_citation_tool(t, citation_collector))
         elif err:
-            failures.append({
-                'tool_key': tool_key or str(tool_id or ''),
-                'tool_type': 'web' if tool_key == 'web_search' else 'tool',
-                # display_name 由前端 i18n 解析，这里只透传 tool_key 供前端映射。
-                'display_name': tool_key or '',
-                'error': err,
-            })
+            failures.append(
+                {
+                    "tool_key": tool_key or str(tool_id or ""),
+                    "tool_type": "web" if tool_key == "web_search" else "tool",
+                    # display_name 由前端 i18n 解析，这里只透传 tool_key 供前端映射。
+                    "display_name": tool_key or "",
+                    "error": err,
+                }
+            )
 
     return tools, failures
 
@@ -1133,12 +1125,12 @@ async def log_telemetry_events(user_id: str, conversation_id: str, start_time: f
     end_time = time.time()
     duration_ms = int((end_time - start_time) * 1000)
     common_data = {
-        'app_id': ApplicationTypeEnum.DAILY_CHAT.value,
-        'app_name': ApplicationTypeEnum.DAILY_CHAT.value,
-        'app_type': ApplicationTypeEnum.DAILY_CHAT,
-        'chat_id': conversation_id,
-        'start_time': int(start_time),
-        'end_time': int(end_time),
+        "app_id": ApplicationTypeEnum.DAILY_CHAT.value,
+        "app_name": ApplicationTypeEnum.DAILY_CHAT.value,
+        "app_type": ApplicationTypeEnum.DAILY_CHAT,
+        "chat_id": conversation_id,
+        "start_time": int(start_time),
+        "end_time": int(end_time),
     }
     await telemetry_service.log_event(
         user_id=user_id,
@@ -1157,6 +1149,7 @@ async def log_telemetry_events(user_id: str, conversation_id: str, start_time: f
 # =========================================================================== #
 # v2.5 — LangGraph Agent-mode chat completion                                  #
 # =========================================================================== #
+
 
 async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayload):
     """Agent-mode init: creates/fetches the conversation and inserts the user's
@@ -1184,7 +1177,7 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
         await MessageSessionDao.async_insert_one(
             MessageSession(
                 chat_id=conversation_id,
-                name='New Chat',
+                name="New Chat",
                 flow_type=FlowType.WORKSTATION.value,
                 user_id=login_user.user_id,
             )
@@ -1196,7 +1189,7 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
             event_data=NewMessageSessionEventData(
                 session_id=conversation_id,
                 app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-                source='platform',
+                source="platform",
                 app_name=ApplicationTypeEnum.DAILY_CHAT.value,
                 app_type=ApplicationTypeEnum.DAILY_CHAT,
             ),
@@ -1227,17 +1220,17 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
             ChatMessage(
                 user_id=login_user.user_id,
                 chat_id=conversation_id,
-                flow_id='',
-                type='over',
+                flow_id="",
+                type="over",
                 is_bot=False,
-                sender='User',
+                sender="User",
                 files=json.dumps(data.files) if data.files else None,
-                extra='{}',
+                extra="{}",
                 message=json.dumps(
-                    {'query': data.text or '', 'files': data.files or []},
+                    {"query": data.text or "", "files": data.files or []},
                     ensure_ascii=False,
                 ),
-                category='question',
+                category="question",
                 source=0,
             )
         )
@@ -1256,21 +1249,19 @@ async def _process_agent_files_legacy(data: APIChatCompletion, model_info, login
     """Split uploaded files into visual (image base64 data URLs) and doc
     (extracted text chunks concatenated up to maxTokens)."""
     if not data.files:
-        return '', []
+        return "", []
     # Skip entries without a filepath (upload in flight / failed uploads still
     # sometimes reach us). Prevents `NoneType.split` inside async_file_download.
-    valid_files = [f for f in data.files if f and f.get('filepath')]
+    valid_files = [f for f in data.files if f and f.get("filepath")]
     if not valid_files:
-        logger.info(
-            f'[process_agent_files] no files with filepath (received={len(data.files)})'
-        )
-        return '', []
-    download_tasks = [async_file_download(f.get('filepath')) for f in valid_files]
+        logger.info(f"[process_agent_files] no files with filepath (received={len(data.files)})")
+        return "", []
+    download_tasks = [async_file_download(f.get("filepath")) for f in valid_files]
     downloaded_files = await asyncio.gather(*download_tasks)
 
     visual_tasks, doc_tasks = [], []
     for filepath, filename in downloaded_files:
-        ext = filename.split('.')[-1].lower()
+        ext = filename.split(".")[-1].lower()
         if model_info.visual and ext in VISUAL_MODEL_FILE_TYPES:
             visual_tasks.append(read_image_as_data_url(filepath=filepath, filename=filename))
         else:
@@ -1285,51 +1276,85 @@ async def _process_agent_files_legacy(data: APIChatCompletion, model_info, login
         asyncio.gather(*visual_tasks),
         asyncio.gather(*doc_tasks),
     )
-    max_token = getattr(ws_config, 'maxTokens', 15000) or 15000
-    file_context = '\n'.join(doc_results)[:max_token]
+    max_token = getattr(ws_config, "maxTokens", 15000) or 15000
+    file_context = "\n".join(doc_results)[:max_token]
     logger.info(
-        f'[process_agent_files] docs={len(doc_results)} visuals={len(visual_results)}'
-        f' file_context_len={len(file_context)} max_token={max_token}'
+        f"[process_agent_files] docs={len(doc_results)} visuals={len(visual_results)}"
+        f" file_context_len={len(file_context)} max_token={max_token}"
     )
     return file_context, list(visual_results)
 
 
-async def _process_agent_files(data, model_info, login_user, ws_config, *, portal_context=False, attachment_states=None):
+async def _process_agent_files(
+    data, model_info, login_user, ws_config, *, portal_context=False, attachment_states=None
+):
     if not portal_context:
         return await _process_agent_files_legacy(data, model_info, login_user, ws_config)
     states = attachment_states if attachment_states is not None else []
     for item in data.files or []:
-        states.append({**(item if isinstance(item, dict) else {}), "provider": "attachment_reference",
-                       "stage": "parse", "status": "pending"})
+        states.append(
+            {
+                **(item if isinstance(item, dict) else {}),
+                "provider": "attachment_reference",
+                "stage": "parse",
+                "status": "pending",
+            }
+        )
 
     async def process(state):
         token = attachment_context.set(state)
         try:
             state["status"] = "processing"
             if not state.get("filepath"):
-                raise AttachmentQuestionError([attachment_error(state, code="REFERENCE_INVALID",
-                    reason="附件缺少有效文件引用，该附件已跳过。", suggestion="请重新上传附件。")])
+                raise AttachmentQuestionError(
+                    [
+                        attachment_error(
+                            state,
+                            code="REFERENCE_INVALID",
+                            reason="附件缺少有效文件引用，该附件已跳过。",
+                            suggestion="请重新上传附件。",
+                        )
+                    ]
+                )
             state.update(provider="attachment_download", stage="download")
             path, name = await async_file_download(state["filepath"])
             state.update(provider="unknown", stage="parse")
-            if getattr(model_info, "visual", False) and name.rsplit('.', 1)[-1].lower() in VISUAL_MODEL_FILE_TYPES:
+            if getattr(model_info, "visual", False) and name.rsplit(".", 1)[-1].lower() in VISUAL_MODEL_FILE_TYPES:
                 state.update(provider="visual_image", stage="parse")
                 image = await read_image_as_data_url(filepath=path, filename=name)
                 if not image or image.endswith(";base64,"):
-                    raise AttachmentQuestionError([attachment_error(state, code="IMAGE_EMPTY",
-                        reason="图片内容为空，该附件未用于回答。", suggestion="请更换图片后重新上传。")])
+                    raise AttachmentQuestionError(
+                        [
+                            attachment_error(
+                                state,
+                                code="IMAGE_EMPTY",
+                                reason="图片内容为空，该附件未用于回答。",
+                                suggestion="请更换图片后重新上传。",
+                            )
+                        ]
+                    )
                 state["status"] = "success"
                 return "", image
             text = await get_file_content(filepath_local=path, file_name=name, invoke_user_id=login_user.user_id)
             if not text.strip():
-                raise AttachmentQuestionError([attachment_error(state, code="PARSER_CONTENT_EMPTY",
-                    reason="未提取到可用于问答的文本，该附件未用于回答。", suggestion="请检查正文或更换文件。")])
+                raise AttachmentQuestionError(
+                    [
+                        attachment_error(
+                            state,
+                            code="PARSER_CONTENT_EMPTY",
+                            reason="未提取到可用于问答的文本，该附件未用于回答。",
+                            suggestion="请检查正文或更换文件。",
+                        )
+                    ]
+                )
             state["status"] = "success"
             return text, None
         except Exception as exc:
             logger.exception("Portal attachment processing failed")
             state["status"] = "failed"
-            errors = exc.attachment_errors if isinstance(exc, AttachmentQuestionError) else [attachment_error(state, exc)]
+            errors = (
+                exc.attachment_errors if isinstance(exc, AttachmentQuestionError) else [attachment_error(state, exc)]
+            )
             state["errors"] = errors
             return errors
         finally:
@@ -1341,14 +1366,14 @@ async def _process_agent_files(data, model_info, login_user, ws_config, *, porta
         raise AttachmentQuestionError(errors)
     text = "\n".join(result[0] for result in results if result[0])
     images = [result[1] for result in results if result[1]]
-    return text[:getattr(ws_config, 'maxTokens', 15000) or 15000], images
+    return text[: getattr(ws_config, "maxTokens", 15000) or 15000], images
 
 
 def _answer_failure_text(exc: BaseException) -> str:
     lowered = str(exc).lower()
-    if isinstance(exc, (TimeoutError, asyncio.TimeoutError)) or 'timeout' in lowered or 'budget' in lowered:
-        return '回答超时'
-    return '回答失败'
+    if isinstance(exc, (TimeoutError, asyncio.TimeoutError)) or "timeout" in lowered or "budget" in lowered:
+        return "回答超时"
+    return "回答失败"
 
 
 async def _store_answer_failure(chat_id: str | None, user_id: int | None, text: str) -> None:
@@ -1366,27 +1391,27 @@ async def _store_answer_failure(chat_id: str | None, user_id: int | None, text: 
             ChatMessage(
                 user_id=user_id,
                 chat_id=chat_id,
-                flow_id='',
-                type='end',
+                flow_id="",
+                type="end",
                 is_bot=True,
                 message=text,
-                category='answer',
-                extra=json.dumps({'error': True, 'error_msg': text}, ensure_ascii=False),
+                category="answer",
+                extra=json.dumps({"error": True, "error_msg": text}, ensure_ascii=False),
                 source=0,
             )
         )
     except Exception:
         # 失败提示写不进去时, 前面的错误事件仍然要返回给用户.
-        logger.exception('store answer failure failed chat_id={}', chat_id)
+        logger.exception("store answer failure failed chat_id={}", chat_id)
 
 
 async def _agent_stream_chat_completion(
-        request: Request,
-        data: APIChatCompletion,
-        login_user: UserPayload,
-        *,
-        portal_context: bool = False,
-        department_file_view_access_service=None,
+    request: Request,
+    data: APIChatCompletion,
+    login_user: UserPayload,
+    *,
+    portal_context: bool = False,
+    department_file_view_access_service=None,
 ):
     """v2.5 LangGraph ReAct Agent chat completion.
 
@@ -1413,25 +1438,26 @@ async def _agent_stream_chat_completion(
         unified_config = None
         if portal_context:
             from bisheng.common.services.config_service import settings as config_settings
+
             unified_config = (await asyncio.wait_for(config_settings.async_get_knowledge(), 30)).retrieval
-            logger.info('portal_qa_strategy strategy=unified_shared')
+            logger.info("portal_qa_strategy strategy=unified_shared")
         if unified_config is None:
             initialized_chat = await _agent_initialize_chat(data, login_user)
     except (BaseErrorCode, ValueError) as exc:
-        logger.exception('Agent chat setup rejected')
-        stage = 'system' if isinstance(exc, BaseErrorCode) else 'config'
+        logger.exception("Agent chat setup rejected")
+        stage = "system" if isinstance(exc, BaseErrorCode) else "config"
         return StreamingResponse(
             iter([stream_error_sse(exc, stage=stage)]),
-            media_type='text/event-stream',
+            media_type="text/event-stream",
         )
     except Exception as exc:
-        logger.exception(f'Error in agent chat completions setup: {exc}')
+        logger.exception(f"Error in agent chat completions setup: {exc}")
         return StreamingResponse(
             iter([stream_error_sse(exc)]),
-            media_type='text/event-stream',
+            media_type="text/event-stream",
         )
 
-    stream_stage = {'value': 'retrieval', 'had_output': False, 'deadline': None}
+    stream_stage = {"value": "retrieval", "had_output": False, "deadline": None}
     attachment_states = []
 
     async def _agent_event_stream_impl():
@@ -1440,9 +1466,9 @@ async def _agent_stream_chat_completion(
                 initialized_chat if initialized_chat is not None else await _agent_initialize_chat(data, login_user)
             )
             conversation_id = conversation.chat_id
-            stream_stage['conversation_id'] = conversation_id
+            stream_stage["conversation_id"] = conversation_id
         except Exception as exc:
-            yield stream_error_sse(exc, stage='config' if isinstance(exc, ValueError) else 'system')
+            yield stream_error_sse(exc, stage="config" if isinstance(exc, ValueError) else "system")
             return
         # Single ordered event log — one entry per thinking segment or tool
         # call, in arrival order. The frontend renders this array directly;
@@ -1455,7 +1481,7 @@ async def _agent_stream_chat_completion(
         #    'display_name': str, 'tool_type': str, 'args': dict,
         #    'results'?: Any, 'error'?: str | None}
         events: list[dict] = []
-        final_msg = ''
+        final_msg = ""
         # Pointer to the currently-open thinking event (None when the model is
         # emitting answer text or running a tool). Used to stream deltas and
         # finalise `duration_ms` without scanning `events`.
@@ -1465,8 +1491,8 @@ async def _agent_stream_chat_completion(
         # in O(1).
         inflight_tool_idx: dict[str, int] = {}
         error_flag = False
-        error_msg = ''
-        failure_stage = 'system'
+        error_msg = ""
+        failure_stage = "system"
         citation_collector = CitationRegistryCollector()
         retrieval_status = None
 
@@ -1483,64 +1509,77 @@ async def _agent_stream_chat_completion(
             now = time.time()
             ended_ms = int(now * 1000)
             ev = events[current_thinking_idx]
-            started_ms = ev.get('started_at')
+            started_ms = ev.get("started_at")
             if started_ms is not None:
                 duration_ms = max(0, ended_ms - started_ms)
             else:
                 duration_ms = max(0, int((now - (current_thinking_start or now)) * 1000))
-            ev['duration_ms'] = duration_ms
-            ev['ended_at'] = ended_ms
+            ev["duration_ms"] = duration_ms
+            ev["ended_at"] = ended_ms
             current_thinking_idx = None
             current_thinking_start = None
             return duration_ms
 
         # Emit first so the client can add the sidebar placeholder before any
         # streaming content arrives. onCreated hook in useAiChat keys on this.
-        yield user_message(message.id, conversation_id, 'User', data.text or '')
-        yield _sse_resp('processing', 'begin', '', conversation_id)
+        yield user_message(message.id, conversation_id, "User", data.text or "")
+        yield _sse_resp("processing", "begin", "", conversation_id)
         yield _sse_resp(
-            'question', 'over',
-            {'query': data.text or '', 'files': data.files or []},
-            conversation_id, message_id=message.id, is_bot=False,
+            "question",
+            "over",
+            {"query": data.text or "", "files": data.files or []},
+            conversation_id,
+            message_id=message.id,
+            is_bot=False,
         )
 
         try:
             # ---- Step 1: resolve user-selected KBs ----
-            failure_stage = 'retrieval'
+            failure_stage = "retrieval"
             retrieval_deadline = time.monotonic() + unified_config.total_timeout_seconds if unified_config else None
-            stream_stage['deadline'] = retrieval_deadline
+            stream_stage["deadline"] = retrieval_deadline
             if unified_config:
                 yield 'event: retrieval_status\ndata: {"stage":"retrieval","scope_complete":true}\n\n'
                 try:
-                    knowledge_bases_info = await asyncio.wait_for(_resolve_user_kb_selection(data), max(0, retrieval_deadline - time.monotonic()))
+                    knowledge_bases_info = await asyncio.wait_for(
+                        _resolve_user_kb_selection(data), max(0, retrieval_deadline - time.monotonic())
+                    )
                 except asyncio.TimeoutError as exc:
-                    raise RuntimeError('retrieval budget exhausted') from exc
+                    raise RuntimeError("retrieval budget exhausted") from exc
             else:
                 knowledge_bases_info = await _resolve_user_kb_selection(data)
             # Portal requests must never fall back to pre-retrieval expansion.
             if portal_context:
                 from bisheng.knowledge.domain.contracts.errors import SharedStorageContractError, SharedStorageErrorCode
+
                 space_ids, org_ids = _split_selected_knowledge_ids(knowledge_bases_info)
                 if org_ids:
-                    raise ValueError('Portal QA requires shared knowledge spaces')
+                    raise ValueError("Portal QA requires shared knowledge spaces")
                 elif space_ids:
                     from bisheng.knowledge.rag.shared_space_storage import aresolve_space_shared_routing
+
                     async def require_shared_route():
-                        route = await aresolve_space_shared_routing(int(login_user.tenant_id), int(knowledge_bases_info[0]['type']))
+                        route = await aresolve_space_shared_routing(
+                            int(login_user.tenant_id), int(knowledge_bases_info[0]["type"])
+                        )
                         if route is None:
                             raise SharedStorageContractError(
                                 SharedStorageErrorCode.ROUTING_NOT_CONFIGURED,
-                                'Portal QA shared routing is missing', tenant_id=int(login_user.tenant_id),
+                                "Portal QA shared routing is missing",
+                                tenant_id=int(login_user.tenant_id),
                             )
+
                     try:
                         await asyncio.wait_for(require_shared_route(), max(0, retrieval_deadline - time.monotonic()))
                     except asyncio.TimeoutError as exc:
-                        raise RuntimeError('retrieval budget exhausted') from exc
+                        raise RuntimeError("retrieval budget exhausted") from exc
             file_ids_by_space = None
             if not portal_context:
-                stream_stage['deadline'] = None
+                stream_stage["deadline"] = None
                 file_ids_by_space = await _resolve_user_kb_file_filters(
-                    request, data, login_user,
+                    request,
+                    data,
+                    login_user,
                 )
 
             # ---- Step 2: assemble LangChain tools ----
@@ -1557,70 +1596,83 @@ async def _agent_stream_chat_completion(
             # sees *something* (e.g. "联网搜索 失败：未配置服务商") rather than
             # the model silently hallucinating a citation.
             for f in tool_failures:
-                tc_id = f'init_fail_{uuid4().hex[:10]}'
+                tc_id = f"init_fail_{uuid4().hex[:10]}"
                 start_payload = {
-                    'tool_call_id': tc_id,
-                    'tool_name': f['tool_key'],
-                    'display_name': f['display_name'],
-                    'tool_type': f['tool_type'],
-                    'args': {},
+                    "tool_call_id": tc_id,
+                    "tool_name": f["tool_key"],
+                    "display_name": f["display_name"],
+                    "tool_type": f["tool_type"],
+                    "args": {},
                 }
-                yield _sse_resp('agent_tool_call', 'start', start_payload, conversation_id)
+                yield _sse_resp("agent_tool_call", "start", start_payload, conversation_id)
                 now_ms = int(time.time() * 1000)
                 end_payload = {
                     **start_payload,
-                    'results': [],
-                    'error': f['error'],
-                    'started_at': now_ms,
-                    'ended_at': now_ms,
-                    'duration_ms': 0,
+                    "results": [],
+                    "error": f["error"],
+                    "started_at": now_ms,
+                    "ended_at": now_ms,
+                    "duration_ms": 0,
                 }
-                events.append({'type': 'tool_call', **end_payload})
-                yield _sse_resp('agent_tool_call', 'end', end_payload, conversation_id)
+                events.append({"type": "tool_call", **end_payload})
+                yield _sse_resp("agent_tool_call", "end", end_payload, conversation_id)
 
             # ---- Step 3: process uploaded files ----
-            failure_stage = 'document'
-            stream_stage['value'] = 'document'
-            stream_stage['deadline'] = None
+            failure_stage = "document"
+            stream_stage["value"] = "document"
+            stream_stage["deadline"] = None
             document_started = time.monotonic()
             if data.files:
-                logger.info('portal_qa_document_started file_count={}', len(data.files))
+                logger.info("portal_qa_document_started file_count={}", len(data.files))
             file_context, image_bases64 = await _process_agent_files(
-                data, model_info, login_user, ws_config,
-                portal_context=portal_context, attachment_states=attachment_states,
+                data,
+                model_info,
+                login_user,
+                ws_config,
+                portal_context=portal_context,
+                attachment_states=attachment_states,
             )
             document_elapsed = time.monotonic() - document_started
             # 附件处理只受问答总期限约束。保留知识检索的剩余预算。
             if retrieval_deadline is not None:
                 retrieval_deadline += document_elapsed
             if data.files:
-                logger.info('portal_qa_document_completed elapsed_ms={}', int(document_elapsed * 1000))
+                logger.info("portal_qa_document_completed elapsed_ms={}", int(document_elapsed * 1000))
 
             # ---- Step 4: 预检索用户选择的知识库，并组装用户消息 ----
-            failure_stage = 'retrieval'
-            stream_stage['value'] = 'retrieval'
-            stream_stage['deadline'] = retrieval_deadline
+            failure_stage = "retrieval"
+            stream_stage["value"] = "retrieval"
+            stream_stage["deadline"] = retrieval_deadline
             if portal_context:
                 retrieved_knowledge_context, retrieval_result = await _unified_portal_context(
-                    request, data, login_user, department_file_view_access_service,
-                    (unified_config, getattr(ws_config, 'maxTokens', 15000) or 15000), citation_collector, deadline=retrieval_deadline,
+                    request,
+                    data,
+                    login_user,
+                    department_file_view_access_service,
+                    (unified_config, getattr(ws_config, "maxTokens", 15000) or 15000),
+                    citation_collector,
+                    deadline=retrieval_deadline,
                 )
                 retrieval_status = {
-                    'stage': 'model', 'scope_complete': retrieval_result.scope_complete,
-                    'degraded': bool(retrieval_result.degraded_reasons),
+                    "stage": "model",
+                    "scope_complete": retrieval_result.scope_complete,
+                    "degraded": bool(retrieval_result.degraded_reasons),
                 }
-                yield 'event: retrieval_status\ndata: ' + json.dumps(retrieval_status) + '\n\n'
+                yield "event: retrieval_status\ndata: " + json.dumps(retrieval_status) + "\n\n"
             else:
                 retrieved_knowledge_context = await _retrieve_selected_knowledge_context(
-                    question=data.text or '', knowledge_bases_info=knowledge_bases_info,
-                    login_user=login_user, max_token=getattr(ws_config, 'maxTokens', 15000) or 15000,
-                    citation_collector=citation_collector, file_ids_by_space=file_ids_by_space,
+                    question=data.text or "",
+                    knowledge_bases_info=knowledge_bases_info,
+                    login_user=login_user,
+                    max_token=getattr(ws_config, "maxTokens", 15000) or 15000,
+                    citation_collector=citation_collector,
+                    file_ids_by_space=file_ids_by_space,
                     request=request,
                 )
-            stream_stage['value'] = 'model'
-            stream_stage['deadline'] = None
+            stream_stage["value"] = "model"
+            stream_stage["deadline"] = None
             user_text = _build_user_content(
-                question=data.text or '',
+                question=data.text or "",
                 file_context=file_context,
                 knowledge_bases_info=knowledge_bases_info,
                 retrieved_knowledge_context=retrieved_knowledge_context,
@@ -1639,29 +1691,26 @@ async def _agent_stream_chat_completion(
             )[:-1]
 
             if image_bases64:
-                content_payload = [{'type': 'text', 'text': user_text}]
+                content_payload = [{"type": "text", "text": user_text}]
                 for img in image_bases64:
-                    content_payload.append({'type': 'image_url', 'image_url': {'url': img}})
+                    content_payload.append({"type": "image_url", "image_url": {"url": img}})
             else:
                 content_payload = user_text
 
             sys_prompt = None
-            request_system_prompt = str(getattr(data, 'system_prompt', '') or '').strip()
+            request_system_prompt = str(getattr(data, "system_prompt", "") or "").strip()
             raw_system_prompt = request_system_prompt or ws_config.systemPrompt
             if raw_system_prompt:
                 # Use plain `replace` instead of `str.format` — admin prompts can
                 # legitimately contain `{...}` JSON snippets (e.g. a tool-call
                 # schema example) that would otherwise trip KeyError.
                 sys_prompt = raw_system_prompt.replace(
-                    '{cur_date}',
-                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    "{cur_date}",
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 )
-            if knowledge_bases_info or any(
-                    isinstance(tool, DailyChatCitationToolWrapper)
-                    for tool in langchain_tools
-            ):
+            if knowledge_bases_info or any(isinstance(tool, DailyChatCitationToolWrapper) for tool in langchain_tools):
                 sys_prompt = (
-                    f'{sys_prompt}\n\n{DAILY_CHAT_CITATION_PROMPT_RULES}'
+                    f"{sys_prompt}\n\n{DAILY_CHAT_CITATION_PROMPT_RULES}"
                     if sys_prompt
                     else DAILY_CHAT_CITATION_PROMPT_RULES
                 )
@@ -1669,12 +1718,12 @@ async def _agent_stream_chat_completion(
             llm_messages = list(history) + [HumanMessage(content=content_payload)]
 
             logger.info(
-                f'[agent_chat] prepared messages user={login_user.user_id}'
-                f' history_len={len(history)} has_sys_prompt={bool(sys_prompt)}'
-                f' tool_count={len(langchain_tools)}'
-                f' tool_names={[t.name for t in langchain_tools]}'
-                f' visual_count={len(image_bases64)}'
-                f' kb_count={len(knowledge_bases_info or [])}'
+                f"[agent_chat] prepared messages user={login_user.user_id}"
+                f" history_len={len(history)} has_sys_prompt={bool(sys_prompt)}"
+                f" tool_count={len(langchain_tools)}"
+                f" tool_names={[t.name for t in langchain_tools]}"
+                f" visual_count={len(image_bases64)}"
+                f" kb_count={len(knowledge_bases_info or [])}"
             )
 
             # [debug] Dump the exact, UNTRUNCATED payload sent to the LLM to
@@ -1686,52 +1735,54 @@ async def _agent_stream_chat_completion(
             #   export BISHENG_AGENT_DUMP=1   # then restart the backend
             # Accepted truthy values: 1, true, yes, on (case-insensitive).
             import os as _os
-            if _os.environ.get('BISHENG_AGENT_DUMP', '').lower() in ('1', 'true', 'yes', 'on'):
+
+            if _os.environ.get("BISHENG_AGENT_DUMP", "").lower() in ("1", "true", "yes", "on"):
                 try:
                     from bisheng.core.logger import trace_id_var
-                    trace_id = trace_id_var.get() or 'notrace'
+
+                    trace_id = trace_id_var.get() or "notrace"
                 except Exception:
-                    trace_id = 'notrace'
+                    trace_id = "notrace"
 
                 def _serialize_message(m):
-                    content = getattr(m, 'content', '')
+                    content = getattr(m, "content", "")
                     if isinstance(content, list):
                         parts = []
                         for p in content:
-                            if isinstance(p, dict) and p.get('type') == 'image_url':
-                                parts.append({'type': 'image_url', 'image_url': '<base64 omitted>'})
+                            if isinstance(p, dict) and p.get("type") == "image_url":
+                                parts.append({"type": "image_url", "image_url": "<base64 omitted>"})
                             else:
                                 parts.append(p)
                         content_out = parts
                     else:
                         content_out = content
-                    return {'role': type(m).__name__, 'content': content_out}
+                    return {"role": type(m).__name__, "content": content_out}
 
                 dump_payload = {
-                    'trace_id': trace_id,
-                    'user_id': login_user.user_id,
-                    'conversation_id': conversation_id,
-                    'tool_count': len(langchain_tools),
-                    'tool_names': [t.name for t in langchain_tools],
-                    'kb_count': len(knowledge_bases_info or []),
-                    'system_prompt': sys_prompt,
-                    'messages': [_serialize_message(m) for m in llm_messages],
+                    "trace_id": trace_id,
+                    "user_id": login_user.user_id,
+                    "conversation_id": conversation_id,
+                    "tool_count": len(langchain_tools),
+                    "tool_names": [t.name for t in langchain_tools],
+                    "kb_count": len(knowledge_bases_info or []),
+                    "system_prompt": sys_prompt,
+                    "messages": [_serialize_message(m) for m in llm_messages],
                 }
                 try:
-                    _os.makedirs('/tmp/bisheng_agent_dumps', exist_ok=True)
-                    dump_path = f'/tmp/bisheng_agent_dumps/{trace_id}.json'
-                    with open(dump_path, 'w', encoding='utf-8') as fp:
+                    _os.makedirs("/tmp/bisheng_agent_dumps", exist_ok=True)
+                    dump_path = f"/tmp/bisheng_agent_dumps/{trace_id}.json"
+                    with open(dump_path, "w", encoding="utf-8") as fp:
                         json.dump(dump_payload, fp, ensure_ascii=False, indent=2, default=str)
-                    logger.info(f'[agent_chat][dump] wrote full payload -> {dump_path}')
+                    logger.info(f"[agent_chat][dump] wrote full payload -> {dump_path}")
                 except Exception as dump_exc:
-                    logger.warning(f'[agent_chat][dump] failed: {dump_exc}')
+                    logger.warning(f"[agent_chat][dump] failed: {dump_exc}")
 
             # ---- Step 5: execute ----
-            failure_stage = 'model'
-            stream_stage['model_started'] = time.monotonic()
+            failure_stage = "model"
+            stream_stage["model_started"] = time.monotonic()
             if langchain_tools:
-                from langgraph.prebuilt import create_react_agent
                 from langchain_core.runnables import RunnableConfig
+                from langgraph.prebuilt import create_react_agent
 
                 agent = create_react_agent(
                     bisheng_llm,
@@ -1743,205 +1794,220 @@ async def _agent_stream_chat_completion(
                 max_iter = await _get_agent_max_iterations()
 
                 def is_visible_agent_event(ev: dict) -> bool:
-                    event_type = ev.get('event', '')
-                    if event_type == 'on_tool_start':
+                    event_type = ev.get("event", "")
+                    if event_type == "on_tool_start":
                         return True
-                    if event_type != 'on_chat_model_stream':
+                    if event_type != "on_chat_model_stream":
                         return False
-                    event_chunk = (ev.get('data') or {}).get('chunk')
+                    event_chunk = (ev.get("data") or {}).get("chunk")
                     if event_chunk is None:
                         return False
-                    event_text = getattr(event_chunk, 'content', '') or ''
-                    event_reasoning = (getattr(event_chunk, 'additional_kwargs', None) or {}).get(
-                        'reasoning_content', ''
+                    event_text = getattr(event_chunk, "content", "") or ""
+                    event_reasoning = (getattr(event_chunk, "additional_kwargs", None) or {}).get(
+                        "reasoning_content", ""
                     )
                     return bool(event_text or event_reasoning)
 
                 async for ev in retry_async_stream(
-                        lambda: agent.astream_events(
-                            {'messages': llm_messages},
-                            version='v2',
-                            config=RunnableConfig(recursion_limit=max_iter),
-                        ),
-                        stage='model',
-                        is_output=is_visible_agent_event,
+                    lambda: agent.astream_events(
+                        {"messages": llm_messages},
+                        version="v2",
+                        config=RunnableConfig(recursion_limit=max_iter),
+                    ),
+                    stage="model",
+                    is_output=is_visible_agent_event,
                 ):
                     if isinstance(ev, StreamRetryEvent):
                         yield stream_retry_sse(ev)
                         continue
-                    et = ev.get('event', '')
-                    name = ev.get('name', '') or ''
+                    et = ev.get("event", "")
+                    name = ev.get("name", "") or ""
 
-                    if et == 'on_chat_model_stream':
-                        chunk = (ev.get('data') or {}).get('chunk')
+                    if et == "on_chat_model_stream":
+                        chunk = (ev.get("data") or {}).get("chunk")
                         if chunk is None:
                             continue
-                        text = getattr(chunk, 'content', '') or ''
-                        reasoning = (getattr(chunk, 'additional_kwargs', None) or {}).get(
-                            'reasoning_content', ''
-                        )
+                        text = getattr(chunk, "content", "") or ""
+                        reasoning = (getattr(chunk, "additional_kwargs", None) or {}).get("reasoning_content", "")
                         if reasoning:
                             if current_thinking_idx is None:
                                 start_ms = int(time.time() * 1000)
-                                events.append({
-                                    'type': 'thinking',
-                                    'content': '',
-                                    'started_at': start_ms,
-                                })
+                                events.append(
+                                    {
+                                        "type": "thinking",
+                                        "content": "",
+                                        "started_at": start_ms,
+                                    }
+                                )
                                 current_thinking_idx = len(events) - 1
                                 current_thinking_start = time.time()
-                            events[current_thinking_idx]['content'] += reasoning
+                            events[current_thinking_idx]["content"] += reasoning
                             yield _sse_resp(
-                                'agent_thinking', 'stream',
-                                {'content': reasoning},
+                                "agent_thinking",
+                                "stream",
+                                {"content": reasoning},
                                 conversation_id,
                             )
                         if text:
                             d = close_thinking()
                             if d is not None:
                                 yield _sse_resp(
-                                    'agent_thinking', 'end',
-                                    {'duration_ms': d},
+                                    "agent_thinking",
+                                    "end",
+                                    {"duration_ms": d},
                                     conversation_id,
                                 )
                             final_msg += text
-                            if events and events[-1].get('type') == 'text':
-                                events[-1]['content'] = events[-1].get('content', '') + text
+                            if events and events[-1].get("type") == "text":
+                                events[-1]["content"] = events[-1].get("content", "") + text
                             else:
-                                events.append({'type': 'text', 'content': text})
+                                events.append({"type": "text", "content": text})
                             yield _sse_resp(
-                                'agent_answer', 'stream', {'msg': text}, conversation_id,
+                                "agent_answer",
+                                "stream",
+                                {"msg": text},
+                                conversation_id,
                             )
 
-                    elif et == 'on_tool_start':
+                    elif et == "on_tool_start":
                         # Close any in-flight thinking before the tool call
                         # so each ReAct round gets its own collapsible block.
                         d = close_thinking()
                         if d is not None:
                             yield _sse_resp(
-                                'agent_thinking', 'end',
-                                {'duration_ms': d},
+                                "agent_thinking",
+                                "end",
+                                {"duration_ms": d},
                                 conversation_id,
                             )
 
                         tool_name = name
-                        tc_id = str(ev.get('run_id') or f'call_{uuid4().hex[:12]}')
-                        meta = tool_meta_map.get(tool_name, {
-                            'display_name': tool_name, 'tool_type': 'tool',
-                        })
+                        tc_id = str(ev.get("run_id") or f"call_{uuid4().hex[:12]}")
+                        meta = tool_meta_map.get(
+                            tool_name,
+                            {
+                                "display_name": tool_name,
+                                "tool_type": "tool",
+                            },
+                        )
                         tool_event = {
-                            'type': 'tool_call',
-                            'tool_call_id': tc_id,
-                            'tool_name': tool_name,
-                            'display_name': meta['display_name'],
-                            'tool_type': meta['tool_type'],
-                            'args': (ev.get('data') or {}).get('input', {}),
-                            'started_at': int(time.time() * 1000),
+                            "type": "tool_call",
+                            "tool_call_id": tc_id,
+                            "tool_name": tool_name,
+                            "display_name": meta["display_name"],
+                            "tool_type": meta["tool_type"],
+                            "args": (ev.get("data") or {}).get("input", {}),
+                            "started_at": int(time.time() * 1000),
                         }
                         events.append(tool_event)
                         inflight_tool_idx[tc_id] = len(events) - 1
                         # SSE payload uses the bare tool_call shape (no type:).
                         yield _sse_resp(
-                            'agent_tool_call', 'start',
-                            {k: v for k, v in tool_event.items() if k != 'type'},
+                            "agent_tool_call",
+                            "start",
+                            {k: v for k, v in tool_event.items() if k != "type"},
                             conversation_id,
                         )
 
-                    elif et == 'on_tool_end':
-                        tc_id = str(ev.get('run_id') or '')
+                    elif et == "on_tool_end":
+                        tc_id = str(ev.get("run_id") or "")
                         idx = inflight_tool_idx.pop(tc_id, None)
-                        raw_output = (ev.get('data') or {}).get('output')
+                        raw_output = (ev.get("data") or {}).get("output")
                         ended_ms = int(time.time() * 1000)
                         if idx is not None:
                             tool_event = events[idx]
-                            results = _parse_tool_results(raw_output, tool_event.get('tool_name'))
-                            tool_event['results'] = results
-                            tool_event['error'] = tool_output_error(raw_output)
-                            tool_event['ended_at'] = ended_ms
-                            if tool_event.get('started_at') is not None:
-                                tool_event['duration_ms'] = max(0, ended_ms - tool_event['started_at'])
-                            payload = {k: v for k, v in tool_event.items() if k != 'type'}
+                            results = _parse_tool_results(raw_output, tool_event.get("tool_name"))
+                            tool_event["results"] = results
+                            tool_event["error"] = tool_output_error(raw_output)
+                            tool_event["ended_at"] = ended_ms
+                            if tool_event.get("started_at") is not None:
+                                tool_event["duration_ms"] = max(0, ended_ms - tool_event["started_at"])
+                            payload = {k: v for k, v in tool_event.items() if k != "type"}
                         else:
                             # Edge case: tool_end without a matching start. Synthesise one.
                             results = _parse_tool_results(raw_output, name)
                             tool_event = {
-                                'type': 'tool_call',
-                                'tool_call_id': tc_id,
-                                'tool_name': name,
-                                'display_name': name,
-                                'tool_type': 'tool',
-                                'args': {},
-                                'results': results,
-                                'error': tool_output_error(raw_output),
-                                'started_at': ended_ms,
-                                'ended_at': ended_ms,
-                                'duration_ms': 0,
+                                "type": "tool_call",
+                                "tool_call_id": tc_id,
+                                "tool_name": name,
+                                "display_name": name,
+                                "tool_type": "tool",
+                                "args": {},
+                                "results": results,
+                                "error": tool_output_error(raw_output),
+                                "started_at": ended_ms,
+                                "ended_at": ended_ms,
+                                "duration_ms": 0,
                             }
                             events.append(tool_event)
-                            payload = {k: v for k, v in tool_event.items() if k != 'type'}
-                        yield _sse_resp('agent_tool_call', 'end', payload, conversation_id)
+                            payload = {k: v for k, v in tool_event.items() if k != "type"}
+                        yield _sse_resp("agent_tool_call", "end", payload, conversation_id)
                     # other events (on_chain_start/on_chain_end/etc.) ignored
             else:
                 # No tools → direct streaming still in new SSE format
                 if sys_prompt:
                     llm_messages.insert(0, SystemMessage(content=sys_prompt))
                 async for chunk in retry_async_stream(
-                        lambda: bisheng_llm.astream(llm_messages),
-                        stage='model',
-                        is_output=lambda item: bool(
-                            getattr(item, 'content', '')
-                            or (getattr(item, 'additional_kwargs', None) or {}).get(
-                                'reasoning_content', ''
-                            )
-                        ),
+                    lambda: bisheng_llm.astream(llm_messages),
+                    stage="model",
+                    is_output=lambda item: bool(
+                        getattr(item, "content", "")
+                        or (getattr(item, "additional_kwargs", None) or {}).get("reasoning_content", "")
+                    ),
                 ):
                     if isinstance(chunk, StreamRetryEvent):
                         yield stream_retry_sse(chunk)
                         continue
-                    text = getattr(chunk, 'content', '') or ''
-                    reasoning = (getattr(chunk, 'additional_kwargs', None) or {}).get(
-                        'reasoning_content', ''
-                    )
+                    text = getattr(chunk, "content", "") or ""
+                    reasoning = (getattr(chunk, "additional_kwargs", None) or {}).get("reasoning_content", "")
                     if reasoning:
                         if current_thinking_idx is None:
                             start_ms = int(time.time() * 1000)
-                            events.append({
-                                'type': 'thinking',
-                                'content': '',
-                                'started_at': start_ms,
-                            })
+                            events.append(
+                                {
+                                    "type": "thinking",
+                                    "content": "",
+                                    "started_at": start_ms,
+                                }
+                            )
                             current_thinking_idx = len(events) - 1
                             current_thinking_start = time.time()
-                        events[current_thinking_idx]['content'] += reasoning
+                        events[current_thinking_idx]["content"] += reasoning
                         yield _sse_resp(
-                            'agent_thinking', 'stream',
-                            {'content': reasoning},
+                            "agent_thinking",
+                            "stream",
+                            {"content": reasoning},
                             conversation_id,
                         )
                     if text:
                         d = close_thinking()
                         if d is not None:
                             yield _sse_resp(
-                                'agent_thinking', 'end',
-                                {'duration_ms': d},
+                                "agent_thinking",
+                                "end",
+                                {"duration_ms": d},
                                 conversation_id,
                             )
                         final_msg += text
-                        if events and events[-1].get('type') == 'text':
-                            events[-1]['content'] = events[-1].get('content', '') + text
+                        if events and events[-1].get("type") == "text":
+                            events[-1]["content"] = events[-1].get("content", "") + text
                         else:
-                            events.append({'type': 'text', 'content': text})
+                            events.append({"type": "text", "content": text})
                         yield _sse_resp(
-                            'agent_answer', 'stream', {'msg': text}, conversation_id,
+                            "agent_answer",
+                            "stream",
+                            {"msg": text},
+                            conversation_id,
                         )
         except BaseErrorCode as exc:
             error_flag = True
-            error_msg = 'business error'
-            logger.exception('Agent chat BaseErrorCode')
+            error_msg = "business error"
+            logger.exception("Agent chat BaseErrorCode")
             had_visible_output = bool(final_msg) or any(
-                event.get('type') in {'thinking', 'text'} and bool(event.get('content'))
-                or event.get('type') == 'tool_call'
-                and not str(event.get('tool_call_id', '')).startswith('init_fail_')
+                (event.get("type") in {"thinking", "text"} and bool(event.get("content")))
+                or (
+                    event.get("type") == "tool_call" and not str(event.get("tool_call_id", "")).startswith("init_fail_")
+                )
                 for event in events
             )
             await _store_answer_failure(conversation_id, login_user.user_id, _answer_failure_text(exc))
@@ -1953,12 +2019,13 @@ async def _agent_stream_chat_completion(
             return
         except Exception as exc:
             error_flag = True
-            error_msg = 'stream execution error'
-            logger.exception('Agent chat execution error')
+            error_msg = "stream execution error"
+            logger.exception("Agent chat execution error")
             had_visible_output = bool(final_msg) or any(
-                event.get('type') in {'thinking', 'text'} and bool(event.get('content'))
-                or event.get('type') == 'tool_call'
-                and not str(event.get('tool_call_id', '')).startswith('init_fail_')
+                (event.get("type") in {"thinking", "text"} and bool(event.get("content")))
+                or (
+                    event.get("type") == "tool_call" and not str(event.get("tool_call_id", "")).startswith("init_fail_")
+                )
                 for event in events
             )
             await _store_answer_failure(conversation_id, login_user.user_id, _answer_failure_text(exc))
@@ -1981,32 +2048,32 @@ async def _agent_stream_chat_completion(
             for tc_id, idx in inflight_tool_idx.items():
                 if 0 <= idx < len(events):
                     ev = events[idx]
-                    if ev.get('ended_at') is None:
-                        ev['ended_at'] = now_ms
-                        if ev.get('error') is None:
-                            ev['error'] = error_msg or 'tool did not complete'
-                        if 'results' not in ev:
-                            ev['results'] = []
-                        if ev.get('started_at') is not None:
-                            ev['duration_ms'] = max(0, now_ms - ev['started_at'])
+                    if ev.get("ended_at") is None:
+                        ev["ended_at"] = now_ms
+                        if ev.get("error") is None:
+                            ev["error"] = error_msg or "tool did not complete"
+                        if "results" not in ev:
+                            ev["results"] = []
+                        if ev.get("started_at") is not None:
+                            ev["duration_ms"] = max(0, now_ms - ev["started_at"])
             inflight_tool_idx.clear()
 
         # Persist agent_answer — new unified shape is `{msg, events}`.
-        db_content: dict = {'msg': final_msg, 'events': events}
+        db_content: dict = {"msg": final_msg, "events": events}
         if retrieval_status is not None:
-            db_content['retrieval_status'] = retrieval_status
+            db_content["retrieval_status"] = retrieval_status
 
         resp_msg = await ChatMessageDao.ainsert_one(
             ChatMessage(
                 user_id=conversation.user_id,
                 chat_id=conversation_id,
-                flow_id='',
-                type='end',
+                flow_id="",
+                type="end",
                 is_bot=True,
                 message=json.dumps(db_content, ensure_ascii=False),
-                category='agent_answer',
+                category="agent_answer",
                 sender=model_info.displayName,
-                extra=json.dumps({'error': True, 'error_msg': error_msg}) if error_flag else '{}',
+                extra=json.dumps({"error": True, "error_msg": error_msg}) if error_flag else "{}",
                 source=0,
             )
         )
@@ -2018,45 +2085,65 @@ async def _agent_stream_chat_completion(
             message_id=resp_msg.id,
             items=citation_items,
             chat_id=conversation_id,
-            flow_id='',
+            flow_id="",
         )
+        cited_file_ids = portal_answer_called_file_ids(
+            portal_context=portal_context,
+            answer_failed=error_flag,
+            items=citation_collector.list_items(),
+            text=final_msg,
+        )
+        if cited_file_ids:
+            from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+                KnowledgeSpaceContentStat,
+            )
+
+            await KnowledgeSpaceContentStat.enqueue_portal_qa_citations_async(
+                file_ids=cited_file_ids,
+                user_id=int(login_user.user_id),
+            )
 
         yield _sse_resp(
-            'agent_answer', 'end', db_content,
-            conversation_id, message_id=resp_msg.id,
+            "agent_answer",
+            "end",
+            db_content,
+            conversation_id,
+            message_id=resp_msg.id,
             citations=citation_items,
         )
-        yield _sse_resp('processing', 'close', '', conversation_id)
+        yield _sse_resp("processing", "close", "", conversation_id)
 
         # Terminal `final` sentinel so the frontend SSE hook's onEnd() fires
         # reliably (it listens for `data.final != null`). Without this the send
         # button stays stuck in "stop" state until the TCP stream closes.
         final_payload = {
-            'final': True,
-            'conversation': {'conversationId': conversation_id},
-            'responseMessage': {
-                'messageId': resp_msg.id,
-                'conversationId': conversation_id,
+            "final": True,
+            "conversation": {"conversationId": conversation_id},
+            "responseMessage": {
+                "messageId": resp_msg.id,
+                "conversationId": conversation_id,
             },
         }
-        yield f'data: {json.dumps(final_payload, ensure_ascii=False)}\n\n'
+        yield f"data: {json.dumps(final_payload, ensure_ascii=False)}\n\n"
 
-        if is_new_conv or (conversation.name in (None, '', 'New Chat')):
+        if is_new_conv or (conversation.name in (None, "", "New Chat")):
             asyncio.create_task(
-                gen_title(data.text or '', final_msg, bisheng_llm, conversation_id, login_user, request)
+                gen_title(data.text or "", final_msg, bisheng_llm, conversation_id, login_user, request)
             )
         await log_telemetry_events(str(login_user.user_id), conversation_id, start_time)
 
     async def owned_event_stream():
-        dept_flow_slot: Optional[int] = None
+        dept_flow_slot: int | None = None
         flow_lim, flow_dept = await DepartmentFlowService.resolve_limit_and_dept(login_user)
         if flow_lim > 0 and flow_dept is not None:
             acquired = await DepartmentFlowService.try_acquire_daily_chat_slot(
-                flow_dept, login_user.user_id, flow_lim,
+                flow_dept,
+                login_user.user_id,
+                flow_lim,
             )
             if not acquired:
                 error = DepartmentDailyChatConcurrentLimitError()
-                yield stream_error_sse(error, stage='rate_limit')
+                yield stream_error_sse(error, stage="rate_limit")
                 return
             dept_flow_slot = flow_dept
         source = _agent_event_stream_impl()
@@ -2067,7 +2154,8 @@ async def _agent_stream_chat_completion(
             await source.aclose()
             if dept_flow_slot is not None:
                 await DepartmentFlowService.release_daily_chat_slot(
-                    dept_flow_slot, login_user.user_id,
+                    dept_flow_slot,
+                    login_user.user_id,
                 )
 
     async def event_stream():
@@ -2076,54 +2164,82 @@ async def _agent_stream_chat_completion(
                 yield chunk
             return
         from .portal_qa_stream import bounded_qa_stream
+
         try:
-            async for chunk in bounded_qa_stream(owned_event_stream(),
-                    timeout=max(0, unified_config.portal_qa_request_timeout_seconds - (time.monotonic() - request_started)),
-                    heartbeat=unified_config.portal_qa_heartbeat_seconds,
-                    phase_deadline=lambda: stream_stage['deadline']):
-                payload_lines = [line[5:].strip() for line in chunk.splitlines() if line.startswith('data:')]
+            async for chunk in bounded_qa_stream(
+                owned_event_stream(),
+                timeout=max(0, unified_config.portal_qa_request_timeout_seconds - (time.monotonic() - request_started)),
+                heartbeat=unified_config.portal_qa_heartbeat_seconds,
+                phase_deadline=lambda: stream_stage["deadline"],
+            ):
+                payload_lines = [line[5:].strip() for line in chunk.splitlines() if line.startswith("data:")]
                 try:
-                    payload = json.loads('\n'.join(payload_lines)) if payload_lines else {}
+                    payload = json.loads("\n".join(payload_lines)) if payload_lines else {}
                 except (TypeError, ValueError):
                     payload = {}
-                if payload.get('category') == 'agent_answer' and payload.get('message') and not stream_stage['had_output']:
-                    stream_stage['had_output'] = True
-                    logger.info('portal_qa_first_answer elapsed_ms={}', int((time.monotonic() - request_started) * 1000))
-                    logger.info('portal_qa_stage stage=model_first_answer elapsed_ms={}',
-                                int((time.monotonic() - stream_stage.get('model_started', request_started)) * 1000))
+                if (
+                    payload.get("category") == "agent_answer"
+                    and payload.get("message")
+                    and not stream_stage["had_output"]
+                ):
+                    stream_stage["had_output"] = True
+                    logger.info(
+                        "portal_qa_first_answer elapsed_ms={}", int((time.monotonic() - request_started) * 1000)
+                    )
+                    logger.info(
+                        "portal_qa_stage stage=model_first_answer elapsed_ms={}",
+                        int((time.monotonic() - stream_stage.get("model_started", request_started)) * 1000),
+                    )
                 yield chunk
         except asyncio.TimeoutError:
-            logger.warning('portal_qa_timeout stage={} elapsed_ms={}',
-                           stream_stage['value'], int((time.monotonic() - request_started) * 1000))
-            timeout_error = RuntimeError('question budget exhausted')
-            if stream_stage['value'] == 'document' and data.files:
+            logger.warning(
+                "portal_qa_timeout stage={} elapsed_ms={}",
+                stream_stage["value"],
+                int((time.monotonic() - request_started) * 1000),
+            )
+            timeout_error = RuntimeError("question budget exhausted")
+            if stream_stage["value"] == "document" and data.files:
                 errors = []
                 for state in attachment_states:
-                    if state.get('status') == 'success':
+                    if state.get("status") == "success":
                         continue
-                    errors.extend(state.get('errors', []) or [attachment_error(state, code='QUESTION_TIMEOUT',
-                        reason='问答总时限已到，该附件处理尚未完成。', suggestion='请重试或拆分文件后重新上传。')])
+                    errors.extend(
+                        state.get("errors", [])
+                        or [
+                            attachment_error(
+                                state,
+                                code="QUESTION_TIMEOUT",
+                                reason="问答总时限已到，该附件处理尚未完成。",
+                                suggestion="请重试或拆分文件后重新上传。",
+                            )
+                        ]
+                    )
                 timeout_error = AttachmentQuestionError(errors)
             await _store_answer_failure(
-                stream_stage.get('conversation_id'), login_user.user_id, '回答超时',
+                stream_stage.get("conversation_id"),
+                login_user.user_id,
+                "回答超时",
             )
-            yield stream_error_sse(timeout_error,
-                                   stage=stream_stage['value'], had_output=stream_stage['had_output'])
+            yield stream_error_sse(timeout_error, stage=stream_stage["value"], had_output=stream_stage["had_output"])
         finally:
-            logger.info('portal_qa_total elapsed_ms={} stage={}',
-                        int((time.monotonic() - request_started) * 1000), stream_stage['value'])
+            logger.info(
+                "portal_qa_total elapsed_ms={} stage={}",
+                int((time.monotonic() - request_started) * 1000),
+                stream_stage["value"],
+            )
 
-    return StreamingResponse(event_stream(), media_type='text/event-stream',
-                             headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+    return StreamingResponse(
+        event_stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
 
 
 async def stream_chat_completion(
-        request: Request,
-        data: APIChatCompletion,
-        login_user: UserPayload,
-        *,
-        portal_context: bool = False,
-        department_file_view_access_service=None,
+    request: Request,
+    data: APIChatCompletion,
+    login_user: UserPayload,
+    *,
+    portal_context: bool = False,
+    department_file_view_access_service=None,
 ):
     """v2.5 unified entry — every workstation chat request goes through the
     LangGraph ReAct Agent flow. When `data.tools` is empty/None the agent
@@ -2135,7 +2251,5 @@ async def stream_chat_completion(
         data,
         login_user,
         portal_context=portal_context,
-        department_file_view_access_service=(
-            department_file_view_access_service
-        ),
+        department_file_view_access_service=(department_file_view_access_service),
     )
