@@ -308,11 +308,11 @@ export default function AbnormalFilesTab() {
     ]
     const hasFilter = Object.values(applied).some(Boolean)
 
-    return <div className="relative">
+    return <div className="audit-pane">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
         </div>}
-        <div className="h-[calc(100vh-128px)] overflow-y-auto px-2 py-4 pb-20">
+        <div className="audit-pane-filters">
             <p className="mb-3 text-sm text-muted-foreground">{t("log.abnormalNote")}</p>
             <div className="mb-4 flex flex-wrap items-center gap-4">
                 <div className="w-[160px] relative">
@@ -416,8 +416,10 @@ export default function AbnormalFilesTab() {
                     disabled={busy || selected.size === 0}
                 >{t("log.abnormalBatchDelete")}</Button>
             </div>
+        </div>
+        <div className="audit-pane-table">
             <TooltipProvider delayDuration={200}>
-                <Table noScroll variant="filelist" className="mb-[50px]" style={{ tableLayout: "fixed", width: rc.totalWidth, minWidth: "100%" }}>
+                <Table variant="filelist" containerClassName="audit-table-scroll" style={{ tableLayout: "fixed", width: rc.totalWidth, minWidth: "100%" }}>
                     <TableHeader>
                         <TableRow>
                             <TableHead {...rc.getThProps(0)}>
@@ -479,9 +481,8 @@ export default function AbnormalFilesTab() {
                     </TableFooter>}
                 </Table>
             </TooltipProvider>
-            {!rows.length && <div className="h-[700px]"></div>}
         </div>
-        <div className="bisheng-table-footer px-6 bg-background-login">
+        <div className="bisheng-table-footer z-20 px-6 bg-background-login">
             <div className="flex items-center gap-2">
                 <p className="desc">{t("log.abnormalFiles")}</p>
             </div>

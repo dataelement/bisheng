@@ -7,13 +7,18 @@ const TableVariantContext = React.createContext<TableVariant>("default")
 
 const Table = React.forwardRef<
     HTMLTableElement,
-    React.HTMLAttributes<HTMLTableElement> & { noScroll?: boolean; variant?: TableVariant }
->(({ className, noScroll, variant = "default", ...props }, ref) => (
+    React.HTMLAttributes<HTMLTableElement> & {
+        noScroll?: boolean
+        variant?: TableVariant
+        /** Replaces the default overflow wrapper classes. */
+        containerClassName?: string
+    }
+>(({ className, noScroll, variant = "default", containerClassName, ...props }, ref) => (
     <TableVariantContext.Provider value={variant}>
         <div
             className={cname(
                 "relative w-full max-w-full",
-                noScroll ? "overflow-x-auto" : "overflow-auto"
+                containerClassName ?? (noScroll ? "overflow-x-auto" : "overflow-auto")
             )}
         >
             <table
