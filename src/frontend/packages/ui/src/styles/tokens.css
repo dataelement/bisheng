@@ -313,11 +313,11 @@
   --citation-web: 155 93 224;     /* = --tag-skill */
 }
 
-/* Mobile (≤768px) remap of the SEMANTIC typography layer only:
+/* Mobile web (≤768px) remap of the SEMANTIC typography layer only:
  * body raised (14→16), headings lowered (24→22) — flatter ladder.
  * Component classNames stay unchanged. */
 @media (max-width: 768px) {
-  :root {
+  :root:not([data-bisheng-surface="desktop"]) {
     --text-body-sm: var(--font-size-3);  --leading-body-sm: var(--line-height-3); /* 13→14 */
     --text-body: var(--font-size-4);     --leading-body: var(--line-height-4);    /* 14→16 */
     --text-h3: 1.0625rem;                --leading-h3: 1.5625rem;                 /* 18→17 / 25 */
@@ -471,8 +471,8 @@
  * on purpose: it must beat the size档's own `text-[length:…]` utility whatever
  * order the stylesheets end up in. */
 @media (max-width: 768px), (hover: none) and (pointer: coarse) {
-  input.input-no-zoom,
-  textarea.input-no-zoom {
+  :root:not([data-bisheng-surface="desktop"]) input.input-no-zoom,
+  :root:not([data-bisheng-surface="desktop"]) textarea.input-no-zoom {
     font-size: 16px;
     line-height: 24px;
   }
