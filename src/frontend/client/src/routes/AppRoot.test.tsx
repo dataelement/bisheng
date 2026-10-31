@@ -11,10 +11,11 @@ let mockMobile = false;
 let mockCompact = true;
 let mockSidebarVisible = true;
 let mockMerged = true;
+let mockReturnTo = '/square?type=apps';
 const mockHeader = { title: 'New conversation', conversationId: 'old', flowId: 'assistant', flowType: 5, hideShare: true };
 
 jest.mock('react-router-dom', () => ({
-  useLocation: () => ({ pathname: '/app/old/assistant/5', search: '', state: { appSurfaceReturn: '/square?type=apps' } }),
+  useLocation: () => ({ pathname: '/app/old/assistant/5', search: '', state: { appSurfaceReturn: mockReturnTo } }),
   useNavigate: () => mockNavigate,
   useParams: () => ({ fid: 'assistant', type: '5' }),
   Outlet: () => <div>Conversation content</div>,
@@ -61,15 +62,11 @@ jest.mock('~/pages/appChat/components/AppSidebarConvoItem', () => ({
   AppSidebarConvoItem: ({ conv, onClick }: { conv: { title: string }; onClick: () => void }) => <button onClick={onClick}>{conv.title}</button>,
 }));
 jest.mock('~/components/ui/Tooltip2', () => ({ Tooltip: () => null, TooltipProvider: () => null, TooltipTrigger: () => null, TooltipContent: () => null }));
-jest.mock('~/pages/appChat/appChatOrigin', () => ({
-  copyAppChatReturnTo: jest.fn(), copyAppChatOrigin: jest.fn(), normalizeAppChatReturn: (value: string) => value,
-  resolveAppChatExitNavigateTarget: () => '/square?type=apps', writeAppChatReturnTo: jest.fn(),
-}));
 jest.mock('bisheng-icons', () => ({ Outlined: { SidebarMenu: () => null, Plus: () => null, Down: () => null } }));
 
 beforeEach(() => {
   mockMobile = false; mockCompact = true; mockSidebarVisible = true; mockMerged = true;
-  localStorage.clear();
+  localStorage.clear(); sessionStorage.clear(); mockReturnTo = '/square?type=apps';
 });
 
 it.each([true, false])('toggles the compact desktop app sidebar from visibility %s', (visible) => {
@@ -166,4 +163,31 @@ it('retains the app sidebar toggle before a conversation title is available', ()
   const menu = screen.getByTestId('mobile-header-left-action');
   fireEvent.click(menu);
   expect(menu).toHaveAttribute('aria-expanded', 'false');
+});
+
+// The compact header owns a visible return action throughout title hydration.
+it.each([true, false])('keeps return available as the title loads with sidebar=%s', (visible) => {
+  mockSidebarVisible = visible;
+  mockMerged = false;
+  const view = render(<AppRoot />);
+  expect(screen.getByRole('button', { name: 'com_ui_go_back' })).toBeVisible();
+  mockMerged = true;
+  view.rerender(<AppRoot />);
+  fireEvent.click(screen.getByRole('button', { name: 'com_ui_go_back' }));
+  expect(mockNavigate).toHaveBeenCalledWith('/square?type=apps', { replace: false });
+});
+
+it('keeps return available on mobile after a title loads', () => {
+  mockMobile = true;
+  render(<AppRoot />);
+  fireEvent.click(screen.getByRole('button', { name: 'com_ui_go_back' }));
+  expect(mockNavigate).toHaveBeenCalledWith('/square?type=apps', { replace: false });
+});
+
+it.each(['/square?type=apps', '/apps', '/apps/explore'])('returns to %s with history expanded', (target) => {
+  mockReturnTo = target;
+  render(<AppRoot />);
+  fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
+  fireEvent.click(screen.getByRole('button', { name: 'com_ui_go_back' }));
+  expect(mockNavigate).toHaveBeenCalledWith(target, { replace: target === '/apps' });
 });

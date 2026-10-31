@@ -31,7 +31,7 @@ type MobileNavProps = {
   onMenuClick?: () => void;
   preferBackButton?: boolean;
   onBack?: () => void;
-  /** 应用内对话：无合并标题时与侧栏并排展示「返回」；有会话标题时返回在侧栏内，顶栏仅抽屉 */
+  /** App surfaces keep their return action available alongside the menu. */
   appSurfaceBackAction?: () => void;
   /** App-surface: opens the app-chat history dropdown (app card + conversation list).
    *  Caret/grey states key off `appHistoryDropdownOpen`; the dropdown itself is rendered
@@ -114,13 +114,15 @@ export default function MobileNav({
     (historyDropdownOpen && !appSurfaceBackAction) ||
     (appHistoryDropdownOpen && Boolean(appSurfaceBackAction));
 
-  /** 应用内对话：有合并标题时顶栏与主站对话一致（左仅抽屉、中标题、右分享+新建）；无标题时保留「菜单+返回」 */
-  const appSurfaceShowBackWithMenu =
-    Boolean(
-      appSurfaceBackAction &&
-        !preferBackButton &&
-        !(showWorkbenchMergedBar && chatMobileHeader),
-    );
+  // App navigation is available throughout conversation-title hydration.
+  const appSurfaceShowBackWithMenu = Boolean(appSurfaceBackAction) && preferBackButton === false;
+
+  const handleMenuClick = () => {
+    setHistoryDropdownOpen(false);
+    if (appHistoryDropdownOpen) onToggleAppHistoryDropdown?.();
+    if (onMenuClick) onMenuClick();
+    else setSystemMenuOpen(true);
+  };
 
   const appBackBtnClassName =
     'inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-border-base bg-white text-text-1 shadow-sm transition-colors hover:bg-fill-1';
@@ -141,12 +143,12 @@ export default function MobileNav({
             <button
               type="button"
               data-testid="mobile-header-left-action"
-              aria-label={navVisible ? localize('com_nav_close_sidebar') : localize('com_nav_open_sidebar')}
-              aria-expanded={navVisible}
+              aria-label={localize(onMenuClick && navVisible ? 'com_nav_close_sidebar' : 'com_nav_open_sidebar')}
+              aria-expanded={onMenuClick ? navVisible : undefined}
               className={appBackBtnClassName}
-              onClick={toggleSidebar}
+              onClick={handleMenuClick}
             >
-              {navVisible ? (
+              {onMenuClick && navVisible ? (
                 <X className="size-4" strokeWidth={2} />
               ) : (
                 <Menu className="size-4" strokeWidth={2} />
@@ -172,12 +174,7 @@ export default function MobileNav({
               mobileHeadIconBtnClassName,
               !onMenuClick && (historyDropdownOpen || appHistoryDropdownOpen) && 'pointer-events-none text-text-4',
             )}
-            onClick={preferBackButton ? (onBack ?? toggleSidebar) : () => {
-              setHistoryDropdownOpen(false);
-              if (appHistoryDropdownOpen) onToggleAppHistoryDropdown?.();
-              if (onMenuClick) onMenuClick();
-              else setSystemMenuOpen(true);
-            }}
+            onClick={preferBackButton ? (onBack ?? toggleSidebar) : handleMenuClick}
           >
             {preferBackButton ? (
               <ChevronLeft className="size-4" strokeWidth={2} />
@@ -194,7 +191,10 @@ export default function MobileNav({
                 either edge. max-w reserves room for the menu (left) and the
                 share + new-chat icons (right) so a long title truncates rather
                 than sliding under them. Mirrors the 知识空间 / 订阅 mobile headers. */}
-            <div className="absolute left-1/2 top-0 flex h-full max-w-[calc(100%-128px)] -translate-x-1/2 items-center justify-center px-1">
+            <div className={cn(
+              'absolute left-1/2 top-0 flex h-full -translate-x-1/2 items-center justify-center px-1',
+              appSurfaceShowBackWithMenu ? 'max-w-[calc(100%-176px)]' : 'max-w-[calc(100%-128px)]',
+            )}>
               {appSurfaceBackAction ? (
                 // App-surface chat: title opens the app-chat history dropdown (app card
                 // + conversation list). The dropdown itself is rendered by AppRoot which
