@@ -230,9 +230,9 @@ export default function MainLayout() {
   /** Pages that read their view from the query string: a page react-activation froze keeps
    *  its old router context, so they are mounted fresh instead of cached. */
   const isQueryDrivenRoute = isSkillsRoute || isSquareRoute || isCapabilitiesRoute;
-  // Channel pages and app conversations use the active router context, including
-  // the current conversation and its entry surface when returning from discovery.
-  const isLiveRoute = isQueryDrivenRoute || isChannelRoute || isAppChatRoute;
+  // Knowledge, channel pages and app conversations use the active router context,
+  // including the selected list tab and the current detail route.
+  const isLiveRoute = isQueryDrivenRoute || isKnowledgeRoute || isChannelRoute || isAppChatRoute;
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [systemMenuOpen, setSystemMenuOpen] = useRecoilState(store.mobileSystemMenuOpenState);
   // 移动端：所有主功能页(应用会话 / apps / channel / knowledge / 主站会话 / 无权限占位页)都隐藏

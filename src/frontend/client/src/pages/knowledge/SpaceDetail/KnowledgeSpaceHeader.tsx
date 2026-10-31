@@ -1,4 +1,5 @@
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { knowledgePathWithTab } from "../knowledgeListNavigation";
 import { CircleHelp, FolderPlus, FolderUp, Link2 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { KnowledgeSpace, SpaceRole, VisibilityType } from "~/api/knowledge";
@@ -112,6 +113,7 @@ export function KnowledgeSpaceHeader({
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
     const navigate = useNavigate();
+    const location = useLocation();
     const bishengConfig = useRecoilValue(bishengConfState);
     const isH5 = usePrefersMobileLayout();
 
@@ -287,7 +289,7 @@ export function KnowledgeSpaceHeader({
                     type="button"
                     onClick={() => {
                         if (currentPath.length === 0) {
-                            navigate("/knowledge");
+                            navigate(knowledgePathWithTab("/knowledge", location.search));
                             return;
                         }
                         const parent = currentPath[currentPath.length - 2];

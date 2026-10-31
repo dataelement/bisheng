@@ -1,6 +1,8 @@
 import { Button, Segmented, Tooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
+import { getKnowledgeListTab } from "../knowledgeListNavigation";
 import type { KnowledgeSpace, SpaceSortType } from "~/api/knowledge";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import {
@@ -49,7 +51,8 @@ export function KnowledgeSpaceSections({
     pageGrid,
 }: KnowledgeSpaceSectionsProps) {
     const localize = useLocalize();
-    const [activeSection, setActiveSection] = useState<SpaceSectionType>("department");
+    const [searchParams, setSearchParams] = useSearchParams();
+    const activeSection = getKnowledgeListTab(searchParams.toString());
     const sortFieldLabel = localize("com_knowledge.sort_field");
     // Keep empty content aligned to the visible tree viewport during horizontal scroll.
     const pinnedEmptyClassName = "sticky left-0 -mx-3 w-[100cqi]";
@@ -79,7 +82,13 @@ export function KnowledgeSpaceSections({
                             value={section.type}
                             onChange={(value) => {
                                 const next = sections.find((item) => item.type === value);
-                                if (next) setActiveSection(next.type);
+                                if (next) {
+                                    setSearchParams((previous) => {
+                                        const params = new URLSearchParams(previous);
+                                        params.set("tab", next.type);
+                                        return params;
+                                    }, { replace: true });
+                                }
                             }}
                         />
                     </div>
