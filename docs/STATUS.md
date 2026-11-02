@@ -1,3 +1,11 @@
+## 2026-11-02 — PR #2506 合并冲突修复
+
+- 目标分支：`dataelement/bisheng:feat/bisheng-work-120@de60988d7b5fd9402dcb607fada97df12c9f1d57`；PR 原提交 `a13ee07a0c3544ff7eeee05026f1f5dbb8ba2080`，工作目录 `.worktrees/bisheng-dsh-user-id-search`。
+- 冲突位于 `docs/STATUS.md` 同一插入位置的独立记录；已完整保留目标分支记录和用户 ID 搜索记录，业务代码自动合并。
+- 本轮自动验证：隔离 Python 3.11 环境后端身份搜索、部门/模型授权与管理用户搜索 31 项通过；前端授权弹窗、部门树和模型授权 20 项通过；修改文件 ESLint、Ruff 检查与格式、多语言一致性、架构守卫和差异检查通过。
+- 平台 530 个严格类型文件检查通过。GitHub Frontend Quality 在全量平台 lint 步骤报告 95 errors / 1 warning，并提示历史 suppression 待清理；本地复现相同数量，全部问题文件、lint 配置和 suppression 与目标基线一致。本次修改文件 ESLint 通过。远端检查记录：https://github.com/dataelement/bisheng/actions/runs/41366372552 。
+- 交付范围为源码冲突修复与 PR 合并；真实企业部署、MySQL/DM8 执行、真实账号授权和浏览器端到端验收继续按既有计划执行。
+
 ## 2026-10-21 — 发送后清理技能草稿
 
 - 根因：提交后的输入区重置覆盖文字和附件，技能仍保存在独立草稿状态，随后重新渲染到编辑器。发送流程现在先捕获任务技能参数，再统一清空本轮文字、附件和技能；发送前校验返回明确结果，校验失败保留草稿。
@@ -113,6 +121,14 @@
 - 参照当前 Work / Harness conversation 与 model-selection UI 0.2.0-rc.2，Chat 卡片采用 28px + superellipse(1.5) 连续圆角；发送按钮采用原生 16px 实心箭头。
 - 模型按钮独立拥有 13px/400 字体与左右 8px/4px 内边距，采用原生 14px 下拉图形，保留 Work 模型与操作区之间的活动槽留白；窄卡片按容器宽度收紧留白。首页已确认的标题与卡片布局保持。
 - 定向 ESLint、生产构建、diff-check 通过；3006 已发布 037d2a0ed，459 个构建文件校验与健康检查通过，其他容器保持。Chrome 实测卡片 114px、28px + superellipse(1.5)，模型 13px/400、左右内边距 8px/4px，下拉可打开并关闭。桌面 Chat 聚焦刷新后，和同窗口 Work 截图核对：发送箭头相对边界一致，禁用按钮底色均为 RGB(185,200,241)，模型下拉与发送间距一致；标题与卡片位置保持。证据：主工作区 outputs/home-controls-20261020。
+
+## 2026-10-20 — DSH 企业后台按用户 ID 搜索
+
+- 基线：远端 `dataelement/bisheng:feat/bisheng-work-120@cbbe6e104b9373d2c25da1bc317d8dc429ef03bf`；工作目录 `.worktrees/bisheng-dsh-user-id-search`，修复分支 `codex/dsh-admin-user-id-search`。修改范围为毕昇企业后台，Desktop/Harness 沿用现有运行版本。
+- 根因：模型授权人员查询只匹配用户名和内部数字编号，遗漏用户业务 ID `external_id`。查询复用毕昇主体搜索规则：用户名包含匹配、业务 ID 大小写敏感前缀匹配，保留内部数字编号精确匹配；关键字统一规范化。租户、账号状态、部门与游标条件继续在外层查询生效，列表沿用内部编号稳定排序。
+- 授权弹窗提示更新为“搜索用户名或 ID”，同步中文、英文和日文。后台与前端接口结构沿用现有合同。
+- 自动验证：原基线查询在新增回归中复现 4 项业务 ID 失败；修复后身份搜索、部门授权、模型授权与管理用户搜索共 31 项通过。授权前端 3 套件共 20 项通过，覆盖业务 ID 请求与人员结果呈现；平台 530 个及客户端 1457 个 strict 文件类型检查、变更文件 ESLint、Ruff、架构守卫、i18n 和 diff 检查通过。
+- 平台全量 ESLint 为 95 errors / 1 warning，客户端为 22 errors / 1 warning，均与相同基线逐项比较完全一致；问题位于本次保持原样的文件。真实企业部署、MySQL/DM8 执行、真实账号添加授权与浏览器端到端验收待执行。
 
 ## 2026-10-20 — Chat / Work 首页布局对齐
 

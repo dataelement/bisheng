@@ -5,7 +5,9 @@ from contextlib import contextmanager
 from sqlalchemy import inspect, or_
 from sqlmodel import Session, col, select
 
+from bisheng.common.subject_search import normalize_keyword
 from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
+from bisheng.core.database.subject_search import subject_match_condition
 from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.tenant import Tenant, UserTenant
 from bisheng.user.domain.models.user import User
@@ -53,8 +55,9 @@ class UserDshProfileRepository:
                 col(UserDepartment.department_id).in_(department_ids)
             )
             statement = statement.where(col(User.user_id).in_(department_members))
+        keyword = normalize_keyword(keyword)
         if keyword:
-            match = col(User.user_name).contains(keyword, autoescape=True)
+            match = subject_match_condition(User.user_id, User.user_name, User.external_id, keyword, name_prefix=False)
             if keyword.isdecimal() and 0 < int(keyword) <= 9223372036854775807:
                 match = or_(match, User.user_id == int(keyword))
             statement = statement.where(match)

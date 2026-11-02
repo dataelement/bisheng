@@ -2633,7 +2633,7 @@
     "noWebSnapshot": "No web snapshot yet — check the stored text or open the source page."
   },
   "dsh": {
-    "searchUsername": "Search username",
+    "searchUserIdentity": "Search username or ID",
     "departmentAndMember": "Department / member",
     "configuredQuota": "Quota (Token/month)",
     "configuredQuotaWan": "Quota (10k Token/month)",

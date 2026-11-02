@@ -207,8 +207,8 @@ export function ModelAccessDialog({ model, onClose }: { model: DshAccessModel | 
                         <div className="flex shrink-0 justify-end gap-2">
                             <Input
                                 boxClassName="w-72"
-                                aria-label={t('dsh.searchUsername')}
-                                placeholder={t('dsh.searchUsername')}
+                                aria-label={t('dsh.searchUserIdentity')}
+                                placeholder={t('dsh.searchUserIdentity')}
                                 value={query}
                                 disabled={saving}
                                 onChange={(event) => setQuery(event.target.value)}

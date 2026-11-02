@@ -2578,7 +2578,7 @@
     "noWebSnapshot": "暂无网页快照，请查看入库文本或打开原网页。"
   },
   "dsh": {
-    "searchUsername": "搜索用户名",
+    "searchUserIdentity": "搜索用户名或 ID",
     "departmentAndMember": "部门 / 成员",
     "configuredQuota": "设置额度（Token/月）",
     "configuredQuotaWan": "设置额度（万 Token/月）",
