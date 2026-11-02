@@ -23,10 +23,11 @@ from bisheng.common.errcode.linsight import (
 )
 from bisheng.linsight.domain.services import skill_store
 from bisheng.linsight.domain.services.skill_store import (
+    PERSONAL_ARCHIVE_MAX_BYTES,
     PERSONAL_ENTRY_MAX_COUNT,
+    PERSONAL_FILE_MAX_BYTES,
     PERSONAL_SKILL_MD_MAX_BYTES,
     PERSONAL_UNPACKED_MAX_BYTES,
-    PERSONAL_UPLOAD_MAX_BYTES,
     SKILL_MD,
     SkillStore,
     accept_skill_upload,
@@ -103,7 +104,8 @@ class TestPersonalSkillStore:
 
     async def test_personal_size_caps_are_fixed(self, store, monkeypatch):
         _conf(monkeypatch, 500, 800)
-        assert PERSONAL_UPLOAD_MAX_BYTES == 52428800
+        assert PERSONAL_FILE_MAX_BYTES == 209715200
+        assert PERSONAL_ARCHIVE_MAX_BYTES == 52428800
         assert PERSONAL_UNPACKED_MAX_BYTES == 209715200
         assert PERSONAL_SKILL_MD_MAX_BYTES == 1048576
 
@@ -112,12 +114,24 @@ class TestPersonalSkillStore:
                 1,
                 "pdf",
                 "pdf.md",
-                b"x" * (PERSONAL_UPLOAD_MAX_BYTES + 1),
+                b"x" * (PERSONAL_FILE_MAX_BYTES + 1),
                 owner_user_id=USER,
                 content_type="text/plain",
             )
         assert _code(upload_error.value) == 11052
-        assert upload_error.value.kwargs["limit_mb"] == 50
+        assert upload_error.value.kwargs["limit_mb"] == 200
+
+        with pytest.raises(SkillFileTooLargeError) as archive_error:
+            await store.publish_upload(
+                1,
+                "pdf",
+                "pdf.zip",
+                b"PK\x03\x04" + b"x" * (PERSONAL_ARCHIVE_MAX_BYTES - 3),
+                owner_user_id=USER,
+                content_type="application/zip",
+            )
+        assert _code(archive_error.value) == 11052
+        assert archive_error.value.kwargs["limit_mb"] == 50
 
         with pytest.raises(SkillBundleTooLargeError) as unpacked_error:
             await store.publish_upload(
@@ -131,14 +145,22 @@ class TestPersonalSkillStore:
         assert _code(unpacked_error.value) == 11059
         assert unpacked_error.value.kwargs["limit_mb"] == 200
 
+        accepted = await accept_skill_upload(
+            "pdf.md",
+            b"a" * (PERSONAL_SKILL_MD_MAX_BYTES + 1),
+            owner_user_id=USER,
+            content_type="text/plain",
+        )
+        assert len(accepted[SKILL_MD]) == PERSONAL_SKILL_MD_MAX_BYTES + 1
+
         with pytest.raises(SkillManifestTooLargeError) as manifest_error:
             await store.publish_upload(
                 1,
                 "pdf",
-                "pdf.md",
-                b"a" * (PERSONAL_SKILL_MD_MAX_BYTES + 1),
+                "pdf.zip",
+                _zip_bytes({SKILL_MD: b"a" * (PERSONAL_SKILL_MD_MAX_BYTES + 1)}),
                 owner_user_id=USER,
-                content_type="text/plain",
+                content_type="application/zip",
             )
         assert _code(manifest_error.value) == 11073
         assert manifest_error.value.kwargs["limit_mb"] == 1

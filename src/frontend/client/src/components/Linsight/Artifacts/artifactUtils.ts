@@ -38,6 +38,12 @@ export interface ArtifactFile {
      * markdown. Absent on legacy entries → falls back to markdown.
      */
     previewAsImage?: boolean;
+    /**
+     * An uploaded SPREADSHEET that lands in the workspace as the original
+     * workbook (`ingest_mode: 'spreadsheet_original'`), with no markdown view.
+     * The user previews and downloads the workbook itself.
+     */
+    previewAsOriginal?: boolean;
 }
 
 export type PreviewKind = 'markdown' | 'text' | 'image' | 'document' | 'slides' | 'unsupported';
@@ -79,6 +85,7 @@ export function getPreviewKind(fileName: string): PreviewKind {
 export function getArtifactPreviewKind(file: ArtifactFile): PreviewKind {
     // Image uploads with a persisted original preview as the picture itself.
     if (file.previewAsImage) return 'image';
+    if (file.previewAsOriginal) return getPreviewKind(file.file_name);
     if (file.source === 'upload') return 'markdown';
     return getPreviewKind(file.file_name);
 }
@@ -123,13 +130,16 @@ export function toUploadedArtifacts(files: any[] | undefined): ArtifactFile[] {
             // persisted it (`original_file_path`); otherwise fall back to the
             // parsed-markdown wrapper (legacy entries / non-image files).
             const previewAsImage = IMAGE_EXTS.includes(getFileExtension(name)) && !!f.original_file_path;
+            const previewAsOriginal =
+                !previewAsImage && f.ingest_mode === 'spreadsheet_original' && !!f.original_file_path;
             return {
                 file_id: f.file_id,
                 file_name: name,
-                file_url: previewAsImage ? f.original_file_path : f.markdown_file_path,
+                file_url: previewAsImage || previewAsOriginal ? f.original_file_path : f.markdown_file_path,
                 file_md5: f.file_md5,
                 source: 'upload' as const,
                 previewAsImage,
+                previewAsOriginal,
             };
         });
 }
@@ -512,7 +522,7 @@ export async function fetchArtifactBlob(
   if (!response.ok) {
     throw new Error(`Failed to download file: ${response.status}`);
   }
-  const isUploadMarkdown = file.source === 'upload' && !file.previewAsImage;
+  const isUploadMarkdown = file.source === 'upload' && !file.previewAsImage && !file.previewAsOriginal;
   const isMarkdown = isUploadMarkdown || MARKDOWN_EXTS.includes(getFileExtension(file.file_name));
   const blob = isMarkdown
     ? await readCitationFreeMarkdown(response, options?.citations)
