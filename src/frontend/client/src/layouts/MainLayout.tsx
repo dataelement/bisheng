@@ -14,6 +14,7 @@ import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/Dialog";
 import store from "~/store";
 import { useAgentToolPreferences } from "~/components/Chat/Input/AgentToolSelector";
+import { useGetBsConfig } from "~/hooks/queries/data-provider";
 
 const systemNoticeTodayKey = () => {
   const d = new Date();

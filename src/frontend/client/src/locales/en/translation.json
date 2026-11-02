@@ -1293,6 +1293,21 @@
     "history_deleted": "Conversation history deleted"
   },
   "com_knowledge": {
+    "home_next": {
+      "no_description": "No description",
+      "no_actions": "No actions available",
+      "all": "All spaces",
+      "created": "Created by me",
+      "department": "Organization & departments",
+      "joined": "Joined spaces",
+      "load_error": "Could not load knowledge spaces. Try again.",
+      "more": "More actions",
+      "sort_create_time": "Creation time",
+      "sort_name": "Name",
+      "sort_update_time": "Last updated",
+      "square": "Knowledge square",
+      "updated_at": "Updated {{date}}"
+    },
     "department_private_disabled": "Department knowledge spaces cannot be private",
     "add_new": "Add",
     "web_link": "Web link",

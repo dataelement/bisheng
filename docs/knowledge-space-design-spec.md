@@ -1,0 +1,416 @@
+# 知识空间 vNext 视觉与实现规范
+
+版本：1.30
+确认日期：2026-11-01  
+状态：主体视觉已实施；v1.5 按用户要求补齐局部交互状态，待用户预览验收。
+
+## 1. 依据与确认记录
+
+- 需求文档：`knowledge-space-redesign.docx`，位于本文同级目录。
+- 原始设计：[Frame 159:8513](https://www.figma.com/design/ceyPGsiRutsoQcjHleUkl3/DSH-Desktop0924?node-id=159-8513)。用户已将画板宽度调整为 1920。
+- 已确认预览：[侧栏展开版 169:156](https://www.figma.com/design/ceyPGsiRutsoQcjHleUkl3/DSH-Desktop0924?node-id=169-156)。
+- 宽度对照：[内容扩展上界版 169:450](https://www.figma.com/design/ceyPGsiRutsoQcjHleUkl3/DSH-Desktop0924?node-id=169-450)。该版本移除左侧占用以展示内容扩展上界，不是宿主侧栏真实收起尺寸的测量结果。
+- 局部组件与预览说明：[169:35](https://www.figma.com/design/ceyPGsiRutsoQcjHleUkl3/DSH-Desktop0924?node-id=169-35)。
+
+用户确认：设计稿文字及计数仅表示内容类型，没有真实业务含义，不将示例计数差异列为产品问题；“更多”图形统一为 **20×4px**；其余视觉按第二阶段建议值统一。用户预览后确认采用此方案。
+
+Figma MCP 已实际读取目标节点的设计上下文、截图、元数据、变量和代表节点属性。变量工具返回“二级标题1 = #6A7588”；目标原稿未配置 Layout Grid，三列栅格由节点几何关系推导，不能声称它原本包含响应式规则。
+
+### 字体预览限制
+
+正式视觉规范仍为 **PingFang SC，400 / 500 / 600**。Figma MCP 环境无法加载该字体，已确认预览临时使用 **Noto Sans SC，400 / 500 / 700**，其中 700 替代正式规范的 600。该替代是已披露的预览环境限制，不将两种字体或字重视为等价。正式实现需要核验实际字体、回退字体及截断效果。
+
+## 2. 范围与隔离原则
+
+仅调整用户端 `/knowledge` 首页右侧主体：标题、知识广场与创建按钮、四分类及计数、排序、卡片网格、相关局部状态与交互。
+
+禁止修改左侧导航及展开/收起机制、其他页面、全局 CSS、既有全局 Token、主题配置、旧公共组件样式、后端 API 和数据结构。不使用 Figma 自动生成代码替换现有业务。
+
+新设计内部保持一致；旧 Token 只用于理解依赖和评估隔离，不能作为新视觉标准。复用路由、数据、权限、操作及缓存行为，隔离视觉实现。暂不建设完整的新组件库。
+
+## 3. 冻结参数
+
+以下尺寸为 CSS px 候选实施单位，不是 PNG 像素或宿主实测尺寸。Token 完整前缀为 `--vnext-`。页作用域指知识首页局部根；控件作用域包括显式启用同一局部 scope 的弹层。
+
+### 3.1 颜色
+
+| 用途 | Figma 原始值 | 冻结值 | Token 后缀 | 作用域与理由 |
+| --- | --- | --- | --- | --- |
+| 页面表面 | #FFFFFF | #FFFFFF | surface-page | 页；保留 |
+| 卡片默认表面 | #F7F9FB | #F7F9FB | surface-card | 页；保留 |
+| 卡片悬停表面 | #EFF2F8 | #EFF2F8 | surface-card-hover | 页；采用原稿悬停示意 |
+| 强调文字 | #000000 | #000000 | text-strong | 页、控件 |
+| 常规文字、卡片名称 | #333333 | #333333 | text-primary | 页、控件 |
+| 描述 | #6A7588 | #626E82 | text-secondary | 页、控件；改善小字对比度 |
+| 时间 | #9299A5，重叠旧层另有 #292929 | #626E82 | text-meta | 页；统一元信息 |
+| 创建者或团队 | #6A7588，重叠旧层另有约 #181818 | #626E82 | text-owner | 页；统一元信息 |
+| 未选中 Tab 文字 | 黑色 60% | rgba(0,0,0,.6) | text-tab | 页；仅文字透明，不影响整个 Tab |
+| 选中 Tab 背景 | #E3E7EE | #E3E7EE | surface-tab-selected | 页 |
+| 主按钮背景/文字 | 黑/白 | #000000 / #FFFFFF | action-primary-bg / action-primary-fg | 控件 |
+| 次按钮背景/文字/边框 | 白/#333/#333 | #FFFFFF / #333333 / #333333 | action-secondary-bg / action-secondary-fg / action-secondary-border | 控件 |
+| 排序边框 | #D0D5DE | #D0D5DE | border-control | 控件 |
+
+语义不同的 Token 即使当前同值也保留独立名称。不引用旧视觉变量来定义这些值。按不透明 sRGB 表面计算，#626E82 在默认与悬停卡片表面上的对比度约为 4.89:1、4.60:1。
+
+### 3.2 字体与排版
+
+| 用途 | Figma 原始值 | 冻结值 | Token 后缀 |
+| --- | --- | --- | --- |
+| 字体 | PingFang SC | "PingFang SC", "Microsoft YaHei", system-ui, sans-serif | font-family |
+| 常规/中等/强调字重 | 400 / 500 / 600 | 400 / 500 / 600 | weight-regular / weight-medium / weight-semibold |
+| 页面标题 | 42 / 74，600 | 40 / 56，600 | title-size / title-line-height |
+| 卡片名称 | 18 / AUTO，600 | 18 / 28，600 | card-title-size / card-title-line-height |
+| 描述和元信息 | 14 / AUTO，部分时间行高 22 | 14 / 22，400 | body-size / body-line-height |
+| Tab | 14；行高 24 或 74 | 14 / 24；选中 500，未选中 400 | tab-size / tab-line-height |
+| 按钮与排序文字 | 14 / AUTO | 14 / 22；主按钮 500，其余 400 | control-size / control-line-height |
+| 字间距 | 0 | 0 | letter-spacing |
+
+斜线表示字号/行高。Figma 文本框高度不视为 AUTO 行高的可靠数值。所有排版 Token 限页或控件作用域；不修改全局字号和字体配置。
+
+### 3.3 布局、尺寸与效果
+
+| 用途 | Figma 原始值或几何推导 | 冻结值 | Token 后缀 |
+| --- | --- | --- | --- |
+| 页面左右 Padding | 两侧各 56 | 40（v1.4用户确认） | page-padding-inline |
+| 页面顶部 | 标题框 y=60 | 64 | page-padding-block-start |
+| 标题行 | 无统一布局容器 | 56 | header-height |
+| 标题行至工具栏 | 原稿无统一值 | 40 | header-toolbar-gap |
+| 工具栏至网格 | Tab 底至卡片顶 29 | 32 | toolbar-grid-gap |
+| 网格横向间距 | 40；局部偏移产生 43/37 | 24（v1.3用户反馈） | grid-gap-inline |
+| 网格纵向间距 | 40 | 24（v1.3用户反馈） | grid-gap-block |
+| 卡片常规最小宽 / 紧凑下限 | 固定宽 446，未定义最小宽 | 440 / 350（v1.3） | card-min-width / card-compact-min-width |
+| 卡片最小高度 | 175 | 176 | card-min-height |
+| 卡片内边距 | 稳定边界为 24 | 24 | card-padding |
+| 卡片图标槽位 | 44×44 | 44×44 | space-icon-size |
+| 卡片图标与名称间距 | 14 | 16 | card-heading-gap |
+| Tab 高度/左右内边距 | 40 / 24 | 40 / 24 | tab-height / tab-padding-inline |
+| Tab 图文间距 | 6 | 8 | tab-icon-gap |
+| Tab 间距 | 8、11、11 | 8 | tab-gap |
+| 顶部按钮间距 | 24 | 24 | header-action-gap |
+| 控件高度 | 40 | 40 | control-height |
+| 按钮左右内边距 | 24 | 24 | button-padding-inline |
+| 排序左右内边距 | 左侧约 17 | 16 | sort-padding-inline |
+| 卡片圆角 | 14.9145727 | 16 | radius-card |
+| 按钮/排序圆角 | 8 / 9 | 8 | radius-control |
+| Tab 圆角 | 高 40、圆角 30 | 999，胶囊 | radius-pill |
+| 卡片/按钮阴影 | 检查节点 effects=[] | none | shadow-card / shadow-control |
+| 更多图形 | 原稿有 20×4 与 30×30 两类外框 | 20×4 | more-glyph-width / more-glyph-height |
+
+“更多”20×4 定义的是图形尺寸；实际网页命中区可由透明容器扩大，不拉伸图形，也不把 30×30 当成图形标准。
+
+按钮宽度随文字、图标和内边距决定，不固定为原稿的 104/146。图标保留固有比例，不把不同资产强行拉伸到相同宽高。
+
+### 3.4 交互状态
+
+下列补全状态原稿未提供完整状态集，属于第二阶段提出并获准采用的规范化建议，不标注为 Figma 原始参数。
+
+| 状态 | 冻结表现 | Token 后缀或行为 |
+| --- | --- | --- |
+| 卡片 hover | #EFF2F8 | surface-card-hover |
+| 卡片 pressed | 同 hover，不缩放 | surface-card-pressed |
+| 键盘焦点 | 2px #333 轮廓，offset 2px，不改变布局尺寸 | focus-color / focus-width / focus-offset |
+| 主按钮 hover / pressed | hover为黑色按钮整体opacity .6；pressed #333333（v1.5） | action-primary-hover / action-hover-opacity / action-primary-pressed |
+| 次按钮 hover / pressed | hover填充rgba(51,51,51,.05)，描边与整体透明度不变；pressed #EFF2F8（v1.7） | action-secondary-hover / action-secondary-pressed |
+| 禁用按钮 | 背景 #E3E7EE，文字 #626E82，无 hover | action-disabled-bg / action-disabled-fg |
+| 按钮 loading | 尺寸不变、busy、防止重复点击 | 沿用该按钮视觉 Token |
+| Tab hover | #F7F9FB | surface-tab-hover |
+| 置顶 pending | 防止重复操作；失败恢复原状态 | 复用现有业务逻辑 |
+
+弹层投影、危险状态及错误/空态的专门视觉值在第二阶段未取得完整设计依据，也未给出可冻结数值。实施中不得冒充原稿参数或自行套用旧视觉标准；需要时先提出本页局部补充并更新本文。
+
+## 4. 自适应与宽度验证
+
+使用实际网格宽度 W 决定列数；W 不含页面 Padding，且须扣除实际滚动条等占位。常规最小宽为440，紧凑下限为350，间距 G=24。v1.4 的有效最小宽随右侧内容容器变化，取 `clamp(350px, (W−48px)/3, 440px)`，不读取 Sidebar 状态。
+
+```css
+--vnext-card-effective-min-width: clamp(
+  var(--vnext-card-compact-min-width),
+  calc((100cqw - 2 * var(--vnext-grid-gap-inline)) / 3),
+  var(--vnext-card-min-width)
+);
+grid-template-columns:
+  repeat(auto-fill, minmax(min(100%, var(--vnext-card-effective-min-width)), 1fr));
+```
+
+三个约束同时成立：页面左右 Padding 稳定；卡片横纵 Gap 稳定；每列以 1fr 平分可用宽度。禁止按 Sidebar 展开状态硬编码列数，禁止用 space-between 拉大卡片间距。
+
+v1.4 三列而非四列的条件：`1098 ≤ W < 1832`（v1.0 固定440下限时为1400起）。`100cqw` 引用页面容器的内容盒，即扣除页面Padding后的宽度；不是窗口宽度。容器足够时增列；不足时减列，不横向溢出。卡片图标、字号、圆角、内边距不随卡片宽度同比放大。
+
+### 1920 预览几何（历史Figma参数G=40；当前实现见v1.4）
+
+| 情形 | 内容容器宽 C | 无额外占位的网格宽 W=C−112 | 列数 | 卡片宽 |
+| --- | --- | --- | --- | --- |
+| 预览侧栏展开，左侧占 389 | 1531 | 1419 | 3 | 446.333… |
+| 内容扩展上界，左侧占 0 | 1920 | 1808 | 3 | 576 |
+
+以上尺寸已在生成的 Figma 预览节点中检查。未运行真实页面，未测量宿主侧栏收起宽度、缩放、滚动条占位或 CSS clientWidth，不能写成运行验收通过。
+
+v1.0 固定440下限时，展开几何距三列门槛仅19px。v1.2 经用户反馈允许紧凑卡片，三列门槛改为1100；仍按实际网格宽度计算，不隐藏滚动条。
+
+无额外占位时，内容容器 C 的两/三/四列阈值在v1.4分别为 **804 / 1178 / 1912px**（原v1.0为1032 / 1512 / 1992px）。PNG 的 1646×974 像素尺寸不能直接替代 CSS 视口尺寸。
+
+现有公共 1000px 上限与此三列要求矛盾：1000 < 1098（v1.3三列门槛）。必须在知识首页局部替换该展示约束；禁止修改公共 MODULE_HOME_COLUMN 影响其他模块。
+
+### 局部布局细则
+
+- 顶部 64，标题行高 56，间隔 40，工具栏高 40，再间隔 32，正常宽度下网格 y=232。
+- 卡片高度最低 176、内边距 24；标题区高 44；描述及底部元信息保持稳定节奏。
+- 名称与描述单行省略；缺失描述不虚构文案。底部元信息稳定对齐，极窄情况下允许换行与卡片增高。
+- 工具栏不足时可换行或 Tab 横向滚动；不挤压排序和图标至不可用。
+- 桌面宿主嵌入模式即使很窄也可能保持桌面页面，必须以内容宽度处理，不能只依赖 viewport 断点。
+- 保留既有移动端页面和详情页；局部 Container Query 如确有需要再使用。
+- 页面保留明确的主要滚动容器；不修改全局滚动规则。验收实际滚动条占位与是否出现双滚动。
+
+## 5. 工程落点与防泄漏
+
+代码仓库目录为本文上级目录下的 `bisheng/`；开发分支 `feat/knowledge-space-redesign`，目标合并分支 `feat/3.1.0-beta1`。
+
+拟议本页实现目录：`bisheng/src/frontend/client/src/pages/knowledge/home/vnext/`。尚未创建代码文件。
+
+- `tokens.module.css`：局部 `.scope` 声明 --vnext-*，只在首页主动启用。
+- `KnowledgeHomeNext.module.css`：本页布局、卡片、工具栏及状态。
+- 工具栏、卡片、菜单等本页组件按职责拆分；第二个复用页面出现后再提取共享层。
+- Portal 面板显式附加同一 Token scope 与局部类；根节点变量不会自动穿过 body Portal。
+- 不声明 :root、html、body；不使用无作用域元素选择器或全局 role 选择器；不覆盖旧 --brand-*、--text-*、--radius 等。
+- CSS Modules 不阻止全局继承，关键字体、表面、控件状态需显式定义和验证。
+- 不依赖修改 body class 或卸载清理 CSS；页面被 KeepAlive 缓存也不得影响外部。
+- 不修改公共组件以适配本页；无法局部隔离所有视觉状态时，本页封装现有交互基础。
+- Figma 预览使用独立 `vNext · Knowledge Preview` 变量集合；不改变原稿共享变量。其变量名用于预览组织，代码以本文 --vnext-* 命名为准。
+
+## 6. 业务复用与数据约束
+
+| 能力 | 实施约束 |
+| --- | --- |
+| 路由、创建、进入、设置、知识广场 | 复用现有回调及导航，不替换业务流 |
+| 三个列表 API、Query Key、刷新 | 复用真实接口和缓存机制 |
+| 权限 | 复用按空间懒查询、默认关闭受限操作、失败可重试 |
+| 删除、退出、置顶 | 保留确认、权限、额度、乐观更新与失败恢复 |
+| 全部空间 | 三个现有分类按 ID 去重；保留来源分类信息供菜单与置顶规则使用 |
+| 分类计数 | 使用真实过滤后集合；错误、未加载不得伪装成可信的 0 |
+| 创建时间排序 | 后端已有支持；前端需页面适配，不用不安全类型断言伪装共享 hook 已支持 |
+| 全部排序 | 合并后统一排序，保留置顶优先和稳定同值顺序 |
+| 卡片元信息 | 接口未返回时不伪造创建者、团队、图标；不默认逐卡请求详情制造 N+1 |
+| 演示数据 | 设计稿文字仅占位，不能写入产品数据；验收关闭已有 DEV 演示注入 |
+| 国际化 | 使用现有体系，新文案同时覆盖项目要求的语言 |
+
+“组织与部门”建议对应现有部门集合；“已加入”当前实际包含其他人创建、权限可见的空间，不限主动加入。用户对占位文字的确认不等于改动接口含义；沿用真实语义，仍需在实现报告说明其口径。
+
+旧 `KnowledgeSpaceSidebar`、`KnowledgeSpaceSections`、`KnowledgeSpaceCardItem` 同时服务移动端及详情场景，不整体换肤。首页优先复用 hooks 和回调，独立展示层。
+
+## 7. 代码定位
+
+以下路径均相对代码仓库 `bisheng/`，位置来自第一、二阶段审计，实施前需复核当前内容。
+
+- `src/frontend/client/src/routes/index.tsx:270`：知识空间路由。
+- `src/frontend/client/src/layouts/MainLayout.tsx:199`：公共壳层与右侧 flex 容器。
+- `src/frontend/client/src/components/ModuleHome/ModuleHome.tsx:19`：公共框架及 1000px 上限，禁止全局修改。
+- `src/frontend/client/src/pages/knowledge/index.tsx:455`：进入空间；508：创建；993：桌面状态分支。
+- `src/frontend/client/src/pages/knowledge/KnowledgeHomePage.tsx:32`：桌面首页入口。
+- `src/frontend/client/src/pages/knowledge/sidebar/KnowledgeSpaceSidebar.tsx:194`：分类过滤；462：旧内容宽度约束。
+- `src/frontend/client/src/pages/knowledge/hooks/useKnowledgeSpaceLists.ts:11`：列表查询。
+- `src/frontend/client/src/pages/knowledge/hooks/useKnowledgeSpacePermissions.ts:25`：空间动作权限。
+- `src/frontend/client/src/pages/knowledge/hooks/useSpaceActions.ts:192`：置顶及回滚。
+- `src/frontend/client/src/api/knowledge.ts:740`：列表 API；345：字段映射。
+
+## 8. 实施前剩余确认与验收
+
+已冻结视觉不因截图或运行限制自行变更。以下项目仍需实测或结合真实数据确认：
+
+1. 基准窗口 CSS 宽度、缩放、侧栏展开/收起后的 C、W、滚动条占位；验证当前1098≤W<1832的三列条件及四列阈值。
+2. PingFang SC 实际可用性、600 字重、跨平台回退及中英日截断；不把预览的 700 当作正式值。
+3. 三分类口径、缺失元信息、分类图标含义；排序选择各分类独立记忆或统一使用的产品规则。
+4. “全部”仍按原分类处理置顶限制，不擅自改成新的全局五个规则。
+5. 新版以本次独立浅色视觉为基准，不自动沿用旧品牌/深色视觉；如增加新版主题，先补充局部规范。
+6. 弹层、危险、错误与空态未定的专门视觉按需补充，不扩散修改旧公共样式。
+
+验收覆盖：常规/窄容器、侧栏切换、长文本和多语言、加载/空/错/重试、权限加载与拒绝、创建额度、进入/返回、排序、置顶恢复、删除/退出、键盘焦点，以及其他页面和左侧导航的无污染回归。
+
+代码修改前检查 Git status，不覆盖未提交改动。后续按变更运行必要验证，包括项目要求的 lint/typecheck。本文保存阶段仅新增本规范，不安装依赖、不修改业务代码、不提交或推送。
+
+## 9. 变更记录
+
+- 2026-11-01 / v1.0：按用户确认保存；基准宽度更新为 1920；文字与计数明确为占位；更多图形冻结 20×4；记录统一参数、Figma 预览证据、字体限制及待实测项。
+- 后续修改冻结值时，先更新本文的版本与理由，再调整实现和验收基准。
+
+### v1.1 素材与接口映射确认
+
+用户确认：组织与部门对应原“部门”接口 `/api/v1/knowledge/space/department`，我的创建对应原“我创建的”接口 `/api/v1/knowledge/space/mine`，已加入空间对应原“我加入的”接口 `/api/v1/knowledge/space/joined`。
+
+卡片分类素材：组织与部门 `card-1.png`、我的创建 `card-2.png`、已加入空间 `card-3.png`。三份原图均为88×88，网页显示仍为44×44；全部空间按照卡片原始分类来源选择素材，保留既有部门优先、创建次之、加入最后的 ID 去重规则。本页分类素材取代旧的通用图标/自定义图标展示优先级，不修改接口、详情页或移动端图标逻辑。
+
+同步接入用户更新的 `clip-2.svg`（原始25×24），替代旧的24×24 PNG，不拉伸其比例。此次仅补充已确认素材映射，其他冻结视觉值保持不变。
+
+### v1.2 响应式修订
+
+用户反馈整个窗口1455px、导航收起时应显示三列。当前预览实测左侧占240，右侧C=1215，网格W=1103；旧固定最小宽440导致仅两列。修订为340–440之间的弹性最小宽，三列优先范围覆盖W=1100至1880。340是本次实施建议值，不是Figma原始参数。Gap40、左右Padding56、图标44、字号及卡片Padding24均保持。
+
+浏览器实测：C=1211/W=1099为两列；C=1212/W=1100为三列340；窗口1455且左侧240时为三列341；1920原展开参考仍为三列446.33；C=1991为三列，C=1992为四列440。未把预览槽位当作真实宿主Sidebar收起宽度。
+
+### v1.3 缩小卡片Gap、提高紧凑卡宽
+
+用户希望Gap在24–36px之间，使1455px窗口中的卡片更宽。实施采用稳定的横纵Gap24px，Page Padding仍为左右56px；紧凑卡宽下限由340提高到350，常规上限仍440。图标、字体、内部Padding、圆角均不改变。
+
+实测：窗口1455、左侧占240时C=1215/W=1103，三列各约351.67px（此前341px）。1920原展开参考C=1531/W=1419为三列457px。C=1209为两列，C=1210为三列350px；C=1943为三列，C=1944为四列440px。缩小Gap后四列阈值相应提前，这是本次参数变更的自然结果。长文本测试无横向溢出。
+
+### v1.4 页面左右Padding改为40px
+
+用户明确要求左右Page Padding由56改40，横纵卡片Gap保持24。仅修改知识空间局部Token；顶部64、卡片内部Padding24、图标44、字号、圆角及350–440的弹性最小宽规则保持。当前左右总占位为80px，网格宽W=C−80（须扣实际滚动条占位）。本修订覆盖此前各版本中的56px页面边距及相应容器阈值。
+
+浏览器实测：窗口1455、左侧占240时，C=1215/W=1135，三列各约362.33px，比v1.3再增加约10.67px。1920原展开参考C=1531/W=1451，三列约467.67px。C=1177为两列，C=1178为三列350px；C=1911为三列，C=1912为四列440px。长文本无横向溢出。导航占位仍为预览几何，不代表真实宿主联调。
+
+### v1.5 Explicit interaction updates
+
+These user-requested states supersede earlier defaults without changing layout tokens.
+
+- More glyph: opacity .6 on hover, press and while its menu is open; restored to1 otherwise. Hit area and focus indicator remain unchanged.
+- Create button: whole-button opacity .6 on hover, black base background. Disabled buttons do not acquire hover styles.
+- Unpinned icon: retain original #6A7588 stroke at opacity .5 by default. A page-local hover derivative changes only stroke-opacity to1, keeping the original25x24 geometry. Pinned artwork is unchanged.
+- Sort arrow: explicitly user-authorized local drawing,12x8, #333333 fill/stroke,2px round join giving1px outer corner radius. This is not a newly retrieved Figma asset.
+- Sorting uses the already-installed Radix Select primitives with local CSS and an explicitly scoped Portal. Border defaults to#D0D5DE; hover/open uses#333333; closed and not hovered resets to default. No outer outline or shadow remains after dismissal. Keyboard focus uses an underlined value instead of an outer ring.
+- Existing sort values, data sorting and keyboard selection remain intact. No global Select or shared component style changes.
+- Deletion remains gated by real delete permission. The fixture has no such permission, so no fake delete action is shown. Rename is deferred to backend integration as explicitly permitted by the user.
+
+Browser checks: create hover .6; more open .6; unpinned hover layer1/default layer0; arrow12x8; open border rgb(51,51,51); after selection and mouse-out border rgb(208,213,222), outline-style none and box-shadow none. Escape closes the list and restores focus. These checks use fixture data, not live backend integration.
+
+### v1.6 Outline-only discovery hover and dark design preview
+
+The user requested that Knowledge Square hover keep its white surface and text unchanged, lowering only the border opacity to60%. Implemented locally as rgba(51,51,51,.6), with button opacity1. Preview card titles/descriptions/owners now come from a test-only Chinese fixture JSON; production data is unchanged.
+
+Current theme implementation: `client/src/hooks/ThemeContext.tsx` toggles light/dark on the html element, persists color-theme and supports system preference. The shared Tailwind preset uses class-based dark mode. `packages/ui/src/styles/tokens.css` supplies the Arco dark gray ramp and semantic aliases; `client/src/style.css` retains separate legacy/shadcn surface tokens. These two token families coexist. The vNext page currently declares fixed light scoped values and color-scheme:light, so it does not yet follow global dark mode. No website dark-mode styling has been implemented in this pass.
+
+Two editable Figma proposals were created by reusing existing local components, with a separate preview-only variable collection. Original light screens/components/global tokens are unchanged:
+- Wide right-content1531: https://www.figma.com/design/ceyPGsiRutsoQcjHleUkl3/DSH-Desktop0924?node-id=181-493
+- Compact right-content1215: https://www.figma.com/design/ceyPGsiRutsoQcjHleUkl3/DSH-Desktop0924?node-id=181-931
+- Source/limitation notes: node181:1369.
+
+Proposed role mapping from current code: page#121212 (--bg-page), card#17171A (--fill-1), hover/selected#2E2E30 (--fill-2), strong#F6F6F6 (--text-1), secondary#ABABAC (--text-2), metadata/icons#929293 (--text-3), border#484849 (--border-base). Monochrome primary uses the legacy dark primary/on-primary pair#FAFAFA/#171717. The source values exist in code; assigning these values to vNext roles is an adaptation proposal, not an approved or already-implemented theme. No host Sidebar is drawn in these right-content previews.
+
+Layout stays Padding40/Gap24/cardPadding24/icon44. Wide cards467.67x176; compact cards362.33x176. The preview keeps existing Figma Noto Sans SC fonts (Bold700 substitutes for the formal PingFang SC600); this known limitation is labeled on the canvas. Figma screenshots were visually reviewed.
+
+### v1.7 Light-mode hover revision and accepted dark preview
+
+The user accepted the Figma dark previews. They remain unchanged; no website dark-mode implementation is requested or applied in this pass. Font limitations and proposal-to-code distinctions recorded in v1.6 remain applicable.
+
+Light-mode Knowledge Square hover now uses rgba(51,51,51,.05) fill with its original #333 border and whole-button opacity1. This supersedes the previous60% border-opacity hover. Sort hover/open uses the same5% #333 fill, keeping its default #D0D5DE border; the former hover/open border darkening is removed. When closed and not hovered, the surface returns to white with no outer ring or shadow.
+
+The local sort-arrow.svg and rendered image are both8x4, preserving#333333 and the round-joined geometry. This supersedes the former12x8 size. All changes remain scoped to the knowledge homepage; layout and real sorting logic are unchanged.
+
+Browser measured: Knowledge Square hover background rgba(51,51,51,.05), border rgb(51,51,51), opacity1; sort open background rgba(51,51,51,.05), border rgb(208,213,222), arrow8x4. Closed/mouse-out restores white with outline-style none and box-shadow none.
+
+### v1.8 Pin action ownership and final More-menu contract
+
+The user confirmed that pin/unpin belongs exclusively to the card's pin button, not the More menu. The card button reuses the existing handlePinSpace action, category-specific quota, pending lock and optimistic rollback behavior. Pin priority in sorting is unchanged.
+
+After integration, the knowledge-home More menu must contain only Rename and Delete, each gated by the appropriate real permission. Pin/unpin, Settings and Leave are removed from this homepage menu. Existing details/mobile flows are not modified. Rename remains deferred to backend integration as previously authorized; Delete retains its permission check and confirmation. No permission is inferred from creator/team text. When permissions provide no available action, the menu displays a disabled localized no-actions row rather than an empty popup or a fake operation.
+
+The test-only preview now maintains local pinned IDs so clicking card pin buttons visibly toggles them. This fixture state is separate from production hooks and makes no backend writes. The first-card pin checkbox reflects the same local state.
+
+Browser verified the card button toggles aria-pressed false/true and labels Pin/Unpin; the fixture More menu contains no pin item. Unit tests cover card unpin arguments without entering the space, repeated pin locking, delete confirmation/permission, and no Settings/Leave/Pin items even for joined spaces with edit-like permissions. Backend quota, persistence, rename and permission integration still require a real environment.
+
+### v1.9 置顶顺序与卡片移动
+
+置顶区按置顶先后顺序排列（先置顶在前），独立于右侧排序；取消置顶后参与当前普通排序，重新置顶排到置顶区末尾。保留原有置顶接口、权限、数量限制和失败回滚。
+
+复用已安装的 Framer Motion，卡片采用 position layout 动画360ms，其他卡片按目标位置每张错开20ms、最多120ms；整个卡片平移，不缩放内部文字和图标，不用JS手动布局。只在卡片ID顺序变化时测量动画，容器缩放继续由CSS Grid控制。系统减少动态效果偏好下关闭移动。
+
+当前接口只返回 is_pinned，不返回置顶时间或序号；因此本页面会话内记录新置顶顺序，已存在的置顶按首次读取顺序稳定显示，不能声称刷新/跨设备恢复真实历史顺序。后端个人置顶表已有 create_time，联调需将该时间或稳定 pin_order 暴露到列表响应，前端再以它作为排序依据。本次未修改后端。
+
+验证：20项单元测试通过；定向ESLint和生产构建通过。浏览器验证连续置顶、切换名称排序、取消及重新置顶；移动期间测得translate矩阵（scale为1），结束后transform为none。1455窗口/240导航占位下保持3列，卡片约362.33px、Gap24。系统减少动态偏好分支已实现，未在浏览器切换该系统设置验证。真实后端与跨设备验证尚未执行。
+
+### v1.10 置顶顺序修正
+
+用户确认：最后置顶的排在第一个。新置顶或重新置顶均放到置顶区最前，替代v1.9的先置顶在前规则；取消置顶后恢复当前普通排序。动画与其他规则不变。接口尚无置顶时间，刷新/跨设备的真实历史顺序仍需联调支持。
+
+### v1.11 紧凑卡片（2026-11-02 用户确认）
+
+常规卡片高度142px；上下Padding16px、左右24px。标题行36px，分类图标36×36，标题16/24px、字重600。标题至描述12px，描述14/22px单行截断、缺失时保留行高，描述至元信息18px，底部信息行22px。总高16+36+12+22+18+22+16=142px。
+
+置顶素材缩至原尺寸75%：已置顶18×18px，未置顶18.75×18px，按钮点击区域仍28×28px。Grid Gap24px、Page Padding及卡片列宽规则不变。使用min-height而非裁切固定高度，极窄容器允许标题或元信息换行撑高，防止重叠。
+
+### v1.12 菜单、空说明与页头（2026-11-02）
+
+更多菜单新增重命名，仅edit权限可见；复用handleUpdateSpace及其缓存更新/失败回滚，标题行内编辑，去除首尾空格、最长50字符、空名不提交，Enter保存、Escape取消、失焦保存。菜单关闭后再聚焦编辑框，避免焦点恢复提前结束编辑。删除原有权限及确认流程保持，本轮不执行真实删除或重命名提交。
+
+空白或未填写说明显示“暂无说明”，使用原说明颜色并设置opacity .6，保留单行与原行高。页面标题字号28px；右上知识广场与创建知识空间按钮从40px减为32px。其余标题行高和布局间距保持。所有视觉规则仅作用于知识空间主页。
+
+### v1.13 页头尺寸微调（2026-11-02）
+
+页面标题字号由28px改为32px，原行高保持。右上知识广场、创建知识空间两个按钮高度由32px改为36px，左右Padding各从24px减为22px（单个按钮总宽减少4px），上下Padding6px。仅修改知识空间页头，其他控件不变。
+
+### v1.14 排序控件宽高及截断（2026-11-02）
+
+排序触发框固定128×36px，128px沿用原五字选项宽度（文字70+左右Padding32+Gap16+箭头8+边框2）。选中文字使用单行ellipsis，切换短选项不收窄。展开面板独立按最长文字自然宽度展开，最大200px，并受可用视口宽度限制；移除原触发框等宽和菜单160px最小宽限制。选项超出时单行ellipsis，复用公共Tooltip组件显示全文，仅实际截断时启用，支持悬停和键盘聚焦。不修改公共组件样式。
+
+浏览器实测：普通面板120px，超长测试面板200px；短、长选项下触发框均128px宽/36px高，长文字宽336px、触发文字可用70px，面板文字可用150px。独立测试页已验证完整文字气泡。22项测试及类型检查通过。
+
+### v1.15 页头位置与小图标（2026-11-02）
+
+以现有侧栏品牌链接y20/高32的中心y36为基准，将右侧页头56px行框的起点改为y8（Page Padding top64→8），标题中心同为y36，不修改侧栏。标题至工具栏间距40→28px（减少12px）。排序选中文字左对齐，移除聚焦文字下划线，保持无外围黑边。
+
+创建者图标20→16px，更多可见图形20×4→16×3.2px（80%），原SVG透明画布30→24px，对应裁切偏移-4/-11.2px。图标在原按钮区域内居中，点击区域不缩小；卡片Padding16/24px和图文Gap8px保持。浏览器实测上述几何值与截断规则正常。
+
+### v1.16 页头顶部对齐（2026-11-02）
+
+按用户修正，以左侧BISHENG品牌标题区域顶部y20为基准，右侧标题行顶部也改为y20；Page Padding top8→20px。替代v1.15的垂直居中对齐，标题至工具栏28px及其他布局不变。
+
+### v1.17 页头与工具栏间距（2026-11-02）
+
+Header下移4px，Page Padding top20→24px。Header至Toolbar间距28→24px，Toolbar至卡片网格间距32→24px。其余布局参数保持。
+
+### v1.18 Tab状态、标题字重与备注位置（2026-11-02）
+
+Tab选中填充色改为#EFF2F8，Tab高度40→36px，选中文字字重改为400，与未选中一致，仅保留文字/背景变色。页面标题与卡片标题统一Medium500。备注上边距12→16px，下边距18→14px，使备注下移4px，保持底部信息位置与卡片常规142px高度。均为知识空间局部样式。
+
+### v1.19 Tab选中色与卡片悬停共用来源（2026-11-02）
+
+选中Tab填充Token引用--vnext-surface-card-hover，不再独立维护色值；当前两者均为#EFF2F8，未来卡片悬停色调整时同步生效。
+
+### v1.20 创建按钮字重（2026-11-02）
+
+知识空间主页的“创建知识空间”按钮字重由Medium500降至Regular400，其他按钮样式不变。
+
+### v1.21 卡片圆角（2026-11-02）
+
+知识空间主页卡片圆角由16px改为14px，使用页面局部--vnext-radius-card，其他组件圆角不变。
+
+### v1.22 页面整体下移（2026-11-02）
+
+知识空间右侧页面顶部Padding24→32px，使Header、Toolbar与卡片整体下移8px，内部间距及左侧导航不变。
+
+### v1.23 卡片标题与图标对齐（2026-11-02）
+
+标题行图文Gap16→14px；标题字号16px不变，行高24→36px，与36px分类图标等高，保留Flex居中。标题编辑框也限制为36px，避免进入重命名时撑高。标题行整体仍36px，不改变卡片142px常规高度及备注/底部位置。
+
+### v1.24 现有产品组件对比版本（2026-11-02）
+
+按用户要求，排序切为@bisheng/ui Select（medium/outlined、宽128px），分类切为Tabs（medium/neutral、无底部分隔线、线形选中指示），更多面板切为Dropdown/DropdownItem；全部使用库原生视觉，不覆盖公共组件样式。原胶囊Tab、Radix局部Select/菜单及其CSS保持。home/vnext/componentMode.ts中的USE_PRODUCT_COMPONENTS=true启用产品组件，设false可一起恢复原版。
+
+共享组件采用自身32px尺寸阶梯和原生选中/焦点/面板规则，暂不强制套用此前36px与200px面板视觉参数。分类图标暂不带入原生线形Tabs，保留真实名称与计数。数据、筛选、排序、置顶、重命名、权限与删除确认沿用原逻辑。新样式只在知识空间主动启用，不修改全局Token/共享组件。
+
+验证：Typecheck通过；22项旧版保留路径回归测试通过；浏览器使用隔离fixture验证共享Tabs筛选（我的创建3张）、Select按名称切换和Dropdown权限空态。真实后端此前返回空数组，未用fixture替换真实页面数据，也未执行远端写操作。
+
+### v1.25 移除知识广场入口（2026-11-02）
+
+移除知识空间主页右上方知识广场按钮，仅保留创建知识空间。其他既有广场路由和业务入口不变。
+
+### v1.26 创建入口使用共享Button（2026-11-02）
+
+产品组件模式下创建知识空间改用@bisheng/ui Button，primary/solid/medium，原生32px高度、主题色、图标、Padding、圆角和交互状态。保留原创建回调及enabled门控，不增加远端写操作。旧版按钮和样式保留，可随componentMode开关恢复；不将旧页头36px/22px或透明度样式覆盖到共享按钮。
+
+### v1.27 备注文字透明度（2026-11-02）
+
+卡片正常备注使用原备注颜色的60%透明度；空备注占位使用同一原色的30%透明度，覆盖而非叠乘正常备注opacity。占位现有文案“暂无说明”保持，位置、字号及行高不变。
+
+### v1.28 使用Segmented分类栏（2026-11-02）
+
+按用户要求将产品组件模式的分类栏由线形Tabs改为共享Segmented medium32px，直接使用组件原生选中态。恢复组织与部门、我的创建、已加入空间左侧原始menu-1.svg/menu-2.svg/menu-3.png，按16×16容纳且保持原比例；全部空间沿用原先无图标。保留真实计数、筛选与键盘操作，窄容器横向滚动。旧局部胶囊Tab仍可随componentMode关闭恢复；Select、Dropdown和创建按钮保持产品组件。
+
+### v1.29 分类栏恢复局部胶囊样式（2026-11-02）
+
+仅分类栏恢复之前的局部胶囊Tab（36px、选中色引用卡片hover、常规字重、原分类图标），不再使用Segmented。排序Select、更多Dropdown、创建Button继续使用现有产品组件；计数和筛选逻辑保持。预览入口切回真实环境/workspace/knowledge，不使用fixture替换真实数据。
+
+### v1.30 编辑空间菜单与置顶显隐（2026-11-02）
+
+移除行内重命名，菜单恢复“编辑空间”，复用宿主onSpaceSettings及既有/knowledge/space/{id}/settings页面和接口流程，edit或manage_permission可见。编辑与删除均使用产品原有Outlined.Edit/Outlined.Delete图标。主页不单独提交名称更新。
+
+未置顶按钮默认透明隐藏且不接收指针，卡片hover或focus-within时显示；已置顶按钮常驻。无hover设备常显未置顶按钮以保持可操作，键盘Tab仍可聚焦并显示。按钮位置和点击范围保留，不引发布局位移。

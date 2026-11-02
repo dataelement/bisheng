@@ -27,7 +27,6 @@ import { useConfirm, useToastContext } from "~/Providers";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
 import { createApiStatusError, extractApiErrorMessage, extractApiStatusCode } from "~/utils/apiStatusError";
 import { KnowledgeHomePage } from "./KnowledgeHomePage";
-import { MODULE_HOME_FRAME, ModuleHomeHeader } from "~/components/ModuleHome";
 import { squareTypePath } from "~/pages/square/squarePaths";
 import { isDemoId } from "~/mock/demo/ids";
 import { KnowledgeSpaceContent } from "./SpaceDetail";
@@ -990,49 +989,18 @@ export default function Knowledge() {
             </>
           )}
         </div>
-      ) : spacesError ? (
-        <ApiRequestFailure error={spacesError} onRetry={retrySpaces} />
-      ) : spacesResolving || detailSpaceId ? (
-        /* PC loading state — keep the loading view up until the space lists
-                   settle so the empty state never flashes before auto-select. */
-        <div className="flex flex-1 flex-col items-center justify-center py-10 text-center text-text-3">
+      ) : detailSpaceId ? (
+        spacesError ? <ApiRequestFailure error={spacesError} onRetry={retrySpaces} /> : <div className="flex flex-1 flex-col items-center justify-center py-10 text-center text-text-3">
           <LoadingIcon className="size-20 text-primary" />
         </div>
-      ) : !hasNoSpace ? (
+      ) : (
         <KnowledgeHomePage
+          enabled={knowledgePluginEnabled}
           onSpaceSelect={handleSpaceSelect}
           onCreateSpace={handleCreateSpace}
           onSpaceSettings={handleSpaceSettings}
           onKnowledgeSquare={handleOpenSquare}
         />
-      ) : (
-        /* PC empty state when the user has no space at all — the 我的 frame (title +
-                   switcher) stays, with the illustration + two actions centered below it. */
-        <div className={MODULE_HOME_FRAME}>
-          <ModuleHomeHeader title={menuNames.knowledge} />
-          <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
-            <EmptyStateIllustration className="size-[120px]" />
-            <p className="mt-6 text-[14px] font-normal leading-6 text-text-3">
-              {localize("com_knowledge.no_related_content_you_can")}
-            </p>
-            <div className="mt-5 flex items-center gap-4">
-              <button
-                type="button"
-                onClick={handleOpenSquare}
-                className="h-8 rounded-md border border-border-base bg-white px-4 text-[14px] leading-[22px] text-text-2 transition-colors hover:border-blue-500 hover:text-blue-500"
-              >
-                {localize("com_knowledge.go_to_square")}
-              </button>
-              <button
-                type="button"
-                onClick={handleCreateSpace}
-                className="h-8 rounded-md bg-blue-500 px-4 text-[14px] leading-[22px] text-white transition-colors hover:bg-blue-400 active:bg-blue-600 btn-brand-primary"
-              >
-                {localize("com_knowledge.create_knowledge_space")}
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       <KnowledgeSpacePreviewDrawer

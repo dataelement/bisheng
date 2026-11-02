@@ -1220,6 +1220,21 @@
     "history_deleted": "历史会话已删除"
   },
   "com_knowledge": {
+    "home_next": {
+      "no_description": "暂无说明",
+      "no_actions": "暂无可用操作",
+      "all": "全部空间",
+      "created": "我的创建",
+      "department": "组织与部门",
+      "joined": "已加入空间",
+      "load_error": "知识空间加载失败，请重试",
+      "more": "更多操作",
+      "sort_create_time": "按创建时间",
+      "sort_name": "按名称",
+      "sort_update_time": "按更新时间",
+      "square": "知识广场",
+      "updated_at": "更新于{{date}}"
+    },
     "department_private_disabled": "部门知识空间不支持设为私有",
     "add_new": "新增",
     "web_link": "网页链接",
