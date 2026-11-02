@@ -20,6 +20,7 @@ from bisheng.linsight.domain.services import agent_factory
 from bisheng.linsight.domain.services.agent_factory import (
     _EMPTY_QUESTIONS_RETRY_HINT,
     _EMPTY_QUESTIONS_RETRY_MARKER,
+    _coerce_options,
     _coerce_questions,
     _empty_retry_count,
     _salvage_options_only,
@@ -286,6 +287,58 @@ async def test_ask_user_case_d_crammed_dict_value_parks_structured():
     assert tool_calls[0]["args"]["question"] == '你想要的"skill test"是指什么？'
     assert len(tool_calls[0]["args"]["options"]) == 4
     assert tool_calls[2]["args"]["multiple"] is True
+
+
+# Exact `questions` the model sent in the live 120-test session (task 70bf89eb…),
+# read back from the Redis checkpoint: each option nested one level deeper than the
+# previous, or the whole options list wrapped once more. Rendered before the fix as a
+# single Python-repr option like "['markdown', ['html', ['docx', ['pdf']]]]".
+_LIVE_NESTED_OPTIONS_QUESTIONS = [
+    {"question": "请提供你的基础信息：性别、年龄、身高、当前体重", "options": [["我直接输入：性别/年龄/身高/体重"]]},
+    {
+        "question": "你的减肥目标是什么？",
+        "options": [
+            [
+                "12周内减 5%-8% 体重（安全区间）",
+                ["3个月内减 10% 体重（偏进取）", ["以体脂率下降为核心，缓慢塑形", ["先不定具体数字，只想要一份通用饮食+运动框架"]]],
+            ]
+        ],
+    },
+    {"question": "饮食与运动方面有什么限制或偏好？（可多选）", "options": [[["没有特殊限制，正常吃"]]], "multiple": True},
+    {"question": "以什么形式交付？", "options": [["markdown", ["html", ["docx", ["pdf"]]]]], "multiple": True},
+]
+
+
+async def test_ask_user_flattens_nested_options_from_live_session():
+    """Nested option lists are flattened in order; the user never sees a repr blob."""
+    captured = MagicMock(return_value="ok")
+    with patch.object(agent_factory, "interrupt", captured):
+        await ask_user.ainvoke({"reason": "r", "questions": _LIVE_NESTED_OPTIONS_QUESTIONS})
+
+    tool_calls = captured.call_args.args[0]["params"]["tool_calls"]
+    options = [tc["args"]["options"] for tc in tool_calls]
+    assert options == [
+        ["我直接输入：性别/年龄/身高/体重"],
+        [
+            "12周内减 5%-8% 体重（安全区间）",
+            "3个月内减 10% 体重（偏进取）",
+            "以体脂率下降为核心，缓慢塑形",
+            "先不定具体数字，只想要一份通用饮食+运动框架",
+        ],
+        ["没有特殊限制，正常吃"],
+        ["markdown", "html", "docx", "pdf"],
+    ]
+    for opts in options:
+        assert not any(o.startswith("[") for o in opts)
+
+
+def test_coerce_options_shapes():
+    assert _coerce_options(None) == []
+    assert _coerce_options("仅一个选项") == ["仅一个选项"]  # bare string is NOT split into chars
+    assert _coerce_options('["a", "b"]') == ["a", "b"]  # stringified array
+    assert _coerce_options(['["a", "b"]', "c"]) == ["a", "b", "c"]  # stringified element
+    assert _coerce_options(["a", "", " ", "a", 1]) == ["a", "1"]  # empties / dups dropped
+    assert _coerce_options([{"label": "x"}, {"foo": "y"}]) == ["x"]
 
 
 # --- ② _salvage_options_only pure-function behavior -------------------------
