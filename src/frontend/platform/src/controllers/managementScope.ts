@@ -36,7 +36,8 @@ export function requiresManagementScope(method: string, raw: string): boolean {
     [['DELETE'], /^\/api\/v1\/flows\/[^/]+$/],
     [['POST','PUT'], /^\/api\/v1\/assistant$/],
     [['POST'], /^\/api\/v1\/assistant\/(?:delete|status|flow|tool)$/],
-    [['POST'], /^\/api\/v1\/knowledge\/(?:create|copy|qa\/copy|upload(?:\/[^/]+)?|tags|file\/tags(?:\/batch)?)$/],
+    // Temporary uploads are shared; only knowledge-scoped uploads are management writes.
+    [['POST'], /^\/api\/v1\/knowledge\/(?:create|copy|qa\/copy|upload\/[^/]+|tags|file\/tags(?:\/batch)?)$/],
   ]
   return rules.some(([methods, pattern]) => methods.includes(verb) && pattern.test(path))
 }
