@@ -250,7 +250,8 @@ class SpaceChannelMemberDao:
         rapid requests (it has returned phantom rows on DM, see subscribe_space),
         so we never trust a passed-in object for the write. UPDATE by
         (business_id, business_type, user_id); if no row was actually affected,
-        INSERT a fresh MEMBER row. Standard SQL — works on both MySQL and DM.
+        INSERT a fresh MEMBER row. Reapplications use the MEMBER role so an
+        earlier administrative role stays revoked. Standard SQL works on MySQL and DM.
         """
         async with get_async_db_session() as session:
             result = await session.exec(
@@ -260,7 +261,7 @@ class SpaceChannelMemberDao:
                     SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
                     SpaceChannelMember.user_id == user_id,
                 )
-                .values(status=status)
+                .values(status=status, user_role=UserRoleEnum.MEMBER)
             )
             if (result.rowcount or 0) > 0:
                 await session.commit()
