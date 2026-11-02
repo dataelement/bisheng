@@ -710,6 +710,47 @@ def _normalize_to_dicts(value: object) -> list[dict]:
     return [q for q in out if isinstance(q, dict)]
 
 
+def _coerce_options(value: object) -> list[str]:
+    """Flatten the ``options`` of one question into a clean ``list[str]``.
+
+    Some models nest each option one level deeper than the last — observed live on
+    120 test (task 70bf89eb…): ``[["a", ["b", ["c", ["d"]]]]]`` — or wrap the whole
+    list once more (``[["a"]]``). ``str()`` on such an element showed the user a
+    Python-repr blob like ``['a', ['b', ...]]`` as ONE option. Walk nested lists
+    depth-first (order preserved), parse a string element that is itself a JSON
+    array, and drop empties / duplicates. A bare string becomes a single option.
+    """
+    out: list[str] = []
+
+    def walk(v: object) -> None:
+        if v is None:
+            return
+        if isinstance(v, (list, tuple)):
+            for x in v:
+                walk(x)
+            return
+        if isinstance(v, dict):
+            # an option smuggled as {"label": ...}/{"text": ...}; keep its text value
+            for key in ("label", "text", "value", "option"):
+                if str(v.get(key, "")).strip():
+                    walk(v[key])
+                    return
+            return
+        text = str(v).strip()
+        if not text:
+            return
+        if text.startswith("[") and text.endswith("]"):
+            parsed = _loads_tolerant(text)
+            if isinstance(parsed, list):
+                walk(parsed)
+                return
+        if text not in out:
+            out.append(text)
+
+    walk(value)
+    return out
+
+
 def _coerce_questions(value: object) -> list[dict]:
     """Normalize the ``questions`` arg into a clean ``list[dict]``, tolerating
     models that stringify nested tool arguments.
@@ -757,7 +798,7 @@ def _salvage_options_only(value: object) -> list[dict]:
     for q in _normalize_to_dicts(value):
         if str(q.get("question", "")).strip():
             continue  # has text — already kept by _coerce_questions
-        options = [str(o) for o in (q.get("options") or []) if str(o).strip()]
+        options = _coerce_options(q.get("options"))
         if options:
             salvaged.append(
                 {"question": _SALVAGE_QUESTION_TITLE, "options": options, "multiple": bool(q.get("multiple", False))}
@@ -855,7 +896,7 @@ async def ask_user(
                 # by the frontend for an empty question (it would NOT duplicate the
                 # reason header — that is exactly why _SALVAGE_QUESTION_TITLE is used).
                 "question": str(q.get("question", "")).strip() or _SALVAGE_QUESTION_TITLE,
-                "options": [str(o) for o in (q.get("options") or [])],
+                "options": _coerce_options(q.get("options")),
                 "multiple": bool(q.get("multiple", False)),
             },
         }
