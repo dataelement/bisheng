@@ -2,6 +2,7 @@
 import { SearchInput } from '@bisheng/ui';
 import { FlowIcon, HelperIcon } from "@/components/bs-icons/app";
 import { readTempsDatabase } from "@/controllers/API";
+import { showApiError } from "@/controllers/request";
 import { AppType, AppTypeToNum } from "@/types/app";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -33,19 +34,32 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
     }, [type, t])
 
     const [keyword, setKeyword] = useState(' ')
-    const allDataRef = useRef([])
+    const [templates, setTemplates] = useState([]);
+    const generation = useRef(0);
 
     useEffect(() => {
-        setKeyword(' ')
+        const reset = () => { ++generation.current; setTemplates([]); setOpen(false); };
+        window.addEventListener('bisheng:management-scope-changed', reset);
+        return () => window.removeEventListener('bisheng:management-scope-changed', reset);
+    }, []);
+
+    useEffect(() => {
+        const request = ++generation.current;
+        setTemplates([]);
+        setKeyword('');
+        if (!open) return;
         readTempsDatabase(type).then(res => {
-            allDataRef.current = res
-            setKeyword('')
-        })
-    }, [type])
+            if (request === generation.current) setTemplates(res);
+        }).catch(error => {
+            if (request === generation.current) showApiError(error);
+        });
+        const invalidate = () => { ++generation.current; };
+        return invalidate;
+    }, [type, open])
 
     const options = useMemo(() => {
-        return allDataRef.current.filter(el => el.name.toLowerCase().includes(keyword.toLowerCase()))
-    }, [keyword])
+        return templates.filter(el => el.name.toLowerCase().includes(keyword.toLowerCase()))
+    }, [keyword, templates])
 
     return <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>

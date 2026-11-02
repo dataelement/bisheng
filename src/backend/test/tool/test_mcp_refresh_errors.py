@@ -13,6 +13,7 @@ from bisheng.tool.domain.services.mcp_errors import mcp_error_code
     [
         (httpx.ConnectError("secret endpoint"), 15026),
         (httpx.ReadTimeout("secret endpoint"), 15027),
+        (TimeoutError("secret endpoint"), 15027),
         (SSEError("wrong content type"), 15030),
         (httpx.UnsupportedProtocol("secret endpoint"), 15031),
         (Exception("secret token"), 15032),

@@ -671,6 +671,7 @@
     "submit": "Submit",
     "workstationEntry": "Lingsi Entry",
     "menuDisplayName": "Menu Display Name",
+    "menuNameLengthHint": "Maximum 8 units: Chinese and Japanese characters count as 2; English letters count as 1.",
     "iconUpload": "Icon Upload",
     "sidebarIcon": "Sidebar Icon",
     "assistantIcon": "Welcome Page Icon & Avatar",

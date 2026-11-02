@@ -9,11 +9,13 @@ import { RadioGroup, Radio as RadioGroupItem } from "@bisheng/ui";
 import { t } from "i18next";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
+import { showApiError } from "@/controllers/request";
 
 export default function FormSet({ data, onChange, onSave, onCancel }) {
     const showReviewType = false;
 
-    const [form, setForm] = useState<any>({})
+    const [form, setForm] = useState(data)
+    const [saving, setSaving] = useState(false)
     useEffect(() => {
         setForm(data)
     }, [data])
@@ -41,14 +43,19 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
             reader.readAsText(file)
         }
     }
-    const handleSave = () => {
-        if ((String((form.autoReply) ?? '').length > 500)) return;
-
-        onChange(form).then(res => {
-            !res && onSave()
-        })
+    const handleSave = async () => {
+        if (saving || String(form.autoReply ?? '').length > 500) return;
+        setSaving(true)
+        try {
+            const blocked = await onChange(form)
+            if (!blocked) onSave()
+        } catch (error) {
+            showApiError(error)
+        } finally {
+            setSaving(false)
+        }
     }
-    return <>
+    return <fieldset disabled={saving} className="m-0 min-w-0 border-0 p-0">
         <div className="px-4 mt-6">
             {showReviewType && (
                 <>
@@ -106,8 +113,8 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
             </div>
         </div>
         <div className="absolute bottom-10 right-4 sapce-x-10 flex space-x-8">
-            <Button onClick={onCancel} variant="outlined" color="default">{t('cancel')}</Button>
-            <Button onClick={handleSave} disabled={(String((form.autoReply) ?? '').length > 500)}>{t('save')}</Button>
+            <Button onClick={onCancel} disabled={saving} variant="outlined" color="default">{t('cancel')}</Button>
+            <Button onClick={handleSave} disabled={saving || (String((form.autoReply) ?? '').length > 500)}>{t('save')}</Button>
         </div>
-    </>
+    </fieldset>
 };

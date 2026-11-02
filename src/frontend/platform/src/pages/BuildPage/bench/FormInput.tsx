@@ -9,6 +9,7 @@ export const FormInput = ({
     error,
     placeholder = "",
     maxLength,
+    suffix,
     type = "text",
     onChange,
     isTextarea = false,
@@ -17,6 +18,7 @@ export const FormInput = ({
     value: string | number;
     error: string;
     maxLength?: number;
+    suffix?: ReactNode;
     onChange: (value: string) => void;
     type?: string;
     placeholder?: string;
@@ -40,7 +42,7 @@ export const FormInput = ({
             {isTextarea ? (
                 <Textarea id={fieldId} value={value} placeholder={placeholder} onChange={handleChange} maxLength={maxLength} textareaClassName={"mt-3 min-h-48"} showCount />
             ) : (
-                <Input id={fieldId} value={value} type={type} placeholder={placeholder} onChange={handleChange} maxLength={maxLength} className={"mt-3"} showCount />
+                <Input id={fieldId} value={value} type={type} placeholder={placeholder} onChange={handleChange} maxLength={maxLength} suffix={suffix} className={"mt-3"} showCount />
             )}
             {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
         </div>
