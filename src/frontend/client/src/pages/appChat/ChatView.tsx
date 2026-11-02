@@ -48,7 +48,7 @@ const _SELECTABLE_CATEGORIES = new Set([
     "stream_msg",
 ]);
 
-export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }) {
+export default function ChatView({ data, cid, v, readOnly, isGuestMode = false, canShareConversation = false }) {
     const { user } = useAuthContext();
     const help = useChatHelpers()
     useWebSocket(help)
@@ -163,10 +163,7 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
         .map((item) => String(item || "").trim())
         .find(Boolean) || localize('com_ui_new_chat');
 
-    /** 与侧栏「分享应用」一致：仅 can_share === true 时展示对话顶栏分享入口 */
-    const hideShare = data?.can_share !== true;
-
-    /** 无消息且无需展示开场白 / 引导问题 / 工作流表单时显示主区域空状态 */
+    // Show the empty state when the conversation has no messages or opening content.
     const showChatEmptyState =
         conversations.length === 0 &&
         messages.length === 0 &&
@@ -184,7 +181,7 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
                 <div className="flex min-h-0 flex-1 flex-col">
                     <HeaderTitle
                         readOnly={readOnly}
-                        hideShare={hideShare}
+                        hideShare={canShareConversation === false}
                         conversation={{ title: headerTitle, flowId: data.id, conversationId: cid, flowType: data.flow_type }}
                     />
                     <ChatEmptyState onNewChat={createNewChat} />
@@ -194,7 +191,7 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
                     <div className="relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
                         <HeaderTitle
                             readOnly={readOnly}
-                            hideShare={hideShare}
+                            hideShare={canShareConversation === false}
                             conversation={{ title: headerTitle, flowId: data.id, conversationId: cid, flowType: data.flow_type }}
                         />
                         <div className="flex min-h-0 flex-1 overflow-hidden">
