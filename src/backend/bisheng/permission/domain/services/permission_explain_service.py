@@ -116,7 +116,7 @@ class PermissionExplainService:
         rows: list[_EffectiveSource] = []
         mode = context.mode.upper()
         for grant in context.local_grants:
-            if not grant.active or not grant.model.active:
+            if not grant.active:
                 continue
             for source in grant.sources:
                 if not source.active:
@@ -136,7 +136,7 @@ class PermissionExplainService:
         if mode == "INHERIT" and context.inherited is not None:
             inherited_from = f"{context.inherited.resource_type}:{context.inherited.resource_id}"
             for grant in context.inherited.grants:
-                if not grant.active or not grant.model.active:
+                if not grant.active:
                     continue
                 rows.extend(
                     self._row(

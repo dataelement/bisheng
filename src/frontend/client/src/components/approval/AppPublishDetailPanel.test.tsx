@@ -5,6 +5,8 @@ import {
   isAppPublishScenario,
 } from "./AppPublishDetailPanel";
 import type { LocalizeFn } from "./approvalPresentation";
+jest.mock('~/utils', () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(' ') }));
+jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key }));
 
 /** Echoes the key back so assertions read as the contract, plus the interpolated value. */
 const localize: LocalizeFn = (key, options) =>
@@ -135,7 +137,7 @@ describe("AppPublishDetailPanel", () => {
       screen.getByText("com_approval_app_publish_capabilities_empty"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("com_approval_app_publish_visibility_empty"),
+      screen.getByText("approval.current_visibility.unavailable"),
     ).toBeInTheDocument();
 
     // Region 4 — the tier dict expanded into name / cpu / memory.
@@ -202,7 +204,7 @@ describe("AppPublishDetailPanel", () => {
     ).toBeInTheDocument();
   });
 
-  it("lists declared capabilities and visibility entries when they arrive", () => {
+  it("lists frozen capabilities and current visibility instead of the old snapshot", () => {
     const detail = buildDetail();
     detail.detail_snapshot = {
       ...detail.detail_snapshot,
@@ -211,6 +213,7 @@ describe("AppPublishDetailPanel", () => {
       ],
       visibility_snapshot: [{ type: "department", name: "R&D" }],
     };
+    detail.current_visibility = { state: 'available', owner_only: false, subjects: [{ type: 'department', id: '12', name: 'Current department', userset_relation: 'member' }] };
     const { container } = render(
       <AppPublishDetailPanel
         detail={detail}
@@ -220,7 +223,8 @@ describe("AppPublishDetailPanel", () => {
     );
     expect(screen.getByText("qwen-max")).toBeInTheDocument();
     expect(screen.getByText("model · chat model")).toBeInTheDocument();
-    expect(screen.getByText("R&D")).toBeInTheDocument();
+    expect(screen.getByText(/Current department/)).toBeInTheDocument();
+    expect(screen.queryByText('R&D')).not.toBeInTheDocument();
     expect(container.textContent).not.toContain("[object Object]");
   });
 

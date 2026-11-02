@@ -62,7 +62,17 @@ export interface ApprovalExceptionItem {
   applicant_user_name?: string | null;
 }
 
+export interface AppCurrentVisibility {
+  state: 'available' | 'unavailable' | 'deleted';
+  checked_at?: string;
+  owner_only?: boolean | null;
+  admin_implicit_access?: boolean;
+  subjects: { type: 'user' | 'department' | 'user_group'; id: string; name: string; userset_relation?: 'member' | 'admin' | 'subtree_member'; include_children?: boolean }[];
+}
+
 export interface ApprovalInstanceDetail {
+  scenario_code?: string;
+  current_visibility?: AppCurrentVisibility;
   instance_id?: number;
   status?: string;
   flow_nodes?: {

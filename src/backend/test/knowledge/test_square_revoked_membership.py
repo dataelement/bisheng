@@ -7,11 +7,13 @@ provider and middleware startup stay outside this regression.
 import ast
 import asyncio
 import sys
+from contextlib import contextmanager
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
+from time import perf_counter
 from types import ModuleType, SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from sqlmodel import Field, SQLModel
@@ -99,6 +101,9 @@ def context(monkeypatch):
         "KnowledgeUtils": object,
         "datetime": datetime,
         "asyncio": asyncio,
+        "perf_counter": perf_counter,
+        "contextmanager": contextmanager,
+        "emit_metric": Mock(),
         "SpaceSubscriptionStatusEnum": Status,
         "MembershipStatusEnum": Membership,
         "UserRoleEnum": Role,
@@ -138,6 +143,9 @@ def context(monkeypatch):
     service.login_user = SimpleNamespace(user_id=7, user_name="viewer", tenant_id=1)
     service.request = None
     service.message_service = None
+    service._permission_actor_resolve_count = 0
+    service._permission_actor_cache_hits = 0
+    service._permission_actor_resolve_elapsed_ms = 0.0
     service._require_space_info_permission = AsyncMock(return_value=(space, False))
     service._has_joined_visibility = AsyncMock(return_value=False)
     service._get_effective_actions = AsyncMock(return_value=set())
@@ -165,8 +173,9 @@ def test_joined_status_uses_current_visibility(context, status, visible):
 
 @pytest.mark.parametrize("status", [Status.PENDING, Status.REJECTED])
 @pytest.mark.parametrize("visible", [False, True])
-def test_application_states_keep_their_existing_contract(context, status, visible):
-    assert context.service._resolve_effective_subscription_status(status, has_visible=visible) == status
+def test_application_states_are_only_shown_without_current_visibility(context, status, visible):
+    expected = Status.SUBSCRIBED if visible else status
+    assert context.service._resolve_effective_subscription_status(status, has_visible=visible) == expected
 
 
 @pytest.mark.parametrize("role", [Role.MEMBER, Role.ADMIN])

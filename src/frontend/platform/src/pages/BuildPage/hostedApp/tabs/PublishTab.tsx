@@ -75,7 +75,7 @@ interface PublishTabProps {
   pendingReason?: HostedAppPendingReason | null
 }
 
-/** Container health → label; an unknown value is shown as sent. */
+/** Only normalized, current runtime facts are displayable. */
 const HEALTH_I18N: Record<string, string> = {
   healthy: "hostedApp.publish.healthValue.healthy",
   unhealthy: "hostedApp.publish.healthValue.unhealthy",
@@ -150,11 +150,23 @@ export function PublishTab({
     </Button>
   )
 
-  const health = instance?.health
-    ? HEALTH_I18N[instance.health]
-      ? t(HEALTH_I18N[instance.health])
-      : instance.health
-    : "-"
+  const current = instance?.observation_state === 'current'
+  const unknown = t('f115.runtime.unknown', { ns: 'bs' })
+  const health = current && instance?.phase === 'stopped'
+    ? t('f115.runtime.notRunning', { ns: 'bs' })
+    : current && instance?.health && HEALTH_I18N[instance.health]
+      ? t(HEALTH_I18N[instance.health]) : unknown
+  const restartCount = current && typeof instance?.restart_count === 'number'
+    && Number.isInteger(instance.restart_count) && instance.restart_count >= 0 ? instance.restart_count : unknown
+  const startedAt = current && instance?.started_at
+    && /(Z|[+-]\d{2}:\d{2})$/i.test(instance.started_at)
+    && Number.isFinite(Date.parse(instance.started_at))
+    && new Date(instance.started_at).getUTCFullYear() > 1 ? formatTimestamp(instance.started_at) : unknown
+  const phase = instance?.observation_state === 'no_execution'
+    ? t('f115.runtime.noExecution', { ns: 'bs' })
+    : instance?.observation_state === 'execution_missing'
+      ? t('f115.runtime.executionMissing', { ns: 'bs' })
+      : current ? t(phaseI18nKey(instance.phase)) : unknown
 
   return (
     <div className="flex flex-col gap-4 pb-6 pt-1">
@@ -235,19 +247,19 @@ export function PublishTab({
               {instance ? (
                 <>
                   <Field label={t("hostedApp.publish.instancePhase")}>
-                    {t(phaseI18nKey(instance.phase))}
+                    {phase}
                   </Field>
                   <Field label={t("hostedApp.publish.instanceHealth")}>
                     {health}
                   </Field>
                   <Field label={t("hostedApp.publish.instanceRestart")}>
                     <span className="tabular-nums">
-                      {instance.restart_count ?? 0}
+                      {restartCount}
                     </span>
                   </Field>
                   <Field label={t("hostedApp.publish.instanceStartedAt")}>
                     <span className="tabular-nums">
-                      {formatTimestamp(instance.started_at)}
+                      {startedAt}
                     </span>
                   </Field>
                 </>

@@ -47,6 +47,18 @@ async def build_runtime_handler(scenario_code: str) -> Any:
     raise KeyError(f"handler not registered for scenario_code={scenario_code}")
 
 
+async def read_current_scenario_detail(instance, login_user, *, management: bool = False) -> dict:
+    """Optional current decoration, called only after the existing read guards."""
+    if instance.scenario_code != "app_publish_request":
+        return {}
+    handler = await build_runtime_handler(instance.scenario_code)
+    return {
+        "current_visibility": await handler.read_current_detail(
+            instance=instance, login_user=login_user, management=management
+        )
+    }
+
+
 class _AsyncSpaceChannelMembershipAdapter:
     async def find_membership(self, business_id: str, business_type: BusinessTypeEnum, user_id: int):
         async with get_async_db_session() as session:

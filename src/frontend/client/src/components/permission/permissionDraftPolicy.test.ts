@@ -68,4 +68,13 @@ describe("canMutatePermissionDraftRow", () => {
       ),
     ).toBe(false);
   });
+
+  it("separates disabled model assignment from existing source management", () => {
+    const row = { ...ownerRow, modelKey: "old-custom", modelActive: false, modelLevel: 1 };
+    expect(canMutatePermissionDraftRow(row, true, grantableModels)).toBe(true);
+    expect(canMutatePermissionDraftRow({ ...row, editable: false }, true, grantableModels)).toBe(false);
+    expect(canMutatePermissionDraftRow({ ...row, protected: true }, true, grantableModels)).toBe(false);
+    expect(canMutatePermissionDraftRow({ ...row, scope: "INHERITED" }, true, grantableModels)).toBe(false);
+    expect(canMutatePermissionDraftRow(row, false, grantableModels)).toBe(false);
+  });
 });

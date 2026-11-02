@@ -61,6 +61,7 @@ function permissionEntryToDraftRow(
     subjectName: entry.subject.name ?? "",
     modelKey: entry.model.key,
     modelName: entry.model.name,
+    modelActive: entry.model.active,
     modelLevel: entry.model.level,
     includeChildren: entry.source.include_children,
     assigneeId: entry.assignee_id,
