@@ -19,10 +19,11 @@ Desktop 的既有窗口级模态协议负责将 body portal 展示到整个原�
 
 - `DialogPresentation.test.tsx` 更新展示契约，并覆盖布局样式保留、输入对象稳定、浏览器展示、主题、路由切换、焦点约束及 Esc。新契约在原逻辑上出现 4 项失败；修复后与 `KnowledgeSpaceDialog.test.tsx` 合计 14 项通过。
 - `Skills/__tests__/skillPreview.test.ts` 使用其 Node 测试配置执行，17 项通过，覆盖技能文件解析和个人技能持久化。
+- 同步目标后，将弹窗、知识空间及历史附件下载组合复测，3 组 / 31 项通过；连同技能文件的 Node 检查，本轮相关回归共 48 项通过。
 - Workspace 全量 ESLint、Platform 的 620 个严格类型文件、Client 的 1,511 个严格类型文件、file-viewers 类型检查通过；Client 生产构建、`check-i18n` 和 `git diff --check` 通过。
 - 原生联合验证 36 组通过：Dialog / OriginalDialog / AlertDialog × 900 / 1084 窗口宽度 × 0.8 / 1 / 1.25 缩放 × 深 / 浅主题。执行实际 Client 组件、当前构建的生产 CSS、Desktop 原生视图及 production preload/IPC，企业账号服务采用隔离夹具。
 - 每组验证原生视图和蒙层覆盖整个窗口、页面根节点坐标保持、蒙层计算值为 `rgba(0, 0, 0, 0.4)`、弹窗不透明。子视图截图在侧栏坐标的像素为黑色且 alpha=102/255，证明该区域携带相同蒙层。截图记录的是原生子视图表面；侧栏内容由下层宿主 renderer 绘制。
-- 验证保留嵌套确认期间的窗口覆盖、外部点击、Esc、取消、焦点及关闭后的内容区恢复；侧栏按钮点击次数保持为 0。
+- 原生检查验证嵌套确认期间的窗口覆盖、侧栏坐标命中蒙层、取消及关闭后的内容区恢复；通过渲染器中的实际取消按钮触发 React/Radix 关闭处理。Tab、Esc、焦点约束及焦点返回由组件用例覆盖，系统级键鼠交互列入安装版验收。
 
 ## 复现命令
 
