@@ -46,6 +46,8 @@ export interface SelectionTriggerProps {
   allowClear: boolean;
   clearLabel: string;
   body: React.ReactNode;
+  /** Inline search makes the entire value slot a field, including its closed state. */
+  hasSearchInput?: boolean;
   /** Adds the Select tag inset without teaching the shared shell about values. */
   hasMultipleTags?: boolean;
   customTrigger?: React.ReactElement;
@@ -75,6 +77,7 @@ export const SelectionTrigger = React.forwardRef<HTMLElement, SelectionTriggerPr
       allowClear,
       clearLabel,
       body,
+      hasSearchInput = false,
       hasMultipleTags = false,
       customTrigger,
       className,
@@ -167,6 +170,7 @@ export const SelectionTrigger = React.forwardRef<HTMLElement, SelectionTriggerPr
           onClick={onTriggerClick}
           className={cn(
             buttonVariants({ color: 'default', variant: 'text', size }),
+            hasSearchInput && (size === 'large' ? 'text-field-lg' : 'text-field'),
             'group max-w-full justify-start',
             GHOST_PADDING[size],
             interactive ? 'cursor-pointer' : 'cursor-default',

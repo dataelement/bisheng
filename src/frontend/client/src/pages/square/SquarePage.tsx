@@ -3,12 +3,12 @@ import { lazy, Suspense } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { MODULE_HOME_COLUMN, MODULE_HOME_PILL } from '~/components/ModuleHome';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
-import { useLocalize } from '~/hooks';
+import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 import { cn } from '~/utils';
 import { useSquareTypes } from './useSquareTypes';
 import type { SquareType } from './squarePaths';
 
-// One chunk per square: opening 广场 only loads the tab in view.
+// One chunk per square: opening discovery only loads the tab in view.
 const PANES: Record<SquareType, ReturnType<typeof lazy>> = {
   knowledge: lazy(() => import('~/pages/knowledge/KnowledgeSquarePane').then((module) => ({ default: module.KnowledgeSquarePane }))),
   channel: lazy(() => import('~/pages/Subscription/ChannelSquarePane').then((module) => ({ default: module.ChannelSquarePane }))),
@@ -17,13 +17,14 @@ const PANES: Record<SquareType, ReturnType<typeof lazy>> = {
 };
 
 /**
- * 广场 — the discover side of every workbench module behind ONE sidebar entry, so the
+ * The discover side of every workbench module behind one sidebar entry, so the
  * module homes are only ever "mine". The tabs are the modules this account may open;
  * each tab hosts that module's existing square unchanged (its own banner, search, cards
- * and preview drawer). Desktop only: mobile keeps each module's own square.
+ * and preview drawer).
  */
 export function SquarePage() {
   const localize = useLocalize();
+  const isMobile = usePrefersMobileLayout();
   const types = useSquareTypes();
   const [params, setParams] = useSearchParams();
 
@@ -35,17 +36,30 @@ export function SquarePage() {
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-white">
       {types.length > 1 && (
-        // A row of its own, centered over the banners' centered titles. It cannot float over
-        // the banner — four segments reach the title — so it wears the banners' own brand
-        // tint instead, and the two read as one surface.
-        <div className="flex w-full shrink-0 justify-center bg-blue-500/[0.05] px-3 pb-[14px] pt-[18px]">
-          <div className={cn(MODULE_HOME_COLUMN, 'flex h-9 items-center justify-center')}>
+        // Keep the banner's height while sharing the top row with the mobile menu.
+        <div
+          className={cn(
+            'flex w-full shrink-0 justify-center bg-blue-500/[0.05] px-3 pb-[14px] pt-[18px]',
+            isMobile && 'px-[52px] pt-[calc(env(safe-area-inset-top,0px)+18px)]',
+          )}
+        >
+          <div className={cn(MODULE_HOME_COLUMN, 'flex h-9 min-w-0 items-center justify-center')}>
             <Segmented
               block
               size="large"
-              className={cn(MODULE_HOME_PILL, 'max-w-fit')}
+              className={cn(
+                MODULE_HOME_PILL,
+                'min-w-0',
+                isMobile
+                  ? '[&>button]:min-w-0 [&>button]:px-2 [&>button>svg]:shrink-0'
+                  : 'max-w-fit',
+              )}
               aria-label={localize('com_workbench_sidebar.square')}
-              options={types.map((item) => ({ value: item.type, label: item.label, icon: item.icon }))}
+              options={types.map((item) => ({
+                value: item.type,
+                label: <span className="min-w-0 truncate" title={item.label}>{item.label}</span>,
+                icon: item.icon,
+              }))}
               value={active.type}
               onChange={(next) => {
                 // A fresh query: the other params (`?skill=`) belong to the tab being left.

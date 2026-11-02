@@ -1796,20 +1796,21 @@ html {
   padding-top: 0;
 }
 
-/* iOS mobile Safari auto-zooms focused inputs when font-size < 16px.
-   Keep text-like form controls at >=16px on H5 to avoid sticky page zoom
-   after blur (covers create channel/knowledge and filter/search inputs). */
+/* Reserved legacy input floor. Opt in through the same root attribute as
+   @bisheng/ui; mobile typography is disabled by default. */
 @media (max-width: 767px) {
-  input[type='text'],
-  input[type='search'],
-  input[type='email'],
-  input[type='url'],
-  input[type='tel'],
-  input[type='password'],
-  input[type='number'],
-  textarea,
-  select {
-    font-size: 16px !important;
+  :root[data-mobile-typography="enabled"] :is(
+    input[type='text'],
+    input[type='search'],
+    input[type='email'],
+    input[type='url'],
+    input[type='tel'],
+    input[type='password'],
+    input[type='number'],
+    textarea,
+    select
+  ) {
+    font-size: max(1em, 1rem, 16px) !important;
   }
 }
 

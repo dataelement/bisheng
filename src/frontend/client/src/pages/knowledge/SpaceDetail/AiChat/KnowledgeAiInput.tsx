@@ -20,12 +20,13 @@ import { SendIcon } from "~/components/svg";
 import AiModelSelect from "~/components/Chat/AiModelSelect";
 import type { BsConfig } from "~/api/chatApi";
 import { TagPicker } from "./TagPicker";
-import type { FolderChatTag } from "~/hooks/useFolderChat";
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import { cn } from "~/utils";
 import { useVoiceDraft } from "~/hooks/Input/useVoiceDraft";
+
+type KnowledgeInputTag = { id: number; name: string };
 
 interface KnowledgeAiInputProps {
     availableTags: { id: number; name: string }[];
@@ -38,7 +39,7 @@ interface KnowledgeAiInputProps {
     onModelAutoChange?: (val: string) => void;
     isStreaming: boolean;
     disabled?: boolean;
-    onSend: (text: string, files?: any[] | null, tag?: FolderChatTag) => void;
+    onSend: (text: string, files?: any[] | null, tag?: KnowledgeInputTag) => void;
     onStop: () => void;
     /** Visual frame; see file header. Defaults to "box". */
     variant?: "box" | "line";
@@ -76,7 +77,7 @@ export function KnowledgeAiInput({
     const [badgeIndentPx, setBadgeIndentPx] = useState<number | undefined>(undefined);
     const [inputText, setInputText] = useState("");
     const voice = useVoiceDraft(textareaRef, inputText, setInputText);
-    const [selectedTag, setSelectedTag] = useState<FolderChatTag | null>(null);
+    const [selectedTag, setSelectedTag] = useState<KnowledgeInputTag | null>(null);
     const [showPicker, setShowPicker] = useState(false);
     const [pickerSearch, setPickerSearch] = useState("");
     const [tagDeleteHighlight, setTagDeleteHighlight] = useState(false);

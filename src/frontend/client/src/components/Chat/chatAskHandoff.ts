@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useActivate } from 'react-activation';
 
 /**
- * Module page → 对话 handoff (desktop). A question typed into a module's ask bar — a
+ * Module page to main chat handoff. A question typed into a module's ask bar — a
  * knowledge space, a channel article — is not answered in place any more: the bar parks
  * it here and routes to /c/new, and the chat view picks it up and sends it in a fresh
  * conversation. The exchange is then an ordinary conversation that shows up in the
@@ -145,5 +145,11 @@ export function useChatAskHandoff({
 
   const retireAttachmentAsk = useCallback(() => setAttachmentAsk(null), []);
 
-  return { attachmentAsk, retireAttachmentAsk };
+  // Read the parked ask during render, before the effect claims it. The next
+  // render is covered by mountedAsk until sending is accepted. Attachment asks
+  // keep the landing composer mounted because it owns their upload lifecycle.
+  const incomingAsk = pendingAsk ?? mountedAsk;
+  const isTextAskPending = conversationId === 'new' && !!incomingAsk && !incomingAsk.attachment;
+
+  return { attachmentAsk, retireAttachmentAsk, isTextAskPending };
 }
