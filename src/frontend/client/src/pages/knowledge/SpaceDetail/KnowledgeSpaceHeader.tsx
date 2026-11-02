@@ -1,3 +1,4 @@
+import { knowledgePathWithTab } from "../knowledgeListNavigation";
 import { Dropdown, DropdownItem, DropdownSeparator } from "@bisheng/ui";
 
 import { Tooltip as SharedTooltip } from "@bisheng/ui";
@@ -6,7 +7,7 @@ import { Outlined } from "bisheng-icons";
 import { KnowledgeSpace, SpaceRole, VisibilityType } from "~/api/knowledge";
 
 
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { SpaceBreadcrumb } from "./SpaceBreadcrumb";
 import { SpaceActionMenuItems, getSpaceActionFlags } from "./SpaceActionMenuItems";
@@ -108,6 +109,7 @@ export function KnowledgeSpaceHeader({
 }: KnowledgeSpaceHeaderProps) {
   const localize = useLocalize();
   const navigate = useNavigate();
+  const location = useLocation();
   const bishengConfig = useRecoilValue(bishengConfState);
   const isH5 = usePrefersMobileLayout();
 
@@ -273,7 +275,7 @@ export function KnowledgeSpaceHeader({
           type="button"
           onClick={() => {
             if (currentPath.length === 0) {
-              navigate("/knowledge");
+              navigate(knowledgePathWithTab("/knowledge", location.search));
               return;
             }
             const parent = currentPath[currentPath.length - 2];

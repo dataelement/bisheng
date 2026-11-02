@@ -4,10 +4,11 @@ import { useState, type ReactNode, type Ref } from 'react';
 export interface ReasoningDetailsProps {
   text: string;
   pending: boolean;
-  labels: { thinking: string; completed: string };
+  stopped?: boolean;
+  labels: { thinking: string; completed: string; stopped?: string };
 }
 /** Reasoning presentation extracted from the client answer message. */
-export function ReasoningDetails({ text, pending, labels }: ReasoningDetailsProps) {
+export function ReasoningDetails({ text, pending, stopped = false, labels }: ReasoningDetailsProps) {
   const [open, setOpen] = useState(true);
   if (!text) return null;
   return <div className="py-1 mb-4">
@@ -18,8 +19,8 @@ export function ReasoningDetails({ text, pending, labels }: ReasoningDetailsProp
         onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setOpen(value => !value); } }}>
         <div className="flex items-center font-bold gap-2 text-sm">
           {pending ? <Outlined.Loading size={16} className="text-primary duration-300 animate-spin" />
-            : <Outlined.CheckCircle size={16} className="text-success" />}
-          <span>{pending ? labels.thinking : labels.completed}</span>
+            : stopped ? <Outlined.Square size={16} className="text-text-3" /> : <Outlined.CheckCircle size={16} className="text-success" />}
+          <span>{stopped ? labels.stopped : pending ? labels.thinking : labels.completed}</span>
         </div>
         <Outlined.Down size={16} className={open ? 'rotate-180' : undefined} />
       </div>
@@ -39,12 +40,13 @@ export interface MessageBubbleProps {
   children?: ReactNode;
   attachments?: ReactNode;
   footer?: ReactNode;
+  status?: ReactNode;
   pending?: boolean;
   contentRef?: Ref<HTMLDivElement>;
   hideBody?: boolean;
 }
 /** Host actions/resources are slots; one shared message layout owns both apps. */
-export function MessageBubble({ title, logo, sender, selection, reasoning, children, attachments, footer, pending, contentRef, hideBody }: MessageBubbleProps) {
+export function MessageBubble({ title, logo, sender, selection, reasoning, children, attachments, footer, status, pending, contentRef, hideBody }: MessageBubbleProps) {
   return <div className="bisheng-message flex w-full py-2 items-start gap-2">
     {selection}
     <div className="w-fit group max-w-[90%]">
@@ -65,6 +67,7 @@ export function MessageBubble({ title, logo, sender, selection, reasoning, child
           </div>
         </div>
       </>}
+      {status}
       {footer && <div className="flex justify-between">{footer}</div>}
     </div>
   </div>;

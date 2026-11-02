@@ -12,6 +12,7 @@ verdict, the space-level gate). Tag-name resolution and the two-layer filter
 loop are now covered by ``test_retrieval_engine_extraction.py``.
 """
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -206,3 +207,54 @@ async def test_aretrieve_chunks_for_one_rejects_unsupported_type(monkeypatch):
 
     with pytest.raises(svc_mod.KnowledgeTypeNotSupportedError):
         await svc._aretrieve_chunks_for_one(MagicMock(), 5, query="q", tag_names=[], max_content=100)
+
+
+async def test_multi_space_retrieval_does_not_overlap_request_scoped_version_queries():
+    svc = _make_service()
+    query_in_progress = False
+    queried_spaces = []
+
+    async def find_non_primary_files(space_ids):
+        nonlocal query_in_progress
+        # AsyncSession cannot provision/use one connection from two tasks.
+        if query_in_progress:
+            raise RuntimeError("concurrent operations on the request-scoped session")
+        query_in_progress = True
+        try:
+            await asyncio.sleep(0)
+            queried_spaces.extend(space_ids)
+            return []
+        finally:
+            query_in_progress = False
+
+    svc.version_repo.find_non_primary_file_ids_by_knowledge_ids = AsyncMock(side_effect=find_non_primary_files)
+
+    async def retrieve_space(engine, space_id, **kwargs):
+        await svc._visibility_service()._non_primary_ids(space_id)
+        return [(space_id, _doc(f"marker-{space_id}", document_id=space_id, document_name="source.txt", chunk_index=0))]
+
+    svc._aretrieve_chunks_for_one = AsyncMock(side_effect=retrieve_space)
+
+    result = await svc.aretrieve_chunks(query="markers", knowledge_base_ids=[7, 9])
+
+    assert queried_spaces == [7, 9]
+    assert [(space_id, doc.page_content) for space_id, doc in result] == [(7, "marker-7"), (9, "marker-9")]
+    assert not query_in_progress
+
+
+async def test_multi_space_retrieval_does_not_skip_later_permission_denial_when_top_k_is_full():
+    svc = _make_service()
+
+    async def retrieve_space(engine, space_id, **kwargs):
+        if space_id == 9:
+            raise HTTPException(status_code=403, detail="space access denied")
+        return [(space_id, _doc("allowed", document_id=7, document_name="source.txt", chunk_index=0))]
+
+    svc._aretrieve_chunks_for_one = AsyncMock(side_effect=retrieve_space)
+
+    with pytest.raises(HTTPException) as exc:
+        await svc.aretrieve_chunks(query="markers", knowledge_base_ids=[7, 9], top_k=1)
+
+    assert exc.value.status_code == 403
+    assert [call.args[1] for call in svc._aretrieve_chunks_for_one.await_args_list] == [7, 9]
+    svc._knowledge_retrieval_engine.attach_document_update_time.assert_not_awaited()

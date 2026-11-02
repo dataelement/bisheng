@@ -421,9 +421,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         has_visible: bool,
     ) -> SpaceSubscriptionStatusEnum:
-        """Treat effective visibility as joined without hiding workflow states."""
-        if subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED and has_visible:
-            return SpaceSubscriptionStatusEnum.SUBSCRIBED
+        """Resolve joined from current visibility while preserving application states."""
+        if subscription_status in {
+            SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED,
+            SpaceSubscriptionStatusEnum.SUBSCRIBED,
+        }:
+            return SpaceSubscriptionStatusEnum.SUBSCRIBED if has_visible else SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
         return subscription_status
 
     @staticmethod
@@ -1643,7 +1646,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             if member_info:
                 subscription_status = self._resolve_subscription_status(member_info)
-                if member_info.is_active:
+                if member_info.is_active and has_content_permission:
                     result.user_role = member_info.user_role
             subscription_status = self._resolve_effective_subscription_status(
                 subscription_status,
@@ -2340,7 +2343,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             subscription_status = self._resolve_effective_subscription_status(
                 subscription_status,
-                has_visible=visible_map.get(str(space.id), False),
+                has_visible=space.user_id == self.login_user.user_id or visible_map.get(str(space.id), False),
             )
             result_list.append(
                 KnowledgeSpaceInfoResp(
@@ -4892,6 +4895,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         if space.auth_type == AuthTypeEnum.PRIVATE:
             raise SpaceSubscribePrivateError()
+        if space.user_id == self.login_user.user_id:
+            return {"status": "subscribed", "space_id": space_id}
 
         target_status = (
             MembershipStatusEnum.ACTIVE if space.auth_type == AuthTypeEnum.PUBLIC else MembershipStatusEnum.PENDING
@@ -4899,16 +4904,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         existing = await SpaceChannelMemberDao.async_find_member(space_id, self.login_user.user_id)
         if existing is not None:
-            if existing.user_role != UserRoleEnum.MEMBER:
-                return {
-                    "status": "subscribed",
-                    "space_id": space_id,
-                }
-            if existing.status == MembershipStatusEnum.ACTIVE:
-                return {
-                    "status": "subscribed",
-                    "space_id": space_id,
-                }
+            if existing.user_role != UserRoleEnum.MEMBER or existing.status == MembershipStatusEnum.ACTIVE:
+                has_visible = await self._has_joined_visibility(
+                    space_id,
+                    has_content_permission=await self._check_action("knowledge_space", space_id, "visible"),
+                )
+                if has_visible:
+                    return {
+                        "status": "subscribed",
+                        "space_id": space_id,
+                    }
             # NOTE: no early "already pending → return" short-circuit here. That
             # trusted a possibly-stale async_find_member read (which has returned
             # phantom PENDING rows on DM under rapid requests), returning success

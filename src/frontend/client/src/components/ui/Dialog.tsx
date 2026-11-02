@@ -3,6 +3,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { X } from "lucide-react"
 import * as React from "react"
 import { cn } from "~/utils"
+import { dialogOverlayStyle } from './dialogOverlayStyle';
 
 const Dialog = DialogPrimitive.Root
 
@@ -15,7 +16,7 @@ const DialogClose = DialogPrimitive.Close
 const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
->(({ className, ...props }, ref) => (
+>(({ className, style, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
@@ -23,6 +24,7 @@ const DialogOverlay = React.forwardRef<
       className
     )}
     {...props}
+    style={dialogOverlayStyle(style)}
   />
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName

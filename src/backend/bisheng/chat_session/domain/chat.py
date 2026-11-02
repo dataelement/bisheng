@@ -50,7 +50,7 @@ class ChatSessionService:
         if not chat_id or not flow_id:
             return []
         session_info = await MessageSessionDao.async_get_one(chat_id=chat_id)
-        if not session_info or session_info.flow_id != flow_id:
+        if not session_info or session_info.is_delete or session_info.flow_id != flow_id:
             return []
 
         history = await ChatMessageDao.afilter_message_by_chat_id(
@@ -68,6 +68,8 @@ class ChatSessionService:
     ) -> MessageSession | None:
         """Get session details with logo URL resolved."""
         res = await MessageSessionDao.async_get_one(chat_id)
+        if res and res.is_delete:
+            res = None
         if subject is not None and (res is None or not subject.matches(res)):
             raise NotFoundError.http_exception()
         if res:
