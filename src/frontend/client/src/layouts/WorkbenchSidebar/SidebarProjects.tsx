@@ -8,11 +8,15 @@ import { useLocalize } from '~/hooks';
 import type { TConversation } from '~/types/chat';
 import { cn } from '~/utils';
 import { ProjectNameDialog } from './ProjectNameDialog';
+import { SIDEBAR_ICON_BUTTON_CLASS_NAME as ICON_BUTTON } from './sidebarIconButton';
 import { createMockProject, deleteMockProject, renameMockProject, useMockProjectChats } from './projectsStore';
 import { useSidebarProjects } from './useSidebarProjects';
 
 const ROW = 'flex w-full items-center rounded-lg py-[5px] pr-2 text-left text-body text-text-1 transition-colors coarse-pointer:min-h-11 coarse-pointer:py-0';
-const ICON_BUTTON = 'flex size-5 shrink-0 items-center justify-center rounded text-text-2 transition-colors hover:bg-fill-3 coarse-pointer:size-11';
+const PROJECT_ACTION_BUTTON = cn(
+  ICON_BUTTON,
+  'opacity-0 focus-visible:opacity-100 group-hover/project:opacity-100 data-[state=open]:opacity-100 coarse-pointer:opacity-100',
+);
 
 type NameDialogTarget = { mode: 'create' } | { mode: 'rename'; id: string; name: string };
 
@@ -21,6 +25,7 @@ interface SidebarProjectsProps {
   openIds: string[];
   onOpenIdsChange: Dispatch<SetStateAction<string[]>>;
   onNavigate: () => void;
+  onStartChat: (projectId: string) => void;
 }
 
 /**
@@ -28,7 +33,7 @@ interface SidebarProjectsProps {
  * projects — and which conversations were moved into them — live in localStorage
  * (see projectsStore); a conversation filed here leaves the flat 对话 list below.
  */
-export function SidebarProjects({ conversations, openIds, onOpenIdsChange, onNavigate }: SidebarProjectsProps) {
+export function SidebarProjects({ conversations, openIds, onOpenIdsChange, onNavigate, onStartChat }: SidebarProjectsProps) {
   const localize = useLocalize();
   const projects = useSidebarProjects();
   const projectChats = useMockProjectChats();
@@ -97,7 +102,7 @@ export function SidebarProjects({ conversations, openIds, onOpenIdsChange, onNav
         const conversations = conversationsByProject.get(project.id) ?? [];
         return (
           <div key={project.id} className="flex w-full flex-col">
-            <div className={cn(ROW, 'group/project relative pl-2 hover:bg-fill-1 has-[[data-state=open]]:bg-fill-1')}>
+            <div className={cn(ROW, 'group/project relative pl-2 hover:bg-fill-1 has-[[data-state=open]]:bg-fill-1', open && 'mb-1')}>
               <button
                 type="button"
                 aria-expanded={open}
@@ -112,30 +117,47 @@ export function SidebarProjects({ conversations, openIds, onOpenIdsChange, onNav
                 <span className="min-w-0 flex-1 truncate">{project.name}</span>
               </button>
               {!project.readonly && (
-                <Dropdown  align="end" menu={<>
-                    <DropdownItem
-                      icon={<Outlined.Edit />}
-
-                      onSelect={() => openNameDialog({ mode: 'rename', id: project.id, name: project.name })}
-                    >{localize('com_ui_rename')}</DropdownItem>
-                    <DropdownItem
-                      danger
-                      icon={<Outlined.Delete />}
-
-                      onSelect={() => deleteMockProject(project.id)}
-                    >{localize('com_ui_delete')}</DropdownItem>
-                   </>}>
-                    <button
-                      type="button"
-                      aria-label={localize('com_workbench_sidebar.more')}
-                      className={cn(
-                        ICON_BUTTON,
-                        'opacity-0 focus-visible:opacity-100 group-hover/project:opacity-100 data-[state=open]:opacity-100 coarse-pointer:opacity-100',
-                      )}
-                    >
-                      <Outlined.More className="size-4" />
-                    </button>
-                   </Dropdown>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Tooltip content={localize('com_workbench_sidebar.more')}>
+                    <span className="inline-flex shrink-0">
+                      <Dropdown align="end" menu={<>
+                        <DropdownItem
+                          icon={<Outlined.Edit />}
+                          onSelect={() => openNameDialog({ mode: 'rename', id: project.id, name: project.name })}
+                        >{localize('com_ui_rename')}</DropdownItem>
+                        <DropdownItem
+                          danger
+                          icon={<Outlined.Delete />}
+                          onSelect={() => deleteMockProject(project.id)}
+                        >{localize('com_ui_delete')}</DropdownItem>
+                      </>}>
+                        <button
+                          type="button"
+                          aria-label={localize('com_workbench_sidebar.more')}
+                          className={PROJECT_ACTION_BUTTON}
+                        >
+                          <Outlined.More className="size-4" />
+                        </button>
+                      </Dropdown>
+                    </span>
+                  </Tooltip>
+                  <Tooltip content={localize('com_nav_start_new_chat')}>
+                    <span className="inline-flex shrink-0">
+                      <button
+                        type="button"
+                        aria-label={`${localize('com_nav_start_new_chat')} · ${project.name}`}
+                        className={PROJECT_ACTION_BUTTON}
+                        onClick={() => {
+                          onOpenIdsChange((prev) => prev.includes(project.id) ? prev : [...prev, project.id]);
+                          onStartChat(project.id);
+                          onNavigate();
+                        }}
+                      >
+                        <Outlined.MessagePlus className="size-4" />
+                      </button>
+                    </span>
+                  </Tooltip>
+                </div>
               )}
             </div>
             {open && (

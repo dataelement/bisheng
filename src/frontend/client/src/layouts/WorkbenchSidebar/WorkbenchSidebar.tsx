@@ -194,7 +194,7 @@ export function WorkbenchSidebar({ hidden = false, mobile = false, open = false,
           scrollPosition={scrollPosition}
           onNavigate={handleNavigate}
           leading={<SidebarProjects conversations={conversations} openIds={openProjectIds}
-            onOpenIdsChange={setOpenProjectIds} onNavigate={handleNavigate} />}
+            onOpenIdsChange={setOpenProjectIds} onNavigate={handleNavigate} onStartChat={startNewChat} />}
         />
       ) : (
         <div className="min-h-0 flex-1" />
