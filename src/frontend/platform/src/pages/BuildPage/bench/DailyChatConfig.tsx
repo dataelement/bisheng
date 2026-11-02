@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import ConfigInheritanceBanner from "./ConfigInheritanceBanner";
 import { FormInput } from "./FormInput";
+import { MenuNameCounter } from "./MenuNameCounter";
 import { IconUploadSection } from "./IconUploadSection";
 import { useChatConfig } from "./index";
 import { handleUiRequest } from "@/controllers/request";
@@ -100,6 +101,7 @@ export function DailyChatConfig({ scopeVersion = 0 }: DailyChatConfigProps) {
                             <FormInput
                                 label={t("chatConfig.menuDisplayName")}
                                 value={formData.homeMenuDisplayName}
+                                suffix={<MenuNameCounter value={formData.homeMenuDisplayName} />}
                                 error={errors.homeMenuDisplayName}
                                 placeholder={t("bench.home")}
                                 onChange={(v) => handleMenuNameChange("homeMenuDisplayName", v)}

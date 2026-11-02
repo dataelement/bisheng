@@ -22,6 +22,7 @@ export function requiresManagementScope(method: string, raw: string): boolean {
   const path = url.pathname.replace(/\/$/, '')
   const verb = method.toUpperCase()
   const rules: [readonly string[], RegExp][] = [
+    [['POST', 'DELETE'], /^\/api\/v1\/skill\/template\/(?:create|[0-9]+)$/],
     [['PATCH','DELETE'], /^\/api\/v1\/apps\/[^/]+$/],
     [['POST'], /^\/api\/v1\/apps\/[^/]+\/actions\/[^/]+$/],
     [['POST','PUT','DELETE'], /^\/api\/v1\/apps\/[^/]+\/secrets\/[^/]+$/],

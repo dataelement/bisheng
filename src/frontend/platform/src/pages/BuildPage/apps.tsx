@@ -38,6 +38,7 @@ import { useNavigate } from "react-router-dom";
 import CardSelectVersion from "./CardSelectVersion";
 import CreateApp from "./CreateApp";
 import CreateTemp from "./CreateTemp";
+import { canManageAppTemplates } from "./templatePermissions";
 import { useCreateTemp,useQueryLabels } from "./hook";
 
 /**
@@ -238,7 +239,8 @@ export default function Apps() {
     const canDelete = (id: string | number) => hasResourceAction(resourceActions, id, 'delete');
     const visibleApps = appRows;
 
-    // `create_app` controls the create and template-management entries.
+    const canManageTemplates = canManageAppTemplates(user);
+    // Application creation and template management have separate permissions.
     // Only global super admins bypass the role menu permission.
     const canCreateApp =
         user.role === 'admin' ||
@@ -415,7 +417,7 @@ export default function Apps() {
                     value={selectLabel.value}
                     onChange={handleLabelSearch}
                 />
-                {canCreateApp && (
+                {canManageTemplates && (
                     <Button variant="text" className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A] ml-auto" onClick={() => navigate(`/build/temps/${tempTypeRef.current && tempTypeRef.current !== AppType.ALL && tempTypeRef.current !== AppType.HOSTED_APP ? tempTypeRef.current : AppType.FLOW}`)} color="default"><Outlined.MoveToFolder className="dark:text-slate-50" />{t('build.manageAppTemplates')}</Button>
                 )}
             </div>
@@ -482,7 +484,8 @@ export default function Apps() {
                                     //         variant: 'warning'
                                     //     })
                                     // }}
-                                    onAddTemp={toggleTempModal}
+                                    canAddTemplate={canManageTemplates && canRead(item.id)}
+                                    onAddTemp={canManageTemplates ? toggleTempModal : undefined}
                                     onCheckedChange={handleCheckedChange}
                                     onDelete={canDelete(item.id) ? handleDelete : undefined}
                                     onSetting={(item) => handleSetting(item)}
