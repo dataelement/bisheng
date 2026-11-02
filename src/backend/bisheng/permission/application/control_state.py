@@ -13,6 +13,7 @@ from bisheng.common.errcode.permission import (
     PermissionPublishNotReadyError,
     PermissionVersionConflictError,
 )
+from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
 from bisheng.core.database import get_async_db_session
 from bisheng.permission.application.sql_runtime import (
     stable_assignee_id,
@@ -30,6 +31,7 @@ from bisheng.permission.domain.models import (
     PermissionVisibleSourceProjection,
     ResourcePermissionMode,
 )
+from bisheng.permission.domain.repositories.grant_repository import GrantRepository, ResourcePermissionModeRepository
 from bisheng.permission.domain.schemas import (
     VerifiedPermissionTarget,
     VisibleSourceProjectionDTO,
@@ -454,6 +456,47 @@ class SqlPermissionControlState:
                 models=models,
             ),
         )
+
+    async def source_read_stamp(self, *, target, models):
+        """Pin every mode and Grant involved in a complete trusted source read."""
+        current = (target.resource_type, target.resource_id)
+        visited, stamp = set(), []
+        known = {model.model_key for model in models}
+        with tenant_execution_scope(target.tenant_id), strict_tenant_filter():
+            while current not in visited:
+                if len(visited) >= 128:
+                    raise PermissionPublishNotReadyError(reason="inheritance_limit")
+                visited.add(current)
+                mode = await ResourcePermissionModeRepository().aget_mode(
+                    resource_type=current[0], resource_id=current[1]
+                )
+                if mode is None or mode.tenant_id != target.tenant_id or mode.projection_state != "CURRENT":
+                    raise PermissionPublishNotReadyError(reason="projection_unavailable")
+                grants = await GrantRepository().alist_resource_grants(resource_type=current[0], resource_id=current[1])
+                if len(grants) > 5000:
+                    raise PermissionPublishNotReadyError(reason="summary_limit")
+                for grant in grants:
+                    if grant.state not in {"ACTIVE", "INACTIVE"} or (
+                        grant.state == "ACTIVE"
+                        and (grant.projection_state != "CURRENT" or grant.model_key not in known)
+                    ):
+                        raise PermissionPublishNotReadyError(reason="grant_projection_unavailable")
+                stamp.append(
+                    (
+                        current,
+                        mode.version,
+                        mode.mode,
+                        mode.parent_type,
+                        mode.parent_id,
+                        tuple(sorted((g.model_key, g.version, g.state, g.projection_state) for g in grants)),
+                    )
+                )
+                if mode.mode == "CUSTOM":
+                    return tuple(stamp)
+                if mode.mode != "INHERIT" or mode.parent_type is None or mode.parent_id is None:
+                    break
+                current = (mode.parent_type, mode.parent_id)
+        raise PermissionPublishNotReadyError(reason="inheritance_unavailable")
 
     async def load_source_page(
         self,

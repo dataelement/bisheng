@@ -2728,6 +2728,23 @@
     "app_release_notes": {
       "title": "Release notes",
       "empty": "No release notes provided"
+    },
+    "current_visibility": {
+      "title": "Visibility",
+      "refresh": "Refresh scope",
+      "currentHint": "Current visibility. Authorization changes take effect immediately and do not affect approval. Refresh to see the latest scope.",
+      "unavailable": "Current visibility could not be confirmed. Please refresh.",
+      "deleted": "The application was deleted. Current visibility is unavailable.",
+      "ownerOnly": "Only the owner can see this application",
+      "noOrdinary": "No ordinary people, departments or user groups currently have visibility.",
+      "adminHint": "Platform super administrators and this tenant’s administrators have separate implicit management access, which is excluded from this ordinary visibility scope.",
+      "checkedAt": "Checked at:",
+      "user": "Person",
+      "department": "Department",
+      "user_group": "User group",
+      "member": "Members",
+      "admin": "Administrators",
+      "children": "Includes subdepartments"
     }
   },
   "chatImage": {

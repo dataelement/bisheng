@@ -10,11 +10,11 @@ from bisheng.app_runtime.domain.services.orchestrator_client import orchestrator
 from bisheng.common.errcode.app_factory import (
     AppManageForbiddenError,
     AppNotFoundError,
+    AppOrchestratorUnavailableError,
 )
 from bisheng.common.services.config_service import settings
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.app import App, AppDao
-from bisheng.database.models.app_instance import PHASE_STOPPED, AppInstanceDao
 from bisheng.database.models.app_version import AppVersionDao
 
 #: Which door the caller came through. The *content* is identical for all three
@@ -60,20 +60,13 @@ class AppQueryService:
                 "started_at",
                 "restart_count",
                 "last_probe_at",
+                "observation_state",
             }
             return {key: value for key, value in status.items() if key in public_fields}
-        except AppNotFoundError:
-            async with get_async_db_session() as session:
-                row = await AppInstanceDao.aget_by_app(session, app.id)
-            return {
-                "instance_id": None,
-                "phase": (row.phase if row is not None else PHASE_STOPPED),
-                "health": (row.health if row is not None else None),
-                "current_version_id": app.current_version_id,
-                "started_at": (row.started_at if row is not None else None),
-                "restart_count": (row.restart_count if row is not None else 0),
-                "last_probe_at": (row.last_probe_at if row is not None else None),
-            }
+        except AppNotFoundError as exc:
+            # An older observer's ambiguous 404 proves no current facts.
+            # Current v2 observers return explicit no_execution/execution_missing.
+            raise AppOrchestratorUnavailableError(reason="execution_unconfirmed") from exc
 
     # -- logs -----------------------------------------------------------
 

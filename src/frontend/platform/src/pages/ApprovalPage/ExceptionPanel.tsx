@@ -5,6 +5,7 @@ import { Outlined } from "bisheng-icons";
 import { formatDateTime, HIDDEN_DETAIL_KEYS } from "./approvalMetadata";
 import { ActionBtn } from "./ApprovalPrimitives";
 import { ApprovalTimeline } from "./ApprovalTimeline";
+import { CurrentAppVisibility } from './CurrentAppVisibility';
 
 import type { useApprovalController } from "./useApprovalController";
 interface ExceptionPanelProps {
@@ -23,6 +24,7 @@ export function ExceptionPanel({ controller }: ExceptionPanelProps) {
     setCancelDialogItem,
     setCancelReason,
     toggleExceptionProgress,
+    refreshExceptionProgress,
     expandedProgressIds,
     loadingProgressId,
     instanceDetailCache,
@@ -201,9 +203,12 @@ export function ExceptionPanel({ controller }: ExceptionPanelProps) {
                         (loadingProgressId === item.id ? (
                           <div className="mt-2 text-xs text-muted-foreground">{t("loading")}</div>
                         ) : instanceDetailCache[item.id] ? (
-                          <ApprovalTimeline detail={instanceDetailCache[item.id]} />
+                          <>
+                            <ApprovalTimeline detail={instanceDetailCache[item.id]} />
+                            {instanceDetailCache[item.id].scenario_code === 'app_publish_request' && <CurrentAppVisibility value={instanceDetailCache[item.id].current_visibility} onRefresh={() => void refreshExceptionProgress(item)} />}
+                          </>
                         ) : (
-                          <div className="mt-2 text-xs text-muted-foreground">{t("subjectSearch.noProgress")}</div>
+                          <div className="mt-2 text-body-sm text-text-3">{t("subjectSearch.noProgress")} <Button size="small" onClick={() => void refreshExceptionProgress(item)}>{t('f115.visibility.refresh')}</Button></div>
                         ))}
                     </div>
                   )}

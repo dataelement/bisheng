@@ -2656,6 +2656,23 @@
     "app_release_notes": {
       "title": "发布说明",
       "empty": "未填写发布说明"
+    },
+    "current_visibility": {
+      "title": "可见范围",
+      "refresh": "刷新范围",
+      "currentHint": "当前可见范围。授权变更即时生效，不影响审批；刷新后可查看最新结果。",
+      "unavailable": "暂时无法确认当前可见范围，请刷新重试。",
+      "deleted": "应用已删除，无法读取当前可见范围。",
+      "ownerOnly": "仅负责人可见",
+      "noOrdinary": "当前没有可见的普通人员、部门或用户组。",
+      "adminHint": "平台超管和本租户管理员另有隐含管理访问资格，不计入此处的普通可见范围。",
+      "checkedAt": "查询时间：",
+      "user": "人员",
+      "department": "部门",
+      "user_group": "用户组",
+      "member": "成员",
+      "admin": "管理员",
+      "children": "包含下级部门"
     }
   },
   "chatImage": {

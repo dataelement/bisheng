@@ -105,7 +105,7 @@ ApprovalCenterService.decide_task()
 | `approval/domain/services/approver_resolver.py` | 解析审批人来源 `direct_user` / `department_admin` / `tenant_admin` | `resolve_approvers_from_sources()`、**`resolve_tenant_admin_user_ids()`** |
 | `approval/domain/services/approval_seed_service.py` | **预置场景 seed（每租户）**：`DEFAULT_APPROVAL_SCENARIO_SEEDS` 三条 × 五行（scenario / route / flow / flow_version / node） | `seed_approval_scenarios_for_tenant()`、`seed_approval_scenarios_in_session()` |
 | `approval/domain/services/approval_registry.py` | 场景预置目录 + handler 注册表 | `with_default_presets()`、`register_handler()`、`get_handler()` |
-| `approval/domain/services/approval_runtime_handler_factory.py` | 为 outbox 执行 / 多节点 advance 重新构造运行时 handler | `build_runtime_handler(scenario_code)` |
+| `approval/domain/services/approval_runtime_handler_factory.py` | 为 outbox 执行 / 多节点 advance 重新构造运行时 handler；审批详情通过原阅读资格后追加场景当前事实 | `build_runtime_handler(scenario_code)`、`read_current_scenario_detail()` |
 | `approval/application/execution_source.py` | 业务侧只读审批投影 | `get_business_approval()` / `get_business_approvals()`（按 100 条分批，版本记录复用） |
 | `approval/domain/services/approval_notification_service.py` | 站内信统一封装 | `notify_user()` / `notify_users()` / `notify_admins()` |
 | `approval/domain/services/user_menu_access_service.py` | 菜单授权增删查，含父级菜单依赖自动补全 | `grant_menu_access()`、`revoke_menu_access()`、`ensure_application_allowed()` |
@@ -119,6 +119,10 @@ ApprovalCenterService.decide_task()
 ### 应用审读窄端口（F114）
 
 `approval/application/app_review.py::pending_app_reviews` 返回冻结的 tenant/app/version/instance/task 值对象；仓储 `app_review_repository.py` 只查询指定真实自然人、指定 app、实例和任务均 pending 的记录。该个人任务查询不继承页面管理视角，源码读取随后在验证过的任务租户内执行并恢复调用前上下文。服务账号不能借其归属人的审批任务，临时资格只覆盖待审版本和当前正式比较基线；普通长期源码读取改用 app edit，不变成长期授权。
+
+### 应用发布当前可见范围（F115）
+
+任务详情、个人实例详情、管理实例详情在原租户与审批阅读门禁通过后，调用 `read_current_scenario_detail()`。仅 `app_publish_request` 使用 Handler 的只读 `read_current_detail()`，其它场景不触发动态查询。新增同级 `current_visibility`；`detail_snapshot`、`payload_snapshot` 仍是冻结值，不回写。应用发布域核对实例绑定的 app/tenant，再经 F048 当前有效 `use` 来源和实时主体资格生成摘要；读取不完整时返回 `unavailable`，不误报“仅负责人可见”。此窄例外不授予长期 manage_permission、审批处理资格或其它资源能力。
 
 ### 四个场景 Handler
 

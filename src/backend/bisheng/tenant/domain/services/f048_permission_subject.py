@@ -23,6 +23,8 @@ from bisheng.permission.domain.services.permission_action_service import (
 )
 from bisheng.tenant.domain.repositories.grant_department_repository import GrantDepartmentRepository
 from bisheng.tenant.domain.repositories.grant_subject_search_repository import GrantSubjectSearchRepository
+from bisheng.tenant.domain.repositories.permission_subject_repository import PermissionSubjectRepository
+from bisheng.user.application.runtime_identity import read_current_person_facts
 from bisheng.user.domain.models.user import UserDao
 
 
@@ -33,6 +35,56 @@ class TenantPermissionSubjectDirectory:
         self._sources = GrantSourceService()
         self._candidate_queries = GrantSubjectSearchRepository()
         self._departments = GrantDepartmentRepository()
+        self._summary_queries = PermissionSubjectRepository()
+
+    async def describe_active_sources(self, *, tenant_id, sources):
+        """Read names and current identity eligibility, never expand usersets."""
+        supported = {"user", "department", "user_group", "service_account"}
+        for source in sources:
+            if source.subject_type not in supported or not source.subject_id.isdigit():
+                raise PermissionSubjectUnavailableError(reason="unsupported_summary_subject")
+        keys = tuple({(row.subject_type, row.subject_id) for row in sources})
+        users = await read_current_person_facts([int(ident) for kind, ident in keys if kind == "user"])
+        names = await self._summary_queries.load(tenant_id, keys)
+        result, seen = [], set()
+        for source in sources:
+            kind, ident = source.subject_type, source.subject_id
+            if kind == "service_account":
+                continue
+            if kind == "user":
+                person = users.get(int(ident))
+                if person is None or person["state"] == "ambiguous":
+                    raise PermissionSubjectUnavailableError(reason="summary_person_unresolved")
+                if person["state"] != "active" or person["tenant_id"] != tenant_id:
+                    continue
+                name = person["name"]
+            else:
+                row = names.get((kind, ident))
+                if row is None or row.tenant_id != tenant_id:
+                    continue
+                name = row.name if kind == "department" else row.group_name
+            relation, children = source.userset_relation, source.include_children
+            if (
+                (kind == "user" and (relation is not None or children))
+                or (kind == "user_group" and (relation not in {"admin", "member"} or children))
+                or (kind == "department" and relation != ("subtree_member" if children else "member"))
+            ):
+                raise PermissionSubjectUnavailableError(reason="summary_userset_unresolved")
+            if not name:
+                raise PermissionSubjectUnavailableError(reason="summary_name_unresolved")
+            key = (kind, ident, relation, children)
+            if key not in seen:
+                seen.add(key)
+                result.append(
+                    {
+                        "type": kind,
+                        "id": ident,
+                        "name": name,
+                        "userset_relation": relation,
+                        "include_children": children,
+                    }
+                )
+        return result
 
     async def candidate_users(self, scope, *, keyword: str, page: int, page_size: int):
         return await self._candidate_queries.users(scope, keyword=keyword, page=page, page_size=page_size)

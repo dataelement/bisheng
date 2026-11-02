@@ -478,6 +478,7 @@ export function useApprovalController() {
     setCancelReason,
     handleCancelException,
     toggleExceptionProgress,
+    refreshExceptionProgress,
     expandedProgressIds,
     loadingProgressId,
     instanceDetailCache,
@@ -485,6 +486,7 @@ export function useApprovalController() {
 
   // ── render ────────────────────────────────────────────────────────────────
   return {
+    refreshExceptionProgress,
     t,
     setActiveTab,
     loadPage,
