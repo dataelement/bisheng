@@ -108,6 +108,10 @@
       "dimensionLimitReached": "Dimension limit reached",
       "metricReached": "Metric limit reached",
       "metricLimitReached": "This chart can have at most {{count}} metrics",
+      "lineAxisSingleKind": "The Y-axis can only share counts or percentages",
+      "lineMaxTwo": "A line chart can have at most two lines",
+      "lineMaxThree": "A combination line chart can have at most three lines",
+      "lineSingleDimension": "A line chart can have only one dimension on the X-axis",
       "virtualMetricConflict": "Virtual metrics cannot be used together with non-virtual metrics",
       "multipleVirtualMetric": "Multiple virtual metrics are not allowed"
     },

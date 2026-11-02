@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>研发测试用例 · 折线图共用纵轴</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#202733;--sub:#515d6d;--line:#dce2eb;--accent:#245bb1;--warn:#8a4b00}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  a{color:var(--accent)}
+  .wrap{max-width:1100px;margin:auto;padding:28px 24px 72px}
+  .hero{background:#164789;color:#fff;padding:28px;border-radius:16px;margin-bottom:20px}
+  h1{margin:0 0 8px;font-size:26px}
+  .meta{font-size:13px;margin:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:24px;margin:0 0 20px}
+  h2{font-size:21px;margin:0 0 8px} h3{font-size:16px;margin:20px 0 8px}
+  .lead{color:var(--sub);font-size:13px}
+  .status{color:#ffe08a;font-weight:600}
+  table{border-collapse:collapse;width:100%;min-width:960px;font-size:12px}
+  .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin:12px 0}
+  th,td{text-align:left;vertical-align:top;padding:8px;border-bottom:1px solid var(--line)}
+  th{background:#f0f3f8}
+  code{font:12px/1.6 ui-monospace,Menlo,Consolas,monospace;background:#f0f3f8;padding:1px 4px;border-radius:4px}
+  .callout{border-left:4px solid var(--warn);background:#fff8e9;padding:12px 16px;margin:14px 0}
+  @media print{body{background:#fff}.hero{background:#fff;color:#111;border:1px solid #777}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero">
+  <h1>折线图共用纵轴 · 研发测试用例</h1>
+  <p class="meta">版本 0.1 · 2026-11-02 · 用途：研发验证 · 工程：<code>src/frontend/platform</code> · 需求 LINE-AXIS 1.0 · 设计 0.1（待确认，用例预期以需求为准）</p>
+  <p class="meta"><span class="status">定义状态：研发用例已按需求写完，尚未执行。</span> 独立验收用例未由测试岗位编写，本文只给出建议。</p>
+</header>
+
+<section class="card" id="prep">
+  <h2>公共准备 PREP-LINE-01</h2>
+  <p class="lead">每条研发用例自己构造初始状态，不依赖另一条用例的结果。</p>
+  <p>在 Vitest 中渲染 <code>useChartState</code>，或调用设计稿中的纯函数。替换 <code>react-i18next</code>、toast 和看板 store。被测的加入判断、格式判断、保存配置生成和 <code>generateChartOption</code> 使用真实代码。不启动浏览器，不调用看板查询接口。</p>
+  <p>图表身份：基础折线图 <code>line</code>，组合折线图 <code>multiple-line</code>。指标显示名使用「用户在线数」「用户活跃数」。格式类型只取 <code>number</code>、<code>percent</code>、<code>duration</code>、<code>storage</code>。</p>
+</section>
+
+<section class="card">
+  <h2>1. 覆盖概览</h2>
+  <p>这是定义覆盖，不是执行结果。岗位均为研发，除最后一行的验收建议。</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>需求</th><th>正常</th><th>异常</th><th>边界</th></tr></thead>
+    <tbody>
+      <tr><td>REQ-LINE-001</td><td>TC-LINE-001、TC-LINE-002</td><td>TC-LINE-003、TC-LINE-004、TC-LINE-006</td><td>TC-LINE-005、TC-LINE-007</td></tr>
+      <tr><td>REQ-LINE-002</td><td>TC-LINE-008</td><td>不适用。没有失败请求。</td><td>TC-LINE-009 一条线不强制图例</td></tr>
+      <tr><td>REQ-LINE-003</td><td>TC-LINE-011 柱状图仍可两个维度</td><td>TC-LINE-010</td><td>已有 1 个后再加是上限边界，含在 TC-LINE-010</td></tr>
+      <tr><td>REQ-LINE-004</td><td>TC-LINE-012、TC-LINE-013</td><td>旧配置上再加入，含在 TC-LINE-013</td><td>2 个旧维度、2 个不同类型指标</td></tr>
+      <tr><td>页面与真实查询</td><td colspan="3">TC-QA-001、TC-QA-002。测试岗位建议，未定义成可执行验收脚本，本文件不标为用例就绪。</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="card">
+  <h2>2. 用例清单</h2>
+  <p>优先级口径：P0 是规则一旦写错就会让纵轴含义错误或删掉旧配置。P1 是防止其他图表被误伤。执行阶段都是开发期隔离测试。清理：只销毁本例的 hook，无数据库残留。</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>ID</th><th>标题</th><th>优先级</th><th>类型</th><th>关联需求</th><th>前置条件</th><th>步骤</th><th>测试数据</th><th>预期结果</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>TC-LINE-001</td>
+        <td>基础折线图加入第二个数量指标</td>
+        <td>P0</td>
+        <td>功能</td>
+        <td>REQ-LINE-001 / AC-LINE-001-01</td>
+        <td>PREP-LINE-01。图表类型 line，值轴已有 DATA-COUNT-A</td>
+        <td>1. 分别用点击和拖拽加入 DATA-COUNT-B</td>
+        <td>DATA-COUNT-A 显示名「用户在线数」，格式 number。DATA-COUNT-B 显示名「用户活跃数」，格式 number</td>
+        <td>值轴字段依次为这两个指标。toast 未被调用</td>
+      </tr>
+      <tr>
+        <td>TC-LINE-002</td>
+        <td>组合折线图加入第二个百分比指标</td>
+        <td>P0</td>
+        <td>功能</td>
+        <td>REQ-LINE-001 / AC-LINE-001-02</td>
+        <td>PREP-LINE-01。图表类型 multiple-line，值轴已有 DATA-PCT-A</td>
+        <td>1. 加入 DATA-PCT-B</td>
+        <td>两个指标格式都是 percent。另备一个 isDivide 为 divide、原始格式为 number 的指标，解析后按 percent 处理并同样允许加入</td>
+        <td>值轴有 2 个百分比指标。toast 未被调用</td>
+      </tr>
+      <tr>
+        <td>TC-LINE-003</td>
+        <td>数量折线图拒绝百分比、时长和存储大小</td>
+        <td>P0</td>
+        <td>异常</td>
+        <td>REQ-LINE-001 / AC-LINE-001-03</td>
+        <td>PREP-LINE-01。line，已有 DATA-COUNT-A。每种拒绝单独起一个状态</td>
+        <td>1. 加入一个 percent 指标。2. 另起状态加入 duration。3. 另起状态加入 storage</td>
+        <td>三个待加入指标各用不同 fieldId</td>
+        <td>每次结束后值轴仍只有 DATA-COUNT-A。提示为「纵轴只能共用数量或百分比」</td>
+      </tr>
+      <tr>
+        <td>TC-LINE-004</td>
+        <td>时长或存储大小不能加入第二个指标</td>
+        <td>P0</td>
+        <td>异常</td>
+        <td>REQ-LINE-001 / AC-LINE-001-04</td>
+        <td>PREP-LINE-01。一个状态的唯一指标是 duration，另一个是 storage</td>
+        <td>1. 向时长图加入另一个 duration。2. 向存储图加入一个 number</td>
+        <td>字段名固定为「时长甲」「时长乙」「存储甲」「数量甲」</td>
+        <td>两个状态都仍只有 1 个指标。提示为「纵轴只能共用数量或百分比」</td>
+      </tr>
+      <tr>
+        <td>TC-LINE-005</td>
+        <td>已有两条数量线时拒绝第三条</td>
+        <td>P0</td>
+        <td>边界</td>
+        <td>REQ-LINE-001 / AC-LINE-001-05</td>
+        <td>PREP-LINE-01。line 的值轴已是 DATA-COUNT-A 和 DATA-COUNT-B</td>
+        <td>1. 加入第三个 number 指标</td>
+        <td>显示名「用户沉默数」，格式 number</td>
+        <td>值轴仍是前两个。提示「折线图最多两条线」</td>
+      </tr>
+      <tr>
+        <td>TC-LINE-006</td>
+        <td>把两条数量线中的一条改成百分比</td>
+        <td>P0</td>
+        <td>异常</td>
+        <td>REQ-LINE-001 / AC-LINE-001-06</td>
+        <td>PREP-LINE-01。两条指标格式都是 number</td>
+        <td>1. 把第二条的格式类型改为 percent</td>
+        <td>小数位保持 0</td>
+        <td>两条格式都仍是 number。提示「纵轴只能共用数量或百分比」</td>
+      </tr>
+      <tr>
+        <td>TC-LINE-007</td>
+        <td>旧的不合法一对可以改成同为数量</td>
+        <td>P1</td>
+        <td>边界</td>
+        <td>REQ-LINE-001 / REQ-LINE-004</td>
+        <td>PREP-LINE-01。multiple-line 已有 number 和 percent 各一条</td>
+        <td>1. 把 percent 那条改成 number</td>
+        <td>显示名不变</td>
+        <td>两条格式都是 number。无拒绝提示</td>
+      </tr>
+      <tr>
+        <td>TC-LINE-008</td>
+        <td>两条线即使关闭图例也显示在右上角</td>
+        <td>P0</td>
+        <td>功能</td>
+        <td>REQ-LINE-002 / AC-LINE-002-01</td>
+        <td>调用 generateChartOption。图表类型 line。样式 showLegend 为 false，legendPosition 为 bottom</td>
+        <td>1. 传入两个系列，名称是「用户在线数」「用户活跃数」</td>
+        <td>系列顺序与指标顺序一致</td>
+        <td>图例存在。位置为上方靠右。图例数据依次是这两个名称。不断言具体色值，只断言两条系列按顺序保留，供主题色序着色</td>
+      </tr>
+      <tr>
+        <td>TC-LINE-009</td>
+        <td>一条线关闭图例时不强制显示</td>
+        <td>P0</td>
+        <td>边界</td>
+        <td>REQ-LINE-002 / AC-LINE-002-02</td>
+        <td>generateChartOption。类型 multiple-line。showLegend 为 false</td>
+        <td>1. 只传入一个系列</td>
+        <td>系列名「用户在线数」</td>
+        <td>选项中没有图例</td>
+      </tr>
+      <tr>
+        <td>TC-LINE-010</td>
+        <td>折线图拒绝第二个横轴维度</td>
+        <td>P0</td>
+        <td>异常</td>
+        <td>REQ-LINE-003 / AC-LINE-003-01</td>
+        <td>PREP-LINE-01。line 与 multiple-line 各有一个类别维度「时间」</td>
+        <td>1. 点击加入「部门」。2. 另起状态拖拽加入「部门」</td>
+        <td>维度 fieldId 为 department</td>
+        <td>类别轴仍只有「时间」。提示「折线图的横轴只能有一个维度」</td>
+      </tr>
+      <tr>
+        <td>TC-LINE-011</td>
+        <td>柱状图仍可加入第二个类别维度</td>
+        <td>P1</td>
+        <td>兼容</td>
+        <td>REQ-LINE-003 / AC-LINE-003-02</td>
+        <td>PREP-LINE-01。图表类型 bar，已有一个类别维度</td>
+        <td>1. 加入第二个维度</td>
+        <td>维度显示名「部门」</td>
+        <td>类别轴有 2 个维度。不出现折线图横轴提示</td>
+      </tr>
+      <tr>
+        <td>TC-LINE-012</td>
+        <td>已保存的两个横轴维度在保存配置中保留</td>
+        <td>P0</td>
+        <td>功能</td>
+        <td>REQ-LINE-004 / AC-LINE-004-01</td>
+        <td>PREP-LINE-01。line 的初始 data_config.dimensions 有「时间」和「部门」</td>
+        <td>1. 等待状态载入。2. 调用 getDataConfig，不删除维度</td>
+        <td>两个维度的 fieldId 为 timestamp、department</td>
+        <td>载入后类别轴长度为 2。生成的配置 dimensions 仍是这两个 fieldId，顺序不变</td>
+      </tr>
+      <tr>
+        <td>TC-LINE-013</td>
+        <td>已保存的数量加百分比不被删除且不能再加</td>
+        <td>P0</td>
+        <td>边界</td>
+        <td>REQ-LINE-004 / AC-LINE-004-02</td>
+        <td>PREP-LINE-01。multiple-line 初始指标为 number 和 percent</td>
+        <td>1. 载入。2. 生成保存配置。3. 再加入一个 number 指标</td>
+        <td>显示名「用户在线数」「用户活跃率」「用户沉默数」</td>
+        <td>载入和保存配置都有前两个指标。第三次加入失败，列表仍是前两个。提示「折线图最多两条线」</td>
+      </tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="card">
+  <h2>3. 异常与边界专项</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>专项</th><th>适用性</th><th>数据或触发</th><th>用例</th><th>副作用</th></tr></thead>
+    <tbody>
+      <tr><td>空值</td><td>不适用单独用例。没有指标时不画第二条线，沿用现有空图。不新增空状态文案。</td><td>无</td><td>无</td><td>不写入指标</td></tr>
+      <tr><td>数量边界</td><td>适用。新操作的 1 与 2，旧数据的 2 个维度和 2 个异类指标。</td><td>见各例测试数据</td><td>TC-LINE-005、010、012、013</td><td>拒绝后列表长度不变。合法加入后长度加 1</td></tr>
+      <tr><td>重复提交</td><td>适用，并入类型拒绝，不单列。同一不合法字段加两次，结果与加一次相同。</td><td>TC-LINE-003 的 percent 字段连续加入两次</td><td>TC-LINE-003 的断言覆盖一次；实施时可在同例循环两次</td><td>无额外指标</td></tr>
+      <tr><td>并发</td><td>不适用。需求不定义两人同时编辑。</td><td>无</td><td>无</td><td>无</td></tr>
+      <tr><td>超时、弱网</td><td>不适用。判断在本地同步完成。</td><td>无</td><td>无</td><td>无</td></tr>
+      <tr><td>权限</td><td>不适用。不改编辑权限。</td><td>无</td><td>无</td><td>无</td></tr>
+      <tr><td>特殊字符</td><td>不适用新规则。显示名长度仍用现有 15 字限制。</td><td>无</td><td>无</td><td>无</td></tr>
+      <tr><td>数据库落库</td><td>开发用例不适用真实库。保存配置对象即内存中的 data_config。</td><td>TC-LINE-012、013</td><td>同上</td><td>真实表 dashboard_component 留到 TC-QA-002，不能用本用例宣称已落库</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="card">
+  <h2>4. 自动化可行性</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>用例</th><th>标注</th><th>层级</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>TC-LINE-001 至 007、010 至 013</td><td>可自动化</td><td>Vitest，hook 与纯函数</td><td>命令候选：在 <code>src/frontend/platform</code> 执行 <code>npx vitest run src/test/lineChartSharedAxis.test.ts</code>。设计确认后才写这个文件。</td></tr>
+      <tr><td>TC-LINE-008、009</td><td>可自动化</td><td>Vitest，图表选项对象</td><td>不渲染浏览器。真实 ECharts 着色留在验收建议。</td></tr>
+      <tr><td>TC-QA-001</td><td>需人工或验收工程浏览器</td><td>独立验收，未编写脚本</td><td>打开编辑器，配两条数量线，看右上角文字是否为「用户在线数」「用户活跃数」，颜色是否不同，是否挡住标题。</td></tr>
+      <tr><td>TC-QA-002</td><td>需真实查询环境</td><td>独立验收，未编写脚本</td><td>打开一条改规则前就保存的双维度折线图，确认仍能查询且配置未被改写。</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout">复核方式是作者对照需求 AC 逐条映射，没有第二人评审。设计 0.1 未确认，因此函数文件名仍可能变化；预期结果不依赖未确认的实现细节。本文件没有执行记录，不能写成测试通过。</div>
+</section>
+</div>
+</body>
+</html>
