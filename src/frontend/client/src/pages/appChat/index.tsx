@@ -67,7 +67,10 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
         );
     }, [cid, conversations, flow?.name, localize]);
 
-    const hideShareForMobile = flow?.can_share !== true;
+    // Both headers share eligibility from the conversation addressed by the route.
+    const currentConversation = chats[cid];
+    const canShareConversation = currentConversation?.flow?.can_share === true &&
+        currentConversation.messages.some(message => message.category === 'question');
 
     // MobileNav still needs the shared header title before the flow reaches Recoil and mounts ChatView.
     useEffect(() => {
@@ -78,7 +81,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
             flowId: flow?.id || String(fid),
             flowType: Number(flow?.flow_type ?? type) || 15,
             readOnly: !!readOnly,
-            hideShare: hideShareForMobile,
+            hideShare: canShareConversation === false,
         });
         return () => setChatMobileHeader(null);
     }, [
@@ -89,7 +92,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
         flow?.flow_type,
         headerTitleForMobile,
         readOnly,
-        hideShareForMobile,
+        canShareConversation,
         setChatMobileHeader,
     ]);
 
@@ -243,7 +246,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
 
     if (!cid || !chatState?.flow) return null;
 
-    return <ChatView data={chatState.flow} cid={cid} v={effectiveApiVersion} readOnly={readOnly} isGuestMode={isGuestMode} />
+    return <ChatView data={chatState.flow} cid={cid} v={effectiveApiVersion} readOnly={readOnly} isGuestMode={isGuestMode} canShareConversation={canShareConversation} />
 };
 
 /**
