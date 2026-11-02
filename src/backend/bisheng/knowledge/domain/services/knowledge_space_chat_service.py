@@ -771,20 +771,16 @@ class KnowledgeSpaceChatService:
                     )
                 filters_by_kb[kb_id] = spec
 
-        per_kb_results = await asyncio.gather(
-            *(
-                self._aretrieve_chunks_dispatch(
-                    kb_id,
-                    query=query,
-                    tag_names=(filters_by_kb.get(kb_id) or {}).get("tags") or [],
-                    max_content=max_content,
-                )
-                for kb_id in knowledge_base_ids
-            )
-        )
-
         flattened: list[tuple[int, Document]] = []
-        for chunks in per_kb_results:
+        # Version visibility queries share the request-scoped AsyncSession,
+        # which must not be used concurrently by multiple space retrievals.
+        for kb_id in knowledge_base_ids:
+            chunks = await self._aretrieve_chunks_dispatch(
+                kb_id,
+                query=query,
+                tag_names=(filters_by_kb.get(kb_id) or {}).get("tags") or [],
+                max_content=max_content,
+            )
             flattened.extend(chunks)
         flattened = flattened[:top_k]
         await self._attach_document_update_time(flattened)
