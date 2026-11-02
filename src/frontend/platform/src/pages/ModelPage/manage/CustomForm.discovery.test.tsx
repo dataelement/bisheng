@@ -36,6 +36,13 @@ describe('discovery connection and speech configuration', () => {
     expect(ref.current?.getCatalogError()).toBe('API Key');
   });
 
+  it('shows the vendor base url in the field when a saved address is blank', () => {
+    render(<CustomForm showDefault={false} provider="qianfan" modelTypes={['asr_rt']}
+      formData={{ base_url: '', api_key: '********', speech_app_id: '124474393', speech_api_key: '********' }} />);
+    expect(screen.getByLabelText('Base URL')).toHaveValue('https://qianfan.baidubce.com/v2');
+    expect(screen.getByLabelText('API Key')).toHaveValue('********');
+  });
+
   it('allows listing when the API key is set and Base URL keeps the vendor default', () => {
     const ref = createRef<CustomFormHandle>();
     render(<CustomForm ref={ref} showDefault={false} provider="tencent" modelTypes={['asr_rt']}

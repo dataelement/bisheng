@@ -113,6 +113,17 @@ describe("model discovery interaction", () => {
       screen.getByRole("button", { name: "model.refreshModels" }),
     ).toBeEnabled();
   });
+  it("shows the rate-limit error inside the picker", async () => {
+    vi.mocked(discoverModels).mockRejectedValue({ data: { reason: "rate_limit" } });
+    render(<ModelDiscovery {...props()} />);
+    fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "model.discoveryError_rate_limit",
+    );
+  });
   it("keeps selections while the picker is closed and imports only after confirmation", async () => {
     vi.mocked(discoverModels).mockResolvedValue({ models: catalog });
     const input = props();

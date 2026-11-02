@@ -42,6 +42,12 @@ describe('native speech provider configuration', () => {
         expect(values).toEqual(stored);
         expect(getConfigError(values, getSpeechFields('qianfan', stored, t))).toBe('');
     });
+    it('shows the vendor base url when a saved address is blank', () => {
+        const fields = getModelProviders().qianfan;
+        const config = configWithDefaults({ base_url: '', api_key: '********' }, fields, false);
+        expect(config.base_url).toBe('https://qianfan.baidubce.com/v2');
+        expect(config.api_key).toBe('********');
+    });
     it('retains existing provider defaults and rejects whitespace credentials', () => {
         const fields = getModelProviders().qwen;
         const config = configWithDefaults({ openai_api_key: '  ' }, fields, true);

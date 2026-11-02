@@ -26,6 +26,7 @@ import {
   availableModelTypes,
   discoveryProviders,
   importableModels,
+  modelTypes,
 } from "./modelDiscoveryState";
 
 import { ModelDiscoveryOptions } from "./ModelDiscoveryOptions";
@@ -303,7 +304,7 @@ export function ModelDiscovery({
                 }}
                 options={[
                   { value: "all", label: t("model.allModelTypes") },
-                  ...allowedTypes.map((type) => ({
+                  ...modelTypes.map((type) => ({
                     value: type,
                     label: t(`model.type_${type}`),
                   })),

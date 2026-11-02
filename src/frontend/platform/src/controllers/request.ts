@@ -80,8 +80,19 @@ customAxios.interceptors.request.use(function (config) {
 });
 
 // Only registered local copy is eligible for user-facing errors.
+function rateLimitDiscoveryMessage(envelope: any): string {
+    const reason = envelope?.data?.reason;
+    if (envelope?.status_code !== 10812 || reason !== 'rate_limit') return '';
+    const key = 'model:discoveryError_rate_limit';
+    if (!i18next.exists(key)) return '';
+    const message = i18next.t(key);
+    return typeof message === 'string' && message && message !== key ? message : '';
+}
+
 function decodeEnvelopeMessage(envelope: any) {
     const statusCode = envelope?.status_code
+    const rateLimitMessage = rateLimitDiscoveryMessage(envelope);
+    if (rateLimitMessage) return rateLimitMessage;
     const statusMessage = typeof envelope?.status_message === 'string' ? envelope.status_message : '';
     const codeKey = `api_errors:${statusCode}`;
     const i18Msg = i18next.exists(codeKey) ? i18next.t(codeKey) : '';

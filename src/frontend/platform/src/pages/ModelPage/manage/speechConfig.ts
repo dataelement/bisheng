@@ -74,7 +74,14 @@ export function getSpeechFields(provider: string, config: ProviderConfig, t: TFu
 export function configWithDefaults(config: ProviderConfig, fields: ConfigField[], showDefault: boolean): ProviderConfig {
     const result = { ...config };
     for (const field of fields) {
-        if (result[field.key] === undefined && (showDefault || field.key.startsWith('speech_'))) {
+        const current = result[field.key];
+        // A saved blank address still uses the vendor default at request time.
+        // Show that address instead of an empty box, including while editing.
+        if ((current === undefined || current.trim() === '') && field.default.trim()) {
+            result[field.key] = field.default;
+            continue;
+        }
+        if (current === undefined && (showDefault || field.key.startsWith('speech_'))) {
             result[field.key] = field.default;
         }
     }
