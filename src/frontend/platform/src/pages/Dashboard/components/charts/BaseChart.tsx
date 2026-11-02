@@ -3,10 +3,11 @@
 import { ChartType, ComponentConfig, ComponentStyleConfig } from '@/pages/Dashboard/types/dataConfig'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { colorSchemes, convertToEChartsTheme } from '../../colorSchemes'
+import { colorSchemes, combinationLineSeriesColors, convertToEChartsTheme } from '../../colorSchemes'
 import { ChartDataResponse, PieDataItem } from '../../types/chartData'
 import { displayJoinedDimension, organizationDisplayName } from '../../utils/organizationLabels'
 import { useComponentExport } from '../export/useComponentExport'
+import { isSharedAxisLineChart } from '../config/lineAxisRules'
 import { unitConversion } from './MetricCard'
 import { applyPieResultLimit } from './pieChartData'
 
@@ -128,6 +129,7 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig, da
       dataConfig,
       styleConfig,
       containerSize,
+      isDark,
       otherLabel: t("componentConfigDrawer.otherResults", { defaultValue: "其他" }),
     });
 
@@ -282,6 +284,7 @@ export function generateChartOption(props: {
   dataConfig?: ComponentConfig;
   styleConfig: ComponentStyleConfig;
   containerSize?: number[];
+  isDark?: boolean;
   otherLabel?: string;
 }): any {
   const { chartType } = props;
@@ -297,7 +300,14 @@ export function generateChartOption(props: {
     );
   }
 
-  return getCartesianChartOption(props.data, chartType, props.styleConfig, props.dataConfig, props.containerSize);
+  return getCartesianChartOption(
+    props.data,
+    chartType,
+    props.styleConfig,
+    props.dataConfig,
+    props.containerSize,
+    props.isDark,
+  );
 }
 
 
@@ -392,13 +402,17 @@ const getCartesianChartOption = (
   chartType: ChartType,
   styleConfig: ComponentStyleConfig,
   dataConfig?: ComponentConfig,
-  containerSize: number[] = []
+  containerSize: number[] = [],
+  isDark = false,
 ) => {
   const { dimensions, series } = data;
   const isHorizontal = chartType.includes('horizontal');
   const isStacked = chartType.includes('stacked');
   const isLineOrArea = chartType.includes('line') || chartType.includes('area');
   const isArea = chartType.includes('area')
+  const combinationLineColors = chartType === ChartType.StackedLine && series.length >= 2 && series.length <= 3
+    ? combinationLineSeriesColors(styleConfig.themeColor, isDark ? "dark" : "light", series.length)
+    : undefined
 
   // aixs title tyle
   const [containerWidth = 500, containerHeight = 500] = containerSize
@@ -514,8 +528,10 @@ const getCartesianChartOption = (
       itemStyle: {
         borderRadius: (!isLineOrArea && !isStacked)
           ? (isHorizontal ? [0, 4, 4, 0] : [4, 4, 0, 0])
-          : 0
-      }
+          : 0,
+        ...(combinationLineColors ? { color: combinationLineColors[index] } : {}),
+      },
+      ...(combinationLineColors ? { lineStyle: { color: combinationLineColors[index], width: 2 } } : {}),
     };
 
     if (styleConfig.showDataLabel) {
@@ -540,6 +556,11 @@ const getCartesianChartOption = (
     return item;
   });
 
+  const forceSharedLineLegend = isSharedAxisLineChart(chartType) && series.length >= 2
+  const legendStyle: ComponentStyleConfig = forceSharedLineLegend
+    ? { ...styleConfig, showLegend: true, legendPosition: "top", legendAlign: "right" }
+    : styleConfig
+
   let grid = {
     left: 0,
     right: 0,
@@ -547,13 +568,14 @@ const getCartesianChartOption = (
     bottom: 0,
     // containLabel: true,
   }
-  if (styleConfig.showLegend) {
-    const titleBottom = (styleConfig.xAxisTitle ? 18 : 0) + ((dataConfig.dimensions.length - 1) * 10);
-    const bottom = (styleConfig.legendPosition === 'bottom' ? 44 : 0) + titleBottom;
+  if (legendStyle.showLegend) {
+    const categoryCount = dataConfig && "dimensions" in dataConfig ? (dataConfig.dimensions?.length || 1) : 1
+    const titleBottom = (legendStyle.xAxisTitle ? 18 : 0) + ((categoryCount - 1) * 10);
+    const bottom = (legendStyle.legendPosition === 'bottom' ? 44 : 0) + titleBottom;
     grid = {
-      left: styleConfig.legendPosition === 'left' ? 160 : 0,
-      right: styleConfig.legendPosition === 'right' ? 100 : 0,
-      top: styleConfig.legendPosition === 'top' ? 40 : 0,
+      left: legendStyle.legendPosition === 'left' ? 160 : 0,
+      right: legendStyle.legendPosition === 'right' ? 100 : 0,
+      top: legendStyle.legendPosition === 'top' ? 40 : 0,
       bottom,
     }
   }
@@ -562,7 +584,7 @@ const getCartesianChartOption = (
     backgroundColor: styleConfig.bgColor,
     // title: buildTitleOption(styleConfig),
     legend: (() => {
-      const legend = buildLegendOption(styleConfig, series.map(s => s.name))
+      const legend = buildLegendOption(legendStyle, series.map(s => s.name))
       if (!legend || !data.seriesFieldId) return legend
       return {
         ...legend,

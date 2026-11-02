@@ -7,6 +7,7 @@ import { generateUUID } from "@/components/bs-ui/utils"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { useTranslation } from "react-i18next"
+import { canAddLineMetric, isSharedAxisLineChart, lineLimitToastKey, maxCategoryDimensions, maxSharedLineMetrics } from "./lineAxisRules"
 
 type MetricNumberFormat = DataConfig["metrics"][number]["numberFormat"]
 
@@ -505,9 +506,23 @@ export function useChartState(
           ? MAX_METRIC_CARD_METRICS
           : STACKED_CHART_TYPES.has(chartType) ? 3 : 1;
 
-      //指标维度只能有一个
-      if (section === 'value' && valueDimensions.length >= maxMetricCount) {
-        console.warn('指标维度只能有一个，请先删除现有的指标维度')
+      if (section === 'value' && isSharedAxisLineChart(chartType)) {
+        const decision = canAddLineMetric(valueDimensions, {
+          isDivide: data.isDivide,
+          numberFormat: data.numberFormat,
+        }, maxSharedLineMetrics(chartType))
+        if (!decision.ok) {
+          toast({
+            description: decision.reason === "max"
+              ? t(lineLimitToastKey(chartType))
+              : t("componentConfigDrawer.toast.lineAxisSingleKind"),
+            variant: "warning",
+          })
+          setDragOverSection(null)
+          return
+        }
+      } else if (section === 'value' && valueDimensions.length >= maxMetricCount) {
+        console.warn(`指标最多只能有 ${maxMetricCount} 个`)
         toast({
           description: t('useChartState.warn.metricLimitReached'),
           variant: "warning",
@@ -582,10 +597,13 @@ export function useChartState(
       }
 
       if (section === 'category') {
-        if (categoryDimensions.length >= 2) {
-          console.warn('类别维度最多只能有 2 个')
+        const categoryLimit = maxCategoryDimensions(chartType)
+        if (categoryDimensions.length >= categoryLimit) {
+          console.warn(`类别维度最多只能有 ${categoryLimit} 个`)
           toast({
-            description: t('useChartState.warn.maxCategoryDimensions'),
+            description: isSharedAxisLineChart(chartType)
+              ? t("componentConfigDrawer.toast.lineSingleDimension")
+              : t('useChartState.warn.maxCategoryDimensions'),
             variant: "warning",
           })
           setDragOverSection(null)

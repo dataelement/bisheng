@@ -107,6 +107,10 @@
       "dimensionLimitReached": "当前维度数量已达到上限",
       "metricReached": "不支持拖拽维度至指标",
       "metricLimitReached": "当前指标数量已达到上限",
+      "lineAxisSingleKind": "纵轴只能共用数量或百分比",
+      "lineMaxTwo": "折线图最多两条线",
+      "lineMaxThree": "组合折线图最多三条线",
+      "lineSingleDimension": "折线图的横轴只能有一个维度",
       "virtualMetricConflict": "无法同时添加虚拟指标和非虚拟指标",
       "multipleVirtualMetric": "无法同时添加多个虚拟指标"
     },
