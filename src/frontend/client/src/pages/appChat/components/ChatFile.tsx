@@ -1,23 +1,27 @@
-// @ts-strict-ignore
 import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
 import { downloadFile } from "~/utils";
 import useLocalize from "~/hooks/useLocalize";
-export default function ChatFile({ fileName, filePath }) {
+import { resolveKnowledgePreviewUrl } from "~/pages/knowledge/FilePreview/previewUrlUtils";
 
-    // download file
-    const handleDownloadFile = (filePath) => {
+interface ChatFileProps {
+    fileName: string;
+    filePath?: string;
+}
+
+export function ChatFile({ fileName, filePath }: ChatFileProps) {
+    const handleDownloadFile = () => {
         if (filePath) {
-            const path = filePath.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)
-            downloadFile(path, fileName)
+            // Object storage uses the origin bucket proxy, independently of the SPA base.
+            void downloadFile(resolveKnowledgePreviewUrl(filePath), fileName);
         }
-    }
+    };
 
     const t = useLocalize()
     return <div
         className="group min-w-52 relative flex items-center gap-2 border bg-white p-2 rounded-xl cursor-pointer"
-        onClick={() => handleDownloadFile(filePath)}
+        onClick={handleDownloadFile}
     >
-        <FileIcon loading={false} type={getFileTypebyFileName(fileName)} />
+        <FileIcon loading={false} type={getFileTypebyFileName(fileName) || "txt"} />
         <div className="flex-1">
             <div className="max-w-48 text-sm font-medium text-gray-700 truncate">
                 {fileName}

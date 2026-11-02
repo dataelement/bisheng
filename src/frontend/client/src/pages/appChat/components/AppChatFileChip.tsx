@@ -6,7 +6,7 @@ import { resolveKnowledgePreviewUrl } from '~/pages/knowledge/FilePreview/previe
 import { isMediaAttachmentFile } from '~/utils/mediaAttachmentUtils';
 import { cn } from '~/utils';
 import { type AppChatFileLike, normalizeAppChatFile } from '../appChatFileUtils';
-import ChatFile from './ChatFile';
+import { ChatFile } from './ChatFile';
 
 const IMAGE_FILE_TYPES = new Set(['jpg', 'jpeg', 'png', 'bmp', 'gif', 'webp']);
 
