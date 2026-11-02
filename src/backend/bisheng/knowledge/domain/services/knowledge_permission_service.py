@@ -259,6 +259,10 @@ class KnowledgeContainerPermissionLoader(Protocol):
         resource_id: str,
     ) -> KnowledgeContainerPermissionRecord | None: ...
 
+    async def load_permission_records_from_rows(
+        self, rows: list[Knowledge], *, resource_type: str
+    ) -> tuple[KnowledgeContainerPermissionRecord, ...]: ...
+
 
 class KnowledgePermissionVersionPort(Protocol):
     async def get_permission_version(
@@ -325,6 +329,48 @@ class KnowledgeContainerDaoPermissionLoader:
             permission_version=version,
             context_version=context_version,
         )
+
+    async def load_permission_records_from_rows(
+        self, rows: list[Knowledge], *, resource_type: str
+    ) -> tuple[KnowledgeContainerPermissionRecord, ...]:
+        """Resolve one business-loaded batch without per-resource SELECTs."""
+        allowed_kinds = {"knowledge_space": {"SPACE"}, "knowledge_library": {"NORMAL", "QA"}}
+        candidates: list[tuple[Knowledge, str, str]] = []
+        for row in rows:
+            if row.id is None or row.tenant_id is None:
+                continue
+            try:
+                kind = KnowledgeTypeEnum(row.type).name
+                status = KnowledgeState(row.state).name
+            except ValueError:
+                continue
+            if kind in allowed_kinds.get(resource_type, set()):
+                candidates.append((row, kind, status))
+        if not candidates:
+            return ()
+        keys = tuple((int(row.tenant_id), resource_type, str(row.id)) for row, _, _ in candidates)
+        snapshots = await self._versions.get_permission_snapshots(keys)
+        records = []
+        for row, kind, status in candidates:
+            snapshot = snapshots.get((int(row.tenant_id), resource_type, str(row.id)))
+            if snapshot is None:
+                continue
+            context_version = sha256(
+                (f"{snapshot.context_version}|{row.update_time.isoformat() if row.update_time else '0'}").encode()
+            ).hexdigest()[:64]
+            records.append(
+                KnowledgeContainerPermissionRecord(
+                    tenant_id=int(row.tenant_id),
+                    resource_type=resource_type,
+                    resource_id=str(row.id),
+                    status=status,
+                    kind=kind,
+                    owner_user_id=int(row.user_id or 0),
+                    permission_version=snapshot.version,
+                    context_version=context_version,
+                )
+            )
+        return tuple(records)
 
 
 class KnowledgeContainerPermissionPort(Protocol):
@@ -450,6 +496,23 @@ class F048KnowledgeContainerPermissionAdapter:
             resource_id,
         )
         return self._target(record, actor, resource_type, resource_id)
+
+    async def resolve_permission_targets_from_rows(
+        self,
+        *,
+        rows: list[Knowledge],
+        resource_type: str,
+        actor: PermissionActor,
+    ) -> tuple[VerifiedPermissionTarget, ...]:
+        records = await self._loader.load_permission_records_from_rows(rows, resource_type=resource_type)
+        targets = []
+        for record in records:
+            try:
+                targets.append(self._target(record, actor, resource_type, record.resource_id))
+            except PermissionInvalidResourceError:
+                # Listing semantics omit individually invalid business resources.
+                continue
+        return tuple(targets)
 
     async def check_action(
         self,

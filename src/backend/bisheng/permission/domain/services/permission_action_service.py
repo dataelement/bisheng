@@ -137,6 +137,8 @@ class PermissionConsistencyMarkerPort(Protocol):
         resource_id: str | None,
     ) -> str | None: ...
 
+    async def consistency_for_batch(self, targets: tuple[VerifiedPermissionTarget, ...]) -> str | None: ...
+
 
 class PermissionFGADecisionPort(Protocol):
     async def check(
@@ -324,6 +326,7 @@ class F048PermissionService:
             raise ValueError(f"BatchCheck accepts at most {MAX_BATCH_CHECKS} targets")
         results: list[bool | None] = [None] * len(targets)
         unresolved: list[tuple[int, VerifiedPermissionTarget]] = []
+        pending: list[tuple[int, VerifiedPermissionTarget]] = []
         consistency = None
         data_scope_denied = await self._data_scope_denied_map(actor, targets)
         for index, target in enumerate(targets):
@@ -340,19 +343,37 @@ class F048PermissionService:
             if shortcut is not None:
                 results[index] = shortcut[0]
                 continue
-            try:
-                force_higher_consistency = await self._prepare_action_target(target, action)
-            except PermissionPublishNotReadyError as exc:
-                results[index] = False
-                self._handle_stale_projection(target, exc)
-                continue
-            target_consistency = await self._consistency(
-                target,
-                force_higher_consistency=force_higher_consistency,
-            )
-            if target_consistency == HIGHER_CONSISTENCY:
-                consistency = HIGHER_CONSISTENCY
-            unresolved.append((index, target))
+            pending.append((index, target))
+
+        if pending:
+            await self._catalog.ensure_runtime_ready()
+            pending_targets = tuple(target for _, target in pending)
+            fence_batch = getattr(type(self._scope_fence), "ensure_readable_batch", None)
+            if callable(fence_batch):
+                fences = await self._scope_fence.ensure_readable_batch(pending_targets)
+            else:
+                # Keep compatibility with decision ports that only expose the
+                # single-target operation; failures remain fail closed.
+                fences = await asyncio.gather(
+                    *(self._scope_fence.ensure_readable(target) for target in pending_targets),
+                    return_exceptions=True,
+                )
+            if len(fences) != len(pending):
+                raise PermissionProjectionFailedError(msg="Permission scope fence returned an incomplete result")
+            consistency_inputs: list[tuple[VerifiedPermissionTarget, bool]] = []
+            for (index, target), fence in zip(pending, fences, strict=True):
+                if isinstance(fence, PermissionPublishNotReadyError):
+                    results[index] = False
+                    self._handle_stale_projection(target, fence)
+                    continue
+                if isinstance(fence, BaseException):
+                    raise fence
+                unresolved.append((index, target))
+                consistency_inputs.append((target, bool(fence)))
+            for resource_type in dict.fromkeys(target.resource_type for _, target in unresolved):
+                if not await self._catalog.is_action_effective(resource_type, action):
+                    raise InvalidCatalogActionError(msg=f"Action {action} is unavailable for {resource_type}")
+            consistency = await self._batch_consistency(tuple(consistency_inputs))
 
         if unresolved:
             checks = [
@@ -467,28 +488,15 @@ class F048PermissionService:
 
         consistency_started_at = perf_counter()
         try:
-            consistency_results = await asyncio.gather(
-                *(
-                    self._consistency(
-                        target,
-                        force_higher_consistency=force_higher_consistency,
-                    )
-                    for _, target, force_higher_consistency in consistency_inputs
-                )
+            consistency = await self._batch_consistency(
+                tuple((target, force_higher_consistency) for _, target, force_higher_consistency in consistency_inputs)
             )
         except Exception:
             consistency_elapsed_ms = (perf_counter() - consistency_started_at) * 1000
             emit_batch_metric("consistency_error")
             raise
         consistency_elapsed_ms = (perf_counter() - consistency_started_at) * 1000
-        for (index, target, _), target_consistency in zip(
-            consistency_inputs,
-            consistency_results,
-            strict=True,
-        ):
-            if target_consistency == HIGHER_CONSISTENCY:
-                consistency = HIGHER_CONSISTENCY
-            unresolved.append((index, target))
+        unresolved.extend((index, target) for index, target, _ in consistency_inputs)
 
         if unresolved:
             checks = [
@@ -837,6 +845,28 @@ class F048PermissionService:
             target.resource_type,
             target.resource_id,
         )
+
+    async def _batch_consistency(self, inputs: tuple[tuple[VerifiedPermissionTarget, bool], ...]) -> str | None:
+        """Select the strongest consistency for one complete BatchCheck."""
+        if not inputs:
+            return None
+        if any(force for _, force in inputs):
+            for target, force in inputs:
+                if force:
+                    await self._consistency(target, force_higher_consistency=True)
+            return HIGHER_CONSISTENCY
+        batch_reader = getattr(type(self._marker), "consistency_for_batch", None)
+        if callable(batch_reader):
+            try:
+                consistency = await self._marker.consistency_for_batch(tuple(target for target, _ in inputs))
+                if consistency not in (None, HIGHER_CONSISTENCY):
+                    raise ValueError("Unsupported permission consistency marker")
+                return consistency
+            except Exception:
+                logger.exception("Failed to read the F048 batch marker; using higher consistency")
+                return HIGHER_CONSISTENCY
+        values = await asyncio.gather(*(self._consistency(target) for target, _ in inputs))
+        return HIGHER_CONSISTENCY if HIGHER_CONSISTENCY in values else None
 
     async def _scope_consistency(
         self,

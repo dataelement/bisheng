@@ -96,6 +96,7 @@ from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
     KnowledgeSpaceTagLibraryDao,
 )
 from bisheng.knowledge.domain.models.knowledge_space_user_pin import KnowledgeSpaceUserPinDao
+from bisheng.knowledge.domain.repositories.knowledge_space_listing_repository import KnowledgeSpaceListingRepository
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FolderUploadItem,
     InitialPermissionApplyResult,
@@ -135,9 +136,11 @@ from bisheng.permission.application.access import (
 from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
     batch_check_business_visible,
+    batch_check_verified_business_actions,
     batch_check_verified_business_visible,
     check_business_action,
 )
+from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
 from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.permission.application.initial_grant import (
     InitialGrantAddition,
@@ -213,6 +216,8 @@ _logger = logging.getLogger(__name__)
 _CHILD_PERMISSION_SCAN_BATCH_SIZE = 100
 _JOINED_VISIBLE_MAX_RESULTS = 5_000
 _JOINED_DB_ID_BATCH_SIZE = 500
+_MANAGED_VISIBLE_MAX_RESULTS = 5_000
+_MANAGED_PERMISSION_BATCH_SIZE = 100
 # F040: keyword-search batch-scan window. A batch shrunk by ReBAC visibility
 # filtering is refilled from the next OFFSET window, so this only bounds per-round
 # DB fetch + visibility evaluation, not the page size.
@@ -241,6 +246,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         initial_grant_application: InitialGrantApplication | None = None,
         prospective_grant_application: ProspectiveGrantApplication | None = None,
         knowledge_file_repo: "KnowledgeFileRepository | None" = None,
+        space_listing_repository: KnowledgeSpaceListingRepository | None = None,
     ):
         self.request = request
         self.login_user = login_user
@@ -251,6 +257,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.initial_grant_application = initial_grant_application
         self.prospective_grant_application = prospective_grant_application
         self.knowledge_file_repo = knowledge_file_repo
+        self.space_listing_repository = space_listing_repository or KnowledgeSpaceListingRepository()
         # Injected by DI factory after construction (same pattern as message_service).
         # When set, list_space_children will exclude non-primary version files and
         # return version enrichment fields.
@@ -521,50 +528,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
         for space in spaces:
             space.file_num = count_map.get(int(space.id), 0)
 
-    async def _format_accessible_spaces(
+    async def _format_managed_space_rows(
         self,
-        space_ids: list[int],
-        order_by: str,
+        spaces: list[Knowledge],
         *,
-        memberships: list[SpaceChannelMember] | None = None,
-        exclude_created: bool = False,
-        required_action: str = "visible",
+        memberships: list[SpaceChannelMember],
+        action_map: dict[str, frozenset[str]],
     ) -> list[KnowledgeRead]:
-        if not space_ids:
-            return []
-
-        membership_map = {int(member.business_id): member for member in (memberships or [])}
-        spaces = await KnowledgeDao.async_get_spaces_by_ids(space_ids, order_by)
-        if exclude_created:
-            spaces = [space for space in spaces if space.user_id != self.login_user.user_id]
+        """Decorate authorized rows in their existing database order."""
         if not spaces:
             return []
+        membership_map = {int(member.business_id): member for member in memberships}
 
         # Pin state is a per-user preference stored in knowledge_space_user_pin,
         # decoupled from the membership row (a space may be pinned even when
         # reached only via ReBAC / department authorization, with no member row).
         pinned_ids = await KnowledgeSpaceUserPinDao.list_pinned_space_ids(self.login_user.user_id)
 
-        requested_actions = tuple(
-            dict.fromkeys(
-                (
-                    "visible",
-                    "manage_permission",
-                    required_action,
-                )
-            )
-        )
-        action_map = await self._batch_actions(
-            "knowledge_space",
-            [space.id for space in spaces],
-            requested_actions,
-        )
-
         pinned_spaces = []
         normal_spaces = []
         for space in spaces:
             effective_actions = action_map.get(str(space.id), frozenset())
-            if "visible" not in effective_actions or required_action not in effective_actions:
+            if not {"visible", "edit"}.issubset(effective_actions):
                 continue
             member_conf = membership_map.get(space.id)
             result = KnowledgeSpaceInfoResp(
@@ -2211,43 +2196,136 @@ class KnowledgeSpaceService(KnowledgeUtils):
             members = [member for member in members if int(member.business_id) not in department_space_ids]
         return await self._format_member_spaces(members, order_by)
 
-    async def _scan_space_action_ids(
-        self,
-        action: str,
-    ) -> list[int]:
-        result: list[int] = []
-        cursor = None
-        while True:
-            rows = await KnowledgeDao.aget_all_knowledge(
-                knowledge_type=KnowledgeTypeEnum.SPACE,
-                sort_by="update_time",
-                limit=100,
-                cursor=cursor,
-            )
-            if not rows:
-                break
-            action_map = await self._batch_actions(
-                "knowledge_space",
-                [row.id for row in rows],
-                (action,),
-            )
-            result.extend(int(row.id) for row in rows if action in action_map.get(str(row.id), frozenset()))
-            if len(rows) < 100:
-                break
-            last = rows[-1]
-            cursor = [last.update_time, last.id]
-        return result
-
     async def get_my_managed_spaces(self, order_by: str = "name") -> list[KnowledgeRead]:
-        members = await SpaceChannelMemberDao.async_get_user_managed_members(self.login_user.user_id)
-        space_ids = {int(member.business_id) for member in members}
-        space_ids.update(await self._scan_space_action_ids("manage_permission"))
-        return await self._format_accessible_spaces(
-            list(space_ids),
-            order_by,
-            memberships=members,
-            required_action="manage_permission",
-        )
+        """Use visible IDs and bulk edit checks for non-global actors."""
+        started = perf_counter()
+        stage = "actor"
+        elapsed = dict.fromkeys(("actor", "visible_ids", "candidates", "members", "permission", "metadata"), 0.0)
+        visible_count = loaded_count = batch_count = 0
+        result: list[KnowledgeRead] = []
+        status = "error"
+        error_type = None
+        system_scope = False
+
+        @contextmanager
+        def measure(name: str):
+            nonlocal stage
+            stage = name
+            phase_started = perf_counter()
+            try:
+                yield
+            finally:
+                elapsed[name] += (perf_counter() - phase_started) * 1000
+
+        try:
+            with measure("actor"):
+                actor = await self._permission_actor()
+                runtime = await get_f048_runtime()
+                system_scope = actor.super_admin and actor.data_scope == DATA_SCOPE_ALL
+            visible_ids: list[int] | None = None
+            if not system_scope:
+                with measure("visible_ids"):
+                    visible = await runtime.list_visible_objects(
+                        actor, resource_type="knowledge_space", max_results=_MANAGED_VISIBLE_MAX_RESULTS
+                    )
+                    if visible.resource_type != "knowledge_space" or visible.status != "NORMAL":
+                        raise PermissionEnumerationIncompleteError(msg="Knowledge-space enumeration is incomplete")
+                    try:
+                        visible_ids = list(dict.fromkeys(int(value) for value in visible.object_ids))
+                    except (TypeError, ValueError) as exc:
+                        raise PermissionEnumerationIncompleteError(
+                            msg="Knowledge-space enumeration returned an invalid ID", exception=exc
+                        ) from exc
+                    if any(str(int(value)) != value or int(value) <= 0 for value in visible.object_ids):
+                        raise PermissionEnumerationIncompleteError(
+                            msg="Knowledge-space enumeration returned an invalid ID"
+                        )
+                    if len(visible_ids) > _MANAGED_VISIBLE_MAX_RESULTS:
+                        raise PermissionEnumerationIncompleteError(msg="Knowledge-space enumeration exceeded capacity")
+                    visible_count = len(visible_ids)
+            with measure("candidates"):
+                spaces = (
+                    await self.space_listing_repository.list_spaces(visible_ids, order_by)
+                    if visible_ids is None or visible_ids
+                    else []
+                )
+                # Defense against stale enumeration IDs and an incorrectly
+                # scoped business loader, including the global-admin branch.
+                spaces = [space for space in spaces if space.tenant_id == actor.current_tenant_id]
+                loaded_count = len(spaces)
+            with measure("members"):
+                members = (
+                    await SpaceChannelMemberDao.async_get_user_managed_members(self.login_user.user_id)
+                    if spaces
+                    else []
+                )
+            action_map: dict[str, frozenset[str]] = {}
+            with measure("permission"):
+                if system_scope:
+                    action_map = {
+                        str(space.id): frozenset(("visible", "edit", "manage_permission")) for space in spaces
+                    }
+                elif spaces:
+                    adapter = self.f048_permission_adapter or await self._resource_adapter("knowledge_space")
+                    member_ids = {int(member.business_id) for member in members}
+                    rows_by_id = {str(space.id): space for space in spaces}
+                    for offset in range(0, len(spaces), _MANAGED_PERMISSION_BATCH_SIZE):
+                        batch_count += 1
+                        targets = await adapter.resolve_permission_targets_from_rows(
+                            rows=spaces[offset : offset + _MANAGED_PERMISSION_BATCH_SIZE],
+                            resource_type="knowledge_space",
+                            actor=actor,
+                        )
+                        edit_map = await batch_check_verified_business_actions(
+                            actor=actor, targets=targets, actions=("edit",)
+                        )
+                        editable = tuple(
+                            target
+                            for target in targets
+                            if "edit" in edit_map.get((target.resource_type, target.resource_id), frozenset())
+                        )
+                        visible_map = await batch_check_verified_business_visible(actor=actor, targets=editable)
+                        allowed = tuple(
+                            target
+                            for target in editable
+                            if visible_map.get((target.resource_type, target.resource_id), False)
+                        )
+                        # Management is display metadata only. Do not require
+                        # it from an editor or expand it for known member roles.
+                        role_targets = tuple(
+                            target
+                            for target in allowed
+                            if int(target.resource_id) not in member_ids
+                            and rows_by_id[target.resource_id].user_id != self.login_user.user_id
+                        )
+                        roles = await batch_check_verified_business_actions(
+                            actor=actor, targets=role_targets, actions=("manage_permission",)
+                        )
+                        for target in allowed:
+                            action_map[target.resource_id] = frozenset(("visible", "edit")) | roles.get(
+                                (target.resource_type, target.resource_id), frozenset()
+                            )
+            with measure("metadata"):
+                result = await self._format_managed_space_rows(spaces, memberships=members, action_map=action_map)
+            status = "success"
+            return result
+        except Exception as exc:
+            error_type = type(exc).__name__
+            raise
+        finally:
+            emit_metric(
+                "knowledge_space_managed",
+                status=status,
+                system_scope=system_scope,
+                visible_count=visible_count,
+                candidate_count=loaded_count,
+                batch_count=batch_count,
+                returned_count=len(result),
+                total_elapsed_ms=(perf_counter() - started) * 1000,
+                failed_stage=stage if status == "error" else None,
+                error_type=error_type,
+                **{f"{name}_elapsed_ms": value for name, value in elapsed.items()},
+            )
 
     async def get_my_followed_spaces(self, order_by: str = "update_time") -> list[KnowledgeRead]:
         """Return complete personally visible spaces created by another user."""
