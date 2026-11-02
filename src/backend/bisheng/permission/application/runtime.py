@@ -11,6 +11,7 @@ from loguru import logger
 from bisheng.common.errcode.permission import (
     AuthorizationModelMismatchError,
     InvalidPermissionModeError,
+    PermissionEnumerationIncompleteError,
     PermissionInvalidResourceError,
     PermissionPublishNotReadyError,
     PermissionVersionConflictError,
@@ -1310,6 +1311,42 @@ class F048PermissionRuntime:
             after_id=after_id,
             limit=limit,
         )
+
+    async def read_effective_action_sources(self, *, target, action):
+        """Trusted business read after its own qualification; not an HTTP roster.
+
+        The owning business service must verify the target and reader first.
+        This does not change the manage_permission gate on ordinary rosters.
+        """
+        catalog = await self._runtime_catalog()
+        models = tuple(item.snapshot for item in catalog.models)
+        before = await self._state.source_read_stamp(target=target, models=models)
+        mode = await self._require_current_target(target)
+        eligible = tuple(model for model in models if model.active and action in model.action_codes)
+        rows, after_id = [], 0
+        while eligible:
+            page, more = await self._state.load_source_page(
+                target=target, mode=mode.mode, models=eligible, after_id=after_id, limit=500
+            )
+            rows.extend(page)
+            if len(rows) > 5000:
+                raise PermissionEnumerationIncompleteError(reason="summary_limit")
+            if not more:
+                break
+            next_id = max((row.source_id for row in page), default=after_id)
+            if next_id <= after_id or len(rows) >= 5000:
+                raise PermissionEnumerationIncompleteError(reason="source_pagination_incomplete")
+            after_id = next_id
+        after = await self._state.source_read_stamp(target=target, models=models)
+        latest = await self._runtime_catalog()
+        await self._require_current_target(target)
+        if before != after or (catalog.release_id, catalog.version, catalog.checksum) != (
+            latest.release_id,
+            latest.version,
+            latest.checksum,
+        ):
+            raise PermissionPublishNotReadyError(reason="summary_scope_changed")
+        return tuple(rows)
 
     async def list_effective_direct_user_ids_by_model(
         self,

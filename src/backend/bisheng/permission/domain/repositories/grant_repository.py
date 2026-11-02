@@ -28,6 +28,24 @@ class GrantRepository(
     _RepositorySessionMixin,
     PermissionGrantRepositoryPort,
 ):
+    async def alist_resource_grants(self, *, resource_type, resource_id):
+        async with self._session() as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(PermissionGrant)
+                        .where(
+                            PermissionGrant.resource_type == resource_type,
+                            PermissionGrant.resource_id == resource_id,
+                        )
+                        .limit(5001)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            return list(rows)
+
     def __init__(
         self,
         session_factory: SessionFactory = get_async_db_session,
@@ -257,8 +275,7 @@ class ResourcePermissionModeRepository(
     ) -> list[ResourcePermissionMode]:
         async with self._session() as session:
             statement = select(ResourcePermissionMode).where(
-                ResourcePermissionMode.tenant_id == tenant_id,
-                ResourcePermissionMode.projection_state == "CURRENT"
+                ResourcePermissionMode.tenant_id == tenant_id, ResourcePermissionMode.projection_state == "CURRENT"
             )
             if resource_type is not None:
                 statement = statement.where(ResourcePermissionMode.resource_type == resource_type)

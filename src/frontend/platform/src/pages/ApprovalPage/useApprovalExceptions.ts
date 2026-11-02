@@ -8,7 +8,7 @@ import {
   type ApprovalExceptionItem,
   type ApprovalInstanceDetail,
 } from "@/controllers/API/approval";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 interface ApprovalExceptionsOptions {
@@ -37,10 +37,30 @@ export function useApprovalExceptions({ loadPage }: ApprovalExceptionsOptions) {
   const [expandedProgressIds, setExpandedProgressIds] = useState<Set<number>>(new Set());
   const [instanceDetailCache, setInstanceDetailCache] = useState<Record<number, ApprovalInstanceDetail>>({});
   const [loadingProgressId, setLoadingProgressId] = useState<number | null>(null);
+  const revisions = useRef(new Map<number, number>());
+  useEffect(() => () => { revisions.current.clear(); }, []);
+
+  const refreshExceptionProgress = async (item: ApprovalExceptionItem) => {
+    if (!item.instance_id) return;
+    const id = item.id;
+    const revision = (revisions.current.get(id) ?? 0) + 1;
+    revisions.current.set(id, revision);
+    setInstanceDetailCache(prev => { const next = { ...prev }; delete next[id]; return next; });
+    setLoadingProgressId(id);
+    try {
+      const detail = await getApprovalInstanceDetailForAdminApi(item.instance_id);
+      if (revisions.current.get(id) === revision) setInstanceDetailCache(prev => ({ ...prev, [id]: detail }));
+    } catch (error) {
+      if (revisions.current.get(id) === revision) showApiError(error);
+    } finally {
+      if (revisions.current.get(id) === revision) setLoadingProgressId(prev => prev === id ? null : prev);
+    }
+  };
 
   const toggleExceptionProgress = async (item: ApprovalExceptionItem) => {
     const id = item.id;
     if (expandedProgressIds.has(id)) {
+      revisions.current.set(id, (revisions.current.get(id) ?? 0) + 1);
       setExpandedProgressIds((prev) => {
         const s = new Set(prev);
         s.delete(id);
@@ -53,21 +73,7 @@ export function useApprovalExceptions({ loadPage }: ApprovalExceptionsOptions) {
       s.add(id);
       return s;
     });
-    if (!item.instance_id || instanceDetailCache[id]) return;
-    setLoadingProgressId(id);
-    try {
-      const detail = await getApprovalInstanceDetailForAdminApi(item.instance_id);
-      setInstanceDetailCache((prev) => ({ ...prev, [id]: detail }));
-    } catch (error) {
-      showApiError(error);
-      setExpandedProgressIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    } finally {
-      setLoadingProgressId(null);
-    }
+    await refreshExceptionProgress(item);
   };
 
   const handleCancelException = async () => {
@@ -95,6 +101,7 @@ export function useApprovalExceptions({ loadPage }: ApprovalExceptionsOptions) {
     setCancelReason,
     handleCancelException,
     toggleExceptionProgress,
+    refreshExceptionProgress,
     expandedProgressIds,
     loadingProgressId,
     instanceDetailCache,

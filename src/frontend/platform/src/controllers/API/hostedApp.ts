@@ -59,8 +59,9 @@ export interface HostedAppInstance {
   health: string | null
   current_version_id: string | null
   started_at: string | null
-  restart_count: number
+  restart_count: number | null
   last_probe_at: string | null
+  observation_state?: 'current' | 'no_execution' | 'execution_missing'
 }
 
 export interface HostedAppVersion {

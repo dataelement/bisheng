@@ -76,6 +76,22 @@ class AppPublishScenarioHandler:
     # Card rendering
     # ------------------------------------------------------------------
 
+    async def read_current_detail(self, *, instance, login_user, management: bool = False) -> dict:
+        from bisheng.app_publish.domain.schemas.current_visibility import ApprovalVisibilityRead
+        from bisheng.app_publish.domain.services.app_publish_current_visibility_service import (
+            AppPublishCurrentVisibilityService,
+        )
+
+        context = ApprovalVisibilityRead(
+            instance_id=instance.id,
+            tenant_id=instance.tenant_id,
+            app_id=instance.business_resource_id,
+            viewer_user_id=login_user.user_id,
+            management=management,
+            payload_app_id=(instance.payload_snapshot or {}).get("app_id"),
+        )
+        return await AppPublishCurrentVisibilityService.read(context, login_user)
+
     async def validate(self, req, login_user) -> None:
         """No extra submission-time validation: the pipeline already ran precheck and the scan."""
         return None

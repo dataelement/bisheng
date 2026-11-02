@@ -478,9 +478,9 @@ export function ApprovalPane({
                     <Button variant="outlined" onClick={() => void loadDetail(activeTab === "my_tasks" ? selectedTaskId : selectedInstanceId, activeTab === "my_tasks" ? "task" : "request")}>{localize('com_ui_retry')}</Button>
                   </div>
                 ) : activeTab === "my_tasks" && taskDetail ? (
-                  <TaskDetailPanel detail={taskDetail} localize={localize} onBack={() => setCompactView("list")} onOpenReview={setReviewTarget} />
+                  <TaskDetailPanel detail={taskDetail} localize={localize} onBack={() => setCompactView("list")} onOpenReview={setReviewTarget} onRefresh={() => void loadDetail(selectedTaskId, 'task')} />
                 ) : activeTab === "my_requests" && requestDetail ? (
-                  <RequestDetailPanel detail={requestDetail} localize={localize} onBack={() => setCompactView("list")} onOpenReview={setReviewTarget} />
+                  <RequestDetailPanel detail={requestDetail} localize={localize} onBack={() => setCompactView("list")} onOpenReview={setReviewTarget} onRefresh={() => void loadDetail(selectedInstanceId, 'request')} />
                 ) : (
                   <div className="flex h-full items-center justify-center text-[14px] text-text-3">{localize("com_approval_empty_detail")}</div>
                 )}

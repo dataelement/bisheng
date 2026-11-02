@@ -4,6 +4,7 @@ import type {
 } from "~/api/approval";
 import { cn } from "~/utils";
 import type { AppReviewTarget } from "./AppReviewView";
+import { CurrentAppVisibility } from './CurrentAppVisibility';
 import {
   DetailHeader,
   formatSerialNo,
@@ -24,12 +25,6 @@ type CapabilityEntry = {
   type: string;
   name: string;
   description: string;
-};
-
-/** One visibility grant in the release's visibility snapshot (owned by F056). */
-type VisibilityEntry = {
-  type: string;
-  name: string;
 };
 
 /** One row of the structure change (`schema_change.items[]`, F055 AC-09). */
@@ -59,6 +54,7 @@ export interface AppPublishDetailPanelProps {
   scope: "task" | "instance";
   localize: LocalizeFn;
   onBack?: () => void;
+  onRefresh?: () => void;
   /**
    * Opens the review view on the version waiting to go live (AC-24's third
    * operation, AC-25). Omitted — or called with a release whose snapshot the
@@ -104,19 +100,6 @@ function toCapabilityEntries(
       type: asText(record.type),
       name: asText(record.name) || asText(record.code) || asText(record.id),
       description: asText(record.description),
-    };
-  });
-}
-
-function toVisibilityEntries(value: unknown): VisibilityEntry[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((item) => {
-    if (typeof item === "string") return { type: "", name: item };
-    const record = asRecord(item);
-    return {
-      type: asText(record.type) || asText(record.subject_type),
-      name:
-        asText(record.name) || asText(record.subject_name) || asText(record.id),
     };
   });
 }
@@ -170,6 +153,7 @@ export function AppPublishDetailPanel({
   scope,
   localize,
   onBack,
+  onRefresh,
   onOpenReview,
 }: AppPublishDetailPanelProps) {
   const snapshot: Record<string, unknown> = detail.detail_snapshot ?? {};
@@ -234,7 +218,6 @@ export function AppPublishDetailPanel({
       : approverNote;
 
   const capabilities = toCapabilityEntries(snapshot.capabilities, localize);
-  const visibility = toVisibilityEntries(snapshot.visibility_snapshot);
   // AC-09 / AC-24: the "结构变更" row appears only when the release changes the
   // declared tables. Breaking rows were confirmed by the publisher at submit
   // time — the approver sees what was confirmed, they are not asked again.
@@ -364,28 +347,7 @@ export function AppPublishDetailPanel({
         )}
       </div>
 
-      {/* ③ Visibility snapshot */}
-      <div>
-        <SectionTitle>
-          {localize("com_approval_app_publish_section_visibility")}
-        </SectionTitle>
-        {visibility.length === 0 ? (
-          <SectionEmpty>
-            {localize("com_approval_app_publish_visibility_empty")}
-          </SectionEmpty>
-        ) : (
-          <div className="flex flex-wrap gap-2 rounded-lg bg-[#fafbfc] p-4">
-            {visibility.map((entry, index) => (
-              <span
-                key={`${entry.type}-${entry.name}-${index}`}
-                className="rounded-full border border-[#e5e6eb] bg-white px-3 py-1 text-[12px] text-[#4e5969] break-all"
-              >
-                {entry.name || "--"}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+      <CurrentAppVisibility value={detail.current_visibility} localize={localize} onRefresh={onRefresh} />
 
       {/* ④ Resource tier (+ the structure-change row when there is one) */}
       <div>

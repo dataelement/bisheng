@@ -16,6 +16,7 @@ from bisheng.approval.domain.repositories.approval_query_repository import Appro
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
 from bisheng.approval.domain.services.approval_gate import ApprovalGate
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
+from bisheng.approval.domain.services.approval_runtime_handler_factory import read_current_scenario_detail
 from bisheng.approval.domain.services.menu_access_handler import MenuAccessApprovalHandler
 from bisheng.approval.domain.services.user_menu_access_service import UserMenuAccessService
 from bisheng.common.errcode.approval import (
@@ -164,6 +165,7 @@ class ApprovalCenterService:
         return {
             "task_id": task.id,
             "instance_id": task.instance_id,
+            **(await read_current_scenario_detail(instance, login_user)),
             "scenario_code": instance.scenario_code,
             "scenario_name": instance.scenario_name,
             "business_name": instance.business_name,
@@ -391,6 +393,7 @@ class ApprovalCenterService:
 
         return {
             "instance_id": instance.id,
+            **(await read_current_scenario_detail(instance, login_user, management=management)),
             "scenario_code": instance.scenario_code,
             "scenario_name": instance.scenario_name,
             "business_name": instance.business_name,
