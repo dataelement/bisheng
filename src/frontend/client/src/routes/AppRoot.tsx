@@ -42,6 +42,10 @@ export default function AppRoot() {
     /** 与 tailwind touch-mobile 一致：768–1023 仍用合并顶栏，避免仅 isTabletOrMobile 时出现 absolute 悬浮菜单 + 内层标题双行 */
     /** ≤1023：合并顶栏 + 禁止左上角 absolute 悬浮钮（与 tailwind touch-mobile 一致） */
     const isAppChatCompact = useMediaQuery('(max-width: 1023px)');
+    const isNarrowContent = useMediaQuery('(max-width: 767px)');
+    // Embedded desktop panes use the existing history region below this width,
+    // leaving the full content width available to the header and conversation.
+    const usesHistoryNavigation = isNarrowContent && !isTabletOrMobile;
     const sidebarWidth = 240;
     const isAppConversationRoute = /^\/app\/[^/]+\/[^/]+\/[^/]+(?:\/|$)/.test(location.pathname);
     /** AppRoot 仅挂在 /app/*；含 `/app/:fid/:type` 入口，不能用仅三段的 isAppConversationRoute 控制顶栏 */
@@ -51,6 +55,10 @@ export default function AppRoot() {
     type AppSurfaceLocationState = { appSurfaceReturn?: string };
 
     const toggleSidebar = () => setSidebarVisible((prev) => !prev);
+    const handleDesktopMenu = () => {
+        if (usesHistoryNavigation) setAppHistoryOpen(!appHistoryOpen);
+        else toggleSidebar();
+    };
     const handleGoBack = () => {
         const pathSegments = location.pathname.split('/').filter(Boolean);
         const appSegmentIndex = pathSegments.indexOf('app');
@@ -129,6 +137,10 @@ export default function AppRoot() {
         scrollLockPrevRef.current = null;
     });
 
+    useEffect(() => {
+        if (isAppChatCompact === false) setAppHistoryOpen(false);
+    }, [isAppChatCompact]);
+
     if (!isAuthenticated) {
         return null;
     }
@@ -155,7 +167,7 @@ export default function AppRoot() {
                 >
 
                     {/* Desktop/Tablet sidebar */}
-                    {!isTabletOrMobile && (
+                    {!isTabletOrMobile && !usesHistoryNavigation && (
                         <div
                             className={cn(
                                 'transition-all duration-300 overflow-hidden flex-shrink-0',
@@ -198,12 +210,12 @@ export default function AppRoot() {
                             <div className="shrink-0 overflow-hidden rounded-t-xl bg-white">
                                 <MobileNav
                                     variant="chat"
-                                    navVisible={sidebarVisible}
-                                    setNavVisible={setSidebarVisible}
+                                    navVisible={usesHistoryNavigation ? appHistoryOpen : sidebarVisible}
+                                    setNavVisible={usesHistoryNavigation ? setAppHistoryOpen : setSidebarVisible}
                                     persistNavVisibleInLocalStorage={false}
                                     navigateToNewChatPath={false}
                                     onNewChat={handleCreateNewAppChat}
-                                    onMenuClick={isTabletOrMobile ? undefined : toggleSidebar}
+                                    onMenuClick={isTabletOrMobile ? undefined : handleDesktopMenu}
                                     appSurfaceBackAction={handleGoBack}
                                     appHistoryDropdownOpen={appHistoryOpen}
                                     onToggleAppHistoryDropdown={() => setAppHistoryOpen((o) => !o)}
