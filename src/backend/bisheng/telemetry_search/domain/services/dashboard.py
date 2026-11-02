@@ -442,12 +442,16 @@ class DashboardService(BaseModel):
         return res
 
     @staticmethod
-    async def get_dataset_options() -> Sequence[Row[Any] | RowMapping | Any]:
+    async def get_dataset_options(login_user: UserPayload) -> Sequence[Row[Any] | RowMapping | Any]:
         """
         Can get all available datasets for dashboards
         :return:
         """
 
+        if not await login_user.async_access_check(
+            0, target_id=WebMenuResource.BOARD.value, access_type=AccessType.WEB_MENU
+        ):
+            raise UnAuthorizedError()
         async with get_async_db_session() as session:
             dashboard_dataset_repository = DashboardDatasetRepositoryImpl(session)
             if is_commercial():
@@ -464,16 +468,43 @@ class DashboardService(BaseModel):
         keyword: str | None = None,
         size: int = 20,
         page: int = 1,
+        *,
+        login_user: UserPayload,
     ) -> dict[str, Any]:
         """
         Get dataset field enum value with server-side pagination using aggregation filters
         """
+        if not 1 <= size <= 100 or page < 1 or page * size > 10000:
+            raise UnAuthorizedError()
+        if not index_name or any(c in index_name for c in "*,?[]:/\\ "):
+            raise UnAuthorizedError()
+        datasets = await DashboardService.get_dataset_options(login_user)
+        dataset = next((item for item in datasets if item.es_index_name == index_name), None)
+        if dataset is None:
+            raise UnAuthorizedError()
+        schema = dataset.schema_config
+        allowed_fields = {
+            item["field"]
+            for key in ("metrics", "dimensions")
+            for item in schema.get(key, [])
+            if isinstance(item, dict) and isinstance(item.get("field"), str)
+        }
+        if field not in allowed_fields:
+            raise UnAuthorizedError()
+        from bisheng.core.context.tenant import get_admin_scope_tenant_id, get_current_tenant_id
+        from bisheng.permission.domain.services.data_scope import DATA_SCOPE_ALL
+
+        actor = await resolve_permission_actor(login_user)
+        unscoped = actor.super_admin and actor.data_scope == DATA_SCOPE_ALL and get_admin_scope_tenant_id() is None
+        tenant_id = get_current_tenant_id() or login_user.tenant_id
+        if not unscoped and (actor.data_scope != DATA_SCOPE_ALL or not tenant_id):
+            raise UnAuthorizedError()
         skip = (page - 1) * size
         es_client = await get_es_connection()
 
         core_aggs = {
             "enum_values": {
-                "terms": {"field": field, "size": 65536, "order": {"_key": "asc"}},
+                "terms": {"field": field, "size": page * size, "order": {"_key": "asc"}},
                 "aggs": {"pagination": {"bucket_sort": {"from": skip, "size": size}}},
             },
             "total_count": {"cardinality": {"field": field}},
@@ -493,8 +524,11 @@ class DashboardService(BaseModel):
             aggs_body = current_aggs
 
         body = {"size": 0, "aggs": aggs_body}
+        if not unscoped:
+            # Unstamped historical records deliberately do not match a tenant.
+            body["query"] = {"term": {"tenant_id": int(tenant_id)}}
 
-        resp = await es_client.search(index=index_name, body=body)
+        resp = await es_client.search(index=dataset.es_index_name, body=body)
 
         aggs_root = resp.get("aggregations", {})
 

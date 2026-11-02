@@ -123,6 +123,55 @@ class ChatSessionService:
         return await ChatSessionService.get_subject_session(chat_id, subject)
 
     @staticmethod
+    async def can_read_session(session: MessageSession, login_user: UserPayload) -> bool:
+        if session.is_delete:
+            return False
+        subject = SessionSubject.natural_person(
+            tenant_id=_resolve_leaf_tenant_id(login_user), user_id=login_user.user_id
+        )
+        if subject.matches(session):
+            return True
+        scope = AuditLogService._get_audit_tenant_scope(login_user)
+        if scope is None and not login_user.is_global_super:
+            scope = _resolve_leaf_tenant_id(login_user)
+        if scope is not None and session.tenant_id != scope:
+            return False
+        if login_user.is_admin() or await AuditLogService._user_has_log_web_menu(login_user):
+            return True
+        groups = await UserGroupDao.aget_user_admin_group(login_user.user_id)
+        session_groups = session.group_ids or []
+        if isinstance(session_groups, str):
+            try:
+                session_groups = json.loads(session_groups)
+            except ValueError:
+                return False
+        return bool({str(group.group_id) for group in groups} & {str(group) for group in session_groups})
+
+    @staticmethod
+    async def require_session_read(chat_id: str, login_user: UserPayload, task_id: int | None = None):
+        session = await MessageSessionDao.async_get_one(chat_id)
+        if session is None or session.is_delete:
+            raise NotFoundError()
+        if await ChatSessionService.can_read_session(session, login_user):
+            return session
+        # Existing annotation history callers do not send task_id. Derive their
+        # grants from persisted assignments, never from an untrusted app claim.
+        tasks = (
+            [MarkTaskDao.get_task_byid(task_id)]
+            if task_id is not None
+            else MarkTaskDao.get_user_tasks(login_user.user_id, _resolve_leaf_tenant_id(login_user))
+        )
+        for task in tasks:
+            if (
+                task is not None
+                and task.tenant_id == _resolve_leaf_tenant_id(login_user) == session.tenant_id
+                and str(login_user.user_id) in (task.process_users or "").split(",")
+                and session.flow_id in (task.app_id or "").split(",")
+            ):
+                return session
+        raise UnAuthorizedError()
+
+    @staticmethod
     def _attachments_of(messages: list) -> list[dict]:
         """Every attachment recorded across a conversation's messages."""
         attachments = []
@@ -217,7 +266,7 @@ class ChatSessionService:
         )
 
     @staticmethod
-    def get_app_chat_list(
+    async def get_app_chat_list(
         *,
         login_user: UserPayload,
         keyword: str | None = None,
@@ -233,25 +282,15 @@ class ChatSessionService:
         flow_ids: list = []
         user_ids: list = []
 
-        user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
-
-        if task_id:
-            if not login_user.is_admin():
-                task = MarkTaskDao.get_task_byid(task_id)
-                if str(login_user.user_id) not in task.process_users.split(","):
-                    raise UnAuthorizedError()
-                if user_groups:
-                    task = MarkTaskDao.get_task_byid(task_id)
-                    group_flow_ids = task.app_id.split(",")
-                    if not group_flow_ids:
-                        return PageList(list=[], total=0)
-                else:
-                    task = MarkTaskDao.get_task_byid(task_id)
-                    if str(login_user.user_id) not in task.process_users.split(","):
-                        raise UnAuthorizedError()
-                    group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
-            else:
-                group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
+        if task_id is not None:
+            task = MarkTaskDao.get_task_byid(task_id)
+            if task is None or task.tenant_id != _resolve_leaf_tenant_id(login_user):
+                raise UnAuthorizedError()
+            if not login_user.is_admin() and str(login_user.user_id) not in (task.process_users or "").split(","):
+                raise UnAuthorizedError()
+            group_flow_ids = [value for value in (task.app_id or "").split(",") if value]
+            if not group_flow_ids:
+                return PageList(list=[], total=0)
 
         if keyword:
             flows = FlowDao.get_flow_list_by_name(name=keyword)
@@ -261,18 +300,24 @@ class ChatSessionService:
                 flow_ids = [flow.id for flow in flows]
             if assistants:
                 flow_ids.extend([assistant.id for assistant in assistants])
-            if user_ids:
+            if users:
                 user_ids = [user.user_id for user in users]
             if not flow_ids and not user_ids:
                 return PageList(list=[], total=0)
 
         if group_flow_ids:
             if flow_ids and keyword:
-                flow_ids = flow_ids
+                flow_ids = list(set(flow_ids) & set(group_flow_ids))
+                if not flow_ids:
+                    return PageList(list=[], total=0)
             else:
                 flow_ids = group_flow_ids
 
         res = MessageSessionDao.filter_session(flow_ids=flow_ids, user_ids=user_ids)
+        if task_id is not None:
+            res = [one for one in res if one.tenant_id == _resolve_leaf_tenant_id(login_user) and not one.is_delete]
+        else:
+            res = [one for one in res if await ChatSessionService.can_read_session(one, login_user)]
         total = len(res)
 
         chat_status_ids = [one.chat_id for one in res]

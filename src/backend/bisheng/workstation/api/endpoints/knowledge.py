@@ -5,7 +5,8 @@ from uuid import uuid4
 from fastapi import APIRouter, BackgroundTasks, File, Form, Query, Request, UploadFile
 
 from bisheng.api.v1.schemas import resp_200
-from bisheng.common.errcode.http_error import ServerError
+from bisheng.chat_session.domain.services.chat_message_service import _resolve_leaf_tenant_id
+from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
 from bisheng.core.cache.utils import save_download_file, save_uploaded_file
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
@@ -47,17 +48,22 @@ async def get_file_share_url(
     filepath: str = Query(..., description="Stored MinIO path, e.g. /tmp-dir/foo.mp4"),
     login_user=LoginUserDep,
 ):
-    del login_user  # auth gate only
     minio_client = await get_minio_storage()
     try:
         bucket_name, object_name = _resolve_minio_object_from_filepath(filepath, minio_client)
     except ValueError as exc:
-        raise ServerError(msg=str(exc), exception=exc) from exc
+        raise UnAuthorizedError() from exc
 
-    if not await minio_client.object_exists(bucket_name, object_name):
-        raise ServerError(msg="File not found in object storage")
-
-    share_url = await minio_client.get_share_link(object_name, bucket=bucket_name)
+    # This generic renewal endpoint only serves uploads carrying server-owned
+    # metadata. Knowledge files use their resource-authorized preview endpoints.
+    if bucket_name != minio_client.tmp_bucket or not object_name.startswith("workstation-uploads/"):
+        raise UnAuthorizedError()
+    metadata = await minio_client.get_object_metadata(bucket_name, object_name)
+    if metadata.get("x-amz-meta-owner-user-id") != str(login_user.user_id) or metadata.get(
+        "x-amz-meta-owner-tenant-id"
+    ) != str(_resolve_leaf_tenant_id(login_user)):
+        raise UnAuthorizedError()
+    share_url = await minio_client.get_share_link(object_name, bucket=bucket_name, expire_days=1)
     return resp_200(data={"url": share_url})
 
 
@@ -113,7 +119,17 @@ async def upload_file(
         minio_client = await get_minio_storage()
         timer.stage("minio_client_ready", endpoint=minio_client.minio_config.endpoint)
         timer.stage("file_read_start")
-        file_path = await save_uploaded_file(file, "bisheng", file_name)
+        extension = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else "bin"
+        object_name = f"workstation-uploads/{uuid4().hex}.{extension}"
+        file_path = await save_uploaded_file(
+            file,
+            "bisheng",
+            object_name,
+            metadata={
+                "owner-user-id": str(login_user.user_id),
+                "owner-tenant-id": str(_resolve_leaf_tenant_id(login_user)),
+            },
+        )
         timer.stage("file_minio_put", filepath=file_path)
         file_path = minio_client.clear_minio_share_host(file_path)
         timer.stage("file_clear_host", filepath=file_path)

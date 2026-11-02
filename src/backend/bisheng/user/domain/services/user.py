@@ -9,6 +9,7 @@ from fastapi import Depends, HTTPException, Request, UploadFile
 from loguru import logger
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
+from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.user import (
     CaptchaError,
     UserForbiddenError,
@@ -344,6 +345,12 @@ class UserService:
 
     @classmethod
     async def user_register(cls, user: UserCreate):
+        env = await settings.aget_from_db("env")
+        enabled = env.get("enable_registration", True) if isinstance(env, dict) else False
+        if isinstance(enabled, str):
+            enabled = enabled.strip().lower() in ("1", "true", "yes", "on")
+        if enabled is not True and enabled != 1:
+            raise UnAuthorizedError()
         # Captcha Verification
         if settings.get_from_db("use_captcha"):
             if not user.captcha_key or not await verify_captcha(user.captcha, user.captcha_key):

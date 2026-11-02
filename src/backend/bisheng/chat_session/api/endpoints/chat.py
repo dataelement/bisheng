@@ -17,7 +17,7 @@ router = APIRouter()
 
 
 @router.get("/chat/app/list")
-def get_app_chat_list(
+async def get_app_chat_list(
     *,
     keyword: str | None = None,
     mark_user: str | None = None,
@@ -29,7 +29,7 @@ def get_app_chat_list(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Get session list filtered by annotation task."""
-    result = ChatSessionService.get_app_chat_list(
+    result = await ChatSessionService.get_app_chat_list(
         login_user=login_user,
         keyword=keyword,
         mark_user=mark_user,
