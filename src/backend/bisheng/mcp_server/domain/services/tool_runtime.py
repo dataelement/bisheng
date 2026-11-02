@@ -59,11 +59,11 @@ class McpToolRuntime:
         try:
             with anyio.fail_after(120 if name in WRITE_TOOLS else 30):
                 with anyio.fail_after(IDENTITY_TIMEOUT_SECONDS):
-                    identity = await self.identity_resolver(principal, params.external_id)
+                    identity = await self.identity_resolver(principal)
                 with McpAuthService.use_identity(identity):
                     async with self.factory(request, identity.user) as services:
                         operation = getattr(services, name)
-                        result = await operation(**params.model_dump(exclude={"external_id"}))
+                        result = await operation(**params.model_dump())
                     outcome = "success"
                     return result
         except (TimeoutError, asyncio.TimeoutError) as exc:

@@ -103,9 +103,7 @@ async def test_real_network_sdk_through_main_middleware(monkeypatch):
                     async with ClientSession(read, write) as client:
                         await client.initialize()
                         assert {t.name for t in (await client.list_tools()).tools} == EXPECTED_TOOL_NAMES
-                        result = await client.call_tool(
-                            "search_knowledge", {"external_id": "0007", "query": "q", "knowledge_base_ids": [118]}
-                        )
+                        result = await client.call_tool("search_knowledge", {"query": "q", "knowledge_base_ids": [118]})
                         assert result.structuredContent["total"] == 1
                         assert not result.isError
             assert not active
@@ -186,13 +184,13 @@ async def test_real_network_disconnect_closes_tool_scope(monkeypatch, stage):
     entered = asyncio.Event()
     identity_active = set()
 
-    async def resolve(principal, external_id):
-        identity_active.add(external_id)
+    async def resolve(principal):
+        identity_active.add(principal.token_id)
         try:
             entered.set()
             await asyncio.Event().wait()
         finally:
-            identity_active.remove(external_id)
+            identity_active.remove(principal.token_id)
 
     async def retrieve(req):
         entered.set()
@@ -215,7 +213,7 @@ async def test_real_network_disconnect_closes_tool_scope(monkeypatch, stage):
                             "method": "tools/call",
                             "params": {
                                 "name": "search_knowledge",
-                                "arguments": {"external_id": "0007", "query": "cancel", "knowledge_base_ids": [118]},
+                                "arguments": {"query": "cancel", "knowledge_base_ids": [118]},
                             },
                         },
                     )

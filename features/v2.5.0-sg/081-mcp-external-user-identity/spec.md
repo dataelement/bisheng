@@ -1,13 +1,15 @@
 # F081：MCP 指定业务账号身份规格
 
 - Feature ID: `081-mcp-external-user-identity`
-- Status: `IMPLEMENTED_LOCAL`
+- Status: `SUPERSEDED_BY_F084`
 - Version: `v2.5.0-sg`
 - Created: `2026-10-22`
 - 关联需求来源：[用户已确认的发现范围](spec-discovery.md)，无独立 PRD。
 - 需求追溯：[requirements.md](requirements.md)；实现设计：[design.md](design.md)；评审：[spec-review.md](spec-review.md)。
 
 ## 1. 概述与用户故事
+
+2026-11-02 用户确认恢复 Token 绑定身份并移除 MCP external_id。本文保留 F081 历史设计，当前契约由 [F084](../084-mcp-token-bound-identity/spec.md) 覆盖；使用方式见最新版 MCP 使用文档。
 
 作为可信业务后端，我希望用有效开发者 Token 接入 MCP，并在每次工具调用中传入真实登录用户的 `external_id`，由该用户决定资源读写权限及业务归属，不再受 Token 绑定用户资源权限的影响。
 

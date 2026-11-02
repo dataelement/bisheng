@@ -33,19 +33,10 @@ from bisheng.open_endpoints.domain.schemas.filelib import RetrieveReq, RetrieveR
 from bisheng.open_endpoints.domain.services.filelib_retrieve_service import FilelibRetrieveService
 from bisheng.open_endpoints.domain.services.filelib_retrieve_source_service import FilelibRetrieveSourceService
 from bisheng.open_endpoints.domain.services.filelib_sync_factory import build_knowledge_space_service_for_filelib_sync
-from bisheng.tenant.domain.repositories.implementations.tenant_membership_repository_impl import (
-    TenantMembershipRepositoryImpl,
-)
-from bisheng.user.domain.repositories.implementations.user_repository_impl import UserRepositoryImpl
 
 
-async def resolve_execution_identity(principal: DeveloperTokenPrincipal, external_id: str) -> McpExecutionIdentity:
-    enabled = settings.multi_tenant.enabled
-    async with get_async_db_session() as session:
-        service = McpUserContextService(
-            UserRepositoryImpl(session), TenantMembershipRepositoryImpl(session), multi_tenant_enabled=enabled
-        )
-        return await service.resolve(principal, external_id)
+async def resolve_execution_identity(principal: DeveloperTokenPrincipal) -> McpExecutionIdentity:
+    return await McpUserContextService().resolve(principal)
 
 
 async def get_source_origin() -> str | None:

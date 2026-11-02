@@ -32,11 +32,11 @@ class McpSearchService:
         outcome = "failed"
         try:
             with anyio.fail_after(IDENTITY_TIMEOUT_SECONDS):
-                identity = await self.identity_resolver(principal, req.external_id)
+                identity = await self.identity_resolver(principal)
             with McpAuthService.use_identity(identity):
                 async with self.factory(request, identity.user) as service:
                     result = await asyncio.wait_for(
-                        service.retrieve(RetrieveReq(**req.model_dump(exclude={"external_id"}))),
+                        service.retrieve(RetrieveReq(**req.model_dump())),
                         timeout=service.timeout_seconds,
                     )
                     outcome = "success"
