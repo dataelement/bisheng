@@ -3,6 +3,7 @@
 - 目标分支：`dataelement/bisheng:feat/bisheng-work-120@de60988d7b5fd9402dcb607fada97df12c9f1d57`；PR 原提交 `a13ee07a0c3544ff7eeee05026f1f5dbb8ba2080`，工作目录 `.worktrees/bisheng-dsh-user-id-search`。
 - 冲突位于 `docs/STATUS.md` 同一插入位置的独立记录；已完整保留目标分支记录和用户 ID 搜索记录，业务代码自动合并。
 - 本轮自动验证：隔离 Python 3.11 环境后端身份搜索、部门/模型授权与管理用户搜索 31 项通过；前端授权弹窗、部门树和模型授权 20 项通过；修改文件 ESLint、Ruff 检查与格式、多语言一致性、架构守卫和差异检查通过。
+- 平台 530 个严格类型文件检查通过。GitHub Frontend Quality 在全量平台 lint 步骤报告 95 errors / 1 warning，并提示历史 suppression 待清理；本地复现相同数量，全部问题文件、lint 配置和 suppression 与目标基线一致。本次修改文件 ESLint 通过。远端检查记录：https://github.com/dataelement/bisheng/actions/runs/41366372552 。
 - 交付范围为源码冲突修复与 PR 合并；真实企业部署、MySQL/DM8 执行、真实账号授权和浏览器端到端验收继续按既有计划执行。
 
 ## 2026-10-21 — 发送后清理技能草稿
