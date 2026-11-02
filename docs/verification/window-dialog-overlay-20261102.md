@@ -11,6 +11,7 @@ Desktop 的既有窗口级模态协议负责将 body portal 展示到整个原�
 ## 基线
 
 - Client：`dataelement/bisheng:feat/bisheng-work-120-main@3120e714fa4ed492884cade11a128341d03eb105`。
+- 提交 PR 前同步目标 `780723543c408013d0011a2d8053fdc6bb712420`，保留同期应用附件下载和已删除会话读取修复及双方状态记录。
 - 原生组合验证：`dataelement/bisheng-desktop:V1.2.0@09c22fe34e5c89193c15387685810fbaa45e73fc`，Harness `0.2.1-rc.2`，Electron `43.0.0`，macOS arm64。
 - Frontend 依赖使用相同锁文件及包清单的独立副本；命令使用仓库指定的 pnpm `9.15.9`。
 
