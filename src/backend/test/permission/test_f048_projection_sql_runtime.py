@@ -70,6 +70,7 @@ async def session_factory(
     metadata = sa.MetaData()
     for name in (
         "permission_projection_operation",
+        "permission_projection_tuple",
         "permission_migration_run",
         "permission_migration_item",
         "permission_visible_source_projection",

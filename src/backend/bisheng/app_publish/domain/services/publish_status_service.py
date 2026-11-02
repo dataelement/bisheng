@@ -18,11 +18,9 @@ Three rules that are easy to get wrong:
   page rather than see "you cannot act on this" (design K11 ② / 坑 22). Business
   errors ride inside the 200 envelope, which is what makes the refusal
   renderable.
-* **Owner-only is a business pre-check, not a permission check.** The permission
-  runtime short-circuits administrators to ALLOW, so "only the owner may
-  withdraw" is inexpressible there — a tenant administrator would pass. Hence
-  ``can`` is computed here, and :meth:`request_manual_publish` re-checks rather
-  than trusting the flags it handed out.
+* **Actions come from F048.** Basic release state requires any management
+  action; private content requires edit; withdrawing and starting require publish.
+  The flags describe current authority and every effect rechecks it.
 
 The read is deliberately tolerant: a missing deployment row, a swept attempt or
 a deleted application all produce a payload rather than an error. A publish face
@@ -45,13 +43,9 @@ from bisheng.app_publish.domain.services.version_service import VersionService
 from bisheng.app_runtime.domain.services.app_query_service import (
     LOG_ENTRY_DETAIL as ENTRY_DETAIL,
 )
-from bisheng.app_runtime.domain.services.app_query_service import (
-    OWNER_ONLY_ENTRIES,
-)
 from bisheng.approval.domain.models.approval_instance import ApprovalInstanceStatus, ApprovalTaskStatus
 from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
 from bisheng.common.errcode.app_publish import AppPublishOwnerOnlyError
-from bisheng.common.permission_identity import check_tenant_admin
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.app import AppDao
 
@@ -88,7 +82,10 @@ class PublishStatusService:
         current_version = await VersionService.get_version(app.id, str(app.current_version_id or ""))
         pending_version = await VersionService.get_version(app.id, str(app.pending_version_id or ""))
 
-        is_owner = cls._is_owner(app, actor)
+        from bisheng.app_runtime.application.authorization import management_actions
+
+        actions = (await management_actions(actor, [app])).get(app.id, frozenset())
+        can_edit = "edit" in actions
         withdrawable = instance is not None and instance.status == _WITHDRAWABLE_INSTANCE_STATUS
         deleted = app.state == _APP_STATE_DELETED
 
@@ -98,21 +95,30 @@ class PublishStatusService:
             "pending_reason": cls._pending_reason(app, deployment),
             "current_version": cls._version_payload(current_version, app),
             "pending_version": cls._version_payload(pending_version, app),
-            "deployment": cls._deployment_payload(deployment),
+            "deployment": cls._deployment_payload(deployment)
+            if can_edit
+            else (
+                {"id": deployment.id, "stage": deployment.stage, "status": deployment.status, "failure": None}
+                if deployment
+                else None
+            ),
             "approval": approval,
             "tier": await cls._tier_payload(current_version or pending_version),
-            "capabilities": await cls._capabilities_payload(app, pending_version or current_version),
-            "schema_change": await cls._schema_change_payload(app, deployment),
+            "capabilities": await cls._capabilities_payload(app, pending_version or current_version)
+            if can_edit
+            else [],
+            "schema_change": await cls._schema_change_payload(app, deployment) if can_edit else None,
+            "allowed_actions": sorted(actions),
             "can": {
-                # Withdrawing goes through the approval centre's own endpoint,
-                # which enforces "applicant only" itself; this flag only decides
-                # whether the button is drawn.
-                "withdraw": bool(is_owner and withdrawable and not deleted),
+                # Business withdrawal rechecks the current publish action and exact frozen target.
+                "withdraw": bool("publish" in actions and withdrawable and not deleted),
                 # PRD-1 RT-03 AC 11: the owner previews the version under review
                 # while the request is pending — the same window the preview
                 # service itself accepts (``ReviewAccess``, settled → refused).
-                "preview": bool(is_owner and withdrawable and not deleted),
-                "manual_publish": bool(is_owner and not deleted and app.state == _APP_STATE_PENDING_CAPACITY),
+                "preview": bool(can_edit and withdrawable and not deleted),
+                "manual_publish": bool(
+                    "publish" in actions and not deleted and app.state == _APP_STATE_PENDING_CAPACITY
+                ),
                 # AC-06: an application that arrived through the CLI has no
                 # draft workspace on the platform, so there is nothing for a
                 # "提交发布" button to submit. It is false for the whole of this
@@ -158,15 +164,9 @@ class PublishStatusService:
         handed to the client would be trusting the client.
         """
         app = await cls._load(app_id)
-        from bisheng.app_runtime.application.tenant_access import require_app_request_tenant
+        from bisheng.app_runtime.application.authorization import authorize_app
 
-        require_app_request_tenant(app.tenant_id, actor)
-        if not cls._is_owner(app, actor):
-            raise AppPublishOwnerOnlyError(
-                msg="仅应用负责人可以手动上线",
-                details={"app_id": app_id, "action": "manual_publish", "reason": "owner_only"},
-                hints=["请联系该应用的负责人操作"],
-            )
+        await authorize_app(actor, app_id, "approved_start")
 
         from bisheng.app_publish.domain.services.publish_online_service import PublishOnlineService
 
@@ -190,40 +190,9 @@ class PublishStatusService:
 
     @classmethod
     async def _require_viewer(cls, app, actor, *, entry: str = ENTRY_DETAIL) -> None:
-        """Owner, administrators, or a same-tenant subject granted the edit action.
+        from bisheng.app_runtime.application.authorization import authorize_app
 
-        Refuses with a **business** error so the response is an HTTP 200 the
-        front end can render. Raising ``HTTPException(403)`` here would take the
-        whole detail page down to ``/403``.
-
-        ``entry`` names the door. On a **credential** door (``cli`` / ``mcp``)
-        only the owner passes — a tenant administrator's own service-account key
-        is refused too (AC-35), because "an administrator may look at anyone's
-        application" is a statement about the platform UI, not about a developer
-        key whose blast radius has to stay predictable when it leaks. Owner
-        equality alone is not enough there either: ``/api/v2`` seeds
-        ``visible_tenant_ids`` with the Root tenant, so the tenant is compared
-        first, exactly as ``AppQueryService._require_log_access`` does it.
-        """
-        from bisheng.app_runtime.application.tenant_access import require_app_request_tenant
-
-        require_app_request_tenant(app.tenant_id, actor, allow_global_super=entry not in OWNER_ONLY_ENTRIES)
-        if entry in OWNER_ONLY_ENTRIES:
-            if int(app.tenant_id or 0) != int(getattr(actor, "tenant_id", 0) or 0):
-                raise cls._not_visible(app)
-            if cls._is_owner(app, actor):
-                return
-            raise cls._not_visible(app)
-        if cls._is_owner(app, actor) or bool(getattr(actor, "is_global_super", False)):
-            return
-        user_id = int(getattr(actor, "user_id", 0) or 0)
-        if await check_tenant_admin(user_id, int(app.tenant_id or 0)):
-            return
-        from bisheng.permission.application.business_authorization import check_business_action
-
-        if await check_business_action(actor, resource_type="app", resource_id=app.id, action="edit"):
-            return
-        raise cls._not_visible(app)
+        await authorize_app(actor, app.id, "management_read")
 
     @staticmethod
     def _not_visible(app) -> AppPublishOwnerOnlyError:

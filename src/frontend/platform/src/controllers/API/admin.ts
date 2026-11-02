@@ -8,10 +8,10 @@
 // F020 can evolve the UI without touching the backend contract.
 
 import axios from "@/controllers/request"
+import { announceManagementScope } from "@/controllers/managementScope"
 
 export interface AdminScopeResponse {
-  // Currently-scoped tenant id; `null` means no scope set (super admin
-  // sees the whole tree). UI should render "global view" when null.
+  // A server response always names one concrete tenant; null is loading-only.
   scope_tenant_id: number | null
   // ISO-8601 UTC string indicating when the Redis key will naturally
   // expire if not refreshed. `null` when no scope is set.
@@ -19,7 +19,7 @@ export interface AdminScopeResponse {
 }
 
 /**
- * Set (tenant_id: number) or clear (tenant_id: null) the caller's
+ * Select a concrete tenant for the caller's
  * management-view scope. The server writes an `admin.scope_switch` audit
  * row and returns the new state.
  *
@@ -30,9 +30,11 @@ export interface AdminScopeResponse {
  *   match any tenant row (HTTP 400).
  */
 export async function setTenantScope(
-  tenantId: number | null,
+  tenantId: number,
 ): Promise<AdminScopeResponse> {
-  return await axios.post("/api/v1/admin/tenant-scope", { tenant_id: tenantId })
+  const result: AdminScopeResponse = await axios.post("/api/v1/admin/tenant-scope", { tenant_id: tenantId })
+  if (result.scope_tenant_id && Number.isSafeInteger(result.scope_tenant_id)) announceManagementScope(result.scope_tenant_id)
+  return result
 }
 
 /**

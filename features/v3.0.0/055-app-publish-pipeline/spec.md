@@ -1,5 +1,7 @@
 # Feature: 发布管线、预置审批流、版本记录、资源档位与能力总线
 
+> **当前后继合同（F114，2026-10-30，本地实现，未部署）**：首发资源仍属于自然人；真实 SA 用于鉴权、可撤销初始 Grant 和审计；迭代 edit AND publish，自审候选排除实际提交关联人，业务撤回 publish，双用途预览与独立凭据按 F114。 详见 [F114 已确认规格](../114-vibe-permission-actions/spec.md) 与 [验证记录](../114-vibe-permission-actions/verification.md)。下文保留原 Feature 的 AC 编号、当时口径及历史证据，不将历史通过记录当作 F114 部署证明。
+
 > **2026-10-23 手动生效修订规格已确认。** 用户原文：“确认修订规格，更新简化设计”。本次确认包括 AC-70、AC-73、AC-74、AC-76、AC-77、AC-86 的修订及新增 AC-90、AC-91、AC-92，共 92 条 AC。批准前文件 SHA-256 为 `33f74ab3b2c3eaac67e64099df4b056ff5e9cf5ec78e2e461f8f34266413804d`；记录见[简化设计评审](../../../docs/reviews/vibe-app-secrets-manual-apply-design-review-2026-10-23.json)。保存不自动重建，正式设计仍需单独评审确认，尚未编码。
 
 > **本文档定位 — 纯 What（需求口径，不随代码漂移）**

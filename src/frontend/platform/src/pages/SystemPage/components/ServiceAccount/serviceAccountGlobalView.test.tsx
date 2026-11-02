@@ -19,18 +19,15 @@ vi.mock("./ApiKeysTab", () => ({ ApiKeysTab: () => null }))
 vi.mock("./OverviewTab", () => ({ OverviewTab: () => null }))
 vi.mock("./ResourceGrantsTab", () => ({ ResourceGrantsTab: () => null }))
 
-it("shows all tenants with names while keeping management controls unavailable", async () => {
+it("does not load accounts for a legacy null scope", async () => {
   render(<locationContext.Provider value={{ appConfig: { multiTenantEnabled: true } } as never}>
     <userContext.Provider value={{ user: { user_id: 3, tenant_id: 1, is_global_super: true } } as never}>
       <ServiceAccount />
     </userContext.Provider>
   </locationContext.Provider>)
-  expect(await screen.findByText("account-1")).toBeInTheDocument()
-  expect(screen.getByText("account-2")).toBeInTheDocument()
-  expect(screen.getByText("Organization 1")).toBeInTheDocument()
-  expect(screen.getByText("Organization 2")).toBeInTheDocument()
-  expect(screen.getByRole("button", { name: "openApiManagement.serviceAccount.create" })).toBeDisabled()
+  expect(await screen.findByText("openApiManagement.tenantScope.choose")).toBeInTheDocument()
+  expect(screen.queryByText("account-1")).toBeNull()
+  expect(screen.queryByText("account-2")).toBeNull()
   expect(screen.queryByTestId("create-form")).toBeNull()
-  expect(screen.queryByRole("button", { name: "account-1" })).toBeNull()
-  expect(listServiceAccountsApi).toHaveBeenCalledWith(expect.objectContaining({ page: 1 }), expect.objectContaining({ tenantId: null }))
+  expect(listServiceAccountsApi).not.toHaveBeenCalled()
 })

@@ -85,12 +85,13 @@ export default function KnowledgeQa({ toolbarTarget }: KnowledgeQaProps) {
         hasRowAction(el, 'edit');
     const canDelete = (el: KnowledgeListRow) =>
         hasRowAction(el, 'delete');
-    const canCreateLibrary =
+    const canCopyLibrary =
         user.role === 'admin' ||
         (user.web_menu || []).includes('create_knowledge');
+    const canCreateLibrary = canCopyLibrary || user.is_child_admin === true;
     const canReadRow = (el: KnowledgeListRow) =>
         hasAction(el, 'visible');
-    const canUseCopy = (el: KnowledgeListRow) => canCreateLibrary && canReadRow(el);
+    const canUseCopy = (el: KnowledgeListRow) => canCopyLibrary && canReadRow(el);
     const canManageKb = (el: KnowledgeListRow) =>
         hasRowAction(el, KB_MANAGE_ACTION);
     const isLibraryBusy = (el: KnowledgeListRow) =>

@@ -69,9 +69,10 @@ export default function MainLayout() {
   /** Pages that read their view from the query string: a page react-activation froze keeps
    *  its old router context, so they are mounted fresh instead of cached. */
   const isQueryDrivenRoute = isSkillsRoute || isSquareRoute || isCapabilitiesRoute;
-  // Channel pages and app conversations use the active router context, including
-  // the current conversation and its entry surface when returning from discovery.
-  const isLiveRoute = isQueryDrivenRoute || isChannelRoute || isAppChatRoute;
+  const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
+  // Knowledge, channel pages and app conversations use the active router context,
+  // including the selected list tab, the current conversation, and its entry surface.
+  const isLiveRoute = isQueryDrivenRoute || isKnowledgeRoute || isChannelRoute || isAppChatRoute;
   const [systemMenuOpen, setSystemMenuOpen] = useRecoilState(store.mobileSystemMenuOpenState);
   const layoutRef = useRef<HTMLDivElement | null>(null);
   const menuTriggerRef = useRef<HTMLElement | null>(null);
@@ -246,7 +247,7 @@ export default function MainLayout() {
           >
             {/* 移动端顶栏:无权限占位页本身没有汉堡入口,这里补一个,与会话/知识页一致,
                 避免收起侧栏后用户无法唤出系统菜单。 */}
-            {shouldHideSidebarOnMobileAppsArea && !isChannelRoute && !isAppChatRoute ? (
+            {shouldHideSidebarOnMobileAppsArea && !isChannelRoute && !isAppChatRoute && !isKnowledgeRoute ? (
               <div
                 className={cn(
                   "top-0 z-[50] shrink-0",

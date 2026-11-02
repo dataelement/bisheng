@@ -477,6 +477,9 @@
   "com_linsight_error_title_context_compress_failed": "整理历史步骤失败",
   "com_linsight_error_desc_context_compress_failed": "任务步骤较多，需要把较早的步骤整理成摘要后才能继续，但整理没有成功，任务已停止。",
   "com_linsight_error_hint_context_compress_failed": "建议：重新发起任务；若多次失败请联系管理员检查模型服务。",
+  "com_linsight_error_title_output_truncated": "模型输出过长被截断",
+  "com_linsight_error_desc_output_truncated": "模型在一次回复中思考过长，达到了单次输出上限，没有给出下一步操作，任务已停止。",
+  "com_linsight_error_hint_output_truncated": "建议：重新发起任务；若反复出现，请联系管理员调大该模型的最大输出长度。",
   "com_linsight_stop": "停止",
   "com_linsight_stop_confirm_title": "终止当前任务？",
   "com_linsight_stop_confirm_desc": "已运行的内容将停止，任务无法恢复。",
@@ -2252,6 +2255,7 @@
       "expired": "模式影响分析已过期"
     },
     "roster": {
+      "inactive_existing_grant": "该权限已停用，已有授权仍有效。",
       "empty": "暂无授权对象",
       "loading": "正在加载权限…",
       "loading_more": "正在加载更多…",
@@ -2656,6 +2660,23 @@
     "app_release_notes": {
       "title": "发布说明",
       "empty": "未填写发布说明"
+    },
+    "current_visibility": {
+      "title": "可见范围",
+      "refresh": "刷新范围",
+      "currentHint": "当前可见范围。授权变更即时生效，不影响审批；刷新后可查看最新结果。",
+      "unavailable": "暂时无法确认当前可见范围，请刷新重试。",
+      "deleted": "应用已删除，无法读取当前可见范围。",
+      "ownerOnly": "仅负责人可见",
+      "noOrdinary": "当前没有可见的普通人员、部门或用户组。",
+      "adminHint": "平台超管和本租户管理员另有隐含管理访问资格，不计入此处的普通可见范围。",
+      "checkedAt": "查询时间：",
+      "user": "人员",
+      "department": "部门",
+      "user_group": "用户组",
+      "member": "成员",
+      "admin": "管理员",
+      "children": "包含下级部门"
     }
   },
   "chatImage": {
@@ -2801,5 +2822,8 @@
       "name": "Excel 表格制作",
       "description": "创建和修改 Excel 工作簿（.xlsx），适用于数据表、汇总表、预算表、财务模型、报价单和台账。支持读取和清洗 .xlsx、.xls、.csv 数据，设置公式与格式，并在交付前重算和检查工作簿。"
     }
+  },
+  "appChat": {
+    "stopped": "已停止"
   }
 }

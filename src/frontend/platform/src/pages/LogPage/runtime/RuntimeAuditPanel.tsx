@@ -24,15 +24,18 @@ interface CandidateProps {
   value?: string
   onChange: (value: string | undefined) => void
 }
-function CandidateFilter({ kind, dimension, filters, scopeKey, value, onChange }: CandidateProps) {
+export function CandidateFilter({ kind, dimension, filters, scopeKey, value, onChange }: CandidateProps) {
   const { t } = useTranslation()
   const labels = useSelectLabels()
   const [search, setSearch] = useState('')
   const query = useInfiniteQuery({ queryKey: ['runtime-audit-candidates', scopeKey, kind, dimension, filters, search], queryFn: ({ pageParam = 0 }) => getRuntimeAuditCandidates(kind, dimension, filters, search, Number(pageParam)), getNextPageParam: (last, pages) => last.has_more ? pages.length * 100 : undefined, retry: false })
+  const empty = query.isError ? t('f115.audit.candidatesFailed')
+    : dimension === 'visitor' ? t('f115.audit.noVisitors') : t('f115.audit.noCandidates')
   return <div className="min-w-48 flex-1"><Select {...labels} allowClear showSearch onSearch={setSearch} loading={query.isInitialLoading} loadingMore={query.isFetchingNextPage} onLoadMore={() => { if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage() }}
+    emptyText={empty} noMatchText={query.isError ? empty : t('f115.audit.noMatches')} loadingText={t('f115.audit.loading')}
     placeholder={t(`log.runtime.${dimension}`)} aria-label={t(`log.runtime.${dimension}`)} value={value ?? null}
     options={(query.data?.pages.flatMap(page => page.items) ?? []).filter(item => item.id != null && item.id !== '').map(item => ({ value: item.id, label: item.label }))}
-    onChange={next => onChange(next == null ? undefined : String(next))} />{query.isError && <p role="alert">{t('log.runtime.loadFailed')}</p>}</div>
+    onChange={next => onChange(next == null ? undefined : String(next))} />{query.isError && <div role="alert">{t('f115.audit.candidatesFailed')} <Button size="small" onClick={() => void query.refetch()}>{t('f115.audit.retry')}</Button></div>}</div>
 }
 
 interface RecordProps {
@@ -55,7 +58,7 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey }: RecordProps) {
   const handleRange = () => {
     if (range === 'custom' && (!start || !end || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start.getTime() > end.getTime())) { setRangeError(true); return }
     setRangeError(false)
-    setFilters({ ...filters, time_range: range, start_time: range === 'custom' ? start?.toISOString() : undefined, end_time: range === 'custom' ? end?.toISOString() : undefined })
+    setFilters({ ...filters, visitor_id: undefined, time_range: range, start_time: range === 'custom' ? start?.toISOString() : undefined, end_time: range === 'custom' ? end?.toISOString() : undefined })
   }
   const handleCreateExport = async () => {
     if (!query.data) return
@@ -93,9 +96,9 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey }: RecordProps) {
       <div className="min-w-48 flex-1">
         <Select {...labels} value={range} aria-label={t('log.runtime.timeRange')} options={['recent7d', 'custom', 'all'].map(value => ({ value, label: t(`log.runtime.${value}`) }))} onChange={value => setRange(value as RuntimeAuditFilters['time_range'])} />
       </div>
-      <CandidateFilter kind={kind} dimension="app" filters={filters} scopeKey={scopeKey} value={filters.app_id} onChange={value => setFilters({ ...filters, app_id: value })} />
-      <CandidateFilter kind={kind} dimension="visitor" filters={filters} scopeKey={scopeKey} value={filters.visitor_id?.toString()} onChange={value => setFilters({ ...filters, visitor_id: value ? Number(value) : undefined })} />
-      {kind === 'model' && <CandidateFilter kind={kind} dimension="credential" filters={filters} scopeKey={scopeKey} value={filters.credential_id?.toString()} onChange={value => setFilters({ ...filters, credential_id: value ? Number(value) : undefined })} />}
+      <CandidateFilter key={`app-${scopeKey}-${filters.time_range}-${filters.start_time}-${filters.end_time}`} kind={kind} dimension="app" filters={filters} scopeKey={scopeKey} value={filters.app_id} onChange={value => setFilters({ ...filters, app_id: value, visitor_id: undefined })} />
+      <CandidateFilter key={`visitor-${scopeKey}-${filters.time_range}-${filters.start_time}-${filters.end_time}-${filters.app_id}-${filters.credential_id}`} kind={kind} dimension="visitor" filters={filters} scopeKey={scopeKey} value={filters.visitor_id?.toString()} onChange={value => setFilters({ ...filters, visitor_id: value ? Number(value) : undefined })} />
+      {kind === 'model' && <CandidateFilter key={`credential-${scopeKey}-${filters.time_range}-${filters.app_id}`} kind={kind} dimension="credential" filters={filters} scopeKey={scopeKey} value={filters.credential_id?.toString()} onChange={value => setFilters({ ...filters, credential_id: value ? Number(value) : undefined, visitor_id: undefined })} />}
       {range === 'custom' && <>
         <div className="w-56 max-w-full"><DatePicker showTime value={start} placeholder={t('log.runtime.start')} onChange={setStart} /></div>
         <div className="w-56 max-w-full"><DatePicker showTime value={end} placeholder={t('log.runtime.end')} onChange={setEnd} /></div>

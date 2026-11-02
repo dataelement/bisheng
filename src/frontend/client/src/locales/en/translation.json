@@ -489,6 +489,9 @@
   "com_linsight_error_title_context_compress_failed": "Couldn't condense earlier steps",
   "com_linsight_error_desc_context_compress_failed": "The task has many steps, so earlier steps had to be condensed into a summary before it could continue. That failed, and the task stopped.",
   "com_linsight_error_hint_context_compress_failed": "Tip: start the task again; if it keeps failing, ask an administrator to check the model service.",
+  "com_linsight_error_title_output_truncated": "The model's reply was cut off",
+  "com_linsight_error_desc_output_truncated": "The model reasoned for too long in a single reply and reached its output limit before taking the next step, so the task stopped.",
+  "com_linsight_error_hint_output_truncated": "Tip: start the task again; if it keeps happening, ask an administrator to raise the model's maximum output length.",
   "com_linsight_stop": "Stop",
   "com_linsight_stop_confirm_title": "Stop the current task?",
   "com_linsight_stop_confirm_desc": "The running task will be stopped and cannot be resumed.",
@@ -2324,6 +2327,7 @@
       "expired": "The mode impact analysis expired."
     },
     "roster": {
+      "inactive_existing_grant": "This permission is disabled for new grants. Existing access remains effective.",
       "empty": "No assignees",
       "loading": "Loading permissions…",
       "loading_more": "Loading more…",
@@ -2728,6 +2732,23 @@
     "app_release_notes": {
       "title": "Release notes",
       "empty": "No release notes provided"
+    },
+    "current_visibility": {
+      "title": "Visibility",
+      "refresh": "Refresh scope",
+      "currentHint": "Current visibility. Authorization changes take effect immediately and do not affect approval. Refresh to see the latest scope.",
+      "unavailable": "Current visibility could not be confirmed. Please refresh.",
+      "deleted": "The application was deleted. Current visibility is unavailable.",
+      "ownerOnly": "Only the owner can see this application",
+      "noOrdinary": "No ordinary people, departments or user groups currently have visibility.",
+      "adminHint": "Platform super administrators and this tenant’s administrators have separate implicit management access, which is excluded from this ordinary visibility scope.",
+      "checkedAt": "Checked at:",
+      "user": "Person",
+      "department": "Department",
+      "user_group": "User group",
+      "member": "Members",
+      "admin": "Administrators",
+      "children": "Includes subdepartments"
     }
   },
   "chatImage": {
@@ -2873,5 +2894,8 @@
       "name": "Excel spreadsheet creation",
       "description": "Create and edit Excel workbooks (.xlsx), including data tables, summaries, budgets, financial models, quotations and registers. Read and clean .xlsx, .xls and .csv data, apply formulas and formatting, and recalculate and check the workbook before delivery."
     }
+  },
+  "appChat": {
+    "stopped": "Stopped"
   }
 }

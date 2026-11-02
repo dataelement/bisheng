@@ -9,6 +9,7 @@ export interface PermissionDraftRow {
   departmentPath?: string | null;
   modelKey: string;
   modelName?: string;
+  modelActive?: boolean;
   modelLevel?: number | null;
   includeChildren?: boolean;
   assigneeId?: string;

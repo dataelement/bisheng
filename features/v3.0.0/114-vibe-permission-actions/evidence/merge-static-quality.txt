@@ -1,0 +1,3 @@
+Architecture guard: 11 merge-resolution source/test files checked, no VIOLATION.
+git diff --check passed; merge-resolution files contain no conflict markers.
+Existing and new evidence manifest SHA-256 entries match files.

@@ -257,7 +257,11 @@ class DockerExecutor:
         return {"complete": True}
 
     def observe(self, exec_ref):
+        from datetime import UTC, datetime
+
         import httpx
+
+        from runtime_manager.observation import counter, timestamp
 
         record = self._record(exec_ref)
         labels = record.get("Config", {}).get("Labels", {})
@@ -267,6 +271,8 @@ class DockerExecutor:
         host = network.get("IPAddress") or network.get("GlobalIPv6Address") or ""
         port = int(operation["payload"].get("port", 8080))
         ready = False
+        probe_state = "pending" if record.get("State", {}).get("Restarting") else "unknown"
+        last_probe_at = None
         if running and host:
             path = operation["payload"].get("health", {}).get("path", "/")
             if not path.startswith("/") or any(c in path for c in "\r\n"):
@@ -280,8 +286,22 @@ class DockerExecutor:
                     < 500
                 )
             except httpx.HTTPError:
-                pass
-        return {"exec_ref": exec_ref, "running": running, "ready": ready, "target": {"host": host, "port": port}}
+                # An actual application probe failed; this is not a platform lookup failure.
+                ready = False
+            probe_state = "passed" if ready else "failed"
+            last_probe_at = datetime.now(UTC).isoformat()
+        elif operation.get("stage") == "starting" or record.get("State", {}).get("Restarting"):
+            probe_state = "pending"
+        return {
+            "exec_ref": exec_ref,
+            "running": running,
+            "ready": ready,
+            "target": {"host": host, "port": port},
+            "probe_state": probe_state,
+            "restart_count": counter(record.get("RestartCount")),
+            "started_at": timestamp(record.get("State", {}).get("StartedAt")),
+            "last_probe_at": last_probe_at,
+        }
 
     def logs(self, exec_ref, *, since=None, tail=200):
         self._record(exec_ref)

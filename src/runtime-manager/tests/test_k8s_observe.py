@@ -68,6 +68,9 @@ def service(tmp_path, monkeypatch):
             return {"items": []}
 
     class Runtime(KubernetesExecutor):
+        def observe_status(self, ref):
+            return self.observe(ref)
+
         def observe(self, ref):
             return {"exec_ref": ref, "ready": True, "running": True, "phase": "Running", "restart_count": 2}
 
@@ -291,7 +294,12 @@ def observed_application_http(tmp_path, monkeypatch):
                 executions.append(("docker-inspect", reference))
                 return {
                     "Config": {
-                        "Labels": {"bisheng.runtime.node": "node-a", OP_LABEL: "op-a"},
+                        "Labels": {
+                            "bisheng.runtime.node": "node-a",
+                            OP_LABEL: "op-a",
+                            "bisheng.app.id": "app-a",
+                            "bisheng.managed": "v2",
+                        },
                         "Env": ["BISHENG_APP_TOKEN=fixture-business-token"],
                     },
                     "State": {"Running": healthy, "Health": {"Status": "healthy" if healthy else "unhealthy"}},
@@ -304,10 +312,18 @@ def observed_application_http(tmp_path, monkeypatch):
                 return "INFO fixture-business-token\n"
 
         class Runtime:
+            def observe_status(self, reference):
+                return self.observe(reference)
+
             def observe(self, reference):
                 assert reference == ref
                 executions.append(("k8s-observe", reference))
-                return {"ready": healthy, "restart_count": 2}
+                return {
+                    "running": True,
+                    "ready": healthy,
+                    "probe_state": "passed" if healthy else "failed",
+                    "restart_count": 2,
+                }
 
             def logs(self, reference, **kwargs):
                 assert reference == ref
@@ -347,8 +363,13 @@ def test_exact_unassigned_application_is_not_found_over_real_client_and_asgi(obs
         kind, application=httpx.Response(404, json={"error": {"reason": "application_not_found"}})
     )
     response = get(suffix)
-    assert response.status_code == 404
-    assert response.json()["detail"]["code"] == "not_found"
+    if suffix == "status":
+        assert response.status_code == 200
+        assert response.json()["observation_state"] == "no_execution"
+        assert response.json()["restart_count"] is None
+    else:
+        assert response.status_code == 404
+        assert response.json()["detail"]["code"] == "not_found"
     assert [path for method, path in requests if method == "GET"] == [PREFIX + "/apps/app-a/execution"]
     assert not executions
 
@@ -391,7 +412,7 @@ def test_resource_failures_are_not_application_absence(observed_application_http
     """覆盖 AC: AC-01、AC-33、AC-35、AC-36、AC-55."""
     get, requests, executions, scope = observed_application_http("kubernetes", resource=failure)
     response = get(suffix)
-    assert response.status_code == 500
+    assert response.status_code == (503 if suffix == "status" else 500)
     assert "not_found" not in response.text and "private-" not in response.text
     assert [path for method, path in requests if method == "GET"] == [
         PREFIX + "/apps/app-a/execution",
@@ -416,6 +437,9 @@ def test_assigned_instance_and_logs_retain_public_shape_with_real_platform_clien
         "instance_id": scope["exec_ref"],
         "health": "healthy" if healthy else "unhealthy",
         "restart_count": 2,
+        "started_at": None,
+        "last_probe_at": None,
+        "observation_state": "current",
     }
     logs = get("logs")
     assert logs.status_code == 200 and set(logs.json()) == {"app_id", "lines"}
@@ -432,5 +456,8 @@ def test_assignment_without_execution_still_reports_not_found(observed_applicati
         kind, application=httpx.Response(200, json={"app_id": "app-a", "node_id": "node-a", "exec_ref": None})
     )
     response = get(suffix)
-    assert response.status_code == 404 and response.json()["detail"]["code"] == "not_found"
+    if suffix == "status":
+        assert response.status_code == 200 and response.json()["observation_state"] == "no_execution"
+    else:
+        assert response.status_code == 404 and response.json()["detail"]["code"] == "not_found"
     assert not executions

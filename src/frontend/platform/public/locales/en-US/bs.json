@@ -3363,6 +3363,9 @@
       "title": "Release notes",
       "empty": "No release notes provided",
       "column": "Version notes"
+    },
+    "permissions": {
+      "managementPreviewTitle": "Management preview"
     }
   },
   "dsh": {
@@ -4344,5 +4347,41 @@
     "notFoundTitle": "Page not found",
     "notFoundDescription": "The page you are trying to access does not exist or has been removed.",
     "recommendedAppLimit": "At most {{max}} recommended apps can be configured."
+  },
+  "f115": {
+    "runtime": {
+      "unknown": "Unknown",
+      "notRunning": "Not running",
+      "noExecution": "No running instance yet",
+      "executionMissing": "The runtime instance no longer exists"
+    },
+    "audit": {
+      "candidatesFailed": "Could not load filter options. Please retry.",
+      "retry": "Retry",
+      "noVisitors": "No natural-person visits in this range. Calls made by the application itself do not represent a visitor.",
+      "noCandidates": "No filter options in this range",
+      "noMatches": "No matching filter options",
+      "loading": "Loading filter options…"
+    },
+    "knowledge": {
+      "membershipUnknown": "Your tenant could not be confirmed. Refresh the page and reopen the creation form."
+    },
+    "visibility": {
+      "title": "Visibility",
+      "refresh": "Refresh scope",
+      "currentHint": "Current visibility. Authorization changes take effect immediately and do not affect approval. Refresh to see the latest scope.",
+      "unavailable": "Current visibility could not be confirmed. Please refresh.",
+      "deleted": "The application was deleted. Current visibility is unavailable.",
+      "ownerOnly": "Only the owner can see this application",
+      "noOrdinary": "No ordinary people, departments or user groups currently have visibility.",
+      "adminHint": "Platform super administrators and this tenant’s administrators have separate implicit management access, which is excluded from this ordinary visibility scope.",
+      "checkedAt": "Checked at:",
+      "user": "Person",
+      "department": "Department",
+      "user_group": "User group",
+      "member": "Members",
+      "admin": "Administrators",
+      "children": "Includes subdepartments"
+    }
   }
 }

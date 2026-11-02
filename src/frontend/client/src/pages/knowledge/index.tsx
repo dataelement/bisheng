@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { knowledgePathWithTab } from "./knowledgeListNavigation";
 import { ApiRequestFailure } from "~/components/ApiRequestFailure";
 import { useKnowledgeSpaceLists } from "./hooks/useKnowledgeSpaceLists";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -475,7 +476,7 @@ export default function Knowledge() {
         targetSpaceId: space.id,
       })
     ) {
-      navigate(`/knowledge/space/${space.id}`);
+      navigate(knowledgePathWithTab(`/knowledge/space/${space.id}`, location.search));
     }
     // Set list-level data immediately for fast UI switch
     setActiveSpace(space);
@@ -580,7 +581,7 @@ export default function Knowledge() {
       queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
       showToast({ message: localize("com_knowledge.space_deleted"), severity: NotificationSeverity.SUCCESS });
       setActiveSpace(null);
-      navigate("/knowledge");
+      navigate(knowledgePathWithTab("/knowledge", location.search));
     } catch {
       showToast({
         message: localize("com_knowledge.delete_space_failed"),
@@ -614,7 +615,7 @@ export default function Knowledge() {
       queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
       showToast({ message: localize("com_knowledge.exited_space"), severity: NotificationSeverity.SUCCESS });
       setActiveSpace(null);
-      navigate("/knowledge");
+      navigate(knowledgePathWithTab("/knowledge", location.search));
     } catch (e) {
       const errorCode = extractApiStatusCode(e);
       const message =
@@ -639,7 +640,7 @@ export default function Knowledge() {
   // (`?square=1`, `?previewSpace=`, notification events) — those keep a back arrow.
   const handleLeaveSquare = () => {
     setShowKnowledgeSquare(false);
-    navigate("/knowledge", { replace: true });
+    navigate(knowledgePathWithTab("/knowledge", location.search), { replace: true });
   };
   const handleOpenSquare = () => {
     if (isH5) setShowKnowledgeSquare(true);
@@ -858,7 +859,7 @@ export default function Knowledge() {
                 // tree auto-expands/highlights to the same folder. Setting folder
                 // state directly would leave the sidebar out of sync.
                 const base = `/knowledge/space/${activeSpace.id}`;
-                navigate(folderId ? `${base}/folder/${folderId}` : base);
+                navigate(knowledgePathWithTab(folderId ? `${base}/folder/${folderId}` : base, location.search));
               }}
               onUploadFile={fileUpload.handleUploadFile}
               onUploadFolder={fileUpload.handleUploadFolder}
@@ -1042,7 +1043,7 @@ export default function Knowledge() {
           // 给 Sheet 的 slide-out 动画留出时间，避免立刻 navigate 导致动画被中断
           if (!open) {
             previewNavTimerRef.current = setTimeout(() => {
-              navigate("/knowledge", { replace: true });
+              navigate(knowledgePathWithTab("/knowledge", location.search), { replace: true });
             }, 400);
           }
         }}

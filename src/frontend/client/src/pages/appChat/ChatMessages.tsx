@@ -101,6 +101,7 @@ export default function ChatMessages({
             confirmed: localize("com_bschoose_confirmed"),
             thinking: localize("com_bs_reasoning_thinking"),
             completed: localize("com_bs_reasoning_done"),
+            stopped: localize("appChat.stopped"),
           }}
           onChoice={(message, value) => {
             const payload = asRecord(message.payload);

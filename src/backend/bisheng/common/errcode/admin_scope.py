@@ -20,3 +20,13 @@ class AdminScopeTenantNotFoundError(BaseErrorCode):
 class AdminScopeTenantRequiredError(BaseErrorCode):
     Code: int = 19703
     Msg: str = "Select a management tenant before changing tenant-specific configuration"
+
+
+class AdminScopeChangedError(BaseErrorCode):
+    Code: int = 19704
+    Msg: str = "The management tenant has changed; refresh before submitting"
+
+
+class AdminScopeUnavailableError(BaseErrorCode):
+    Code: int = 19705
+    Msg: str = "A valid management tenant could not be determined"

@@ -52,6 +52,43 @@ class PublishTerminalService:
     """The three terminal callbacks of the publish approval scenario."""
 
     @classmethod
+    async def request_withdraw(cls, app_id, *, instance_id, actor, reason=None):
+        from bisheng.app_runtime.application.authorization import authorize_app, resolve_app_actor
+        from bisheng.approval.application.app_publish import withdraw_app_publish
+        from bisheng.common.errcode.approval import ApprovalInstanceNotPendingError
+        from bisheng.core.context.tenant import get_current_tenant_id
+
+        await authorize_app(actor, app_id, "withdraw")
+        async with get_async_db_session() as session:
+            rows = await AppDeploymentDao.alist_by_app(session, app_id, limit=1)
+        deployment = rows[0] if rows else None
+        if (
+            deployment is None
+            or deployment.approval_instance_id != instance_id
+            or deployment.tenant_id != get_current_tenant_id()
+        ):
+            raise ApprovalInstanceNotPendingError()
+        identity = await resolve_app_actor(actor)
+        expected = {
+            "tenant_id": deployment.tenant_id,
+            "app_id": app_id,
+            "deployment_id": deployment.id,
+            "version_id": deployment.version_id,
+            "instance_id": instance_id,
+        }
+        return await withdraw_app_publish(
+            expected,
+            operator_user_id=identity.subject_id if identity.subject_type == "user" else 0,
+            operator_user_name=getattr(actor, "user_name", None),
+            reason=reason,
+            actor_metadata={
+                "subject_type": identity.subject_type,
+                "subject_id": identity.subject_id,
+                "tenant_id": identity.tenant_id,
+            },
+        )
+
+    @classmethod
     async def on_rejected(cls, payload_snapshot: dict, *, reason: str | None) -> None:
         """AC-33. ``reason`` is the approver's comment, kept whole.
 

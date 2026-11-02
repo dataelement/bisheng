@@ -1683,6 +1683,31 @@
   - **验收**：T197、F048 permission focused suite、Ruff、arch-guard 与 diff-check 通过。
   - **依赖**：T197
 
+## Wave 17 — 停用模型既有授权展示纠正（2026-11-02）
+
+本轮落实已确认 AC-15/164/166 与用户认可的修复方案，不重新定义授权规则。
+
+- [x] **T199：既有停用授权的后端定向合同验证**
+  - **文件**：`test/permission/test_inactive_model_existing_roster.py`，以及 F048 explain、catalog runtime、resource API、grant policy/source 与 F115 action sources 的定向测试。
+  - **覆盖 AC**：AC-15, AC-164, AC-166。
+  - **验收**：55 项通过；覆盖直接/继承来源、分页/搜索、同级和等级限制、protected、权限拒绝、Catalog 读取冲突及 mutation 响应。
+
+- [x] **T200：修复后端来源读取及既有来源管理资格**
+  - **文件**：`permission/application/{control_state,resource_api,runtime}.py`，`permission/domain/services/{grant_service,permission_explain_service}.py`。
+  - **逻辑**：保留有效既有来源，返回真实 model.active，服务端细化 editable；不放开新目标 active 校验。
+  - **依赖**：T199。
+
+- [x] **T201：两套 SPA 展示状态与表单管理修复**
+  - **文件**：两套 `PermissionGrantTab` / `PermissionListTab` / `assigneePolicy` / `PermissionModelStatus`，Client `PermissionDraftEditor` / draft policy / row type、知识空间和频道表单映射，三语文案及定向测试。
+  - **覆盖 AC**：AC-15, AC-164, AC-166。
+  - **验收**：Platform 9 项、Client 临时 runner 25 项通过；lint 与 i18n 通过。TypeScript 基线限制与 runner 差异见验证记录。
+  - **依赖**：T200。
+
+- [ ] **T202：部署后定向 E2E**
+  - **范围**：3254 只读核对来源；专用测试资源验证停用、拒绝新分配、精确撤销/移动、多来源并集与非管理员权限拒绝。
+  - **状态**：本轮未部署，真实环境 E2E 未执行；不在空间 3254 上撤权或修改模型。
+  - **依赖**：T200, T201 与目标环境更新。
+
 ## 实际偏差记录
 
 > 只记录一句话指针；设计原因和反直觉事实回写 [design.md](./design.md)。

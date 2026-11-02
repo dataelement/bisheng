@@ -756,7 +756,20 @@ class KubernetesExecutor:
         row = self.platform.resource(exec_ref)
         return self._observed(row, self._fresh(row))
 
+    def observe_status(self, exec_ref):
+        """Only an exact Pod 404 proves absence; helper/API failures do not."""
+        row = self.platform.resource(exec_ref)
+        try:
+            pod = self._fresh(row)
+        except KubernetesAPIError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
+        return self._observed(row, pod)
+
     def _observed(self, row, pod):
+        from runtime_manager.observation import counter, timestamp
+
         exec_ref = row["resource_ref"]
         status = pod.get("status", {})
         ready = (
@@ -791,6 +804,12 @@ class KubernetesExecutor:
                 for e in item.get("endpoints", [])
             )
         target = service.get("observed_state", {}) if service else {}
+        app_status = next((c for c in status.get("containerStatuses", []) if c.get("name") == "app"), {})
+        container_state = app_status.get("state", {})
+        current_state = container_state.get("running") or container_state.get("terminated") or {}
+        pending = status.get("phase") == "Pending" or bool(container_state.get("waiting"))
+        known_ready = any(c.get("type") == "Ready" for c in status.get("conditions", []))
+        probe_state = "passed" if ready else ("pending" if pending else ("failed" if known_ready else "unknown"))
         return {
             "exec_ref": exec_ref,
             "pod_uid": row["uid"],
@@ -798,9 +817,9 @@ class KubernetesExecutor:
             "target": {"host": target.get("cluster_ip", ""), "port": target.get("port", 0)},
             "phase": status.get("phase", "Unknown"),
             "running": status.get("phase") == "Running" and not pod["metadata"].get("deletionTimestamp"),
-            "restart_count": sum(
-                int(c.get("restartCount", 0)) for c in status.get("containerStatuses", []) if c.get("name") == "app"
-            ),
+            "restart_count": counter(app_status.get("restartCount")),
+            "started_at": timestamp(current_state.get("startedAt")),
+            "probe_state": probe_state,
         }
 
     @staticmethod

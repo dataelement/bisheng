@@ -9,6 +9,7 @@ import {
 } from "./usePermissionDraft";
 import type { PermissionDraftRow } from "./usePermissionDraft";
 import { SourceBadge } from "./SourceBadge";
+import { PermissionModelStatus } from "./PermissionModelStatus";
 
 export interface PermissionDraftEditorCapabilities {
   canChangeRelation: boolean;
@@ -43,7 +44,7 @@ export function PermissionDraftEditor({
     const rowKey = getPermissionDraftRowKey(row);
     onChange(value.map((candidate) => (
       getPermissionDraftRowKey(candidate) === rowKey
-        ? { ...candidate, modelKey: model.id, modelName: model.name, modelLevel: model.level }
+        ? { ...candidate, modelKey: model.id, modelName: model.name, modelLevel: model.level, modelActive: true }
         : candidate
     )));
   };
@@ -86,7 +87,7 @@ export function PermissionDraftEditor({
         const showReadOnly =
           !row.protected && (row.scope === "INHERITED" || row.editable === false);
         const showInheritedFrom = row.scope === "INHERITED" && !!row.inheritedFromName;
-        const hasMeta = !!row.sourceType || showReadOnly || showInheritedFrom;
+        const hasMeta = !!row.sourceType || showReadOnly || showInheritedFrom || row.modelActive === false;
 
         return (
           <div key={rowKey} className="flex min-h-11 items-center gap-3 py-2">
@@ -112,6 +113,7 @@ export function PermissionDraftEditor({
                     {showReadOnly && (
                       <span>{localize("f048_permission.roster.read_only")}</span>
                     )}
+                    <PermissionModelStatus active={row.modelActive} />
                     {showInheritedFrom && (
                       <span>
                         {localize("f048_permission.roster.inherited_from")}: {row.inheritedFromName}

@@ -432,3 +432,65 @@ class CredentialRepository:
                 session.add(row)
                 await session.commit()
         return True
+
+    @classmethod
+    async def revoke_preview_credential(cls, session, *, credential_id, tenant_id, subject_id, reason):
+        """Revoke one exact credential, including audit, inside the caller's transaction."""
+        from bisheng.database.models.audit_log import AuditLog
+        from bisheng.open_api.domain.models.api_credential import SUBJECT_KIND_HOSTED_APP, ApiCredential
+
+        row = (
+            await session.exec(select(ApiCredential).where(ApiCredential.id == credential_id).with_for_update())
+        ).first()
+        if row is None or (row.tenant_id, row.subject_kind, row.subject_id) != (
+            tenant_id,
+            SUBJECT_KIND_HOSTED_APP,
+            subject_id,
+        ):
+            raise ValueError("preview_credential_mismatch")
+        if row.revoked_at is not None:
+            return False
+        row.revoked_at = datetime.utcnow()
+        row.revoke_reason = reason[:32]
+        session.add(row)
+        session.add(
+            AuditLog(
+                tenant_id=tenant_id,
+                operator_id=0,
+                operator_name="system",
+                operator_tenant_id=tenant_id,
+                action="open_api.api_key.revoke",
+                target_type="api_credential",
+                target_id=str(row.id),
+                object_name=row.name,
+                audit_metadata={
+                    "credential_id": row.id,
+                    "subject_kind": row.subject_kind,
+                    "subject_id": subject_id,
+                    "reason": reason,
+                    "preview": True,
+                },
+            )
+        )
+        await session.flush()
+        return True
+
+    @classmethod
+    async def preview_credential_is_live(cls, credential_id, tenant_id, app_id):
+        from bisheng.open_api.domain.models.api_credential import SUBJECT_KIND_HOSTED_APP, ApiCredential
+
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                row = (
+                    await session.exec(
+                        select(ApiCredential).where(
+                            ApiCredential.id == credential_id, ApiCredential.tenant_id == tenant_id
+                        )
+                    )
+                ).first()
+                return bool(
+                    row
+                    and row.subject_kind == SUBJECT_KIND_HOSTED_APP
+                    and row.is_valid_at(datetime.utcnow())
+                    and (await cls.trusted_app_metadata(session, row)).get("app_id") == app_id
+                )

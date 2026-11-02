@@ -474,6 +474,9 @@
   "com_linsight_error_title_context_compress_failed": "これまでの手順を要約できませんでした",
   "com_linsight_error_desc_context_compress_failed": "手順が多いため、先の手順を要約してから続行する必要がありましたが、要約に失敗したためタスクを停止しました。",
   "com_linsight_error_hint_context_compress_failed": "ヒント：タスクを再実行してください。繰り返し失敗する場合は、モデルサービスの確認を管理者に依頼してください。",
+  "com_linsight_error_title_output_truncated": "モデルの出力が長すぎて途中で打ち切られました",
+  "com_linsight_error_desc_output_truncated": "モデルが 1 回の応答で長く考えすぎて出力上限に達し、次の操作を示せなかったため、タスクを停止しました。",
+  "com_linsight_error_hint_output_truncated": "ヒント：タスクを再実行してください。繰り返し発生する場合は、モデルの最大出力長を引き上げるよう管理者に依頼してください。",
   "com_linsight_stop": "停止",
   "com_linsight_stop_confirm_title": "現在のタスクを終了しますか？",
   "com_linsight_stop_confirm_desc": "実行中の内容は停止し、タスクは再開できません。",
@@ -2247,6 +2250,7 @@
       "expired": "モード影響分析の有効期限が切れました。"
     },
     "roster": {
+      "inactive_existing_grant": "新規付与には使用できません。既存のアクセス権は引き続き有効です。",
       "empty": "付与対象はありません",
       "loading": "権限を読み込み中…",
       "loading_more": "さらに読み込み中…",
@@ -2651,6 +2655,23 @@
     "app_release_notes": {
       "title": "リリースノート",
       "empty": "リリースノートは未入力です"
+    },
+    "current_visibility": {
+      "title": "公開範囲",
+      "refresh": "範囲を更新",
+      "currentHint": "現在の公開範囲です。権限変更は即時に反映され、承認には影響しません。更新すると最新の範囲を確認できます。",
+      "unavailable": "現在の公開範囲を確認できません。更新してください。",
+      "deleted": "アプリが削除されたため、現在の公開範囲を取得できません。",
+      "ownerOnly": "責任者のみ閲覧可能",
+      "noOrdinary": "現在、閲覧可能な一般ユーザー、部門、ユーザーグループはありません。",
+      "adminHint": "プラットフォームのスーパー管理者とこのテナントの管理者には別途暗黙の管理アクセス権があり、ここに示す一般の公開範囲には含まれません。",
+      "checkedAt": "確認日時：",
+      "user": "ユーザー",
+      "department": "部門",
+      "user_group": "ユーザーグループ",
+      "member": "メンバー",
+      "admin": "管理者",
+      "children": "下位部門を含む"
     }
   },
   "chatImage": {
@@ -2796,5 +2817,8 @@
       "name": "Excel スプレッドシート作成",
       "description": "データ表、集計表、予算表、財務モデル、見積書、台帳などの Excel ブック（.xlsx）を作成・編集します。.xlsx、.xls、.csv データの読み込みと整形、数式や書式の設定を行い、納品前にブックを再計算して確認します。"
     }
+  },
+  "appChat": {
+    "stopped": "停止済み"
   }
 }

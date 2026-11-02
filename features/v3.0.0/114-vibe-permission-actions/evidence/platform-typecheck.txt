@@ -1,0 +1,26 @@
+
+> bisheng@3.0.0 typecheck <f114-worktree>/src/frontend/platform
+> tsc-strict
+
+- Looking for strict files...
+🎯 Found 1008 strict files
+- Compiling with strict mode...
+../../../../../../../works/bisheng/src/frontend/packages/ui/src/components/Input/PasswordInput.tsx(71,46): error TS2339: Property 'EyeClose' does not exist on type 'typeof index$2'.
+../../../../../../../works/bisheng/src/frontend/packages/ui/src/components/Input/PasswordInput.tsx(71,84): error TS2339: Property 'Eye' does not exist on type 'typeof index$2'.
+../../../../../../../works/bisheng/src/frontend/packages/chat/src/content/ChatMarkdown.tsx(6,29): error TS2307: Cannot find module 'rehype-highlight' or its corresponding type declarations.
+../../../../../../../works/bisheng/src/frontend/packages/chat/src/content/ChatMarkdown.tsx(7,25): error TS2307: Cannot find module 'rehype-katex' or its corresponding type declarations.
+../../../../../../../works/bisheng/src/frontend/packages/chat/src/content/ChatMarkdown.tsx(8,24): error TS2307: Cannot find module 'rehype-slug' or its corresponding type declarations.
+../../../../../../../works/bisheng/src/frontend/packages/chat/src/content/ChatMarkdown.tsx(9,29): error TS2307: Cannot find module 'remark-directive' or its corresponding type declarations.
+../../../../../../../works/bisheng/src/frontend/packages/chat/src/content/ChatMarkdown.tsx(12,22): error TS2307: Cannot find module 'remark-supersub' or its corresponding type declarations.
+../../../../../../../works/bisheng/src/frontend/packages/file-viewers/src/viewers/MarkdownViewer.tsx(4,29): error TS2307: Cannot find module 'rehype-highlight' or its corresponding type declarations.
+src/pages/BuildPage/bench/OrgKbConfig.tsx(17,55): error TS2307: Cannot find module '@hello-pangea/dnd' or its corresponding type declarations.
+src/pages/BuildPage/flow/hooks/useBeforeUnload.ts(5,10): error TS2305: Module '"react-router-dom"' has no exported member 'useBlocker'.
+src/pages/SystemPage/theme/BrandAssetUpload.tsx(351,43): error TS2339: Property 'Eye' does not exist on type 'typeof index$2'.
+src/pages/ApprovalPage/ApprovalDialogs.tsx(130,51): error TS2339: Property 'People' does not exist on type 'typeof index$2'.
+src/pages/ApprovalPage/ApprovalDialogs.tsx(141,49): error TS2339: Property 'People' does not exist on type 'typeof index$2'.
+src/pages/ApprovalPage/FlowManagementPanel.tsx(209,47): error TS2339: Property 'Eye' does not exist on type 'typeof index$2'.
+src/pages/ApprovalPage/FlowManagementPanel.tsx(255,52): error TS2339: Property 'People' does not exist on type 'typeof index$2'.
+src/pages/ApprovalPage/FlowManagementPanel.tsx(443,63): error TS2339: Property 'People' does not exist on type 'typeof index$2'.
+src/pages/ApprovalPage/FlowManagementPanel.tsx(454,61): error TS2339: Property 'People' does not exist on type 'typeof index$2'.
+💥 Found 17 errors
+ ELIFECYCLE  Command failed with exit code 1.

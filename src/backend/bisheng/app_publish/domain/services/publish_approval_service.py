@@ -321,6 +321,8 @@ async def _build_payload(
     second net.
     """
     manifest = deployment.manifest if isinstance(deployment.manifest, dict) else {}
+    authorization = deployment.authorization_context or {}
+    submission_actor = {**authorization.get("actor", {}), "name": authorization.get("actor_name")}
     return {
         "app_id": app.id,
         "app_name": app.name,
@@ -330,6 +332,8 @@ async def _build_payload(
         "version_no": version_no,
         "release_notes": deployment.release_notes,
         "deployment_id": deployment.id,
+        "submission_actor": submission_actor,
+        "self_review_user_id": authorization.get("self_review_user_id"),
         "release_kind": release_kind,
         "owner_user_id": owner_user_id,
         "owner_user_name": owner_user_name,

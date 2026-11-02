@@ -206,7 +206,7 @@
 
 | 字段 / 结构 | 类型 / 格式 | 说明 | 谁会消费 |
 |---|---|---|---|
-| 提交 body | `run_mode:"task"`、`execution:"async"`、`text`、`instructions?`、`model`、`skills?[]`、`tools?[]`、`knowledge_ids?[]`、`knowledge_space_ids?[]`、`files?[]`、`clientTimestamp` | `extra=forbid`；`text` 1–20000 字符；`instructions` ≤ 4000；两类知识各 ≤ 50；`files` 为 `/api/v2/knowledge/upload` 返回的引用 | 调用方 |
+| 提交 body | `run_mode:"task"`、`execution:"async"`、`text`、`instructions?`、`model`、`skills?[]`、`tools?[]`、`knowledge_ids?[]`、`knowledge_space_ids?[]`、`files?[]`、`clientTimestamp` | `extra=forbid`；`text` 1–100000 字符；`instructions` ≤ 4000；两类知识各 ≤ 50；`files` 为 `/api/v2/knowledge/upload` 返回的引用 | 调用方 |
 | 提交响应 `data` | `{task_id, status, queue_position}` | UnifiedResponseModel 信封 | 调用方 |
 | 任务视图 `data` | `{task_id, status, queue_position?, progress?, partial?, failure?, result?, created_at, updated_at}` | `result` 仅 `completed` 时出现 | 调用方 |
 | `linsight_session_version.api_meta` | JSON，可空 | `{channel, instructions, credential_id, identity_mode}`；工作台发起的任务为空 | worker、审计排障 |

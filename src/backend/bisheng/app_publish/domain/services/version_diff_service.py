@@ -117,47 +117,46 @@ class VersionDiffService:
         only diff AC-41 asks for and the one side that never has a request of
         its own.
         """
-        app = await ReviewAccess.load_app(app_id)
-        role = await ReviewAccess.require(app, actor, (base_version_id, target_version_id))
-        base = await SnapshotBrowseService.load_version(app.id, base_version_id)
-        target = await SnapshotBrowseService.load_version(app.id, target_version_id)
-        base_bytes = await SnapshotBrowseService.load_snapshot_bytes(app.id, base)
-        target_bytes = await SnapshotBrowseService.load_snapshot_bytes(app.id, target)
+        async with ReviewAccess.scope(app_id, actor, (base_version_id, target_version_id)) as (app, role):
+            base = await SnapshotBrowseService.load_version(app.id, base_version_id)
+            target = await SnapshotBrowseService.load_version(app.id, target_version_id)
+            base_bytes = await SnapshotBrowseService.load_snapshot_bytes(app.id, base)
+            target_bytes = await SnapshotBrowseService.load_snapshot_bytes(app.id, target)
 
-        try:
-            budget = await asyncio.to_thread(cls._compute, base_bytes, target_bytes)
-        except AppPublishError as exc:
-            # ``safe_extract`` speaks in deploy-time codes (16201 / 16202). At
-            # review time the developer did nothing wrong — the stored bytes
-            # are — so the caller hears "snapshot unavailable" with the cause.
-            logger.warning(
-                f"app_publish.diff_snapshot_invalid app_id={app.id} base={base_version_id} "
-                f"target={target_version_id} code={exc.Code}"
-            )
-            raise AppVersionSnapshotUnavailableError(
-                msg="快照无法解析, 无法比较",
-                details={"app_id": app.id, "reason": "unreadable_archive", "cause": exc.Code},
-                hints=["请联系管理员检查对象存储中的快照"],
-            ) from exc
+            try:
+                budget = await asyncio.to_thread(cls._compute, base_bytes, target_bytes)
+            except AppPublishError as exc:
+                # ``safe_extract`` speaks in deploy-time codes (16201 / 16202). At
+                # review time the developer did nothing wrong — the stored bytes
+                # are — so the caller hears "snapshot unavailable" with the cause.
+                logger.warning(
+                    f"app_publish.diff_snapshot_invalid app_id={app.id} base={base_version_id} "
+                    f"target={target_version_id} code={exc.Code}"
+                )
+                raise AppVersionSnapshotUnavailableError(
+                    msg="快照无法解析, 无法比较",
+                    details={"app_id": app.id, "reason": "unreadable_archive", "cause": exc.Code},
+                    hints=["请联系管理员检查对象存储中的快照"],
+                ) from exc
 
-        return {
-            "base": SnapshotBrowseService.version_payload(base),
-            "target": SnapshotBrowseService.version_payload(target),
-            "role": role,
-            "secret_references": cls.secret_reference_diff(base.capabilities, target.capabilities),
-            "summary": {
-                "files_changed": budget.files_changed,
-                "additions": budget.additions,
-                "deletions": budget.deletions,
-                "truncated": budget.truncated,
-            },
-            "files": budget.files,
-            "patches": budget.patches,
-        }
+            return {
+                "base": SnapshotBrowseService.version_payload(base),
+                "target": SnapshotBrowseService.version_payload(target),
+                "role": role,
+                "secret_references": cls.secret_reference_diff(base.capabilities, target.capabilities),
+                "summary": {
+                    "files_changed": budget.files_changed,
+                    "additions": budget.additions,
+                    "deletions": budget.deletions,
+                    "truncated": budget.truncated,
+                },
+                "files": budget.files,
+                "patches": budget.patches,
+            }
 
-    # ------------------------------------------------------------------
-    # the walk (runs on a worker thread)
-    # ------------------------------------------------------------------
+        # ------------------------------------------------------------------
+        # the walk (runs on a worker thread)
+        # ------------------------------------------------------------------
 
     @classmethod
     def _compute(cls, base_bytes: bytes, target_bytes: bytes) -> _Budget:

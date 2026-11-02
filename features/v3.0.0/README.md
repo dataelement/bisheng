@@ -1,5 +1,7 @@
 # v3.0.0 Feature 索引（应用工场）
 
+2026-11-02 增量：[F117 知识空间详情读取优化](./117-space-info-read-optimization/spec.md) — 按用户要求将已评审的中粮 `/info` 优化适配到主线；保留撤权重入、分享预览和主线下载契约。本地验证完成，真实部署验收待执行，见 [验证记录](./117-space-info-read-optimization/validation.md)。
+
 **版本目标**：交付《3.0 应用工场 PRD-1》**v2.0**——专业开发者通道（DEV）、应用运行时与发布（RT）、治理与管理面（GOV）共 21 项，及伴生《3.0 开放 API 鉴权与身份传递 PRD》**v2.1** 的 v2 开放 API 鉴权改造。界面承载面落 platform「构建 → 应用」（托管应用 = 与工作流 / 助手并列的第三种类型），运行时 compose / k8s 双形态。
 
 **版本契约**：[release-contract.md](./release-contract.md)

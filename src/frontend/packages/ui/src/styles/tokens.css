@@ -335,9 +335,10 @@
 /* Reserved mobile typography, disabled by default.
  * Only an explicit data-mobile-typography="enabled" on <html> activates
  * these remaps and the input floors below. No app sets this attribute.
- * Keep the draft values for a future typography decision. */
+ * Desktop embedded panes (data-bisheng-surface="desktop") keep desktop
+ * sizes even when the opt-in is set. Component classNames stay unchanged. */
 @media (max-width: 768px) {
-  :root[data-mobile-typography="enabled"] {
+  :root[data-mobile-typography="enabled"]:not([data-bisheng-surface="desktop"]) {
     --text-body-sm: var(--font-size-3);  --leading-body-sm: var(--line-height-3); /* 13→14 */
     --text-body: var(--font-size-4);     --leading-body: var(--line-height-4);    /* 14→16 */
     --text-h3: 1.0625rem;                --leading-h3: 1.5625rem;                 /* 18→17 / 25 */
@@ -348,9 +349,9 @@
   }
 }
 
-/* Reserved field remap; uses the same opt-in as reading typography. */
+/* Reserved field remap; uses the same opt-in and desktop-pane exclusion. */
 @media (max-width: 768px), (hover: none) and (pointer: coarse) {
-  :root[data-mobile-typography="enabled"] {
+  :root[data-mobile-typography="enabled"]:not([data-bisheng-surface="desktop"]) {
     --text-field: max(var(--font-size-4), 16px);
     --leading-field: max(var(--line-height-4), 24px);
     --text-field-lg: max(var(--font-size-4), 16px);
@@ -531,10 +532,11 @@
 }
 
 /* Reserved iOS input floor; disabled with the rest of mobile typography.
- * Preserve larger inherited or user-selected sizes when explicitly enabled. */
+ * Preserve larger inherited or user-selected sizes when explicitly enabled.
+ * Desktop embedded panes keep their own size. */
 @media (max-width: 768px), (hover: none) and (pointer: coarse) {
-  :root[data-mobile-typography="enabled"] input.input-no-zoom,
-  :root[data-mobile-typography="enabled"] textarea.input-no-zoom {
+  :root[data-mobile-typography="enabled"]:not([data-bisheng-surface="desktop"]) input.input-no-zoom,
+  :root[data-mobile-typography="enabled"]:not([data-bisheng-surface="desktop"]) textarea.input-no-zoom {
     font-size: max(1em, 1rem, 16px);
     line-height: 1.5;
   }

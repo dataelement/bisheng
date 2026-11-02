@@ -1797,9 +1797,10 @@ html {
 }
 
 /* Reserved legacy input floor. Opt in through the same root attribute as
-   @bisheng/ui; mobile typography is disabled by default. */
+   @bisheng/ui; mobile typography is disabled by default. Desktop embedded
+   panes keep desktop sizes. */
 @media (max-width: 767px) {
-  :root[data-mobile-typography="enabled"] :is(
+  :root[data-mobile-typography="enabled"]:not([data-bisheng-surface="desktop"]) :is(
     input[type='text'],
     input[type='search'],
     input[type='email'],

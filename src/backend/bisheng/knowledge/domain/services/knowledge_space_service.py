@@ -3,6 +3,8 @@ import json
 import logging
 import re
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime
 from hashlib import sha256
@@ -91,6 +93,7 @@ from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
     KnowledgeSpaceTagLibraryDao,
 )
 from bisheng.knowledge.domain.models.knowledge_space_user_pin import KnowledgeSpaceUserPinDao
+from bisheng.knowledge.domain.repositories.knowledge_space_listing_repository import KnowledgeSpaceListingRepository
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FolderUploadItem,
     InitialPermissionApplyResult,
@@ -130,9 +133,11 @@ from bisheng.permission.application.access import (
 from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
     batch_check_business_visible,
+    batch_check_verified_business_actions,
     batch_check_verified_business_visible,
     check_business_action,
 )
+from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
 from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.permission.application.initial_grant import (
     InitialGrantAddition,
@@ -207,6 +212,8 @@ _logger = logging.getLogger(__name__)
 _CHILD_PERMISSION_SCAN_BATCH_SIZE = 100
 _JOINED_VISIBLE_MAX_RESULTS = 5_000
 _JOINED_DB_ID_BATCH_SIZE = 500
+_MANAGED_VISIBLE_MAX_RESULTS = 5_000
+_MANAGED_PERMISSION_BATCH_SIZE = 100
 # F040: keyword-search batch-scan window. A batch shrunk by ReBAC visibility
 # filtering is refilled from the next OFFSET window, so this only bounds per-round
 # DB fetch + visibility evaluation, not the page size.
@@ -233,6 +240,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         initial_grant_application: InitialGrantApplication | None = None,
         prospective_grant_application: ProspectiveGrantApplication | None = None,
         knowledge_file_repo: "KnowledgeFileRepository | None" = None,
+        space_listing_repository: KnowledgeSpaceListingRepository | None = None,
     ):
         self.request = request
         self.login_user = login_user
@@ -243,6 +251,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.initial_grant_application = initial_grant_application
         self.prospective_grant_application = prospective_grant_application
         self.knowledge_file_repo = knowledge_file_repo
+        self.space_listing_repository = space_listing_repository or KnowledgeSpaceListingRepository()
         # Injected by DI factory after construction (same pattern as message_service).
         # When set, list_space_children will exclude non-primary version files and
         # return version enrichment fields.
@@ -421,9 +430,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         has_visible: bool,
     ) -> SpaceSubscriptionStatusEnum:
-        """Treat effective visibility as joined without hiding workflow states."""
-        if subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED and has_visible:
+        """Current visibility wins; revoked access must not retain a stale joined state."""
+        if has_visible:
             return SpaceSubscriptionStatusEnum.SUBSCRIBED
+        if subscription_status == SpaceSubscriptionStatusEnum.SUBSCRIBED:
+            return SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
         return subscription_status
 
     @staticmethod
@@ -489,50 +500,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
         for space in spaces:
             space.file_num = count_map.get(int(space.id), 0)
 
-    async def _format_accessible_spaces(
+    async def _format_managed_space_rows(
         self,
-        space_ids: list[int],
-        order_by: str,
+        spaces: list[Knowledge],
         *,
-        memberships: list[SpaceChannelMember] | None = None,
-        exclude_created: bool = False,
-        required_action: str = "visible",
+        memberships: list[SpaceChannelMember],
+        action_map: dict[str, frozenset[str]],
     ) -> list[KnowledgeRead]:
-        if not space_ids:
-            return []
-
-        membership_map = {int(member.business_id): member for member in (memberships or [])}
-        spaces = await KnowledgeDao.async_get_spaces_by_ids(space_ids, order_by)
-        if exclude_created:
-            spaces = [space for space in spaces if space.user_id != self.login_user.user_id]
+        """Decorate authorized rows in their existing database order."""
         if not spaces:
             return []
+        membership_map = {int(member.business_id): member for member in memberships}
 
         # Pin state is a per-user preference stored in knowledge_space_user_pin,
         # decoupled from the membership row (a space may be pinned even when
         # reached only via ReBAC / department authorization, with no member row).
         pinned_ids = await KnowledgeSpaceUserPinDao.list_pinned_space_ids(self.login_user.user_id)
 
-        requested_actions = tuple(
-            dict.fromkeys(
-                (
-                    "visible",
-                    "manage_permission",
-                    required_action,
-                )
-            )
-        )
-        action_map = await self._batch_actions(
-            "knowledge_space",
-            [space.id for space in spaces],
-            requested_actions,
-        )
-
         pinned_spaces = []
         normal_spaces = []
         for space in spaces:
             effective_actions = action_map.get(str(space.id), frozenset())
-            if "visible" not in effective_actions or required_action not in effective_actions:
+            if not {"visible", "edit"}.issubset(effective_actions):
                 continue
             member_conf = membership_map.get(space.id)
             result = KnowledgeSpaceInfoResp(
@@ -1616,86 +1605,137 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
     async def get_space_info(self, space_id: int) -> KnowledgeSpaceInfoResp:
-        from bisheng.worker import rebuild_knowledge_celery
-
-        space, has_content_permission = await self._require_space_info_permission(space_id)
-
-        follower_num = await SpaceChannelMemberDao.async_count_space_members(space_id)
-        total_file_num = (await KnowledgeFileDao.async_count_success_files_batch([space_id])).get(space_id, 0)
-        result = KnowledgeSpaceInfoResp(**space.model_dump())
-        if space.user_id != self.login_user.user_id:
-            create_user = await UserDao.aget_user(space.user_id)
-            result.user_name = create_user.user_name if create_user else str(space.user_id)
-        else:
-            result.user_name = self.login_user.user_name
-        if space.user_id == self.login_user.user_id:
-            result.user_role = UserRoleEnum.CREATOR
-            self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
-        else:
-            has_joined_visibility = await self._has_joined_visibility(
-                space_id,
-                has_content_permission=has_content_permission,
-            )
-            subscription_status = SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
-            member_info = await SpaceChannelMemberDao.async_find_member(
-                space_id=space.id,
-                user_id=self.login_user.user_id,
-            )
-            if member_info:
-                subscription_status = self._resolve_subscription_status(member_info)
-                if member_info.is_active:
-                    result.user_role = member_info.user_role
-            subscription_status = self._resolve_effective_subscription_status(
-                subscription_status,
-                has_visible=has_joined_visibility,
-            )
-            self._apply_subscription_flags(result, subscription_status)
-            if result.user_role is None and has_content_permission:
-                result.user_role = (
-                    UserRoleEnum.ADMIN
-                    if await self._check_action(
-                        "knowledge_space",
-                        space_id,
-                        "manage_permission",
-                    )
-                    else UserRoleEnum.MEMBER
-                )
-        result.follower_num = follower_num
-        result.file_num = total_file_num
-        # The share link has to tell "already has access" from "may only preview
-        # and apply", and `user_role` cannot: it is absent for a non-member, and
-        # the client maps an absent role to MEMBER — the same value a real member
-        # gets. Report the effective actions the way the space list and the
-        # channel detail already do, so `visible` answers it outright.
-        #
-        # Only for a caller who holds the space. The share/square preview deliberately
-        # answers without `visible` — asking the permission runtime for a viewer
-        # who has none would both cost a lookup and require a runtime the preview
-        # path does not depend on. No actions is the honest answer there.
-        result.actions = (
-            sorted(await self._get_effective_actions("knowledge_space", space_id)) if has_content_permission else []
+        request_started_at = perf_counter()
+        stage = "prepare"
+        stage_elapsed_ms = dict.fromkeys(
+            (
+                "prepare_elapsed_ms",
+                "auth_elapsed_ms",
+                "member_count_elapsed_ms",
+                "file_count_elapsed_ms",
+                "creator_elapsed_ms",
+                "subscription_role_elapsed_ms",
+                "department_elapsed_ms",
+                "auto_tag_elapsed_ms",
+                "rebuild_elapsed_ms",
+            ),
+            0.0,
         )
-        await self._decorate_department_metadata([result])
-        await self._decorate_auto_tag_for_info(result)
+        has_content_permission: bool | None = None
 
-        if space.state != KnowledgeState.PUBLISHED.value:
-            current_tid = get_current_tenant_id()
-            if space.tenant_id is None or current_tid in (None, space.tenant_id):
-                rebuild_knowledge_celery.delay(
-                    space_id,
-                    new_model_id=space.model,
-                    invoke_user_id=self.login_user.user_id,
-                )
-            else:
-                logger.warning(
-                    "skip knowledge space rebuild across tenant boundary: "
-                    "space_id={} space_tenant_id={} current_tenant_id={} user_id={}",
-                    space.id,
-                    space.tenant_id,
-                    current_tid,
-                    self.login_user.user_id,
-                )
+        @contextmanager
+        def measure_stage(name: str) -> Iterator[None]:
+            nonlocal stage
+            stage = name
+            started_at = perf_counter()
+            try:
+                yield
+            finally:
+                # Include the time spent in a stage even when it raises.
+                stage_elapsed_ms[f"{name}_elapsed_ms"] += (perf_counter() - started_at) * 1000
 
+        def emit_info_metric(*, status: str, error_type: str | None = None) -> None:
+            emit_metric(
+                "knowledge_space_info",
+                status=status,
+                space_id=space_id,
+                has_content_permission=has_content_permission,
+                failed_stage=stage if status == "error" else None,
+                error_type=error_type,
+                actor_resolve_count=self._permission_actor_resolve_count,
+                actor_cache_hits=self._permission_actor_cache_hits,
+                actor_resolve_elapsed_ms=self._permission_actor_resolve_elapsed_ms,
+                total_elapsed_ms=(perf_counter() - request_started_at) * 1000,
+                **stage_elapsed_ms,
+            )
+
+        try:
+            with measure_stage("prepare"):
+                from bisheng.worker import rebuild_knowledge_celery
+
+            with measure_stage("auth"):
+                space, has_content_permission = await self._require_space_info_permission(space_id)
+
+            with measure_stage("member_count"):
+                follower_num = await SpaceChannelMemberDao.async_count_space_members(space_id)
+            with measure_stage("file_count"):
+                total_file_num = (await KnowledgeFileDao.async_count_success_files_batch([space_id])).get(space_id, 0)
+            with measure_stage("prepare"):
+                result = KnowledgeSpaceInfoResp(**space.model_dump())
+                result.follower_num = follower_num
+                result.file_num = total_file_num
+            with measure_stage("creator"):
+                if space.user_id != self.login_user.user_id:
+                    create_user = await UserDao.aget_user(space.user_id)
+                    result.user_name = create_user.user_name if create_user else str(space.user_id)
+                else:
+                    result.user_name = self.login_user.user_name
+
+            with measure_stage("subscription_role"):
+                if space.user_id == self.login_user.user_id:
+                    result.user_role = UserRoleEnum.CREATOR
+                    self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
+                else:
+                    has_joined_visibility = await self._has_joined_visibility(
+                        space_id,
+                        has_content_permission=has_content_permission,
+                    )
+                    subscription_status = SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+                    member_info = await SpaceChannelMemberDao.async_find_member(
+                        space_id=space.id,
+                        user_id=self.login_user.user_id,
+                    )
+                    if member_info:
+                        subscription_status = self._resolve_subscription_status(member_info)
+                        if member_info.is_active and has_content_permission:
+                            result.user_role = member_info.user_role
+                    subscription_status = self._resolve_effective_subscription_status(
+                        subscription_status,
+                        has_visible=has_joined_visibility,
+                    )
+                    self._apply_subscription_flags(result, subscription_status)
+                    if result.user_role is None and has_content_permission:
+                        result.user_role = (
+                            UserRoleEnum.ADMIN
+                            if await self._check_action(
+                                "knowledge_space",
+                                space_id,
+                                "manage_permission",
+                            )
+                            else UserRoleEnum.MEMBER
+                        )
+            # The share-link guard only needs the entry's visible decision.
+            # Full button permissions are fetched through my-permissions.
+            with measure_stage("prepare"):
+                result.actions = ["visible"] if has_content_permission else []
+            with measure_stage("department"):
+                await self._decorate_department_metadata([result])
+            with measure_stage("auto_tag"):
+                await self._decorate_auto_tag_for_info(result)
+
+            with measure_stage("rebuild"):
+                if space.state != KnowledgeState.PUBLISHED.value:
+                    current_tid = get_current_tenant_id()
+                    if space.tenant_id is None or current_tid in (None, space.tenant_id):
+                        rebuild_knowledge_celery.delay(
+                            space_id,
+                            new_model_id=space.model,
+                            invoke_user_id=self.login_user.user_id,
+                        )
+                    else:
+                        logger.warning(
+                            "skip knowledge space rebuild across tenant boundary: "
+                            "space_id={} space_tenant_id={} current_tenant_id={} user_id={}",
+                            space.id,
+                            space.tenant_id,
+                            current_tid,
+                            self.login_user.user_id,
+                        )
+        except Exception as exc:
+            emit_info_metric(status="error", error_type=type(exc).__name__)
+            raise
+
+        emit_info_metric(status="success")
         return result
 
     async def clear_space(self, space_id: int) -> None:
@@ -2009,43 +2049,136 @@ class KnowledgeSpaceService(KnowledgeUtils):
             members = [member for member in members if int(member.business_id) not in department_space_ids]
         return await self._format_member_spaces(members, order_by)
 
-    async def _scan_space_action_ids(
-        self,
-        action: str,
-    ) -> list[int]:
-        result: list[int] = []
-        cursor = None
-        while True:
-            rows = await KnowledgeDao.aget_all_knowledge(
-                knowledge_type=KnowledgeTypeEnum.SPACE,
-                sort_by="update_time",
-                limit=100,
-                cursor=cursor,
-            )
-            if not rows:
-                break
-            action_map = await self._batch_actions(
-                "knowledge_space",
-                [row.id for row in rows],
-                (action,),
-            )
-            result.extend(int(row.id) for row in rows if action in action_map.get(str(row.id), frozenset()))
-            if len(rows) < 100:
-                break
-            last = rows[-1]
-            cursor = [last.update_time, last.id]
-        return result
-
     async def get_my_managed_spaces(self, order_by: str = "name") -> list[KnowledgeRead]:
-        members = await SpaceChannelMemberDao.async_get_user_managed_members(self.login_user.user_id)
-        space_ids = {int(member.business_id) for member in members}
-        space_ids.update(await self._scan_space_action_ids("manage_permission"))
-        return await self._format_accessible_spaces(
-            list(space_ids),
-            order_by,
-            memberships=members,
-            required_action="manage_permission",
-        )
+        """Use visible IDs and bulk edit checks for non-global actors."""
+        started = perf_counter()
+        stage = "actor"
+        elapsed = dict.fromkeys(("actor", "visible_ids", "candidates", "members", "permission", "metadata"), 0.0)
+        visible_count = loaded_count = batch_count = 0
+        result: list[KnowledgeRead] = []
+        status = "error"
+        error_type = None
+        system_scope = False
+
+        @contextmanager
+        def measure(name: str):
+            nonlocal stage
+            stage = name
+            phase_started = perf_counter()
+            try:
+                yield
+            finally:
+                elapsed[name] += (perf_counter() - phase_started) * 1000
+
+        try:
+            with measure("actor"):
+                actor = await self._permission_actor()
+                runtime = await get_f048_runtime()
+                system_scope = actor.super_admin and actor.data_scope == DATA_SCOPE_ALL
+            visible_ids: list[int] | None = None
+            if not system_scope:
+                with measure("visible_ids"):
+                    visible = await runtime.list_visible_objects(
+                        actor, resource_type="knowledge_space", max_results=_MANAGED_VISIBLE_MAX_RESULTS
+                    )
+                    if visible.resource_type != "knowledge_space" or visible.status != "NORMAL":
+                        raise PermissionEnumerationIncompleteError(msg="Knowledge-space enumeration is incomplete")
+                    try:
+                        visible_ids = list(dict.fromkeys(int(value) for value in visible.object_ids))
+                    except (TypeError, ValueError) as exc:
+                        raise PermissionEnumerationIncompleteError(
+                            msg="Knowledge-space enumeration returned an invalid ID", exception=exc
+                        ) from exc
+                    if any(str(int(value)) != value or int(value) <= 0 for value in visible.object_ids):
+                        raise PermissionEnumerationIncompleteError(
+                            msg="Knowledge-space enumeration returned an invalid ID"
+                        )
+                    if len(visible_ids) > _MANAGED_VISIBLE_MAX_RESULTS:
+                        raise PermissionEnumerationIncompleteError(msg="Knowledge-space enumeration exceeded capacity")
+                    visible_count = len(visible_ids)
+            with measure("candidates"):
+                spaces = (
+                    await self.space_listing_repository.list_spaces(visible_ids, order_by)
+                    if visible_ids is None or visible_ids
+                    else []
+                )
+                # Defense against stale enumeration IDs and an incorrectly
+                # scoped business loader, including the global-admin branch.
+                spaces = [space for space in spaces if space.tenant_id == actor.current_tenant_id]
+                loaded_count = len(spaces)
+            with measure("members"):
+                members = (
+                    await SpaceChannelMemberDao.async_get_user_managed_members(self.login_user.user_id)
+                    if spaces
+                    else []
+                )
+            action_map: dict[str, frozenset[str]] = {}
+            with measure("permission"):
+                if system_scope:
+                    action_map = {
+                        str(space.id): frozenset(("visible", "edit", "manage_permission")) for space in spaces
+                    }
+                elif spaces:
+                    adapter = self.f048_permission_adapter or await self._resource_adapter("knowledge_space")
+                    member_ids = {int(member.business_id) for member in members}
+                    rows_by_id = {str(space.id): space for space in spaces}
+                    for offset in range(0, len(spaces), _MANAGED_PERMISSION_BATCH_SIZE):
+                        batch_count += 1
+                        targets = await adapter.resolve_permission_targets_from_rows(
+                            rows=spaces[offset : offset + _MANAGED_PERMISSION_BATCH_SIZE],
+                            resource_type="knowledge_space",
+                            actor=actor,
+                        )
+                        edit_map = await batch_check_verified_business_actions(
+                            actor=actor, targets=targets, actions=("edit",)
+                        )
+                        editable = tuple(
+                            target
+                            for target in targets
+                            if "edit" in edit_map.get((target.resource_type, target.resource_id), frozenset())
+                        )
+                        visible_map = await batch_check_verified_business_visible(actor=actor, targets=editable)
+                        allowed = tuple(
+                            target
+                            for target in editable
+                            if visible_map.get((target.resource_type, target.resource_id), False)
+                        )
+                        # Management is display metadata only. Do not require
+                        # it from an editor or expand it for known member roles.
+                        role_targets = tuple(
+                            target
+                            for target in allowed
+                            if int(target.resource_id) not in member_ids
+                            and rows_by_id[target.resource_id].user_id != self.login_user.user_id
+                        )
+                        roles = await batch_check_verified_business_actions(
+                            actor=actor, targets=role_targets, actions=("manage_permission",)
+                        )
+                        for target in allowed:
+                            action_map[target.resource_id] = frozenset(("visible", "edit")) | roles.get(
+                                (target.resource_type, target.resource_id), frozenset()
+                            )
+            with measure("metadata"):
+                result = await self._format_managed_space_rows(spaces, memberships=members, action_map=action_map)
+            status = "success"
+            return result
+        except Exception as exc:
+            error_type = type(exc).__name__
+            raise
+        finally:
+            emit_metric(
+                "knowledge_space_managed",
+                status=status,
+                system_scope=system_scope,
+                visible_count=visible_count,
+                candidate_count=loaded_count,
+                batch_count=batch_count,
+                returned_count=len(result),
+                total_elapsed_ms=(perf_counter() - started) * 1000,
+                failed_stage=stage if status == "error" else None,
+                error_type=error_type,
+                **{f"{name}_elapsed_ms": value for name, value in elapsed.items()},
+            )
 
     async def get_my_followed_spaces(self, order_by: str = "update_time") -> list[KnowledgeRead]:
         """Return complete personally visible spaces created by another user."""
@@ -2340,7 +2473,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             subscription_status = self._resolve_effective_subscription_status(
                 subscription_status,
-                has_visible=visible_map.get(str(space.id), False),
+                has_visible=space.user_id == self.login_user.user_id or visible_map.get(str(space.id), False),
             )
             result_list.append(
                 KnowledgeSpaceInfoResp(
@@ -4892,6 +5025,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         if space.auth_type == AuthTypeEnum.PRIVATE:
             raise SpaceSubscribePrivateError()
+        if space.user_id == self.login_user.user_id:
+            return {"status": "subscribed", "space_id": space_id}
 
         target_status = (
             MembershipStatusEnum.ACTIVE if space.auth_type == AuthTypeEnum.PUBLIC else MembershipStatusEnum.PENDING
@@ -4899,16 +5034,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         existing = await SpaceChannelMemberDao.async_find_member(space_id, self.login_user.user_id)
         if existing is not None:
-            if existing.user_role != UserRoleEnum.MEMBER:
-                return {
-                    "status": "subscribed",
-                    "space_id": space_id,
-                }
-            if existing.status == MembershipStatusEnum.ACTIVE:
-                return {
-                    "status": "subscribed",
-                    "space_id": space_id,
-                }
+            if existing.user_role != UserRoleEnum.MEMBER or existing.status == MembershipStatusEnum.ACTIVE:
+                has_visible = await self._has_joined_visibility(
+                    space_id,
+                    has_content_permission=await self._check_action("knowledge_space", space_id, "visible"),
+                )
+                if has_visible:
+                    return {
+                        "status": "subscribed",
+                        "space_id": space_id,
+                    }
             # NOTE: no early "already pending → return" short-circuit here. That
             # trusted a possibly-stale async_find_member read (which has returned
             # phantom PENDING rows on DM under rapid requests), returning success

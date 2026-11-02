@@ -23,6 +23,7 @@ import { Checkbox } from '@bisheng/ui';
 import { useLocalize } from "~/hooks";
 import { canMutatePermissionAssignee } from "./assigneePolicy";
 import { SourceBadge } from "./SourceBadge";
+import { PermissionModelStatus } from "./PermissionModelStatus";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 import { SubjectSearchUser } from "./SubjectSearchUser";
 import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup";
@@ -432,6 +433,7 @@ export function PermissionGrantTab({
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-[#818181]">
                     <SourceBadge source={assignee.source} />
+                    <PermissionModelStatus active={assignee.model.active} />
                     {assignee.protected && (
                       <span className="ml-2 inline-flex items-center gap-1">
                         <LockKeyhole aria-hidden="true" className="size-3" />

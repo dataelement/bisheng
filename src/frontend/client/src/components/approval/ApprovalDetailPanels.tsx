@@ -29,7 +29,7 @@ type TimelineNode = {
   status?: string | null;
 };
 
-export function TaskDetailPanel({ detail, localize, onBack, onOpenReview }: { detail: ApprovalTaskDetail; localize: ReturnType<typeof useLocalize>; onBack?: () => void; onOpenReview?: (target: AppReviewTarget) => void }) {
+export function TaskDetailPanel({ detail, localize, onBack, onOpenReview, onRefresh }: { detail: ApprovalTaskDetail; localize: ReturnType<typeof useLocalize>; onBack?: () => void; onOpenReview?: (target: AppReviewTarget) => void; onRefresh?: () => void }) {
   const instanceId = detail.instance_id;
   const serialNo = instanceId ? formatSerialNo(instanceId, detail.create_time) : "--";
 
@@ -54,7 +54,7 @@ export function TaskDetailPanel({ detail, localize, onBack, onOpenReview }: { de
   return (
     <div className="space-y-5">
       {isAppPublish ? (
-        <AppPublishDetailPanel detail={detail} scope="task" localize={localize} onBack={onBack} onOpenReview={onOpenReview} />
+        <AppPublishDetailPanel detail={detail} scope="task" localize={localize} onBack={onBack} onOpenReview={onOpenReview} onRefresh={onRefresh} />
       ) : (
         <>
           <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} instanceStatus={detail.instance_status} scope="task"
@@ -209,7 +209,7 @@ export function TaskDetailPanel({ detail, localize, onBack, onOpenReview }: { de
   );
 }
 
-export function RequestDetailPanel({ detail, localize, onBack, onOpenReview }: { detail: ApprovalInstanceDetail; localize: ReturnType<typeof useLocalize>; onBack?: () => void; onOpenReview?: (target: AppReviewTarget) => void }) {
+export function RequestDetailPanel({ detail, localize, onBack, onOpenReview, onRefresh }: { detail: ApprovalInstanceDetail; localize: ReturnType<typeof useLocalize>; onBack?: () => void; onOpenReview?: (target: AppReviewTarget) => void; onRefresh?: () => void }) {
   const id = detail.instance_id ?? detail.id;
   const serialNo = id ? formatSerialNo(Number(id), detail.create_time) : "--";
 
@@ -235,7 +235,7 @@ export function RequestDetailPanel({ detail, localize, onBack, onOpenReview }: {
   return (
     <div className="space-y-5">
       {isAppPublish ? (
-        <AppPublishDetailPanel detail={detail} scope="instance" localize={localize} onBack={onBack} onOpenReview={onOpenReview} />
+        <AppPublishDetailPanel detail={detail} scope="instance" localize={localize} onBack={onBack} onOpenReview={onOpenReview} onRefresh={onRefresh} />
       ) : (
         <>
           <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} scope="instance" serialNo={serialNo}
