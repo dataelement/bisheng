@@ -14,7 +14,7 @@ const previous = await (() => ({ useToast: () => ({ message: mock.message }) }))
 const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
 return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
 })
-vi.mock('@/components/bs-comp/selectComponent/knowledge', () => ({ default: ({ onChange }: { onChange: (value: { value: string }[]) => void }) => <button onClick={() => onChange([{ value: 'qa-1' }])}>Select knowledge</button> }))
+vi.mock('@/components/bs-comp/selectComponent/QaKnowledgeSelect', () => ({ QaKnowledgeSelect: ({ onChange }: { onChange: (value: { value: string }[]) => void }) => <button onClick={() => onChange([{ value: 'qa-1' }])}>Select knowledge</button> }))
 afterEach(cleanup)
 beforeEach(() => {
     vi.clearAllMocks()
