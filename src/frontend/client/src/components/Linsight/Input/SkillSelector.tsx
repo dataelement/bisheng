@@ -31,6 +31,18 @@ interface SkillRowProps {
     onToggle: (skill: TaskModeSkill) => void;
 }
 
+/** Full name + description shown when a row's text is clipped. */
+function SkillTooltipContent({ skill }: { skill: TaskModeSkill }) {
+    return (
+        <>
+            <p className="font-medium">{skill.display_name}</p>
+            {skill.description && (
+                <p className="mt-0.5 text-[10px] leading-[15px] text-white/70">{skill.description}</p>
+            )}
+        </>
+    );
+}
+
 /**
  * One selectable row. Name and description are each clamped to a single line;
  * the full text moves into a tooltip — but only when something actually
@@ -44,9 +56,7 @@ function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
     return (
         // Always wrapped: rendering the tooltip conditionally would instead swap
         // the row's element type and remount it on every measure.
-        <SharedTooltip disabled={!showTooltip} content={<><p className="font-medium">{skill.display_name}</p>{skill.description && (
-                        <p className="mt-0.5 text-[10px] leading-[15px] text-white/70">{skill.description}</p>
-                    )}</>} side="right"  align="start"><DropdownMenuItem
+        <SharedTooltip disabled={!showTooltip} content={<SkillTooltipContent skill={skill} />} side="right" align="start"><DropdownMenuItem
                     onSelect={(e) => {
                         e.preventDefault();
                         onToggle(skill);
@@ -75,6 +85,42 @@ function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
                     </div>
                     {isChecked && <Outlined.Check size={14} className="mt-1 shrink-0 text-blue-500" />}
                 </DropdownMenuItem></SharedTooltip>
+    );
+}
+
+/**
+ * Command-layout row: name and description share one line, so the description
+ * is the part that usually clips. Same rule as SkillRow — the tooltip with the
+ * full text mounts only when something actually overflows.
+ */
+function CommandSkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
+    const [nameRef, nameClipped] = useIsClipped<HTMLSpanElement>(skill.display_name);
+    const [descRef, descClipped] = useIsClipped<HTMLSpanElement>(skill.description);
+
+    return (
+        <SharedTooltip
+            disabled={!(nameClipped || descClipped)}
+            content={<SkillTooltipContent skill={skill} />}
+            side="top"
+            align="start"
+            contentClassName="max-w-[400px]"
+        >
+            <DropdownMenuItem
+                className="dsh-command-skill-row"
+                role="menuitemcheckbox"
+                aria-checked={isChecked}
+                onSelect={(event) => {
+                    event.preventDefault();
+                    onToggle(skill);
+                }}
+            >
+                <span ref={nameRef} className="dsh-command-name">{skill.display_name}</span>
+                {skill.description && (
+                    <span ref={descRef} className="dsh-command-description">{skill.description}</span>
+                )}
+                {isChecked && <Outlined.Check size={14} className="shrink-0 text-blue-500" />}
+            </DropdownMenuItem>
+        </SharedTooltip>
     );
 }
 
@@ -163,27 +209,14 @@ export function SkillSelector({ selected, onChange, layout }: SkillSelectorProps
                         </div>
                     ) : filtered.length === 0 ? (
                         <StateView size="inline" title={localize('com_linsight_skill_empty')} />
-                    ) : filtered.map((skill) => {
-                        const isChecked = selected.some((item) => item.name === skill.name);
-                        return (
-                            <DropdownMenuItem
-                                key={skill.name}
-                                className="dsh-command-skill-row"
-                                role="menuitemcheckbox"
-                                aria-checked={isChecked}
-                                onSelect={(event) => {
-                                    event.preventDefault();
-                                    handleToggle(skill);
-                                }}
-                            >
-                                <span className="dsh-command-name">{skill.display_name}</span>
-                                {skill.description && (
-                                    <span className="dsh-command-description">{skill.description}</span>
-                                )}
-                                {isChecked && <Outlined.Check size={14} className="shrink-0 text-blue-500" />}
-                            </DropdownMenuItem>
-                        );
-                    })}
+                    ) : filtered.map((skill) => (
+                        <CommandSkillRow
+                            key={skill.name}
+                            skill={skill}
+                            isChecked={selected.some((item) => item.name === skill.name)}
+                            onToggle={handleToggle}
+                        />
+                    ))}
                 </div>
             </div>
         );
