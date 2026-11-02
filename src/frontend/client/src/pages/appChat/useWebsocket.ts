@@ -78,6 +78,7 @@ export const useWebSocket = (helpers) => {
     const activationRef = useRef(createWorkflowActivation(helpers.chatId))
     activationRef.current = syncWorkflowActivation(activationRef.current, helpers.chatId)
 
+    const stoppedRef = useRef<Record<string, boolean>>({})
     const unavailableRef = useRef<Record<string, string>>({})
     const isUnavailable = () => unavailableCodes.has(String(helpers.appLost))
         || !!unavailableRef.current[helpers.chatId]
@@ -230,9 +231,17 @@ export const useWebSocket = (helpers) => {
             return
         }
 
+        // A manual stop freezes the visible answer while terminal frames supply its stored ID.
+        const stopped = stoppedRef.current[helpers.chatId] === true
+        if (stopped && !(data.category === 'processing' && data.type === 'close')
+            && data.category !== 'error' && data.type !== 'error') {
+            helpers.message.finishStoppedMsg(helpers.chatId, data)
+            return
+        }
+
         let workflowCloseAction: WorkflowCloseAction | null = null
         if (helpers.flow.flow_type === 10 && data.type === 'close' && data.category === 'processing') {
-            workflowCloseAction = decideWorkflowCloseAction({
+            workflowCloseAction = stopped ? 'manual' : decideWorkflowCloseAction({
                 data,
                 activation: activationRef.current,
                 enabled: standaloneContext?.autoRerunOnOpen ?? false,
@@ -331,7 +340,7 @@ export const useWebSocket = (helpers) => {
         }
         /***** 技能 end******/
         if (data.type === 'close' && data.category === 'processing') {
-            helpers.message.insetSeparator(helpers.chatId, 'com_chat_round_finished')
+            if (!stopped) helpers.message.insetSeparator(helpers.chatId, 'com_chat_round_finished')
             // 重启会话按钮,接收close确认后端处理结束后重启会话
             const restartCallback = restartCallbacks.get(helpers.chatId)
             if (restartCallback) {
@@ -396,6 +405,7 @@ export const useWebSocket = (helpers) => {
         if (submitData
             && (submitData.action === 'skill_input' || websocket && websocket.readyState === WebSocket.OPEN)) {
             const action = submitData.action
+            if (action !== ActionType.STOP) stoppedRef.current[helpers.chatId] = false
 
             switch (action) {
                 case ActionType.RESTART: {
@@ -521,6 +531,8 @@ export const useWebSocket = (helpers) => {
                     helpers.message.closeOutputMsg(submitData.data.data.output_result)
                     break;
                 case ActionType.STOP:
+                    stoppedRef.current[helpers.chatId] = true
+                    helpers.message.stopMsg(helpers.chatId)
                     sendWsMsg({ action: 'stop' })
                     break;
             }

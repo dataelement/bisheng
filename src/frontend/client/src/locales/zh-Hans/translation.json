@@ -1,4 +1,7 @@
 {
+  "appChat": {
+    "stopped": "已停止"
+  },
   "chatImage": {
     "processingRequired": "图片已保留。请切换到支持识图的模型，或请管理员配置图片解析服务后再发送。"
   },
