@@ -1,3 +1,10 @@
+## 2026-11-02 — 发现广场知识空间预览返回
+
+- 测试原图对应 `/square` 的知识空间预览抽屉。原组件内状态保持列表 URL，Desktop 相同 URL 导航提前返回；抽屉左侧中部收起入口及固定宽度影响可发现性与窄窗口可见性。
+- 预览现由 `previewSpace` URL 参数驱动，顶部提供本地化“返回”，关闭时保留来源分类；再次进入发现广场由路由直接关闭预览。宽度随视口收缩，上限 1000px。
+- 原版新增回归 5 项失败；修复后 7 文件 / 38 项通过。前端全量 lint/typecheck、Client 生产构建、i18n、架构和差异检查通过；macOS 实际 Electron 宿主、preload、预览组件的宽度/缩放/主题 12 组通过。
+- 基线 `725ee5bf38d4ff2d067763fb305817a730b238a4`。Client 部署及 Windows 安装版真实账号验收待执行，见[验证记录](verification/knowledge-square-navigation-20261102.md)。
+
 ## 2026-11-02 — 积分分配列表精简交付复核
 
 - 当前基线：`upstream/feat/bisheng-work-120-main@954f8ba9f7b979d3f2193caa173dbe28356700dd`；分支 `codex/credit-allocation-labels-pr-20261102`。原实现 `ecfccecea` 已完整恢复，业务组件与三语资源的内容与原提交一致；最新服务分支的其他修复完整保留。
