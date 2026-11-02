@@ -28,6 +28,8 @@ export type ChatMessageType = {
   files?: Array<{ data: string; type: string; data_type: string, file_name?: string }>;
   chatKey: string;
   end: boolean;
+  stopped?: boolean;
+  remark?: string;
   id?: number;
   source?: number;
   citations?: any[] | null;

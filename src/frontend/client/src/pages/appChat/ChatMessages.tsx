@@ -5,6 +5,7 @@ import type { CitationReferencesDesktopPayload } from "~/components/Chat/Message
 import { SelectionMessagesProvider, SelectAllBelowBanner } from "~/components/Chat/MessageSelection";
 import type { SelectableMessage } from "~/hooks/useMessageSelection";
 import { useLocalize } from "~/hooks";
+import { isAppMessageStopped } from "./appMessageStop";
 import GuideWord from "./components/GuideWord";
 import InputForm from "./components/InputForm";
 import InputFormSkill from "./components/InputFormSkill";
@@ -165,7 +166,7 @@ export default function ChatMessages({
                             data={msg} />;
                     case 'reasoning':
                     case 'reasoning_answer':
-                        return <ReasoningLog key={msg.id} loading={false} msg={msg.message} />;
+                        return <ReasoningLog key={msg.id} stopped={isAppMessageStopped(msg)} loading={false} msg={msg.message} />;
                     default:
                         return <div className="text-sm mt-2 border rounded-md p-2" key={msg.id}>Unknown message type</div>;
                 }

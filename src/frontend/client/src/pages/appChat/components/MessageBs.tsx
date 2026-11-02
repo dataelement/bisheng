@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Outlined } from "bisheng-icons";
 import { CheckIcon, ChevronDown, Loader2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
@@ -15,9 +16,10 @@ import { cn, copyText, formatStrTime } from "~/utils";
 import { AppChatFileList } from "./AppChatFileList";
 import MessageButtons from "./MessageButtons";
 import useLocalize from "~/hooks/useLocalize";
+import { isAppMessageStopped } from "../appMessageStop";
 
 
-export const ReasoningLog = ({ loading, msg = '' }) => {
+export const ReasoningLog = ({ loading, msg = '', stopped = false }) => {
     const t = useLocalize()
     const [open, setOpen] = useState(true)
 
@@ -30,6 +32,10 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
                     <Loader2 className="text-primary duration-300 animate-spin" />
                     <span>{t('com_bs_reasoning_thinking')}</span>
                 </div>
+                    : stopped ? <div className="flex items-center gap-2 text-body-sm text-text-3">
+                        <Outlined.Square size={14} aria-hidden="true" />
+                        <span>{t('appChat.stopped')}</span>
+                    </div>
                     : <div className="flex items-center font-bold gap-2 text-sm">
                         <div className="w-5 h-5 bg-[#05B353] rounded-full p-1" >
                             <CheckIcon size={14} className='text-white' />
@@ -68,6 +74,7 @@ export default function MessageBs({
 }: MessageBsProps) {
 
     const t = useLocalize()
+    const stopped = isAppMessageStopped(data)
     const [message, reasoningLog] = useMemo(() => {
         const msg = typeof data.message === 'string' ? data.message : data.message?.msg
         if (!msg) {
@@ -120,7 +127,7 @@ export default function MessageBs({
             />
         )}
         <div className="w-fit group max-w-[90%]">
-            <ReasoningLog loading={!data.end && (data.reasoning_log || reasoningLog)} msg={data.reasoning_log || reasoningLog} />
+            <ReasoningLog stopped={stopped} loading={!data.end && (data.reasoning_log || reasoningLog)} msg={data.reasoning_log || reasoningLog} />
             {!(data.reasoning_log && !message && !data.files.length) && <>
                 <div className="flex gap-2 items-center">
                     {data.sender ? <p className="text-gray-600 text-xs mb-1 ml-2">{data.sender}</p> : <p />}
@@ -159,6 +166,9 @@ export default function MessageBs({
                     </div>
                 </div>
             </>}
+            {stopped && <p role="status" className="ml-4 mt-2 text-body-sm text-text-3">
+                {t('appChat.stopped')}
+            </p>}
             {/* 附加信息 */}
             {
                 data.end && <div className="flex justify-between">
