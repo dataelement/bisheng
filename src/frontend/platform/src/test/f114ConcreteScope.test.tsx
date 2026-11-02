@@ -8,6 +8,11 @@ it('protects only dedicated management writes; shared reads and calls keep their
   expect(requiresManagementScope('post','/api/v1/apps/a/actions/resume')).toBe(true)
   expect(requiresManagementScope('patch','/api/v1/apps/a/data/tables/t/rows/1')).toBe(true)
 })
+it('keeps temporary uploads shared while protecting knowledge-scoped uploads',()=>{
+  expect(requiresManagementScope('post','/api/v1/knowledge/upload')).toBe(false)
+  expect(requiresManagementScope('post','/api/v1/knowledge/upload/')).toBe(false)
+  expect(requiresManagementScope('post','/api/v1/knowledge/upload/3')).toBe(true)
+})
 it('never derives an authorization scope from saved browser storage or global values',()=>{
   vi.stubGlobal('localStorage',{getItem:vi.fn(()=> '999'),setItem:vi.fn()})
   expect(managementRequestScope()).toBeNull()

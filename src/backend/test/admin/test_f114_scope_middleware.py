@@ -42,6 +42,29 @@ def test_shared_read_has_no_new_required_header(scoped_client):
     assert response.headers["X-Management-Tenant"] == "3"
 
 
+@pytest.mark.parametrize("is_super", [True, False])
+@pytest.mark.parametrize("path", ["/api/v1/knowledge/upload", "/api/v1/knowledge/upload/"])
+def test_temporary_upload_does_not_require_a_management_write_header(scoped_client, is_super, path):
+    client, resolver, super_check = scoped_client
+    super_check.return_value = is_super
+    response = client.post(path, files={"file": ("notes.txt", b"notes", "text/plain")})
+    assert response.status_code == 200
+    assert resolver.await_args.kwargs["for_write"] is False
+
+
+@pytest.mark.parametrize(
+    "headers,code", [({}, 19703), ({"X-Management-Tenant": "2"}, 19704), ({"X-Management-Tenant": "3"}, None)]
+)
+def test_knowledge_scoped_upload_keeps_management_write_protection(scoped_client, headers, code):
+    client, resolver, _super_check = scoped_client
+    response = client.post("/api/v1/knowledge/upload/3", headers=headers)
+    if code is None:
+        assert response.status_code == 200
+    else:
+        assert response.json()["status_code"] == code
+    assert resolver.await_args.kwargs["for_write"] is True
+
+
 @pytest.mark.parametrize("header,code", [({}, 19703), ({"X-Management-Tenant": "2"}, 19704)])
 def test_old_form_never_executes_in_new_scope(scoped_client, header, code):
     client, _resolver, _super_check = scoped_client

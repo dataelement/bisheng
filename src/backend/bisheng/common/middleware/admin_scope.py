@@ -78,7 +78,8 @@ _EXPECTED_SCOPE_WRITES = (
     (frozenset({"DELETE"}), r"/api/v1/flows/[^/]+"),
     (frozenset({"POST", "PUT"}), r"/api/v1/assistant"),
     (frozenset({"POST"}), r"/api/v1/assistant/(?:delete|status|flow|tool)"),
-    (frozenset({"POST"}), r"/api/v1/knowledge/(?:create|copy|qa/copy|upload(?:/[^/]+)?|tags|file/tags(?:/batch)?)"),
+    # Bare /knowledge/upload only stages a temporary file for shared chat/workflow callers.
+    (frozenset({"POST"}), r"/api/v1/knowledge/(?:create|copy|qa/copy|upload/[^/]+|tags|file/tags(?:/batch)?)"),
 )
 
 
