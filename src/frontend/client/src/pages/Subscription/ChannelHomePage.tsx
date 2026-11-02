@@ -100,7 +100,7 @@ export function ChannelHomePage({
     return (
         // The scroll area spans the full width so its scrollbar sits at the page edge, not
         // beside the column.
-        <div className={MODULE_HOME_FRAME}>
+        <div className={cn(MODULE_HOME_FRAME, "px-[clamp(1rem,3.5%,2rem)] py-6")}>
             <ModuleHomeHeader title={menuNames.channel}>
                 <Button onClick={onCreateChannel}>
                     <Outlined.Plus />
@@ -120,7 +120,7 @@ export function ChannelHomePage({
                                 // inset rule falls outside and its content lines up with the section title,
                                 // whatever the auto-fill column count is.
                                 <div className="overflow-hidden border-y border-border-deep">
-                                    <div className="-mb-px -ml-4 grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))]">
+                                    <div className="-mb-px -ml-4 grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))]">
                                         {section.channels.map((channel, i) => (
                                             <ChannelCard key={channel.id} channel={channel} index={i + 1} onSelect={onChannelSelect} />
                                         ))}

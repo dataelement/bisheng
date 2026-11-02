@@ -14,6 +14,7 @@ export interface ConversationLabels {
   confirmed: string;
   thinking: string;
   completed: string;
+  stopped?: string;
 }
 export interface ConversationMessageSlots {
   content: (text: string, message: ChatMessage) => ReactNode;
@@ -39,6 +40,8 @@ function ConversationRow({ message, canExecute, labels, slots, onChoice, onError
   const { text, reasoning } = splitMessageContent(message.text);
   const title = slots.title?.(message) ?? '';
   const logo = slots.avatar?.(message);
+  const stopped = message.raw.stopped === true || message.raw.remark === 'break_answer';
+  const stopStatus = stopped && labels.stopped ? <p role="status" className="ml-4 mt-2 text-body-sm text-text-3">{labels.stopped}</p> : undefined;
   if (message.kind === 'hidden') return null;
   if (['divider', 'separator'].includes(message.category)) {
     return <div className="flex items-center justify-center py-4 text-gray-400 text-sm">{slots.content(text, message)}</div>;
@@ -46,7 +49,7 @@ function ConversationRow({ message, canExecute, labels, slots, onChoice, onError
   if (message.category === 'guide_word') return <GreetingMessage title={title} logo={logo} footer={slots.footer?.(message, contentRef)}>
     <div ref={contentRef}>{slots.content(text, message)}</div>{slots.attachments?.(message)}
   </GreetingMessage>;
-  if (message.kind === 'reasoning') return <><ReasoningDetails text={text || message.reasoning} pending={!message.final} labels={labels} />{slots.attachments?.(message)}</>;
+  if (message.kind === 'reasoning') return <><ReasoningDetails text={text || message.reasoning} stopped={stopped} pending={!message.final && !stopped} labels={labels} />{stopStatus}{slots.attachments?.(message)}</>;
   if (message.kind === 'form' || message.kind === 'choice') {
     const options = Array.isArray(payload.options) ? payload.options.flatMap(item => {
       const option = asRecord(item); const id = sourceId(option.id);
@@ -80,9 +83,10 @@ function ConversationRow({ message, canExecute, labels, slots, onChoice, onError
   const reasoningText = message.reasoning || reasoning;
   return <MessageBubble title={title} logo={logo} sender={displayText(message.raw.sender)} contentRef={contentRef}
     selection={slots.selection?.(message)}
-    reasoning={<ReasoningDetails text={reasoningText} pending={!message.final} labels={labels} />}
+    reasoning={<ReasoningDetails text={reasoningText} stopped={stopped} pending={!message.final && !stopped} labels={labels} />}
     hideBody={!!reasoningText && !text && !message.files.length}
-    pending={message.kind !== 'user' && !message.final && !text && !message.files.length}
+    status={stopStatus}
+    pending={!stopped && message.kind !== 'user' && !message.final && !text && !message.files.length}
     attachments={slots.attachments?.(message)}
     footer={message.final ? slots.footer?.(message, contentRef) : undefined}>
     {message.kind === 'user' ? <div className="text-[#0D1638] dark:text-[#CFD5E8] text-base break-all whitespace-break-spaces">{text}</div>

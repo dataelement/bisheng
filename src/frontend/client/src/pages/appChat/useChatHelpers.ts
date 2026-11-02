@@ -2,6 +2,7 @@ import { workflowStreamForHost, startAssistantForHost, assistantStreamForHost } 
 /**
  * websocket辅助函数
  */
+import { finishStoppedAppMessage, stopAppMessages } from "./appMessageStop"
 import { produce } from "immer"
 import { useMemo } from "react"
 import { useRecoilState, useRecoilValue } from "recoil"
@@ -153,6 +154,24 @@ export default function useChatHelpers() {
 
     // 更新消息
     const message = {
+        stopMsg: (chatid: string) => {
+            setChats((prev) => updateChatMessages(prev, chatid, (messages) => {
+                const stopped = stopAppMessages(messages)
+                const hasStoppedAnswer = stopped.some((msg, index) => msg !== messages[index]
+                    && ['stream_msg', 'answer', 'output_msg'].includes(msg.category))
+                return hasStoppedAnswer ? stopped : [...stopped, {
+                    ...baseMsgItem,
+                    id: 'tmp-stop-' + generateUUID(8),
+                    is_bot: true,
+                    category: 'stream_msg',
+                    end: true,
+                    stopped: true,
+                }]
+            }))
+        },
+        finishStoppedMsg: (chatid: string, frame: Parameters<typeof finishStoppedAppMessage>[1]) => {
+            setChats((prev) => updateChatMessages(prev, chatid, (messages) => finishStoppedAppMessage(messages, frame)))
+        },
         createNodeMsg: (chatid: string, data: any) => {
             if (['output', 'condition'].includes(data.message?.node_id.split('_')[0])) return
 

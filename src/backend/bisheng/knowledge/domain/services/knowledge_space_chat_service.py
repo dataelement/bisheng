@@ -693,21 +693,16 @@ class KnowledgeSpaceChatService:
                 filters_by_kb[kb_id] = spec
 
         engine = self._retrieval_engine()
-        per_kb_results = await asyncio.gather(
-            *(
-                self._aretrieve_chunks_for_one(
-                    engine,
-                    kb_id,
-                    query=query,
-                    tag_names=(filters_by_kb.get(kb_id) or {}).get("tags") or [],
-                    max_content=max_content,
-                )
-                for kb_id in knowledge_base_ids
-            )
-        )
-
         flattened: list[tuple[int, Document]] = []
-        for chunks in per_kb_results:
+        # Version visibility uses one request-scoped AsyncSession across spaces.
+        for kb_id in knowledge_base_ids:
+            chunks = await self._aretrieve_chunks_for_one(
+                engine,
+                kb_id,
+                query=query,
+                tag_names=(filters_by_kb.get(kb_id) or {}).get("tags") or [],
+                max_content=max_content,
+            )
             flattened.extend(chunks)
         flattened = flattened[:top_k]
         await engine.attach_document_update_time(flattened)
