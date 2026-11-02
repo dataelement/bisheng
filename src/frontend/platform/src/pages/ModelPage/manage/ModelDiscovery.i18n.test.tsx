@@ -52,7 +52,6 @@ describe("model discovery with actual language resources", () => {
           <ModelDiscovery
             provider="openai"
             connectionVersion={0}
-            autoFetchVersion={0}
             existing={[]}
             getConnection={() => ({
               provider: "openai",
@@ -127,7 +126,6 @@ it.each([
         <ModelDiscovery
           provider="volcengine"
           connectionVersion={0}
-          autoFetchVersion={0}
           existing={[]}
           getConnection={() => ({ provider: "volcengine", config: {} })}
           onImport={vi.fn()}

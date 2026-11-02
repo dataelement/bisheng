@@ -168,7 +168,7 @@ def identify_type(item: dict) -> tuple[str | None, str]:
         ("tts", r"^(?:glm-tts|tts-1|cosyvoice|gpt-4o-mini-tts|qwen[^/]*-tts|gemini[^/]*-tts)"),
         (
             "llm",
-            r"^(?:gpt-|chatgpt-|o[134](?:-|$)|claude-|deepseek-(?:chat|reasoner|flash|pro|coder|r\d|v\d)|qwen(?:[0-9.]+)?-(?:turbo|plus|max|chat|\d+(?:\.\d+)?b|coder|vl|omni|next|instruct|flash|thinking)|doubao-(?:\d+(?:[-.]\d+)*-)?(?:seed(?:[-.]|$)|pro|lite|vision|thinking|ui-tars)|gemini-[\d.]|llama[\d.-]*|gemma[\d.-]*|mistral|mixtral|moonshot-|kimi-|glm-|minimax-m|hunyuan-)",
+            r"^(?:gpt-|chatgpt-|o[134](?:-|$)|claude-|deepseek-(?:chat|reasoner|flash|pro|coder|r\d|v\d)|qwen(?:[0-9.]+)?-(?:turbo|plus|max|chat|\d+(?:\.\d+)?b|coder|vl|omni|next|instruct|flash|thinking)|doubao-(?:\d+(?:[-.]\d+)*-)?(?:seed(?:[-.]|$)|pro|lite|vision|thinking|ui-tars)|gemini-[\d.]|llama[\d.-]*|gemma[\d.-]*|mistral|mixtral|moonshot-|kimi-|glm-|minimax-m|hunyuan-|hy\d|hy-)",
         ),
     )
     for kind, pattern in registry:
@@ -309,18 +309,26 @@ async def read_catalog(client: httpx.AsyncClient, method: str, url: str, **kwarg
 
 
 async def enrich_silicon(client: httpx.AsyncClient, url: str, headers: dict, models: dict) -> None:
-    """The official list exposes capability through filters, rather than row fields."""
+    """The official list exposes capability through filters, rather than row fields.
+
+    A filter that does not return a model array only skips that capability.
+    The unfiltered catalog has already been accepted.
+    """
     subtypes = ["chat", "embedding", "reranker", "speech-to-text", "text-to-image", "image-to-image", "text-to-video"]
 
     async def fetch(subtype):
-        return await read_catalog(client, "GET", url, headers=headers, params={"sub_type": subtype})
+        try:
+            payload = await read_catalog(client, "GET", url, headers=headers, params={"sub_type": subtype})
+        except ModelDiscoveryError as error:
+            if error.kwargs.get("reason") != "format":
+                raise
+            return []
+        rows = payload.get("data")
+        return rows if isinstance(rows, list) else []
 
     responses = await asyncio.gather(*(fetch(subtype) for subtype in subtypes))
     capabilities: dict[str, set[tuple[str | None, str]]] = {}
-    for subtype, payload in zip(subtypes, responses, strict=True):
-        rows = payload.get("data")
-        if not isinstance(rows, list):
-            raise ModelDiscoveryError(reason="format")
+    for subtype, rows in zip(subtypes, responses, strict=True):
         for row in rows:
             if isinstance(row, dict) and row.get("id") in models:
                 capabilities.setdefault(row["id"], set()).add(identify_type({"sub_type": subtype}))

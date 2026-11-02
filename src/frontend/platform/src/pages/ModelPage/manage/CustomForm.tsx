@@ -13,12 +13,12 @@ interface CustomFormProps {
     formData: ProviderConfig;
     modelTypes?: string[];
     onConnectionChange?: () => void;
-    onConnectionBlur?: () => void;
     providerName?: string;
     apiKeySite?: string;
 }
 export interface CustomFormHandle {
     getData(): [ProviderConfig, string];
+    getCatalogError(): string;
 }
 interface FormFieldProps {
     field: ConfigField;
@@ -51,7 +51,7 @@ function FormField({ field, value, providerName, apiKeySite, onChange }: FormFie
 }
 
 export const CustomForm = forwardRef<CustomFormHandle, CustomFormProps>(function CustomForm(
-    { showDefault, provider, formData, modelTypes = [], providerName, apiKeySite, onConnectionChange, onConnectionBlur }, ref,
+    { showDefault, provider, formData, modelTypes = [], providerName, apiKeySite, onConnectionChange }, ref,
 ) {
     const { t } = useTranslation();
     const [form, setForm] = useState(formData);
@@ -59,7 +59,8 @@ export const CustomForm = forwardRef<CustomFormHandle, CustomFormProps>(function
     const speechOnly = hasSpeech && modelTypes.every(isSpeechModelType);
     // Speech-only rows still need the catalog API key to list models. Saving
     // does not require it until a non-speech model is added.
-    const commonFields = (getModelProviders()[provider] || []).map((field) =>
+    const providerFields = getModelProviders()[provider] || [];
+    const commonFields = providerFields.map((field) =>
         speechOnly ? { ...field, required: false } : field,
     );
     const speechFields = hasSpeech ? getSpeechFields(provider, form, t) : [];
@@ -72,8 +73,11 @@ export const CustomForm = forwardRef<CustomFormHandle, CustomFormProps>(function
     useEffect(() => { setForm(formData); }, [formData]);
     useImperativeHandle(ref, () => ({
         getData: () => [values, getConfigError(values, fields)],
+        // Listing needs a credential. A blank address that already has a vendor
+        // default is filled in by the discovery service, so it does not block.
+        getCatalogError: () => getConfigError(values, providerFields.filter((field) => !field.default?.trim())),
     }));
-    return <div className="space-y-4" onBlur={onConnectionBlur}>
+    return <div className="space-y-4">
         {commonFields.map(field => <FormField key={field.key} field={field} value={values[field.key] || ''}
             providerName={providerName} apiKeySite={apiKeySite} onChange={handleChange} />)}
         {hasSpeech && <div className="my-3 rounded border p-3">

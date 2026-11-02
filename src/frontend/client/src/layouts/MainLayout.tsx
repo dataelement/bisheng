@@ -7,6 +7,7 @@ import KeepAlive from "react-activation";
 import { matchPath, Navigate, useLocation, useOutlet } from "react-router-dom";
 import { useRecoilState } from "recoil";
 import { usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
+import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { useAuthContext, useLocalize, useWorkbenchMenuNames } from "~/hooks";
 import { Button } from "~/components/ui/Button";

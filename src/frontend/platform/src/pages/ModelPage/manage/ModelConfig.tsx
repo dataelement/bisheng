@@ -88,7 +88,6 @@ export default function ModelConfig({
   const [detailLoading, setDetailLoading] = useState(id !== -1);
   const [detailReload, setDetailReload] = useState(0);
   const [connectionVersion, setConnectionVersion] = useState(0);
-  const [autoFetchVersion, setAutoFetchVersion] = useState(0);
 
   // Create mode reads the admin scope fresh instead of taking it from the
   // list page: the scope is a server-side lease that can expire while the
@@ -413,10 +412,6 @@ export default function ModelConfig({
           onConnectionChange={() =>
             setConnectionVersion((version) => version + 1)
           }
-          onConnectionBlur={() => {
-            const [, errorKey] = formRef.current.getData();
-            if (!errorKey) setAutoFetchVersion((version) => version + 1);
-          }}
         />
         <div className={formData.type ? "visible" : "invisible"}>
           <section className="mt-6 space-y-3">
@@ -436,16 +431,16 @@ export default function ModelConfig({
                 <ModelDiscovery
                   provider={formData.type}
                   connectionVersion={connectionVersion}
-                  autoFetchVersion={autoFetchVersion}
                   existing={formData.models.map((model) =>
                     model.model_name.trim(),
                   )}
                   getConnection={() => {
-                    const [config, errorKey] = formRef.current.getData();
-                    if (errorKey) {
-                      message({
+                    const [config] = formRef.current.getData();
+                    const missing = formRef.current.getCatalogError();
+                    if (missing) {
+                      toast.show({
                         type: "warning",
-                        message: `${errorKey} ${t("model.notBeEmpty")}`,
+                        message: `${missing} ${t("model.notBeEmpty")}`,
                       });
                       return null;
                     }

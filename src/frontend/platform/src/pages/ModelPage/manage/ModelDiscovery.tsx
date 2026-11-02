@@ -33,7 +33,6 @@ import { ModelDiscoveryOptions } from "./ModelDiscoveryOptions";
 interface ModelDiscoveryProps {
   provider: string;
   connectionVersion: number;
-  autoFetchVersion: number;
   existing: string[];
   getConnection: () => DiscoveryConnection | null;
   onImport: (models: DiscoveredModel[]) => void;
@@ -42,7 +41,6 @@ interface ModelDiscoveryProps {
 export function ModelDiscovery({
   provider,
   connectionVersion,
-  autoFetchVersion,
   existing,
   getConnection,
   onImport,
@@ -66,7 +64,6 @@ export function ModelDiscovery({
   const [requiredReason, setRequiredReason] = useState("");
   const triggerRef = useRef<HTMLButtonElement>(null);
   const requestVersion = useRef(0);
-  const lastConnection = useRef("");
   const supported = discoveryProviders.has(provider);
   const allowedTypes = availableModelTypes(provider);
   const needsDeployment = resultInfo?.scope === "azure_models";
@@ -121,7 +118,6 @@ export function ModelDiscovery({
 
   useEffect(() => {
     requestVersion.current += 1;
-    lastConnection.current = "";
     setResultInfo(null);
     setDeploymentNames({});
     setCatalog(null);
@@ -140,13 +136,10 @@ export function ModelDiscovery({
     };
   }, [provider, connectionVersion]);
 
-  const handleFetch = async (automatic = false) => {
+  const handleFetch = async () => {
     if (!supported) return;
     const connection = getConnection();
     if (!connection) return;
-    const identity = JSON.stringify([connection, source, options]);
-    if (automatic && identity === lastConnection.current) return;
-    lastConnection.current = identity;
     const version = ++requestVersion.current;
     setOpen(true);
     setLoading(true);
@@ -165,7 +158,6 @@ export function ModelDiscovery({
       }
     } catch (failure: unknown) {
       if (version === requestVersion.current) {
-        lastConnection.current = "";
         const failureData = failure as {
           data?: { reason?: string };
           response?: { data?: { data?: { reason?: string } } };
@@ -206,18 +198,11 @@ export function ModelDiscovery({
       if (version === requestVersion.current) setLoading(false);
     }
   };
-  const fetchCurrent = useRef(handleFetch);
-  fetchCurrent.current = handleFetch;
-  useEffect(() => {
-    if (autoFetchVersion > 0) void fetchCurrent.current(true);
-  }, [autoFetchVersion]);
-
   const handleOptionsChange = (
     nextSource: DiscoverySource,
     nextOptions: Record<string, string>,
   ) => {
     requestVersion.current += 1;
-    lastConnection.current = "";
     if (nextSource !== source) setRequiredReason("");
     setSource(nextSource);
     setOptions(nextOptions);
@@ -236,7 +221,6 @@ export function ModelDiscovery({
       setLoading(false);
       setOptions({});
       setRequiredReason("");
-      lastConnection.current = "";
     }
   };
 
@@ -250,6 +234,7 @@ export function ModelDiscovery({
         variant="outlined"
         color="default"
         onClick={() => {
+          if (!getConnection()) return;
           if (catalog) setOpen(true);
           else void handleFetch();
         }}
