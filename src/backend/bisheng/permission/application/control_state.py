@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from sqlalchemy import update
 from sqlmodel import col, select
@@ -383,6 +383,42 @@ class SqlPermissionControlState:
                 )
             )
         return tuple(result)
+
+    async def resolve_business_source_version(
+        self,
+        *,
+        target: VerifiedPermissionTarget,
+        source: GrantSourceRecord,
+    ) -> GrantSourceRecord:
+        """Resolve an inactive stable source's next version before planning tuples.
+
+        The resource version fence and _upsert_assignee recheck this snapshot
+        during prepare, before any OpenFGA write.
+        """
+        async with get_async_db_session() as session:
+            row = (
+                (
+                    await session.execute(
+                        select(PermissionGrantAssignee)
+                        .join(PermissionGrant, PermissionGrant.id == PermissionGrantAssignee.grant_id)
+                        .where(
+                            PermissionGrant.tenant_id == target.tenant_id,
+                            PermissionGrant.resource_type == target.resource_type,
+                            PermissionGrant.resource_id == target.resource_id,
+                            PermissionGrantAssignee.tenant_id == target.tenant_id,
+                            PermissionGrantAssignee.id == source.source_id,
+                        )
+                    )
+                )
+                .scalars()
+                .first()
+            )
+        if row is None:
+            return source
+        historical = self._source_snapshot(row)
+        if row.state != "INACTIVE" or replace(historical, active=True, version=source.version) != source:
+            raise PermissionVersionConflictError(msg="Business permission source changed before reactivation")
+        return replace(source, version=historical.version + 1)
 
     async def load_visible_sources(
         self,
@@ -1493,6 +1529,10 @@ class SqlPermissionControlState:
             )
             if signature != expected:
                 raise PermissionVersionConflictError(msg="Permission source fingerprint collision")
+            expected_version = row.version + (1 if row.state == "INACTIVE" else 0)
+            if source.version != expected_version:
+                raise PermissionVersionConflictError(msg="Permission source version changed before projection")
+            row.version = source.version
             row.state = state
         return row
 
