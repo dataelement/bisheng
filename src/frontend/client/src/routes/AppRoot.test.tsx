@@ -9,6 +9,7 @@ const mockSystemMenu = jest.fn();
 const mockRows = jest.fn();
 let mockMobile = false;
 let mockCompact = true;
+let mockNarrow = false;
 let mockSidebarVisible = true;
 let mockMerged = true;
 let mockReturnTo = '/square?type=apps';
@@ -38,7 +39,7 @@ jest.mock('~/pages/appChat/store/atoms', () => ({ currentChatState: 'chat' }));
 jest.mock('~/hooks', () => ({
   useLocalize: () => (key: string) => key,
   useAuthContext: () => ({ isAuthenticated: true }),
-  useMediaQuery: () => mockCompact,
+  useMediaQuery: (query: string) => query === '(max-width: 767px)' ? mockNarrow : mockCompact,
   usePrefersMobileLayout: () => mockMobile,
   useNewConvo: () => ({ newConversation: jest.fn() }),
 }));
@@ -65,7 +66,7 @@ jest.mock('~/components/ui/Tooltip2', () => ({ Tooltip: () => null, TooltipProvi
 jest.mock('bisheng-icons', () => ({ Outlined: { SidebarMenu: () => null, Plus: () => null, Down: () => null } }));
 
 beforeEach(() => {
-  mockMobile = false; mockCompact = true; mockSidebarVisible = true; mockMerged = true;
+  mockMobile = false; mockCompact = true; mockNarrow = false; mockSidebarVisible = true; mockMerged = true;
   localStorage.clear(); sessionStorage.clear(); mockReturnTo = '/square?type=apps';
 });
 
@@ -152,6 +153,7 @@ it('returns keyboard focus to the title on Escape and releases its listener', ()
 
 it('retains the mobile system menu destination', () => {
   mockMobile = true;
+  mockNarrow = true;
   render(<AppRoot />);
   fireEvent.click(screen.getByTestId('mobile-header-left-action'));
   expect(mockSystemMenu).toHaveBeenCalledWith(true);
@@ -190,4 +192,47 @@ it.each(['/square?type=apps', '/apps', '/apps/explore'])('returns to %s with his
   fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
   fireEvent.click(screen.getByRole('button', { name: 'com_ui_go_back' }));
   expect(mockNavigate).toHaveBeenCalledWith(target, { replace: target === '/apps' });
+});
+
+it.each([true, false])('uses full-width history navigation in narrow desktop content with sidebar=%s', (visible) => {
+  mockNarrow = true;
+  mockSidebarVisible = visible;
+  render(<AppRoot />);
+  expect(screen.queryByText('App sidebar')).toBeNull();
+  const menu = screen.getByTestId('mobile-header-left-action');
+  expect(menu).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(menu);
+  expect(screen.getByRole('region', { name: 'com_app_chat_sidebar_title' })).toBeVisible();
+  expect(menu).toHaveAttribute('aria-expanded', 'true');
+  fireEvent.click(screen.getByRole('button', { name: 'com_ui_go_back' }));
+  expect(mockNavigate).toHaveBeenCalledWith('/square?type=apps', { replace: false });
+  fireEvent.click(menu);
+  expect(screen.queryByRole('region')).toBeNull();
+});
+
+it.each([true, false])('preserves docked sidebar choice %s through narrow content and new chat', (visible) => {
+  mockSidebarVisible = visible;
+  const view = render(<AppRoot />);
+  mockNarrow = true;
+  view.rerender(<AppRoot />);
+  fireEvent.click(screen.getByTestId('mobile-header-left-action'));
+  fireEvent.click(screen.getByTestId('mobile-header-new-chat-button'));
+  expect(screen.queryByRole('region')).toBeNull();
+  mockNarrow = false;
+  view.rerender(<AppRoot />);
+  expect(screen.getByText('App sidebar').parentElement).toHaveClass(visible ? 'w-[240px]' : 'w-0');
+});
+
+it('closes compact history when maximized into the wide layout', () => {
+  mockNarrow = true;
+  const view = render(<AppRoot />);
+  fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
+  mockNarrow = false;
+  mockCompact = false;
+  view.rerender(<AppRoot />);
+  mockNarrow = true;
+  mockCompact = true;
+  view.rerender(<AppRoot />);
+  expect(screen.queryByRole('region')).toBeNull();
+  expect(screen.getByTestId('mobile-header-left-action')).toHaveAttribute('aria-expanded', 'false');
 });
