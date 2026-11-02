@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from './Dialog';
 import { OGDialog, OGDialogContent, OGDialogTitle } from './OriginalDialog';
 import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogCancel } from './AlertDialog';
+import { dialogOverlayStyle } from './dialogOverlayStyle';
 
 jest.mock('~/utils', () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(' ') }));
 jest.mock('../../utils', () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(' ') }));
@@ -20,14 +21,26 @@ const cases = [
   ['alert', <AlertDialog open><AlertDialogContent><AlertDialogTitle>Confirm</AlertDialogTitle><AlertDialogCancel>Cancel</AlertDialogCancel></AlertDialogContent></AlertDialog>],
 ] as const;
 
-it.each(cases)('%s keeps desktop backgrounds transparent in both themes', (_name, content) => {
+it.each(cases)('%s dims the full desktop viewport in both themes', (_name, content) => {
   window.history.replaceState({}, '', '/workspace/skills?embed=dsh');
   const { rerender } = render(content);
-  expect(document.querySelector('[data-state="open"][style*="background"]')).toHaveStyle({ background: 'transparent' });
+  expect(document.querySelector('[data-state="open"][style*="background"]')).toHaveStyle({ background: 'rgba(0, 0, 0, 0.4)' });
   document.documentElement.classList.add('dark');
   window.history.replaceState({}, '', '/workspace/knowledge');
   rerender(<React.Fragment>{content}</React.Fragment>);
-  expect(document.querySelector('[data-state="open"][style*="background"]')).toHaveStyle({ background: 'transparent' });
+  expect(document.querySelector('[data-state="open"][style*="background"]')).toHaveStyle({ background: 'rgba(0, 0, 0, 0.4)' });
+});
+
+it('preserves overlay layout styles while applying the desktop mask', () => {
+  window.history.replaceState({}, '', '/workspace/skills?embed=dsh');
+  const style = { background: 'transparent', zIndex: 160 };
+  expect(dialogOverlayStyle(style)).toEqual({ background: 'rgba(0, 0, 0, 0.4)', zIndex: 160 });
+  expect(style).toEqual({ background: 'transparent', zIndex: 160 });
+});
+
+it('preserves caller styles for standalone browser dialogs', () => {
+  const style = { background: 'rgba(12, 34, 56, 0.2)', zIndex: 160 };
+  expect(dialogOverlayStyle(style)).toBe(style);
 });
 
 it.each(cases)('%s uses its normal web presentation in a browser', (_name, content) => {

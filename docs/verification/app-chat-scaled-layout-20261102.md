@@ -33,3 +33,10 @@ AppRoot 现在按现有 767px 断点选择内容导航：窄桌面内容区复�
 ## Code review
 
 按 hotfix 范围自检：导航与宽度采用同一个布局条件；菜单和标题共享已有非模态历史列表；侧栏偏好与窄布局临时开关分别保存；新建和窗口恢复有回归；真实账号与 Windows 运行结果保持单列。源码、权限及依赖范围保持应用导航边界。
+
+## PR #2581 目标分支同步
+
+- 在线核对 PR head `a6c3aec9d751e3d8964fa6188e46aa103d96cc11`；目标分支新增 PR #2580，当前目标为 `037d6037a1cf6a906caf51f3657b7c688ac42bd7`。
+- 冲突集中在 STATUS 的同一插入位置，现同时保留应用会话缩放和整窗弹窗蒙层记录。AppRoot 两个文件与本修复原提交逐字节一致，弹窗展示两个文件与目标分支逐字节一致。
+- 同步后的 AppRoot、来源解析、发现广场入口、DialogPresentation、KnowledgeSpaceDialog 组合回归 5 组 / 52 项通过。全量前端 lint/typecheck、Client 生产构建通过；Client 1513 / Platform 620 个严格类型文件通过。依赖和锁文件沿用原版本。
+- 网页部署及 Windows 安装版真实账号验收按原边界记录。同步验证日志位于主工作区 `outputs/app-chat-font-scale-20261102/merge-2581/`。
