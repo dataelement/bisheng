@@ -1210,6 +1210,7 @@ domain 对业务 model/repository 的 import 必须由架构测试禁止。正�
 | 32 | 文件夹本级授权不意味着整个知识空间可见；读取指定文件夹时只要求该容器可见，子项仍逐项执行包含继承的最终判断 | 先校验空间 visible 会使只有某层文件夹权限的账号无法列出或搜索其下级；直接放行全部子项又会越过 CUSTOM 边界 | `KnowledgeSpaceService._require_container_read_permission`，由普通列表与搜索共用；根目录仍校验空间 visible |
 | 33 | 服务账号继承需要每层资源的 `service_account:*` mode/permission_enabled 技术标记；这些标记不授予任何账号资源权限 | 旧数据只有 `user:*` 时会出现空间 visible 成功而子项不可见、上传失败；新增 Grant 不会补齐存量后代的技术标记 | 创建与迁移编译器写入两类主体标记；模型发布脚本 `publish_authorization_model_change.py` 和完整对账脚本 `reconcile_f048_visible_projection.py` 在维护窗口按 CURRENT 模式补齐，保留 CUSTOM 边界；模型已一致也必须补齐并校验后才返回成功 |
 | 34 | 预置工具的历史 `user_id` 可以非空；预置身份只由 `GptsToolsType.is_preset=1` 决定；权限 mirror 为 `CURRENT` 也可能缺失系统 tuples | 把创建者为空作为额外条件会从工作台剔除预置工具，并错误地按 USER 迁移；只修分类或只检查 mirror 不能补齐存量系统授权 | 运行时、迁移、清单与租户复制统一判定；显式系统资源审计读取真实 wildcard `visible/system_use_marker`，仅为有效预置工具经版本围栏和 durable ledger 补缺，保留既有 Grant，拒绝 non-CURRENT；预置工具仍只支持 `visible/use` 并经实际动作鉴权 |
+| 35 | 成员退出使历史 assignee 版本递增；重新加入会复用稳定来源 ID，不能把来源版本重新设为 1 | SQL assignee 与 visible contribution 版本不一致，投影收尾把实际已写入的可见关系误标为 RETIRED；后续退出漏编译 visible 删除 | `sync_business_source_model` 在编译计划前读取同资源历史来源，按历史版本加 1；`_upsert_assignee` 在资源版本围栏内复核状态与版本，持久化同一版本。空间、频道连续加入/退出、角色移动后重新加入及重复操作由 `test_f048_membership_reactivation.py` 验证；存量孤儿关系经既有维护工具单独对账，不在普通请求中自动清理 |
 
 ---
 
@@ -1979,6 +1980,8 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 ---
 
 ## 修订历史
+
+- 2026-11-02：修复业务成员来源重新激活时的历史版本同步，写 OpenFGA 前校验版本，保持稳定来源 ID；新增连续加入/退出与角色移动回归。无表结构、公开 API 或权限语义变更，存量孤儿关系仍走独立运维对账。
 
 - 2026-10-29：修复租户管理员构建列表的跨租户快捷放行；权限冲突码迁至 25020–25026，保留信息源原码及存量资源归属；仅执行本缺陷定向验证。
 
