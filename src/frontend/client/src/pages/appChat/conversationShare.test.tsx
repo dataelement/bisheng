@@ -1,10 +1,12 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 // eslint-disable-next-line no-restricted-imports -- Exercise existing conversation and header stores.
 import { RecoilRoot, useRecoilValue, useSetRecoilState } from 'recoil';
 import type { Chat, ChatMessageType } from '~/@types/chat';
 import store from '~/store';
 import AppChat from './index';
+import Share from '../share';
+import { appConversationsState } from './store/appSidebarAtoms';
 import { chatIdState, chatsState } from './store/atoms';
 
 jest.mock('~/hooks', () => ({
@@ -23,9 +25,13 @@ jest.mock('./useChatHelpers', () => ({ __esModule: true, default: () => ({}) }))
 jest.mock('./useWebsocket', () => ({ useWebSocket: jest.fn() }));
 jest.mock('~/utils', () => ({ cn: (...values: string[]) => values.filter(Boolean).join(' '), generateUUID: () => 'new-chat' }));
 jest.mock('~/components/Avator', () => ({ __esModule: true, default: () => null }));
-jest.mock('./ChatInput', () => ({ __esModule: true, default: () => null }));
-jest.mock('./ChatMessages', () => ({ __esModule: true, default: () => null }));
-jest.mock('./components/ChatEmptyState', () => ({ ChatEmptyState: () => <div>Empty conversation</div> }));
+jest.mock('./ChatInput', () => ({ __esModule: true, default: () => <textarea aria-label="Message input" /> }));
+jest.mock('./ChatMessages', () => ({ __esModule: true, default: () => <div>Conversation messages</div> }));
+jest.mock('~/components/illustrations', () => ({ ArticleQAIllustration: () => null }));
+jest.mock('~/components/Chat/ChatView', () => ({ __esModule: true, default: () => null }));
+jest.mock('~/components/Sop', () => ({ __esModule: true, default: () => null }));
+let mockShareType = 'workflow';
+jest.mock('~/api', () => ({ getShareParamsApi: async () => ({ data: { resource_type: mockShareType, resource_id: 'current', meta_data: { flowId: 'flow' } } }) }));
 jest.mock('~/components/Chat/MessageSelection', () => ({ ExportFormatSheet: () => null, MessageSelectionToolbar: () => null }));
 jest.mock('~/pages/Subscription/Article/AddToKnowledgeModal', () => ({ AddToKnowledgeModal: () => null }));
 jest.mock('~/hooks/useMessageSelection', () => ({
@@ -45,13 +51,14 @@ let updateChats: (chats: Record<string, Chat>) => void;
 function Probe() {
     updateChats = useSetRecoilState(chatsState);
     const navigate = useNavigate();
+    const location = useLocation();
     const header = useRecoilValue(store.chatMobileHeaderState);
-    return <><button onClick={() => navigate("/app/fresh/flow/10")}>New conversation</button><output data-testid="compact-share">{header?.hideShare === false && header.readOnly === false ? 'visible' : 'hidden'}</output></>;
+    return <><output data-testid="path">{location.pathname}</output><button onClick={() => navigate("/app/fresh/flow/10")}>New conversation</button><output data-testid="compact-share">{header?.hideShare === false && header.readOnly === false ? 'visible' : 'hidden'}</output></>;
 }
 function setup(chat: Chat, readOnly = false) {
     return render(<RecoilRoot initializeState={({ set }) => {
         set(chatIdState, 'current');
-        set(chatsState, { current: chat, fresh: conversation([message("stream_msg", "Welcome")]) });
+        set(chatsState, { current: chat, fresh: conversation([message("stream_msg", "Welcome")]), 'new-chat': conversation([]) });
     }}><MemoryRouter initialEntries={[`/app/current/flow/${chat.flow.flow_type}`]}>
         <Probe />
         <Routes><Route path="/app/:conversationId/:fid/:type" element={<AppChat shareToken={readOnly ? 'shared-link' : ''} />} /></Routes>
@@ -112,4 +119,48 @@ it('derives sharing from the destination conversation while the active store swi
     await expectShare(true);
     fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
     await expectShare(false);
+});
+
+
+function renderSharedChat(chat: Chat, hasPersonalHistory = false) {
+    mockShareType = chat.flow.flow_type === 5 ? 'assistant' : 'workflow';
+    return render(<RecoilRoot initializeState={({ set }) => {
+        set(chatIdState, 'current');
+        set(chatsState, { current: chat });
+        if (hasPersonalHistory) set(appConversationsState, [{
+            id: 'personal', title: 'Personal conversation', flowId: 'flow', flowType: 10,
+            createdAt: '', updatedAt: '',
+        }]);
+    }}><MemoryRouter initialEntries={['/share/test-token']}>
+        <Probe />
+        <Routes><Route path="/share/:token" element={<Share />} /></Routes>
+    </MemoryRouter></RecoilRoot>);
+}
+
+it.each([5, 10].flatMap(flowType => [false, true].flatMap(hasPersonalHistory =>
+    [null, 'Configured greeting'].map(guideWord => ({ flowType, hasPersonalHistory, guideWord })),
+)))('renders empty share for $flowType with personal history=$hasPersonalHistory and greeting=$guideWord', async ({ flowType, hasPersonalHistory, guideWord }) => {
+    const chat = conversation([]);
+    chat.flow.flow_type = flowType;
+    chat.flow.guide_word = guideWord;
+    renderSharedChat(chat, hasPersonalHistory);
+    expect(await screen.findByText('appChat.emptyShared')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'com_app_chat_empty_cta' })).toBeNull();
+    expect(screen.getByTestId('path')).toHaveTextContent('/share/test-token');
+    expect(screen.queryByRole('textbox', { name: 'Message input' })).toBeNull();
+});
+
+it('starts a new conversation from the ordinary app empty state', async () => {
+    setup(conversation([]));
+    fireEvent.click(await screen.findByRole('button', { name: 'com_app_chat_empty_cta' }));
+    await waitFor(() => expect(screen.getByTestId('path')).toHaveTextContent('/app/new-chat/flow/10'));
+});
+
+
+it('renders existing shared history as read-only', async () => {
+    renderSharedChat(conversation([message('question'), message('answer')]));
+    expect(await screen.findByText('Conversation messages')).toBeVisible();
+    expect(screen.queryByText('appChat.emptyShared')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'com_app_chat_empty_cta' })).toBeNull();
+    expect(screen.queryByRole('textbox', { name: 'Message input' })).toBeNull();
 });

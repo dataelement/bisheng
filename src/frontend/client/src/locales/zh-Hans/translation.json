@@ -1,5 +1,6 @@
 {
   "appChat": {
+    "emptyShared": "该分享暂无对话记录",
     "stopped": "已停止"
   },
   "chatImage": {

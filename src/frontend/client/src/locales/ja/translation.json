@@ -1,5 +1,6 @@
 {
   "appChat": {
+    "emptyShared": "この共有会話にはまだメッセージがありません",
     "stopped": "停止済み"
   },
   "chatImage": {

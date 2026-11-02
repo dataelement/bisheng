@@ -163,13 +163,15 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false, 
         .map((item) => String(item || "").trim())
         .find(Boolean) || localize('com_ui_new_chat');
 
-    // Show the empty state when the conversation has no messages or opening content.
-    const showChatEmptyState =
-        conversations.length === 0 &&
-        messages.length === 0 &&
-        !data?.guide_word &&
-        !running?.inputForm &&
-        !(running?.guideWord?.length);
+    // Shared history owns its empty state independently of personal chats and opening content.
+    const showChatEmptyState = messages.length === 0 && (
+        readOnly || (
+            conversations.length === 0 &&
+            !data?.guide_word &&
+            !running?.inputForm &&
+            !(running?.guideWord?.length)
+        )
+    );
 
     const Logo = useMemo(() => {
         return <AppAvator className="size-6 min-w-6" url={data.logo} id={data.name} flowType={data.flow_type} />
@@ -184,7 +186,7 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false, 
                         hideShare={canShareConversation === false}
                         conversation={{ title: headerTitle, flowId: data.id, conversationId: cid, flowType: data.flow_type }}
                     />
-                    <ChatEmptyState onNewChat={createNewChat} />
+                    <ChatEmptyState onNewChat={readOnly ? undefined : createNewChat} />
                 </div>
             ) : (
                 <div className="flex min-h-0 flex-1 overflow-hidden">

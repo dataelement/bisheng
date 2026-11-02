@@ -1,5 +1,6 @@
 {
   "appChat": {
+    "emptyShared": "This shared conversation has no messages yet",
     "stopped": "Stopped"
   },
   "chatImage": {
