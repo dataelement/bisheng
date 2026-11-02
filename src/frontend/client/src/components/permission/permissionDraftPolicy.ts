@@ -11,6 +11,6 @@ export function canMutatePermissionDraftRow(
     !row.protected &&
     row.editable !== false &&
     row.scope !== "INHERITED" &&
-    grantableModels.some((model) => model.id === row.modelKey)
+    (row.modelActive === false || grantableModels.some((model) => model.id === row.modelKey))
   );
 }

@@ -198,6 +198,7 @@
     "expired": "The mode impact analysis expired."
   },
   "roster": {
+    "inactive_existing_grant": "This permission is disabled for new grants. Existing access remains effective.",
     "empty": "No assignees",
     "loading": "Loading permissions…",
     "loadingMore": "Loading more…",

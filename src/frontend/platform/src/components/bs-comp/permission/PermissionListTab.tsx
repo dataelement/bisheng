@@ -26,6 +26,7 @@ import { useTranslation } from "react-i18next"
 import { canMutatePermissionAssignee } from "./assigneePolicy"
 import { PermissionSubjectIdentity } from "./PermissionSubjectLayout"
 import { SourceBadge } from "./SourceBadge"
+import { PermissionModelStatus } from "./PermissionModelStatus"
 import type { SubjectType } from "./types"
 
 interface PermissionListTabProps {
@@ -96,6 +97,7 @@ function RosterRow({
     >
       <PermissionSubjectIdentity type={assignee.subject.type} name={displayName} metadata={<>
         <SourceBadge source={assignee.source} />
+        <PermissionModelStatus active={assignee.model.active} />
         <span>{t(`scope.${assignee.scope.toLowerCase()}`)}</span>
         {assignee.inherited_from && <span className="truncate">· {t("roster.inheritedFrom")}: {getInheritedSourceLabel(assignee, t)}</span>}
       </>} />

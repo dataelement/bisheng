@@ -896,6 +896,34 @@ class F048PermissionRuntime:
     ) -> tuple[GrantModelSnapshot, ...]:
         return self._grants.grantable_models(await self.build_grant_context(actor=actor, target=target))
 
+    async def manageable_model_keys(
+        self,
+        *,
+        actor: PermissionActor,
+        target: VerifiedPermissionTarget,
+    ) -> frozenset[str]:
+        """Read existing-binding eligibility without loading the complete roster."""
+
+        await self._require_manage_permission(actor, target)
+        await self._require_current_target(target)
+        catalog = await self._runtime_catalog()
+        return await self._manageable_model_keys(actor, target, catalog)
+
+    async def _manageable_model_keys(
+        self,
+        actor: PermissionActor,
+        target: VerifiedPermissionTarget,
+        catalog: RuntimeCatalogSnapshot,
+    ) -> frozenset[str]:
+        system_authorized = self._system_authorized(actor, target)
+        capabilities = () if system_authorized else await self._grant_capabilities(actor, target)
+        models = self._grants.manageable_models_for_capabilities(
+            models=tuple(item.snapshot for item in catalog.models),
+            capabilities=capabilities,
+            system_authorized=system_authorized,
+        )
+        return frozenset(model.model_key for model in models)
+
     async def mutate_grants(
         self,
         *,
@@ -1304,13 +1332,17 @@ class F048PermissionRuntime:
         await self._require_manage_permission(actor, target)
         catalog = await self._runtime_catalog()
         mode = await self._require_current_target(target)
-        return await self._state.load_source_page(
+        rows, has_more = await self._state.load_source_page(
             target=target,
             mode=mode.mode,
             models=tuple(item.snapshot for item in catalog.models),
             after_id=after_id,
             limit=limit,
         )
+        if not any(row.editable for row in rows):
+            return rows, has_more
+        manageable = await self._manageable_model_keys(actor, target, catalog)
+        return tuple(replace(row, editable=row.editable and row.model_key in manageable) for row in rows), has_more
 
     async def read_effective_action_sources(self, *, target, action):
         """Trusted business read after its own qualification; not an HTTP roster.
@@ -1322,7 +1354,7 @@ class F048PermissionRuntime:
         models = tuple(item.snapshot for item in catalog.models)
         before = await self._state.source_read_stamp(target=target, models=models)
         mode = await self._require_current_target(target)
-        eligible = tuple(model for model in models if model.active and action in model.action_codes)
+        eligible = tuple(model for model in models if action in model.action_codes)
         rows, after_id = [], 0
         while eligible:
             page, more = await self._state.load_source_page(

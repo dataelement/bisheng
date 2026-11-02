@@ -336,7 +336,7 @@ describe("F048 PermissionGrantTab", () => {
     expect(onSuccess).not.toHaveBeenCalled()
   })
 
-  it("keeps an inactive existing row read-only when it is not grantable", async () => {
+  it("respects server read-only eligibility for an inactive existing row", async () => {
     vi.mocked(getGrantablePermissionModelsApi).mockResolvedValueOnce([
       { key: "viewer", name: "Viewer", level: 1, active: true },
       { key: "editor", name: "Editor", level: 2, active: true },
@@ -344,6 +344,7 @@ describe("F048 PermissionGrantTab", () => {
     ])
     const inactiveAssignee: PermissionGrantAssignee = {
       ...editableAssignee,
+      editable: false,
       model: {
         key: "retired-editor",
         name: "Retired editor",
@@ -376,5 +377,29 @@ describe("F048 PermissionGrantTab", () => {
       screen.getByRole("button", { name: "grant.remove.41" }),
     ).toBeDisabled()
     expect(mutateResourceGrantsApi).not.toHaveBeenCalled()
+  })
+
+  it("shows an inactive source and permits its authorized removal", async () => {
+    render(
+      <PermissionGrantTab
+        resourceType="workflow"
+        resourceId="flow-1"
+        context={context}
+        assignees={[{
+          ...editableAssignee,
+          model: { key: "old-custom", name: "Old permission", level: 1, active: false },
+        }]}
+        onSuccess={vi.fn()}
+      />,
+    )
+    expect(await screen.findByText("roster.inactive_existing_grant")).toBeInTheDocument()
+    const remove = screen.getByRole("button", { name: "grant.remove.41" })
+    await waitFor(() => expect(remove).toBeEnabled())
+    expect(screen.getByLabelText("grant.addModel")).not.toHaveTextContent("Old permission")
+    fireEvent.click(remove)
+    await waitFor(() => expect(mutateResourceGrantsApi).toHaveBeenCalled())
+    expect(vi.mocked(mutateResourceGrantsApi).mock.calls.at(-1)?.[2].changes).toEqual([
+      { op: "REMOVE", assignee_id: "41", expected_assignee_version: 2 },
+    ])
   })
 })
