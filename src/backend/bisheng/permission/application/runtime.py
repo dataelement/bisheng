@@ -1092,6 +1092,10 @@ class F048PermissionRuntime:
                         source_fingerprint=source.source_fingerprint,
                     ),
                 )
+                stable_source = await self._state.resolve_business_source_version(
+                    target=target,
+                    source=stable_source,
+                )
                 changes.append(
                     CanonicalGrantChange(
                         operation="ADD",

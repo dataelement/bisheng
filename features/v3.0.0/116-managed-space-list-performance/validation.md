@@ -8,10 +8,12 @@
 
 只应用来源提交的 backend 性能代码和回归补丁，未合并 COFCO 其它提交、客户材料或部署配置。真实 E2E 改为主线命名并使用显式预期 tenant_id；主线额外补 contextmanager 导入及租户管理员可见范围回归。
 
+并行整合：提交前检测到本地主线新增 `f13c29489` 成员来源重新激活修复。已普通合并并保留其版本递增/冲突围栏，再额外联合运行相关三组测试；没有用性能补丁覆盖它。
+
 ## 自动化结果
 
 - 变更前同环境基线：**253 passed**。
-- 适配后联合回归：**331 passed、3 skipped**，无失败。跳过项均为默认关闭的真实部署 E2E。
+- 适配后联合回归：**351 passed、3 skipped**，无失败。跳过项均为默认关闭的真实部署 E2E。
 - 原两个绑定已删除扫描/formatter 的测试移除，其目标改由服务/adapter/统一 runtime 的行为和批次预算测试保护。
 - 新增/修改的 11 个 Python 文件 Ruff check、format check、AST 解析和架构守卫通过；diff 空白及冲突标记检查通过。
 - 函数级 AST 对比确认：存量生产文件只变更 managed 编排/formatter、构造注入，以及批量快照/门禁/标记入口。get_space_info、广场/退出重入、公开应用 guest-link 及文件 adapter 原有方法保持原实现。主线 runtime.py 未修改。
@@ -43,6 +45,9 @@ test/permission/test_f048_catalog_runtime.py
 test/permission/test_f048_listing_batch_preparation.py
 test/permission/test_creation_rollback.py
 test/permission/test_creation_rollback_repository.py
+test/permission/test_f048_membership_reactivation.py
+test/permission/test_f048_business_source_projection.py
+test/permission/test_f048_projection_sql_runtime.py
 test/f040/test_static_scan.py
 test/public_endpoints/test_guest_policy.py
 test/public_endpoints/test_guest_link.py
