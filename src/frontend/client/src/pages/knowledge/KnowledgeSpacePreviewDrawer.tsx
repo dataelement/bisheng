@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { EmptyStateIllustration, NoPermissionIllustration } from "~/components/illustrations";
 import { ChevronRight, X } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "~/components/ui/Sheet";
@@ -10,7 +10,6 @@ import { FileCard } from "./SpaceDetail/FileCard";
 import {
     KnowledgeFile,
     KnowledgeSpace,
-    SPACE_CHILDREN_STATUS_SUCCESS_ONLY,
     SpaceRole,
     VisibilityType,
     getJoinedSpacesApi,
@@ -24,6 +23,7 @@ import { cn } from "~/utils";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
 import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
+import { getPreviewFileStatusFilter, getSpaceJoinButton, resolveSpaceJoinStatus, type SpaceJoinStatus } from "./spaceSubscriptionState";
 
 interface KnowledgeSpacePreviewDrawerProps {
     spaceId: string | undefined;
@@ -48,7 +48,7 @@ export function KnowledgeSpacePreviewDrawer({
     const { isOverQuota } = useEffectiveQuota();
 
     const [space, setSpace] = useState<KnowledgeSpace | null>(null);
-    const [status, setStatus] = useState<"none" | "joined" | "pending" | "rejected">("none");
+    const [status, setStatus] = useState<SpaceJoinStatus>("none");
     const [subscribing, setSubscribing] = useState(false);
     const [filesPreview, setFilesPreview] = useState<KnowledgeFile[]>([]);
     // Bumped on every drawer open. The file-list effect below keys on values derived from
@@ -101,51 +101,15 @@ export function KnowledgeSpacePreviewDrawer({
         showToastRef.current = showToast;
     }, [showToast]);
 
-    const syncPreviewStatus = (info: KnowledgeSpace) => {
-        const emitSquareStatus = (nextStatus: "join" | "joined" | "pending" | "rejected") => {
-            const syncKey = `${String(info.id)}:${nextStatus}`;
-            if (lastSyncedSquareStatusRef.current === syncKey) {
-                return;
-            }
-            lastSyncedSquareStatusRef.current = syncKey;
-            onSquareStatusChangeRef.current?.(String(info.id), nextStatus);
-        };
-
-        const subscriptionStatus = String(info.subscriptionStatus ?? info.squareStatus ?? "").toLowerCase();
-        if (subscriptionStatus === "rejected") {
-            setStatus("rejected");
-            emitSquareStatus("rejected");
-            return;
-        }
-        if (info.isPending || subscriptionStatus === "pending") {
-            setStatus("pending");
-            emitSquareStatus("pending");
-            return;
-        }
-        if (
-            info.isFollowed ||
-            subscriptionStatus === "subscribed" ||
-            subscriptionStatus === "joined"
-        ) {
-            setStatus("joined");
-            emitSquareStatus("joined");
-            return;
-        }
-        setStatus("none");
-        emitSquareStatus("join");
-    };
-
-    /**
-     * 广场预览文件列表状态过滤（对齐 /space/{id}/info 的 user_role）：
-     * - creator / admin：不限制
-     * - member 与 user_role 为 null（映射为 member）：仅展示解析成功的文件
-     */
-    const getPreviewFileStatusFilter = (s: KnowledgeSpace): number[] | undefined => {
-        if (s.role === SpaceRole.CREATOR || s.role === SpaceRole.ADMIN) {
-            return undefined;
-        }
-        return SPACE_CHILDREN_STATUS_SUCCESS_ONLY;
-    };
+    const syncPreviewStatus = useCallback((info: KnowledgeSpace) => {
+        const nextStatus = resolveSpaceJoinStatus(info);
+        setStatus(nextStatus);
+        const squareStatus = nextStatus === "none" ? "join" : nextStatus;
+        const syncKey = `${String(info.id)}:${squareStatus}`;
+        if (lastSyncedSquareStatusRef.current === syncKey) return;
+        lastSyncedSquareStatusRef.current = syncKey;
+        onSquareStatusChangeRef.current?.(String(info.id), squareStatus);
+    }, []);
 
     useEffect(() => {
         if (!open || !spaceId) return;
@@ -199,7 +163,7 @@ export function KnowledgeSpacePreviewDrawer({
             .finally(() => {
                 setLoadingSpace(false);
             });
-    }, [open, spaceId]);
+    }, [open, spaceId, syncPreviewStatus]);
 
     // Load file preview list for spaces that are visible to the current user
     useEffect(() => {
@@ -343,6 +307,16 @@ export function KnowledgeSpacePreviewDrawer({
             .then((res) => {
                 if (!cancelled) {
                     setCanViewApprovalContent(Boolean(res?.allowed));
+                    if (res?.allowed === false && status === "joined") {
+                        const nextSpace: KnowledgeSpace = {
+                            ...space,
+                            isFollowed: false,
+                            subscriptionStatus: "not_subscribed",
+                            squareStatus: "join",
+                        };
+                        setSpace(nextSpace);
+                        syncPreviewStatus(nextSpace);
+                    }
                 }
             })
             .catch(() => {
@@ -355,7 +329,7 @@ export function KnowledgeSpacePreviewDrawer({
             cancelled = true;
             controller.abort();
         };
-    }, [space?.id, space?.visibility, isOwnerOrAdmin, hasReadableGrant]);
+    }, [space, isOwnerOrAdmin, hasReadableGrant, status, syncPreviewStatus]);
 
     const handleClickAction = () => {
         if (!space) return;
@@ -432,15 +406,7 @@ export function KnowledgeSpacePreviewDrawer({
         })();
     };
 
-    const getButtonConfig = () => {
-        if (status === "joined") return { label: localize("com_knowledge.joined"), variant: "secondary" as const, disabled: true };
-        if (status === "pending") return { label: localize("com_knowledge.pending"), variant: "secondary" as const, disabled: true };
-        if (status === "rejected") return { label: localize("com_knowledge.reapply"), variant: "outline" as const, disabled: subscribing };
-        if (isPublic) return { label: localize("com_knowledge.join"), variant: "default" as const, disabled: subscribing };
-        return { label: localize("com_knowledge.join"), variant: "outline" as const, disabled: subscribing };
-    };
-
-    const btn = getButtonConfig();
+    const btn = getSpaceJoinButton(status, isPublic, subscribing);
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
@@ -513,7 +479,7 @@ export function KnowledgeSpacePreviewDrawer({
                                     disabled={btn.disabled}
                                     onClick={handleClickAction}
                                 >
-                                    {btn.label}
+                                    {localize(btn.label)}
                                 </Button>
                             </div>
                         </SheetHeader>
