@@ -2601,11 +2601,6 @@
       "count": 1
     }
   },
-  "src/pages/appChat/components/ChatFile.tsx": {
-    "no-useless-escape": {
-      "count": 1
-    }
-  },
   "src/pages/appChat/components/ConversationList.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 2
