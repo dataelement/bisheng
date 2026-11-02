@@ -20,6 +20,7 @@ import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInherita
 import { resolveConfigString } from "./configValue";
 import { DepartmentKnowledgeSpaceManagerDialog } from "./DepartmentKnowledgeSpaceManagerDialog";
 import { FormInput } from "./FormInput";
+import { MenuNameCounter } from "./MenuNameCounter";
 import {
     KnowledgeSpaceSensitivePolicy,
     type KnowledgeSpaceSensitivePolicyHandle,
@@ -105,6 +106,7 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                             <FormInput
                                 label={t("chatConfig.menuDisplayName")}
                                 value={formData.menuDisplayName}
+                                suffix={<MenuNameCounter value={formData.menuDisplayName} />}
                                 error={errors.menuDisplayName}
                                 placeholder={t("bench.knowledgeSpace")}
                                 onChange={(v) => {

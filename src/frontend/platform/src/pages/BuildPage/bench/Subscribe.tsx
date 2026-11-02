@@ -19,6 +19,7 @@ import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
 import { resolveConfigString } from "./configValue";
 import { FormInput } from "./FormInput";
+import { MenuNameCounter } from "./MenuNameCounter";
 import { clampMenuName, toStoredMenuName } from "./menuDisplayName";
 import Preview from "./Preview";
 import { SubscriptionSensitivePolicy, type SubscriptionSensitivePolicyHandle } from "./SubscriptionSensitivePolicy";
@@ -116,6 +117,7 @@ export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number 
                         <FormInput
                             label={t("chatConfig.menuDisplayName")}
                             value={formData.menuDisplayName}
+                            suffix={<MenuNameCounter value={formData.menuDisplayName} />}
                             error={errors.menuDisplayName}
                             placeholder={t("bench.subscribe")}
                             onChange={(v) => {
