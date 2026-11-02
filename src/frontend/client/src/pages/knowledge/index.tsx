@@ -991,6 +991,11 @@ export default function Knowledge() {
       ) : (
         <KnowledgeHomePage
           enabled={knowledgePluginEnabled}
+          category={(['department', 'created', 'joined'] as const).find((tab) => tab === new URLSearchParams(location.search).get('tab')) ?? 'all'}
+          onCategoryChange={(tab) => {
+            const params = new URLSearchParams(location.search); params.set('tab', tab);
+            navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
+          }}
           onSpaceSelect={handleSpaceSelect}
           onCreateSpace={handleCreateSpace}
           onSpaceSettings={handleSpaceSettings}

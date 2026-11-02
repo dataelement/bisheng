@@ -20,6 +20,8 @@ import styles from './home/vnext/KnowledgeHomeNext.module.css';
 
 interface KnowledgeHomePageProps {
   enabled?: boolean;
+  category?: HomeCategory;
+  onCategoryChange?: (category: HomeCategory) => void;
   onSpaceSelect: (space: KnowledgeSpace | null) => void;
   onCreateSpace: () => void;
   onSpaceSettings: (space: KnowledgeSpace) => void;
@@ -29,11 +31,13 @@ interface KnowledgeHomePageProps {
 const categories: HomeCategory[] = ['all', 'department', 'created', 'joined'];
 const categoryIcons = { department: departmentIcon, created: createdIcon, joined: joinedIcon };
 
-export function KnowledgeHomePage({ enabled = true, onSpaceSelect, onCreateSpace, onSpaceSettings }: KnowledgeHomePageProps) {
+export function KnowledgeHomePage({ enabled = true, category: controlledCategory, onCategoryChange, onSpaceSelect, onCreateSpace, onSpaceSettings }: KnowledgeHomePageProps) {
   const localize = useLocalize();
   const menuNames = useWorkbenchMenuNames();
   const id = useId();
-  const [category, setCategory] = useState<HomeCategory>('all');
+  const [localCategory, setLocalCategory] = useState<HomeCategory>('all');
+  const category = controlledCategory ?? localCategory;
+  const setCategory = (next: HomeCategory) => { setLocalCategory(next); onCategoryChange?.(next); };
   const [sort, setSort] = useState<HomeSort>('create_time');
   // Retain the canonical query keys used by the existing action hook. Complete
   // lists are sorted locally, including the merged category and creation dates.

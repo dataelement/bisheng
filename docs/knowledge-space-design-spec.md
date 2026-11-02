@@ -414,3 +414,7 @@ Tab选中填充色改为#EFF2F8，Tab高度40→36px，选中文字字重改为4
 移除行内重命名，菜单恢复“编辑空间”，复用宿主onSpaceSettings及既有/knowledge/space/{id}/settings页面和接口流程，edit或manage_permission可见。编辑与删除均使用产品原有Outlined.Edit/Outlined.Delete图标。主页不单独提交名称更新。
 
 未置顶按钮默认透明隐藏且不接收指针，卡片hover或focus-within时显示；已置顶按钮常驻。无hover设备常显未置顶按钮以保持可操作，键盘Tab仍可聚焦并显示。按钮位置和点击范围保留，不引发布局位移。
+
+### 推送整合记录（2026-11-02）
+
+整合最新feat/3.1.0-beta1时去除MainLayout重复useGetBsConfig导入。桌面首页分类绑定路由tab查询参数并保留其他查询参数，支持进入详情、文件夹、返回、前进后退以及缓存模块恢复；新增all类别可随路由携带，默认仍全部空间。更新上游返回分类测试以匹配新版Tab UI，保持原回归行为检查，不改变视觉方案。

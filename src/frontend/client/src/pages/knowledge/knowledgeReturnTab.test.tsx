@@ -20,7 +20,7 @@ jest.mock('~/layouts/UserPopMenu', () => ({ UserPopMenu: () => null }));
 jest.mock('~/layouts/useWorkbenchNavLinks', () => ({ useWorkbenchNavLinks: () => ({ links: [] }) }));
 
 const mockSpaces: KnowledgeSpace[] = ['department', 'created', 'joined'].map((id) => ({
-  id, name: `${id} space`, role: SpaceRole.MEMBER, visibility: VisibilityType.PUBLIC,
+  id, name: `${id} space`, createdAt: '2026-01-01', updatedAt: '2026-01-01', creator: '', role: SpaceRole.MEMBER, visibility: VisibilityType.PUBLIC,
 } as KnowledgeSpace));
 jest.mock('~/api/knowledge', () => ({
   ...jest.requireActual('~/api/knowledge'),
@@ -93,50 +93,50 @@ function setup(path = '/knowledge') {
 beforeEach(() => { jest.spyOn(console, 'info').mockImplementation(() => undefined); });
 it.each(['department', 'created', 'joined'])('returns to %s through the actual detail Back button', async (tab) => {
   const router = setup();
-  fireEvent.click(await screen.findByRole('radio', { name: tab }));
+  fireEvent.click(await screen.findByRole('tab', { name: new RegExp(`home_next.${tab}`) }));
   fireEvent.click(await screen.findByRole('button', { name: `${tab} space` }));
   await waitFor(() => expect(router.state.location.pathname).toBe(`/knowledge/space/${tab}`));
   fireEvent.click(await screen.findByRole('button', { name: 'com_ui_go_back' }));
-  expect(await screen.findByRole('region', { name: tab })).toBeInTheDocument();
-  expect(screen.getByRole('radio', { name: tab })).toBeChecked();
+  expect(await screen.findByRole('tabpanel', { name: new RegExp(`home_next.${tab}`) })).toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: new RegExp(`home_next.${tab}`) })).toHaveAttribute('aria-selected', 'true');
   expect(router.state.location.pathname).toBe('/knowledge');
 });
 it('retains joined through folders and both levels of Back', async () => {
   const router = setup();
-  fireEvent.click(await screen.findByRole('radio', { name: 'joined' }));
+  fireEvent.click(await screen.findByRole('tab', { name: /home_next.joined/ }));
   fireEvent.click(await screen.findByRole('button', { name: 'joined space' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Open folder' }));
   await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/space/joined/folder/folder-1'));
   fireEvent.click(screen.getByRole('button', { name: 'com_ui_go_back' }));
   await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/space/joined'));
   fireEvent.click(screen.getByRole('button', { name: 'com_ui_go_back' }));
-  expect(await screen.findByRole('region', { name: 'joined' })).toBeInTheDocument();
+  expect(await screen.findByRole('tabpanel', { name: /home_next.joined/ })).toBeInTheDocument();
 });
 it('retains joined across browser Back and Forward', async () => {
   const router = setup();
-  fireEvent.click(await screen.findByRole('radio', { name: 'joined' }));
+  fireEvent.click(await screen.findByRole('tab', { name: /home_next.joined/ }));
   fireEvent.click(await screen.findByRole('button', { name: 'joined space' }));
   await screen.findByRole('button', { name: 'com_ui_go_back' });
   await act(async () => { await router.navigate(-1); });
-  expect(await screen.findByRole('region', { name: 'joined' })).toBeInTheDocument();
+  expect(await screen.findByRole('tabpanel', { name: /home_next.joined/ })).toBeInTheDocument();
   await act(async () => { await router.navigate(1); });
   fireEvent.click(await screen.findByRole('button', { name: 'com_ui_go_back' }));
-  expect(await screen.findByRole('region', { name: 'joined' })).toBeInTheDocument();
+  expect(await screen.findByRole('tabpanel', { name: /home_next.joined/ })).toBeInTheDocument();
 });
 it.each(['joined', 'created'])('restores %s from a directly loaded detail URL', async (tab) => {
   setup(`/knowledge/space/${tab}?tab=${tab}`);
   fireEvent.click(await screen.findByRole('button', { name: 'com_ui_go_back' }));
-  expect(await screen.findByRole('region', { name: tab })).toBeInTheDocument();
+  expect(await screen.findByRole('tabpanel', { name: new RegExp(`home_next.${tab}`) })).toBeInTheDocument();
 });
 it.each(['', '?tab=unknown'])('uses the default tab for direct links with query %s', async (query) => {
   setup(`/knowledge/space/joined${query}`);
   fireEvent.click(await screen.findByRole('button', { name: 'com_ui_go_back' }));
-  expect(await screen.findByRole('region', { name: 'department' })).toBeInTheDocument();
+  expect(await screen.findByRole('tabpanel', { name: /home_next.all/ })).toBeInTheDocument();
 });
 it('preserves other query parameters and replaces tab-only history entries', async () => {
   const router = setup('/knowledge?source=menu');
-  fireEvent.click(await screen.findByRole('radio', { name: 'created' }));
-  fireEvent.click(screen.getByRole('radio', { name: 'joined' }));
+  fireEvent.click(await screen.findByRole('tab', { name: /home_next.created/ }));
+  fireEvent.click(screen.getByRole('tab', { name: /home_next.joined/ }));
   expect(new URLSearchParams(router.state.location.search).get('source')).toBe('menu');
   await act(async () => { await router.navigate(-1); });
   expect(screen.getByText('Previous page')).toBeInTheDocument();
@@ -144,9 +144,9 @@ it('preserves other query parameters and replaces tab-only history entries', asy
 
 it('restores the requested tab after leaving the cached knowledge module', async () => {
   const router = setup('/knowledge?tab=created');
-  expect(await screen.findByRole('region', { name: 'created' })).toBeInTheDocument();
+  expect(await screen.findByRole('tabpanel', { name: /home_next.created/ })).toBeInTheDocument();
   await act(async () => { await router.navigate('/before'); });
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); });
   await act(async () => { await router.navigate('/knowledge?tab=joined'); });
-  expect(await screen.findByRole('region', { name: 'joined' })).toBeInTheDocument();
+  expect(await screen.findByRole('tabpanel', { name: /home_next.joined/ })).toBeInTheDocument();
 });
