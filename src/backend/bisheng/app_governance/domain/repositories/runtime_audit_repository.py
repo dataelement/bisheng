@@ -63,6 +63,13 @@ class RuntimeAuditRepository:
         stmt = select(*[getattr(model, f).label(f) for f in FIELDS[kind]])
         if scope.tenant_id is not None:
             stmt = stmt.where(model.tenant_id == scope.tenant_id)
+        if scope.authorized_app_ids is not None:
+            ids = scope.authorized_app_ids
+            stmt = stmt.where(
+                or_(*(model.app_id.in_(ids[i : i + 500]) for i in range(0, len(ids), 500)))
+                if ids
+                else model.app_id.in_(())
+            )
         if watermark is not None:
             stmt = stmt.where(model.id <= watermark)
         if filters.get("start_time"):

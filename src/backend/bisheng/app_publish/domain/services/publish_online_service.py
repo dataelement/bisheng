@@ -58,15 +58,13 @@ from bisheng.app_publish.domain.models.app_deployment import (
     AppDeploymentDao,
 )
 from bisheng.app_publish.domain.schemas.failure import failure_from_error
-from bisheng.app_publish.domain.services import publish_notification_service, schema_evolution_service
+from bisheng.app_publish.domain.services import publish_notification_service
 from bisheng.app_publish.domain.services.preview_instance_service import PreviewInstanceService
 from bisheng.app_publish.domain.services.release_audit import write_release_audit
 from bisheng.app_publish.domain.services.version_service import VersionService
-from bisheng.app_runtime.application.tenant_access import require_app_request_tenant
 from bisheng.approval.application.execution_source import get_business_approval
 from bisheng.common.errcode.app_publish import (
     AppCapacityInsufficientError,
-    AppPublishOwnerOnlyError,
     AppSchemaMigrationFailedError,
     AppStartupProbeFailedError,
     AppVersionNotFoundError,
@@ -191,7 +189,7 @@ class PublishOnlineService:
                 AppReleaseAuditAction.APPROVED,
                 deployment=await cls._deployment_ref(payload_snapshot, app),
                 version_no=version.version_no,
-                operator_id=int(app.owner_user_id or 0),
+                **cls._audit_actor(payload_snapshot, await cls._deployment_ref(payload_snapshot, app)),
                 metadata={"status": STATUS_STAGED_ONLY, "app_state": app.state},
             )
             return {"status": STATUS_STAGED_ONLY, "app_id": app_id, "version_id": version_id}
@@ -221,9 +219,9 @@ class PublishOnlineService:
                 details={"app_id": app_id, "reason": "app_missing"},
                 hints=["请刷新页面确认应用是否已被删除"],
             )
-        require_app_request_tenant(app.tenant_id, actor)
-        if int(getattr(actor, "user_id", 0) or 0) != app.owner_user_id:
-            raise AppPublishOwnerOnlyError()
+        from bisheng.app_runtime.application.authorization import authorize_app
+
+        await authorize_app(actor, app.id, "approved_start")
         version_id = app.pending_version_id or app.current_version_id
         await require_release_eligible(app.id, version_id=str(version_id or ""))
         version = await VersionService.get_version(app_id, str(version_id or ""))
@@ -234,9 +232,17 @@ class PublishOnlineService:
                 hints=["请先通过 bisheng deploy 提交一个版本并完成审批"],
             )
 
+        from bisheng.app_runtime.application.authorization import resolve_app_actor
         from bisheng.app_runtime.domain.services.app_state_service import AppStateService
 
+        actual_actor = await resolve_app_actor(actor)
         payload = {
+            "execution_actor": {
+                "subject_type": actual_actor.subject_type,
+                "subject_id": actual_actor.subject_id,
+                "tenant_id": actual_actor.tenant_id,
+                "name": getattr(actor, "user_name", None),
+            },
             "app_id": app_id,
             "version_id": version.id,
             "version_no": version.version_no,
@@ -297,20 +303,11 @@ class PublishOnlineService:
             ):
                 raise AppVersionNotFoundError(details={"reason": "execution_source_invalid"})
         else:
-            require_app_request_tenant(app.tenant_id, actor)
-            if int(getattr(actor, "user_id", 0) or 0) != app.owner_user_id:
-                raise AppPublishOwnerOnlyError()
+            from bisheng.app_runtime.application.authorization import authorize_app
+
+            await authorize_app(actor, app.id, "approved_start")
             await require_release_eligible(app.id, version_id=version.id)
         deployment = await cls._deployment_ref(payload_snapshot, app)
-        try:
-            from bisheng.common.services.config_service import settings
-
-            if settings.app_runtime.runtime_protocol_version != 2:
-                await schema_evolution_service.migrate_for_release(app.id, version.manifest)
-        except AppSchemaMigrationFailedError as error:
-            return await cls._settle_schema_failure(
-                app, version, deployment, payload_snapshot, error=error, instance_id=instance_id
-            )
         if source is not None:
             from bisheng.app_runtime.application.approved_release import start_approved_release
 
@@ -327,7 +324,7 @@ class PublishOnlineService:
                 AppReleaseAuditAction.ONLINE,
                 deployment=deployment,
                 version_no=version.version_no,
-                operator_id=int(app.owner_user_id or 0),
+                **cls._audit_actor(payload_snapshot, deployment),
                 metadata={"status": STATUS_ONLINE, "trigger": str(audit_action), "app_state": result.state},
             )
             logger.info(f"app_publish.online app_id={app.id} version_id={version.id} state={result.state}")
@@ -364,7 +361,7 @@ class PublishOnlineService:
             AppReleaseAuditAction.PENDING_ONLINE,
             deployment=deployment,
             version_no=version.version_no,
-            operator_id=int(app.owner_user_id or 0),
+            **cls._audit_actor(payload_snapshot, deployment),
             reason=result.reason,
             metadata={
                 "status": status,
@@ -430,7 +427,7 @@ class PublishOnlineService:
             AppReleaseAuditAction.SCHEMA_MIGRATION_FAILED,
             deployment=deployment,
             version_no=version.version_no,
-            operator_id=int(app.owner_user_id or 0),
+            **cls._audit_actor(payload_snapshot, deployment),
             reason=reason,
             metadata={
                 "status": STATUS_SCHEMA_MIGRATION_FAILED,
@@ -514,7 +511,7 @@ class PublishOnlineService:
             AppReleaseAuditAction.ITERATION_FAILED,
             deployment=deployment,
             version_no=version.version_no,
-            operator_id=int(app.owner_user_id or 0),
+            **cls._audit_actor(payload_snapshot, deployment),
             reason=result.reason,
             metadata={
                 "status": STATUS_ITERATION_FAILED,
@@ -631,6 +628,20 @@ class PublishOnlineService:
         return row
 
     @staticmethod
+    def _audit_actor(payload_snapshot, deployment):
+        context = getattr(deployment, "authorization_context", None) or {}
+        actor = (
+            payload_snapshot.get("execution_actor")
+            or payload_snapshot.get("submission_actor")
+            or context.get("actor")
+            or {}
+        )
+        return {
+            "operator_id": int(actor.get("subject_id") or 0) if actor.get("subject_type") == "user" else 0,
+            "operator_name": actor.get("name") or context.get("actor_name"),
+        }
+
+    @staticmethod
     async def _deployment_ref(payload_snapshot: dict, app):
         """The ``app_deployment`` row this release came from, or a stand-in.
 
@@ -651,7 +662,7 @@ class PublishOnlineService:
             app_id=app.id,
             tenant_id=int(app.tenant_id or 0),
             version_id=str(payload_snapshot.get("version_id") or ""),
-            submitted_by_user_id=int(app.owner_user_id or 0),
+            submitted_by_user_id=0,
             stage=None,
         )
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import uuid4
 
 from loguru import logger
@@ -208,6 +208,7 @@ class RuntimeDeliveryCoordinator:
                 },
             }
         payload = {
+            "authorization_context": deployment.authorization_context,
             "source_limits": {
                 "compressed": settings.app_runtime.max_package_mb * 1024 * 1024,
                 "unpacked": settings.app_runtime.max_unpacked_mb * 1024 * 1024,
@@ -265,6 +266,7 @@ class RuntimeDeliveryCoordinator:
         from bisheng.app_publish.domain.services.schema_evolution_service import migration_plan, tables_of
 
         body = {
+            "authorization_context": deployment.authorization_context,
             "resolved_delivery": delivery.content,
             "migration_plan": migration_plan([], tables_of(manifest)),
             "slug": app.slug,
@@ -287,7 +289,9 @@ class RuntimeDeliveryCoordinator:
         await self.wake(op)
         return await self.wait(op)
 
-    async def inject_environment(self, op, *, capabilities=None, environment=None, preview=False, secret_snapshot=None):
+    async def inject_environment(
+        self, op, *, capabilities=None, environment=None, preview=False, secret_snapshot=None, preview_identity=None
+    ):
         from bisheng.app_publish.domain.services.app_credential_service import AppRuntimeCredentialService
         from bisheng.app_publish.domain.services.capability_bus_service import (
             derive_scopes,
@@ -306,13 +310,33 @@ class RuntimeDeliveryCoordinator:
                 raise RuntimeConflict("runtime_platform_base_url_required")
             storage = await AppStorageService(
                 self.repo, max_file_bytes=settings.app_runtime.storage_max_file_mb * 1024 * 1024
-            ).issue(op, base_url=base, preview_session=op.id if preview else None)
+            ).issue(op, base_url=base, preview_session=(op.payload.get("session_id") or op.id) if preview else None)
             env = {**(environment or {}), **storage["env"], "BISHENG_PLATFORM_API_BASE": base}
             # Preflight gets isolated data and no production application identity.
             from bisheng.app_publish.application.runtime_secrets import formal_snapshot, preview_environment
 
             if preview:
                 env.update(preview_environment(capabilities or {}))
+                if op.kind == "preview":
+                    if not preview_identity:
+                        raise RuntimeConflict("preview_identity_required")
+                    declaration = parse_declaration(capabilities or {})
+                    env.update(
+                        {
+                            "BISHENG_APP_TOKEN": preview_identity,
+                            "BISHENG_API_BASE_URL": base,
+                            "BISHENG_PREVIEW_SESSION_ID": op.payload["session_id"],
+                            "BISHENG_PREVIEW_PURPOSE": op.payload["preview_purpose"],
+                        }
+                    )
+                    if declaration.models:
+                        env.update(
+                            {
+                                "OPENAI_API_KEY": preview_identity,
+                                "BISHENG_MODEL_BASE_URL": model_face_base_url(),
+                                "OPENAI_BASE_URL": model_face_base_url(),
+                            }
+                        )
             else:
                 if secret_snapshot is None:
                     from bisheng.database.models.app import App
@@ -344,7 +368,7 @@ class RuntimeDeliveryCoordinator:
             op.payload = {**op.payload, "sealed_env": seal(env)}
             await self.repo.save(op)
 
-    async def deploy(self, app, version, tier, *, key=None, preserve_pending=False):
+    async def deploy(self, app, version, tier, *, authorization_context, key=None, preserve_pending=False):
         from bisheng.app_publish.domain.schemas.app_manifest import egress_domains_of
         from bisheng.app_publish.domain.services.schema_evolution_service import (
             _reference_tables,
@@ -360,6 +384,9 @@ class RuntimeDeliveryCoordinator:
         active = [row for row in existing if row.status not in {"completed", "failed", "cancelled", "timed_out"}]
         if active:
             op = active[-1]
+            from bisheng.app_runtime.domain.services.runtime_authorization_service import RuntimeAuthorizationService
+
+            await RuntimeAuthorizationService.validate_operation(self.repo, op)
             await self.inject_environment(
                 op, capabilities=version.capabilities, environment=(version.injections or {}).get("env", {})
             )
@@ -372,6 +399,7 @@ class RuntimeDeliveryCoordinator:
             return {"instance_id": routes[0].exec_ref, "phase": "running", "operation_id": op.id}
         delivery = await self.delivery(app.id, version.id)
         body = {
+            "authorization_context": authorization_context,
             "resolved_delivery": delivery.content,
             "slug": app.slug,
             "version_no": version.version_no,
@@ -424,61 +452,12 @@ class RuntimeDeliveryCoordinator:
         await self.wake(op)
         return await self.wait(op)
 
-    async def preview_start(self, app, version, row, payload):
-        from bisheng.app_publish.domain.services.schema_evolution_service import migration_plan, tables_of
-
-        delivery = await self.delivery(app.id, version.id)
-        body = {
-            "resolved_delivery": delivery.content,
-            "session_id": row.id,
-            "preview_expires_at": datetime.fromtimestamp(row.expires_at.timestamp(), UTC)
-            .replace(tzinfo=None)
-            .isoformat(),
-            "base_path": payload["base_path"],
-            "slug": app.slug,
-            "version_no": version.version_no,
-            "port": payload["port"],
-            "health": payload["health"],
-            "tier": {"memory_mb": payload["tier"]["mem"], "cpu_millicores": int(payload["tier"]["cpu"] * 1000)},
-            "migration_plan": migration_plan([], tables_of(version.manifest)),
-            "egress_domains": payload["egress_domains"],
-        }
-        op = await self.submit(app, kind="preview", key="preview:" + row.id, version_id=version.id, payload=body)
-        await self.inject_environment(
-            op, preview=True, capabilities=version.capabilities, environment=payload.get("env")
-        )
-        await self.wake(op)
-        return await self.wait(op, ready=True)
-
     async def preview_stop(self, session_id):
-        from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeRoute
+        from bisheng.app_runtime.application.preview_operations import stop_preview
 
-        async with self.repo.transaction():
-            routes = await self.repo.find(RuntimeRoute, route_key="preview:" + session_id, lock=True)
-            if not routes:
-                return
-            route = routes[0]
-            route.status = "stopped"
-            route.route_epoch += 1
-            await self.repo.save(route)
-            op = await self.repo.get(RuntimeOperation, route.operation_id, lock=True)
-            if op and op.status not in {"completed", "failed", "cancelled", "timed_out"}:
-                op.payload = {**op.payload, "cancel_requested": True}
-                from bisheng.app_runtime.domain.models.runtime_delivery import (
-                    RuntimeEgressPolicy,
-                    RuntimeStorageBinding,
-                )
+        return await stop_preview(session_id, reason="manual", coordinator=self)
 
-                for binding in await self.repo.find(RuntimeStorageBinding, operation_id=op.id, lock=True):
-                    binding.state = "revoked"
-                    await self.repo.save(binding)
-                for policy in await self.repo.find(RuntimeEgressPolicy, operation_id=op.id, lock=True):
-                    policy.revoked_at = datetime.utcnow()
-                    await self.repo.save(policy)
-
-                await self.repo.save(op)
-
-    async def recover(self, app, route, *, running):
+    async def recover(self, app, route, *, running, observation):
         from bisheng.app_publish.domain.schemas.app_manifest import egress_domains_of
         from bisheng.app_runtime.domain.services.app_state_service import AppStateService
 
@@ -500,8 +479,6 @@ class RuntimeDeliveryCoordinator:
         version = await AppStateService._load_version(app.id, route.version_id)
         delivery = await self.delivery(app.id, version.id)
         tier = await AppStateService._resolve_tier(version.tier_id)
-        if not running:
-            await self.repo.release(route.operation_id, stopped=True)
         payload = {
             "resolved_delivery": delivery.content,
             "slug": app.slug,
@@ -529,6 +506,39 @@ class RuntimeDeliveryCoordinator:
                 app.pending_version_id,
             ):
                 return
+            from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeRoute
+            from bisheng.app_runtime.domain.services.runtime_authorization_service import RuntimeAuthorizationService
+
+            owners = await self.repo.find(RuntimeAssignment, app_id=app.id, lock=True)
+            current_previous = (
+                await self.repo.get(RuntimeOperation, owners[0].active_operation_id, lock=True) if owners else None
+            )
+            if (
+                bool(current_previous) != bool(previous)
+                or (
+                    current_previous
+                    and (
+                        current_previous.id != previous.id
+                        or current_previous.status not in {"completed", "failed", "cancelled", "timed_out"}
+                        or current_previous.cleanup_status != "complete"
+                    )
+                )
+                or (owners and owners[0].data_operation_id)
+            ):
+                return
+            current_route = await self.repo.get(RuntimeRoute, route.id, lock=True)
+            if current_route is None or RuntimeAuthorizationService.route_snapshot(
+                current_route
+            ) != RuntimeAuthorizationService.route_snapshot(route):
+                return
+            origin = await self.repo.get(RuntimeOperation, current_route.operation_id, lock=True)
+            if origin is None:
+                return
+            payload["authorization_context"] = RuntimeAuthorizationService.capture_system(
+                locked, current_route, origin, delivery, observation
+            )
+            if not running:
+                await self.repo.release(current_route.operation_id, stopped=True)
             op = await self.submit(
                 app,
                 kind="deploy",

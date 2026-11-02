@@ -1,29 +1,4 @@
-"""Read-only browsing of one version's frozen package — the review view's data (AC-25 / T052).
-
-Three reads (tree, one file, and the surrounding review context), one access
-rule, and three things that are easy to get wrong:
-
-* **Who may look.** The owner, the app's tenant administrator and a platform
-  super admin (the same set ``publish-status`` admits), **plus an approver who
-  holds a task on the publish request of that very version** — AC-30 keeps a
-  draft app owner-only and names the review view as the approver's sanctioned
-  way in. "Holds a task" is taken literally: a task row with the caller's
-  ``approver_user_id`` on an instance whose ``payload_snapshot.version_id`` is
-  the version asked for. Being an approver *somewhere* admits nobody; being
-  the approver of version 3 does not open version 1. Refusals ride in the 200
-  envelope (design K11 ②).
-* **Nothing is extracted.** A tree listing or a single file read walks the
-  archive as a stream and never writes to disk — a 50 MB package per click,
-  materialised in a temp directory, is how an API worker's disk fills up
-  quietly. The path rule is still the extractor's (:func:`safe_member_path`),
-  so a listing cannot show an entry the runtime would have refused.
-* **What the scanner did not read, the browser does not show.** A binary or
-  over-sized file degrades to ``previewable: false`` with the scanner's own
-  reason, and what *is* shown goes through :func:`mask_secrets` first. A
-  version snapshot passed the scan gate by construction (only attempts that
-  did get a version row), but the rule set grows and a snapshot frozen under
-  yesterday's rules is read under today's.
-"""
+"""Edit or current-task access to bounded, masked frozen source snapshots."""
 
 from __future__ import annotations
 
@@ -31,6 +6,7 @@ import asyncio
 import io
 import tarfile
 from collections.abc import Iterable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
@@ -38,11 +14,10 @@ from typing import Any
 from loguru import logger
 
 from bisheng.app_publish.domain.services import package_service
-from bisheng.app_publish.domain.services.app_publish_scenario_handler import SCENARIO_CODE
 from bisheng.app_publish.domain.services.secret_scanner import mask_secrets, skip_reason
 from bisheng.app_publish.domain.services.version_service import VersionService
-from bisheng.app_runtime.application.tenant_access import require_app_request_tenant
-from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
+from bisheng.app_runtime.application.authorization import authorize_app
+from bisheng.approval.application.app_review import pending_app_reviews
 from bisheng.common.errcode.app_factory import AppNotFoundError
 from bisheng.common.errcode.app_publish import (
     AppPackageInvalidError,
@@ -51,93 +26,74 @@ from bisheng.common.errcode.app_publish import (
     AppVersionReviewForbiddenError,
     AppVersionSnapshotUnavailableError,
 )
-from bisheng.common.permission_identity import check_tenant_admin
+from bisheng.common.errcode.permission import InvalidCatalogActionError, PermissionDeniedError
+from bisheng.core.context.tenant import tenant_execution_scope
+from bisheng.open_api.application.access_context import get_current_open_api_principal
 
 #: Bytes read from the head of each file to decide "binary" — the scanner's
 #: own sniff width, restated here because the listing reads it off a stream.
 _SNIFF_BYTES = 8192
 
-#: The roles :meth:`ReviewAccess.require` can answer with. Returned rather than
-#: swallowed so the endpoint can tell the client *why* it is allowed in — an
-#: approver's view and an owner's view differ in what else they may do.
-ROLE_OWNER = "owner"
-ROLE_SUPER_ADMIN = "super_admin"
-ROLE_TENANT_ADMIN = "tenant_admin"
+ROLE_EDITOR = "editor"
 ROLE_APPROVER = "approver"
 
 
-# ---------------------------------------------------------------------------
-# Access
-# ---------------------------------------------------------------------------
-
-
 class ReviewAccess:
-    """The single answer to "may this caller read the source of these versions"."""
+    """A temporary task never becomes a lasting application-management grant."""
+
+    @staticmethod
+    async def load_app(app_id: str):
+        app = await VersionService.get_app_scoped(app_id)
+        if app is None or app.state == "deleted":
+            raise AppVersionReviewForbiddenError()
+        return app
+
+    @staticmethod
+    def _natural_viewer(actor) -> int | None:
+        principal = get_current_open_api_principal()
+        if principal is not None:
+            if principal.actor_kind != "natural_person":
+                return None
+            return int(principal.authorization_subject_id)
+        if getattr(actor, "subject_type", "user") != "user":
+            return None
+        return int(getattr(actor, "user_id", 0) or 0) or None
 
     @classmethod
-    async def load_app(cls, app_id: str):
-        """The app row, or 16257 with ``reason: not_found``.
-
-        Deliberately the *same* code as "not allowed": a stranger probing ids
-        learns nothing from the difference, and the client renders both as
-        "you cannot view this".
-        """
-        app = await VersionService.get_app_scoped(app_id)
-        if app is None:
-            raise AppVersionReviewForbiddenError(
-                msg="应用不存在或无权访问",
-                details={"app_id": app_id, "reason": "not_found"},
-                hints=["请确认应用是否已被删除"],
-            )
-        return app
+    @asynccontextmanager
+    async def scope(cls, app_id: str, actor, version_ids: Iterable[str]):
+        requested = {str(value) for value in version_ids}
+        viewer = cls._natural_viewer(actor)
+        grants = await pending_app_reviews(viewer, app_id, requested) if viewer else ()
+        if grants:
+            tenants = {grant.tenant_id for grant in grants}
+            if len(tenants) != 1 or any(grant.app_id != app_id for grant in grants):
+                raise AppVersionReviewForbiddenError()
+            target_tenant = next(iter(tenants))
+            if int(getattr(actor, "tenant_id", 0) or 0) != target_tenant and not bool(
+                getattr(actor, "is_global_super", False)
+            ):
+                raise AppVersionReviewForbiddenError()
+            with tenant_execution_scope(target_tenant):
+                app = await cls.load_app(app_id)
+                permitted = {grant.version_id for grant in grants} | {app.current_version_id}
+                if app.tenant_id != target_tenant or not requested.issubset(permitted):
+                    raise AppVersionReviewForbiddenError()
+                yield app, ROLE_APPROVER
+            return
+        app = await cls.load_app(app_id)
+        try:
+            await authorize_app(actor, app_id, "content_read")
+        except (AppNotFoundError, PermissionDeniedError, InvalidCatalogActionError) as exc:
+            raise AppVersionReviewForbiddenError() from exc
+        yield app, ROLE_EDITOR
 
     @classmethod
     async def require(cls, app, actor, version_ids: Iterable[str]) -> str:
-        """Return the role the caller is admitted under, or raise 16257.
-
-        ``version_ids`` is the set of versions the read is about — one for a
-        tree or file read, two for a diff. An approver is admitted when they
-        hold a task on the publish request of **any** of them: the diff an
-        approver needs is "pending version against the last published one",
-        and the published side has no request of its own to hold a task on.
-        """
-        try:
-            require_app_request_tenant(app.tenant_id, actor, allow_global_super=True)
-        except AppNotFoundError as exc:
-            raise AppVersionReviewForbiddenError() from exc
-        user_id = int(getattr(actor, "user_id", 0) or 0)
-        if user_id and user_id == int(app.owner_user_id or 0):
-            return ROLE_OWNER
-        if bool(getattr(actor, "is_global_super", False)):
-            return ROLE_SUPER_ADMIN
-        if await check_tenant_admin(user_id, int(app.tenant_id or 0)):
-            return ROLE_TENANT_ADMIN
-        if await cls._holds_task(app, user_id, {str(v) for v in version_ids}):
-            return ROLE_APPROVER
-        raise AppVersionReviewForbiddenError(
-            msg="没有查看该版本代码的权限",
-            details={"app_id": app.id, "reason": "not_reviewer"},
-            hints=["只有应用负责人、租户管理员和该版本的审批人可以查看"],
-        )
-
-    @staticmethod
-    async def _holds_task(app, user_id: int, version_ids: set[str]) -> bool:
-        if not user_id or not version_ids:
-            return False
-        instances = await ApprovalInstanceRepository.list_instances_by_resource(
-            tenant_id=int(app.tenant_id or 0),
-            scenario_code=SCENARIO_CODE,
-            business_resource_type="app",
-            business_resource_id=str(app.id),
-        )
-        for instance in instances:
-            payload = instance.payload_snapshot if isinstance(instance.payload_snapshot, dict) else {}
-            if str(payload.get("version_id") or "") not in version_ids:
-                continue
-            tasks = await ApprovalInstanceRepository.list_tasks(int(instance.id))
-            if any(int(task.approver_user_id or 0) == user_id for task in tasks):
-                return True
-        return False
+        async with cls.scope(app.id, actor, version_ids) as (current, role):
+            if current.tenant_id != app.tenant_id:
+                raise AppVersionReviewForbiddenError()
+            return role
 
 
 # ---------------------------------------------------------------------------
@@ -172,24 +128,23 @@ class SnapshotBrowseService:
 
         Read-only and free of the snapshot: no object storage is touched.
         """
-        app = await ReviewAccess.load_app(app_id)
-        role = await ReviewAccess.require(app, actor, (version_id,))
-        version = await cls.load_version(app.id, version_id)
-        rows = await VersionService.list_versions(app.id)
-        return {
-            "version": cls.version_payload(version),
-            "role": role,
-            "current_version_id": app.current_version_id,
-            "pending_version_id": app.pending_version_id,
-            "versions": [
-                {
-                    **cls.version_payload(row),
-                    "is_current": row.id == app.current_version_id,
-                    "is_pending": row.id == app.pending_version_id,
-                }
-                for row in rows
-            ],
-        }
+        async with ReviewAccess.scope(app_id, actor, (version_id,)) as (app, role):
+            version = await cls.load_version(app.id, version_id)
+            rows = await VersionService.list_versions(app.id)
+            return {
+                "version": cls.version_payload(version),
+                "role": role,
+                "current_version_id": app.current_version_id,
+                "pending_version_id": app.pending_version_id,
+                "versions": [
+                    {
+                        **cls.version_payload(row),
+                        "is_current": row.id == app.current_version_id,
+                        "is_pending": row.id == app.pending_version_id,
+                    }
+                    for row in rows
+                ],
+            }
 
     @classmethod
     async def list_tree(cls, app_id: str, version_id: str, *, actor) -> dict[str, Any]:
@@ -201,45 +156,44 @@ class SnapshotBrowseService:
         same two checks the scanner applies — so the client can grey a file
         out before asking for it.
         """
-        app = await ReviewAccess.load_app(app_id)
-        role = await ReviewAccess.require(app, actor, (version_id,))
-        version = await cls.load_version(app.id, version_id)
-        data = await cls.load_snapshot_bytes(app.id, version)
-        limit = package_service.deploy_limits()["max_package_entries"]
-        members, truncated = await asyncio.to_thread(cls._walk, data, version_id, None, limit)
+        async with ReviewAccess.scope(app_id, actor, (version_id,)) as (app, role):
+            version = await cls.load_version(app.id, version_id)
+            data = await cls.load_snapshot_bytes(app.id, version)
+            limit = package_service.deploy_limits()["max_package_entries"]
+            members, truncated = await asyncio.to_thread(cls._walk, data, version_id, None, limit)
 
-        prefix = package_service.snapshot_root_prefix([member.path for member in members])
-        entries: list[dict[str, Any]] = []
-        seen_dirs: set[str] = set()
-        for member in members:
-            if prefix and not member.path.startswith(prefix):
-                continue  # a sibling of the single wrapping directory: not part of the app
-            relative = member.path[len(prefix) :]
-            parts = PurePosixPath(relative).parts
-            for depth in range(1, len(parts)):
-                directory = "/".join(parts[:depth])
-                if directory not in seen_dirs:
-                    seen_dirs.add(directory)
-                    entries.append({"path": directory, "name": parts[depth - 1], "type": "dir", "size": None})
-            reason = skip_reason(member.size, member.head)
-            entries.append(
-                {
-                    "path": relative,
-                    "name": parts[-1],
-                    "type": "file",
-                    "size": member.size,
-                    "previewable": reason is None,
-                    "reason": reason,
-                }
-            )
-        entries.sort(key=lambda item: item["path"])
-        return {
-            "version": cls.version_payload(version),
-            "role": role,
-            "entries": entries,
-            "total_files": sum(1 for item in entries if item["type"] == "file"),
-            "truncated": truncated,
-        }
+            prefix = package_service.snapshot_root_prefix([member.path for member in members])
+            entries: list[dict[str, Any]] = []
+            seen_dirs: set[str] = set()
+            for member in members:
+                if prefix and not member.path.startswith(prefix):
+                    continue  # a sibling of the single wrapping directory: not part of the app
+                relative = member.path[len(prefix) :]
+                parts = PurePosixPath(relative).parts
+                for depth in range(1, len(parts)):
+                    directory = "/".join(parts[:depth])
+                    if directory not in seen_dirs:
+                        seen_dirs.add(directory)
+                        entries.append({"path": directory, "name": parts[depth - 1], "type": "dir", "size": None})
+                reason = skip_reason(member.size, member.head)
+                entries.append(
+                    {
+                        "path": relative,
+                        "name": parts[-1],
+                        "type": "file",
+                        "size": member.size,
+                        "previewable": reason is None,
+                        "reason": reason,
+                    }
+                )
+            entries.sort(key=lambda item: item["path"])
+            return {
+                "version": cls.version_payload(version),
+                "role": role,
+                "entries": entries,
+                "total_files": sum(1 for item in entries if item["type"] == "file"),
+                "truncated": truncated,
+            }
 
     @classmethod
     async def read_file(cls, app_id: str, version_id: str, path: str, *, actor) -> dict[str, Any]:
@@ -250,52 +204,51 @@ class SnapshotBrowseService:
         ``MAX_SCAN_FILE_BYTES``, not a UI preference — it is the size above
         which the platform has not vetted the content.
         """
-        app = await ReviewAccess.load_app(app_id)
-        role = await ReviewAccess.require(app, actor, (version_id,))
-        version = await cls.load_version(app.id, version_id)
-        wanted = cls._normalise_request_path(path)
-        data = await cls.load_snapshot_bytes(app.id, version)
-        limit = package_service.deploy_limits()["max_package_entries"]
-        members, _truncated = await asyncio.to_thread(cls._walk, data, version_id, wanted, limit)
+        async with ReviewAccess.scope(app_id, actor, (version_id,)) as (app, role):
+            version = await cls.load_version(app.id, version_id)
+            wanted = cls._normalise_request_path(path)
+            data = await cls.load_snapshot_bytes(app.id, version)
+            limit = package_service.deploy_limits()["max_package_entries"]
+            members, _truncated = await asyncio.to_thread(cls._walk, data, version_id, wanted, limit)
 
-        prefix = package_service.snapshot_root_prefix([member.path for member in members])
-        member = next((m for m in members if m.path == prefix + wanted), None)
-        if member is None:
-            raise AppSnapshotFileNotFoundError(
-                msg=f"快照中没有这个文件: {wanted}",
-                details={"path": wanted, "reason": "not_found"},
-            )
-        reason = skip_reason(member.size, member.head)
-        payload: dict[str, Any] = {
-            "version": cls.version_payload(version),
-            "role": role,
-            "path": wanted,
-            "size": member.size,
-            "previewable": reason is None,
-            "reason": reason,
-            "content": None,
-            "masked_secrets": 0,
-            "line_count": 0,
-        }
-        if reason is not None or member.content is None:
-            return payload
-        text, masked = mask_secrets(member.content.decode("utf-8", errors="replace"))
-        payload.update(
-            {
-                "content": text,
-                "masked_secrets": masked,
-                "line_count": len(text.splitlines()),
+            prefix = package_service.snapshot_root_prefix([member.path for member in members])
+            member = next((m for m in members if m.path == prefix + wanted), None)
+            if member is None:
+                raise AppSnapshotFileNotFoundError(
+                    msg=f"快照中没有这个文件: {wanted}",
+                    details={"path": wanted, "reason": "not_found"},
+                )
+            reason = skip_reason(member.size, member.head)
+            payload: dict[str, Any] = {
+                "version": cls.version_payload(version),
+                "role": role,
+                "path": wanted,
+                "size": member.size,
+                "previewable": reason is None,
+                "reason": reason,
+                "content": None,
+                "masked_secrets": 0,
+                "line_count": 0,
             }
-        )
-        if masked:
-            logger.warning(
-                f"app_publish.snapshot_masked app_id={app.id} version_id={version_id} path={wanted} masked={masked}"
+            if reason is not None or member.content is None:
+                return payload
+            text, masked = mask_secrets(member.content.decode("utf-8", errors="replace"))
+            payload.update(
+                {
+                    "content": text,
+                    "masked_secrets": masked,
+                    "line_count": len(text.splitlines()),
+                }
             )
-        return payload
+            if masked:
+                logger.warning(
+                    f"app_publish.snapshot_masked app_id={app.id} version_id={version_id} path={wanted} masked={masked}"
+                )
+            return payload
 
-    # ------------------------------------------------------------------
-    # internals
-    # ------------------------------------------------------------------
+        # ------------------------------------------------------------------
+        # internals
+        # ------------------------------------------------------------------
 
     @staticmethod
     async def load_version(app_id: str, version_id: str):

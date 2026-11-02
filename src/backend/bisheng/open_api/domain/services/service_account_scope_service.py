@@ -18,7 +18,7 @@ from bisheng.common.errcode.open_api import (
     ServiceAccountOperationForbiddenError,
 )
 from bisheng.common.services.config_service import settings
-from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter, tenant_execution_scope
+from bisheng.core.context.tenant import DEFAULT_TENANT_ID, management_tenant_scope, tenant_execution_scope
 
 _admitted_tenant: ContextVar[int | None] = ContextVar("service_account_admitted_tenant", default=None)
 
@@ -42,33 +42,24 @@ class ServiceAccountScopeService:
 
     @classmethod
     @asynccontextmanager
-    async def bind_request(
-        cls, operator, *, expected_tenant: str | None, writing: bool, allow_all_tenants: bool = False
-    ):
-        global_read = expected_tenant == "all"
-        if global_read and (
-            writing or not allow_all_tenants or not operator.is_global_super or not settings.multi_tenant.enabled
-        ):
-            raise ServiceAccountManagementScopeChangedError()
-        expected = _expected_tenant(None if global_read else expected_tenant)
+    async def bind_request(cls, operator, *, expected_tenant: str | None, writing: bool):
+        expected = _expected_tenant(expected_tenant)
         try:
             if not settings.multi_tenant.enabled:
                 tenant_id = DEFAULT_TENANT_ID
             elif operator.is_global_super:
                 selected = await current_admin_scope(operator.user_id)
-                if global_read and selected is not None:
-                    raise ServiceAccountManagementScopeChangedError()
                 if writing and (selected is None or expected is None):
                     raise ServiceAccountManagementScopeChangedError()
                 if expected is not None and expected != selected:
                     raise ServiceAccountManagementScopeChangedError()
                 # Legacy reads without a header retain the authenticated tenant when no scope exists.
-                tenant_id = None if global_read else selected if selected is not None else operator.tenant_id
+                tenant_id = selected if selected is not None else operator.tenant_id
             else:
                 tenant_id = operator.tenant_id
             if expected is not None and expected != tenant_id:
                 raise ServiceAccountManagementScopeChangedError()
-            if settings.multi_tenant.enabled and tenant_id is not None:
+            if settings.multi_tenant.enabled:
                 await ensure_service_account_tenant_available(tenant_id)
         except BaseErrorCode:
             raise
@@ -77,8 +68,7 @@ class ServiceAccountScopeService:
             raise OpenApiAuthDependencyUnavailableError() from exc
 
         # Clear stale middleware overrides as well as pinning current/visible tenant ids.
-        scope_context = bypass_tenant_filter() if global_read else tenant_execution_scope(tenant_id)
-        with scope_context:
+        with tenant_execution_scope(tenant_id), management_tenant_scope(tenant_id):
             token = _admitted_tenant.set(tenant_id)
             try:
                 yield tenant_id

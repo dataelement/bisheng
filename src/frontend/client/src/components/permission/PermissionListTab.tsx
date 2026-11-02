@@ -24,6 +24,7 @@ import { useConfirm } from "~/Providers";
 import { canMutatePermissionAssignee } from "./assigneePolicy";
 import { PermissionEmptyState } from "./PermissionEmptyState";
 import { SourceBadge } from "./SourceBadge";
+import { PermissionModelStatus } from "./PermissionModelStatus";
 
 interface PermissionListTabProps {
   resourceType: ResourceType;
@@ -128,6 +129,7 @@ function RosterRow({
           </p>
           <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1 text-xs text-[#86909C]">
             <SourceBadge source={assignee.source} />
+            <PermissionModelStatus active={assignee.model.active} />
             <span>
               {localize(
                 `f048_permission.scope.${assignee.scope.toLowerCase()}`,

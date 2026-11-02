@@ -55,7 +55,7 @@ from bisheng.common.errcode.permission import (
 )
 from bisheng.common.errcode.tenant_fga import PermissionBackendUnavailableError
 from bisheng.common.services.config_service import settings
-from bisheng.core.context.tenant import bypass_tenant_filter, set_current_tenant_id
+from bisheng.core.context.tenant import bypass_tenant_filter, set_current_tenant_id, tenant_execution_scope
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.app import App, AppDao
 from bisheng.permission.application.business_authorization import check_business_action
@@ -297,44 +297,44 @@ async def authorize_preview_entry(
     if app is None:
         return {"decision": DECISION_NOT_FOUND}
 
-    set_current_tenant_id(int(app.tenant_id or 0))
-    user_name, subject_kind = await _user_facts(user_id, subject)
-    obo_config = _obo_signing_snapshot()
-    if obo_configuration_status(obo_config):
-        return {"decision": DECISION_UNAVAILABLE, "reason": "identity_config_incomplete"}
-    material = await _identity_material(
-        app=app, user_id=user_id, user_name=user_name, subject_kind=subject_kind, request_id=request_id
-    )
-    obo_token, obo_expires_at = _issue_obo_token(
-        config=obo_config,
-        app_id=app.id,
-        user_id=user_id,
-        tenant_id=int(app.tenant_id or 0),
-        subject_kind=material.get("X-BiSheng-Subject-Kind", "human"),
-        # The approval exception rides the token, not a header: AC-27 widens
-        # what the *platform* does for this visit, so the fact belongs where the
-        # platform reads it back, never where the application could read — or
-        # forge — it.
-        preview_session=row.id,
-    )
-    if not obo_token:
-        return {"decision": DECISION_UNAVAILABLE, "reason": "identity_config_incomplete"}
-    material["X-BiSheng-Access-Token"] = obo_token
-    logger.debug("app_runtime.preview_entry allow session={} user={} ip={}", session, user_id, client_ip)
-    # No access record: AC-38 counts visits to an *application*, and a trial
-    # instance of a version that may never ship is not one. Counting it would
-    # inflate an app's usage with its own approvals.
-    return {
-        "decision": DECISION_ALLOW,
-        "app_id": app.id,
-        "app_name": app.name,
-        "app_state": app.state,
-        "preview_session": row.id,
-        "headers": material,
-        "obo_token": obo_token,
-        "obo_expires_at": obo_expires_at,
-        "ws_max_lifetime_seconds": int(settings.app_runtime.ws_max_lifetime_seconds),
-    }
+    with tenant_execution_scope(int(app.tenant_id or 0)):
+        user_name, subject_kind = await _user_facts(user_id, subject)
+        obo_config = _obo_signing_snapshot()
+        if obo_configuration_status(obo_config):
+            return {"decision": DECISION_UNAVAILABLE, "reason": "identity_config_incomplete"}
+        material = await _identity_material(
+            app=app, user_id=user_id, user_name=user_name, subject_kind=subject_kind, request_id=request_id
+        )
+        obo_token, obo_expires_at = _issue_obo_token(
+            config=obo_config,
+            app_id=app.id,
+            user_id=user_id,
+            tenant_id=int(app.tenant_id or 0),
+            subject_kind=material.get("X-BiSheng-Subject-Kind", "human"),
+            # The approval exception rides the token, not a header: AC-27 widens
+            # what the *platform* does for this visit, so the fact belongs where the
+            # platform reads it back, never where the application could read — or
+            # forge — it.
+            preview_session=row.id,
+        )
+        if not obo_token:
+            return {"decision": DECISION_UNAVAILABLE, "reason": "identity_config_incomplete"}
+        material["X-BiSheng-Access-Token"] = obo_token
+        logger.debug("app_runtime.preview_entry allow session={} user={} ip={}", session, user_id, client_ip)
+        # No access record: AC-38 counts visits to an *application*, and a trial
+        # instance of a version that may never ship is not one. Counting it would
+        # inflate an app's usage with its own approvals.
+        return {
+            "decision": DECISION_ALLOW,
+            "app_id": app.id,
+            "app_name": app.name,
+            "app_state": app.state,
+            "preview_session": row.id,
+            "headers": material,
+            "obo_token": obo_token,
+            "obo_expires_at": obo_expires_at,
+            "ws_max_lifetime_seconds": int(settings.app_runtime.ws_max_lifetime_seconds),
+        }
 
 
 async def _resolve_preview_session(session: str):
@@ -655,7 +655,7 @@ def _issue_obo_token(
     return jwt.encode(payload, secret, algorithm="HS256"), expires_at
 
 
-def verify_obo_token(token: str, *, app_id: str, tenant_id: int) -> int | None:
+def verify_obo_claims(token: str, *, app_id: str, tenant_id: int):
     """The reader :func:`_issue_obo_token` was written for — returns the visitor's user id.
 
     ``None`` for every failure, with no distinction between them: an expired,
@@ -696,7 +696,19 @@ def verify_obo_token(token: str, *, app_id: str, tenant_id: int) -> int | None:
     if int(claims.get("tenant_id") or 0) != int(tenant_id or 0):
         return None
     user_id = claims.get("user_id")
-    return int(user_id) if user_id else None
+    if not user_id:
+        return None
+    from bisheng.open_api.domain.services.model_range_policy import AccessSubject
+
+    preview = claims.get("preview_session")
+    if preview is not None and (not isinstance(preview, str) or not preview):
+        return None
+    return AccessSubject(user_id=int(user_id), preview_session=preview, expires_at=int(payload["exp"]))
+
+
+def verify_obo_token(token: str, *, app_id: str, tenant_id: int) -> int | None:
+    claims = verify_obo_claims(token, app_id=app_id, tenant_id=tenant_id)
+    return claims.user_id if claims else None
 
 
 class AccessSubjectVerifier:
@@ -708,7 +720,4 @@ class AccessSubjectVerifier:
     """
 
     def verify(self, token: str, *, app_id: str, tenant_id: int):
-        from bisheng.open_api.domain.services.model_range_policy import AccessSubject
-
-        user_id = verify_obo_token(token, app_id=app_id, tenant_id=tenant_id)
-        return AccessSubject(user_id=user_id) if user_id else None
+        return verify_obo_claims(token, app_id=app_id, tenant_id=tenant_id)

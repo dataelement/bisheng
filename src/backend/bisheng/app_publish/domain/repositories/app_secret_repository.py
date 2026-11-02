@@ -9,7 +9,7 @@ from bisheng.app_publish.domain.models.app_deployment import ACTIVE_STATUSES, Ap
 from bisheng.app_publish.domain.models.app_secret_config import AppSecretConfig
 from bisheng.common.errcode.app_factory import AppNotFoundError
 from bisheng.common.errcode.app_publish import AppPublishOwnerOnlyError, AppSecretRevisionConflictError
-from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter, tenant_execution_scope
+from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.app import App
 from bisheng.database.models.app_version import AppVersion
@@ -33,16 +33,17 @@ class AppSecretConfigRepository:
 
     @asynccontextmanager
     async def read_transaction(self, app_id):
-        """Locate within the request's management view, then isolate dependent reads.
+        """Keep dependent reads in the concrete request scope and retain actor identity.
 
-        The service must authorize the returned application before reading its
-        configuration. Owner writes continue to use the strict transaction.
+        The service authorizes the application before reading its configuration.
+        Strict filtering preserves the selected tenant without resetting the
+        management context needed by F048 to check the original caller.
         """
         async with self._factory() as session:
-            app = (await session.exec(select(App).where(App.id == app_id))).first()
-            if app is None:
-                raise AppNotFoundError(app_id=app_id)
-            with tenant_execution_scope(int(app.tenant_id)), strict_tenant_filter():
+            with strict_tenant_filter():
+                app = (await session.exec(select(App).where(App.id == app_id))).first()
+                if app is None:
+                    raise AppNotFoundError(app_id=app_id)
                 yield session, app
 
     async def app(self, session, app_id, *, lock=False):

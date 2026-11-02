@@ -8,6 +8,7 @@ import {
   type HostedAppActionResult,
   type HostedAppVersion,
 } from "@/controllers/API/hostedApp"
+import { appActionState } from "./hostedApp/appActions"
 import { AppType } from "@/types/app"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -36,6 +37,7 @@ export interface HostedAppListItem {
   /** The real application state; the badge falls back when it is absent. */
   app_state?: string
   write?: boolean
+  allowed_actions?: import("@/controllers/API/hostedApp").HostedAppAction[]
 }
 
 interface HostedAppVersionLabelProps {
@@ -125,9 +127,6 @@ export function HostedAppCard({
   item,
   currentUser,
   isAdmin,
-  canDelete,
-  canSwitch,
-  canManagePermission,
   labelPannel = null,
   onPermission,
   onChanged,
@@ -145,9 +144,8 @@ export function HostedAppCard({
   const state =
     item.app_state ?? (item.status === 2 ? "online" : undefined)
   const online = isOnline(state) || item.status === 2
-  const mayDelete = Boolean(currentUser?.is_global_super)
-    || Number(item.user_id) === Number(currentUser?.user_id)
-    || (item.owner_active === false && Boolean(currentUser?.is_child_admin))
+  const actions = appActionState(item.allowed_actions)
+  const canSwitch = online ? actions.unpublish : actions.publish
   const appRef = { appId: String(item.id), name: item.name, state }
 
   const handleCheckedChange = async (checked: boolean) => {
@@ -179,8 +177,8 @@ export function HostedAppCard({
       // touching the shared component.
       onAddTemp={undefined}
       showCopy={false}
-      onPermission={canManagePermission ? onPermission : undefined}
-      onDelete={canDelete && mayDelete ? handleDelete : undefined}
+      onPermission={actions.managePermission ? onPermission : undefined}
+      onDelete={actions.delete ? handleDelete : undefined}
       deleteDisabledHint={
         isDeleteBlockedByState(state) || online
           ? t("hostedApp.actions.deleteBlockedHint")

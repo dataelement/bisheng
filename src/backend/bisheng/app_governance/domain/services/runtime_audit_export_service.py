@@ -69,7 +69,7 @@ class RuntimeAuditExportService:
             token_version=account.token_version,
         )
         with tenant_execution_scope(job.tenant_id):
-            scope = await self.scope_resolver(user, job.scope_tenant_id)
+            scope = await self.job_scope(user, job)
         if scope.tenant_id != job.scope_tenant_id or scope.owner_tenant_id != job.tenant_id:
             raise RuntimeAuditAccessDeniedError()
         return scope
@@ -78,10 +78,25 @@ class RuntimeAuditExportService:
         enabled()
         if not request_id or len(request_id) > 128:
             raise RuntimeAuditExportUnavailableError()
-        scope = await self.scope_resolver(user, tenant_id)
-        snapshot = await self.source.snapshot(scope, snapshot_id)
+        from bisheng.app_governance.domain.schemas.runtime_audit import AuthorizedRuntimeAuditScope
+        from bisheng.core.context.tenant import get_current_tenant_id
+
+        effective = get_current_tenant_id() or user.tenant_id
+        if tenant_id is not None and tenant_id != effective:
+            raise RuntimeAuditAccessDeniedError()
+        lookup = AuthorizedRuntimeAuditScope(user.user_id, effective, effective)
+        snapshot = await self.source.snapshot(lookup, snapshot_id)
+        if snapshot is None:
+            raise RuntimeAuditCursorInvalidError()
+        filters = snapshot.normalized_filter
+        scope = (
+            await self.scope_resolver(user, effective, app_id=filters["app_id"])
+            if filters.get("app_id")
+            else await self.scope_resolver(user, effective)
+        )
         if not snapshot or snapshot.expires_at <= datetime.utcnow() or snapshot.scope_tenant_id != scope.tenant_id:
             raise RuntimeAuditCursorInvalidError()
+        await self.check_snapshot_scope(user, scope, snapshot.normalized_filter)
         return await self.repo.create(
             RuntimeAuditExport(
                 tenant_id=scope.owner_tenant_id,
@@ -95,11 +110,41 @@ class RuntimeAuditExportService:
             )
         )
 
+    async def check_snapshot_scope(self, user, scope, filters):
+        current = (
+            await self.scope_resolver(user, scope.tenant_id, app_id=filters["app_id"])
+            if filters.get("app_id")
+            else scope
+        )
+        frozen = filters.get("authorized_app_ids")
+        if frozen is not None and (
+            current.authorized_app_ids is None or not set(frozen).issubset(current.authorized_app_ids)
+        ):
+            raise RuntimeAuditAccessDeniedError()
+        return current
+
+    async def job_scope(self, user, job):
+        filters = job.normalized_filter
+        scope = (
+            await self.scope_resolver(user, job.scope_tenant_id, app_id=filters["app_id"])
+            if filters.get("app_id")
+            else await self.scope_resolver(user, job.scope_tenant_id)
+        )
+        await self.check_snapshot_scope(user, scope, filters)
+        return scope
+
     async def authorized_job(self, user, job_id, tenant_id=None):
         enabled()
-        scope = await self.scope_resolver(user, tenant_id)
-        job = await self.repo.get(scope.owner_tenant_id, job_id)
-        if not job or job.creator_user_id != scope.creator_user_id or job.scope_tenant_id != scope.tenant_id:
+        from bisheng.core.context.tenant import get_current_tenant_id
+
+        effective = get_current_tenant_id() or user.tenant_id
+        if tenant_id is not None and tenant_id != effective:
+            raise RuntimeAuditAccessDeniedError()
+        job = await self.repo.get(effective, job_id)
+        if not job or job.creator_user_id != user.user_id:
+            raise RuntimeAuditAccessDeniedError()
+        scope = await self.job_scope(user, job)
+        if job.scope_tenant_id != scope.tenant_id or job.tenant_id != scope.owner_tenant_id:
             raise RuntimeAuditAccessDeniedError()
         return job
 

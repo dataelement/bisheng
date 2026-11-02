@@ -3,7 +3,8 @@ import { Dialog,DialogClose,DialogContent,DialogFooter,DialogHeader,DialogTitle 
 
 import { getKnowledgeModelConfig } from "@/controllers/API/finetune";
 import { Outlined } from "bisheng-icons";
-import { useEffect,useRef,useState } from "react";
+import { useContext,useEffect,useRef,useState } from "react";
+import { userContext } from '@/contexts/userContext';
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
@@ -23,6 +24,16 @@ interface LibraryDialogProps {
 
 export function KnowledgeLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode = 'create', currentLib = null }: LibraryDialogProps) {
     const { t } = useTranslation('knowledge')
+    const { user } = useContext(userContext)
+    const expectedTenant = useRef<number | null>(null)
+    const wasOpen = useRef(false)
+    useEffect(() => {
+        if (open && !wasOpen.current) {
+            const tenant = user?.leaf_tenant_id
+            expectedTenant.current = Number.isInteger(tenant) && tenant > 0 ? tenant : null
+        }
+        wasOpen.current = open
+    }, [open, user?.leaf_tenant_id])
 
     const navigate = useNavigate()
 
@@ -76,6 +87,10 @@ export function KnowledgeLibraryDialog({ datalist, open, onOpenChange, onLoadEnd
     const [error, setError] = useState({ name: false, desc: false })
 
     const handleCreate = async (isImport = false) => {
+        if (mode === 'create' && expectedTenant.current === null) {
+            handleError(t('f115.knowledge.membershipUnknown', { ns: 'bs' }))
+            return
+        }
         const name = nameRef.current!.value || ''; // Name (default empty string to avoid null)
         let desc = descRef.current!.value || '';   // Description (default empty string)
 
@@ -136,6 +151,7 @@ export function KnowledgeLibraryDialog({ datalist, open, onOpenChange, onLoadEnd
                 name,
                 description: desc,
                 model: modelId,
+                expected_tenant_id: expectedTenant.current,
                 type: 0
             }).then(response => {
                 const res = response as unknown as { id: string | number };

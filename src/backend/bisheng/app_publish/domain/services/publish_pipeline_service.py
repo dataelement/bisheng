@@ -63,13 +63,13 @@ from bisheng.app_publish.domain.schemas.failure import failure_from_error
 from bisheng.app_publish.domain.services import (
     capability_bus_service,
     package_service,
-    precheck_service,
     schema_evolution_service,
 )
 from bisheng.app_publish.domain.services.manifest_validator import validate_manifest
 from bisheng.app_publish.domain.services.release_audit import write_release_audit
 from bisheng.app_publish.domain.services.secret_scanner import scan_package
 from bisheng.app_publish.domain.services.version_service import VersionService
+from bisheng.app_runtime.application.authorization import authorize_app, management_actions, resolve_app_actor
 from bisheng.common.errcode.app_publish import (
     AppNotOwnedBySubjectError,
     AppPublishRuntimeLayerDisabledError,
@@ -238,9 +238,16 @@ class PublishPipelineService:
             validated = await validate_manifest(package_service.read_manifest_bytes(extracted.root))
 
             if app_id:
-                await cls._assert_owned(app_id, owner_user_id, tenant_id=tenant)
+                app = await cls._assert_authorized(app_id, principal, tenant_id=tenant)
+                owner_user_id = app.owner_user_id
+                await require_owner_tenant(owner_user_id, tenant)
             else:
-                app_id = await cls._create_draft(validated.manifest, owner_user_id=owner_user_id, tenant_id=tenant)
+                app_id = await cls._create_draft(
+                    validated.manifest,
+                    owner_user_id=owner_user_id,
+                    tenant_id=tenant,
+                    actor=await resolve_app_actor(principal),
+                )
 
             if validated.manifest.manifest_version == 2:
                 from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import (
@@ -272,12 +279,18 @@ class PublishPipelineService:
             schema_evolution_service.require_confirmation(schema_change, confirmed=confirm_schema_change)
 
             version_id = generate_uuid()
+            from bisheng.app_runtime.application.runtime_authorization import capture_user_authorization
+
+            authorization_context = await capture_user_authorization(
+                principal, app_id, "release_submit", version_id=version_id
+            )
             code_object_key = await package_service.store_package(
                 Path(package_path), app_id=app_id, version_id=version_id
             )
 
             deployment = AppDeployment(
                 release_notes=release_notes,
+                authorization_context=authorization_context,
                 tenant_id=tenant,
                 app_id=app_id,
                 owner_user_id=owner_user_id,
@@ -328,44 +341,15 @@ class PublishPipelineService:
         return AcceptResult(deployment_id=deployment.id, app_id=app_id, version_id=version_id)
 
     @classmethod
-    async def _assert_owned(cls, app_id: str, owner_user_id: int, *, tenant_id: int | None) -> None:
-        """An iteration only proceeds on an app the credential's resource owner owns (AC-04).
-
-        **The tenant is compared as well as the owner, because an equal owner is
-        not enough.** Two facts make "same ``owner_user_id``" reachable across a
-        tenant boundary on this door:
-
-        * ``/api/v2`` seeds ``visible_tenant_ids`` as ``{DEFAULT_TENANT_ID,
-          principal.tenant_id}`` (``open_api/api/dependencies.py``), so the
-          automatic tenant filter still hands a **Root-tenant** application to a
-          child-tenant credential — the IN-list only shuts out leaf-to-leaf.
-        * Under D19 a token survives its holder moving tenants ("令牌随人迁移不
-          失效"), so the owner recorded on an app the person left behind keeps
-          matching the credential that followed them.
-
-        ``AppQueryService._load_visible`` already applies exactly this guard on
-        the platform face; the CLI door must answer alike, or the same
-        application is refused in the UI and accepted by ``bisheng deploy``.
-
-        The mismatch is folded into the refusal below rather than given its own
-        code or message on purpose: a distinguishable answer would tell a caller
-        that the application exists in a tenant they cannot see.
-        """
-        async with get_async_db_session() as session:
-            app_row = await AppDao.aget(session, app_id)
-        if (
-            app_row is None
-            or app_row.owner_user_id != owner_user_id
-            or int(app_row.tenant_id or 0) != int(tenant_id or 0)
-        ):
-            raise AppNotOwnedBySubjectError(
-                msg="该应用归属其他用户, 当前密钥无法发布",
-                details={"app_id": app_id, "reason": "owner_mismatch"},
-                hints=["确认 .bisheng/app_id 指向的是本人名下的应用, 或省略 app_id 以首发一个新应用"],
-            )
+    async def _assert_authorized(cls, app_id, principal, *, tenant_id):
+        await authorize_app(principal, app_id, "release_submit")
+        app = await VersionService.get_app_scoped(app_id)
+        if app.tenant_id != tenant_id:
+            raise AppNotOwnedBySubjectError(details={"reason": "target_unavailable"})
+        return app
 
     @classmethod
-    async def _create_draft(cls, manifest: AppManifest, *, owner_user_id: int, tenant_id: int) -> str:
+    async def _create_draft(cls, manifest: AppManifest, *, owner_user_id: int, tenant_id: int, actor) -> str:
         """First publish: F054 creates the application row, F055 never does (决议-8 / 坑 26)."""
         from bisheng.app_runtime.domain.services.app_provision_service import AppProvisionService
 
@@ -375,6 +359,7 @@ class PublishPipelineService:
             description=manifest.description,
             owner_user_id=owner_user_id,
             tenant_id=tenant_id,
+            actor=actor,
         )
 
     @classmethod
@@ -386,7 +371,7 @@ class PublishPipelineService:
 
     @classmethod
     async def get_deployment_status(cls, deployment_id: str, *, principal) -> dict[str, Any]:
-        """What the CLI polls (design §4.2 ①). Read-only, and scoped to the caller's owner.
+        """What the CLI polls (design §4.2 ①). Read-only, scoped by the caller's current resource actions.
 
         Two scoping layers, and both are needed — but **not** the two it is easy
         to assume. The automatic tenant filter shuts out *leaf-to-leaf* only:
@@ -417,21 +402,21 @@ class PublishPipelineService:
         # row's own tenant (``AppQueryService._load:242`` and four siblings), so
         # a later edit that put one above this check would silently turn the
         # comparison into a row compared against itself.
-        owner_user_id = resource_owner_of(principal)
+        resource_owner_of(principal)
         credential_tenant_id = int(getattr(principal, "tenant_id", 0) or 0)
         async with get_async_db_session() as session:
             deployment = await AppDeploymentDao.aget(session, deployment_id)
-        if (
-            deployment is None
-            or int(deployment.owner_user_id or 0) != owner_user_id
-            or int(deployment.tenant_id or 0) != credential_tenant_id
-        ):
+        if deployment is None or int(deployment.tenant_id or 0) != credential_tenant_id:
             raise AppNotOwnedBySubjectError(
                 msg="该发布记录不存在或不属于当前密钥",
                 details={"deployment_id": deployment_id, "reason": "not_owned"},
                 hints=["确认 deployment_id 来自本人名下应用的发布"],
             )
 
+        await authorize_app(principal, deployment.app_id, "management_read")
+        loaded = await VersionService.get_app_scoped(deployment.app_id)
+        actions = await management_actions(principal, [loaded])
+        can_edit = "edit" in actions.get(deployment.app_id, ())
         app_state = None
         version_no = None
         app_row = None
@@ -481,7 +466,7 @@ class PublishPipelineService:
             # AC-11's five-tuple, or None. The CLI branches on ``code`` and
             # prints ``message`` + ``hints``; a partially filled failure is what
             # turns an actionable error into "something went wrong".
-            "failure": deployment.failure,
+            "failure": deployment.failure if can_edit else None,
             "approval": approval,
             "app_state": app_state,
             # F053 T034 write-back 3. Without it the CLI's ``deploy --wait``
@@ -492,8 +477,8 @@ class PublishPipelineService:
             # single implementation — never composed here, and never in the
             # browser (AC-25).
             "entry_url": entry_url,
-            "secret_references": await cls._secret_references(deployment, app_row),
-            "scan_result": deployment.scan_result,
+            "secret_references": await cls._secret_references(deployment, app_row) if can_edit else [],
+            "scan_result": deployment.scan_result if can_edit else None,
         }
 
     @staticmethod
@@ -524,11 +509,14 @@ class PublishPipelineService:
         workdir = Path(tempfile.mkdtemp(prefix="bisheng-app-run-"))
         try:
             await require_release_eligible(deployment.app_id, deployment_id=deployment.id)
+            await cls._revalidate_authorization(deployment)
             root = await cls._materialise_snapshot(deployment, workdir)
             context: dict[str, Any] = {"manifest": manifest, "root": root, "image_ref": None}
             for stage, step in PIPELINE_STAGES:
+                await cls._revalidate_authorization(deployment)
                 await cls._advance(deployment, stage)
                 await getattr(cls, step)(deployment, context)
+            await cls._revalidate_authorization(deployment)
             await cls._update_meta(deployment, context)
             await cls._record_version(deployment, context)
         except BaseErrorCode as exc:
@@ -541,28 +529,25 @@ class PublishPipelineService:
         finally:
             shutil.rmtree(workdir, ignore_errors=True)
 
+    @staticmethod
+    async def _revalidate_authorization(deployment):
+        from bisheng.app_runtime.application.runtime_authorization import validate_user_authorization
+
+        await validate_user_authorization(
+            deployment.authorization_context, deployment.app_id, version_id=deployment.version_id
+        )
+
     # -- stages ---------------------------------------------------------
 
     @classmethod
     async def _stage_build(cls, deployment: AppDeployment, context: dict[str, Any]) -> None:
         tier = await cls._tier(deployment)
         context["tier"] = tier
-        from bisheng.common.services.config_service import settings
+        from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
 
-        if settings.app_runtime.runtime_protocol_version == 2:
-            from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
-
-            frozen = await RuntimeDeliveryCoordinator().prepare(deployment, context["manifest"], tier)
-            context["resolved_delivery"] = frozen.content
-            context["image_ref"] = frozen.content.get("image_ref")
-            return
-        if context["manifest"].manifest_version == 2:
-            from bisheng.common.errcode.app_publish import AppDependencyBuildFailedError
-
-            raise AppDependencyBuildFailedError(msg="新版应用交付需要启用 runtime v2")
-        context["image_ref"] = await precheck_service.precheck_build(
-            deployment, manifest=context["manifest"], tier=tier
-        )
+        frozen = await RuntimeDeliveryCoordinator().prepare(deployment, context["manifest"], tier)
+        context["resolved_delivery"] = frozen.content
+        context["image_ref"] = frozen.content.get("image_ref")
 
     @classmethod
     async def _stage_schema(cls, deployment: AppDeployment, context: dict[str, Any]) -> None:
@@ -591,12 +576,9 @@ class PublishPipelineService:
 
     @classmethod
     async def _stage_probe(cls, deployment: AppDeployment, context: dict[str, Any]) -> None:
-        if context.get("resolved_delivery"):
-            from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
+        from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
 
-            await RuntimeDeliveryCoordinator().probe(deployment, context["manifest"], context["tier"])
-            return
-        await precheck_service.precheck_probe(deployment, manifest=context["manifest"], image_ref=context["image_ref"])
+        await RuntimeDeliveryCoordinator().probe(deployment, context["manifest"], context["tier"])
 
     @classmethod
     async def _stage_scan(cls, deployment: AppDeployment, context: dict[str, Any]) -> None:
@@ -698,6 +680,7 @@ class PublishPipelineService:
         from bisheng.app_publish.domain.services import publish_approval_service
 
         await require_release_eligible(deployment.app_id, deployment_id=deployment.id)
+        await cls._revalidate_authorization(deployment)
         await VersionService.record_version(
             deployment,
             approval=publish_approval_service,

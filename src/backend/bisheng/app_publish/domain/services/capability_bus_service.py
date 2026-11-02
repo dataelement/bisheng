@@ -198,12 +198,26 @@ async def load_effective_declaration(app_id: str) -> EffectiveDeclaration | None
     approving it.
     """
 
+    from bisheng.open_api.application.access_context import get_current_open_api_principal
+
+    principal = get_current_open_api_principal()
+    preview = None
+    if principal is not None and principal.actor_kind == "hosted_app" and principal.preview_session_id:
+        from bisheng.open_api.domain.services.preview_context import revalidate_preview
+
+        preview = await revalidate_preview(principal)
+        if preview.app_id != app_id:
+            return None
     with bypass_tenant_filter():
         async with get_async_db_session() as session:
             app = await AppDao.aget(session, app_id)
-            if app is None or app.state != AppState.ONLINE.value or not app.current_version_id:
+            if app is None or app.state == AppState.DELETED.value:
                 return None
-            version = await AppVersionDao.aget(session, app_id, app.current_version_id)
+            if preview is None and (app.state != AppState.ONLINE.value or not app.current_version_id):
+                return None
+            version = await AppVersionDao.aget(
+                session, app_id, preview.version_id if preview else app.current_version_id
+            )
     if version is None:
         return None
 
@@ -437,6 +451,15 @@ def hosted_app_access_user(request, principal) -> int | None:
         app_id=principal.subject_ref or "",
         tenant_id=principal.tenant_id,
     )
+    if principal.preview_session_id:
+        if verified is None or (verified.user_id, verified.preview_session) != (
+            principal.preview_viewer_user_id,
+            principal.preview_session_id,
+        ):
+            return None
+        return principal.preview_capability_user_id
+    if getattr(verified, "preview_session", None):
+        return None
     return verified.user_id if verified is not None else None
 
 
@@ -573,14 +596,17 @@ class CapabilityBusService:
         if not access_user_id:
             return
         from bisheng.app_publish.domain.services import capability_audit
+        from bisheng.open_api.application.access_context import get_current_open_api_principal
 
+        principal = get_current_open_api_principal()
+        audit_user = principal.preview_viewer_user_id if principal and principal.preview_session_id else access_user_id
         await capability_audit.record_retrieval(
             app_id=declaration.app_id,
             app_name=declaration.app_name,
             tenant_id=declaration.tenant_id,
             version_id=declaration.version_id,
             credential_id=credential_id,
-            access_user_id=int(access_user_id),
+            access_user_id=int(audit_user),
             requested=[int(one) for one in (requested or [])],
             effective=list(getattr(result, "effective_scope", []) or []),
             result=capability_audit.RESULT_SUCCESS if error is None else capability_audit.RESULT_REFUSED,

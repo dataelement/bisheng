@@ -116,3 +116,12 @@ class ExecutionFactInput(BaseModel):
     ]
     exec_ref: str = ""
     detail: dict = Field(default_factory=dict)
+
+
+class StageAuthorizationInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    node_id: str = Field(min_length=1, max_length=64)
+    generation: int = Field(ge=1)
+    owner_epoch: int = Field(ge=1)
+    phase: Literal["prepare", "probe", "preview", "maintenance", "data_write", "starting"]
+    controller: dict = Field(default_factory=dict)

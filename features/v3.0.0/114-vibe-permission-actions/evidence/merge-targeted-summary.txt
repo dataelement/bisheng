@@ -1,0 +1,7 @@
+F114 local merge integration, 2026-10-30
+Backend initial targeted execution: 22 passed, 13 failed (test identity transport and explicit management-context fixtures).
+Only the failing cases were rerun after fixture adaptation: 13 passed; see merge-secret-scope.txt.
+Platform targeted execution: 4 files, 27 passed (serviceAccountScope 14; serviceAccountGlobalView 1; hostedAppCurrentVersion 9; f114AppActions 3).
+Backend Ruff: 6 merge-resolution files, All checks passed.
+Platform ESLint: 5 merge-resolution files, exit 0.
+These are local targeted checks, not remote E2E, full-suite or final L2 evidence.

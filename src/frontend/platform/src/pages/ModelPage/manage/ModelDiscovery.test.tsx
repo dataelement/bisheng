@@ -39,7 +39,6 @@ const catalog = [
 const props = () => ({
   provider: "openai",
   connectionVersion: 0,
-  autoFetchVersion: 0,
   existing: ["gpt-4o"],
   getConnection: () => ({
     provider: "openai",
@@ -51,6 +50,12 @@ const props = () => ({
 describe("model discovery interaction", () => {
   beforeEach(() => {
     vi.mocked(discoverModels).mockReset();
+  });
+  it("does not open the catalog when required connection fields are missing", () => {
+    render(<ModelDiscovery {...props()} getConnection={() => null} />);
+    fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(discoverModels).not.toHaveBeenCalled();
   });
   it("fetches, preserves existing models and fills only selected models", async () => {
     vi.mocked(discoverModels).mockResolvedValue({ models: catalog });
@@ -89,17 +94,6 @@ describe("model discovery interaction", () => {
     expect(
       screen.getByRole("button", { name: "model.selectModels" }),
     ).toBeEnabled();
-  });
-  it("automatically fetches on completed input blur and avoids duplicate blur requests", async () => {
-    vi.mocked(discoverModels).mockResolvedValue({ models: [] });
-    const input = props();
-    const view = render(<ModelDiscovery {...input} autoFetchVersion={1} />);
-    await waitFor(() => expect(discoverModels).toHaveBeenCalledTimes(1));
-    view.rerender(<ModelDiscovery {...input} autoFetchVersion={2} />);
-    expect(discoverModels).toHaveBeenCalledTimes(1);
-    expect(
-      await screen.findByText("model.emptyModelCatalog"),
-    ).toBeInTheDocument();
   });
   it("shows recoverable authentication feedback and permits a retry", async () => {
     vi.mocked(discoverModels).mockImplementation(async () => {
@@ -357,19 +351,16 @@ describe("progressive model discovery", () => {
   });
 
   it.each(["qwen", "volcengine", "azure_openai", "zhipu"])(
-    "keeps %s extra settings hidden on automatic fetch",
+    "keeps %s extra settings hidden after opening the catalog",
     async (provider) => {
       vi.mocked(discoverModels).mockResolvedValue({
         models: [],
         source: "live",
       });
       render(
-        <ModelDiscovery
-          {...props()}
-          provider={provider}
-          autoFetchVersion={1}
-        />,
+        <ModelDiscovery {...props()} provider={provider} />,
       );
+      fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
       await screen.findByText("model.emptyModelCatalog");
       expect(
         screen.queryByRole("combobox", { name: "model.discoverySource" }),

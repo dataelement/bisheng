@@ -166,6 +166,10 @@ class AppDeployment(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(JsonType, nullable=True, comment="Parsed bisheng-app.yaml; inspected in Python only"),
     )
+    authorization_context: dict | None = Field(
+        default=None,
+        sa_column=Column(JsonType, nullable=True, comment="Server-authenticated publication origin"),
+    )
     tier_code: str | None = Field(
         default=None,
         sa_column=Column(String(32), nullable=True, comment="Resolved resource_tier.code of this attempt"),

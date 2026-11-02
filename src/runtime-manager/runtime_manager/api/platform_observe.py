@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends
 from runtime_manager.api.operations import authorized, executor
 from runtime_manager.api.readonly import _parse_since
 from runtime_manager.container_runner import OP_LABEL, redact
-from runtime_manager.errors import NotFoundError
+from runtime_manager.errors import BackendUnavailableError, NotFoundError
+from runtime_manager.observation import public_status
 from runtime_manager.platform_client import PlatformError
 
 router = APIRouter(prefix="/v2", dependencies=[Depends(authorized)])
@@ -45,26 +46,66 @@ def record(app_id):
 
 @router.get("/apps/{app_id}/status")
 async def status(app_id: str):
-    _service, scope, data = await asyncio.to_thread(record, app_id)
-    if "observation" in data:
-        observation = data["observation"]
-        return {
-            "app_id": app_id,
-            "phase": "running" if observation.get("ready") else "unhealthy",
-            "generation": scope["generation"],
-            "instance_id": scope["exec_ref"],
-            "health": "healthy" if observation.get("ready") else "unhealthy",
-            "restart_count": observation.get("restart_count", 0),
-        }
-    state = data.get("State", {})
-    return {
-        "app_id": app_id,
-        "phase": "running" if state.get("Running") else "unhealthy",
-        "generation": scope["generation"],
-        "instance_id": scope["exec_ref"],
-        "health": state.get("Health", {}).get("Status"),
-        "restart_count": data.get("RestartCount", 0),
-    }
+    return await asyncio.to_thread(_current_status, app_id)
+
+
+def _current_status(app_id):
+    service = executor()
+    try:
+        scope = service.platform.application(app_id)
+    except PlatformError as exc:
+        if exc.status == 404 and str(exc) == "application_not_found":
+            return public_status(app_id, {}, {}, state="no_execution")
+        raise
+    ref = scope.get("exec_ref")
+    if not ref:
+        return public_status(app_id, scope, {}, state="no_execution")
+    try:
+        if service.config.executor_kind == "kubernetes":
+            row = service.platform.resource(ref)
+            if (row.get("app_id"), row.get("node_id"), row.get("operation_id"), row.get("kind")) != (
+                app_id,
+                service.config.node_id,
+                scope.get("operation_id"),
+                "Pod",
+            ) or not row.get("uid"):
+                raise BackendUnavailableError("Execution assignment mismatch")
+        else:
+            raw = service.docker.inspect_container(ref)
+            labels = raw.get("Config", {}).get("Labels", {})
+            if (
+                labels.get("bisheng.app.id") != app_id
+                or labels.get("bisheng.runtime.node") != service.config.node_id
+                or labels.get(OP_LABEL) != scope.get("operation_id")
+                or labels.get("bisheng.managed") != "v2"
+            ):
+                raise BackendUnavailableError("Execution assignment mismatch")
+        observation = (
+            service.runtime.observe_status(ref)
+            if service.config.executor_kind == "kubernetes"
+            else service.runtime.observe(ref)
+        )
+    except PlatformError as exc:
+        raise BackendUnavailableError("Platform execution assignment unavailable") from exc
+    except Exception as exc:
+        if (
+            service.config.executor_kind != "kubernetes"
+            and getattr(exc, "status_code", getattr(exc, "status", None)) == 404
+        ):
+            observation = None
+        else:
+            raise
+    current = service.platform.application(app_id)
+    keys = ("generation", "operation_id", "exec_ref")
+    if any(current.get(key) != scope.get(key) for key in keys):
+        raise BackendUnavailableError("Execution assignment changed during observation")
+    if service.config.executor_kind == "kubernetes":
+        latest = service.platform.resource(ref)
+        if latest.get("uid") != row.get("uid"):
+            raise BackendUnavailableError("Execution assignment UID changed during observation")
+    return public_status(
+        app_id, scope, observation or {}, state="current" if observation is not None else "execution_missing"
+    )
 
 
 @router.get("/apps/{app_id}/logs")

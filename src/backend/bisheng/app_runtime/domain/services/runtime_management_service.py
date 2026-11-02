@@ -1,4 +1,4 @@
-"""Human management boundary: global profiles and owner-scoped application materials."""
+"""Human management boundary: platform profiles and F048 application actions."""
 
 import asyncio
 import hashlib
@@ -17,14 +17,14 @@ from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import 
     RuntimeDeliveryRepository,
 )
 from bisheng.app_runtime.domain.repositories.runtime_object_store import RuntimeObjectStore
+from bisheng.app_runtime.domain.schemas.app_authorization import required_actions
+from bisheng.app_runtime.domain.services.app_authorization_service import AppAuthorizationService
 from bisheng.app_runtime.domain.services.runtime_offline_package import validate_offline_package
 from bisheng.app_runtime.domain.services.runtime_profile_service import (
     RuntimeProfileService,
-    require_natural_owner,
     require_platform_super,
 )
 from bisheng.common.services.config_service import settings
-from bisheng.permission.application.identity import resolve_permission_actor
 
 
 class RuntimeManagementService:
@@ -32,12 +32,9 @@ class RuntimeManagementService:
         self.repo = repository or RuntimeDeliveryRepository()
         self.objects = objects or RuntimeObjectStore()
 
-    async def owner(self, app_id, actor):
+    async def application(self, app_id, actor, purpose="content_read", *, resume=False):
         app = await self.repo.get_application(app_id)
-        if app is None or app.state == "deleted":
-            raise RuntimeConflict("natural_owner_required")
-        require_natural_owner(app, await resolve_permission_actor(actor))
-        return app
+        return await AppAuthorizationService.authorize_loaded_app(actor, app, purpose, resume=resume)
 
     async def import_materials(self, stream, *, app_id, profile_reference, platform, sha256, actor, public=False):
         if public:
@@ -46,7 +43,7 @@ class RuntimeManagementService:
             app_id = ""
             scope = "public"
         else:
-            app = await self.owner(app_id, actor)
+            app = await self.application(app_id, actor)
             tenant = app.tenant_id
             scope = f"{tenant}/{app_id}"
         code, sep, revision = profile_reference.rpartition("@")
@@ -113,7 +110,7 @@ class RuntimeManagementService:
         return {"artifact_id": row.id, "state": row.state}
 
     async def state(self, app_id, actor):
-        app = await self.owner(app_id, actor)
+        app = await self.application(app_id, actor, "management_read")
         assignments = await self.repo.find(RuntimeAssignment, app_id=app_id)
         assignment = assignments[0] if assignments else None
         return {
@@ -125,7 +122,7 @@ class RuntimeManagementService:
         }
 
     async def snapshots(self, app_id, actor):
-        await self.owner(app_id, actor)
+        await self.application(app_id, actor)
         return [
             {
                 "snapshot_id": row.id,
@@ -138,7 +135,8 @@ class RuntimeManagementService:
         ]
 
     async def operation(self, app_id, operation_id, actor):
-        await self.owner(app_id, actor)
+        app = await self.application(app_id, actor, "management_read")
+        actions = await AppAuthorizationService.management_actions(actor, [app])
         row = await self.repo.get(RuntimeOperation, operation_id)
         if row is None or row.app_id != app_id:
             raise RuntimeConflict("operation_not_found")
@@ -148,16 +146,36 @@ class RuntimeManagementService:
             "stage": row.stage,
             "status": row.status,
             "cleanup_status": row.cleanup_status,
-            "failure": row.failure,
+            "failure": row.failure if "edit" in actions.get(app_id, ()) else None,
             "deadline": row.deadline,
         }
 
     async def cancel(self, app_id, operation_id, actor):
-        await self.owner(app_id, actor)
+        app = await self.application(app_id, actor, "management_read")
         async with self.repo.transaction():
             row = await self.repo.get(RuntimeOperation, operation_id, lock=True)
             if row is None or row.app_id != app_id:
                 raise RuntimeConflict("operation_not_found")
+            context = row.payload.get("authorization_context") or {}
+            target = context.get("target") or {}
+            if (
+                context.get("schema") != 1
+                or context.get("origin_kind") != "user_request"
+                or row.tenant_id != app.tenant_id
+                or target.get("tenant_id") != app.tenant_id
+                or target.get("app_id") != app_id
+                or target.get("version_id") != row.version_id
+            ):
+                raise RuntimeConflict("operation_authorization_source_unavailable")
+            try:
+                actions = required_actions(context["purpose"], resume=bool(context.get("resume_after_restore")))
+            except (KeyError, ValueError) as exc:
+                raise RuntimeConflict("operation_authorization_source_unavailable") from exc
+            if set(context.get("required_actions", ())) != set(actions):
+                raise RuntimeConflict("operation_authorization_source_mismatch")
+            await AppAuthorizationService.authorize_loaded_app(
+                actor, app, context["purpose"], resume=bool(context.get("resume_after_restore"))
+            )
             if row.stage in {"serving", "retiring"}:
                 raise RuntimeConflict("serving_operation_cannot_cancel")
             if row.status not in {"completed", "failed", "cancelled", "timed_out"}:
@@ -166,7 +184,10 @@ class RuntimeManagementService:
         return {"operation_id": row.id, "cancel_requested": True}
 
     async def restore(self, app_id, request, actor):
-        app = await self.owner(app_id, actor)
+        app = await self.repo.get_application(app_id)
+        resume = app is not None and app.state == "online"
+        await AppAuthorizationService.authorize_loaded_app(actor, app, "restore", resume=resume)
+        identity = await AppAuthorizationService.resolve_actor(actor)
         if not request.acknowledge_data_loss:
             raise RuntimeConflict("restore_acknowledgement_required")
         assignments = await self.repo.find(RuntimeAssignment, app_id=app_id)
@@ -187,12 +208,18 @@ class RuntimeManagementService:
         tier = await AppStateService._resolve_tier(version.tier_id)
         coordinator = RuntimeDeliveryCoordinator(self.repo)
         delivery = await coordinator.delivery(app_id, version.id)
+        from bisheng.app_runtime.domain.services.runtime_authorization_service import RuntimeAuthorizationService
+
+        authorization_context = await RuntimeAuthorizationService.capture_user(
+            actor, app, "restore", version_id=version.id, resume=resume
+        )
         body = {
+            "authorization_context": authorization_context,
             "resolved_delivery": delivery.content,
             "snapshot_id": snapshot.id,
             "audit": {
-                "actor_kind": "user",
-                "actor_id": int(actor.user_id),
+                "actor_kind": identity.subject_type,
+                "actor_id": identity.subject_id,
                 "action": "app.data_restore",
                 "acknowledge_data_loss": True,
             },
@@ -231,7 +258,7 @@ class RuntimeManagementService:
         return {"operation_id": op.id, "status": op.status}
 
     async def set_material_enabled(self, app_id, artifact_id, enabled, actor):
-        app = await self.owner(app_id, actor)
+        app = await self.application(app_id, actor)
         row = await self.repo.get(RuntimeArtifact, artifact_id)
         if row is None or (row.tenant_id, row.app_id, row.kind, row.visibility) != (
             app.tenant_id,

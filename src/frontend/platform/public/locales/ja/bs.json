@@ -3308,6 +3308,9 @@
       "title": "リリースノート",
       "empty": "リリースノートは未入力です",
       "column": "バージョンの説明"
+    },
+    "permissions": {
+      "managementPreviewTitle": "管理プレビュー"
     }
   },
   "dsh": {
@@ -4289,5 +4292,41 @@
     "notFoundTitle": "ページが見つかりません",
     "notFoundDescription": "アクセスしたページは存在しないか、削除されています。",
     "recommendedAppLimit": "おすすめのアプリは最大{{max}}件まで設定できます。"
+  },
+  "f115": {
+    "runtime": {
+      "unknown": "不明",
+      "notRunning": "未実行",
+      "noExecution": "実行インスタンスはまだありません",
+      "executionMissing": "実行インスタンスは存在しません"
+    },
+    "audit": {
+      "candidatesFailed": "絞り込み候補を読み込めません。再試行してください。",
+      "retry": "再試行",
+      "noVisitors": "この範囲に自然人のアクセス記録はありません。アプリ自身による呼び出しは自然人のアクセスを示しません。",
+      "noCandidates": "この範囲に絞り込み候補はありません",
+      "noMatches": "一致する候補はありません",
+      "loading": "絞り込み候補を読み込み中…"
+    },
+    "knowledge": {
+      "membershipUnknown": "所属テナントを確認できません。ページを更新して作成フォームを開き直してください。"
+    },
+    "visibility": {
+      "title": "公開範囲",
+      "refresh": "範囲を更新",
+      "currentHint": "現在の公開範囲です。権限変更は即時に反映され、承認には影響しません。更新すると最新の範囲を確認できます。",
+      "unavailable": "現在の公開範囲を確認できません。更新してください。",
+      "deleted": "アプリが削除されたため、現在の公開範囲を取得できません。",
+      "ownerOnly": "責任者のみ閲覧可能",
+      "noOrdinary": "現在、閲覧可能な一般ユーザー、部門、ユーザーグループはありません。",
+      "adminHint": "プラットフォームのスーパー管理者とこのテナントの管理者には別途暗黙の管理アクセス権があり、ここに示す一般の公開範囲には含まれません。",
+      "checkedAt": "確認日時：",
+      "user": "ユーザー",
+      "department": "部門",
+      "user_group": "ユーザーグループ",
+      "member": "メンバー",
+      "admin": "管理者",
+      "children": "下位部門を含む"
+    }
   }
 }

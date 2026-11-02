@@ -1,6 +1,6 @@
 # Vibe runtime v2：安装、离线材料与维护
 
-适用：F086 的 Docker 实现。正式发行以通过 amd64、arm64 原生 CI 的镜像和目录产物为准。本开发分支的Docker主链路和双架构原生容器已验，完整验收和正式镜像发行仍未完成，见[F086真实记录](../../features/v3.0.0/086-vibe-runtime-delivery/live-validation.md)；下列完整安装步骤尚非客户现场安装证明。K8s 执行器继续由 F059 交付。
+适用：F086 的 Docker 实现，F059 的 Kubernetes 执行器沿用同一 v2 控制合同。F114 本地实现已统一六动作与具体租户范围；真实部署 E2E、正式镜像发行及特性合入仍待完成，见 [F114 验证记录](../../features/v3.0.0/114-vibe-permission-actions/verification.md)。正式发行以通过 amd64、arm64 原生 CI 的镜像和目录产物为准。本开发分支的Docker主链路和双架构原生容器已验，完整验收和正式镜像发行仍未完成，见[F086真实记录](../../features/v3.0.0/086-vibe-runtime-delivery/live-validation.md)；下列完整安装步骤尚非客户现场安装证明。K8s 执行器继续由 F059 交付。
 
 ## 1. 服务与前置条件
 
@@ -10,7 +10,7 @@
 | runtime-manager | 独立进程和已发布镜像；能够访问 backend 与 Docker Engine API；有专属持久数据盘和执行资源。服务镜像不含 Docker CLI，不带 MinIO 凭据 |
 | docker-socket-proxy | 唯一挂载 docker.sock；只与 manager 加入 `runtime-control` 内部网络，不发布端口。Engine API 仍有创建/挂载容器的高权限 |
 | app-proxy / egress-proxy | 分别读取 backend 路由与短效出站策略；egress 使用 manager 镜像的另一入口。无 Engine 权限、MinIO 凭据或生产数据卷 |
-| 应用镜像 | 精确匹配目标平台的 runtime 和 preparer 镜像。完整应用镜像无需 preparer；v1 / source-image 仍需要旧模板基础镜像和构建依赖 |
+| 应用镜像 | 精确匹配目标平台的 runtime 和 preparer 镜像。完整应用镜像无需 preparer；v2 source-image 仍需要共用模板基础镜像和构建依赖 |
 | 制作工具 | 在有网的目标架构准备机上使用 Docker CLI；与 manager 服务自身的依赖不同 |
 
 单 Engine 固定节点；节点失联不自动跨机接管 SQLite。应用没有宿主端口映射，各容器可同时监听 8080。正式入口仍是 nginx → app-proxy → 应用 IP。
@@ -30,7 +30,7 @@ app_runtime:
   entry_base_url: https://bisheng.example
 ```
 
-OBO secret 必须独立于平台 JWT secret。manager/entry/egress/control 的 v2 服务身份由正式 Compose 的环境映射提供；为空会拒绝请求。已有 YAML 若显式写了旧 `runtime_protocol_version` 或身份字段，需要与新环境保持一致。
+OBO secret 必须独立于平台 JWT secret。manager/entry/egress/control 的 v2 服务身份由正式 Compose 的环境映射提供；为空会拒绝请求。backend `app_runtime.runtime_protocol_version`、manager/代理 `RTM_PROTOCOL_VERSION` 仅接受 2，省略时也默认 2；显式 1 或未知值在启动时拒绝。平台 `/api/v1`、`/api/v2` 和 manifest_version 不因此退役。
 
 | 要替换的内容 | 修改位置 |
 | --- | --- |
@@ -66,7 +66,7 @@ python src/runtime-manager/tools/runtime_materials.py import-profile \
 
 1. 在目标架构有网机器取得所有服务、runtime、preparer 镜像，保留发行目录及镜像归档 SHA-256。`docker save` 打包后运入现场 `docker load`。
 2. manager 通过配置 Image ID 查本地镜像，并核对 Engine 的 OS/架构及冻结 ID。默认 `RTM_IMAGE_PULL_POLICY=never`；缺失就前置失败，不回落公网。仅有同名 tag 不构成校验通过。
-3. 现场导入相同目录及公开基础补包。业务包额外依赖由 owner 提前制作应用私有补包；如果没有材料，首次发布或新增依赖会在审批前失败。
+3. 现场导入相同目录及公开基础补包。业务包额外依赖由应用获授权编辑者提前制作私有补包；如果没有材料，首次发布或新增依赖会在审批前失败。
 
 从 CI 目录在有网准备机导出精确 profile，不需要接入客户 SQL 或 MinIO：
 
@@ -85,7 +85,7 @@ python src/runtime-manager/tools/runtime_materials.py verify-offline \
 
 Python 接受常规 PEP 508 requirements、`-r` / `-c` 和 sha256 hash；包含文件必须在源码根内。联网阶段拒绝 VCS、直接依赖 URL 和任意 pip 参数，以免安装元数据执行代码取得源凭据。需要源码编译的第三方包应由受控准备机先构建目标平台 wheel；显式离线源码包需要完整构建后端/系统库。Node 以 package-lock/npm cache 为材料；VCS、外部本地路径和脚本的在线补下载不受支持。`postinstall`、Python 构建钩子和前端编译在禁网阶段执行；缺材料就失败。
 
-owner 导入应用私有补包：
+持该应用 `edit` 的已登录人员导入应用私有补包：
 
 ```bash
 python src/runtime-manager/tools/runtime_materials.py import-app-pack \
@@ -94,7 +94,7 @@ python src/runtime-manager/tools/runtime_materials.py import-app-pack \
   --file ./app-offline.tar.gz
 ```
 
-导入成功将材料绑定到当前 owner 的该应用，后续同 profile/平台的发布自动纳入，包括原本有发版权限的 SAK 发布；SAK 不能独立选择或更改私有材料。owner 可 PATCH `/api/v1/apps/{app}/runtime/materials/{artifact}` 的 `enabled`，仅影响未来 prepare。显式填写清单 `offline_artifacts` 选择私有材料仍要求 owner。超管用 `import-base` 导入公开基础集合，不得夹带私有内容。
+导入成功后材料仍绑定原应用及其固定归属人；持当前 `edit` 的人员可导入、读取及 PATCH `/api/v1/apps/{app}/runtime/materials/{artifact}` 的 `enabled`，只影响未来 prepare。清单显式填写 `offline_artifacts` 也以真实调用主体的 `edit` 判定，SA 仍须通过既有 S 模式、`app:manage`、F113 资格及相应发布组合动作；不能借归属人权限。工具上传前从平台应用状态响应读取实际具体租户并冻结 `X-Management-Tenant`；范围缺失、失效或冲突就失败，不静默重试到另一个租户。公开基础集合与全局 profile 继续由原平台运维资格维护。
 
 `offline.json` 格式：`schema_version:1`、`profile_id`、`profile_digest`、`platform`、`abi` 和 `files:{path:{sha256,size}}`。导入检查完整性、范围和兼容元数据；真正的禁网依赖物化验证发生在 prepare，不能把导入 verified 当成所有应用已通过运行验收。
 
@@ -104,29 +104,28 @@ python src/runtime-manager/tools/runtime_materials.py import-app-pack \
 
 升级共享 SQLite 前：容量预占 → 平台维护路由确认 → 停止旧写入者 → SQLite Backup API → backend 内容/SQL 确认 → 受控 DDL → 启动探活 → 平台业务事务切换。迁移日志和 DDL 在同一 SQLite 事务内，重试不会重复执行破坏性计划。DDL 后启动失败保留维护状态；不会自动用旧快照覆盖新数据。
 
-恢复前，owner 先 GET `/api/v1/apps/{app}/runtime/state` 取得当前 `generation`、当前代码版本与操作 ID，作为 CAS 输入；未登记 v2 归属时 generation 为0，不能直接恢复。恢复 API：`POST /api/v1/apps/{app}/runtime/restore`，参数为 `snapshot_id`、`expected_current_generation`、`acknowledge_data_loss:true` 和独立 `idempotency_key`。只允许同租户当前自然人 owner；super admin、租管、非 owner、SAK 无此豁免。返回 202 后查 `/runtime/operations/{id}`。先保护当前 DB，再原子替换目标快照；停用应用恢复后仍停用，在线应用恢复需重新探活。恢复不变更代码版本。审计动作是 `app.data_restore`。
+恢复前，获授权操作者先 GET `/api/v1/apps/{app}/runtime/state` 取得当前 `generation`、当前代码版本与操作 ID，作为 CAS 输入；未登记 v2 归属时 generation 为0，不能直接恢复。恢复 API：`POST /api/v1/apps/{app}/runtime/restore`，参数为 `snapshot_id`、`expected_current_generation`、`acknowledge_data_loss:true` 和独立 `idempotency_key`。恢复数据要求该应用 `edit`；若恢复后包含启动正式实例，还必须有 `publish`。F048 判定真实主体，不再按原创建人或其账号状态加限制。浏览器管理写携带从实际响应取得的 `X-Management-Tenant`，该头不能赋权。返回 202 后查 `/runtime/operations/{id}`。先保护当前 DB，再原子替换目标快照；停用应用恢复后仍停用，在线应用恢复需重新探活。恢复不变更代码版本。审计动作是 `app.data_restore`。
 
 数据表/行操作经 backend 既有权限检查后调用 manager v2。为防业务文件链接跨出应用目录，manager 使用**相同 manager 镜像的短命禁网数据容器**，只挂载一个应用的数据库和一次性导出目录；最多两个，每个 128 MiB/100mCPU、30 秒。不是新增常驻进程；系统保留资源至少 256 MiB，镜像必须本地可用。停写备份/迁移仍由 manager 本地执行，并拒绝主文件和 WAL/SHM/journal 链接。
 
-停用保留 DB、附件、快照和版本；删除经原 owner 动作及确认停止后清理本地 DB、附件和数据库快照。历史代码/版本引用继续保留；不以缓存清理代替数据删除。
+停用保留 DB、附件、快照和版本；删除经 F048 `delete`、用户二次确认及旧写入者停止确认后清理本地 DB、附件和数据库快照。历史代码/版本引用继续保留；不以缓存清理代替数据删除。
 
 ## 6. 存量升级与故障处理
 
-先使用新版 manager 的协议 1 兼容模式，在维护窗口通过 backend 内部签名的 `RuntimeControlClient.inventory()` 导出旧状态（例如在已正确配置的 backend 容器执行下列只读命令）；它只返回版本、标签、不可变镜像 ID 和数据范围，不导出容器环境。`scripts/upgrade_vibe_runtime.py` 默认 dry-run，`--apply` 必须有人工核对的 inventory SHA 与 `--acknowledge-maintenance`。backend 会再读实时 inventory 对照，拒绝伪造绑定；历史 AppVersion 不改写。旧自定义 MinIO bucket 需先单独迁移，不能直接冒充默认 bucket。
+当前仅支持运行控制协议 v2，不再提供协议 1 兼容模式、旧 inventory/import、绑定 upgrade/rebind API 或自动收养。代码仍保留供 v2 source-image、SQLite/helper 复用的工具；旧控制方法不可调用，不据文件名删除共用工具。
 
-```bash
-docker compose -f docker/docker-compose.yml exec -T backend python -c \
-  'import asyncio,json; from bisheng.app_runtime.domain.services.runtime_control_client import RuntimeControlClient; print(json.dumps(asyncio.run(RuntimeControlClient().inventory())))' > inventory.json
-```
+升级前只读核对数据库节点/路由/operation 与真实执行体标签、不可变镜像和存储归属。原生 v2 的正式实例及凭据不会仅因协议收敛自动重建。旧 v1 或缺少授权来源的在途操作不能继续新增用户效果；先停新受理，用旧版本完成所有旧预览回收并确认旧写入者停止，备份后按专门批准的维护计划重新发布为 v2，保留原数据库和附件。这里没有可以直接执行的旧导入命令，也不授权处理任何既有环境。
 
-导入后显式调用 `/api/v1/apps/{app}/runtime/upgrade/rebind`，从当前已批准版本重建 v2 正式实例并重新签发句柄，不把 pending 版本当成批准版本。停掉旧写入者后才能挂生产卷。完成范围核对后再切 v2 代理/平台配置；旧 v1 写意图和 storage RPC 在协议 2 返回拒绝，不能作为旁路。原始卷、旧 state 和系统备份保留到验收结束。
+新用户操作保存服务器产生的授权来源，后端在准备、维护前、数据步骤、启动及路由切换时重新校验。manager 必须先取得短效阶段许可，平台确认维护路由后才停止旧 writer；超时或回复未知不能当作允许。系统自愈只恢复当前批准版本/原运行意图，依据真实观测重新验证，不依赖历史提交者仍然持权。
+
+管理预览要求当前 `edit`，审批预览要求当前有效任务；显式用途分别为 `management`、`approval`。两者只注入声明名和空密钥值，独立会话/数据库/附件/凭据在同一事务登记，提交后唤醒，ready 后才开放入口。结束/过期只吊销该预览凭据，原生产凭据保持；运行时仍逐次校验当前用途、任务或动作及可信 OBO。管理范围必须为一个具体租户，不能选择全平台；个人审批、SDK 及内部调用不借浏览器选择赋权。
 
 manager 重启不撤销平台已提交路由；入口/出口读取 backend，平台授权失联后按 TTL 拒绝。未知执行体不自动释放额度或跨节点接管。正常任务清理不触及生产库/保护快照；无法确认停止时保留预占并报告 cleanup pending。节点替换、Engine ID 变化或物理磁盘丢失需人工维护恢复。
 
 验收及当前证据见 [F086 验证记录](../../features/v3.0.0/086-vibe-runtime-delivery/validation.json) 和 [E2E 清单](../../features/v3.0.0/086-vibe-runtime-delivery/e2e-checklist.md)。
 
 
-旧模板 Engine build 在调用前持久标记 started，只有读到完整结束流才记 finished。中断且不能确认 daemon build 已退出时，报告 legacy_build_stop_unconfirmed 并保留容量，不因容器列表为空就清理/重建。该状态需要专门维护窗口核对并停止未知构建；不能仅通过 owner cancel 或修改缓存让资源重新可用。原生构建中断与恢复仍须在专用 Engine 故障验收中验证。
+旧模板 Engine build 在调用前持久标记 started，只有读到完整结束流才记 finished。中断且不能确认 daemon build 已退出时，报告 legacy_build_stop_unconfirmed 并保留容量，不因容器列表为空就清理/重建。该状态需要专门维护窗口核对并停止未知构建；不能仅通过用户 cancel 或修改缓存让资源重新可用。原生构建中断与恢复仍须在专用 Engine 故障验收中验证。
 
 协议2默认每5秒心跳/对账，平台节点新鲜度上限15秒；自定义调大interval时需给网络/处理延迟留余量。材料导入上限读取backend app_runtime.artifact_max_mb；代理默认2GiB，修改平台上限时同步评估代理限制。
 

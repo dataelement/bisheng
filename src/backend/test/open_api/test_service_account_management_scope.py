@@ -29,6 +29,9 @@ def scope_ports(monkeypatch):
 
 
 async def test_verified_scope_overrides_stale_middleware_and_restores_it(scope_ports):
+    from bisheng.core.context.tenant import set_is_management_api
+
+    management_token = set_is_management_api(True)
     old = set_admin_scope_tenant_id(9)
     try:
         async with service.ServiceAccountScopeService.bind_request(
@@ -43,6 +46,7 @@ async def test_verified_scope_overrides_stale_middleware_and_restores_it(scope_p
         assert service.ServiceAccountScopeService.admitted_tenant() is None
     finally:
         old.var.reset(old)
+        management_token.var.reset(management_token)
 
 
 @pytest.mark.parametrize("selected,expected", [(None, "1"), (2, None), (2, "1"), (2, "0"), (2, "invalid")])
@@ -240,38 +244,22 @@ async def test_management_scope_http_requires_super_and_keeps_selection_when_tar
     assert current["scope_tenant_id"] == 1
 
 
-async def test_global_list_scope_is_explicit_read_only_and_super_only(scope_ports):
+@pytest.mark.parametrize("super_admin,writing", [(True, False), (True, True), (False, False)])
+async def test_global_list_scope_is_retired_for_every_actor(scope_ports, super_admin, writing):
     from bisheng.core.context.tenant import is_tenant_filter_bypassed
-    from bisheng.open_api.domain.repositories.service_account_repository import current_tenant_scope
 
     scope_ports[0].return_value = None
-    async with service.ServiceAccountScopeService.bind_request(
-        caller(), expected_tenant="all", writing=False, allow_all_tenants=True
-    ):
-        assert current_tenant_scope() is None
-        assert is_tenant_filter_bypassed()
-    assert not is_tenant_filter_bypassed()
-    scope_ports[1].assert_not_awaited()
-
-    for actor, writing, allow_all in [
-        (caller(), True, True),
-        (caller(), False, False),
-        (caller(super_admin=False), False, True),
-    ]:
-        with pytest.raises(ServiceAccountManagementScopeChangedError):
-            async with service.ServiceAccountScopeService.bind_request(
-                actor, expected_tenant="all", writing=writing, allow_all_tenants=allow_all
-            ):
-                pytest.fail("Global scope admitted an invalid operation")
-    scope_ports[0].return_value = 2
     with pytest.raises(ServiceAccountManagementScopeChangedError):
         async with service.ServiceAccountScopeService.bind_request(
-            caller(), expected_tenant="all", writing=False, allow_all_tenants=True
+            caller(super_admin=super_admin), expected_tenant="all", writing=writing
         ):
-            pytest.fail("Stale global list request was admitted")
+            pytest.fail("Retired global scope was admitted")
+    assert not is_tenant_filter_bypassed()
+    scope_ports[0].assert_not_awaited()
+    scope_ports[1].assert_not_awaited()
 
 
-async def test_global_list_http_paginates_all_tenants_and_labels_them(open_api_db, scope_ports):
+async def test_list_http_is_concrete_and_rejects_legacy_global_requests(open_api_db, scope_ports):
     import httpx
     from fastapi import FastAPI
 
@@ -285,20 +273,13 @@ async def test_global_list_http_paginates_all_tenants_and_labels_them(open_api_d
 
     with bypass_tenant_filter():
         async with open_api_db() as db:
-            db.add_all(
-                [
-                    Tenant(id=1, tenant_code="root", tenant_name="Root organization"),
-                    Tenant(id=2, tenant_code="department", tenant_name="Department tenant"),
-                ]
-            )
-            db.add_all(
-                [
-                    ServiceAccount(id=1, tenant_id=1, name="root-account", resource_owner_user_id=21),
-                    ServiceAccount(id=2, tenant_id=2, name="department-account", resource_owner_user_id=22),
-                ]
-            )
+            db.add_all([
+                Tenant(id=1, tenant_code="root", tenant_name="Root organization"),
+                Tenant(id=2, tenant_code="department", tenant_name="Department tenant"),
+                ServiceAccount(id=1, tenant_id=1, name="root-account", resource_owner_user_id=21),
+                ServiceAccount(id=2, tenant_id=2, name="department-account", resource_owner_user_id=22),
+            ])
             await db.commit()
-    scope_ports[0].return_value = None
     operator = UserPayload(user_id=21, user_name="admin", tenant_id=1, user_role=[], is_global_super=True)
     app = FastAPI()
     app.dependency_overrides[get_service_account_admin] = lambda: operator
@@ -306,25 +287,18 @@ async def test_global_list_http_paginates_all_tenants_and_labels_them(open_api_d
     register_open_api_exception_handlers(app)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as client:
         url = "/api/v1/service-accounts"
-        pages = []
-        for page in (1, 2):
-            response = await client.get(
-                url, headers={"X-Service-Account-Tenant": "all"}, params={"page": page, "page_size": 1}
-            )
-            assert response.json()["status_code"] == 200
-            assert response.json()["data"]["total"] == 2
-            pages.extend(response.json()["data"]["data"])
-        assert {row["tenant_name"] for row in pages} == {"Root organization", "Department tenant"}
-        assert {row["tenant_id"] for row in pages} == {1, 2}
-        blocked = await client.post(
-            url, headers={"X-Service-Account-Tenant": "all"}, json={"name": "blocked", "resource_owner_user_id": 21}
-        )
+        blocked = await client.get(url, headers={"X-Service-Account-Tenant": "all"})
         assert blocked.json()["status_code"] == ServiceAccountManagementScopeChangedError.Code
-        detail = await client.get(url + "/2", headers={"X-Service-Account-Tenant": "all"})
-        assert detail.json()["status_code"] == ServiceAccountManagementScopeChangedError.Code
+        for selected in (1, 2):
+            scope_ports[0].return_value = selected
+            response = await client.get(url, headers={"X-Service-Account-Tenant": str(selected)})
+            assert response.json()["status_code"] == 200
+            assert response.json()["data"]["total"] == 1
+            assert {row["tenant_id"] for row in response.json()["data"]["data"]} == {selected}
+            assert response.json()["data"]["data"][0]["tenant_name"]
         operator.is_global_super = False
         operator.tenant_id = 2
-        denied = await client.get(url, headers={"X-Service-Account-Tenant": "all"})
+        denied = await client.get(url, headers={"X-Service-Account-Tenant": "1"})
         assert denied.json()["status_code"] == ServiceAccountManagementScopeChangedError.Code
         own = await client.get(url, headers={"X-Service-Account-Tenant": "2"})
         assert own.json()["data"]["total"] == 1

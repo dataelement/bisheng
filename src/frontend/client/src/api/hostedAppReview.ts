@@ -23,7 +23,7 @@ interface ApiResponse<T> {
 }
 
 /** Which door the caller came in through; an approver may read, not act. */
-export type ReviewRole = "owner" | "super_admin" | "tenant_admin" | "approver";
+export type ReviewRole = "owner" | "super_admin" | "tenant_admin" | "approver" | "editor";
 
 export interface ReviewVersion {
   version_id: string;

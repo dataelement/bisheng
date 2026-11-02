@@ -22,8 +22,14 @@ PRESETS = {
         "models": {"llm": ["MiniMax-M3.1-Flash", "MiniMax-M3"]},
     },
     "tencent": {
-        "hosts": {"api.hunyuan.cloud.tencent.com"},
-        "docs": "https://cloud.tencent.com/document/product/1729/111007",
+        "hosts": {
+            "api.hunyuan.cloud.tencent.com",
+            "tokenhub.tencentmaas.com",
+            "tokenhub.tencentmaas.cn",
+            "tokenhub-intl.tencentmaas.com",
+            "tokenhub-intl.tencentmaas.cn",
+        },
+        "docs": "https://cloud.tencent.com/document/product/1823/130078",
         "models": {"llm": ["hunyuan-turbos-latest", "hunyuan-vision"], "embedding": ["hunyuan-embedding"]},
     },
 }

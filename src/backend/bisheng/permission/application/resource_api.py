@@ -485,6 +485,9 @@ class F048ResourcePermissionApi:
         )
         parent_names = await self._subjects.resource_display_names(parents) if parents else {}
         model_names = {item.snapshot.model_key: item.name for item in catalog.models}
+        model_states = {item.snapshot.model_key: item.snapshot.active for item in catalog.models}
+        if any(row.model_key not in model_states for row in selected):
+            raise PermissionVersionConflictError(msg="Permission Catalog changed while reading sources")
         data = [
             {
                 "assignee_id": str(row.source_id),
@@ -501,7 +504,7 @@ class F048ResourcePermissionApi:
                         row.model_key,
                     ),
                     "level": row.model_level,
-                    "active": True,
+                    "active": model_states[row.model_key],
                 },
                 "source": {
                     "type": row.source_type,
@@ -651,6 +654,7 @@ class F048ResourcePermissionApi:
                     target_model_key=change.target_model_key,
                 )
             )
+        manageable = await self._runtime.manageable_model_keys(actor=actor, target=target)
         result = await self._runtime.mutate_grants(
             actor=actor,
             target=target,
@@ -681,10 +685,10 @@ class F048ResourcePermissionApi:
                 "scope": "LOCAL",
                 "inherited_from": None,
                 "protected": source.protected,
-                "editable": not source.protected,
+                "editable": not source.protected and grant.model.model_key in manageable,
             }
             for grant in result.grants
-            if grant.active and grant.model.active
+            if grant.active
             for source in grant.sources
             if source.active
         ]

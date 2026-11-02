@@ -4,6 +4,12 @@ import { notification } from '@bisheng/ui';
 
 import axios from "axios";
 import i18next from "i18next";
+import { managementRequestScope,requiresManagementScope,guardManagementResponse } from './managementScope';
+
+window.addEventListener('storage', event => {
+    if (event.key === 'bs:management-scope' && event.oldValue !== event.newValue) window.location.reload();
+});
+window.addEventListener('bisheng:management-scope-changed', () => window.location.reload());
 axios.defaults.withCredentials = true;
 const customAxios = axios.create({
     baseURL: import.meta.env.BASE_URL
@@ -64,6 +70,10 @@ function beginSessionKick(envelope: unknown): boolean {
 
 customAxios.interceptors.request.use(function (config) {
     Object.assign(config.headers, requestAuthHeaders(config.url || ''));
+    config.managementScopeSnapshot = managementRequestScope();
+    if (requiresManagementScope(config.method || 'get',config.url || '') && config.managementScopeSnapshot !== null) {
+        config.headers['X-Management-Tenant'] = String(config.managementScopeSnapshot);
+    }
     return config;
 }, function (error) {
     return Promise.reject(error);
@@ -161,6 +171,11 @@ async function responseError(cause, response?) {
 }
 
 export async function handleRequestResponse(response) {
+    try {
+        guardManagementResponse(response.headers,response.config?.managementScopeSnapshot);
+    } catch {
+        return Promise.reject(await responseError({status_code:19704,status_message:'management_scope_changed'},response));
+    }
     const binary = response.data instanceof Blob || response.data instanceof ArrayBuffer;
     const decoded = binary ? await decodeErrorEnvelope(response.data) : undefined;
     const envelope = decoded ?? response.data;

@@ -2,6 +2,7 @@ import * as React from 'react';
 import * as AlertDialogPrimitive from '@radix-ui/react-alert-dialog';
 
 import { cn } from '../../utils';
+import { dialogOverlayStyle } from './dialogOverlayStyle';
 
 /**
  * The color defaults below carry NO `dark:` prefix — they use semantic tokens
@@ -34,13 +35,14 @@ AlertDialogPortal.displayName = AlertDialogPrimitive.Portal.displayName;
 const AlertDialogOverlay = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Overlay>
->(({ className = '', ...props }, ref) => (
+>(({ className = '', style, ...props }, ref) => (
   <AlertDialogPrimitive.Overlay
     className={cn(
       'fixed inset-0 z-[110] bg-gray-500/90 transition-opacity animate-in fade-in dark:bg-gray-800/90',
       className,
     )}
     {...props}
+    style={dialogOverlayStyle(style)}
     ref={ref}
   />
 ));

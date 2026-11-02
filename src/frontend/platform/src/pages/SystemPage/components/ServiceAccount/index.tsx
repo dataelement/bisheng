@@ -31,7 +31,6 @@ function ServiceAccountView() {
   const requestScope = useServiceAccountRequestScope();
   const { appConfig } = useContext(locationContext);
   const showTenant = !!appConfig?.multiTenantEnabled;
-  const isGlobalView = requestScope.tenantId === null;
   const { t } = useTranslation();
   const [selected, setSelected] = useState<ServiceAccountItem | null>(null);
   const [keyword, setKeyword] = useState("");
@@ -141,7 +140,6 @@ function ServiceAccountView() {
 
   return (
     <div className="h-full min-h-0 flex-1 overflow-y-auto pb-8">
-      {isGlobalView && <p className="mb-4 text-sm text-muted-foreground">{t("openApiManagement.tenantScope.globalReadonlyHint")}</p>}
       <div className="mb-4 flex items-center justify-end gap-3">
         <SearchInput value={keyword} placeholder={t("openApiManagement.serviceAccount.search")} onChange={(event) => setKeyword(event.target.value)} onKeyDown={(event) => {
             if (event.key === "Enter") {
@@ -149,7 +147,7 @@ function ServiceAccountView() {
               else setSearchKeyword(keyword.trim());
             }
           }} className={"w-56"} />
-        <Button disabled={isGlobalView} onClick={() => setCreateOpen(true)}>{t("openApiManagement.serviceAccount.create")}</Button>
+        <Button onClick={() => setCreateOpen(true)}>{t("openApiManagement.serviceAccount.create")}</Button>
       </div>
       <Table>
         <TableHeader>
@@ -169,9 +167,9 @@ function ServiceAccountView() {
             return (
               <TableRow key={account.id}>
                 <TableCell>
-                  {isGlobalView ? <span className="block max-w-56 truncate font-medium">{account.name}</span> : <Button variant="link" className="h-auto max-w-56 px-0 font-medium" onClick={handleUiRequest(() => openDetail(account.id))}>
+                  <Button variant="link" className="h-auto max-w-56 px-0 font-medium" onClick={handleUiRequest(() => openDetail(account.id))}>
                     <span className="truncate">{account.name}</span>
-                  </Button>}
+                  </Button>
                 </TableCell>
                 {showTenant && <TableCell>{displayTenantName(account.tenant_name) || "-"}</TableCell>}
                 <TableCell>
@@ -245,14 +243,14 @@ function ServiceAccountView() {
         onLoadMore={list.loadMore}
         onRetry={list.retry}
       />
-      {!isGlobalView && <CreateServiceAccountDialog
+      <CreateServiceAccountDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreated={(id) => {
           void list.reload();
           void openDetail(id, "keys").catch(showApiError);
         }}
-      />}
+      />
     </div>
   );
 }

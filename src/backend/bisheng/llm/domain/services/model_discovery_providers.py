@@ -23,7 +23,7 @@ DEFAULT_BASES = {
     "qianfan": "https://qianfan.baidubce.com/v2",
     "anthropic": "https://api.anthropic.com/v1",
     "volcengine": "https://ark.cn-beijing.volces.com/api/v3",
-    "tencent": "https://api.hunyuan.cloud.tencent.com/v1",
+    "tencent": "https://tokenhub.tencentmaas.com/v1",
     "spark": "https://spark-api-open.xf-yun.com/v1",
     "minimax": "https://api.minimax.cn/v1",
 }

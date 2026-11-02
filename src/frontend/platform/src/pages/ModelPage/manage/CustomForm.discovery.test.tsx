@@ -4,17 +4,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { CustomForm, CustomFormHandle } from './CustomForm';
 
 describe('discovery connection and speech configuration', () => {
-  it('retains speech fields while publishing connection changes and blur', () => {
+  it('retains speech fields while publishing connection changes', () => {
     const ref = createRef<CustomFormHandle>();
     const onConnectionChange = vi.fn();
-    const onConnectionBlur = vi.fn();
     render(<CustomForm ref={ref} showDefault={false} provider="tencent" modelTypes={['llm', 'asr']}
       formData={{ api_key: 'chat-key', base_url: 'https://gateway.example/v1', speech_app_id: '123', speech_secret_id: 'id', speech_secret_key: 'speech-key' }}
-      onConnectionChange={onConnectionChange} onConnectionBlur={onConnectionBlur} />);
+      onConnectionChange={onConnectionChange} />);
     fireEvent.change(screen.getByDisplayValue('chat-key'), { target: { value: 'edited' } });
-    fireEvent.blur(screen.getByDisplayValue('edited'));
     expect(onConnectionChange).toHaveBeenCalledOnce();
-    expect(onConnectionBlur).toHaveBeenCalledOnce();
     expect(ref.current?.getData()).toEqual([expect.objectContaining({ api_key: 'edited', speech_secret_key: 'speech-key' }), '']);
   });
 
@@ -29,5 +26,20 @@ describe('discovery connection and speech configuration', () => {
     }), '']);
     expect(screen.getByLabelText('Base URL')).toBeInTheDocument();
     expect(screen.getByLabelText('API Key')).toBeInTheDocument();
+  });
+
+  it('requires the catalog API key before listing when speech-only rows omit it from save validation', () => {
+    const ref = createRef<CustomFormHandle>();
+    render(<CustomForm ref={ref} showDefault={false} provider="tencent" modelTypes={['asr_rt']}
+      formData={{ base_url: 'https://tokenhub.tencentmaas.com/v1', api_key: '', speech_app_id: '1', speech_secret_id: 'id', speech_secret_key: 'key' }} />);
+    expect(ref.current?.getData()[1]).toBe('');
+    expect(ref.current?.getCatalogError()).toBe('API Key');
+  });
+
+  it('allows listing when the API key is set and Base URL keeps the vendor default', () => {
+    const ref = createRef<CustomFormHandle>();
+    render(<CustomForm ref={ref} showDefault={false} provider="tencent" modelTypes={['asr_rt']}
+      formData={{ base_url: '', api_key: 'token', speech_app_id: '1', speech_secret_id: 'id', speech_secret_key: 'key' }} />);
+    expect(ref.current?.getCatalogError()).toBe('');
   });
 });

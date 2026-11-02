@@ -40,7 +40,7 @@ export function normalizeFiles(value: unknown, issues: string[]): ChatAttachment
   if (!Array.isArray(parsed)) { issues.push('invalid-files'); return []; }
   return parsed.map(item => {
     const raw = asRecord(item);
-    return { id: sourceId(raw.file_id ?? raw.id), name: String(raw.file_name ?? raw.name ?? ''),
+    return { id: sourceId(raw.file_id ?? raw.id), name: String(raw.file_name ?? raw.name ?? raw.filename ?? ''),
       url: String(raw.file_url ?? raw.filepath ?? raw.file_path ?? raw.path ?? raw.url ?? ''), raw };
   });
 }

@@ -94,16 +94,34 @@ export function MobileAppHistoryDropdown({
     const flowData = chatState?.flow ?? currentApp;
     const showShareApp = flowData?.can_share === true;
 
+    const historyTrigger = useRef<Element | null>(null);
+    useEffect(() => {
+        historyTrigger.current = open ? document.activeElement : null;
+    }, [open]);
+
+    useEffect(() => {
+        if (!open) return;
+        const trigger = historyTrigger.current;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && !event.defaultPrevented) {
+                event.preventDefault();
+                onClose();
+                if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus();
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [open, onClose]);
+
     if (!open || typeof document === 'undefined') return null;
 
-    // Render through a portal so the dropdown escapes MobileNav's stacking context (its
-    // sibling holds chat content + input form which would otherwise paint on top).
+    // This history region keeps the header and desktop sidebar interactive. Body
+    // portals with modal semantics are expanded to the native window by the host.
     return createPortal(
         <div
             className="fixed inset-x-0 bottom-0 z-[80] flex flex-col bg-white"
             style={{ top: topOffset }}
-            role="dialog"
-            aria-modal="true"
+            role="region"
             aria-label={localize('com_app_chat_sidebar_title')}
         >
             {/* App card — same UI as the SideNav card */}

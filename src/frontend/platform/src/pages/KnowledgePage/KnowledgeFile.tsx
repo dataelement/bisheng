@@ -110,14 +110,14 @@ export default function KnowledgeFile({ toolbarTarget }: KnowledgeFileProps) {
         hasRowAction(el, 'edit');
     const canDelete = (el: KnowledgeListRow) =>
         hasRowAction(el, 'delete');
-    // PRD 3.3.3：「创建」「复制」与 ReBAC 编辑权解耦，由 WEB_MENU `create_knowledge` 控制（对齐「创建应用」+ 列表「复制」）
-    const canCreateLibrary =
+    // Copy retains the original menu qualification and source visibility.
+    const canCopyLibrary =
         user.role === 'admin' ||
         (user.web_menu || []).includes('create_knowledge');
+    const canCreateLibrary = canCopyLibrary || user.is_child_admin === true;
     const canReadRow = (el: KnowledgeListRow) =>
         hasAction(el, 'visible');
-    /** 与 apps.tsx 一致：create_knowledge 菜单 + 对目标库具备使用/可见（can_read） */
-    const canUseCopy = (el: KnowledgeListRow) => canCreateLibrary && canReadRow(el);
+    const canUseCopy = (el: KnowledgeListRow) => canCopyLibrary && canReadRow(el);
     const canManageKb = (el: KnowledgeListRow) =>
         hasRowAction(el, KB_MANAGE_ACTION);
     const isLibraryBusy = (el: KnowledgeListRow) =>

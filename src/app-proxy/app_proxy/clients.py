@@ -286,10 +286,12 @@ class ManagerRouteClient(HmacClient):
         *args,
         ttl_seconds: float = 3.0,
         clock: Callable[[], float] = time.monotonic,
-        protocol_version=1,
+        protocol_version=2,
         key_id="",
         **kwargs,
     ):
+        if protocol_version != 2:
+            raise ValueError("entry_requires_protocol_v2")
         self.protocol_version = protocol_version
         self.key_id = key_id
         super().__init__(*args, **kwargs)
@@ -316,7 +318,6 @@ class ManagerRouteClient(HmacClient):
             if cached is not None:
                 return {**cached, "cache_hit": True}
 
-        path = f"/v1/previews/{app_id}/route" if preview else f"/v1/apps/{app_id}/route"
         if self.protocol_version == 2:
             from app_proxy.platform_protocol import signed_headers
 
@@ -329,7 +330,7 @@ class ManagerRouteClient(HmacClient):
             except (httpx.HTTPError, ValueError) as exc:
                 raise InternalRpcError("backend", "route projection unavailable") from exc
         else:
-            response = await self._send("GET", path)
+            raise InternalRpcError("backend", "runtime v1 retired")
         if response.status_code == 404:
             return None
         if response.status_code == 409 and self._is_deploying(response):
@@ -389,8 +390,8 @@ def build_clients(config: Config | None = None) -> tuple[BackendAuthzClient, Man
         ttl_seconds=config.authz_ttl_seconds,
     )
     manager = ManagerRouteClient(
-        config.backend_base if config.protocol_version == 2 else config.manager_base,
-        config.route_secret if config.protocol_version == 2 else config.manager_secret,
+        config.backend_base,
+        config.route_secret,
         protocol_version=config.protocol_version,
         key_id=config.route_key_id,
         signature_header=config.signature_header,

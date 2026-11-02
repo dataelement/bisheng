@@ -69,6 +69,23 @@ async def test_zhipu_preset_speech_row_is_unsupported():
     assert "_transports" not in speech
 
 
+async def test_tencent_default_lists_tokenhub_models(monkeypatch):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={"object": "list", "data": [{"id": "hy3", "object": "model", "name": "Hy3"}]})
+
+    transport(monkeypatch, handler)
+    result = await ModelDiscoveryService.discover("tencent", {"api_key": "fixture"})
+    assert str(requests[0].url) == "https://tokenhub.tencentmaas.com/v1/models"
+    assert requests[0].headers["authorization"] == "Bearer fixture"
+    assert result["source"] == "live"
+    hy3 = result["models"][0]
+    assert hy3["model_name"] == "hy3"
+    assert hy3["model_type"] == "llm"
+
+
 async def test_custom_gateway_failures_never_turn_into_vendor_presets(monkeypatch):
     transport(monkeypatch, lambda request: httpx.Response(401, text="private failure"))
     with pytest.raises(ModelDiscoveryError) as error:
@@ -309,6 +326,24 @@ async def test_silicon_speech_only_rows_stay_unsupported(monkeypatch):
     assert rows["private-speech"]["model_type"] is None
     assert rows["private-speech"]["type_source"] == "unsupported"
     assert rows["private-chat"]["model_type"] == "llm"
+
+
+async def test_silicon_keeps_the_catalog_when_a_capability_filter_is_not_a_list(monkeypatch):
+    def handler(request):
+        subtype = request.url.params.get("sub_type")
+        if subtype is None:
+            return httpx.Response(200, json={"data": [{"id": "org/chat-a"}, {"id": "org/embed-a"}]})
+        if subtype == "chat":
+            return httpx.Response(200, json={"data": [{"id": "org/chat-a"}]})
+        if subtype == "image-to-image":
+            return httpx.Response(200, json={"code": 20012, "message": "unavailable", "data": "unavailable"})
+        return httpx.Response(200, json={"data": []})
+
+    transport(monkeypatch, handler)
+    result = await ModelDiscoveryService.discover("silicon", {"api_key": "fixture"})
+    rows = {model["model_name"]: model for model in result["models"]}
+    assert rows["org/chat-a"]["model_type"] == "llm"
+    assert rows["org/embed-a"]["model_type"] is None
 
 
 @pytest.mark.parametrize("payload", [{"ResponseMetadata": "bad"}, {"data": [], "error": "private-body"}])

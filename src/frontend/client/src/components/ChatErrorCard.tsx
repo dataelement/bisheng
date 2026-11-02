@@ -57,6 +57,9 @@ const KNOWN_TYPES = new Set([
     'context_overflow',
     // Task mode only: condensing earlier steps into a summary failed (F087).
     'context_compress_failed',
+    // Task mode only: the model spent its whole output budget (usually on
+    // reasoning) without a tool call or an answer, even after one retry.
+    'output_truncated',
     // Attachment parsing (OCR / ETL) — daily-mode chat only.
     'file_parse_busy',
     'file_parse_failed',
