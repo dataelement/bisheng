@@ -10,7 +10,7 @@
 **关联**：[spec.md](./spec.md) · [产品说明](./product-authorization-model-and-migration-guide.md) · [release contract](../release-contract.md)
 **版本**：v3.0.0-beta1
 **功能分支**：`feat/v3.0.0-beta1/048-rebac-permission-model-grants`
-**最后更新**：2026-08-13
+**最后更新**：2026-11-02
 
 ---
 
@@ -1135,7 +1135,7 @@ scope/version/operation 不匹配继续转人工分析。重复传入 `FINALIZED
 | `permission/domain/services/catalog_service.py` | draft、影响分析、标准模型生成、Catalog publish 编排 | 不直接 ORM/FGA HTTP |
 | `.../projection_service.py` | operation、tuple phase、幂等提交、reconcile、recent marker | 不决定谁可授权 |
 | `.../visibility_projection_service.py` | 从 canonical Grant assignee 编译单槽浅层 visible contribution、跨来源引用计数、checksum/reconcile；迁移器与运行时复用同一纯编译器 | 不展开部门/用户组成员；system/public/shared 仍由各 Owner projection 处理；不接受业务编辑；不参与 Check/List fallback |
-| `.../grant_service.py` | 来源、模型、版本、protected 和同级规则编排 | 不读取 Config |
+| `.../grant_service.py` | 来源、模型、版本、protected 和同级规则编排；新增目标要求 active，既有来源管理复用相同等级规则但不要求模型 active | 不读取 Config |
 | `.../mode_service.py` | 已验证 parent/mode context 的 impact/snapshot/projection | 不查询或移动业务资源，不维护第二 parent |
 | `.../permission_service.py` | 唯一权限 facade：具体 action check/batch-check、visible check/batch-check/完整流式枚举、Grant 与 projection | 不查询业务资源，不判断状态/父级，不 fallback ALLOW；个人 visible 不做管理员扩权短路 |
 | `.../permission_explain_service.py` | 已经 FGA 判定后的 opaque subject/source/model ID、scope 与 protected 说明 | 不产生 ALLOW，不查询用户/部门/用户组/资源名称 |
@@ -1211,6 +1211,7 @@ domain 对业务 model/repository 的 import 必须由架构测试禁止。正�
 | 33 | 服务账号继承需要每层资源的 `service_account:*` mode/permission_enabled 技术标记；这些标记不授予任何账号资源权限 | 旧数据只有 `user:*` 时会出现空间 visible 成功而子项不可见、上传失败；新增 Grant 不会补齐存量后代的技术标记 | 创建与迁移编译器写入两类主体标记；模型发布脚本 `publish_authorization_model_change.py` 和完整对账脚本 `reconcile_f048_visible_projection.py` 在维护窗口按 CURRENT 模式补齐，保留 CUSTOM 边界；模型已一致也必须补齐并校验后才返回成功 |
 | 34 | 预置工具的历史 `user_id` 可以非空；预置身份只由 `GptsToolsType.is_preset=1` 决定；权限 mirror 为 `CURRENT` 也可能缺失系统 tuples | 把创建者为空作为额外条件会从工作台剔除预置工具，并错误地按 USER 迁移；只修分类或只检查 mirror 不能补齐存量系统授权 | 运行时、迁移、清单与租户复制统一判定；显式系统资源审计读取真实 wildcard `visible/system_use_marker`，仅为有效预置工具经版本围栏和 durable ledger 补缺，保留既有 Grant，拒绝 non-CURRENT；预置工具仍只支持 `visible/use` 并经实际动作鉴权 |
 | 35 | 成员退出使历史 assignee 版本递增；重新加入会复用稳定来源 ID，不能把来源版本重新设为 1 | SQL assignee 与 visible contribution 版本不一致，投影收尾把实际已写入的可见关系误标为 RETIRED；后续退出漏编译 visible 删除 | `sync_business_source_model` 在编译计划前读取同资源历史来源，按历史版本加 1；`_upsert_assignee` 在资源版本围栏内复核状态与版本，持久化同一版本。空间、频道连续加入/退出、角色移动后重新加入及重复操作由 `test_f048_membership_reactivation.py` 验证；存量孤儿关系经既有维护工具单独对账，不在普通请求中自动清理 |
+| 36 | 模型 inactive 只禁止新分配，既有 ACTIVE Grant/assignee 仍可提供 visible、具体动作和管理能力 | 名单、我的权限或审批当前授权摘要按 model.active 过滤，会出现“实际可访问但授权页无来源”；复用可分配模型列表管理旧绑定又会无法撤销 | `load_source_page`、`PermissionExplainService` 和 `read_effective_action_sources` 保留既有来源；名单返回真实 model.active；服务端按相同等级策略计算 editable，两套前端区分旧来源管理与新目标选择 |
 
 ---
 
@@ -1243,6 +1244,13 @@ protected creator 对该接口始终 `editable=false`。
 Grant 列表使用 `PageInfiniteCursorData`，不返回需要全量权限扫描的 total。
 请求参数为 `cursor`（opaque、可空）与 `page_size`（默认 50、最大 100）；cursor 绑定
 tenant/resource/current Catalog/resource version，任一变化返回 25002，不能跨资源复用。
+
+名单与搜索保留已停用模型的既有有效来源，`model.active` 返回 Catalog 中真实的可分配状态。
+`editable` 同时满足本级 CUSTOM、非 protected 和服务端 manage_permission/等级/同级策略；
+停用模型不会因此成为新目标。`grants:mutate` 响应同样保留未撤销的停用模型来源，不能在
+一次无关操作后让它从表单消失。两套 SPA 显示停用提示；Client 知识空间及频道设置表单
+保留 `modelActive` 元数据，允许依法精确撤销或移动到可分配模型。新增、MOVE 目标和复制
+仍沿用 active 校验，原版本围栏、租户边界、继承和受保护来源规则保持生效。
 
 #### 具体 action check
 
@@ -1390,6 +1398,13 @@ Grant/assignee 引用均为零，并要求 source projection/live tuple 残留�
   不在 TSX 中硬编码，也不引入新的组件或状态库。
 
 ### 6.2 内部 Python API
+
+`F048PermissionRuntime.manageable_model_keys(actor, target)` 供权限 API 序列化既有来源的
+管理资格使用：先执行 manage_permission 与 CURRENT target 校验，再对有界 Catalog 模型
+应用 `GrantService.manageable_models_for_capabilities`。它与新分配的等级/同级策略共用判断，
+只取消来源模型的 active 要求；不加载完整名单、不代替写入时的最终校验。分页读取复用
+同一策略细化每条来源的 editable；审批的内部 action 来源摘要仍只在原阅读门禁后调用，
+不得把 SQL 来源说明当作 OpenFGA 授权结果。
 
 | 契约 | 调用方 | 说明 |
 |---|---|---|
@@ -1982,6 +1997,8 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 ## 修订历史
 
 - 2026-11-02：修复业务成员来源重新激活时的历史版本同步，写 OpenFGA 前校验版本，保持稳定来源 ID；新增连续加入/退出与角色移动回归。无表结构、公开 API 或权限语义变更，存量孤儿关系仍走独立运维对账。
+
+- 2026-11-02：修正停用模型既有授权在名单、搜索、我的权限及审批当前授权摘要中的遗漏；真实返回 model.active，按原等级规则开放旧来源管理并保留新目标 active 校验。依据空间 3254 的只读排查与用户确认方案，不迁移或撤销存量授权。验证见 [本次记录](./verification-inactive-existing-grants-20261102.md)。
 
 - 2026-10-29：修复租户管理员构建列表的跨租户快捷放行；权限冲突码迁至 25020–25026，保留信息源原码及存量资源归属；仅执行本缺陷定向验证。
 

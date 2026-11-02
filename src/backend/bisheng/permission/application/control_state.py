@@ -548,7 +548,8 @@ class SqlPermissionControlState:
         if after_id < 0 or limit <= 0:
             raise ValueError("Permission source cursor bounds are invalid")
         normalized_mode = mode.upper()
-        model_by_key = {model.model_key: model for model in models if model.active}
+        # Model deactivation only prevents new assignments; existing sources remain effective.
+        model_by_key = {model.model_key: model for model in models}
         if not model_by_key:
             return (), False
         fetch_limit = limit + 1

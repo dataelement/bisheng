@@ -43,6 +43,15 @@ async def test_actions_not_model_names_and_all_pages():
     assert service._state.load_source_page.call_args.kwargs["after_id"] == 7
 
 
+async def test_inactive_model_still_contributes_existing_action_sources():
+    row = SimpleNamespace(source_id=7)
+    service, target = runtime([((row,), False)])
+    catalog = await service._runtime_catalog()
+    catalog.models[1].snapshot = GrantModelSnapshot("custom", False, ("use",))
+    assert await service.read_effective_action_sources(target=target, action="use") == (row,)
+    assert service._state.load_source_page.call_args.kwargs["models"][0].active is False
+
+
 async def test_projection_change_refuses_partial_roster():
     from bisheng.common.errcode.permission import PermissionPublishNotReadyError
 
