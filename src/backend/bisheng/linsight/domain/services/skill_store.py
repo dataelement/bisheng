@@ -88,11 +88,13 @@ MAX_UNPACKED_SIZE = 500 * _MB
 # materialize guards check this ceiling, not the live setting: a bundle accepted under
 # a larger setting has to stay readable after an admin lowers it.
 MAX_UNPACKED_CEILING = 1024 * _MB
-# Personal uploads ignore the tenant's 系统配置 caps. Confirmed 2026-09-14:
-# one file up to 50 MiB (52,428,800 bytes), unpacked contents up to 200 MiB
-# (209,715,200 bytes), SKILL.md itself up to 1 MiB. Equal to a limit passes.
-# The 200 MiB figure on the dialog is the account quota, not this per-file cap.
-PERSONAL_UPLOAD_MAX_BYTES = 50 * _MB
+# Personal uploads ignore the tenant's 系统配置 caps.
+# A skill file (.md) may be 200 MiB. A compressed package (.zip / .skill) may be
+# 50 MiB, and its unpacked contents may be 200 MiB. SKILL.md inside a package
+# stays at 1 MiB. Equal to a limit passes. The 200 MiB figure on the dialog is
+# the account quota, separate from these per-upload caps.
+PERSONAL_FILE_MAX_BYTES = 200 * _MB
+PERSONAL_ARCHIVE_MAX_BYTES = 50 * _MB
 PERSONAL_UNPACKED_MAX_BYTES = 200 * _MB
 PERSONAL_SKILL_MD_MAX_BYTES = 1 * _MB
 PERSONAL_ENTRY_MAX_COUNT = 1000
@@ -383,7 +385,6 @@ async def accept_skill_upload(
     """
     personal = owner_user_id != 0
     if personal:
-        upload_limit = PERSONAL_UPLOAD_MAX_BYTES
         unpacked_limit = PERSONAL_UNPACKED_MAX_BYTES
     else:
         upload_limit = await resolve_skill_upload_limit()
@@ -413,6 +414,8 @@ async def accept_skill_upload(
     elif mime not in _ZIP_CONTENT_TYPES or not _looks_like_zip(data):
         raise SkillTypeMismatchError()
 
+    if personal:
+        upload_limit = PERSONAL_FILE_MAX_BYTES if kind == "md" else PERSONAL_ARCHIVE_MAX_BYTES
     if len(data) > upload_limit:
         raise SkillFileTooLargeError(limit_mb=upload_limit // _MB)
 
@@ -429,7 +432,9 @@ async def accept_skill_upload(
         except BundleTooLargeError:
             raise SkillBundleTooLargeError(limit_mb=unpacked_limit // _MB) from None
 
-    if personal and len(files.get(SKILL_MD, b"")) > PERSONAL_SKILL_MD_MAX_BYTES:
+    # A markdown upload is the skill file, so its 200 MiB cap is the only size
+    # check. Inside a package, SKILL.md itself stays at 1 MiB.
+    if personal and kind != "md" and len(files.get(SKILL_MD, b"")) > PERSONAL_SKILL_MD_MAX_BYTES:
         raise SkillManifestTooLargeError(limit_mb=PERSONAL_SKILL_MD_MAX_BYTES // _MB)
     return files
 
