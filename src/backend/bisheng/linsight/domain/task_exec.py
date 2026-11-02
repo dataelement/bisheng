@@ -974,13 +974,15 @@ class LinsightWorkflowTask:
             if skipped:
                 logger.warning(f"{skipped} uploaded file(s) without markdown_file_path skipped for local prefetch")
 
-            # A passthrough file has no separate markdown view — its seed object and
-            # its original are the same bytes. It is fetched by the raw track below,
+            # A passthrough file (text, or an Excel original) has no separate
+            # markdown view — its seed object and its original are the same bytes. It is fetched by the raw track below,
             # which lands it under ``uploads/`` where the pointer block says it is;
             # letting it through here as well would ALSO drop a flat copy at the task
             # root, and the code interpreter's file list (``os.walk``) would show the
             # same file twice under two different paths.
-            downloadable = [f for f in entries if f.get("ingest_mode") != "passthrough"]
+            downloadable = [
+                f for f in entries if f.get("ingest_mode") not in LinsightWorkbenchImpl._ORIGINAL_ONLY_MODES
+            ]
 
             # Concurrent downloads
             download_tasks = [self._download_file(file_info, file_dir) for file_info in downloadable]
