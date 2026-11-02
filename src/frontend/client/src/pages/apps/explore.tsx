@@ -47,6 +47,7 @@ export default function ExplorePlaza() {
 
   const navigate = useNavigate();
   const location = useLocation();
+  const isUnifiedSquare = location.pathname === "/square";
   const { showToast } = useToastContext();
   const localize = useLocalize();
   const { data: bsConfig } = useGetBsConfig();
@@ -193,7 +194,7 @@ export default function ExplorePlaza() {
       recordUsedAppApi(String(flowId)).catch(() => {});
       return;
     }
-    const returnTo = location.pathname === "/square" ? squareTypePath("apps") : "/apps/explore";
+    const returnTo = isUnifiedSquare ? squareTypePath("apps") : "/apps/explore";
     try {
       sessionStorage.setItem(appFlowOriginKey(String(flowId)), "explore");
       sessionStorage.setItem(appLastOriginKey, "explore");
@@ -255,17 +256,18 @@ export default function ExplorePlaza() {
             maskRepeat: "no-repeat",
           }}
         />
-        {/* Desktop hosts this page inside 广场 (~/pages/square), whose tabs are the way
-                    around; the back arrow is the mobile way out. */}
-        <div className="absolute left-4 top-4 z-10 md:hidden">
-          <Button
-            variant="ghost"
-            onClick={() => navigate("/apps")}
-            className="h-8 w-8 rounded-md border border-[#E5E6EB] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F7F8FA] fine-pointer:hover:text-blue-500"
-          >
-            <ArrowLeft className="size-3.5" />
-          </Button>
-        </div>
+        {/* The unified square owns navigation; only the standalone mobile page needs a back button. */}
+        {!isUnifiedSquare && (
+          <div className="absolute left-4 top-4 z-10 md:hidden">
+            <Button
+              variant="ghost"
+              onClick={() => navigate("/apps")}
+              className="h-8 w-8 rounded-md border border-[#E5E6EB] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F7F8FA] fine-pointer:hover:text-blue-500"
+            >
+              <ArrowLeft className="size-3.5" />
+            </Button>
+          </div>
+        )}
         <div className="relative mx-auto flex w-full max-w-[1000px] flex-col items-center justify-center px-5 pb-5 pt-7 text-center">
           <h1 className="mb-1 font-['PingFang_SC'] text-[26px] font-semibold text-blue-500">{bannerTitle}</h1>
           <p className="mb-3 max-w-[640px] font-['PingFang_SC'] text-[13px] leading-[22px] text-[#86909C]">

@@ -14,6 +14,7 @@ import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/Dialog";
 import store from "~/store";
 import { useAgentToolPreferences } from "~/components/Chat/Input/AgentToolSelector";
+import { useGetBsConfig } from "~/hooks/queries/data-provider";
 
 const systemNoticeTodayKey = () => {
   const d = new Date();
@@ -245,24 +246,27 @@ export default function MainLayout() {
             {/* 移动端顶栏:无权限占位页本身没有汉堡入口,这里补一个,与会话/知识页一致,
                 避免收起侧栏后用户无法唤出系统菜单。 */}
             {shouldHideSidebarOnMobileAppsArea && !isChannelRoute && !isAppChatRoute ? (
-              <div className="sticky top-0 z-[50] w-full shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+              <div
+                className={cn(
+                  "top-0 z-[50] shrink-0",
+                  isSquareRoute
+                    ? "pointer-events-none absolute left-0 pt-[calc(env(safe-area-inset-top,0px)+14px)]"
+                    : "sticky w-full bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]",
+                )}
+              >
                 <div className="relative flex h-11 min-h-11 w-full flex-row items-center justify-between px-4">
                   <button
                     type="button"
                     aria-label={localize("com_nav_open_sidebar")}
                     onClick={() => setSystemMenuOpen(true)}
-                    className="workbench-menu-trigger relative inline-flex size-5 shrink-0 items-center justify-center text-text-1"
+                    className="workbench-menu-trigger pointer-events-auto relative inline-flex size-5 shrink-0 items-center justify-center text-text-1"
                   >
                     <Outlined.SidebarMenu className="size-5" />
                   </button>
-                  {isQueryDrivenRoute ? (
+                  {isQueryDrivenRoute && !isSquareRoute ? (
                     <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-text-1">
                       {localize(
-                        isSquareRoute
-                          ? "com_workbench_sidebar.square"
-                          : isCapabilitiesRoute
-                            ? "com_capability_center.title"
-                            : "com_skill_center_title",
+                        isCapabilitiesRoute ? "com_capability_center.title" : "com_skill_center_title",
                       )}
                     </span>
                   ) : null}

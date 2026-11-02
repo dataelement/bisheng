@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   BRAND, BRAND_STEPS, GRAY, TEXT, FILL, BORDER, BG, FUNCTIONAL, TAG,
-  FONT_FAMILY, TYPE_SCALE, FONT_WEIGHT, RADIUS, ICON_SIZE, Z_INDEX,
+  FONT_FAMILY, TYPE_SCALE, CONTROL_TYPE_SCALE, FONT_WEIGHT, RADIUS, ICON_SIZE, Z_INDEX,
 } from '~/design-token.cjs';
 
 export const mono = 'ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace';
@@ -183,13 +183,12 @@ export const TypeScaleTable = () => (
   <TokenTable
     cols={[
       { t: '变量名', r: (s) => <Name>text-{s.name}</Name> },
-      { t: '桌面（字号 / 行高）', r: (s) => <Code>{s.desktop[0]}px / {s.desktop[1]}px</Code> },
-      { t: '移动 ≤768px', r: (s) => <Code dim={s.mobile[0] === s.desktop[0] && s.mobile[1] === s.desktop[1]}>{s.mobile[0]}px / {s.mobile[1]}px</Code> },
-      { t: '字重', r: (s) => <Code>{s.weight}</Code> },
+      { t: '字号 / 行高', r: (s) => <Code>{s.desktop[0]}px / {s.desktop[1]}px</Code> },
+      { t: '字重', r: (s) => <Code>{s.weight ?? '沿用组件'}</Code> },
       { t: 'CSS 变量', r: (s) => <span style={{ whiteSpace: 'nowrap' }}><Code>{s.cssVar}</Code><br /><Code dim>{s.leadingVar}</Code></span> },
       { t: '描述', r: (s) => s.usage },
     ]}
-    rows={TYPE_SCALE}
+    rows={[...TYPE_SCALE, ...CONTROL_TYPE_SCALE]}
   />
 );
 
@@ -313,7 +312,7 @@ export const ZIndexTable = () => (
 
 ## 字号与行高 Font Size
 
-语义化字阶（Tailwind fontSize key 即变量名），≤768px 自动重映射（运行时载体为 CSS 变量，媒体查询切换）。字号与字重绑定：类名自带对应字重。
+语义化字阶的类名与变量一一对应。阅读字阶自带字重；字段和紧凑控件只定义字号 / 行高，字重沿用组件。各字阶用途见 [基础-字体规范.mdx](基础-字体规范.mdx) §2.1、§2.2。
 
 <TypeScaleTable />
 

@@ -1,4 +1,5 @@
 const plugin = require('tailwindcss/plugin');
+const { CONTROL_TYPE_SCALE } = require('./design-token.cjs');
 
 /**
  * @bisheng/ui tailwind preset — maps the semantic tokens in
@@ -46,8 +47,8 @@ module.exports = {
     },
     extend: {
       // Semantic type scale (基础-字体规范.md §2/§7) — values reference the
-      // semantic CSS vars in tokens.css, which remap under 768px, so
-      // classNames never change per breakpoint.
+      // semantic CSS vars in tokens.css. Baseline sizes apply at every width;
+      // mobile remaps remain available only behind an explicit root opt-in.
       fontSize: {
         'caption-sm': ['var(--text-caption-sm)', { lineHeight: 'var(--leading-caption-sm)', fontWeight: '400' }],
         caption: ['var(--text-caption)', { lineHeight: 'var(--leading-caption)', fontWeight: '400' }],
@@ -59,6 +60,9 @@ module.exports = {
         h1: ['var(--text-h1)', { lineHeight: 'var(--leading-h1)', fontWeight: '500' }],
         display: ['var(--text-display)', { lineHeight: 'var(--leading-display)', fontWeight: '500' }],
         metric: ['var(--text-metric)', { lineHeight: 'var(--leading-metric)', fontWeight: '500' }],
+        ...Object.fromEntries(CONTROL_TYPE_SCALE.map((s) => [
+          s.name, [`var(${s.cssVar})`, { lineHeight: `var(${s.leadingVar})` }],
+        ])),
       },
       colors: {
         // Brand accent — channel-triplet vars keep `/<alpha>` modifiers working;

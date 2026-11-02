@@ -39,6 +39,12 @@
   --text-display: var(--font-size-8);  --leading-display: var(--line-height-8);
   --text-metric: var(--font-size-9);   --leading-metric: var(--line-height-9);
 
+  /* Field and compact-control roles inherit the component's font weight. */
+  --text-field: var(--font-size-3);      --leading-field: var(--line-height-3);
+  --text-field-lg: var(--font-size-4);   --leading-field-lg: var(--line-height-4);
+  --text-control: var(--font-size-3);    --leading-control: var(--line-height-3);
+  --text-control-lg: var(--font-size-4); --leading-control-lg: var(--line-height-4);
+
   /* ---------- Neutral colors (基础-色彩规范.md, Arco ramp) ---------- */
   /* Primitive — Arco gray 1-10 (RGB channel triplets for `/<alpha>` support) */
   --arco-gray-1: 248 248 248;   /* #F8F8F8 — neutral, not Arco's blue-tinted #F7F8FA */
@@ -326,11 +332,12 @@
   --citation-web: 155 93 224;     /* = --tag-skill */
 }
 
-/* Mobile (≤768px) remap of the SEMANTIC typography layer only:
- * body raised (14→16), headings lowered (24→22) — flatter ladder.
- * Component classNames stay unchanged. */
+/* Reserved mobile typography, disabled by default.
+ * Only an explicit data-mobile-typography="enabled" on <html> activates
+ * these remaps and the input floors below. No app sets this attribute.
+ * Keep the draft values for a future typography decision. */
 @media (max-width: 768px) {
-  :root {
+  :root[data-mobile-typography="enabled"] {
     --text-body-sm: var(--font-size-3);  --leading-body-sm: var(--line-height-3); /* 13→14 */
     --text-body: var(--font-size-4);     --leading-body: var(--line-height-4);    /* 14→16 */
     --text-h3: 1.0625rem;                --leading-h3: 1.5625rem;                 /* 18→17 / 25 */
@@ -338,6 +345,16 @@
     --text-h1: 1.375rem;                 --leading-h1: 1.875rem;                  /* 24→22 / 30 */
     --text-display: 1.625rem;            --leading-display: 2.125rem;             /* 30→26 / 34 */
     --text-metric: var(--font-size-8);   --leading-metric: var(--line-height-8);  /* 36→30 */
+  }
+}
+
+/* Reserved field remap; uses the same opt-in as reading typography. */
+@media (max-width: 768px), (hover: none) and (pointer: coarse) {
+  :root[data-mobile-typography="enabled"] {
+    --text-field: max(var(--font-size-4), 16px);
+    --leading-field: max(var(--line-height-4), 24px);
+    --text-field-lg: max(var(--font-size-4), 16px);
+    --leading-field-lg: max(var(--line-height-4), 24px);
   }
 }
 
@@ -513,15 +530,12 @@
   }
 }
 
-/* iOS anti-zoom (组件-Input输入框.md §6): Safari zooms the whole page when a
- * field smaller than 16px takes focus. Every size档 therefore types at 16px on
- * touch / narrow screens — the 双判定 of 多端适配原则 §4. Element+class selector
- * on purpose: it must beat the size档's own `text-[length:…]` utility whatever
- * order the stylesheets end up in. */
+/* Reserved iOS input floor; disabled with the rest of mobile typography.
+ * Preserve larger inherited or user-selected sizes when explicitly enabled. */
 @media (max-width: 768px), (hover: none) and (pointer: coarse) {
-  input.input-no-zoom,
-  textarea.input-no-zoom {
-    font-size: 16px;
-    line-height: 24px;
+  :root[data-mobile-typography="enabled"] input.input-no-zoom,
+  :root[data-mobile-typography="enabled"] textarea.input-no-zoom {
+    font-size: max(1em, 1rem, 16px);
+    line-height: 1.5;
   }
 }

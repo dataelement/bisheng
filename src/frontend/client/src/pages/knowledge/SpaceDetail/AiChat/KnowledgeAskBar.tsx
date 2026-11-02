@@ -1,9 +1,9 @@
 /**
- * KnowledgeAskBar — desktop bottom bar of a knowledge space. It only TAKES the question:
+ * KnowledgeAskBar — bottom bar of a knowledge space on every screen size. It takes the question:
  * sending hands it to the main chat (see ~/components/Chat/chatAskHandoff), which
  * opens a fresh conversation with this space mounted. The answer, and every later turn,
  * live on the 对话 page and in the workbench sidebar's conversation list — the space page
- * keeps no chat panel or history of its own on desktop.
+ * keeps no chat panel or history of its own.
  *
  * What does not carry over: the main chat scopes a question to whole spaces, so the
  * current folder and the `#` tag filter of the old in-place dock have no equivalent
@@ -48,7 +48,7 @@ export function KnowledgeAskBar({ spaceId, spaceName, modelValue }: KnowledgeAsk
     };
 
     return (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex flex-col bg-gradient-to-b from-white/0 to-white px-4 pb-4 pt-10">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex flex-col bg-gradient-to-b from-white/0 to-white px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-10">
             <div className="pointer-events-auto relative mx-auto flex w-full max-w-[800px] flex-col">
                 <KnowledgeAiInput
                     key={spaceId}

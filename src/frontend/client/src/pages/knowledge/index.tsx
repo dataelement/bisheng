@@ -630,10 +630,6 @@ export default function Knowledge() {
     setDragError(error || null);
   };
 
-  const contextLabel = fileManager.currentFolderId
-    ? localize("com_knowledge.folder")
-    : localize("com_knowledge.knowledge_space");
-
   if (knowledgePluginGate === "disabled") {
     return null;
   }
@@ -909,8 +905,6 @@ export default function Knowledge() {
               <KnowledgeAiBottomDock
                 key={String(activeSpace.id)}
                 spaceId={String(activeSpace.id)}
-                folderId={fileManager.currentFolderId}
-                contextLabel={contextLabel}
                 spaceName={activeSpace.name}
               />
             )}

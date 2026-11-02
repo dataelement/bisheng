@@ -304,7 +304,6 @@ const ChatView = ({
 
   const isNew = conversationId === "new";
   const hasMessages = messages.length > 0;
-  useDesktopConversation(conversationId, isNew && !hasMessages && !isStreaming);
   const { activeCitationMessageId, citationPanelElement, onOpenCitationPanel, closeCitationPanel } =
     useCitationReferencePanel({ hasMessages });
 
@@ -493,7 +492,7 @@ const ChatView = ({
     },
     [showToast, t],
   );
-  const { attachmentAsk, retireAttachmentAsk } = useChatAskHandoff({
+  const { attachmentAsk, retireAttachmentAsk, isTextAskPending } = useChatAskHandoff({
     conversationId,
     activeConversationId: activeConvoId,
     locationKey: location.key,
@@ -506,6 +505,7 @@ const ChatView = ({
     onModelUnavailable: handleAskModelUnavailable,
     onTake: leaveTaskMode,
   });
+  useDesktopConversation(conversationId, isNew && !hasMessages && !isStreaming && !isTextAskPending);
 
   // Flipping the toggle by hand pins the mode for the rest of this conversation
   // — without the flag, the effect above would re-derive it from the history on
@@ -734,7 +734,9 @@ const ChatView = ({
             // An EXISTING conversation (id !== 'new') always uses the detail layout,
             // even with zero messages — opening an empty conversation must show the
             // conversation view, not the welcome/landing page (landing is /c/new only).
-            const useMessagesLayout = hasMessages || loadingExistingConvo || isStreaming || !isNew;
+            // A module ask is already a conversation intent on its first render,
+            // including while its model, scope or send lease is still preparing.
+            const useMessagesLayout = hasMessages || loadingExistingConvo || isStreaming || !isNew || isTextAskPending;
             return (
               <div
                 className={cn(
@@ -752,7 +754,7 @@ const ChatView = ({
                   <div className="flex h-full items-center justify-center text-text-3" role="status">
                     {t("dshChat.loadingConversation")}
                   </div>
-                ) : hasMessages || !isNew ? (
+                ) : useMessagesLayout ? (
                   <div ref={compareFreeze.rowRef} className="flex min-h-0 flex-1 overflow-hidden">
                     {/* Left: Chat Main (Messages + Input). F071: while the report is
                         compared with a cited source the workspace takes this column's
