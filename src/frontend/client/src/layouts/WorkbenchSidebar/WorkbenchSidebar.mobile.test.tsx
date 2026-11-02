@@ -117,3 +117,13 @@ it('keeps a persistent history error visible with a working retry', async () => 
   fireEvent.click(screen.getByRole('button', { name: 'com_ui_retry' }));
   await waitFor(() => expect(mockRefetch).toHaveBeenCalled());
 });
+
+it('starts a chat in the selected project, expands it, and closes narrow-screen navigation', async () => {
+  render(<Harness />);
+  fireEvent.click(screen.getByRole('button', { name: 'Open navigation' }));
+  fireEvent.click(screen.getByRole('button', { name: 'com_nav_start_new_chat · Project one' }));
+  expect(mockStartNewChat).toHaveBeenCalledWith('project-one');
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  fireEvent.click(screen.getByRole('button', { name: 'Open navigation' }));
+  expect(screen.getByRole('button', { name: 'Project one' })).toHaveAttribute('aria-expanded', 'true');
+});
