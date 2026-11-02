@@ -2513,7 +2513,8 @@ async def stream_chat_completion(
     """
     if data.task_mode:
         return await _task_mode_stream_completion(request, data, login_user)
-    return await _agent_stream_chat_completion(request, data, login_user, session_subject)
+    daily_data = data.model_copy(update={"skills": []})
+    return await _agent_stream_chat_completion(request, daily_data, login_user, session_subject)
 
 
 # Upper bound for in-stream title generation (task mode). Matches the gen_title

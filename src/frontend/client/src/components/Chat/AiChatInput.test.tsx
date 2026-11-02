@@ -1,10 +1,27 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import AiChatInput from './AiChatInput';
 
+// jsdom has no layout observer; behavior tests use deterministic geometry.
+beforeAll(() => {
+    global.ResizeObserver = class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+    };
+});
+
 const mockSetSkills = jest.fn();
 const mockSkills = [{ name: 'research' }];
 jest.mock('react-router-dom', () => ({ useNavigate: () => jest.fn() }));
-jest.mock('recoil', () => ({ useRecoilValue: () => ({}), useRecoilState: () => [mockSkills, mockSetSkills] }));
+jest.mock('recoil', () => ({
+  useRecoilValue: () => ({}),
+  useRecoilState: () => {
+    const React = jest.requireActual('react');
+    const [skills, setSkills] = React.useState(mockSkills);
+    const update = React.useCallback((value) => { mockSetSkills(value); setSkills(value); }, []);
+    return [skills, update];
+  },
+}));
 jest.mock('~/store/linsight', () => ({ taskModeSkillsState: () => 'skills' }));
 jest.mock('~/pages/appChat/store/atoms', () => ({ bishengConfState: 'config' }));
 jest.mock('~/components/Linsight/Input/useDefaultCheckedSkills', () => ({ useDefaultCheckedSkills: () => {} }));
@@ -37,7 +54,7 @@ jest.mock('./Input/ChatResourceMenu', () => ({
   ),
 }));
 jest.mock('./Input/AttachmentBar', () => ({
-  AttachmentBar: ({ files, kbs }) => <div data-testid="attachments">{[...files, ...kbs].map((file) => file.name).join(',')}</div>,
+  AttachmentBar: ({ files }) => <div data-testid="attachments">{files.map((file) => file.name).join(',')}</div>,
 }));
 jest.mock('./Input/Files/DragDropOverlay', () => () => null);
 jest.mock('~/components/Voice/SpeechToText', () => () => null);
@@ -69,20 +86,21 @@ test('new chat offers setup, established chat hides setup while preserving conte
   for (const label of ['skills', 'tools', 'research', 'spaces']) {
     expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
   }
-  expect(screen.getByTestId('attachments')).toHaveTextContent('Reference');
+  expect(screen.getByText('@Reference')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'tools' }).closest('.dsh-chat-composer')).toBeTruthy();
   view.rerender(<AiChatInput {...input} allowConfiguration={false} />);
-  for (const label of ['skills', 'tools', 'research']) {
+  for (const label of ['tools', 'research']) {
     expect(screen.queryByRole('button', { name: label })).toBeNull();
   }
-  expect(screen.getByTestId('attachments')).toBeInTheDocument();
+  expect(screen.getByText('@Reference')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'spaces' })).toBeInTheDocument();
-  expect(screen.getByRole('textbox')).toHaveAttribute('placeholder', 'dshChat.followupPlaceholder');
+  expect(screen.getByRole('button', { name: 'skills' })).toBeInTheDocument();
+  expect(screen.getByRole('textbox')).toHaveAttribute('contenteditable', 'true');
   expect(input.onSelectedOrgKbsChange).not.toHaveBeenCalled();
   expect(mockSetSkills).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: 'model' })).toBeInTheDocument();
   view.rerender(<AiChatInput {...input} />);
-  expect(screen.getByTestId('attachments')).toBeInTheDocument();
+  expect(screen.getByText('@Reference')).toBeInTheDocument();
 });
 
 test('follow-up retains attachment upload and sends its text and file', () => {
@@ -90,7 +108,8 @@ test('follow-up retains attachment upload and sends its text and file', () => {
   render(<AiChatInput {...input} allowConfiguration={false} />);
   fireEvent.click(screen.getByRole('button', { name: 'upload' }));
   expect(screen.getByTestId('attachments')).toHaveTextContent('notes.txt');
-  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Summarize this file' } });
+  screen.getByRole('textbox').append(document.createTextNode('Summarize this file'));
+  fireEvent.input(screen.getByRole('textbox'));
   fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
   expect(input.onSend).toHaveBeenCalledWith('Summarize this file', [{ name: 'notes.txt', filepath: '/notes.txt' }]);
   expect(input.onSelectedOrgKbsChange).not.toHaveBeenCalled();
@@ -108,7 +127,8 @@ test('media parsing keeps drafting available while blocking send until parsing c
   const view = render(<AiChatInput {...input} isParsingMedia />);
   const textbox = screen.getByRole('textbox');
   expect(textbox).toBeEnabled();
-  fireEvent.change(textbox, { target: { value: 'Draft while parsing' } });
+  textbox.append(document.createTextNode('Draft while parsing'));
+  fireEvent.input(textbox);
   expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
   expect(input.onSend).not.toHaveBeenCalled();
   view.rerender(<AiChatInput {...input} isParsingMedia={false} />);
@@ -117,14 +137,45 @@ test('media parsing keeps drafting available while blocking send until parsing c
 });
 
 
-test('selecting an enterprise skill preserves its selection and enters platform task mode', () => {
-  const toggle = jest.fn();
+test('ordinary chat offers task mode and keeps skills out of its menu and editor', () => {
   const input = props();
-  const view = render(<AiChatInput {...input} features={{ ...input.features, taskMode: false }} onToggleTaskMode={toggle} />);
-  fireEvent.click(screen.getByRole('button', { name: 'skills' }));
-  expect(mockSetSkills).toHaveBeenCalledWith(mockSkills);
-  expect(toggle).toHaveBeenCalledTimes(1);
-  view.rerender(<AiChatInput {...input} onToggleTaskMode={toggle} />);
-  fireEvent.click(screen.getByRole('button', { name: 'skills' }));
-  expect(toggle).toHaveBeenCalledTimes(1);
+  render(<AiChatInput {...input} features={{ taskModeEntry: true, taskMode: false }} />);
+  expect(screen.queryByRole('button', { name: 'skills' })).toBeNull();
+  expect(screen.queryByText('/research')).toBeNull();
+  expect(screen.getByRole('button', { name: 'research' })).toBeInTheDocument();
+});
+
+test('returning to ordinary chat clears selected task skills', () => {
+  const input = props();
+  const view = render(<AiChatInput {...input} />);
+  expect(screen.getByText('/research')).toBeInTheDocument();
+  view.rerender(<AiChatInput {...input} features={{ taskModeEntry: true, taskMode: false }} />);
+  expect(mockSetSkills).toHaveBeenCalledWith([]);
+  expect(screen.queryByText('/research')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'skills' })).toBeNull();
+});
+
+
+test.each([true, false])('send acceptance %s controls the entire skill draft reset', (accepted) => {
+  const input = props();
+  input.onSend.mockReturnValue(accepted);
+  render(<AiChatInput {...input} />);
+  fireEvent.click(screen.getByRole('button', { name: 'upload' }));
+  const editor = screen.getByRole('textbox');
+  editor.append(document.createTextNode('Prepare a report'));
+  fireEvent.input(editor);
+  fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+  expect(input.onSend).toHaveBeenCalledWith('Prepare a report', [{ name: 'notes.txt', filepath: '/notes.txt' }]);
+  if (accepted) {
+    expect(mockSetSkills).toHaveBeenCalledWith([]);
+    expect(mockSetSkills.mock.invocationCallOrder[0]).toBeGreaterThan(input.onSend.mock.invocationCallOrder[0]);
+    expect(editor).not.toHaveTextContent('Prepare a report');
+    expect(editor).not.toHaveTextContent('/research');
+    expect(screen.queryByText('notes.txt')).toBeNull();
+  } else {
+    expect(mockSetSkills).not.toHaveBeenCalled();
+    expect(editor).toHaveTextContent('/research');
+    expect(editor).toHaveTextContent('Prepare a report');
+    expect(screen.getByTestId('attachments')).toHaveTextContent('notes.txt');
+  }
 });

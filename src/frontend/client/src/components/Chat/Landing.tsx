@@ -4,6 +4,7 @@ import { useLocalize } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { Constants } from '~/types/chat';
 import ConvoStarter from './ConvoStarter';
+import { workbenchBranding } from './workbenchBranding';
 
 export default function Landing({ Header, isNew, hideSubtitle = false, onStarterClick }: {
   Header?: ReactNode;
@@ -19,6 +20,7 @@ export default function Landing({ Header, isNew, hideSubtitle = false, onStarter
 }) {
   const { data: bsConfig } = useGetBsConfig();
   const localize = useLocalize();
+  const branding = workbenchBranding(bsConfig, localize('dshChat.welcome'));
   const [searchParams] = useSearchParams();
   const defaultCategory = searchParams.get('category') || 'favorites';
 
@@ -33,15 +35,15 @@ export default function Landing({ Header, isNew, hideSubtitle = false, onStarter
       <div className="dsh-chat-welcome-content">
         {/* The headline shares the native Work hero dimensions at every width. */}
         <div className="dsh-chat-headline">
-          {bsConfig?.assistantIcon?.image && (
+          {branding.assistantIcon.enabled && (
             <img
               className="dsh-chat-hero-mark"
-              src={__APP_ENV__.BASE_URL + bsConfig.assistantIcon.image}
+              src={branding.assistantIcon.image}
               alt=""
             />
           )}
           <h2 className="dsh-chat-headline-title">
-            {bsConfig?.welcomeMessage || localize('dshChat.welcome')}
+            {branding.welcomeMessage}
           </h2>
         </div>
         {!hideSubtitle && bsConfig?.functionDescription?.trim() && (

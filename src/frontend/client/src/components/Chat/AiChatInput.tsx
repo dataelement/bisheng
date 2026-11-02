@@ -19,14 +19,15 @@ import { taskModeSkillsState } from "~/store/linsight";
 import { useDefaultCheckedSkills } from "~/components/Linsight/Input/useDefaultCheckedSkills";
 import { ChatSkillSelector } from "./Input/ChatSkillSelector";
 import { ChatResourceMenu } from "~/components/Chat/Input/ChatResourceMenu";
-import { SkillMenuEntries } from "~/components/Skills/SkillMenuEntries";
 import { skillCenterPreviewEnabled } from "~/components/Skills/types";
+import { ComposerEditor } from "./Input/ComposerEditor";
+import { useComposerReferences } from "./Input/useComposerReferences";
+import { handleComposerResourceKeyDown } from "./Input/composerResourceKeyboard";
 import { AttachmentBar } from "~/components/Chat/Input/AttachmentBar";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
 import { Outlined } from "bisheng-icons";
 import { ArrowDown } from "lucide-react";
-import { SendIcon } from "~/components/svg";
-import { Button, TextareaAutosize } from "~/components/ui";
+import { Button } from "~/components/ui";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useContainerCompact, TOOLBAR_COMPACT_THRESHOLD } from "~/hooks";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
@@ -36,7 +37,7 @@ import InputFiles from "~/pages/appChat/components/InputFiles";
 import { resolveUploadSizeLimits } from "~/pages/knowledge/knowledgeUtils";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
-import { checkIfScrollable, cn, removeFocusRings } from "~/utils";
+import { cn, removeFocusRings } from "~/utils";
 import AiModelSelect from "./AiModelSelect";
 import type { AttachmentAsk } from "./chatAskHandoff";
 
@@ -103,7 +104,7 @@ interface AiChatInputProps {
     onModelAutoChange?: (val: string) => void;
     placeholder?: string;
     /** files: uploaded file list [{path, name}], null means still uploading */
-    onSend: (text: string, files?: any[] | null) => void;
+    onSend: (text: string, files?: any[] | null) => void | boolean;
     onStop: () => void;
     onScrollToBottom: () => void;
     /** Optional controlled value — for filling in preset questions */
@@ -198,9 +199,7 @@ const AiChatInput = memo(
         // viewport's) runs short — e.g. once the sidebar opens on a mid-size screen.
         const { ref: toolbarRef } = useContainerCompact(TOOLBAR_COMPACT_THRESHOLD);
 
-        // Selecting a skill picks it into the fresh
-        // task session ('new'), then enters task mode (/linsight/new) where the
-        // selection is refilled as a chip. Keyed 'new' to match the landing page.
+        // Skills belong to the current draft, shared by the landing and conversation inputs.
         const [dailySkills, setDailySkills] = useRecoilState(taskModeSkillsState('new'));
 
         // True while an IME composition is in flight — see handleKeyDown.
@@ -220,7 +219,7 @@ const AiChatInput = memo(
             },
             [isControlled, onExternalChange]
         );
-        const textAreaRef = useRef<HTMLTextAreaElement>(null);
+        const textAreaRef = useRef<HTMLDivElement>(null);
         const [isTextareaScrollable, setIsTextareaScrollable] = useState(false);
         /** True only while user is actively scrolling — drives .scroll-on-scroll (see style.css). */
         const [isTextareaScrolling, setIsTextareaScrolling] = useState(false);
@@ -228,7 +227,7 @@ const AiChatInput = memo(
 
         const updateTextareaScrollable = useCallback(() => {
             const el = textAreaRef.current;
-            setIsTextareaScrollable(el ? checkIfScrollable(el) : false);
+            setIsTextareaScrollable(el ? el.scrollHeight > el.clientHeight : false);
         }, []);
 
         const handleTextareaScroll = useCallback(() => {
@@ -267,6 +266,7 @@ const AiChatInput = memo(
         const [chatFiles, setChatFiles] = useState<any[] | null>(null);
         const [uploadingFiles, setUploadingFiles] = useState<Array<{
             id: string;
+            clientId?: string;
             name: string;
             previewUrl?: string;
             mediaPreviewUrl?: string;
@@ -281,16 +281,11 @@ const AiChatInput = memo(
             (model) => String(model.id) === String(modelValue) && model.visual
         );
 
-        // Leaving task mode drops what only task mode could carry: the skill
-        // selection (so the panel's checkboxes reset in sync with the now-hidden
-        // chips) and any attachment daily chat cannot accept. The latter is not
-        // tidiness — daily chat feeds attachments through the document parser, so a
-        // leftover .py would fail the whole turn instead of just being ignored.
+        // Ordinary chat clears task skills and keeps supported document attachments.
         // Fires only on a true→false transition, never on mount or re-entry.
         useEffect(() => {
             if (prevTaskModeRef.current && !taskMode) {
-                setDailySkills((prev) => (prev.length ? [] : prev));
-
+                setDailySkills([]);
                 const dailyAccept = buildChatAccept({
                     enableMedia: !!envConfig?.enable_media_upload,
                     enableEtl4lm: !!bsConfig?.enable_etl4lm,
@@ -339,7 +334,8 @@ const AiChatInput = memo(
         // knowledge bases and files coexist freely — there's no mutex anymore.
         // `agentMode` stays around only so Lingsi / legacy renderers keep working.
         const agentMode = Array.isArray(bsConfig?.tools) && bsConfig.tools.length > 0;
-        const showSkillPicker = allowConfiguration && !isLingsi && !!onSelectedOrgKbsChange && showAddSkill;
+        const showSkillPicker = !isLingsi && !!onSelectedOrgKbsChange
+            && taskMode && (showAddSkill || skillCenterPreviewEnabled);
         const showToolPicker = allowConfiguration && tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
         const filesDisabled = !!disabled;
         const fileAccept = buildChatAccept({
@@ -389,12 +385,14 @@ const AiChatInput = memo(
             // that this component revokes on the very next line, and it outranks
             // the server cover in the message bubble — so it stops here, and the
             // bubble goes back to `cover_filepath` once parsing produces it.
-            onSend(trimmed, chatFiles?.map((file) => (
+            const accepted = onSend(trimmed, chatFiles?.map((file) => (
                 file?.mediaCoverUrl?.startsWith('blob:')
                     ? { ...file, mediaCoverUrl: undefined }
                     : file
             )) ?? chatFiles);
+            if (accepted === false) return;
             setText("");
+            if (taskMode && !isLingsi) setDailySkills([]);
             setChatFiles(null);
             setUploadingFiles([]);
             inputFilesRef.current?.clear();
@@ -408,7 +406,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, fileAccept, onSend, chatFiles, setText, showToast, localize]);
+        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, fileAccept, onSend, chatFiles, setText, taskMode, isLingsi, setDailySkills, showToast, localize]);
 
         // ── Handed-over ask (chatAskHandoff): upload its file, then send unattended ──
         const startedAskKeyRef = useRef<string | null>(null);
@@ -436,7 +434,7 @@ const AiChatInput = memo(
         }, [autoSendAskKey, chatFiles, uploadingFiles.length, fileUploading, filesParsing, text, handleSend, onAttachmentAskDone]);
 
         const handleKeyDown = useCallback(
-            (e: KeyboardEvent<HTMLTextAreaElement>) => {
+            (e: KeyboardEvent<HTMLDivElement>) => {
                 // While an IME is composing (拼音 / かな / 한글), Enter belongs to the
                 // IME: it commits the candidate into the box. Sending on it shipped
                 // the raw pinyin instead. The event must also pass through
@@ -467,9 +465,11 @@ const AiChatInput = memo(
             isComposingRef.current = false;
         }, []);
 
-        // Skills join the knowledge spaces as context resources you
-        // mount onto the conversation, not something you are about to send.
-        const mountedSkills = allowConfiguration && taskMode && !isLingsi ? dailySkills : [];
+        // Skills and knowledge spaces render as references in the writing area.
+        const mountedSkills = taskMode && !isLingsi ? dailySkills : [];
+        const { references, onReferencesChange } = useComposerReferences(
+            mountedSkills, isLingsi ? [] : selectedOrgKbs, setDailySkills, onSelectedOrgKbsChange,
+        );
         const hasMountedKbs = ((!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0);
         const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
         const hasSelectionTags = hasMountedKbs || hasInlineAttachments;
@@ -502,11 +502,11 @@ const AiChatInput = memo(
                 </div>}
 
                 <div
+                    onKeyDownCapture={(event) => handleComposerResourceKeyDown(event, !!disabled || !!isStreaming, isComposingRef.current)}
                     className={cn(
-                        // Figma 12669:66966 — white surface, 16px radius, hairline
-                        // border (replaces the legacy gray fill). z-[1] keeps it
-                        // painted above the attachment strip it overlaps.
-                        "dsh-chat-composer relative z-[1] flex w-full flex-col items-start gap-0 overflow-hidden rounded-2xl border border-border-base bg-white p-3",
+                        // The composer owns its theme surface through dsh-composer-bg.
+                        // z-[1] keeps it above the attached resource strip.
+                        "dsh-chat-composer relative z-[1] flex w-full flex-col items-start gap-0 overflow-hidden rounded-2xl border border-border-base p-3",
                         // Soft drop shadow on the landing page (always) and on the
                         // in-conversation input only while it has a mounted knowledge
                         // space / file; otherwise in-conversation inputs stay flat
@@ -514,19 +514,17 @@ const AiChatInput = memo(
                         (elevated || hasSelectionTags) && "shadow-[0_0_8px_rgba(3,7,117,0.05)]",
                     )}
                 >
-                    {hasSelectionTags && (
+                    {hasInlineAttachments && (
                         <AttachmentBar
                             uploadingFiles={uploadingFiles}
                             files={chatFiles || []}
-                            kbs={selectedOrgKbs || []}
-                            skills={mountedSkills}
-                            onRemoveKb={onSelectedOrgKbsChange ? (kb) => onSelectedOrgKbsChange(selectedOrgKbs.filter((item) => item.id !== kb.id || item.type !== kb.type)) : undefined}
-                            onRemoveSkill={(skill) => setDailySkills(dailySkills.filter((item) => item.name !== skill.name))}
-                            onRemoveFile={(file) => {
+                            onRemoveFile={disabled || isStreaming ? undefined : (file) => {
                                 // clientId, not name: a folder upload can carry the
                                 // same file name in several subdirectories.
-                                inputFilesRef.current?.removeByClientId?.(file.clientId);
-                                setChatFiles((prev) => (prev || []).filter((i) => String(i.clientId) !== String(file.clientId)));
+                                const id = String(file.clientId ?? file.id);
+                                inputFilesRef.current?.removeByClientId?.(id);
+                                setUploadingFiles((prev) => prev.filter((item) => String(item.clientId ?? item.id) !== id));
+                                setChatFiles((prev) => (prev || []).filter((item) => String(item.clientId ?? item.id) !== id));
                             }}
                         />
                     )}
@@ -613,36 +611,24 @@ const AiChatInput = memo(
                         />;
                     })()}
 
-                    {/* Textarea */}
-                    <TextareaAutosize
-                        ref={textAreaRef}
-                        value={text}
-                        onChange={(e) => setText(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        onCompositionStart={handleCompositionStart}
-                        onCompositionEnd={handleCompositionEnd}
-                        onPaste={handlePaste}
-                        onScroll={handleTextareaScroll}
-                        onHeightChange={updateTextareaScrollable}
-                        // Media parsing only has to block a second send, not typing:
-                        // the send button below stays disabled while `isParsingMedia`.
-                        disabled={disabled || isStreaming}
-                        placeholder={placeholder || (allowConfiguration ? bsConfig?.inputPlaceholder || localize("dshChat.placeholder") : localize("dshChat.followupPlaceholder"))}
-                        tabIndex={0}
-                        data-testid="ai-chat-input"
-                        data-scrolling={isTextareaScrollable && isTextareaScrolling ? "true" : "false"}
-                        rows={1}
-                        style={{ height: 52, overflowY: isTextareaScrollable ? "auto" : "hidden" }}
-                        className={cn(
-                            "m-0 w-full resize-none bg-transparent text-sm mb-2.5 pb-0 pt-0",
-                            "placeholder:text-text-3",
-                            "max-h-[240px] scrollbar-gutter-stable",
-                            size === 'mini' ? 'min-h-0' : 'min-h-12',
-                            removeFocusRings,
-                            "transition-[max-height] duration-200",
-                            isTextareaScrollable && "scroll-on-scroll"
-                        )}
-                    />
+                    <div className="dsh-composer-writing">
+                        <ComposerEditor
+                            ref={textAreaRef}
+                            value={text}
+                            references={references}
+                            onReferencesChange={onReferencesChange}
+                            onChange={setText}
+                            onKeyDown={handleKeyDown}
+                            onCompositionStart={handleCompositionStart}
+                            onCompositionEnd={handleCompositionEnd}
+                            onPaste={handlePaste}
+                            onScroll={handleTextareaScroll}
+                            disabled={disabled || isStreaming}
+                            placeholder={placeholder || (allowConfiguration ? bsConfig?.inputPlaceholder || localize("dshChat.placeholder") : localize("dshChat.followupPlaceholder"))}
+                            className={cn(size === 'mini' && 'min-h-0', removeFocusRings,
+                                isTextareaScrollable && isTextareaScrolling && 'scroll-on-scroll')}
+                        />
+                    </div>
 
                     <div className="dsh-composer-toolbar flex h-7 min-h-7 w-full min-w-0 items-center justify-between gap-1 touch-mobile:gap-0.5">
                         {/* Toolbar：flex-1 + overflow-hidden，避免与右侧语音/发送横向重叠 */}
@@ -684,16 +670,11 @@ const AiChatInput = memo(
                                         ? () => inputFilesRef.current?.openFolderPicker?.()
                                         : undefined}
                                 >
-                                    {/* Executable skills use the platform picker and task submission path. */}
+                                    {/* Task mode owns skill selection and execution. */}
                                     {showSkillPicker ? <ChatSkillSelector menu
-                                            selected={taskMode ? dailySkills : []} disabled={!!disabled}
-                                            onChange={(next) => {
-                                                setDailySkills(next);
-                                                if (taskMode) return;
-                                                if (onToggleTaskMode) onToggleTaskMode();
-                                                else navigate('/linsight/new');
-                                            }} />
-                                        : skillCenterPreviewEnabled && <SkillMenuEntries inline />}
+                                            selected={dailySkills} disabled={!!disabled}
+                                            onChange={setDailySkills} />
+                                        : null}
                                 </ChatResourceMenu>
                             )}
 
@@ -773,7 +754,9 @@ const AiChatInput = memo(
                                     aria-label="Send message"
                                     data-testid="send-button"
                                 >
-                                    <SendIcon size={18} />
+                                    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                                        <path fill="currentColor" d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" />
+                                    </svg>
                                 </button>
                             )}
                         </div>

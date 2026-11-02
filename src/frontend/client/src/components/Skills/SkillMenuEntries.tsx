@@ -5,19 +5,22 @@ import { DropdownMenuItem } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import { skillCenterPreviewEnabled } from './types';
 import { SkillMenuPanel } from './SkillMenuPanel';
+import type { TaskModeSkill } from '~/store/linsight';
 
 interface SkillMenuEntriesProps {
   onOpenMobile?: () => void;
   inline?: boolean;
+  selected: TaskModeSkill[];
+  onChange: (skills: TaskModeSkill[]) => void;
 }
 
-export function SkillMenuEntries({ onOpenMobile, inline }: SkillMenuEntriesProps) {
+export function SkillMenuEntries({ onOpenMobile, inline, selected, onChange }: SkillMenuEntriesProps) {
   const localize = useLocalize();
   if (!skillCenterPreviewEnabled) return null;
   const icon = <Outlined.Skill size={16} className="text-text-2" />;
   const label = localize('com_skill_center_menu');
   if (inline) return <ComposerSubmenu icon={icon} label={label}>
-    <SkillMenuPanel />
+    <SkillMenuPanel selected={selected} onChange={onChange} />
   </ComposerSubmenu>;
   if (onOpenMobile) return (
     <DropdownMenuItem onSelect={(event) => { event.preventDefault(); onOpenMobile(); }} className="flex h-8 cursor-pointer items-center justify-between gap-2 rounded-lg px-2 outline-none">
@@ -29,7 +32,7 @@ export function SkillMenuEntries({ onOpenMobile, inline }: SkillMenuEntriesProps
   );
   return (
     <PlusMenuSub icon={icon} label={label} panelClassName="w-[280px] max-w-[calc(100vw-24px)] gap-0 pb-1">
-      <SkillMenuPanel />
+      <SkillMenuPanel selected={selected} onChange={onChange} />
     </PlusMenuSub>
   );
 }

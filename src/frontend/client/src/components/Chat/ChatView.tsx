@@ -359,25 +359,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   }, [user]);
 
   const handleSend = useCallback((text: string, files?: any[] | null) => {
-    // F035 Track J (TJ-6): both modes go through the SAME unified entry now.
-    // Task mode is just a per-turn flag — no /linsight navigation, no separate
-    // submission pipeline. The turn stays in this daily conversation; the
-    // backend hands off the linsight SV and the inline task bubble renders it.
-    //
-    // The unified entry now threads question + knowledge-base selection +
-    // tools + uploaded files (backend _to_linsight_submit maps them onto the
-    // linsight submit schema; daily-bucket files are parsed on-the-fly into the
-    // task workspace). Skills are still resolved separately.
-    if (taskMode && canUseTaskMode) {
-      const trimmed = text.trim();
-      if (!trimmed) return;
-      sendMessage(trimmed, files, { taskMode: true });
-      setInputText('');
-      return;
-    }
-
-    sendMessage(text, files);
-    setInputText('');
+    // Capture the turn's resources before resetting its composer draft.
+    const accepted = sendMessage(text, files, { taskMode: taskMode && canUseTaskMode });
+    if (accepted) setInputText('');
+    return accepted;
   }, [taskMode, canUseTaskMode, sendMessage]);
 
   const isNew = conversationId === 'new';
