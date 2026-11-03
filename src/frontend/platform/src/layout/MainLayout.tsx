@@ -71,7 +71,7 @@ export default function MainLayout() {
         });
     };
 
-    // 重置密码
+    // Reset password
     const navigator = useNavigate();
     const JumpResetPage = () => {
         localStorage.setItem("account", user.external_id || user.user_name);
@@ -88,7 +88,7 @@ export default function MainLayout() {
     const showSystemNav = isSuperAdmin || isDeptAdmin || isChildAdmin;
     const { config: dshConfig } = useDshBrowserConfig();
     const showDshNav = !!dshConfig?.management_enabled && canManageWorkbenchConfig;
-    // 审批管理 — 仅超管 / Child Admin（部门管理员不可见）
+    // Approval management is visible to platform and child tenant admins.
     const showApprovalNav = isSuperAdmin || isChildAdmin;
     // Admin-area approval scope (falls back to the legacy global flag for
     // roles saved before the workbench/admin split).
@@ -351,6 +351,15 @@ export default function MainLayout() {
                                     </span>
                                 </NavLink>
                             )}
+                            <NavLink
+                                to="/answer-corrections"
+                                className="navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]"
+                            >
+                                <Outlined.ApprovalTodo className="h-4 w-4 my-4 mr-2 shrink-0" />
+                                <span className="mx-[14px] text-[14px] leading-[48px]">
+                                    {t("answerCorrection.title")}
+                                </span>
+                            </NavLink>
                             {showApprovalNav && (
                                 <NavLink
                                     to="/approval"

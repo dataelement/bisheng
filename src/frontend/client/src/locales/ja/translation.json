@@ -2820,5 +2820,18 @@
   },
   "appChat": {
     "stopped": "停止済み"
-  }
+  },
+  "com_correction_report": "誤りを報告",
+  "com_correction_mine": "自分のフィードバック",
+  "com_correction_quote": "誤りのある原文",
+  "com_correction_correction": "訂正内容",
+  "com_correction_evidence": "根拠",
+  "com_correction_pending_assignment": "割り当て待ち",
+  "com_correction_pending_processing": "対応中",
+  "com_correction_pending_reply": "返信待ち",
+  "com_correction_replied": "返信済み",
+  "com_correction_empty": "フィードバックはありません",
+  "com_correction_previous": "前へ",
+  "com_correction_next": "次へ",
+  "com_correction_error": "フィードバックを保存または読み込めませんでした。"
 }

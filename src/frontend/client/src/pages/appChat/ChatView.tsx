@@ -1,3 +1,4 @@
+import { MyAnswerCorrectionsButton } from "./components/AnswerCorrectionButton";
 import { isApiError } from "@bisheng/api-client";
 import { useCallback, useMemo, useState } from "react";
 import { useUnactivate } from "react-activation";
@@ -166,6 +167,9 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
       <div className="min-h-0 flex-1 flex flex-col bg-[position:0_100%] bg-repeat-x bg-[length:10px_432px]">
         {showChatEmptyState ? (
           <div className="flex min-h-0 flex-1 flex-col">
+            {!readOnly && !isGuestMode && (
+              <div className="flex justify-end px-4"><MyAnswerCorrectionsButton /></div>
+            )}
             <HeaderTitle
               readOnly={readOnly}
               hideShare={hideShare}
@@ -181,6 +185,9 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
         ) : (
           <div className="flex min-h-0 flex-1 overflow-hidden">
             <div className="relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
+              {!readOnly && !isGuestMode && (
+                <div className="flex justify-end px-4"><MyAnswerCorrectionsButton /></div>
+              )}
               <HeaderTitle
                 readOnly={readOnly}
                 hideShare={hideShare}

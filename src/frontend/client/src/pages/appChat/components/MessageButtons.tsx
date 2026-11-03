@@ -1,3 +1,4 @@
+import { AnswerCorrectionButton } from "./AnswerCorrectionButton";
 import type { ReactNode } from 'react';
 import { useLocalize } from '~/hooks';
 import { useState } from "react";
@@ -68,6 +69,7 @@ export default function MessageButtons({ id, text, onCopy, data, children = null
                 ? <Outlined.Copied size={14} className="text-blue-500" />
                 : <Outlined.Copy size={14} className="text-text-3" />}
         </button>
+        <AnswerCorrectionButton messageId={id} />
         <MessageFeedbackButtons
             liked={data}
             onLike={handleLike}

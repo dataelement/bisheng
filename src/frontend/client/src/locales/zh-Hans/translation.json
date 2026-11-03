@@ -2825,5 +2825,18 @@
   },
   "appChat": {
     "stopped": "已停止"
-  }
+  },
+  "com_correction_report": "指出错误",
+  "com_correction_mine": "我的反馈",
+  "com_correction_quote": "有误原句",
+  "com_correction_correction": "更正说明",
+  "com_correction_evidence": "正确依据",
+  "com_correction_pending_assignment": "待分派",
+  "com_correction_pending_processing": "待处理",
+  "com_correction_pending_reply": "待回复",
+  "com_correction_replied": "已回复",
+  "com_correction_empty": "暂无反馈",
+  "com_correction_previous": "上一页",
+  "com_correction_next": "下一页",
+  "com_correction_error": "无法保存或读取反馈。"
 }

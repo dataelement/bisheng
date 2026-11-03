@@ -41,6 +41,8 @@ const Finetune = lazy(() => import("@/pages/ModelPage/finetune").then(module => 
 const Management = lazy(() => import("@/pages/ModelPage/manage"));
 const Report = lazy(() => import("@/pages/Report"));
 const SystemPage = lazy(() => import("@/pages/SystemPage"));
+const AnswerCorrectionPage = lazy(() => import("@/pages/AnswerCorrectionPage")
+  .then((module) => ({ default: module.AnswerCorrectionPage })));
 const ApprovalPage = lazy(() => import("@/pages/ApprovalPage"));
 const ResoucePage = lazy(() => import("@/pages/resoucePage"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
@@ -101,6 +103,7 @@ const privateRouter = [
       { path: "model", element: <Navigate to="management" replace /> },
       { path: "dsh", element: <DshPage />, permission: 'sys' },
       { path: "sys", element: <SystemPage />, permission: 'sys' },
+      { path: "answer-corrections", element: <AnswerCorrectionPage /> },
       { path: "approval", element: <ApprovalPage />, permission: 'sys' },
       { path: "log", element: <LogPage />, permission: "log" },
       { path: "log/chatlog/:fid/:cid/:type", element: <AppChatDetail />, permission: "log" },

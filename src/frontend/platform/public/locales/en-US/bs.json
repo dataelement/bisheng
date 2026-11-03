@@ -4324,5 +4324,32 @@
       "admin": "Administrators",
       "children": "Includes subdepartments"
     }
+  },
+  "answerCorrection": {
+    "title": "Answer feedback",
+    "quote": "Original sentence",
+    "correction": "Correction",
+    "evidence": "Evidence",
+    "result": "Processing result",
+    "reply": "Reply",
+    "knowledge": "Knowledge base",
+    "assignee": "Maintainer",
+    "choose": "Select",
+    "error": "Could not load or update feedback.",
+    "close": "Close",
+    "assign": "Assign",
+    "send": "Send",
+    "save": "Save",
+    "previous": "Previous",
+    "next": "Next",
+    "owner": "App feedback",
+    "assigned": "Assigned to me",
+    "loading": "Loading feedback",
+    "empty": "No feedback yet",
+    "open": "View",
+    "pending_assignment": "Awaiting assignment",
+    "pending_processing": "In progress",
+    "pending_reply": "Awaiting reply",
+    "replied": "Replied"
   }
 }

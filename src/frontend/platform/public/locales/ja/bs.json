@@ -4269,5 +4269,32 @@
       "admin": "管理者",
       "children": "下位部門を含む"
     }
+  },
+  "answerCorrection": {
+    "title": "回答の誤り報告",
+    "quote": "誤りのある原文",
+    "correction": "訂正内容",
+    "evidence": "根拠",
+    "result": "対応結果",
+    "reply": "返信",
+    "knowledge": "ナレッジベース",
+    "assignee": "担当者",
+    "choose": "選択してください",
+    "error": "フィードバックを読み込めないか更新できませんでした。",
+    "close": "閉じる",
+    "assign": "割り当て",
+    "send": "送信",
+    "save": "保存",
+    "previous": "前へ",
+    "next": "次へ",
+    "owner": "アプリへのフィードバック",
+    "assigned": "自分の担当",
+    "loading": "読み込み中",
+    "empty": "フィードバックはありません",
+    "open": "表示",
+    "pending_assignment": "割り当て待ち",
+    "pending_processing": "対応中",
+    "pending_reply": "返信待ち",
+    "replied": "返信済み"
   }
 }

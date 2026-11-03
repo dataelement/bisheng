@@ -2897,5 +2897,18 @@
   },
   "appChat": {
     "stopped": "Stopped"
-  }
+  },
+  "com_correction_report": "Report an error",
+  "com_correction_mine": "My feedback",
+  "com_correction_quote": "Original sentence",
+  "com_correction_correction": "Correction",
+  "com_correction_evidence": "Supporting evidence",
+  "com_correction_pending_assignment": "Awaiting assignment",
+  "com_correction_pending_processing": "In progress",
+  "com_correction_pending_reply": "Awaiting reply",
+  "com_correction_replied": "Replied",
+  "com_correction_empty": "No feedback yet",
+  "com_correction_previous": "Previous",
+  "com_correction_next": "Next",
+  "com_correction_error": "Could not save or load feedback."
 }

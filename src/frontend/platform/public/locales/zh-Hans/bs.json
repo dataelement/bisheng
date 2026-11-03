@@ -4269,5 +4269,32 @@
       "admin": "管理员",
       "children": "包含下级部门"
     }
+  },
+  "answerCorrection": {
+    "title": "回答纠错",
+    "quote": "有误原句",
+    "correction": "更正说明",
+    "evidence": "正确依据",
+    "result": "处理结果",
+    "reply": "回复",
+    "knowledge": "知识库",
+    "assignee": "维护人员",
+    "choose": "请选择",
+    "error": "无法读取或更新反馈。",
+    "close": "关闭",
+    "assign": "分派",
+    "send": "发送",
+    "save": "保存",
+    "previous": "上一页",
+    "next": "下一页",
+    "owner": "应用反馈",
+    "assigned": "分派给我",
+    "loading": "正在加载反馈",
+    "empty": "暂无反馈",
+    "open": "查看",
+    "pending_assignment": "待分派",
+    "pending_processing": "待处理",
+    "pending_reply": "待回复",
+    "replied": "已回复"
   }
 }
