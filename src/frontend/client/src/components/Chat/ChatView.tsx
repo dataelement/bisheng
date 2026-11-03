@@ -633,7 +633,9 @@ const ChatView = ({
 
   const taskLinsight = latestTaskVersionId ? getLinsight(latestTaskVersionId) : null;
   const taskWorkspaceFiles = useMemo(() => {
-    return collectConversationWorkspaceFiles(taskVersionIds.map((versionId) => linsightMap.get(versionId)));
+    return collectConversationWorkspaceFiles(
+      taskVersionIds.map((versionId) => ({ versionId, snapshot: linsightMap.get(versionId) })),
+    );
   }, [taskVersionIds, linsightMap]);
   // Task turns hydrate lazily (TaskTurnPanel), so on a cold load (share page,
   // full refresh) the store is still empty — that must not read as "no files".

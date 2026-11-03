@@ -288,7 +288,10 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
                         citations={linsight.output_result?.citations}
                         citationAudit={linsight.output_result?.citation_audit}
                         messageId={linsight.message_id ?? undefined}
-                        onPreview={(file) => onPreviewFile?.(file)}
+                        // The conversation workspace panel holds only the latest turn's id;
+                        // stamp this turn's id so an earlier turn's file resolves against
+                        // the version that owns it (backend owned_file_key).
+                        onPreview={(file) => onPreviewFile?.({ ...file, versionId: file.versionId || versionId })}
                     />
                 </ResultPanel>
             )}
