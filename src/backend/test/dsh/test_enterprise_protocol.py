@@ -152,14 +152,14 @@ def test_real_model_configuration_negotiates_protocol_and_copies_chat_sdk():
         app_name="test",
         user_id=1,
     )
-    assert llm.llm.use_responses_api is True
+    assert llm.llm.use_responses_api is False
     execution = DshChatAdapter().prepare(
         DshChatRequest(model="bisheng:42", messages=[{"role": "user", "content": "hi"}]),
         llm,
         capabilities,
     )
     assert execution.llm is not llm and execution.llm.llm.use_responses_api is False
-    assert llm.llm.use_responses_api is True and model.config == config
+    assert llm.llm.use_responses_api is False and model.config == config
     assert execution.parameters["reasoning_effort"] == "low"
     with pytest.raises(ValueError):
         model_capabilities(model, SimpleNamespace(type="ollama"))

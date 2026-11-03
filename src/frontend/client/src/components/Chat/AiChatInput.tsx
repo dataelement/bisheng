@@ -117,6 +117,7 @@ interface AiChatInputProps {
     bsConfig?: any;
     /** Knowledge base state */
     selectedOrgKbs?: any[];
+    knowledgeAccessMessage?: string;
     onSelectedOrgKbsChange?: (val: any[]) => void;
     /** Search type state (for tools) */
     searchType?: string;
@@ -170,6 +171,7 @@ const AiChatInput = memo(
         onChange: onExternalChange,
         bsConfig,
         selectedOrgKbs = [],
+        knowledgeAccessMessage,
         onSelectedOrgKbsChange,
         searchType = "",
         onSearchTypeChange,
@@ -491,6 +493,9 @@ const AiChatInput = memo(
 
         return (
             <div className="dsh-chat-input-shell px-4 sm:px-0 pb-1 touch-mobile:px-0 touch-mobile:pb-1 shrink-0 relative">
+                {knowledgeAccessMessage && (
+                    <p role="status" className="mb-2 text-body-sm text-text-3">{knowledgeAccessMessage}</p>
+                )}
                 {/* Drag-drop overlay */}
                 {isDragging && <DragDropOverlay />}
 

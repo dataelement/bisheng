@@ -7,6 +7,9 @@ const mockRetry = jest.fn();
 let mockError = false;
 let mockHasMore = false;
 const rows = [{ id: 1, name: 'Enterprise' }, { id: 2, name: 'Policies' }];
+jest.mock('~/hooks/useKnowledgeSpaceAccess', () => ({
+  useKnowledgeSpaceAccess: (selection: import('~/store/modeltype').SelectedOrgKb[]) => ({ available: selection, message: '', checking: false, failed: false }),
+}));
 jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key }));
 jest.mock('~/hooks/queries/data-provider', () => ({
   useGetOrgToolPages: query => {

@@ -37,7 +37,7 @@ import { generateUUID } from "~/utils";
 // same filtered, position-stable list.
 const _SELECTABLE_CATEGORIES = new Set(["question", "answer", "agent_answer", "output_msg", "stream_msg"]);
 
-export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }) {
+export default function ChatView({ data, cid, v, readOnly, isGuestMode = false, canShareConversation = false }) {
   const { user } = useAuthContext();
   const help = useChatHelpers();
   useWebSocket(help, { canExecute: !readOnly });
@@ -147,15 +147,12 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
     localize("com_ui_new_chat");
 
   /** 与侧栏「分享应用」一致：仅 can_share === true 时展示对话顶栏分享入口 */
-  const hideShare = data?.can_share !== true;
+  const hideShare = canShareConversation === false;
 
   /** 无消息且无需展示开场白 / 引导问题 / 工作流表单时显示主区域空状态 */
-  const showChatEmptyState =
-    conversations.length === 0 &&
-    messages.length === 0 &&
-    !data?.guide_word &&
-    !running?.inputForm &&
-    !running?.guideWord?.length;
+  const showChatEmptyState = messages.length === 0 && (
+    readOnly || (conversations.length === 0 && !data?.guide_word && !running?.inputForm && !running?.guideWord?.length)
+  );
 
   const Logo = useMemo(() => {
     return <AppAvator className="size-6 min-w-6" url={data.logo} id={data.name} flowType={data.flow_type} />;
@@ -176,7 +173,7 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
                 flowType: data.flow_type,
               }}
             />
-            <ChatEmptyState onNewChat={createNewChat} />
+            <ChatEmptyState onNewChat={readOnly ? undefined : createNewChat} />
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 overflow-hidden">

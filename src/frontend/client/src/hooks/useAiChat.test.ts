@@ -19,6 +19,15 @@ import type { SSESubmission } from "./useAiChatSSE";
 jest.mock("react-activation", () => ({ useActivate: jest.fn() }));
 
 let mockBsConfig: { models?: { id: number; visual: boolean }[]; enable_etl4lm?: boolean } = {};
+let mockKnowledgeBlocked = false;
+jest.mock('./useKnowledgeSpaceAccess', () => ({
+    useKnowledgeSpaceAccess: (selection) => ({
+        available: mockKnowledgeBlocked ? [] : selection,
+        blocked: mockKnowledgeBlocked,
+        message: mockKnowledgeBlocked ? 'knowledgeAccess.revoked' : '',
+    }),
+}));
+
 let mockSelectedSkills: Array<{ name: string }> = [];
 const mockOpenedStreams: Array<{ submission: SSESubmission; close: jest.Mock }> = [];
 
@@ -110,6 +119,7 @@ const renderChat = (conversationId: string) =>
 const latestStream = () => mockOpenedStreams[mockOpenedStreams.length - 1];
 
 beforeEach(() => {
+  mockKnowledgeBlocked = false;
   localStorage.clear();
   mockOpenedStreams.length = 0;
   mockBsConfig = { models: [{ id: 1, visual: true }] };
@@ -657,4 +667,19 @@ test('does not regenerate an image turn with a model that has lost image support
   act(() => result.current.regenerate('c1-q'));
   expect(mockOpenedStreams).toHaveLength(0);
   expect(result.current.messages).toHaveLength(1);
+});
+
+
+describe('revoked knowledge scope submission gate', () => {
+    it('keeps the old conversation intact and blocks sending and regenerating', async () => {
+        mockKnowledgeBlocked = true;
+        const { result } = renderChat('retained');
+        await waitFor(() => expect(result.current.messages.length).toBeGreaterThan(0));
+        const originalMessages = result.current.messages;
+        act(() => expect(result.current.sendMessage('D6-W')).toBe(false));
+        act(() => result.current.regenerate('retained-q'));
+        expect(mockOpenedStreams).toHaveLength(0);
+        expect(result.current.messages).toEqual(originalMessages);
+        expect(result.current.knowledgeAccessMessage).toBe('knowledgeAccess.revoked');
+    });
 });

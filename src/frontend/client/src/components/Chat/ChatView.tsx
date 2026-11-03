@@ -95,6 +95,7 @@ const ChatView = ({
   // Core chat state — replaces old ChatContext + useSSE + useChatHelpers
   const {
     selectedOrgKbs,
+    knowledgeAccessMessage,
     setSelectedOrgKbs,
     messages,
     conversationId: activeConvoId,
@@ -839,6 +840,7 @@ const ChatView = ({
                               onChange={setInputText}
                               bsConfig={bsConfig}
                               selectedOrgKbs={selectedOrgKbs}
+                              knowledgeAccessMessage={knowledgeAccessMessage}
                               onSelectedOrgKbsChange={setSelectedOrgKbs}
                               searchType={searchType}
                               onSearchTypeChange={setSearchType}
@@ -1035,6 +1037,7 @@ const ChatView = ({
                             onChange={setInputText}
                             bsConfig={bsConfig}
                             selectedOrgKbs={selectedOrgKbs}
+                            knowledgeAccessMessage={knowledgeAccessMessage}
                             onSelectedOrgKbsChange={setSelectedOrgKbs}
                             searchType={searchType}
                             onSearchTypeChange={setSearchType}
