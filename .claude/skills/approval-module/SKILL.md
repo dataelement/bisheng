@@ -72,6 +72,8 @@ ApprovalCenterService.decide_task()
 
 **异常实例也留痕**：`_create_exception_result()` 在创建异常后会补写 `action='approval.request.submit'` 审计日志（与正常 PENDING/PASS 分支一致）。
 
+**执行失败单重复申请（2026-11-03，Work120）**：`execute_failed` 保留去重，但审批入口返回业务错误18120，提示管理员处理或取消旧异常后再申请，不新建任务或重复授权。正常pending/exception不变。知识空间详情及广场通过只读 `approval/application/request_state.py` 按100键分批核对；仅无当前可见权限且命中失败单的PENDING显示改为既有not_subscribed/is_pending=false，不改Work120其它状态优先级。读取不重试、不取消或修改业务数据；租户上下文使用该分支已有变量，退出及异常均恢复。
+
 ---
 
 ## 3. 代码锚点

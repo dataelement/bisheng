@@ -124,6 +124,7 @@ def context(monkeypatch):
         "_resolve_subscription_status",
         "_resolve_subscription_status_from_fields",
         "_resolve_effective_subscription_status",
+        "_exclude_failed_subscriptions",
         "_apply_subscription_flags",
         "get_space_info",
         "get_knowledge_square",
@@ -236,7 +237,7 @@ async def test_reapplication_storage_uses_member_role(existing):
     from sqlmodel import Session, create_engine, select, update
 
     engine = create_engine("sqlite://")
-    SQLModel.metadata.create_all(engine)
+    SQLModel.metadata.create_all(engine, tables=[MemberRow.__table__])
     with Session(engine) as session:
         if existing:
             session.add(

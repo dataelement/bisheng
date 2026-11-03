@@ -21,7 +21,7 @@ from bisheng.approval.domain.schemas.approval_center_schema import (
     ApprovalGateRequest,
     ApprovalGateResult,
 )
-from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
+from bisheng.common.errcode.approval import ApprovalExecutionFailedError, ApprovalScenarioDisabledError
 from bisheng.database.models.audit_log import AuditLogDao
 
 
@@ -39,7 +39,7 @@ async def _get_user_role_labels(user_id: int, tenant_id: int) -> frozenset[str]:
                          e.g. 'role_3', 'role_7'
                          Allows conditions like {"field":"applicant_role","value":"role_3"}
 
-    PRD §4.3: "同一申请人可能同时具备多个身份标签，条件匹配采用'包含即命中'"
+    PRD section 4.3: applicants may hold several labels; matching uses membership.
     """
     labels: set[str] = {"regular_user"}
     try:
@@ -461,6 +461,9 @@ class ApprovalGate:
 
     @staticmethod
     def _decision_from_instance_status(status: str) -> ApprovalGateDecision:
+        if status == ApprovalInstanceStatus.EXECUTE_FAILED:
+            # Keep the old execution recoverable without promising a new pending task.
+            raise ApprovalExecutionFailedError()
         if status == ApprovalInstanceStatus.EXCEPTION:
             return ApprovalGateDecision.EXCEPTION
         return ApprovalGateDecision.PENDING
