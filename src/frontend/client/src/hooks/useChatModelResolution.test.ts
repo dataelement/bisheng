@@ -222,6 +222,7 @@ describe('useChatModelResolution — applying across conversations', () => {
 });
 
 describe('late admin default loading', () => {
+    const initialProps: { admin: string | null } = { admin: null };
     beforeEach(() => localStorage.clear());
 
     it.each(['daily', 'task'] as const)('upgrades a %s fallback when the configured default arrives', (mode) => {
@@ -231,7 +232,7 @@ describe('late admin default loading', () => {
         const { rerender } = renderHook(({ admin }: { admin: string | null }) => useChatModelResolution({
             userId: 'new-user', conversationId: 'new', mode, models: MODELS,
             adminDefaultId: admin, onResolved,
-        }), { initialProps: { admin: null } });
+        }), { initialProps });
         expect(onResolved).toHaveBeenLastCalledWith(fallback, false);
         rerender({ admin: String(configured.id) });
         expect(onResolved).toHaveBeenLastCalledWith(configured, false);
@@ -244,7 +245,7 @@ describe('late admin default loading', () => {
         const { result, rerender } = renderHook(({ admin }: { admin: string | null }) => useChatModelResolution({
             userId: 'new-user', conversationId: 'new', mode: 'daily', models: MODELS,
             adminDefaultId: admin, onResolved,
-        }), { initialProps: { admin: null } });
+        }), { initialProps });
         act(() => result.current.persistPick('6'));
         rerender({ admin: '3' });
         expect(onResolved).toHaveBeenCalledTimes(1);
@@ -257,7 +258,7 @@ describe('late admin default loading', () => {
         const { rerender } = renderHook(({ admin }: { admin: string | null }) => useChatModelResolution({
             userId: 'existing-user', conversationId: 'new', mode: 'daily', models: MODELS,
             adminDefaultId: admin, onResolved,
-        }), { initialProps: { admin: null } });
+        }), { initialProps });
         rerender({ admin: '3' });
         expect(onResolved).toHaveBeenCalledTimes(1);
         expect(onResolved).toHaveBeenLastCalledWith(MODELS[1], true);
