@@ -19,6 +19,14 @@ from bisheng.utils import get_request_ip
 from bisheng.workstation.domain.schemas import WorkstationConversation, WorkstationMessage
 
 
+def use_chat_completions(llm):
+    """Select Chat Completions for this workstation call without changing model configuration."""
+    inner = getattr(llm, "llm", None)
+    if getattr(inner, "use_responses_api", None) is True:
+        return llm.model_copy(update={"llm": inner.model_copy(update={"use_responses_api": False})})
+    return llm
+
+
 def custom_json_serializer(obj):
     if isinstance(obj, datetime):
         return obj.isoformat()
