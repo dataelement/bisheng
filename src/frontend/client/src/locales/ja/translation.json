@@ -2819,6 +2819,9 @@
     }
   },
   "appChat": {
+    "unknownApp": "不明なアプリ",
+    "noDescription": "説明はありません",
+    "emptyShared": "この共有会話にはまだメッセージがありません",
     "stopped": "停止済み"
   },
   "knowledgeAccess": {

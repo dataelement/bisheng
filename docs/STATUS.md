@@ -1,3 +1,68 @@
+## 2026-11-03 — Desktop 弹窗显式模态语义
+
+- 真实 test9 客户端连接已更新的 13001，上传技能弹窗仍只覆盖右侧。页面通知区域使用 `aria-live`，Radix 保留根节点可访问状态；弹窗缺少 `aria-modal`，Desktop 监听因此漏报模态状态。
+- Dialog / OriginalDialog 将 Root 的 `modal` 设置通过 Context 传递给弹窗内容，AlertDialog 明确声明 `aria-modal=true`。既有 Desktop 协议据此触发整窗展示。
+- 旧代码新增回归 5 项失败；修复后相关组件 20 项通过。使用 test9 包内原版 preload 的 macOS 原生验证 36 组通过，涵盖宽度、缩放、主题、三类弹窗、嵌套确认、关闭及侧栏像素覆盖。全量前端 lint/typecheck、Client 构建、i18n 通过。
+- 基线 `e5941f38e40a32590d2c7a9b618cd6f370de12e2`，分支 `codex/dialog-modal-semantics-20261103`。修复合入、Client 部署及 macOS/Windows 真实账号复测待执行，见[验证记录](verification/dialog-modal-semantics-20261103.md)。
+
+## 2026-11-03 — 发现广场知识空间详情布局
+
+- PR #2591 同步目标分支 `e7319073fbd69ac21b5e720ca760724e8f346ef6`，合并双方在本文件新增的状态记录。两份布局组件及原生验证脚本与原 PR 提交逐字节一致。同步后 3 文件 / 15 项组件回归、前端全量 lint/typecheck、Client 生产构建、i18n 及差异检查通过；Client 部署、Windows 安装版和真实账号验收待执行。
+- 统一返回图标、标题和文件列表的水平基准，使用单层 16px 区域间距；加入状态按钮置于标题右侧，长标题及统计数量按空间换行。
+- 旧版真实渲染复现 40px 水平错位和 40px 顶部空隙。相关 15 项组件回归、全量 lint/typecheck、Client 构建和 i18n 已通过，macOS Electron 实际宿主 54 组布局/导航与浏览器模式 3 档布局/关闭验证通过。
+- 基线 `1e495e15a46bcb749a86642e292ff2c35897d847`。Client 部署、Windows 安装版与真实账号验收待执行，见[验证记录](verification/knowledge-preview-layout-20261103.md)。
+
+## 2026-11-03 — 旧会话知识空间权限状态
+
+- 修复旧会话恢复空间选择后缺少权限核验的问题。失效空间退出有效标签与计数，输入区显示原因及重新选择引导，发送和重新生成遵循核验结果。
+- 原实现 3 项缺陷回归失败；修复后 6 文件 / 76 项通过。全量前端 lint、类型检查、Client 构建与 i18n 校验通过。
+- 基线 `feat/bisheng-work-120-main@d4ada988a44e82016a3dd427fc6cb6e14ff5e92a`；Client 部署、原账号和 Windows 复测待执行。
+- 交付记录：`docs/verification/chat-space-access-20261103.md`；关联 TC-120-KSP-038。
+
+## 2026-11-03 — 应用侧栏移除旧模块导航
+
+- 按用户标注，应用侧栏直接使用仅含 Logo 与关闭按钮的共享头部，移除首页、订阅、知识空间、应用四个入口及对应占位行。应用卡片、新建对话、会话历史与返回逻辑继续使用现有实现。
+- 原因是应用侧栏复用的 `MobileSidebarHeaderTabs` 同时包含头部和全局导航，宽度进入 `touch-mobile` 档位时展示四个重复入口。现将头部独立为 `MobileSidebarHeader`，频道及知识空间继续按原组合使用导航。移除零引用的 `SideNavModuleTabs.tsx`。
+- 同步按仓库规则将所编辑文件的两处中文兜底文案迁入中英日资源，并通过 lint:prune 收缩对应存量豁免。
+- 基线 `feat/bisheng-work-120-main@1e495e15a46bcb749a86642e292ff2c35897d847`；分支 `codex/app-sidebar-remove-module-nav`。
+- 前端全量 lint、typecheck、Client 生产构建、i18n、变更文件架构守卫及差异检查通过；既有导航、返回来源与分享回归 3 文件 / 42 项通过。日志位于外层工作区 `outputs/app-sidebar-remove-module-nav-20261103/`。
+- Client 部署及 Windows 安装版原截图场景验收待执行。部署后核对窄窗口和缩放下四个入口已移除，关闭按钮、应用卡片、新建及历史操作可用。
+
+## 2026-11-02 — 只读分享页空状态
+
+- 空分享页显示“该分享暂无对话记录”，按共享消息判断空状态；普通应用会话继续提供有效的新建入口。空状态根据页面新建能力显示操作，中英日文案同步。
+- 原版新增分享场景 8 项失败；修复后 5 文件 / 61 项回归通过，覆盖助手/工作流、个人历史、开场白、普通会话新建跳转与已有分享历史只读展示。
+- 前端全量 ESLint、类型检查、Client 生产构建、i18n、变更文件架构守卫与差异检查通过。基线 `ac625c821396dcc628a8c71845e7a808f7b95b9b`。
+- Client 部署与测试环境 macOS Chrome 真实账号验收待执行，见[验证记录](verification/shared-chat-empty-20261102.md)。
+
+## 2026-11-02 — 应用会话分享以用户输入为准
+
+- 顶栏分享资格统一按当前路由会话的应用分享权限与 `question` 用户消息判断；欢迎语、自动输出、待填表单保持新会话状态。宽屏、紧凑布局共用结果，侧栏分享应用沿用现有规则。
+- 原代码新增回归 9 项失败；修复后新增 13 项及相关回归共 4 文件 / 46 项通过。前端全量 ESLint、类型检查、Client 生产构建、i18n、变更文件架构守卫和差异检查通过。
+- 基线 `23a4b97e5d86e38d8a2f53a5de3fe17ffb8671c4`。Client 部署、浏览器及 macOS/Windows 安装版真实账号验收待执行，见[验证记录](verification/app-chat-share-20261102.md)。
+
+## 2026-11-02 — 发现广场知识空间预览返回
+
+- 测试原图对应 `/square` 的知识空间预览抽屉。原组件内状态保持列表 URL，Desktop 相同 URL 导航提前返回；抽屉左侧中部收起入口及固定宽度影响可发现性与窄窗口可见性。
+- 预览现由 `previewSpace` URL 参数驱动，顶部提供本地化“返回”，关闭时保留来源分类；再次进入发现广场由路由直接关闭预览。宽度随视口收缩，上限 1000px。
+- 原版新增回归 5 项失败；修复后 7 文件 / 38 项通过。前端全量 lint/typecheck、Client 生产构建、i18n、架构和差异检查通过；macOS 实际 Electron 宿主、preload、预览组件的宽度/缩放/主题 12 组通过。
+- 基线 `725ee5bf38d4ff2d067763fb305817a730b238a4`。Client 部署及 Windows 安装版真实账号验收待执行，见[验证记录](verification/knowledge-square-navigation-20261102.md)。
+
+## 2026-11-02 — 积分分配列表精简交付复核
+
+- 当前基线：`upstream/feat/bisheng-work-120-main@954f8ba9f7b979d3f2193caa173dbe28356700dd`；分支 `codex/credit-allocation-labels-pr-20261102`。原实现 `ecfccecea` 已完整恢复，业务组件与三语资源的内容与原提交一致；最新服务分支的其他修复完整保留。
+- 用户、部门、角色列表统一为对象、每人每月积分额度、操作三列；额度表头提供信息图标与说明，编辑区域保留“启用此积分分配”，新增分配默认启用，停用状态显示在额度旁。积分校验继续采用每月 100 万上限和最多一位小数。
+- 本轮确定性验证：CreditRulesView、dshPolicyView、dshCreditAmount 共 3 组 / 43 项通过；Platform 与 Client 全量 ESLint、620 / 1515 个严格类型文件检查通过；Platform 生产构建、i18n、共享语言资源同步、变更文件架构守卫和差异检查通过。
+- 交付范围为现有实现的 PR 补交；按用户要求保持 `192.168.106.109:13001` 当前部署。真实账号及浏览器视觉验收继续待执行。
+
+## 2026-10-29 — 积分分配列表精简（本地验证通过）
+
+- 产品确认：移除列表中的配置状态列，积分表头统一为“每人每月积分额度”，添加积分说明入口。
+- 实现：用户、部门、角色三个页签采用三列表格；额度表头使用现有 Tooltip 与信息图标，支持悬停和键盘聚焦。编辑区域保留启停操作，停用配置在额度旁显示灰色标签；新增配置默认启用。中英日文案同步，顶部说明明确每人额度、多条已启用配置取最高值和 Chat / Work 共用。
+- 基线：目标分支 `upstream/feat/bisheng-work-120-main@3950752273b75a120a0f8e25ecd5d903c94f8106`；工作目录 `.worktrees/bisheng-credit-allocation-labels`，分支 `codex/credit-allocation-labels`。已同步目标分支，保留最新每月 100 万积分上限与 1 位小数规则。本轮范围为 BISHENG 后台前端。
+- 验证：现有 CreditRulesView 9 项回归、platform 全量 ESLint、619 个严格类型文件、三语 i18n 检查、变更文件架构检查、差异空白检查通过。使用本地已有依赖，Tooltip 源码与工作区版本一致。workspace 级 pnpm 命令受运行器依赖自动安装及外部依赖目录保护限制，转为直接执行 platform 对应检查。
+- 验收边界：代码与上述本地自动化已完成；部署、真实账号和浏览器视觉验收待执行。
+
 ## 2026-11-02 — 知识广场撤权后的加入状态与重新申请
 
 - TC-120-DSQ-014：旧 ACTIVE 成员记录被当作已加入，重新申请也被该记录短路。广场/详情现以有效 visible 判定加入状态，撤权后按既有审核流程重新申请。

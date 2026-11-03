@@ -2824,6 +2824,9 @@
     }
   },
   "appChat": {
+    "unknownApp": "未知应用",
+    "noDescription": "暂无描述信息",
+    "emptyShared": "该分享暂无对话记录",
     "stopped": "已停止"
   },
   "knowledgeAccess": {
