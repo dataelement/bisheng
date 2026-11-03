@@ -4,6 +4,11 @@ from typing import Any
 
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.telemetry.domain.mid_table.base import BaseMidTable, BaseRecord
+from bisheng.telemetry.domain.mid_table.belonging_organization import (
+    BELONGING_NAME_MAPPING,
+    BELONGING_ORGANIZATION_FIELDS,
+    without_empty_belonging,
+)
 from bisheng.telemetry.domain.mid_table.content_stat_reconcile import ContentStatReconciler
 from bisheng.telemetry.domain.mid_table.knowledge_space_content_dimensions import resolve_organization_names
 
@@ -99,7 +104,7 @@ def merge_qa_document(current: dict, desired: dict) -> dict:
     if current.get(ASKER_ORG_RESOLVED):
         result[ASKER_ORG_RESOLVED] = current[ASKER_ORG_RESOLVED]
     if current.get("department_source") != "event_time":
-        return result
+        return without_empty_belonging(result)
     for field in _EVENT_DEPARTMENT_FIELDS:
         if field in current:
             result[field] = current[field]
@@ -111,13 +116,13 @@ def merge_qa_document(current: dict, desired: dict) -> dict:
         current.get("primary_department_id"),
         desired.get("primary_department_id"),
     )
-    for field in ASKER_ORGANIZATION_FIELDS:
+    for field in (*ASKER_ORGANIZATION_FIELDS, *BELONGING_ORGANIZATION_FIELDS):
         current_value = current.get(field)
         if current_value not in (None, ""):
             result[field] = current_value
         elif not same_department:
             result.pop(field, None)
-    return result
+    return without_empty_belonging(result)
 
 
 class RealtimeQaQuestionRecord(BaseRecord):
@@ -132,6 +137,9 @@ class RealtimeQaQuestionRecord(BaseRecord):
     asker_company_name: str | None = None
     asker_department_name: str | None = None
     asker_office_name: str | None = None
+    belonging_company_name: str | None = None
+    belonging_department_name: str | None = None
+    belonging_office_name: str | None = None
     asker_org_resolved: str | None = None
     department_source: str
     space_id: int | None = None
@@ -178,6 +186,7 @@ class RealtimeQaQuestionFact(BaseMidTable):
             "type": "keyword",
             "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
         },
+        **BELONGING_NAME_MAPPING,
         "asker_org_resolved": {"type": "keyword"},
         "department_source": {"type": "keyword"},
         "space_id": {"type": "keyword"},
@@ -271,6 +280,9 @@ class RealtimeQaQuestionFact(BaseMidTable):
             asker_company_name=org_fields.get("asker_company_name"),
             asker_department_name=org_fields.get("asker_department_name"),
             asker_office_name=org_fields.get("asker_office_name"),
+            belonging_company_name=org_fields.get("asker_company_name"),
+            belonging_department_name=org_fields.get("asker_department_name"),
+            belonging_office_name=org_fields.get("asker_office_name"),
             asker_org_resolved=org_fields.get(ASKER_ORG_RESOLVED),
             department_source="event_time",
             space_id=int(space_id) if str(space_id or "").isdigit() else None,

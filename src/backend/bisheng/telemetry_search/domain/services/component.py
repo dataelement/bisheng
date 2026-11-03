@@ -13,6 +13,7 @@ from bisheng.common.errcode.telemetry import (
     QueryOperatorNotFoundError,
 )
 from bisheng.core.database import get_async_db_session
+from bisheng.telemetry.domain.mid_table.belonging_organization import belonging_terms_missing
 
 from ..models.dashboard_dataset import (
     DimensionConfig,
@@ -97,18 +98,21 @@ class DataQueryService(BaseModel):
         metric_map = {one.field: one for one in schema_config.metrics}
         dimension_map = {one.field: one for one in schema_config.dimensions}
 
-        query_dimensions = await self.convert_dimensions(self.data_config.dimensions, dimension_map)
+        query_dimensions = await self.convert_dimensions(self.data_config.dimensions, dimension_map, self.dataset_code)
         configured_stack_dimensions = self.data_config.get_stack_dimensions()
 
         if self.data_config.stack_dimensions:
             query_stack_dimensions = await self.convert_dimensions(
                 configured_stack_dimensions,
                 dimension_map,
+                self.dataset_code,
             )
             query_dimensions.extend(query_stack_dimensions)
             stack_dimension = None
         elif self.data_config.stack_dimension:
-            stack_dimensions = await self.convert_dimensions([self.data_config.stack_dimension], dimension_map)
+            stack_dimensions = await self.convert_dimensions(
+                [self.data_config.stack_dimension], dimension_map, self.dataset_code
+            )
             stack_dimension = stack_dimensions[0] if stack_dimensions else None
         else:
             stack_dimension = None
@@ -653,7 +657,9 @@ class DataQueryService(BaseModel):
 
     @staticmethod
     async def convert_dimensions(
-        dimensions: list[DimensionField], dimension_map: dict[str, DimensionConfig]
+        dimensions: list[DimensionField],
+        dimension_map: dict[str, DimensionConfig],
+        dataset_code: str = "",
     ) -> list[AggregationExpression]:
         res = []
         for dimension in dimensions:
@@ -680,6 +686,9 @@ class DataQueryService(BaseModel):
                     field=dimension_config.field,
                     type=AggsTypeEnum.TERMS,
                 )
+                missing = belonging_terms_missing(dataset_code, dimension_config.field)
+                if missing:
+                    agg.custom_params = {**(agg.custom_params or {}), **missing}
             res.append(agg)
         return res
 

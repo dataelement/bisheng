@@ -1,6 +1,5 @@
 # ruff: noqa: F401
 # register tasks
-from bisheng.worker.knowledge.background_jobs import drain_knowledge_background_jobs
 from bisheng.open_endpoints.worker.filelib_sync_worker import (
     fanout_automotive_sheet_intro_sync,
     run_automotive_sheet_intro_sync,
@@ -15,14 +14,11 @@ from bisheng.worker.information.article import sync_information_article
 from bisheng.worker.knowledge.auto_publish_worker import (
     auto_publish_file_celery,
 )
+from bisheng.worker.knowledge.background_jobs import drain_knowledge_background_jobs
 from bisheng.worker.knowledge.document_projection import (
     process_document_projection,
     rebuild_document_content,
     scan_document_projections,
-)
-from bisheng.worker.knowledge.shared_storage_reconcile import (
-    fanout_shared_storage_reconcile,
-    reconcile_tenant_shared_storage,
 )
 from bisheng.worker.knowledge.favorite_notification import (
     send_favorite_change_notifications,
@@ -48,10 +44,10 @@ from bisheng.worker.knowledge.fulltext_index import (
     repair_knowledge_fulltext_source,
 )
 from bisheng.worker.knowledge.fulltext_reconcile import (
-    start_fulltext_reconcile,
-    resume_fulltext_reconcile,
-    reparse_fulltext_file,
     rebuild_fulltext_projection,
+    reparse_fulltext_file,
+    resume_fulltext_reconcile,
+    start_fulltext_reconcile,
 )
 from bisheng.worker.knowledge.pdf_artifact_worker import (
     generate_knowledge_file_pdf_celery,
@@ -73,6 +69,10 @@ from bisheng.worker.knowledge.portal_recommendation import (
 from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery, insert_qa_celery, rebuild_qa_knowledge_celery
 from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery, rebuild_knowledge_file_chunk
 from bisheng.worker.knowledge.recycle_bin import purge_expired_recycle_items_celery
+from bisheng.worker.knowledge.shared_storage_reconcile import (
+    fanout_shared_storage_reconcile,
+    reconcile_tenant_shared_storage,
+)
 from bisheng.worker.knowledge.space_init_worker import (
     grant_knowledge_space_scope_permissions,
     init_knowledge_space_indices,
@@ -102,6 +102,7 @@ from bisheng.worker.portal_course.tasks import (
     scan_portal_course_media_cleanup,
 )
 from bisheng.worker.qa_expert.tasks import expire_publish_requests
+from bisheng.worker.telemetry.belonging_backfill import backfill_belonging_organization_names
 from bisheng.worker.telemetry.derived_mid_table import (
     sync_mid_active_user,
     sync_mid_doc_parse_dtl,
