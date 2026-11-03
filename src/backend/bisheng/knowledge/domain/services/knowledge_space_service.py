@@ -437,6 +437,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
         return subscription_status
 
+    async def _exclude_failed_subscriptions(self, statuses: dict[int, SpaceSubscriptionStatusEnum]) -> None:
+        """A failed execution has no pending approval; keep its recovery in approval."""
+        from bisheng.approval.application.request_state import get_failed_request_keys
+
+        pending_ids = [
+            space_id for space_id, status in statuses.items() if status == SpaceSubscriptionStatusEnum.PENDING
+        ]
+        if not pending_ids:
+            return
+        keys = {f"space:{space_id}:user:{self.login_user.user_id}": space_id for space_id in pending_ids}
+        failed = await get_failed_request_keys(
+            tenant_id=self.login_user.tenant_id,
+            scenario_code="knowledge_space_subscribe_request",
+            applicant_user_id=self.login_user.user_id,
+            business_keys=list(keys),
+        )
+        for key in failed:
+            statuses[keys[key]] = SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+
     @staticmethod
     def _apply_subscription_flags(
         result: KnowledgeSpaceInfoResp,
@@ -1689,6 +1708,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         subscription_status = self._resolve_subscription_status(member_info)
                         if member_info.is_active and has_content_permission:
                             result.user_role = member_info.user_role
+                    if not has_joined_visibility:
+                        statuses = {space_id: subscription_status}
+                        await self._exclude_failed_subscriptions(statuses)
+                        subscription_status = statuses[space_id]
                     subscription_status = self._resolve_effective_subscription_status(
                         subscription_status,
                         has_visible=has_joined_visibility,
@@ -2496,29 +2519,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         user_map = {u.user_id: u for u in (creator_users or [])}
         resolved_subscription_status = {
-            row[0].id: self._resolve_subscription_status_from_fields(row[1], row[2]) for row in rows
+            row[0].id: self._resolve_effective_subscription_status(
+                self._resolve_subscription_status_from_fields(row[1], row[2]),
+                has_visible=row[0].user_id == self.login_user.user_id or visible_map.get(str(row[0].id), False),
+            )
+            for row in rows
         }
+        await self._exclude_failed_subscriptions(resolved_subscription_status)
 
         # 4. Build response items
         result_list: list = []
         for row in rows:
             space = row[0]
-            user_subscription_status = row[1]
-            user_subscription_update_time = row[2]
             subscriber_count = row[3]
 
             creator = user_map.get(space.user_id)
 
-            subscription_status = resolved_subscription_status.get(
-                space.id
-            ) or self._resolve_subscription_status_from_fields(
-                user_subscription_status,
-                user_subscription_update_time,
-            )
-            subscription_status = self._resolve_effective_subscription_status(
-                subscription_status,
-                has_visible=space.user_id == self.login_user.user_id or visible_map.get(str(space.id), False),
-            )
+            subscription_status = resolved_subscription_status[space.id]
             result_list.append(
                 KnowledgeSpaceInfoResp(
                     **space.model_dump(),

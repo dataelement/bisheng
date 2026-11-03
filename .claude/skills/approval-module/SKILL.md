@@ -87,6 +87,8 @@ ApprovalCenterService.decide_task()
 
 **异常实例也留痕**：`_create_exception_result()` 在创建异常后会补写 `action='approval.request.submit'` 审计日志（与正常 PENDING/PASS 分支一致）。
 
+**执行失败单重复申请（2026-11-03）**：`execute_failed` 仍参与同租户/场景/业务键/申请人的去重，避免旧执行可重试时又创建第二份授权。`ApprovalGate.request_or_pass()` 命中此状态返回业务错误 **18120**，不再返回 pending，也不新建实例、任务或 outbox。申请人应由管理员通过既有异常入口处理；取消旧异常后可重新申请。其它 pending/exception 去重不变。知识空间详情与广场通过只读 `approval/application/request_state.py::get_failed_request_keys()`（固定申请人租户，按100键分批，取最新在途记录）剔除这种假待审显示；无有效 visible 时使用既有 not_subscribed，当前有效授权仍显示已加入。读取不会重试、取消或修改历史审批/成员/授权。
+
 ---
 
 ## 3. 代码锚点

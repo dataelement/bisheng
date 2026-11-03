@@ -129,6 +129,7 @@ def context(monkeypatch):
         "_resolve_subscription_status",
         "_resolve_subscription_status_from_fields",
         "_resolve_effective_subscription_status",
+        "_exclude_failed_subscriptions",
         "_apply_subscription_flags",
         "get_space_info",
         "get_knowledge_square",
@@ -188,6 +189,63 @@ async def test_info_and_square_clear_stale_joined_state_after_revocation(context
     assert square["data"][0].is_followed is False
     assert info.user_role is None
     assert info.actions == []
+
+
+@pytest.mark.parametrize("failed", [False, True])
+async def test_failed_execution_is_not_displayed_as_pending_in_info_or_square(context, monkeypatch, failed):
+    from bisheng.approval.application import request_state
+
+    context.member.is_active = False
+    context.member.is_pending = True
+    context.member.status = Membership.PENDING
+    context.namespace["KnowledgeDao"].async_get_public_spaces_paginated.return_value = [
+        (context.space, Membership.PENDING, None, 2)
+    ]
+    lookup = AsyncMock(return_value=frozenset({"space:74:user:7"}) if failed else frozenset())
+    monkeypatch.setattr(request_state, "get_failed_request_keys", lookup)
+
+    info = await context.service.get_space_info(74)
+    square = await context.service.get_knowledge_square()
+
+    expected = Status.NOT_SUBSCRIBED if failed else Status.PENDING
+    assert info.subscription_status == square["data"][0].subscription_status == expected
+    assert info.is_pending == square["data"][0].is_pending == (not failed)
+    assert info.is_followed is False
+    assert info.actions == []
+    assert lookup.await_count == 2
+
+
+async def test_failed_subscription_lookup_batches_only_pending_rows(context, monkeypatch):
+    from bisheng.approval.application import request_state
+
+    lookup = AsyncMock(return_value=frozenset({"space:74:user:7"}))
+    monkeypatch.setattr(request_state, "get_failed_request_keys", lookup)
+    states = {74: Status.PENDING, 75: Status.SUBSCRIBED, 76: Status.REJECTED}
+    await context.service._exclude_failed_subscriptions(states)
+    assert states == {74: Status.NOT_SUBSCRIBED, 75: Status.SUBSCRIBED, 76: Status.REJECTED}
+    lookup.assert_awaited_once_with(
+        tenant_id=1,
+        scenario_code="knowledge_space_subscribe_request",
+        applicant_user_id=7,
+        business_keys=["space:74:user:7"],
+    )
+
+
+async def test_failed_reapplication_does_not_persist_pending_member_or_notify(context):
+    from bisheng.approval.domain.services.approval_gate import ApprovalGate
+    from bisheng.common.errcode.approval import ApprovalExecutionFailedError
+
+    context.member.status = Membership.PENDING
+    context.service.approval_gate = ApprovalGate(
+        registry=SimpleNamespace(get_handler=AsyncMock()),
+        instance_repository=SimpleNamespace(
+            find_duplicate_active_instance=AsyncMock(return_value=SimpleNamespace(id=16, status="execute_failed"))
+        ),
+    )
+    with pytest.raises(ApprovalExecutionFailedError):
+        await context.service.subscribe_space(74)
+    context.service._persist_space_member.assert_not_awaited()
+    context.service.sync_direct_space_user_permissions.assert_not_awaited()
 
 
 async def test_effective_direct_or_inherited_grant_still_displays_joined(context):

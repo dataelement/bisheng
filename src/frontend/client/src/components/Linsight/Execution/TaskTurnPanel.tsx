@@ -33,6 +33,7 @@ import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { useLinsightWebSocket } from '~/hooks/Websocket';
 import { useLinsightQueuePolling } from '~/hooks/useLinsightQueuePolling';
 import { SopStatus } from '~/store/linsight';
+import { AnswerFallback } from './AnswerFallback';
 import { BreathingRow } from './BreathingRow';
 import { ClarifyCard } from './ClarifyCard';
 import { QueueCard } from './QueueCard';
@@ -186,15 +187,9 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
 
     // Not hydrated yet — show the answer text fallback (or a thin loading hint).
     if (!linsight) {
-        if (loadFailed) {
-            return (
-                <div className="text-[14px] leading-relaxed text-text-1">
-                    {answer || localize('com_linsight_detail_load_failed')}
-                </div>
-            );
-        }
-        return answer ? (
-            <div className="whitespace-pre-wrap text-[14px] leading-relaxed text-text-1">{answer}</div>
+        if (answer) return <AnswerFallback answer={answer} />;
+        return loadFailed ? (
+            <div className="text-[14px] leading-relaxed text-text-1">{localize('com_linsight_detail_load_failed')}</div>
         ) : (
             <div className="py-2 text-sm text-text-3">{localize('com_linsight_loading')}</div>
         );

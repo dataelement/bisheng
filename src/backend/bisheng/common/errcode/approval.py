@@ -88,14 +88,19 @@ class ApprovalFlowNotFoundError(BaseErrorCode):
 
 class ApprovalFlowInUseByRoutesError(BaseErrorCode):
     Code: int = 18117
-    Msg: str = "该流程已被分支引用，请先在分支管理中解除绑定后再删除"
+    Msg: str = "该流程已被分支引用，请先在分支管理中解除绑定后再删除"  # noqa: RUF001
 
 
 class ApprovalInstanceNotPendingError(BaseErrorCode):
     Code: int = 18118
-    Msg: str = "该审批申请已结束，无法撤回"
+    Msg: str = "该审批申请已结束，无法撤回"  # noqa: RUF001
 
 
 class ApprovalScenarioForbidsPassRouteError(BaseErrorCode):
     Code: int = 18119
-    Msg: str = "该审批场景不允许配置免审分支，每一次申请都必须经人工审批"
+    Msg: str = "该审批场景不允许配置免审分支，每一次申请都必须经人工审批"  # noqa: RUF001
+
+
+class ApprovalExecutionFailedError(BaseErrorCode):
+    Code: int = 18120
+    Msg: str = "The previous application was approved but could not be completed. Ask an administrator to resolve or cancel it before applying again."
