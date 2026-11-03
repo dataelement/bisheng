@@ -10,3 +10,17 @@ export function departmentDisplayName(
     ? defaultName
     : node.name;
 }
+
+/** Replace only a verified built-in root segment, preserving path separators and descendants. */
+export function departmentDisplayPath(
+  path: string,
+  root: Pick<DepartmentTreeNode, "dept_id" | "name"> | undefined,
+  defaultName: string,
+): string {
+  if (!root) return path;
+  const translated = departmentDisplayName(root, defaultName);
+  if (translated === root.name) return path;
+  const [first, ...rest] = path.split("/");
+  if (first.trim() !== root.name) return path;
+  return [first.replace(root.name, translated), ...rest].join("/");
+}

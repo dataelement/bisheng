@@ -44,12 +44,18 @@ function start() {
 }
 
 describe('useStreamChatSSE end event', () => {
+    it('forwards the exact citation registry with the final persisted answer', () => {
+        const { sse, onFinal } = start();
+        const citations = [{ citationId: 'knowledgesearch_15c85c1a', itemId: '29' }];
+        sse.emit('message', { type: 'end', message: { content: 'Answer', message_id: 42 }, citations });
+        expect(onFinal).toHaveBeenCalledWith('Answer', 42, citations);
+    });
     it('finalizes with the persisted content, not the raw stream', () => {
         const { sse, onFinal } = start();
         sse.emit('message', { type: 'stream', message: { content: 'Answer.\ue200knowledgesearch_bad:0\ue202' } });
         sse.emit('message', { type: 'end', message: { content: 'Answer.', message_id: 42 } });
 
-        expect(onFinal).toHaveBeenCalledWith('Answer.', 42);
+        expect(onFinal).toHaveBeenCalledWith('Answer.', 42, undefined);
     });
 
     it('keeps the thinking block ahead of the persisted content', () => {
@@ -57,7 +63,7 @@ describe('useStreamChatSSE end event', () => {
         sse.emit('message', { type: 'stream', message: { reasoning_content: 'thinking', content: 'raw' } });
         sse.emit('message', { type: 'end', message: { content: 'clean', message_id: 7 } });
 
-        expect(onFinal).toHaveBeenCalledWith(':::thinking\nthinking\n:::\nclean', 7);
+        expect(onFinal).toHaveBeenCalledWith(':::thinking\nthinking\n:::\nclean', 7, undefined);
     });
 
     it('falls back to the streamed text when the end event carries none', () => {
@@ -65,6 +71,6 @@ describe('useStreamChatSSE end event', () => {
         sse.emit('message', { type: 'stream', message: { content: 'streamed' } });
         sse.emit('message', { type: 'end', message: { message_id: 9 } });
 
-        expect(onFinal).toHaveBeenCalledWith('streamed', 9);
+        expect(onFinal).toHaveBeenCalledWith('streamed', 9, undefined);
     });
 });

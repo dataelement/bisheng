@@ -1,5 +1,6 @@
 // @ts-strict-ignore
 import { getCitationAccessScope } from './citationScope';
+import { hydrateStreamChatCitations } from './hydrateStreamChatCitations';
 /**
  * Direct API calls for the AI chat system.
  */
@@ -496,7 +497,7 @@ export async function getChannelChatHistory(
     const res = await http.get(`/api/v1/channel/chat/messages/${articleDocId}`);
     const items: StreamHistoryItem[] = res?.data ?? [];
     // Channel API returns oldest-first, no need to reverse
-    return items.map(parseStreamHistoryItem);
+    return hydrateStreamChatCitations(items.map(parseStreamHistoryItem), resolveCitationDetails);
 }
 
 /** Clear channel article chat history */
@@ -569,6 +570,7 @@ export function parseStreamHistoryItem(raw: StreamHistoryItem): ChatMessage {
         error: false,
         flow_name: raw.flow_name,
         liked: raw.liked,
+        citations: Array.isArray(raw.citations) ? raw.citations : null,
     };
 }
 
@@ -596,7 +598,7 @@ export async function getFileChatHistory(
     );
     const items: StreamHistoryItem[] = Array.isArray(res?.data) ? res.data : [];
     // Backend returns newest-first; reverse for chronological order
-    return items.reverse().map(parseStreamHistoryItem);
+    return hydrateStreamChatCitations(items.reverse().map(parseStreamHistoryItem), resolveCitationDetails);
 }
 
 /** Delete single-file chat history */
@@ -708,7 +710,7 @@ export async function getFolderChatHistory(
     );
     const items: StreamHistoryItem[] = Array.isArray(res?.data) ? res.data : [];
     // Backend returns newest-first; reverse for chronological order
-    return items.reverse().map(parseStreamHistoryItem);
+    return hydrateStreamChatCitations(items.reverse().map(parseStreamHistoryItem), resolveCitationDetails);
 }
 
 /**
