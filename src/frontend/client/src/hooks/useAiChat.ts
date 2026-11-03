@@ -12,6 +12,8 @@ import { addConversation, updateConvoFields } from "~/utils";
 import store from "~/store";
 import type { SelectedOrgKb } from "~/store/modeltype";
 import { useAuthContext } from "~/hooks/AuthContext";
+import { knowledgeSpaceTagFilters } from "~/utils/knowledgeTagSelection";
+import { canProcessChatImage } from "~/common/chatAccept";
 import { useConversationKnowledge } from "~/hooks/useConversationKnowledge";
 import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
@@ -504,6 +506,17 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     const sendMessage = useCallback(
         (text: string, files?: any[] | null, opts?: { taskMode?: boolean }) => {
             if ((!text.trim() && !(files?.length)) || isStreaming) return false;
+            if (opts?.taskMode && selectedOrgKbs.some(item => item.type === 'space' && item.tag)) {
+                showToast({ message: localize("com_knowledge.tag_filter_daily_only"), status: "warning" });
+                return false;
+            }
+            const vision = bsConfig?.models?.some(model => String(model.id) === String(chatModel.id) && model.visual) ?? false;
+            if (!opts?.taskMode && !isLingsi && files?.some(file => !canProcessChatImage(
+                file.name || file.filename || file.file_name || '', vision, !!bsConfig?.enable_etl4lm,
+            ))) {
+                showToast({ message: localize("chatImage.processingRequired"), status: "warning" });
+                return false;
+            }
             // This turn belongs to the conversation it started in, and every
             // write below must land there even if the user walks away mid-answer.
             // Shadowing the viewed-conversation writers with turn-scoped ones is
@@ -613,6 +626,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     personal_knowledge_enabled: false,
                     organization_knowledge_ids: orgKbs,
                     knowledge_space_ids: spaceKbs,
+                    knowledge_space_tag_filters: knowledgeSpaceTagFilters(selectedOrgKbs),
                 },
                 isContinued: false,
                 isTemporary: false,
@@ -1135,6 +1149,13 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 (m) => m.messageId === parentMessageId
             );
             if (!parentMsg) return;
+            const vision = bsConfig?.models?.some(model => String(model.id) === String(chatModel.id) && model.visual) ?? false;
+            if (parentMsg.files?.some(file => !canProcessChatImage(
+                file.name || file.filename || file.file_name || '', vision, !!bsConfig?.enable_etl4lm,
+            ))) {
+                showToast({ message: localize("chatImage.processingRequired"), status: "warning" });
+                return;
+            }
 
             // Create a new placeholder response as sibling
             const newResponseId = v4();
@@ -1172,6 +1193,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     knowledge_space_ids: selectedOrgKbs
                         .filter((kb) => kb.type === 'space')
                         .map((kb) => Number(kb.id)),
+                    knowledge_space_tag_filters: knowledgeSpaceTagFilters(selectedOrgKbs),
                 },
                 isContinued: false,
                 isRegenerate: true,

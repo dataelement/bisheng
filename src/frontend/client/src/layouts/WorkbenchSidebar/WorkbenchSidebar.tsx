@@ -157,7 +157,7 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
       </nav>
 
       {homeLink && homeGranted ? (
-        <SidebarConversationList leading={<SidebarProjects />} />
+        <SidebarConversationList leading={<SidebarProjects onStartChat={startNewChat} />} />
       ) : (
         <div className="min-h-0 flex-1" />
       )}

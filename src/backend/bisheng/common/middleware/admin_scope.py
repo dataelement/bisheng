@@ -28,6 +28,7 @@ from bisheng.utils.http_middleware import (
 )
 
 MANAGEMENT_API_PREFIXES: tuple[str, ...] = (
+    "/api/v1/skill/template",
     "/api/v1/llm",
     "/api/v1/workstation",
     "/api/v1/linsight",
@@ -61,6 +62,7 @@ MANAGEMENT_API_PREFIXES: tuple[str, ...] = (
 
 # Explicit mutating management routes only: shared reads and calls need no new header.
 _EXPECTED_SCOPE_WRITES = (
+    (frozenset({"POST", "DELETE"}), r"/api/v1/skill/template/(?:create|[0-9]+)"),
     (frozenset({"PATCH", "DELETE"}), r"/api/v1/apps/[^/]+"),
     (frozenset({"POST"}), r"/api/v1/apps/[^/]+/actions/[^/]+"),
     (frozenset({"PUT", "DELETE", "POST"}), r"/api/v1/apps/[^/]+/secrets/[^/]+"),

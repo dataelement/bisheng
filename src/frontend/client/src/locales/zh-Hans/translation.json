@@ -1220,6 +1220,8 @@
     "history_deleted": "历史会话已删除"
   },
   "com_knowledge": {
+    "tag_filter_daily_only": "标签筛选仅支持日常模式，请取消标签或切回日常模式。",
+    "load_tags_failed": "标签获取失败，请重试。",
     "department_private_disabled": "部门知识空间不支持设为私有",
     "add_new": "新增",
     "web_link": "网页链接",
@@ -2560,7 +2562,7 @@
   "com_skill_center_replace": "覆盖",
   "com_skill_center_replace_confirm": "已有同名技能。确认后将覆盖原文件，技能和启停状态保持不变。",
   "com_skill_center_drop": "拖入已有的技能文件",
-  "com_skill_center_formats": "支持 SKILL.md、.zip、.skill；文件最大 50 MiB，压缩包解压后最大 200 MiB。",
+  "com_skill_center_formats": "支持 SKILL.md、.zip、.skill；技能文件最大 200 MiB，压缩包最大 50 MiB，解压后最大 200 MiB。",
   "com_skill_center_choose": "选择文件",
   "com_skill_center_reselect": "重新选择",
   "com_skill_center_parsing": "正在校验技能文件…",
@@ -2598,7 +2600,8 @@
   "com_skill_center_retry_hint": "重试后查看账号可用的技能。",
   "com_skill_center_clear": "清空搜索",
   "com_skill_center_error_format": "请选择 .md、.zip 或 .skill 文件。",
-  "com_skill_center_error_size": "请选择非空文件，大小控制在 50 MiB 以内。",
+  "com_skill_center_error_size": "请选择非空的技能文件，大小不超过 200 MiB。",
+  "com_skill_center_error_archive_limit": "请选择非空的压缩包，大小不超过 50 MiB。",
   "com_skill_center_error_manifest_size": "SKILL.md 最大支持 1 MiB，请精简说明后重试。",
   "com_skill_center_error_manifest": "SKILL.md 需包含 YAML 头部的 name、description 和正文说明。description 最多 1024 个字符。",
   "com_skill_center_error_name": "name 请使用小写英文字母、数字和单个连字符，最多 64 个字符。",

@@ -684,6 +684,9 @@ def _normalize_to_dicts(value: object) -> list[dict]:
             value = json.loads(stripped)
         except (json.JSONDecodeError, ValueError):
             return _recover_question_items(stripped) if _looks_like_crammed_questions_array(stripped) else []
+    if isinstance(value, dict):
+        # a single question object passed bare instead of inside an array
+        value = [value]
     if not isinstance(value, list):
         return []
 
@@ -707,7 +710,96 @@ def _normalize_to_dicts(value: object) -> list[dict]:
         elif isinstance(item, list):
             # a smuggled nested array of question dicts
             out.extend(q for q in item if isinstance(q, dict))
-    return [q for q in out if isinstance(q, dict)]
+    # ``question`` may arrive as a list / dict / null instead of text; str() on those
+    # would show a repr blob (or the literal "None") as the card title.
+    return [
+        {**q, "question": _coerce_text(q["question"])} if "question" in q and not isinstance(q["question"], str) else q
+        for q in out
+        if isinstance(q, dict)
+    ]
+
+
+def _coerce_text(value: object) -> str:
+    """Coerce a model-supplied text field (a question title) to plain text.
+
+    Models occasionally wrap the text in a list (``["你的目标？"]``) or an object
+    (``{"text": "你的目标？"}``); ``str()`` on those showed a Python-repr blob.
+    Take the first non-empty text found; anything else (None, numbers-only debris
+    in containers) yields ``""`` so the caller's "must carry question text" rule
+    still applies.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (list, tuple)):
+        for x in value:
+            text = _coerce_text(x)
+            if text:
+                return text
+        return ""
+    if isinstance(value, dict):
+        for key in ("question", "text"):
+            text = _coerce_text(value.get(key))
+            if text:
+                return text
+        return ""
+    return str(value).strip()
+
+
+_FALSY_STRINGS = {"", "false", "0", "no", "n", "否", "单选", "none", "null"}
+
+
+def _coerce_bool(value: object) -> bool:
+    """Coerce ``multiple`` to a bool. ``bool("false")`` is True, so a model that
+    sends the flag as a string would turn every single-choice question into a
+    multi-select one."""
+    if isinstance(value, str):
+        return value.strip().lower() not in _FALSY_STRINGS
+    if isinstance(value, (bool, int, float)):
+        return bool(value)
+    return False
+
+
+def _coerce_options(value: object) -> list[str]:
+    """Flatten the ``options`` of one question into a clean ``list[str]``.
+
+    Some models nest each option one level deeper than the last — observed live on
+    120 test (task 70bf89eb…): ``[["a", ["b", ["c", ["d"]]]]]`` — or wrap the whole
+    list once more (``[["a"]]``). ``str()`` on such an element showed the user a
+    Python-repr blob like ``['a', ['b', ...]]`` as ONE option. Walk nested lists
+    depth-first (order preserved), parse a string element that is itself a JSON
+    array, and drop empties / duplicates. A bare string becomes a single option.
+    """
+    out: list[str] = []
+
+    def walk(v: object) -> None:
+        if v is None:
+            return
+        if isinstance(v, (list, tuple)):
+            for x in v:
+                walk(x)
+            return
+        if isinstance(v, dict):
+            # an option smuggled as {"label": ...}/{"text": ...}; keep its text value
+            for key in ("label", "text", "value", "option"):
+                if str(v.get(key, "")).strip():
+                    walk(v[key])
+                    return
+            return
+        text = str(v).strip()
+        if not text:
+            return
+        if text.startswith("[") and text.endswith("]"):
+            parsed = _loads_tolerant(text)
+            if isinstance(parsed, list):
+                walk(parsed)
+                return
+        if text not in out:
+            out.append(text)
+
+    walk(value)
+    return out
 
 
 def _coerce_questions(value: object) -> list[dict]:
@@ -757,10 +849,10 @@ def _salvage_options_only(value: object) -> list[dict]:
     for q in _normalize_to_dicts(value):
         if str(q.get("question", "")).strip():
             continue  # has text — already kept by _coerce_questions
-        options = [str(o) for o in (q.get("options") or []) if str(o).strip()]
+        options = _coerce_options(q.get("options"))
         if options:
             salvaged.append(
-                {"question": _SALVAGE_QUESTION_TITLE, "options": options, "multiple": bool(q.get("multiple", False))}
+                {"question": _SALVAGE_QUESTION_TITLE, "options": options, "multiple": _coerce_bool(q.get("multiple"))}
             )
     return salvaged
 
@@ -818,7 +910,7 @@ def _empty_retry_count(state: object) -> int:
 @tool
 async def ask_user(
     reason: str,
-    questions: list[dict] | str | None = None,
+    questions: list[dict] | list[Any] | dict | str | None = None,
     state: Annotated[dict | None, InjectedState] = None,
 ) -> str:
     """需要用户补充信息、做选择或确认时调用本工具暂停任务并向用户提问；用户回答后任务自动继续。
@@ -855,8 +947,8 @@ async def ask_user(
                 # by the frontend for an empty question (it would NOT duplicate the
                 # reason header — that is exactly why _SALVAGE_QUESTION_TITLE is used).
                 "question": str(q.get("question", "")).strip() or _SALVAGE_QUESTION_TITLE,
-                "options": [str(o) for o in (q.get("options") or [])],
-                "multiple": bool(q.get("multiple", False)),
+                "options": _coerce_options(q.get("options")),
+                "multiple": _coerce_bool(q.get("multiple")),
             },
         }
         for i, q in enumerate(coerced)

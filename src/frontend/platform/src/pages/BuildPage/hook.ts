@@ -42,6 +42,11 @@ export const useCreateTemp = () => {
     const [open, setOpen] = useState(false)
     const [tempType, setType] = useState<AppType>(AppType.ALL)
     const flowRef = useRef(null)
+    useEffect(() => {
+        const reset = () => { flowRef.current = null; setOpen(false); };
+        window.addEventListener('bisheng:management-scope-changed', reset);
+        return () => window.removeEventListener('bisheng:management-scope-changed', reset);
+    }, []);
 
     return {
         open,

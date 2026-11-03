@@ -2,7 +2,8 @@ import JSZip from 'jszip';
 import { load, JSON_SCHEMA } from 'js-yaml';
 import { SkillError, type SkillManifest } from './types';
 
-const MAX_UPLOAD = 50 * 1024 * 1024;
+const MAX_FILE = 200 * 1024 * 1024;
+const MAX_ARCHIVE = 50 * 1024 * 1024;
 const MAX_EXPANDED = 200 * 1024 * 1024;
 const MAX_MANIFEST = 1024 * 1024;
 
@@ -68,11 +69,11 @@ function readManifest(entry: JSZip.JSZipObject): Promise<Uint8Array> {
 
 export async function parseSkillFile(file: File): Promise<SkillManifest> {
   if (!/\.(md|zip|skill)$/i.test(file.name)) throw new SkillError('format');
-  if (!file.size || file.size > MAX_UPLOAD) throw new SkillError('size');
+  const archive = /\.(zip|skill)$/i.test(file.name);
+  if (!file.size || file.size > (archive ? MAX_ARCHIVE : MAX_FILE)) throw new SkillError('size');
   let bytes: Uint8Array;
   let files = ['SKILL.md'];
-  if (/\.md$/i.test(file.name)) {
-    if (file.size > MAX_MANIFEST) throw new SkillError('manifest_size');
+  if (!archive) {
     bytes = new Uint8Array(await file.arrayBuffer());
   } else {
     let zip: JSZip;

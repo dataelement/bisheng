@@ -25,7 +25,8 @@ interface SkillUploadDialogProps {
 }
 
 const MIB = 1024 * 1024;
-const MAX_UPLOAD_BYTES = 50 * MIB;
+const MAX_FILE_BYTES = 200 * MIB;
+const MAX_ARCHIVE_BYTES = 50 * MIB;
 const QUOTA_ERROR_CODES = new Set([11061, 11062]);
 
 export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: SkillUploadDialogProps) {
@@ -69,9 +70,11 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
       setError(localize('com_skill_center_error_format'));
       return;
     }
-    if (selected && (!selected.size || selected.size > MAX_UPLOAD_BYTES)) {
+    const archive = Boolean(selected && /\.(zip|skill)$/i.test(selected.name));
+    const sizeLimit = archive ? MAX_ARCHIVE_BYTES : MAX_FILE_BYTES;
+    if (selected && (!selected.size || selected.size > sizeLimit)) {
       setChecking(false);
-      setError(localize('com_skill_center_error_size'));
+      setError(localize(archive ? 'com_skill_center_error_archive_limit' : 'com_skill_center_error_size'));
       return;
     }
     if (!selected) return;

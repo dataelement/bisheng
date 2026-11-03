@@ -67,7 +67,12 @@ describe('skill package validation', () => {
   it('rejects unsupported, empty and oversized input', async () => {
     await expect(parseSkillFile(file('content', 'report.pdf'))).rejects.toMatchObject({ code: 'format' });
     await expect(parseSkillFile(file(''))).rejects.toMatchObject({ code: 'size' });
-    await expect(parseSkillFile(file(new Uint8Array(50 * 1024 * 1024 + 1)))).rejects.toMatchObject({ code: 'size' });
+    const oversizedFile = file(new Uint8Array(1), 'notes.md');
+    Object.defineProperty(oversizedFile, 'size', { value: 200 * 1024 * 1024 + 1 });
+    await expect(parseSkillFile(oversizedFile)).rejects.toMatchObject({ code: 'size' });
+    const oversizedArchive = file(new Uint8Array(1), 'notes.zip');
+    Object.defineProperty(oversizedArchive, 'size', { value: 50 * 1024 * 1024 + 1 });
+    await expect(parseSkillFile(oversizedArchive)).rejects.toMatchObject({ code: 'size' });
   });
 });
 

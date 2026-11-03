@@ -437,6 +437,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
         return subscription_status
 
+    async def _exclude_failed_subscriptions(self, statuses: dict[int, SpaceSubscriptionStatusEnum]) -> None:
+        """A failed execution has no pending approval; keep its recovery in approval."""
+        from bisheng.approval.application.request_state import get_failed_request_keys
+
+        pending_ids = [
+            space_id for space_id, status in statuses.items() if status == SpaceSubscriptionStatusEnum.PENDING
+        ]
+        if not pending_ids:
+            return
+        keys = {f"space:{space_id}:user:{self.login_user.user_id}": space_id for space_id in pending_ids}
+        failed = await get_failed_request_keys(
+            tenant_id=self.login_user.tenant_id,
+            scenario_code="knowledge_space_subscribe_request",
+            applicant_user_id=self.login_user.user_id,
+            business_keys=list(keys),
+        )
+        for key in failed:
+            statuses[keys[key]] = SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+
     @staticmethod
     def _apply_subscription_flags(
         result: KnowledgeSpaceInfoResp,
@@ -1689,6 +1708,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         subscription_status = self._resolve_subscription_status(member_info)
                         if member_info.is_active and has_content_permission:
                             result.user_role = member_info.user_role
+                    if not has_joined_visibility:
+                        statuses = {space_id: subscription_status}
+                        await self._exclude_failed_subscriptions(statuses)
+                        subscription_status = statuses[space_id]
                     subscription_status = self._resolve_effective_subscription_status(
                         subscription_status,
                         has_visible=has_joined_visibility,
@@ -2049,6 +2072,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
             members = [member for member in members if int(member.business_id) not in department_space_ids]
         return await self._format_member_spaces(members, order_by)
 
+    @staticmethod
+    async def _complete_visible_space_ids(actor: PermissionActor, runtime) -> list[int]:
+        """Validate complete enumeration before using it as a list candidate set."""
+        visible = await runtime.list_visible_objects(
+            actor, resource_type="knowledge_space", max_results=_MANAGED_VISIBLE_MAX_RESULTS
+        )
+        if visible.resource_type != "knowledge_space" or visible.status != "NORMAL":
+            raise PermissionEnumerationIncompleteError(msg="Knowledge-space enumeration is incomplete")
+        try:
+            visible_ids = list(dict.fromkeys(int(value) for value in visible.object_ids))
+        except (TypeError, ValueError) as exc:
+            raise PermissionEnumerationIncompleteError(
+                msg="Knowledge-space enumeration returned an invalid ID", exception=exc
+            ) from exc
+        if any(str(int(value)) != value or int(value) <= 0 for value in visible.object_ids):
+            raise PermissionEnumerationIncompleteError(msg="Knowledge-space enumeration returned an invalid ID")
+        if len(visible_ids) > _MANAGED_VISIBLE_MAX_RESULTS:
+            raise PermissionEnumerationIncompleteError(msg="Knowledge-space enumeration exceeded capacity")
+        return visible_ids
+
     async def get_my_managed_spaces(self, order_by: str = "name") -> list[KnowledgeRead]:
         """Use visible IDs and bulk edit checks for non-global actors."""
         started = perf_counter()
@@ -2078,23 +2121,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             visible_ids: list[int] | None = None
             if not system_scope:
                 with measure("visible_ids"):
-                    visible = await runtime.list_visible_objects(
-                        actor, resource_type="knowledge_space", max_results=_MANAGED_VISIBLE_MAX_RESULTS
-                    )
-                    if visible.resource_type != "knowledge_space" or visible.status != "NORMAL":
-                        raise PermissionEnumerationIncompleteError(msg="Knowledge-space enumeration is incomplete")
-                    try:
-                        visible_ids = list(dict.fromkeys(int(value) for value in visible.object_ids))
-                    except (TypeError, ValueError) as exc:
-                        raise PermissionEnumerationIncompleteError(
-                            msg="Knowledge-space enumeration returned an invalid ID", exception=exc
-                        ) from exc
-                    if any(str(int(value)) != value or int(value) <= 0 for value in visible.object_ids):
-                        raise PermissionEnumerationIncompleteError(
-                            msg="Knowledge-space enumeration returned an invalid ID"
-                        )
-                    if len(visible_ids) > _MANAGED_VISIBLE_MAX_RESULTS:
-                        raise PermissionEnumerationIncompleteError(msg="Knowledge-space enumeration exceeded capacity")
+                    visible_ids = await self._complete_visible_space_ids(actor, runtime)
                     visible_count = len(visible_ids)
             with measure("candidates"):
                 spaces = (
@@ -2361,28 +2388,68 @@ class KnowledgeSpaceService(KnowledgeUtils):
         keyword: str | None = None,
         limit: int = 200,
     ) -> list[Knowledge]:
-        """Scan tenant-owned candidates and BatchCheck exact upload_file."""
+        """Batch-prepare loaded candidates before checking exact upload_file.
+
+        Ordinary action grants have a visible projection, so enumeration avoids
+        checking the whole tenant. Admins retain their existing action shortcut
+        scope. Neither branch requires edit; exact upload_file remains decisive.
+        """
 
         spaces: list[Knowledge] = []
+        if limit <= 0:
+            return spaces
+        actor = await self._permission_actor()
+        system_scope = actor.super_admin and actor.data_scope == DATA_SCOPE_ALL
+        administrative_scope = system_scope or (
+            actor.data_scope == DATA_SCOPE_ALL and actor.current_tenant_id in actor.tenant_admin_tenant_ids
+        )
+        candidates = None
+        if not administrative_scope:
+            runtime = await get_f048_runtime()
+            visible_ids = await self._complete_visible_space_ids(actor, runtime)
+            if not visible_ids:
+                return spaces
+            candidates = await self.space_listing_repository.list_spaces(visible_ids, "update_time", keyword=keyword)
+            candidates = [space for space in candidates if space.tenant_id == actor.current_tenant_id]
+        adapter = (
+            None if system_scope else self.f048_permission_adapter or await self._resource_adapter("knowledge_space")
+        )
         cursor = None
+        offset = 0
         while len(spaces) < limit:
-            batch = await KnowledgeDao.aget_all_knowledge(
-                name=keyword,
-                knowledge_type=KnowledgeTypeEnum.SPACE,
-                sort_by="update_time",
-                limit=100,
-                cursor=cursor,
+            batch = (
+                candidates[offset : offset + _MANAGED_PERMISSION_BATCH_SIZE]
+                if candidates is not None
+                else await KnowledgeDao.aget_all_knowledge(
+                    name=keyword,
+                    knowledge_type=KnowledgeTypeEnum.SPACE,
+                    sort_by="update_time",
+                    limit=_MANAGED_PERMISSION_BATCH_SIZE,
+                    cursor=cursor,
+                )
             )
             if not batch:
                 break
-            action_map = await self._batch_actions(
-                "knowledge_space",
-                [space.id for space in batch],
-                ("upload_file",),
-            )
-            spaces.extend(space for space in batch if "upload_file" in action_map.get(str(space.id), frozenset()))
-            if len(batch) < 100:
+            if system_scope:
+                # Preserve the existing unrestricted-super-admin fast path.
+                spaces.extend(batch)
+            else:
+                targets = await adapter.resolve_permission_targets_from_rows(
+                    rows=batch,
+                    resource_type="knowledge_space",
+                    actor=actor,
+                )
+                action_map = await batch_check_verified_business_actions(
+                    actor=actor, targets=targets, actions=("upload_file",)
+                )
+                spaces.extend(
+                    space
+                    for space in batch
+                    if "upload_file" in action_map.get(("knowledge_space", str(space.id)), frozenset())
+                )
+            if len(batch) < _MANAGED_PERMISSION_BATCH_SIZE:
                 break
+            offset += len(batch)
             last = batch[-1]
             cursor = [last.update_time, last.id]
         return spaces[:limit]
@@ -2452,29 +2519,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         user_map = {u.user_id: u for u in (creator_users or [])}
         resolved_subscription_status = {
-            row[0].id: self._resolve_subscription_status_from_fields(row[1], row[2]) for row in rows
+            row[0].id: self._resolve_effective_subscription_status(
+                self._resolve_subscription_status_from_fields(row[1], row[2]),
+                has_visible=row[0].user_id == self.login_user.user_id or visible_map.get(str(row[0].id), False),
+            )
+            for row in rows
         }
+        await self._exclude_failed_subscriptions(resolved_subscription_status)
 
         # 4. Build response items
         result_list: list = []
         for row in rows:
             space = row[0]
-            user_subscription_status = row[1]
-            user_subscription_update_time = row[2]
             subscriber_count = row[3]
 
             creator = user_map.get(space.user_id)
 
-            subscription_status = resolved_subscription_status.get(
-                space.id
-            ) or self._resolve_subscription_status_from_fields(
-                user_subscription_status,
-                user_subscription_update_time,
-            )
-            subscription_status = self._resolve_effective_subscription_status(
-                subscription_status,
-                has_visible=space.user_id == self.login_user.user_id or visible_map.get(str(space.id), False),
-            )
+            subscription_status = resolved_subscription_status[space.id]
             result_list.append(
                 KnowledgeSpaceInfoResp(
                     **space.model_dump(),

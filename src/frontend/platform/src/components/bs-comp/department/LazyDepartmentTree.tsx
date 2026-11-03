@@ -1,3 +1,4 @@
+import { departmentDisplayName } from "./departmentDisplayName";
 import { SearchInput } from '@bisheng/ui';
 
 import { DepartmentTreeNode } from "@/types/api/department";
@@ -108,7 +109,7 @@ function Row({ node, depth, searchMode, props }: RowProps) {
           )}
         />
         <span className="flex-1 truncate">
-          {node.name}
+          {departmentDisplayName(node, t("bs:department.defaultOrganization"))}
           {isArchived ? ` ${t("bs:department.archivedTag")}` : ""}
         </span>
         {renderRowSuffix?.(node)}
@@ -158,11 +159,11 @@ export function LazyDepartmentTree(props: LazyDepartmentTreeProps) {
         {controller.searchTooLong || controller.searchFailed ? <SubjectSearchStatus tooLong={controller.searchTooLong} failed={controller.searchFailed} onRetry={controller.retrySearch} /> : busy ? (
           <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
             <Outlined.Loading className="mr-2 h-4 w-4 animate-spin" />
-            {t("loading", { defaultValue: "加载中" })}
+            {t("loading")}
           </div>
         ) : roots.length === 0 ? (
           <div className="py-6 text-center text-sm text-muted-foreground">
-            {emptyHint ?? t("bs:department.noResult", { defaultValue: "暂无结果" })}
+            {emptyHint ?? t("bs:department.noResult")}
           </div>
         ) : (
           roots.map((node) => (
@@ -171,9 +172,7 @@ export function LazyDepartmentTree(props: LazyDepartmentTreeProps) {
         )}
         {searchMode && controller.truncated && (
           <div className="px-2 py-1.5 text-center text-xs text-muted-foreground">
-            {t("bs:department.searchTruncated", {
-              defaultValue: "结果较多，仅显示部分，请细化关键词",
-            })}
+            {t("bs:department.searchTruncated")}
           </div>
         )}
       </div>

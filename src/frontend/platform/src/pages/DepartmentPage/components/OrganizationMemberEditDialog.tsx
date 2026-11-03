@@ -290,7 +290,7 @@ export function OrganizationMemberEditDialog({
         {...selectLabels}
         multiple
         showSearch
-        className="mt-1"
+        className="mt-1 min-w-0 max-w-full"
         aria-label={ariaLabel}
         options={options
           .filter((r) => r.id != null)
@@ -313,7 +313,7 @@ export function OrganizationMemberEditDialog({
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent
-        className="max-h-[90vh] overflow-y-auto sm:max-w-lg"
+        className="max-h-[90vh] min-w-0 overflow-y-auto sm:max-w-lg [&>div]:min-w-0"
         aria-describedby={undefined}
       >
         <DialogHeader>
@@ -324,7 +324,7 @@ export function OrganizationMemberEditDialog({
             {t("bs:department.memberEditLoading")}
           </div>
         ) : (
-          <div className="space-y-4 py-1">
+          <div className="min-w-0 space-y-4 py-1">
             <div>
               <Label>{t("system.username")}</Label>
               <Input value={userName} disabled={
@@ -349,7 +349,7 @@ export function OrganizationMemberEditDialog({
                       {...selectLabels}
                       multiple
                       showSearch
-                      className="mt-1"
+                      className="mt-1 min-w-0 max-w-full"
                       aria-label={t("bs:department.userGroups")}
                       options={form.manageable_groups
                         .filter((g) => g.id != null)
@@ -377,7 +377,7 @@ export function OrganizationMemberEditDialog({
                     <Label>{t("bs:department.primary")}</Label>
                     {form.can_change_primary && primaryDeptInternalId != null ? (
                       <TreeDepartmentSelect
-                        className="mt-1"
+                        className="mt-1 min-w-0 max-w-full"
                         modal={false}
                         value={primaryDeptInternalId}
                         onChange={handleUiRequest(handlePrimaryDeptChange)}

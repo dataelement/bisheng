@@ -23,7 +23,7 @@ def mcp_error_code(error: BaseException) -> type[BaseErrorCode]:
             return code
     if isinstance(error, BaseErrorCode):
         return type(error)
-    if isinstance(error, httpx.TimeoutException):
+    if isinstance(error, (httpx.TimeoutException, TimeoutError)):
         return ToolMcpTimeoutError
     if isinstance(error, httpx.ConnectError):
         return ToolMcpConnectionError

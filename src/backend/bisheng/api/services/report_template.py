@@ -123,14 +123,10 @@ async def ais_app_template_asset(version_key: str) -> bool:
     template table is a small curated list, so scanning it in Python keeps the
     query portable across both supported databases.
     """
-    from sqlmodel import select
-
-    from bisheng.core.database import get_async_db_session
-    from bisheng.database.models.template import Template
+    from bisheng.app_template.domain.services.template_service import TemplateService
 
     key = storage_key(version_key)
     if not key:
         return False
-    async with get_async_db_session() as session:
-        rows = (await session.execute(select(Template.data))).scalars().all()
+    rows = await TemplateService.workflow_data()
     return any(key in iter_report_keys(row) for row in rows)
