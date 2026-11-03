@@ -1,4 +1,15 @@
 import type { ChatCitation, CitationDisplayData } from './types';
+function mapBareCitationRefs(content: string, replace: (ref: string, token: string) => string) {
+    // Leave code, links, existing protocol spans and generated placeholders literal.
+    const tokens = /(`+)[\s\S]*?\1|~~~[\s\S]*?~~~|\[[^\]\n]*\]\([^\n)]*\)|\[citationref:[^\]]*\]|\ue200[^\ue202]*\ue202|https?:\/\/[^\s<>]+|((?<![\w/:])(?:knowledgesearch|websearch|tempsearch|articlesearch)_[a-fA-F0-9]+:\d+(?![\w:.-]))[\ue201\ue202]*/g;
+    return content.replace(tokens, (token: string, _ticks: string | undefined, ref: string | undefined) => ref ? replace(ref, token) : token);
+}
+/** Candidates are untrusted; callers must resolve them before restoring badges. */
+export function getBareCitationRefs(content: string): string[] {
+    const refs = new Set<string>();
+    mapBareCitationRefs(normalizeCitationMarkers(content), (ref, token) => { refs.add(ref); return token; });
+    return [...refs];
+}
 /** Recover missing wrappers only when the exact source and chunk were supplied. */
 function restoreRegisteredBareCitations(content: string, citations?: ChatCitation[] | null) {
     const registeredRefs = new Set<string>();
@@ -9,11 +20,9 @@ function restoreRegisteredBareCitations(content: string, citations?: ChatCitatio
         }
     }
     if (!registeredRefs.size) return content;
-    // Leave code, links, existing protocol spans and generated placeholders literal.
-    const tokens = /(`+)[\s\S]*?\1|~~~[\s\S]*?~~~|\[[^\]\n]*\]\([^\n)]*\)|\[citationref:[^\]]*\]|\ue200[^\ue202]*\ue202|https?:\/\/[^\s<>]+|(?<![\w/:])(?:knowledgesearch|websearch|tempsearch|articlesearch)_[a-fA-F0-9]+:\d+(?![\w:.-])/g;
-    return content.replace(tokens, token => registeredRefs.has(token)
-        ? `${CITATION_START}${token}${CITATION_END}`
-        : token);
+    // Consume leftover protocol characters only for an exact registered reference.
+    return mapBareCitationRefs(content, (ref, token) => registeredRefs.has(ref)
+        ? `${CITATION_START}${ref}${CITATION_END}` : token);
 }
 
 export function transformPrivateCitations(content: string, citations?: ChatCitation[] | null) {

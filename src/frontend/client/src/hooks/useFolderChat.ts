@@ -175,7 +175,7 @@ export default function useFolderChat(
                     return msgs;
                 });
             },
-            onFinal: (fullText, realMessageId) => {
+            onFinal: (fullText, realMessageId, citations) => {
                 setMessages((prev) => {
                     const msgs = [...prev];
                     const idx = msgs.findIndex(
@@ -187,6 +187,7 @@ export default function useFolderChat(
                         msgs[idx] = {
                             ...msgs[idx],
                             text: fullText,
+                            citations,
                             ...(realMessageId != null && { messageId: String(realMessageId) }),
                         };
                     }

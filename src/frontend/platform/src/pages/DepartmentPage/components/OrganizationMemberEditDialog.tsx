@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { departmentDisplayName } from "@/components/bs-comp/department/departmentDisplayName";
 import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { Button, Input, Select, notification } from '@bisheng/ui';
 import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect"
@@ -386,14 +387,14 @@ export function OrganizationMemberEditDialog({
                     ) : (
                       <>
                         <SharedTooltipProvider delayDuration={300}><SharedTooltip  content={<><p className="break-words text-left text-xs">
-                                {form.primary_department.name}
+                                {departmentDisplayName(form.primary_department, t("bs:department.defaultOrganization"))}
                               </p></>} side="bottom" ><div
                                 className={cn(
                                   "mt-1 flex h-9 w-full min-w-0 cursor-default items-center rounded-md border border-input bg-muted px-3 py-1 text-sm text-foreground shadow-sm",
                                 )}
                               >
                                 <span className="min-w-0 flex-1 truncate">
-                                  {form.primary_department.name}
+                                  {departmentDisplayName(form.primary_department, t("bs:department.defaultOrganization"))}
                                 </span>
                               </div></SharedTooltip></SharedTooltipProvider>
                         <p className="mt-1 text-xs text-muted-foreground">
