@@ -36,7 +36,7 @@ function useFeedbackRequest<T>(url: string | null, refresh = 0) {
     useEffect(() => {
         if (!url) return;
         const controller = new AbortController();
-        void request.get<unknown, T>(url, { signal: controller.signal }).then(
+        void (request.get(url, { signal: controller.signal }) as Promise<T>).then(
             (data) => { if (!controller.signal.aborted) setResponse({ url, data }); },
             () => { if (!controller.signal.aborted) setResponse({ url, error: true }); },
         );

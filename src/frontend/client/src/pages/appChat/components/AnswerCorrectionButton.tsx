@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getCorrectionEligibility, listMyCorrections, submitCorrection } from "~/api/answerCorrection";
 import { Button } from "~/components/ui/Button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/Dialog";
-import { Textarea } from "~/components/ui/Textarea";
+import { Textarea } from "@bisheng/ui";
 import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
 
