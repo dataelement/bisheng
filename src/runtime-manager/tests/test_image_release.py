@@ -131,8 +131,10 @@ def test_helper_installs_trusted_package_and_assembler_uses_pinned_toolchain():
     assert "--no-index" in helper and "--no-deps" in helper
     assert "USER 10001:10001" in helper and '"-I"' in helper
     assembler = (ROOT / "src/runtime-manager/Dockerfile.assembler").read_text()
-    assert "golang:1.27.3-bookworm" in assembler and "v0.22.1" in assembler
-    assert "/usr/share/licenses/crane" in assembler
+    assert "golang:1.27.3-bookworm" in helper and "v0.22.1" in helper
+    assert "/usr/share/licenses/crane" in helper
+    assert "FROM ${HELPER_IMAGE}" in assembler and "FROM golang:" not in assembler
+    assert "COPY --from=crane /out/crane /usr/local/bin/crane" in helper
 
 
 def test_ci_keeps_native_gate_and_immutable_digest_indexes():
