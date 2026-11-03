@@ -16,7 +16,7 @@ import { showApiError } from "@/controllers/request";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
-import { clampMenuName, toStoredMenuName } from "./menuDisplayName";
+import { isMenuNameTooLong, toStoredMenuName } from "./menuDisplayName";
 import { Model } from "./ModelManagement";
 import { OrgKbConfig as OrgKbConfigType } from "./OrgKbConfig";
 import { ToolConfig as ToolConfigType } from "./ToolsConfig";
@@ -308,9 +308,9 @@ export const useChatConfig = (
     }
   };
 
-  // Menu name: truncate past the display-width cap; blank is allowed (client localizes it)
+  // Keep composition and pasted input intact; validate the menu name before saving.
   const handleMenuNameChange = (field: "homeMenuDisplayName", value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: clampMenuName(value) }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
@@ -360,7 +360,11 @@ export const useChatConfig = (
       systemPrompt: "",
     };
 
-    // round-trips through dataToSave) — no validation for it anymore.
+    if (isMenuNameTooLong(formData.homeMenuDisplayName)) {
+      newErrors.homeMenuDisplayName = t("chatConfig.menuNameTooLong");
+      if (!firstErrorRef) firstErrorRef = refs.homeMenuDisplayNameRef;
+      isValid = false;
+    }
 
     const taskModeName = (formData.linsightConfig.tab_display_name || "").trim();
     if (!taskModeName) {
