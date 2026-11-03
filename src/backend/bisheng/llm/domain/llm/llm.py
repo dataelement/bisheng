@@ -288,6 +288,9 @@ class BishengLLM(BishengBase, BaseChatModel):
 
         class_object = self._get_llm_class(server_info.type)
         params = self._get_llm_params(server_info, model_info)
+        if server_info.type in {LLMServerType.OPENAI.value, LLMServerType.AZURE_OPENAI.value}:
+            # BishengLLM exposes chat calls; native Responses uses its own request path.
+            params["use_responses_api"] = False
         if self.max_retries is not None:
             # Override only this client's parameters; never update the ORM config.
             params["max_retries"] = self.max_retries
