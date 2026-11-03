@@ -1,6 +1,23 @@
-import type { CitationDisplayData } from './types';
-export function transformPrivateCitations(content: string) {
-    const normalizedCitationContent = normalizeCitationMarkers(content);
+import type { ChatCitation, CitationDisplayData } from './types';
+/** Recover missing wrappers only when the exact source and chunk were supplied. */
+function restoreRegisteredBareCitations(content: string, citations?: ChatCitation[] | null) {
+    const registeredRefs = new Set<string>();
+    for (const citation of citations || []) {
+        if (citation.itemId != null) registeredRefs.add(`${citation.citationId}:${citation.itemId}`);
+        for (const item of citation.sourcePayload?.items || []) {
+            if (item.itemId != null) registeredRefs.add(`${citation.citationId}:${item.itemId}`);
+        }
+    }
+    if (!registeredRefs.size) return content;
+    // Leave code, links, existing protocol spans and generated placeholders literal.
+    const tokens = /(`+)[\s\S]*?\1|~~~[\s\S]*?~~~|\[[^\]\n]*\]\([^\n)]*\)|\[citationref:[^\]]*\]|\ue200[^\ue202]*\ue202|https?:\/\/[^\s<>]+|(?<![\w/:])(?:knowledgesearch|websearch|tempsearch|articlesearch)_[a-fA-F0-9]+:\d+(?![\w:.-])/g;
+    return content.replace(tokens, token => registeredRefs.has(token)
+        ? `${CITATION_START}${token}${CITATION_END}`
+        : token);
+}
+
+export function transformPrivateCitations(content: string, citations?: ChatCitation[] | null) {
+    const normalizedCitationContent = restoreRegisteredBareCitations(normalizeCitationMarkers(content), citations);
     if (!normalizedCitationContent.includes(CITATION_START)) {
         return { transformedContent: normalizedCitationContent, citationMap: {} as Record<string, CitationDisplayData> };
     }

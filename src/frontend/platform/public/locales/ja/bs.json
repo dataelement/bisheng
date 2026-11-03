@@ -4167,6 +4167,7 @@
     "noProgress": "承認状況はありません"
   },
   "department": {
+    "defaultOrganization": "デフォルト組織",
     "searchUsersPlaceholder": "ユーザー名または ID で検索",
     "searchMember": "ユーザー名または ID で検索"
   },

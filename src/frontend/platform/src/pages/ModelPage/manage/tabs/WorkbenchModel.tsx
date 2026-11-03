@@ -100,6 +100,15 @@ export default function WorkbenchModel({ data, onBack }) {
     return "";
   };
 
+  const handleDefaultModelChange = (field: "linsightDefaultModelId" | "chatDefaultModelId", value: string | null) => {
+    setForm((prev) => ({
+      ...prev,
+      [field]: value,
+      // The backend requires defaults to belong to the selectable-model catalog.
+      models: value ? updateModelMetadata(prev.models, { id: Number(value), model_name: findModelLabel(value) }, {}) : prev.models,
+    }));
+  };
+
   const submitConfig = async () => {
     const {
       linsightDefaultModelId,
@@ -289,6 +298,21 @@ export default function WorkbenchModel({ data, onBack }) {
           {t("model.otherModelSettings")}
         </summary>
         <div className="mt-4 max-w-[880px] space-y-4">
+          <ModelSelect
+            close
+            label={t("model.linsightDefaultModel")}
+            tooltipText={t("model.linsightDefaultModelTooltip")}
+            value={form.linsightDefaultModelId}
+            options={llmOptions}
+            onChange={(val) => handleDefaultModelChange("linsightDefaultModelId", val)}
+          />
+          <ModelSelect
+            close
+            label={t("model.dailyDefaultModel")}
+            value={form.chatDefaultModelId}
+            options={llmOptions}
+            onChange={(val) => handleDefaultModelChange("chatDefaultModelId", val)}
+          />
           <ModelSelect
             close
             label={t("model.workVectorModel")}
