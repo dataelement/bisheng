@@ -19,8 +19,7 @@ import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
 import { resolveConfigString } from "./configValue";
 import { FormInput } from "./FormInput";
-import { MenuNameCounter } from "./MenuNameCounter";
-import { clampMenuName, toStoredMenuName } from "./menuDisplayName";
+import { isMenuNameTooLong, toStoredMenuName } from "./menuDisplayName";
 import Preview from "./Preview";
 import { SubscriptionSensitivePolicy, type SubscriptionSensitivePolicyHandle } from "./SubscriptionSensitivePolicy";
 
@@ -102,6 +101,10 @@ export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number 
         if (!configMeta) return false;
         if ((String((formData.assistantName) ?? '').length > 50) || (String((formData.systemPrompt) ?? '').length > 30000) || (String((formData.userPrompt) ?? '').length > 30000)) return;
 
+        if (isMenuNameTooLong(formData.menuDisplayName)) {
+            setErrors((prev) => ({ ...prev, menuDisplayName: t("chatConfig.menuNameTooLong") }));
+            return false;
+        }
         const sensitiveSaved = await sensitivePolicyRef.current?.save();
         if (sensitiveSaved === false) return false;
         return saveChatConfig();
@@ -117,11 +120,11 @@ export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number 
                         <FormInput
                             label={t("chatConfig.menuDisplayName")}
                             value={formData.menuDisplayName}
-                            suffix={<MenuNameCounter value={formData.menuDisplayName} />}
+                            validate={(v) => isMenuNameTooLong(v) ? t("chatConfig.menuNameTooLong") : ""}
                             error={errors.menuDisplayName}
                             placeholder={t("bench.subscribe")}
                             onChange={(v) => {
-                                setFormData((prev) => ({ ...prev, menuDisplayName: clampMenuName(v) }));
+                                setFormData((prev) => ({ ...prev, menuDisplayName: v }));
                                 setErrors((prev) => ({ ...prev, menuDisplayName: "" }));
                             }}
                         />
@@ -351,6 +354,11 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
             applicationCenterWelcomeMessage: "",
             applicationCenterDescription: "",
         };
+
+        if (isMenuNameTooLong(formData.menuDisplayName)) {
+            newErrors.menuDisplayName = t("chatConfig.menuNameTooLong");
+            isValid = false;
+        }
 
         // systemPrompt / userPrompt are auto-refilled with the i18n default template
         // in handleSave when blank, so only the length cap needs to be checked here.

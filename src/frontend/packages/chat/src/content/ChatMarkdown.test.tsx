@@ -73,3 +73,16 @@ it('keeps prose line breaks, list structure and GFM table cells without rewritin
   expect(screen.getAllByRole('listitem')).toHaveLength(2);
   expect(screen.getByRole('table')).toBeTruthy();
 });
+
+it('renders registered bare chunk ids as badges and keeps unknown chunks visible', () => {
+  const id = 'knowledgesearch_af2df1b';
+  const api = services();
+  const { container } = render(<ChatMarkdown services={api}
+    content={`Answer ${id}:12 then ${id}:5 unknown ${id}:99`}
+    citations={[{ citationId: id, sourcePayload: { items: [{ itemId: '12' }, { itemId: '5' }] } }]} />);
+  expect(screen.getByText('1')).toBeTruthy();
+  expect(screen.getByText('2')).toBeTruthy();
+  expect(container.textContent).not.toContain(`${id}:12`);
+  expect(container.textContent).not.toContain(`${id}:5`);
+  expect(container.textContent).toContain(`${id}:99`);
+});

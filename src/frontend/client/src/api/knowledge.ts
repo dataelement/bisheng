@@ -1436,38 +1436,7 @@ export async function deleteFolderApi(space_id: string, folder_id: string): Prom
 // API functions — File management
 // ─────────────────────────────────────────────
 
-/**
- * Step 1: Upload a file to the server and get back its server path
- * Returns the upload response containing file_path to use in addFilesApi
- */
-export async function uploadFileToServerApi(
-    space_id: string,
-    file: File,
-    /**
-     * Explicit filename for the multipart part. Defaults to `file.name`.
-     * Pass this when uploading Files from a `<input webkitdirectory>` picker —
-     * Chromium otherwise uses `file.webkitRelativePath` (e.g. `Docs/a.pdf`)
-     * as the multipart filename, which the backend persists verbatim.
-     */
-    filename?: string,
-): Promise<UploadFileResponse> {
-    const formData = new FormData();
-    formData.append("file", file, filename ?? file.name);
-    const res = await request.postMultiPart(`/api/v1/knowledge/upload/${space_id}`, formData) as ApiResponse<UploadFileResponse> & { message?: string; msg?: string };
-    if (res?.status_code !== undefined && res.status_code !== 200) {
-        // Preserve status_code and data so the caller can render the localized
-        // backend message via i18n (e.g. api_errors.19403 with used_gb/quota_gb)
-        // instead of falling through to a generic "upload failed" toast.
-        const err = new Error(res.status_message || res.message || res.msg || "upload file failed");
-        (err as any).statusCode = res.status_code;
-        (err as any).errorData = res.data;
-        throw err;
-    }
-    if (!res?.data?.file_path) {
-        throw new Error("upload file failed: missing file path");
-    }
-    return res.data;
-}
+export { uploadFileToServerApi } from "./knowledgeUpload";
 
 /**
  * Step 2: Register uploaded file paths into a knowledge space

@@ -671,7 +671,7 @@
     "submit": "Submit",
     "workstationEntry": "Lingsi Entry",
     "menuDisplayName": "Menu Display Name",
-    "menuNameLengthHint": "Maximum 8 units: Chinese and Japanese characters count as 2; English letters count as 1.",
+    "menuNameTooLong": "Use up to 4 Chinese characters or 8 English characters. Mixed text follows the same width limit.",
     "iconUpload": "Icon Upload",
     "sidebarIcon": "Sidebar Icon",
     "assistantIcon": "Welcome Page Icon & Avatar",
@@ -4222,6 +4222,7 @@
     "noProgress": "No progress available"
   },
   "department": {
+    "defaultOrganization": "Default Org",
     "searchUsersPlaceholder": "Search user name or ID",
     "searchMember": "Search user name or ID"
   },

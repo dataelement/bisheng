@@ -131,9 +131,6 @@
     }
   },
   "src/components/bs-comp/department/LazyDepartmentTree.tsx": {
-    "no-restricted-syntax": {
-      "count": 3
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }

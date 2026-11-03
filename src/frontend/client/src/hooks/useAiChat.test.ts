@@ -18,6 +18,7 @@ import type { SSESubmission } from "./useAiChatSSE";
 /** Every SSE turn opened during a test, in order. */
 jest.mock("react-activation", () => ({ useActivate: jest.fn() }));
 
+let mockBsConfig: { models?: { id: number; visual: boolean }[]; enable_etl4lm?: boolean } = {};
 let mockSelectedSkills: Array<{ name: string }> = [];
 const mockOpenedStreams: Array<{ submission: SSESubmission; close: jest.Mock }> = [];
 
@@ -58,7 +59,7 @@ jest.mock("~/hooks/AuthContext", () => ({ useAuthContext: () => ({ user: { id: "
 
 jest.mock("~/hooks", () => ({ useLocalize: () => (key: string) => key }));
 jest.mock("~/Providers", () => ({ useToastContext: () => ({ showToast: jest.fn() }) }));
-jest.mock("~/hooks/queries/data-provider", () => ({ useGetBsConfig: () => ({ data: {} }) }));
+jest.mock("~/hooks/queries/data-provider", () => ({ useGetBsConfig: () => ({ data: mockBsConfig }) }));
 // Added since the fix was lost: the hook now reads media metadata off
 // attachments and mints an owner id for the stream registry.
 jest.mock("~/utils/mediaAttachmentUtils", () => ({
@@ -111,6 +112,7 @@ const latestStream = () => mockOpenedStreams[mockOpenedStreams.length - 1];
 beforeEach(() => {
   localStorage.clear();
   mockOpenedStreams.length = 0;
+  mockBsConfig = { models: [{ id: 1, visual: true }] };
   mockSelectedSkills = [];
   mockGetAgentMessages.mockImplementation((cid: string) => Promise.resolve(historyOf(cid)));
   mockGetSessionName.mockResolvedValue("");
@@ -609,4 +611,50 @@ test("knowledge handoff submits the chosen model ID and space in the real chat p
   } finally {
     modelAtom.__testValue = initialModel;
   }
+});
+
+test('preserves a space tag across send, regeneration and conversation reload', async () => {
+  const tagged = [{ id: '12', name: 'Space', type: 'space', tag: { id: 7, name: 'Report' } }];
+  const { result, unmount } = renderChat('c1');
+  await waitFor(() => expect(result.current.messages).toHaveLength(1));
+  act(() => result.current.setSelectedOrgKbs(tagged));
+  act(() => result.current.sendMessage('tagged question'));
+  expect(latestStream().submission.payload.use_knowledge_base.knowledge_space_tag_filters).toEqual({ '12': 7 });
+  act(() => latestStream().submission.onEnd());
+  act(() => result.current.regenerate(result.current.messages[result.current.messages.length - 1].messageId));
+  expect(latestStream().submission.payload.use_knowledge_base.knowledge_space_tag_filters).toEqual({ '12': 7 });
+  act(() => latestStream().submission.onEnd());
+  unmount();
+  const restored = renderChat('c1');
+  expect(restored.result.current.selectedOrgKbs).toEqual(tagged);
+});
+
+
+test('rejects task-mode tag filtering without clearing the draft', async () => {
+  const tagged = [{ id: '12', name: 'Space', type: 'space', tag: { id: 7, name: 'Report' } }];
+  const { result } = renderChat('c1');
+  await waitFor(() => expect(result.current.messages).toHaveLength(1));
+  act(() => result.current.setSelectedOrgKbs(tagged));
+  act(() => expect(result.current.sendMessage('question', [], { taskMode: true })).toBe(false));
+  expect(mockOpenedStreams).toHaveLength(0);
+  expect(result.current.selectedOrgKbs).toEqual(tagged);
+});
+
+test('blocks image sends at the shared entry when neither vision nor image parsing is available', async () => {
+  mockBsConfig = { models: [{ id: 1, visual: false }], enable_etl4lm: false };
+  const { result } = renderChat('c1');
+  await waitFor(() => expect(result.current.messages).toHaveLength(1));
+  act(() => expect(result.current.sendMessage('Describe', [{ name: 'image.png', filepath: 'image.png' }])).toBe(false));
+  expect(mockOpenedStreams).toHaveLength(0);
+  expect(result.current.messages).toHaveLength(1);
+});
+
+test('does not regenerate an image turn with a model that has lost image support', async () => {
+  mockBsConfig = { models: [{ id: 1, visual: false }], enable_etl4lm: false };
+  mockGetAgentMessages.mockResolvedValue([{ ...historyOf('c1')[0], files: [{ name: 'image.png', filepath: 'image.png' }] }]);
+  const { result } = renderChat('c1');
+  await waitFor(() => expect(result.current.messages).toHaveLength(1));
+  act(() => result.current.regenerate('c1-q'));
+  expect(mockOpenedStreams).toHaveLength(0);
+  expect(result.current.messages).toHaveLength(1);
 });

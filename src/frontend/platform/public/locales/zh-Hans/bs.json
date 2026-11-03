@@ -944,7 +944,7 @@
     "submit": "提交",
     "workstationEntry": "灵思入口",
     "menuDisplayName": "菜单显示名称",
-    "menuNameLengthHint": "中文、日文计 2，英文计 1，最多 8；即最多 4 个中文或 8 个英文字母。",
+    "menuNameTooLong": "最多4个中文字符或8个英文字符；混合输入按相同宽度限制。",
     "iconUpload": "图标上传",
     "sidebarIcon": "左侧边栏图标",
     "assistantIcon": "欢迎页面图标&对话头像",
@@ -4167,6 +4167,7 @@
     "noProgress": "暂无进度数据"
   },
   "department": {
+    "defaultOrganization": "默认组织",
     "searchUsersPlaceholder": "搜索用户名称或 ID",
     "searchMember": "搜索用户名称或 ID"
   },

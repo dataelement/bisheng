@@ -283,3 +283,11 @@ test.each([1, 2])('prepares once when a synchronous model store publishes model 
   expect(selectModel).toHaveBeenCalledTimes(2);
   expect(sendMessage).toHaveBeenCalledTimes(2);
 });
+
+test('hands the selected tag to its own space before sending', () => {
+  const tag = { id: 7, name: 'Report' };
+  parkChatAsk({ text: 'tagged question', space: { ...space, tag } });
+  const { result, sendMessage } = renderHandoff();
+  expect(result.current.selectedKbs).toEqual([{ ...space, type: 'space', tag }]);
+  expect(sendMessage).toHaveBeenCalledTimes(1);
+});
