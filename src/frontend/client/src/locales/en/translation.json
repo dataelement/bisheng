@@ -2697,5 +2697,10 @@
       "name": "Excel spreadsheet creation",
       "description": "Create and edit Excel workbooks (.xlsx), including data tables, summaries, budgets, financial models, quotations and registers. Read and clean .xlsx, .xls and .csv data, apply formulas and formatting, and recalculate and check the workbook before delivery."
     }
+  },
+  "knowledgeAccess": {
+    "checking": "Checking knowledge space access…",
+    "failed": "Could not load knowledge space permissions. Refresh the page to try again.",
+    "revoked": "Access has expired for these knowledge spaces: {{names}}. Choose accessible spaces in Add context."
   }
 }
