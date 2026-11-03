@@ -14,7 +14,8 @@ export function KnowledgePreviewNavigation({ onClose }: KnowledgePreviewNavigati
     const isH5 = usePrefersMobileLayout();
     if (isDesktopEmbedded()) {
         return (
-            <div className="shrink-0 px-6 pt-4">
+            // Align the leading icon with the shared content gutter; keep Button sizing intact.
+            <div className="-ml-4 shrink-0 pt-4">
                 <Button color="default" variant="text" size="medium" onClick={onClose}>
                     <Outlined.ArrowLeft />
                     {localize('com_ui_go_back')}

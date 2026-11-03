@@ -21,7 +21,7 @@ import {
 import { checkResourceAction } from "~/api/permission";
 import { cn } from "~/utils";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
-import { useLocalize, useScrollRevealRef } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
 import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 import { getPreviewFileStatusFilter, getSpaceJoinButton, resolveSpaceJoinStatus, type SpaceJoinStatus } from "./spaceSubscriptionState";
 
@@ -42,6 +42,7 @@ export function KnowledgeSpacePreviewDrawer({
     onSquareStatusChange,
 }: KnowledgeSpacePreviewDrawerProps) {
     const localize = useLocalize();
+    const isMobileLayout = usePrefersMobileLayout();
     const spacePreviewScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const { showToast } = useToastContext();
     const { isOverQuota } = useEffectiveQuota();
@@ -412,7 +413,7 @@ export function KnowledgeSpacePreviewDrawer({
             <SheetContent
                 side="right"
                 className={cn(
-                    "flex h-full min-h-0 flex-col overflow-hidden p-0 px-12 w-full sm:max-w-[1000px]",
+                    "flex h-full min-h-0 flex-col gap-0 overflow-hidden p-0 px-6 w-full sm:max-w-[1000px]",
                     "touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:px-4"
                 )}
                 hideClose
@@ -420,10 +421,21 @@ export function KnowledgeSpacePreviewDrawer({
                 <KnowledgePreviewNavigation onClose={() => onOpenChange(false)} />
                 {space ? (
                     <>
-                        <SheetHeader className="gap-0 border-b border-gray-100 px-6 pb-4 pt-6 text-left touch-mobile:px-0 touch-mobile:pt-6">
-                            <SheetTitle className="mb-1 text-text-1 leading-tight font-semibold touch-mobile:pr-10">
-                                {space.name}
-                            </SheetTitle>
+                        <SheetHeader className={cn("gap-0 border-b border-border-base px-0 py-4 text-left", isMobileLayout && "pt-14")}>
+                            <div className="flex items-start justify-between gap-4">
+                                <SheetTitle className="min-w-0 flex-1 break-words text-text-1 leading-tight font-semibold">
+                                    {space.name}
+                                </SheetTitle>
+                                <Button
+                                    variant={btn.variant}
+                                    size="medium"
+                                    className="shrink-0"
+                                    disabled={btn.disabled}
+                                    onClick={handleClickAction}
+                                >
+                                    {localize(btn.label)}
+                                </Button>
+                            </div>
                             {space.description && (
                                 <Tooltip>
                                     <TooltipTrigger asChild>
@@ -444,30 +456,15 @@ export function KnowledgeSpacePreviewDrawer({
                                 <span className="text-sm text-text-3">{space.creator}</span>
                             </div>
 
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center text-sm text-text-3">
-                                    <span className="mr-3">{space.fileCount ?? 0} {localize("com_knowledge.articles_count")}</span>
-                                    <span>{space.memberCount ?? 0} {localize("com_knowledge.users_count")}</span>
-                                </div>
-                                <Button
-                                    variant={btn.variant}
-                                    className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${status === "joined"
-                                        ? "bg-fill-2 text-text-3 border-border-base"
-                                        : status === "pending"
-                                            ? "bg-fill-2 text-text-4 border-border-base"
-                                            : ""
-                                        }`}
-                                    disabled={btn.disabled}
-                                    onClick={handleClickAction}
-                                >
-                                    {localize(btn.label)}
-                                </Button>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body text-text-3">
+                                <span>{space.fileCount ?? 0} {localize("com_knowledge.articles_count")}</span>
+                                <span>{space.memberCount ?? 0} {localize("com_knowledge.users_count")}</span>
                             </div>
                         </SheetHeader>
 
                         <div
                             ref={spacePreviewScrollRevealRef}
-                            className="scrollbar-on-scroll flex-1 min-h-0 overflow-y-auto px-6 py-4 touch-mobile:px-0"
+                            className="scrollbar-on-scroll flex-1 min-h-0 overflow-y-auto py-4"
                             onScroll={(e) => {
                                 const el = e.currentTarget;
                                 if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {
@@ -567,7 +564,7 @@ export function KnowledgeSpacePreviewDrawer({
                         </div>
                     </>
                 ) : (
-                    <div className="flex flex-1 items-center justify-center px-6 py-4 text-sm text-text-3 touch-mobile:px-0">
+                    <div className="flex flex-1 items-center justify-center py-4 text-sm text-text-3">
                         {loadingSpace ? (
                             <LoadingIcon className="size-20 text-primary" />
                         ) : (
