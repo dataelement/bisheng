@@ -1562,7 +1562,12 @@
       "appReleaseRollback": "公開をロールバック",
       "appSecretSet": "アプリ環境変数を保存",
       "appSecretDelete": "アプリ環境変数を削除",
-      "appSecretRebuild": "アプリインスタンス再構築を確認"
+      "appSecretRebuild": "アプリインスタンス再構築を確認",
+      "update_sandbox_conf": "サンドボックス設定を変更",
+      "link_file_version": "ファイルバージョンを関連付け",
+      "set_primary_version": "ファイルのメインバージョンを設定",
+      "delete_file_version": "履歴ファイルバージョンを削除",
+      "dismiss_similar_file": "類似ファイルの提案を無視"
     },
     "objectTypeEnum": {
       "app": "アプリ",
@@ -1672,7 +1677,9 @@
       "like": "高評価",
       "dislike": "低評価",
       "copy": "コピー",
-      "sensitiveStatus": "コンテンツ安全審査"
+      "sensitiveStatus": "コンテンツ安全審査",
+      "org": "組織",
+      "usageType": "利用タイプ"
     },
     "userRole": "ユーザー",
     "aiRole": "AI",
@@ -1785,7 +1792,8 @@
         "http_status": "HTTP 状態",
         "ttft_ms": "最初のトークン（ミリ秒）",
         "request_id": "リクエスト ID",
-        "version_id": "アプリバージョン ID"
+        "version_id": "アプリバージョン ID",
+        "operator_dept_path": "組織"
       },
       "values": {
         "service_account": "サービスアカウント",
@@ -1804,6 +1812,34 @@
         "capability_undeclared": "機能未宣言",
         "client_disconnected": "クライアント切断"
       }
+    },
+    "org": {
+      "column": "組織",
+      "placeholder": "組織を選択",
+      "search": "部門名または番号で検索",
+      "includeDescendants": "下位部門を含む",
+      "archivedSection": "アーカイブ済み部門",
+      "archived": "アーカイブ済み",
+      "none": "所属部門なし",
+      "unrecorded": "未記録",
+      "notApplicable": "該当なし",
+      "clear": "選択をクリア",
+      "confirm": "確定",
+      "empty": "選択できる部門がありません",
+      "selected": "{{count}} 件選択",
+      "loading": "読み込み中…",
+      "loadFailed": "部門の読み込みに失敗しました",
+      "retry": "再試行",
+      "expand": "{{name}} を展開",
+      "collapse": "{{name}} を折りたたむ",
+      "tenantGroup": "テナント {{id}}"
+    },
+    "usageType": {
+      "label": "利用タイプ",
+      "daily": "日常会話",
+      "assistant": "アシスタント会話",
+      "workflow": "ワークフロー会話",
+      "task": "タスクモード"
     }
   },
   "tag": {

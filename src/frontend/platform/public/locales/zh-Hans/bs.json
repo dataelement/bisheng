@@ -1562,7 +1562,12 @@
       "appReleaseRollback": "发布回滚",
       "appSecretSet": "保存应用环境变量",
       "appSecretDelete": "删除应用环境变量",
-      "appSecretRebuild": "确认重建应用实例"
+      "appSecretRebuild": "确认重建应用实例",
+      "update_sandbox_conf": "修改沙箱配置",
+      "link_file_version": "关联文件版本",
+      "set_primary_version": "设置文件主版本",
+      "delete_file_version": "删除历史文件版本",
+      "dismiss_similar_file": "忽略相似文件建议"
     },
     "objectTypeEnum": {
       "app": "应用",
@@ -1672,7 +1677,9 @@
       "like": "点赞",
       "dislike": "点踩",
       "copy": "复制",
-      "sensitiveStatus": "是否命中内容安全审查"
+      "sensitiveStatus": "是否命中内容安全审查",
+      "org": "组织",
+      "usageType": "使用类型"
     },
     "userRole": "用户",
     "aiRole": "AI",
@@ -1785,7 +1792,8 @@
         "http_status": "HTTP 状态",
         "ttft_ms": "首 Token 耗时（毫秒）",
         "request_id": "请求标识",
-        "version_id": "应用版本标识"
+        "version_id": "应用版本标识",
+        "operator_dept_path": "组织"
       },
       "values": {
         "service_account": "服务账号",
@@ -1804,6 +1812,34 @@
         "capability_undeclared": "未声明能力",
         "client_disconnected": "客户端断开"
       }
+    },
+    "org": {
+      "column": "组织",
+      "placeholder": "选择组织",
+      "search": "搜索部门名称或编号",
+      "includeDescendants": "包含下级部门",
+      "archivedSection": "已归档部门",
+      "archived": "已归档",
+      "none": "无所属部门",
+      "unrecorded": "未记录",
+      "notApplicable": "不适用",
+      "clear": "清除所选",
+      "confirm": "确定",
+      "empty": "没有可选的部门",
+      "selected": "已选 {{count}} 项",
+      "loading": "加载中…",
+      "loadFailed": "部门加载失败",
+      "retry": "重试",
+      "expand": "展开 {{name}}",
+      "collapse": "收起 {{name}}",
+      "tenantGroup": "租户 {{id}}"
+    },
+    "usageType": {
+      "label": "使用类型",
+      "daily": "日常对话",
+      "assistant": "助手会话",
+      "workflow": "工作流会话",
+      "task": "任务模式"
     }
   },
   "tag": {

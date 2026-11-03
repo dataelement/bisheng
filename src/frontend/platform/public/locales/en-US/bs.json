@@ -1579,7 +1579,12 @@
       "appReleaseRollback": "Publish rolled back",
       "appSecretSet": "Save app environment variable",
       "appSecretDelete": "Delete app environment variable",
-      "appSecretRebuild": "Confirm app instance rebuild"
+      "appSecretRebuild": "Confirm app instance rebuild",
+      "update_sandbox_conf": "Update sandbox settings",
+      "link_file_version": "Link file version",
+      "set_primary_version": "Set primary file version",
+      "delete_file_version": "Delete file history version",
+      "dismiss_similar_file": "Dismiss similar file suggestion"
     },
     "objectTypeEnum": {
       "app": "Application",
@@ -1727,7 +1732,9 @@
       "like": "Like",
       "dislike": "Dislike",
       "copy": "Copy",
-      "sensitiveStatus": "Sensitive Content Hit"
+      "sensitiveStatus": "Sensitive Content Hit",
+      "org": "Organization",
+      "usageType": "Usage type"
     },
     "userRole": "User",
     "aiRole": "AI",
@@ -1840,7 +1847,8 @@
         "http_status": "HTTP status",
         "ttft_ms": "First token (ms)",
         "request_id": "Request ID",
-        "version_id": "Application version ID"
+        "version_id": "Application version ID",
+        "operator_dept_path": "Organization"
       },
       "values": {
         "service_account": "Service account",
@@ -1859,6 +1867,34 @@
         "capability_undeclared": "Capability not declared",
         "client_disconnected": "Client disconnected"
       }
+    },
+    "org": {
+      "column": "Organization",
+      "placeholder": "Select organization",
+      "search": "Search by department name or ID",
+      "includeDescendants": "Include sub-departments",
+      "archivedSection": "Archived departments",
+      "archived": "Archived",
+      "none": "No department",
+      "unrecorded": "Not recorded",
+      "notApplicable": "Not applicable",
+      "clear": "Clear selection",
+      "confirm": "OK",
+      "empty": "No departments available",
+      "selected": "{{count}} selected",
+      "loading": "Loading…",
+      "loadFailed": "Failed to load departments",
+      "retry": "Retry",
+      "expand": "Expand {{name}}",
+      "collapse": "Collapse {{name}}",
+      "tenantGroup": "Tenant {{id}}"
+    },
+    "usageType": {
+      "label": "Usage type",
+      "daily": "Daily chat",
+      "assistant": "Assistant session",
+      "workflow": "Workflow session",
+      "task": "Task mode"
     }
   },
   "tag": {

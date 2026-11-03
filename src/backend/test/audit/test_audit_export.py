@@ -74,14 +74,7 @@ class TestExportBoundary:
     async def test_plain_user_is_rejected(self, patch_audit_dao, audit_lookups, monkeypatch):
         user = make_user_payload(user_id=500, is_admin=False, is_global_super=False)
 
-        async def _no_menu(_user):
-            return False
-
-        async def _no_groups(_uid):
-            return []
-
-        monkeypatch.setattr(AuditLogService, "_user_has_log_web_menu", _no_menu)
-        monkeypatch.setattr("bisheng.api.services.audit_log.UserGroupDao.aget_user_admin_group", _no_groups)
+        # No audit menu, no managed department: the conftest ``audit_identity`` defaults.
         with pytest.raises(UnAuthorizedError):
             await _export(user)
 

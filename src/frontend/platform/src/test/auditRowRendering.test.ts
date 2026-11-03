@@ -123,6 +123,7 @@ describe("csv export", () => {
     expect(withTenant[0]).toEqual([
       "log.auditId",
       "log.username",
+      "log.org.column",
       "log.operationTime",
       "log.systemModule",
       "log.operationAction",
@@ -137,6 +138,7 @@ describe("csv export", () => {
     expect(withTenant[1]).toEqual([
       "row-1",
       "olga",
+      "log.org.unrecorded",
       "2026-09-16 10:00:00",
       "log.systemIdEnum.app",
       "log.eventTypeEnum.appPublish",
