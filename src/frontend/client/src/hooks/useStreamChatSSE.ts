@@ -17,7 +17,7 @@
  */
 import { useEffect, useRef } from "react";
 import { SSE } from "sse.js";
-import type { ChatCitation } from "@bisheng/chat/citations";
+import { hideStreamingCitations, type ChatCitation } from "@bisheng/chat/citations";
 
 export interface StreamChatSSESubmission {
     /** SSE endpoint URL (absolute) */
@@ -47,6 +47,7 @@ export default function useStreamChatSSE(
     submission: StreamChatSSESubmission | null
 ) {
     const sseRef = useRef<any>(null);
+    const flushRef = useRef<(() => void) | null>(null);
 
     useEffect(() => {
         if (!submission) return;
@@ -57,13 +58,22 @@ export default function useStreamChatSSE(
         // Accumulators
         let reasoningText = "";
         let contentText = "";
+        let finished = false;
 
-        const buildFullText = (): string => {
-            if (reasoningText) {
-                return `:::thinking\n${reasoningText}\n:::\n${contentText}`;
+        const buildFullText = (streaming = false): string => {
+            const content = streaming ? hideStreamingCitations(contentText) : contentText;
+            const reasoning = streaming ? hideStreamingCitations(reasoningText) : reasoningText;
+            if (reasoning) {
+                return `:::thinking\n${reasoning}\n:::\n${content}`;
             }
-            return contentText;
+            return content;
         };
+        const flush = () => {
+            if (finished) return;
+            finished = true;
+            onMessage(buildFullText());
+        };
+        flushRef.current = flush;
 
         const sse = new SSE(sseUrl, {
             payload: JSON.stringify(payload),
@@ -73,14 +83,16 @@ export default function useStreamChatSSE(
         sseRef.current = sse;
 
         sse.addEventListener("open", () => {
-            onStart();
+            if (!finished) onStart();
         });
 
         sse.addEventListener("message", (e: MessageEvent) => {
+            if (finished) return;
             try {
                 const data = JSON.parse(e.data);
 
                 if (data.type === "end") {
+                    finished = true;
                     // Stream complete. The end event carries the answer as
                     // persisted, after the backend dropped citation markers it
                     // could not back — prefer it over the raw streamed text, or
@@ -108,13 +120,15 @@ export default function useStreamChatSSE(
                 }
 
                 // Intermediate stream event — send accumulated text so far
-                onMessage(buildFullText());
+                onMessage(buildFullText(true));
             } catch (err) {
                 console.error("[StreamChatSSE] Failed to parse message:", err);
             }
         });
 
         sse.addEventListener("error", (e: MessageEvent) => {
+            if (finished) return;
+            finished = true;
             console.error("[StreamChatSSE] SSE error event, raw data:", e?.data);
             try {
                 const data = JSON.parse(e.data);
@@ -136,12 +150,16 @@ export default function useStreamChatSSE(
         });
 
         sse.addEventListener("cancel", () => {
+            if (finished) return;
+            flush();
             onEnd();
         });
 
         sse.stream();
 
         return () => {
+            finished = true;
+            if (flushRef.current === flush) flushRef.current = null;
             sse.close();
             sseRef.current = null;
         };
@@ -150,6 +168,7 @@ export default function useStreamChatSSE(
     /** Abort the current SSE stream */
     const abort = () => {
         if (sseRef.current) {
+            flushRef.current?.();
             sseRef.current.close();
             sseRef.current = null;
         }
