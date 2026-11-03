@@ -1,5 +1,7 @@
 # v3.0.0 Feature 索引（应用工场）
 
+2026-11-03 增量：[F119 应用工场交付契约与诊断修复](./119-app-factory-deploy-repairs/spec.md) — 42条AC和设计已确认，本地实现与分发制品已完成，真实116部署E2E与原生服务镜像验证待完成；历史聊天暂用F118，因发版线已占用而顺延。见[验证记录](./119-app-factory-deploy-repairs/verification.md)。
+
 2026-11-03 增量：[F118 项目内新建对话](./118-project-new-chat/spec.md) — 用户定为高优，将 3.1 分支上的工作台项目内新建对话（原 `573a62d10d`）提前适配到 3.0；纯前端，项目归属仍存浏览器本地，不改 API。自动化验证完成，3.0 页面实测待执行，见 [验证记录](./118-project-new-chat/e2e-checklist.md)。
 
 2026-11-02 增量：[F117 知识空间详情读取优化](./117-space-info-read-optimization/spec.md) — 按用户要求将已评审的中粮 `/info` 优化适配到主线；保留撤权重入、分享预览和主线下载契约。本地验证完成，真实部署验收待执行，见 [验证记录](./117-space-info-read-optimization/validation.md)。

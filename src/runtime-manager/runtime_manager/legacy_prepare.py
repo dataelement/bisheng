@@ -48,17 +48,25 @@ def prepare_image(config, platform, docker, operation, *, checkpoint, report):
             source = children[0]
     body = operation["payload"]
     runtime = body["runtime"]
-    if body.get("offline") or config.image_pull_policy == "never":
-        try:
-            base = docker.inspect_image(BASE_IMAGES[runtime])
-        except Exception as exc:
-            if isinstance(exc, KeyError) or getattr(exc, "status_code", None) == 404:
-                raise ExecutionError("legacy_base_image_missing") from exc
+    reference = BASE_IMAGES[runtime]
+    try:
+        base = docker.inspect_image(reference)
+    except Exception as exc:
+        if not isinstance(exc, KeyError) and getattr(exc, "status_code", None) != 404:
             raise
-        if base.get("Os", "linux") + "/" + base.get("Architecture", "") != body["platform"]:
-            raise ExecutionError("legacy_base_platform_mismatch")
+        if body.get("offline") or config.image_pull_policy == "never":
+            raise ExecutionError("legacy_base_image_missing", image_role="base", image_ref=reference) from exc
+        if config.image_pull_policy != "if-not-present":
+            raise ExecutionError("image_pull_policy_invalid") from exc
+        checkpoint()
+        docker.pull_image(reference)
+        base = docker.inspect_image(reference)
+    if base.get("Os", "linux") + "/" + base.get("Architecture", "") != body["platform"]:
+        raise ExecutionError("legacy_base_platform_mismatch", image_role="base", image_ref=reference)
+    if not base.get("Id", "").startswith("sha256:"):
+        raise ExecutionError("image_identity_unavailable")
     for name, content in render_build_context(
-        runtime, {"port": body.get("port", 8080), **source_facts(runtime, source)}
+        runtime, {"port": body.get("port", 8080), "base_image": base["Id"], **source_facts(runtime, source)}
     ).items():
         (source / name).write_text(content)
     checkpoint()
