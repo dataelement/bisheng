@@ -671,7 +671,7 @@
     "submit": "Submit",
     "workstationEntry": "Lingsi Entry",
     "menuDisplayName": "Menu Display Name",
-    "menuNameLengthHint": "Maximum 8 units: Chinese and Japanese characters count as 2; English letters count as 1.",
+    "menuNameTooLong": "Use up to 4 Chinese or Japanese characters, or 8 English characters. Mixed text follows the same width limit.",
     "iconUpload": "Icon Upload",
     "sidebarIcon": "Sidebar Icon",
     "assistantIcon": "Welcome Page Icon & Avatar",

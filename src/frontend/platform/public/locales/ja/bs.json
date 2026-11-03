@@ -939,7 +939,7 @@
     "submit": "送信",
     "workstationEntry": "Lingsi エントリー",
     "menuDisplayName": "メニュー表示名",
-    "menuNameLengthHint": "上限は8です。日本語・中国語は1文字を2、英字は1として数えます。",
+    "menuNameTooLong": "中国語・日本語は4文字、英数字は8文字までです。混在する場合も同じ表示幅の上限が適用されます。",
     "iconUpload": "アイコンアップロード",
     "sidebarIcon": "左サイドバーアイコン",
     "assistantIcon": "ウェルカム画面アイコン & 対話アバター",
