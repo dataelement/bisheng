@@ -9,7 +9,7 @@
 import { useEffect, useState } from 'react';
 import { getLinsightFilePreviewApi } from '~/api/chat/data-service';
 import { getShareTokenFromPath } from '~/utils/shareToken';
-import { type ArtifactFile, getArtifactPreviewKind } from './artifactUtils';
+import { type ArtifactFile, artifactVersionId, getArtifactPreviewKind } from './artifactUtils';
 
 export const POLL_INTERVAL_MS = 2000;
 export const POLL_TIMEOUT_MS = 90_000;
@@ -18,7 +18,7 @@ export type SlidesPreviewState = 'idle' | 'generating' | 'ready' | 'failed';
 
 // Successes only: a failed conversion must be retried on the next open.
 const readyCache = new Map<string, string>();
-const cacheKey = (file: ArtifactFile, versionId: string) => `${versionId}::${file.file_url}`;
+const cacheKey = (file: ArtifactFile, versionId: string) => `${artifactVersionId(file, versionId)}::${file.file_url}`;
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -69,7 +69,7 @@ export function useSlidesPreview(file: ArtifactFile | null, versionId: string) {
         let cancelled = false;
         setUrl('');
         setState('generating');
-        pollSlidesPreview(file.file_url, versionId, () => cancelled)
+        pollSlidesPreview(file.file_url, artifactVersionId(file, versionId), () => cancelled)
             .then((pdfUrl) => {
                 if (cancelled) return;
                 if (pdfUrl) {
