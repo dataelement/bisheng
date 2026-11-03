@@ -1,5 +1,7 @@
 {
   "appChat": {
+    "unknownApp": "Unknown app",
+    "noDescription": "No description available",
     "emptyShared": "This shared conversation has no messages yet",
     "stopped": "Stopped"
   },

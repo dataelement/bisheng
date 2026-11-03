@@ -2567,9 +2567,6 @@
     },
     "no-restricted-imports": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
     }
   },
   "src/pages/appChat/appUtils/skillMethod.ts": {
