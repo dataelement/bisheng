@@ -17,6 +17,7 @@
  */
 import { useEffect, useRef } from "react";
 import { SSE } from "sse.js";
+import type { ChatCitation } from "@bisheng/chat/citations";
 
 export interface StreamChatSSESubmission {
     /** SSE endpoint URL (absolute) */
@@ -31,7 +32,7 @@ export interface StreamChatSSESubmission {
      */
     onMessage: (text: string) => void;
     /** Called when the stream ends (type: "end") with final full text */
-    onFinal: (text: string, messageId?: string | number) => void;
+    onFinal: (text: string, messageId?: string | number, citations?: ChatCitation[]) => void;
     /** Called on connection or parse errors */
     onError: (error: string) => void;
     /** Called when the SSE lifecycle is fully done */
@@ -90,7 +91,7 @@ export default function useStreamChatSSE(
                     if (typeof finalContent === "string") {
                         contentText = finalContent;
                     }
-                    onFinal(buildFullText(), data?.message?.message_id);
+                    onFinal(buildFullText(), data?.message?.message_id, Array.isArray(data.citations) ? data.citations : undefined);
                     onEnd();
                     return;
                 }

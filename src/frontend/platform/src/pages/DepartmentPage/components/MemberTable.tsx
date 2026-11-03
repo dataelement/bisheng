@@ -1,5 +1,6 @@
 // @ts-strict-ignore
 import { notification } from '@bisheng/ui';
+import { departmentDisplayPath } from "@/components/bs-comp/department/departmentDisplayName";
 import { MemberTableView } from "./MemberTableView";
 
 import { useResizableColumns } from "@/components/bs-ui/table/useResizableColumns";
@@ -107,6 +108,12 @@ export function useMemberTableController({
       cancelled = true;
     };
   }, [dept?.id]);
+
+  const rootDepartment = dept?.dept_id === "BS@root" ? dept : ancestorDepartments.find(node => node.dept_id === "BS@root");
+  const displayGlobalRows = useMemo(() => globalRows.map(row => ({
+    ...row,
+    primary_department_path: departmentDisplayPath(row.primary_department_path, rootDepartment, t("bs:department.defaultOrganization")),
+  })), [globalRows, rootDepartment, t]);
 
   const loadAdminSummary = useCallback(() => {
     let cancelled = false;
@@ -301,7 +308,7 @@ export function useMemberTableController({
     directAdmins,
     inheritedAdmins,
     globalLoading,
-    globalRows,
+    globalRows: displayGlobalRows,
     onRequestLocateMember,
     globalPage,
     globalTotal,

@@ -17,6 +17,7 @@ import { cn } from "@/utils";
 import type { ReactNode } from "react";
 import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
+import { departmentDisplayName } from "./departmentDisplayName";
 import { LazyDepartmentTree } from "./LazyDepartmentTree";
 import { useLazyDepartmentTree,type UseLazyDepartmentTreeOptions } from "./useLazyDepartmentTree";
 
@@ -96,12 +97,12 @@ export function findDepartmentAncestorIds(
 }
 
 /** Join a single-path pruned tree (path-tree response) into a `a / b / c` label. */
-function pathLabelOf(tree: DepartmentSearchResult | null): string {
+function pathLabelOf(tree: DepartmentSearchResult | null, defaultName: string): string {
   if (!tree) return ""
   const names: string[] = []
   let cur: DepartmentTreeNode | undefined = tree.roots[0]
   while (cur) {
-    names.push(cur.name)
+    names.push(departmentDisplayName(cur, defaultName))
     cur = cur.children?.[0]
   }
   return names.join(" / ")
@@ -125,7 +126,8 @@ export function TreeDepartmentSelect({
 }: TreeDepartmentSelectProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  const [labelPath, setLabelPath] = useState("")
+  const [labelTree, setLabelTree] = useState<DepartmentSearchResult | null>(null)
+  const labelPath = pathLabelOf(labelTree, t("bs:department.defaultOrganization"))
   // Pickers never offer archived departments as new picks (the backend excludes
   // them from children/search); an archived current value can still be echoed
   // via path-tree (AC-18). Load only while the popover is open.
@@ -148,12 +150,12 @@ export function TreeDepartmentSelect({
   // even for a deep or archived current value without loading the whole tree).
   useEffect(() => {
     if (value == null) {
-      setLabelPath("")
+      setLabelTree(null)
       return
     }
     let cancelled = false
     getDepartmentPathTreeApi(value).then((res) => {
-      if (!cancelled) setLabelPath(pathLabelOf((res as DepartmentSearchResult | null) ?? null))
+      if (!cancelled) setLabelTree((res as DepartmentSearchResult | null) ?? null)
     }).catch(showApiError)
     return () => {
       cancelled = true
