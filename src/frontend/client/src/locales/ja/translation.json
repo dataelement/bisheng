@@ -1217,6 +1217,8 @@
     "history_deleted": "会話履歴を削除しました"
   },
   "com_knowledge": {
+    "tag_filter_daily_only": "タグによる絞り込みは通常モードのみ対応しています。タグを解除するか通常モードに戻してください。",
+    "load_tags_failed": "タグを取得できませんでした。再試行してください。",
     "department_private_disabled": "部門ナレッジスペースは非公開に設定できません",
     "add_new": "新規追加",
     "web_link": "Webリンク",

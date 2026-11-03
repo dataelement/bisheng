@@ -4156,6 +4156,7 @@
     "noProgress": "暂无进度数据"
   },
   "department": {
+    "defaultOrganization": "默认组织",
     "searchUsersPlaceholder": "搜索用户名称或 ID",
     "searchMember": "搜索用户名称或 ID"
   },

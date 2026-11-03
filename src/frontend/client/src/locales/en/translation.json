@@ -1293,6 +1293,8 @@
     "history_deleted": "Conversation history deleted"
   },
   "com_knowledge": {
+    "tag_filter_daily_only": "Tag filters are available in daily mode. Remove the tag or switch back to daily mode.",
+    "load_tags_failed": "Could not load tags. Please retry.",
     "department_private_disabled": "Department knowledge spaces cannot be private",
     "add_new": "Add",
     "web_link": "Web link",

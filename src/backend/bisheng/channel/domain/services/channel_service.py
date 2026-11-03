@@ -109,7 +109,10 @@ from bisheng.permission.domain.services.permission_action_service import (
 )
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
-from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
+from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import (
+    DEFAULT_AUTO_REPLY,
+    SensitiveWordPolicyService,
+)
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
 
@@ -336,6 +339,9 @@ class ChannelService:
         can_view_sensitive: bool,
     ) -> ArticleSensitiveReview:
         violated = bool(hits)
+        # Existing policies share the upload default; article readers need reading-specific wording.
+        if auto_reply == DEFAULT_AUTO_REPLY:
+            auto_reply = "该文章未通过安全审查，无法查看详情"  # noqa: RUF001
         return ArticleSensitiveReview(
             enabled=enabled,
             violated=violated,

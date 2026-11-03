@@ -12,7 +12,7 @@ vi.mock('@bisheng/ui', async (importOriginal) => ({
 }))
 vi.mock('@/controllers/API/finetune', () => ({ getLinsightModelEnvelope: mocks.get, updateLinsightModelConfig: mocks.save }))
 vi.mock('@/controllers/request', () => ({ showApiError: vi.fn() }))
-vi.mock('..', () => ({ useModel: () => ({ llmOptions: [], embeddings: [], asrModel: [], ttsModel: [] }) }))
+vi.mock('..', () => ({ useModel: () => ({ llmOptions: [{ value: 'provider', label: 'Provider', children: [{ value: '42', label: 'Original' }, { value: '99', label: 'Hidden' }, { value: '7', label: 'New model' }] }], embeddings: [], asrModel: [], ttsModel: [] }) }))
 vi.mock('@/components/bs-ui/select/cascader', () => ({ default: () => null }))
 vi.mock('../dsh/ModelVisionSwitch', () => ({ ModelVisionSwitch: () => null }))
 vi.mock('../dsh/ModelMultiplierInput', () => ({ ModelMultiplierInput: () => null }))
@@ -52,4 +52,25 @@ it('keeps the draft available after a failed save', async () => {
     expect(input).toHaveValue('Draft')
     expect(mocks.get).toHaveBeenCalledOnce()
     expect(mocks.message).not.toHaveBeenCalledWith(expect.objectContaining({ variant: 'success' }))
+})
+
+it('exposes both mode defaults in other model settings', async () => {
+    render(<WorkbenchModel data={data} onBack={vi.fn()} />)
+    await screen.findByRole('button', { name: 'model.save' })
+    expect(screen.getAllByLabelText('model.linsightDefaultModel').length).toBeGreaterThan(0)
+    expect(screen.getAllByLabelText('model.dailyDefaultModel').length).toBeGreaterThan(0)
+})
+
+it('adds a newly chosen default to the saved selectable catalog', async () => {
+    render(<WorkbenchModel data={data} onBack={vi.fn()} />)
+    await screen.findByRole('button', { name: 'model.save' })
+    fireEvent.click(screen.getByText('model.otherModelSettings'))
+    fireEvent.click(screen.getByRole('combobox', { name: 'model.dailyDefaultModel' }))
+    fireEvent.click((await screen.findAllByText('Provider')).at(-1)!)
+    fireEvent.click(await screen.findByText('New model'))
+    fireEvent.click(screen.getByRole('button', { name: 'model.save' }))
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({
+        chat_default_model_id: '7',
+        models: expect.arrayContaining([expect.objectContaining({ id: '7', displayName: 'New model' })]),
+    })))
 })

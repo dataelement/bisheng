@@ -1220,6 +1220,8 @@
     "history_deleted": "历史会话已删除"
   },
   "com_knowledge": {
+    "tag_filter_daily_only": "标签筛选仅支持日常模式，请取消标签或切回日常模式。",
+    "load_tags_failed": "标签获取失败，请重试。",
     "department_private_disabled": "部门知识空间不支持设为私有",
     "add_new": "新增",
     "web_link": "网页链接",

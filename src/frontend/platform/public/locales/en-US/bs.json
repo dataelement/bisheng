@@ -4211,6 +4211,7 @@
     "noProgress": "No progress available"
   },
   "department": {
+    "defaultOrganization": "Default Org",
     "searchUsersPlaceholder": "Search user name or ID",
     "searchMember": "Search user name or ID"
   },
