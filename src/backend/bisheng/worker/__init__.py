@@ -78,6 +78,7 @@ from bisheng.worker.knowledge.space_init_worker import (
     init_knowledge_space_indices,
 )
 from bisheng.worker.knowledge.space_migrate_worker import space_migrate_celery
+from bisheng.worker.knowledge.upload_batch_similarity import reconcile_upload_batch_similarity
 from bisheng.worker.message.tasks import push_single_wechat_message, scan_wechat_message_push_outbox
 from bisheng.worker.org_sync.reconcile_tasks import (
     reconcile_all_organizations,

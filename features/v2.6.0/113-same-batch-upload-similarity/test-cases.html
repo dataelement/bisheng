@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>研发测试用例 · 同一次上传文件的相似互判</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#202733;--sub:#515d6d;--line:#dce2eb;--accent:#245bb1;--warn:#8a4b00;--ok:#17683b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:1100px;margin:auto;padding:28px 20px 64px}
+  h1{font-size:26px;line-height:1.4;margin:0 0 8px}
+  h2{font-size:20px;margin:0 0 8px}
+  h3{font-size:16px;margin:18px 0 8px}
+  a{color:var(--accent)}
+  .hero,.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px;margin:0 0 16px}
+  .hero{background:linear-gradient(135deg,#164789,#285eae);color:#fff;border:0}
+  .meta{font-size:13px;margin:0}
+  .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin:12px 0}
+  table{border-collapse:collapse;width:100%;min-width:980px;font-size:13px}
+  th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--line);border-right:1px solid var(--line)}
+  th{background:#f0f3f8}
+  tr>*:last-child,tr:last-child td{border-right:0}
+  caption{caption-side:top;text-align:left;font-weight:600;padding:8px 10px}
+  code{font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;background:#f0f3f8;padding:1px 4px;border-radius:4px}
+  .callout{border-left:4px solid var(--accent);background:#f1f5fc;padding:10px 14px;margin:12px 0}
+  .callout.warn{border-left-color:var(--warn);background:#fff8e9}
+  ol{margin:6px 0;padding-left:18px}
+  .footer{font-size:12px;color:var(--sub);text-align:center}
+  @media print{body{background:#fff}.hero{background:#fff;color:#111;border:1px solid #777}.table-wrap{overflow:visible}table{min-width:0;font-size:8pt}}
+</style>
+</head>
+<body>
+<main class="wrap">
+<header class="hero">
+  <h1>研发测试用例：同一次上传文件的相似互判</h1>
+  <p class="meta">用例版本 0.1 · 2026-11-03 · 岗位：研发开发验证 · 需求 requirements.html 0.2 · 契约 design.html 0.1（待确认）</p>
+  <p class="meta">定义状态：随设计待确认。执行状态：未执行。本文不是独立验收用例，也不是通过报告。</p>
+</header>
+
+<nav class="card">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#matrix">用例覆盖概览</a></li>
+    <li><a href="#cases">用例清单</a></li>
+    <li><a href="#special">异常与边界专项</a></li>
+    <li><a href="#auto">自动化可行性</a></li>
+  </ol>
+</nav>
+
+<section class="card" id="matrix">
+  <h2>1. 用例覆盖概览</h2>
+  <p>优先级：P0 表示解析结果被改写，或同批该出现的候选缺失，或已点「不关联」被重新打开。P1 表示资格、前 3 名、历史文件和发布路径。P2 表示只影响旧客户端是否自动跨请求合并，本需求明确不合并。</p>
+  <p>复核方式：作者把 AC-01 至 AC-15 逐条对到下表。没有第二人评审。设计若在确认时改契约，对应用例作废。</p>
+  <div class="table-wrap" tabindex="0">
+    <table>
+      <caption>需求到用例</caption>
+      <thead><tr><th>验收</th><th>正常</th><th>异常</th><th>边界</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>AC-01</td><td>TC-BATCH-01</td><td></td><td></td><td>先后解析成功后两侧都有对方</td></tr>
+        <tr><td>AC-02</td><td>TC-API-01、TC-FE-01</td><td></td><td></td><td>两次登记同一键；界面两次调用带同一键</td></tr>
+        <tr><td>AC-03</td><td>TC-BATCH-02</td><td></td><td></td><td>第三个仍在解析</td></tr>
+        <tr><td>AC-04</td><td></td><td>TC-BATCH-03</td><td></td><td>一个解析失败</td></tr>
+        <tr><td>AC-05</td><td></td><td></td><td>TC-BATCH-04</td><td>已不关联不重算</td></tr>
+        <tr><td>AC-06</td><td></td><td></td><td>TC-SCORE-01</td><td>第 4 名不插入</td></tr>
+        <tr><td>AC-07</td><td>TC-BATCH-05</td><td></td><td></td><td>两次确认不回头更新第一次</td></tr>
+        <tr><td>AC-08</td><td>TC-API-02</td><td></td><td></td><td>不传键的两次请求</td></tr>
+        <tr><td>AC-09</td><td></td><td></td><td>TC-SCORE-02、TC-SCORE-03</td><td>公司不同；同一文档</td></tr>
+        <tr><td>AC-10</td><td>TC-BATCH-06</td><td></td><td></td><td>一次只登记一个文件</td></tr>
+        <tr><td>AC-11</td><td>TC-BATCH-07</td><td></td><td></td><td>没有批次成员的旧文件</td></tr>
+        <tr><td>AC-12</td><td></td><td>TC-PARSE-01、TC-API-03</td><td></td><td>相似失败不改解析；非法键不建文件</td></tr>
+        <tr><td>AC-13</td><td>TC-PUB-01</td><td></td><td></td><td>发布任务种类不变</td></tr>
+        <tr><td>AC-14</td><td>不适用新用例</td><td></td><td></td><td>设计规定不改徽标条件。实现审核时核对客户端条件未改。浏览器不在研发阶段执行</td></tr>
+        <tr><td>AC-15</td><td></td><td></td><td>TC-RACE-01</td><td>旧代次不得覆盖新代次</td></tr>
+        <tr><td>批次键归属</td><td></td><td>TC-API-04</td><td></td><td>其他用户不能挂入</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="cases">
+  <h2>2. 用例清单</h2>
+  <h3 id="prep">公共准备 PREP-113</h3>
+  <p>每个用例自己创建知识库 1、租户 1、上传用户 11。相似刷新使用现有打分函数，关闭正文二次复核，避免依赖真实检索。指纹为 16 位十六进制。相同指纹 <code>ffffffffffffffff</code> 的相似度是 1。公司编码使用 <code>GF-ZD-SC-20261000000001</code>，第一段为 GF。阈值沿用测试配置里的现有默认值，1 高于该默认值。用例结束只删除自己创建的文件、批次和候选。</p>
+  <p>环境：后端 <code>src/backend</code> 的 pytest，内存或项目现有隔离数据库。客户端用例在 <code>src/frontend/client</code> 用 Jest，不打开浏览器。队列投递用测试替身记录参数，不连接真实 Celery。</p>
+
+  <h3 id="data">测试数据</h3>
+  <div class="table-wrap" tabindex="0">
+    <table>
+      <caption>数据</caption>
+      <thead><tr><th>数据 ID</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td>KEY-A</td><td><code>11111111-1111-4111-8111-111111111111</code></td></tr>
+        <tr><td>KEY-B</td><td><code>22222222-2222-4222-8222-222222222222</code></td></tr>
+        <tr><td>KEY-BAD</td><td><code>not-a-uuid</code></td></tr>
+        <tr><td>HASH-SAME</td><td><code>ffffffffffffffff</code></td></tr>
+        <tr><td>HASH-FOURTH</td><td><code>fffffffffffffff0</code>。与 HASH-SAME 相差 4 位，相似度 0.9375，低于三条 1 分的候选</td></tr>
+        <tr><td>ENC-GF</td><td><code>GF-ZD-SC-20261000000001</code></td></tr>
+        <tr><td>ENC-OT</td><td><code>OT-ZD-SC-20261000000001</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="table-wrap" tabindex="0">
+    <table>
+      <caption>用例</caption>
+      <thead>
+        <tr><th>ID</th><th>标题</th><th>优先级</th><th>类型</th><th>关联需求</th><th>前置条件</th><th>步骤</th><th>测试数据</th><th>预期结果</th></tr>
+      </thead>
+      <tbody>
+        <tr id="tc-parse-01">
+          <td>TC-PARSE-01</td>
+          <td>相似刷新抛错后，解析状态仍为成功</td>
+          <td>P0</td>
+          <td>异常</td>
+          <td>需求 0.2 AC-12；设计 INV-1</td>
+          <td>PREP-113。文件甲已由解析提交函数写成成功，并已登记全文意图。相似刷新替身固定抛错</td>
+          <td>1. 调用解析收尾里的相似入口</td>
+          <td>文件甲，状态值 2（成功）</td>
+          <td>文件甲状态仍为 2。全文意图记录仍在。不新增甲对其他文件的候选。日志不要求固定文案，但不得把状态改成失败</td>
+        </tr>
+        <tr id="tc-batch-01">
+          <td>TC-BATCH-01</td>
+          <td>同一请求里后解析成功的文件让先完成的文件也出现对方</td>
+          <td>P0</td>
+          <td>功能</td>
+          <td>需求 0.2 AC-01；设计 INV-6</td>
+          <td>PREP-113。一次登记两个文件，不传批次键。两者指纹相同，编码 ENC-GF，没有其他更高分文件</td>
+          <td>1. 只把甲标记为解析成功并执行收尾。2. 再把乙标记为解析成功并执行收尾。3. 执行乙投递出的补算任务</td>
+          <td>HASH-SAME，ENC-GF，文件名甲.pdf、乙.pdf</td>
+          <td>第 1 步后甲的候选不含乙。第 3 步后甲、乙的候选都含对方，两侧待处理状态为有候选。解析状态都保持成功。任务参数里的代次等于乙完成时的代次</td>
+        </tr>
+        <tr id="tc-batch-02">
+          <td>TC-BATCH-02</td>
+          <td>第三个文件尚未解析成功时，前两个已经互见</td>
+          <td>P0</td>
+          <td>功能</td>
+          <td>需求 0.2 AC-03</td>
+          <td>PREP-113。同一 KEY-A 下三个文件都已登记。丙状态仍是等待解析</td>
+          <td>1. 甲、乙先后解析成功并跑完对应补算。2. 不改变丙</td>
+          <td>KEY-A，三个文件指纹都是 HASH-SAME</td>
+          <td>甲和乙候选互相包含。丙没有候选，甲和乙的候选也不含丙</td>
+        </tr>
+        <tr id="tc-batch-03">
+          <td>TC-BATCH-03</td>
+          <td>同批一个文件解析失败时不进入候选</td>
+          <td>P0</td>
+          <td>异常</td>
+          <td>需求 0.2 AC-04</td>
+          <td>PREP-113。KEY-A 三个文件。丙的解析提交结果是失败</td>
+          <td>1. 提交丙为失败。2. 甲、乙解析成功并跑完补算</td>
+          <td>丙状态为失败值。甲、乙为 HASH-SAME</td>
+          <td>丙的解析状态保持失败且没有候选。甲、乙互相包含，且不含丙。丙的失败没有增加批次代次</td>
+        </tr>
+        <tr id="tc-batch-04">
+          <td>TC-BATCH-04</td>
+          <td>已点不关联的文件不被同批后到文件重算</td>
+          <td>P0</td>
+          <td>边界</td>
+          <td>需求 0.2 AC-05；设计 INV-3</td>
+          <td>PREP-113。甲已解析成功且相似状态为已不关联，候选行数记为 N。乙尚未成功。同一批次</td>
+          <td>1. 乙解析成功。2. 执行补算任务</td>
+          <td>HASH-SAME。甲的状态值 2 表示已不关联</td>
+          <td>甲的状态仍为已不关联。甲的候选行数仍为 N。乙的候选包含甲</td>
+        </tr>
+        <tr id="tc-race-01">
+          <td>TC-RACE-01</td>
+          <td>按旧代次计算出的候选不能覆盖新代次</td>
+          <td>P0</td>
+          <td>边界。附加：并发</td>
+          <td>需求 0.2 AC-15；设计 INV-6、图 3</td>
+          <td>PREP-113。甲、乙同一批次且都已解析成功。先按代次 6 写入双方互相包含的候选</td>
+          <td>1. 用代次 5 调用同一次候选替换</td>
+          <td>期望写入的候选改成空列表，用来区分是否发生覆盖</td>
+          <td>替换不提交。甲、乙候选仍互相包含。这是受控代次检查，不代表两台机器同时跑过</td>
+        </tr>
+        <tr id="tc-api-01">
+          <td>TC-API-01</td>
+          <td>同一用户用同一个键分两次登记，文件进入同一批次</td>
+          <td>P0</td>
+          <td>功能</td>
+          <td>需求 0.2 AC-02；设计 DD-3</td>
+          <td>PREP-113。用户 11 已登录。两次请求的父文件夹不同</td>
+          <td>1. 用 KEY-A 登记甲到文件夹 1。2. 用 KEY-A 登记乙到文件夹 2</td>
+          <td>KEY-A。两次请求各一个文件路径</td>
+          <td>两次都成功。甲和乙的成员行指向同一个批次。响应字段与不传键时的文件字段一致，不新增批次字段</td>
+        </tr>
+        <tr id="tc-fe-01">
+          <td>TC-FE-01</td>
+          <td>门户一次确认拆成两次登记时携带同一个批次键</td>
+          <td>P0</td>
+          <td>功能</td>
+          <td>需求 0.2 AC-02；设计 INV-5</td>
+          <td>客户端测试替身替换登记接口。空间已选。推荐结果把两个文件分到不同文件夹</td>
+          <td>1. 一次加入两个文件并确认上传</td>
+          <td>文件名能源管理标准.pdf、其他资料.pdf</td>
+          <td>登记接口被调用两次。两次的 <code>upload_batch_key</code> 是同一个非空 UUID。测试不打开浏览器</td>
+        </tr>
+        <tr id="tc-api-02">
+          <td>TC-API-02</td>
+          <td>不传批次键的两次请求不会合成一批</td>
+          <td>P0</td>
+          <td>功能</td>
+          <td>需求 0.2 AC-08</td>
+          <td>PREP-113。用户 11</td>
+          <td>1. 不传键登记甲。2. 不传键登记乙。3. 两边都解析成功并执行各自补算</td>
+          <td>两次请求都省略 <code>upload_batch_key</code></td>
+          <td>两个批次主键不同。乙的候选可以包含甲。甲不被乙的补算任务刷新，因此甲不因为乙新增候选</td>
+        </tr>
+        <tr id="tc-batch-05">
+          <td>TC-BATCH-05</td>
+          <td>第二次确认不回头重算第一次确认的文件</td>
+          <td>P0</td>
+          <td>功能</td>
+          <td>需求 0.2 AC-07；设计 INV-2</td>
+          <td>PREP-113。KEY-A 只有甲且甲已解析成功。KEY-B 只有乙</td>
+          <td>1. 乙解析成功并执行 KEY-B 的补算</td>
+          <td>KEY-A 与 KEY-B</td>
+          <td>补算文件集合不含甲。甲的候选不因乙而增加</td>
+        </tr>
+        <tr id="tc-batch-06">
+          <td>TC-BATCH-06</td>
+          <td>一次只登记一个文件时不要求同批对手</td>
+          <td>P1</td>
+          <td>边界</td>
+          <td>需求 0.2 AC-10</td>
+          <td>PREP-113。库内已有旧文件丙，指纹与甲相同，但丙没有批次成员。本次只登记甲</td>
+          <td>1. 甲解析成功并执行收尾和补算</td>
+          <td>一个文件路径。甲与丙都是 HASH-SAME</td>
+          <td>甲按现有规则可以包含丙。丙没有被这次补算刷新</td>
+        </tr>
+        <tr id="tc-batch-07">
+          <td>TC-BATCH-07</td>
+          <td>没有批次成员的旧文件不会被新上传补算</td>
+          <td>P1</td>
+          <td>边界</td>
+          <td>需求 0.2 AC-11</td>
+          <td>PREP-113。旧文件甲、乙都已成功，都没有成员行，候选都不含对方</td>
+          <td>1. 用 KEY-A 新登记并解析成功丙</td>
+          <td>甲、乙无成员行</td>
+          <td>甲和乙的候选行保持原来的条数和对方缺失。不因为发布这次功能而给甲、乙补写对方</td>
+        </tr>
+        <tr id="tc-score-01">
+          <td>TC-SCORE-01</td>
+          <td>同批文件分数排第 4 时不占前 3 名</td>
+          <td>P1</td>
+          <td>边界</td>
+          <td>需求 0.2 AC-06；设计 INV-4</td>
+          <td>PREP-113。甲已有三个库内文件，指纹都是 HASH-SAME。乙与甲是 HASH-FOURTH，编码都是 ENC-GF。乙和甲同一批次</td>
+          <td>1. 乙解析成功。2. 执行补算，补算内部调用现有刷新函数</td>
+          <td>三条 HASH-SAME，乙为 HASH-FOURTH</td>
+          <td>甲的三条候选仍是原来三个文件，不含乙。不存在第四条候选</td>
+        </tr>
+        <tr id="tc-score-02">
+          <td>TC-SCORE-02</td>
+          <td>公司编码第一段不同的同批文件不互为候选</td>
+          <td>P1</td>
+          <td>边界</td>
+          <td>需求 0.2 AC-09</td>
+          <td>PREP-113。同一 KEY-A。甲编码 ENC-GF，乙编码 ENC-OT。指纹都是 HASH-SAME</td>
+          <td>1. 两者都解析成功并执行补算</td>
+          <td>ENC-GF 与 ENC-OT</td>
+          <td>甲的候选不含乙，乙的候选不含甲</td>
+        </tr>
+        <tr id="tc-score-03">
+          <td>TC-SCORE-03</td>
+          <td>同一文档的两个版本不因同批而互相推荐</td>
+          <td>P1</td>
+          <td>边界</td>
+          <td>需求 0.2 AC-09</td>
+          <td>PREP-113。甲和乙挂在同一个文档上，指纹都是 HASH-SAME，并被放进同一批次</td>
+          <td>1. 两者都解析成功并执行补算</td>
+          <td>同一文档编号</td>
+          <td>现有同一文档排除仍然生效，双方候选都不含对方</td>
+        </tr>
+        <tr id="tc-pub-01">
+          <td>TC-PUB-01</td>
+          <td>发布入口就绪不投递上传批次补算</td>
+          <td>P1</td>
+          <td>兼容</td>
+          <td>需求 0.2 AC-13；设计 INV-7</td>
+          <td>沿用现有发布相似测试的就绪投影数据。文件可以另有上传批次</td>
+          <td>1. 执行投影就绪后的现有相似登记</td>
+          <td>发布入口文件编号</td>
+          <td>产生的后台任务种类仍是原来的 <code>refresh_similarity</code>。不新增上传批次补算任务</td>
+        </tr>
+        <tr id="tc-api-03">
+          <td>TC-API-03</td>
+          <td>非法批次键拒绝登记且不留下文件</td>
+          <td>P0</td>
+          <td>异常</td>
+          <td>设计 0.1 错误表；需求 AC-12 的失败不留脏数据</td>
+          <td>PREP-113。登记前文件数为 0，批次数为 0</td>
+          <td>1. 提交 KEY-BAD 和一条合法文件路径</td>
+          <td>KEY-BAD</td>
+          <td>响应为请求体验证失败。文件数仍为 0。批次表和成员表仍为 0 行</td>
+        </tr>
+        <tr id="tc-api-04">
+          <td>TC-API-04</td>
+          <td>其他用户不能把文件挂进已有批次</td>
+          <td>P0</td>
+          <td>安全。附加：权限</td>
+          <td>设计 0.1 错误表</td>
+          <td>PREP-113。用户 11 已用 KEY-A 创建批次。当前调用方改为用户 12</td>
+          <td>1. 用户 12 用 KEY-A 登记一个新文件</td>
+          <td>KEY-A，用户 12</td>
+          <td>登记被拒绝。用户 12 的文件没有创建。KEY-A 的成员数不变。响应不包含用户 11 的文件正文</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="special">
+  <h2>3. 异常与边界专项</h2>
+  <div class="table-wrap" tabindex="0">
+    <table>
+      <caption>专项</caption>
+      <thead><tr><th>专项</th><th>适用性</th><th>数据或触发</th><th>用例</th><th>缺口</th></tr></thead>
+      <tbody>
+        <tr><td>空值</td><td>适用。批次键缺省与空串等价</td><td>字段省略；空串</td><td>TC-API-02 覆盖省略。空串与省略同路径，实现时用同一校验，不单列用例</td><td>无</td></tr>
+        <tr><td>超长与边界</td><td>适用。前 3 名是已确认上限</td><td>3 条满分加 1 条 0.9375</td><td>TC-SCORE-01</td><td>无上传文件个数上限，不自造一个最大批次数</td></tr>
+        <tr><td>特殊字符</td><td>适用在批次键</td><td>KEY-BAD</td><td>TC-API-03</td><td>不穷举 Unicode 文件名，文件名不是本次契约</td></tr>
+        <tr><td>重复提交</td><td>适用</td><td>同一代次任务执行两次</td><td>实现时并入 TC-RACE-01 的替身调用两次，预期候选不翻倍</td><td>文档不把两次调用写成新用例编号</td></tr>
+        <tr><td>并发</td><td>适用</td><td>旧代次在新代次写入之后再写</td><td>TC-RACE-01</td><td>真实双工人重叠未在开发用例执行，留给验收</td></tr>
+        <tr><td>超时</td><td>适用到现有解析超时</td><td>解析结果不是成功</td><td>TC-BATCH-03 的失败状态代表未成功。不另造超时秒数</td><td>无新的相似超时指标</td></tr>
+        <tr><td>弱网</td><td>不适用</td><td>需求没有弱网规则</td><td>无</td><td>无</td></tr>
+        <tr><td>权限</td><td>适用。其他用户挂批次；徽标权限不改</td><td>用户 12</td><td>TC-API-04。AC-14 无新用例</td><td>浏览器上看不见徽标的验收未写、未跑</td></tr>
+        <tr><td>数据不存在</td><td>适用。旧文件没有成员行</td><td>无成员行</td><td>TC-BATCH-07</td><td>无</td></tr>
+        <tr><td>非法状态</td><td>适用。已不关联不得被补算打开</td><td>状态值 2</td><td>TC-BATCH-04</td><td>无</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>副作用</h3>
+  <div class="table-wrap" tabindex="0">
+    <table>
+      <caption>副作用断言</caption>
+      <thead><tr><th>副作用</th><th>适用用例如何判断</th></tr></thead>
+      <tbody>
+        <tr><td>数据库</td><td>解析状态、候选行、批次成员数按各例预期核对。拒绝用例要求文件数和成员数不变。隔离库不能叫做真实 MySQL 落库</td></tr>
+        <tr><td>状态</td><td>成功保持为成功。已不关联保持已不关联。失败保持失败</td></tr>
+        <tr><td>消息</td><td>只断言替身收到的补算参数。不证明真实队列送达</td></tr>
+        <tr><td>埋点</td><td>不适用。需求不新增埋点</td></tr>
+        <tr><td>下游</td><td>全文检索用现有测试替身。不证明真实索引</td></tr>
+        <tr><td>日志</td><td>TC-PARSE-01 只禁止用日志把成功改成失败。不规定日志句子</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="auto">
+  <h2>4. 自动化可行性</h2>
+  <div class="table-wrap" tabindex="0">
+    <table>
+      <caption>自动化</caption>
+      <thead><tr><th>用例</th><th>标注</th><th>层级和入口</th><th>限制</th></tr></thead>
+      <tbody>
+        <tr><td>TC-PARSE-01、TC-BATCH-01 至 07、TC-RACE-01、TC-SCORE-01 至 03、TC-PUB-01</td><td>可自动化</td><td>后端 pytest，计划文件 <code>src/backend/test/knowledge/test_same_batch_upload_similarity.py</code>。实现阶段才创建</td><td>队列和检索是替身。未执行</td></tr>
+        <tr><td>TC-API-01 至 04</td><td>可自动化</td><td>同一后端测试，走登记服务或现有接口测试客户端</td><td>不连接线上库。未执行</td></tr>
+        <tr><td>TC-FE-01</td><td>可自动化</td><td>客户端 Jest，扩展现有门户上传对话框测试</td><td>不打开浏览器。未执行</td></tr>
+        <tr><td>AC-14 的页面可见性</td><td>需独立验收，不在本岗位自动化</td><td>测试岗位的验收工程，当前未指定</td><td>研发阶段不跑界面</td></tr>
+        <tr><td>真实双工人时序</td><td>需工具，自动化待验收工程决定</td><td>真实知识库队列</td><td>TC-RACE-01 不能代替</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout warn">用例定义完成不等于测试通过。设计 0.1 若未确认或契约变更，本文件相应条目失效。独立验收用例尚未由测试岗位编写。</div>
+</section>
+<p class="footer">毕昇 · features/v2.6.0/113-same-batch-upload-similarity/test-cases.html · 研发用例 0.1 · 未执行</p>
+</main>
+</body>
+</html>

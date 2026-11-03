@@ -148,7 +148,8 @@ def delete_vector_files(file_ids: list[int], knowledge: Knowledge) -> bool:
     es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
     if es_client.client.indices.exists(index=knowledge_index):
         es_client.client.delete_by_query(
-            index=knowledge_index, query={"terms": {"metadata.document_id": file_ids}},
+            index=knowledge_index,
+            query={"terms": {"metadata.document_id": file_ids}},
         )
     return True
 
@@ -227,8 +228,7 @@ def delete_minio_file_snapshot_objects(
             )
         except Exception as exc:
             logger.warning(
-                "delete_knowledge_file_object_failed file_id={} generation={} "
-                "object_name={} error_type={}",
+                "delete_knowledge_file_object_failed file_id={} generation={} object_name={} error_type={}",
                 file_id,
                 generation,
                 object_name,
@@ -291,11 +291,7 @@ def addEmbedding(
         resolve_space_shared_routing,
     )
 
-    tenant_id = int(
-        getattr(knowledge_info, "tenant_id", None)
-        or getattr(knowledge_files[0], "tenant_id", None)
-        or 1
-    )
+    tenant_id = int(getattr(knowledge_info, "tenant_id", None) or getattr(knowledge_files[0], "tenant_id", None) or 1)
     shared_routing = resolve_space_shared_routing(
         tenant_id=tenant_id,
         knowledge_type=knowledge_info.type,
@@ -333,16 +329,10 @@ def addEmbedding(
                 db_file=db_file,
                 preview_cache_key=preview_cache_key,
                 need_thumbnail=knowledge_info.type == KnowledgeTypeEnum.SPACE.value,
-                vector_store=(
-                    []
-                    if shared_routing is not None
-                    else [vector_client, es_client]
-                ),
+                vector_store=([] if shared_routing is not None else [vector_client, es_client]),
             )
             if shared_routing is not None:
-                pipeline_result = knowledge_file_pipeline.run(
-                    PipelineConfig(stop_at=PipelineStage.TRANSFORMER)
-                )
+                pipeline_result = knowledge_file_pipeline.run(PipelineConfig(stop_at=PipelineStage.TRANSFORMER))
                 from bisheng.knowledge.domain.services.shared_space_direct_ingestion_service import (
                     SharedSpaceDirectIngestionService,
                 )
@@ -440,11 +430,11 @@ def addEmbedding(
                     )
                 KnowledgeSpaceContentStat.enqueue_file_stat_sync([db_file.id])
                 try:
-                    from bisheng.worker.knowledge.file_worker import (
-                        refresh_file_similarity_candidates,
+                    from bisheng.knowledge.domain.services.knowledge_upload_batch_service import (
+                        run_similarity_after_parse,
                     )
 
-                    refresh_file_similarity_candidates(db_file.id)
+                    run_similarity_after_parse(db_file.id)
                 except Exception:
                     # Similarity recommendations must not invalidate a persisted successful parse.
                     logger.exception("inline similarity candidate refresh failed file_id={}", db_file.id)

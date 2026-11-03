@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>技术设计 · 同一次上传文件的相似互判</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#202733;--sub:#515d6d;--line:#dce2eb;--accent:#245bb1;--weak:#edf3ff;--ok:#17683b;--warn:#8a4b00}
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;overflow-wrap:anywhere}
+  a{color:var(--accent);text-underline-offset:3px}
+  a:focus-visible,button:focus-visible,summary:focus-visible,.table-wrap:focus-visible{outline:3px solid #b25b00;outline-offset:4px}
+  .wrap{max-width:1060px;margin:auto;padding:28px 24px 72px}
+  #progress{position:fixed;inset:0 auto auto 0;height:3px;background:var(--accent);width:0;z-index:20}
+  .hero{background:linear-gradient(135deg,#164789,#285eae);color:#fff;padding:28px;border-radius:16px;margin-bottom:20px}
+  h1{margin:0 0 8px;font-size:27px;line-height:1.45}
+  .meta{font-size:13px;margin:0}
+  .summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px}
+  .summary-grid .item{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);padding:12px 14px;border-radius:10px}
+  .item b{display:block;font-size:12px;margin-bottom:4px}
+  .item p{font-size:14px;margin:0}
+  .toc,.card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:24px;margin:0 0 20px}
+  .toc h2{font-size:15px;margin:0 0 10px}
+  .toc ol{columns:2;column-gap:32px;padding-left:22px;margin:0}
+  .toc li{break-inside:avoid;margin:3px 0}
+  .toolbar{display:flex;flex-wrap:wrap;gap:9px;margin:14px 0 0}
+  [hidden]{display:none!important}
+  button{font:inherit;font-size:13px;padding:7px 13px;min-height:38px;color:var(--accent);background:#fff;border:1px solid #b9c9e4;border-radius:8px;cursor:pointer}
+  h2{font-size:21px;line-height:1.5;margin:0 0 6px}
+  h3{font-size:16px;line-height:1.6;margin:23px 0 8px}
+  .lead,.hint{color:var(--sub);font-size:13px}
+  .lead{margin:0 0 16px}
+  p{margin:10px 0}
+  .badge{display:inline-block;font-size:11px;font-weight:600;color:var(--accent);background:var(--weak);padding:2px 8px;border-radius:12px}
+  .callout{border-left:4px solid var(--accent);background:#f1f5fc;padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0}
+  .callout.warn{border-color:var(--warn);background:#fff8e9}
+  .callout.ok{border-color:var(--ok);background:#eff8f2}
+  .callout strong{display:block;margin-bottom:4px}
+  .table-wrap{overflow-x:auto;max-width:100%;margin:12px 0;border:1px solid var(--line);border-radius:8px}
+  table{border-collapse:collapse;width:100%;min-width:760px;font-size:13px}
+  th,td{text-align:left;vertical-align:top;padding:10px 12px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+  th{background:#f0f3f8}
+  tr:last-child td{border-bottom:0}
+  tr>*:last-child{border-right:0}
+  caption{text-align:left;font-weight:600;padding:10px 12px;background:#fafbfc}
+  .diagram{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:15px;margin:14px 0}
+  .diagram-scroll{overflow-x:auto}
+  .diagram svg{display:block;width:100%;min-width:720px;height:auto}
+  figcaption{font-size:12px;color:var(--sub);margin-top:8px}
+  .diagram text{font-family:inherit;fill:#26364d}
+  details{border:1px solid var(--line);border-radius:9px;margin:12px 0;background:#fafbfd}
+  details[open]{background:#fff}
+  summary{font-size:14px;font-weight:600;padding:13px 16px;cursor:pointer}
+  details .inner{padding:0 16px 15px}
+  code{font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#f0f3f8;padding:1px 4px;border-radius:4px}
+  .status{font-weight:600;color:var(--warn)}
+  .footer{font-size:12px;color:var(--sub);text-align:center;margin-top:26px}
+  @media(max-width:680px){.wrap{padding:16px 12px 48px}.hero,.card,.toc{padding:20px 16px}h1{font-size:23px}.summary-grid,.toc ol{columns:1;grid-template-columns:1fr}}
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  @page{size:A4;margin:14mm 12mm}
+  @media print{
+    body{background:#fff;color:#111;font-size:10pt}
+    .wrap{max-width:none;padding:0}
+    #progress,.toolbar,.noscript-note{display:none!important}
+    .hero{background:#fff!important;color:#111!important;border:1px solid #777;border-radius:0}
+    .hero *,.summary-grid .item{color:#111!important;background:#fff;border-color:#777}
+    .card,.toc{break-inside:avoid}
+    table{min-width:0!important;font-size:8.5pt}
+    details{break-inside:auto}
+    a{color:#111;text-decoration:none}
+  }
+</style>
+</head>
+<body>
+<div id="progress" aria-hidden="true"></div>
+<main class="wrap">
+<header class="hero" id="top">
+  <h1>同一次上传文件的相似互判</h1>
+  <p class="meta">设计版本 0.1 · 2026-11-03 · 状态：<span class="status">设计已确认</span> · 需求 0.2 已确认 · 上线时间未定</p>
+  <div class="summary-grid">
+    <div class="item"><b>做什么</b><p>同一次上传登记成功的文件，在解析成功之后按现有规则互相补算相似候选。</p></div>
+    <div class="item"><b>为什么</b><p>现在每个文件只在自己解析成功时算一次，先完成的文件不会看见后完成的同批文件。</p></div>
+    <div class="item"><b>影响谁</b><p>知识库上传者看到的待处理相似。解析成功或失败的结果保持现在的含义。</p></div>
+    <div class="item"><b>关键选择</b><p>不改解析提交事务。批次用新表记住。同批补算放到解析提交之后的独立任务。</p></div>
+    <div class="item"><b>失败后怎么办</b><p>相似计算或补算任务失败时，文件仍保持已经提交的解析结果，不写入这次没算完的候选。</p></div>
+    <div class="item"><b>当前进度</b><p>设计待确认。确认前不改业务代码。没有未决的产品规则。</p></div>
+  </div>
+</header>
+
+<nav class="toc" aria-label="文档目录">
+  <h2>按需要选择阅读深度</h2>
+  <p class="hint">先读第 1–4 节。研发和测试再看契约、影响和验证。</p>
+  <ol>
+    <li><a href="#summary">方案摘要</a></li>
+    <li><a href="#basis">依据与范围</a>（<a href="#correctness">正确性约束</a>／<a href="#visual-plan">图解导读</a>）</li>
+    <li><a href="#architecture">现状及目标架构</a></li>
+    <li><a href="#flows">核心流程与状态</a></li>
+    <li><a href="#decisions">关键决策</a></li>
+    <li><a href="#contracts">详细契约</a></li>
+    <li><a href="#impact">影响与依赖</a></li>
+    <li><a href="#verification">验证安排</a></li>
+    <li><a href="#release">发布与恢复</a></li>
+    <li><a href="#records">待决事项及变更记录</a></li>
+  </ol>
+  <div class="toolbar" id="toolbar" hidden>
+    <button type="button" id="expand-all">展开技术细节</button>
+    <button type="button" id="collapse-all">收起技术细节</button>
+    <button type="button" id="print-document">打印／另存 PDF</button>
+  </div>
+  <noscript><p class="hint noscript-note">未启用脚本：技术细节默认展开。</p></noscript>
+</nav>
+
+<section class="card" id="summary">
+  <h2>1. 方案摘要 <span class="badge">所有人可读</span></h2>
+  <p>上传者一次确认上传多个文件。这些文件解析完成后，如果按现在的相似标准彼此够像，并且能排进对方最多 3 条候选，两侧都会出现待处理相似。先解析完的文件也会在后一个解析成功后被补算。</p>
+  <p>解析本身怎么判定成功、失败、超时和违规，保持现在的函数和提交顺序。相似只在这次提交成功之后进行。相似失败只记日志，不把文件打回未解析。</p>
+  <div class="callout ok">
+    <strong>方案结论</strong>
+    用户已于 2026-11-03 确认设计 0.1。实现已按该版本落地。补算任务实际进入默认 Celery 队列，不进入解析队列。
+  </div>
+</section>
+
+<section class="card" id="basis">
+  <h2>2. 依据与范围</h2>
+  <div class="table-wrap" tabindex="0">
+    <table>
+      <caption>来源</caption>
+      <thead><tr><th>依据</th><th>版本</th><th>证据类型</th><th>确认或限制</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>需求</td>
+          <td><a href="requirements.html">requirements.html</a> 0.2。REQ-001、REQ-002、REQ-003，AC-01 至 AC-15</td>
+          <td>用户确认的规则</td>
+          <td>2026-11-03 用户确认，并要求不影响现有解析业务</td>
+        </tr>
+        <tr>
+          <td>代码基线</td>
+          <td>工作区源码阅读，不是线上运行记录</td>
+          <td>源码观察</td>
+          <td>见第 3 节入口。未在真实 MySQL 上复现漏判</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="table-wrap" tabindex="0">
+    <table>
+      <caption>范围</caption>
+      <thead><tr><th>本次改变</th><th>明确不做</th><th>继续沿用</th><th>约束</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>登记请求可带上传批次键。解析成功后为同批已成功且未点「不关联」的文件再跑一次现有相似计算</td>
+          <td>不改解析算法、不改 <code>persist_parse_result_with_fulltext_intent</code>、不改发布入口刷新、不回填历史、不改阈值和前 3 条</td>
+          <td>现有 <code>refresh_similar_candidates_for_file</code>、公司编码、同一文档排除、列表徽标条件</td>
+          <td>需求 0.2；用户要求解析核心路径的业务结果不变</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <section id="correctness">
+    <h3>2.1 正确性约束</h3>
+    <div class="table-wrap" tabindex="0">
+      <table>
+        <caption>必须守住的结果</caption>
+        <thead><tr><th>约束</th><th>来源</th><th>范围和窗口</th><th>机制</th><th>失败和并发</th><th>验证</th></tr></thead>
+        <tbody>
+          <tr>
+            <td id="inv-1">INV-1 解析结果先提交，相似失败不回滚</td>
+            <td>需求 0.2，AC-12</td>
+            <td>每一个知识库文件的解析结束。从进入现有提交函数到该函数返回</td>
+            <td>不修改 <code>persist_parse_result_with_fulltext_intent</code>。批次补算只在它成功返回之后，并包在现有的异常捕获里</td>
+            <td>补算抛错、任务丢失或超时：解析状态、全文意图、自动发布登记保持该函数已经提交的值</td>
+            <td>开发测试断言状态未被改回。不能用这次测试证明线上解析耗时</td>
+          </tr>
+          <tr>
+            <td id="inv-2">INV-2 只有同一批才回头补算</td>
+            <td>AC-07、AC-08、AC-10、AC-11</td>
+            <td>没有批次成员记录的文件，以及另一次登记产生的文件</td>
+            <td>没有成员行就不发补算任务。另一次确认使用新的批次键</td>
+            <td>重复投递同一补算任务只按同一批次代次重写候选，不把别的批次算进来</td>
+            <td>隔离测试核对任务参数和被刷新的文件编号</td>
+          </tr>
+          <tr>
+            <td id="inv-3">INV-3 已点「不关联」不重算、不重开</td>
+            <td>AC-05，决定 D6</td>
+            <td>相似状态已是已处理的文件，直到用户另有现有功能改变它</td>
+            <td>补算任务跳过这些文件，不调用现有刷新函数</td>
+            <td>并发补算若抢在点击之前写过候选，点击之后的任务不得再写该文件</td>
+            <td>跳过路径断言候选行数不变、状态仍为已处理</td>
+          </tr>
+          <tr>
+            <td id="inv-4">INV-4 资格和前 3 条不变</td>
+            <td>AC-06、AC-09、REQ-003</td>
+            <td>每一次刷新，无论是文件自己的那次还是同批补算</td>
+            <td>只调用现有 <code>refresh_similar_candidates_for_file</code>。不另写一套打分</td>
+            <td>代次不一致时放弃这次写入，由更新的代次重跑同一函数</td>
+            <td>用现有打分和固定指纹断言第 4 名不出现</td>
+          </tr>
+          <tr>
+            <td id="inv-5">INV-5 一次确认跨文件夹仍是一批</td>
+            <td>AC-02，决定 D4</td>
+            <td>同一次界面确认里多次调用登记接口，且携带同一个批次键</td>
+            <td>客户端每次确认生成一个键。服务端按租户、知识库、用户和键归并</td>
+            <td>键缺失时退回「这一次请求一批」，不把两次旧客户端请求拼成一批</td>
+            <td>门户上传单测断言两次登记收到同一个键；接口测试断言成员在同一批次</td>
+          </tr>
+          <tr>
+            <td id="inv-6">INV-6 两侧补算结束后，该进前 3 的对方要在</td>
+            <td>AC-01、AC-03、AC-15</td>
+            <td>同批文件的解析状态都已提交之后。允许任务结束前只有一侧先有候选</td>
+            <td>后完成的文件把自己的代次加一，并让补算任务按这个代次重算所有未点「不关联」的已成功成员。写入时核对代次</td>
+            <td>慢的写入若代次已变，整次候选替换取消。更新的任务负责最终结果</td>
+            <td>受控交错测试只证明代次检查，不证明真实多机时序</td>
+          </tr>
+          <tr>
+            <td id="inv-7">INV-7 发布入口刷新保持原样</td>
+            <td>AC-13</td>
+            <td>投影就绪时的 <code>refresh_similarity</code> 任务</td>
+            <td>不在该任务里读取上传批次，也不新增发布回头更新</td>
+            <td>不适用新的失败语义</td>
+            <td>现有发布相似测试仍只产生原来的任务种类</td>
+          </tr>
+          <tr>
+            <td id="inv-8">INV-8 权限和徽标条件不变</td>
+            <td>AC-14</td>
+            <td>文件列表和候选读取</td>
+            <td>不改列表查询和客户端徽标条件。批次成员本身不产生徽标</td>
+            <td>无权查看的候选仍由现有读取过滤处理</td>
+            <td>本次不改对应代码路径；回归现有列表断言</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="visual-plan">
+    <h3>2.2 图解导读</h3>
+    <div class="table-wrap" tabindex="0">
+      <table>
+        <caption>选图</caption>
+        <thead><tr><th>难点</th><th>图</th><th>位置</th><th>依据</th><th>理由</th></tr></thead>
+        <tbody>
+          <tr><td>解析和相似的边界容易被看成同一步</td><td>上下文图</td><td>图 1，第 3 节</td><td>INV-1</td><td>标出本次不改的解析提交，以及之后才发生的相似</td></tr>
+          <tr><td>先提交、再算自己、再补同批，失败不能回头改解析</td><td>时序图</td><td>图 2，第 4 节</td><td>INV-1、INV-6</td><td>顺序本身就是约束</td></tr>
+          <tr><td>两个文件几乎同时完成时，慢的写入不能覆盖新结果</td><td>时序对照图</td><td>图 3，第 4 节</td><td>INV-6、AC-15</td><td>成功直线解释不了覆盖问题</td></tr>
+          <tr><td>批次代次和文件相似状态</td><td>状态图</td><td>图 4，第 4 节</td><td>INV-3、INV-6</td><td>禁止从「已不关联」被同批任务打回</td></tr>
+          <tr><td>新表和文件的归属</td><td>实体关系图</td><td>图 5，第 6 节</td><td>决策 DD-2</td><td>说明不改知识库文件表</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="hint">不画部署图。补算走现有知识库 Celery 队列，不新增进程。队列延迟和真实并发仍要独立验收，图不能代替。</p>
+  </section>
+</section>
+
+<section class="card" id="architecture">
+  <h2>3. 现状及目标架构</h2>
+  <p>今天，登记接口 <code>POST /api/v1/knowledge/space/{space_id}/files</code> 创建文件、文档和主版本，再逐个派发解析。解析结束时，<code>persist_parse_result_with_fulltext_intent</code> 在同一个提交里写入解析状态、全文同步意图，并在满足条件时登记自动发布。提交返回之后，<code>knowledge_imp.py</code> 才调用 <code>refresh_file_similarity_candidates</code>。这个调用被异常捕获包住，失败不影响已提交的解析。它只刷新当前文件。</p>
+  <p>目标是在这次调用之后，如果该文件属于一个上传批次，就再安排一次同批补算。解析提交函数不增加任何语句。</p>
+  <figure class="diagram">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 980 210" role="img" aria-labelledby="fig1title fig1desc">
+        <title id="fig1title">解析与相似的边界</title>
+        <desc id="fig1desc">上传者调用登记。解析工人提交解析结果。相似只在提交之后计算。发布投影刷新不读取上传批次。</desc>
+        <rect x="16" y="24" width="200" height="70" rx="8" fill="#fff" stroke="#9baec9"/>
+        <text x="116" y="52" text-anchor="middle" font-size="14">上传者</text>
+        <text x="116" y="74" text-anchor="middle" font-size="12">一次确认，可多次登记</text>
+        <rect x="250" y="24" width="220" height="70" rx="8" fill="#edf3ff" stroke="#245bb1"/>
+        <text x="360" y="48" text-anchor="middle" font-size="14">登记</text>
+        <text x="360" y="68" text-anchor="middle" font-size="12">只新增批次成员</text>
+        <text x="360" y="84" text-anchor="middle" font-size="11">不改解析派发条件</text>
+        <rect x="506" y="24" width="220" height="70" rx="8" fill="#fff8e9" stroke="#8a4b00"/>
+        <text x="616" y="48" text-anchor="middle" font-size="14">解析提交</text>
+        <text x="616" y="68" text-anchor="middle" font-size="12">现有函数，本次不改</text>
+        <text x="616" y="84" text-anchor="middle" font-size="11">状态、全文、自动发布</text>
+        <rect x="760" y="24" width="200" height="70" rx="8" fill="#eff8f2" stroke="#17683b"/>
+        <text x="860" y="48" text-anchor="middle" font-size="14">相似</text>
+        <text x="860" y="68" text-anchor="middle" font-size="12">提交成功之后</text>
+        <text x="860" y="84" text-anchor="middle" font-size="11">自己一次，同批再补</text>
+        <path d="M216 59 H250 M470 59 H506 M726 59 H760" fill="none" stroke="#40618e" stroke-width="1.6"/>
+        <rect x="506" y="124" width="220" height="58" rx="8" fill="#fff" stroke="#9baec9"/>
+        <text x="616" y="148" text-anchor="middle" font-size="13">发布投影刷新</text>
+        <text x="616" y="168" text-anchor="middle" font-size="12">保持现状，不读批次</text>
+        <path d="M616 94 V124" fill="none" stroke="#9baec9" stroke-width="1.4" stroke-dasharray="4 3"/>
+        <text x="628" y="114" font-size="11">现有衔接，不扩展</text>
+      </svg>
+    </div>
+    <figcaption>图 1。虚线表示发布路径仍然存在，但这次不让它承担同批补算。相似框里的失败不允许修改解析提交框已经写下的状态。</figcaption>
+  </figure>
+  <div class="table-wrap" tabindex="0">
+    <table>
+      <caption>模块</caption>
+      <thead><tr><th>模块</th><th>现状</th><th>变化</th><th>边界</th></tr></thead>
+      <tbody>
+        <tr><td>客户端上传 <code>useFileUpload</code>、<code>usePortalUploadDialog</code></td><td>一次确认可能按文件夹多次调用 <code>addFilesApi</code></td><td>同一次确认传同一个 <code>upload_batch_key</code></td><td>不改解析轮询和徽标显示条件</td></tr>
+        <tr><td><code>FileCreateReq</code> 与 <code>KnowledgeSpaceService.add_file</code></td><td>创建文件、文档、主版本并派发解析</td><td>写入批次和成员。校验失败时一个文件都不创建</td><td>其他入库路径，例如文件库同步，不写批次</td></tr>
+        <tr><td><code>persist_parse_result_with_fulltext_intent</code></td><td>提交解析状态、全文意图、自动发布登记</td><td>无语句变化</td><td>相似代码不得被放进这个函数</td></tr>
+        <tr><td><code>knowledge_imp.py</code> 的解析收尾</td><td>提交后刷新当前文件，异常只记日志</td><td>有批次时追加代次和补算任务，仍在同一处捕获异常</td><td>不改状态赋值</td></tr>
+        <tr><td>新的补算任务</td><td>不存在</td><td>按代次重算同批已成功且未点「不关联」的文件</td><td>不得调用解析提交，不得修改解析状态</td></tr>
+        <tr><td>现有相似服务</td><td>计算并替换一个文件的候选</td><td>批次写入前增加代次核对。不传代次时与现在一样直接写</td><td>发布刷新和回填脚本不传代次</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="flows">
+  <h2>4. 核心流程与状态</h2>
+  <ol>
+    <li>上传者确认一次上传。界面生成一个批次键；直接调用接口时可以不传，服务端就为这一次请求生成一个键。</li>
+    <li>登记创建文件。格式不合法，或键属于别的用户、别的知识库，则拒绝并且不创建文件。</li>
+    <li>解析工人按现在的方式解析。提交函数返回后，当前文件先按现有函数刷新自己。</li>
+    <li>若该文件有批次成员行，把批次代次加 1，再用这个代次投递补算任务。任务重算同批里已经解析成功、且未点「不关联」的文件。</li>
+    <li>用户在列表上看到的仍是现有待处理相似。补算没跑完之前，可以暂时只有后完成的那一侧看得到对方。</li>
+  </ol>
+  <figure class="diagram">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 980 250" role="img" aria-labelledby="fig2title fig2desc">
+        <title id="fig2title">解析成功后的顺序</title>
+        <desc id="fig2desc">解析提交先完成并返回。然后刷新当前文件。然后增加代次并投递补算。任一步失败都不修改已经提交的解析状态。</desc>
+        <text x="70" y="28" font-size="13">解析工人</text>
+        <text x="300" y="28" font-size="13">解析提交函数</text>
+        <text x="560" y="28" font-size="13">现有相似刷新</text>
+        <text x="800" y="28" font-size="13">补算任务</text>
+        <path d="M40 48 H940" stroke="#dce2eb"/>
+        <path d="M80 70 V200" stroke="#245bb1"/>
+        <path d="M320 70 V200" stroke="#8a4b00"/>
+        <path d="M560 70 V200" stroke="#17683b"/>
+        <path d="M820 70 V200" stroke="#245bb1"/>
+        <path d="M80 80 H320" stroke="#26364d"/>
+        <text x="140" y="74" font-size="12">1. 现有调用，函数体不改</text>
+        <path d="M320 100 H80" stroke="#8a4b00"/>
+        <text x="140" y="94" font-size="12">2. 提交成功后返回</text>
+        <path d="M80 130 H560" stroke="#26364d"/>
+        <text x="200" y="124" font-size="12">3. 刷新当前文件</text>
+        <path d="M80 160 H820" stroke="#26364d"/>
+        <text x="250" y="154" font-size="12">4. 代次加 1，投递同批补算</text>
+        <path d="M820 190 H560" stroke="#17683b"/>
+        <text x="600" y="184" font-size="12">5. 重算未点「不关联」的已成功成员</text>
+        <text x="40" y="230" font-size="12">第 3 到第 5 步的异常只记日志。第 2 步已经提交的解析状态保持不变。</text>
+      </svg>
+    </div>
+    <figcaption>图 2。第 2 步是原子边界。它成功之后，相似步骤没有权力撤销解析状态、全文意图和自动发布登记。</figcaption>
+  </figure>
+  <figure class="diagram">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 980 180" role="img" aria-labelledby="fig3title fig3desc">
+        <title id="fig3title">慢的写入不能覆盖更新的代次</title>
+        <desc id="fig3desc">文件甲按代次 5 计算。文件乙完成后代次变为 6 并写出包含双方的候选。甲若仍按代次 5 写入，则该次写入取消。</desc>
+        <text x="40" y="36" font-size="13">甲的计算开始于代次 5</text>
+        <text x="40" y="70" font-size="13">乙解析提交，代次变为 6，补算写出新候选</text>
+        <text x="40" y="104" font-size="13">甲计算结束，发现代次已不是 5，不写入</text>
+        <text x="40" y="138" font-size="13">代次 6 的任务负责最终候选</text>
+        <rect x="620" y="20" width="320" height="130" rx="8" fill="#fff8e9" stroke="#8a4b00"/>
+        <text x="780" y="55" text-anchor="middle" font-size="14">写入条件</text>
+        <text x="780" y="82" text-anchor="middle" font-size="13">当前代次必须仍等于</text>
+        <text x="780" y="104" text-anchor="middle" font-size="13">这次计算开始时看到的代次</text>
+        <text x="780" y="130" text-anchor="middle" font-size="12">否则整次候选替换取消</text>
+      </svg>
+    </div>
+    <figcaption>图 3。允许短时间只有一侧有候选。两侧相关任务都结束后，结果以最后一次匹配的代次为准。本地交错测试不能证明多台机器上的时间差。</figcaption>
+  </figure>
+  <figure class="diagram">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 980 150" role="img" aria-labelledby="fig4title fig4desc">
+        <title id="fig4title">相似状态在同批补算下允许的变化</title>
+        <desc id="fig4desc">无待处理和待处理可以随重算互相转换。已不关联不会被同批补算改回待处理。</desc>
+        <rect x="40" y="40" width="180" height="52" rx="8" fill="#edf3ff" stroke="#245bb1"/>
+        <text x="130" y="72" text-anchor="middle" font-size="14">无待处理</text>
+        <rect x="390" y="40" width="180" height="52" rx="8" fill="#eff8f2" stroke="#17683b"/>
+        <text x="480" y="72" text-anchor="middle" font-size="14">待处理</text>
+        <rect x="740" y="40" width="200" height="52" rx="8" fill="#fff8e9" stroke="#8a4b00"/>
+        <text x="840" y="72" text-anchor="middle" font-size="14">已不关联</text>
+        <path d="M220 58 H390" fill="none" stroke="#17683b" stroke-width="1.5"/>
+        <path d="M390 78 H220" fill="none" stroke="#245bb1" stroke-width="1.5"/>
+        <text x="305" y="34" text-anchor="middle" font-size="12">重算后前 3 有候选</text>
+        <text x="305" y="112" text-anchor="middle" font-size="12">重算后没有候选</text>
+        <path d="M570 66 H740" fill="none" stroke="#8a4b00" stroke-width="1.5"/>
+        <text x="655" y="58" text-anchor="middle" font-size="12">用户点「不关联」</text>
+        <text x="840" y="118" text-anchor="middle" font-size="12">同批任务不得指向左边</text>
+      </svg>
+    </div>
+    <figcaption>图 4。从「已不关联」回到「待处理」如果发生，只能来自本次范围之外的现有功能。同批补算禁止这条转换。</figcaption>
+  </figure>
+  <div class="table-wrap" tabindex="0">
+    <table>
+      <caption>结果</caption>
+      <thead><tr><th>场景</th><th>判断</th><th>用户能看到的终态</th><th>副作用</th><th>责任</th></tr></thead>
+      <tbody>
+        <tr><td>明确成功</td><td>同批已成功成员的补算任务按当前代次写完，且代次没有再变</td><td>该进前 3 的对方出现在相应一侧。已不关联的一侧不变</td><td>只替换这些文件的相似候选和待处理状态</td><td>补算任务。对应 INV-6</td></tr>
+        <tr><td>明确失败</td><td>相似函数抛错，或代次核对失败</td><td>解析状态保持提交结果。代次核对失败时不写入该次候选</td><td>日志含文件编号，不含正文</td><td>解析收尾捕获异常。对应 INV-1</td></tr>
+        <tr><td>结果未知</td><td>补算任务已投递，但工人尚未执行完</td><td>解析结果已知。相似可能暂时只有一侧更新</td><td>不把这种等待当成解析失败</td><td>现有知识库队列。没有新的分钟级期限</td></tr>
+        <tr><td>部分成功</td><td>同批有的文件解析失败</td><td>失败文件不进入候选。已成功文件仍按规则互算</td><td>失败文件不增加代次</td><td>只有解析提交结果为成功才进入第 4 步</td></tr>
+        <tr><td>重复投递</td><td>同一个代次的任务执行两次</td><td>候选与一次执行相同</td><td>允许重写同一批候选，不新增解析行</td><td>替换写入本身可重复</td></tr>
+        <tr><td>并发</td><td>两个文件几乎同时解析成功</td><td>图 3 的最终代次写完后，与一先一后的结束状态相同</td><td>旧代次写入被取消</td><td>INV-6。真实多进程时序留给验收</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout warn">
+    <strong>上传者需要知道的失败</strong>
+    文件显示解析成功，但暂时没有相似提醒，表示相似这一步没有完成，不表示文件坏了。后一个同批文件解析成功时会再补一次。若任务一直没有执行，已提交的解析结果仍然有效，不自动改成失败。
+  </div>
+</section>
+
+<section class="card" id="decisions">
+  <h2>5. 关键决策</h2>
+  <div class="table-wrap" tabindex="0">
+    <table>
+      <caption>设计取舍</caption>
+      <thead><tr><th>决策</th><th>做法</th><th>放弃的做法</th><th>理由</th><th>重审条件</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>DD-1 解析提交零改动</td>
+          <td>相似继续放在 <code>knowledge_imp.py</code> 提交返回之后的异常捕获里</td>
+          <td>把批次代次加进 <code>persist_parse_result_with_fulltext_intent</code></td>
+          <td>那个函数同时提交解析、全文和自动发布。放进去会使相似故障连坐解析提交</td>
+          <td>若提交函数被拆开，再评估能否同事务记录代次</td>
+        </tr>
+        <tr>
+          <td>DD-2 新表，不改文件表，不用用户元数据</td>
+          <td>批次和成员各自一张新表</td>
+          <td>把批次键放进 <code>user_metadata</code>，或给 <code>knowledgefile</code> 加列</td>
+          <td>解析预览会改写用户元数据，键可能丢。给核心文件表加列会碰到所有文件读写。新表只有登记和补算访问</td>
+          <td>若新表迁移不能在双库落地，停在设计，不改用元数据凑合</td>
+        </tr>
+        <tr>
+          <td>DD-3 键由界面一次确认生成</td>
+          <td>可选字段 <code>upload_batch_key</code>。缺省时服务端为这一次请求生成一个键</td>
+          <td>用时间窗口把多次请求猜成一批</td>
+          <td>时间窗口会把两次确认并错，直接违反 AC-07</td>
+          <td>无</td>
+        </tr>
+        <tr>
+          <td>DD-4 同批补算用独立任务</td>
+          <td>当前文件的那一次刷新仍留在解析收尾。同批其他文件交给知识库队列上的新任务</td>
+          <td>在解析工人里同步重算所有同批文件；或复用 5 分钟后才再次到期的后台作业</td>
+          <td>同步重算会拉长这条解析任务。现有后台作业的等待状态要 5 分钟后才再次执行，补算会明显晚于解析完成。知识库 Celery 队列没有这个固定等待</td>
+          <td>若该队列的实际延迟让同批提醒长时间单侧存在，再给任务增加可观测告警。不把补算挪回解析事务</td>
+        </tr>
+        <tr>
+          <td>DD-5 代次核对只包住批次写入</td>
+          <td>不传代次的刷新保持现在的直接写入</td>
+          <td>让发布刷新和历史回填也走代次</td>
+          <td>那些路径没有上传批次，强行套用会改变它们的写入条件</td>
+          <td>无</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout ok">
+    <strong>接受的代价</strong>
+    解析任务本身仍会做当前文件的那一次相似计算，这是今天已经有的耗时。同批其他文件的补算改由另一条队列任务完成，所以当前这条解析任务不按同批人数成倍变长。补算完成前，列表可能暂时只有一侧有提醒。
+  </div>
+</section>
+
+<section class="card" id="contracts">
+  <h2>6. 详细契约 <span class="badge">按需展开</span></h2>
+  <details data-technical open>
+    <summary>接口、字段与错误</summary>
+    <div class="inner">
+      <p>现有登记接口 <code>POST /api/v1/knowledge/space/{space_id}/files</code>。认证和权限沿用该接口。成功响应字段不新增、不删除。</p>
+      <div class="table-wrap" tabindex="0">
+        <table>
+          <caption id="contract-fields">请求字段</caption>
+          <thead><tr><th>字段</th><th>含义</th><th>必填</th><th>校验</th><th>来源</th><th>需求</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>upload_batch_key</code> 输入</td>
+              <td>同一次确认共用的批次键</td>
+              <td>否。缺省、空串都表示由服务端为这一次请求生成</td>
+              <td>若填写，必须是 36 字符的 UUID，形如 <code>8-4-4-4-12</code> 的十六进制带连字符。前后空白先去掉</td>
+              <td>界面每次确认生成一次。直接调用方可以不传</td>
+              <td>REQ-001，需求 0.2</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-wrap" tabindex="0">
+        <table>
+          <caption>错误</caption>
+          <thead><tr><th>条件</th><th>结果</th><th>状态和副作用</th><th>重复调用</th><th>依据</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>键不是合法 UUID</td>
+              <td>请求体验证失败，沿用现有 422 行为</td>
+              <td>不创建文件，不写批次表</td>
+              <td>每次都拒绝</td>
+              <td>DD-3</td>
+            </tr>
+            <tr>
+              <td>键已属于同一知识库的其他用户，或其他知识库</td>
+              <td>业务错误。实现时在知识库错误码里取一个未占用的 5 位码，消息说明批次键不能用于当前用户或当前知识库。不在本设计里编造具体数字</td>
+              <td>不创建文件，不新增成员</td>
+              <td>仍拒绝</td>
+              <td>防止别人把文件挂进他人的批次</td>
+            </tr>
+            <tr>
+              <td>键属于当前用户、当前租户、当前知识库</td>
+              <td>本次登记成功的文件加入该批次</td>
+              <td>成功响应形状不变</td>
+              <td>再次确认必须用新键。同一个键继续追加成员</td>
+              <td>AC-02</td>
+            </tr>
+            <tr>
+              <td>不传键</td>
+              <td>这一次请求里登记成功的文件共用一个新键</td>
+              <td>与今天的创建结果相同，外加批次行</td>
+              <td>下一次请求是新批次</td>
+              <td>AC-08</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+  <details data-technical open>
+    <summary>数据、一致性与迁移</summary>
+    <div class="inner">
+      <figure class="diagram">
+        <div class="diagram-scroll">
+          <svg viewBox="0 0 980 160" role="img" aria-labelledby="fig5title fig5desc">
+            <title id="fig5title">批次数据归属</title>
+            <desc id="fig5desc">一个批次包含多个成员。每个成员指向一个已有知识库文件。知识库文件表本身不加列。</desc>
+            <rect x="40" y="40" width="250" height="80" rx="8" fill="#edf3ff" stroke="#245bb1"/>
+            <text x="165" y="70" text-anchor="middle" font-size="14">上传批次</text>
+            <text x="165" y="92" text-anchor="middle" font-size="12">租户 + 知识库 + 键</text>
+            <rect x="390" y="40" width="220" height="80" rx="8" fill="#eff8f2" stroke="#17683b"/>
+            <text x="500" y="70" text-anchor="middle" font-size="14">批次成员</text>
+            <text x="500" y="92" text-anchor="middle" font-size="12">一个文件只属于一批</text>
+            <rect x="700" y="40" width="240" height="80" rx="8" fill="#fff" stroke="#9baec9"/>
+            <text x="820" y="70" text-anchor="middle" font-size="14">现有知识库文件</text>
+            <text x="820" y="92" text-anchor="middle" font-size="12">表结构不改</text>
+            <path d="M290 80 H390 M610 80 H700" fill="none" stroke="#40618e" stroke-width="1.5"/>
+            <text x="340" y="72" text-anchor="middle" font-size="12">1 对多</text>
+            <text x="655" y="72" text-anchor="middle" font-size="12">多对 1</text>
+          </svg>
+        </div>
+        <figcaption>图 5。成员行删除与否不影响解析。文件删除后成员行可以留下，补算时跳过已删除或未成功的文件。</figcaption>
+      </figure>
+      <div class="table-wrap" tabindex="0">
+        <table>
+          <caption>表</caption>
+          <thead><tr><th>表</th><th>变化</th><th>事务边界</th><th>生命周期</th><th>迁移</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>knowledge_upload_batch</code></td>
+              <td>新表。字段：自增主键、租户、知识库、36 字符批次键、创建用户、整数代次、创建和更新时间。租户+知识库+键唯一。代次从 0 开始。每个字段带中文注释</td>
+              <td>与该文件的成员行在登记事务中一起提交。代次加 1 是解析提交返回之后的单独短事务</td>
+              <td>不回填旧文件。不存文件正文</td>
+              <td>新增 Alembic。MySQL 和 DM8 都要能建表。只加表，不改旧表</td>
+            </tr>
+            <tr>
+              <td><code>knowledge_upload_batch_file</code></td>
+              <td>新表。字段：自增主键、租户、批次主键、文件编号、创建时间。文件编号唯一。中文注释</td>
+              <td>文件创建被清理回滚时，按文件编号删除对应成员</td>
+              <td>不参与权限判断</td>
+              <td>同上</td>
+            </tr>
+            <tr>
+              <td><code>knowledgefile</code>、<code>knowledge_file_similarity_candidate</code>、<code>knowledge_background_job</code></td>
+              <td>无新列。候选和相似状态仍由现有刷新函数写入</td>
+              <td>候选替换与代次核对必须在同一个短事务：代次不符则该文件的候选替换不提交</td>
+              <td>沿用现有相似数据</td>
+              <td>无文件表迁移</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+  <details data-technical open>
+    <summary>并发、失败与资源</summary>
+    <div class="inner">
+      <div class="table-wrap" tabindex="0">
+        <table>
+          <caption>机制</caption>
+          <thead><tr><th>风险</th><th>机制</th><th>谁释放</th><th>失败后</th><th>验证边界</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>慢写入覆盖新候选</td>
+              <td>每次解析成功把代次加 1。刷新函数只有在调用方传入的代次仍等于批次当前代次时才替换候选。比较和写入在同一事务，不在计算全文之前占住锁</td>
+              <td>数据库事务结束即释放行锁</td>
+              <td>代次不符则该次不写。新代次的任务再算</td>
+              <td>隔离测试可以安排写前代次变化。真实锁等待留给验收</td>
+            </tr>
+            <tr>
+              <td>补算任务重复或乱序</td>
+              <td>任务参数是批次主键和代次。执行时若代次已更大，任务直接结束且不写</td>
+              <td>Celery 工人结束任务</td>
+              <td>旧任务丢弃。不修改解析状态</td>
+              <td>用假的队列投递记录参数。真实队列延迟不在开发测试里证明</td>
+            </tr>
+            <tr>
+              <td>解析工人崩溃在提交之后、投递之前</td>
+              <td>与今天当前文件的相似刷新丢失是同一类窗口。后一个同批文件成功时仍会补算先前的已成功成员</td>
+              <td>不新增补偿事务</td>
+              <td>最后一个文件若在投递前崩溃，同批可能暂时缺它。解析结果已在</td>
+              <td>这是接受的缺口，与今天单文件刷新丢失相同，不扩大到回滚解析</td>
+            </tr>
+            <tr>
+              <td>补算超过现有后台作业的 120 秒处理上限</td>
+              <td>不走 <code>KnowledgeBackgroundService</code> 的 120 秒处理和 5 分钟再执行。走知识库 Celery 任务，一个任务按成员顺序调用现有单文件刷新</td>
+              <td>任务结束或 Celery 按现有失败策略结束</td>
+              <td>失败不改解析状态</td>
+              <td>没有新的耗时指标。大批次的真实耗时留给验收观察，不在设计里编造秒数</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+  <details data-technical open>
+    <summary>安全与日志</summary>
+    <div class="inner">
+      <p>批次键只允许创建它的用户在同一知识库继续追加。不能靠键读取文件内容。日志记录文件编号、批次主键和代次，不记录文件正文、键以外的身份证件号。列表权限代码不改。</p>
+    </div>
+  </details>
+</section>
+
+<section class="card" id="impact">
+  <h2>7. 影响与依赖</h2>
+  <div class="table-wrap" tabindex="0">
+    <table>
+      <caption>影响</caption>
+      <thead><tr><th>对象</th><th>影响</th><th>不影响</th></tr></thead>
+      <tbody>
+        <tr><td>解析状态、全文同步、自动发布登记</td><td>无代码变化</td><td>这些结果的含义和提交顺序</td></tr>
+        <tr><td>积分、配额、权限元组、文件夹</td><td>无</td><td>登记里原有的这些步骤</td></tr>
+        <tr><td>旧客户端</td><td>不传键时，一次请求仍是一批。一次请求里的多个文件会开始互算</td><td>不会把两次请求自动并成一次确认</td></tr>
+        <tr><td>门户按文件夹拆开的登记</td><td>必须一起发布带批次键的前端，AC-02 才成立</td><td>后端单独发布时，跨请求的同一次确认仍不会互算</td></tr>
+        <tr><td>文件库同步等其他入库</td><td>不写批次，解析收尾只刷新自己</td><td>那些路径的相似行为</td></tr>
+        <tr><td>历史文件</td><td>没有成员行，不会被补算</td><td>已有候选</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>上线顺序：先执行只加表的迁移，再同时发布后端和知识库客户端。只发后端时，同一次请求内的互算已经生效，跨文件夹的一次确认要等前端。</p>
+</section>
+
+<section class="card" id="verification">
+  <h2>8. 验证安排</h2>
+  <p>开发用例见 <a href="test-cases.html">test-cases.html</a>。下表是追溯，不是执行通过。</p>
+  <div class="table-wrap" tabindex="0">
+    <table>
+      <caption>追溯</caption>
+      <thead><tr><th>需求</th><th>设计</th><th>用例</th><th>岗位和工程</th><th>阶段</th><th>真实与替身</th></tr></thead>
+      <tbody>
+        <tr><td>AC-12、INV-1</td><td>DD-1</td><td>TC-PARSE-01</td><td>研发，<code>src/backend/test/knowledge/</code></td><td>开发期隔离</td><td>真实提交函数和收尾捕获；相似函数用会抛错的替身。不断言真实解析引擎</td></tr>
+        <tr><td>AC-01、AC-03、AC-04、AC-05、AC-15、INV-6</td><td>DD-4、DD-5</td><td>TC-BATCH-01 至 05，TC-RACE-01</td><td>研发，同上</td><td>开发期隔离</td><td>真实批次服务和代次核对。全文检索用现有测试替身。不证明多机队列</td></tr>
+        <tr><td>AC-02、AC-08、INV-5</td><td>DD-3</td><td>TC-API-01、TC-API-02、TC-FE-01</td><td>研发后端接口测试；客户端 Jest</td><td>开发期</td><td>真实请求模型校验。前端只断言发出的键，不打开浏览器</td></tr>
+        <tr><td>AC-07、AC-10、AC-11、INV-2</td><td>没有成员行就不投递</td><td>TC-BATCH-06、TC-BATCH-07</td><td>研发后端</td><td>开发期</td><td>断言未投递的文件没有被刷新</td></tr>
+        <tr><td>AC-06、AC-09、INV-4</td><td>调用现有刷新</td><td>TC-SCORE-01</td><td>研发后端</td><td>开发期</td><td>真实现有打分函数和固定指纹</td></tr>
+        <tr><td>AC-13、INV-7</td><td>不改发布任务</td><td>TC-PUB-01</td><td>研发后端</td><td>开发期</td><td>沿用发布相似测试的内存库，断言任务种类</td></tr>
+        <tr><td>AC-14、INV-8</td><td>不改列表和徽标</td><td>无新用例。实现时禁止改动徽标条件</td><td>研发自查</td><td>代码审核</td><td>没有新的界面测试。浏览器验收不在研发阶段执行</td></tr>
+        <tr><td>全部 AC 的真实队列和页面</td><td>图 2、图 3</td><td>测试岗位另行编写</td><td>独立验收工程，当前未指定</td><td>研发交付后</td><td>本设计不把隔离测试写成端到端通过</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout"><strong>验证计划不等于执行通过</strong>开发测试在实现阶段才写、才跑。界面和真实队列由测试岗位以后单独验收。</div>
+</section>
+
+<section class="card" id="release">
+  <h2>9. 发布与恢复</h2>
+  <div class="table-wrap" tabindex="0">
+    <table>
+      <caption>发布</caption>
+      <thead><tr><th>环节</th><th>安排</th><th>判断</th><th>限制</th></tr></thead>
+      <tbody>
+        <tr><td>启用</td><td>先迁移两张新表，再发布包含登记字段、解析收尾和客户端批次键的版本。没有新开关</td><td>迁移成功且旧的解析测试仍通过</td><td>不回填历史</td></tr>
+        <tr><td>观察</td><td>看解析失败率是否相对发布前上升，以及相似任务错误日志。没有预先测量的阈值，不编一个百分比</td><td>解析状态被相似错误改写，即视为这次改动破坏 INV-1</td><td>由发布负责人对照日志，不在设计里指定人名</td></tr>
+        <tr><td>代码回滚</td><td>先回客户端和后端。新表可以留下。回滚后新解析不再投递补算任务</td><td>解析收尾不再调用补算</td><td>已写出的候选不会自动删除</td></tr>
+        <tr><td>数据</td><td>不在回滚脚本里批量删除候选或批次行</td><td>需要清数据时另作确认</td><td>删除候选会影响用户已经看到的提醒，本次不自动做</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="records">
+  <h2>10. 待决事项及变更记录</h2>
+  <h3>待决事项</h3>
+  <p>没有阻塞设计的产品或技术未决项。业务错误码的具体 5 位数字在实现时查空号，不改变拒绝语义。真实队列延迟没有测量值，不构成方案分支。</p>
+  <h3>专业检查</h3>
+  <div class="table-wrap" tabindex="0">
+    <table>
+      <caption>自检</caption>
+      <thead><tr><th>检查项</th><th>依据</th><th>发现</th><th>状态</th><th>是否阻塞</th></tr></thead>
+      <tbody>
+        <tr><td>需求追溯</td><td>需求 0.2 已确认</td><td>AC-01 至 AC-15 都有设计安排。AC-14 不新增测试，靠不改徽标代码守住</td><td>作者对照需求检查。没有第二人复核</td><td>不阻塞。AC-14 的界面证据留给验收</td></tr>
+        <tr><td>正确性约束</td><td>INV-1 至 INV-8</td><td>解析提交与相似写入分开。代次核对覆盖慢写入</td><td>源码核对了提交函数和收尾捕获的位置</td><td>不阻塞。多机时序未证实，已标明</td></tr>
+        <tr><td>图解</td><td>第 2.2 节</td><td>图 1 至图 5 与正文的边界一致</td><td>作者检查。未做浏览器打印</td><td>不阻塞</td></tr>
+        <tr><td>契约和失败</td><td>第 6 节</td><td>422 与业务拒绝都不创建文件。任务失败不改解析状态</td><td>作者检查</td><td>不阻塞</td></tr>
+        <tr><td>安全与恢复</td><td>批次键归属、回滚不删候选</td><td>其他用户不能挂入批次。回滚不自动清候选</td><td>作者检查</td><td>不阻塞</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout ok"><strong>当前设计确认</strong>用户于 2026-11-03 确认设计 0.1。作者自查不是独立代码审核。</div>
+  <h3>术语</h3>
+  <div class="table-wrap" tabindex="0">
+    <table>
+      <caption>术语</caption>
+      <thead><tr><th>术语</th><th>通俗解释</th><th>边界</th></tr></thead>
+      <tbody>
+        <tr><td>代次 <code>revision</code></td><td>这批文件每成功解析完一个，就加 1 的计数。写入候选时必须对得上</td><td>不是文档版本号</td></tr>
+        <tr><td>代次核对</td><td>计算期间如果又有同批文件解析成功，这次结果作废，不覆盖更新的结果</td><td>不保证计算过程中途的列表已经稳定</td></tr>
+        <tr><td>补算任务</td><td>解析提交成功之后，在知识库队列里重算同批其他已成功文件</td><td>不重新解析文件</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>变更记录</h3>
+  <div class="table-wrap" tabindex="0">
+    <table>
+      <caption>版本</caption>
+      <thead><tr><th>版本</th><th>变更</th><th>关联</th><th>状态</th><th>依据</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>0.1 · 2026-11-03</td>
+          <td>首稿。把相似移出解析提交，用新表和代次保护同批补算</td>
+          <td>需求 0.2 的 REQ-001 至 REQ-003，AC-01 至 AC-15</td>
+          <td>待确认。用例稿已按本契约起草，尚未执行</td>
+          <td>需求确认，外加解析核心路径不得被相似失败改写</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+<p class="footer">毕昇 · features/v2.6.0/113-same-batch-upload-similarity/design.html · 0.1 待确认</p>
+</main>
+<script>
+(function () {
+  "use strict";
+  var panels = Array.prototype.slice.call(document.querySelectorAll("details[data-technical]"));
+  var bar = document.getElementById("progress");
+  var printState = null;
+  var toolbar = document.getElementById("toolbar");
+  if (toolbar) toolbar.hidden = false;
+  panels.forEach(function (panel) { panel.open = false; });
+  document.getElementById("expand-all").addEventListener("click", function () {
+    panels.forEach(function (panel) { panel.open = true; });
+  });
+  document.getElementById("collapse-all").addEventListener("click", function () {
+    panels.forEach(function (panel) { panel.open = false; });
+  });
+  document.getElementById("print-document").addEventListener("click", function () { window.print(); });
+  function preparePrint() {
+    if (printState !== null) return;
+    printState = panels.map(function (panel) { return panel.open; });
+    panels.forEach(function (panel) { panel.open = true; });
+  }
+  function restorePrint() {
+    if (printState === null) return;
+    panels.forEach(function (panel, index) { panel.open = printState[index]; });
+    printState = null;
+  }
+  window.addEventListener("beforeprint", preparePrint);
+  window.addEventListener("afterprint", restorePrint);
+  function updateProgress() {
+    var root = document.documentElement;
+    var range = root.scrollHeight - root.clientHeight;
+    var percentage = range > 0 ? Math.max(0, Math.min(100, root.scrollTop / range * 100)) : 0;
+    if (bar) bar.style.width = percentage + "%";
+  }
+  window.addEventListener("scroll", updateProgress, { passive: true });
+  updateProgress();
+}());
+</script>
+</body>
+</html>

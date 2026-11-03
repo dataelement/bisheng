@@ -840,6 +840,7 @@ async def add_file(
         business_domain_code=req.business_domain_code,
         manual_tag_ids=req.manual_tag_ids,
         manual_tag_names=req.manual_tag_names,
+        upload_batch_key=req.upload_batch_key,
     )
     return resp_200(file_record)
 

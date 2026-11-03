@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>需求 · 同一次上传文件的相似互判</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#202733;--sub:#515d6d;--line:#dce2eb;--accent:#245bb1;--weak:#edf3ff;--ok:#17683b;--warn:#8a4b00;--bad:#a92525}
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;overflow-wrap:anywhere}
+  a{color:var(--accent);text-underline-offset:3px}
+  a:focus-visible{outline:3px solid #b25b00;outline-offset:4px}
+  .wrap{max-width:1060px;margin:auto;padding:28px 24px 72px}
+  .hero{background:linear-gradient(135deg,#164789,#285eae);color:#fff;padding:28px;border-radius:16px;margin-bottom:20px}
+  h1{margin:0 0 8px;font-size:27px;line-height:1.45}
+  .meta{font-size:13px;margin:0}
+  .summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px}
+  .summary-grid .item{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);padding:12px 14px;border-radius:10px}
+  .item b{display:block;font-size:12px;margin-bottom:4px}
+  .item p{font-size:14px;margin:0}
+  .toc,.card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:24px;margin:0 0 20px}
+  .toc h2{font-size:15px;margin:0 0 10px}
+  .toc ol{columns:2;column-gap:32px;padding-left:22px;margin:0}
+  .toc li{break-inside:avoid;margin:3px 0}
+  h2{font-size:21px;line-height:1.5;margin:0 0 6px}
+  h3{font-size:16px;line-height:1.6;margin:23px 0 8px}
+  .lead,.hint{color:var(--sub);font-size:13px}
+  .lead{margin:0 0 16px}
+  p{margin:10px 0}
+  .badge{display:inline-block;font-size:11px;font-weight:600;color:var(--accent);background:var(--weak);padding:2px 8px;border-radius:12px;vertical-align:middle}
+  .callout{border-left:4px solid var(--accent);background:#f1f5fc;padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0}
+  .callout.warn{border-color:var(--warn);background:#fff8e9}
+  .callout.ok{border-color:var(--ok);background:#eff8f2}
+  .callout strong{display:block;margin-bottom:4px}
+  .table-wrap{overflow-x:auto;max-width:100%;margin:12px 0;border:1px solid var(--line);border-radius:8px}
+  table{border-collapse:collapse;width:100%;min-width:720px;font-size:13px}
+  th,td{text-align:left;vertical-align:top;padding:10px 12px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+  th{background:#f0f3f8;color:#364459;font-weight:650}
+  tr:last-child td{border-bottom:0}
+  tr>*:last-child{border-right:0}
+  caption{text-align:left;font-weight:600;padding:10px 12px;background:#fafbfc}
+  .diagram{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:15px;margin:14px 0}
+  .diagram-scroll{overflow-x:auto}
+  .diagram svg{display:block;width:100%;min-width:760px;height:auto}
+  figcaption{font-size:12px;color:var(--sub);margin-top:8px}
+  .diagram text{font-family:inherit;fill:#26364d}
+  code{font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#f0f3f8;padding:1px 4px;border-radius:4px}
+  .status{font-weight:600;color:var(--warn)}
+  .footer{font-size:12px;color:var(--sub);text-align:center;margin-top:26px}
+  @media(max-width:680px){
+    .wrap{padding:16px 12px 48px}.hero,.card,.toc{padding:20px 16px}
+    h1{font-size:23px}.summary-grid{grid-template-columns:1fr}.toc ol{columns:1}
+  }
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  @page{size:A4;margin:14mm 12mm}
+  @media print{
+    body{background:#fff;color:#111;font-size:10pt}
+    .wrap{max-width:none;padding:0}
+    .hero{background:#fff!important;color:#111!important;border:1px solid #777;border-radius:0}
+    .summary-grid .item{background:#fff;border-color:#777;color:#111}
+    .card,.toc{break-inside:avoid}
+    a{color:#111;text-decoration:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero">
+  <h1>同一次上传文件的相似互判</h1>
+  <p class="meta">文档版本 0.2 · 2026-11-03 · 状态：<span class="status">需求已闭环</span> · 确认内容为 0.1 的规则，外加「解析主流程保持原样」</p>
+  <div class="summary-grid">
+    <div class="item"><b>适用项目</b><p>毕昇知识库。门户不单独做相似判定。</p></div>
+    <div class="item"><b>优先级建议</b><p>P0 = 本需求必须交付的规则。没有 P1/P2。一期即本次，二期未定。</p></div>
+    <div class="item"><b>确认依据</b><p>2026-11-03 用户回复「确认」，并要求上传解析的现有业务逻辑不受这次改动影响。</p></div>
+  </div>
+</header>
+
+<nav class="toc" id="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#background">背景与问题</a></li>
+    <li><a href="#goals">目标与指标</a></li>
+    <li><a href="#scope">范围</a></li>
+    <li><a href="#flow">用户场景与流程</a></li>
+    <li><a href="#requirements">功能需求</a></li>
+    <li><a href="#nfr">非功能与依赖</a></li>
+    <li><a href="#data">数据与埋点</a></li>
+    <li><a href="#acceptance">验收标准</a></li>
+    <li><a href="#risk">风险与灰度回滚</a></li>
+    <li><a href="#changelog">变更记录</a></li>
+  </ol>
+</nav>
+
+<section class="card" id="background">
+  <h2>1. 背景与问题</h2>
+  <p>知识库上传者一次选中多个文件并确认上传。这些文件解析成功、进入知识库之后，彼此之间经常没有相似提醒。上传者因此看不到同一批里的重复或近重复文件。</p>
+  <div class="callout">
+    <strong>客观事实（来自当前毕昇代码，不是生产实测计数）</strong>
+    每个文件在自己解析成功时，只和当时已经解析成功的其他文件比一次，结果只写在自己名下。候选按来源文件保存。文件列表上的相似徽标只看这个文件自己有没有待处理候选。比较范围是同一个知识库，不看文件夹。先解析完的文件不会因为同批后面的文件解析完而再算一次。解析可以并行，两边都可能在对方指纹写入前就算完。
+  </div>
+  <p><span class="badge">逻辑推演</span> 串行时，后完成的文件有机会看到先完成的文件；先完成的文件看不到后完成的文件。并行时，两侧候选都可以没有对方。这和「同一批落库后互相看不出来」一致。代码里没有一条「同一批跳过」的专门规则。</p>
+  <p><span class="badge">已核对的文件夹事实</span> 相似候选查询按知识库列出已解析成功的主版本和已就绪发布入口，条件里没有文件夹。已确认的发布相似需求也按目标知识库比较，不按目录。因此，不同文件夹之间算出相似，是当前规则，不是文件夹误判。</p>
+  <p>本次要补的是比较时机：同一次上传里后解析成功的文件，要让同批里已经解析成功、且用户还没点「不关联」的文件再按现有规则算一遍。</p>
+  <div class="callout ok">
+    <strong>确认时追加的约束</strong>
+    上传解析是核心功能。文件是否解析成功、解析失败、超时或违规，以及这些结果提交时已经做的全文同步意图和自动发布登记，都保持现在的行为。相似互判失败不得改写这些结果。
+  </div>
+</section>
+
+<section class="card" id="goals">
+  <h2>2. 目标与指标</h2>
+  <p>上传者在同一次确认里上传的多个文件，解析成功后，如果按现有相似规则彼此达到阈值并且进入对方的前 3 名，两侧文件列表都能看到这条待处理相似。</p>
+  <div class="table-wrap">
+    <table>
+      <caption>指标</caption>
+      <thead>
+        <tr><th>名称</th><th>口径</th><th>基线</th><th>目标</th><th>观察</th><th>数据来源</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>同批互见</td>
+          <td>同一次上传中两个解析成功的文件，都达到现有阈值，且按相似度都能进入对方前 3 名时，两侧待处理候选都包含对方</td>
+          <td>无。没有统计过线上漏判对的数量，不能编一个百分比</td>
+          <td>验收用例 AC-01、AC-02、AC-15 通过。不设上线后转化率</td>
+          <td>开发验证时断言候选；真实环境留给独立验收</td>
+          <td>毕昇相似候选与文件相似状态</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="scope">
+  <h2>3. 范围</h2>
+  <h3>本次包含</h3>
+  <ul>
+    <li>毕昇知识库里，用户一次确认上传、最终登记成功的文件。</li>
+    <li>客户端知识库上传，以及门户上传对话框。一次确认即使按文件夹拆成多次登记，仍是一批。</li>
+    <li>不经过上述界面、直接调用登记接口时：同一次请求里登记成功的文件是一批。</li>
+    <li>这些文件解析成功之后的相似候选、文件上的待处理相似状态、列表徽标所读的那份结果。</li>
+  </ul>
+  <h3>明确不做</h3>
+  <ul>
+    <li>两次分开的确认上传之间，不回头更新更早的那一次。</li>
+    <li>不补算上线前已经落库的文件。现有数据没有「哪一次确认」的记录，无法按本规则还原历史批次。全库重算是另一个范围，本次不做。</li>
+    <li>不改变发布到目标库之后的发布入口刷新。发布入口仍只在自己就绪时算一次。</li>
+    <li>不改变相似度算法、公司编码第一段、两套阈值、每个文件最多 3 条、同一文档的不同版本不互推。</li>
+    <li>不把已点「不关联」的文件重新打开。</li>
+    <li>不新增文件夹过滤，也不把跨文件夹相似改成错误。</li>
+    <li>不改门户自己的页面。门户没有独立的相似判定；毕昇列表已经展示徽标。</li>
+    <li>不改权限、积分、解析成功与否。</li>
+  </ul>
+  <p>一期就是上表。二期未定，不承诺历史回填，也不承诺发布入口互判。</p>
+  <h3>角色与对象</h3>
+  <div class="table-wrap">
+    <table>
+      <caption>角色与对象</caption>
+      <thead><tr><th>对象</th><th>含义</th></tr></thead>
+      <tbody>
+        <tr><td>上传者</td><td>在知识库执行一次确认上传的登录用户。谁能看见徽标、谁能点「不关联」，沿用现有权限，本次不改。</td></tr>
+        <tr><td>上传批次</td><td>下面规则表里的那组文件。它是业务集合，不是要求本次新增一个给用户看的批次号字段。</td></tr>
+        <tr><td>知识库文件</td><td>登记成功后进入该知识库、拥有自己的文档和主版本的文件。</td></tr>
+        <tr><td>待处理相似</td><td>该文件按现有规则算出至少一条仍有效的候选，且用户还没点「不关联」。</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="flow">
+  <h2>4. 用户场景与流程</h2>
+  <p>上传者在知识库或门户上传对话框一次选择多个文件并确认。文件逐个解析。某个文件解析成功后，系统用现有规则更新这个文件的相似候选，并回头更新同批里已经解析成功、且未点「不关联」的其他文件。用户在文件列表上看到待处理相似；点开后仍是现有的相似候选，最多 3 条。</p>
+  <figure class="diagram">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 980 150" role="img" aria-labelledby="flowTitle flowDesc">
+        <title id="flowTitle">同一次上传的相似更新顺序</title>
+        <desc id="flowDesc">一次确认形成批次。每个文件解析成功后，先更新自己，再更新同批里已经成功且未点不关联的其他文件。尚未解析成功的同批文件先不更新。</desc>
+        <rect x="10" y="40" width="140" height="64" rx="8" fill="#edf3ff" stroke="#245bb1"/>
+        <text x="80" y="68" text-anchor="middle" font-size="13">一次确认上传</text>
+        <text x="80" y="88" text-anchor="middle" font-size="12">形成一批</text>
+        <rect x="190" y="40" width="150" height="64" rx="8" fill="#edf3ff" stroke="#245bb1"/>
+        <text x="265" y="68" text-anchor="middle" font-size="13">单个文件</text>
+        <text x="265" y="88" text-anchor="middle" font-size="12">解析成功</text>
+        <rect x="380" y="40" width="170" height="64" rx="8" fill="#edf3ff" stroke="#245bb1"/>
+        <text x="465" y="68" text-anchor="middle" font-size="13">按现有规则</text>
+        <text x="465" y="88" text-anchor="middle" font-size="12">更新这个文件</text>
+        <rect x="590" y="40" width="200" height="64" rx="8" fill="#eff8f2" stroke="#17683b"/>
+        <text x="690" y="62" text-anchor="middle" font-size="13">回头更新同批中</text>
+        <text x="690" y="82" text-anchor="middle" font-size="12">已成功且未点</text>
+        <text x="690" y="98" text-anchor="middle" font-size="12">「不关联」的文件</text>
+        <rect x="830" y="40" width="130" height="64" rx="8" fill="#fff8e9" stroke="#8a4b00"/>
+        <text x="895" y="68" text-anchor="middle" font-size="13">列表徽标</text>
+        <text x="895" y="88" text-anchor="middle" font-size="12">最多 3 条</text>
+        <path d="M150 72 H190 M340 72 H380 M550 72 H590 M790 72 H830" stroke="#245bb1" stroke-width="1.5" fill="none"/>
+      </svg>
+    </div>
+    <figcaption>图 1. 后解析成功的文件会带动同批已成功文件再算一遍。比较对象仍是整个知识库里当时已具备资格的文件，不是只在这一批内部比较。</figcaption>
+  </figure>
+  <h3>结束状态</h3>
+  <ul>
+    <li>进入对方前 3 名的两侧文件：各自有待处理相似，候选里有对方。</li>
+    <li>达到阈值但排不进前 3：这一侧不显示对方。</li>
+    <li>已点「不关联」的一侧：保持已处理，不因为同批后到的文件重新出现提醒。</li>
+    <li>解析失败的文件：没有相似候选，也不使别人把它写成候选。</li>
+  </ul>
+  <h3>异常出口</h3>
+  <p>相似计算失败时，该文件保持解析成功，不写入这次没算出来的相似关系。用户仍可在列表看到文件已解析。详细规则见 <a href="#exceptions">异常表</a>。</p>
+</section>
+
+<section class="card" id="requirements">
+  <h2>5. 功能需求</h2>
+
+  <h3 id="decisions">已经做出的产品决定</h3>
+  <div class="table-wrap">
+    <table>
+      <caption>决定记录</caption>
+      <thead><tr><th>议题</th><th>曾经的选项</th><th>决定</th><th>依据</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>一批是什么</td>
+          <td>一次上传；一次上传再加发布入口；任何后入库文件都回头更新全库</td>
+          <td>一次上传里解析成功的文件。另一次上传不回头更新更早的文件</td>
+          <td>用户选择。标识：决定 D1</td>
+        </tr>
+        <tr>
+          <td>结果写在哪一侧</td>
+          <td>两侧都出现；只要有一侧出现</td>
+          <td>两侧都按同一套规则参与比较。先完成且未点「不关联」的文件，要在后一个成功后重算</td>
+          <td>用户选择。标识：决定 D2</td>
+        </tr>
+        <tr>
+          <td>何时必须可见</td>
+          <td>任意两个都成功就判；等整批全部结束再判</td>
+          <td>同批里任意两个都解析成功后就判，不等最慢的文件</td>
+          <td>用户选择。标识：决定 D3</td>
+        </tr>
+        <tr>
+          <td>不同文件夹</td>
+          <td>一次确认跨文件夹仍算一批；只算同一次登记接口</td>
+          <td>与当前一致：文件夹不是相似边界。一次确认即使拆成多次登记，仍是一批。跨文件夹相似不是误判</td>
+          <td>用户要求先核对再与当前保持一致。代码与已有发布相似需求都按知识库比较。标识：决定 D4</td>
+        </tr>
+        <tr>
+          <td>前 3 名</td>
+          <td>仍按分数取 3 条；同批优先占名额；同批可超过 3 条</td>
+          <td>不强制插入。两侧都拿对方参与比较，仍按相似度取前 3。排不进前 3 就不显示</td>
+          <td>用户选择。标识：决定 D5</td>
+        </tr>
+        <tr>
+          <td>已点「不关联」</td>
+          <td>不重新打开；同批后到文件要重新打开</td>
+          <td>不重新打开。另一侧如果自己还没点「不关联」，仍可以在自己的前 3 里看到它</td>
+          <td>用户选择。标识：决定 D6</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="req-001">REQ-001 认定同一批 <span class="badge">P0 · 一期</span></h3>
+  <p>来源：决定 D1、D4。</p>
+  <p>主流程：用户在知识库上传界面或门户上传对话框点击确认。系统把这次确认里登记成功的文件记为同一批，不论它们落在哪个文件夹，也不论界面把登记拆成了几次请求。直接调用登记接口时，同一次请求里登记成功的文件是一批，下一次请求是另一批。</p>
+  <div class="table-wrap">
+    <table>
+      <caption>谁进入这一批</caption>
+      <thead><tr><th>条件</th><th>是否属于这一批</th></tr></thead>
+      <tbody>
+        <tr><td>这次确认里登记成功，创建了知识库文件</td><td>属于</td></tr>
+        <tr><td>同一次确认，文件被分到不同文件夹，登记接口被调用多次</td><td>属于同一批</td></tr>
+        <tr><td>直接调用登记接口，同一次请求里的多个文件</td><td>属于同一批</td></tr>
+        <tr><td>敏感词拦截、临时文件上传失败、登记失败、重复因而没有新建文件</td><td>不属于</td></tr>
+        <tr><td>另一次确认，或另一次登记请求</td><td>另一批</td></tr>
+        <tr><td>之后单独重试、单独再传的文件</td><td>按那次新的确认或新的请求另算一批</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>关联验收：<a href="#ac-02">AC-02</a>、<a href="#ac-08">AC-08</a>、<a href="#ac-10">AC-10</a>。</p>
+
+  <h3 id="req-002">REQ-002 解析成功后互判 <span class="badge">P0 · 一期</span></h3>
+  <p>来源：决定 D2、D3、D5、D6。算法本身沿用现有相似规则。</p>
+  <p>前置：文件已经登记成功，并且这次解析成功，具备现有比较资格（有效指纹、有公司编码，且通过现有状态过滤）。</p>
+  <p>操作与结果：该文件解析成功时，系统做两件事。</p>
+  <ol>
+    <li>按现有规则计算这个文件自己的候选。比较范围是同一个知识库里当时已具备资格的文件，包含同批里已经解析成功的文件，也包含更早就不在这一批里的文件。</li>
+    <li>对同一批里其他已经解析成功、且相似状态不是「已不关联」的文件，各自再按现有规则计算一次。尚未解析成功的同批文件不在这次被更新。</li>
+  </ol>
+  <p>结束：每个被更新的文件只保留相似度最高的 3 条。某条达到阈值但排在第 4 名及以后，不显示。用户没有新的页面，仍看文件列表上的待处理相似和现有候选弹层。</p>
+  <div class="table-wrap">
+    <table>
+      <caption>回头更新决策</caption>
+      <thead><tr><th>同批其他文件的状态</th><th>后一个文件解析成功时</th></tr></thead>
+      <tbody>
+        <tr><td>已解析成功，未点「不关联」</td><td>按现有规则重算它的前 3 条</td></tr>
+        <tr><td>已解析成功，已点「不关联」</td><td>不重算，不重新打开提醒</td></tr>
+        <tr><td>还在解析，或解析失败，或没有有效指纹</td><td>不把它写入别人的候选；等它自己以后解析成功时再参与</td></tr>
+        <tr><td>不属于这一批</td><td>不因为这一批而回头重算</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <caption>相似状态</caption>
+      <thead><tr><th>状态</th><th>含义</th><th>本次允许的变化</th></tr></thead>
+      <tbody>
+        <tr><td>无待处理</td><td>当前没有需要用户处理的候选</td><td>重算后若前 3 里有候选，变为待处理</td></tr>
+        <tr><td>待处理</td><td>有仍有效的候选，用户还没点「不关联」</td><td>可随重算更换前 3 条；候选变为空时回到无待处理</td></tr>
+        <tr><td>已不关联</td><td>用户点过「不关联」</td><td>同批后到文件不得把它改回待处理</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>重算使用当时整个知识库的资格文件，所以先完成文件的前 3 名可能因为新文件加入而替换其中一条。这是决定 D5 的结果，不是只往旧列表末尾追加。</p>
+  <p>关联验收：<a href="#ac-01">AC-01</a> 至 <a href="#ac-07">AC-07</a>、<a href="#ac-09">AC-09</a>、<a href="#ac-15">AC-15</a>。</p>
+
+  <h3 id="req-003">REQ-003 沿用现有资格与展示 <span class="badge">P0 · 一期</span></h3>
+  <p>来源：决定 D5、D6，以及现有相似实现。本次不放宽、不收紧这些规则。</p>
+  <div class="table-wrap">
+    <table>
+      <caption>继续有效的资格</caption>
+      <thead><tr><th>条件</th><th>结果</th></tr></thead>
+      <tbody>
+        <tr><td>公司编码第一段相同，且达到该对文件对应的现有阈值</td><td>可以进入排序</td></tr>
+        <tr><td>没有公司编码，或第一段不同</td><td>不进入候选</td></tr>
+        <tr><td>没有有效指纹，解析未成功，文件已删除</td><td>不进入候选</td></tr>
+        <tr><td>同一文档上的不同版本或同一文档的多个入口</td><td>不互相推荐</td></tr>
+        <tr><td>不在同一个知识库</td><td>不互相推荐</td></tr>
+        <tr><td>查看资格沿用现有候选读取规则</td><td>本次不改谁能看见</td></tr>
+        <tr><td>列表徽标沿用现有条件，包括版本管理开关和现有的管理权限判断</td><td>本次不改徽标出现条件</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>关联验收：<a href="#ac-06">AC-06</a>、<a href="#ac-09">AC-09</a>、<a href="#ac-14">AC-14</a>。</p>
+
+  <h3 id="exceptions">异常与边界</h3>
+  <div class="table-wrap">
+    <table>
+      <caption>异常适用性</caption>
+      <thead><tr><th>类型</th><th>适用性</th><th>用户可观察到的结果</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>失败</td>
+          <td>适用。指相似计算失败，不是解析失败</td>
+          <td>文件保持解析成功。不写入这次没有算出的相似关系。不把已点「不关联」改回待处理。解析失败的文件不参与相似</td>
+        </tr>
+        <tr>
+          <td>超时</td>
+          <td>适用到现有解析超时</td>
+          <td>解析超时后的文件按解析未成功处理，不参与同批互判。本次不新增长时间等待文案</td>
+        </tr>
+        <tr>
+          <td>并发</td>
+          <td>适用</td>
+          <td>同批两个文件几乎同时解析成功时，允许短暂只有一侧先有候选。两侧为这次成功所做的更新都结束后，结果与一先一后相同：在库内其他文件不变时，该进前 3 的对方会出现在相应一侧</td>
+        </tr>
+        <tr>
+          <td>重复提交</td>
+          <td>适用</td>
+          <td>再点一次确认是新的一批。新文件按新批处理。上一批已经存在的文件不因为新的一次确认被回头重算</td>
+        </tr>
+        <tr>
+          <td>权限不足</td>
+          <td>适用，规则不变</td>
+          <td>不能上传的用户仍不能创建这批文件。不能看见某文件的用户，仍按现有规则不在候选里得到该文件。本次不新增拒绝文案</td>
+        </tr>
+        <tr>
+          <td>空数据</td>
+          <td>适用</td>
+          <td>这一批只有一个登记成功的文件时，没有同批对象可回头更新。它只按现有规则和库里已有文件比较</td>
+        </tr>
+        <tr>
+          <td>边界值</td>
+          <td>适用。依据是现有「最多 3 条」</td>
+          <td>第 3 名显示，第 4 名不显示。同批第 4 个达到阈值的文件不单独保底。一批里零个解析成功：没有相似更新</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="fields">业务字段</h3>
+  <p>本次不新增用户可见字段，也不规定新的接口路径。下表只固定已有对象在本需求里的含义。</p>
+  <div class="table-wrap">
+    <table>
+      <caption>已有业务对象</caption>
+      <thead>
+        <tr><th>名称</th><th>含义</th><th>类型</th><th>必填</th><th>范围</th><th>默认</th><th>校验</th><th>来源</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>待处理相似</td>
+          <td>这个文件当前有需要用户处理的相似候选</td>
+          <td>是否</td>
+          <td>条件必填：文件已解析成功并完成一次相似计算后才有意义</td>
+          <td>是或否</td>
+          <td>新登记文件在算出候选前视为否</td>
+          <td>已点「不关联」时必须为否</td>
+          <td>现有文件列表</td>
+        </tr>
+        <tr>
+          <td>相似候选</td>
+          <td>按相似度排序后展示的其他文件</td>
+          <td>列表</td>
+          <td>否。没有达到规则的候选时为空</td>
+          <td>0 到 3 条</td>
+          <td>空列表</td>
+          <td>同一文档不进入；公司第一段不同不进入</td>
+          <td>现有相似候选</td>
+        </tr>
+        <tr>
+          <td>相似度</td>
+          <td>现有规则给出的分数</td>
+          <td>数值</td>
+          <td>有候选时必填</td>
+          <td>沿用现有阈值，本次不改数字</td>
+          <td>无</td>
+          <td>低于该对文件适用阈值的不进入列表</td>
+          <td>现有计算</td>
+        </tr>
+        <tr>
+          <td>上传批次</td>
+          <td>一次确认或一次直接登记请求中登记成功的文件集合</td>
+          <td>文件集合</td>
+          <td>只在判定同批时使用</td>
+          <td>至少 1 个登记成功文件才构成批次；1 个文件时没有同批对手</td>
+          <td>无</td>
+          <td>见 REQ-001 决策表</td>
+          <td>该次上传。不要求给用户展示批次号</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="nfr">
+  <h2>6. 非功能与依赖</h2>
+  <div class="table-wrap">
+    <table>
+      <caption>非功能</caption>
+      <thead><tr><th>项</th><th>要求</th><th>验证</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>性能</td>
+          <td>没有毫秒级基线，不新设时限。额外重算的次数等于同批里已经解析成功且未点「不关联」的其他文件数。不因为一个文件解析成功而去重算整个知识库的所有文件</td>
+          <td>开发测试核对一次解析成功所更新的文件集合</td>
+        </tr>
+        <tr>
+          <td>权限</td>
+          <td>不改变上传、查看、点「不关联」的现有权限</td>
+          <td>AC-14，以及现有权限回归仍按原断言</td>
+        </tr>
+        <tr>
+          <td>安全与隐私</td>
+          <td>日志和候选展示不新增文件正文。沿用现有候选里已经展示的标题、分数和上传信息</td>
+          <td>实现审查时检查新增日志</td>
+        </tr>
+        <tr>
+          <td>合规</td>
+          <td>不适用。本次不引入新的个人信息种类</td>
+          <td>无</td>
+        </tr>
+        <tr>
+          <td>可观测</td>
+          <td>不新增埋点。相似计算失败须留下可定位到文件的服务日志，并且不能把解析成功改成失败</td>
+          <td>AC-12</td>
+        </tr>
+        <tr>
+          <td>发布与恢复</td>
+          <td>没有单独灰度开关。版本管理关闭时，用户仍按现在的方式看不到相似徽标。回滚代码后停止新的同批回头更新；已经写上的候选不自动删除</td>
+          <td>见 <a href="#risk">风险</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>依赖</h3>
+  <div class="table-wrap">
+    <table>
+      <caption>上下游</caption>
+      <thead><tr><th>依赖</th><th>用途</th><th>阻塞</th></tr></thead>
+      <tbody>
+        <tr><td>毕昇知识库登记与解析</td><td>产生批次成员和解析成功时机</td><td>解析未成功则不能互判</td></tr>
+        <tr><td>现有相似规则与候选存储</td><td>阈值、公司编码、前 3 条、待处理状态</td><td>不替换这套规则</td></tr>
+        <tr><td>客户端知识库列表与门户上传对话框</td><td>一次确认的入口。门户上传会按文件夹拆登记请求</td><td>批次必须跨这些拆分仍然成立</td></tr>
+        <tr><td>门户前端相似页面</td><td>无。门户仓库没有知识库相似判定</td><td>不阻塞</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="data">
+  <h2>7. 数据与埋点</h2>
+  <p>相似结果仍然落在毕昇已有数据上：文件的待处理或已不关联状态、该文件名下的相似候选、计算时使用的比较快照。比较时读取文件指纹、解析状态、公司编码、文档与主版本、知识库归属。</p>
+  <p><span class="badge">事实</span> 当前没有「上传批次」字段。本需求要求系统在这些文件解析结束前知道它们属于同一次确认。用任务参数记住，还是在现有表增加一列，由技术设计决定。需求不指定表结构。</p>
+  <p>上线前的旧文件没有这个批次事实，所以不回填。</p>
+  <p>埋点：不适用。没有新的统计指标需要事件。不记录文件正文。</p>
+  <p>隐私：候选里继续只使用现有已展示的文件信息。不新增身份证、电话等字段。</p>
+</section>
+
+<section class="card" id="acceptance">
+  <h2>8. 验收标准</h2>
+  <p>下列预期都来自第 5 节的决定。库内其他文件在每条用例执行期间保持不变，除非该条自己说明。</p>
+  <div class="table-wrap">
+    <table>
+      <caption>验收条件</caption>
+      <thead><tr><th>标识</th><th>需求</th><th>前提</th><th>动作</th><th>预期</th></tr></thead>
+      <tbody>
+        <tr id="ac-01">
+          <td>AC-01</td><td>REQ-002</td>
+          <td>一次确认、同一文件夹，登记两个文件。二者按现有规则互相达到阈值，且都会进入对方前 3 名。库内没有更靠前的文件</td>
+          <td>文件甲先解析成功，文件乙后解析成功</td>
+          <td>乙成功后，甲和乙的待处理候选都包含对方。甲在乙成功之前不包含乙</td>
+        </tr>
+        <tr id="ac-02">
+          <td>AC-02</td><td>REQ-001、REQ-002</td>
+          <td>一次确认里的两个文件被分到不同文件夹，登记接口因此调用两次。相似资格同 AC-01</td>
+          <td>两个文件先后解析成功</td>
+          <td>与 AC-01 相同。文件夹不阻止它们互相进入候选</td>
+        </tr>
+        <tr id="ac-03">
+          <td>AC-03</td><td>REQ-002</td>
+          <td>同一批三个文件。甲、乙会互相进入前 3。丙还没解析完</td>
+          <td>甲、乙解析成功，丙仍在解析</td>
+          <td>甲和乙已经互相出现。系统不等丙结束。丙此时不在甲、乙的候选里</td>
+        </tr>
+        <tr id="ac-04">
+          <td>AC-04</td><td>REQ-002</td>
+          <td>同一批三个文件。丙解析失败</td>
+          <td>甲、乙解析成功，丙失败</td>
+          <td>甲和乙按规则互相出现。丙没有候选，甲和乙的候选也不包含丙</td>
+        </tr>
+        <tr id="ac-05">
+          <td>AC-05</td><td>REQ-002</td>
+          <td>甲先解析成功，用户对甲点了「不关联」。乙与甲达到阈值且会进入乙的前 3</td>
+          <td>乙随后解析成功</td>
+          <td>甲保持已不关联，不重新出现提醒。乙的候选包含甲</td>
+        </tr>
+        <tr id="ac-06">
+          <td>AC-06</td><td>REQ-002、REQ-003</td>
+          <td>甲已有 3 条相似度更高的库内候选。乙与甲达到阈值，但分数低于这 3 条</td>
+          <td>乙解析成功，并触发甲重算</td>
+          <td>甲的 3 条仍是原来的更高分文件，不包含乙。乙是否显示甲，只看甲能否进入乙自己的前 3</td>
+        </tr>
+        <tr id="ac-07">
+          <td>AC-07</td><td>REQ-001、REQ-002</td>
+          <td>第一次确认只有甲，且甲已解析成功。第二次确认只有乙。二者会互相进入前 3</td>
+          <td>乙解析成功</td>
+          <td>乙的候选可以包含甲。甲不被这次上传回头重算，因此甲不因为乙而新增候选</td>
+        </tr>
+        <tr id="ac-08">
+          <td>AC-08</td><td>REQ-001</td>
+          <td>不经过上传对话框，连续两次登记请求，各登记一个文件</td>
+          <td>两个文件都解析成功</td>
+          <td>它们不属于同一批。结果与 AC-07 相同</td>
+        </tr>
+        <tr id="ac-09">
+          <td>AC-09</td><td>REQ-003</td>
+          <td>同批两个文件分别属于：公司编码第一段不同、同一文档的两个版本、没有有效指纹、不在同一知识库，这四种里的一种</td>
+          <td>两者都解析成功</td>
+          <td>沿用现有规则，不把对方写入候选</td>
+        </tr>
+        <tr id="ac-10">
+          <td>AC-10</td><td>REQ-001、REQ-002</td>
+          <td>一次确认只登记成功一个文件，库内已有另一个可相似文件</td>
+          <td>该文件解析成功</td>
+          <td>没有同批回头更新。它与库内旧文件的比较保持现有一次计算的结果</td>
+        </tr>
+        <tr id="ac-11">
+          <td>AC-11</td><td>范围排除</td>
+          <td>两个相似文件在本功能上线前已经解析成功，当时两侧都没有对方</td>
+          <td>完成本次发布，不另做回填</td>
+          <td>这两个旧文件不被自动补上对方</td>
+        </tr>
+        <tr id="ac-12">
+          <td>AC-12</td><td>异常：失败</td>
+          <td>同批文件解析已经成功，随后的相似计算失败</td>
+          <td>计算失败</td>
+          <td>文件仍是解析成功。不写入这次没算出的候选。已不关联状态不被改回待处理</td>
+        </tr>
+        <tr id="ac-13">
+          <td>AC-13</td><td>范围排除</td>
+          <td>同一次上传的两个文件后来都发布到同一个目标库</td>
+          <td>两个发布入口先后就绪</td>
+          <td>发布入口仍只在自己就绪时刷新。本次不追加「同批发布入口回头更新」</td>
+        </tr>
+        <tr id="ac-14">
+          <td>AC-14</td><td>REQ-003</td>
+          <td>现有列表规则下，某用户本来看不到相似徽标</td>
+          <td>同批文件形成待处理相似</td>
+          <td>该用户仍然看不到徽标。能看见的用户仍按原入口查看，最多 3 条</td>
+        </tr>
+        <tr id="ac-15">
+          <td>AC-15</td><td>REQ-002</td>
+          <td>同 AC-01，但两个文件几乎同时解析成功</td>
+          <td>两侧更新都结束</td>
+          <td>最终与 AC-01 的结束状态相同。允许结束前短暂只有一侧有候选</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>四问自检</h3>
+  <div class="callout ok">
+    <strong>研发能否不开工前再问产品规则</strong>
+    批次、两侧重算、不等整批结束、前 3、不重新打开、文件夹不设边界，都有决定和验收。表结构、并发锁和失败后的自动重试次数留给技术设计，不是未定的产品规则。
+  </div>
+  <div class="callout ok">
+    <strong>测试能否写用例</strong>
+    AC-01 至 AC-15 覆盖主路径、跨文件夹、部分完成、失败、已不关联、前 3 挤出、两次上传、直接接口、资格排除、单文件、历史不回填、计算失败、发布入口排除、权限和同时完成。
+  </div>
+  <div class="callout ok">
+    <strong>业务方能否说出上线换来什么</strong>
+    同一次确认上传并且解析成功的文件，会按现有相似标准互相参与比较。先传完的那份也会在后一份成功后更新。两次分开的上传、历史文件和发布入口不在这次收益里。
+  </div>
+  <div class="callout ok">
+    <strong>三个月后能否看懂原因</strong>
+    第 1 节写了漏判来自单向、单次计算，不是文件夹误判。决定表保留了没选的方案。
+  </div>
+</section>
+
+<section class="card" id="risk">
+  <h2>9. 风险与灰度回滚</h2>
+  <div class="table-wrap">
+    <table>
+      <caption>风险</caption>
+      <thead><tr><th>风险</th><th>触发</th><th>影响</th><th>应对</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>先完成文件的前 3 名发生变化</td>
+          <td>同批后一个文件解析成功并触发重算</td>
+          <td>用户如果正打开旧的候选，可能看到其中一条被换掉</td>
+          <td>接受。这是按分数重新取前 3 的结果，不额外保留旧候选</td>
+        </tr>
+        <tr>
+          <td>同时完成时短时间只有一侧有提醒</td>
+          <td>两个解析几乎同时结束</td>
+          <td>用户刷新得太早，可能先只看到一侧</td>
+          <td>验收看两侧更新结束后的结果，见 AC-15。锁和重试由设计处理</td>
+        </tr>
+        <tr>
+          <td>历史相似仍缺失</td>
+          <td>上线前的同一次上传</td>
+          <td>旧文件不会自动补上</td>
+          <td>接受。没有批次记录就不回填，避免把全库重算混进本次</td>
+        </tr>
+        <tr>
+          <td>发布入口仍可能单侧缺失</td>
+          <td>同批文件发布到目标库</td>
+          <td>目标库发布入口不一定互相出现</td>
+          <td>接受，并写进 AC-13。要做需另开需求</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>启用范围：跟随现有知识库相似能力，不新增开关。版本管理关闭时，徽标继续按现在的条件隐藏。</p>
+  <p>回滚：撤回本次代码后，新的解析只保持原有的「每个文件算自己一次」。已经写入的候选和待处理状态保留，不在回滚时批量删除。需要清数据时另作确认。</p>
+</section>
+
+<section class="card" id="changelog">
+  <h2>10. 变更记录</h2>
+  <div class="table-wrap">
+    <table>
+      <caption>版本</caption>
+      <thead><tr><th>版本</th><th>日期</th><th>变更</th><th>受影响标识</th><th>依据</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>0.1</td>
+          <td>2026-11-03</td>
+          <td>首稿。当时状态为待用户确认</td>
+          <td>REQ-001、REQ-002、REQ-003；AC-01 至 AC-15</td>
+          <td>用户对批次、两侧、完成时机、前 3 名、不重新打开的选择；文件夹以当前整库比较为准</td>
+        </tr>
+        <tr>
+          <td>0.2</td>
+          <td>2026-11-03</td>
+          <td>用户确认 0.1。补充一条已有验收里的硬约束：解析主流程和解析提交时的既有副作用保持原样</td>
+          <td>REQ-001、REQ-002、REQ-003；AC-12 及全部 AC。规则正文未改判定标准</td>
+          <td>用户回复「确认。上传解析是核心功能，我们要确保这次改动不会影响现有的业务逻辑。」</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="hint">0.2 是需求闭环依据。技术设计另稿，确认前不改业务代码。</p>
+</section>
+
+<p class="footer">毕昇 · features/v2.6.0/113-same-batch-upload-similarity/requirements.html · 0.2 已确认</p>
+</div>
+</body>
+</html>
