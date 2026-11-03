@@ -33,7 +33,7 @@ const GHOST_PADDING: Record<InputSize, string> = {
   large: 'gap-1 px-2',
 };
 
-export interface SelectionTriggerProps {
+export interface SelectionTriggerProps extends Omit<React.HTMLAttributes<HTMLElement>, 'children'> {
   size: InputSize;
   status: InputStatus;
   variant: SelectionVariant;
@@ -84,6 +84,7 @@ export const SelectionTrigger = React.forwardRef<HTMLElement, SelectionTriggerPr
       comboboxProps,
       onTriggerClick,
       onClear,
+      ...triggerProps
     },
     ref,
   ) {
@@ -185,6 +186,7 @@ export const SelectionTrigger = React.forwardRef<HTMLElement, SelectionTriggerPr
       );
     }
 
-    return node;
+    // Tooltip/Popover asChild props must reach the DOM without replacing field handlers.
+    return <Slot {...triggerProps}>{node}</Slot>;
   },
 );

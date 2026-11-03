@@ -38,7 +38,7 @@ function SortOption({ order, label }: { order: HomeSort; label: string }) {
 export function KnowledgeHomeSort({ value, onValueChange }: KnowledgeHomeSortProps) {
   const localize = useLocalize();
   if (USE_PRODUCT_COMPONENTS) return <div className={styles.sort}>
-    <ProductSelect size="medium" variant="outlined" className={styles.productSort} panelClassName={`${tokens.geometry} ${styles.productMenu}`} aria-label={localize('com_knowledge.sort_field')}
+    <ProductSelect size="medium" variant="ghost" panelClassName={`${tokens.geometry} ${styles.productMenu}`} aria-label={localize('com_knowledge.sort_field')}
       value={value} options={orders.map((order) => ({ value: order, label: localize(`com_knowledge.home_next.sort_${order}`) }))}
       onChange={(next) => { const order = orders.find((order) => order === next); if (order) onValueChange(order); }} />
   </div>;

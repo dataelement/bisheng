@@ -295,7 +295,7 @@ export default function Conversation({
           </div>
         </a>
       )}
-      {!renaming && hasDate && (
+      {!renaming && hasDate && !isPopoverPresent && (
         <time className="dsh-history-time" dateTime={updatedAt.toISOString()}>
           {updatedAt.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}
         </time>

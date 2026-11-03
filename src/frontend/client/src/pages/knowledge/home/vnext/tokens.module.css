@@ -1,6 +1,5 @@
-/* Quantize layout lengths downward to even CSS pixels, independently of typography. */
+/* Keep the approved 1440px geometry at every viewport width. */
 .scope, .geometry {
-  --vnext-layout-unit: max(.8px, .0657894736842vw);
   --vnext-geometry-2: 2px;
   --vnext-geometry-4: 2px;
   --vnext-geometry-6: 4px;
@@ -31,52 +30,17 @@
   --vnext-geometry-440: 416px;
 }
 
-@supports (width: round(down, 3px, 2px)) {
-  .scope, .geometry {
-    --vnext-geometry-2: max(2px, round(down, calc(2 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-4: max(2px, round(down, calc(4 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-6: max(2px, round(down, calc(6 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-8: max(2px, round(down, calc(8 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-11: max(2px, round(down, calc(11 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-12: max(2px, round(down, calc(12 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-12-8: max(2px, round(down, calc(12.8 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-14: max(2px, round(down, calc(14 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-14-4: max(2px, round(down, calc(14.4 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-16: max(2px, round(down, calc(16 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-18: max(2px, round(down, calc(18 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-22: max(2px, round(down, calc(22 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-24: max(2px, round(down, calc(24 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-28: max(2px, round(down, calc(28 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-32: max(2px, round(down, calc(32 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-36: max(2px, round(down, calc(36 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-40: max(2px, round(down, calc(40 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-48: max(2px, round(down, calc(48 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-56: max(2px, round(down, calc(56 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-120: max(2px, round(down, calc(120 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-128: max(2px, round(down, calc(128 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-142: max(2px, round(down, calc(142 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-160: max(2px, round(down, calc(160 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-200: max(2px, round(down, calc(200 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-240: max(2px, round(down, calc(240 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-280: max(2px, round(down, calc(280 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-350: max(2px, round(down, calc(350 * var(--vnext-layout-unit)), 2px));
-    --vnext-geometry-440: max(2px, round(down, calc(440 * var(--vnext-layout-unit)), 2px));
-  }
-}
-
 .scope {
-  --vnext-surface-page: #fff;
-  --vnext-surface-card: #f7f9fb;
-  --vnext-surface-card-hover: #eff2f8;
-  --vnext-surface-card-pressed: #eff2f8;
-  --vnext-surface-tab-hover: #f7f9fb;
-  --vnext-surface-tab-selected: var(--vnext-surface-card-hover);
+  --vnext-surface-page: rgb(var(--bg-page));
+  --vnext-surface-card: rgb(var(--fill-1));
+  --vnext-surface-card-hover: rgb(var(--fill-2));
+  --vnext-surface-card-pressed: rgb(var(--fill-3));
   --vnext-text-strong: #000;
-  --vnext-text-primary: #333;
-  --vnext-text-secondary: #626e82;
-  --vnext-text-meta: #626e82;
-  --vnext-text-owner: #626e82;
-  --vnext-text-tab: rgb(0 0 0 / 60%);
+  --vnext-text-primary: rgb(var(--text-1));
+  --vnext-text-secondary: rgb(var(--text-3));
+  --vnext-text-placeholder: rgb(var(--text-4));
+  --vnext-text-meta: rgb(var(--text-2));
+  --vnext-text-owner: rgb(var(--text-2));
   --vnext-action-primary-bg: #000;
   --vnext-action-primary-fg: #fff;
   --vnext-action-primary-hover: #000;
@@ -88,33 +52,23 @@
   --vnext-action-secondary-border: #333;
   --vnext-action-secondary-hover: rgb(51 51 51 / 5%);
   --vnext-action-secondary-pressed: #eff2f8;
-  --vnext-action-disabled-bg: #e3e7ee;
-  --vnext-action-disabled-fg: #626e82;
+  --vnext-action-disabled-bg: rgb(var(--btn-disabled-bg));
+  --vnext-action-disabled-fg: rgb(var(--btn-disabled-text));
   --vnext-border-control: #d0d5de;
   --vnext-font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
   --vnext-weight-regular: 400;
   --vnext-weight-medium: 500;
   --vnext-weight-semibold: 600;
-  --vnext-title-size: 24px;
-  --vnext-title-line-height: 56px;
-  --vnext-card-title-size: 16px;
+  --vnext-card-title-size: 14px;
   --vnext-card-title-line-height: var(--vnext-space-icon-size);
   --vnext-body-size: 14px;
   --vnext-body-line-height: 22px;
-  --vnext-tab-size: 14px;
-  --vnext-tab-line-height: 24px;
   --vnext-control-size: 14px;
   --vnext-control-line-height: 22px;
   --vnext-letter-spacing: 0;
-  --vnext-page-padding-inline: var(--vnext-geometry-40);
-  --vnext-page-padding-block-start: var(--vnext-geometry-32);
-  --vnext-header-height: var(--vnext-geometry-56);
-  --vnext-header-toolbar-gap: var(--vnext-geometry-24);
-  --vnext-toolbar-grid-gap: var(--vnext-geometry-24);
   --vnext-grid-gap-inline: var(--vnext-geometry-24);
   --vnext-grid-gap-block: var(--vnext-geometry-24);
-  --vnext-card-min-width: var(--vnext-geometry-440);
-  --vnext-card-compact-min-width: var(--vnext-geometry-350);
+  --vnext-card-min-width: 300px;
   --vnext-card-min-height: 126px;
   --vnext-card-padding: 14px 18px;
   --vnext-card-description-gap-start: max(2px, calc(var(--vnext-geometry-16) - 2px));
@@ -122,22 +76,14 @@
   --vnext-card-footer-row-gap: max(2px, calc(var(--vnext-geometry-8) - 4px));
   --vnext-space-icon-size: var(--vnext-geometry-36);
   --vnext-card-heading-gap: var(--vnext-geometry-12);
-  --vnext-tab-height: var(--vnext-geometry-36);
-  --vnext-tab-padding-inline: var(--vnext-geometry-24);
-  --vnext-tab-gap: var(--vnext-geometry-8);
-  --vnext-tab-icon-gap: var(--vnext-geometry-8);
-  --vnext-header-action-gap: var(--vnext-geometry-24);
   --vnext-control-height: var(--vnext-geometry-40);
   --vnext-button-padding-inline: var(--vnext-geometry-24);
   --vnext-sort-padding-inline: var(--vnext-geometry-16);
   --vnext-radius-card: var(--vnext-geometry-14);
   --vnext-radius-control: var(--vnext-geometry-8);
-  --vnext-radius-pill: 999px;
   --vnext-shadow-card: none;
   --vnext-shadow-control: none;
-  --vnext-more-glyph-width: var(--vnext-geometry-12-8);
-  --vnext-more-glyph-height: var(--vnext-geometry-12-8);
-  --vnext-focus-color: #333;
+  --vnext-focus-color: rgb(var(--text-2));
   --vnext-focus-width: 2px;
   --vnext-focus-offset: 2px;
   font-family: var(--vnext-font-family);
@@ -146,5 +92,4 @@
   line-height: var(--vnext-body-line-height);
   letter-spacing: var(--vnext-letter-spacing);
   color: var(--vnext-text-primary);
-  color-scheme: light;
 }

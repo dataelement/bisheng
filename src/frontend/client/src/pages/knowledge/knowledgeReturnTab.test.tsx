@@ -52,7 +52,7 @@ jest.mock('./hooks/useFileManager', () => ({
     return { files: [], currentPath: folderId ? [{ id: folderId, name: 'Folder' }] : [], currentFolderId: folderId, loadFiles: jest.fn() };
   },
 }));
-// Keep real page navigation, home, Segmented and detail Back; isolate data-heavy children.
+// Keep real page navigation, home, Tabs and detail Back; isolate data-heavy children.
 jest.mock('./sidebar/KnowledgeSpaceSidebar', () => ({
   KnowledgeSpaceSidebar: ({ onSpaceSelect }: { onSpaceSelect: (space: KnowledgeSpace) => void }) => (
     <MockKnowledgeSpaceSections
@@ -93,7 +93,7 @@ function setup(path = '/knowledge') {
 beforeEach(() => { jest.spyOn(console, 'info').mockImplementation(() => undefined); });
 it.each(['department', 'created', 'joined'])('returns to %s through the actual detail Back button', async (tab) => {
   const router = setup();
-  fireEvent.click(await screen.findByRole('tab', { name: new RegExp(`home_next.${tab}`) }));
+  fireEvent.mouseDown(await screen.findByRole('tab', { name: new RegExp(`home_next.${tab}`) }));
   fireEvent.click(await screen.findByRole('button', { name: `${tab} space` }));
   await waitFor(() => expect(router.state.location.pathname).toBe(`/knowledge/space/${tab}`));
   fireEvent.click(await screen.findByRole('button', { name: 'com_ui_go_back' }));
@@ -103,7 +103,7 @@ it.each(['department', 'created', 'joined'])('returns to %s through the actual d
 });
 it('retains joined through folders and both levels of Back', async () => {
   const router = setup();
-  fireEvent.click(await screen.findByRole('tab', { name: /home_next.joined/ }));
+  fireEvent.mouseDown(await screen.findByRole('tab', { name: /home_next.joined/ }));
   fireEvent.click(await screen.findByRole('button', { name: 'joined space' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Open folder' }));
   await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/space/joined/folder/folder-1'));
@@ -114,7 +114,7 @@ it('retains joined through folders and both levels of Back', async () => {
 });
 it('retains joined across browser Back and Forward', async () => {
   const router = setup();
-  fireEvent.click(await screen.findByRole('tab', { name: /home_next.joined/ }));
+  fireEvent.mouseDown(await screen.findByRole('tab', { name: /home_next.joined/ }));
   fireEvent.click(await screen.findByRole('button', { name: 'joined space' }));
   await screen.findByRole('button', { name: 'com_ui_go_back' });
   await act(async () => { await router.navigate(-1); });
@@ -135,8 +135,8 @@ it.each(['', '?tab=unknown'])('uses the default tab for direct links with query 
 });
 it('preserves other query parameters and replaces tab-only history entries', async () => {
   const router = setup('/knowledge?source=menu');
-  fireEvent.click(await screen.findByRole('tab', { name: /home_next.created/ }));
-  fireEvent.click(screen.getByRole('tab', { name: /home_next.joined/ }));
+  fireEvent.mouseDown(await screen.findByRole('tab', { name: /home_next.created/ }));
+  fireEvent.mouseDown(screen.getByRole('tab', { name: /home_next.joined/ }));
   expect(new URLSearchParams(router.state.location.search).get('source')).toBe('menu');
   await act(async () => { await router.navigate(-1); });
   expect(screen.getByText('Previous page')).toBeInTheDocument();

@@ -103,7 +103,7 @@ export function ChannelHomePage({
     return (
         // The scroll area spans the full width so its scrollbar sits at the page edge, not
         // beside the column.
-        <div className={cn(MODULE_HOME_FRAME, isMobile ? "px-0 py-0" : "px-[clamp(1rem,3.5%,2rem)] py-6")}>
+        <div className={cn(MODULE_HOME_FRAME, isMobile && "px-0 py-0")}>
             {isMobile ? (
                 <>
                     {/* Global navigation remains available without a duplicate square switcher. */}

@@ -4,7 +4,11 @@ import type { KnowledgeSpace } from '~/api/knowledge';
 import { KnowledgeHomePage } from '../../KnowledgeHomePage';
 
 jest.mock('./componentMode', () => ({ USE_PRODUCT_COMPONENTS: false }));
-jest.mock('@bisheng/ui', () => jest.requireActual('../../../../../../packages/ui/src/components/Tooltip/Tooltip.tsx'));
+jest.mock('@bisheng/ui', () => ({
+  ...jest.requireActual('../../../../../../packages/ui/src/components/Tooltip/Tooltip.tsx'),
+  ...jest.requireActual('../../../../../../packages/ui/src/components/Tabs/Tabs.tsx'),
+  ...jest.requireActual('../../../../../../packages/ui/src/components/Button/Button.tsx'),
+}));
 
 const mockCreatorInfo = jest.fn();
 const mockPin = jest.fn();
@@ -28,8 +32,8 @@ jest.mock('~/hooks', () => ({
   useLocalize: () => (key: string) => key,
 }));
 jest.mock('~/Providers', () => ({ useConfirm: () => mockConfirm }));
-jest.mock('bisheng-icons', () => ({ Outlined: {
-  Edit: () => <svg />, Delete: () => <svg />, Plus: () => <svg />, Pin: () => <svg />, People: () => <svg />,
+jest.mock('bisheng-icons', () => ({ ...jest.requireActual('bisheng-icons'), Outlined: {
+  Edit: () => <svg />, Delete: () => <svg />, Plus: () => <svg />, More: () => <svg />, Pin: () => <svg />, People: () => <svg />,
 } }));
 jest.mock('../../hooks/useKnowledgeSpaceLists', () => ({ useKnowledgeSpaceLists: () => ({
   mine: { data: mockData.mine, isLoading: mockLoading },
@@ -66,7 +70,7 @@ it('binds real counts, category filtering, merged sorting and navigation callbac
   fireEvent.keyDown(screen.getByRole('combobox'), { key: 'ArrowDown' });
   fireEvent.click(await screen.findByRole('option', { name: 'com_knowledge.home_next.sort_name' }));
   expect(screen.getAllByRole('article').map((card) => within(card).getByRole('heading').textContent)).toEqual(['Alpha', 'Beta', 'Department']);
-  fireEvent.click(screen.getByRole('tab', { name: 'com_knowledge.home_next.joined (1)' }));
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'com_knowledge.home_next.joined (1)' }));
   expect(screen.getAllByRole('article')).toHaveLength(1);
   fireEvent.click(screen.getByRole('button', { name: 'Beta' }));
   expect(callbacks.onSpaceSelect).toHaveBeenCalledWith(mockData.joined[0]);
@@ -89,12 +93,15 @@ it('closes sorting with Escape without changing its value and restores keyboard 
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
 });
 
-it('supports arrow-key category selection and preserves focus', () => {
+it('supports arrow-key category selection and preserves focus', async () => {
   mount();
   const first = screen.getByRole('tab', { name: 'com_knowledge.home_next.all (3)' });
+  act(() => first.focus());
   fireEvent.keyDown(first, { key: 'ArrowRight' });
-  expect(screen.getByRole('tab', { name: 'com_knowledge.home_next.department (1)' })).toHaveFocus();
-  expect(screen.getAllByRole('article')).toHaveLength(1);
+  await waitFor(() => {
+    expect(screen.getByRole('tab', { name: 'com_knowledge.home_next.department (1)' })).toHaveFocus();
+    expect(screen.getAllByRole('article')).toHaveLength(1);
+  });
 });
 
 it('keeps latest pin first through sort changes, unpin and re-pin', async () => {

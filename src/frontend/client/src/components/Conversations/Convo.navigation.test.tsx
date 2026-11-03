@@ -64,13 +64,18 @@ it('keeps the menu anchor displayed until its exit animation completes', () => {
     open('/c/one');
     const options = screen.getByRole('button', { name: 'Options', hidden: true });
     const slot = options.closest('.dsh-history-options') as HTMLElement;
+    const row = options.closest('.dsh-history-row') as HTMLElement;
+    expect(row.querySelector('time')).toBeInTheDocument();
     fireEvent.click(options);
     expect(getComputedStyle(slot).display).toBe('flex');
+    expect(row.querySelector('time')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Close options' }));
     // A disappearing anchor makes the still-fading floating panel jump to x=0.
     expect(getComputedStyle(slot).display).toBe('flex');
+    expect(row.querySelector('time')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Finish closing' }));
     expect(getComputedStyle(slot).display).toBe('none');
+    expect(row.querySelector('time')).toBeInTheDocument();
   } finally {
     styles.remove();
   }

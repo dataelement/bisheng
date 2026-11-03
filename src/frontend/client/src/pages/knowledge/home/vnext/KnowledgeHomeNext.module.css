@@ -1,19 +1,8 @@
 .page {
-  width: 100%;
-  min-width: 0;
-  height: 100%;
-  min-height: 0;
-  overflow: auto;
   overscroll-behavior: contain;
   overflow-anchor: none;
-  padding: var(--vnext-page-padding-block-start) var(--vnext-page-padding-inline) var(--vnext-geometry-56);
   background: var(--vnext-surface-page);
-  container-type: inline-size;
-  container-name: knowledge-home;
 }
-.header { display: flex; align-items: center; gap: var(--vnext-geometry-24); min-height: var(--vnext-header-height); flex-wrap: wrap; }
-.title { flex: 1 1 var(--vnext-geometry-240); min-width: 0; margin: 0; font-size: var(--vnext-title-size); line-height: var(--vnext-title-line-height); font-weight: var(--vnext-weight-medium); color: var(--vnext-text-strong); overflow-wrap: anywhere; }
-.headerActions { display: flex; flex-wrap: wrap; gap: var(--vnext-header-action-gap); }
 .primaryButton, .secondaryButton {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--vnext-geometry-8);
   min-height: var(--vnext-control-height); padding: var(--vnext-geometry-8) var(--vnext-button-padding-inline);
@@ -23,11 +12,7 @@
 }
 .primaryButton { color: var(--vnext-action-primary-fg); background: var(--vnext-action-primary-bg); font-weight: var(--vnext-weight-regular); }
 .primaryButton > svg { width: var(--vnext-geometry-16); height: var(--vnext-geometry-16); flex: none; }
-.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--vnext-geometry-16) var(--vnext-geometry-24); margin-top: var(--vnext-header-toolbar-gap); margin-bottom: var(--vnext-toolbar-grid-gap); }
-.tabs { display: flex; gap: var(--vnext-tab-gap); max-width: 100%; min-width: 0; overflow-x: auto; padding: var(--vnext-geometry-4); margin: calc(-1 * var(--vnext-geometry-4)); }
-.tab { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: var(--vnext-tab-icon-gap); height: var(--vnext-tab-height); padding: 0 var(--vnext-tab-padding-inline); border: 0; border-radius: var(--vnext-radius-pill); font: inherit; font-size: var(--vnext-tab-size); line-height: var(--vnext-tab-line-height); color: var(--vnext-text-tab); background: transparent; white-space: nowrap; }
-.tabIcon { flex: none; max-width: none; object-fit: contain; }
-.tab[aria-selected='true'] { color: var(--vnext-text-strong); background: var(--vnext-surface-tab-selected); font-weight: var(--vnext-weight-regular); }
+.toolbar { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: var(--vnext-geometry-16) var(--vnext-geometry-24); margin-top: 16px; margin-bottom: 16px; }
 .sort { margin-left: auto; flex: none; max-width: 100%; }
 .sortTrigger { display: inline-flex; align-items: center; justify-content: center; gap: var(--vnext-geometry-16); width: var(--vnext-geometry-128); max-width: 100%; height: var(--vnext-geometry-36); min-height: var(--vnext-geometry-36); padding: var(--vnext-geometry-6) var(--vnext-sort-padding-inline); border: 1px solid var(--vnext-border-control); border-radius: var(--vnext-radius-control); background: var(--vnext-surface-page); color: var(--vnext-text-primary); font: inherit; font-size: var(--vnext-control-size); line-height: var(--vnext-control-line-height); box-shadow: none; cursor: pointer; }
 .sortTrigger > img { flex: none; max-width: none; }
@@ -36,12 +21,11 @@
 .sortTrigger[data-state='open'] { background: var(--vnext-sort-active-bg); }
 .menu.sortMenu { width: max-content; min-width: 0; max-width: min(var(--vnext-geometry-200), var(--radix-select-content-available-width)); max-height: var(--radix-select-content-available-height); overflow: auto; box-shadow: none; }
 .sortItem[data-state='checked'] { font-weight: var(--vnext-weight-medium); }
-.panel { min-width: 0; }
-/* Scale track thresholds with geometry; track widths still follow the content container. */
+.panel { min-width: 0; flex: none; padding-bottom: var(--vnext-geometry-24); container-type: inline-size; container-name: knowledge-home; }
+/* Reflow fluid cards against a fixed minimum; narrower containers cannot add columns. */
 .grid {
   display: grid;
-  --vnext-card-effective-min-width: clamp(var(--vnext-card-compact-min-width), calc((100cqw - 2 * var(--vnext-grid-gap-inline)) / 3), var(--vnext-card-min-width));
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--vnext-card-effective-min-width)), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--vnext-card-min-width)), 1fr));
   column-gap: var(--vnext-grid-gap-inline);
   row-gap: var(--vnext-grid-gap-block);
 }
@@ -53,33 +37,29 @@
 .openSpace::after { content: ''; position: absolute; inset: 0; border-radius: var(--vnext-radius-card); }
 .card { position: relative; }
 .iconButton { position: relative; z-index: 1; }
-.description { min-height: var(--vnext-body-line-height); margin: var(--vnext-card-description-gap-start) 0 var(--vnext-card-description-gap-end); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--vnext-text-secondary); opacity: .6; }
+.description { min-height: var(--vnext-body-line-height); margin: var(--vnext-card-description-gap-start) 0 var(--vnext-card-description-gap-end); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--vnext-text-secondary); }
 .cardFooter { display: flex; align-items: center; flex-wrap: wrap; gap: var(--vnext-card-footer-row-gap) var(--vnext-geometry-16); margin-top: auto; min-width: 0; }
 .cardFooter > .iconButton { height: var(--vnext-body-line-height); }
 .owner { display: flex; align-items: center; flex: 1; min-width: 0; gap: var(--vnext-geometry-8); color: var(--vnext-text-owner); }
-.owner > img { flex: none; width: var(--vnext-geometry-16); height: var(--vnext-geometry-16); max-width: none; }
 .owner > span { white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
 .updated { color: var(--vnext-text-meta); font-variant-numeric: tabular-nums; }
 .iconButton { display: inline-flex; align-items: center; justify-content: center; width: var(--vnext-geometry-28); height: var(--vnext-geometry-28); flex: none; padding: var(--vnext-geometry-2); border: 0; border-radius: var(--vnext-radius-control); background: transparent; color: var(--vnext-text-secondary); }
-/* Render updated square exports without legacy canvas cropping. */
-.iconButton > img { flex: none; max-width: none; }
+/* Keep the supplied pin shapes while inheriting the semantic icon color. */
 .pinGlyph { display: grid; place-items: center; width: var(--vnext-geometry-14-4); height: var(--vnext-geometry-14-4); }
-.pinGlyph > img { grid-area: 1 / 1; width: var(--vnext-geometry-14-4); height: var(--vnext-geometry-14-4); max-width: none; }
-.pinHover { opacity: 0; }
-.moreButton:active:not(:disabled) .moreGlyph, .moreButton[data-state='open'] .moreGlyph { opacity: var(--vnext-action-hover-opacity); }
-.moreGlyph { display: block; flex: none; width: var(--vnext-more-glyph-width); height: var(--vnext-more-glyph-height); overflow: hidden; }
-.moreGlyph > img { display: block; width: 100%; height: 100%; max-width: none; object-fit: contain; }
+.pinGlyph > span { grid-area: 1 / 1; width: 100%; height: 100%; background: currentColor; mask-repeat: no-repeat; mask-position: center; mask-size: contain; }
+.pinFilled { mask-image: url('./assets/Clip.svg'); }
+.pinDefault { mask-image: url('./assets/clip-2.svg'); }
+.pinHover { mask-image: url('./assets/clip-2-hover.svg'); opacity: 0; }
 .status { display: flex; flex-direction: column; align-items: center; gap: var(--vnext-geometry-16); padding: var(--vnext-geometry-48) 0; text-align: center; color: var(--vnext-text-secondary); }
 .menu { z-index: 60; min-width: var(--vnext-geometry-160); max-width: min(var(--vnext-geometry-280), calc(100vw - var(--vnext-geometry-16))); padding: var(--vnext-geometry-8); border: 1px solid var(--vnext-border-control); border-radius: var(--vnext-radius-control); background: var(--vnext-surface-page); }
 .menuItem { padding: var(--vnext-geometry-8) var(--vnext-geometry-16); border-radius: var(--vnext-radius-control); cursor: pointer; outline: none; }
 .menuItem[data-highlighted] { background: var(--vnext-surface-card-hover); }
 .menuItem[data-disabled] { cursor: default; color: var(--vnext-action-disabled-fg); }
-.page button:not([data-product-control]):focus-visible, .panel:focus-visible, .menuItem:focus-visible { outline: var(--vnext-focus-width) solid var(--vnext-focus-color); outline-offset: var(--vnext-focus-offset); }
+.page button:not([data-product-control]):not([role='tab']):focus-visible, .panel:focus-visible, .menuItem:focus-visible { outline: var(--vnext-focus-width) solid var(--vnext-focus-color); outline-offset: var(--vnext-focus-offset); }
 .sortMenu .sortItem:focus-visible { outline: none; }
 .page button:not([data-product-control]):disabled { cursor: not-allowed; background: var(--vnext-action-disabled-bg); color: var(--vnext-action-disabled-fg); }
 .primaryButton:active:not(:disabled) { background: var(--vnext-action-primary-pressed); }
 .secondaryButton:active:not(:disabled) { background: var(--vnext-action-secondary-pressed); }
-.card:active { background: var(--vnext-surface-card-pressed); }
 /* Keep the selected text free of underlines and the closed control free of an outer ring. */
 .page .sortTrigger:focus-visible { outline: none; box-shadow: none; }
 .sortTrigger:focus-visible .sortValue { text-decoration: none; }
@@ -89,13 +69,12 @@
 @media (hover: hover) {
   .card:hover { background: var(--vnext-surface-card-hover); }
   .primaryButton:hover:not(:disabled) { background: var(--vnext-action-primary-hover); opacity: var(--vnext-action-hover-opacity); }
-  .moreButton:hover:not(:disabled) .moreGlyph { opacity: var(--vnext-action-hover-opacity); }
   .pinButton:hover:not(:disabled) .pinDefault { opacity: 0; }
   .pinButton:hover:not(:disabled) .pinHover { opacity: 1; }
   .sortTrigger:hover { background: var(--vnext-sort-active-bg); }
   .secondaryButton:hover:not(:disabled) { background: var(--vnext-action-secondary-hover); }
-  .tab:hover:not([aria-selected='true']) { background: var(--vnext-surface-tab-hover); }
 }
+.card:active { background: var(--vnext-surface-card-pressed); }
 @container knowledge-home (max-width: 350px) {
   .cardFooter { align-items: flex-start; }
   .updated { overflow-wrap: anywhere; }
@@ -106,8 +85,7 @@
   .cardHeading > .iconButton { margin-left: auto; }
 }
 
-.headerActions > button { min-height: var(--vnext-geometry-36); padding: var(--vnext-geometry-6) var(--vnext-geometry-22); }
-.emptyDescription { opacity: .3; }
+.emptyDescription { color: var(--vnext-text-placeholder); }
 .renameInput { height: var(--vnext-space-icon-size); box-sizing: border-box; position: relative; z-index: 2; width: 100%; min-width: 0; font: inherit; color: var(--vnext-text-primary); background: var(--vnext-surface-page); border: 1px solid var(--vnext-border-control); border-radius: var(--vnext-geometry-4); padding: 0 var(--vnext-geometry-4); }
 
 .sortItem { min-width: 0; max-width: 100%; white-space: nowrap; }
@@ -115,8 +93,6 @@
 
 /* Layout only: native component visuals come from @bisheng/ui. */
 .productTabs { flex: 1 1 auto; min-width: 0; }
-
-.productHeaderActions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--vnext-header-action-gap); }
 
 .productSegments { flex: 1 1 auto; min-width: 0; overflow-x: auto; }
 .segmentIcon { width: var(--vnext-geometry-16); height: var(--vnext-geometry-16); object-fit: contain; flex: none; }
@@ -127,21 +103,6 @@
 .menuItem > svg { width: var(--vnext-geometry-16); height: var(--vnext-geometry-16); flex: none; }
 .menuItem { display: flex; align-items: center; gap: var(--vnext-geometry-8); }
 
-/* Page-only geometry overrides; shared component colors, states and typography stay native. */
-.departmentTabIcon { width: var(--vnext-geometry-18); height: var(--vnext-geometry-18); }
-.createdTabIcon { width: var(--vnext-geometry-18); height: var(--vnext-geometry-18); }
-.joinedTabIcon { width: var(--vnext-geometry-18); height: var(--vnext-geometry-18); }
-.productHeaderActions > button {
-  height: var(--vnext-geometry-32);
-  padding-inline: var(--vnext-geometry-16);
-  gap: var(--vnext-geometry-8);
-}
-.productHeaderActions > button svg { width: var(--vnext-geometry-16); height: var(--vnext-geometry-16); }
-.sort .productSort { width: var(--vnext-geometry-128); height: var(--vnext-geometry-32); }
-.sort .productSort > div { padding-inline: var(--vnext-geometry-11); gap: var(--vnext-geometry-8); }
-/* The shared chevron supplies inline dimensions; scale its canvas without scaling text. */
-.productSort svg { width: var(--vnext-geometry-16) !important; height: var(--vnext-geometry-16) !important; }
-
 /* Portals opt into geometry separately, without adopting legacy page colors or fonts. */
 .productMenu { min-width: var(--vnext-geometry-120); max-width: var(--vnext-geometry-280); padding: var(--vnext-geometry-6); }
 .productMenu [role='menuitem'], .productMenu [role='option'] {
@@ -150,12 +111,3 @@
   gap: var(--vnext-geometry-8);
 }
 .productMenu svg { width: var(--vnext-geometry-16); height: var(--vnext-geometry-16); }
-
-/* Quantize tracks too; leave the sub-track remainder at the inline end, not in gaps. */
-@supports (width: round(down, calc((100px / 10px) * 1px), 2px)) {
-  .grid {
-    --vnext-track-count: max(1, round(down, calc((100cqw + var(--vnext-grid-gap-inline)) / (var(--vnext-card-effective-min-width) + var(--vnext-grid-gap-inline))), 1));
-    --vnext-track-width: max(2px, round(down, calc((100cqw - (var(--vnext-track-count) - 1) * var(--vnext-grid-gap-inline)) / var(--vnext-track-count)), 2px));
-    grid-template-columns: repeat(var(--vnext-track-count), minmax(0, var(--vnext-track-width)));
-  }
-}

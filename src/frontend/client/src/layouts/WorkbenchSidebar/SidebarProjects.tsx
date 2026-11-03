@@ -15,7 +15,7 @@ import { useSidebarProjects } from './useSidebarProjects';
 const ROW = 'flex w-full items-center rounded-lg py-[5px] pr-2 text-left text-body text-text-1 transition-colors coarse-pointer:min-h-11 coarse-pointer:py-0';
 const PROJECT_ACTION_BUTTON = cn(
   ICON_BUTTON,
-  'opacity-0 focus-visible:opacity-100 group-hover/project:opacity-100 data-[state=open]:opacity-100 coarse-pointer:opacity-100',
+  'opacity-0 focus-visible:opacity-100 group-hover/project:opacity-100 group-has-[[data-menu-open]]/project:opacity-100 data-[state=open]:opacity-100 coarse-pointer:opacity-100',
 );
 
 type NameDialogTarget = { mode: 'create' } | { mode: 'rename'; id: string; name: string };

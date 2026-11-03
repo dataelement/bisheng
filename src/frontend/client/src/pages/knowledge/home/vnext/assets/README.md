@@ -1,17 +1,17 @@
 # Knowledge home asset mapping
 
-Source: project-level `design/asset/`, updated 2026-11-03. The three active card PNGs and seven supplied SVGs are copied byte-for-byte. Page-only CSS controls their display sizes; source artwork and business category mappings are preserved.
+Source: project-level `design/asset/`, updated 2026-11-03. The three active card PNGs and seven supplied SVGs are copied byte-for-byte. Some SVGs are retained as inactive design references after adopting shared components and library icons; active mappings are listed below.
 
-- `card-1.png`, `card-2.png`, `card-3.png`: 88×88 (2×) PNGs, mapped respectively to department, created and joined API sources. At 1440px they display at 34×34px. Rasterized blur and translucent layers match the exported design. The experimental card SVGs are inactive and are not required by this change.
-- `menu-1.svg`, `menu-2.svg`, `menu-3.svg`: square 18×18 canvases for the same three categories; displayed at 16×16px at 1440. Internal whitespace is retained.
-- `menber.svg`: square 20×20 canvas for creator metadata, displayed at 14×14px at 1440; not a member count.
-- `Clip.svg`, `clip-2.svg`: square 20×20 canvases for pinned / unpinned state, displayed at 12×12px at 1440 after the requested 80% reduction and downward even-pixel quantization. The button hit area remains independent. `clip-2-hover.svg` derives from the supplied outline by changing only stroke-opacity from .5 to 1, retaining the confirmed #6A7588 hover stroke. Unpinned icons remain hidden until card hover/focus, while pinned icons remain visible.
-- `more.svg`: square 20×20 viewBox. Circles at x=2/10/18, y=10, r=2 give painted bounds x=0..20, y=8..12. The whole square displays at 12×12px at 1440, without the obsolete crop/translation. Original opacity states and button hit area remain unchanged.
+- `card-1.png`, `card-2.png`, `card-3.png`: 88×88 (2×) PNGs, mapped respectively to department, created and joined API sources through `knowledgeSpaceIcons.ts`. Desktop cards and mobile list rows share this mapping. At 1440px they display at 34×34px; mobile rows display at 32×32px. Rasterized blur and translucent layers match the exported design. The experimental card SVGs are inactive and are not required by this change.
+- `menu-1.svg`, `menu-2.svg`, `menu-3.svg`: inactive design references. Tabs now use `bisheng-icons` 0.2.37's `Filled.Departure`, `Filled.Person`, and `Filled.Tag` for department, created, and joined. The shared medium Tabs supplies 16×16px sizing and currentColor selection states.
+- `menber.svg`: inactive design reference. Creator metadata now uses `bisheng-icons`'s `Outlined.People` at 14×14px, alongside 12px creator and update text.
+- `Clip.svg`, `clip-2.svg`: square 20×20 canvases for pinned / unpinned state, displayed at 12×12px at 1440 after the requested 80% reduction and downward even-pixel quantization. They now act as CSS alpha masks: the original shapes and stroke opacity remain, while the visible color inherits the shared `text-3` token. The button hit area remains independent. `clip-2-hover.svg` derives from the supplied outline by changing only stroke-opacity from .5 to 1. Unpinned icons remain hidden until card hover/focus, while pinned icons remain visible.
+- `more.svg`: inactive design reference. The shared small icon-only Button now uses `Outlined.More` at its native 14×14px size.
 - `sort-arrow.svg`: earlier local fallback arrow retained; the active shared Select uses its own chevron.
 
-CSS geometry rounds down to even pixels independently of typography; SVG internal coordinates and opacity values are not rounded. Current card title is 16px, card padding is 14px 18px, and the authoritative revision history is in `docs/knowledge-space-design-spec.md`.
+CSS geometry rounds down to even pixels independently of typography; SVG internal coordinates and opacity values are not rounded. Current card title is 14px, card padding is 14px 18px, and the authoritative revision history is in `docs/knowledge-space-design-spec.md`.
 
-## SHA256 of active supplied files
+## SHA256 of supplied files (including inactive references)
 
 - `card-1.png`: `1fda19627df95ef8292a2aeaea3560aa6c13b8837f43719401f5809393a3615c`
 - `card-2.png`: `ae5b08860b39b78238478f9df16cb32fb2c710177f5671b4ff03b8c0c9d6fe2a`
