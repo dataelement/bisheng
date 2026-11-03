@@ -270,11 +270,17 @@ describe("usePortalUploadDialog", () => {
         expect(addFilesApi).toHaveBeenNthCalledWith(1, "space-1", {
             file_path: ["/tmp/能源管理标准.pdf"],
             parent_id: 37,
+            upload_batch_key: expect.any(String),
         });
         expect(addFilesApi).toHaveBeenNthCalledWith(2, "space-1", {
             file_path: ["/tmp/其他资料.pdf"],
             parent_id: null,
+            upload_batch_key: expect.any(String),
         });
+        const firstBatchKey = jest.mocked(addFilesApi).mock.calls[0][1].upload_batch_key;
+        const secondBatchKey = jest.mocked(addFilesApi).mock.calls[1][1].upload_batch_key;
+        expect(firstBatchKey).toEqual(secondBatchKey);
+        expect(firstBatchKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
         expect(reloadFiles).toHaveBeenCalledTimes(1);
         expect(onUploaded).toHaveBeenCalledTimes(1);
         expect(hook.result.current.uploadDialogOpen).toBe(false);
@@ -301,6 +307,7 @@ describe("usePortalUploadDialog", () => {
         expect(addFilesApi).toHaveBeenCalledWith("space-1", {
             file_path: ["/tmp/uploaded.pdf"],
             parent_id: null,
+            upload_batch_key: expect.any(String),
         });
     });
 
@@ -326,6 +333,7 @@ describe("usePortalUploadDialog", () => {
         expect(addFilesApi).toHaveBeenCalledWith("space-1", {
             file_path: ["/tmp/uploaded.pdf"],
             parent_id: 1,
+            upload_batch_key: expect.any(String),
         });
     });
 
@@ -376,6 +384,7 @@ describe("usePortalUploadDialog", () => {
             parent_id: null,
             file_category_code: "RPT",
             file_subcategory_code: "RPT",
+            upload_batch_key: expect.any(String),
         });
     });
 
@@ -402,6 +411,7 @@ describe("usePortalUploadDialog", () => {
             business_domain_code: "PP",
             manual_tag_ids: [1],
             manual_tag_names: ["制度"],
+            upload_batch_key: expect.any(String),
         });
     });
 
@@ -605,6 +615,7 @@ describe("usePortalUploadDialog", () => {
             file_path: ["/tmp/uploaded.pdf"],
             parent_id: null,
             manual_tag_names: ["已有标签"],
+            upload_batch_key: expect.any(String),
         });
     });
 });

@@ -381,3 +381,8 @@ class AbnormalUploadRetryFailedError(BaseErrorCode):
 class PortalManualRecommendationInvalidError(BaseErrorCode):
     Code: int = 18080
     Msg: str = "人工推荐知识无效，请检查知识库范围、文件状态及归属"
+
+
+class UploadBatchKeyRejectedError(BaseErrorCode):
+    Code: int = 18007
+    Msg: str = "上传批次键不能用于当前用户或当前知识库"

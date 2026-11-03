@@ -20,9 +20,10 @@ repos:
     rev: v0.15.14
     hooks:
       - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
+        args: [--fix, --exit-non-zero-on-fix, --config=src/backend/pyproject.toml]
         types_or: [python, pyi]
       - id: ruff-format
+        args: [--config=src/backend/pyproject.toml]
         types_or: [python, pyi]
 
   - repo: local

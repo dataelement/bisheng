@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import { v4 as createUploadBatchKey } from "uuid";
 import i18next from "i18next";
 import {
     FileStatus,
@@ -180,6 +181,7 @@ export function useFileUpload({
             }
 
             const requestSpaceId = String(activeSpace.id);
+            const uploadBatchKey = createUploadBatchKey();
             const isCurrentSpace = () => activeSpaceIdRef.current === requestSpaceId;
             const fileArray = Array.from(fileList);
 
@@ -278,6 +280,7 @@ export function useFileUpload({
                 const registeredFiles = await addFilesApi(activeSpace.id, {
                     file_path: uploadedPaths,
                     parent_id: currentFolderId ? Number(currentFolderId) : null,
+                    upload_batch_key: uploadBatchKey,
                 });
                 if (!isCurrentSpace()) {
                     return;
@@ -361,6 +364,7 @@ export function useFileUpload({
             if (!activeSpace || !fileList || fileList.length === 0) return;
             if (folderUploadInFlightRef.current) return;
             folderUploadInFlightRef.current = true;
+            const uploadBatchKey = createUploadBatchKey();
             try {
                 const allFiles = Array.from(fileList);
 
@@ -478,6 +482,7 @@ export function useFileUpload({
                             const registeredFiles = await addFilesApi(activeSpace.id, {
                                 file_path: uploadedPaths,
                                 parent_id: Number(parentFolderId),
+                                upload_batch_key: uploadBatchKey,
                             });
                             const dupes = extractDuplicateFileEntries(registeredFiles);
                             if (dupes.length > 0) {
