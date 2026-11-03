@@ -86,7 +86,7 @@ export function KnowledgeHomeCard({ animateLayout, moving, layoutDelay, layoutOr
     <motion.article ref={cardRef} className={styles.card} aria-busy={pending} layout={animateLayout ? 'position' : false}
       layoutDependency={layoutOrder}
       initial={false} style={{ zIndex: moving ? 2 : 0 }}
-      transition={{ layout: { duration: .36, delay: layoutDelay, ease: [.22, 1, .36, 1] } }}>
+      transition={{ layout: { duration: .6, delay: layoutDelay, ease: [.22, 1, .36, 1] } }}>
       <div className={styles.cardHeading}>
         <img className={styles.spaceIcon} src={icon} width={36} height={36} alt="" />
         <h2 className={styles.cardTitle}>
@@ -98,8 +98,8 @@ export function KnowledgeHomeCard({ animateLayout, moving, layoutDelay, layoutOr
           aria-pressed={space.isPinned} disabled={pending || demo} onClick={() => onAction('pin')}>
           <span className={styles.pinGlyph} aria-hidden="true">
             <img className={space.isPinned ? undefined : styles.pinDefault} src={space.isPinned ? pinnedIcon : unpinnedIcon}
-              width={space.isPinned ? 24 : 25} height={24} alt="" />
-            {!space.isPinned ? <img className={styles.pinHover} src={unpinnedHoverIcon} width={25} height={24} alt="" /> : null}
+              width={20} height={20} alt="" />
+            {!space.isPinned ? <img className={styles.pinHover} src={unpinnedHoverIcon} width={20} height={20} alt="" /> : null}
           </span>
         </button>
       </div>
@@ -115,7 +115,7 @@ export function KnowledgeHomeCard({ animateLayout, moving, layoutDelay, layoutOr
             year: 'numeric', month: '2-digit', day: '2-digit',
           }).format(new Date(updated)) })}
         </time> : null}
-        {USE_PRODUCT_COMPONENTS ? <Dropdown align="end"
+        {USE_PRODUCT_COMPONENTS ? <Dropdown align="end" panelClassName={`${tokens.geometry} ${styles.productMenu}`}
           onOpenChange={(open) => { if (open) onMenuOpen(); }}
           menu={permissionsLoading ? <DropdownItem disabled>{localize('com_knowledge.loading')}</DropdownItem> : <>
             {canEdit ? <DropdownItem icon={<Outlined.Edit />} disabled={pending} onSelect={onEdit}>{localize('com_knowledge.space_settings')}</DropdownItem> : null}
@@ -123,14 +123,14 @@ export function KnowledgeHomeCard({ animateLayout, moving, layoutDelay, layoutOr
             {!canEdit && !canDelete ? <DropdownItem disabled>{localize('com_knowledge.home_next.no_actions')}</DropdownItem> : null}
           </>}>
           <button type="button" className={`${styles.iconButton} ${styles.moreButton}`} aria-label={localize('com_knowledge.home_next.more')} disabled={pending || demo}>
-            <span className={styles.moreGlyph} aria-hidden="true"><img src={moreIcon} width={30} height={30} alt="" /></span>
+            <span className={styles.moreGlyph} aria-hidden="true"><img src={moreIcon} width={20} height={20} alt="" /></span>
           </button>
         </Dropdown> : <Menu.Root onOpenChange={(open) => { if (open) onMenuOpen(); }}>
           <Menu.Trigger asChild>
             <button type="button" className={`${styles.iconButton} ${styles.moreButton}`} aria-label={localize('com_knowledge.home_next.more')}
               disabled={pending || demo}>
               <span className={styles.moreGlyph} aria-hidden="true">
-                <img src={moreIcon} width={30} height={30} alt="" />
+                <img src={moreIcon} width={20} height={20} alt="" />
               </span>
             </button>
           </Menu.Trigger>

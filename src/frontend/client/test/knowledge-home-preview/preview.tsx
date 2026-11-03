@@ -21,7 +21,7 @@ export const useWorkbenchMenuNames = () => ({ knowledge: translations.com_ui_kno
 export function useLocalize() {
   const { long } = useContext(FixtureContext);
   return (key: string, options?: Record<string, unknown>) => {
-    if (long && key.startsWith('com_knowledge.home_next.sort_')) return '用于验证排序选项超长文字截断及完整气泡提示的文字';
+    if (long && key.startsWith('com_knowledge.home_next.sort_')) return fixtureContent.longTitle;
     let value: unknown = translations;
     for (const part of key.split('.')) value = value && typeof value === 'object' ? (value as Record<string, unknown>)[part] : undefined;
     return typeof value === 'string' ? value.replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(options?.[name] ?? '')) : key;
@@ -47,8 +47,8 @@ export function useSpaceActions() {
 }
 
 function Preview() {
-  const [width, setWidth] = useState(1920);
-  const [sidebar, setSidebar] = useState(389);
+  const [width, setWidth] = useState(1440);
+  const [sidebar, setSidebar] = useState(240);
   const [count, setCount] = useState(7);
   const [long, setLong] = useState(false);
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => new Set());

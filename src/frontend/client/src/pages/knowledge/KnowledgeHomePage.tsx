@@ -14,7 +14,7 @@ import { KnowledgeHomeCard } from './home/vnext/KnowledgeHomeCard';
 import { groupHomeSpaces, mergePinnedOrder, sortHomeSpaces, type HomeCategory, type HomeSort, type HomeSpace } from './home/vnext/homeSpaces';
 import departmentIcon from './home/vnext/assets/menu-1.svg';
 import createdIcon from './home/vnext/assets/menu-2.svg';
-import joinedIcon from './home/vnext/assets/menu-3.png';
+import joinedIcon from './home/vnext/assets/menu-3.svg';
 import tokens from './home/vnext/tokens.module.css';
 import styles from './home/vnext/KnowledgeHomeNext.module.css';
 
@@ -55,7 +55,7 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
   const [movingSpaceId, setMovingSpaceId] = useState<string | null>(null);
   useEffect(() => {
     if (!movingSpaceId) return;
-    const timer = window.setTimeout(() => setMovingSpaceId(null), 600);
+    const timer = window.setTimeout(() => setMovingSpaceId(null), 1100);
     return () => window.clearTimeout(timer);
   }, [movingSpaceId]);
   const ids = useMemo(() => groups.all.map(({ space }) => space.id), [groups]);
@@ -128,7 +128,7 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
               aria-selected={category === key} aria-controls={`${id}-panel`}
               tabIndex={category === key ? 0 : -1} className={styles.tab}
               onClick={() => setCategory(key)} onKeyDown={(event) => handleTabKeyDown(event, index)}>
-              {key !== 'all' ? <img className={styles.tabIcon} src={categoryIcons[key]} alt="" /> : null}
+              {key !== 'all' ? <img className={`${styles.tabIcon} ${styles[`${key}TabIcon`]}`} src={categoryIcons[key]} alt="" /> : null}
               <span>{localize(`com_knowledge.home_next.${key}`)}{' '}
               <span>{resolved ? `(${groups[key].length})` : '—'}</span></span>
             </button>
