@@ -65,18 +65,21 @@ export function DailyFeaturedApps({ t }: DailyFeaturedAppsProps) {
       </div>
       <div className="relative max-w-[800px] mx-auto px-4">
         <div className="pr-1">
-          <div className="grid grid-cols-2 touch-desktop:grid-cols-4 gap-3 mb-3">
+          {/* Two wide columns on every device: four columns in the 800px area made each card
+              about 185px wide against a 142px fixed height, a near-square box whose short
+              content left the lower half empty. Height now follows the content. */}
+          <div className="grid grid-cols-2 gap-3 mb-3">
             {displayApps.map((appItem) => (
               <Card
                 key={appItem.id}
-                className="group flex flex-col py-0 rounded-lg shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-border-base overflow-hidden cursor-pointer hover:border-blue-500 hover:shadow-[0_4px_14px_rgb(var(--brand-500)/0.12)] transition-all duration-300 h-[142px] hover:-translate-y-1"
+                className="group flex flex-col py-0 rounded-lg shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-border-base overflow-hidden cursor-pointer hover:border-blue-500 hover:shadow-[0_4px_14px_rgb(var(--brand-500)/0.12)] transition-all duration-300 hover:-translate-y-1"
                 style={{
                   background:
                     "linear-gradient(135deg, rgb(var(--brand-500)/0.04) 0%, #fff 50%, rgb(var(--brand-500)/0.04) 100%)",
                 }}
                 onClick={() => handleCardClick(appItem)}
               >
-                <CardContent className="h-full p-2 flex flex-col relative w-full">
+                <CardContent className="h-full p-3 flex flex-col relative w-full">
                   <div className="flex items-center gap-2.5 mb-2 shrink-0">
                     <AppAvator
                       id={appItem.name}
