@@ -1639,6 +1639,16 @@
     "exportEmpty": "当前筛选条件下没有记录可导出",
     "exportTruncated": "共 {{total}} 条记录，超过单次导出上限，仅导出最新的 {{max}} 条，请缩小筛选范围",
     "runtime": {
+      "identityHint": "调用方和访问用户显示记录中的名称；执行用户缺少记录名称时显示当前账号名称。悬停可查看原始标识。",
+      "exportModelHint": "CSV 保留原始标识和空值。应用自身调用没有执行用户；首 Token 耗时仅适用于流式调用；上游未提供用量时 Token 数留空。成功记录的错误码和未记录的 HTTP 状态也会留空，空白不代表 0。",
+      "exportCapabilityHint": "CSV 保留原始记录。调用被拒绝或未产生检索结果时，结果条数可能为空；实际返回 0 条时仍导出 0。",
+      "callerWithId": "调用方 #{{id}}（名称未记录）",
+      "personWithId": "用户 #{{id}}（名称不可用）",
+      "accountWithId": "服务账号 #{{id}}（名称未记录）",
+      "keyWithId": "密钥 #{{id}}（掩码未记录）",
+      "notRecorded": "未记录",
+      "noResult": "未产生结果",
+      "identifier": "标识：{{id}}",
       "title": "应用运行记录",
       "app": "应用",
       "visitor": "访问用户",
@@ -1680,6 +1690,7 @@
         "expired": "导出已过期或已取消"
       },
       "fields": {
+        "subject_name": "执行身份",
         "create_time": "时间",
         "entry_time": "进入时间",
         "app_id": "应用标识",

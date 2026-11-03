@@ -69,8 +69,31 @@ it('renders caller and model metadata while leaving missing tokens unknown and e
   render(<RuntimeAuditPanel />, { wrapper })
   expect(await screen.findByText('Example model')).toBeVisible()
   expect(screen.getByText('log.runtime.values.service_account')).toBeVisible()
-  expect(screen.getAllByText('log.runtime.unknown').length).toBeGreaterThan(0)
+  expect(screen.getAllByText('log.runtime.notRecorded').length).toBeGreaterThan(0)
   expect(screen.queryByText('PRIVATE_BODY')).not.toBeInTheDocument()
+})
+
+it('uses readable identities instead of separate surrogate-ID columns', async () => {
+  mock.records.mockResolvedValue({ items: [{ id: 36, actor_kind: 'hosted_app', actor_id: 10,
+    actor_name: 'Recorded application', subject_kind: 'app_self', subject_id: null,
+    credential_id: 143, credential_mask: 'bs-app-********ABCD', result: 'upstream_failed' }],
+    next_cursor: null, snapshot_id: 'selection' })
+  render(<RuntimeAuditPanel />, { wrapper })
+  expect(await screen.findByText('Recorded application')).toBeVisible()
+  expect(screen.getByText('bs-app-********ABCD')).toBeVisible()
+  expect(screen.getAllByText('log.runtime.values.app_self').length).toBeGreaterThan(0)
+  expect(screen.queryByRole('columnheader', { name: 'log.runtime.fields.actor_id' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('columnheader', { name: 'log.runtime.fields.credential_id' })).not.toBeInTheDocument()
+  expect(screen.queryByText('143')).not.toBeInTheDocument()
+})
+
+it('shows the recorded visitor name without a redundant numeric user column', async () => {
+  mock.records.mockResolvedValue({ items: [{ id: 58, user_id: 3, user_name: 'Recorded visitor' }],
+    next_cursor: null, snapshot_id: 'selection' })
+  render(<RuntimeAuditPanel />, { wrapper })
+  fireEvent.click(screen.getByRole('radio', { name: 'log.runtime.accessTab' }))
+  expect(await screen.findByText('Recorded visitor')).toBeVisible()
+  expect(screen.queryByRole('columnheader', { name: 'log.runtime.fields.user_id' })).not.toBeInTheDocument()
 })
 
 it('keeps a pending export on close and cancels only through the explicit cancel action', async () => {

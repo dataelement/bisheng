@@ -32,6 +32,7 @@ export function RuntimeAuditExportDialog({ open, onOpenChange, kind, filters, jo
   >
     <div className="space-y-4 py-4">
       <p className="text-body-sm text-text-3">{t('log.runtime.exportBackground')}</p>
+      {kind !== 'access' && <p className="text-body-sm text-text-3">{t(`log.runtime.${kind === 'model' ? 'exportModelHint' : 'exportCapabilityHint'}`)}</p>}
       <p>{t(`log.runtime.${kind}Tab`)} · {t(`log.runtime.${filters.time_range}`)}</p>
       {filters.time_range === 'custom' && <p>{formatTimestamp(filters.start_time!)} — {formatTimestamp(filters.end_time!)}</p>}
       {createFailed ? <p role="alert">{t('log.runtime.exportCreateFailed')}</p>
