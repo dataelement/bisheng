@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import event
@@ -103,6 +104,8 @@ async def _seed_upload(
                 },
             ]
             request = KnowledgeSpaceFileChangeRequest(
+                business_key=uuid4().hex,
+                request_fingerprint=uuid4().hex,
                 tenant_id=tenant_id,
                 space_id=space_id,
                 action=KnowledgeSpaceFileChangeAction.UPLOAD,
@@ -195,6 +198,8 @@ async def _seed_delete(
     async with AsyncSession(bind=engine, expire_on_commit=False) as session:
         async with session.begin():
             request = KnowledgeSpaceFileChangeRequest(
+                business_key=uuid4().hex,
+                request_fingerprint=uuid4().hex,
                 tenant_id=tenant_id,
                 space_id=space_id,
                 action=KnowledgeSpaceFileChangeAction.DELETE,
@@ -235,6 +240,8 @@ async def _seed_mutation_fence(
     async with AsyncSession(bind=engine, expire_on_commit=False) as session:
         async with session.begin():
             request = KnowledgeSpaceFileChangeRequest(
+                business_key=uuid4().hex,
+                request_fingerprint=uuid4().hex,
                 tenant_id=tenant_id,
                 space_id=source_space_id,
                 action=KnowledgeSpaceFileChangeAction.MOVE,
@@ -290,6 +297,8 @@ async def _seed_rename_projection(
     async with AsyncSession(bind=engine, expire_on_commit=False) as session:
         async with session.begin():
             request = KnowledgeSpaceFileChangeRequest(
+                business_key=uuid4().hex,
+                request_fingerprint=uuid4().hex,
                 tenant_id=tenant_id,
                 space_id=space_id,
                 action=KnowledgeSpaceFileChangeAction.RENAME,
@@ -796,9 +805,8 @@ async def test_visibility_guards_batch_across_spaces_without_per_resource_querie
         assert len(statements) == 2
         statements.clear()
         assert await deletion_guard.list_deleted_ids(tenant_id=42, space_ids=[8, 9]) == {401, 402}
-        # Active footprint is the post-cutover residue truth, so guard reads
-        # request checkpoint + relational footprint in one bounded join and
-        # never scans all historical APPLIED delete requests.
-        assert len(statements) == 1
+        # Only active footprint candidates drive checkpoint reads. The second
+        # query loads each request once, independent of its footprint count.
+        assert len(statements) == 2
     finally:
         event.remove(visibility_engine.sync_engine, "before_cursor_execute", record_statement)

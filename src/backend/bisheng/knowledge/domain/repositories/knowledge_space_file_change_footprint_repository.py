@@ -15,6 +15,8 @@ from bisheng.knowledge.domain.models.knowledge_space_file_change_request import 
     KnowledgeSpaceFileChangeRequest,
 )
 
+_DELETE_GUARD_REQUEST_BATCH_SIZE = 500
+
 RESOURCE_LOCK_BLOCKING_EXECUTION_STATES = frozenset(
     {
         KnowledgeSpaceFileChangeExecutionState.NOT_STARTED,
@@ -405,7 +407,7 @@ class KnowledgeSpaceFileChangeFootprintRepository:
         statement = (
             select(
                 KnowledgeSpaceFileChangeFootprint.resource_id,
-                KnowledgeSpaceFileChangeRequest.execution_checkpoint,
+                KnowledgeSpaceFileChangeFootprint.request_id,
             )
             .join(
                 KnowledgeSpaceFileChangeRequest,
@@ -433,13 +435,27 @@ class KnowledgeSpaceFileChangeFootprintRepository:
                 KnowledgeSpaceFileChangeRequest.id.asc(),
             )
         )
-        return {
-            int(resource_id)
-            for resource_id, checkpoint in (await self.session.exec(statement)).all()
-            if resource_id is not None
-            and isinstance(checkpoint, dict)
-            and checkpoint.get(str(cutover_checkpoint_key)) is True
-        }
+        # A request may own thousands of footprints. Keep the per-footprint
+        # result scalar-only; joining the checkpoint here repeats its CLOB and
+        # JSON decoding for every resource in the same deletion manifest.
+        resources = list((await self.session.exec(statement)).all())
+        request_ids = sorted({int(request_id) for _, request_id in resources})
+        active_request_ids: set[int] = set()
+        for offset in range(0, len(request_ids), _DELETE_GUARD_REQUEST_BATCH_SIZE):
+            checkpoints = select(
+                KnowledgeSpaceFileChangeRequest.id,
+                KnowledgeSpaceFileChangeRequest.execution_checkpoint,
+            ).where(
+                KnowledgeSpaceFileChangeRequest.tenant_id == int(tenant_id),
+                KnowledgeSpaceFileChangeRequest.id.in_(request_ids[offset : offset + _DELETE_GUARD_REQUEST_BATCH_SIZE]),
+            )
+            # Execution-state filtering belongs to the candidate read above.
+            # A concurrent retry can change FAILED to QUEUED while the active
+            # cutover marker must still hide the same resources.
+            for request_id, checkpoint in (await self.session.exec(checkpoints)).all():
+                if isinstance(checkpoint, dict) and checkpoint.get(str(cutover_checkpoint_key)) is True:
+                    active_request_ids.add(int(request_id))
+        return {int(resource_id) for resource_id, request_id in resources if int(request_id) in active_request_ids}
 
     async def list_active_mutation_projections(
         self,

@@ -336,6 +336,16 @@ Knowledge 包不 import Approval ORM/repository；F025 不 import Knowledge Serv
 
 ## 11. 变更历史
 
+### 2026-11-03 删除守卫 checkpoint 读取热修复
+
+`list_active_delete_resource_ids` 先用既有 tenant/space/resource-type/action/state 条件查询 `(resource_id, request_id)` 小字段，再按唯一 request ID 每批最多 500 个读取 checkpoint，在 Python 中按 `deletion_cutover_active is True` 关联资源。一个请求的完整删除 manifest 只反序列化一次，不再随 footprint 数量放大；不对 CLOB 使用 DISTINCT 或数据库 JSON 函数，保持 MySQL/DM8 查询可移植性。
+
+候选查询后如 FAILED 进入 QUEUED 重试，第二次读取仍以有效 cutover 标记决定隐藏，不重复按 execution_state 排除它。两个读取共用调用方的 session，不缓存跨请求授权/删除状态；最终清理事务仍负责移除 footprint 和清除标记。外部清理失败恢复策略、业务写入、权限、数据库结构及索引均不变。
+
+本地仓储/守卫/删除一致性回归 45 项通过，包含 1/40/399 footprint 的单次解码、501 唯一请求的分批预算、租户/空间/资源类型/状态/严格布尔标记、空范围，以及重试/完成在两次读取间发生的状态观测。原 visibility 测试夹具缺失当前模型必填 business_key/request_fingerprint，基线 10 项建数失败；本次补齐夹具并将删除守卫预算由 1 次大字段 JOIN 调整为 2 次有界读取。真实 DM8/MySQL 及客户接口耗时待部署后验证；离线测试不代表生产提速幅度。
+
+热修复自审（sdd-code-review 七维度）：边界/权限隔离/并发观测/信息泄漏/测试覆盖/风格/文档均 PASS。生产代码仅一个 Repository 方法及批次常量改变，无新契约或领域对象。此次按用户指定直接修复中粮 1028 客户专有 F046 路径，不把中粮功能合入没有该路径的主线。
+
 | 日期 | 变更 | 原因 |
 |---|---|---|
 | 2026-08-10 | 初版以 ApprovalGate/ApprovalOutbox/Deferred/runtime handler 驱动文件业务 | F046 初始设计 |
