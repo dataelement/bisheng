@@ -280,7 +280,8 @@ async def test_ac03_repository_uses_bounded_in_lists_and_preserves_db_order():
 
 
 @pytest.mark.parametrize("ids", [None, [1, 2, 3]])
-async def test_ac04_repository_keeps_global_and_visible_lists_in_current_tenant(ids):
+@pytest.mark.parametrize("keyword", [None, "matched", "absent"])
+async def test_ac04_repository_keeps_global_and_visible_lists_in_current_tenant(ids, keyword):
     """AC-04: real SQL execution stays strict even with inherited tenant visibility."""
     register_tenant_filter_events()
     engine = create_engine("sqlite://")
@@ -292,6 +293,9 @@ async def test_ac04_repository_keeps_global_and_visible_lists_in_current_tenant(
             rows = [_make_space(space_id=i) for i in range(1, 4)]
             for row in rows:
                 row.tenant_id = 2 if row.id == 2 else 1
+            rows[0].name = "matched name"
+            rows[1].name = "matched foreign tenant"
+            rows[2].description = "matched description"
             with bypass_tenant_filter():
                 db.add_all(rows)
                 db.commit()
@@ -303,8 +307,8 @@ async def test_ac04_repository_keeps_global_and_visible_lists_in_current_tenant(
             async def session():
                 yield SimpleNamespace(exec=execute)
 
-            result = await KnowledgeSpaceListingRepository(session_factory=session).list_spaces(ids)
-            assert {row.id for row in result} == {1, 3}
+            result = await KnowledgeSpaceListingRepository(session_factory=session).list_spaces(ids, keyword=keyword)
+            assert {row.id for row in result} == (set() if keyword == "absent" else {1, 3})
     finally:
         visible_tenant_ids.reset(visibility_token)
         current_tenant_id.reset(tenant_token)

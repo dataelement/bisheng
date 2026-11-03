@@ -13,6 +13,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
 import { FormInput } from "./FormInput";
+import { MenuNameCounter } from "./MenuNameCounter";
 import { clampMenuName, toStoredMenuName } from "./menuDisplayName";
 
 const MAX_LEN = 1000;
@@ -80,6 +81,7 @@ export function AppCenter({ scopeVersion = 0 }: { scopeVersion?: number }) {
                         <FormInput
                             label={t("chatConfig.menuDisplayName")}
                             value={menuDisplayName}
+                            suffix={<MenuNameCounter value={menuDisplayName} />}
                             error={errors.menuDisplayName}
                             placeholder={t("bench.appCenter")}
                             onChange={(v) => {

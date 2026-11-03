@@ -1,7 +1,7 @@
 // @ts-strict-ignore
 import { captureQaOperation, type QaOperation } from '@bisheng/chat/core';
 import { Pagination, Button, Input, toast } from '@bisheng/ui';
-import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
+import { QaKnowledgeSelect } from "@/components/bs-comp/selectComponent/QaKnowledgeSelect";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
 import { Checkbox } from "@bisheng/ui";
@@ -123,14 +123,16 @@ const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps
                 </DialogHeader>
                 <div className="flex flex-col gap-4 py-2">
                     <div className="flex items-center gap-4">
-                        <Label htmlFor="knowledgeLib" className="bisheng-label w-40 whitespace-nowrap">{t('log.qaKnowledgeLib')}</Label>
-                        <KnowledgeSelect
-                            type="qa"
+                        <Label htmlFor="knowledgeLib" className="bisheng-label w-40 shrink-0 whitespace-nowrap">{t('log.qaKnowledgeLib')}</Label>
+                        <QaKnowledgeSelect
+                            multiple={false}
+                            label={t('log.qaKnowledgeLib')}
                             value={knowledgeLib}
                             onChange={handleKnowledgeLibChange}
-                            className={`${error && knowledgeLib.length === 0 ? 'border-red-400' : ''}`}
+                            className="min-w-0 flex-1"
+                            error={error && knowledgeLib.length === 0}
                         />
-                        <Input placeholder={t('log.qaContent')} onChange={(e) => knowledgeLib.length && filterData({ id: knowledgeLib[0].value, searchKey: e.target.value })} />
+                        <Input className="min-w-0 flex-1" placeholder={t('log.qaContent')} onChange={(e) => knowledgeLib.length && filterData({ id: knowledgeLib[0].value, searchKey: e.target.value })} />
                     </div>
                     <div className="relative">
                         {loading && (

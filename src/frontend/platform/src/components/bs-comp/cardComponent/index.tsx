@@ -28,6 +28,7 @@ interface IProps<T> {
   currentUser?: any,
   labelPannel?: React.ReactNode,
   isAdmin?: boolean,
+  canAddTemplate?: boolean,
   headSelecter?: React.ReactNode,
   footer?: React.ReactNode,
   onClick?: () => void,
@@ -95,6 +96,7 @@ export default function CardComponent<T>({
   title,
   checked,
   isAdmin,
+  canAddTemplate = Boolean(edit && isAdmin && type !== AppType.ASSISTANT),
   description,
   footer = null,
   headSelecter = null,
@@ -142,7 +144,7 @@ export default function CardComponent<T>({
       setSwitching(false)
     }
   }
-  const showAddTemp = Boolean(edit && isAdmin && type !== 'assistant' && onAddTemp)
+  const showAddTemp = Boolean(canAddTemplate && (type === AppType.FLOW || type === AppType.ASSISTANT) && onAddTemp)
   const showCopyItem = Boolean(showCopy && onCopy)
   const showDelete = Boolean(!checked && onDelete)
   const hasPlainActions = Boolean(onPermission) || showAddTemp || showCopyItem

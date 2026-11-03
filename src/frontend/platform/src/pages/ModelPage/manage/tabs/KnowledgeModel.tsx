@@ -38,11 +38,11 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
 
     return (
         <div className="min-w-0">
-            <Label className="bisheng-label inline-flex items-center">
+            {Boolean(label || required || tooltipText) && <Label className="bisheng-label inline-flex items-center">
                 <span>{label}</span>
                 {required && <span className="text-red-500 text-xs">*</span>}
                 {tooltipText && <ModelFieldHint className="ml-1" content={tooltipText} />}
-            </Label>
+            </Label>}
             <Cascader
                 {...selectLabels}
                 className="w-full"

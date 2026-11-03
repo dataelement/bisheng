@@ -1,0 +1,73 @@
+# 前端全量运行失败用例快照
+
+2026-11-02，platform Vitest 全量运行：277 文件（254 通过 / 23 失败），1549 用例（1482 通过 / 67 失败），另有 4 个未处理错误。此清单如实保留失败名；除托管应用卡片的 4 项做过 HEAD 基线复跑外，未逐项证明其来源。
+
+- src/controllers/dshRequestCompatibility.test.ts > structured errors after shared request handling > preserves business rejection evidence for every caller
+- src/controllers/dshRequestCompatibility.test.ts > structured errors after shared request handling > retains full default rejection and shared toast
+- src/controllers/dshRequestCompatibility.test.ts > structured errors after shared request handling > preserves transport evidence with the deprecated option too
+- src/controllers/dshRequestCompatibility.test.ts > structured errors after shared request handling > retains cancellation behavior
+- src/controllers/dshRequestCompatibility.test.ts > desktop login after an expired browser session > preserves the authorization URL through 401 and SSO=false
+- src/controllers/dshRequestCompatibility.test.ts > desktop login after an expired browser session > preserves the authorization URL through 401 and SSO=true
+- src/controllers/requestCompatibilityMatrix.test.ts > keeps forced permission routing for showError=false while the legacy silent exception stays quiet
+- src/controllers/requestSessionFailure.test.ts > lets the session-kick interaction handle an untyped HTTP401 Blob before clearing the session
+- src/utils/dshRequestError.test.ts > DSH management error messages > preserves business error 26112 in direct and HTTP envelopes
+- src/utils/dshRequestError.test.ts > DSH management error messages > preserves business error 26113 in direct and HTTP envelopes
+- src/utils/dshRequestError.test.ts > DSH management error messages > preserves seat_limit_reached in operation receipts and HTTP errors
+- src/utils/dshRequestError.test.ts > DSH management error messages > preserves seat_revoked in operation receipts and HTTP errors
+- src/test/approvalPage.test.tsx > ApprovalPage > renders page title and loads scenario/route/node data on mount
+- src/test/approvalPage.test.tsx > ApprovalPage > opens add-scenario dialog and creates scenario on confirm
+- src/test/approvalPage.test.tsx > ApprovalPage > switches to exception tab and retries an exception
+- src/test/approvalPage.test.tsx > ApprovalPage > assigns checked users to an exception with the same retry payload
+- src/test/approvalPage.test.tsx > ApprovalPage > requires a cancellation reason and trims it before submitting
+- src/test/approvalPage.test.tsx > ApprovalPage > uses historical tasks when an exception has no flow snapshot
+- src/test/citationFailure.test.ts > citation request failures > preserves expired reasons on directly rejected business envelopes
+- src/test/f048PermissionDialog.test.tsx > F048 PermissionDialog > keeps the legacy subject tabs, search, add action, and roster layout
+- src/test/hostedAppDeleteEligibility.test.tsx > allows platform super admins alongside the original owner (7, false, false)
+- src/test/hostedAppDeleteEligibility.test.tsx > allows platform super admins alongside the original owner (8, false, true)
+- src/test/hostedAppDeleteEligibility.test.tsx > allows platform super admins alongside the original owner (8, true, true)
+- src/test/hostedAppMenuTrim.test.tsx > ⚙️ menu — hosted application keeps two entries (AC-16 / F054 AC-53) > offers manage-permission and delete, and nothing else
+- src/test/hostedAppMenuTrim.test.tsx > ⚙️ menu — hosted application keeps two entries (AC-16 / F054 AC-53) > never offers copy or add-to-template, even to an admin who can edit
+- src/test/hostedAppMenuTrim.test.tsx > ⚙️ menu — hosted application keeps two entries (AC-16 / F054 AC-53) > greys delete out while the application is online (F054 AC-42)
+- src/test/hostedAppMenuTrim.test.tsx > ⚙️ menu — hosted application keeps two entries (AC-16 / F054 AC-53) > drops the permission entry for a caller who may not manage it
+- src/test/knowledgeSpaceGrantSubjects.test.tsx > permission subject discovery business boundary > adds a department carrying the current include-children flag when toggled on
+- src/test/openApiManagementApi.test.ts > open API management wrappers > keeps service-account subjects explicit in key and resource-grant calls
+- src/test/openApiManagementApi.test.ts > open API management wrappers > loads subject-side grants and selectable resources without manual resource ids
+- src/test/serviceAccountCandidates.test.ts > service-account delegation candidates > uses the target service account and preserves cancellation for user filtering
+- src/test/serviceAccountCandidates.test.ts > service-account delegation candidates > filters search and path trees while preserving eligible descendants
+- src/test/serviceAccountKeyIssue.test.tsx > service-account key issue dialog > shows localized permission names and keeps endpoint paths in help tooltips
+- src/test/serviceAccountKeyIssue.test.tsx > delegate ⊗ local development toolkit exclusivity > delegation first: the toolkit scopes go unavailable and say why, and come back when it is cleared
+- src/test/serviceAccountKeyIssue.test.tsx > delegate ⊗ local development toolkit exclusivity > toolkit first: delegation goes unavailable and says why, and comes back when the toolkit scope is cleared
+- src/test/serviceAccountKeyIssue.test.tsx > delegate ⊗ local development toolkit exclusivity > clicking through the label cannot assemble the pair either
+- src/test/serviceAccountKeyIssue.test.tsx > delegate ⊗ local development toolkit exclusivity > a key issued before the gate keeps both boxes clickable, blocks save, and clears once one side is dropped
+- src/test/serviceAccountResourceGrantMutations.test.tsx > service-account grant mutations over HTTP > submits the selected library with fresh versions and closes after refreshing
+- src/test/serviceAccountResourceGrantMutations.test.tsx > service-account grant mutations over HTTP > updates a grant from the dialog without randomUUID
+- src/test/serviceAccountResourceGrantMutations.test.tsx > service-account grant mutations over HTTP > keeps the selection and dialog open when the mutation fails
+- src/test/serviceAccountResourceGrants.test.tsx > service-account resource grants > restricts add-resource types and permission tiers and names the account
+- src/test/serviceAccountResourceGrantMutations.test.tsx > service-account grant mutations over HTTP > updates the permission tier from the resource list without randomUUID
+- src/test/serviceAccountResourceGrantMutations.test.tsx > service-account grant mutations over HTTP > revokes resources and closes the confirmation (bulk: false)
+- src/test/serviceAccountResourceGrantMutations.test.tsx > service-account grant mutations over HTTP > revokes resources and closes the confirmation (bulk: true)
+- src/test/serviceAccountResourceGrants.test.tsx > service-account resource grants > renders the requested columns, effective state, copy action, and count
+- src/test/serviceAccountResourceGrants.test.tsx > service-account resource grants > lists which keys the grants apply to and which they do not
+- src/test/serviceAccountResourceGrants.test.tsx > service-account resource grants > names the missing key permission only when an own-identity key exists
+- src/test/serviceAccountResourceGrants.test.tsx > service-account resource grants > separates an empty list from a filter with no matches
+- src/test/serviceAccountResourceGrants.test.tsx > service-account resource grants > uses distinct creator and direct single-revoke dialogs
+- src/test/serviceAccountResourceGrants.test.tsx > service-account resource grants > filters grants by resource type and source
+- src/test/serviceAccountResourceGrants.test.tsx > service-account resource grants > lists direct grants and retains creator grants in bulk revoke
+- src/test/serviceAccountStatus.test.tsx > service-account status > shows an enabled account and sends the disable action
+- src/test/serviceAccountStatus.test.tsx > service-account status > shows a disabled account and sends the enable action
+- src/pages/BuildPage/dsh/PluginMarketPage.test.tsx > previews the chosen ZIP and imports it into the resolved tenant
+- src/pages/BuildPage/dsh/PluginMarketPage.test.tsx > blocks import when the preview reports a version conflict
+- src/pages/BuildPage/bench/IconUploadSection.test.tsx > workbench logo upload > keeps the original logo and shows the server error, then retries the same file
+- src/pages/BuildPage/bench/IconUploadSection.test.tsx > workbench logo upload > restores the picker after an image decoding failure and accepts the same file again
+- src/pages/BuildPage/bench/IconUploadSection.test.tsx > workbench logo upload > keeps the current icon while a request is in flight and restores the picker afterward
+- src/pages/BuildPage/bench/IconUploadSection.test.tsx > workbench logo upload > preserves an absolute uploaded image URL
+- src/pages/LogPage/systemLog/index.test.tsx > preserves structured audit fields, valid filter options, date bounds and reset
+- src/pages/SystemPage/dsh/ContentSafetyDetails.test.tsx > audit views without detached safety checks > keeps groups available without an unlinked-check entry or query
+- src/pages/SystemPage/dsh/ContentSafetyDetails.test.tsx > audit views without detached safety checks > keeps unassociated available without an unlinked-check entry or query
+- src/pages/BuildPage/hostedApp/publish/AppSecretSettings.test.tsx > environment settings > opens confirmation without calling rebuild and gives administrators no write buttons
+- src/pages/BuildPage/hostedApp/publish/DangerZoneCard.test.tsx > delete visibility and state guard (7, false, stopped)
+- src/pages/BuildPage/hostedApp/publish/DangerZoneCard.test.tsx > delete visibility and state guard (8, true, stopped)
+- src/pages/BuildPage/hostedApp/publish/DangerZoneCard.test.tsx > delete visibility and state guard (8, true, online)
+- src/pages/ModelPage/manage/dsh/ModelAccessDialog.test.tsx > saves visibility while preserving the persisted multiplier outside the dialog
+
+另有 4 个未处理错误，来自 PluginMarketPage 的 API mock 缺项及 IconUploadSection 的请求拒绝；没有将这些未处理错误计为通过。

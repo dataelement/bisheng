@@ -13,8 +13,8 @@ import { getTenantsApi } from '@/controllers/API/tenant'
 import { cancelRuntimeAuditExport, createRuntimeAuditExport, downloadRuntimeAuditExport, getRuntimeAuditCandidates } from '@/controllers/API/runtimeAudit'
 import type { RuntimeAuditFilters, RuntimeAuditKind } from '@/controllers/API/runtimeAudit'
 import { useRuntimeAudit } from './useRuntimeAudit'
-import { formatTimestamp } from '@/utils/displayTimestamp'
 import { RuntimeAuditExportDialog } from './RuntimeAuditExportDialog'
+import { RuntimeAuditCell } from './RuntimeAuditCell'
 
 interface CandidateProps {
   kind: RuntimeAuditKind
@@ -86,10 +86,10 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey }: RecordProps) {
     try { await cancelRuntimeAuditExport(jobId, tenantId); await exportQuery.refetch() } catch (error) { showApiError(error) } finally { setBusy(false) }
   }
   const fields = kind === 'model'
-    ? ['id', 'create_time', 'app_id', 'actor_kind', 'actor_id', 'actor_name', 'subject_kind', 'subject_id', 'credential_id', 'credential_mask', 'model_name', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'result', 'error_code', 'http_status', 'latency_ms', 'ttft_ms', 'request_id']
+    ? ['id', 'create_time', 'app_id', 'actor_kind', 'actor_name', 'subject_kind', 'subject_name', 'credential_mask', 'model_name', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'result', 'error_code', 'http_status', 'latency_ms', 'ttft_ms', 'request_id']
     : kind === 'capability'
-      ? ['id', 'create_time', 'app_name', 'app_id', 'credential_id', 'subject_kind', 'subject_user_id', 'capability', 'result', 'error_code', 'latency_ms', 'chunk_count', 'version_id']
-      : ['id', 'entry_time', 'app_name_snapshot', 'app_id', 'user_name', 'user_id', 'request_id']
+      ? ['id', 'create_time', 'app_name', 'app_id', 'credential_mask', 'subject_kind', 'subject_name', 'capability', 'result', 'error_code', 'latency_ms', 'chunk_count', 'version_id']
+      : ['id', 'entry_time', 'app_name_snapshot', 'app_id', 'user_name', 'request_id']
   return <div className="flex min-h-0 flex-1 flex-col gap-4 pt-2">
     {kind === 'access' && <p className="text-sm text-muted-foreground">{t('log.runtime.accessHint')}</p>}
     <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -107,10 +107,11 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey }: RecordProps) {
       <Button disabled={busy || !query.data || query.isError} onClick={handleExport}>{t('log.runtime.export')}</Button>
     </div>
     {rangeError && <p role="alert">{t('log.runtime.invalidRange')}</p>}
+    <p className="text-sm text-muted-foreground">{t('log.runtime.identityHint')}</p>
     {query.isError ? <div role="alert">{t('log.runtime.loadFailed')} <Button onClick={() => void query.refetch()}>{t('log.runtime.refresh')}</Button></div>
       : query.isInitialLoading ? <p role="status">{t('log.runtime.loading')}</p>
         : <Table containerClassName="min-h-0 flex-1 overflow-auto"><TableHeader className="sticky top-0 z-10 bg-background-main"><TableRow>{fields.map(field => <TableHead key={field}>{t(`log.runtime.fields.${field}`)}</TableHead>)}</TableRow></TableHeader><TableBody>
-          {query.data?.items.map(row => <TableRow key={String(row.id)}>{fields.map(field => <TableCell key={field}>{row[field] == null ? t('log.runtime.unknown') : ['actor_kind', 'subject_kind', 'result', 'capability'].includes(field) ? t(`log.runtime.values.${String(row[field])}`, { defaultValue: String(row[field]) }) : ['entry_time', 'create_time'].includes(field) ? formatTimestamp(String(row[field])) : String(row[field])}</TableCell>)}</TableRow>)}
+          {query.data?.items.map(row => <TableRow key={String(row.id)}>{fields.map(field => <TableCell key={field}><RuntimeAuditCell kind={kind} field={field} row={row} /></TableCell>)}</TableRow>)}
           {query.data?.items.length === 0 && <TableRow><TableCell colSpan={fields.length}>{t('log.runtime.empty')}</TableCell></TableRow>}
         </TableBody></Table>}
     <div className="flex shrink-0 items-center gap-2"><Button disabled={page === 1 || query.isFetching} onClick={previous}>{t('log.runtime.previous')}</Button><span>{page}</span><Button disabled={!query.data?.next_cursor || query.isFetching} onClick={next}>{t('log.runtime.next')}</Button><Button onClick={() => void query.refetch()}>{t('log.runtime.refresh')}</Button></div>

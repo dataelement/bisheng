@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 
-from sqlmodel import or_, select
+from sqlmodel import col, or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.core.context.tenant import strict_tenant_filter
@@ -17,7 +17,9 @@ class KnowledgeSpaceListingRepository:
     def __init__(self, session_factory: SessionFactory | None = None):
         self._session_factory = session_factory or get_async_db_session
 
-    async def list_spaces(self, space_ids: list[int] | None, order_by: str = "name") -> list[Knowledge]:
+    async def list_spaces(
+        self, space_ids: list[int] | None, order_by: str = "name", *, keyword: str | None = None
+    ) -> list[Knowledge]:
         """Load a visible set in database order; None is for full-scope admins.
 
         IN groups stay below DM8's limit. A single ORDER BY preserves the
@@ -27,6 +29,10 @@ class KnowledgeSpaceListingRepository:
         if space_ids is not None and not space_ids:
             return []
         statement = select(Knowledge).where(Knowledge.type == KnowledgeTypeEnum.SPACE.value)
+        if keyword:
+            statement = statement.where(
+                or_(col(Knowledge.name).like(f"%{keyword}%"), col(Knowledge.description).like(f"%{keyword}%"))
+            )
         if space_ids is not None:
             statement = statement.where(
                 or_(*(Knowledge.id.in_(space_ids[offset : offset + 500]) for offset in range(0, len(space_ids), 500)))
