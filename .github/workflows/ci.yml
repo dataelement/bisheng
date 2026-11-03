@@ -233,6 +233,8 @@ jobs:
           ARCH: ${{ matrix.arch }}
         run: |
           docker buildx build --file docker/bisheng-sandbox/Dockerfile --platform "linux/$ARCH" --provenance=false \
+            --build-arg APT_MIRROR=deb.debian.org --build-arg APT_SECURITY_MIRROR=security.debian.org \
+            --build-arg PYPI_INDEX_URL=https://pypi.org/simple \
             --label "org.opencontainers.image.revision=$GITHUB_SHA" \
             --label "org.opencontainers.image.version=$VERSION" \
             --tag "dataelement/bisheng-sandbox:$VERSION-$ARCH" --push .

@@ -137,7 +137,7 @@ def test_helper_installs_trusted_package_and_assembler_uses_pinned_toolchain():
     assert "COPY --from=crane /out/crane /usr/local/bin/crane" in helper
 
 
-def test_ci_keeps_native_gate_and_immutable_digest_indexes():
+def test_ci_keeps_native_gate_and_release_only_formal_tags():
     workflow = (ROOT / ".github/workflows/runtime-images.yml").read_text()
     assert "ubuntu-22.04-arm" in workflow and "needs: native" in workflow
     # A release shares one publication lock across tag and manual/ref entry points.
@@ -146,6 +146,12 @@ def test_ci_keeps_native_gate_and_immutable_digest_indexes():
     assert "setup-qemu" not in workflow
     assert "runtime-release.json" in workflow
     assert "RUNTIME_PUBLISH: '1'" in workflow
+    assert "github.event.forced" in workflow
+    assert "imagetools create" not in workflow
+    release = (ROOT / ".github/workflows/release.yml").read_text()
+    assert "types: [published]" in release
+    assert '"$image:${{ steps.get_version.outputs.VERSION }}-amd64"' in release
+    assert '"cr.dataelem.com/$image:${{ steps.get_version.outputs.VERSION }}-arm64"' in release
     builder = (ROOT / "scripts/build_runtime_images.sh").read_text()
     assert "--read-only" in builder and "--network none" in builder
     assert "runtime-helper" in builder and "runtime-assembler" in builder
@@ -245,7 +251,7 @@ elif args[:2]==["image","inspect"]:
         text=True,
         umask=creation_mask,
     )
-    commands = [json.loads(line) for line in log.read_text().splitlines()]
+    commands = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
     return result, commands
 
 
@@ -299,6 +305,54 @@ def test_mock_builder_rejects_existing_release_before_build(tmp_path, monkeypatc
     assert result.returncode != 0
     assert "Refusing to overwrite" in result.stderr
     assert not any(command[:2] == ["buildx", "build"] for command in commands)
+
+
+@pytest.mark.parametrize("replace_release", ["v-test", "another-release"])
+def test_explicit_reissue_is_scoped_and_keeps_native_smoke_gate(tmp_path, monkeypatch, replace_release):
+    monkeypatch.setenv("RUNTIME_REPLACE_RELEASE", replace_release)
+    result, commands = mock_builder(tmp_path, monkeypatch, publish=True, existing=True)
+    if replace_release != "v-test":
+        assert result.returncode != 0
+        assert not any(command[0] == "push" for command in commands)
+        return
+    assert result.returncode == 0, result.stderr
+    first_push = next(index for index, command in enumerate(commands) if command[0] == "push")
+    assert all(index < first_push for index, command in enumerate(commands) if command[0] == "run")
+    assert len([command for command in commands if command[0] == "push"]) == 9
+
+
+def test_explicit_reissue_never_pushes_after_failed_native_smoke(tmp_path, monkeypatch):
+    monkeypatch.setenv("RUNTIME_REPLACE_RELEASE", "v-test")
+    monkeypatch.setenv("MOCK_FAIL_RESOLVE", "1")
+    result, commands = mock_builder(tmp_path, monkeypatch, publish=True, existing=True)
+    assert result.returncode != 0
+    assert not any(command[0] == "push" for command in commands)
+
+
+@pytest.mark.parametrize("replace_release", ["", "v-test", "another-release"])
+def test_cr_reissue_requires_matching_release_and_uses_verified_ids(tmp_path, monkeypatch, replace_release):
+    import subprocess
+
+    result, _ = mock_builder(tmp_path, monkeypatch, publish=True)
+    assert result.returncode == 0, result.stderr
+    monkeypatch.setenv("MOCK_EXISTING", "1")
+    monkeypatch.setenv("RUNTIME_REPLACE_RELEASE", replace_release)
+    log = tmp_path / "docker.jsonl"
+    log.write_text("")
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/sync_runtime_images_cr.sh")], cwd=tmp_path, capture_output=True, text=True
+    )
+    commands = [json.loads(line) for line in log.read_text().splitlines()]
+    if replace_release != "v-test":
+        assert result.returncode != 0
+        assert not any(command[0] == "push" for command in commands)
+        return
+    assert result.returncode == 0, result.stderr
+    tags = [command for command in commands if command[0] == "tag"]
+    assert len(tags) == 9
+    assert all(command[1].startswith("sha256:") for command in tags)
+    assert all(command[2].startswith("cr.dataelem.com/") for command in tags)
+    assert len([command for command in commands if command[0] == "push"]) == 9
 
 
 def test_mock_publishing_happens_after_all_native_smokes(tmp_path, monkeypatch):

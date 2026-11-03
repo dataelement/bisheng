@@ -7,6 +7,9 @@ RUNTIME_PUBLISH="${RUNTIME_PUBLISH:-0}"
 RUNTIME_IMAGE_NAMESPACE="${RUNTIME_IMAGE_NAMESPACE:-dataelement}"
 [[ "$RUNTIME_RELEASE" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,100}$ ]] || exit 64
 [[ "$TARGET_ARCH" == amd64 || "$TARGET_ARCH" == arm64 ]] || exit 64
+# A forced Git tag update may explicitly reissue this exact release. Normal builds remain immutable.
+RUNTIME_REPLACE_RELEASE="${RUNTIME_REPLACE_RELEASE:-}"
+[[ -z "$RUNTIME_REPLACE_RELEASE" || "$RUNTIME_REPLACE_RELEASE" == "$RUNTIME_RELEASE" ]] || exit 64
 [[ "$RUNTIME_PUBLISH" == 0 || "$RUNTIME_PUBLISH" == 1 ]] || exit 64
 [[ "$RUNTIME_IMAGE_NAMESPACE" =~ ^[A-Za-z0-9][A-Za-z0-9./:_-]+$ ]] || exit 64
 if [[ "$RUNTIME_PUBLISH" == 1 && -n "$(git status --porcelain)" ]]; then
@@ -35,7 +38,10 @@ if [[ "$RUNTIME_PUBLISH" == 1 ]]; then
   for name in "${names[@]}"; do
     image="$(image_for "$name")"
     if docker buildx imagetools inspect "$image" >"$metadata_dir/$name.existing" 2>"$metadata_dir/$name.error"; then
-      echo "Refusing to overwrite published image: $image" >&2; exit 1
+      if [[ "$RUNTIME_REPLACE_RELEASE" != "$RUNTIME_RELEASE" ]]; then
+        echo "Refusing to overwrite published image: $image" >&2; exit 1
+      fi
+      echo "Explicit release reissue: $image; publication still requires all native smokes"
     elif ! grep -Eqi 'manifest unknown|not found|no such manifest' "$metadata_dir/$name.error"; then
       echo "Cannot establish tag absence for $name; publication refused" >&2; exit 1
     fi
