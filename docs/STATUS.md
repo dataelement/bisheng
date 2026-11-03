@@ -1,3 +1,10 @@
+## 2026-11-03 — Desktop 弹窗显式模态语义
+
+- 真实 test9 客户端连接已更新的 13001，上传技能弹窗仍只覆盖右侧。页面通知区域使用 `aria-live`，Radix 保留根节点可访问状态；弹窗缺少 `aria-modal`，Desktop 监听因此漏报模态状态。
+- Dialog / OriginalDialog 将 Root 的 `modal` 设置通过 Context 传递给弹窗内容，AlertDialog 明确声明 `aria-modal=true`。既有 Desktop 协议据此触发整窗展示。
+- 旧代码新增回归 5 项失败；修复后相关组件 20 项通过。使用 test9 包内原版 preload 的 macOS 原生验证 36 组通过，涵盖宽度、缩放、主题、三类弹窗、嵌套确认、关闭及侧栏像素覆盖。全量前端 lint/typecheck、Client 构建、i18n 通过。
+- 基线 `e5941f38e40a32590d2c7a9b618cd6f370de12e2`，分支 `codex/dialog-modal-semantics-20261103`。修复合入、Client 部署及 macOS/Windows 真实账号复测待执行，见[验证记录](verification/dialog-modal-semantics-20261103.md)。
+
 ## 2026-11-03 — 发现广场知识空间详情布局
 
 - PR #2591 同步目标分支 `e7319073fbd69ac21b5e720ca760724e8f346ef6`，合并双方在本文件新增的状态记录。两份布局组件及原生验证脚本与原 PR 提交逐字节一致。同步后 3 文件 / 15 项组件回归、前端全量 lint/typecheck、Client 生产构建、i18n 及差异检查通过；Client 部署、Windows 安装版和真实账号验收待执行。
