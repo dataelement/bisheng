@@ -5,19 +5,14 @@ import json
 import httpx
 import pytest
 from langchain_core.messages import HumanMessage
-from langchain_openai import ChatOpenAI
-from pydantic import BaseModel
 
-from bisheng.workstation.domain.services.chat_helpers import use_chat_completions
-
-
-class WrappedModel(BaseModel):
-    llm: ChatOpenAI
+from bisheng.llm.domain.llm.llm import BishengLLM
+from bisheng.llm.domain.models import LLMModel, LLMServer
 
 
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("with_tools", [False, True])
-async def test_workstation_selects_chat_wire_protocol_without_mutating_model(stream, with_tools):
+async def test_workstation_selects_chat_wire_protocol_without_mutating_model(stream, with_tools, monkeypatch):
     requests = []
 
     async def upstream(request):
@@ -41,18 +36,24 @@ async def test_workstation_selects_chat_wire_protocol_without_mutating_model(str
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(upstream)) as http_client:
-        original = WrappedModel(
-            llm=ChatOpenAI(
-                model="test",
-                api_key="test",
-                base_url="https://supplier.invalid/v1",
-                use_responses_api=True,
-                http_async_client=http_client,
-                max_retries=0,
-            )
+        original_params = BishengLLM._get_llm_params
+
+        def client_params(self, server, model):
+            return {
+                **original_params(self, server, model),
+                "http_async_client": http_client,
+                "max_retries": 0,
+                "streaming": stream,
+            }
+
+        monkeypatch.setattr(BishengLLM, "_get_llm_params", client_params)
+        config = {"user_kwargs": json.dumps({"use_responses_api": True})}
+        model_info = LLMModel(id=42, server_id=7, model_name="test", model_type="llm", config=config)
+        server = LLMServer(id=7, type="openai", config={"api_key": "test", "base_url": "https://supplier.invalid/v1"})
+        original = BishengLLM.get_class_instance_from_snapshot(
+            model_info=model_info, server_info=server, app_id="test", app_type="dsh_desktop", app_name="test", user_id=1
         )
-        selected = use_chat_completions(original)
-        model = selected.llm
+        model = original.llm
         if with_tools:
             model = model.bind_tools(
                 [
@@ -74,10 +75,5 @@ async def test_workstation_selects_chat_wire_protocol_without_mutating_model(str
 
     assert requests[0].url.path == "/v1/chat/completions"
     assert json.loads(requests[0].content)["model"] == "test"
-    assert original.llm.use_responses_api is True
-    assert selected is not original and selected.llm.use_responses_api is False
-
-
-def test_unrelated_model_is_unchanged():
-    model = object()
-    assert use_chat_completions(model) is model
+    assert original.llm.use_responses_api is False
+    assert model_info.config == config

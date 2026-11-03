@@ -90,7 +90,6 @@ from .chat_helpers import (
     _sse_resp,  # v2.5 Agent-mode SSE builder
     gen_title,
     read_image_as_data_url,
-    use_chat_completions,
     user_message,  # legacy `{created: true}` envelope — tells the client to
 )
 from .constants import VISUAL_MODEL_FILE_TYPES
@@ -236,7 +235,7 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
         app_type=ApplicationTypeEnum.DAILY_CHAT,
         user_id=login_user.user_id,
     )
-    return ws_config, conversation, message, use_chat_completions(bisheng_llm), model_info, is_new_conversation
+    return ws_config, conversation, message, bisheng_llm, model_info, is_new_conversation
 
 
 # --------------------------------------------------------------------------- #
@@ -1364,7 +1363,7 @@ async def _agent_initialize_chat(
         app_type=ApplicationTypeEnum.DAILY_CHAT,
         user_id=login_user.user_id,
     )
-    return ws_config, conversation, message, use_chat_completions(bisheng_llm), model_info, is_new_conversation
+    return ws_config, conversation, message, bisheng_llm, model_info, is_new_conversation
 
 
 # Parser failures that recover on their own (the OCR service is throttled or
@@ -2540,8 +2539,6 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
         app_type=ApplicationTypeEnum.DAILY_CHAT,
         user_id=login_user.user_id,
     )
-
-    title_llm = use_chat_completions(title_llm)
 
     async def _handoff_event():
         payload = {
