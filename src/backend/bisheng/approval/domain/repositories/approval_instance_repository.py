@@ -16,6 +16,25 @@ class ApprovalInstanceRepository:
     _DUPLICATE_ACTIVE_STATUSES = ("pending", "exception", "execute_failed")
 
     @classmethod
+    async def list_active_instances_for_business_keys(
+        cls, *, scenario_code: str, applicant_user_id: int, business_keys: list[str]
+    ) -> list[ApprovalInstance]:
+        if not business_keys:
+            return []
+        statement = (
+            select(ApprovalInstance)
+            .where(
+                ApprovalInstance.scenario_code == scenario_code,
+                ApprovalInstance.applicant_user_id == applicant_user_id,
+                ApprovalInstance.business_key.in_(business_keys),
+                ApprovalInstance.status.in_(cls._DUPLICATE_ACTIVE_STATUSES),
+            )
+            .order_by(ApprovalInstance.id.desc())
+        )
+        async with get_async_db_session() as session:
+            return list((await session.exec(statement)).all())
+
+    @classmethod
     async def create_instance(cls, row: ApprovalInstance) -> ApprovalInstance:
         async with get_async_db_session() as session:
             session.add(row)

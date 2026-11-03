@@ -47,6 +47,13 @@ def info_case():
     service = KnowledgeSpaceService(MagicMock(), login_user)
 
     with ExitStack() as stack:
+        stack.enter_context(
+            patch(
+                "bisheng.approval.application.request_state.get_failed_request_keys",
+                new_callable=AsyncMock,
+                return_value=frozenset(),
+            )
+        )
 
         def mock_async(path, **kwargs):
             return stack.enter_context(patch(f"{MODULE}.{path}", new_callable=AsyncMock, **kwargs))
