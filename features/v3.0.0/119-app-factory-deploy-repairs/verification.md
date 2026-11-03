@@ -119,6 +119,15 @@
 
 T041完成的是验收清单/API测试入口的编写，不是116实际E2E。T042本地验证已执行，原生镜像与真实E2E待验；T043预审见code-review.md，最终交付门未关闭。
 
-## 本轮提交与合并（进行中）
+## 本轮提交与合并
 
 用户已明确要求“合并到feat/3.0.0分支并推送远端”。已重新fetch，整合起点为origin/feat/3.0.0 `a65f130cf4`；核心app_publish/app_runtime/runtime-manager/CLI文件与开发基线后续提交无重叠，Feature索引需保留双方新增条目。主工作区有未提交配置和设计文件，整合在本独立worktree中执行。代码推送不代表原生镜像/真实116 E2E已完成，T042/T043保持待验。
+
+### 合并后复核
+
+- Feature提交：`4a91ec61d`（fix(app-factory): align delivery contracts and retained diagnostics）。
+- 整合基线：最新远端feat/3.0.0 `a65f130cf4`；合并提交：`03d8d82c8`（Merge F119 delivery contract and diagnostic fixes into feat/3.0.0）。
+- 唯一冲突为`features/v3.0.0/README.md`的并列新增条目，逐块保留F118项目内新建对话和F119本功能；没有覆盖上游整份文件。运行时代码无冲突，原SDK wheel/hash未变。
+- 在整合工作区复核：backend原12文件 **167 passed / 3 E2E skipped**；CLI四文件 **100 passed**；manager本功能与环境/静态/K8s模板/准入11文件 **400 passed**；locales生成/check-i18n通过。旧20项基线失败已在前轮完整相关组合留证，本轮未为索引冲突重复全量组合。
+- 合并后ruff/arch-guard和diff空白检查复核，代码发布仍不代表真实116/189部署或原生服务镜像已验收，T042/T043保持未勾。
+- 推送目标为`origin`的`refs/heads/feat/3.0.0`，使用普通非强制push；以远端ref核验包含上述Feature与合并提交。主工作区未提交配置/文档须保持原内容。
