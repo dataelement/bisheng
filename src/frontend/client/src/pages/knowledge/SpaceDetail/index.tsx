@@ -63,6 +63,7 @@ import {
 } from "~/hooks";
 import { cn, getFullWidthLength } from "~/utils";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
+import { getSpaceDetailMembershipAction } from "../sidebar/spaceMembershipAction";
 import { useRefreshEffectiveQuota } from "~/hooks/useEffectiveQuota";
 import { useStorageQuotaGuard } from "~/hooks/usePersonalStorageQuota";
 
@@ -292,14 +293,12 @@ export function KnowledgeSpaceContent({
     void ensureSpaceActions(space.id);
   }, [ensureSpaceActions, space.id]);
   const canShareSpace = hasKnowledgeSpaceAction(spaceActions, space.id, "share");
-  const canDeleteSpace = hasKnowledgeSpaceAction(spaceActions, space.id, "delete");
+  const membershipAction = getSpaceDetailMembershipAction(space, hasKnowledgeSpaceAction(spaceActions, space.id, "delete"));
+  const canDeleteSpace = membershipAction === "delete";
   const canManageMembers = hasKnowledgeSpaceAction(spaceActions, space.id, "manage_permission");
   const canEditSpace = hasKnowledgeSpaceAction(spaceActions, space.id, "edit");
-  // "Leave" is the joined-space counterpart of "delete", mirroring the space list's
-  // rule (delete when you may, otherwise exit for spaces you joined). Department
-  // spaces are membership-managed elsewhere, and a creator never leaves their own.
-  const canLeaveSpace =
-    !canDeleteSpace && space.spaceKind !== "department" && space.role !== SpaceRole.CREATOR;
+  // Membership intent takes precedence over elevated deletion permissions on every device.
+  const canLeaveSpace = membershipAction === "leave";
   // ─── Version Management ──────────────────────────────────────────────
   const versionManagementEnabled = useVersionManagementEnabled();
   const queryClient = useQueryClient();

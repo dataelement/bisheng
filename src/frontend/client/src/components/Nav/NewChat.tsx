@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Outlined } from 'bisheng-icons';
 import { useCallback, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useSetRecoilState } from 'recoil';
 import { taskModeState } from '~/store/linsight';
 import type { TMessage } from '~/types/chat';
@@ -20,20 +20,23 @@ const SECOND_PASS_DELAY_MS = 300;
  * does not fully reset an open conversation. Lives here (not next to its caller)
  * because it needs recoil, which is frozen for new files.
  */
-export function useStartNewChat(): () => void {
+export function useStartNewChat(): (projectId?: string) => void {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
+  const locationRef = useRef(location);
+  locationRef.current = location;
   const { newConversation } = useNewConvo(0);
   const { conversation } = store.useCreateConversationAtom(0);
   const setTaskMode = useSetRecoilState(taskModeState);
   const timerRef = useRef<number | null>(null);
 
   // Latest values for the delayed second pass, which must not run a stale closure.
-  const resetRef = useRef<() => void>(() => undefined);
-  resetRef.current = () => {
+  const resetRef = useRef<(projectId?: string) => void>(() => undefined);
+  resetRef.current = (projectId) => {
     newConversation();
     setTaskMode(false);
-    navigate('/c/new');
+    navigate(projectId ? `/c/new?projectId=${encodeURIComponent(projectId)}` : '/c/new');
     queryClient.setQueryData<TMessage[]>(
       [QueryKeys.messages, conversation?.conversationId ?? Constants.NEW_CONVO],
       [],
@@ -47,12 +50,15 @@ export function useStartNewChat(): () => void {
     [],
   );
 
-  return useCallback(() => {
-    resetRef.current();
+  return useCallback((projectId?: string) => {
+    resetRef.current(projectId);
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null;
-      resetRef.current();
+      // A fast send or another navigation must not be reset by this old intent.
+      const current = locationRef.current;
+      if (current.pathname !== '/c/new' || new URLSearchParams(current.search).get('projectId') !== (projectId ?? null)) return;
+      resetRef.current(projectId);
     }, SECOND_PASS_DELAY_MS);
   }, []);
 }

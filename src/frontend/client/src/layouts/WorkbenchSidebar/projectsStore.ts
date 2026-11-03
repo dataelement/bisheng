@@ -42,6 +42,10 @@ export function useMockProjects(): MockProject[] {
   return useLocalStore(projectsStore);
 }
 
+export function hasMockProject(id: string): boolean {
+  return projectsStore.get().some((project) => project.id === id);
+}
+
 export function createMockProject(name: string): MockProject {
   const createdAt = Date.now();
   const project: MockProject = { id: `local-${createdAt.toString(36)}`, name, createdAt };

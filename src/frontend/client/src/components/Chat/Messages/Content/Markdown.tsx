@@ -29,7 +29,7 @@ import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import store from '~/store';
 import { langSubset, preprocessLaTeX } from '~/utils';
 import { type ChatCitation } from '~/api/chatApi';
-import { transformPrivateCitations, type CitationDisplayData } from './citationUtils';
+import { transformPrivateCitations, type CitationDisplayData } from '@bisheng/chat/citations';
 import type { CitationReferencesDesktopPayload } from './CitationReferencesDrawer';
 import CitationDocumentPreviewDrawer, { type CitationDocumentPreviewState } from './CitationDocumentPreviewDrawer';
 import { isDeliverableLinkHref } from '~/components/Linsight/Artifacts/artifactUtils';
