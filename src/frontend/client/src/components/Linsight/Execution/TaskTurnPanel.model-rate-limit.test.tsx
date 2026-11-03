@@ -88,6 +88,7 @@ jest.mock('~/components/Linsight/Artifacts/ResultSection', () => ({
     ResultSection: () => null,
 }));
 
+jest.mock('./AnswerFallback', () => ({ AnswerFallback: () => null }));
 jest.mock('./BreathingRow', () => ({ BreathingRow: () => null }));
 jest.mock('./ClarifyCard', () => ({ ClarifyCard: () => null }));
 jest.mock('./ExecutionTimeline', () => ({ ExecutionTimeline: () => null }));
