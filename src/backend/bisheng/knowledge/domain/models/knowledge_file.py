@@ -66,6 +66,7 @@ class ParseType(Enum):
     UN_ETL4LM = "un_etl4lm"  # Nonetl4lmService parsing, nobboxContent, only source files andmdDoc.
     MINERU = "mineru"
     PADDLE_OCR = "paddle_ocr"
+    DOCFLOW = "docflow"
 
 
 class FileSource(Enum):

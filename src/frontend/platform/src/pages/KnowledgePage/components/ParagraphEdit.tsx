@@ -216,7 +216,7 @@ const ParagraphEdit = ({
     }
 
     const fileView = () => {
-        const newVersion = ['etl4lm', 'un_etl4lm'].includes(parseType)
+        const newVersion = ['etl4lm', 'un_etl4lm', 'docflow'].includes(parseType)
         if (!newVersion) return previewFileUrl && <FileView
             select
             fileUrl={previewFileUrl}
@@ -229,9 +229,10 @@ const ParagraphEdit = ({
             case 'ppt':
             case 'pptx':
             case 'pdf':
+            case 'ofd':
                 return previewFileUrl && <FileView
                     select
-                    startIndex={0}
+                    startIndex={parseType === 'docflow' ? 1 : 0}
                     fileUrl={previewFileUrl}
                     labels={labels}
                     scrollTo={postion}

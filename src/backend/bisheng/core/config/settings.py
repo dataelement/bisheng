@@ -645,6 +645,38 @@ class VersionManagementConf(BaseModel):
     )
 
 
+class DocFlowConf(BaseModel):
+    """MK-routed DocFlow OCR. Empty credentials leave the provider disabled."""
+
+    url: str = ""
+    host: str = ""
+    app_key: str = Field(default="", repr=False)
+    app_secret: str = Field(default="", repr=False)
+    docflow_app_id: str = Field(default="", repr=False)
+    docflow_secret_code: str = Field(default="", repr=False)
+    workspace_id: str = ""
+    parser_revision: str = "1"
+    timeout: int = Field(default=120, ge=1, le=3600)
+    poll_timeout: int = Field(default=120, ge=1, le=86400)
+    poll_interval: float = Field(default=3, ge=0.1, le=60)
+    trust_env: bool = False
+    upload_headers: dict[str, str] = Field(default_factory=dict, repr=False)
+    max_concurrency: int = Field(default=5, ge=1, le=100)
+
+    @field_validator("app_key", "app_secret", "docflow_app_id", "docflow_secret_code", mode="before")
+    @classmethod
+    def resolve_environment_secret(cls, value):
+        if isinstance(value, str) and value.startswith("env:"):
+            return os.environ.get(value[4:], "")
+        return value
+
+    @property
+    def configured(self) -> bool:
+        return all(
+            (self.url, self.app_key, self.app_secret, self.docflow_app_id, self.docflow_secret_code, self.workspace_id)
+        )
+
+
 class KnowledgeConf(BaseModel):
     """Knowledge Configure"""
 
@@ -652,6 +684,7 @@ class KnowledgeConf(BaseModel):
     etl4lm: Etl4lmConf = Field(default_factory=Etl4lmConf, description="Etl4lm Configure")
     mineru: MineruConf = Field(default_factory=MineruConf, description="Mineru Configure")
     paddle_ocr: PaddleOcrConf = Field(default_factory=PaddleOcrConf, description="PaddleOcr Config")
+    docflow: DocFlowConf = Field(default_factory=DocFlowConf)
     version_management: VersionManagementConf = Field(
         default_factory=VersionManagementConf,
         description="Version Management Configure",
@@ -673,6 +706,8 @@ class KnowledgeConf(BaseModel):
             return bool(self.mineru.url)
         if provider == "paddle_ocr":
             return bool(self.paddle_ocr.url)
+        if provider == "docflow":
+            return self.docflow.configured
         return False
 
 

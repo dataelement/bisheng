@@ -197,6 +197,12 @@ def addEmbedding(
         knowledge=knowledge_info,
         vector_client=vector_client,
     )
+    vector_client._docflow_identity = {
+        "knowledge_id": knowledge_id,
+        "model": knowledge_info.model,
+        "collection": knowledge_info.collection_name,
+        "index": knowledge_info.index_name,
+    }
     logger.info("start init ES")
     es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(
         knowledge=knowledge_info, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
@@ -295,7 +301,8 @@ def addEmbedding(
             status = "success"
         except EtlException as e:
             logger.exception(f"process_file_fail file_id={db_file.id} file_name={db_file.file_name}")
-            db_file.parse_type = ParseType.ETL4LM.value
+            if db_file.parse_type != ParseType.DOCFLOW.value:
+                db_file.parse_type = ParseType.ETL4LM.value
             db_file.status = KnowledgeFileStatus.FAILED.value
             if str(e).find("etl4lm server timeout") != -1:
                 db_file.remark = KnowledgeEtl4lmTimeoutError(exception=e).to_json_str()

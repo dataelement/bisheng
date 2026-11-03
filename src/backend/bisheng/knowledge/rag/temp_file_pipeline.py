@@ -1,6 +1,6 @@
 import time
 from functools import cached_property
-from typing import List, Dict
+from typing import Dict, List
 
 from langchain_core.documents import BaseDocumentTransformer
 
@@ -14,11 +14,12 @@ from bisheng.user.domain.models.user import UserDao
 
 
 class TempFilePipeline(BaseFilePipeline):
-
-    def __init__(self, invoke_user_id: int, local_file_path: str, file_name: str,
-                 file_rule: FileProcessBase = None, **kwargs):
-        super(TempFilePipeline, self).__init__(invoke_user_id, file_name, file_rule or FileProcessBase(knowledge_id=0),
-                                               **kwargs)
+    def __init__(
+        self, invoke_user_id: int, local_file_path: str, file_name: str, file_rule: FileProcessBase = None, **kwargs
+    ):
+        super(TempFilePipeline, self).__init__(
+            invoke_user_id, file_name, file_rule or FileProcessBase(knowledge_id=0), **kwargs
+        )
         self.local_file_path = local_file_path
 
     @cached_property
@@ -45,16 +46,20 @@ class TempFilePipeline(BaseFilePipeline):
         transformers = self._init_abstract_transformers()
         if self.should_use_ppt_page_split():
             transformers.append(DirectChunkTransformer())
+        elif self.docflow_structure_splitter() is not None:
+            transformers.append(self.docflow_structure_splitter())
         elif self.should_use_hierarchical_split():
-            transformers.append(HierarchicalSplitterTransformer(
-                hierarchy_level=self.file_split_rule.hierarchy_level,
-                append_title=self.file_split_rule.append_title,
-                max_chunk_size=self.file_split_rule.max_chunk_size,
-                fallback_separator=self.file_split_rule.separator,
-                fallback_separator_rule=self.file_split_rule.separator_rule,
-                fallback_chunk_size=self.file_split_rule.chunk_size,
-                fallback_chunk_overlap=self.get_splitter_kwargs()["chunk_overlap"],
-            ))
+            transformers.append(
+                HierarchicalSplitterTransformer(
+                    hierarchy_level=self.file_split_rule.hierarchy_level,
+                    append_title=self.file_split_rule.append_title,
+                    max_chunk_size=self.file_split_rule.max_chunk_size,
+                    fallback_separator=self.file_split_rule.separator,
+                    fallback_separator_rule=self.file_split_rule.separator_rule,
+                    fallback_chunk_size=self.file_split_rule.chunk_size,
+                    fallback_chunk_overlap=self.get_splitter_kwargs()["chunk_overlap"],
+                )
+            )
         else:
             transformers.append(SplitterTransformer(**self.get_splitter_kwargs()))
         return transformers

@@ -90,6 +90,22 @@ class BaseFilePipeline(BasePipeline):
     def should_use_hierarchical_split(self) -> bool:
         return self.split_mode == "hierarchical" and self.file_extension in self.hierarchical_file_exts
 
+    def docflow_structure_splitter(self):
+        if self.file_split_rule.split_mode != "hierarchical" or not getattr(
+            self.loader, "supports_semantic_markdown", False
+        ):
+            return None
+        from bisheng.knowledge.rag.pipeline.transformer.docflow_structure import DocFlowStructureSplitter
+
+        return DocFlowStructureSplitter(
+            hierarchy_level=self.file_split_rule.hierarchy_level,
+            append_title=self.file_split_rule.append_title,
+            chunk_size=self.file_split_rule.max_chunk_size,
+            chunk_overlap=0,
+            separator=self.file_split_rule.separator,
+            separator_rule=self.file_split_rule.separator_rule,
+        )
+
     def should_use_ppt_page_split(self) -> bool:
         return self.split_mode == "auto" and self.file_extension in self.ppt_page_split_exts
 
@@ -229,6 +245,20 @@ class BaseFilePipeline(BasePipeline):
         """
         knowledge_conf = settings.get_knowledge()
         common_params = self._get_loader_common_params(file_path=file_path, file_extension=file_extension)
+        if knowledge_conf.loader_provider == ParseType.DOCFLOW.value:
+            from bisheng.knowledge.docflow.client import DocFlowError
+            from bisheng.knowledge.rag.pipeline.loader.docflow import DocFlowLoader
+
+            if hasattr(self, "db_file") and self.db_file:
+                self.db_file.parse_type = ParseType.DOCFLOW.value
+            if not knowledge_conf.docflow.configured:
+                raise DocFlowError("DocFlow provider selected but required settings are missing")
+            return DocFlowLoader(
+                **common_params,
+                knowledge_file_id=getattr(getattr(self, "db_file", None), "id", None),
+                filter_page_header_footer=self.file_split_rule.filter_page_header_footer == 1,
+                **knowledge_conf.docflow.model_dump(),
+            )
         if knowledge_conf.loader_provider == ParseType.ETL4LM.value and knowledge_conf.etl4lm.url:
             if hasattr(self, "db_file") and self.db_file:
                 self.db_file.parse_type = ParseType.ETL4LM.value

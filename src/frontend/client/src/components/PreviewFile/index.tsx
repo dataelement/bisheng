@@ -57,7 +57,8 @@ export default function FileViewPanne({ file }) {
             case 'ppt':
             case 'pptx':
             case 'pdf':
-                return previewFileUrl && <MemoizedFileView startIndex={0} scrollTo={postion} fileUrl={file.fileUrl} labels={labels} />
+            case 'ofd':
+                return previewFileUrl && <MemoizedFileView startIndex={file.parse_type === 'docflow' ? 1 : 0} scrollTo={postion} fileUrl={file.fileUrl} labels={labels} />
             case 'csv': return <TxtFileViewer filePath={previewFileUrl} />
             case 'txt': return <TxtFileViewer filePath={previewFileUrl} />
             case 'md': return <TxtFileViewer markdown filePath={previewFileUrl} />
