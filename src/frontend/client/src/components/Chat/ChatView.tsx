@@ -93,6 +93,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   // Core chat state — replaces old ChatContext + useSSE + useChatHelpers
   const {
     selectedOrgKbs,
+    knowledgeAccessMessage,
     setSelectedOrgKbs,
     messages,
     conversationId: activeConvoId,
@@ -795,6 +796,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                               onChange={setInputText}
                               bsConfig={bsConfig}
                               selectedOrgKbs={selectedOrgKbs}
+                              knowledgeAccessMessage={knowledgeAccessMessage}
                               onSelectedOrgKbsChange={setSelectedOrgKbs}
                               searchType={searchType}
                               onSearchTypeChange={setSearchType}
@@ -976,6 +978,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             onChange={setInputText}
                             bsConfig={bsConfig}
                             selectedOrgKbs={selectedOrgKbs}
+                            knowledgeAccessMessage={knowledgeAccessMessage}
                             onSelectedOrgKbsChange={setSelectedOrgKbs}
                             searchType={searchType}
                             onSearchTypeChange={setSearchType}

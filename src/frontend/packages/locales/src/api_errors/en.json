@@ -294,6 +294,7 @@
   "18115": "The approval flow has no nodes configured. Please add approval nodes before retrying.",
   "18116": "Approval flow not found",
   "18117": "This flow is still referenced by branches. Please unbind it from all branches before deleting.",
+  "18120": "The previous application was approved but could not be completed. Ask an administrator to resolve or cancel it before applying again.",
   "19000": "Permission denied",
   "19001": "Unauthorized access to Bisheng Information Service",
   "19002": "Error occurred while accessing Bisheng Information Service",

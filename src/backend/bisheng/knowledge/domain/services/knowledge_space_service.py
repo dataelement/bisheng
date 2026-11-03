@@ -424,6 +424,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return SpaceSubscriptionStatusEnum.SUBSCRIBED if has_visible else SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
         return subscription_status
 
+    async def _exclude_failed_subscriptions(self, statuses: dict[int, SpaceSubscriptionStatusEnum]) -> None:
+        from bisheng.approval.application.request_state import get_failed_request_keys
+
+        keys = {
+            f"space:{space_id}:user:{self.login_user.user_id}": space_id
+            for space_id, status in statuses.items()
+            if status == SpaceSubscriptionStatusEnum.PENDING
+        }
+        if not keys:
+            return
+        failed = await get_failed_request_keys(
+            tenant_id=self.login_user.tenant_id,
+            scenario_code="knowledge_space_subscribe_request",
+            applicant_user_id=self.login_user.user_id,
+            business_keys=list(keys),
+        )
+        for key in failed:
+            statuses[keys[key]] = SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+
     @staticmethod
     def _apply_subscription_flags(
         result: KnowledgeSpaceInfoResp,
@@ -1589,6 +1608,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 subscription_status = self._resolve_subscription_status(member_info)
                 if member_info.is_active and has_content_permission:
                     result.user_role = member_info.user_role
+            if not has_joined_visibility:
+                statuses = {space_id: subscription_status}
+                await self._exclude_failed_subscriptions(statuses)
+                subscription_status = statuses[space_id]
             subscription_status = self._resolve_effective_subscription_status(
                 subscription_status,
                 has_visible=has_joined_visibility,
@@ -2257,6 +2280,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         resolved_subscription_status = {
             row[0].id: self._resolve_subscription_status_from_fields(row[1], row[2]) for row in rows
         }
+        unjoined_statuses = {
+            row[0].id: resolved_subscription_status[row[0].id]
+            for row in rows
+            if row[0].user_id != self.login_user.user_id and not visible_map.get(str(row[0].id), False)
+        }
+        await self._exclude_failed_subscriptions(unjoined_statuses)
+        resolved_subscription_status.update(unjoined_statuses)
 
         # 4. Build response items
         result_list: list = []

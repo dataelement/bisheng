@@ -2,6 +2,7 @@ import { useLayoutEffect, useState } from 'react';
 import { BookOpen } from 'lucide-react';
 import { Button, Checkbox, Modal, SearchInput } from '@bisheng/ui';
 import { useCategorizedKnowledgeSpaces, useLocalize } from '~/hooks';
+import { useKnowledgeSpaceAccess } from '~/hooks/useKnowledgeSpaceAccess';
 import type { KnowledgeItem } from './knowledgeTypes';
 
 interface KnowledgeSpaceDialogProps {
@@ -23,16 +24,19 @@ export function KnowledgeSpaceDialog({ value, onConfirm, onClose }: KnowledgeSpa
   const [draft, setDraft] = useState(() => value.filter((item) => item.type === 'space'));
   const [keyword, setKeyword] = useState('');
   const { groups, isFetching, isError, retry } = useCategorizedKnowledgeSpaces({ keyword });
-  const selectedIds = new Set(draft.map((item) => String(item.id)));
+  const access = useKnowledgeSpaceAccess(draft, 'knowledge-picker');
+  const selectedIds = new Set(access.available.map((item) => String(item.id)));
 
   const handleToggle = (id: string, name: string) => {
-    setDraft((current) => current.some((item) => String(item.id) === id)
-      ? current.filter((item) => String(item.id) !== id)
-      : current.length < MAX_SPACES ? [...current, { id, name, type: 'space' }] : current);
+    setDraft((current) => {
+      const available = current.filter((item) => selectedIds.has(String(item.id)));
+      return selectedIds.has(id) ? available.filter((item) => String(item.id) !== id)
+        : available.length < MAX_SPACES ? [...available, { id, name, type: 'space' }] : available;
+    });
   };
   const handleConfirm = () => {
     // Organization knowledge remains independent of the selected spaces.
-    onConfirm([...value.filter((item) => item.type !== 'space'), ...draft]);
+    onConfirm([...value.filter((item) => item.type !== 'space'), ...access.available]);
     onClose();
   };
 
@@ -42,14 +46,15 @@ export function KnowledgeSpaceDialog({ value, onConfirm, onClose }: KnowledgeSpa
       className="dsh-knowledge-dialog" overlayClassName="dsh-knowledge-overlay" bodyClassName="flex flex-col"
       footer={<>
         <span className="mr-auto self-center text-body-sm text-text-3" aria-live="polite">
-          {localize('dshChat.selectedKnowledge', { count: draft.length })}
+          {localize('dshChat.selectedKnowledge', { count: access.available.length })}
         </span>
         <Button color="default" variant="outlined" className="dsh-knowledge-cancel" onClick={onClose}>{localize('com_ui_cancel')}</Button>
-        <Button onClick={handleConfirm} disabled={isError || isFetching}>
+        <Button onClick={handleConfirm} disabled={isError || isFetching || access.checking || access.failed}>
           {localize('dshChat.confirmKnowledge')}
         </Button>
       </>}
     >
+      {access.message && <p role="status" className="mb-2 text-body-sm text-text-3">{access.message}</p>}
       <SearchInput value={keyword} onChange={(event) => setKeyword(event.target.value)}
         placeholder={localize('dshChat.searchKnowledge')} aria-label={localize('dshChat.searchKnowledge')} />
       <div className="dsh-knowledge-columns">
@@ -74,7 +79,7 @@ export function KnowledgeSpaceDialog({ value, onConfirm, onClose }: KnowledgeSpa
               const checked = selectedIds.has(id);
               return (
                 <label key={id} className="dsh-knowledge-row flex cursor-pointer items-center gap-3 rounded-lg px-2 py-3 hover:bg-fill-2" data-selected={checked}>
-                  <Checkbox checked={checked} disabled={!checked && draft.length >= MAX_SPACES}
+                  <Checkbox checked={checked} disabled={!checked && access.available.length >= MAX_SPACES}
                     onCheckedChange={() => handleToggle(id, space.name)} aria-label={space.name} />
                   <span className="dsh-knowledge-icon"><BookOpen size={18} aria-hidden /></span>
                   <span className="min-w-0 flex-1 truncate text-body text-text-1" title={space.name}>{space.name}</span>
@@ -88,7 +93,7 @@ export function KnowledgeSpaceDialog({ value, onConfirm, onClose }: KnowledgeSpa
           </section>
         ))}
       </div>
-      {draft.length >= MAX_SPACES && <p role="status" className="text-body-sm text-text-3">{localize('dshChat.knowledgeLimit')}</p>}
+      {access.available.length >= MAX_SPACES && <p role="status" className="text-body-sm text-text-3">{localize('dshChat.knowledgeLimit')}</p>}
     </Modal>
   );
 }

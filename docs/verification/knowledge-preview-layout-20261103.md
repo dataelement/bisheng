@@ -38,6 +38,12 @@ DESKTOP_SOURCE=/absolute/path/to/bisheng-desktop \
 
 ## Windows 交付验收
 
+### PR #2591 合并冲突处理
+
+2026-11-03 同步目标分支 `e7319073fbd69ac21b5e720ca760724e8f346ef6`。冲突集中于 `docs/STATUS.md` 首部的独立新增记录，已完整合并双方内容。两份布局组件及原生验证脚本与原提交 `afe6c982ac986c86ce32f5348055cd1f41d0a803` 逐字节一致；目标分支同期的权限和导航修复一并保留。
+
+同步后 3 文件 / 15 项组件回归、前端全量 ESLint、Platform 620 个及 Client 1520 个严格类型文件与 file-viewers 类型检查、Client 生产构建、i18n 和差异检查通过。沿用 pnpm 9.15.9 与现有依赖，日志位于外层工作区 `outputs/knowledge-preview-layout-20261103/pr-sync/`。原生布局证据沿用本记录前述结果，本轮完成合并组合验证。
+
 状态：Client 部署、Windows 安装版和真实账号验收待执行。
 
 1. 部署包含本次提交的 Client，重新打开发现广场中的知识空间详情。

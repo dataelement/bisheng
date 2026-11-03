@@ -1,5 +1,7 @@
 {
   "appChat": {
+    "unknownApp": "未知应用",
+    "noDescription": "暂无描述信息",
     "emptyShared": "该分享暂无对话记录",
     "stopped": "已停止"
   },
@@ -2624,5 +2626,10 @@
       "name": "Excel 表格制作",
       "description": "创建和修改 Excel 工作簿（.xlsx），适用于数据表、汇总表、预算表、财务模型、报价单和台账。支持读取和清洗 .xlsx、.xls、.csv 数据，设置公式与格式，并在交付前重算和检查工作簿。"
     }
+  },
+  "knowledgeAccess": {
+    "checking": "正在核验知识空间访问权限…",
+    "failed": "知识空间权限加载失败，请刷新页面后重试。",
+    "revoked": "以下知识空间的访问权限已失效：{{names}}。请在“添加上下文”中重新选择可访问的空间。"
   }
 }
