@@ -450,7 +450,7 @@
   "19606": "from_user_id and to_user_id must be different",
   "19701": "Only the global super admin may set an admin tenant-scope (INV-T14); caller is not a super admin",
   "19702": "Target tenant for admin scope does not exist",
-  "19703": "Select a management tenant in the top-right corner before changing tenant configuration.",
+  "19703": "The tenant information required for this operation is unavailable. Refresh the page and try again. If the issue persists, contact your administrator.",
   "19704": "The tenant view changed. Refresh the page before continuing.",
   "19705": "No valid tenant view is available. Contact an administrator.",
   "19801": "Root-shared LLM server/model is read-only for Child Admins; only global super admin may modify",
