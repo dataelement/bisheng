@@ -116,6 +116,7 @@ def test_history_reuses_roster_and_merges_login_before_one_write(monkeypatch):
         lambda ids: department_reads.append(ids) or {},
     )
     monkeypatch.setattr(worker, "_cleanup_participation_records", lambda *args: 0)
+    monkeypatch.setattr(worker, "_get_dimension_department_map", lambda _departments: {})
     dates = [date(2026, 9, 20), date(2026, 9, 21)]
     login = {
         "tenant_id": 1,

@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from bisheng.common.schemas.telemetry.base_telemetry_schema import UserContext
 from bisheng.common.services import telemetry_service
 from bisheng.core.search.elasticsearch.manager import get_es_connection, get_es_connection_sync
+from bisheng.telemetry.domain.mid_table.belonging_organization import without_empty_belonging
 
 common_properties = {
     "user_id": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
@@ -163,7 +164,7 @@ class BaseMidTable(BaseModel):
         for rec in records:
             action = {
                 "_index": self._index_name,
-                "_source": rec.model_dump(exclude={"es_id"}),
+                "_source": without_empty_belonging(rec.model_dump(exclude={"es_id"})),
             }
             if rec.es_id is not None:
                 action["_id"] = rec.es_id
@@ -175,7 +176,7 @@ class BaseMidTable(BaseModel):
         await self.ensure_index_exists()
         kwargs = {
             "index": self._index_name,
-            "document": record.model_dump(exclude={"es_id"}),
+            "document": without_empty_belonging(record.model_dump(exclude={"es_id"})),
         }
         if record.es_id is not None:
             kwargs["id"] = record.es_id

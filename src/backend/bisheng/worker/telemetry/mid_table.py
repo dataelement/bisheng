@@ -56,6 +56,7 @@ from bisheng.knowledge.domain.services.file_classification_label_service import 
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.telemetry.domain.mid_table.app_increment import AppIncrement, AppIncrementRecord
 from bisheng.telemetry.domain.mid_table.base import BaseMidTable
+from bisheng.telemetry.domain.mid_table.belonging_organization import belonging_names
 from bisheng.telemetry.domain.mid_table.content_stat_reconcile import BatchWriteError, ContentStatReconciler
 from bisheng.telemetry.domain.mid_table.daily_participation import (
     CHINA_STANDARD_TIME,
@@ -137,7 +138,14 @@ def sync_mid_user_increment(start_date: str | None = None, end_date: str | None 
         if not user_list:
             break
         records = []
+        unique_primaries, ambiguous_primaries = _load_unique_primary_departments(
+            [int(user.user_id) for user in user_list]
+        )
+        departments_by_id = _get_dimension_department_map(list(unique_primaries.values()))
         for user in user_list:
+            user_id = int(user.user_id)
+            department = None if user_id in ambiguous_primaries else unique_primaries.get(user_id)
+            names = belonging_names(department, departments_by_id, int(getattr(department, "tenant_id", None) or 1))
             records.append(
                 UserIncrementRecord(
                     es_id=f"increment_user_{user.user_id}",
@@ -155,6 +163,7 @@ def sync_mid_user_increment(start_date: str | None = None, end_date: str | None 
                         for dept in getattr(user, "departments", []) or []
                     ],
                     timestamp=int(user.create_time.timestamp()),
+                    **names,
                 )
             )
         mid_table.insert_records_sync(records)
@@ -291,7 +300,8 @@ def _reconcile_participation_days(dates, *, aggregates=None, department_source="
             unchanged,
         )
 
-    def build(user_id, tenant, name, department, local_date, timestamp, login):
+    def build(user_id, tenant, name, department, local_date, timestamp, login, departments_by_id):
+        names = belonging_names(department, departments_by_id, tenant)
         return DailyParticipationRecord(
             es_id=DailyParticipationFact.build_es_id(tenant, local_date, user_id),
             tenant_id=tenant,
@@ -307,6 +317,7 @@ def _reconcile_participation_days(dates, *, aggregates=None, department_source="
             primary_department_name=department.name if department else None,
             department_source="current_primary_backfill" if login else department_source,
             projection_updated_at=started_at,
+            **names,
             **(
                 {key: login[key] for key in ("login_count", "first_login_at", "last_login_at")} | {"logged_in": True}
                 if login
@@ -326,13 +337,23 @@ def _reconcile_participation_days(dates, *, aggregates=None, department_source="
             departments = UserDepartmentDao.get_primary_department_map_by_user_ids(
                 sorted({int(user.user_id) for user, _ in users})
             )
+        departments_by_id = _get_dimension_department_map(list(departments.values()))
         for user, tenant in users:
             user_id = int(user.user_id)
             roster_keys.add((tenant, user_id))
             for local_date, timestamp in date_values:
                 login = logins.pop((tenant, local_date, user_id), None)
                 records.append(
-                    build(user_id, tenant, user.user_name, departments.get(user_id), local_date, timestamp, login)
+                    build(
+                        user_id,
+                        tenant,
+                        user.user_name,
+                        departments.get(user_id),
+                        local_date,
+                        timestamp,
+                        login,
+                        departments_by_id,
+                    )
                 )
                 roster += 1
                 if len(records) == 1000:
@@ -347,6 +368,7 @@ def _reconcile_participation_days(dates, *, aggregates=None, department_source="
             departments = UserDepartmentDao.get_primary_department_map_by_user_ids(
                 sorted({row["user_id"] for row in batch})
             )
+        departments_by_id = _get_dimension_department_map(list(departments.values()))
         for login in batch:
             records.append(
                 build(
@@ -357,6 +379,7 @@ def _reconcile_participation_days(dates, *, aggregates=None, department_source="
                     login["local_date"],
                     participation_day(date.fromisoformat(login["local_date"]))[1],
                     login,
+                    departments_by_id,
                 )
             )
             if len(records) == 1000:
