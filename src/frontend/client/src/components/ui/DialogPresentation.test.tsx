@@ -21,6 +21,28 @@ const cases = [
   ['alert', <AlertDialog open><AlertDialogContent><AlertDialogTitle>Confirm</AlertDialogTitle><AlertDialogCancel>Cancel</AlertDialogCancel></AlertDialogContent></AlertDialog>],
 ] as const;
 
+it.each(cases)('%s declares its modal state when live regions keep the application root exposed', (_name, content) => {
+  const root = document.createElement('div');
+  root.id = 'root';
+  document.body.append(root);
+  const view = render(<><main>Background content</main><div aria-live="polite" />{content}</>, { container: root });
+  expect(root).not.toHaveAttribute('aria-hidden', 'true');
+  expect(screen.getByText('Background content')).toHaveAttribute('aria-hidden', 'true');
+  expect(document.querySelector('[role="dialog"], [role="alertdialog"]')).toHaveAttribute('aria-modal', 'true');
+  view.unmount();
+  root.remove();
+});
+
+it.each([
+  ['dialog', Dialog, DialogContent, DialogTitle],
+  ['original', OGDialog, OGDialogContent, OGDialogTitle],
+] as const)('%s follows its Root modal setting through portals', (_name, Root, Content, Title) => {
+  const view = render(<Root open modal={false}><Content><Title>Floating panel</Title></Content></Root>);
+  expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'false');
+  view.rerender(<Root open modal><Content><Title>Floating panel</Title></Content></Root>);
+  expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
+});
+
 it.each(cases)('%s dims the full desktop viewport in both themes', (_name, content) => {
   window.history.replaceState({}, '', '/workspace/skills?embed=dsh');
   const { rerender } = render(content);
