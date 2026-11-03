@@ -12,6 +12,7 @@ import { addConversation, updateConvoFields } from "~/utils";
 import store from "~/store";
 import type { SelectedOrgKb } from "~/store/modeltype";
 import { useAuthContext } from "~/hooks/AuthContext";
+import { useKnowledgeSpaceAccess } from "~/hooks/useKnowledgeSpaceAccess";
 import { useConversationKnowledge } from "~/hooks/useConversationKnowledge";
 import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
@@ -215,10 +216,13 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     const knowledgeDefaults = useMemo<SelectedOrgKb[]>(() => bsConfig?.knowledgeBase?.enabled === false
         ? [] : (bsConfig?.orgKbs ?? []).filter((kb) => kb.default_checked)
             .map((kb) => ({ id: String(kb.id), name: kb.name, type: 'org' })), [bsConfig]);
-    const { selectedOrgKbs, setSelectedOrgKbs, promoteSelection } = useConversationKnowledge(
+    const { selectedOrgKbs: savedKnowledge, setSelectedOrgKbs, promoteSelection } = useConversationKnowledge(
         user?.id == null ? undefined : String(user.id), conversationId, knowledgeDefaults,
         bsConfig?.knowledgeBase?.enabled !== false, draftScope,
     );
+
+    const { available: selectedOrgKbs, message: knowledgeAccessMessage, blocked: knowledgeAccessBlocked } =
+        useKnowledgeSpaceAccess(savedKnowledge, `${draftScope}:${conversationId}`, !shareToken);
 
     const queryClient = useQueryClient();
 
@@ -496,6 +500,10 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     const sendMessage = useCallback(
         (text: string, files?: any[] | null, opts?: { taskMode?: boolean }) => {
             if ((!text.trim() && !(files?.length)) || isStreaming) return false;
+            if (knowledgeAccessBlocked) {
+                showToast({ message: knowledgeAccessMessage, status: "warning" });
+                return false;
+            }
             // This turn belongs to the conversation it started in, and every
             // write below must land there even if the user walks away mid-answer.
             // Shadowing the viewed-conversation writers with turn-scoped ones is
@@ -1082,7 +1090,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             beginStream(turn.cid, submission);
             return true;
         },
-        [conversationId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, showToast, queryClient, finishMediaParsing]
+        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, showToast, queryClient, finishMediaParsing]
     );
 
     // --- Stop generating ---
@@ -1107,6 +1115,10 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     const regenerate = useCallback(
         (parentMessageId: string) => {
             if (isStreaming) return;
+            if (knowledgeAccessBlocked) {
+                showToast({ message: knowledgeAccessMessage, status: "warning" });
+                return;
+            }
             // This turn belongs to the conversation it started in, and every
             // write below must land there even if the user walks away mid-answer.
             // Shadowing the viewed-conversation writers with turn-scoped ones is
@@ -1270,7 +1282,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             setIsStreaming(true);
             beginStream(turn.cid, submission);
         },
-        [conversationId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, localize]
+        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, localize, showToast]
     );
 
     return {
@@ -1286,6 +1298,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         isParsingMedia,
 
         selectedOrgKbs,
+        knowledgeAccessMessage,
         setSelectedOrgKbs,
 
         // Actions

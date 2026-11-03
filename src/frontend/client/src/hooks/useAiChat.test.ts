@@ -18,6 +18,15 @@ import type { SSESubmission } from "./useAiChatSSE";
 /** Every SSE turn opened during a test, in order. */
 jest.mock("react-activation", () => ({ useActivate: jest.fn() }));
 
+let mockKnowledgeBlocked = false;
+jest.mock('./useKnowledgeSpaceAccess', () => ({
+    useKnowledgeSpaceAccess: (selection) => ({
+        available: mockKnowledgeBlocked ? [] : selection,
+        blocked: mockKnowledgeBlocked,
+        message: mockKnowledgeBlocked ? 'knowledgeAccess.revoked' : '',
+    }),
+}));
+
 let mockSelectedSkills: Array<{ name: string }> = [];
 const mockOpenedStreams: Array<{ submission: SSESubmission; close: jest.Mock }> = [];
 
@@ -110,6 +119,7 @@ const latestStream = () => mockOpenedStreams[mockOpenedStreams.length - 1];
 
 beforeEach(() => {
     localStorage.clear();
+    mockKnowledgeBlocked = false;
     mockOpenedStreams.length = 0;
     mockSelectedSkills = [];
     mockGetAgentMessages.mockImplementation((cid: string) => Promise.resolve(historyOf(cid)));
@@ -547,4 +557,19 @@ test("knowledge handoff submits the chosen model ID and space in the real chat p
     } finally {
         modelAtom.__testValue = initialModel;
     }
+});
+
+
+describe('revoked knowledge scope submission gate', () => {
+    it('keeps the old conversation intact and blocks sending and regenerating', async () => {
+        mockKnowledgeBlocked = true;
+        const { result } = renderChat('retained');
+        await waitFor(() => expect(result.current.messages.length).toBeGreaterThan(0));
+        const originalMessages = result.current.messages;
+        act(() => expect(result.current.sendMessage('D6-W')).toBe(false));
+        act(() => result.current.regenerate('retained-q'));
+        expect(mockOpenedStreams).toHaveLength(0);
+        expect(result.current.messages).toEqual(originalMessages);
+        expect(result.current.knowledgeAccessMessage).toBe('knowledgeAccess.revoked');
+    });
 });
