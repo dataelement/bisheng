@@ -1,10 +1,12 @@
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.department.domain.services.audit_dept_scope import DeptSelection
 
 router = APIRouter(prefix="/audit", tags=["AuditLog"])
 
@@ -22,6 +24,10 @@ async def get_audit_logs(
     tenant_id: int | None = Query(
         default=None, description="F056: narrow to one tenant (global super only; others must match their own)"
     ),
+    dept_ids: list[int] | None = Query(default=[], description="F003: department.id of the organisation filter"),
+    include_descendants: bool = Query(default=True, description="F003: expand selected departments to sub-departments"),
+    include_none: bool = Query(default=False, description="F003: rows whose operator had no department"),
+    include_unrecorded: bool = Query(default=False, description="F003: rows written before the snapshot existed"),
     page: int | None = Query(default=0, description="Page"),
     limit: int | None = Query(default=0, description="Listings Per Page"),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -40,6 +46,7 @@ async def get_audit_logs(
         limit,
         target_app_id=target_app_id or None,
         tenant_id=tenant_id,
+        dept_selection=DeptSelection.of(dept_ids, include_descendants, include_none, include_unrecorded),
     )
 
 
@@ -68,6 +75,10 @@ async def export_audit_logs(
     event_type: str | None = Query(default=None, description="Operation behaviors"),
     target_app_id: str | None = Query(default=None),
     tenant_id: int | None = Query(default=None),
+    dept_ids: list[int] | None = Query(default=[], description="F003: department.id of the organisation filter"),
+    include_descendants: bool = Query(default=True, description="F003: expand selected departments to sub-departments"),
+    include_none: bool = Query(default=False, description="F003: rows whose operator had no department"),
+    include_unrecorded: bool = Query(default=False, description="F003: rows written before the snapshot existed"),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Rows for the system-audit export (F056 AC-32) — same filters, same
@@ -86,8 +97,26 @@ async def export_audit_logs(
         event_type,
         target_app_id=target_app_id or None,
         tenant_id=tenant_id,
+        dept_selection=DeptSelection.of(dept_ids, include_descendants, include_none, include_unrecorded),
     )
     return resp_200(data={"data": rows, "total": total})
+
+
+@router.get("/departments")
+async def get_audit_departments(
+    *,
+    parent_id: int | None = Query(default=None, description="Children of this department; omit for the top level"),
+    keyword: str | None = Query(default=None, description="Name / dept_id / external_id substring; ignores parent_id"),
+    tenant_id: int | None = Query(default=None, description="Same rule as GET /audit"),
+    limit: int = Query(default=50, ge=1, le=200),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """F003: organisation candidates for the audit tabs, within the caller's audit scope."""
+    return resp_200(
+        data=await AuditLogService.get_audit_departments(
+            login_user, parent_id=parent_id, keyword=keyword, tenant_id=tenant_id, limit=limit
+        )
+    )
 
 
 @router.get("/operators")
@@ -108,12 +137,30 @@ async def get_session_list(
     end_date: datetime | None = Query(default=None, description="End time"),
     feedback: str | None = Query(default=None, description="like LikedislikeUnlikecopiedCopy:"),
     sensitive_status: int | None = Query(default=None, description="Sensitive word review status"),
+    dept_ids: list[int] | None = Query(default=[], description="F003: department.id of the organisation filter"),
+    include_descendants: bool = Query(default=True, description="F003: expand selected departments to sub-departments"),
+    include_none: bool = Query(default=False, description="F003: rows whose operator had no department"),
+    include_unrecorded: bool = Query(default=False, description="F003: rows written before the snapshot existed"),
+    usage_type: Literal["daily", "assistant", "workflow", "task"] | None = Query(
+        default=None, description="F003: daily | assistant | workflow | task"
+    ),
     page: int | None = Query(default=1, description="Page"),
     page_size: int | None = Query(default=10, description="Listings Per Page"),
 ):
     """Filter all session lists"""
     data, total = await AuditLogService.get_session_list(
-        login_user, flow_ids, user_ids, group_ids, start_date, end_date, feedback, sensitive_status, page, page_size
+        login_user,
+        flow_ids,
+        user_ids,
+        group_ids,
+        start_date,
+        end_date,
+        feedback,
+        sensitive_status,
+        page,
+        page_size,
+        dept_selection=DeptSelection.of(dept_ids, include_descendants, include_none, include_unrecorded),
+        usage_type=usage_type,
     )
     return resp_200(data={"data": data, "total": total})
 
@@ -128,9 +175,35 @@ async def get_session_messages(
     end_date: datetime | None = Query(default=None, description="End time"),
     feedback: str | None = Query(default=None, description="like LikedislikeUnlikecopiedCopy:"),
     sensitive_status: int | None = Query(default=None, description="Sensitive word review status"),
+    dept_ids: list[int] | None = Query(default=[], description="F003: department.id of the organisation filter"),
+    include_descendants: bool = Query(default=True, description="F003: expand selected departments to sub-departments"),
+    include_none: bool = Query(default=False, description="F003: rows whose operator had no department"),
+    include_unrecorded: bool = Query(default=False, description="F003: rows written before the snapshot existed"),
+    usage_type: Literal["daily", "assistant", "workflow", "task"] | None = Query(
+        default=None, description="F003: daily | assistant | workflow | task"
+    ),
 ):
     """Export data for a list of session details"""
     result = await AuditLogService.get_session_messages(
-        login_user, flow_ids, user_ids, group_ids, start_date, end_date, feedback, sensitive_status
+        login_user,
+        flow_ids,
+        user_ids,
+        group_ids,
+        start_date,
+        end_date,
+        feedback,
+        sensitive_status,
+        dept_selection=DeptSelection.of(dept_ids, include_descendants, include_none, include_unrecorded),
+        usage_type=usage_type,
     )
     return resp_200(data={"data": result})
+
+
+@router.get("/session/users")
+async def get_session_users(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    keyword: str | None = Query(default=None, description="User name substring"),
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """F003: user candidates of the application-usage tab, within the caller's audit scope."""
+    return resp_200(data=await AuditLogService.get_session_users(login_user, keyword, limit))

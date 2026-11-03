@@ -229,6 +229,8 @@ CREATE TABLE IF NOT EXISTS auditlog (
     target_id VARCHAR(64),
     reason TEXT,
     metadata JSON,
+    operator_dept_id INTEGER,
+    operator_dept_path VARCHAR(1024),
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
 )"""

@@ -10,7 +10,10 @@ import { userContext } from '@/contexts/userContext'
 import { useAdminScope } from '@/hooks/useAdminScope'
 import { showApiError } from '@/controllers/request'
 import { getTenantsApi } from '@/controllers/API/tenant'
-import { cancelRuntimeAuditExport, createRuntimeAuditExport, downloadRuntimeAuditExport, getRuntimeAuditCandidates } from '@/controllers/API/runtimeAudit'
+import { cancelRuntimeAuditExport, createRuntimeAuditExport, downloadRuntimeAuditExport, getRuntimeAuditCandidates, withRuntimeOrg } from '@/controllers/API/runtimeAudit'
+import { EMPTY_ORG_SELECTION } from '@/controllers/API/log'
+import type { OrgSelection } from '@/types/api/audit'
+import { OrgFilter } from '../components/OrgFilter'
 import type { RuntimeAuditFilters, RuntimeAuditKind } from '@/controllers/API/runtimeAudit'
 import { useRuntimeAudit } from './useRuntimeAudit'
 import { RuntimeAuditExportDialog } from './RuntimeAuditExportDialog'
@@ -51,6 +54,8 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey }: RecordProps) {
   const [start, setStart] = useState<Date>()
   const [end, setEnd] = useState<Date>()
   const [rangeError, setRangeError] = useState(false)
+  // Draft organisation selection; it joins `filters` when the user applies (AC-26).
+  const [org, setOrg] = useState<OrgSelection>(EMPTY_ORG_SELECTION)
   const [busy, setBusy] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [createFailed, setCreateFailed] = useState(false)
@@ -58,7 +63,7 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey }: RecordProps) {
   const handleRange = () => {
     if (range === 'custom' && (!start || !end || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start.getTime() > end.getTime())) { setRangeError(true); return }
     setRangeError(false)
-    setFilters({ ...filters, visitor_id: undefined, time_range: range, start_time: range === 'custom' ? start?.toISOString() : undefined, end_time: range === 'custom' ? end?.toISOString() : undefined })
+    setFilters(withRuntimeOrg({ ...filters, visitor_id: undefined, time_range: range, start_time: range === 'custom' ? start?.toISOString() : undefined, end_time: range === 'custom' ? end?.toISOString() : undefined }, org))
   }
   const handleCreateExport = async () => {
     if (!query.data) return
@@ -86,10 +91,10 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey }: RecordProps) {
     try { await cancelRuntimeAuditExport(jobId, tenantId); await exportQuery.refetch() } catch (error) { showApiError(error) } finally { setBusy(false) }
   }
   const fields = kind === 'model'
-    ? ['id', 'create_time', 'app_id', 'actor_kind', 'actor_name', 'subject_kind', 'subject_name', 'credential_mask', 'model_name', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'result', 'error_code', 'http_status', 'latency_ms', 'ttft_ms', 'request_id']
+    ? ['id', 'create_time', 'app_id', 'actor_kind', 'actor_name', 'subject_kind', 'subject_name', 'operator_dept_path', 'credential_mask', 'model_name', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'result', 'error_code', 'http_status', 'latency_ms', 'ttft_ms', 'request_id']
     : kind === 'capability'
-      ? ['id', 'create_time', 'app_name', 'app_id', 'credential_mask', 'subject_kind', 'subject_name', 'capability', 'result', 'error_code', 'latency_ms', 'chunk_count', 'version_id']
-      : ['id', 'entry_time', 'app_name_snapshot', 'app_id', 'user_name', 'request_id']
+      ? ['id', 'create_time', 'app_name', 'app_id', 'credential_mask', 'subject_kind', 'subject_name', 'operator_dept_path', 'capability', 'result', 'error_code', 'latency_ms', 'chunk_count', 'version_id']
+      : ['id', 'entry_time', 'app_name_snapshot', 'app_id', 'user_name', 'operator_dept_path', 'request_id']
   return <div className="flex min-h-0 flex-1 flex-col gap-4 pt-2">
     {kind === 'access' && <p className="text-sm text-muted-foreground">{t('log.runtime.accessHint')}</p>}
     <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -99,6 +104,7 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey }: RecordProps) {
       <CandidateFilter key={`app-${scopeKey}-${filters.time_range}-${filters.start_time}-${filters.end_time}`} kind={kind} dimension="app" filters={filters} scopeKey={scopeKey} value={filters.app_id} onChange={value => setFilters({ ...filters, app_id: value, visitor_id: undefined })} />
       <CandidateFilter key={`visitor-${scopeKey}-${filters.time_range}-${filters.start_time}-${filters.end_time}-${filters.app_id}-${filters.credential_id}`} kind={kind} dimension="visitor" filters={filters} scopeKey={scopeKey} value={filters.visitor_id?.toString()} onChange={value => setFilters({ ...filters, visitor_id: value ? Number(value) : undefined })} />
       {kind === 'model' && <CandidateFilter key={`credential-${scopeKey}-${filters.time_range}-${filters.app_id}`} kind={kind} dimension="credential" filters={filters} scopeKey={scopeKey} value={filters.credential_id?.toString()} onChange={value => setFilters({ ...filters, credential_id: value ? Number(value) : undefined, visitor_id: undefined })} />}
+      <OrgFilter value={org} onChange={setOrg} tenantId={tenantId ?? null} className="min-w-48 flex-1" />
       {range === 'custom' && <>
         <div className="w-56 max-w-full"><DatePicker showTime value={start} placeholder={t('log.runtime.start')} onChange={setStart} /></div>
         <div className="w-56 max-w-full"><DatePicker showTime value={end} placeholder={t('log.runtime.end')} onChange={setEnd} /></div>
