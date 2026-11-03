@@ -40,6 +40,7 @@ MIGRATED_RESOURCE_TYPES: frozenset[str] = frozenset(
         "linsight_skill",
         "channel",
         "dashboard",
+        "app",
     }
 )
 
@@ -56,6 +57,7 @@ ACTION_RESOURCE_SCOPES: Mapping[str, frozenset[str]] = {
             "linsight_skill",
             "channel",
             "dashboard",
+            "app",
         }
     ),
     "create_folder": frozenset({"knowledge_space", "folder"}),
@@ -64,9 +66,9 @@ ACTION_RESOURCE_SCOPES: Mapping[str, frozenset[str]] = {
     "download": frozenset({"folder", "knowledge_file"}),
     "delete": MIGRATED_RESOURCE_TYPES,
     "share": frozenset({"knowledge_space", "knowledge_file", "workflow", "assistant"}),
-    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool", "linsight_skill"}),
-    "publish": frozenset({"workflow", "assistant"}),
-    "unpublish": frozenset({"workflow", "assistant"}),
+    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool", "linsight_skill", "app"}),
+    "publish": frozenset({"workflow", "assistant", "app"}),
+    "unpublish": frozenset({"workflow", "assistant", "app"}),
 }
 
 STANDARD_MODEL_KEYS: tuple[str, ...] = ("viewer", "editor", "manager", "owner")

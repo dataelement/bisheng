@@ -11,6 +11,7 @@ export type ResourceType =
   | 'channel'
   | 'dashboard'
   | 'linsight_skill'
+  | 'app'
 
 export type SubjectType = 'user' | 'department' | 'user_group'
 

@@ -73,7 +73,8 @@
     "web-vitals": "^4.1.1",
     "xlsx": "^0.18.5",
     "xlsx-populate": "^1.21.0",
-    "zustand": "^4.5.2"
+    "zustand": "^4.5.2",
+    "qrcode.react": "catalog:"
   },
   "scripts": {
     "gen:locales": "pnpm --filter @bisheng/locales build",

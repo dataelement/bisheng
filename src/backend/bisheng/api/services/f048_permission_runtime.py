@@ -47,6 +47,7 @@ from bisheng.permission.application.process_runtime import (
 )
 from bisheng.permission.application.resource_api import (
     F048ResourcePermissionApi,
+    GrantChangeListenerRegistry,
 )
 from bisheng.permission.application.resource_authorization import (
     BoundResourceAuthorizationPort,
@@ -167,6 +168,9 @@ def build_f048_resource_composition(
         loader=DashboardDaoPermissionLoader(runtime),
         permission=runtime,
     )
+    from bisheng.app_runtime.domain.services.f048_app_permission import AppDaoPermissionLoader, F048AppPermissionAdapter
+
+    hosted_app = F048AppPermissionAdapter(loader=AppDaoPermissionLoader(runtime), permission=runtime)
     skill = SkillPermissionAdapter(runtime)
     adapters: dict[str, object] = {
         "linsight_skill": skill,
@@ -179,6 +183,7 @@ def build_f048_resource_composition(
         "knowledge_file": knowledge_file,
         "tool": tool,
         "dashboard": dashboard,
+        "app": hosted_app,
     }
     registry = ResourceAuthorizationRegistry()
     for resource_type in (
@@ -200,6 +205,9 @@ def build_f048_resource_composition(
     registry.register("tool", tool)
     registry.register("linsight_skill", skill)
     registry.register("dashboard", dashboard)
+    # Hosted apps, like tools, own a single resource type; the bound wrapper
+    # injects a resource_type argument only multi-resource adapters accept.
+    registry.register("app", hosted_app)
     return adapters, registry
 
 
@@ -226,10 +234,15 @@ async def initialize_f048_api_runtime(
         resources=registry,
         permission=runtime,
     )
+    from bisheng.app_runtime.domain.services.visibility_audit import HostedAppVisibilityAuditListener
+
+    grant_listeners = GrantChangeListenerRegistry()
+    grant_listeners.register("app", HostedAppVisibilityAuditListener())
     resource_api = F048ResourcePermissionApi(
         resources=registry,
         runtime=runtime,
         subjects=TenantPermissionSubjectDirectory(),
+        grant_listeners=grant_listeners,
     )
     catalog_state = SqlCatalogState()
     catalog_api = F048CatalogApi(

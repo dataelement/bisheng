@@ -36,6 +36,7 @@ GRANT_SUBJECT_RESOURCE_TYPES = frozenset(
         "tool",
         "channel",
         "dashboard",
+        "app",
     }
 )
 

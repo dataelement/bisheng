@@ -202,3 +202,28 @@ def get_is_management_api() -> bool:
 def set_is_management_api(value: bool):
     """Set the management-api flag. Returns a reset token."""
     return _is_management_api.set(value)
+
+
+@contextmanager
+def tenant_execution_scope(tenant_id: int):
+    """Bind a verified tenant for background work and restore ambient request state.
+
+    A business actor's tenant field does not bind SQLAlchemy's ContextVars.
+    Bootstrap and reconciliation must also clear an inherited admin override,
+    visible-tenant set and bypass flag while projecting one tenant's resources.
+    This scope provides isolation only; callers still authorize the operation.
+    """
+    if isinstance(tenant_id, bool) or not isinstance(tenant_id, int) or tenant_id <= 0:
+        raise ValueError("tenant_id must be a positive integer")
+    bindings = (
+        (current_tenant_id, tenant_id),
+        (visible_tenant_ids, frozenset({tenant_id})),
+        (_admin_scope_tenant_id, None),
+        (_bypass_tenant_filter, False),
+    )
+    tokens = [(variable, variable.set(value)) for variable, value in bindings]
+    try:
+        yield
+    finally:
+        for variable, token in reversed(tokens):
+            variable.reset(token)

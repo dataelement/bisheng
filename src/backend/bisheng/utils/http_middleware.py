@@ -15,6 +15,12 @@ from bisheng.utils import get_request_ip
 
 # Paths exempt from tenant context checks (login, env, health, docs, static)
 TENANT_CHECK_EXEMPT_PATHS = (
+    "/api/v1/internal/app-proxy/authorize",
+    "/api/v1/internal/app-proxy/desktop-session",
+    "/api/v1/internal/app-runtime/v2/",
+    "/internal/app-runtime/v2/material-access/",
+    "/api/v1/apps/_unavailable",
+    "/api/v1/dev-toolkit",
     "/api/v1/user/login",
     "/api/v1/user/regist",
     "/api/v1/user/sso",
@@ -80,6 +86,14 @@ DSH_CREDENTIAL_ROUTES = frozenset(
 def owns_dsh_credential(method: str, path: str) -> bool:
     return (
         (method, path) in DSH_CREDENTIAL_ROUTES
+        or (
+            method in {"GET", "POST"}
+            and re.fullmatch(
+                r"/api/v1/dsh/apps(?:/(?:deploy|deploy-limits|[a-f0-9]{32}/(?:launch|deployments/[a-f0-9]{32}|versions/[a-f0-9]{32}/source)))?",
+                path,
+            )
+            is not None
+        )
         or (method == "POST" and re.fullmatch(r"/api/v1/dsh/tools/[A-Za-z0-9_-]{1,125}/invoke", path) is not None)
         or (
             method == "GET"
@@ -95,7 +109,9 @@ def owns_dsh_credential(method: str, path: str) -> bool:
 
 def _uses_browser_identity(path: str) -> bool:
     """v2 credentials and v3 default operators resolve identity at their endpoints."""
-    return path not in {"/api/v2", "/api/v3"} and not path.startswith(("/api/v2/", "/api/v3/"))
+    return path not in {"/api/v2", "/api/v3"} and not path.startswith(
+        ("/api/v2/", "/api/v3/", "/internal/app-runtime/v2/material-access/")
+    )
 
 
 def _decode_jwt_subject(token: str) -> dict | None:

@@ -600,5 +600,6 @@
         "label": "Output Variable"
       }
     }
-  }
+  },
+  "hostedApp": "Hosted App"
 }

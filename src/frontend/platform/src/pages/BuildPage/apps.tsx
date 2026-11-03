@@ -32,6 +32,9 @@ import CreateApp from "./CreateApp";
 import { useCreateTemp, useErrorPrompt, useQueryLabels } from "./hook";
 import CardSelectVersion from "./CardSelectVersion";
 import CreateTemp from "./CreateTemp";
+import { locationContext } from "@/contexts/locationContext";
+import { useHostedAppActions } from "./useHostedAppActions";
+import { stateI18nKey } from "./hostedApp/types";
 
 /** 按应用上线(2)/下线(1)状态筛选，与后端 ``/api/v1/workflow/list?status=`` 一致 */
 export const SelectAppStatus = ({ defaultValue = 'all', onChange }: { defaultValue?: string; onChange: (v: string) => void }) => {
@@ -54,7 +57,7 @@ export const SelectAppStatus = ({ defaultValue = 'all', onChange }: { defaultVal
     )
 }
 
-export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
+export const SelectType = ({ all = false, includeHosted = false, defaultValue = 'all', onChange }) => {
     const [value, setValue] = useState<string>(defaultValue)
     const { t } = useTranslation();
 
@@ -62,6 +65,8 @@ export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
         { label: t('build.workflow'), value: AppType.FLOW },
         { label: t('build.assistant'), value: AppType.ASSISTANT },
     ];
+
+    if (includeHosted) options.push({ label: t('hostedApp.typeName'), value: AppType.HOSTED_APP });
 
     if (all) {
         options.unshift({ label: t('build.allAppTypes'), value: 'all' });
@@ -84,7 +89,8 @@ export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
 
 const TypeNames = {
     5: AppType.ASSISTANT,
-    10: AppType.FLOW
+    10: AppType.FLOW,
+    35: AppType.HOSTED_APP
 }
 
 const APP_ACTIONS = [
@@ -96,7 +102,7 @@ const APP_ACTIONS = [
     'manage_permission',
 ]
 
-export default function apps() {
+export default function Apps() {
     const { t, i18n } = useTranslation()
     // useErrorPrompt();
 
@@ -106,6 +112,7 @@ export default function apps() {
     const { user } = useContext(userContext);
     const { message } = useToast()
     const navigate = useNavigate()
+    const { appConfig } = useContext(locationContext);
 
     // Build page lists apps the user can manage. Backend treats managed=true
     // as "filter by edit" (admins still see everything via the admin
@@ -127,18 +134,22 @@ export default function apps() {
         }),
     )
 
+    const hostedActions = useHostedAppActions({ onChanged: () => reload() });
+
     // Permission management state
     const [permDialogOpen, setPermDialogOpen] = useState(false);
     const [permTarget, setPermTarget] = useState<{ id: string; name: string; type: string } | null>(null);
     const workflowResourceIds = dataSource
-        .filter((item: any) => item.flow_type !== AppNumType.ASSISTANT)
+        .filter((item: any) => item.flow_type === AppNumType.FLOW)
         .map((item: any) => String(item.id));
     const assistantResourceIds = dataSource
         .filter((item: any) => item.flow_type === AppNumType.ASSISTANT)
         .map((item: any) => String(item.id));
+    const hostedResourceIds = dataSource.filter((item) => item.flow_type === AppNumType.HOSTED_APP).map((item) => String(item.id));
+    const { actions: hostedActionsMap } = useResourceActions('app', hostedResourceIds, APP_ACTIONS);
     const { actions: workflowActions } = useResourceActions('workflow', workflowResourceIds, APP_ACTIONS);
     const { actions: assistantActions } = useResourceActions('assistant', assistantResourceIds, APP_ACTIONS);
-    const resourceActions = { ...workflowActions, ...assistantActions };
+    const resourceActions = { ...workflowActions, ...assistantActions, ...hostedActionsMap };
     const listedAppIds = new Set(dataSource.map((item: any) => String(item.id)));
     const canRead = (id: string | number) =>
         user.role === 'admin' ||
@@ -213,7 +224,7 @@ export default function apps() {
     };
 
     const handleOpenPermission = (item: any) => {
-        const typeMap = { 5: 'assistant', 10: 'workflow' };
+        const typeMap = { 5: 'assistant', 10: 'workflow', 35: 'app' };
         setPermTarget({ id: String(item.id), name: item.name, type: typeMap[item.flow_type] || 'workflow' });
         setPermDialogOpen(true);
     };
@@ -224,6 +235,9 @@ export default function apps() {
     const handleCheckedChange = (checked, data) => {
         if (checked && !canPublish(data.id)) return;
         if (!checked && !canUnpublish(data.id)) return;
+        if (data.flow_type === AppNumType.HOSTED_APP) {
+            return checked ? hostedActions.resumeApp(data) : hostedActions.stopApp(data);
+        }
         if (data.flow_type === 5) {
             return captureAndAlertRequestErrorHoc(changeAssistantStatusApi(data.id, checked ? 2 : 1)).then(res => {
                 if (res === null) {
@@ -243,10 +257,15 @@ export default function apps() {
 
     const typeCnNames = {
         5: t('build.assistant'),
-        10: t('build.workflow')
+        10: t('build.workflow'),
+        35: t('hostedApp.typeName')
     }
 
     const handleDelete = (data) => {
+        if (data.flow_type === AppNumType.HOSTED_APP) {
+            void hostedActions.deleteApp(data);
+            return;
+        }
         const descMap = {
             1: t('build.confirmDeleteSkill'),
             10: t('build.confirmDeleteFlow'),
@@ -265,6 +284,10 @@ export default function apps() {
 
     const { toast } = useToast()
     const handleSetting = (data) => {
+        if (data.flow_type === AppNumType.HOSTED_APP) {
+            navigate(`/build/apps/${data.id}`);
+            return;
+        }
         if (!data.write) {
             return toast({ variant: 'warning', description: '无编辑权限' })
         }
@@ -291,7 +314,7 @@ export default function apps() {
         <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative bg-background-main border-t">
             <div className="flex gap-4">
                 <SearchInput className="w-64" placeholder={t('build.searchApp')} onChange={(e) => search(e.target.value)}></SearchInput>
-                <SelectType all onChange={(v) => {
+                <SelectType all includeHosted={!!appConfig.appRuntimeEnabled} onChange={(v) => {
                     tempTypeRef.current = v
                     filterData({ type: v })
                 }} />
@@ -360,14 +383,14 @@ export default function apps() {
                                     //         variant: 'warning'
                                     //     })
                                     // }}
-                                    onAddTemp={toggleTempModal}
+                                    onAddTemp={item.flow_type === AppNumType.HOSTED_APP ? undefined : toggleTempModal}
                                     onCheckedChange={handleCheckedChange}
                                     onDelete={canDelete(item.id) ? handleDelete : undefined}
                                     onSetting={(item) => handleSetting(item)}
                                     onPermission={canManage(item.id) ? handleOpenPermission : undefined}
-                                    showSwitch={item.status === 2 ? canUnpublish(item.id) : canPublish(item.id)}
+                                    showSwitch={item.flow_type === AppNumType.HOSTED_APP && !['online', 'stopped'].includes(item.app_state) ? false : item.status === 2 ? canUnpublish(item.id) : canPublish(item.id)}
                                     canSwitch={item.status === 2 ? canUnpublish(item.id) : canPublish(item.id)}
-                                    showCopy={canCreateApp && canRead(item.id)}
+                                    showCopy={item.flow_type !== AppNumType.HOSTED_APP && canCreateApp && canRead(item.id)}
                                     onCopy={canCreateApp && canRead(item.id) ? handleCopyApp : undefined}
                                     headSelecter={(
                                         item.version_list?.length ? <CardSelectVersion
@@ -385,7 +408,7 @@ export default function apps() {
                                     }
                                     footer={
                                         <Badge className={`absolute py-0 px-1 right-0 bottom-0 rounded-none rounded-br-md  ${item.flow_type === AppNumType.ASSISTANT && 'bg-[#fdb136]'}`}>
-                                            {typeCnNames[item.flow_type]}
+                                            {typeCnNames[item.flow_type]}{item.flow_type === AppNumType.HOSTED_APP ? ` · ${t(stateI18nKey(item.app_state))}` : ''}
                                         </Badge>
                                     }
                                 ></CardComponent>

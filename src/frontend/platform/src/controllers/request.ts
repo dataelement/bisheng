@@ -353,3 +353,7 @@ export function requestAuthHeaders(url: string): Record<string, string> {
         ? { Authorization: `Bearer ${token}` }
         : {}
 }
+
+export function showApiError(error: unknown) {
+    return captureAndAlertRequestErrorHoc(Promise.reject(error))
+}

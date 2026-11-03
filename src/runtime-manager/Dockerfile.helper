@@ -1,0 +1,61 @@
+# Build context: repository root. All bases are native outputs of the same release.
+ARG MANAGER_IMAGE
+ARG NODE_IMAGE
+ARG PYTHON_PREPARER_IMAGE
+FROM ${NODE_IMAGE} AS node-tools
+USER 0:0
+# Copy only Node's native C++ runtimes; glibc and its loader remain the manager base's.
+RUN set -eu; mkdir -p /node-runtime/lib /node-runtime/licenses \
+    && for library in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do \
+         origin="$(find /usr/lib /lib -name "$library" -print -quit)"; \
+         if [ -n "$origin" ]; then cp -L "$origin" "/node-runtime/lib/$library"; \
+         elif [ "$library" != libatomic.so.1 ]; then exit 1; fi; \
+       done \
+    && for package in libstdc++6 libgcc-s1; do \
+         cp "/usr/share/doc/$package/copyright" "/node-runtime/licenses/$package.copyright"; \
+       done \
+    && if [ -f /node-runtime/lib/libatomic.so.1 ]; then \
+         cp /usr/share/doc/libatomic1/copyright /node-runtime/licenses/libatomic1.copyright; fi \
+    && if [ -f /usr/local/LICENSE ]; then cp /usr/local/LICENSE /node-runtime/licenses/Node.LICENSE; \
+       else cp /usr/local/share/doc/node/LICENSE /node-runtime/licenses/Node.LICENSE; fi \
+    && cp /usr/local/lib/node_modules/npm/LICENSE /node-runtime/licenses/npm.LICENSE \
+    && node --version > /node-runtime/licenses/node-version.txt \
+    && npm --version > /node-runtime/licenses/npm-version.txt
+
+FROM ${PYTHON_PREPARER_IMAGE} AS materials
+
+FROM ${MANAGER_IMAGE} AS package
+USER 0:0
+WORKDIR /build
+COPY --from=materials /opt/bisheng/wheelhouse/ /opt/bisheng/wheelhouse/
+COPY src/runtime-manager/pyproject.toml /build/pyproject.toml
+COPY src/runtime-manager/runtime_manager /build/runtime_manager
+# The release preparer's pinned wheelhouse supplies build tools without network fallback.
+RUN pip install --no-index --find-links=/opt/bisheng/wheelhouse hatchling==1.27.0 \
+    && pip wheel --no-index --no-deps --no-build-isolation --wheel-dir /wheels /build
+
+FROM ${MANAGER_IMAGE}
+USER 0:0
+COPY --from=package /wheels/ /tmp/runtime-wheels/
+COPY --from=materials /opt/bisheng/wheelhouse/ /opt/bisheng/wheelhouse/
+COPY --from=node-tools /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-tools /usr/local/lib/node_modules/npm/ /usr/local/lib/node_modules/npm/
+COPY --from=node-tools /node-runtime/lib/ /usr/local/lib/
+COPY --from=node-tools /node-runtime/licenses/ /usr/share/licenses/node/
+COPY src/app-runtime/common/prepare.py /opt/bisheng/prepare.py
+COPY LICENSE /usr/share/licenses/bisheng/LICENSE
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+    && ldconfig \
+    && pip install --no-index --no-deps /tmp/runtime-wheels/*.whl \
+    && python -I -m runtime_manager.image_catalog python-packages --output /usr/share/licenses/bisheng/python-packages.json \
+    && rm -rf /tmp/runtime-wheels /app/runtime_manager \
+    && mkdir -p /workspace /data /scratch \
+    && chown 10001:10001 /workspace /data /scratch
+# Isolated Python imports only trusted site-packages, never application code from /workspace.
+ENV HOME=/tmp UV_CACHE_DIR=/tmp/uv UV_PYTHON_DOWNLOADS=never \
+    npm_config_cache=/tmp/npm npm_config_update_notifier=false npm_config_audit=false npm_config_fund=false
+WORKDIR /tmp
+USER 10001:10001
+ENTRYPOINT ["python", "-I", "-m", "runtime_manager.k8s_helper"]
+CMD []

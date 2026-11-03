@@ -32,6 +32,7 @@ class ApplicationTypeEnum(str, Enum):
     # TTS
     TTS = "tts"
     DSH_DESKTOP = "dsh_desktop"
+    MODEL_GATEWAY = "model_gateway"
 
     UNKNOWN = "unknown"
 

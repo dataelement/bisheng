@@ -2381,18 +2381,6 @@
       "tenThousand": "万"
     }
   },
-  "com_citation.preview_loading": "正在加载文件预览…",
-  "com_citation.preview_unavailable": "这份文件暂时无法预览",
-  "com_citation.close_document_preview": "关闭文档预览",
-  "com_citation.collapse_source": "收起来源（Esc）",
-  "com_citation.close_workspace": "关闭工作区",
-  "com_citation.occurrence": "第 {{index}} 处，共 {{total}} 处",
-  "com_citation.prev_occurrence": "上一处",
-  "com_citation.next_occurrence": "下一处",
-  "com_citation.tab_report": "报告",
-  "com_citation.tab_source": "来源",
-  "com_citation.back_to_report": "回到报告",
-  "com_citation.locate_missed": "没能自动找到被引段落，下面是引用的原文",
   "com_ui": {
     "scroll_to_bottom": "回到底部"
   },
@@ -2600,5 +2588,8 @@
     "scenario_time": "当前时间",
     "scenario_order": "订单查询",
     "scenario_inventory": "库存查询"
-  }
+  },
+  "com_notifications_action_app_publish_pending_capacity": "「{{target}}」审批已通过，但运行环境容量不足，暂未上线；资源空出后可在应用详情页手动上线",
+  "com_notifications_action_app_publish_deploy_failed": "「{{target}}」审批已通过，但启动失败，暂未上线；请查看运行日志后在应用详情页手动上线",
+  "com_notifications_action_app_publish_iteration_failed": "「{{target}}」审批已通过，但新版本未能上线；线上版本仍在正常服务，可修复后重新执行 bisheng deploy"
 }

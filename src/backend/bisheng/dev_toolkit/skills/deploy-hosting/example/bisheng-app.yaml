@@ -1,0 +1,13 @@
+# 最小托管应用样例的应用清单。
+# 这是 `bisheng deploy` 读的唯一配置文件;字段定义见平台的 AppManifest schema。
+# 未知字段会被拒绝(不是忽略)——写错的键名会当场告诉你。
+manifest_version: 1
+
+name: 你好托管应用
+description: 一个零依赖的最小样例:访问计数落 SQLite。用来验证「本地应用能部署到平台」这条最小闭环。
+slug: hello-hosted
+
+runtime: python3.11
+port: 8080
+
+# 不写 tier 即「轻量」档。

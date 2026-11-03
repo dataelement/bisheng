@@ -3,10 +3,12 @@ export enum AppType {
     ALL = 'all',
     FLOW = 'flow',
     ASSISTANT = 'assistant',
+    HOSTED_APP = 'hosted_app',
 }
 
 
 export enum AppNumType {
+    HOSTED_APP = 35,
     FLOW = 10,
     ASSISTANT = 5,
 }
@@ -15,9 +17,11 @@ export enum AppNumType {
 export const AppTypeToNum = {
   [AppType.ASSISTANT]: AppNumType.ASSISTANT,
   [AppType.FLOW]: AppNumType.FLOW,
+  [AppType.HOSTED_APP]: AppNumType.HOSTED_APP,
 };
 
 export const AppNumToType = {
   [AppNumType.ASSISTANT]: AppType.ASSISTANT,
   [AppNumType.FLOW]: AppType.FLOW,
+  [AppNumType.HOSTED_APP]: AppType.HOSTED_APP,
 }

@@ -206,6 +206,15 @@ class KnowledgeCreate(BaseModel):
 
 class KnowledgeDao(KnowledgeBase):
     @classmethod
+    async def aget_by_exact_names(cls, names: list[str]) -> list[Knowledge]:
+        """Return all tenant-scoped matches so ambiguous declarations are refused."""
+        if not names:
+            return []
+        async with get_async_db_session() as session:
+            result = await session.exec(select(Knowledge).where(col(Knowledge.name).in_(names)))
+            return result.all()
+
+    @classmethod
     async def aget_by_creation_request(
         cls,
         *,

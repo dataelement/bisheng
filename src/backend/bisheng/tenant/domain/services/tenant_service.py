@@ -148,6 +148,14 @@ class TenantService:
             except Exception:
                 logger.warning("built-in skill seeding failed for new tenant %s", tenant.id, exc_info=True)
 
+            # New tenants need the same publish approval scenario as existing tenants.
+            try:
+                from bisheng.approval.domain.services.approval_seed_service import seed_approval_scenarios_for_tenant
+
+                await seed_approval_scenarios_for_tenant(tenant.id)
+            except Exception:
+                logger.opt(exception=True).warning("approval scenario seeding failed for tenant {}", tenant.id)
+
             return _safe_tenant_dump(tenant)
 
         except TenantCodeDuplicateError:

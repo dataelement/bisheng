@@ -92,6 +92,7 @@ def get_env():
     env["version"] = __version__
     env["enable_etl4lm"] = image_parser_enabled
     env["multi_tenant_enabled"] = bisheng_settings.multi_tenant.enabled
+    env["app_runtime_enabled"] = bisheng_settings.app_runtime.enabled
     env["personal_token_enabled"] = bool(bisheng_settings.open_api.pat_enabled)
     env["open_api_management_enabled"] = bool(bisheng_settings.open_api.management_ui_enabled)
     try:

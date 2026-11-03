@@ -77,6 +77,16 @@ def _register_worker_permission_contexts() -> None:
     register_department_projection_runtime_context()
 
 
+def _register_app_publish_composition() -> None:
+    """Wire the publish hooks in the worker as well as the API process."""
+    try:
+        from bisheng.app_publish.composition import register as register_app_publish
+
+        register_app_publish()
+    except Exception:
+        logger.exception("app_publish composition root failed to register; continuing worker startup")
+
+
 @celeryd_after_setup.connect
 def on_worker_init(*args, **kwargs):
     global _WORKER_START
@@ -85,6 +95,7 @@ def on_worker_init(*args, **kwargs):
 
     get_worker_loop()  # start the persistent loop thread before any task arrives
     run_async_task(lambda: initialize_app_context(settings, instance_role="celery"))
+    _register_app_publish_composition()
     _register_worker_permission_contexts()
     queues = bisheng_celery.amqp.queues
     all_queues = []

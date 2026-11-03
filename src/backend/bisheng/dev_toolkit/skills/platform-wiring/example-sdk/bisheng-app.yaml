@@ -1,0 +1,20 @@
+# 平台能力接线样例(SDK 版)的应用清单。字段定义见平台的 AppManifest schema;未知字段会被拒绝。
+manifest_version: 1
+
+name: 三件套样例
+description: 用平台 SDK 读访问者身份、按访问者权限检索知识库、在应用附件空间里存取文件的最小样例。
+slug: sdk-trio
+
+runtime: python3.11
+port: 8080
+
+# 声明这个应用会检索哪些知识库。审批通过后它就是平台侧的白名单:
+# 用户自己有权限、但这里没声明的库,经这个应用检索不到。
+#
+# ⚠️ 下面的 id 是占位,**换成你自己有权限的知识库 id**,并同步改 main.py 的
+# KNOWLEDGE_BASE_IDS —— 两处是同一份事实,只改一处线上会答「目标不可及」。
+capabilities:
+  knowledge_bases:
+    - id: "12"
+
+# 本样例不用应用数据库(附件走 storage),所以没有 database 段。

@@ -20,13 +20,18 @@ from bisheng.api.v1 import (
     workflow_router,
     workstation_router,
 )
+from bisheng.app_publish.api.router import v1_router as app_publish_v1_router
+from bisheng.app_publish.api.router import v2_router as app_publish_v2_router
+from bisheng.app_runtime.api.router import router as app_runtime_router
 from bisheng.approval.api.router import router as approval_router
 from bisheng.brand.api.router import router as brand_router
 from bisheng.channel.api.router import router as channel_router
 from bisheng.chat_session.api.router import router as session_router
 from bisheng.citation.api.router import router as citation_router
 from bisheng.commercial_license.api.router import router as commercial_license_router
+from bisheng.common.services.config_service import settings as runtime_settings
 from bisheng.department.api.router import router as department_router
+from bisheng.dev_toolkit.api.router import router as dev_toolkit_router
 from bisheng.dsh.api.router import router as dsh_router
 from bisheng.dsh_market.api.router import router as dsh_market_router
 from bisheng.evaluation.api.router import router as evaluation_router
@@ -43,6 +48,7 @@ from bisheng.linsight.api.router import router as linsight_router
 from bisheng.llm.api.router import router as llm_router
 from bisheng.message.api.router import router as message_router
 from bisheng.open_api.api.dependencies import verify_open_api_access
+from bisheng.open_api.api.endpoints.model_gateway import router as model_gateway_router
 from bisheng.open_api.api.router import management_router as open_api_management_router
 from bisheng.open_api.api.router import rpc_router as open_api_rpc_router
 from bisheng.open_endpoints.api.endpoints.llm import router as llm_router_rpc
@@ -132,3 +138,13 @@ router_rpc.include_router(flow_router_rpc)
 router_rpc.include_router(citation_router_rpc)
 router_rpc.include_router(workstation_router_rpc)
 router_rpc.include_router(chat_router_rpc)
+
+# Hosted workbenches share the platform account and permission runtime.
+
+router.include_router(app_runtime_router)
+router.include_router(app_publish_v1_router)
+router_rpc.include_router(app_publish_v2_router)
+
+if runtime_settings.open_platform.enabled:
+    router_rpc.include_router(model_gateway_router)
+    router.include_router(dev_toolkit_router)

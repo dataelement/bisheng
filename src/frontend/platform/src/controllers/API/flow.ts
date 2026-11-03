@@ -189,14 +189,14 @@ export async function getAppsApi(
         pageSize?: number;
         keyword?: string;
         tag_id?: number;
-        type?: 'assistant' | 'skill' | 'flow';
+        type?: 'assistant' | 'skill' | 'flow' | 'hosted_app';
         managed?: any;
         status?: number;
         action?: 'visible' | 'use';
     },
 ): Promise<{ data: any[]; page_size: number; has_more: boolean; next_cursor: string | null }> {
     const tagIdStr = tag_id === -1 ? '' : `&tag_id=${tag_id}`
-    const map = { assistant: 5, skill: 1, flow: 10 }
+    const map = { assistant: 5, skill: 1, flow: 10, hosted_app: 35 }
     const flowType = map[type] ? `&flow_type=${map[type]}` : ''
     const managedStr = (managed !== undefined && managed !== null && managed !== '')
         ? `&managed=${managed}`

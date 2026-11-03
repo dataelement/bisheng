@@ -23,6 +23,7 @@ FIXED_CUSTOM_TYPES = frozenset(
         "channel",
         "dashboard",
         "linsight_skill",
+        "app",
     }
 )
 
@@ -142,8 +143,7 @@ def build_create_plan(
     )
     protected_offset = len(staging)
     staging.extend(
-        replace(delta, phase="STAGE", sequence=protected_offset + index)
-        for index, delta in enumerate(protected_deltas)
+        replace(delta, phase="STAGE", sequence=protected_offset + index) for index, delta in enumerate(protected_deltas)
     )
     enabled = _marker_deltas(
         target,

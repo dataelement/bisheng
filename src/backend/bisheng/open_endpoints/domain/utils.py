@@ -9,6 +9,7 @@ from fastapi.exceptions import HTTPException
 from sqlmodel import select
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.open_api import OpenApiHostedAppEndpointRefusedError
 from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.tenant import UserTenant, UserTenantDao
@@ -20,6 +21,10 @@ def _principal_user_id() -> tuple[int, bool]:
     principal = get_current_open_api_principal()
     if principal is None:
         raise HTTPException(status_code=500, detail="Open API execution identity is missing")
+    # Hosted applications must use declared capability faces and visitor identity,
+    # never inherit the owner through legacy natural-person endpoints.
+    if principal.actor_kind == "hosted_app":
+        raise OpenApiHostedAppEndpointRefusedError()
     user_id = principal.effective_user_id or principal.resource_owner_user_id
     if user_id is None:
         raise HTTPException(status_code=500, detail="Open API execution has no compatible resource owner")

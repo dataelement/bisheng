@@ -12,7 +12,7 @@ const gradients = [
     'bg-blue-700'
 ]
 
-export default function AppAvator({ id = 1, flowType = '', url = '', className = '' }) {
+export default function AppAvator({ id = 1, flowType = '', url = '', className = '' }: { id?: string | number; flowType?: number | string; url?: string; className?: string }) {
 
     const color = useMemo(() => {
         const str = (id + '').substring(0, 4)

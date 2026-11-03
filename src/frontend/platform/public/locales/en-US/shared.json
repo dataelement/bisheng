@@ -18,5 +18,25 @@
       "imageRef": "Image reference",
       "imagesOutsideTable": "Images outside the table area"
     }
+  },
+  "hostedApp": {
+    "versionDiff": {
+      "loading": "Comparing...",
+      "identical": "The two versions have identical content.",
+      "filesChanged": "{{count}} files changed",
+      "additions": "{{count}} lines added",
+      "deletions": "{{count}} lines removed",
+      "listTruncated": "Too many changes to list them all; only part is shown.",
+      "selectFile": "Pick a file on the left to see what changed.",
+      "notComparable": "Cannot compare",
+      "reasonBinary": "This is a binary file, so its content is not compared.",
+      "reasonTooLarge": "This file is too large, so its content is not compared.",
+      "patchTruncated": "This file has too many changes; only the first part is shown.",
+      "patchOmitted": "The changes across all files are too large, so this one is not shown.",
+      "maskedSecrets": "{{count}} suspected secrets hidden",
+      "changeAdded": "Added file",
+      "changeRemoved": "Removed file",
+      "changeModified": "Modified file"
+    }
   }
 }

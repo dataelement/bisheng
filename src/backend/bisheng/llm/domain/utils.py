@@ -1,7 +1,7 @@
 import functools
 import time
 from datetime import datetime
-from typing import Any, Union
+from typing import TYPE_CHECKING, Any, Union
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
@@ -15,6 +15,9 @@ from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.core.logger import trace_id_var
 from bisheng.llm.domain.const import LLM_CACHE, LLMModelStatus
+
+if TYPE_CHECKING:
+    from bisheng.llm.domain.llm.base import BishengBase
 
 # httpx / langchain reject values without a scheme (``URL('admin')``).
 _PROXY_URL_SCHEMES = ("http://", "https://", "socks://", "socks4://", "socks5://", "socks5h://")
@@ -115,6 +118,10 @@ def normalize_reasoning_content(payload: Any) -> Any:
     return payload
 
 
+class LlmProviderDailyLimitExceededError(Exception):
+    """Typed form of the existing daily provider quota refusal."""
+
+
 async def bisheng_model_limit_check(self: "BishengBase"):
     now = datetime.now().strftime("%Y-%m-%d")
     if self.server_info.limit_flag:
@@ -123,7 +130,9 @@ async def bisheng_model_limit_check(self: "BishengBase"):
         redis_client = await get_redis_client()
         use_num = await redis_client.aincr(cache_key)
         if use_num > self.server_info.limit:
-            raise Exception(f"{self.server_info.name}/{self.model_info.model_name} Quota used up")
+            raise LlmProviderDailyLimitExceededError(
+                f"{self.server_info.name}/{self.model_info.model_name} Quota used up"
+            )
 
 
 def sync_bisheng_model_limit_check(self: "BishengBase"):
@@ -133,7 +142,9 @@ def sync_bisheng_model_limit_check(self: "BishengBase"):
         cache_key = f"model_limit:{now}:{self.server_info.id}"
         use_num = get_redis_client_sync().incr(cache_key)
         if use_num > self.server_info.limit:
-            raise Exception(f"{self.server_info.name}/{self.model_info.model_name} Quota used up")
+            raise LlmProviderDailyLimitExceededError(
+                f"{self.server_info.name}/{self.model_info.model_name} Quota used up"
+            )
 
 
 def get_token_from_usage(token_usage: dict[str, Any] | None) -> tuple[int, int, int, int]:

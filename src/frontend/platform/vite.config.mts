@@ -198,6 +198,12 @@ export default defineConfig(({ command, mode }) => {
   const gatewayProxyConfig = createProxyConfig(gatewayTarget, true, false, proxyLog);
   const fileServiceProxyConfig = createProxyConfig(fileServiceTarget, true, true, proxyLog);
   const proxyTargets: Record<string, ReturnType<typeof createProxyConfig>> = {};
+  // MCP validates the public Host against platform_public_url. Preserve it
+  // across the development proxy instead of exposing the internal API port.
+  proxyTargets[`${app_env.BASE_URL}/api/v1/dsh/work/mcp`] = {
+    ...apiProxyConfig,
+    changeOrigin: false,
+  };
   // More specific than `/api/` and must be registered first, otherwise Vite's
   // prefix match sends `/api/license/status` to FastAPI (404 in open-source).
   proxyTargets[`${app_env.BASE_URL}/api/license`] = gatewayProxyConfig;
@@ -304,6 +310,18 @@ export default defineConfig(({ command, mode }) => {
       port: 3001,
       proxy: {
         ...proxyTargets,
+        ...(env.VITE_APP_PROXY_ORIGIN ? {
+          '/apps': { target: env.VITE_APP_PROXY_ORIGIN, changeOrigin: true, ws: true },
+        } : {}),
+        // Desktop embeds /workspace on the platform origin to share its login cookie.
+        // Production uses the reverse proxy; local development can forward to the client SPA.
+        ...(env.VITE_WORKSPACE_ORIGIN ? {
+          '/workspace': {
+            target: env.VITE_WORKSPACE_ORIGIN,
+            changeOrigin: true,
+            ws: true,
+          },
+        } : {}),
       },
     },
   };

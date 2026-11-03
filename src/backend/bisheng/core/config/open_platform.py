@@ -22,6 +22,7 @@ class OpenApiConf(BaseModel):
         ),
     )
     pat_admin_ttl_days: int = Field(default=7, ge=1)
+    model_catalog_ttl_seconds: int = Field(default=30, ge=1)
     management_ui_enabled: bool = Field(
         default=True,
         description=(
@@ -62,3 +63,8 @@ class OpenApiConf(BaseModel):
                 "https://kb.example.com or https://portal.example.com/bisheng"
             )
         return text
+
+    @field_validator("model_catalog_ttl_seconds")
+    @classmethod
+    def cap_model_catalog_ttl(cls, value: int) -> int:
+        return min(value, 60)

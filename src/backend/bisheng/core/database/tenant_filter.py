@@ -39,6 +39,12 @@ _EXCLUDED_TABLES: set[str] = {"user_tenant", "channel_info_source"}
 # exactly how knowledgefile / flowversion / roleaccess / userrole / ...
 # kept writing child-tenant resources to root in v2.5.
 _TENANT_AWARE_MODEL_MODULES = (
+    "bisheng.app_publish.domain.models",
+    "bisheng.database.models.resource_tier",
+    "bisheng.database.models.app",
+    "bisheng.database.models.app_access_log",
+    "bisheng.database.models.app_version",
+    "bisheng.app_runtime.domain.models",
     "bisheng.dsh.domain.models.content_safety_event",
     "bisheng.dsh.domain.models.local_session",
     "bisheng.dsh.domain.models.model_audit_conversation",
@@ -114,6 +120,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.dsh.domain.models.admin_operation",
     "bisheng.dsh.domain.models.monthly_usage",
     "bisheng.dsh.domain.models.model_call",
+    "bisheng.open_api.domain.models.model_call_record",
     "bisheng.dsh.domain.models.subject_policy",
     "bisheng.dsh.domain.models.subject_grant",
     "bisheng.dsh.domain.models.model_audit_setting",

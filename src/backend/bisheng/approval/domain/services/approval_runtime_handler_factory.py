@@ -32,6 +32,18 @@ async def build_runtime_handler(scenario_code: str) -> Any:
             update_member=SpaceChannelMemberDao.update,
             sync_permissions=KnowledgeSpaceService.sync_direct_space_user_permissions,
         )
+    if scenario_code == "app_publish_request":
+        # Imported inside the branch: the factory is reached from the API
+        # process, the Celery worker and the withdraw path, and only one of
+        # those has any reason to pull in the publish pipeline.
+        #
+        # A **new instance every call** is load bearing, not tidiness: the
+        # handler carries the self-approval flag of the request it resolved
+        # (F055 design D7), and a shared instance would leak it between two
+        # concurrent releases.
+        from bisheng.app_publish.domain.services.app_publish_scenario_handler import AppPublishScenarioHandler
+
+        return AppPublishScenarioHandler()
     raise KeyError(f"handler not registered for scenario_code={scenario_code}")
 
 

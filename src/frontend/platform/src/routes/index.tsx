@@ -15,6 +15,7 @@ import SharePage from "@/pages/Dashboard/share";
 // 异步加载页面组件
 const DshLogin = lazy(() => import('@/pages/DshLogin').then(module => ({ default: module.DshLogin })));
 const Templates = lazy(() => import("@/pages/BuildPage/appTemps"));
+const HostedAppDetail = lazy(() => import("@/pages/BuildPage/hostedApp"));
 const Apps = lazy(() => import("@/pages/BuildPage/apps"));
 const EditAssistantPage = lazy(() => import("@/pages/BuildPage/assistant/editAssistant"));
 const WorkBenchPage = lazy(() => import("@/pages/BuildPage/bench/DialogueWork"));
@@ -85,6 +86,7 @@ const privateRouter = [
       { path: "filelib/adjust/:fileId", element: <AdjustFilesUpload />, permission: 'knowledge', },
       { path: "filelib/qalib/:id", element: <QasPage />, permission: 'knowledge', },
       { path: "build/apps", element: <Apps />, permission: 'build', },
+      { path: "build/apps/:appId", element: <HostedAppDetail />, permission: 'build', },
       // @ts-ignore
       { path: "build/tools", element: <SkillToolsPage />, permission: 'build', },
       { path: "build/dsh", element: <Navigate to="/dsh?tab=plugins" replace /> },

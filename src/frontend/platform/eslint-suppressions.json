@@ -1431,9 +1431,6 @@
     },
     "no-restricted-syntax": {
       "count": 1
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 16
     }
   },
   "src/pages/BuildPage/assistant/CreateAssistant.tsx": {

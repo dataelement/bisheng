@@ -501,7 +501,7 @@ class LLMDao:
             await session.commit()
 
     @classmethod
-    async def aget_shared_server_ids_for_leaf(cls, leaf_id: int) -> list[int]:
+    async def aget_shared_server_ids_for_leaf(cls, leaf_id: int, *, raise_on_error: bool = False) -> list[int]:
         """Return Root LLM server IDs shared to the given leaf.
 
         Returns [] for Root callers or when permissions are unavailable.
@@ -519,6 +519,8 @@ class LLMDao:
             )
         except Exception:
             _LOG.exception("Permission resource lookup for leaf=%s failed", leaf_id)
+            if raise_on_error:
+                raise
             return []
 
         result: list[int] = []

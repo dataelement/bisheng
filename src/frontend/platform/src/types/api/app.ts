@@ -1,4 +1,5 @@
 export type AppConfig = {
+    app_runtime_enabled?: boolean;
     env: string;
     uns_support: string[];
     office_url: string;

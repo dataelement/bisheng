@@ -1,6 +1,7 @@
 # register tasks
 # ruff: noqa: F401 - importing task modules is the Celery registration mechanism.
 from bisheng.worker.admin_scope.tasks import admin_scope_cleanup
+from bisheng.worker.app_publish.tasks import run_publish_pipeline
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
 from bisheng.worker.commercial_license.tasks import refresh_etl_license
 from bisheng.worker.dsh.registry import register_dsh_tasks
@@ -68,6 +69,7 @@ __all__ = [
     "retry_approval_outbox",
     "retry_failed_tuples",
     "retry_knowledge_file_celery",
+    "run_publish_pipeline",
     "stop_workflow",
     "sync_information_articles",
     "sync_mid_app_increment",

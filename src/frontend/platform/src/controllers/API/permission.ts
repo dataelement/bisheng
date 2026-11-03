@@ -14,6 +14,7 @@ export type PermissionResourceType =
   | "channel"
   | "dashboard"
   | "linsight_skill"
+  | "app"
 
 export type PermissionActionLevel = 1 | 2 | 3 | 4
 export type PermissionModelKind = "STANDARD" | "CUSTOM"

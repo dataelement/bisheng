@@ -35,6 +35,8 @@ export async function getLogsApi({ page, pageSize, userIds, groupId = '', start,
 export async function getModulesApi(): Promise<{ data: any[] }> {
     return {
         data: [
+            { name: 'log.systemIdEnum.app', value: 'app' },
+            { name: 'log.systemIdEnum.openApi', value: 'open_api' },
             { name: 'log.systemIdEnum.chat', value: 'chat' },
             { name: 'log.systemIdEnum.build', value: 'build' },
             { name: 'log.systemIdEnum.knowledge', value: 'knowledge' },
@@ -105,6 +107,61 @@ const actions = [
     { name: 'log.eventTypeEnum.approvalScenarioToggle', value: 'approval.scenario.toggle' },
     { name: 'log.eventTypeEnum.approvalScenarioCreate', value: 'approval.scenario.create' },
     { name: 'log.eventTypeEnum.approvalMenuAccessRevokeGrant', value: 'approval.menu_access.revoke_grant' },
+    { name: 'log.eventTypeEnum.openApiServiceAccountCreate', value: 'open_api.service_account.create' },
+    { name: 'log.eventTypeEnum.openApiServiceAccountUpdate', value: 'open_api.service_account.update' },
+    { name: 'log.eventTypeEnum.openApiServiceAccountEnable', value: 'open_api.service_account.enable' },
+    { name: 'log.eventTypeEnum.openApiServiceAccountDisable', value: 'open_api.service_account.disable' },
+    { name: 'log.eventTypeEnum.openApiServiceAccountDelete', value: 'open_api.service_account.delete' },
+    { name: 'log.eventTypeEnum.openApiApiKeyIssue', value: 'open_api.api_key.issue' },
+    { name: 'log.eventTypeEnum.openApiApiKeyUpdate', value: 'open_api.api_key.update' },
+    { name: 'log.eventTypeEnum.openApiApiKeyRevoke', value: 'open_api.api_key.revoke' },
+    { name: 'log.eventTypeEnum.openApiApiKeyRevokeAll', value: 'open_api.api_key.revoke_all' },
+    { name: 'log.eventTypeEnum.openApiApiKeyExpire', value: 'open_api.api_key.expire' },
+    { name: 'log.eventTypeEnum.openApiApiKeyInvalidateBySubject', value: 'open_api.api_key.invalidate_by_subject' },
+    { name: 'log.eventTypeEnum.openApiGrantAdd', value: 'open_api.grant.add' },
+    { name: 'log.eventTypeEnum.openApiGrantUpdate', value: 'open_api.grant.update' },
+    { name: 'log.eventTypeEnum.openApiGrantRemove', value: 'open_api.grant.remove' },
+    { name: 'log.eventTypeEnum.openApiGrantRemoveAll', value: 'open_api.grant.remove_all' },
+    { name: 'log.eventTypeEnum.openApiShareLinkRevoke', value: 'open_api.share_link.revoke' },
+    { name: 'log.eventTypeEnum.openApiShareLinkExpire', value: 'open_api.share_link.expire' },
+    { name: 'log.eventTypeEnum.openApiWsConnect', value: 'open_api.ws.connect' },
+    { name: 'log.eventTypeEnum.openApiMcpToolCall', value: 'open_api.mcp.tool_call' },
+    { name: 'log.eventTypeEnum.appPublish', value: 'app.publish' },
+    { name: 'log.eventTypeEnum.appPublishPending', value: 'app.publish_pending' },
+    { name: 'log.eventTypeEnum.appManualPublish', value: 'app.manual_publish' },
+    { name: 'log.eventTypeEnum.appStop', value: 'app.stop' },
+    { name: 'log.eventTypeEnum.appResume', value: 'app.resume' },
+    { name: 'log.eventTypeEnum.appDelete', value: 'app.delete' },
+    { name: 'log.eventTypeEnum.appDeleteHookFailed', value: 'app.delete_hook_failed' },
+    { name: 'log.eventTypeEnum.appMetaUpdate', value: 'app.meta_update' },
+    { name: 'log.eventTypeEnum.appDataRowEdit', value: 'app.data_row_edit' },
+    { name: 'log.eventTypeEnum.appDataExport', value: 'app.data_export' },
+    { name: 'log.eventTypeEnum.appDataRestore', value: 'app.data_restore' },
+    { name: 'log.eventTypeEnum.appVisibilityChange', value: 'app.visibility_change' },
+    { name: 'log.eventTypeEnum.appTierUpdate', value: 'app.tier_update' },
+    { name: 'log.eventTypeEnum.appReleaseSubmit', value: 'app.release.submit' },
+    { name: 'log.eventTypeEnum.appReleasePrecheckFailed', value: 'app.release.precheck_failed' },
+    { name: 'log.eventTypeEnum.appReleaseScanBlocked', value: 'app.release.scan_blocked' },
+    { name: 'log.eventTypeEnum.appReleaseVersionCreated', value: 'app.release.version_created' },
+    { name: 'log.eventTypeEnum.appReleaseApprovalCreated', value: 'app.release.approval_created' },
+    { name: 'log.eventTypeEnum.appReleaseApprovalException', value: 'app.release.approval_exception' },
+    { name: 'log.eventTypeEnum.appReleaseSelfApproval', value: 'app.release.self_approval' },
+    { name: 'log.eventTypeEnum.appReleaseApproved', value: 'app.release.approved' },
+    { name: 'log.eventTypeEnum.appReleaseRejected', value: 'app.release.rejected' },
+    { name: 'log.eventTypeEnum.appReleaseWithdrawn', value: 'app.release.withdrawn' },
+    { name: 'log.eventTypeEnum.appReleaseCancelled', value: 'app.release.cancelled' },
+    { name: 'log.eventTypeEnum.appReleaseOnline', value: 'app.release.online' },
+    { name: 'log.eventTypeEnum.appReleasePendingOnline', value: 'app.release.pending_online' },
+    { name: 'log.eventTypeEnum.appReleaseIterationFailed', value: 'app.release.iteration_failed' },
+    { name: 'log.eventTypeEnum.appReleaseSchemaMigrationFailed', value: 'app.release.schema_migration_failed' },
+    { name: 'log.eventTypeEnum.appReleaseManualPublish', value: 'app.release.manual_publish' },
+    { name: 'log.eventTypeEnum.appReleaseCapabilityDeclared', value: 'app.release.capability_declared' },
+    { name: 'log.eventTypeEnum.appReleasePreviewStarted', value: 'app.release.preview_started' },
+    { name: 'log.eventTypeEnum.appReleasePreviewReclaimed', value: 'app.release.preview_reclaimed' },
+    { name: 'log.eventTypeEnum.appReleaseRollback', value: 'app.release.rollback' },
+    { name: 'log.eventTypeEnum.appSecretSet', value: 'app.secret.set' },
+    { name: 'log.eventTypeEnum.appSecretDelete', value: 'app.secret.delete' },
+    { name: 'log.eventTypeEnum.appSecretRebuild', value: 'app.secret.rebuild' },
 ];
 
 // 全部操作行为
@@ -124,6 +181,8 @@ export async function getActionsByModuleApi(moduleId) {
         case 'knowledge_space': return actions.filter(a => a.value.includes('knowledge_space'))
         case 'tenant': return actions.filter(a => a.value.startsWith('tenant.'))
         case 'llm': return actions.filter(a => a.value.startsWith('llm.server.'))
+        case 'app': return actions.filter(a => a.value.startsWith('app.'))
+        case 'open_api': return actions.filter(a => a.value.startsWith('open_api.'))
         case 'approval': return actions.filter(a => a.value.startsWith('approval.'))
     }
 }

@@ -11,6 +11,7 @@ from cryptography.fernet import Fernet
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from bisheng.core.config.app_runtime import AppRuntimeConf
 from bisheng.core.config.dsh import DshSettings
 from bisheng.core.config.llm import LLMConf
 from bisheng.core.config.multi_tenant import MultiTenantConf
@@ -888,6 +889,7 @@ def _coerce_sandbox_env(annotation, raw: str):
 
 
 class Settings(BaseModel):
+    app_runtime: AppRuntimeConf = AppRuntimeConf()
     """Application Settings"""
 
     model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True, extra="ignore")

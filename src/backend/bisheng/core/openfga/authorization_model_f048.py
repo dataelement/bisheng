@@ -13,7 +13,7 @@ from hashlib import sha256
 from typing import Any
 
 # v6 supports revocable tenant-member grants and the full skill action catalog.
-MODEL_VERSION = "f048-v6"
+MODEL_VERSION = "f048-v6-app"
 
 DEFAULT_ACTION_CODES: tuple[str, ...] = (
     "manage_permission",
@@ -41,6 +41,7 @@ MIGRATED_RESOURCE_TYPES: tuple[str, ...] = (
     "linsight_skill",
     "channel",
     "dashboard",
+    "app",
 )
 
 OWNER_PROJECTION_RESOURCE_TYPES: tuple[str, ...] = ()
@@ -67,6 +68,7 @@ RESOURCE_ACTION_SCOPES: dict[str, frozenset[str]] = {
             "linsight_skill",
             "channel",
             "dashboard",
+            "app",
         }
     ),
     "create_folder": frozenset({"knowledge_space", "folder"}),
@@ -75,9 +77,9 @@ RESOURCE_ACTION_SCOPES: dict[str, frozenset[str]] = {
     "download": frozenset({"folder", "knowledge_file"}),
     "delete": frozenset(MIGRATED_RESOURCE_TYPES),
     "share": frozenset({"knowledge_space", "knowledge_file", "workflow", "assistant"}),
-    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool", "linsight_skill"}),
-    "publish": frozenset({"workflow", "assistant"}),
-    "unpublish": frozenset({"workflow", "assistant"}),
+    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool", "linsight_skill", "app"}),
+    "publish": frozenset({"workflow", "assistant", "app"}),
+    "unpublish": frozenset({"workflow", "assistant", "app"}),
 }
 
 PARENT_TYPES: dict[str, tuple[str, ...]] = {

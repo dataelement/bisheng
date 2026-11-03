@@ -91,6 +91,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           enableMediaUpload: !!res.enable_media_upload,
           enableEtl4lm: res.enable_etl4lm,
           multiTenantEnabled: !!res.multi_tenant_enabled,
+          appRuntimeEnabled: !!res.app_runtime_enabled,
           personalTokenEnabled: !!res.personal_token_enabled,
           openApiManagementEnabled: !!res.open_api_management_enabled,
           // Off unless an operator turned it on: the builder marks the node as
