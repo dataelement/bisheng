@@ -19,7 +19,8 @@ import {
   SERVICE_ACCOUNT_PERMISSION_TIERS,
   SERVICE_ACCOUNT_RESOURCE_TYPES,
 } from "@/pages/SystemPage/components/ServiceAccount/resourceGrantUtils"
-import { render, screen, waitFor, within } from "@/test/test-utils"
+import { screen, waitFor, within } from "@/test/test-utils"
+import { renderWithServiceAccountScope as render } from "@/test/serviceAccountTestScope"
 import type {
   ApiKeyItem,
   ServiceAccountResourceGrant,
