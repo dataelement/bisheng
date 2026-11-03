@@ -2820,6 +2820,7 @@
     "permissionTiers": {
       "editor": "編集者",
       "manager": "管理者",
+      "owner": "所有者",
       "viewer": "閲覧者"
     },
     "resourceTypes": {
