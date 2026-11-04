@@ -32,9 +32,9 @@ export function getSpaceActionFlags({
     canLeaveSpace = false,
 }: SpaceActionMenuItemsProps) {
     const showSettings = (canEditSpace || canManageMembers) && !!onOpenSettings;
-    const showDelete = canDeleteSpace && !!onDeleteSpace;
-    // Leaving is the joined-space counterpart of deleting, never both at once.
-    const showLeave = !showDelete && canLeaveSpace && !!onLeaveSpace;
+    const showDelete = !canLeaveSpace && canDeleteSpace && !!onDeleteSpace;
+    // A joined-space action must never fall through to deleting the shared space.
+    const showLeave = canLeaveSpace && !!onLeaveSpace;
     return { showSettings, showDelete, showLeave, hasAny: showSettings || showDelete || showLeave };
 }
 

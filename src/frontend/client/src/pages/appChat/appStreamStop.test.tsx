@@ -1,3 +1,6 @@
+import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
+import { isAppMessageStopped } from './appMessageStop';
 import { act, renderHook } from '@testing-library/react';
 // eslint-disable-next-line no-restricted-imports -- Exercise the existing app conversation store.
 import { RecoilRoot, useRecoilValue, useSetRecoilState } from 'recoil';
@@ -121,6 +124,34 @@ test('stopping before the first token leaves a visible stopped response', () => 
     act(() => socket.receive({ category: 'processing', type: 'close', message: '' }));
     expect(result.current.chat?.messages[2]).toMatchObject({ category: 'stream_msg', message: '', end: true, stopped: true });
     expect(result.current.running?.inputDisabled).toBe(false);
+    unmount();
+    closeAppChatWebSocket(chatId);
+});
+
+
+test('production assistant stop frames restore input and persist the truncated terminal through the next round', () => {
+    const script = resolve(__dirname, '../../../../../backend/test/chat/test_assistant_stop_lifecycle.py');
+    const trace = JSON.parse(execFileSync(process.env.PYTHON || 'python3', [script, '--trace'], { encoding: 'utf8' })) as {
+        before: unknown[]; stopped: unknown[]; next: unknown[];
+        history: Array<{ id: number; category: string; message: string; remark: string }>;
+    };
+    const { result, socket, chatId, unmount } = openConversation(5, true);
+    act(() => trace.before.forEach(frame => socket.receive(frame)));
+    const partial = result.current.chat?.messages.slice(-1)[0].message;
+    expect(partial).toBe('APP_STREAM_1030R\n'.repeat(234) + 'APP_STREAM_');
+    act(() => result.current.submit({ action: 'stop' }));
+    act(() => trace.stopped.forEach(frame => socket.receive(frame)));
+    expect(result.current.running?.inputDisabled).toBe(false);
+    expect(result.current.running?.running).toBe(false);
+    expect(result.current.chat?.messages.slice(-1)[0]).toMatchObject({ message: partial, stopped: true, end: true });
+    const saved = trace.history.find(row => row.category === 'answer');
+    expect(saved?.message).toBe(partial);
+    expect(isAppMessageStopped(saved!)).toBe(true);
+    act(() => result.current.submit({ action: 'skill_input', input: 'NEXT', data: { inputs: { input: 'NEXT' } } }));
+    act(() => trace.next.forEach(frame => socket.receive(frame)));
+    expect(result.current.chat?.messages.slice(-1)[0]).toMatchObject({ message: 'APP_NEXT_OK', end: true });
+    expect(result.current.running?.inputDisabled).toBe(false);
+    expect(trace.history.filter(row => row.category === 'answer').map(row => row.message)).toEqual([partial, 'APP_NEXT_OK']);
     unmount();
     closeAppChatWebSocket(chatId);
 });

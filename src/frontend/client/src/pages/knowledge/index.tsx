@@ -437,9 +437,9 @@ function useKnowledgePage({
   const handleLeaveActiveSpace = async (sp: KnowledgeSpace | null) => {
     if (!sp) return;
     const ok = await confirm({
-      title: localize("com_knowledge.prompt"),
+      title: localize("com_knowledge.exit_space_short"),
       description: localize("com_knowledge.confirm_exit_space"),
-      confirmText: localize("com_knowledge.exit"),
+      confirmText: localize("com_knowledge.exit_space_short"),
       cancelText: localize("com_knowledge.cancel"),
     });
     if (!ok) return;

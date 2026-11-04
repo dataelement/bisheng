@@ -1,6 +1,32 @@
-import type { CitationDisplayData } from './types';
-export function transformPrivateCitations(content: string) {
-    const normalizedCitationContent = normalizeCitationMarkers(content);
+import type { ChatCitation, CitationDisplayData } from './types';
+function mapBareCitationRefs(content: string, replace: (ref: string, token: string) => string) {
+    // Leave code, links, existing protocol spans and generated placeholders literal.
+    const tokens = /(`+)[\s\S]*?\1|~~~[\s\S]*?~~~|\[[^\]\n]*\]\([^\n)]*\)|\[citationref:[^\]]*\]|\ue200[^\ue202]*\ue202|https?:\/\/[^\s<>]+|((?<![\w/:])(?:knowledgesearch|websearch|tempsearch|articlesearch)_[a-fA-F0-9]+:\d+(?![\w:.-]))[\ue201\ue202]*/g;
+    return content.replace(tokens, (token: string, _ticks: string | undefined, ref: string | undefined) => ref ? replace(ref, token) : token);
+}
+/** Candidates are untrusted; callers must resolve them before restoring badges. */
+export function getBareCitationRefs(content: string): string[] {
+    const refs = new Set<string>();
+    mapBareCitationRefs(normalizeCitationMarkers(content), (ref, token) => { refs.add(ref); return token; });
+    return [...refs];
+}
+/** Recover missing wrappers only when the exact source and chunk were supplied. */
+function restoreRegisteredBareCitations(content: string, citations?: ChatCitation[] | null) {
+    const registeredRefs = new Set<string>();
+    for (const citation of citations || []) {
+        if (citation.itemId != null) registeredRefs.add(`${citation.citationId}:${citation.itemId}`);
+        for (const item of citation.sourcePayload?.items || []) {
+            if (item.itemId != null) registeredRefs.add(`${citation.citationId}:${item.itemId}`);
+        }
+    }
+    if (!registeredRefs.size) return content;
+    // Consume leftover protocol characters only for an exact registered reference.
+    return mapBareCitationRefs(content, (ref, token) => registeredRefs.has(ref)
+        ? `${CITATION_START}${ref}${CITATION_END}` : token);
+}
+
+export function transformPrivateCitations(content: string, citations?: ChatCitation[] | null) {
+    const normalizedCitationContent = restoreRegisteredBareCitations(normalizeCitationMarkers(content), citations);
     if (!normalizedCitationContent.includes(CITATION_START)) {
         return { transformedContent: normalizedCitationContent, citationMap: {} as Record<string, CitationDisplayData> };
     }

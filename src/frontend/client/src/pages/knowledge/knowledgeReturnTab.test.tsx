@@ -8,6 +8,8 @@ import { AliveScope } from 'react-activation';
 import { KnowledgeSpaceSections as MockKnowledgeSpaceSections } from './sidebar/KnowledgeSpaceSections';
 import { KnowledgeSpaceHeader as MockKnowledgeSpaceHeader } from './SpaceDetail/KnowledgeSpaceHeader';
 import { SpaceRole, SpaceSortType as MockSpaceSortType, VisibilityType, type KnowledgeSpace } from '~/api/knowledge';
+import { deleteSpaceApi, unsubscribeSpaceApi } from '~/api/knowledge';
+const mockSpaceActionConfirm = jest.fn().mockResolvedValue(true);
 
 jest.mock('~/components/Chat/desktopEmbedding', () => ({ isDesktopEmbedded: () => true }));
 jest.mock('~/hooks/queries/data-provider', () => ({ useGetBsConfig: () => ({ data: {} }) }));
@@ -28,11 +30,13 @@ jest.mock('~/api/knowledge', () => ({
   getJoinedSpacesApi: jest.fn(async () => [mockSpaces[2]]),
   getDepartmentSpacesApi: jest.fn(async () => [mockSpaces[0]]),
   getSpaceInfoApi: jest.fn(async (id: string) => mockSpaces.find((space) => space.id === id)),
+  deleteSpaceApi: jest.fn(),
+  unsubscribeSpaceApi: jest.fn(async () => ({ status_code: 200 })),
 }));
 jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key, useWorkbenchMenuNames: () => ({ knowledge: 'Knowledge' }), usePrefersMobileLayout: () => false, useScrollRevealRef: () => ({ current: null }), useAuthContext: () => ({ user: { id: 'user' }, isUserLoading: false, logout: jest.fn() }) }));
 jest.mock('~/hooks/AuthContext', () => ({ useAuthContext: () => ({ user: { id: 'user', plugins: ['knowledge_space'] }, isUserLoading: false }) }));
 jest.mock('~/hooks/useEffectiveQuota', () => ({ useEffectiveQuota: () => ({ isOverQuota: () => false }) }));
-jest.mock('~/Providers', () => ({ useToastContext: () => ({ showToast: jest.fn() }), useConfirm: () => jest.fn() }));
+jest.mock('~/Providers', () => ({ useToastContext: () => ({ showToast: jest.fn() }), useConfirm: () => mockSpaceActionConfirm }));
 jest.mock('recoil', () => ({ useRecoilState: () => jest.requireActual('react').useState({}), useRecoilValue: () => ({}), useSetRecoilState: () => jest.fn() }));
 jest.mock('~/store', () => ({ __esModule: true, default: { mobileSystemMenuOpenState: {} } }));
 jest.mock('~/pages/appChat/store/atoms', () => ({ bishengConfState: {} }));
@@ -68,6 +72,7 @@ jest.mock('./sidebar/KnowledgeSpaceSidebar', () => ({
 jest.mock('./SpaceDetail', () => ({
   KnowledgeSpaceContent: (props: ComponentProps<typeof MockKnowledgeSpaceHeader>) => (
     <><MockKnowledgeSpaceHeader {...props} selectedCount={0} />
+      <button onClick={props.onLeaveSpace}>Leave {props.space.name}</button>
       <button onClick={() => props.onNavigateFolder('folder-1')}>Open folder</button></>
   ),
 }));
@@ -93,6 +98,26 @@ function setup(path = '/knowledge') {
 beforeEach(() => {
   window.localStorage.clear();
   jest.spyOn(console, 'info').mockImplementation(() => undefined);
+});
+it('confirms and executes exit from the detail page without deleting the space', async () => {
+  setup('/knowledge/space/joined?tab=joined');
+  fireEvent.click(await screen.findByRole('button', { name: 'Leave joined space' }));
+  await waitFor(() => expect(unsubscribeSpaceApi).toHaveBeenCalledWith('joined'));
+  expect(deleteSpaceApi).not.toHaveBeenCalled();
+  expect(mockSpaceActionConfirm).toHaveBeenLastCalledWith({
+    title: 'com_knowledge.exit_space_short', description: 'com_knowledge.confirm_exit_space',
+    confirmText: 'com_knowledge.exit_space_short', cancelText: 'com_knowledge.cancel',
+  });
+});
+it('keeps the space and membership when exiting from detail is cancelled', async () => {
+  const router = setup('/knowledge/space/joined?tab=joined');
+  mockSpaceActionConfirm.mockResolvedValueOnce(false);
+  const leaveButton = await screen.findByRole('button', { name: 'Leave joined space' });
+  await act(async () => { fireEvent.click(leaveButton); });
+  expect(mockSpaceActionConfirm).toHaveBeenCalled();
+  expect(unsubscribeSpaceApi).not.toHaveBeenCalled();
+  expect(deleteSpaceApi).not.toHaveBeenCalled();
+  expect(router.state.location.pathname).toBe('/knowledge/space/joined');
 });
 it.each(['department', 'created', 'joined'])('returns to %s through the actual detail Back button', async (tab) => {
   const router = setup();

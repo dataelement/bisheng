@@ -50,7 +50,6 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.errcode.knowledge import (
-    KnowledgeFileNotSupportedError,
     KnowledgeMediaNoRecognizableAudioError,
     KnowledgeMediaTranscriptionError,
 )
@@ -153,8 +152,6 @@ async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: 
     try:
         result = await pipeline.arun()
         raw_texts = [doc.page_content for doc in result.documents]
-    except KnowledgeFileNotSupportedError:
-        raw_texts = []
     except KnowledgeMediaNoRecognizableAudioError:
         # A clip with no speech in it is not a failure — the user attached a
         # file, not a transcription request. Failing the turn would throw away
@@ -833,6 +830,11 @@ async def _build_knowledge_search_tool(
     if not knowledge_bases_info:
         return None
 
+    selected_tag_filters = {
+        int(kb["id"]): int(kb["selected_tag_id"])
+        for kb in knowledge_bases_info
+        if kb.get("source") == "space" and kb.get("selected_tag_id") is not None
+    }
     kb_id_whitelist = [str(kb["id"]) for kb in knowledge_bases_info]
     # Space-type KBs skip auth check in queryChunksFromDB; org-type go
     # through KnowledgeDao.ajudge_knowledge_permission. Preserve the
@@ -1060,12 +1062,19 @@ async def _build_knowledge_search_tool(
             kb_ids_int = [int(k) for k in kb_id_whitelist]
             logger.info(f"[search_kb] hallucinated kb_ids; falling back to whitelist={kb_ids_int}")
 
+        # Fixed user tags are enforced before retrieval; model filters cannot replace them.
+        model_filters = [
+            item
+            for item in ((filters.knowledge_base_filters if filters else None) or [])
+            if str(item.knowledge_base_id).isdigit()
+            if int(item.knowledge_base_id) not in selected_tag_filters
+        ]
         # Resolve tag filters into {kb_id: allowed_file_ids}. Applied as a
         # post-retrieval filter on the docs returned by queryChunksFromDB so
         # we don't have to plumb file-id filters into the milvus/es layer.
         try:
             file_filter = await _resolve_tag_filter_file_ids(
-                (filters.knowledge_base_filters if filters else None) or [],
+                model_filters,
             )
         except Exception as exc:
             logger.warning(f"[search_kb] tag resolution failed: {exc}")
@@ -1082,6 +1091,11 @@ async def _build_knowledge_search_tool(
                 use_knowledge_param=UseKnowledgeBaseParam(
                     knowledge_space_ids=space_bucket,
                     organization_knowledge_ids=org_bucket,
+                    knowledge_space_tag_filters={
+                        space_id: selected_tag_filters[space_id]
+                        for space_id in space_bucket
+                        if space_id in selected_tag_filters
+                    },
                 ),
                 max_token=max_token,
                 login_user=login_user,
@@ -1166,6 +1180,9 @@ async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
     ukb = data.use_knowledge_base
     if not ukb:
         return []
+    from bisheng.knowledge.domain.services.knowledge_space_tag_filter_service import KnowledgeSpaceTagFilterService
+
+    await KnowledgeSpaceTagFilterService().validate_selection(ukb.knowledge_space_tag_filters)
     org_ids = list(ukb.organization_knowledge_ids or [])
     space_ids = list(ukb.knowledge_space_ids or [])
     ids = org_ids + space_ids
@@ -1236,6 +1253,11 @@ async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
             "description": kb.description or "",
             "tags": tags_by_kb.get(kb.id, []),
             "source": "space" if kb.id in space_id_set else "organization",
+            **(
+                {"selected_tag_id": ukb.knowledge_space_tag_filters[kb.id]}
+                if kb.id in ukb.knowledge_space_tag_filters
+                else {}
+            ),
         }
         for kb in kbs
     ]
@@ -1508,6 +1530,17 @@ async def _extract_doc_text(
     filename plus the parser's own message to the chat bubble, and lets a throttled
     OCR service be told apart from a genuinely unparseable file.
     """
+    # This helper is the OCR path; vision-capable images bypass it entirely.
+    if filename.rsplit(".", 1)[-1].lower() in {*VISUAL_MODEL_FILE_TYPES, "bmp"}:
+        from bisheng.common.services.config_service import settings
+
+        knowledge_config = await settings.async_get_knowledge()
+        if not knowledge_config.image_parser_enabled:
+            raise ChatFileParseError(
+                error_type="file_parse_failed",
+                detail=f"{filename}: image parsing is not configured; select a vision-capable model or configure an image parser",
+                filename=filename,
+            )
     try:
         image_storage = None
         if chat_id:

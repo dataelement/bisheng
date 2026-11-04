@@ -13,6 +13,8 @@ from runtime_manager.admission import Tier
 from runtime_manager.bundle_inputs import BundleInputError, startup_command
 from runtime_manager.container_runner import OP_LABEL, PHASE_LABEL, ContainerRunner, ExecutionError, host_path
 from runtime_manager.lifecycle import build_container_payload
+from runtime_manager.runtime_environment import platform_environment
+from runtime_manager.secret_redaction import bounded_diagnostic, diagnostic_environment
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,10 @@ class BundleLauncher:
         mode = delivery["mode"]
         reference = delivery.get("image_ref") or profile.get("runtime_image")
         image = self.runner.ensure_image(
-            reference, platform=platform, expected_id=delivery.get("image_id") or profile.get("runtime_image_id")
+            reference,
+            platform=platform,
+            expected_id=delivery.get("image_id") or profile.get("runtime_image_id"),
+            role="runtime" if mode == "bundle" else "image",
         )
         port = int(body.get("port", 8080))
         health = body.get("health", {})
@@ -47,18 +52,19 @@ class BundleLauncher:
             for key in env
         ):
             raise BundleInputError("control_secret_environment_refused")
-        env.update(
-            {
-                "PORT": str(port),
-                "BISHENG_APP_PORT": str(port),
-                "BISHENG_APP_ID": operation["app_id"],
-                "BISHENG_APP_DB_URL": "sqlite:////data/app.db",
-                "BISHENG_APP_BASE_PATH": body.get("base_path", f"/apps/{body.get('slug', operation['app_id'])}"),
-                "PYTHONDONTWRITEBYTECODE": "1",
-            }
+        env = platform_environment(
+            app_id=operation["app_id"],
+            slug=body.get("slug", operation["app_id"]),
+            version_id=operation.get("version_id", ""),
+            version_no=body.get("version_no"),
+            port=port,
+            health_path=health.get("path", "/"),
+            base_path=body.get("base_path", ""),
+            language=profile.get("language") or body.get("runtime", ""),
+            bundle=mode == "bundle",
+            extra=env,
         )
-        if mode == "bundle" and profile.get("language") == "python3.11":
-            env["PATH"] = "/opt/venv/bin:/usr/local/bin:/usr/bin:/bin"
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
         command = delivery.get("startup", {}).get("command")
         if mode == "bundle":
             command = startup_command(Path(code_dir), profile["language"], command)
@@ -67,7 +73,7 @@ class BundleLauncher:
             app_id=operation["app_id"],
             slug=body.get("slug", operation["app_id"]),
             version_id=operation.get("version_id", ""),
-            version_no=int(body.get("version_no", 1)),
+            version_no=body.get("version_no", ""),
             image_ref=image,
             tier=Tier(cpu=int(tier.get("cpu_millicores", 1000)) / 1000, mem_mb=int(tier.get("memory_mb", 1024))),
             port=port,
@@ -155,7 +161,7 @@ class BundleLauncher:
             self.checkpoint()
             record = self.docker.inspect_container(ref)
             if not record.get("State", {}).get("Running"):
-                raise ExecutionError("startup_exited")
+                raise ExecutionError("startup_exited", self._diagnostic(operation, ref))
             network = record.get("NetworkSettings", {}).get("Networks", {}).get(self.config.network, {})
             host = network.get("IPAddress") or network.get("GlobalIPv6Address")
             if host:
@@ -172,5 +178,17 @@ class BundleLauncher:
                 except httpx.HTTPError as exc:
                     logger.debug("readiness request failed; retrying: %s", type(exc).__name__)
             if self.clock.monotonic() >= deadline:
-                raise ExecutionError("readiness_timeout")
+                raise ExecutionError("readiness_timeout", self._diagnostic(operation, ref))
             self.clock.sleep(self.config.probe_interval_seconds)
+
+    def _diagnostic(self, operation, ref):
+        try:
+            text = self.docker.container_logs(ref, tail=40)
+            payload = operation.get("payload", {})
+            return bounded_diagnostic(
+                text, diagnostic_environment(self.config, payload), payload.get("sensitive_env_names", [])
+            )
+        except Exception as exc:
+            # Optional diagnostics must never replace the actual startup failure.
+            logger.warning("startup output unavailable (%s)", type(exc).__name__)
+            return ""

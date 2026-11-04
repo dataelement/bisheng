@@ -2928,6 +2928,7 @@
     "permissionTiers": {
       "editor": "編集者",
       "manager": "管理者",
+      "owner": "所有者",
       "viewer": "閲覧者"
     },
     "resourceTypes": {
@@ -4231,11 +4232,11 @@
       "userTab": "ユーザー",
       "addCredits": "割り当てを追加",
       "emptyCredits": "クレジット設定がありません",
-      "ruleHelp": "ユーザー・部門・ロールごとに月間クレジットを設定します。有効な設定が複数該当する場合は最大値が適用され、Chat と Work で共有されます。有効な設定に該当しないメンバーは上限なしになります。",
+      "ruleHelp": "ユーザー・部門・ロールごとに、1 人あたりの月間クレジット上限を設定します。部門・ロールの各メンバーに個別の上限が適用されます。複数の設定が該当する場合は有効な設定の最大値を適用し、Chat と Work で共有します。",
       "scope": "対象範囲",
-      "monthlyCredits": "1 人あたりの月間クレジット",
+      "monthlyCredits": "1 人あたりの月間クレジット上限",
       "creditRangeHint": "月あたり 0～{{max}} クレジット、小数点以下 1 桁まで。",
-      "enabled": "ルールを有効化",
+      "enabled": "このクレジット割り当てを有効にする",
       "selectSubject": "対象を選択",
       "save": "保存",
       "saving": "保存中…",
@@ -4243,7 +4244,9 @@
       "edit": "編集",
       "yes": "有効",
       "no": "無効",
-      "usedCredits": "この期間の使用ポイント: {{value}}"
+      "usedCredits": "この期間の使用ポイント: {{value}}",
+      "monthlyCreditsHelp": "各ユーザーの月間クレジット上限。Chat と Work で共有",
+      "monthlyCreditsHelpLabel": "クレジット上限の説明"
     }
   },
   "request": {
@@ -4275,6 +4278,7 @@
     "noProgress": "承認状況はありません"
   },
   "department": {
+    "defaultOrganization": "デフォルト組織",
     "searchUsersPlaceholder": "ユーザー名または ID で検索",
     "searchMember": "ユーザー名または ID で検索"
   },

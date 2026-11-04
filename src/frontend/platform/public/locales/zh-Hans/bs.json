@@ -2928,6 +2928,7 @@
     "permissionTiers": {
       "editor": "编辑者",
       "manager": "管理者",
+      "owner": "所有者",
       "viewer": "查看者"
     },
     "resourceTypes": {
@@ -4231,11 +4232,11 @@
       "userTab": "用户",
       "addCredits": "新增分配",
       "emptyCredits": "暂无积分配置",
-      "ruleHelp": "按用户、部门或角色设置每人每月积分。同时命中多条有效配置时取最高值，Chat 和 Work 共用。未命中任何有效配置的人员不限额度。",
+      "ruleHelp": "按用户、部门或角色设置每人每月积分额度，部门和角色中的每位用户分别获得该额度。多条配置同时适用时，取已启用配置中的最高额度，Chat 和 Work 共用。",
       "scope": "适用范围",
-      "monthlyCredits": "每人每月积分",
+      "monthlyCredits": "每人每月积分额度",
       "creditRangeHint": "每月 0～{{max}} 积分，最多 1 位小数。",
-      "enabled": "启用规则",
+      "enabled": "启用此积分分配",
       "selectSubject": "选择对象",
       "save": "保存",
       "saving": "保存中…",
@@ -4243,7 +4244,9 @@
       "edit": "编辑",
       "yes": "已启用",
       "no": "已停用",
-      "usedCredits": "当前时段已消耗 {{value}} 积分"
+      "usedCredits": "当前时段已消耗 {{value}} 积分",
+      "monthlyCreditsHelp": "每位用户的月度积分上限，Chat 和 Work 共用",
+      "monthlyCreditsHelpLabel": "积分额度说明"
     }
   },
   "request": {
@@ -4275,6 +4278,7 @@
     "noProgress": "暂无进度数据"
   },
   "department": {
+    "defaultOrganization": "默认组织",
     "searchUsersPlaceholder": "搜索用户名称或 ID",
     "searchMember": "搜索用户名称或 ID"
   },

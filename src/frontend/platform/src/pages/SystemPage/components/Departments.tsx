@@ -1,3 +1,4 @@
+import { departmentDisplayName } from "@/components/bs-comp/department/departmentDisplayName";
 import { Button } from '@bisheng/ui';
 import { LazyDepartmentTree, useLazyDepartmentTree } from "@/components/bs-comp/department";
 
@@ -21,7 +22,7 @@ export default function Departments() {
   const { t } = useTranslation();
   const { appConfig } = useContext(locationContext);
   const { user } = useContext(userContext);
-  /** 与系统页「组织同步」一致：仅平台超级管理员（role=admin） */
+  /** Match organization sync: only platform super admins. */
   const isSuperAdmin = user?.role === "admin";
   const showTrafficControlTab = isSuperAdmin && appConfig.isPro;
   const multiTenantEnabled = !!appConfig?.multiTenantEnabled;
@@ -191,7 +192,7 @@ export default function Departments() {
       <div className="min-w-0 flex-1 overflow-auto pl-4 pt-2">
         {selectedDept ? (
           <div className="w-full">
-            <h3 className="mb-3 text-base font-semibold">{selectedDept.name}</h3>
+            <h3 className="mb-3 text-base font-semibold">{departmentDisplayName(selectedDept, t("bs:department.defaultOrganization"))}</h3>
             <Tabs
               defaultActiveKey="members"
               className="w-full [&>div:first-child]:shrink-0 [&>[role=tabpanel][data-state=active]]:flex [&>[role=tabpanel]]:min-h-0 [&>[role=tabpanel]]:flex-1 [&>[role=tabpanel]]:flex-col [&>[role=tabpanel]]:overflow-hidden [&>[role=tabpanel]>div]:mt-2"

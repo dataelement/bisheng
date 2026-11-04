@@ -235,3 +235,24 @@ test('resource icons, names and click selection form one atomic reference', () =
     expect(editor.querySelector('img')).toBeNull();
     expect(readComposerDocument(editor)).toEqual({ text: 'Draft', keys: references.map(ref => ref.key) });
 });
+
+function TaggedSpaceHarness() {
+    const [text, setText] = useState('Question');
+    const [spaces, setSpaces] = useState([{ id: '12', name: 'Space', type: 'space', tag: { id: 7, name: 'Report' } }]);
+    const binding = useComposerReferences([], spaces, () => {}, setSpaces);
+    return <>
+        <ComposerEditor value={text} onChange={setText} {...binding} onKeyDown={() => {}} placeholder="Write" />
+        <output data-testid="spaces">{JSON.stringify(spaces)}</output>
+    </>;
+}
+
+test('deleting and restoring the tag DOM token preserves its space and tag metadata', () => {
+    render(<TaggedSpaceHarness />);
+    const editor = screen.getByRole('textbox');
+    const token = screen.getByText('#Report').closest('[data-composer-reference]')!;
+    token.remove(); fireEvent.input(editor);
+    expect(JSON.parse(screen.getByTestId('spaces').textContent!)).toEqual([{ id: '12', name: 'Space', type: 'space' }]);
+    editor.prepend(token); fireEvent.input(editor);
+    expect(JSON.parse(screen.getByTestId('spaces').textContent!)[0].tag).toEqual({ id: 7, name: 'Report' });
+    expect(readComposerDocument(editor).text).toBe('Question');
+});

@@ -3,6 +3,7 @@ import { useLayoutEffect, useState } from "react";
 import { BookOpen } from "lucide-react";
 import { Button, Checkbox, Modal, SearchInput } from "@bisheng/ui";
 import { useLocalize } from "~/hooks";
+import { useKnowledgeSpaceAccess } from "~/hooks/useKnowledgeSpaceAccess";
 import type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
 
 export interface KnowledgePickerGroup {
@@ -59,7 +60,9 @@ export function KnowledgePickerDialog({
   const [draft, setDraft] = useState(() =>
     value.filter((item) => item.type === kind),
   );
-  const selectedIds = new Set(draft.map((item) => String(item.id)));
+  const access = useKnowledgeSpaceAccess(draft, "knowledge-picker", kind === "space");
+  const available = access.available;
+  const selectedIds = new Set(available.map((item) => String(item.id)));
   const copy =
     kind === "org"
       ? ({
@@ -86,16 +89,17 @@ export function KnowledgePickerDialog({
         } as const);
 
   const handleToggle = (id: string, name: string) => {
-    setDraft((current) =>
-      current.some((item) => String(item.id) === id)
-        ? current.filter((item) => String(item.id) !== id)
-        : current.length < MAX_SELECTED
-          ? [...current, { id, name, type: kind }]
-          : current,
-    );
+    setDraft((current) => {
+      const allowed = current.filter((item) => selectedIds.has(String(item.id)));
+      return allowed.some((item) => String(item.id) === id)
+        ? allowed.filter((item) => String(item.id) !== id)
+        : allowed.length < MAX_SELECTED
+          ? [...allowed, { id, name, type: kind }]
+          : allowed;
+    });
   };
   const handleConfirm = () => {
-    onConfirm([...value.filter((item) => item.type !== kind), ...draft]);
+    onConfirm([...value.filter((item) => item.type !== kind), ...available]);
     onClose();
   };
 
@@ -116,7 +120,7 @@ export function KnowledgePickerDialog({
             className="mr-auto self-center text-body-sm text-text-3"
             aria-live="polite"
           >
-            {localize(copy.selected, { count: draft.length })}
+            {localize(copy.selected, { count: available.length })}
           </span>
           <Button
             color="default"
@@ -126,7 +130,7 @@ export function KnowledgePickerDialog({
           >
             {localize("com_ui_cancel")}
           </Button>
-          <Button onClick={handleConfirm} disabled={isError || isFetching}>
+          <Button onClick={handleConfirm} disabled={isError || isFetching || access.checking || access.failed}>
             {localize("dshChat.confirmKnowledge")}
           </Button>
         </>
@@ -192,7 +196,7 @@ export function KnowledgePickerDialog({
                     >
                       <Checkbox
                         checked={checked}
-                        disabled={!checked && draft.length >= MAX_SELECTED}
+                        disabled={!checked && available.length >= MAX_SELECTED}
                         onCheckedChange={() => handleToggle(id, item.name)}
                         aria-label={item.name}
                       />
@@ -226,7 +230,8 @@ export function KnowledgePickerDialog({
           </p>
         )}
       </div>
-      {draft.length >= MAX_SELECTED && (
+      {access.message && <p role="status" className="text-body-sm text-danger">{access.message}</p>}
+      {available.length >= MAX_SELECTED && (
         <p role="status" className="text-body-sm text-text-3">
           {localize(copy.limit)}
         </p>

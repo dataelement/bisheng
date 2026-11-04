@@ -1,7 +1,16 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactElement, ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { getSpaceTagsApi } from '~/api/knowledge';
+import { fireEvent, render as renderUI, screen, waitFor } from '@testing-library/react';
 import { KnowledgeAskBar } from './KnowledgeAskBar';
 import { KnowledgeAiBottomDock } from './KnowledgeAiBottomDock';
 import { parkChatAsk } from '~/components/Chat/chatAskHandoff';
+
+jest.mock('~/api/knowledge', () => ({ getSpaceTagsApi: jest.fn() }));
+function render(ui: ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } }, logger: { log: () => {}, warn: console.warn, error: () => {} } });
+  return renderUI(ui, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+}
 
 const mockNavigate = jest.fn();
 const mockNewConversation = jest.fn();
@@ -16,7 +25,7 @@ jest.mock('~/hooks', () => ({
   useLocalize: () => (key: string) => key,
   useNewConvo: () => ({ newConversation: mockNewConversation }),
   usePrefersMobileLayout: () => mockMobile,
-  useScrollRevealRef: () => null,
+  useScrollRevealRef: () => () => {},
 }));
 jest.mock('recoil', () => ({ useRecoilValue: () => ({ id: 1 }) }));
 jest.mock('~/store', () => ({ __esModule: true, default: { chatModel: 'model' } }));
@@ -28,6 +37,7 @@ jest.mock('~/utils', () => ({ cn: (...classes: string[]) => classes.filter(Boole
 
 beforeEach(() => {
   mockMobile = false;
+  jest.mocked(getSpaceTagsApi).mockReset().mockResolvedValue([{ id: 7, name: "Report" }]);
   mockModels = [
     { id: '1', name: 'alpha', displayName: 'Provider / Alpha' },
     { id: '2', name: 'beta', displayName: 'Provider / Beta with a long display name' },
@@ -72,4 +82,34 @@ test('catalog arrival repairs an unavailable initial model and sends the display
   fireEvent.change(screen.getByTestId('knowledge-ai-input'), { target: { value: 'Count' } });
   fireEvent.keyDown(screen.getByTestId('knowledge-ai-input'), { key: 'Enter' });
   expect(parkChatAsk).toHaveBeenCalledWith(expect.objectContaining({ modelId: 2 }));
+});
+
+
+test('loads real space tags and transfers the selected tag when asking', async () => {
+  render(<KnowledgeAskBar spaceId="12" spaceName="Knowledge" modelValue={1} />);
+  const input = screen.getByTestId('knowledge-ai-input');
+  fireEvent.change(input, { target: { value: '#' } });
+  fireEvent.click(await screen.findByRole('button', { name: /#\s*Report/ }));
+  fireEvent.change(input, { target: { value: 'Count' } });
+  fireEvent.click(screen.getByTestId('send-button'));
+  expect(getSpaceTagsApi).toHaveBeenCalledWith('12');
+  expect(parkChatAsk).toHaveBeenCalledWith(expect.objectContaining({ space: { id: '12', name: 'Knowledge', tag: { id: 7, name: 'Report' } } }));
+});
+
+test('shows loading instead of an empty tag list while the request is pending', async () => {
+  jest.mocked(getSpaceTagsApi).mockReturnValue(new Promise(() => {}));
+  render(<KnowledgeAskBar spaceId="12" spaceName="Knowledge" modelValue={1} />);
+  fireEvent.change(screen.getByTestId('knowledge-ai-input'), { target: { value: '#' } });
+  expect(await screen.findByText('com_ui_loading')).toBeInTheDocument();
+  expect(screen.queryByText('com_knowledge.no_matched_tags')).not.toBeInTheDocument();
+});
+
+test('shows tag request failure and lets the user retry', async () => {
+  jest.mocked(getSpaceTagsApi).mockRejectedValueOnce(new Error('network'));
+  render(<KnowledgeAskBar spaceId="12" spaceName="Knowledge" modelValue={1} />);
+  fireEvent.change(screen.getByTestId('knowledge-ai-input'), { target: { value: '#' } });
+  expect(await screen.findByRole('alert')).toHaveTextContent('com_knowledge.load_tags_failed');
+  jest.mocked(getSpaceTagsApi).mockResolvedValue([{ id: 7, name: 'Report' }]);
+  fireEvent.click(screen.getByRole('button', { name: 'com_ui_retry' }));
+  expect(await screen.findByRole('button', { name: /#\s*Report/ })).toBeInTheDocument();
 });

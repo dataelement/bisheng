@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSetRecoilState, useRecoilValue } from 'recoil';
 import AppAvator from '~/components/Avator';
-import { MobileSidebarHeaderTabs } from '~/components/Nav/MobileSidebarHeaderTabs';
+import { MobileSidebarHeader } from '~/components/Nav/MobileSidebarHeaderTabs';
 
 import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
@@ -22,7 +22,7 @@ function formatConversationTimeGroupLabel(label: string, localize: (key: string)
     return label.startsWith('com_ui_date_') || label.startsWith('com_') ? localize(label) : label;
 }
 
-/** 仅当单行 truncate 实际溢出时显示完整文案的 Tooltip */
+/** Show the full text in a tooltip when the single-line label overflows. */
 function TruncatedLineTooltip({ text, className }: { text: string; className?: string }) {
     const ref = useRef<HTMLParagraphElement>(null);
     const [truncated, setTruncated] = useState(false);
@@ -110,12 +110,9 @@ export function SideNav() {
             )}
         >
             <div className="hidden touch-mobile:block">
-                <MobileSidebarHeaderTabs
+                <MobileSidebarHeader
                     logoSrc={bsConfig?.sidebarIcon?.image ? __APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image : undefined}
                     onClose={() => setSidebarVisible(false)}
-                    onLinkClick={(link) => {
-                        if (link.closeDrawerOnNavigate) setSidebarVisible(false);
-                    }}
                 />
             </div>
 
@@ -135,7 +132,7 @@ export function SideNav() {
                 </span>
             </div>
 
-            {/* App card — 应用内对话侧栏固定展示 */}
+            {/* App card */}
             <div className="shrink-0 touch-mobile:px-2 touch-mobile:pt-4 touch-mobile:pb-6">
                 <div
                     className="border-border-base border-[0.5px] rounded-md p-[8px] flex flex-col gap-[12px]"

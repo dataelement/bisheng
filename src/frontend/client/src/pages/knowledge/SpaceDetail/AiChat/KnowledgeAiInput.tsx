@@ -37,10 +37,14 @@ import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import { cn } from "~/utils";
 import { useVoiceDraft } from "~/hooks/Input/useVoiceDraft";
 
-type KnowledgeInputTag = { id: number; name: string };
+export type KnowledgeInputTag = { id: number; name: string };
 
 interface KnowledgeAiInputProps {
   availableTags: { id: number; name: string }[];
+  tagsLoading?: boolean;
+  tagsError?: boolean;
+  onTagPickerOpen?: () => void;
+  onRetryTags?: () => void;
   modelOptions?: BsConfig["models"];
   modelValue?: number;
   /** User picked a model — the dock owns the selection, this input never
@@ -69,6 +73,10 @@ const TAG_TEXT_CLASS = "text-text-1";
 
 export function KnowledgeAiInput({
   availableTags,
+  tagsLoading = false,
+  tagsError = false,
+  onTagPickerOpen,
+  onRetryTags,
   modelOptions,
   modelValue = 0,
   onModelChange,
@@ -95,6 +103,7 @@ export function KnowledgeAiInput({
   );
   const [showPicker, setShowPicker] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
+  useEffect(() => { if (showPicker) onTagPickerOpen?.(); }, [showPicker, onTagPickerOpen]);
   const [tagDeleteHighlight, setTagDeleteHighlight] = useState(false);
   /** Restacks the input from single-row to two-row when the textarea wraps.
    *  Only escalates (one-way) to avoid oscillation; resets when the input is cleared. */
@@ -363,6 +372,9 @@ export function KnowledgeAiInput({
             tags={availableTags
               .filter((t) => !selectedTag || t.id !== selectedTag.id)
               .map((t) => t.name)}
+            loading={tagsLoading}
+            failed={tagsError}
+            onRetry={onRetryTags}
             searchText={pickerSearch}
             onSelect={handleTagSelect}
             onClose={() => setShowPicker(false)}

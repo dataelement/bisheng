@@ -5,7 +5,7 @@ import {
 } from '~/layouts/WorkbenchSidebar/projectsStore';
 import ConvoOptions from './ConvoOptions';
 
-jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key }));
+jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key, usePrefersMobileLayout: () => false }));
 jest.mock('~/Providers', () => ({ useChatContext: () => ({ index: 0 }) }));
 jest.mock('~/mock/demo/ids', () => ({ isDemoDataEnabled: () => false }));
 jest.mock('./useDeleteConversationConfirm', () => ({ useDeleteConversationConfirm: () => jest.fn() }));

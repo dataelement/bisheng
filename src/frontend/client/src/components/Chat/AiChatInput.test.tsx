@@ -314,3 +314,15 @@ test('clipboard image passes the real uploader and reaches the send payload with
   })]);
   expect(mockToast).not.toHaveBeenCalled();
 });
+
+
+test('shows the permission reason next to the composer and preserves a blocked question', () => {
+  const input = props();
+  input.onSend.mockReturnValue(false);
+  render(<AiChatInput {...input} knowledgeAccessMessage="Space access expired. Choose an accessible space."
+    value="D6-W" />);
+  expect(screen.getByRole('status')).toHaveTextContent('Space access expired');
+  fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+  expect(input.onSend).toHaveBeenCalled();
+  expect(screen.getByRole('textbox')).toHaveTextContent('D6-W');
+});

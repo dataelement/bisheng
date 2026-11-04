@@ -18,6 +18,16 @@ import type { SSESubmission } from "./useAiChatSSE";
 /** Every SSE turn opened during a test, in order. */
 jest.mock("react-activation", () => ({ useActivate: jest.fn() }));
 
+let mockBsConfig: { models?: { id: number; visual: boolean }[]; enable_etl4lm?: boolean } = {};
+let mockKnowledgeBlocked = false;
+jest.mock('./useKnowledgeSpaceAccess', () => ({
+    useKnowledgeSpaceAccess: (selection) => ({
+        available: mockKnowledgeBlocked ? [] : selection,
+        blocked: mockKnowledgeBlocked,
+        message: mockKnowledgeBlocked ? 'knowledgeAccess.revoked' : '',
+    }),
+}));
+
 let mockSelectedSkills: Array<{ name: string }> = [];
 const mockOpenedStreams: Array<{ submission: SSESubmission; close: jest.Mock }> = [];
 
@@ -58,7 +68,7 @@ jest.mock("~/hooks/AuthContext", () => ({ useAuthContext: () => ({ user: { id: "
 
 jest.mock("~/hooks", () => ({ useLocalize: () => (key: string) => key }));
 jest.mock("~/Providers", () => ({ useToastContext: () => ({ showToast: jest.fn() }) }));
-jest.mock("~/hooks/queries/data-provider", () => ({ useGetBsConfig: () => ({ data: {} }) }));
+jest.mock("~/hooks/queries/data-provider", () => ({ useGetBsConfig: () => ({ data: mockBsConfig }) }));
 // Added since the fix was lost: the hook now reads media metadata off
 // attachments and mints an owner id for the stream registry.
 jest.mock("~/utils/mediaAttachmentUtils", () => ({
@@ -109,8 +119,10 @@ const renderChat = (conversationId: string) =>
 const latestStream = () => mockOpenedStreams[mockOpenedStreams.length - 1];
 
 beforeEach(() => {
+  mockKnowledgeBlocked = false;
   localStorage.clear();
   mockOpenedStreams.length = 0;
+  mockBsConfig = { models: [{ id: 1, visual: true }] };
   mockSelectedSkills = [];
   mockGetAgentMessages.mockImplementation((cid: string) => Promise.resolve(historyOf(cid)));
   mockGetSessionName.mockResolvedValue("");
@@ -121,7 +133,7 @@ describe("useAiChat conversation switching", () => {
     const { result, rerender } = renderChat("c1");
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
-    act(() => result.current.sendMessage("hello"));
+    await act(async () => { await result.current.sendMessage("hello"); });
     expect(mockOpenedStreams).toHaveLength(1);
     const turn = latestStream();
 
@@ -171,7 +183,7 @@ describe("useAiChat conversation switching", () => {
     const { result, rerender } = renderChat("c1");
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
-    act(() => result.current.sendMessage("with a video", [{ name: "clip.mp4", filepath: "p" }]));
+    await act(async () => { await result.current.sendMessage("with a video", [{ name: "clip.mp4", filepath: "p" }]); });
     const before = jest.getTimerCount?.() ?? 0;
 
     rerender({ cid: "c2" });
@@ -187,7 +199,7 @@ describe("useAiChat conversation switching", () => {
     const { result, rerender } = renderChat("c1");
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
-    act(() => result.current.sendMessage("with a video", [{ name: "clip.mp4", filepath: "p" }]));
+    await act(async () => { await result.current.sendMessage("with a video", [{ name: "clip.mp4", filepath: "p" }]); });
 
     rerender({ cid: "c2" });
     await waitFor(() => expect(result.current.messages[0].text).toBe("c2 history"));
@@ -201,7 +213,7 @@ describe("useAiChat conversation switching", () => {
     const { result, rerender } = renderChat("c1");
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
-    act(() => result.current.sendMessage("hello"));
+    await act(async () => { await result.current.sendMessage("hello"); });
     act(() => {
       latestStream().submission.onStart();
       latestStream().submission.onAgentUpdate?.({ text: "streaming" });
@@ -223,7 +235,7 @@ describe("useAiChat conversation switching", () => {
     const { result, rerender } = renderChat("c1");
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
-    act(() => result.current.sendMessage("hello"));
+    await act(async () => { await result.current.sendMessage("hello"); });
     const turn = latestStream();
     act(() => turn.submission.onStart());
 
@@ -245,7 +257,7 @@ describe("useAiChat conversation switching", () => {
     const { result, unmount } = renderChat("c1");
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
-    act(() => result.current.sendMessage("hello"));
+    await act(async () => { await result.current.sendMessage("hello"); });
     const turn = latestStream();
     act(() => turn.submission.onStart());
 
@@ -275,7 +287,7 @@ describe("useAiChat adopts a new conversation id", () => {
   it("keeps the turn on screen when the task handoff binds a real chat id", async () => {
     const { result } = renderChat("new");
 
-    act(() => result.current.sendMessage("write me a report", null, { taskMode: true }));
+    await act(async () => { await result.current.sendMessage("write me a report", null, { taskMode: true }); });
     const turn = latestStream();
     act(() => {
       turn.submission.onStart();
@@ -293,7 +305,7 @@ describe("useAiChat adopts a new conversation id", () => {
   it("does not blank a new chat when the reply finishes in the same tick the id is minted", async () => {
     const { result } = renderChat("new");
 
-    act(() => result.current.sendMessage("blocked keyword"));
+    await act(async () => { await result.current.sendMessage("blocked keyword"); });
     const turn = latestStream();
     mockGetAgentMessages.mockClear();
 
@@ -329,7 +341,7 @@ describe("useAiChat adopts a new conversation id", () => {
   it("leaves nothing behind under the id the turn started with", async () => {
     const { result, rerender } = renderChat("new");
 
-    act(() => result.current.sendMessage("write me a report", null, { taskMode: true }));
+    await act(async () => { await result.current.sendMessage("write me a report", null, { taskMode: true }); });
     const turn = latestStream();
     act(() => {
       turn.submission.onStart();
@@ -383,7 +395,7 @@ describe("task mode owns skill execution", () => {
     mockSelectedSkills = [{ name: "writing" }];
     const { result } = renderChat("c1");
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
-    act(() => result.current.sendMessage("Use this skill", null, { taskMode }));
+    await act(async () => { await result.current.sendMessage("Use this skill", null, { taskMode }); });
     expect(latestStream().submission.payload).toMatchObject({
       task_mode: taskMode,
       skills: taskMode ? ["writing"] : [],
@@ -395,8 +407,8 @@ test("an incomplete upload rejects submission before starting a stream", async (
   const { result } = renderChat("c1");
   await waitFor(() => expect(result.current.messages).toHaveLength(1));
   let accepted;
-  act(() => {
-    accepted = result.current.sendMessage("Use this file", [{ name: "draft.txt", valid: false }], {
+  await act(async () => {
+    accepted = await result.current.sendMessage("Use this file", [{ name: "draft.txt", valid: false }], {
       taskMode: true,
     });
   });
@@ -428,12 +440,12 @@ describe("conversation knowledge isolation", () => {
     const reopened = renderChat("c1");
     await waitFor(() => expect(reopened.result.current.isLoading).toBe(false));
     expect(reopened.result.current.selectedOrgKbs).toEqual(k1);
-    act(() => reopened.result.current.sendMessage("search C1"));
+    await act(async () => { await reopened.result.current.sendMessage("search C1"); });
     expect(scope()).toMatchObject({ knowledge_space_ids: [101], organization_knowledge_ids: [] });
     reopened.rerender({ cid: "c2" });
     await waitFor(() => expect(reopened.result.current.isLoading).toBe(false));
     expect(reopened.result.current.selectedOrgKbs).toEqual(k2);
-    act(() => reopened.result.current.sendMessage("search C2"));
+    await act(async () => { await reopened.result.current.sendMessage("search C2"); });
     expect(scope()).toMatchObject({ knowledge_space_ids: [202] });
   });
 
@@ -475,7 +487,7 @@ describe("conversation knowledge isolation", () => {
     act(() => chat.result.current.setSelectedOrgKbs(k2));
     chat.rerender({ cid: "c1" });
     await waitFor(() => expect(chat.result.current.messages[0]?.messageId).toBe("c1-q"));
-    act(() => chat.result.current.regenerate("c1-q"));
+    await act(async () => { await chat.result.current.regenerate("c1-q"); });
     expect(scope()).toMatchObject({ knowledge_space_ids: [101] });
     act(() => {
       latestStream().submission.onEnd();
@@ -485,14 +497,14 @@ describe("conversation knowledge isolation", () => {
     const reopened = renderChat("c1");
     await waitFor(() => expect(reopened.result.current.isLoading).toBe(false));
     expect(reopened.result.current.selectedOrgKbs).toEqual([]);
-    act(() => reopened.result.current.sendMessage("empty selection"));
+    await act(async () => { await reopened.result.current.sendMessage("empty selection"); });
     expect(scope()).toMatchObject({ knowledge_space_ids: [], organization_knowledge_ids: [] });
   });
 
   it("carries the first turn scope into its server id while C2 stays selected", async () => {
     const chat = renderChat("new");
     act(() => chat.result.current.setSelectedOrgKbs(k1));
-    act(() => chat.result.current.sendMessage("first turn"));
+    await act(async () => { await chat.result.current.sendMessage("first turn"); });
     const first = latestStream();
     chat.rerender({ cid: "c2" });
     await waitFor(() => expect(chat.result.current.isLoading).toBe(false));
@@ -567,7 +579,7 @@ describe("knowledge-space asks across cached conversations", () => {
   });
 });
 
-test("knowledge handoff submits the chosen model ID and space in the real chat payload", () => {
+test("knowledge handoff submits the chosen model ID and space in the real chat payload", async () => {
   const modelAtom = store.chatModel as unknown as { __testValue: { id: number; name: string } };
   const initialModel = modelAtom.__testValue;
   parkChatAsk({ text: "Count entries", modelId: 2, space: { id: "28", name: "Knowledge" } });
@@ -592,7 +604,7 @@ test("knowledge handoff submits the chosen model ID and space in the real chat p
         onModelUnavailable: jest.fn(),
       });
     });
-    expect(mockOpenedStreams).toHaveLength(1);
+    await waitFor(() => expect(mockOpenedStreams).toHaveLength(1));
     expect(latestStream().submission.payload).toEqual(
       expect.objectContaining({
         text: "Count entries",
@@ -609,4 +621,65 @@ test("knowledge handoff submits the chosen model ID and space in the real chat p
   } finally {
     modelAtom.__testValue = initialModel;
   }
+});
+
+test('preserves a space tag across send, regeneration and conversation reload', async () => {
+  const tagged = [{ id: '12', name: 'Space', type: 'space', tag: { id: 7, name: 'Report' } }];
+  const { result, unmount } = renderChat('c1');
+  await waitFor(() => expect(result.current.messages).toHaveLength(1));
+  act(() => result.current.setSelectedOrgKbs(tagged));
+  await act(async () => { await result.current.sendMessage('tagged question'); });
+  expect(latestStream().submission.payload.use_knowledge_base.knowledge_space_tag_filters).toEqual({ '12': 7 });
+  act(() => latestStream().submission.onEnd());
+  await act(async () => { await result.current.regenerate(result.current.messages[result.current.messages.length - 1].messageId); });
+  expect(latestStream().submission.payload.use_knowledge_base.knowledge_space_tag_filters).toEqual({ '12': 7 });
+  act(() => latestStream().submission.onEnd());
+  unmount();
+  const restored = renderChat('c1');
+  expect(restored.result.current.selectedOrgKbs).toEqual(tagged);
+});
+
+
+test('rejects task-mode tag filtering without clearing the draft', async () => {
+  const tagged = [{ id: '12', name: 'Space', type: 'space', tag: { id: 7, name: 'Report' } }];
+  const { result } = renderChat('c1');
+  await waitFor(() => expect(result.current.messages).toHaveLength(1));
+  act(() => result.current.setSelectedOrgKbs(tagged));
+  await act(async () => { expect(await result.current.sendMessage('question', [], { taskMode: true })).toBe(false); });
+  expect(mockOpenedStreams).toHaveLength(0);
+  expect(result.current.selectedOrgKbs).toEqual(tagged);
+});
+
+test('blocks image sends at the shared entry when neither vision nor image parsing is available', async () => {
+  mockBsConfig = { models: [{ id: 1, visual: false }], enable_etl4lm: false };
+  const { result } = renderChat('c1');
+  await waitFor(() => expect(result.current.messages).toHaveLength(1));
+  await act(async () => { expect(await result.current.sendMessage('Describe', [{ name: 'image.png', filepath: 'image.png' }])).toBe(false); });
+  expect(mockOpenedStreams).toHaveLength(0);
+  expect(result.current.messages).toHaveLength(1);
+});
+
+test('does not regenerate an image turn with a model that has lost image support', async () => {
+  mockBsConfig = { models: [{ id: 1, visual: false }], enable_etl4lm: false };
+  mockGetAgentMessages.mockResolvedValue([{ ...historyOf('c1')[0], files: [{ name: 'image.png', filepath: 'image.png' }] }]);
+  const { result } = renderChat('c1');
+  await waitFor(() => expect(result.current.messages).toHaveLength(1));
+  await act(async () => { await result.current.regenerate('c1-q'); });
+  expect(mockOpenedStreams).toHaveLength(0);
+  expect(result.current.messages).toHaveLength(1);
+});
+
+
+describe('revoked knowledge scope submission gate', () => {
+    it('keeps the old conversation intact and blocks sending and regenerating', async () => {
+        mockKnowledgeBlocked = true;
+        const { result } = renderChat('retained');
+        await waitFor(() => expect(result.current.messages.length).toBeGreaterThan(0));
+        const originalMessages = result.current.messages;
+        await act(async () => { expect(await result.current.sendMessage('D6-W')).toBe(false); });
+        await act(async () => { await result.current.regenerate('retained-q'); });
+        expect(mockOpenedStreams).toHaveLength(0);
+        expect(result.current.messages).toEqual(originalMessages);
+        expect(result.current.knowledgeAccessMessage).toBe('knowledgeAccess.revoked');
+    });
 });
