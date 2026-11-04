@@ -648,11 +648,6 @@
       "count": 18
     }
   },
-  "src/controllers/API/linsight.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
-    }
-  },
   "src/controllers/API/log.ts": {
     "@typescript-eslint/no-empty-object-type": {
       "count": 1
@@ -696,11 +691,6 @@
   },
   "src/controllers/hooks/knowledge.ts": {
     "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/controllers/request.ts": {
-    "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
   },

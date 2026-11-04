@@ -22,7 +22,7 @@ describe('speech credentials form', () => {
     it('shows speech credentials for a realtime-only provider and hides chat fields', () => {
         const ref = createRef<CustomFormHandle>();
         const config = { speech_app_id: '123', speech_secret_id: 'fixture-id', speech_secret_key: '********' };
-        const { getByText, queryByText } = render(
+        const { getByText } = render(
             <CustomForm ref={ref} showDefault={true} provider="tencent" formData={config} modelTypes={['asr_rt']} />,
         );
         expect(getByText('model.speechCredentials')).toBeTruthy();
