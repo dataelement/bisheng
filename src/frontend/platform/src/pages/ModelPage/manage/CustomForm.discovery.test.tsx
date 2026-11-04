@@ -43,6 +43,17 @@ describe('discovery connection and speech configuration', () => {
     expect(screen.getByLabelText('API Key')).toHaveValue('********');
   });
 
+  it('shows Tencent SecretId and SecretKey beside the API key', () => {
+    const ref = createRef<CustomFormHandle>();
+    render(<CustomForm ref={ref} showDefault={false} provider="tencent" modelTypes={['llm']}
+      formData={{ api_key: 'chat-key', base_url: 'https://tokenhub.tencentmaas.com/v1' }} />);
+    expect(screen.getByLabelText(/SecretId/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/SecretKey/)).toBeInTheDocument();
+    expect(screen.queryByText('model.speechCredentials')).toBeNull();
+    expect(ref.current?.getCatalogError()).toBe('SecretId');
+    expect(ref.current?.getData()[1]).toBe('SecretId');
+  });
+
   it('allows listing when the API key is set and Base URL keeps the vendor default', () => {
     const ref = createRef<CustomFormHandle>();
     render(<CustomForm ref={ref} showDefault={false} provider="tencent" modelTypes={['asr_rt']}

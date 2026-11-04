@@ -63,27 +63,109 @@ async def test_native_presets_are_explicit_and_make_no_network_calls(monkeypatch
 
 async def test_zhipu_preset_speech_row_is_unsupported():
     result = await ModelDiscoveryService.discover("zhipu", {}, source="preset")
-    speech = next(model for model in result["models"] if model["model_name"] == "glm-asr-2512")
-    assert speech["model_type"] is None
-    assert speech["type_source"] == "unsupported"
-    assert "_transports" not in speech
+    rows = {model["model_name"]: model for model in result["models"]}
+    assert rows["glm-asr-2512"]["model_type"] is None
+    assert rows["glm-asr-2512"]["type_source"] == "unsupported"
+    assert rows["glm-tts"]["model_type"] is None
+    assert rows["glm-tts"]["type_source"] == "unsupported"
+    assert "_transports" not in rows["glm-asr-2512"]
 
 
-async def test_tencent_default_lists_tokenhub_models(monkeypatch):
+async def test_zhipu_official_auto_uses_the_preset_catalog(monkeypatch):
+    transport(monkeypatch, lambda request: pytest.fail("official Zhipu auto must not call the partial list"))
+    result = await ModelDiscoveryService.discover("zhipu", {"api_key": "fixture"})
+    assert result["source"] == "preset"
+    assert any(model["model_name"] == "glm-5.3" for model in result["models"])
+
+
+async def test_tencent_catalog_requires_management_credentials(monkeypatch):
+    transport(
+        monkeypatch, lambda request: pytest.fail("missing TokenHub credentials must not call the compatible list")
+    )
+    with pytest.raises(ModelDiscoveryError) as error:
+        await ModelDiscoveryService.discover("tencent", {"api_key": "fixture"})
+    assert error.value.kwargs["reason"] == "credentials"
+
+
+async def test_tencent_describe_model_list_pages_and_types(monkeypatch):
     requests = []
 
     def handler(request):
         requests.append(request)
-        return httpx.Response(200, json={"object": "list", "data": [{"id": "hy3", "object": "model", "name": "Hy3"}]})
+        offset = json.loads(request.content)["Offset"]
+        rows = (
+            [
+                {"ModelId": "hy3", "ModelName": "Hy3", "ModelType": "Text", "DisplayName": "Hy3"},
+                {"ModelId": "hunyuan-embedding", "ModelType": "Embedding"},
+                {"ModelId": "hy-asr-3.0-preview", "ModelType": "Speech"},
+                {"ModelId": "16k_zh", "ModelType": "Speech"},
+                {"ModelId": "z-image-turbo", "ModelType": "Vision"},
+                {"ModelId": "hunyuan-vision", "ModelType": "Vision"},
+            ]
+            if offset == 0
+            else [{"ModelId": "deepseek-v3.2", "ModelType": "Text"}]
+        )
+        return httpx.Response(200, json={"Response": {"ModelSet": rows, "TotalCount": 7}})
 
     transport(monkeypatch, handler)
-    result = await ModelDiscoveryService.discover("tencent", {"api_key": "fixture"})
+    result = await ModelDiscoveryService.discover(
+        "tencent",
+        {"api_key": "chat-key"},
+        options={"secret_id": "secret-id-fixture", "secret_key": "secret-key-fixture"},
+    )
+    assert str(requests[0].url) == "https://tokenhub.tencentcloudapi.com/"
+    assert requests[0].headers["x-tc-action"] == "DescribeModelList"
+    assert requests[0].headers["x-tc-version"] == "2026-03-22"
+    assert requests[0].headers["x-tc-region"] == "ap-guangzhou"
+    assert "secret-key-fixture" not in request_text(requests[0])
+    assert json.loads(requests[1].content)["Offset"] == 100
+    rows = {model["model_name"]: model for model in result["models"]}
+    assert rows["hy3"]["model_type"] == "llm"
+    assert rows["hunyuan-embedding"]["model_type"] == "embedding"
+    assert rows["hy-asr-3.0-preview"]["type_source"] == "unsupported"
+    assert rows["16k_zh"]["model_type"] == "asr_rt"
+    assert rows["z-image-turbo"]["type_source"] == "unsupported"
+    assert rows["hunyuan-vision"]["model_type"] == "llm"
+    assert rows["deepseek-v3.2"]["model_type"] == "llm"
+    assert result["source"] == "live"
+
+
+def request_text(request) -> str:
+    return str(request.url) + str(request.headers) + request.content.decode()
+
+
+async def test_tencent_catalog_uses_saved_speech_credentials(monkeypatch):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(
+            200, json={"Response": {"ModelSet": [{"ModelId": "hy3", "ModelType": "Text"}], "TotalCount": 1}}
+        )
+
+    transport(monkeypatch, handler)
+    result = await ModelDiscoveryService.discover(
+        "tencent",
+        {"api_key": "chat-key", "speech_secret_id": "saved-id", "speech_secret_key": "saved-key"},
+    )
+    assert requests[0].headers["x-tc-action"] == "DescribeModelList"
+    assert "saved-id" in requests[0].headers["authorization"]
+    assert "saved-key" not in request_text(requests[0])
+    assert result["models"][0]["model_name"] == "hy3"
+
+
+async def test_tencent_compatible_list_remains_an_explicit_live_choice(monkeypatch):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={"data": [{"id": "hy3"}]})
+
+    transport(monkeypatch, handler)
+    result = await ModelDiscoveryService.discover("tencent", {"api_key": "fixture"}, source="live")
     assert str(requests[0].url) == "https://tokenhub.tencentmaas.com/v1/models"
     assert requests[0].headers["authorization"] == "Bearer fixture"
-    assert result["source"] == "live"
-    hy3 = result["models"][0]
-    assert hy3["model_name"] == "hy3"
-    assert hy3["model_type"] == "llm"
+    assert result["models"][0]["model_name"] == "hy3"
 
 
 async def test_custom_gateway_failures_never_turn_into_vendor_presets(monkeypatch):
@@ -361,7 +443,7 @@ def test_specialized_models_precede_chat_family_names(name, kind):
     assert identify_type({"id": name})[0] == kind
 
 
-@pytest.mark.parametrize("provider", ["qwen", "volcengine", *sorted(PRESETS)])
+@pytest.mark.parametrize("provider", ["qwen", "volcengine", "spark", "minimax"])
 async def test_auto_uses_existing_key_before_requesting_extra_information(monkeypatch, provider):
     requests = []
 
@@ -392,7 +474,7 @@ async def test_requests_extra_information_only_after_unsupported_list(monkeypatc
     assert len(requests) == 1
 
 
-@pytest.mark.parametrize("provider", ["qwen", "volcengine", "zhipu"])
+@pytest.mark.parametrize("provider", ["qwen", "volcengine"])
 @pytest.mark.parametrize("status,reason", [(401, "auth"), (403, "auth"), (429, "rate_limit"), (500, "failure")])
 async def test_auto_preserves_operational_errors(monkeypatch, provider, status, reason):
     transport(monkeypatch, lambda request: httpx.Response(status))
@@ -401,7 +483,7 @@ async def test_auto_preserves_operational_errors(monkeypatch, provider, status, 
     assert error.value.kwargs["reason"] == reason
 
 
-@pytest.mark.parametrize("provider", sorted(PRESETS))
+@pytest.mark.parametrize("provider", sorted(set(PRESETS) - {"tencent"}))
 async def test_unsupported_official_catalog_uses_labeled_preset(monkeypatch, provider):
     transport(monkeypatch, lambda request: httpx.Response(404))
     result = await ModelDiscoveryService.discover(provider, {"api_key": "fixture"})

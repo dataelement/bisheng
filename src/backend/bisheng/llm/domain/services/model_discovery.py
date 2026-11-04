@@ -10,9 +10,12 @@ import httpx
 from pydantic import BaseModel, Field
 
 from bisheng.common.errcode.llm import ModelDiscoveryError
+from bisheng.core.ai.asr.capabilities import ALI_MODELS, BAIDU_MODELS, TENCENT_MODELS
 
 from .model_discovery_providers import (
+    GENERATION_NAME,
     build_plan,
+    catalog_options,
     next_page,
     prefer_connection_catalog,
     preset_catalog,
@@ -60,6 +63,7 @@ TYPE_ALIASES = {
 # beside that map. These sets decide asr versus asr_rt; model names do not.
 _FILE_ASR_PROVIDERS = frozenset({"openai", "azure_openai", "qwen"})
 _REALTIME_ASR_PROVIDERS = frozenset({"volcengine", "qianfan", "tencent", "qwen"})
+_TTS_PROVIDERS = frozenset({"openai", "azure_openai", "qwen"})
 _REALTIME_TRANSPORTS = frozenset({"websocket", "realtime", "streaming"})
 _FILE_TRANSPORTS = frozenset({"file", "batch"})
 # These names also match the LLM registry (``glm-`` and ``gpt-``). Keeping them
@@ -155,9 +159,9 @@ def identify_type(item: dict) -> tuple[str | None, str]:
     if re.match(
         r"^(?:gpt-image|dall-e|flux|stable-diffusion|sora|glm-image|cogview|cogvideox|doubao-seedream|doubao-seedance|gemini[^/]*-image)",
         name,
-    ):
+    ) or GENERATION_NAME.search(name):
         return None, "unsupported"
-    if _LLM_SHADOWED_SPEECH_NAMES.match(name):
+    if _LLM_SHADOWED_SPEECH_NAMES.match(name) or _SPEECH_NAME.search(name):
         return None, "unknown"
     registry = (
         ("rerank", r"^(?:bge-reranker|qwen3-reranker|rerank|jina-reranker)"),
@@ -168,7 +172,7 @@ def identify_type(item: dict) -> tuple[str | None, str]:
         ("tts", r"^(?:glm-tts|tts-1|cosyvoice|gpt-4o-mini-tts|qwen[^/]*-tts|gemini[^/]*-tts)"),
         (
             "llm",
-            r"^(?:gpt-|chatgpt-|o[134](?:-|$)|claude-|deepseek-(?:chat|reasoner|flash|pro|coder|r\d|v\d)|qwen(?:[0-9.]+)?-(?:turbo|plus|max|chat|\d+(?:\.\d+)?b|coder|vl|omni|next|instruct|flash|thinking)|doubao-(?:\d+(?:[-.]\d+)*-)?(?:seed(?:[-.]|$)|pro|lite|vision|thinking|ui-tars)|gemini-[\d.]|llama[\d.-]*|gemma[\d.-]*|mistral|mixtral|moonshot-|kimi-|glm-|minimax-m|hunyuan-|hy\d|hy-)",
+            r"^(?:gpt-|chatgpt-|o[134](?:-|$)|claude-|deepseek-(?:chat|reasoner|flash|pro|coder|r\d|v\d)|qwen(?:[0-9.]+)?-(?:turbo|plus|max|chat|\d+(?:\.\d+)?b|coder|vl|omni|next|instruct|flash|thinking)|doubao-(?:\d+(?:[-.]\d+)*-)?(?:seed(?:[-.]|$)|pro|lite|vision|thinking|ui-tars)|gemini-[\d.]|llama[\d.-]*|gemma[\d.-]*|mistral|mixtral|moonshot-|kimi-|glm-|minimax-m|hunyuan-|hy\d|hy-(?!asr))",
         ),
     )
     for kind, pattern in registry:
@@ -220,20 +224,42 @@ def _compatible_speech_transports(model_name: str) -> set[str] | None:
     return {"file"}
 
 
+def _registered_realtime(provider: str, model_name: str) -> bool:
+    if provider == "qwen":
+        return model_name in ALI_MODELS
+    if provider == "qianfan":
+        return model_name in BAIDU_MODELS
+    if provider == "tencent":
+        return model_name in TENCENT_MODELS
+    return provider == "volcengine" and model_name == "bigmodel"
+
+
 def assign_speech_type(model: dict, provider: str) -> None:
     """Rewrite the internal speech marker using the real provider, not catalog names."""
+    _assign_speech_type(model, provider)
+    name = str(model.get("model_name") or "")
+    if model.get("model_type") == "asr_rt" and provider in {"qwen", "qianfan", "tencent", "volcengine"}:
+        if not _registered_realtime(provider, name):
+            model["model_type"] = None
+            model["type_source"] = "unsupported"
+
+
+def _assign_speech_type(model: dict, provider: str) -> None:
     transports = set(model.pop("_transports", ()))
+    if model.get("model_type") == "tts" and provider not in _TTS_PROVIDERS:
+        model["model_type"] = None
+        model["type_source"] = "unsupported"
+        return
     named = None
-    if (
-        model.get("model_type") is None
-        and model.get("type_source") == "unknown"
-        and provider in _FILE_ASR_PROVIDERS & _REALTIME_ASR_PROVIDERS
-    ):
+    if model.get("model_type") is None and model.get("type_source") == "unknown":
         named = _compatible_speech_transports(str(model.get("model_name") or ""))
-        if named is not None:
+        if named is not None and provider in _FILE_ASR_PROVIDERS | _REALTIME_ASR_PROVIDERS:
             model["model_type"] = "asr"
             model["type_source"] = "metadata"
             transports |= named
+        elif named is not None:
+            model["type_source"] = "unsupported"
+            return
     if model.get("model_type") != "asr" or model.get("type_source") != "metadata":
         return
     realtime = bool(set(transports) & _REALTIME_TRANSPORTS)
@@ -359,6 +385,7 @@ class ModelDiscoveryService:
 
     @classmethod
     async def _fetch_catalog(cls, provider: str, config: dict, source: str, options: dict) -> dict:
+        options = catalog_options(provider, config, options)
         plan = build_plan(provider, config, source, options)
         if plan.protocol == "preset":
             payload, docs = preset_catalog(provider)

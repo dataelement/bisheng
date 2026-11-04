@@ -31,6 +31,15 @@ import {
 
 import { ModelDiscoveryOptions } from "./ModelDiscoveryOptions";
 
+const manualSpeechProviders = new Set([
+  "volcengine",
+  "qianfan",
+  "tencent",
+  "zhipu",
+  "spark",
+  "minimax",
+]);
+
 interface ModelDiscoveryProps {
   provider: string;
   connectionVersion: number;
@@ -264,6 +273,11 @@ export function ModelDiscovery({
               options={options}
               onChange={handleOptionsChange}
             />
+            {manualSpeechProviders.has(provider) && (
+              <p className="text-xs text-muted-foreground">
+                {t("model.discoverySpeechManual")}
+              </p>
+            )}
             {resultInfo && (
               <div role="status" className="text-xs text-muted-foreground">
                 <p>
@@ -469,7 +483,9 @@ export function ModelDiscovery({
                           {t(
                             type
                               ? `model.type_${type}`
-                              : "model.unknownModelType",
+                              : model.type_source === "unsupported"
+                                ? "model.discoveryAdapterBadge"
+                                : "model.unknownModelType",
                           )}
                         </span>
                       )}
