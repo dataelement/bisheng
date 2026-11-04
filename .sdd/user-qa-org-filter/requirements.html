@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>需求稿 · 用户与问答的所属组织筛选</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#202733;--sub:#515d6d;--line:#dce2eb;--accent:#245bb1;--ok:#17683b;--warn:#8a4b00}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  a{color:var(--accent)}
+  .wrap{max-width:1060px;margin:auto;padding:28px 24px 72px}
+  .hero{background:#164789;color:#fff;padding:28px;border-radius:16px;margin-bottom:20px}
+  h1{margin:0 0 8px;font-size:26px;line-height:1.4}
+  .meta{font-size:13px;margin:0 0 6px}
+  .card,.toc{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:24px;margin:0 0 20px}
+  h2{font-size:21px;margin:0 0 8px} h3{font-size:16px;margin:22px 0 8px}
+  .lead{color:var(--sub);font-size:13px;margin:0 0 14px}
+  table{border-collapse:collapse;width:100%;min-width:720px;font-size:13px}
+  .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin:12px 0}
+  th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{background:#f0f3f8}
+  code{font:12px/1.6 ui-monospace,Menlo,Consolas,monospace;background:#f0f3f8;padding:1px 4px;border-radius:4px}
+  .callout{border-left:4px solid var(--accent);background:#f1f5fc;padding:12px 16px;margin:14px 0}
+  .callout.ok{border-color:var(--ok);background:#eff8f2}
+  .callout.warn{border-color:var(--warn);background:#fff8ef}
+  .tag{display:inline-block;border-radius:999px;padding:0 8px;font-size:12px;background:#edf3ff;color:var(--accent)}
+  .toc ol{columns:2;margin:0;padding-left:20px}
+  svg{max-width:100%;height:auto}
+  @media(max-width:680px){.toc ol{columns:1}.wrap{padding:16px 12px 48px}}
+  @media print{body{background:#fff}.hero{background:#fff;color:#111;border:1px solid #777} .card{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero">
+  <h1>用户与问答的所属组织筛选</h1>
+  <p class="meta">版本 1.0 · 2026-11-03 · 状态：需求已闭环 · 项目：毕昇平台数据看板 · 标识 USER-QA-ORG</p>
+  <p class="meta">来源：2026-11-03 对话。用户先确认人员主部门口径，再选择「只补两个数据集的三列」。</p>
+  <p class="meta">确认依据：2026-11-03 用户对版本 0.9 回复「确认」。确认内容是当时这份需求稿的规则、范围和验收条件，不含技术设计。</p>
+</header>
+<nav class="toc card">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#s1">背景与问题</a></li>
+    <li><a href="#s2">目标与指标</a></li>
+    <li><a href="#s3">范围</a></li>
+    <li><a href="#s4">用户场景与流程</a></li>
+    <li><a href="#s5">功能需求</a></li>
+    <li><a href="#s6">非功能与依赖</a></li>
+    <li><a href="#s7">数据与埋点</a></li>
+    <li><a href="#s8">验收标准</a></li>
+    <li><a href="#s9">风险与回滚</a></li>
+    <li><a href="#s10">变更记录</a></li>
+  </ol>
+</nav>
+
+<section class="card" id="s1">
+  <h2>1. 背景与问题</h2>
+  <div class="callout ok">
+    <strong>四维结论（本版）。</strong>
+    合理：成立。闭环：成立。边界：成立。可验收：成立。未解决阻塞：无。版本 1.0 已由用户确认。
+  </div>
+  <p>看板查看者用「所属公司、所属部门、所属科室」缩小图表。2026-11-03 查阅 171 库 <code>bisheng.dashboard</code>、<code>dashboard_component</code>、<code>dashboard_dataset</code>：这三个名称只存在于数据集「知识空间内容统计」。用户图和问答图的数据集没有同名字段，筛选被跳过，数字不变。</p>
+  <p>这是观察，不是线上页面复测。已发布看板「统计看板」（id=10）上的「总用户数」「新增用户数」因此不受这三个筛选控制。实时问答图同样不受控制。</p>
+  <p>内容统计里的这三列表示文件登记组织 <code>belonging_organization_id</code> 沿部门路径展开。用户统计和问答统计的行不是文件。用户已确认：这两类改按该行人员当时的唯一主部门展开，内容统计的文件口径不改。</p>
+</section>
+
+<section class="card" id="s2">
+  <h2>2. 目标与指标</h2>
+  <p>看板编辑者能在「用户数据统计」和「实时问答统计」里使用所属公司、所属部门、所属科室。已经关联到该图、并且带上这三个字段的筛选，按人员主部门缩小该图。没有选组织时，图与上线前一致。</p>
+  <div class="table-wrap"><table>
+    <caption>目标指标</caption>
+    <thead><tr><th>名称</th><th>口径</th><th>基线</th><th>目标</th><th>观察</th><th>来源</th></tr></thead>
+    <tbody>
+      <tr><td>规则符合率</td><td>第 8 节验收条件全部可观察通过</td><td>无历史测量。当前用户图和问答图没有这三列，筛选不生效。</td><td>所列 AC 均通过</td><td>开发验证与独立验收各一次</td><td>本需求。无点击率、时延或转化目标</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="card" id="s3">
+  <h2>3. 范围</h2>
+  <div class="table-wrap"><table>
+    <caption>范围</caption>
+    <thead><tr><th>类别</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td>包含，一期，P0</td><td>数据集「用户数据统计」「实时问答统计」增加所属公司、所属部门、所属科室。取值规则、筛选生效规则、空组织规则、历史行回刷后的可观察结果。</td></tr>
+      <tr><td>角色</td><td>已能查看该看板的登录用户查看结果。已能编辑该看板的用户配置维度和筛选。不新增角色，不改变谁能看哪张看板。</td></tr>
+      <tr><td>排除</td><td>知识空间内容统计的文件所属口径。组合筛选跨数据集勾图。自动改已保存看板的筛选关联。应用、会话、模型调用、知识库存量、用户反馈、文件解析。所属班组。打开看板时按人的当前部门重算。</td></tr>
+      <tr><td>未定，不承诺</td><td>一张组合筛选同时控制文件图、用户图和问答图。本次明确不做，也不排进二期。</td></tr>
+    </tbody>
+  </table></div>
+  <p>P0 表示本期必须一起交付。没有二期。</p>
+  <div class="callout">
+    <strong>已确认决定。</strong>
+    2026-11-03 用户确认人员主部门口径。同日在「只补两个数据集的三列」和「同时改组合筛选跨数据集」中选择前者。
+  </div>
+</section>
+
+<section class="card" id="s4">
+  <h2>4. 用户场景与流程</h2>
+  <h3>主路径</h3>
+  <p>编辑者在用户图或问答图上配置筛选，筛选项为所属部门，并关联到该图。查看者打开看板，选中「制造部」。该图只统计主部门路径上部门一级是「制造部」的人。未关联此筛选的图不变。内容统计图若使用自己的所属部门筛选，仍按文件登记组织，不按提问人或用户的主部门。</p>
+  <svg viewBox="0 0 880 120" role="img" aria-labelledby="flowTitle flowDesc">
+    <title id="flowTitle">筛选主路径</title>
+    <desc id="flowDesc">编辑者把所属部门关联到用户图或问答图，查看者选中部门后只剩主部门匹配的人，未关联的图保持原数。</desc>
+    <rect x="8" y="28" width="150" height="64" rx="8" fill="#edf3ff" stroke="#245bb1"/>
+    <text x="83" y="56" text-anchor="middle" font-size="13">编辑者关联</text>
+    <text x="83" y="76" text-anchor="middle" font-size="13">所属部门</text>
+    <rect x="198" y="28" width="150" height="64" rx="8" fill="#edf3ff" stroke="#245bb1"/>
+    <text x="273" y="56" text-anchor="middle" font-size="13">查看者选中</text>
+    <text x="273" y="76" text-anchor="middle" font-size="13">制造部</text>
+    <rect x="388" y="28" width="170" height="64" rx="8" fill="#eff8f2" stroke="#17683b"/>
+    <text x="473" y="56" text-anchor="middle" font-size="13">用户图或问答图</text>
+    <text x="473" y="76" text-anchor="middle" font-size="13">只留匹配的人</text>
+    <rect x="598" y="28" width="180" height="64" rx="8" fill="#f7f8fa" stroke="#515d6d"/>
+    <text x="688" y="56" text-anchor="middle" font-size="13">未关联的图</text>
+    <text x="688" y="76" text-anchor="middle" font-size="13">数字不变</text>
+    <path d="M158 60 H198 M348 60 H388" stroke="#245bb1" marker-end="url(#arrow)"/>
+    <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#245bb1"/></marker></defs>
+  </svg>
+  <h3>不选组织</h3>
+  <p>查看者不选公司、部门、科室。用户图和问答图不按组织缩小，有组织和组织为空的行都保留。结束状态与上线前未筛选时一致。</p>
+  <h3>组织为空</h3>
+  <p>某人没有唯一主部门，或主部门已停用、已删除、不属于该行租户。三列为空。按所属部门分组时，这些行显示在「未分类」。查看者选了具体部门后，这些行不进入该图。</p>
+  <h3>内容统计不受影响</h3>
+  <p>文件图继续按文件登记组织筛选。同一次看板上，用户图按人的主部门缩小，文件图按文件所属缩小。两边都叫「制造部」时，只要求名称相同的行各自命中，不要求同一个人的文件和提问落到同一部门。</p>
+</section>
+
+<section class="card" id="s5">
+  <h2>5. 功能需求</h2>
+
+  <h3 id="REQ-UQ-001">REQ-UQ-001 两个数据集提供三列</h3>
+  <p>优先级 P0，一期。来源：用户要求为用户和问答加上这三列，并选择只补数据集、不改组合筛选的跨数据集限制。</p>
+  <p>入口是看板数据集的维度列表，以及已关联到该数据集图表的筛选。适用数据集仅「用户数据统计」「实时问答统计」。</p>
+  <div class="table-wrap"><table>
+    <caption>维度字段</caption>
+    <thead><tr><th>名称</th><th>业务含义</th><th>类型</th><th>必填</th><th>范围</th><th>默认值</th><th>校验</th><th>来源</th></tr></thead>
+    <tbody>
+      <tr><td>所属公司</td><td>该行人员主部门路径上，第一个有效公司的部门全称</td><td>文本</td><td>条件必填：路径上有有效公司时有值，否则空</td><td>与组织节点全称一致，不写简称</td><td>空</td><td>筛选值使用组织节点全称。展示简称沿用现有组织筛选，不另定规则</td><td>该行已确定的主部门，沿部门路径展开</td></tr>
+      <tr><td>所属部门</td><td>路径上第一个有效部门的全称</td><td>文本</td><td>条件必填：路径上有有效部门时有值，否则空</td><td>同上</td><td>空</td><td>同上</td><td>同上</td></tr>
+      <tr><td>所属科室</td><td>路径上第一个有效科室的全称</td><td>文本</td><td>条件必填：路径上有有效科室时有值，否则空</td><td>同上</td><td>空</td><td>同上</td><td>同上</td></tr>
+    </tbody>
+  </table></div>
+  <p>筛选组件发出的字段标识与知识空间内容统计已使用的标识相同：<code>belonging_company_name</code>、<code>belonging_department_name</code>、<code>belonging_office_name</code>。用户图和问答图必须认识这三个标识，关联筛选才不会被跳过。存储用同名列还是对照已有提问人列，由技术设计决定，不改变上面的可见结果。</p>
+  <p>主部门挂在科室或班组上时，所属部门仍取路径上的上级部门。路径上没有部门这一级时，所属部门为空，不把科室名称写入所属部门。</p>
+  <p>关联验收：<a href="#AC-UQ-001">AC-UQ-001</a>、<a href="#AC-UQ-002">AC-UQ-002</a>。</p>
+
+  <h3 id="REQ-UQ-002">REQ-UQ-002 取值用该行人员当时的唯一主部门</h3>
+  <p>优先级 P0，一期。来源：2026-11-03 用户确认的口径。</p>
+  <div class="table-wrap"><table>
+    <caption>三列如何取值</caption>
+    <thead><tr><th>行</th><th>用哪个部门</th><th>三列结果</th></tr></thead>
+    <tbody>
+      <tr><td>问答行</td><td>该提问已经记下的主部门。不在打开看板或再次回刷时改成这个人今天的主部门</td><td>按该主部门的路径展开。已记下的提问人公司、部门、科室与这三列相同</td></tr>
+      <tr><td>用户参与度行</td><td>该行已经记下的 <code>primary_department_id</code></td><td>按这个部门的路径展开。不在回刷时替换成今天的主部门</td></tr>
+      <tr><td>新增用户行</td><td>写入该行时的唯一主部门</td><td>按写入时的主部门展开</td></tr>
+      <tr><td>已存在、且从未记过主部门的新增用户旧行</td><td>没有注册当时的部门快照</td><td>回刷时使用回刷执行那一刻的唯一主部门。这是事实约束：旧的注册时点无法还原</td></tr>
+      <tr><td>主部门零条或多条</td><td>没有唯一主部门</td><td>三列都空</td></tr>
+      <tr><td>主部门已停用、已删除，或不属于该行租户</td><td>部门不能用</td><td>三列都空</td></tr>
+    </tbody>
+  </table></div>
+  <p>不使用新增用户行上的部门列表代替唯一主部门。部门列表里有多个部门、但主部门不唯一时，三列仍为空。</p>
+  <p>用户统计索引里有新增用户文档和参与度文档。两类文档都要能带上这三列。只给其中一类补值时，不满足本需求。</p>
+  <p>关联验收：<a href="#AC-UQ-002">AC-UQ-002</a>、<a href="#AC-UQ-003">AC-UQ-003</a>、<a href="#AC-UQ-007">AC-UQ-007</a>。</p>
+
+  <h3 id="REQ-UQ-003">REQ-UQ-003 已关联的筛选才缩小图表</h3>
+  <p>优先级 P0，一期。来源：用户选择「只补两个数据集的三列」。</p>
+  <div class="table-wrap"><table>
+    <caption>筛选是否作用到这张图</caption>
+    <thead><tr><th>筛选是否关联到该图</th><th>是否带了这三列中的已选值</th><th>该图数据集</th><th>结果</th></tr></thead>
+    <tbody>
+      <tr><td>否</td><td>任意</td><td>任意</td><td>该图不按这三列缩小</td></tr>
+      <tr><td>是</td><td>某一列选了一个或多个组织</td><td>用户数据统计或实时问答统计</td><td>该列按「或」匹配，列与列之间按「且」同时满足。组织为空的行不进入结果</td></tr>
+      <tr><td>是</td><td>三列都没有选中值</td><td>同上</td><td>不按组织缩小，空组织行保留</td></tr>
+      <tr><td>是</td><td>带了这三列</td><td>知识空间内容统计</td><td>仍按文件登记组织。本需求不改变该结果</td></tr>
+      <tr><td>是</td><td>带了这三列</td><td>没有这三列的其他数据集</td><td>该条件继续被跳过，图不报错，数字不因这三列改变</td></tr>
+    </tbody>
+  </table></div>
+  <p>组合筛选仍然只能勾与它同一个数据集的图。内容统计上已有的组合筛选，配置界面里仍然看不到用户图和问答图。查询组件仍可关联不同数据集的图；它发出的这三列，只在认识这三个字段的图上生效。</p>
+  <p>本次不修改任何已保存看板的关联名单。编辑者需要自己把筛选关联到用户图或问答图，查看者才会看到缩小后的数。</p>
+  <p>关联验收：<a href="#AC-UQ-004">AC-UQ-004</a>、<a href="#AC-UQ-005">AC-UQ-005</a>、<a href="#AC-UQ-006">AC-UQ-006</a>。</p>
+
+  <h3>异常</h3>
+  <div class="table-wrap"><table>
+    <caption>异常适用性</caption>
+    <thead><tr><th>类型</th><th>适用结果</th></tr></thead>
+    <tbody>
+      <tr><td>失败</td><td>适用。统计投影尚未写入三列时，选了具体组织的用户图或问答图不把缺列的行算进去，也不弹新的错误提示。未选组织时，这些行仍按原指标计入。</td></tr>
+      <tr><td>超时</td><td>不适用。不新增打开看板时的组织查询，没有新的等待结束状态。</td></tr>
+      <tr><td>并发</td><td>不适用新规则。人在统计写入期间调部门时，该行保留本次写入已经确定的主部门。不新增「谁后写入谁成功」的看板提示。</td></tr>
+      <tr><td>重复提交</td><td>适用。同一批统计重复回刷，同一行的三列仍按 REQ-UQ-002 的部门计算，不新增多余的人，也不把空组织写成「未分类」三个字。</td></tr>
+      <tr><td>权限不足</td><td>不适用新规则。看不到该看板的人仍然看不到。本需求不新增拒绝文案，不改变授权结果。</td></tr>
+      <tr><td>空数据</td><td>适用。选中的组织没有任何匹配行时，图为空结果，展示沿用该图表现有的空状态，不新增文案。</td></tr>
+      <tr><td>边界值</td><td>适用。主部门零条、多条、停用、删除、跨租户，三列为空。路径只有公司、没有部门时，所属部门为空，所属公司可以有值。分组时空值显示「未分类」，该词只出现在展示和导出，不写入统计数据。</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="card" id="s6">
+  <h2>6. 非功能与依赖</h2>
+  <div class="table-wrap"><table>
+    <caption>非功能</caption>
+    <thead><tr><th>项</th><th>要求</th><th>验证</th></tr></thead>
+    <tbody>
+      <tr><td>性能</td><td>不新增打开看板时查询人员当前部门。筛选仍是统计结果上的条件。不设定新的时延数字，因为没有基线承诺。</td><td>AC-UQ-004 的查询不依赖现场读取组织树来计算每一行</td></tr>
+      <tr><td>权限</td><td>不改变看板、数据集和图表的现有授权。</td><td>无新权限用例。原不能打开看板的人仍不能打开</td></tr>
+      <tr><td>安全与隐私</td><td>三列是部门全称，与现有组织筛选相同。日志不写筛选请求里的令牌。</td><td>代码审核检查新增日志</td></tr>
+      <tr><td>合规</td><td>不适用新的合规义务。没有新的外部披露对象。</td><td>无单独验收</td></tr>
+      <tr><td>可观测</td><td>用户统计回刷需要能区分已写入三列和尚未写入。具体日志字段由技术设计定，必须能判断回刷是否覆盖新增用户和参与度两类文档。</td><td>设计评审核对回刷结果可检查</td></tr>
+      <tr><td>发布</td><td>无灰度开关。一次发布代码。用户图要等用户统计回刷完成后，选中的组织才覆盖旧行。问答行若已有提问人三级，不依赖这次用户回刷。</td><td>AC-UQ-007</td></tr>
+    </tbody>
+  </table></div>
+  <div class="table-wrap"><table>
+    <caption>依赖</caption>
+    <thead><tr><th>依赖</th><th>用途</th><th>可用条件</th><th>阻塞</th></tr></thead>
+    <tbody>
+      <tr><td><code>user_department</code></td><td>读唯一主部门</td><td>已有 <code>user_id</code>、<code>department_id</code>、<code>is_primary</code></td><td>无新表结构。主部门不唯一时按空处理，不阻塞发布</td></tr>
+      <tr><td><code>department</code></td><td>读路径和层级，展开三级全称</td><td>已有 <code>id</code>、<code>name</code>、<code>path</code>、<code>org_level</code>、<code>status</code></td><td>同上</td></tr>
+      <tr><td><code>user</code></td><td>沿用现有新增用户同步</td><td>现有同步可读</td><td>不新增来源</td></tr>
+      <tr><td>问答现有投影</td><td>提问人三级已经按主部门写下</td><td>行上已有提问人公司、部门、科室时直接使用</td><td>没有这三列的旧提问，在选中组织时不计入，见 AC-UQ-007</td></tr>
+      <tr><td>用户统计索引 <code>mid_user_engagement_stat</code></td><td>新增用户和参与度文档写入三列</td><td>回刷任务可运行</td><td>回刷未完成时，缺列旧行在选中组织后不计入</td></tr>
+      <tr><td><code>dashboard_dataset</code> 的数据集定义</td><td>两个数据集声明这三列</td><td>现有数据集种子可更新定义</td><td>定义未更新时，筛选仍跳过这些图</td></tr>
+    </tbody>
+  </table></div>
+  <p>无 MySQL 新表，无加列。因此没有新的库表中文 COMMENT。若技术设计改为在 MySQL 加列，该决定超出本需求，需重新确认。</p>
+</section>
+
+<section class="card" id="s7">
+  <h2>7. 数据与埋点</h2>
+  <p>三列属于统计投影，不新增业务埋点。不把部门全称写进新的埋点示例。</p>
+  <div class="table-wrap"><table>
+    <caption>数据归属</caption>
+    <thead><tr><th>数据</th><th>归属</th><th>生命周期</th><th>隐私</th></tr></thead>
+    <tbody>
+      <tr><td>人员主部门及路径</td><td>组织主数据，统计只读</td><td>随组织变更。已写入统计行的部门不因后来调部门自动改写，规则见 REQ-UQ-002</td><td>部门名称，现有看板已展示</td></tr>
+      <tr><td>用户统计三列</td><td>用户统计投影</td><td>随该统计行写入和回刷更新。删除人员不在本需求单独规定</td><td>同上</td></tr>
+      <tr><td>问答三列</td><td>问答统计投影</td><td>与该提问已记下的提问人组织一致。不因后来调部门改写</td><td>同上</td></tr>
+      <tr><td>文件所属三列</td><td>知识空间内容统计</td><td>保持现有文件登记组织规则</td><td>本需求不改</td></tr>
+    </tbody>
+  </table></div>
+  <p>分组展示的「未分类」不是存储值。统计数据里空着的字段继续为空。</p>
+</section>
+
+<section class="card" id="s8">
+  <h2>8. 验收标准</h2>
+  <div class="table-wrap"><table>
+    <caption>验收条件</caption>
+    <thead><tr><th>标识</th><th>对应需求</th><th>前提</th><th>动作</th><th>预期</th></tr></thead>
+    <tbody>
+      <tr id="AC-UQ-001"><td>AC-UQ-001</td><td>REQ-UQ-001</td><td>编辑者能配置这两个数据集</td><td>打开维度列表</td><td>两个数据集都有所属公司、所属部门、所属科室。其他数据集不因此多出这三列</td></tr>
+      <tr id="AC-UQ-002"><td>AC-UQ-002</td><td>REQ-UQ-001、REQ-UQ-002</td><td>某人唯一主部门是科室，路径上有公司「首钢」和部门「制造部」，科室全称「轧钢科」</td><td>查看该人的用户行和提问行</td><td>所属公司是「首钢」，所属部门是「制造部」，所属科室是「轧钢科」。三列都是全称</td></tr>
+      <tr id="AC-UQ-003"><td>AC-UQ-003</td><td>REQ-UQ-002</td><td>某人无主部门、有两条主部门，或主部门已停用、已删除、不属于该行租户</td><td>分别查看这些行</td><td>每种情况三列都空。按所属部门分组时显示「未分类」。统计数据中不出现「未分类」这三个字</td></tr>
+      <tr id="AC-UQ-004"><td>AC-UQ-004</td><td>REQ-UQ-003</td><td>用户图已关联所属部门筛选。一人所属部门是「制造部」，另一人三列为空，第三人是「设备部」</td><td>查看者选中「制造部」</td><td>只计入「制造部」这个人。空组织和「设备部」不计入。取消选择后，三人都回到原指标</td></tr>
+      <tr id="AC-UQ-005"><td>AC-UQ-005</td><td>REQ-UQ-003</td><td>同一人所属公司是「首钢」、所属部门是「制造部」。问答图同时关联这两列</td><td>两列都选中对应值；再把部门改成「设备部」</td><td>两列都匹配时该提问计入。部门不匹配时不计入。只选一列时，另一列不额外限制</td></tr>
+      <tr id="AC-UQ-006"><td>AC-UQ-006</td><td>REQ-UQ-003</td><td>内容统计组合筛选只关联了内容统计图。另有一张用户图未关联任何所属筛选。一张应用图关联了带这三列的查询组件</td><td>选中「制造部」</td><td>内容统计图仍按文件所属变化。用户图不变。应用图不报错，也不因这三列变化。组合筛选的可选图里仍然没有用户图</td></tr>
+      <tr id="AC-UQ-007"><td>AC-UQ-007</td><td>REQ-UQ-002</td><td>存在回刷前没有三列的新增用户旧行，以及已经记下提问人部门的问答行。另有一条参与度行，其记下的主部门不是该人今天的主部门</td><td>执行规定的回刷后，再按所属部门筛选</td><td>旧新增用户行使用回刷当时的唯一主部门，没有唯一主部门则保持为空且筛选时不计入。问答行仍是原来的提问人部门，不改成今天的主部门。参与度行按它已经记下的主部门展开，不改成今天的主部门</td></tr>
+      <tr id="AC-UQ-008"><td>AC-UQ-008</td><td>REQ-UQ-002</td><td>用户图指标「总用户数」会同时看到新增用户文档和参与度文档</td><td>只给其中一类文档写入「制造部」，另一类缺列，然后按所属部门选「制造部」</td><td>这不等于交付完成。交付要求两类文档都能按同一规则写出三列。本条用来防止只补一类文档</td></tr>
+    </tbody>
+  </table></div>
+  <p>非功能里的权限、性能和发布，分别由「无新权限变更」、AC-UQ-004 不在打开时重算、以及 AC-UQ-007 的回刷结果覆盖。独立验收的页面步骤不在本文档里执行。</p>
+</section>
+
+<section class="card" id="s9">
+  <h2>9. 风险与回滚</h2>
+  <div class="table-wrap"><table>
+    <caption>风险</caption>
+    <thead><tr><th>标识</th><th>风险</th><th>触发</th><th>影响</th><th>应对</th></tr></thead>
+    <tbody>
+      <tr><td>RISK-UQ-01</td><td>同一筛选名称在文件图和人员图上不是同一件事</td><td>查看者以为选「制造部」后，文件、用户、提问都按文件所属部门缩小</td><td>文件图按文件登记组织，用户图和问答图按人的主部门。名称相同才会各自命中</td><td>本需求接受这个差异，并在 AC-UQ-006 固定文件图口径不变。不在图表上新增解释文案</td></tr>
+      <tr><td>RISK-UQ-02</td><td>新增用户旧行没有注册当时的部门</td><td>回刷历史新增用户</td><td>旧行用回刷当时的主部门，调过部门的人不会回到注册时的部门</td><td>作为事实约束写入 REQ-UQ-002，不承诺还原历史</td></tr>
+      <tr><td>RISK-UQ-03</td><td>回刷未完成就按组织筛选</td><td>代码已发布，用户索引旧行还没有三列</td><td>选中组织后，缺列的人暂时不计入</td><td>发布说明要求回刷两类用户文档。完成前不以筛选结果作为正式人数</td></tr>
+    </tbody>
+  </table></div>
+  <p>没有灰度开关。发布代码后，未选组织的图应与发布前一致。回滚代码后，筛选再次跳过没有这三列的数据集；已经写进统计索引的名称可以留下，不要求删字段。回滚不自动改写已保存看板。</p>
+  <p>监测与暂停：回刷结果必须能核对新增用户文档和参与度文档是否都写了三列。核对失败则不把该环境的筛选结果当作 AC-UQ-007 通过。不设自动停机阈值。</p>
+</section>
+
+<section class="card" id="s10">
+  <h2>10. 变更记录</h2>
+  <div class="table-wrap"><table>
+    <caption>版本</caption>
+    <thead><tr><th>版本</th><th>日期</th><th>变更</th><th>受影响需求</th><th>依据</th></tr></thead>
+    <tbody>
+      <tr><td>0.9</td><td>2026-11-03</td><td>首版评审稿</td><td>REQ-UQ-001 至 REQ-UQ-003，AC-UQ-001 至 AC-UQ-008</td><td>用户确认人员主部门口径，并选择只补两个数据集</td></tr>
+      <tr><td>1.0</td><td>2026-11-03</td><td>用户确认 0.9，状态改为需求已闭环。规则正文未改</td><td>同上</td><td>用户回复「确认」</td></tr>
+    </tbody>
+  </table></div>
+  <h3>四问自检</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>问题</th><th>结果</th></tr></thead>
+    <tbody>
+      <tr><td>研发能否不问就进入技术设计</td><td>业务规则、范围、字段和异常已写明。存储用同名列还是对照提问人列，留给设计，不在本需求里猜实现。不能据此直接编码。</td></tr>
+      <tr><td>测试能否写用例</td><td>AC 含主路径、空组织、多列并且、未关联、文件图不变、旧行回刷。页面验收步骤留待用例文档。</td></tr>
+      <tr><td>业务方能否说出上线换来什么</td><td>用户图和问答图可以被所属公司、部门、科室按人的主部门缩小。现有内容统计筛选不会自动控这些图。</td></tr>
+      <tr><td>三个月后能否看懂原因</td><td>第 1 节记录了 171 上字段缺失。第 3 节记录了不改跨数据集组合筛选的选择。第 9 节记录了文件口径和人员口径同名不同义。</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout ok">版本 1.0 已确认。后续设计变更如果改变本文规则，需要重新确认需求。</div>
+</section>
+</div>
+</body>
+</html>

@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>技术设计 · 用户与问答的所属组织筛选</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#202733;--sub:#515d6d;--line:#dce2eb;--accent:#245bb1;--weak:#edf3ff;--ok:#17683b;--warn:#8a4b00}
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;overflow-wrap:anywhere}
+  a{color:var(--accent);text-underline-offset:3px}
+  .wrap{max-width:1060px;margin:auto;padding:28px 24px 72px}
+  #progress{position:fixed;inset:0 auto auto 0;height:3px;background:var(--accent);width:0;z-index:20}
+  .hero{background:linear-gradient(135deg,#164789,#285eae);color:#fff;padding:28px;border-radius:16px;margin-bottom:20px}
+  h1{margin:0 0 8px;font-size:27px;line-height:1.45}
+  .meta{font-size:13px;margin:0 0 16px}
+  .summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  .summary-grid .item{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);padding:12px 14px;border-radius:10px}
+  .item b{display:block;font-size:12px;margin-bottom:4px}
+  .item p{font-size:14px;margin:0}
+  .toc,.card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:24px;margin:0 0 20px}
+  .toc h2{font-size:15px;margin:0 0 10px}
+  .toc ol{columns:2;column-gap:32px;padding-left:22px;margin:0}
+  .toc li{break-inside:avoid;margin:3px 0}
+  .toolbar{display:flex;flex-wrap:wrap;gap:9px;margin:14px 0 0}
+  button{font:inherit;font-size:13px;padding:7px 13px;min-height:38px;color:var(--accent);background:#fff;border:1px solid #b9c9e4;border-radius:8px;cursor:pointer}
+  h2{font-size:21px;line-height:1.5;margin:0 0 6px}
+  h3{font-size:16px;line-height:1.6;margin:23px 0 8px}
+  .lead,.hint{color:var(--sub);font-size:13px}
+  p{margin:10px 0}
+  .callout{border-left:4px solid var(--accent);background:#f1f5fc;padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0}
+  .callout.warn{border-color:var(--warn);background:#fff8e9}
+  .callout.ok{border-color:var(--ok);background:#eff8f2}
+  .table-wrap{overflow-x:auto;max-width:100%;margin:12px 0;border:1px solid var(--line);border-radius:8px}
+  table{border-collapse:collapse;width:100%;min-width:700px;font-size:13px}
+  th,td{text-align:left;vertical-align:top;padding:10px 12px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+  th{background:#f0f3f8}
+  tr:last-child td{border-bottom:0}
+  tr>*:last-child{border-right:0}
+  caption{text-align:left;font-weight:600;padding:10px 12px;background:#fafbfc}
+  .diagram{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:15px;margin:14px 0}
+  .diagram-scroll{overflow-x:auto}
+  .diagram svg{display:block;width:100%;min-width:640px;height:auto}
+  figcaption{font-size:12px;color:var(--sub);margin-top:8px}
+  details{border:1px solid var(--line);border-radius:9px;margin:12px 0;background:#fafbfd}
+  details[open]{background:#fff}
+  summary{font-size:14px;font-weight:600;padding:13px 16px;cursor:pointer}
+  details .inner{padding:0 16px 15px}
+  code{font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#f0f3f8;padding:1px 4px;border-radius:4px}
+  @media(max-width:680px){.wrap{padding:16px 12px 48px}.summary-grid,.toc ol{columns:1;grid-template-columns:1fr}}
+  @media print{
+    body{background:#fff;color:#111;font-size:10pt}
+    #progress,.toolbar{display:none!important}
+    .hero{background:#fff!important;color:#111!important;border:1px solid #777}
+    .hero *{color:#111!important}
+    .summary-grid .item{background:#fff;border:1px solid #aaa}
+    .card,.toc{border:0;padding:8px 0}
+    table{min-width:0!important;font-size:8.5pt}
+    details .inner{display:block}
+    .diagram svg{min-width:0}
+  }
+</style>
+</head>
+<body>
+<div id="progress" aria-hidden="true"></div>
+<main class="wrap">
+<header class="hero" id="top">
+  <h1>用户与问答的所属组织筛选 · 技术设计</h1>
+  <p class="meta">版本 1.0 · 2026-11-03 · 状态：设计已确认 · 需求：USER-QA-ORG 1.0</p>
+  <div class="summary-grid">
+    <div class="item"><b>做什么</b><p>给用户统计和实时问答写入所属公司、所属部门、所属科室，让已关联的筛选能按这三列缩小图表。</p></div>
+    <div class="item"><b>为什么</b><p>需求 1.0 已确认。现在这两类统计没有这三列，筛选会被跳过。</p></div>
+    <div class="item"><b>影响谁</b><p>看板查看者和编辑者。内容统计、其他数据集、已保存的筛选关联名单不变。</p></div>
+      <div class="item"><b>关键选择</b><p>三列直接写进统计文档，字段名与内容统计相同。问答不改用这个人今天的部门。设计 1.0 已确认。</p></div>
+    <div class="item"><b>失败后怎么办</b><p>回刷没做完时，选了组织会暂时少算缺列的人。代码回滚后筛选再次跳过，已写入的名称可以留在索引里。</p></div>
+    <div class="item"><b>当前进度与待决</b><p>无产品待决。上线日期未定。确认本设计后才编码。</p></div>
+  </div>
+</header>
+
+<nav class="toc" aria-label="目录">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#summary">方案摘要</a></li>
+    <li><a href="#basis">依据与范围</a></li>
+    <li><a href="#architecture">现状及目标架构</a></li>
+    <li><a href="#flows">核心流程与状态</a></li>
+    <li><a href="#decisions">关键决策</a></li>
+    <li><a href="#contracts">详细契约</a></li>
+    <li><a href="#impact">影响与依赖</a></li>
+    <li><a href="#verification">验证安排</a></li>
+    <li><a href="#release">发布与恢复</a></li>
+    <li><a href="#records">待决事项及变更记录</a></li>
+  </ol>
+  <div class="toolbar">
+    <button type="button" id="expand-all">展开技术细节</button>
+    <button type="button" id="collapse-all">收起技术细节</button>
+    <button type="button" id="print-document">打印</button>
+  </div>
+</nav>
+
+<section class="card" id="summary">
+  <h2>1. 方案摘要</h2>
+  <p>人员主部门沿组织路径拆成三个全称，写到统计文档的 <code>belonging_company_name</code>、<code>belonging_department_name</code>、<code>belonging_office_name</code>。数据集声明同名字段后，现有图表查询会把筛选当成普通条件。查询代码不新加一套组织算法。</p>
+  <p>用户统计索引 <code>mid_user_engagement_stat</code> 里，新增用户文档和参与度文档都要写。实时问答索引 <code>mid_realtime_qa_question_fact</code> 把已经记下的提问人三级复制过来；没有提问人三级时，才用该行记下的主部门编号展开，不用这个人今天的主部门。</p>
+  <p>空组织不写「未分类」，也不写空字符串。按这三列分组时，缺字段的文档归进一个空键分组，界面沿用现有的「未分类」展示。这个空键只加在用户统计和实时问答上，内容统计的分组不变。</p>
+  <div class="callout warn"><strong>重要失败结果</strong>代码发布后、用户索引回刷完成前，选中某个部门会把还没有这三列的用户行排除。未选组织时，人数与发布前一致。</div>
+</section>
+
+<section class="card" id="basis">
+  <h2>2. 依据与范围</h2>
+  <p class="lead">需求来源：<code>.sdd/user-qa-org-filter/requirements.html</code> 版本 1.0，2026-11-03 用户确认。代码事实来自当前仓库源码，不是 171 的页面复测。</p>
+  <h3 id="correctness">正确性约束</h3>
+  <div class="table-wrap"><table>
+    <caption>必须守住的规则</caption>
+    <thead><tr><th>标识</th><th>规则与来源</th><th>适用范围</th><th>保证</th><th>失败时</th><th>验证</th></tr></thead>
+    <tbody>
+      <tr><td>INV-1</td><td>REQ-UQ-001。筛选字段标识是 <code>belonging_company_name</code>、<code>belonging_department_name</code>、<code>belonging_office_name</code></td><td>用户数据统计、实时问答统计的图表查询</td><td>数据集维度使用这三个字段名，文档写入同名非空值</td><td>维度未发布时，现有查询继续跳过未知字段，不报错</td><td>数据集定义测试；筛选转换测试</td></tr>
+      <tr><td>INV-2</td><td>REQ-UQ-002。只用唯一主部门。零条、多条、停用、删除、跨租户都留空</td><td>新写入和回刷</td><td>复用现有唯一主部门判断和部门有效性判断，再调用现有路径展开</td><td>无法判断时三列删除或不写入，不写「未分类」</td><td>组织展开单元测试</td></tr>
+      <tr><td>INV-3</td><td>REQ-UQ-002、AC-UQ-007。问答和已登录参与度不改成今天的主部门</td><td>问答全量；参与度里 <code>department_source=event_time</code>，以及已登录且来源是名册的行</td><td>问答优先复制已有提问人三级。参与度合并时，主部门编号被保留，三列也必须一起保留</td><td>回刷中断后已改行保持上次成功写入；未改行仍缺列</td><td>合并函数测试；回刷用记下的部门编号</td></tr>
+      <tr><td>INV-4</td><td>REQ-UQ-002 事实约束。没有历史快照的新增用户旧行，用回刷当时的唯一主部门</td><td>仅 <code>metric_source=increment</code> 的旧文档</td><td>回刷只更新三列，不改用户编号和时间</td><td>没有唯一主部门则清空三列</td><td>回刷函数测试</td></tr>
+      <tr><td>INV-5</td><td>AC-UQ-008。新增用户和参与度两类文档都要有三列</td><td><code>mid_user_engagement_stat</code></td><td>两条写入路径和一次回刷都覆盖。只完成一类不算完成</td><td>回刷日志分别计数两类</td><td>回刷结果断言两类计数</td></tr>
+      <tr><td>INV-6</td><td>REQ-UQ-003。只有选中值才排除空组织；未选则保留</td><td>已关联筛选的用户图、问答图</td><td>沿用现有筛选：有值才加 terms 条件，缺字段匹配不到</td><td>无新的错误提示</td><td>现有筛选转换测试加这三列</td></tr>
+      <tr><td>INV-7</td><td>AC-UQ-006。内容统计口径、组合筛选的同数据集限制、已保存关联名单都不改</td><td>知识空间内容统计及其他数据集</td><td>不修改内容统计投影，不修改筛选配置界面的数据集限制，不写看板组件表</td><td>不适用</td><td>回归：内容统计组织测试仍用原字段来源</td></tr>
+    </tbody>
+  </table></div>
+  <h3 id="visual-plan">图解导读</h3>
+  <div class="table-wrap"><table>
+    <caption>选图</caption>
+    <thead><tr><th>要回答的问题</th><th>图</th><th>依据</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr><td>这次改哪份统计、不改哪份</td><td><a href="#fig-context">图 1 上下文</a></td><td>INV-1、INV-7</td><td>文件统计和人员统计容易被看成同一套所属</td></tr>
+      <tr><td>名称从哪来、写到哪、筛选怎么读</td><td><a href="#fig-flow">图 2 数据流</a></td><td>INV-2、INV-3、INV-4</td><td>三类行的部门来源不同</td></tr>
+      <tr><td>参与度再次同步时，哪一列允许被今天的部门盖住</td><td><a href="#fig-merge">图 3 参与度合并</a></td><td>INV-3</td><td>现有合并会保留主部门编号；三列若单独按今天重算，会和编号拆开</td></tr>
+    </tbody>
+  </table></div>
+  <p>不画部署图。没有新进程。不画实体关系图。MySQL 不加列，只读已有组织表。</p>
+</section>
+
+<section class="card" id="architecture">
+  <h2>3. 现状及目标架构</h2>
+  <p>现状：内容统计已经把文件登记组织写成这三个字段。实时问答把提问人主部门写成 <code>asker_company_name</code>、<code>asker_department_name</code>、<code>asker_office_name</code>。用户统计只有主部门编号或部门列表，没有公司、部门、科室三级。图表查询在数据集维度里找不到字段时，跳过该筛选。</p>
+  <p>组织展开函数是 <code>resolve_organization_names</code>。它沿部门 <code>path</code> 取每一级第一个有效名称，名称用 <code>department.name</code> 全称。唯一主部门判断是 <code>_load_unique_primary_departments</code>。部门是否可用沿用 <code>_registered_uploader_department</code>：必须属于该行租户、状态为 active、未删除。</p>
+  <figure class="diagram" id="fig-context">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 880 250" role="img" aria-labelledby="ctxTitle ctxDesc">
+        <title id="ctxTitle">图 1 上下文</title>
+        <desc id="ctxDesc">查看者的筛选进入图表查询。用户统计和实时问答写入三列。内容统计和其他统计不改。</desc>
+        <rect x="20" y="20" width="160" height="52" rx="8" fill="#edf3ff" stroke="#245bb1"/>
+        <text x="100" y="50" text-anchor="middle" font-size="13">看板查看者筛选</text>
+        <rect x="230" y="20" width="180" height="52" rx="8" fill="#fff" stroke="#245bb1"/>
+        <text x="320" y="50" text-anchor="middle" font-size="13">现有图表查询</text>
+        <rect x="460" y="16" width="190" height="64" rx="8" fill="#eff8f2" stroke="#17683b"/>
+        <text x="555" y="42" text-anchor="middle" font-size="13">用户统计索引</text>
+        <text x="555" y="62" text-anchor="middle" font-size="12">本次写入三列</text>
+        <rect x="670" y="16" width="190" height="64" rx="8" fill="#eff8f2" stroke="#17683b"/>
+        <text x="765" y="42" text-anchor="middle" font-size="13">实时问答索引</text>
+        <text x="765" y="62" text-anchor="middle" font-size="12">本次写入三列</text>
+        <rect x="460" y="120" width="190" height="56" rx="8" fill="#f7f8fa" stroke="#8a4b00"/>
+        <text x="555" y="152" text-anchor="middle" font-size="13">内容统计，不改</text>
+        <rect x="670" y="120" width="190" height="56" rx="8" fill="#f7f8fa" stroke="#515d6d"/>
+        <text x="765" y="152" text-anchor="middle" font-size="13">应用、会话等，不改</text>
+        <rect x="20" y="176" width="250" height="52" rx="8" fill="#fff" stroke="#245bb1"/>
+        <text x="145" y="206" text-anchor="middle" font-size="13">组织表，只读</text>
+        <path d="M180 46 H230 M410 46 H460" stroke="#245bb1"/>
+        <path d="M145 176 V120 H460" fill="none" stroke="#245bb1"/>
+      </svg>
+    </div>
+    <figcaption>图 1。绿色是本次写入。灰色不改。筛选仍走现有图表查询，不在打开看板时重查组织。</figcaption>
+  </figure>
+  <p>数据集定义在 <code>init_dataset.py</code>。启动时 <code>_upgrade_dashboard_datasets</code> 会按种子覆盖已列入刷新名单的数据集。用户数据统计 <code>mid_user_increment</code> 和实时问答 <code>mid_realtime_qa_question_fact</code> 已在这个名单里。隐藏的 <code>mid_user_daily_participation</code>、<code>mid_active_user</code> 指向同一用户索引，一并加上这三列，避免旧图的数据集编码认不出字段。不因此把隐藏数据集重新开放到选择器。</p>
+</section>
+
+<section class="card" id="flows">
+  <h2>4. 核心流程与状态</h2>
+  <figure class="diagram" id="fig-flow">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 880 280" role="img" aria-labelledby="flowTitle flowDesc">
+        <title id="flowTitle">图 2 三类行的部门来源</title>
+        <desc id="flowDesc">问答复制已记下的提问人三级。参与度展开该行主部门编号。新增用户旧行使用回刷当时的唯一主部门。有效名称写入三个字段。</desc>
+        <rect x="16" y="24" width="200" height="64" rx="8" fill="#edf3ff" stroke="#245bb1"/>
+        <text x="116" y="50" text-anchor="middle" font-size="13">问答行</text>
+        <text x="116" y="70" text-anchor="middle" font-size="12">先复制提问人三级</text>
+        <rect x="250" y="24" width="220" height="64" rx="8" fill="#edf3ff" stroke="#245bb1"/>
+        <text x="360" y="50" text-anchor="middle" font-size="13">参与度行</text>
+        <text x="360" y="70" text-anchor="middle" font-size="12">用记下的主部门编号</text>
+        <rect x="504" y="24" width="230" height="64" rx="8" fill="#fff8e9" stroke="#8a4b00"/>
+        <text x="619" y="50" text-anchor="middle" font-size="13">新增用户旧行</text>
+        <text x="619" y="70" text-anchor="middle" font-size="12">用回刷当时的唯一主部门</text>
+        <rect x="250" y="140" width="360" height="52" rx="8" fill="#fff" stroke="#245bb1"/>
+        <text x="430" y="170" text-anchor="middle" font-size="13">部门不可用则三列为空</text>
+        <rect x="250" y="214" width="360" height="48" rx="8" fill="#eff8f2" stroke="#17683b"/>
+        <text x="430" y="242" text-anchor="middle" font-size="13">否则写入三个全称字段</text>
+        <path d="M116 88 V176 H250 M360 88 V140 M619 88 V176 H610" fill="none" stroke="#245bb1"/>
+        <path d="M430 192 V214" stroke="#17683b"/>
+      </svg>
+    </div>
+    <figcaption>图 2。黄色表示无法还原注册当时的部门，只能用回刷时刻。问答即使提问人三级为空，也只展开该行已记下的主部门编号。</figcaption>
+  </figure>
+  <figure class="diagram" id="fig-merge">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 880 150" role="img" aria-labelledby="mergeTitle mergeDesc">
+        <title id="mergeTitle">图 3 参与度再次同步</title>
+        <desc id="mergeDesc">已登录或事件当时的行保留原主部门编号和三列。未登录名册行允许一起改成当前主部门。</desc>
+        <rect x="16" y="40" width="250" height="70" rx="8" fill="#eff8f2" stroke="#17683b"/>
+        <text x="141" y="68" text-anchor="middle" font-size="13">已登录，或来源是事件当时</text>
+        <text x="141" y="90" text-anchor="middle" font-size="12">保留编号和三列</text>
+        <rect x="310" y="40" width="250" height="70" rx="8" fill="#fff8e9" stroke="#8a4b00"/>
+        <text x="435" y="68" text-anchor="middle" font-size="13">未登录的名册行</text>
+        <text x="435" y="90" text-anchor="middle" font-size="12">编号和三列一起更新</text>
+        <rect x="604" y="40" width="250" height="70" rx="8" fill="#f7f8fa" stroke="#a92525"/>
+        <text x="729" y="68" text-anchor="middle" font-size="13">禁止</text>
+        <text x="729" y="90" text-anchor="middle" font-size="12">只改三列、编号仍是旧部门</text>
+      </svg>
+    </div>
+    <figcaption>图 3。三列必须和最终留下的主部门编号来自同一次部门判断。</figcaption>
+  </figure>
+  <h3>写入</h3>
+  <div class="table-wrap"><table>
+    <caption>写入点</caption>
+    <thead><tr><th>路径</th><th>现有入口</th><th>本次</th></tr></thead>
+    <tbody>
+      <tr><td>新提问</td><td><code>RealtimeQaQuestionFact.record_success</code> 和实时回填构造</td><td>与提问人三级同时赋值。值相同</td></tr>
+      <tr><td>提问合并</td><td><code>merge_qa_document</code> 已保留事件当时的提问人三级</td><td>三列与提问人三级使用同一保留规则</td></tr>
+      <tr><td>登录与参与度对账</td><td><code>record_login</code>、<code>_reconcile_participation_days</code></td><td>用本次写入主部门编号的那个部门展开三列</td></tr>
+      <tr><td>参与度合并</td><td><code>merge_participation_document</code></td><td>主部门编号被保留时，三列也从当前文档保留，不用本次希望写入的新部门</td></tr>
+      <tr><td>新增用户同步</td><td><code>sync_mid_user_increment</code></td><td>写入时取唯一主部门。整份文档替换，因此新文档必须自带三列</td></tr>
+    </tbody>
+  </table></div>
+  <h3>回刷</h3>
+  <p>单独的回刷只做局部更新，不整份替换。文档编号不变。用户参与度按文档里的 <code>primary_department_id</code> 展开。问答优先复制 <code>asker_*</code>；这三列都空时才用该行 <code>primary_department_id</code>。新增用户按回刷当时的唯一主部门。没有可用部门时删除这三列。</p>
+  <p>回刷可重复执行。同一规则重复写入不新增人数。日志只记检查数、写入数、清空数和文档类型，不记姓名和令牌。</p>
+  <h3>查询</h3>
+  <p>筛选逻辑不改。数据集有字段且查看者选了值，就按全称做 terms 条件。缺字段的文档匹配不到。</p>
+  <p>分组时，仅当数据集是用户统计或实时问答、且维度是这三列之一，terms 聚合增加 <code>missing: ""</code>。空键到界面后仍显示「未分类」。内容统计不加这个参数。</p>
+  <h3>失败、重复、并发</h3>
+  <div class="table-wrap"><table>
+    <caption>异常结果</caption>
+    <thead><tr><th>情况</th><th>结果</th></tr></thead>
+    <tbody>
+      <tr><td>回刷中途失败</td><td>已成功的文档保持新三列。未处理的文档仍缺列。再次执行同一回刷即可继续。没有自动回滚已写文档</td></tr>
+      <tr><td>重复回刷</td><td>结果与再算一次相同。不新增文档</td></tr>
+      <tr><td>回刷与登录写入重叠</td><td>参与度沿用现有对账的版本冲突重试。冲突后重读再合并。不新增长时间锁</td></tr>
+      <tr><td>人在写入窗口调部门</td><td>该行保留这次已经确定的部门。不保证和调部门之后的主部门一致</td></tr>
+      <tr><td>超时</td><td>不适用新的看板等待。回刷是离线任务，超时后以上次成功写入为准，看日志计数</td></tr>
+      <tr><td>权限</td><td>不改看板授权。查询仍走现有登录用户</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="card" id="decisions">
+  <h2>5. 关键决策</h2>
+  <div class="table-wrap"><table>
+    <caption>DEC-1 三列写进文档，而不是查询时改字段名</caption>
+    <thead><tr><th>选项</th><th>结果</th><th>不选的原因</th></tr></thead>
+    <tbody>
+      <tr><td>选定：文档写入同名字段</td><td>筛选、分组、导出都读同一字段。用户统计没有可对照的旧列，本来就要写</td><td>问答需要一次复制回刷</td></tr>
+      <tr><td>查询时把 belonging 改写成 asker</td><td>问答旧数据不用回刷</td><td>分组、导出、明细若漏一处就仍对不上。用户统计仍然要写字段，两套机制并存</td></tr>
+    </tbody>
+  </table></div>
+  <p>重新考虑条件：如果实时问答索引不能做局部更新，再改成查询对照。当前索引更新机制已经存在。</p>
+  <div class="table-wrap"><table>
+    <caption>DEC-2 参与度三列跟随被保留的主部门编号</caption>
+    <thead><tr><th>选项</th><th>结果</th></tr></thead>
+    <tbody>
+      <tr><td>选定：编号保留时，三列也保留</td><td>满足 AC-UQ-007。已登录行不会在名册同步时被今天的部门改写三列</td></tr>
+      <tr><td>回刷和每次同步都按今天的主部门重算</td><td>会违反「不改成今天的主部门」</td></tr>
+    </tbody>
+  </table></div>
+  <p>未登录名册行今天就会更新主部门编号。三列与该编号一起更新，这是现有名册行为，不是新口径。</p>
+  <p>DEC-3 是约束而不是取舍：新增用户旧行没有注册当时的部门快照，回刷只能用执行当时的唯一主部门。需求 1.0 已写明。</p>
+</section>
+
+<section class="card" id="contracts">
+  <h2>6. 详细契约</h2>
+  <p>无新的 HTTP 接口，无 MySQL 加列，无看板组件数据改写。筛选下拉仍由现有组织树接口按字段前缀 <code>belonging_</code> 给出全称选项，展示简称的规则不变。</p>
+  <div class="table-wrap"><table id="contract-fields">
+    <caption>统计文档字段</caption>
+    <thead><tr><th>字段</th><th>含义</th><th>写入</th><th>空值</th></tr></thead>
+    <tbody>
+      <tr><td><code>belonging_company_name</code></td><td>路径上第一个有效公司的 <code>name</code></td><td>keyword，可被现有映射更新逻辑追加</td><td>不写字段。不写空字符串，不写「未分类」</td></tr>
+      <tr><td><code>belonging_department_name</code></td><td>路径上第一个有效部门的全称</td><td>同上</td><td>同上。科室挂在部门下时这里是上级部门</td></tr>
+      <tr><td><code>belonging_office_name</code></td><td>路径上第一个有效科室的全称</td><td>同上</td><td>路径没有科室则为空</td></tr>
+    </tbody>
+  </table></div>
+  <p>数据集维度名称是所属公司、所属部门、所属科室，字段标识与上表相同。加到 <code>mid_user_increment</code>、<code>mid_user_daily_participation</code>、<code>mid_active_user</code>、<code>mid_realtime_qa_question_fact</code>。后两个用户数据集保持隐藏。</p>
+  <p>分组聚合仅在上述用户与问答数据集、且字段是这三列时附加 <code>missing: ""</code>。筛选条件不使用 missing，因此选中具体组织时缺字段行不计入。</p>
+  <details>
+    <summary>模块与不改的边界</summary>
+    <div class="inner">
+      <p>投影代码在 <code>src/backend/bisheng/telemetry/domain/mid_table/</code> 和 <code>src/backend/bisheng/worker/telemetry/mid_table.py</code>。数据集种子在 <code>init_dataset.py</code>。分组缺失桶在图表查询组装处按数据集判断。</p>
+      <p>不改 <code>DimensionFilterConfigurator</code> 的同数据集限制。不改内容统计投影。不改 <code>dashboard</code>、<code>dashboard_component</code>。</p>
+    </div>
+  </details>
+  <p>安全：回刷日志不包含姓名、部门全称清单和令牌。组织名称只出现在统计文档和现有查询结果里。</p>
+  <p>性能：不在打开看板时查主部门。不承诺新的时延数字。回刷按现有批量更新执行，没有新的并发度指标。</p>
+</section>
+
+<section class="card" id="impact">
+  <h2>7. 影响与依赖</h2>
+  <div class="table-wrap"><table>
+    <caption>数据</caption>
+    <thead><tr><th>存储</th><th>动作</th></tr></thead>
+    <tbody>
+      <tr><td>MySQL <code>user_department</code></td><td>只读 <code>user_id</code>、<code>department_id</code>、<code>is_primary</code>。无 DDL</td></tr>
+      <tr><td>MySQL <code>department</code></td><td>只读 <code>id</code>、<code>name</code>、<code>path</code>、<code>org_level</code>、<code>status</code>、<code>tenant_id</code>、<code>is_deleted</code>。无 DDL，无新 COMMENT</td></tr>
+      <tr><td>MySQL <code>user</code></td><td>沿用新增用户同步的读取。无 DDL</td></tr>
+      <tr><td>MySQL <code>dashboard_dataset</code></td><td>更新已有 <code>schema_config</code> JSON。无新列</td></tr>
+      <tr><td>Elasticsearch <code>mid_user_engagement_stat</code></td><td>两类文档局部增加或删除三列。文档编号不变</td></tr>
+      <tr><td>Elasticsearch <code>mid_realtime_qa_question_fact</code></td><td>复制或按记下的主部门编号写入三列。不改 <code>asker_*</code> 和主部门编号</td></tr>
+    </tbody>
+  </table></div>
+  <p>使用方：已关联这三列的用户图和问答图会在回刷后按人员主部门缩小。未关联的图不变。内容统计图不变。没有新的门户接口。</p>
+  <p>上线顺序：先发布写入与合并代码，再发布数据集定义，然后跑回刷。数据集定义若早于文档回刷，选中组织会暂时排除缺列行。这个窗口接受，见需求 RISK-UQ-03。</p>
+</section>
+
+<section class="card" id="verification">
+  <h2>8. 验证安排</h2>
+  <div class="table-wrap"><table>
+    <caption>需求到验证</caption>
+    <thead><tr><th>需求</th><th>设计保证</th><th>研发验证</th><th>独立验收</th></tr></thead>
+    <tbody>
+      <tr><td>AC-UQ-001 至 AC-UQ-003</td><td>INV-1、INV-2</td><td>种子维度与组织展开单元测试。替身部门对象，不连 171</td><td>页面上能看见三列并分组出「未分类」。本次不执行</td></tr>
+      <tr><td>AC-UQ-004、AC-UQ-005</td><td>INV-6</td><td>图表筛选转换测试。真实查询组装，Elasticsearch 用替身</td><td>看板选中部门后的数字。本次不执行</td></tr>
+      <tr><td>AC-UQ-006</td><td>INV-7</td><td>断言内容统计投影测试未改来源；筛选配置仍按数据集过滤目标图</td><td>已发布内容统计图。本次不执行</td></tr>
+      <tr><td>AC-UQ-007、AC-UQ-008</td><td>INV-3、INV-4、INV-5</td><td>合并与回刷纯函数测试，覆盖两类用户文档和问答复制</td><td>真实索引回刷计数与抽样。本次不执行，写入发布步骤</td></tr>
+    </tbody>
+  </table></div>
+  <p>研发测试放在 <code>src/backend/test/telemetry/</code> 与 <code>src/backend/test/telemetry_search/</code>。不新增浏览器测试，不把验收脚本放进应用仓库。真实 Elasticsearch 回刷由发布操作核对日志计数，不作为开发期通过条件。</p>
+</section>
+
+<section class="card" id="release">
+  <h2>9. 发布与恢复</h2>
+  <p>前提：组织表可读，两个统计索引允许追加 keyword 字段。现有索引类已经会在启动时补映射。</p>
+  <p>启用：部署后端后执行一次用户索引回刷和一次问答索引回刷。完成标准是日志里新增用户、参与度、问答三类的检查数都大于零，或该环境确实没有该类文档。清空数单独可见。</p>
+  <p>暂停：没有开关。若回刷日志失败，停止继续使用筛选后的用户人数作为正式数，未选组织的图仍可看。</p>
+  <p>回滚代码：筛选对没有维度定义的数据集会再次跳过。已写入索引的三列不删除。回滚不修改已保存看板。不保证回滚后分组「未分类」桶消失前的文档被改回；缺字段行只是不再被新查询归组。</p>
+</section>
+
+<section class="card" id="records">
+  <h2>10. 待决事项及变更记录</h2>
+  <p>无未决产品问题。无未决技术阻塞。上线日期未知，不在本设计内确定。</p>
+  <div class="table-wrap"><table>
+    <caption>自检</caption>
+    <thead><tr><th>检查</th><th>结果</th></tr></thead>
+    <tbody>
+      <tr><td>每条需求有安排</td><td>第 8 节覆盖 AC-UQ-001 至 AC-UQ-008</td></tr>
+      <tr><td>正确性约束有失败路径</td><td>INV-1 至 INV-7 写了跳过、清空、中断再跑</td></tr>
+      <tr><td>图与正文一致</td><td>图 1 排除内容统计；图 2 区分三类来源；图 3 禁止编号与三列拆开</td></tr>
+      <tr><td>独立复核</td><td>未做。作者根据需求和源码交叉检查，不能代替他人复核</td></tr>
+      <tr><td>用户确认</td><td>2026-11-03 用户对设计 0.9 回复「确认」，记为设计 1.0</td></tr>
+    </tbody>
+  </table></div>
+  <div class="table-wrap"><table>
+    <caption>版本</caption>
+    <thead><tr><th>版本</th><th>日期</th><th>变更</th></tr></thead>
+    <tbody>
+      <tr><td>0.9</td><td>2026-11-03</td><td>首版。依据需求 1.0</td></tr>
+      <tr><td>1.0</td><td>2026-11-03</td><td>用户回复「确认」。规则正文未改</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout ok">版本 1.0 已确认。确认依据是用户对设计 0.9 回复「确认」。</div>
+</section>
+</main>
+<script>
+(function () {
+  var panels = Array.prototype.slice.call(document.querySelectorAll("details"));
+  var bar = document.getElementById("progress");
+  document.getElementById("expand-all").addEventListener("click", function () { panels.forEach(function (p) { p.open = true; }); });
+  document.getElementById("collapse-all").addEventListener("click", function () { panels.forEach(function (p) { p.open = false; }); });
+  document.getElementById("print-document").addEventListener("click", function () { panels.forEach(function (p) { p.open = true; }); window.print(); });
+  window.addEventListener("beforeprint", function () { panels.forEach(function (p) { p.open = true; }); });
+  function progress() {
+    var root = document.documentElement;
+    var range = root.scrollHeight - root.clientHeight;
+    bar.style.width = (range > 0 ? Math.max(0, Math.min(100, root.scrollTop / range * 100)) : 0) + "%";
+  }
+  window.addEventListener("scroll", progress, { passive: true });
+  progress();
+}());
+</script>
+</body>
+</html>
