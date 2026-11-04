@@ -13,6 +13,8 @@ def test_nested_failure_restores_admin_visibility_and_bypass():
         (tenant.visible_tenant_ids, frozenset({1, 9})),
         (tenant._admin_scope_tenant_id, 12),
         (tenant._bypass_tenant_filter, True),
+        (tenant._is_management_api, True),
+        (tenant._management_all_tenants, True),
     )
     tokens = [(variable, variable.set(value)) for variable, value in bindings]
     try:
@@ -20,6 +22,7 @@ def test_nested_failure_restores_admin_visibility_and_bypass():
             assert tenant.get_current_tenant_id() == 2
             assert tenant.get_visible_tenant_ids() == frozenset({2})
             assert not tenant.is_tenant_filter_bypassed()
+            assert not tenant.is_management_all_tenants()
             with pytest.raises(RuntimeError):
                 with tenant.tenant_execution_scope(3):
                     assert tenant.get_current_tenant_id() == 3
@@ -29,6 +32,8 @@ def test_nested_failure_restores_admin_visibility_and_bypass():
         assert tenant.current_tenant_id.get() == 9
         assert tenant.get_visible_tenant_ids() == frozenset({1, 9})
         assert tenant.is_tenant_filter_bypassed()
+        assert tenant._management_all_tenants.get() is True
+        assert not tenant.is_management_all_tenants()
     finally:
         for variable, token in reversed(tokens):
             variable.reset(token)
@@ -58,3 +63,19 @@ def test_invalid_tenant_never_changes_the_callers_context(invalid):
         with tenant.tenant_execution_scope(invalid):
             pytest.fail("invalid scope was entered")
     assert tenant.get_current_tenant_id() == before
+
+
+def test_management_view_preserves_authenticated_membership():
+    token = tenant.current_tenant_id.set(9)
+    try:
+        with tenant.management_tenant_scope(3):
+            assert tenant.get_current_tenant_id() == 3
+            assert tenant.current_tenant_id.get() == 9
+            assert tenant.get_visible_tenant_ids() == frozenset({3})
+            with tenant.tenant_execution_scope(2):
+                assert tenant.get_current_tenant_id() == 2
+                assert not tenant.get_is_management_api()
+            assert tenant.get_current_tenant_id() == 3
+        assert tenant.current_tenant_id.get() == 9
+    finally:
+        tenant.current_tenant_id.reset(token)

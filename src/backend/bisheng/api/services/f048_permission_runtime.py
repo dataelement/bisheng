@@ -34,10 +34,7 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgeContainerDaoPermissionLoader,
     KnowledgeFileDaoPermissionLoader,
 )
-from bisheng.linsight.domain.services.f048_skill_permission import (
-    F048SkillPermissionAdapter,
-    SkillDaoPermissionLoader,
-)
+from bisheng.linsight.domain.services.skill_permission import SkillPermissionAdapter
 from bisheng.linsight.domain.services.skill_service import (
     configure_linsight_skill_owner_projection,
 )
@@ -119,6 +116,7 @@ class F048IdentityOwnerProjection:
         resource_version: int,
         context_version: str,
         idempotency_key: str,
+        shared_with_tenant: bool = False,
     ):
         target = VerifiedPermissionTarget.from_business_service(
             tenant_id=tenant_id,
@@ -137,6 +135,7 @@ class F048IdentityOwnerProjection:
             owner_user_id=owner_user_id,
             mode="CUSTOM",
             protected=True,
+            shared_with_tenant=shared_with_tenant,
             idempotency_key=idempotency_key,
         )
 
@@ -182,10 +181,7 @@ def build_f048_resource_composition(
         loader=AppDaoPermissionLoader(runtime),
         permission=runtime,
     )
-    skill = F048SkillPermissionAdapter(
-        loader=SkillDaoPermissionLoader(runtime),
-        permission=runtime,
-    )
+    skill = SkillPermissionAdapter(runtime)
     adapters: dict[str, object] = {
         "workflow": application,
         "assistant": application,

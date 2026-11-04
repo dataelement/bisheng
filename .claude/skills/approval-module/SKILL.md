@@ -87,6 +87,8 @@ ApprovalCenterService.decide_task()
 
 **异常实例也留痕**：`_create_exception_result()` 在创建异常后会补写 `action='approval.request.submit'` 审计日志（与正常 PENDING/PASS 分支一致）。
 
+**执行失败单重复申请（2026-11-03）**：`execute_failed` 仍参与同租户/场景/业务键/申请人的去重，避免旧执行可重试时又创建第二份授权。`ApprovalGate.request_or_pass()` 命中此状态返回业务错误 **18120**，不再返回 pending，也不新建实例、任务或 outbox。申请人应由管理员通过既有异常入口处理；取消旧异常后可重新申请。其它 pending/exception 去重不变。知识空间详情与广场通过只读 `approval/application/request_state.py::get_failed_request_keys()`（固定申请人租户，按100键分批，取最新在途记录）剔除这种假待审显示；无有效 visible 时使用既有 not_subscribed，当前有效授权仍显示已加入。读取不会重试、取消或修改历史审批/成员/授权。
+
 ---
 
 ## 3. 代码锚点
@@ -105,7 +107,8 @@ ApprovalCenterService.decide_task()
 | `approval/domain/services/approver_resolver.py` | 解析审批人来源 `direct_user` / `department_admin` / `tenant_admin` | `resolve_approvers_from_sources()`、**`resolve_tenant_admin_user_ids()`** |
 | `approval/domain/services/approval_seed_service.py` | **预置场景 seed（每租户）**：`DEFAULT_APPROVAL_SCENARIO_SEEDS` 三条 × 五行（scenario / route / flow / flow_version / node） | `seed_approval_scenarios_for_tenant()`、`seed_approval_scenarios_in_session()` |
 | `approval/domain/services/approval_registry.py` | 场景预置目录 + handler 注册表 | `with_default_presets()`、`register_handler()`、`get_handler()` |
-| `approval/domain/services/approval_runtime_handler_factory.py` | 为 outbox 执行 / 多节点 advance 重新构造运行时 handler | `build_runtime_handler(scenario_code)` |
+| `approval/domain/services/approval_runtime_handler_factory.py` | 为 outbox 执行 / 多节点 advance 重新构造运行时 handler；审批详情通过原阅读资格后追加场景当前事实 | `build_runtime_handler(scenario_code)`、`read_current_scenario_detail()` |
+| `approval/application/execution_source.py` | 业务侧只读审批投影 | `get_business_approval()` / `get_business_approvals()`（按 100 条分批，版本记录复用） |
 | `approval/domain/services/approval_notification_service.py` | 站内信统一封装 | `notify_user()` / `notify_users()` / `notify_admins()` |
 | `approval/domain/services/user_menu_access_service.py` | 菜单授权增删查，含父级菜单依赖自动补全 | `grant_menu_access()`、`revoke_menu_access()`、`ensure_application_allowed()` |
 | `approval/domain/services/approval_service.py` + `message_handler.py` | **旧系统（已废弃）**：部门知识空间文件上传审批（`approval_request` 表），与审批中心独立，仅兼容存量、勿新增功能 | `ApprovalService.decide_request()` |
@@ -114,6 +117,14 @@ ApprovalCenterService.decide_task()
 | `approval/api/endpoints/approval_user.py` | Client 端 API（`/api/v1/approval/...`） | — |
 | `approval/api/endpoints/approval_admin.py` | Platform 管理 API（`/api/v1/approval/admin/...`） | — |
 | `approval/api/endpoints/approval.py` | 旧系统 legacy API（`/api/v1/approval/requests/...`），**已废弃** | — |
+
+### 应用审读窄端口（F114）
+
+`approval/application/app_review.py::pending_app_reviews` 返回冻结的 tenant/app/version/instance/task 值对象；仓储 `app_review_repository.py` 只查询指定真实自然人、指定 app、实例和任务均 pending 的记录。该个人任务查询不继承页面管理视角，源码读取随后在验证过的任务租户内执行并恢复调用前上下文。服务账号不能借其归属人的审批任务，临时资格只覆盖待审版本和当前正式比较基线；普通长期源码读取改用 app edit，不变成长期授权。
+
+### 应用发布当前可见范围（F115）
+
+任务详情、个人实例详情、管理实例详情在原租户与审批阅读门禁通过后，调用 `read_current_scenario_detail()`。仅 `app_publish_request` 使用 Handler 的只读 `read_current_detail()`，其它场景不触发动态查询。新增同级 `current_visibility`；`detail_snapshot`、`payload_snapshot` 仍是冻结值，不回写。应用发布域核对实例绑定的 app/tenant，再经 F048 当前有效 `use` 来源和实时主体资格生成摘要；读取不完整时返回 `unavailable`，不误报“仅负责人可见”。此窄例外不授予长期 manage_permission、审批处理资格或其它资源能力。
 
 ### 四个场景 Handler
 
@@ -301,6 +312,9 @@ POST   /approval/admin/exceptions/{exception_id}/cancel      # 取消审批（�
 
 ## 8. 站内信通知矩阵
 
+审批深链：发布首节点通知以 `instance_id` 定位，由每位接收人解析自己的 task，不能向所有人共用首个 task_id。撤回及业务取消通知发送给原审批人，进入「我的审批」已处理项；同栏内更换目标必须重新读取详情，筛选切换不能覆盖通知指定的目标。目标不可用时不选取另一条无关记录。
+
+
 | 触发时机 | 接收人 | 实现位置 |
 |----------|--------|---------|
 | 创建审批任务（菜单申请） | 审批人 | `ApprovalCenterService._send_menu_access_approval_messages()` |
@@ -434,3 +448,19 @@ cd src/backend && uv run pytest test/approval test/app_publish
 - `test/app_publish/test_publish_notification.py` —— 六类事件触达与「消息不承载操作」的发送契约
 
 > ⚠️ 2026-08-19 实测：`test/approval` 有 13 例失败，**全部是本批之前就红的既有漂移**（本地 MySQL 未起 4–5 例、fake 与被测 API 漂移 6 例、断言漂移 2 例），不是新引入的。改审批模块前先跑一次拿基线，别把既有红当成自己弄坏的。
+
+
+## 2026-10-29 管理视角与异常进度修复
+
+平台右上角复用 F019 管理视角：非超管管理查询严格限定所属租户，超管只能选择一个有效的具体租户，未选择或失效时回到经验证的所属租户；不改变 JWT 的人员归属和 SDK/RPC 身份。`approval/admin` 加入共享管理查询范围。管理列表按当前视角读取，创建/更新仍携带具体租户；个人审批接口不使用管理视角。F114 管理 middleware 不再向管理列表提供全平台语义；个人任务不受管理视角影响。
+
+异常列表进度改用 `GET /api/v1/approval/admin/instances/{instance_id}`：先 `_ensure_admin`，再 `ApprovalCenterService.get_instance_detail(management=True)` 复核选中租户和超管/该租户管理员资格；不要求管理员必须是申请人或审批任务持有人。原个人实例详情仍检查申请/任务归属；新增只读入口不授予同意/拒绝权限。API 锚点：`approval_admin.get_admin_instance_detail`。配对测试：`test/approval/test_admin_instance_progress.py` 与 `test/admin/test_management_view_filtering.py`；未改审批人来源解析和节点流转。
+
+
+### F114 应用发布候选与业务撤回（2026-10-30，本地实现）
+
+- `approval/application/app_candidates.py` 与所属仓储核对当前有效自然人及真实管理员全集；应用 handler 消费冻结的归属人和 self_review_user_id，双重排除，仅真实单管理员例外允许自审。
+- `approval_runtime_handler_factory.py::eligible_scenario_candidates` / `validate_scenario_candidates` 仅对应用发布调用候选校验；引擎通过任务、异常指定流程/人和后续节点复用，其他场景沿原候选来源，不改 approver_resolver 通用语义。
+- `approval/application/app_publish.py::withdraw_app_publish` → `ApprovalCenterService.withdraw_app_publish` → `app_publish_withdrawal_repository.py` 在一个事务内锁定目标实例、取消任务、写 withdrawn 动作。目标由发布模块基于冻结 tenant/app/deployment/version/instance 生成；发布模块先重验当前 publish，实际操作者计审计。通用 `withdraw_instance` 仍要求申请人。
+- 平台 Vibe 管理页使用 `POST /api/v1/apps/{app_id}/withdraw`，body 含 expected_instance_id 和可选 reason；不拿申请人身份代发通用撤回。完整确认和终态保护不变。
+- 双用途预览由 F055 public `preview_access` 当前资格端口消费 pending task；临时资格不会写入长期 F048 Grant。真实部署 E2E 尚未执行，以 F114 verification 为准。

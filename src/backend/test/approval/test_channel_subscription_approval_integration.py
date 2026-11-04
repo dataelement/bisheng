@@ -4,6 +4,14 @@ from unittest.mock import AsyncMock, call, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def no_business_subscription_by_default(monkeypatch):
+    monkeypatch.setattr(
+        "bisheng.channel.domain.services.channel_service.batch_check_business_visible",
+        AsyncMock(return_value={"channel-1": False}),
+    )
+
+
 @pytest.mark.asyncio
 async def test_review_channel_subscription_uses_approval_gate_pending():
     from bisheng.channel.domain.models.channel import ChannelVisibilityEnum
@@ -36,6 +44,7 @@ async def test_review_channel_subscription_uses_approval_gate_pending():
         message_service=message_service,
         approval_gate=approval_gate,
     )
+    service._get_channel_actions = AsyncMock(return_value=set())
     login_user = SimpleNamespace(user_id=42, user_name="alice", tenant_id=7, is_admin=lambda: False)
 
     with (
@@ -66,14 +75,14 @@ async def test_review_channel_subscription_uses_approval_gate_pending():
 
 
 @pytest.mark.asyncio
-async def test_review_channel_subscription_direct_pass_activates_membership():
+async def test_review_channel_subscription_direct_pass_waits_for_outbox_activation():
     from bisheng.channel.domain.models.channel import ChannelVisibilityEnum
     from bisheng.channel.domain.schemas.channel_manager_schema import (
         SubscribeChannelRequest,
         SubscriptionStatusEnum,
     )
     from bisheng.channel.domain.services.channel_service import ChannelService
-    from bisheng.common.models.space_channel_member import MembershipStatusEnum, UserRoleEnum
+    from bisheng.common.models.space_channel_member import MembershipStatusEnum
 
     channel = SimpleNamespace(id="channel-1", name="资讯频道", visibility=ChannelVisibilityEnum.REVIEW)
     membership = SimpleNamespace(id=99, status=MembershipStatusEnum.REJECTED, user_role="member")
@@ -93,6 +102,7 @@ async def test_review_channel_subscription_direct_pass_activates_membership():
         message_service=SimpleNamespace(send_generic_approval=AsyncMock()),
         approval_gate=approval_gate,
     )
+    service._get_channel_actions = AsyncMock(return_value=set())
     login_user = SimpleNamespace(user_id=42, user_name="alice", tenant_id=7, is_admin=lambda: False)
 
     with (
@@ -115,16 +125,10 @@ async def test_review_channel_subscription_direct_pass_activates_membership():
             login_user,
         )
 
-    assert status == SubscriptionStatusEnum.SUBSCRIBED
-    assert membership.status == MembershipStatusEnum.ACTIVE
+    assert status == SubscriptionStatusEnum.PENDING
+    assert membership.status == MembershipStatusEnum.PENDING
     member_repository.update.assert_awaited()
-    mock_sync_permissions.assert_awaited_once_with(
-        "channel-1",
-        42,
-        UserRoleEnum.MEMBER,
-        is_active=True,
-        operator_user_id=42,
-    )
+    mock_sync_permissions.assert_not_awaited()
 
 
 @pytest.mark.asyncio

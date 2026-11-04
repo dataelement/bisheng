@@ -50,6 +50,34 @@ def index_exists(table: str, index: str) -> bool:
     return _index_exists(op.get_bind(), table, index)
 
 
+def get_check_constraint(table: str, constraint: str) -> dict | None:
+    """Find a named CHECK in reflected schema, including DM8 name folding."""
+    inspector = inspect(op.get_bind())
+    actual_table = next((name for name in inspector.get_table_names() if name.casefold() == table.casefold()), None)
+    if actual_table is None:
+        return None
+    return next(
+        (
+            item
+            for item in inspector.get_check_constraints(actual_table)
+            if (item.get("name") or "").casefold() == constraint.casefold()
+        ),
+        None,
+    )
+
+
+def unique_constraint_exists(table: str, constraint: str) -> bool:
+    """Find a named UNIQUE in reflected schema, including DM8 name folding."""
+    inspector = inspect(op.get_bind())
+    actual_table = next((name for name in inspector.get_table_names() if name.casefold() == table.casefold()), None)
+    if actual_table is None:
+        return False
+    return any(
+        (item.get("name") or "").casefold() == constraint.casefold()
+        for item in inspector.get_unique_constraints(actual_table)
+    )
+
+
 def create_missing_model_tables(connection: Connection, metadata: MetaData) -> tuple[str, ...]:
     """Create every model table that is absent without altering existing tables.
 

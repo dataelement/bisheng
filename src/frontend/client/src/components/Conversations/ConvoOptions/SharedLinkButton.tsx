@@ -1,19 +1,19 @@
 // @ts-strict-ignore
 import { showApiError } from "~/api/request";
-import { Tooltip as SharedTooltip } from '@bisheng/ui';
-import { useState, useCallback } from 'react';
-import { QrCode, RotateCw, Trash2 } from 'lucide-react';
-import type { TSharedLinkGetResponse } from '~/types/chat';
+import { Tooltip as SharedTooltip } from "@bisheng/ui";
+import { useState, useCallback } from "react";
+import { QrCode, RotateCw, Trash2 } from "lucide-react";
+import type { TSharedLinkGetResponse } from "~/types/chat";
 import {
   useCreateSharedLinkMutation,
   useUpdateSharedLinkMutation,
   useDeleteSharedLinkMutation,
-} from '~/hooks/queries/data-provider';
-import { Button, OGDialog, Spinner, Label } from '~/components';
-import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
-import { NotificationSeverity } from '~/common';
-import { useToastContext } from '~/Providers';
-import { useLocalize } from '~/hooks';
+} from "~/hooks/queries/data-provider";
+import { Button, OGDialog, Spinner, Label } from "~/components";
+import OGDialogTemplate from "~/components/ui/OGDialogTemplate";
+import { NotificationSeverity } from "~/common";
+import { useToastContext } from "~/Providers";
+import { useLocalize } from "~/hooks";
 
 export default function SharedLinkButton({
   share,
@@ -33,7 +33,7 @@ export default function SharedLinkButton({
   const localize = useLocalize();
   const { showToast } = useToastContext();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const shareId = share?.shareId ?? '';
+  const shareId = share?.shareId ?? "";
 
   const { mutateAsync: mutate, isLoading: isCreateLoading } = useCreateSharedLinkMutation({
     onError: showApiError,
@@ -78,7 +78,7 @@ export default function SharedLinkButton({
     try {
       await deleteMutation.mutateAsync({ shareId });
       showToast({
-        message: localize('com_ui_shared_link_delete_success'),
+        message: localize("com_ui_shared_link_delete_success"),
         severity: NotificationSeverity.SUCCESS,
       });
     } catch (error) {
@@ -90,55 +90,51 @@ export default function SharedLinkButton({
     <>
       <div className="flex gap-2">
         {!shareId && (
-          <Button disabled={isCreateLoading} variant="submit" onClick={() => void createShareLink().catch(showApiError)}>
-            {!isCreateLoading && localize('com_ui_create_link')}
+          <Button
+            disabled={isCreateLoading}
+            variant="submit"
+            onClick={() => void createShareLink().catch(showApiError)}
+          >
+            {!isCreateLoading && localize("com_ui_create_link")}
             {isCreateLoading && <Spinner className="size-4" />}
           </Button>
         )}
         {shareId && (
           <div className="flex items-center gap-2">
-            <SharedTooltip  content={localize('com_ui_refresh_link')}  >
-                <Button
+            <SharedTooltip content={localize("com_ui_refresh_link")}>
+              <Button
+                onClick={() => void updateSharedLink().catch(showApiError)}
+                variant="outline"
+                disabled={isUpdateLoading}
+              >
+                {isUpdateLoading ? <Spinner className="size-4" /> : <RotateCw className="size-4" />}
+              </Button>
+            </SharedTooltip>
 
-                  onClick={() => void updateSharedLink().catch(showApiError)}
-                  variant="outline"
-                  disabled={isUpdateLoading}
-                >
-                  {isUpdateLoading ? (
-                    <Spinner className="size-4" />
-                  ) : (
-                    <RotateCw className="size-4" />
-                  )}
-                </Button>
-              </SharedTooltip>
+            <SharedTooltip content={showQR ? localize("com_ui_hide_qr") : localize("com_ui_show_qr")}>
+              <Button onClick={() => setShowQR(!showQR)} variant="outline">
+                <QrCode className="size-4" />
+              </Button>
+            </SharedTooltip>
 
-            <SharedTooltip  content={showQR ? localize('com_ui_hide_qr') : localize('com_ui_show_qr')}  >
-                <Button  onClick={() => setShowQR(!showQR)} variant="outline">
-                  <QrCode className="size-4" />
-                </Button>
-              </SharedTooltip>
-
-            <SharedTooltip  content={localize('com_ui_delete')}  >
-                <Button  onClick={() => setShowDeleteDialog(true)} variant="destructive">
-                  <Trash2 className="size-4" />
-                </Button>
-              </SharedTooltip>
+            <SharedTooltip content={localize("com_ui_delete")}>
+              <Button onClick={() => setShowDeleteDialog(true)} variant="destructive">
+                <Trash2 className="size-4" />
+              </Button>
+            </SharedTooltip>
           </div>
         )}
         <OGDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
           <OGDialogTemplate
             showCloseButton={false}
-            title={localize('com_ui_delete_shared_link')}
+            title={localize("com_ui_delete_shared_link")}
             className="max-w-[450px]"
             main={
               <>
                 <div className="flex w-full flex-col items-center gap-2">
                   <div className="grid w-full items-center gap-2">
-                    <Label
-                      htmlFor="dialog-confirm-delete"
-                      className="text-left text-sm font-medium"
-                    >
-                      {localize('com_ui_delete_confirm')} <strong>&quot;{shareId}&quot;</strong>
+                    <Label htmlFor="dialog-confirm-delete" className="text-left text-sm font-medium">
+                      {localize("com_ui_delete_confirm")} <strong>&quot;{shareId}&quot;</strong>
                     </Label>
                   </div>
                 </div>
@@ -146,9 +142,8 @@ export default function SharedLinkButton({
             }
             selection={{
               selectHandler: handleDelete,
-              selectClasses:
-                'bg-red-700 dark:bg-red-600 hover:bg-red-800 dark:hover:bg-red-800 text-white',
-              selectText: localize('com_ui_delete'),
+              selectClasses: "bg-red-700 dark:bg-red-600 hover:bg-red-800 dark:hover:bg-red-800 text-white",
+              selectText: localize("com_ui_delete"),
             }}
           />
         </OGDialog>

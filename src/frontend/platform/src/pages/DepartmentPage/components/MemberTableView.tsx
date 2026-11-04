@@ -1,11 +1,11 @@
-import { TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
+import { Pagination, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { Button, SearchInput } from '@bisheng/ui';
 import { Segmented, Select, Tooltip as SharedTooltip, Switch, Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
 
 
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
@@ -60,6 +60,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
     handleEditClose,
     handleEditSaved,
   } = controller;
+  const paginationLocale = usePaginationLocale();
   const selectLabels = useSelectLabels();
   return (
     <div>
@@ -191,8 +192,8 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                 </TableBody>
               </Table>
               <div className="flex justify-end border-t px-2 py-2">
-                <AutoPagination
-                  page={globalPage}
+                <Pagination locale={paginationLocale}
+                  current={globalPage}
                   pageSize={20}
                   total={globalTotal}
                   showTotal
@@ -327,7 +328,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
 
       {memberScope === "dept" && (
         <div className="mt-4 flex justify-end">
-          <AutoPagination page={page} pageSize={20} total={total} showTotal={true} onChange={handlePageChange} />
+          <Pagination locale={paginationLocale} current={page} pageSize={20} total={total} showTotal={true} onChange={handlePageChange} />
         </div>
       )}
 

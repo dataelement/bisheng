@@ -213,15 +213,17 @@ async def record_used_app(
 @router.post("/app/used/pin")
 async def pin_used_app(login_user=LoginUserDep, data: UsedAppPin = Body(..., description="App to pin")):
     flow_id = data.flow_id
-    app_info = await FlowDao.aget_flow_by_id(flow_id)
-    if not app_info:
+    # Resolve the same tenant-scoped assistant/workflow catalog used by the list.
+    apps, _ = await FlowDao.aget_all_apps(id_list=[flow_id], page=0, limit=0)
+    if not apps:
         raise UsedAppNotFoundError(flow_id=flow_id)
-    if app_info.status != FlowStatus.ONLINE.value:
+    app_info = apps[0]
+    if app_info["status"] != FlowStatus.ONLINE.value:
         raise UsedAppNotOnlineError(flow_id=flow_id)
 
-    if app_info.flow_type == FlowType.ASSISTANT.value:
+    if app_info["flow_type"] == FlowType.ASSISTANT.value:
         object_type = "assistant"
-    elif app_info.flow_type == FlowType.WORKFLOW.value:
+    elif app_info["flow_type"] == FlowType.WORKFLOW.value:
         object_type = "workflow"
     else:
         raise UsedAppNotFoundError(flow_id=flow_id)

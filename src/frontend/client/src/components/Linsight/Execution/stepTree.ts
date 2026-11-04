@@ -99,8 +99,9 @@ export function mergeStepFrames(history: ExecStepEventData[] | null | undefined)
                 namespace: frame.extra_info?.namespace ?? frame.namespace ?? null,
                 extraInfo: frame.extra_info || {},
                 // first-seen frame timestamp starts the clock; end/later frames
-                // extend endedAt below
-                startedAt: ts,
+                // extend endedAt below. A folded entry (appendStepFrame) carries
+                // its first frame's timestamp in client_started_at.
+                startedAt: typeof frame.client_started_at === 'number' ? frame.client_started_at : ts,
                 endedAt: ts,
                 raw: frame,
             });

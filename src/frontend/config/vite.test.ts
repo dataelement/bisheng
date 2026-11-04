@@ -162,6 +162,7 @@ it('loads both real Vite configs with separate API, license and object-storage r
   vi.stubEnv('VITE_API_PROXY_TARGET', 'http://api.example:7860');
   vi.stubEnv('VITE_MINIO_PROXY_TARGET', 'http://objects.example:9000');
   vi.stubEnv('VITE_GATEWAY_PROXY_TARGET', 'http://gateway.example:8180');
+  vi.stubEnv('VITE_APP_PROXY_TARGET', 'http://app-entry.example:3001');
   const log = vi.spyOn(console, 'log').mockImplementation(() => {});
   try {
     const platform = (await loadConfigFromFile(
@@ -184,6 +185,12 @@ it('loads both real Vite configs with separate API, license and object-storage r
     });
     expect(platform.server!.proxy!['/bisheng']).toMatchObject({
       target: 'http://objects.example:9000/',
+    });
+    expect(platform.server!.proxy!['/apps/']).toMatchObject({
+      target: 'http://app-entry.example:3001',
+      changeOrigin: true,
+      xfwd: true,
+      ws: true,
     });
     expect(client.base).toBe('/workspace');
     expect(client.server!.proxy!['/workspace/api']).toMatchObject({

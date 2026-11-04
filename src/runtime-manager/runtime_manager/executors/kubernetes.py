@@ -39,6 +39,7 @@ from runtime_manager.k8s_templates import (
     service_template,
 )
 from runtime_manager.platform_client import PlatformClient, PlatformError
+from runtime_manager.runtime_environment import platform_environment
 
 _RESOURCES = {
     "Pod": "pods",
@@ -191,6 +192,11 @@ class KubernetesExecutor:
                 "platform": self.descriptor.platform,
                 "helper_image": self.document.get("helper_image", ""),
                 "assembler_image": self.document.get("assembler_image", ""),
+                "image_check_registry_secret": self.document.get("registry_secret")
+                or self.document.get("pull_secret", ""),
+                "image_registry_endpoints": self.document.get("image_registry_endpoints", []),
+                "image_repository": self.document.get("image_repository", ""),
+                "insecure_registry": self.document.get("insecure_registry") is True,
                 "status_policy_revision": self.descriptor.status_policy_revision,
                 "data_transport_ready": self.data_transport is not None,
             },
@@ -297,7 +303,13 @@ class KubernetesExecutor:
         payload = operation["payload"]
         delivery, profile = self._delivery_profile(operation, purge=purpose == "purge")
         platform = (
-            self.descriptor.platform if purpose == "purge" else (delivery.get("platform") or profile.get("platform"))
+            self.descriptor.platform
+            if purpose == "purge"
+            else (
+                delivery.get("platform")
+                or profile.get("platform")
+                or (payload.get("platform") if purpose == "image-check" else None)
+            )
         )
         if platform != self.descriptor.platform:
             raise ExecutorError("frozen_platform_mismatch")
@@ -320,15 +332,17 @@ class KubernetesExecutor:
             raise ExecutorError("frozen_environment_invalid")
         defaults = {}
         if purpose in {"serve", "probe", "preview"}:
-            defaults = {
-                "PORT": str(payload.get("port", 8080)),
-                "BISHENG_APP_PORT": str(payload.get("port", 8080)),
-                "BISHENG_APP_ID": operation["app_id"],
-                "BISHENG_APP_DB_URL": "sqlite:////data/app.db",
-                "BISHENG_APP_DB_PATH": "/data/app.db",
-                "PYTHONDONTWRITEBYTECODE": "1",
-                "BISHENG_APP_BASE_PATH": payload.get("base_path", "/apps/" + payload.get("slug", operation["app_id"])),
-            }
+            defaults = platform_environment(
+                app_id=operation["app_id"],
+                slug=payload.get("slug", operation["app_id"]),
+                version_id=operation.get("version_id", ""),
+                version_no=payload.get("version_no"),
+                port=payload.get("port", 8080),
+                health_path=health.get("path", "/"),
+                base_path=payload.get("base_path", ""),
+                language=profile.get("language") or payload.get("runtime", ""),
+            )
+            defaults["PYTHONDONTWRITEBYTECODE"] = "1"
             env = {key: value for key, value in env.items() if key not in defaults}
         if deadline is None and purpose != "serve":
             deadline = int(_seconds(operation["deadline"]) - self.clock.time())
@@ -403,7 +417,8 @@ class KubernetesExecutor:
             if purpose.startswith("prepare-") or purpose == "assemble"
             else "",
             material_secret=_name("material-", reference)
-            if mode == "bundle" or purpose in {"prepare-download", "prepare-upload"}
+            if (mode == "bundle" and purpose in {"serve", "probe", "preview"})
+            or purpose in {"prepare-download", "prepare-upload"}
             else "",
             app_secret=_name("credentials-", reference) if env else "",
             secret_env=tuple(sorted(env)),
@@ -756,7 +771,20 @@ class KubernetesExecutor:
         row = self.platform.resource(exec_ref)
         return self._observed(row, self._fresh(row))
 
+    def observe_status(self, exec_ref):
+        """Only an exact Pod 404 proves absence; helper/API failures do not."""
+        row = self.platform.resource(exec_ref)
+        try:
+            pod = self._fresh(row)
+        except KubernetesAPIError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
+        return self._observed(row, pod)
+
     def _observed(self, row, pod):
+        from runtime_manager.observation import counter, timestamp
+
         exec_ref = row["resource_ref"]
         status = pod.get("status", {})
         ready = (
@@ -791,6 +819,12 @@ class KubernetesExecutor:
                 for e in item.get("endpoints", [])
             )
         target = service.get("observed_state", {}) if service else {}
+        app_status = next((c for c in status.get("containerStatuses", []) if c.get("name") == "app"), {})
+        container_state = app_status.get("state", {})
+        current_state = container_state.get("running") or container_state.get("terminated") or {}
+        pending = status.get("phase") == "Pending" or bool(container_state.get("waiting"))
+        known_ready = any(c.get("type") == "Ready" for c in status.get("conditions", []))
+        probe_state = "passed" if ready else ("pending" if pending else ("failed" if known_ready else "unknown"))
         return {
             "exec_ref": exec_ref,
             "pod_uid": row["uid"],
@@ -798,9 +832,9 @@ class KubernetesExecutor:
             "target": {"host": target.get("cluster_ip", ""), "port": target.get("port", 0)},
             "phase": status.get("phase", "Unknown"),
             "running": status.get("phase") == "Running" and not pod["metadata"].get("deletionTimestamp"),
-            "restart_count": sum(
-                int(c.get("restartCount", 0)) for c in status.get("containerStatuses", []) if c.get("name") == "app"
-            ),
+            "restart_count": counter(app_status.get("restartCount")),
+            "started_at": timestamp(current_state.get("startedAt")),
+            "probe_state": probe_state,
         }
 
     @staticmethod
@@ -952,7 +986,6 @@ class KubernetesExecutor:
         }
 
     def _diagnostic(self, operation, reference):
-        from runtime_manager.container_runner import redact
 
         try:
             row = self.platform.resource(reference)
@@ -974,16 +1007,30 @@ class KubernetesExecutor:
             waiting = item.get("state", {}).get("waiting", {}).get("reason")
             if waiting:
                 output.append(item.get("name", "container") + ": " + str(waiting)[:128])
-        env = {
-            **operation["payload"].get("runtime_env", {}),
-            "PIP_INDEX_URL": self.config.build_index_url,
-            "PIP_EXTRA_INDEX_URL": self.config.build_extra_index_url,
-            "NPM_REGISTRY": self.config.build_npm_registry,
-        }
-        return (
-            redact("\n".join(output), env, operation.get("payload", {}).get("sensitive_env_names", []))
-            .encode()[-16384:]
-            .decode("utf-8", errors="ignore")
+        from runtime_manager.secret_redaction import bounded_diagnostic, diagnostic_environment
+
+        payload = operation["payload"]
+        return bounded_diagnostic(
+            "\n".join(output), diagnostic_environment(self.config, payload), payload.get("sensitive_env_names", [])
+        )
+
+    def diagnostics(self, operation):
+        from runtime_manager.secret_redaction import bounded_diagnostic, diagnostic_environment
+
+        parts = []
+        for row in self.platform.resources(operation["operation_id"]):
+            if (
+                row.get("kind") == "Pod"
+                and row.get("operation_id") == operation["operation_id"]
+                and row.get("app_id") == operation["app_id"]
+                and row.get("node_id") == self.config.node_id
+                and row.get("owner_epoch") == operation["owner_epoch"]
+            ):
+                parts.append(self._diagnostic(operation, row["resource_ref"]))
+        return bounded_diagnostic(
+            "\n".join(parts),
+            diagnostic_environment(self.config, operation["payload"]),
+            operation["payload"].get("sensitive_env_names", []),
         )
 
     def logs(self, exec_ref, *, since=None, tail=200):
@@ -1212,6 +1259,122 @@ class KubernetesExecutor:
             raise ExecutorError("preparation_writer_stop_unconfirmed")
         return result
 
+    def preflight(self, operation):
+        return self._image_check(operation)
+
+    def _image_check(self, operation):
+        from runtime_manager.egress import egress_env
+        from runtime_manager.image_check import check_document, registry_sources
+
+        self._startup_checkpoint(operation)
+        document = check_document(operation, self.document, self.descriptor.platform)
+        targets = document["targets"]
+        sources = registry_sources(
+            targets,
+            endpoints=self.document.get("image_registry_endpoints", []),
+            insecure_registries=document.get("insecure_registries", []),
+        )
+        reference = _ref(operation, "image-check", operation.get("stage", "admitted"))
+        environment = {
+            "IMAGE_CHECK_PLAN": json.dumps(document, sort_keys=True, separators=(",", ":")),
+            "DOCKER_CONFIG": "/run/registry",
+        }
+        if self.config.egress_enabled:
+            credentials = self.platform.egress(operation["operation_id"], "image-check", package_sources=sources)
+            proxy = egress_env(self.config, **credentials)
+            environment.update({key: proxy[key] for key in ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY")})
+        deadline = min(120, int(_seconds(operation["deadline"]) - self.clock.time()))
+        if deadline <= 0:
+            raise ExecutorError("image_check_timeout")
+        plan = replace(
+            self._plan(
+                operation,
+                "image-check",
+                reference=reference,
+                image=self.document.get("helper_image", ""),
+                deadline=deadline,
+            ),
+            mode="image",
+            pvc_name="",
+            scratch_pvc="",
+            material_secret="",
+            app_secret="",
+            secret_env=(),
+            command=("python", "-I", "-m", "runtime_manager.image_check"),
+            registry_secret=self.document.get("registry_secret") or self.document.get("pull_secret", ""),
+            env={},
+            helper_env=environment,
+            schema_plan=(),
+            volume_guard={},
+            temporary_mb=128,
+        )
+        row = self._intent(operation, plan, pod_template(plan), reference)
+        self._create(row, pod_template(plan))
+        limit = self.clock.time() + deadline
+        while True:
+            self._startup_checkpoint(operation)
+            self._controller()
+            pod = self._fresh(self.platform.resource(reference))
+            created = pod.get("metadata", {}).get("creationTimestamp")
+            if created and self.clock.time() - _seconds(created) >= 120:
+                raise ExecutorError("image_check_expired")
+            phase = pod.get("status", {}).get("phase")
+            if phase == "Failed":
+                raise ExecutorError("image_check_unavailable")
+            if phase == "Succeeded":
+                states = pod.get("status", {}).get("containerStatuses", [])
+                if (
+                    len(states) != 1
+                    or states[0].get("name") != "image-check"
+                    or states[0].get("state", {}).get("terminated", {}).get("exitCode") != 0
+                ):
+                    raise ExecutorError("image_check_result_invalid")
+                raw = self.client.logs(plan.name, container="image-check", tail=10)
+                lines = [line[len(_RESULT) :] for line in raw.splitlines() if line.startswith(_RESULT)]
+                try:
+                    if len(lines) != 1 or len(lines[0]) > 8192:
+                        raise ValueError()
+                    result = json.loads(lines[0])
+                    if not isinstance(result, dict):
+                        raise ValueError()
+                    if result.get("reason") in {
+                        "image_check_document_invalid",
+                        "image_check_timeout",
+                        "image_check_unavailable",
+                        "image_check_output_limit",
+                        "image_check_config_invalid",
+                        "image_platform_mismatch",
+                        "image_content_mismatch",
+                    }:
+                        context = {key: result.get(key, "") for key in ("image_role", "image_ref")}
+                        if any(
+                            t["role"] == context["image_role"] and t["reference"] == context["image_ref"]
+                            for t in targets
+                        ):
+                            raise ExecutorError(result["reason"], **context)
+                        raise ExecutorError(result["reason"])
+                    images = result["images"]
+                    if not isinstance(images, list) or len(images) != len(targets):
+                        raise ValueError()
+                    for target, image in zip(targets, images, strict=True):
+                        if (
+                            not isinstance(image, dict)
+                            or set(image) != set(target)
+                            or image["role"] != target["role"]
+                            or image["reference"] != target["reference"]
+                            or not re.fullmatch(r"sha256:[a-f0-9]{64}", image.get("image_id", ""))
+                            or (target["image_id"] and image["image_id"] != target["image_id"])
+                        ):
+                            raise ValueError()
+                except (ValueError, KeyError, TypeError):
+                    raise ExecutorError("image_check_result_invalid") from None
+                # Retain its finalizer and terminal result for restart adoption. The normal
+                # operation cleanup requests deletion and records actual stop evidence.
+                return result
+            if self.clock.time() >= limit:
+                raise ExecutorError("image_check_timeout")
+            self.clock.sleep(min(1, limit - self.clock.time()))
+
     def prepare(self, operation):
         if operation["kind"] != "prepare":
             raise ExecutorError("preparation_mode_unavailable")
@@ -1226,6 +1389,7 @@ class KubernetesExecutor:
                 raise ExecutorError("image_digest_required")
             if payload.get("platform") != self.descriptor.platform:
                 raise ExecutorError("frozen_platform_mismatch")
+            self._image_check(operation)
             return {
                 "mode": "image",
                 "image_ref": reference,
@@ -1234,6 +1398,7 @@ class KubernetesExecutor:
             }
         if mode not in {"bundle", "source-image"}:
             raise ExecutorError("preparation_mode_unavailable")
+        self._image_check(operation)
         document = {
             key: copy.deepcopy(payload[key]) for key in ("tenant_id", "source_artifact_id", "profile", "delivery")
         }

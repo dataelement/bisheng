@@ -11,7 +11,7 @@ import { Outlined } from "bisheng-icons";
 import { useAudioStore } from "@/components/voiceFunction/audioPlayerStore";
 import SpeechToTextComponent from "@/components/voiceFunction/speechToText";
 import { locationContext } from "@/contexts/locationContext";
-import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
+import { useWorkbenchRuntimeConfig } from "@/hooks/useWorkbenchRuntimeConfig";
 import { formatDate } from "@/util/utils";
 
 import { useContext,useEffect,useRef,useState } from "react";
@@ -29,7 +29,7 @@ export default function ChatInput({ clear, form, inputForm, wsUrl, onBeforSend, 
     const [formShow, setFormShow] = useState(false)
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
     const [inputLock, setInputLock] = useState({ locked: false, reason: '' })
-    const { data: linsightConfig } = useLinsightConfig();
+    const { data: linsightConfig } = useWorkbenchRuntimeConfig();
 
     const { isLoading: audioOpening } = useAudioStore()
 

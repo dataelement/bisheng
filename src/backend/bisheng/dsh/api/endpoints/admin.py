@@ -8,9 +8,7 @@ from fastapi import APIRouter, Depends, Path, Query
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
 from bisheng.dsh.api.dependencies import get_runtime
-from bisheng.dsh.domain.schemas.admin import SubjectPolicyInput
 from bisheng.dsh.domain.schemas.audit import AuditAction, AuditStatus
-from bisheng.dsh.domain.schemas.contracts import DshUserPolicyInput
 from bisheng.dsh.domain.services.vision import VisionSetting
 
 router = APIRouter(prefix="/dsh/admin")
@@ -18,7 +16,6 @@ admin_user = UserPayload.get_tenant_admin_user
 UserId = Annotated[int, Path(gt=0, le=9223372036854775807)]
 TenantId = Annotated[int | None, Query(gt=0, le=9223372036854775807)]
 Limit = Annotated[int, Query(ge=1, le=100)]
-SubjectType = Literal["DEPARTMENT"]
 
 
 async def get_management(runtime=Depends(get_runtime)):
@@ -37,124 +34,6 @@ async def update_model_vision(
     model_id: UserId, setting: VisionSetting, user=Depends(admin_user), service=Depends(get_management)
 ):
     return resp_200(data=await service.model_vision(user.user_id, model_id, setting))
-
-
-@router.get("/models/{model_id}/users")
-async def model_users(
-    model_id: UserId,
-    user=Depends(admin_user),
-    service=Depends(get_management),
-    tenant_id: TenantId = None,
-    cursor: Annotated[int | None, Query(gt=0, le=9223372036854775807)] = None,
-    limit: Limit = 20,
-    keyword: Annotated[str | None, Query(max_length=128)] = None,
-    authorized_only: bool = False,
-):
-    return resp_200(
-        data=await service.model_users(
-            user.user_id,
-            model_id,
-            tenant_id=tenant_id,
-            cursor=cursor,
-            limit=limit,
-            keyword=keyword,
-            authorized_only=authorized_only,
-        )
-    )
-
-
-@router.get("/models/{model_id}/user-permissions")
-async def model_user_permissions(
-    model_id: UserId,
-    user=Depends(admin_user),
-    service=Depends(get_management),
-    tenant_id: TenantId = None,
-    cursor: Annotated[int | None, Query(gt=0, le=9223372036854775807)] = None,
-    limit: Limit = 20,
-    keyword: Annotated[str | None, Query(max_length=128)] = None,
-    department_id: Annotated[int | None, Query(gt=0, le=9223372036854775807)] = None,
-    membership: Literal["DIRECT", "EFFECTIVE"] = "EFFECTIVE",
-    unassigned_only: bool = False,
-    include_seats: bool = False,
-):
-    return resp_200(
-        data=await service.model_user_permissions(
-            user.user_id,
-            model_id,
-            tenant_id=tenant_id,
-            cursor=cursor,
-            limit=limit,
-            keyword=keyword,
-            department_id=department_id,
-            membership=membership,
-            unassigned_only=unassigned_only,
-            include_seats=False,
-        )
-    )
-
-
-@router.get("/models/{model_id}/subjects")
-async def model_subjects(
-    model_id: UserId,
-    user=Depends(admin_user),
-    service=Depends(get_management),
-    tenant_id: TenantId = None,
-):
-    return resp_200(data=await service.model_subjects(user.user_id, model_id, tenant_id=tenant_id))
-
-
-@router.put("/models/{model_id}/subjects/{subject_type}/{subject_id}/policy")
-async def update_subject_policy(
-    model_id: UserId,
-    subject_type: SubjectType,
-    subject_id: UserId,
-    body: SubjectPolicyInput,
-    user=Depends(admin_user),
-    service=Depends(get_management),
-    tenant_id: TenantId = None,
-):
-    return resp_200(
-        data=await service.update_subject_policy(
-            user.user_id,
-            model_id,
-            subject_type,
-            subject_id,
-            body,
-            tenant_id=tenant_id,
-        )
-    )
-
-
-@router.get("/users/{user_id}/models/{model_id}/policy")
-async def model_policy(
-    user_id: UserId,
-    model_id: UserId,
-    user=Depends(admin_user),
-    service=Depends(get_management),
-    tenant_id: TenantId = None,
-):
-    return resp_200(data=await service.get_model_policy(user.user_id, user_id, model_id, tenant_id=tenant_id))
-
-
-@router.put("/users/{user_id}/models/{model_id}/policy")
-async def update_policy(
-    user_id: UserId,
-    model_id: UserId,
-    body: DshUserPolicyInput,
-    user=Depends(admin_user),
-    service=Depends(get_management),
-    tenant_id: TenantId = None,
-):
-    return resp_200(
-        data=await service.update_policy(user.user_id, user_id, body, model_id=model_id, tenant_id=tenant_id)
-    )
-
-
-@router.get("/operations/{operation_id}")
-async def operation(
-    operation_id: str, user=Depends(admin_user), service=Depends(get_management), tenant_id: TenantId = None
-):
-    return resp_200(data=await service.operation(user.user_id, operation_id, tenant_id=tenant_id))
 
 
 @router.get("/audit-records")
@@ -231,15 +110,3 @@ async def usage_overview(
             granularity=granularity,
         )
     )
-
-
-@router.get("/users/{user_id}/sessions")
-async def sessions(
-    user_id: UserId,
-    user=Depends(admin_user),
-    service=Depends(get_management),
-    tenant_id: TenantId = None,
-    cursor: Annotated[str | None, Query(max_length=2048)] = None,
-    limit: Limit = 50,
-):
-    return resp_200(data=await service.sessions(user.user_id, user_id, tenant_id=tenant_id, cursor=cursor, limit=limit))

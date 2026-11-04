@@ -141,3 +141,12 @@ Biggest drift risk: **hotfixes that skip SDD** — code changes, nobody updates 
 - CI must bring up the full middleware stack (+ DM8) before the CI/Stop-hook items can land.
 
 > Each 🚧 item should land with a minimal eval (does it actually reduce human intervention?) before being treated as ✅ — see §0 lesson.
+
+## 9. Writing & branching rules
+
+Moved out of root `AGENTS.md §6`; root keeps a one-line summary of the release-line rule.
+
+- **Renumbering a section means running a cross-reference sweep** — collect every `§X.Y` reference and every heading, and diff both ways. Prose problems are caught by reading the document once; broken references are not.
+- **Write AC ids out in full** (`AC-P4、AC-P5`, never `AC-P4 / P5`): a contracted form is not greppable and breaks the traceability chain. Anything meant to change later belongs in an AC, not a comment — comments get lost, ACs get checked at delivery.
+- **Whether a feature actually shipped cannot be read off the `features/` directory**, nor off its entry in the release contract: complete spec and design documents with zero lines of implementation have happened. Grep the implementation side for real wiring (registration, call sites, i18n keys) before claiming delivery.
+- **The release-line branch is the single source of truth.** Anything not specific to a derived branch lands on the current release line first, and derived branches merge down from it. Doing it the other way round — first on the derived branch, then cherry-picked back — leaves the same change on two lines under different hashes, so history carries it twice and "did this reach the release line?" can only be answered by comparing content. Across version lines, cherry-pick only, and only from a commit that is already on a release line. When back-porting, `git cherry` is not a reliable duplicate check: a fix that was picked into a hotfix branch and then merged forward is an *ancestor* of the merge base, so the comparison range is empty and it looks absent. Check per file with `git diff <base> <head> -- <file>` plus `git log <base> -- <file>`, and record any deliberate divergence from the source branch — otherwise the next person "corrects" it back.

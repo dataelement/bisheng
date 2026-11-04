@@ -7,6 +7,7 @@ from bisheng.open_api.api.endpoints.personal_token_self import router as persona
 from bisheng.open_api.api.endpoints.service_account import router as service_account_crud_router
 from bisheng.open_api.api.endpoints.service_account_keys import router as service_account_keys_router
 from bisheng.open_api.api.endpoints.service_account_keys import scopes_router
+from bisheng.open_api.api.endpoints.service_account_scope import router as service_account_scope_router
 from bisheng.open_api.api.endpoints.skill_pack import router as skill_pack_router
 
 management_router = APIRouter()
@@ -14,6 +15,7 @@ management_router.include_router(skill_pack_router)
 management_router.include_router(personal_token_self_router)
 management_router.include_router(personal_token_admin_router)
 management_router.include_router(scopes_router)
+management_router.include_router(service_account_scope_router)
 management_router.include_router(service_account_keys_router)
 management_router.include_router(service_account_crud_router)
 

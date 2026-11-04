@@ -71,6 +71,18 @@ class RuntimeDeliveryRepository:
 
         return await self.get(App, app_id)
 
+    async def list_applications(self, app_ids=None):
+        from bisheng.database.models.app import App
+
+        async with self.transaction() as session:
+            if app_ids is None:
+                return list((await session.exec(select(App))).all())
+            ids = sorted(set(app_ids))
+            rows = []
+            for offset in range(0, len(ids), 500):
+                rows.extend((await session.exec(select(App).where(App.id.in_(ids[offset : offset + 500])))).all())
+            return rows
+
     async def get(self, model, record_id: str, *, lock: bool = False):
         async with self.transaction() as session:
             statement = select(model).where(model.id == record_id)

@@ -1,5 +1,7 @@
 import { Select } from "@bisheng/ui";
 import useSelectCopy from "~/hooks/useSelectCopy";
+import { useLocalize } from "~/hooks";
+import { permissionModelLabel } from "./permissionModelLabel";
 
 export interface RelationModelOption {
   id: string;
@@ -26,13 +28,14 @@ export function RelationSelect({
   "aria-label": ariaLabel,
 }: RelationSelectProps) {
   const selectCopy = useSelectCopy();
+  const localize = useLocalize();
   return (
     <Select
       {...selectCopy}
       variant="ghost"
       options={options
         .filter((model) => model.id != null && model.id !== "")
-        .map((model) => ({ value: model.id, label: model.name }))}
+        .map((model) => ({ value: model.id, label: permissionModelLabel(model.id, model.name, localize) }))}
       value={value || null}
       onChange={(next) => next != null && onChange(String(next))}
       disabled={disabled}

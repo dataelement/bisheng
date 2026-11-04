@@ -86,7 +86,7 @@ async def list_apps(user: UserPayload = Depends(UserPayload.get_login_user)):
 
 @router.get("/{app_id}", response_model=UnifiedResponseModel[dict], summary="Application detail")
 async def get_app(app_id: str, user: UserPayload = Depends(UserPayload.get_login_user)):
-    """AC-25 — includes ``entry_url`` as a full address; the front end must not compose it."""
+    """AC-25 — includes the configured full ``entry_url``; browser links use their current origin."""
     return resp_200(data=await AppQueryService.get_detail(app_id, actor=user))
 
 
@@ -146,7 +146,7 @@ async def patch_app(
 
 @router.delete("/{app_id}", response_model=UnifiedResponseModel[dict], summary="Delete an application")
 async def delete_app(app_id: str, user: UserPayload = Depends(UserPayload.get_login_user)):
-    """AC-42 / AC-43 / AC-44 — owner only, blocked while online, purges the data."""
+    """AC-42 / AC-43 / AC-44 — eligible owner/admin, blocked while online, purges the data."""
     return resp_200(data=_action_payload(await AppStateService.delete(app_id, actor=user)))
 
 

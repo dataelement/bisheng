@@ -108,7 +108,7 @@ describe("useFileManager — F027 infinite-scroll guards", () => {
     expect(resetEffect).toMatch(/if\s*\(isActiveSpaceReady\s*&&\s*activeSpace\)/);
     expect(resetEffect.match(/setReloadToken\(/g)).toHaveLength(1);
     expect(resetEffect).toMatch(
-      /\[isActiveSpaceReady,\s*activeSpace\?\.id,\s*activeSpace\?\.role,\s*initialFolderId\]/,
+      /\[isActiveSpaceReady,\s*activeSpace\?\.id,\s*initialFolderId\]/,
     );
   });
 

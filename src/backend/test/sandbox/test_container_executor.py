@@ -7,7 +7,8 @@ import socket
 from pathlib import Path
 
 import pytest
-from fake_runner import FakeRunnerClient, _tar_gz
+from fake_runner import FakeRunnerClient as _BaseFakeRunnerClient
+from fake_runner import _tar_gz
 
 from bisheng.common.errcode.sandbox import (
     SandboxCapacityExceededError,
@@ -19,6 +20,15 @@ from bisheng_langchain.gpts.tools.code_interpreter.container_executor import Con
 from bisheng_langchain.gpts.tools.code_interpreter.local_executor import LocalExecutor
 
 _SHUFFLE_MODULE = "bisheng_langchain.gpts.tools.code_interpreter.container_executor.random.shuffle"
+
+
+class FakeRunnerClient(_BaseFakeRunnerClient):
+    """The executor streams copy-in bodies; join them before the shared fake parses them."""
+
+    def request(self, method, url, *, content=None, **kwargs):
+        if content is not None and not isinstance(content, (bytes, bytearray)):
+            content = b"".join(content)
+        return super().request(method, url, content=content, **kwargs)
 
 
 def _exe(fake: FakeRunnerClient, **kwargs) -> ContainerExecutor:
@@ -251,3 +261,28 @@ def test_execute_code_without_work_dir_does_not_copy_cwd(tmp_path, monkeypatch):
     assert "secret-from-cwd.py" not in fake.last_put_members
     assert not any(method == "PUT" and url.endswith("/files") for method, url in fake.calls)
     assert not any(method == "GET" and url.endswith("/files") for method, url in fake.calls)
+
+
+def test_task_artifact_storage_failure_is_reported(tmp_path, monkeypatch):
+    fake = FakeRunnerClient()
+    fake.add_replica("http://runner-a:8080", write_after_exec={"output/report.xlsx": b"artifact"})
+    exe = _exe(fake, local_sync_path=str(tmp_path), workspace_prefix="workspace/task-1")
+    monkeypatch.setattr(LocalExecutor, "sync_to_workspace", lambda *args: 0)
+    with pytest.raises(SandboxProtocolError, match="workspace storage"):
+        exe.run("print('saved')")
+
+
+def test_task_returns_stable_artifact_reference(tmp_path, monkeypatch):
+    fake = FakeRunnerClient()
+    fake.add_replica("http://runner-a:8080", write_after_exec={"output/report.xlsx": b"artifact"})
+    exe = _exe(fake, local_sync_path=str(tmp_path), workspace_prefix="workspace/task-1")
+    saved = []
+
+    def persist(root, files):
+        saved.extend(files)
+        return len(files)
+
+    monkeypatch.setattr(exe, "sync_to_workspace", persist)
+    result = exe.run("print('saved')")
+    assert result["file_list"] == ["/output/report.xlsx"]
+    assert saved == ["output/report.xlsx"]

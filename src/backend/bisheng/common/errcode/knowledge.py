@@ -236,3 +236,8 @@ class KnowledgeInvalidCursorError(BaseErrorCode):
 class KnowledgeSpaceListNotSupportedError(BaseErrorCode):
     Code: int = 10992
     Msg: str = "This endpoint does not list knowledge spaces; use the knowledge-space endpoints instead"
+
+
+class KnowledgeCreationScopeChangedError(BaseErrorCode):
+    Code: int = 10993
+    Msg: str = "Your tenant has changed; reopen the knowledge-base creation form"

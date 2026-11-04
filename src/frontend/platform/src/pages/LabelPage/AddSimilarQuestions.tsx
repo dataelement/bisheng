@@ -1,14 +1,14 @@
 // @ts-strict-ignore
 import { captureQaOperation, type QaOperation } from '@bisheng/chat/core';
-import { Button, Input, toast } from '@bisheng/ui';
-import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
+import { Pagination, Button, Input, toast } from '@bisheng/ui';
+import { QaKnowledgeSelect } from "@/components/bs-comp/selectComponent/QaKnowledgeSelect";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
 import { Checkbox } from "@bisheng/ui";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 
 import { Label } from "@/components/bs-ui/label";
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import { addSimilarQa, getQaList } from "@/controllers/API";
@@ -20,6 +20,7 @@ import type { AnnotationFormHandle, AnnotationFormProps } from "./annotationType
 
 const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps>(({ onMarked }, ref) => {
     const { t } = useTranslation();
+    const paginationLocale = usePaginationLocale();
     const [open, setOpen] = useState(false);
     const [knowledgeLib, setKnowledgeLib] = useState([]);
     const [selectedItems, setSelectedItems] = useState([]);
@@ -122,14 +123,16 @@ const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps
                 </DialogHeader>
                 <div className="flex flex-col gap-4 py-2">
                     <div className="flex items-center gap-4">
-                        <Label htmlFor="knowledgeLib" className="bisheng-label w-40 whitespace-nowrap">{t('log.qaKnowledgeLib')}</Label>
-                        <KnowledgeSelect
-                            type="qa"
+                        <Label htmlFor="knowledgeLib" className="bisheng-label w-40 shrink-0 whitespace-nowrap">{t('log.qaKnowledgeLib')}</Label>
+                        <QaKnowledgeSelect
+                            multiple={false}
+                            label={t('log.qaKnowledgeLib')}
                             value={knowledgeLib}
                             onChange={handleKnowledgeLibChange}
-                            className={`${error && knowledgeLib.length === 0 ? 'border-red-400' : ''}`}
+                            className="min-w-0 flex-1"
+                            error={error && knowledgeLib.length === 0}
                         />
-                        <Input placeholder={t('log.qaContent')} onChange={(e) => knowledgeLib.length && filterData({ id: knowledgeLib[0].value, searchKey: e.target.value })} />
+                        <Input className="min-w-0 flex-1" placeholder={t('log.qaContent')} onChange={(e) => knowledgeLib.length && filterData({ id: knowledgeLib[0].value, searchKey: e.target.value })} />
                     </div>
                     <div className="relative">
                         {loading && (
@@ -172,9 +175,9 @@ const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps
                             </Table>
                         </div>
                         <div className="bisheng-table-footer px-6 bg-transparent">
-                            <AutoPagination
+                            <Pagination locale={paginationLocale} size="small" simple
                                 className="justify-end"
-                                page={page}
+                                current={page}
                                 pageSize={pageSize}
                                 total={total}
                                 onChange={(newPage) => setPage(newPage)}

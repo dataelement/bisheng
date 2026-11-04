@@ -16,10 +16,13 @@ hard-failing the HITL flow. These tests pin that behavior deterministically.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from bisheng.linsight.domain.services import agent_factory
 from bisheng.linsight.domain.services.agent_factory import (
     _EMPTY_QUESTIONS_RETRY_HINT,
     _EMPTY_QUESTIONS_RETRY_MARKER,
+    _coerce_options,
     _coerce_questions,
     _empty_retry_count,
     _salvage_options_only,
@@ -82,7 +85,8 @@ def test_coerce_degrades_to_empty():
     assert _coerce_questions("not json at all") == []
     assert _coerce_questions("{not: valid}") == []
     assert _coerce_questions(42) == []
-    assert _coerce_questions('{"question": "single object not array"}') == []  # dict, not list
+    # A single question object (not wrapped in an array) is recovered, not dropped.
+    assert _coerce_questions('{"question": "single object not array"}') == [{"question": "single object not array"}]
 
 
 # The harder live failure (session 9aef4773…, 福建古田7日游): the model crammed the
@@ -286,6 +290,113 @@ async def test_ask_user_case_d_crammed_dict_value_parks_structured():
     assert tool_calls[0]["args"]["question"] == '你想要的"skill test"是指什么？'
     assert len(tool_calls[0]["args"]["options"]) == 4
     assert tool_calls[2]["args"]["multiple"] is True
+
+
+# Exact `questions` the model sent in the live 120-test session (task 70bf89eb…),
+# read back from the Redis checkpoint: each option nested one level deeper than the
+# previous, or the whole options list wrapped once more. Rendered before the fix as a
+# single Python-repr option like "['markdown', ['html', ['docx', ['pdf']]]]".
+_LIVE_NESTED_OPTIONS_QUESTIONS = [
+    {"question": "请提供你的基础信息：性别、年龄、身高、当前体重", "options": [["我直接输入：性别/年龄/身高/体重"]]},
+    {
+        "question": "你的减肥目标是什么？",
+        "options": [
+            [
+                "12周内减 5%-8% 体重（安全区间）",
+                ["3个月内减 10% 体重（偏进取）", ["以体脂率下降为核心，缓慢塑形", ["先不定具体数字，只想要一份通用饮食+运动框架"]]],
+            ]
+        ],
+    },
+    {"question": "饮食与运动方面有什么限制或偏好？（可多选）", "options": [[["没有特殊限制，正常吃"]]], "multiple": True},
+    {"question": "以什么形式交付？", "options": [["markdown", ["html", ["docx", ["pdf"]]]]], "multiple": True},
+]
+
+
+async def test_ask_user_flattens_nested_options_from_live_session():
+    """Nested option lists are flattened in order; the user never sees a repr blob."""
+    captured = MagicMock(return_value="ok")
+    with patch.object(agent_factory, "interrupt", captured):
+        await ask_user.ainvoke({"reason": "r", "questions": _LIVE_NESTED_OPTIONS_QUESTIONS})
+
+    tool_calls = captured.call_args.args[0]["params"]["tool_calls"]
+    options = [tc["args"]["options"] for tc in tool_calls]
+    assert options == [
+        ["我直接输入：性别/年龄/身高/体重"],
+        [
+            "12周内减 5%-8% 体重（安全区间）",
+            "3个月内减 10% 体重（偏进取）",
+            "以体脂率下降为核心，缓慢塑形",
+            "先不定具体数字，只想要一份通用饮食+运动框架",
+        ],
+        ["没有特殊限制，正常吃"],
+        ["markdown", "html", "docx", "pdf"],
+    ]
+    for opts in options:
+        assert not any(o.startswith("[") for o in opts)
+
+
+def test_coerce_options_shapes():
+    assert _coerce_options(None) == []
+    assert _coerce_options("仅一个选项") == ["仅一个选项"]  # bare string is NOT split into chars
+    assert _coerce_options('["a", "b"]') == ["a", "b"]  # stringified array
+    assert _coerce_options(['["a", "b"]', "c"]) == ["a", "b", "c"]  # stringified element
+    assert _coerce_options(["a", "", " ", "a", 1]) == ["a", "1"]  # empties / dups dropped
+    assert _coerce_options([{"label": "x"}, {"foo": "y"}]) == ["x"]
+
+
+async def _park_args(questions: object) -> list[dict]:
+    """Invoke the TOOL (not the pure helper) so schema validation is exercised too:
+    a shape the arg schema rejects never reaches the coercion code at all."""
+    captured = MagicMock(return_value="ok")
+    with patch.object(agent_factory, "interrupt", captured):
+        await ask_user.ainvoke({"reason": "r", "questions": questions})
+    captured.assert_called_once()
+    return [tc["args"] for tc in captured.call_args.args[0]["params"]["tool_calls"]]
+
+
+@pytest.mark.parametrize("flag", ["false", "False", "0", "否", "", None, 0, False])
+async def test_ask_user_multiple_falsy_strings_stay_single_choice(flag):
+    """bool("false") is True — a stringified flag must not flip single-choice to multi."""
+    args = await _park_args([{"question": "Q", "options": ["a", "b"], "multiple": flag}])
+    assert args[0]["multiple"] is False
+
+
+@pytest.mark.parametrize("flag", ["true", "True", "1", True, 1])
+async def test_ask_user_multiple_truthy_values(flag):
+    args = await _park_args([{"question": "Q", "options": ["a", "b"], "multiple": flag}])
+    assert args[0]["multiple"] is True
+
+
+@pytest.mark.parametrize("question", [["你的目标？"], {"text": "你的目标？"}, ("你的目标？",)])
+async def test_ask_user_non_string_question_title_is_unwrapped(question):
+    args = await _park_args([{"question": question, "options": ["a"]}])
+    assert args[0]["question"] == "你的目标？"
+
+
+async def test_ask_user_null_question_does_not_render_literal_none():
+    args = await _park_args([{"question": None, "options": ["a", "b"]}])
+    assert args[0]["question"] == "请从以下选项中选择"  # options-only salvage, not "None"
+
+
+async def test_ask_user_single_question_dict_not_rejected_by_schema():
+    """A bare dict (not wrapped in an array) used to fail arg validation before the
+    tool body ran, so the model only saw an error and retried."""
+    args = await _park_args({"question": "Q", "options": ["a", "b"]})
+    assert args == [{"question": "Q", "options": ["a", "b"], "multiple": False}]
+
+
+async def test_ask_user_list_of_plain_strings_not_rejected_by_schema():
+    """String elements in the list used to be rejected by the list[dict] schema, so
+    the per-item string recovery in _normalize_to_dicts was unreachable via the tool."""
+    args = await _park_args(["问题一？", '{"question": "问题二？", "options": ["x", "y"]}'])
+    assert [a["question"] for a in args] == ["问题一？", "问题二？"]
+    assert args[1]["options"] == ["x", "y"]
+
+
+def test_ask_user_schema_still_advertises_array_of_objects_first():
+    """Widening the accepted types must not hide the intended shape from the model."""
+    schema = ask_user.tool_call_schema.model_json_schema()["properties"]["questions"]
+    assert schema["anyOf"][0] == {"items": {"additionalProperties": True, "type": "object"}, "type": "array"}
 
 
 # --- ② _salvage_options_only pure-function behavior -------------------------

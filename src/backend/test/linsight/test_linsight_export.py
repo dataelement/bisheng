@@ -311,3 +311,133 @@ async def test_export_docx_bakes_numbers_for_the_task_owner(monkeypatch):
     assert "## 参考资料" in seen["md"] and "《政策.pdf》 · 第 3 页" in seen["md"]
     assert "" not in seen["md"] and "websearch_" not in seen["md"]  # the unresolved web key is stripped
     assert "已生成 Word" in res
+
+
+# --- workspace images are inlined as data URIs (the converters run in the
+# worker, and sanitize_html_for_pdf drops scheme-less src values) -------------
+
+
+def _png_bytes() -> bytes:
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (4, 4), (200, 30, 30)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+_PNG = _png_bytes()
+
+
+def _download_backend(md_content: str, files: dict[str, bytes]):
+    backend = _writable_backend(md_content)
+
+    async def _download(paths):
+        return [
+            SimpleNamespace(path="/" + p, content=files[p], error=None)
+            if p in files
+            else SimpleNamespace(path="/" + p, content=None, error="file_not_found")
+            for p in paths
+        ]
+
+    backend.adownload_files = AsyncMock(side_effect=_download)
+    return backend
+
+
+def _capture_docx_md(monkeypatch) -> list[str]:
+    import bisheng.common.utils.markdown_cmpnt.md_to_docx.markdocx as markdocx_mod
+
+    seen: list[str] = []
+
+    class _FakeMarkDocx:
+        def __call__(self, md):
+            seen.append(md)
+            return (b"DOCXBYTES", "title")
+
+    monkeypatch.setattr(markdocx_mod, "MarkDocx", _FakeMarkDocx)
+    return seen
+
+
+async def test_export_docx_inlines_relative_and_rooted_images(monkeypatch):
+    seen = _capture_docx_md(monkeypatch)
+    # Three spellings seen in practice: md-relative, workspace-rooted with a
+    # slash, and workspace-rooted without one (session 48e1bcae wrote this last
+    # form inside output/减肥计划.md).
+    md = (
+        "# R\n\n![曲线](charts/weight_curve.png)\n\n![宏量](/output/charts/macros.png)\n\n"
+        "![宏量2](output/charts/macros.png)\n"
+    )
+    backend = _download_backend(md, {"output/charts/weight_curve.png": _PNG, "output/charts/macros.png": _PNG})
+    res = await linsight_export.ExportDocxTool(backend=backend)._arun(source_path="output/report.md")
+
+    (paths,), _ = backend.adownload_files.await_args
+    assert paths == [
+        "charts/weight_curve.png",
+        "output/charts/macros.png",
+        "output/charts/weight_curve.png",
+        "output/output/charts/macros.png",
+    ]
+    assert seen[0].count("](data:image/png;base64,") == 3
+    assert "charts/" not in seen[0]
+    assert "未嵌入" not in res
+
+
+async def test_export_pdf_inlines_html_img_and_percent_encoded_name(monkeypatch):
+    seen: list[str] = []
+    monkeypatch.setattr(linsight_export, "_md_to_pdf_bytes_via_libreoffice", lambda md: seen.append(md) or b"PDFBYTES")
+    md = '<img src="%E5%9B%BE.png" width="300">\n'
+    backend = _download_backend(md, {"scratch/图.png": _PNG})
+    res = await linsight_export.ExportPdfTool(backend=backend)._arun(source_path="scratch/draft.md")
+
+    assert '<img src="data:image/png;base64,' in seen[0]
+    assert "已生成 PDF" in res
+
+
+async def test_export_reports_missing_images_instead_of_dropping_silently(monkeypatch):
+    seen = _capture_docx_md(monkeypatch)
+    md = "![a](charts/nope.png)\n![b](../../etc/passwd.png)\n![c](https://example.com/x.png)\n"
+    backend = _download_backend(md, {})
+    res = await linsight_export.ExportDocxTool(backend=backend)._arun(source_path="output/report.md")
+
+    # The escaping path is never requested; the remote url is left for the converter.
+    (paths,), _ = backend.adownload_files.await_args
+    assert paths == ["charts/nope.png", "output/charts/nope.png"]
+    assert "https://example.com/x.png" in seen[0]
+    assert "已生成 Word" in res
+    assert "2 张图片未找到" in res and "charts/nope.png" in res and "../../etc/passwd.png" in res
+
+
+async def test_export_without_images_skips_download(monkeypatch):
+    _capture_docx_md(monkeypatch)
+    backend = _download_backend("# plain\n\ntext", {})
+    await linsight_export.ExportDocxTool(backend=backend)._arun(source_path="output/report.md")
+    backend.adownload_files.assert_not_awaited()
+
+
+# --- real converter (no mocks): the 'src' KeyError regression ----------------
+
+
+def _docx_parts(docx_bytes: bytes) -> tuple[str, list[str]]:
+    import io
+    import zipfile
+
+    with zipfile.ZipFile(io.BytesIO(docx_bytes)) as zf:
+        return zf.read("word/document.xml").decode("utf-8"), zf.namelist()
+
+
+def test_markdocx_local_image_path_does_not_crash():
+    """A scheme-less src is stripped by the sanitizer; the converter must skip the
+    image instead of raising KeyError('src') (which failed every export with an image)."""
+    xml, _ = _docx_parts(linsight_export._md_to_docx_bytes("# 标题\n\n正文\n\n![图](charts/a.png)\n"))
+    assert "正文" in xml
+
+
+def test_markdocx_embeds_data_uri_image():
+    import base64
+
+    uri = "data:image/png;base64," + base64.b64encode(_PNG).decode()
+    xml, names = _docx_parts(linsight_export._md_to_docx_bytes(f"# 标题\n\n正文\n\n![图]({uri})\n"))
+    assert "正文" in xml
+    assert "<pic:pic" in xml
+    assert any(n.startswith("word/media/") for n in names)

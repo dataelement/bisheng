@@ -56,19 +56,19 @@ export function useCategorizedKnowledgeSpaces({ enabled = true, keyword = '' }: 
     // Must equal the 知识空间 page's default sort or the cache keys diverge.
     const sortBy = SpaceSortType.UPDATE_TIME;
 
-    const { data: departmentSpaces = [], isFetching: departmentFetching } = useQuery({
+    const { data: departmentSpaces = [], isFetching: departmentFetching, isError: departmentError, refetch: refetchDepartment } = useQuery({
         queryKey: ['knowledgeSpaces', 'department', sortBy],
         queryFn: () => getDepartmentSpacesApi({ order_by: sortBy }),
         enabled,
         refetchOnWindowFocus: false,
     });
-    const { data: createdSpaces = [], isFetching: createdFetching } = useQuery({
+    const { data: createdSpaces = [], isFetching: createdFetching, isError: createdError, refetch: refetchCreated } = useQuery({
         queryKey: ['knowledgeSpaces', 'mine', sortBy],
         queryFn: () => getMineSpacesApi({ order_by: sortBy }),
         enabled,
         refetchOnWindowFocus: false,
     });
-    const { data: joinedSpaces = [], isFetching: joinedFetching } = useQuery({
+    const { data: joinedSpaces = [], isFetching: joinedFetching, isError: joinedError, refetch: refetchJoined } = useQuery({
         queryKey: ['knowledgeSpaces', 'joined', sortBy],
         queryFn: () => getJoinedSpacesApi({ order_by: sortBy }),
         enabled,
@@ -108,6 +108,8 @@ export function useCategorizedKnowledgeSpaces({ enabled = true, keyword = '' }: 
 
     return {
         groups,
+        isError: departmentError || createdError || joinedError,
+        retry: () => Promise.all([refetchDepartment(), refetchCreated(), refetchJoined()]),
         isFetching: departmentFetching || createdFetching || joinedFetching,
     };
 }

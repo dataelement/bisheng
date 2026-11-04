@@ -198,6 +198,7 @@
     "expired": "模式影响分析已过期"
   },
   "roster": {
+    "inactive_existing_grant": "该权限已停用，已有授权仍有效。",
     "empty": "暂无授权对象",
     "loading": "正在加载权限…",
     "loadingMore": "正在加载更多…",
@@ -278,5 +279,10 @@
     "knowledge_space": "知识空间",
     "tool": "工具",
     "workflow": "工作流"
-  }
+  },
+  "allMembers": {
+  "title": "全员可用",
+  "publicHint": "当前企业所有成员均可使用。关闭后，按下方指定范围授权。",
+  "selectedHint": "当前按指定人员、部门和用户组授权。"
+}
 }

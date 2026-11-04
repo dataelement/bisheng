@@ -13,16 +13,10 @@
  * the entire detail page.
  */
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker"
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels"
 import { Button } from "@bisheng/ui"
 import { SearchInput } from "@bisheng/ui"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/bs-ui/select"
+import { Select } from "@bisheng/ui"
 import { Switch } from "@bisheng/ui"
 import {
   getHostedAppErrorCode,
@@ -45,6 +39,7 @@ interface LogsTabProps {
 
 export function LogsTab({ appId }: LogsTabProps) {
   const { t } = useTranslation()
+  const selectLabels = useSelectLabels()
   const [lines, setLines] = useState<string[]>([])
   const [keyword, setKeyword] = useState("")
   const [since, setSince] = useState<Date | null>(null)
@@ -126,20 +121,17 @@ export function LogsTab({ appId }: LogsTabProps) {
           placeholder={t("hostedApp.logs.keywordPlaceholder")}
           onChange={(event) => setKeyword(event.target.value)}
         />
-        <Select value={String(tail)} onValueChange={(value) => setTail(Number(value))}>
-          <SelectTrigger className="w-28">
-            <SelectValue placeholder={t("hostedApp.logs.tail")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              {TAIL_OPTIONS.map((option) => (
-                <SelectItem key={option} value={String(option)}>
-                  {t("hostedApp.logs.tailLines", { lines: option })}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+        <Select
+          {...selectLabels}
+          className="w-40 shrink-0"
+          aria-label={t("hostedApp.logs.tail")}
+          value={tail}
+          options={TAIL_OPTIONS.map((value) => ({
+            value,
+            label: t("hostedApp.logs.tailLines", { lines: value }),
+          }))}
+          onChange={(value) => { if (value != null) setTail(Number(value)) }}
+        />
         <Button variant="outline" size="sm" disabled={loading} onClick={load}>
           <RefreshCw className={`mr-1 size-3.5 ${loading ? "animate-spin" : ""}`} />
           {t("hostedApp.logs.refresh")}

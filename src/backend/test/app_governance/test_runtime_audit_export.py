@@ -5,7 +5,9 @@ import io
 
 import pytest
 
+from test.app_governance.test_runtime_audit_query import AUDIT_USER
 from test.app_governance.test_runtime_audit_query import audit_env as audit_env
+from test.app_governance.test_runtime_audit_query import audit_tenant as audit_tenant
 
 
 class MemoryStorage:
@@ -39,19 +41,19 @@ async def test_export_whole_selection_is_immutable_and_csv_safe(audit_env):
         scope_resolver=service.scope_resolver,
         worker_scope=current,
     )
-    page = await service.list("admin", "model", {"time_range": "all"}, limit=1)
-    job = await export.submit("admin", page["snapshot_id"], "request-a")
-    assert (await export.submit("admin", page["snapshot_id"], "request-a")).id == job.id
+    page = await service.list(AUDIT_USER, "model", {"time_range": "all"}, limit=1)
+    job = await export.submit(AUDIT_USER, page["snapshot_id"], "request-a")
+    assert (await export.submit(AUDIT_USER, page["snapshot_id"], "request-a")).id == job.id
     await export.run(job.id, scope.owner_tenant_id, batch_size=2)
-    ready = await export.status("admin", job.id)
+    ready = await export.status(AUDIT_USER, job.id)
     assert ready["status"] == "ready" and ready["final_count"] == 4
-    raw = b"".join([part async for part in export.download("admin", job.id)])
-    assert await export.download_size("admin", job.id) == len(raw)
+    raw = b"".join([part async for part in export.download(AUDIT_USER, job.id)])
+    assert await export.download_size(AUDIT_USER, job.id) == len(raw)
     data = list(csv.DictReader(io.StringIO(raw.decode("utf-8-sig"))))
     assert [int(row["id"]) for row in data] == [4, 3, 2, 1]
     assert data[0]["actor_name"] == "'=unsafe"
     assert "token_hash" not in data[0]
-    assert raw == b"".join([part async for part in export.download("admin", job.id)])
+    assert raw == b"".join([part async for part in export.download(AUDIT_USER, job.id)])
 
 
 @pytest.mark.parametrize("text", ["=1+1", "  +1", "\t@sum(A1)", "\r-3", "\x00 =1"])
@@ -82,12 +84,12 @@ async def test_revoked_reader_cannot_download_ready_object(audit_env):
     export = RuntimeAuditExportService(
         RuntimeAuditExportRepository(repo.factory), repo, MemoryStorage(), scope_resolver=resolve, worker_scope=current
     )
-    page = await service.list("admin", "model", {"time_range": "all"})
-    job = await export.submit("admin", page["snapshot_id"], "request-b")
+    page = await service.list(AUDIT_USER, "model", {"time_range": "all"})
+    job = await export.submit(AUDIT_USER, page["snapshot_id"], "request-b")
     await export.run(job.id, 1, batch_size=2)
     allowed = False
     with pytest.raises(RuntimeAuditAccessDeniedError):
-        await anext(export.download("admin", job.id))
+        await anext(export.download(AUDIT_USER, job.id))
 
 
 def test_celery_wrapper_passes_factory_with_explicit_tenant(monkeypatch):
@@ -120,8 +122,8 @@ async def test_terminal_artifact_gc_marker_does_not_starve_later_jobs(audit_env)
     service, source, sessions, scope = audit_env
     repo = RuntimeAuditExportRepository(source.factory)
     exports = RuntimeAuditExportService(repo, source, MemoryStorage(), scope_resolver=service.scope_resolver)
-    page = await service.list("admin", "model", {"time_range": "all"})
-    job = await exports.submit("admin", page["snapshot_id"], "gc-test")
+    page = await service.list(AUDIT_USER, "model", {"time_range": "all"})
+    job = await exports.submit(AUDIT_USER, page["snapshot_id"], "gc-test")
     await repo.terminate(1, job.id, "failed")
     assert [row.id for row in await repo.gc_candidates()] == [job.id]
     await repo.mark_gc_complete(1, job.id)
@@ -148,8 +150,8 @@ async def test_expired_attempt_cannot_publish_after_new_owner_claim(audit_env):
     service, source, sessions, _ = audit_env
     repo = RuntimeAuditExportRepository(source.factory)
     exports = RuntimeAuditExportService(repo, source, MemoryStorage(), scope_resolver=service.scope_resolver)
-    page = await service.list("admin", "model", {"time_range": "all"})
-    job = await exports.submit("admin", page["snapshot_id"], "lease-test")
+    page = await service.list(AUDIT_USER, "model", {"time_range": "all"})
+    job = await exports.submit(AUDIT_USER, page["snapshot_id"], "lease-test")
     old = await repo.claim(1, job.id, "old")
     async with sessions() as session:
         row = await session.get(RuntimeAuditExport, job.id)

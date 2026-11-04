@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from bisheng.common.errcode.user_group import (
     UserGroupMemberNotFoundError,
@@ -60,7 +60,7 @@ async def _is_department_admin(login_user) -> bool:
 
 
 async def _can_open_user_group_management(login_user) -> bool:
-    """Who may use user-group management APIs: 超管 / 部门管理员 / 子租户管理员
+    """Who may use user-group management APIs: global, department or tenant administrators
     (PRD 3.2.2 + §4.5)."""
     if _is_admin(login_user):
         return True
@@ -74,7 +74,7 @@ async def _can_open_user_group_management(login_user) -> bool:
 
 
 async def _can_view_all_groups(login_user) -> bool:
-    """Who may see all groups in list/selectors: 超管 / 租户管理员."""
+    """Global and tenant administrators may see all groups in their scope."""
     if _is_admin(login_user):
         return True
     from bisheng.department.domain.services.department_service import (
@@ -93,7 +93,7 @@ async def _user_can_view_group(login_user, group: Group) -> bool:
     if group.create_user == login_user.user_id:
         return True
     visible_ids_raw = await UserGroupDao.aget_user_visible_group_ids(login_user.user_id)
-    visible_ids: Set[int] = set()
+    visible_ids: set[int] = set()
     for x in visible_ids_raw:
         visible_ids.add(int(x[0]) if isinstance(x, tuple) else int(x))
     return group.id in visible_ids
@@ -105,7 +105,7 @@ async def _ensure_manage_user_groups(login_user) -> None:
 
 
 async def _ensure_mutate_group(login_user, group: Group) -> None:
-    """修改用户组元数据（名称、可见性等）：仅系统超管或创建者。"""
+    """Only global administrators or creators may edit group metadata."""
     if _is_admin(login_user):
         return
     if group.create_user == login_user.user_id:
@@ -113,15 +113,36 @@ async def _ensure_mutate_group(login_user, group: Group) -> None:
     raise UserGroupPermissionDeniedError()
 
 
-async def _ensure_mutate_group_members(login_user, group: Group) -> None:
-    """增删普通成员：超管、创建者，或「公开组」下的部门管理员（与组织成员编辑 PRD 一致）。"""
+async def _ensure_mutate_group_members(login_user, group: Group) -> bool:
+    """Authorize membership writes; return whether tenant-admin rights admitted them."""
     if _is_admin(login_user):
-        return
+        return False
+    from bisheng.department.domain.services.department_service import _is_tenant_admin
+
+    if (
+        getattr(group, "tenant_id", None) == getattr(login_user, "tenant_id", None)
+        and getattr(login_user, "tenant_id", None) is not None
+        and await _is_tenant_admin(login_user)
+    ):
+        return True
     if group.create_user == login_user.user_id:
-        return
+        return False
     if getattr(group, "visibility", None) == "public" and await _is_department_admin(login_user):
-        return
+        return False
     raise UserGroupPermissionDeniedError()
+
+
+async def _ensure_tenant_member_scope(login_user, group: Group, user_ids: list[int], *, tenant_admin: bool) -> None:
+    """The new tenant-admin path cannot assign personnel from another tenant."""
+    if not tenant_admin:
+        return
+    from bisheng.user_group.domain.repositories.member_identity_repository import MemberIdentityRepository
+
+    tenant_id = int(getattr(login_user, "tenant_id", 0) or 0)
+    if group.tenant_id != tenant_id or (
+        await MemberIdentityRepository.tenant_member_ids(user_ids, tenant_id) != set(user_ids)
+    ):
+        raise UserGroupPermissionDeniedError()
 
 
 async def _ensure_create_group(login_user) -> None:
@@ -129,7 +150,7 @@ async def _ensure_create_group(login_user) -> None:
 
 
 async def _ensure_delete_group(login_user, group: Group) -> None:
-    """超管可删任意组；创建者可删自己创建的组（可有成员，删除后成员关系与组权限一并清理）。"""
+    """Global administrators or creators may delete groups, including memberships."""
     if _is_admin(login_user):
         return
     if group.create_user == login_user.user_id:
@@ -137,9 +158,9 @@ async def _ensure_delete_group(login_user, group: Group) -> None:
     raise UserGroupPermissionDeniedError()
 
 
-def _normalize_id_rows(raw: List) -> Set[int]:
+def _normalize_id_rows(raw: list) -> set[int]:
     """Normalize SQLAlchemy/SQLModel scalar query rows to a set of ints."""
-    out: Set[int] = set()
+    out: set[int] = set()
     for x in raw or []:
         if x is None:
             continue
@@ -154,8 +175,8 @@ class UserGroupService:
     """User group business logic. All methods are async classmethods."""
 
     @classmethod
-    async def _list_manageable_groups(cls, login_user) -> List[Group]:
-        """Groups whose **membership** the caller may assign (编辑人员用户组多选).
+    async def _list_manageable_groups(cls, login_user) -> list[Group]:
+        """Groups whose membership the caller may assign in the member editor.
 
         System admins / tenant admins: any group. Department admins: public
         groups + groups they created (private groups created by others remain
@@ -163,7 +184,9 @@ class UserGroupService:
         """
         if await _can_view_all_groups(login_user):
             groups, _ = await GroupDao.aget_all_groups(1, 2000, "")
-            return groups
+            if _is_admin(login_user):
+                return groups
+            return [group for group in groups if group.tenant_id == getattr(login_user, "tenant_id", None)]
 
         visible_groups, _ = await GroupDao.aget_visible_groups(
             login_user.user_id,
@@ -179,7 +202,7 @@ class UserGroupService:
     async def alist_manageable_groups(
         cls,
         login_user,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         groups = await cls._list_manageable_groups(login_user)
         return [await cls._enrich_group(g) for g in groups]
 
@@ -187,7 +210,7 @@ class UserGroupService:
     async def alist_manageable_group_options(
         cls,
         login_user,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Return lightweight group options for selectors."""
         groups = await cls._list_manageable_groups(login_user)
         return [
@@ -201,7 +224,7 @@ class UserGroupService:
 
     @classmethod
     async def _department_path_label(cls, user_id: int) -> str:
-        """主属部门在组织树中的完整路径（用于 PRD 3.2.2 组内成员展示）。"""
+        """Full primary department path for member display (PRD 3.2.2)."""
         uds = await UserDepartmentDao.aget_user_departments(user_id)
         if not uds:
             return ""
@@ -209,7 +232,7 @@ class UserGroupService:
         dept = await DepartmentDao.aget_by_id(primary.department_id)
         if not dept or not dept.path:
             return dept.name if dept else ""
-        ids: List[int] = []
+        ids: list[int] = []
         for seg in dept.path.strip("/").split("/"):
             if seg.isdigit():
                 ids.append(int(seg))
@@ -225,7 +248,7 @@ class UserGroupService:
         cls,
         data: UserGroupCreate,
         login_user,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         await _ensure_create_group(login_user)
 
         # Check name uniqueness within tenant
@@ -261,7 +284,7 @@ class UserGroupService:
         limit: int,
         keyword: str,
         login_user,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if await _can_view_all_groups(login_user):
             groups, total = await GroupDao.aget_all_groups(page, limit, keyword)
         else:
@@ -280,7 +303,7 @@ class UserGroupService:
         cls,
         group_id: int,
         login_user,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         group = await GroupDao.aget_by_id(group_id)
         if not group:
             raise UserGroupNotFoundError()
@@ -296,7 +319,7 @@ class UserGroupService:
         group_id: int,
         data: UserGroupUpdate,
         login_user,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         group = await GroupDao.aget_by_id(group_id)
         if not group:
             raise UserGroupNotFoundError()
@@ -330,10 +353,10 @@ class UserGroupService:
 
         await _ensure_delete_group(login_user, group)
 
-        from bisheng.permission.domain.services.owner_service import OwnerService
         from bisheng.permission.domain.services.legacy_rbac_sync_service import (
             LegacyRBACSyncService,
         )
+        from bisheng.permission.domain.services.owner_service import OwnerService
 
         await OwnerService.delete_resource_tuples("user_group", str(group_id))
         await LegacyRBACSyncService.cleanup_user_group_subject_tuples(group_id)
@@ -352,7 +375,7 @@ class UserGroupService:
         limit: int,
         keyword: str,
         login_user,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         group = await GroupDao.aget_by_id(group_id)
         if not group:
             raise UserGroupNotFoundError()
@@ -378,16 +401,18 @@ class UserGroupService:
     async def aadd_members(
         cls,
         group_id: int,
-        user_ids: List[int],
+        user_ids: list[int],
         login_user,
     ) -> None:
         group = await GroupDao.aget_by_id(group_id)
         if not group:
             raise UserGroupNotFoundError()
-        await _ensure_mutate_group_members(login_user, group)
+        tenant_admin = await _ensure_mutate_group_members(login_user, group)
 
         if not user_ids:
             return
+
+        await _ensure_tenant_member_scope(login_user, group, user_ids, tenant_admin=tenant_admin)
 
         raw_existing = await UserGroupDao.acheck_members_exist(group_id, user_ids)
         existing = _normalize_id_rows(raw_existing)
@@ -404,10 +429,10 @@ class UserGroupService:
     async def async_plain_members(
         cls,
         group_id: int,
-        desired_user_ids: List[int],
+        desired_user_ids: list[int],
         login_user,
     ) -> None:
-        """将普通成员全量同步为 desired_user_ids（与 UI 多选一致，避免前后端 diff 漂移）。"""
+        """Synchronize plain members with the complete selection from the UI."""
         group = await GroupDao.aget_by_id(group_id)
         if not group:
             raise UserGroupNotFoundError()
@@ -435,7 +460,7 @@ class UserGroupService:
     async def areplace_user_memberships(
         cls,
         user_id: int,
-        desired_group_ids: List[int],
+        desired_group_ids: list[int],
         login_user,
     ) -> None:
         """Replace memberships only within the caller's manageable groups.
@@ -446,15 +471,15 @@ class UserGroupService:
         manageable_ids = {int(g.id) for g in manageable_groups}
         desired_ids = {int(gid) for gid in desired_group_ids if int(gid) > 0}
 
-        if not desired_ids.issubset(manageable_ids):
-            raise UserGroupPermissionDeniedError()
-
         current_links = await UserGroupDao.aget_user_group(user_id)
         current_ids = {int(link.group_id) for link in current_links}
+        # Forms also carry existing memberships the operator cannot change.
+        if not (desired_ids - current_ids).issubset(manageable_ids):
+            raise UserGroupPermissionDeniedError()
         current_manageable_ids = current_ids & manageable_ids
 
         to_remove = sorted(current_manageable_ids - desired_ids)
-        to_add = sorted(desired_ids - current_manageable_ids)
+        to_add = sorted((desired_ids & manageable_ids) - current_manageable_ids)
 
         for group_id in to_remove:
             await cls.aremove_member(group_id, user_id, login_user)
@@ -472,7 +497,8 @@ class UserGroupService:
         group = await GroupDao.aget_by_id(group_id)
         if not group:
             raise UserGroupNotFoundError()
-        await _ensure_mutate_group_members(login_user, group)
+        tenant_admin = await _ensure_mutate_group_members(login_user, group)
+        await _ensure_tenant_member_scope(login_user, group, [user_id], tenant_admin=tenant_admin)
 
         row = await UserGroupDao.aget_plain_member_row(group_id, user_id)
         if not row:
@@ -487,9 +513,9 @@ class UserGroupService:
     async def aset_admins(
         cls,
         group_id: int,
-        _user_ids: List[int],
+        _user_ids: list[int],
         login_user,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         group = await GroupDao.aget_by_id(group_id)
         if not group:
             raise UserGroupNotFoundError()
@@ -499,8 +525,8 @@ class UserGroupService:
     # --- Private helpers ---
 
     @classmethod
-    async def _enrich_group(cls, group: Group) -> Dict[str, Any]:
-        """Attach member_count、创建者展示（不再使用 user_group 管理员多选）。"""
+    async def _enrich_group(cls, group: Group) -> dict[str, Any]:
+        """Attach member counts and creator display information."""
         member_count = await UserGroupDao.aget_group_member_count(group.id)
         creator_name = ""
         if group.create_user:
@@ -521,8 +547,8 @@ class UserGroupService:
         }
 
     @classmethod
-    async def _enrich_groups(cls, groups: List[Group]) -> List[Dict[str, Any]]:
-        """列表页批量补充成员数和创建者名称，避免逐条查询。"""
+    async def _enrich_groups(cls, groups: list[Group]) -> list[dict[str, Any]]:
+        """Batch member counts and creator names for list rows."""
         if not groups:
             return []
 
@@ -530,12 +556,12 @@ class UserGroupService:
         member_counts = await UserGroupDao.aget_group_member_counts(group_ids)
 
         creator_ids = sorted({int(group.create_user) for group in groups if group.create_user})
-        creator_name_map: Dict[int, str] = {}
+        creator_name_map: dict[int, str] = {}
         if creator_ids:
             creators = await UserDao.aget_user_by_ids(creator_ids)
             creator_name_map = {int(user.user_id): user.user_name for user in creators if user.user_id is not None}
 
-        items: List[Dict[str, Any]] = []
+        items: list[dict[str, Any]] = []
         for group in groups:
             creator_name = ""
             if group.create_user:

@@ -145,6 +145,11 @@ export function approvalStatusI18nKey(status: string | undefined | null): string
   )
 }
 
+export function versionApprovalI18nKey(version: HostedAppVersion): string {
+  const legacyStatus = version.terminal_state === "online" ? "approved" : version.terminal_state
+  return approvalStatusI18nKey(version.approval_status ?? legacyStatus)
+}
+
 /** Badge colouring for an approval status; unknown statuses stay neutral. */
 export function approvalStatusBadgeClass(status: string | undefined | null): string {
   switch (status) {

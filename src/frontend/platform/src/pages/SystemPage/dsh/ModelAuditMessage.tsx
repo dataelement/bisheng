@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { DshPager } from "./common";
-import { Tag } from "@bisheng/ui";
+import { Pagination, Tag } from "@bisheng/ui";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import {
   auditTextPage,
   type AuditMessage,
@@ -31,7 +31,7 @@ interface AuditMessageTextProps {
   code?: boolean;
 }
 function AuditMessageText({ value, code = false }: AuditMessageTextProps) {
-  const { t } = useTranslation();
+  const paginationLocale = usePaginationLocale();
   const [page, setPage] = useState(0);
   const pages = Math.max(1, Math.ceil(value.length / TEXT_PAGE_SIZE));
   const content = auditTextPage(value, page * TEXT_PAGE_SIZE, TEXT_PAGE_SIZE);
@@ -45,21 +45,15 @@ function AuditMessageText({ value, code = false }: AuditMessageTextProps) {
         <p className="whitespace-pre-wrap break-words text-sm">{content}</p>
       )}
       {pages > 1 && (
-        <>
-          <p className="text-sm text-muted-foreground">
-            {t("dsh.modelAuditView.messages.text_page", {
-              page: page + 1,
-              pages,
-            })}
-          </p>
-          <DshPager
-            hideUnavailable
-            previous={page > 0}
-            next={page + 1 < pages}
-            onPrevious={() => setPage((old) => old - 1)}
-            onNext={() => setPage((old) => old + 1)}
-          />
-        </>
+        <Pagination
+          locale={paginationLocale}
+          size="small"
+          simple
+          current={page + 1}
+          pageSize={TEXT_PAGE_SIZE}
+          total={value.length}
+          onChange={(nextPage) => setPage(nextPage - 1)}
+        />
       )}
     </div>
   );

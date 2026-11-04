@@ -2,6 +2,7 @@ import { workflowStreamForHost, startAssistantForHost, assistantStreamForHost } 
 /**
  * websocket辅助函数
  */
+import { finishStoppedAppMessage, stopAppMessages } from "./appMessageStop"
 import { produce } from "immer"
 import { useMemo } from "react"
 import { useRecoilState, useRecoilValue } from "recoil"
@@ -68,6 +69,8 @@ export default function useChatHelpers() {
                 running: false,
                 showStop: false,
                 showUpload: false,
+                inputForm: false,
+                showReRun: false,
                 inputDisabled: close || !!errorMsg.code, //chatState?.flow.flow_type !== 1, // 技能不禁止输入
                 // showReRun: chatState?.flow.flow_type === 10, // 错误时工作流展示重试按钮
                 error: close ? prev[chatId].error : errorMsg,
@@ -91,7 +94,7 @@ export default function useChatHelpers() {
             ...prev,
             [chatId]: {
                 ...prev[chatId],
-                running: true,
+                running: show,
                 showStop: show,
             },
         }))
@@ -151,6 +154,24 @@ export default function useChatHelpers() {
 
     // 更新消息
     const message = {
+        stopMsg: (chatid: string) => {
+            setChats((prev) => updateChatMessages(prev, chatid, (messages) => {
+                const stopped = stopAppMessages(messages)
+                const hasStoppedAnswer = stopped.some((msg, index) => msg !== messages[index]
+                    && ['stream_msg', 'answer', 'output_msg'].includes(msg.category))
+                return hasStoppedAnswer ? stopped : [...stopped, {
+                    ...baseMsgItem,
+                    id: 'tmp-stop-' + generateUUID(8),
+                    is_bot: true,
+                    category: 'stream_msg',
+                    end: true,
+                    stopped: true,
+                }]
+            }))
+        },
+        finishStoppedMsg: (chatid: string, frame: Parameters<typeof finishStoppedAppMessage>[1]) => {
+            setChats((prev) => updateChatMessages(prev, chatid, (messages) => finishStoppedAppMessage(messages, frame)))
+        },
         createNodeMsg: (chatid: string, data: any) => {
             if (['output', 'condition'].includes(data.message?.node_id.split('_')[0])) return
 
@@ -343,7 +364,6 @@ export default function useChatHelpers() {
         endMsg: (chatid: string, data: any) => {
             // 删除所有未结束消息
             if (data.type === "end_cover" && data.message) {
-                console.log("触发安全审计,删除所有未结束消息")
                 data.category = "stream_msg"
                 data.type = "over"
                 data.id = generateUUID(8)

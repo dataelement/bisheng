@@ -1,4 +1,3 @@
-import { Button } from '@bisheng/ui';
 
 import { Command, CommandInput, CommandItem, CommandList } from "@/components/bs-ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
@@ -80,10 +79,10 @@ export function UsageUserSelect({ value, range, onChange }: UsageUserSelectProps
       modal={false}
     >
       <PopoverTrigger asChild>
-        <Button variant="outlined" className="w-72 max-w-full justify-between" aria-label={t("dsh.selectUsageUser")} aria-expanded={open} color="default">
-          <span className="truncate">{value?.user_name ?? t("dsh.selectUsageUser")}</span>
-          <Outlined.Down className="ml-2 size-4 shrink-0 opacity-60" />
-        </Button>
+        <button type="button" className="input-touch-hit relative flex h-8 w-72 max-w-full min-w-0 cursor-pointer items-center gap-2 overflow-hidden rounded-md border border-border-base bg-bg-page px-[11px] text-left text-[length:var(--font-size-3)] font-normal leading-[var(--line-height-3)] text-text-1 outline-none transition-colors hover:border-border-deep focus-visible:border-border-deep focus-visible:shadow-focus data-[state=open]:border-border-deep data-[state=open]:shadow-focus" aria-label={t("dsh.selectUsageUser")} aria-expanded={open}>
+          <span className="min-w-0 flex-1 truncate">{value?.user_name ?? t("dsh.selectUsageUser")}</span>
+          <Outlined.Down className={`size-4 shrink-0 text-text-3 transition-transform${open ? " rotate-180" : ""}`} aria-hidden="true" />
+        </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 max-w-[calc(100vw-2rem)] p-0">
         <Command shouldFilter={false} label={t("dsh.userSearchResults")}>

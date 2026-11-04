@@ -2,10 +2,12 @@
 import { Button } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { AppType } from "@/types/app";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { userContext } from '@/contexts/userContext';
+import { canManageAppTemplates } from './templatePermissions';
 
 import {
     Table,
@@ -21,6 +23,9 @@ import { SelectType } from "./apps";
 
 export default function Templates() {
     const navigate = useNavigate()
+    const { user } = useContext(userContext);
+    const canManageTemplates = canManageAppTemplates(user);
+    const generation = useRef(0);
 
     const onChange = () => { }
     const { t } = useTranslation('flow')
@@ -28,14 +33,32 @@ export default function Templates() {
     const { type } = useParams()
     const [temps, setTemps] = useState([])
     useEffect(() => {
-        readTempsDatabase(type).then(setTemps).catch(showApiError)
-    }, [type])
+        let active = true;
+        const load = () => {
+            const request = ++generation.current;
+            setTemps([]);
+            if (!canManageTemplates) return;
+            readTempsDatabase(type).then(rows => {
+                if (active && request === generation.current) setTemps(rows);
+            }).catch(error => {
+                if (active && request === generation.current) showApiError(error);
+            });
+        };
+        load();
+        window.addEventListener('bisheng:management-scope-changed', load);
+        const invalidate = () => { active = false; ++generation.current; };
+        return () => {
+            invalidate();
+            window.removeEventListener('bisheng:management-scope-changed', load);
+        };
+    }, [type, canManageTemplates, user?.tenant_id])
 
     const handleDragEnd = ({ source, destination }: any) => {
         if (!destination || source.index === destination.index) {
             return;
         }
         const previousList = temps;
+        const request = generation.current;
         const updatedList = temps.map(temp => ({ ...temp }));
         const [removed] = updatedList.splice(source.index, 1);
         updatedList.splice(destination.index, 0, removed);
@@ -54,15 +77,16 @@ export default function Templates() {
 
         const currentItem = updatedList[destination.index]
         currentItem.order_num = sort
-        const { name, description, order_num } = currentItem
+        const { order_num } = currentItem
 
-        updateTempApi(currentItem.id, { name, description, order_num }).then(onChange).catch(error => {
-            setTemps(previousList)
+        updateTempApi(currentItem.id, { order_num }).then(onChange).catch(error => {
+            if (request === generation.current) setTemps(previousList)
             showApiError(error)
         })
     }
 
     const handleDelTemp = (index: number, id: number) => {
+        const request = generation.current;
         const nameMap = {
             [AppType.FLOW]: t('workflow'),
             [AppType.ASSISTANT]: t('assistant')
@@ -72,14 +96,17 @@ export default function Templates() {
             desc: t('confirmDeleteTemplate', { type: labelName }),
             okTxt: t('delete'),
             onOk(next) {
+                if (request !== generation.current) { next(); return; }
                 return deleteTempApi(id).then((res) => {
                     onChange(res)
-                    setTemps(temps.filter((temp, i) => index !== i));
+                    if (request === generation.current) setTemps(rows => rows.filter(temp => temp.id !== id));
                     next()
                 })
             }
         })
     }
+
+    if (!canManageTemplates) return <Navigate to="/403" replace />;
 
     return <div className="px-2 py-4 h-full relative">
         <div className="h-full w-full overflow-y-auto overflow-x-hidden scrollbar-hide">

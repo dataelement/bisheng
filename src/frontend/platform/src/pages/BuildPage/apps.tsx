@@ -38,6 +38,7 @@ import { useNavigate } from "react-router-dom";
 import CardSelectVersion from "./CardSelectVersion";
 import CreateApp from "./CreateApp";
 import CreateTemp from "./CreateTemp";
+import { canManageAppTemplates } from "./templatePermissions";
 import { useCreateTemp,useQueryLabels } from "./hook";
 
 /**
@@ -201,6 +202,7 @@ export default function Apps() {
             tag_id: param.tag_id,
             type: param.type,
             status: param.status,
+            app_state: param.app_state,
             managed: param.managed,
         }),
     )
@@ -237,7 +239,8 @@ export default function Apps() {
     const canDelete = (id: string | number) => hasResourceAction(resourceActions, id, 'delete');
     const visibleApps = appRows;
 
-    // `create_app` controls the create and template-management entries.
+    const canManageTemplates = canManageAppTemplates(user);
+    // Application creation and template management have separate permissions.
     // Only global super admins bypass the role menu permission.
     const canCreateApp =
         user.role === 'admin' ||
@@ -389,7 +392,7 @@ export default function Apps() {
 
     const tempTypeRef = useRef(null)
     return <div className="h-full relative">
-        <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative bg-background-main border-t">
+        <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative bg-[#f8f8f8] dark:bg-background-main border-t">
             <div className="flex gap-4">
                 <SearchInput className="w-64" placeholder={t('build.searchApp')} onChange={(e) => search(e.target.value)}></SearchInput>
                 <SelectType all includeHosted={hostedAppEnabled} onChange={(v) => {
@@ -414,7 +417,7 @@ export default function Apps() {
                     value={selectLabel.value}
                     onChange={handleLabelSearch}
                 />
-                {canCreateApp && (
+                {canManageTemplates && (
                     <Button variant="text" className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A] ml-auto" onClick={() => navigate(`/build/temps/${tempTypeRef.current && tempTypeRef.current !== AppType.ALL && tempTypeRef.current !== AppType.HOSTED_APP ? tempTypeRef.current : AppType.FLOW}`)} color="default"><Outlined.MoveToFolder className="dark:text-slate-50" />{t('build.manageAppTemplates')}</Button>
                 )}
             </div>
@@ -481,7 +484,8 @@ export default function Apps() {
                                     //         variant: 'warning'
                                     //     })
                                     // }}
-                                    onAddTemp={toggleTempModal}
+                                    canAddTemplate={canManageTemplates && canRead(item.id)}
+                                    onAddTemp={canManageTemplates ? toggleTempModal : undefined}
                                     onCheckedChange={handleCheckedChange}
                                     onDelete={canDelete(item.id) ? handleDelete : undefined}
                                     onSetting={(item) => handleSetting(item)}
@@ -523,7 +527,7 @@ export default function Apps() {
         {/* add template */}
         <CreateTemp flow={flowRef.current} type={tempType} open={tempOpen} setOpen={() => toggleTempModal()} onCreated={() => { }} ></CreateTemp>
         {/* footer */}
-        <div className="flex justify-between absolute bottom-0 left-0 w-full bg-background-main h-16 items-center px-10 z-20">
+        <div className="flex justify-between absolute bottom-0 left-0 w-full bg-[#f8f8f8] dark:bg-background-main h-16 items-center px-10 z-20">
             <div className="flex items-center gap-2">
                 <p className="text-sm text-muted-foreground break-keep">{t('build.manageYourApplications')}</p>
             </div>

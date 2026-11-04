@@ -1,19 +1,19 @@
 from .base import BaseErrorCode
 
 
-# Permission module error codes, module code: 190
+# 19000 is retained for compatibility; 19001-19007 belong to channel errors.
 class PermissionDeniedError(BaseErrorCode):
     Code: int = 19000
     Msg: str = "Permission denied"
 
 
 class PermissionCheckFailedError(BaseErrorCode):
-    Code: int = 19001
+    Code: int = 25020
     Msg: str = "Permission check failed"
 
 
 class PermissionServiceUnavailableError(BaseErrorCode):
-    Code: int = 19002
+    Code: int = 25021
     Msg: str = "Authorization service unavailable"
 
 
@@ -22,33 +22,33 @@ PermissionFGAUnavailableError = PermissionServiceUnavailableError
 
 
 class PermissionInvalidResourceError(BaseErrorCode):
-    Code: int = 19003
+    Code: int = 25022
     Msg: str = "Invalid resource type or ID"
 
 
 class PermissionTupleWriteError(BaseErrorCode):
-    Code: int = 19004
+    Code: int = 25023
     Msg: str = "Failed to write authorization tuple"
 
 
 class PermissionInvalidRelationError(BaseErrorCode):
-    Code: int = 19005
+    Code: int = 25024
     Msg: str = "Invalid permission relation"
 
 
 class PermissionRelationModelNameExistsError(BaseErrorCode):
-    Code: int = 19006
+    Code: int = 25025
     Msg: str = "Relation model name already exists"
 
 
 class PermissionLastOwnerError(BaseErrorCode):
-    Code: int = 19007
+    Code: int = 25026
     Msg: str = "Cannot remove the last owner of the resource"
 
 
 # F048 permission Catalog / Grant errors. These codes intentionally use the
-# feature-reserved 250xx range while the legacy 190xx errors remain available
-# to endpoints that have not migrated to the new contract yet.
+# 250xx range. Legacy permission symbols above use the same module range so
+# their responses cannot be mistaken for channel failures by shared clients.
 class InvalidCatalogActionError(BaseErrorCode):
     Code: int = 25001
     Msg: str = "Invalid or unavailable permission action"
@@ -126,4 +126,6 @@ class SameLevelGrantRequiresManagePermissionError(BaseErrorCode):
 
 class PermissionSubjectUnavailableError(BaseErrorCode):
     Code: int = 25016
-    Msg: str = "The selected person is no longer an active member of this tenant. Refresh the candidate list and select again."
+    Msg: str = (
+        "The selected person is no longer an active member of this tenant. Refresh the candidate list and select again."
+    )

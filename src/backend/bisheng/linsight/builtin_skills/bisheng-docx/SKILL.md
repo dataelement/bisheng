@@ -3,9 +3,10 @@ name: bisheng-docx
 description: >-
   制作或修改 Word 文档（.docx）时使用：撰写工作报告、分析报告、方案、纪要、通知、公文、
   合同初稿、说明书、简历、周报月报等正式文档；把已有内容整理成带标题层级、目录、页码、
-  表格和图表的 Word 文件；读取、改写用户上传的 .docx。当用户说到「Word」「文档」「报告」
+  表格和图表的 Word 文件；读取、改写用户上传的 .docx；按用户上传的模板或范文的格式
+  写一份文档、或把另一份文档改成模板的格式（此时版式一律以模板为准）。当用户说到「Word」「文档」「报告」
   「方案」「纪要」「公文」「通知」「说明书」「docx」「写一份 X」「整理成 Word」
-  「导出成 Word」时触发。本技能给出当前代码执行器里唯一可行的 python-docx 路径
+  「导出成 Word」「按这个模板」「照第一个文件的格式」时触发。本技能给出当前代码执行器里唯一可行的 python-docx 路径
   （该环境没有 Node/docx-js，中文字体必须显式写 w:eastAsia 才生效），
   内置 GB/T 9704-2012 公文版式为默认档，另有一档给简历宣传稿这类非公文文档；
   还包括目录页码写法、交付前自检与渲染脚本。
@@ -88,14 +89,16 @@ print("pandoc :", shutil.which("pandoc") or "无（读 .docx 用 inspect_docx.py
 
 | 情况 | 做法 |
 |---|---|
+| **用户给了参照文档**：模板、范文，或说「按第一个文件的格式」「照这个模板整理」 | **§5.1 照参照文档排版**。版式全部取自参照文档，§2.1 的版式档、§3 的骨架都不用 |
 | 用户只要「把刚才的内容存成 Word」，没提版式要求 | `export_docx`，**不要用本技能** |
 | 用户要目录 / 页码 / A4 / 表格列宽 / 封面 / 特定字体字号 | §3 从零构建 |
 | 用户上传了 .docx 要改 | §5 改已有文件（`export_docx` 做不到） |
-| 用户上传了模板要按样式填 | 用 `Document("uploads/模板.docx")` 打开**模板本身**，样式自动继承 |
 | 还勾选了公文写作类技能 | §2.1：文种文风听它的，版式落地仍走本技能 |
 | 拿不准 | 按用户原话里的名词判：出现「正式/对外/打印/汇报稿/公文/目录/页码」走本技能，否则走 `export_docx` |
 
 ### 2.1 定版式档（决定全篇字体字号，只需定一次）
+
+> 用户给了参照文档时跳过本节：参照文档就是版式规格，见 §5.1。
 
 本技能自带两档。`apply_chinese_defaults()` 选定后，`add_body` / `add_heading_cn` /
 `add_table` / `add_toc` / 页码全部自动跟随，**不必逐处传字体**（逐处传的结果通常是
@@ -216,7 +219,15 @@ print(r.stdout or "(no stdout)")
 print(r.stderr[-2000:] if r.stderr else "(no stderr)")
 ```
 
-它按段落序号打印样式和文本、逐表打印内容，据此规划改哪里。然后：
+它按段落序号打印样式、**实际版式**和文本，逐表打印内容和表格版式，据此规划改哪里。
+一行长这样：
+
+```
+P11   {仿宋 16pt 加粗 首行缩进1.9字 固定行距28pt 含制表符} 一、	相关背景介绍
+```
+
+花括号里是读者在 Word 里实际看到的字体、字号、加粗、对齐、缩进、行距（已沿样式继承链解析），
+`行首N个空格`、`含制表符` 说明这段靠空格或制表符对齐。然后：
 
 - **只改需要改的 run**，不要整段重建 —— 重建会丢掉原有字体、编号、批注关联。
 - 原文的样式约定压倒本技能的规范，跟着它走。
@@ -226,6 +237,72 @@ print(r.stderr[-2000:] if r.stderr else "(no stderr)")
 - 改完另存到 `output/`，不要覆盖 `uploads/` 里的原件。
 - Word 会把一句话拆进多个 `w:r`，**看得见的短语在 XML 里未必是连续字符串** ——
   跨 run 的替换要先合并 run，或整段重写后手动补格式。
+
+### 5.1 照参照文档排版（模板 / 范文 / 「按第一个文件的格式」）
+
+**参照文档的版式就是规格，本技能的版式档不参与。** 客户模板几乎都把字体字号、缩进、行距
+直接写在每个段落上（样式一栏全是 Normal），所以「打开模板再 `add_body`」得到的是版式档的字体，
+不是模板的字体；从 `Document()` 起步再调 `apply_chinese_defaults` 更是整份换成国标版式。
+唯一能保住模板版式的做法是：**以参照文档为底稿，复制它同类的段落，只换文字。**
+
+**第 1 步 · 读两份文档。** 对参照文档和源文档都跑 `inspect_docx.py --content-only`（§5 的写法）。
+参照文档的逐段版式就是要照抄的规格；`uploads/` 下的文件不会被体检，不要拿体检去「纠正」模板。
+
+**第 2 步 · 给参照文档的段落分角色。** 例：P0 文首标题、P2–P7 信息栏、P9 议案标题、
+P11 一级标题、P12 正文、P20 结束语、P22 附件。说明性文字（「（2号方正小标宋简体字……）」「XX」）
+是模板的填写说明，不进产物。
+
+**第 3 步 · 定内容，不改写。** 用户说「其他不要变」「内容不变」时：
+
+- 源文档的文字逐字保留，不增、不删、不改写，也不另写开头语、结束语、署名。
+- 模板的固定栏目（标题、主送、信息栏、署名日期）：源文档里有对应信息就填；没有就保留模板原来的
+  占位符（`×××`、`XX`），**不要编**机关名、人名、日期。
+- 模板的章节结构和源文档对不上时，保留源文档自己的章节，只套版式。拿不准用户要的是
+  「套版式」还是「按模板的章节重写」，先用 `ask_user` 问一次，不要自己挑一个。
+
+**第 4 步 · 写构建脚本**（同样写到 `scratch/build_doc.py`）：
+
+```python
+import sys, os
+sys.path.insert(0, "skills/bisheng-docx/scripts")
+from docx_helpers import clone_paragraph, copy_table, delete_paragraph
+from docx import Document
+
+os.makedirs("output", exist_ok=True)
+doc = Document("uploads/模板.docx")             # ★ 底稿是参照文档：页边距、页眉页脚原样继承
+src = Document("uploads/源文档.docx")
+P = doc.paragraphs                               # 段落号和 inspect 的 P 号一致
+proto = {"title": P[9], "h1": P[11], "body": P[12]}
+template_paras = list(P)                         # 先记下模板原有段落，最后删掉
+
+cur = P[-1]                                      # 新内容接在模板末尾
+cur = clone_paragraph(proto["title"], "智能单据审核场景交流", after=cur)
+cur = clone_paragraph(proto["h1"], "一、交流及测试内容", after=cur)
+cur = clone_paragraph(proto["body"], "本次选取……", after=cur)
+cur = copy_table(src.tables[0], after=cur, font="仿宋", size_pt=16)   # 表格从源文档搬，字体按模板正文
+
+for p in template_paras:                          # 要保留的模板段落（如信息栏）别放进这个列表
+    delete_paragraph(p)
+doc.save("output/xxx.docx")
+print("saved")
+```
+
+- `clone_paragraph(proto, text, after=)` 复制原型段落的段落格式和首个有字 run 的字体，换上新文字，
+  并补回原型的行首空格。**一级标题、正文、结束语各用各的原型**，不要全用正文段去套。
+- `copy_table(table, after=, font=, size_pt=)` 跨文档复制表格；`font` / `size_pt` 填参照文档正文的值。
+- ❌ 这条路线里**不要调** `apply_chinese_defaults`、`setup_page`、`add_body`、`add_heading_cn`、
+  `add_gongwen_title`、`add_table`：它们都按版式档写字体和页边距，会把模板的版式冲掉。
+- 模板写的是「仿宋」就照抄「仿宋」，不要「纠正」成仿宋_GB2312；国标字体只用于没有参照文档的从零构建。
+
+**第 5 步 · 体检时带上参照文档**：
+
+```python
+r = subprocess.run([sys.executable, "skills/bisheng-docx/scripts/inspect_docx.py",
+                    "output/xxx.docx", "--reference", "uploads/模板.docx"], capture_output=True, text=True)
+```
+
+带 `--reference` 时体检不套版式档，只报「页边距不一致」「某段的字体/字号/加粗/行距组合在参照文档里
+找不到」这类差异。逐条对照参照文档的同类段落改掉。
 
 ## 6. 交付前体检（必做）
 
@@ -240,7 +317,8 @@ print(r.stderr[-2000:] if r.stderr else "(no stderr)")
 输出分两段：
 
 - **`=== 内容 ===`**：页面尺寸、段落数、逐段样式与文本、逐表内容。用它核对错字、顺序、缺漏。
-- **`=== 体检 ===`**：开头会先说明它**按哪个版式档校验**（公文 / 非公文，从文档自身推断）。
+- **`=== 体检 ===`**：开头会先说明它**按哪个版式档校验**（公文 / 非公文，从文档自身推断）；
+  带了 `--reference` 时改为只报和参照文档的差异（§5.1）。
   ERROR 必须修完；WARN 逐条复核（确认无误可交付）；INFO 是建议。
   覆盖公文文档混入通用字体、中文字体缺 `w:eastAsia`（含样式继承链）、字号过小、标题层级跳级、表格超出版心、
   表格首行不像表头、长表不重复表头、图片超宽、目录域没开 updateFields、目录域下没有 Heading、
@@ -287,6 +365,8 @@ print(r.stderr[-2000:] if r.stderr else "(no stderr)")
   `read_file` 读技能文档带斜杠（`/skills/bisheng-docx/references/design-zh.md`），
   代码执行器里的路径一律不带（`skills/bisheng-docx/scripts/inspect_docx.py`、`output/x.docx`）。
 - ❌ 只写 `run.font.name` 就以为中文字体设好了。
+- ❌ 用户给了模板却从 `Document()` 起步、或在模板上调 `apply_chinese_defaults` / `setup_page` ——
+  产物会变成一份国标公文，而不是用户那份模板的样子（§5.1）。
 - ❌ 因为「用户机器上可能没装仿宋_GB2312 / 方正小标宋简体」就换成微软雅黑、宋体。
   字体名只写进 XML，渲染在用户的 Word 里 —— 服务端装没装不影响产物，公文字体是国标强制项。
 - ❌ 用手写的 `•` / `1.` 当列表，用 `\n` 当换行。

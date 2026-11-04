@@ -38,6 +38,7 @@ GRANT_SUBJECT_RESOURCE_TYPES = frozenset(
         "workflow",
         "assistant",
         "tool",
+        "linsight_skill",
         "channel",
         "dashboard",
         # F054 hosted applications.

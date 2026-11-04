@@ -22,7 +22,12 @@ from bisheng.common.utils import title_generator
             ],
             "Travel plan",
         ),
-        ([{"type": "reasoning", "summary": []}], title_generator.DEFAULT_TITLE),
+        ([{"type": "reasoning", "summary": []}], "Travel"),
+        ("<think>Private thought</think>Travel plan", "Travel plan"),
+        ("<think>Unfinished private thought", "Travel"),
+        ("Travel plan\nExtra explanation", "Travel plan"),
+        ("T" * 300, "T" * 50),
+        ("", "Travel"),
     ],
 )
 async def test_title_extracts_only_visible_text(monkeypatch, asynchronous, content, expected):
@@ -38,3 +43,38 @@ async def test_title_extracts_only_visible_text(monkeypatch, asynchronous, conte
         result = title_generator.generate_conversation_title_sync("Travel", llm)
 
     assert result == expected
+
+
+async def test_title_timeout_uses_question(monkeypatch):
+    import asyncio
+
+    loader = SimpleNamespace(render_prompt=lambda *_a, **_k: SimpleNamespace(prompt="Name this conversation"))
+    monkeypatch.setattr(title_generator, "get_prompt_manager", AsyncMock(return_value=loader))
+    monkeypatch.setattr(title_generator, "TITLE_GENERATION_TIMEOUT_S", 0.01, raising=False)
+
+    async def slow_model(_messages):
+        await asyncio.Event().wait()
+
+    assert (
+        await title_generator.generate_conversation_title_async(
+            "Summarize the document", SimpleNamespace(ainvoke=slow_model)
+        )
+        == "Summarize the document"
+    )
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+async def test_title_provider_failure_uses_question(monkeypatch, asynchronous):
+    loader = SimpleNamespace(render_prompt=lambda *_a, **_k: SimpleNamespace(prompt="Name this conversation"))
+    monkeypatch.setattr(title_generator, "get_prompt_manager", AsyncMock(return_value=loader))
+    monkeypatch.setattr(title_generator, "get_prompt_manager_sync", lambda: loader)
+
+    def fail(_messages):
+        raise RuntimeError("provider unavailable")
+
+    llm = SimpleNamespace(invoke=fail, ainvoke=AsyncMock(side_effect=RuntimeError("provider unavailable")))
+    if asynchronous:
+        result = await title_generator.generate_conversation_title_async("Travel", llm)
+    else:
+        result = title_generator.generate_conversation_title_sync("Travel", llm)
+    assert result == "Travel"

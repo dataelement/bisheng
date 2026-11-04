@@ -3,7 +3,9 @@
 Provides async and sync functions for generating conversation titles using LLM.
 """
 
+import asyncio
 import logging
+import re
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
@@ -13,8 +15,19 @@ from bisheng.core.prompts.manager import get_prompt_manager, get_prompt_manager_
 
 logger = logging.getLogger(__name__)
 
-# Default title when LLM fails or returns empty
+# Last resort when neither model output nor the user's question has visible text.
 DEFAULT_TITLE = "New Chat"
+TITLE_GENERATION_TIMEOUT_S = 25.0
+_TITLE_MAX_CHARS = 50
+
+
+def normalize_conversation_title(content: str, question: str) -> str:
+    """Exclude inline reasoning, including a truncated reasoning-only response."""
+    title = re.sub(r"<think\b[^>]*>.*?(?:</think\s*>|$)", "", content, flags=re.IGNORECASE | re.DOTALL)
+    title = re.sub(r"</?think\s*>?", "", title, flags=re.IGNORECASE).strip()
+    if not title:
+        title = (question or "").strip()
+    return title.splitlines()[0].strip()[:_TITLE_MAX_CHARS] if title else DEFAULT_TITLE
 
 
 async def generate_conversation_title_async(
@@ -33,7 +46,7 @@ async def generate_conversation_title_async(
         llm: The BaseChatModel instance to use for generation.
 
     Returns:
-        Generated title string, or default title if generation fails.
+        Clean title, or a question-derived title if generation fails.
     """
     try:
         prompt_loader = await get_prompt_manager()
@@ -45,13 +58,12 @@ async def generate_conversation_title_async(
 
         messages = [HumanMessage(content=prompt_obj.prompt)]
 
-        response = await llm.ainvoke(messages)
-        title = extract_message_text(response).strip()
-
-        return title if title else DEFAULT_TITLE
-    except Exception as e:
-        logger.error(f"Failed to generate conversation title: {e}")
-        return DEFAULT_TITLE
+        response = await asyncio.wait_for(llm.ainvoke(messages), timeout=TITLE_GENERATION_TIMEOUT_S)
+        return normalize_conversation_title(extract_message_text(response), question)
+    except Exception:
+        # Naming is non-critical to the reply; retain the question and log the failure.
+        logger.exception("Failed to generate conversation title")
+        return normalize_conversation_title("", question)
 
 
 def generate_conversation_title_sync(
@@ -67,7 +79,7 @@ def generate_conversation_title_sync(
         llm: The BaseChatModel instance to use for generation.
 
     Returns:
-        Generated title string, or default title if generation fails.
+        Clean title, or a question-derived title if generation fails.
     """
     try:
         prompt_loader = get_prompt_manager_sync()
@@ -80,9 +92,8 @@ def generate_conversation_title_sync(
         messages = [HumanMessage(content=prompt_obj.prompt)]
 
         response = llm.invoke(messages)
-        title = extract_message_text(response).strip()
-
-        return title if title else DEFAULT_TITLE
-    except Exception as e:
-        logger.error(f"Failed to generate conversation title: {e}")
-        return DEFAULT_TITLE
+        return normalize_conversation_title(extract_message_text(response), question)
+    except Exception:
+        # Naming is non-critical to the reply; retain the question and log the failure.
+        logger.exception("Failed to generate conversation title")
+        return normalize_conversation_title("", question)

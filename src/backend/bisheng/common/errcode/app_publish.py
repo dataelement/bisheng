@@ -183,10 +183,10 @@ class AppCapacityInsufficientError(AppPublishError):
 
 
 class AppDependencyBuildFailedError(AppPublishError):
-    """Dependency installation / image build failed; ``data`` carries the log tail."""
+    """Delivery preparation failed; retained diagnostics are read separately."""
 
     Code: int = 16227
-    Msg: str = "Dependency installation failed while building the application"
+    Msg: str = "Application delivery preparation failed"
 
 
 class AppStartupProbeFailedError(AppPublishError):
@@ -238,6 +238,13 @@ class AppWebSocketDeclarationError(AppPublishError):
 
     Code: int = 16232
     Msg: str = "WebSocket needs no declaration in bisheng-app.yaml; remove the key"
+
+
+class AppReleaseNotesInvalidError(AppPublishError):
+    """Release notes exceed the normalized Unicode code-point limit."""
+
+    Code: int = 16233
+    Msg: str = "Release notes must not exceed 2,000 characters"
 
 
 # ---------------------------------------------------------------------------

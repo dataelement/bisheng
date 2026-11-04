@@ -284,7 +284,7 @@ prs.save("output/思源电气企业介绍.pptx")
 print("OK:", os.path.getsize("output/思源电气企业介绍.pptx"), "bytes")
 ```
 
-保存后一定要跑（见 SKILL.md §5）：
+保存后一定要跑（见 SKILL.md §6）：
 
 ```python
 import subprocess, sys
@@ -296,7 +296,7 @@ print(r.stderr[-2000:] if r.stderr else "(no stderr)")
 
 ## 10. python-pptx 做不到的事（别浪费轮次）
 
-- **复制一张已有幻灯片**：没有这个 API。要"再来一页同样的"，就用同一个 layout 再 `add_slide` 一次。
+- **复制一张已有幻灯片**：python-pptx 没有这个 API。内置模板请用 `Deck.add()`（它负责复制原型页）；用户自己的模板，要"再来一页同样的"就用同一个 layout 再 `add_slide` 一次。
 - **渐变填充**：`fill.gradient()` 支持有限且容易出错；要渐变就用一张渐变图片当背景。
 - **读取 SVG/EMF**：`add_picture` 会抛 `UnidentifiedImageError`。模板里的矢量图标只能靠"复用带该图标的版式"来保留。
 - **自动缩放文字以适应形状**：`auto_size` 的自动缩字号在 PowerPoint 里才生效，生成时不会真的改字号 ——

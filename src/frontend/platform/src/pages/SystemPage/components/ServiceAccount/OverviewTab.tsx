@@ -1,3 +1,5 @@
+import { useServiceAccountOwnerCandidates } from "./useServiceAccountOwnerCandidates";
+import { useServiceAccountRequestScope } from "./useServiceAccountManagementScope";
 import { Button, Input, Textarea, notification } from '@bisheng/ui';
 import DepartmentUsersSelect,{
 type DepartmentUserOption,
@@ -8,6 +10,10 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Label } from "@/components/bs-ui/label";
 
 import { locationContext } from "@/contexts/locationContext";
+import { userContext } from "@/contexts/userContext";
+import { getTenantApi, getUserTenantsApi } from "@/controllers/API/tenant";
+import { displayTenantName } from "@/utils/tenantDisplayName";
+import { useQuery } from "@tanstack/react-query";
 import {
 deleteServiceAccountApi,
 listServiceAccountResourceGrantsApi,
@@ -51,11 +57,28 @@ export function OverviewTab({
   onChanged,
   onDeleted,
 }: OverviewTabProps) {
+  const requestScope = useServiceAccountRequestScope();
+  const ownerCandidates = useServiceAccountOwnerCandidates(requestScope);
   const { t } = useTranslation()
   const { appConfig } = useContext(locationContext)
   // A standard docker install is a single (Root) tenant: showing "Tenant: 1"
   // there names a concept the deployment does not expose anywhere else.
   const multiTenantEnabled = !!appConfig?.multiTenantEnabled
+  const { user } = useContext(userContext)
+  const isGlobalAdmin = !!user && (user.is_global_super || user.role === "admin")
+  const tenantName = useQuery({
+    queryKey: ["service-account-tenant-name", user?.user_id, detail.tenant_id, isGlobalAdmin],
+    enabled: multiTenantEnabled,
+    queryFn: async () => {
+      if (isGlobalAdmin) {
+        return displayTenantName((await getTenantApi(detail.tenant_id)).tenant_name)
+      }
+      const tenants = await getUserTenantsApi()
+      return displayTenantName(tenants.find(tenant => tenant.tenant_id === detail.tenant_id)?.tenant_name)
+    },
+    staleTime: 60_000,
+    onError: showApiError,
+  })
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(detail.name)
   const [description, setDescription] = useState(detail.description || "")
@@ -96,7 +119,7 @@ export function OverviewTab({
     }
     setLoading("save")
     try {
-      const updated = await updateServiceAccountApi(detail.id, payload)
+      const updated = await updateServiceAccountApi(detail.id, payload, requestScope)
       if (!updated) return
       notification.open({ type: "success", title: String(t("openApiManagement.serviceAccount.title") ?? ''), description: String(t("openApiManagement.feedback.updated") ?? '') })
       setEditing(false)
@@ -111,7 +134,7 @@ export function OverviewTab({
   const handleToggle = () => {
     const enabled = detail.status !== "enabled"
     setLoading("toggle")
-    void setServiceAccountEnabledApi(detail.id, enabled)
+    void setServiceAccountEnabledApi(detail.id, enabled, requestScope)
       .then((updated) => {
         if (!updated) return
         notification.open({ type: "success", title: String(t("openApiManagement.serviceAccount.title") ?? ''), description: String(t(
@@ -126,9 +149,10 @@ export function OverviewTab({
 
   const handleDelete = async () => {
     setLoading("delete")
-    const grants = await listServiceAccountResourceGrantsApi(detail.id).finally(() => setLoading(null))
+    const grants = await listServiceAccountResourceGrantsApi(detail.id, requestScope).finally(() => setLoading(null))
     if (!grants) return
     bsConfirm({
+      signal: requestScope.signal,
       title: t("openApiManagement.serviceAccount.deleteConfirmTitle"),
       desc: (
         <div className="space-y-2 text-left">
@@ -159,7 +183,7 @@ export function OverviewTab({
       ),
       onOk: (close) => {
         setLoading("delete")
-        return deleteServiceAccountApi(detail.id)
+        return deleteServiceAccountApi(detail.id, requestScope)
           .then((result) => {
             if (!result) return
             notification.open({ type: "success", title: String(t("openApiManagement.serviceAccount.title") ?? ''), description: String(t("openApiManagement.feedback.deleted") ?? '') })
@@ -186,7 +210,7 @@ export function OverviewTab({
         </Field>
         {multiTenantEnabled ? (
           <Field label={t("openApiManagement.fields.tenant")}>
-            {detail.tenant_id}
+            {tenantName.isLoading ? t("loading") : tenantName.data || "-"}
           </Field>
         ) : null}
         <Field
@@ -206,6 +230,7 @@ export function OverviewTab({
           {editing ? (
             <div className="space-y-2">
               <DepartmentUsersSelect
+              candidateSource={ownerCandidates}
                 multiple={false}
                 value={owner}
                 onChange={setOwner}

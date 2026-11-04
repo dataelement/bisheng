@@ -1,5 +1,4 @@
 export { TrashIcon } from './del';
-export { FilterIcon } from './filter';
 export { FlagIcon } from './flag';
 export { AssistantIcon, SkillIcon } from './flow';
 export { GithubIcon } from './github';

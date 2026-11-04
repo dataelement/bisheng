@@ -42,7 +42,7 @@ import hashlib
 import hmac
 import json
 from typing import Any
-from urllib.parse import quote, unquote
+from urllib.parse import quote
 
 import httpx
 from loguru import logger
@@ -344,53 +344,12 @@ class OrchestratorClient:
         op: str,
         as_bytes: bool = False,
     ) -> Any:
-        if settings.app_runtime.runtime_protocol_version == 2 and (
-            op.startswith("db_") or op in {"status", "logs", "runtime_status"}
-        ):
+        if settings.app_runtime.runtime_protocol_version != 2:
+            raise AppOrchestratorUnavailableError(msg="runtime v1 retired", reason="runtime_v1_retired")
+        if op.startswith("db_") or op in {"status", "logs", "runtime_status"}:
             return await self._v2_request(method, path, json=json, params=params, op=op, as_bytes=as_bytes)
-        base_url, secret = self._config()
-        if not secret:
-            logger.error("app_runtime.orchestrator op={} rejected: manager_hmac_secret is empty (fail-closed)", op)
-            raise AppOrchestratorUnavailableError(msg="运行环境管理器未配置共享密钥", reason="hmac_secret_missing")
-
-        raw = self._encode(json)
-        # The manager verifies against the *decoded* request path (Starlette's
-        # ``request.url.path``), so the signature covers the decoded form even
-        # when the wire carries a percent-encoded segment (a row key).
-        headers = {self._signature_header: compute_signature(method, unquote(path), raw, secret)}
-        if json is not None:
-            headers["Content-Type"] = "application/json"
-
-        # Replaying a write whose response we never saw could double-apply it;
-        # only reads and never-connected attempts are retried (module docstring).
-        idempotent = method.upper() == "GET"
-        timeout = _TIMEOUTS.get(op, _DEFAULT_TIMEOUT)
-        last_error: Exception | None = None
-        for attempt in range(_MAX_ATTEMPTS):
-            try:
-                async with httpx.AsyncClient(base_url=base_url, timeout=timeout, transport=self._transport) as client:
-                    response = await client.request(
-                        method,
-                        path,
-                        content=raw if json is not None else None,
-                        params=params or None,
-                        headers=headers,
-                    )
-                return self._unwrap(response, op=op, as_bytes=as_bytes)
-            except httpx.ConnectError as exc:
-                last_error = exc  # peer never saw it — safe to replay whatever the verb
-            except httpx.HTTPError as exc:
-                last_error = exc
-                if not idempotent:
-                    break
-            if attempt + 1 < _MAX_ATTEMPTS:
-                logger.warning("app_runtime.orchestrator op={} attempt={} retrying: {}", op, attempt + 1, last_error)
-
-        logger.error("app_runtime.orchestrator op={} unreachable: {}", op, last_error)
         raise AppOrchestratorUnavailableError(
-            msg="无法连接运行环境管理器",
-            reason="transport_error",
-            detail=str(last_error),
+            msg="runtime control RPC retired; use durable v2 operations", reason="runtime_v1_retired"
         )
 
     async def _v2_request(self, method, path, *, json, params, op, as_bytes):

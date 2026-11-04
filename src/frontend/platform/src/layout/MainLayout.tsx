@@ -1,3 +1,4 @@
+import { HeaderTenantScope } from "@/components/HeaderTenantScope";
 // @ts-strict-ignore
 import { Button, Dropdown, DropdownChevron, DropdownItem, DropdownSeparator, Select } from '@bisheng/ui';
 import { LoadingIcon } from "@/components/bs-icons/loading";
@@ -24,6 +25,22 @@ import { User } from "../types/api/user";
 import { getBrandAssetUrl } from "../utils/brand";
 import { HeaderMenu } from "./HeaderMenu";
 import { LicenseBanner } from "./LicenseBanner";
+
+const PRIMARY_PAGE_PATHS = new Set([
+    "/dashboard",
+    "/build/client",
+    "/filelib",
+    "/dataset",
+    "/model/management",
+    "/model/finetune",
+    "/dsh",
+    "/evaluation",
+    "/label",
+    "/log",
+    "/approval",
+    "/sys",
+    "/tenant",
+]);
 
 export default function MainLayout() {
     const { dark, setDark } = useContext(darkContext);
@@ -96,6 +113,7 @@ export default function MainLayout() {
     // NavLink matches on pathname only, so every link falling back to
     // /menu-pending?menu=<key> would light up together; disambiguate by `menu`.
     const location = useLocation();
+    const isPrimaryPage = PRIMARY_PAGE_PATHS.has(location.pathname.replace(/\/$/, ""));
     const pendingNavClass =
         (menuKey: string) =>
         ({ isActive }: { isActive: boolean }) => {
@@ -117,10 +135,11 @@ export default function MainLayout() {
 
     return (
         <div className="flex">
-            <div className="bg-background-main w-full h-screen flex flex-col">
+            <div className="bg-[#f8f8f8] dark:bg-background-main w-full h-screen flex flex-col">
                 {isGlobalSuper && <LicenseBanner />}
-                <div className="flex justify-between h-[64px] shrink-0 bg-background-main relative z-[21]">
-                    <div className="flex h-9 my-[14px]">
+                {/* 1fr / auto / 1fr keeps the page tabs centered even though the logo and the right cluster differ in width */}
+                <div className="grid h-[64px] shrink-0 grid-cols-[1fr_auto_1fr] items-center bg-[#f8f8f8] dark:bg-background-main relative z-[21]">
+                    <div className="flex h-9">
                         <div className="inline-block">
                             {/* @ts-ignore */}
                             <img
@@ -138,8 +157,9 @@ export default function MainLayout() {
                     <div>
                         <HeaderMenu />
                     </div>
-                    <div className="flex w-fit relative z-10">
-                        <div className="flex">
+                    <div className="relative z-10 flex items-center justify-self-end gap-x-4 pr-8">
+                        {isGlobalSuper && appConfig.multiTenantEnabled && <HeaderTenantScope user={user} />}
+                        <div className="flex items-center gap-x-1">
                             <TooltipProvider>
                                 <Tooltip
                                     content={
@@ -148,7 +168,7 @@ export default function MainLayout() {
                                         </>
                                     }
                                 >
-                                    <Button type="button" size="medium" variant="text" iconOnly className="my-4" aria-label={t("menu.themeSwitch")} onClick={() => setDark(!dark)}>
+                                    <Button type="button" size="medium" variant="text" color="default" iconOnly aria-label={t("menu.themeSwitch")} onClick={() => setDark(!dark)}>
                                         <div className="">
                                             {dark ? (
                                                 <Sun className="side-bar-button-size dark:text-slate-50 mx-auto w-[13px] h-[13px]" />
@@ -159,11 +179,10 @@ export default function MainLayout() {
                                     </Button>
                                 </Tooltip>
                             </TooltipProvider>
-                            <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
                             <Select
                                 {...selectLabels}
                                 variant="ghost"
-                                className="my-4 w-auto"
+                                className="w-auto"
                                 aria-label={t("system.language")}
                                 options={languageOptions}
                                 value={language}
@@ -171,15 +190,12 @@ export default function MainLayout() {
                                     if (value != null) changLanguage(String(value));
                                 }}
                             />
-                            <Separator
-                                className="mx-[23px] h-6 border-l my-5 border-[#dddddd]"
-                                orientation="vertical"
-                            />
                         </div>
-                        <div className="flex items-center h-7 my-4">
+                        <Separator className="h-5 border-l border-[#dddddd]" orientation="vertical" />
+                        <div className="flex items-center gap-x-2">
                             {/* @ts-ignore */}
                             <img
-                                className="h-7 w-7 rounded-2xl mr-4"
+                                className="h-7 w-7 rounded-2xl"
                                 src={__APP_ENV__.BASE_URL + (user.avatar || "/assets/user.png")}
                                 alt=""
                             />
@@ -203,7 +219,7 @@ export default function MainLayout() {
                                     </>
                                 }
                             >
-                                <Button type="button" variant="text" color="default" className="mr-8 max-w-40">
+                                <Button type="button" variant="text" color="default" className="max-w-40">
                                     <span className="truncate">{user.user_name}</span>
                                     <DropdownChevron />
                                 </Button>
@@ -212,7 +228,7 @@ export default function MainLayout() {
                     </div>
                 </div>
                 <div className="flex flex-1 min-h-0">
-                    <div className="relative z-10 bg-background-main h-full w-[184px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
+                    <div className="relative z-10 bg-[#f8f8f8] dark:bg-background-main h-full w-[184px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
                         <nav
                             className="overflow-y-auto overflow-x-hidden [&_.navlink>svg]:text-text-2 [&_.navlink.active>svg]:text-inherit"
                             style={{ maxHeight: "calc(100vh - 64px - 90px - var(--license-banner-h, 0px))" }}
@@ -367,7 +383,7 @@ export default function MainLayout() {
                                     >
                                         <Outlined.City className="h-4 w-4 my-4 mr-2 shrink-0" />
                                         <span className="mx-[14px] max-w-[56px] text-[14px] leading-[48px]">
-                                            {t("tenant.management")}
+                                            {t("menu.tenant")}
                                         </span>
                                     </NavLink>
                                 </>
@@ -375,7 +391,7 @@ export default function MainLayout() {
                         </nav>
                         {!appConfig.noFace && (
                             <div className="absolute left-0 bottom-0 w-[180px] p-2">
-                                <div className="help flex items-between my-3">
+                                <div className="help flex items-between my-2">
                                     <TooltipProvider>
                                         <Tooltip
                                             content={
@@ -431,7 +447,8 @@ export default function MainLayout() {
                     document scrollbar, so calc(100vw-184px) overshot the free space
                     by the scrollbar width and forced a horizontal document scrollbar
                     (which then cost vertical space and produced a second, outer scrollbar). */}
-                    <div className="flex-1 min-w-0 bg-background-main-content rounded-lg">
+                    {/* Clip child backgrounds to the shared radius without creating a scroll container. */}
+                    <div className={`flex-1 min-w-0 bg-background-main-content rounded-lg${isPrimaryPage ? " mr-4 mb-4 overflow-clip" : ""}`}>
                         <Suspense
                             fallback={
                                 <div className="flex items-center justify-center h-full">
@@ -468,11 +485,14 @@ export default function MainLayout() {
 }
 
 const useLanguage = (user: User) => {
+    const { t } = useTranslation();
     // APP_CONFIG.disableJa (config.js) hides Japanese from the switcher.
     const jaDisabled = !!(window as any).APP_CONFIG?.disableJa;
-    const options: Record<string, string> = jaDisabled
-        ? { "zh-Hans": "中文", "en-US": "English" }
-        : { "zh-Hans": "中文", "en-US": "English", ja: "日本語" };
+    const options: Record<string, string> = {
+        "zh-Hans": t("menu.languageChinese"),
+        "en-US": "English",
+        ...(!jaDisabled && { ja: t("menu.languageJapanese") }),
+    };
     // Source of truth for the displayed label is whatever i18next resolved
     // during init (which already honors disableJa).
     const initialLanguage = options[i18next.language] ? i18next.language : "zh-Hans";
@@ -485,7 +505,6 @@ const useLanguage = (user: User) => {
         }
     }, [user]);
 
-    const { t } = useTranslation();
     const changLanguage = (ln: string) => {
         setLanguage(ln);
         localStorage.setItem("i18nextLng", ln);

@@ -25,7 +25,7 @@ import {
     type KnowledgeSpaceSensitivePolicyHandle,
 } from "./KnowledgeSpaceSensitivePolicy";
 import KnowledgeSpaceTagLibrarySection from "./KnowledgeSpaceTagLibrarySection";
-import { clampMenuName, toStoredMenuName } from "./menuDisplayName";
+import { isMenuNameTooLong, toStoredMenuName } from "./menuDisplayName";
 import Preview from "./Preview";
 
 interface KnowledgeConfigForm {
@@ -89,6 +89,10 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
         if (!configMeta) return false;
         if ((String((formData.assistantName) ?? '').length > 50) || (String((formData.systemPrompt) ?? '').length > 30000) || (String((formData.userPrompt) ?? '').length > 30000)) return;
 
+        if (isMenuNameTooLong(formData.menuDisplayName)) {
+            setErrors((prev) => ({ ...prev, menuDisplayName: t("chatConfig.menuNameTooLong") }));
+            return false;
+        }
         const sensitiveSaved = await sensitivePolicyRef.current?.save();
         if (sensitiveSaved === false) return false;
         return saveKnowledgeConfig();
@@ -105,10 +109,11 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                             <FormInput
                                 label={t("chatConfig.menuDisplayName")}
                                 value={formData.menuDisplayName}
+                                validate={(v) => isMenuNameTooLong(v) ? t("chatConfig.menuNameTooLong") : ""}
                                 error={errors.menuDisplayName}
                                 placeholder={t("bench.knowledgeSpace")}
                                 onChange={(v) => {
-                                    setFormData((prev) => ({ ...prev, menuDisplayName: clampMenuName(v) }));
+                                    setFormData((prev) => ({ ...prev, menuDisplayName: v }));
                                     setErrors((prev) => ({ ...prev, menuDisplayName: "" }));
                                 }}
                             />
@@ -356,6 +361,10 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
         // Length cap is the only remaining check after auto-refill removes the blank case.
         let isValid = true;
         const nextErrors = { systemPrompt: "", userPrompt: "", menuDisplayName: "" };
+        if (isMenuNameTooLong(formData.menuDisplayName)) {
+            nextErrors.menuDisplayName = t("chatConfig.menuNameTooLong");
+            isValid = false;
+        }
 
         if (finalSystemPrompt.length > 30000) {
             nextErrors.systemPrompt = t("chatConfig.errors.maxCharacters", { count: 30000 });

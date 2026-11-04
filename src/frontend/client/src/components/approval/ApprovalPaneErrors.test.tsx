@@ -55,3 +55,37 @@ it('releases a stale detail loader when refreshing the list fails', async () => 
   expect(screen.queryByText('com_approval_loading')).not.toBeInTheDocument();
   expect(screen.queryByText('Detail First')).not.toBeInTheDocument();
 });
+
+
+it('keeps the notification target selected after switching to processed tasks', async () => {
+  const tasks = [
+    { task_id: 1, instance_id: 40, status: 'cancelled', business_name: 'Other' },
+    { task_id: 2, instance_id: 42, status: 'cancelled', business_name: 'Target' },
+  ];
+  (listMyApprovalTasksApi as jest.Mock).mockResolvedValue({ data: tasks });
+  (getMyApprovalTaskDetailApi as jest.Mock).mockImplementation(async id => tasks.find(task => task.task_id === id));
+  render(<ApprovalPane {...props} target={{ instanceId: 42 }} />);
+  expect(await screen.findByText('Detail Target')).toBeInTheDocument();
+  expect(getMyApprovalTaskDetailApi).not.toHaveBeenCalledWith(1);
+});
+
+it('reloads the exact target when another notification arrives in the same section', async () => {
+  const tasks = [
+    { task_id: 1, instance_id: 41, status: 'pending', business_name: 'First' },
+    { task_id: 2, instance_id: 42, status: 'pending', business_name: 'Target' },
+  ];
+  (listMyApprovalTasksApi as jest.Mock).mockResolvedValue({ data: tasks });
+  (getMyApprovalTaskDetailApi as jest.Mock).mockImplementation(async id => tasks.find(task => task.task_id === id));
+  const view = render(<ApprovalPane {...props} target={{ instanceId: 41 }} />);
+  await screen.findByText('Detail First');
+  view.rerender(<ApprovalPane {...props} target={{ instanceId: 42 }} />);
+  expect(await screen.findByText('Detail Target')).toBeInTheDocument();
+});
+
+it('does not open an unrelated record for an unavailable target', async () => {
+  (listMyApprovalTasksApi as jest.Mock).mockResolvedValue({ data: [{ task_id: 1, instance_id: 40, status: 'pending', business_name: 'Other' }] });
+  render(<ApprovalPane {...props} target={{ instanceId: 42 }} />);
+  await waitFor(() => expect(listMyApprovalTasksApi).toHaveBeenCalled());
+  expect(getMyApprovalTaskDetailApi).not.toHaveBeenCalled();
+  expect(screen.queryByText('Detail Other')).not.toBeInTheDocument();
+});

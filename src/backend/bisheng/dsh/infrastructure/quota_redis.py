@@ -171,7 +171,7 @@ class QuotaRedis:
                     str(event.model_id),
                     event.usage_month,
                     event.status,
-                    "" if event.total_tokens is None else str(event.total_tokens),
+                    "" if event.total_tokens is None else str(event.billed_tokens),
                     event.request_id,
                     event.model_dump_json(),
                     event.operation_id or "",
@@ -371,6 +371,9 @@ class QuotaRedis:
             "started_at",
         )
         data = event.model_dump(mode="json", include=set(fields))
+        # Preserve hashes of historical 1x events while fencing nondefault rates.
+        if event.credit_rate != 100:
+            data["credit_rate"] = event.credit_rate
         started = event.started_at
         if started.tzinfo is None:
             started = started.replace(tzinfo=UTC)

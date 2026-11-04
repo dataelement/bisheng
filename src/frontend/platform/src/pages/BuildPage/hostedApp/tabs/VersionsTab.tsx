@@ -14,7 +14,8 @@ import {
 } from "@/controllers/API/hostedApp"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { versionTerminalStateI18nKey } from "../types"
+import { versionApprovalI18nKey } from "../types"
+import { VersionReleaseNotes } from "../VersionReleaseNotes"
 
 interface VersionsTabProps {
   appId: string
@@ -29,19 +30,29 @@ export function VersionsTab({ appId, contentSlot = null }: VersionsTabProps) {
   const [failure, setFailure] = useState("")
 
   useEffect(() => {
+    let cancelled = false
     setLoading(true)
+    setVersions([])
+    setFailure("")
     getHostedAppVersionsApi(appId)
       .then((rows) => {
+        if (cancelled) return
         setVersions(rows || [])
         setFailure("")
       })
       .catch((error) => {
+        if (cancelled) return
         setVersions([])
         setFailure(
           getHostedAppErrorMessage(error) || t("hostedApp.versions.loadFailed"),
         )
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [appId, t])
 
   return (
@@ -50,8 +61,12 @@ export function VersionsTab({ appId, contentSlot = null }: VersionsTabProps) {
         <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-background-login text-xs text-muted-foreground">
             <tr>
-              <th className="px-3 py-2 text-left">{t("hostedApp.versions.no")}</th>
-              <th className="px-3 py-2 text-left">{t("hostedApp.versions.kind")}</th>
+              <th className="px-3 py-2 text-left">
+                {t("hostedApp.versions.no")}
+              </th>
+              <th className="px-3 py-2 text-left">
+                {t("hostedApp.versions.kind")}
+              </th>
               <th className="px-3 py-2 text-left">
                 {t("hostedApp.versions.terminalState")}
               </th>
@@ -61,18 +76,14 @@ export function VersionsTab({ appId, contentSlot = null }: VersionsTabProps) {
               <th className="px-3 py-2 text-left">
                 {t("hostedApp.versions.marker")}
               </th>
+              <th className="w-28 px-3 py-2 text-left font-normal">
+                {t("operations")}
+              </th>
             </tr>
           </thead>
           <tbody>
             {versions.map((version) => {
-              // Mapped, never printed raw: `online` / `rejected` / `withdrawn`
-              // are wire values, and an owner reading "withdrawn" in a Chinese
-              // UI is reading a database column. A version with no latched
-              // outcome keeps the dash — the marker column next door already
-              // says whether it is staged or still under approval.
-              const outcomeKey = versionTerminalStateI18nKey(
-                version.terminal_state,
-              )
+              const outcomeKey = versionApprovalI18nKey(version)
               return (
                 <tr key={version.version_id} className="border-t">
                   <td className="px-3 py-2">{`v${version.version_no}`}</td>
@@ -98,6 +109,9 @@ export function VersionsTab({ appId, contentSlot = null }: VersionsTabProps) {
                         {t("hostedApp.versions.pending")}
                       </span>
                     )}
+                  </td>
+                  <td className="w-28 whitespace-nowrap px-3 py-2">
+                    <VersionReleaseNotes notes={version.release_notes} />
                   </td>
                 </tr>
               )

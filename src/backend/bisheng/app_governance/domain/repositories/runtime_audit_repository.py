@@ -39,6 +39,26 @@ def source_time(value, filters):
 
 def project(row, kind, filters):
     result = dict(row)
+    prefix = result.pop("_credential_prefix", None)
+    last4 = result.pop("_credential_last4", None)
+    if prefix is not None and last4 is not None:
+        from bisheng.open_api.domain.models.api_credential import mask_key
+
+        result["credential_mask"] = mask_key(last4, prefix)
+    if (
+        kind == "model"
+        and "subject_name" in result
+        and result.get("subject_id") is not None
+        and result.get("subject_id") == result.get("actor_id")
+        and (
+            result.get("subject_kind") == result.get("actor_kind") == "service_account"
+            or (
+                result.get("subject_kind") in {"user", "natural_person"}
+                and result.get("actor_kind") == "natural_person"
+            )
+        )
+    ):
+        result["subject_name"] = result.get("actor_name") or result["subject_name"]
     key = "entry_time" if kind == "access" else "create_time"
     value = result.get(key)
     if value is not None:
@@ -63,6 +83,13 @@ class RuntimeAuditRepository:
         stmt = select(*[getattr(model, f).label(f) for f in FIELDS[kind]])
         if scope.tenant_id is not None:
             stmt = stmt.where(model.tenant_id == scope.tenant_id)
+        if scope.authorized_app_ids is not None:
+            ids = scope.authorized_app_ids
+            stmt = stmt.where(
+                or_(*(model.app_id.in_(ids[i : i + 500]) for i in range(0, len(ids), 500)))
+                if ids
+                else model.app_id.in_(())
+            )
         if watermark is not None:
             stmt = stmt.where(model.id <= watermark)
         if filters.get("start_time"):
@@ -85,6 +112,32 @@ class RuntimeAuditRepository:
             stmt = stmt.where(model.credential_id == filters["credential_id"])
         return stmt, model, time
 
+    @staticmethod
+    def with_display_labels(stmt, model, kind):
+        """Optional labels never change the source rows or their stable identifiers."""
+        if kind == "access":
+            return stmt
+        from bisheng.user.domain.models.user import User
+
+        subject = model.subject_id if kind == "model" else model.subject_user_id
+        # User IDs are global. Only identities already named in the authorized
+        # audit facts are joined; this is not a directory or permission lookup.
+        stmt = stmt.outerjoin(
+            User,
+            and_(User.user_id == subject, User.delete == 0, model.subject_kind.in_(["user", "natural_person"])),
+        ).add_columns(User.user_name.label("subject_name"))
+        if kind == "capability":
+            from bisheng.open_api.domain.models.api_credential import ApiCredential
+
+            stmt = stmt.outerjoin(
+                ApiCredential,
+                and_(ApiCredential.id == model.credential_id, ApiCredential.tenant_id == model.tenant_id),
+            ).add_columns(
+                ApiCredential.key_prefix.label("_credential_prefix"),
+                ApiCredential.last4.label("_credential_last4"),
+            )
+        return stmt
+
     async def watermark(self, scope, kind, filters):
         stmt, _, _ = self.statement(scope, kind, filters)
         with read_scope(scope):
@@ -93,6 +146,7 @@ class RuntimeAuditRepository:
 
     async def page(self, scope, kind, filters, watermark, *, after=None, limit=50):
         stmt, model, time = self.statement(scope, kind, filters, watermark)
+        stmt = self.with_display_labels(stmt, model, kind)
         if after:
             when, record_id = after
             if when is None:
@@ -151,7 +205,8 @@ class RuntimeAuditRepository:
             label = {"capability": "app_name", "access": "app_name_snapshot"}.get(kind)
         elif dimension == "visitor":
             key = {"model": "subject_id", "capability": "subject_user_id", "access": "user_id"}[kind]
-            label = "user_name" if kind == "access" else None
+            label = "user_name" if kind == "access" else "subject_name"
+            stmt = self.with_display_labels(stmt, model, kind)
             if kind == "model":
                 stmt = stmt.where(model.subject_kind.in_(["user", "natural_person"]))
         elif dimension == "credential" and kind == "model":

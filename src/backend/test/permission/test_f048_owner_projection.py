@@ -454,10 +454,35 @@ async def test_system_owned_requires_code_allowlist_and_business_predicate() -> 
         ),
     )
 
+    sources = GrantSourceService()
+    public_model = GrantModelSnapshot(model_key="viewer", active=True, action_codes=("use",), derived_level=1)
+    public_grant = GrantSnapshot(
+        grant_id="public-tool",
+        tenant_id=5,
+        resource_type="tool",
+        resource_id="preset-1",
+        model=public_model,
+        active=False,
+        sources=(),
+    )
+    mutation = sources.add_source(
+        public_grant,
+        sources.canonicalize_source(
+            source_id=100,
+            subject_type="tenant",
+            subject_id="5",
+            source_type="TENANT",
+        ),
+    )
+    valid = replace(valid, creation_grants=(mutation.grant,), creation_deltas=mutation.deltas)
     result = await service.project_created(valid)
     assert result.grant is None
     assert any(delta.relation == "visible" for delta in projection.plans[0].deltas)
-    assert any(delta.relation == "system_use_marker" for delta in projection.plans[0].deltas)
+    assert all(delta.relation != "system_use_marker" for delta in projection.plans[0].deltas)
+    assert any(
+        delta.user == "tenant:5#member" and delta.relation == "ordinary_assignee"
+        for delta in projection.plans[0].deltas
+    )
 
     for invalid in (
         replace(valid, system_predicate=False),

@@ -18,6 +18,7 @@ from bisheng.core.context.tenant import (
     DEFAULT_TENANT_ID,
     get_current_tenant_id,
     get_visible_tenant_ids,
+    is_management_all_tenants,
     is_strict_tenant_filter,
     is_tenant_filter_bypassed,
 )
@@ -39,10 +40,12 @@ _EXCLUDED_TABLES: set[str] = {"user_tenant", "channel_info_source"}
 # exactly how knowledgefile / flowversion / roleaccess / userrole / ...
 # kept writing child-tenant resources to root in v2.5.
 _TENANT_AWARE_MODEL_MODULES = (
+    "bisheng.dsh.domain.models.content_safety_event",
     "bisheng.dsh.domain.models.local_session",
     "bisheng.dsh.domain.models.model_audit_conversation",
     "bisheng.dsh.domain.models.model_audit_title",
     "bisheng.dsh.domain.models.model_audit_tree",
+    "bisheng.dsh.domain.models.work_publication",
     "bisheng.dsh_market.domain.models",
     # Already on the main router import chain — listed for completeness so
     # _force_import_all_models() guarantees them even if a future refactor
@@ -141,6 +144,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     # for lack of the column, so it is never auto-filtered.
     "bisheng.database.models.resource_tier",
     # F062 desktop model access.
+    "bisheng.dsh.domain.models.unified_policy",
     "bisheng.dsh.domain.models.user_policy",
     "bisheng.dsh.domain.models.admin_operation",
     "bisheng.dsh.domain.models.monthly_usage",
@@ -214,6 +218,8 @@ def register_tenant_filter_events() -> None:
             return
 
         if not orm_execute_state.is_select:
+            return
+        if is_management_all_tenants() and not is_strict_tenant_filter():
             return
 
         stmt = orm_execute_state.statement
@@ -312,7 +318,7 @@ def build_tenant_filter_clause(tenant_col):
         ``None`` — the latter only when multi_tenant is disabled and no
         context exists). Callers should treat ``None`` as "skip this WHERE".
     """
-    if is_tenant_filter_bypassed():
+    if is_tenant_filter_bypassed() or (is_management_all_tenants() and not is_strict_tenant_filter()):
         return None
 
     visible = _resolve_visible_tenant_ids()

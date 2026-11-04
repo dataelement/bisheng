@@ -338,6 +338,15 @@ class BaseExecutor(ABC):
         touched.extend(modified)
         logs += self.relocation_advisory(moved)
 
+        file_list = self._publish_generated_files(dir_path, touched)
+        if self.local_sync_path and os.path.exists(self.local_sync_path):
+            files_info = list(os.scandir(dir_path))
+            self.sync_files_to_local(files_info, dir_path)
+        return exitcode, logs, file_list
+
+    def _publish_generated_files(self, dir_path: str, touched: list[str]) -> list[str]:
+        """Publish a successful run's changed files to its caller's storage."""
+        file_list = []
         for rel in touched:
             file_name = os.path.join(dir_path, rel)
             if not os.path.isfile(file_name):
@@ -345,10 +354,7 @@ class BaseExecutor(ABC):
             file_ext = os.path.splitext(rel)[-1]
             file_list.append(self.upload_minio(f"{uuid.uuid4().hex}.{file_ext}", file_name))
         self.sync_to_workspace(dir_path, touched)
-        if self.local_sync_path and os.path.exists(self.local_sync_path):
-            files_info = list(os.scandir(dir_path))
-            self.sync_files_to_local(files_info, dir_path)
-        return exitcode, logs, file_list
+        return file_list
 
     def sync_files_to_local(self, files_info: list[DirEntry], root_path: str):
         if not files_info:

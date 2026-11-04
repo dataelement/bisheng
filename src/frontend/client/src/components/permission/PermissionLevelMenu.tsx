@@ -1,4 +1,5 @@
 import { Dropdown, DropdownItem, DropdownSeparator } from "@bisheng/ui";
+import { permissionModelLabel } from "./permissionModelLabel";
 import { Outlined } from "bisheng-icons";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
@@ -12,7 +13,7 @@ interface PermissionLevelMenuProps {
   /** When false the level items are hidden — the menu then only offers removal. */
   canChangeLevel: boolean;
   onChange: (modelId: string) => void;
-  /** Renders the destructive "移除" item. Omit to hide it. */
+  /** Renders the destructive "Remove" item. Omit to hide it. */
   onRemove?: () => void;
   className?: string;
 }
@@ -52,15 +53,16 @@ export function PermissionLevelMenu({
       align="end"
       menu={
         <>
-          {showLevels && options.map((model) => (
-            <DropdownItem
-              key={model.id}
-              checked={model.id === activeId}
-              onSelect={() => onChange(model.id)}
-            >
-              {model.name}
-            </DropdownItem>
-          ))}
+          {showLevels &&
+            options.map((model) => (
+              <DropdownItem
+                key={model.id}
+                checked={model.id === activeId}
+                onSelect={() => onChange(model.id)}
+              >
+                {permissionModelLabel(model.id, model.name, localize)}
+              </DropdownItem>
+            ))}
           {showLevels && onRemove && <DropdownSeparator />}
           {onRemove && (
             <DropdownItem danger onSelect={() => onRemove()}>

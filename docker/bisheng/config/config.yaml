@@ -26,6 +26,14 @@ database_pool:
 # 轮换：改这里的值或删掉配置表中的记录后重启，全员需重新登录。
 # jwt_secret: "replace-with-a-long-random-string"
 
+# Desktop deployment: set the public origin once for login, Chat and Work tools.
+# Use the address entered in the client, including its public port when present.
+# Example: https://work.example.com or http://192.0.2.15:18081
+# Enable this section with a Desktop-compatible backend image.
+# dsh:
+#   enabled: true
+#   platform_public_url: https://work.example.com
+
 # 缓存配置  redis://[[username]:[password]]@localhost:6379/0
 # 如果设置了密码，需要参考MySQL密码的加密逻辑对密码进行加密。eg: redis://root:gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==@redis:6379/0
 # 普通模式:
@@ -44,7 +52,7 @@ openfga:
 # bisheng.gateway-hmac-secret 配成同一个值——这把密钥等同于「可以替任何人
 # 签发登录态」的权限，绝不能沿用示例值或在多个环境间复用。
 sso_sync:
-  gateway_hmac_secret: ""
+  gateway_hmac_secret: !env ${BISHENG_GATEWAY_HMAC_SECRET}
   signature_header: "X-Signature"
 
 # 集群模式或者哨兵模式（只能选其一）:
@@ -206,7 +214,7 @@ logger_conf:
 # 这一层可以整层不装：enabled 保持 false 时，平台其余部分零变化，
 # /apps/{slug} 会落到"本环境未启用应用工场"引导页，CLI 部署被 16207 明确拒绝。
 # compose 形态下这两个服务挂在 `app-runtime` profile 后面，不带
-# `--profile app-runtime` 启动就根本不创建（docker/deploy.sh 已自动处理）。
+# `--profile app-runtime` 启动就根本不创建（scripts/deploy.sh 已自动处理）。
 # app_runtime:
   # 本机（本部署）是否安装了工场运行时层
 #   enabled: false

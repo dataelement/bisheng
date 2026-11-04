@@ -90,7 +90,11 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
     user_name: str = Field(default="", description="Knowledge Space creator name")
     actions: list[str] | None = Field(
         default=None,
-        description="Effective F048 actions the current identity holds on this space",
+        description=(
+            "On /info, an entry access hint only: ['visible'] for content access, "
+            "[] for preview-only access. Full actions come from the resource my-permissions endpoint. "
+            "Other space listings may leave this field unset."
+        ),
     )
     avatar: str | None = Field(default=None, description="Knowledge Space creator avatar")
     follower_num: int = Field(1, description="Follower Number")

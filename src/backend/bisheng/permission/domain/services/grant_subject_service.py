@@ -23,10 +23,6 @@ from bisheng.common.subject_search import normalize_keyword
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import Department, DepartmentDao, UserDepartment
-from bisheng.department.domain.services.department_service import (
-    DepartmentService,
-    _dept_node_dict,
-)
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
 )
@@ -160,25 +156,8 @@ async def list_candidate_department_layer(
 ) -> list[dict]:
     """One layer of the department tree, so a large organisation never loads at once."""
 
-    with bypass_tenant_filter():
-        async with get_async_db_session() as session:
-            statement = select(Department).where(
-                Department.tenant_id == scope.tenant_id,
-                Department.status == "active",
-            )
-            if parent_id is None:
-                # A department-bound space starts at its own department, not at
-                # the tenant root.
-                if scope.department_path is not None:
-                    statement = statement.where(col(Department.path) == scope.department_path)
-                else:
-                    statement = statement.where(col(Department.parent_id).is_(None))
-            else:
-                statement = statement.where(Department.parent_id == parent_id)
-                if scope.department_path is not None:
-                    statement = statement.where(col(Department.path).like(f"{scope.department_path}%"))
-            rows = (await session.exec(statement.order_by(col(Department.id)))).all()
-    return await _as_tree_nodes(rows)
+    directory = await get_grant_subject_directory()
+    return await directory.candidate_department_layer(scope, parent_id=parent_id)
 
 
 async def search_candidate_departments(
@@ -191,15 +170,7 @@ async def search_candidate_departments(
     if not keyword:
         return {"roots": [], "total_matches": 0, "truncated": False}
     directory = await get_grant_subject_directory()
-    rows = await directory.candidate_departments(scope, keyword=keyword, limit=limit + 1)
-    truncated = len(rows) > limit
-    matches = list(rows[:limit])
-    roots = await DepartmentService.abuild_forest_within_subtree(
-        matches,
-        {int(row.id) for row in matches if row.id is not None},
-        confined_to_path=None if scope.department_path is None else scope.department_path,
-    )
-    return {"roots": roots, "total_matches": len(matches), "truncated": truncated}
+    return await directory.search_candidate_departments(scope, keyword=keyword, limit=limit)
 
 
 async def get_candidate_department_path(scope: GrantSubjectScope, *, dept_id: int) -> dict:
@@ -209,23 +180,5 @@ async def get_candidate_department_path(scope: GrantSubjectScope, *, dept_id: in
     tree renders the two interchangeably.
     """
 
-    empty = {"roots": [], "total_matches": 0, "truncated": False}
-    department = await DepartmentDao.aget_by_id(dept_id)
-    if department is None or int(department.tenant_id) != scope.tenant_id:
-        return empty
-    if scope.department_path is not None and not str(department.path).startswith(scope.department_path):
-        return empty
-    roots = await DepartmentService.abuild_forest_within_subtree(
-        [department],
-        {int(department.id)},
-        confined_to_path=scope.department_path,
-    )
-    return {"roots": roots, "total_matches": 1, "truncated": False}
-
-
-async def _as_tree_nodes(rows: list) -> list[dict]:
-    """One rendered layer, in the org tree's node shape (`has_children` batched)."""
-
-    ids = [int(row.id) for row in rows if row.id is not None]
-    with_children = await DepartmentDao.aget_children_existence(ids) if ids else set()
-    return [_dept_node_dict(row, has_children=int(row.id) in with_children) for row in rows]
+    directory = await get_grant_subject_directory()
+    return await directory.candidate_department_path(scope, dept_id=dept_id)

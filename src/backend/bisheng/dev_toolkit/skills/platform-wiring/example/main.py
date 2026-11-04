@@ -22,7 +22,9 @@ from urllib.parse import parse_qs, unquote
 PORT = int(os.environ.get("PORT") or os.environ.get("BISHENG_APP_PORT") or 8080)
 BASE_PATH = (os.environ.get("BISHENG_APP_BASE_PATH") or "").rstrip("/")
 # 第 2 章:数据库路径只从环境变量读;本地直跑(没经 bisheng dev)退回当前目录。
-DB_PATH = os.environ.get("BISHENG_APP_DB_PATH") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.db")
+DB_PATH = os.environ.get("BISHENG_APP_DB_PATH")
+if not DB_PATH:
+    raise RuntimeError("Missing BISHENG_APP_DB_PATH; run with bisheng dev or configure the application database")
 
 
 def url(path: str) -> str:

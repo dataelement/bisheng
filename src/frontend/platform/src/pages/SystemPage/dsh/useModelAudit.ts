@@ -10,34 +10,40 @@ import type {
 } from "@/types/dshModelAudit";
 import { useEffect, useState } from "react";
 
+type AuditRequestState = {
+  query: ModelAuditQuery;
+  revision: number;
+  groupKey?: string;
+  page: ModelAuditPage | null;
+  loading: boolean;
+  failed: boolean;
+  missing: MissingModelAudit | null;
+};
+
 export function useModelAudit(
   query: ModelAuditQuery,
   revision: number,
   groupKey?: string,
   enabled = true,
 ) {
-  const [page, setPage] = useState<ModelAuditPage | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [failed, setFailed] = useState(false);
-  const [missing, setMissing] = useState<MissingModelAudit | null>(null);
+  const [result, setResult] = useState<AuditRequestState | null>(null);
   useEffect(() => {
-    if (!enabled) {
-      setPage(null);
-      setLoading(false);
-      setFailed(false);
-      setMissing(null);
-      return;
-    }
+    if (!enabled) return;
     const controller = new AbortController();
-    setPage(null);
-    setLoading(true);
-    setFailed(false);
-    setMissing(null);
+    const scope = { query, revision, groupKey };
+    setResult({
+      ...scope,
+      page: null,
+      loading: true,
+      failed: false,
+      missing: null,
+    });
     (groupKey
       ? getAuditGroupRequests(groupKey, query, controller.signal)
       : getModelAudit(query, controller.signal)
     )
       .then(async (value) => {
+        let missing: MissingModelAudit | null = null;
         if (
           query.request_id &&
           !value.items.length &&
@@ -48,21 +54,43 @@ export function useModelAudit(
             query.tenant_id,
             controller.signal,
           );
-          if (!controller.signal.aborted && "audit_record_missing" in detail)
-            setMissing(detail);
+          if ("audit_record_missing" in detail) missing = detail;
         }
         if (!controller.signal.aborted) {
-          setPage(value);
-          setLoading(false);
+          // Preserve absent safety observations and nullable model facts exactly as returned.
+          setResult({
+            ...scope,
+            page: value,
+            loading: false,
+            failed: false,
+            missing,
+          });
         }
       })
       .catch(() => {
         if (!controller.signal.aborted) {
-          setFailed(true);
-          setLoading(false);
+          setResult({
+            ...scope,
+            page: null,
+            loading: false,
+            failed: true,
+            missing: null,
+          });
         }
       });
     return () => controller.abort();
   }, [query, revision, groupKey, enabled]);
-  return { page, loading, failed, missing };
+  // A new filter, tenant or refresh must not expose the previous request's page
+  // during the render before its effect starts. Older transports may ignore abort.
+  const current =
+    enabled &&
+    result?.query === query &&
+    result.revision === revision &&
+    result.groupKey === groupKey;
+  return {
+    page: current ? result.page : null,
+    loading: enabled && (!current || result.loading),
+    failed: current ? result.failed : false,
+    missing: current ? result.missing : null,
+  };
 }

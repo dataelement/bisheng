@@ -64,22 +64,23 @@ class DshSelfService:
             )
             result = await view(user.user_id)
         usage = result["usage"]
-        limits, amounts = usage.get("model_limits") or {}, usage.get("models") or {}
+        amounts = usage.get("models") or {}
         return {
             "month": usage["month"],
             "billing_timezone": self.runtime.settings.billing_timezone,
             "source": usage["source"],
             "as_of": usage["as_of"],
             "unknown_pending": usage["unknown_pending"],
+            "limit": usage["limit"],
+            "used": usage["used"],
+            "remaining": usage["remaining"],
             "models": [
                 {
                     "model_id": model["id"],
                     "name": model["name"],
-                    "limit": limits.get(str(model["id"])),
+                    "limit": usage["limit"],
                     "used": amounts.get(str(model["id"])),
-                    "remaining": max(limits[str(model["id"])] - amounts[str(model["id"])], 0)
-                    if str(model["id"]) in limits and str(model["id"]) in amounts
-                    else None,
+                    "remaining": usage["remaining"],
                 }
                 for model in candidates
             ],

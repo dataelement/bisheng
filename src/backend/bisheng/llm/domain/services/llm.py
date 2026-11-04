@@ -13,6 +13,7 @@ from loguru import logger
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.dsh import DshModelNotAllowedError
 from bisheng.common.errcode.http_error import NotFoundError, ServerError
 from bisheng.common.errcode.llm import (
@@ -137,6 +138,7 @@ def _workbench_model_ref_values(config: WorkbenchModelConfig) -> list[Any]:
         getattr(config.asr_model, "id", None),
         getattr(config.tts_model, "id", None),
         getattr(config.chat_title_llm, "id", None),
+        getattr(config.image_read_model, "id", None),
     ]
 
 
@@ -608,7 +610,19 @@ class LLMService:
 
     @classmethod
     async def get_dsh_model_snapshot(cls, model_id: int) -> tuple[LLMModel, LLMServer]:
-        """Read the current governed model/provider pair for one DSH invocation.
+        """Read an online governed model/provider pair for one DSH invocation."""
+        return await cls._get_governed_dsh_model_snapshot(model_id, online_required=True)
+
+    @classmethod
+    async def get_dsh_model_metadata_snapshot(cls, model_id: int) -> tuple[LLMModel, LLMServer]:
+        """Read governed metadata so authorized administrators can restrict offline models."""
+        return await cls._get_governed_dsh_model_snapshot(model_id, online_required=False)
+
+    @classmethod
+    async def _get_governed_dsh_model_snapshot(
+        cls, model_id: int, *, online_required: bool
+    ) -> tuple[LLMModel, LLMServer]:
+        """Keep canonical tenant/Root-share checks common to both named operations.
 
         Ordinary callers retain their existing caching behavior. Root access is
         still decided by get_model_for_call; bypass only resolves the provider
@@ -626,7 +640,7 @@ class LLMService:
             raise
         if (
             model.tenant_id not in {tenant_id, ROOT_TENANT_ID}
-            or not model.online
+            or (online_required and not model.online)
             or model.model_type != LLMModelType.LLM.value
         ):
             raise DshModelNotAllowedError()
@@ -1594,6 +1608,7 @@ class LLMService:
                         config_obj.asr_model,
                         config_obj.tts_model,
                         config_obj.chat_title_llm,
+                        config_obj.image_read_model,
                     )
                 ),
             ],
@@ -1684,6 +1699,28 @@ class LLMService:
         """
         cfg, _, _ = await cls.aget_workbench_llm_with_meta(tenant_id)
         return cfg
+
+    @classmethod
+    async def get_workbench_llm_for_picker(cls) -> WorkbenchModelConfig:
+        """Add public provider labels to the already tenant-validated model list."""
+        config = (await cls.get_workbench_llm()).model_copy(deep=True)
+        if not config.models:
+            return config
+        # get_workbench_llm has checked local/Root ownership before this batch
+        # read. The bypass resolves only those configured models and their servers.
+        with bypass_tenant_filter():
+            models = await LLMDao.aget_model_by_ids([int(model.id) for model in config.models])
+            servers = await LLMDao.aget_server_by_ids(list({model.server_id for model in models}))
+        model_by_id = {str(model.id): model for model in models}
+        server_by_id = {server.id: server for server in servers}
+        for option in config.models:
+            model = model_by_id.get(str(option.id))
+            server = server_by_id.get(model.server_id) if model else None
+            option.provider_id = str(server.id) if server else None
+            option.provider_name = (server.name.strip() or server.type) if server else None
+            if model:
+                option.name = model.model_name
+        return config
 
     @classmethod
     async def aget_workbench_llm_with_meta(

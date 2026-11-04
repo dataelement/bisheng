@@ -26,7 +26,7 @@ export interface HostedAppDiffVersion {
 export interface HostedAppVersionDiff {
   base: HostedAppDiffVersion
   target: HostedAppDiffVersion
-  role: "owner" | "super_admin" | "tenant_admin" | "approver"
+  role: "owner" | "super_admin" | "tenant_admin" | "approver" | "editor"
   summary: {
     files_changed: number
     additions: number

@@ -151,7 +151,7 @@ class SignedClient:
 
 @pytest.fixture
 def rtm_client(rtm_config: Config, fake_docker: FakeDockerBackend) -> SignedClient:
-    from runtime_manager.main import app
-
-    with TestClient(app) as client:
-        yield SignedClient(client)
+    pytest.skip(
+        "F114 retired the v1 HTTP control fixture; v2 signed control uses test_operations_v2 and test_f114_v2_only"
+    )
+    yield  # Keep the fixture generator shape; no legacy control request is sent.

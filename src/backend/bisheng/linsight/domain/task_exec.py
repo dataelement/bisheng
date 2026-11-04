@@ -974,13 +974,15 @@ class LinsightWorkflowTask:
             if skipped:
                 logger.warning(f"{skipped} uploaded file(s) without markdown_file_path skipped for local prefetch")
 
-            # A passthrough file has no separate markdown view — its seed object and
-            # its original are the same bytes. It is fetched by the raw track below,
+            # A passthrough file (text, or an Excel original) has no separate
+            # markdown view — its seed object and its original are the same bytes. It is fetched by the raw track below,
             # which lands it under ``uploads/`` where the pointer block says it is;
             # letting it through here as well would ALSO drop a flat copy at the task
             # root, and the code interpreter's file list (``os.walk``) would show the
             # same file twice under two different paths.
-            downloadable = [f for f in entries if f.get("ingest_mode") != "passthrough"]
+            downloadable = [
+                f for f in entries if f.get("ingest_mode") not in LinsightWorkbenchImpl._ORIGINAL_ONLY_MODES
+            ]
 
             # Concurrent downloads
             download_tasks = [self._download_file(file_info, file_dir) for file_info in downloadable]
@@ -1079,9 +1081,8 @@ class LinsightWorkflowTask:
         return file_path
 
     async def _generate_tools(self, session_model: LinsightSessionVersion) -> list:
-        """Build Tool List"""
-        if not session_model.tools:
-            return []
+        """Resolve authorized task infrastructure and the selected optional tools."""
+        await self._sync_workspace_originals(session_model)
 
         return await LinsightWorkbenchImpl.init_linsight_config_tools(
             session_version=session_model, llm=self.llm, need_upload=True, file_dir=self.file_dir
@@ -1134,7 +1135,7 @@ class LinsightWorkflowTask:
         from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
 
         # Whether the code interpreter is actually bound this run (it is injected
-        # only when the user selected it). Everything that points the model at it —
+        # through the current user permission policy). Everything that points the model at it —
         # the uploaded-files pointer block and the binary read guard — must stay in
         # lockstep with this flag, or we recreate the "told to call a tool that
         # isn't there" failure mode.

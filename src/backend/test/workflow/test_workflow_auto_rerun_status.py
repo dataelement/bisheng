@@ -34,7 +34,7 @@ class FakeRedisCallback:
     async def async_clear_workflow_status(self):
         self.cleared = True
 
-    def set_workflow_stop(self):
+    async def async_set_workflow_stop(self):
         self.stopped = True
 
     def clear_workflow_status(self):
@@ -48,6 +48,8 @@ def make_client(monkeypatch, callback, *, has_history=True, online=True):
     client.user_id = 1
     client.latest_history = SimpleNamespace(category="other") if has_history else None
     client.workflow = None
+    client.session_subject = None
+    client.execution_snapshot = None
     client.hash_key = None
     client.websocket = object()
     client.run_lock = asyncio.Lock()
@@ -162,4 +164,5 @@ async def test_offline_workflow_close_is_not_marked_finished(monkeypatch):
     await client.check_status({"flow_id": "flow-1", "chat_id": "chat-1"})
 
     assert sent == [{"category": "processing", "type": "close", "message": ""}]
-    assert callback.cleared is True
+    assert callback.stopped is True
+    assert callback.cleared is False

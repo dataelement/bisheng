@@ -8,7 +8,7 @@ from bisheng.app_runtime.domain.schemas.runtime_delivery import RestoreInput, Ru
 from bisheng.app_runtime.domain.services.runtime_management_service import RuntimeManagementService
 from bisheng.app_runtime.domain.services.runtime_profile_service import RuntimeProfileService
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.app_factory import AppDataInvalidError, AppManageForbiddenError, AppOwnerOnlyError
+from bisheng.common.errcode.app_factory import AppDataInvalidError, AppManageForbiddenError
 from bisheng.common.schemas.api import resp_200
 
 router = APIRouter(tags=["Runtime delivery management"])
@@ -18,8 +18,6 @@ async def result(awaitable):
     try:
         return resp_200(data=await awaitable)
     except RuntimeConflict as exc:
-        if str(exc) == "natural_owner_required":
-            raise AppOwnerOnlyError() from exc
         if str(exc) == "platform_super_admin_required":
             raise AppManageForbiddenError(reason="platform_super_admin_required") from exc
         raise AppDataInvalidError(reason=str(exc)) from exc
@@ -107,22 +105,6 @@ async def operation(app_id: str, operation_id: str, user: UserPayload = Depends(
 @router.post("/apps/{app_id}/runtime/operations/{operation_id}/cancel")
 async def cancel(app_id: str, operation_id: str, user: UserPayload = Depends(UserPayload.get_login_user)):
     return await result(RuntimeManagementService().cancel(app_id, operation_id, user))
-
-
-@router.post("/apps/{app_id}/runtime/upgrade")
-async def upgrade(app_id: str, body: dict, user: UserPayload = Depends(UserPayload.get_login_user)):
-    from bisheng.app_runtime.domain.services.runtime_upgrade_service import RuntimeUpgradeService
-
-    if body.get("app_id") != app_id:
-        raise AppDataInvalidError(reason="upgrade_scope_mismatch")
-    return await result(RuntimeUpgradeService().import_binding(body, user))
-
-
-@router.post("/apps/{app_id}/runtime/upgrade/rebind")
-async def upgrade_rebind(app_id: str, user: UserPayload = Depends(UserPayload.get_login_user)):
-    from bisheng.app_runtime.domain.services.runtime_upgrade_service import RuntimeUpgradeService
-
-    return await result(RuntimeUpgradeService().rebind(app_id, user))
 
 
 @router.get("/runtime/profiles/{reference}/{os_name}/{architecture}")

@@ -4,11 +4,13 @@ The shared audit harness replaces external identity only; this is not proof of
 production JWT/OpenFGA. It creates a disposable database and object store.
 """
 
+from datetime import timedelta
+
 from sqlmodel import select
 
 from bisheng.dsh.domain.models.model_audit_content import DshModelAuditBodyAccess
 from bisheng.dsh.domain.repositories.model_audit_queries import DshModelAuditQueryRepository as Repository
-from test.dsh.model_audit_fixtures import audit_session
+from test.dsh.model_audit_fixtures import NOW, audit_session
 from test.dsh.test_model_audit_flow import ADMIN, BASE, LOCAL_ADMIN, USER, fixture
 from test.dsh.test_model_audit_tree import add, finish
 from test.e2e.helpers.api import assert_resp_200
@@ -17,6 +19,7 @@ from test.e2e.helpers.api import assert_resp_200
 async def test_tree_http_permissions_filters_and_no_original_prefetch():
     """AC-H01/AC-H04/AC-H06: tenant-scoped tree, same-request filter and zero body reads."""
     async with fixture() as (harness, client, objects):
+        harness.queries.now = lambda: NOW + timedelta(seconds=1)
         with audit_session(harness.engine) as session, session.begin():
             add(session, "parent", "parent")
             add(session, "child", "child", origin="subagent", parent="parent", model_result="FAILED")

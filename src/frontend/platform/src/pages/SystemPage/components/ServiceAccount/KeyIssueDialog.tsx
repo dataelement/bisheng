@@ -1,4 +1,5 @@
-import { Button, Input, notification } from '@bisheng/ui';
+import { useServiceAccountRequestScope } from "./useServiceAccountManagementScope";
+import { Button, Input, notification, Tooltip as QuestionTooltip } from '@bisheng/ui';
 import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect";
 import DepartmentUsersSelect,{
 type DepartmentUserOption,
@@ -20,7 +21,6 @@ DialogTitle,
 import { Label } from "@/components/bs-ui/label";
 
 
-import { QuestionHint as QuestionTooltip } from '@/components/bs-comp/QuestionHint';
 import {
 issueServiceAccountKeyApi,
 updateServiceAccountKeyApi,
@@ -86,6 +86,7 @@ export function KeyIssueDialog({
   onIssued,
   onUpdated,
 }: KeyIssueDialogProps) {
+  const requestScope = useServiceAccountRequestScope();
   const { t } = useTranslation()
   const [name, setName] = useState("")
   const [expiresAt, setExpiresAt] = useState<string | null>(null)
@@ -95,7 +96,7 @@ export function KeyIssueDialog({
     DelegateDepartment[]
   >([])
   const [loading, setLoading] = useState(false)
-  const candidates = useMemo(() => createDelegateCandidateSource(serviceAccountId), [serviceAccountId])
+  const candidates = useMemo(() => createDelegateCandidateSource(serviceAccountId, requestScope), [serviceAccountId, requestScope])
 
   const localDevToolkitCodes = useMemo(
     () =>
@@ -231,14 +232,13 @@ export function KeyIssueDialog({
         const updated = await updateServiceAccountKeyApi(
             serviceAccountId,
             editingKey.id,
-            updatePayload,
-          )
+            updatePayload, requestScope)
         if (!updated) return
         notification.open({ type: "success", title: String(t("openApiManagement.keys.edit") ?? ''), description: String(t("openApiManagement.feedback.keyUpdated") ?? '') })
         onUpdated()
         return
       }
-      const issued = await issueServiceAccountKeyApi(serviceAccountId, payload)
+      const issued = await issueServiceAccountKeyApi(serviceAccountId, payload, requestScope)
       if (!issued) return
       notification.open({ type: "success", title: String(t("openApiManagement.keys.issue") ?? ''), description: String(t("openApiManagement.feedback.keyIssued") ?? '') })
       onIssued(issued)
@@ -278,6 +278,7 @@ export function KeyIssueDialog({
             {t(scope.label_key)}
             {endpointText ? (
               <QuestionTooltip
+                contentClassName="w-[375px] max-w-[calc(100vw-2rem)]"
                 content={
                   <span className="whitespace-pre-line">
                     {t("openApiManagement.keys.endpointsTitle")}\n{endpointText}

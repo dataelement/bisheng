@@ -47,3 +47,8 @@ class SandboxEndpointInvalidError(BaseErrorCode):
         "Sandbox address must be http or https, include a hostname and a legal port, "
         "must not be empty, must be unique after stripping a trailing slash, and at most 32"
     )
+
+
+class SandboxConfigurationError(BaseErrorCode):
+    Code: int = 28010
+    Msg: str = "请为任务模式配置有效的代码执行器 (local、container 或 e2b) 后重试"

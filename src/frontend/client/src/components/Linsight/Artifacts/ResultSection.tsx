@@ -175,7 +175,7 @@ export function ResultSection({
                                pointer sits on the floating panel, so :hover has
                                already dropped and the row would otherwise go flat
                                under an open menu that clearly belongs to it. */
-                            className="group/row flex cursor-pointer items-center justify-between gap-2 rounded-lg py-1 pl-6 pr-1 transition-colors hover:bg-[#f7f7f7] has-[[data-state=open]]:bg-[#f7f7f7]"
+                            className="group/row flex cursor-pointer items-center justify-between gap-2 rounded-lg py-1 pl-6 pr-1 transition-colors hover:bg-fill-1 has-[[data-state=open]]:bg-fill-1"
                             onClick={() => onPreview(file)}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter' || e.key === ' ') {
@@ -184,7 +184,7 @@ export function ResultSection({
                                 }
                             }}
                         >
-                            <span className="flex min-w-0 items-center gap-1.5 text-[14px] leading-[22px] text-[#1D2129] transition-colors group-hover/row:text-blue-700 group-has-[[data-state=open]]/row:text-blue-700">
+                            <span className="flex min-w-0 items-center gap-1.5 text-[14px] leading-[22px] text-text-1 transition-colors group-hover/row:text-blue-700 group-has-[[data-state=open]]/row:text-blue-700">
                                 <span className="truncate">{file.file_name}</span>
                                 <NewTabHint file={file} />
                             </span>

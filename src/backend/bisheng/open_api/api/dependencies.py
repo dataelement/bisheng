@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -16,6 +17,7 @@ from bisheng.common.errcode.open_api import (
     OpenApiAuthError,
     OpenApiEndpointUnregisteredError,
     OpenApiRemovedIdentityInputError,
+    ServiceAccountOperationForbiddenError,
 )
 from bisheng.common.services.config_service import settings
 from bisheng.open_api.domain.context import (
@@ -31,6 +33,7 @@ from bisheng.open_api.domain.services.access_context import (
 )
 from bisheng.open_api.domain.services.credential_validator import validate_bearer
 from bisheng.open_api.domain.services.credential_watcher import watch_websocket_credential
+from bisheng.open_api.domain.services.service_account_scope_service import ServiceAccountScopeService
 from bisheng.open_api.domain.services.tenant_setting_service import TenantSettingService
 from bisheng.user.domain.services.auth import AuthJwt
 
@@ -84,6 +87,40 @@ async def get_service_account_admin(auth_jwt: AuthJwt = Depends()) -> UserPayloa
         return await UserPayload.get_tenant_admin_user(auth_jwt)
     except LLMModelSharedReadonlyError as exc:
         raise UnAuthorizedError() from exc
+
+
+_SERVICE_ACCOUNT_WRITES = (
+    ("POST", r"/api/v1/service-accounts"),
+    ("PATCH", r"/api/v1/service-accounts/\d+"),
+    ("DELETE", r"/api/v1/service-accounts/\d+"),
+    ("POST", r"/api/v1/service-accounts/\d+/(?:enable|disable|resource-grants:mutate)"),
+    ("POST", r"/api/v1/service-accounts/\d+/keys(?:/revoke-all|/\d+/revoke)?"),
+    ("PATCH", r"/api/v1/service-accounts/\d+/keys/\d+"),
+)
+
+
+def is_service_account_write(method: str, path: str) -> bool:
+    path = path.rstrip("/")
+    if method in {"GET", "HEAD", "OPTIONS"}:
+        return False
+    if method == "POST" and re.fullmatch(r"/api/v1/service-accounts/\d+/delegate-candidates:filter", path):
+        return False
+    if any(method == verb and re.fullmatch(pattern, path) for verb, pattern in _SERVICE_ACCOUNT_WRITES):
+        return True
+    # A new mutation must explicitly join the business-write inventory.
+    raise ServiceAccountOperationForbiddenError()
+
+
+async def get_service_account_manager(
+    request: Request,
+    admin: UserPayload = Depends(get_service_account_admin),
+) -> AsyncIterator[UserPayload]:
+    async with ServiceAccountScopeService.bind_request(
+        admin,
+        expected_tenant=request.headers.get("X-Service-Account-Tenant"),
+        writing=is_service_account_write(request.method, request.url.path),
+    ):
+        yield admin
 
 
 def _raise_for_connection(conn: HTTPConnection, exc: OpenApiAuthError) -> None:

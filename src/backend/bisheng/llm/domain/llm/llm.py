@@ -34,6 +34,12 @@ from bisheng.core.ai import (
     ChatZhipuAI,
 )
 from bisheng.core.ai.llm.custom_chat_deepseek import CustomChatDeepSeek
+from bisheng.dsh.domain.services.chat_credits import (
+    account_async,
+    account_async_stream,
+    account_sync,
+    account_sync_stream,
+)
 from bisheng.llm.domain.const import LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMModel, LLMServer
 
@@ -265,6 +271,8 @@ _llm_node_type: dict = {
     LLMServerType.VOLCENGINE.value: {"client": ChatVoiceEngine, "params_handler": _get_openai_params},
     LLMServerType.SILICON.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},
     LLMServerType.MIND_IE.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},
+    # Generic OpenAI-protocol servers: send max_tokens, which older third-party servers still require
+    LLMServerType.OPENAI_COMPATIBLE.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},
 }
 
 
@@ -333,6 +341,9 @@ class BishengLLM(BishengBase, BaseChatModel):
 
         class_object = self._get_llm_class(server_info.type)
         params = self._get_llm_params(server_info, model_info)
+        if server_info.type in {LLMServerType.OPENAI.value, LLMServerType.AZURE_OPENAI.value}:
+            # BishengLLM exposes chat calls; native Responses uses its own request path.
+            params["use_responses_api"] = False
         if self.max_retries is not None:
             # Override only this client's parameters; never update the ORM config.
             params["max_retries"] = self.max_retries
@@ -396,6 +407,7 @@ class BishengLLM(BishengBase, BaseChatModel):
         return self.llm._llm_type
 
     @wrapper_bisheng_model_limit_check
+    @account_sync
     def _generate(
         self,
         messages: list[BaseMessage],
@@ -420,6 +432,7 @@ class BishengLLM(BishengBase, BaseChatModel):
         return normalize_reasoning_content(ret)
 
     @wrapper_bisheng_model_limit_check_async
+    @account_async
     async def _agenerate(
         self,
         messages: list[BaseMessage],
@@ -460,6 +473,7 @@ class BishengLLM(BishengBase, BaseChatModel):
         return super().bind(tools=formatted_tools, **kwargs)
 
     @wrapper_bisheng_model_generator
+    @account_sync_stream
     def _stream(
         self,
         messages: list[BaseMessage],
@@ -475,6 +489,7 @@ class BishengLLM(BishengBase, BaseChatModel):
             raise
 
     @wrapper_bisheng_model_generator_async
+    @account_async_stream
     async def _astream(
         self,
         messages: list[BaseMessage],

@@ -35,7 +35,7 @@ function buildCitationReferenceItems({
   citations?: ChatCitation[] | null;
 }): CitationReferenceItem[] {
   const detailMap = createCitationDetailMap(citations);
-  const { transformedContent, citationMap } = transformPrivateCitations(content || '');
+  const { transformedContent, citationMap } = transformPrivateCitations(content || '', citations);
   const items: CitationReferenceItem[] = [];
   const seen = new Set<string>();
   const grouped = new Map<string, CitationReferenceItem>();

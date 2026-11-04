@@ -3,7 +3,7 @@ import type { ClipboardEvent, CompositionEvent } from "react";
 
 export function normalizeSubjectKeyword(value: string): string {
   return value.replace(/\r\n|[\r\n]/g, " ").replace(
-    /^\p{White_Space}+|\p{White_Space}+$/gu,
+    /^[\s\u0085]+|[\s\u0085]+$/g,
     "",
   );
 }

@@ -36,7 +36,7 @@ from sqlmodel import Field, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, LargeText
 from bisheng.utils import generate_uuid
 
 # ``kind`` values — the first version of an app vs. every later one.
@@ -61,6 +61,7 @@ class AppVersion(SQLModelSerializable, table=True):
     )
 
     id: str = Field(default_factory=generate_uuid, primary_key=True)
+    release_notes: str | None = Field(default=None, sa_column=Column(LargeText, nullable=True))
     app_id: str = Field(sa_column=Column(String(36), nullable=False, comment="Owning app.id — the isolation handle"))
     version_no: int = Field(sa_column=Column(Integer, nullable=False, comment="1-based, monotonic within one app"))
     kind: str = Field(sa_column=Column(String(16), nullable=False, comment="initial | iteration"))

@@ -13,9 +13,10 @@ const copy: Record<string, string> = {
   com_skill_center_add: 'Add to my skills',
   com_skill_center_parsing: 'Validating skill file…',
   com_skill_center_error_multiple: 'Upload one skill file at a time.',
-  com_skill_center_error_size: 'Choose a non-empty file up to 50 MiB.',
+  com_skill_center_error_size: 'Choose a non-empty skill file up to 200 MiB.',
+  com_skill_center_error_archive_limit: 'Choose a non-empty compressed package up to 50 MiB.',
   com_skill_center_error_format: 'Choose a .md, .zip, or .skill file.',
-  com_skill_center_formats: 'Supports SKILL.md, .zip, and .skill; upload limit 50 MiB, unpacked limit 200 MiB.',
+  com_skill_center_formats: 'Supports SKILL.md, .zip, and .skill. A skill file can be up to 200 MiB. A compressed package can be up to 50 MiB, or 200 MiB after it is expanded.',
   com_skill_center_usage: 'Usage',
   com_skill_center_quota_full: 'Personal skill count or storage limit reached. No more skills can be added.',
 };
@@ -116,14 +117,21 @@ it('validates a file chosen from the picker the same way', async () => {
   expect(screen.getByRole('button', { name: 'Add to my skills' })).toBeDisabled();
 });
 
-it('rejects a file over 50 MiB before sending it', () => {
+it('rejects a skill file over 200 MiB and an archive over 50 MiB before sending it', () => {
   (checkPersonalSkill as jest.Mock).mockClear();
   openDialog();
-  expect(screen.getByText('Supports SKILL.md, .zip, and .skill; upload limit 50 MiB, unpacked limit 200 MiB.')).toBeVisible();
-  const oversized = new File(['x'], 'skill-199MiB.md', { type: 'text/markdown' });
-  Object.defineProperty(oversized, 'size', { value: 50 * 1024 * 1024 + 1 });
-  dropOnZone([oversized]);
-  expect(screen.getByRole('alert')).toHaveTextContent('Choose a non-empty file up to 50 MiB.');
+  expect(screen.getByText('Supports SKILL.md, .zip, and .skill. A skill file can be up to 200 MiB. A compressed package can be up to 50 MiB, or 200 MiB after it is expanded.')).toBeVisible();
+  const oversizedFile = new File(['x'], 'skill-199MiB.md', { type: 'text/markdown' });
+  Object.defineProperty(oversizedFile, 'size', { value: 200 * 1024 * 1024 + 1 });
+  dropOnZone([oversizedFile]);
+  expect(screen.getByRole('alert')).toHaveTextContent('Choose a non-empty skill file up to 200 MiB.');
+  const oversizedArchive = new File(['x'], 'skill.zip', { type: 'application/zip' });
+  Object.defineProperty(oversizedArchive, 'size', { value: 50 * 1024 * 1024 + 1 });
+  const zone = screen.getByText('skill-199MiB.md').parentElement;
+  if (!zone) throw new Error('drop zone missing');
+  const archiveList = Object.assign([oversizedArchive], { item: (index: number) => [oversizedArchive][index] ?? null });
+  fireEvent.drop(zone, { dataTransfer: { files: archiveList } });
+  expect(screen.getByRole('alert')).toHaveTextContent('Choose a non-empty compressed package up to 50 MiB.');
   expect(checkPersonalSkill).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: 'Add to my skills' })).toBeDisabled();
 });

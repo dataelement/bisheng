@@ -313,3 +313,19 @@ class TestForwardsToManagerOnly:
 
         for name in ("list_tables", "get_table_schema", "get_rows", "update_row", "export_table"):
             assert callable(getattr(AppDataService, name)), name
+
+
+async def test_unpublished_database_is_not_an_internal_error(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from bisheng.app_runtime.domain.services.app_data_service import AppDataService
+    from bisheng.common.errcode.app_factory import AppDataNotReadyError
+
+    app = SimpleNamespace(id="draft", current_version_id=None, pending_version_id=None)
+    monkeypatch.setattr(AppDataService, "_load_owned", AsyncMock(return_value=app))
+    call = AsyncMock()
+    monkeypatch.setattr(AppDataService, "_call", call)
+    with pytest.raises(AppDataNotReadyError):
+        await AppDataService.list_tables("draft", actor=object())
+    call.assert_not_awaited()

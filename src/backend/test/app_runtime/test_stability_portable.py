@@ -319,7 +319,11 @@ def test_ac49_real_host_adapter_covers_what_this_file_cannot():
     the drift is invisible, because both sides keep passing on their own.
     """
     script = (
-        Path(__file__).resolve().parents[4] / "docker" / "verify-app-runtime-stability.sh"  # portable-vocab-ok: path
+        Path(__file__).resolve().parents[4]
+        / "scripts"
+        / "tests"
+        / "compose"  # portable-vocab-ok: adapter script directory
+        / "verify-app-runtime-stability.sh"  # portable-vocab-ok: path
     )
     assert script.exists(), "the host-side stability adapter is missing; AC-49's real-host half has no runner"
 

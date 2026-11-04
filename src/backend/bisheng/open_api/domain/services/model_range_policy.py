@@ -47,6 +47,8 @@ HOSTED_APP_ACTOR_KIND = "hosted_app"
 @dataclass(frozen=True, slots=True)
 class AccessSubject:
     user_id: int
+    preview_session: str | None = None
+    expires_at: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,6 +176,7 @@ async def resolve_range_and_subject(
     # or not the declaration happens to be readable this second. Reading the
     # declaration first would answer 26516 ("cannot tell right now, try again")
     # to a caller whose token is permanently invalid.
+    verified = None
     subject = ResolvedSubject(subject_kind=SUBJECT_KIND_APP_SELF, app_id=app_id)
     if access_token is not None:
         verified = _access_subject_verifier.verify(
@@ -191,6 +194,17 @@ async def resolve_range_and_subject(
             app_id=app_id,
         )
 
+    if principal.preview_session_id:
+        from bisheng.open_api.domain.services.preview_context import revalidate_preview
+
+        context = await revalidate_preview(principal)
+        if verified is None or (verified.user_id, verified.preview_session) != (
+            context.viewer_user_id,
+            context.session_id,
+        ):
+            raise ModelFaceAccessTokenRefusedError()
+    elif access_token is not None and getattr(verified, "preview_session", None):
+        raise ModelFaceAccessTokenRefusedError()
     try:
         declared = await _declaration_port.declared_model_names(app_id, principal.tenant_id)
     except Exception as exc:

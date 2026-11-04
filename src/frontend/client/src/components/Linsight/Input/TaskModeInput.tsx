@@ -302,7 +302,6 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
     // ofd originals into the workspace either way.
     const accept = buildChatAccept({
         enableMedia: !!(envConfig as any)?.enable_media_upload,
-        enableEtl4lm: !!(bsConfig as any)?.enable_etl4lm,
         includeOfd: true,
         taskMode: true,
     });
@@ -396,7 +395,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                             selectedSkills={skills}
                             onSkillsChange={setSkills}
                             // F035 (v2.6): Add-Skill entry stays hidden unless admin enabled it.
-                            showAddSkill={!!bsConfig?.skillEntry?.enabled}
+                            showAddSkill
                         />
                         <KnowledgeSpaceSelect
                             value={context.knowledge}

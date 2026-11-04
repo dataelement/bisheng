@@ -9,8 +9,11 @@
 // the bare key.
 
 import { locationContext } from "@/contexts/locationContext"
+import { userContext } from "@/contexts/userContext"
+import { getTenantApi, getUserTenantsApi } from "@/controllers/API/tenant"
 import { PersonalToken } from "@/pages/SystemPage/components/PersonalToken"
 import { CreateServiceAccountDialog } from "@/pages/SystemPage/components/ServiceAccount/CreateServiceAccountDialog"
+import { ServiceAccountRequestScopeContext } from "@/pages/SystemPage/components/ServiceAccount/useServiceAccountManagementScope"
 import { OverviewTab } from "@/pages/SystemPage/components/ServiceAccount/OverviewTab"
 import { render, screen } from "@/test/test-utils"
 import type { PersonalTokenSetting, ServiceAccountItem } from "@/types/api/openApi"
@@ -20,6 +23,11 @@ import {
   getPersonalTokenSettingApi,
   listPersonalTokensApi,
 } from "@/controllers/API/personalToken"
+
+vi.mock("@/controllers/API/tenant", () => ({
+  getTenantApi: vi.fn().mockResolvedValue({ id: 1, tenant_name: "Root organization" }),
+  getUserTenantsApi: vi.fn().mockResolvedValue([{ tenant_id: 1, tenant_name: "Root organization" }]),
+}))
 
 // The owner picker fetches departments/users; it plays no part here.
 vi.mock("@/components/bs-comp/selectComponent/DepartmentUsersSelect", () => ({
@@ -45,7 +53,9 @@ vi.mock("@/controllers/API/personalToken", () => ({
 const renderWithTenancy = (ui: ReactElement, multiTenantEnabled: boolean) =>
   render(
     <locationContext.Provider value={{ appConfig: { multiTenantEnabled } } as never}>
-      {ui}
+      <ServiceAccountRequestScopeContext.Provider value={{ tenantId: 1, signal: new AbortController().signal, onScopeChanged: vi.fn() }}>
+        {ui}
+      </ServiceAccountRequestScopeContext.Provider>
     </locationContext.Provider>,
   )
 
@@ -102,23 +112,41 @@ describe("CreateServiceAccountDialog tenant copy", () => {
 })
 
 describe("OverviewTab tenant field", () => {
+  beforeEach(() => vi.clearAllMocks())
   it("single-tenant: no tenant field on the account overview", () => {
     renderWithTenancy(
       <OverviewTab detail={account} onChanged={vi.fn()} onDeleted={vi.fn()} />,
       false,
     )
     expect(screen.queryByText(TENANT_FIELD)).toBeNull()
+    expect(getTenantApi).not.toHaveBeenCalled()
+    expect(getUserTenantsApi).not.toHaveBeenCalled()
     // The rest of the overview is untouched.
     expect(screen.getByText("openApiManagement.fields.owner")).toBeInTheDocument()
   })
 
-  it("multi-tenant: the tenant field shows the account's tenant", () => {
+  it("multi-tenant: the tenant field shows the account's tenant name", async () => {
     renderWithTenancy(
       <OverviewTab detail={account} onChanged={vi.fn()} onDeleted={vi.fn()} />,
       true,
     )
     expect(screen.getByText(TENANT_FIELD)).toBeInTheDocument()
-    expect(screen.getByText(String(account.tenant_id))).toBeInTheDocument()
+    expect(await screen.findByText("Root organization")).toBeInTheDocument()
+    expect(screen.queryByText(String(account.tenant_id))).toBeNull()
+    expect(getTenantApi).not.toHaveBeenCalled()
+  })
+
+  it("global admin resolves the account's own tenant rather than the current user tenant", async () => {
+    vi.mocked(getTenantApi).mockResolvedValueOnce({ tenant_name: "Department tenant" } as Awaited<ReturnType<typeof getTenantApi>>)
+    renderWithTenancy(
+      <userContext.Provider value={{ user: { user_id: 3, tenant_id: 1, is_global_super: true } } as never}>
+        <OverviewTab detail={{ ...account, tenant_id: 60 }} onChanged={vi.fn()} onDeleted={vi.fn()} />
+      </userContext.Provider>,
+      true,
+    )
+    expect(await screen.findByText("Department tenant")).toBeInTheDocument()
+    expect(getTenantApi).toHaveBeenCalledWith(60)
+    expect(getUserTenantsApi).not.toHaveBeenCalled()
   })
 })
 

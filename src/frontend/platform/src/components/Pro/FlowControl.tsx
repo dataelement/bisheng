@@ -1,6 +1,6 @@
-import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
+import { Pagination, Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { SearchInput } from '@bisheng/ui';
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import { getGroupFlowsApi, getDepartmentFlowsApi } from "@/controllers/API/pro";
@@ -20,6 +20,7 @@ type FlowControlProps = {
 
 export function FlowControl({ entityId, entityType, type, onChange }: FlowControlProps) {
     const { t } = useTranslation()
+    const paginationLocale = usePaginationLocale();
     const map: Record<number, { name: string; label: string; placeholder: string }> = {
         3: { name: t('build.assistantName'), label: t('system.AssistantFlowCtrl'), placeholder: t('system.assistantName') },
         2: { name: t('skills.skillName'), label: t('system.SkillFlowCtrl'), placeholder: t('skills.skillName') },
@@ -84,8 +85,8 @@ export function FlowControl({ entityId, entityType, type, onChange }: FlowContro
                     </TableRow>))}
                 </TableBody>
             </Table>
-            <AutoPagination className="m-0 mt-4 w-auto justify-end"
-                page={page} pageSize={pageSize} total={total}
+            <Pagination locale={paginationLocale} className="m-0 mt-4 w-auto justify-end"
+                current={page} pageSize={pageSize} total={total}
                 onChange={setPage}
             />
         </div>

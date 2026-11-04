@@ -843,7 +843,12 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     async def acreate_knowledge(
-        cls, request: Request, login_user: UserPayload, knowledge: KnowledgeCreate
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        knowledge: KnowledgeCreate,
+        *,
+        web_creation_context=None,
     ) -> Knowledge:
         from bisheng.llm.domain.share_fallback import aget_model_by_id_with_share_fallback
 
@@ -871,6 +876,10 @@ class KnowledgeService(KnowledgeUtils):
         if embed_info.model_type != LLMModelType.EMBEDDING.value:
             raise KnowledgeNoEmbeddingError.http_exception()
 
+        if web_creation_context is not None:
+            from bisheng.knowledge.domain.services.knowledge_creation_policy import KnowledgeCreationPolicy
+
+            login_user = await KnowledgeCreationPolicy.revalidate(web_creation_context)
         return await cls.acreate_knowledge_base(request, login_user, db_knowledge)
 
     @classmethod

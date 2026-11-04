@@ -22,12 +22,12 @@ import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDial
 import { useLazyResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
-import { FilterIcon } from "@/components/bs-icons/filter";
 
 
 
 
 import { useContext,useEffect,useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import LoadMore from "../../components/bs-comp/loadMore";
 import { userContext } from "../../contexts/userContext";
@@ -60,7 +60,11 @@ interface KnowledgeListRow {
 }
 
 const doing = {} // Record knowledge bases being copied
-export default function KnowledgeFile() {
+interface KnowledgeFileProps {
+    toolbarTarget?: HTMLDivElement | null;
+}
+
+export default function KnowledgeFile({ toolbarTarget }: KnowledgeFileProps) {
     const [open, setOpen] = useState(false);
     const { user } = useContext(userContext);
 
@@ -106,14 +110,14 @@ export default function KnowledgeFile() {
         hasRowAction(el, 'edit');
     const canDelete = (el: KnowledgeListRow) =>
         hasRowAction(el, 'delete');
-    // PRD 3.3.3：「创建」「复制」与 ReBAC 编辑权解耦，由 WEB_MENU `create_knowledge` 控制（对齐「创建应用」+ 列表「复制」）
-    const canCreateLibrary =
+    // Copy retains the original menu qualification and source visibility.
+    const canCopyLibrary =
         user.role === 'admin' ||
         (user.web_menu || []).includes('create_knowledge');
+    const canCreateLibrary = canCopyLibrary || user.is_child_admin === true;
     const canReadRow = (el: KnowledgeListRow) =>
         hasAction(el, 'visible');
-    /** 与 apps.tsx 一致：create_knowledge 菜单 + 对目标库具备使用/可见（can_read） */
-    const canUseCopy = (el: KnowledgeListRow) => canCreateLibrary && canReadRow(el);
+    const canUseCopy = (el: KnowledgeListRow) => canCopyLibrary && canReadRow(el);
     const canManageKb = (el: KnowledgeListRow) =>
         hasRowAction(el, KB_MANAGE_ACTION);
     const isLibraryBusy = (el: KnowledgeListRow) =>
@@ -310,16 +314,20 @@ export default function KnowledgeFile() {
         </>;
     };
 
+    const toolbar = (
+        <div className="flex items-center justify-end gap-4">
+            <SearchInput placeholder={t('lib.searchPlaceholder', { ns: 'bs' })} onChange={(e) => search(e.target.value)} />
+            {canCreateLibrary && <Button onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>}
+        </div>
+    );
+
     return (
         <div className="relative">
+            {toolbarTarget ? createPortal(toolbar, toolbarTarget) : toolbarTarget === undefined ? toolbar : null}
             {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <Outlined.Loading  className="size-4 animate-spin"/>
             </div>}
             <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-20">
-                <div className="flex justify-end gap-4 items-center absolute right-0 top-[-40px]">
-                    <SearchInput placeholder={t('lib.searchPlaceholder', { ns: 'bs' })} onChange={(e) => search(e.target.value)} />
-                    {canCreateLibrary && <Button onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>}
-                </div>
                 <Table noScroll>
                     <TableHeader>
                         <TableRow>
@@ -346,7 +354,7 @@ export default function KnowledgeFile() {
                                                     value: fileStatusFilterOptions.find(option => option.value === fileStatusFilter)?.label ?? t('fileStatusFilterAll'),
                                                 })}
                                             >
-                                                <FilterIcon className={fileStatusFilter ? 'text-primary' : 'text-gray-400'} />
+                                                <Outlined.Filter size={16} aria-hidden className={fileStatusFilter ? 'text-primary' : 'text-gray-400'} />
                                             </button>
                                         }
                                     />
@@ -375,7 +383,7 @@ export default function KnowledgeFile() {
                                 >
                                     <div className="flex items-center gap-2">
                                         <div className="flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-fill-2 group-odd:bg-white dark:group-odd:bg-fill-2 text-text-2">
-                                            <Outlined.BookOpenText size={16} className="shrink-0" />
+                                            <Outlined.Books size={16} className="shrink-0" aria-hidden="true" />
                                         </div>
                                         <div>
                                             <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2">
@@ -456,12 +464,6 @@ export default function KnowledgeFile() {
                     keeps the footer always-visible and stalls pagination. */}
                 {hasMore && <LoadMore onScrollLoad={loadMore} />}
             </div>
-            <div className="bisheng-table-footer px-6 bg-background-login">
-                <div className="flex items-center gap-2">
-                    <p className="desc">{t('lib.libraryCollection', { ns: 'bs' })}</p>
-                </div>
-            </div>
-
             {/* Create modal */}
             <KnowledgeLibraryDialog
                 datalist={datalist}

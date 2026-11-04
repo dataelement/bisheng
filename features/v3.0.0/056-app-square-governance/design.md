@@ -166,11 +166,26 @@ flowchart LR
 
 | kind / 来源 | 响应白名单 | 历史缺项 |
 |---|---|---|
-| model / `ModelCallRecord` | id、create_time、app_id、actor_kind/id/name、subject_kind/id、credential_id/mask、model_id/name、prompt/completion/total_tokens、result/error_code/http_status、latency/ttft、request_id | app_id 可空（服务账号调用）；subject 未知不冒充 owner；Token 空不填 0；无当时 app 名只显示 ID |
-| capability / `AppCapabilityCallRecord` | id、create_time、app_id/app_name、credential_id、subject_kind/subject_user_id、capability、result/error_code、chunk_count、latency_ms、version_id | credential mask 仅经受限凭据投影能找到时补；无 actor 快照只表达 app 这个 actor，不虚构用户 |
+| model / `ModelCallRecord` | id、create_time、app_id、actor_kind/id/name、subject_kind/id、credential_id/mask、model_id/name、prompt/completion/total_tokens、result/error_code/http_status、latency/ttft、request_id；列表另有可空 subject_name 显示投影 | app_id 可空（服务账号调用）；subject 未知不冒充 owner；Token 空不填 0；无当时 app 名只显示 ID |
+| capability / `AppCapabilityCallRecord` | id、create_time、app_id/app_name、credential_id、subject_kind/subject_user_id、capability、result/error_code、chunk_count、latency_ms、version_id；列表另有可空 subject_name/credential_mask 显示投影 | credential mask 仅经同租户受限凭据投影能找到时补；无 actor 快照只表达 app 这个 actor，不虚构用户 |
 | access / `AppAccessLog` | id、entry_time、app_id、app_name_snapshot（新增可空）、user_id/user_name、request_id | 老行 app_name_snapshot 空显示 ID；访问为 allow 合并事件，不显示为 HTTP 成功率/逐请求响应 |
 
 不输出 model prompt/completion、检索 chunks/正文/targets 原始 payload、secret/env/cookies/OBO/token/任意 metadata。仅为新 access 记录新增 app_name_snapshot（128 字符 nullable）与写入参数，不重写合并窗口；历史不从当前名称回填。模型表已有 actor_name/model_name 快照，能力表已有 app_name；不为方便前端用 mandatory live join 丢掉已删除/撤销记录。
+
+**2026-11-02 名称展示纠正**：列表按已有 actor_name、user_name 和密钥掩码呈现，合并重复的
+数字标识列，原始标识保留在悬停提示及 API/CSV。执行用户只从事实中的有类型身份解析：
+同一自然人/服务账号作为 caller 与 subject 时优先使用该行 actor_name 快照；其他自然人
+subject 通过全局唯一 user_id 做可空左连接，只显示当前 user_name，页面明确说明当前名称
+与记录快照的区别。app_self 明示“应用自身”，不借 owner 或 caller 的数字 ID 猜测自然人。
+capability 凭据仅按同租户 id 左连接读取 prefix/last4 后生成掩码，不读取或返回凭据私密
+name/token_hash。缺失、删除、撤销对象不使来源行消失；候选仍只从已授权历史中产生。
+这些投影只用于列表/自然人候选，不写回事实表；导出继续按原 FIELDS 白名单和单一源读视图，
+不增加展示列或补造历史名称、人数、用量、结果条数与耗时。
+
+模型、能力导出弹窗说明空值：app_self 的 subject_id 为 NULL；非流式或尚未测得首 Token
+时 ttft_ms 为 NULL；未返回 usage 的 Token 数不填 0；成功调用可以没有 error_code，未写入
+的 http_status 也保持空。能力被拒绝、无结果对象时 chunk_count 为 NULL；实际零条必须
+保留 0。普通 NULL 显示“未记录”，拒绝且无 count 显示“未产生结果”。
 
 **③ QuerySnapshot / RuntimeAuditExport（拟新增）**：仍为两个申请者私有实体，不新增永久审计大表或全量 ID 选集副本。`RuntimeAuditQuerySnapshot` 保存 UUID、tenant_id（默认 None/NOT NULL/索引）、creator_user_id、scope_mode/scope_tenant_id、kind、normalized_filter JsonType、filter_digest、watermark、created_at/expires_at；只含条件，不含事实正文或完整 ID 集。tenant_id 取服务端确认的申请者有效工作租户，global 是经超管核验的过滤范围，不以 NULL tenant 绕过自动过滤。
 
@@ -201,6 +216,8 @@ worker 按持久任务 tenant_execution_scope 初始化租户过滤，只有源�
 | MySQL INSERT 不回传服务器默认时间字段，普通 SQLite 默认会回传 | 同事务签发后构建凭据 DTO 触发隐式异步 IO / MissingGreenlet，审批执行失败 | CredentialRepository.create_in_transaction 在 flush 后显式 await refresh，不提交事务；定向测试禁用 INSERT RETURNING 并验证 rollback |
 | HTTP 失败不是空结果 | 用户误以为无人访问/导出成功 | 独立 error/loading/empty 状态 |
 | 应用 allow 访问按窗口合并 | 错读为 PV/逐次网络请求 | UI 字段提示与 F054 同语义 |
+| 调用方、执行主体和资源 owner 是不同身份；单独显示内部数字 ID 容易误读 | 给 app_self 填 owner、或用 hosted_app 的数值 ID 查询 User 会伪造访问者；删除对象的内连接也会漏掉审计行 | `RuntimeAuditRepository.with_display_labels/project` 按类型做可空投影；`RuntimeAuditCell` 明示应用自身并保留原标识 |
+| NULL、真实 0 与导出缺列含义不同 | 将拒绝检索的 NULL count 或上游未返回的 usage 填成 0，会制造原记录不存在的数据 | 原事实和 CSV 字段保持；界面区分未记录/未产生结果，导出弹窗解释适用条件；数据库与 CSV 定向一致性验证 |
 
 历史坑编号见 `dda16a6` 本文件；旧 300/1800 秒勘误不覆盖当前代码配置，本轮不改窗口。
 
@@ -243,6 +260,7 @@ worker 按持久任务 tenant_execution_scope 初始化租户过滤，只有源�
 
 | 日期 | 变化 | 依据 |
 |---|---|---|
+| 2026-11-02 | 审计名称与内部标识分开展示，增加只读 subject_name/同租户凭据掩码投影；CSV 保持原始值并解释适用性空值；同步 F114 现行登录态/单租户测试夹具 | 用户四项排查修复要求；116 原始记录和现行导出序列化只读核对，详见 runtime-audit-display-verification-20261102.md |
 | 2026-10-23（二次修订） | 去除导出总量/时间硬限制；条件元数据与后台单一读取视图分离；私有分块 ready 原子发布、重启从头只读重建 | 用户要求修订并复审；规格 AC 未变，尚未编码 |
 | 2026-10-23 | 刷新已实现广场/操作审计；新增 D12–D15、三视图/稳定导出/权限合同 | 用户确认规格，静态代码核查；未实现/部署 |
 | 2026-08-17 起 | 早期广场与治理设计 | 旧正文见 `dda16a6`；历史任务证据不改写 |
@@ -263,3 +281,7 @@ F056-S1 修订：运行绑定的真实撤销生产者由凭据 Owner 公共协�
 - SQLite 本地定向结果不代替 MySQL/DM8 驱动或真实 MinIO/worker/FGA 验收。DM8 按用户口径仅检查模型/DDL 静态兼容。提测与低概率组合清单见 closeout-validation.md。
 
 2026-10-25 部署热修：运行凭据事务写入后显式加载服务器默认字段，修复 MySQL 上 KeyItem 读取 create_time 的 MissingGreenlet；不改变授权、API 或事务提交边界。
+
+### 2026-10-29 运行记录时间显示修复
+
+源日志按既有 source_timezone 转 UTC 的查询/导出合同保持。平台表格将 create_time/entry_time 和导出选取时间等带时区时间转换为浏览器本地时间显示，复用 displayTimestamp 格式化函数；不直接显示 UTC 原文，不对无时区时间擅自加减八小时。116 宿主与 backend 为 UTC+8，未调整服务器时间或改写历史记录。

@@ -221,6 +221,11 @@ async def seed_builtin_skills(tenant_ids: Iterable[int] | None = None, *, store:
             for name, (meta, files) in bundles.items():
                 try:
                     outcome = await _seed_one(store, tenant_id, name, meta, files)
+                    row = await LinsightSkillDao.get_by_name(name)
+                    if row is not None and row.source == SKILL_SOURCE_BUILTIN:
+                        from bisheng.linsight.domain.services.skill_permission import ensure_builtin_skill_permission
+
+                        await ensure_builtin_skill_permission(row)
                 except Exception:
                     logger.exception("built-in skill {!r} failed to seed for tenant {}", name, tenant_id)
                     outcome = "failed"

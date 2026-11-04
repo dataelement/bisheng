@@ -64,6 +64,17 @@ class DockerExecutor:
             )
         return BundlePreparer(self.config, self.platform, runner=runner).prepare(operation)
 
+    def preflight(self, operation):
+        delivery = operation["payload"]["resolved_delivery"]
+        profile = delivery.get("profile") or {}
+        reference = delivery.get("image_ref") or profile.get("runtime_image")
+        return self._runner(operation).ensure_image(
+            reference,
+            platform=delivery.get("platform") or profile.get("platform"),
+            expected_id=delivery.get("image_id") or profile.get("runtime_image_id"),
+            role="runtime" if delivery["mode"] == "bundle" else "image",
+        )
+
     def executions(self, app_id=None, operation_id=None):
         labels = ["bisheng.managed=v2", f"bisheng.runtime.node={self.config.node_id}"]
         if app_id:
@@ -245,6 +256,24 @@ class DockerExecutor:
         stopped = not record.get("State", {}).get("Running", True)
         return {"stopped": stopped, "evidence_kind": "engine_stopped" if stopped else "unknown", "exec_ref": exec_ref}
 
+    def diagnostics(self, operation):
+        parts = []
+        for item in self.executions(app_id=operation["app_id"], operation_id=operation["operation_id"]):
+            record = self._record(item["Id"], operation)
+            labels = record.get("Config", {}).get("Labels", {})
+            if labels.get(OP_LABEL) != operation["operation_id"] or labels.get("bisheng.runtime.epoch") != str(
+                operation["owner_epoch"]
+            ):
+                continue
+            parts.append(self._runner(operation).diagnostic(operation, item["Id"]))
+        from runtime_manager.secret_redaction import bounded_diagnostic, diagnostic_environment
+
+        return bounded_diagnostic(
+            "\n".join(parts),
+            diagnostic_environment(self.config, operation["payload"]),
+            operation["payload"].get("sensitive_env_names", []),
+        )
+
     def cleanup(self, operation):
         for item in self.executions(operation_id=operation["operation_id"]):
             ident = item["Id"]
@@ -257,7 +286,11 @@ class DockerExecutor:
         return {"complete": True}
 
     def observe(self, exec_ref):
+        from datetime import UTC, datetime
+
         import httpx
+
+        from runtime_manager.observation import counter, timestamp
 
         record = self._record(exec_ref)
         labels = record.get("Config", {}).get("Labels", {})
@@ -267,6 +300,8 @@ class DockerExecutor:
         host = network.get("IPAddress") or network.get("GlobalIPv6Address") or ""
         port = int(operation["payload"].get("port", 8080))
         ready = False
+        probe_state = "pending" if record.get("State", {}).get("Restarting") else "unknown"
+        last_probe_at = None
         if running and host:
             path = operation["payload"].get("health", {}).get("path", "/")
             if not path.startswith("/") or any(c in path for c in "\r\n"):
@@ -280,8 +315,22 @@ class DockerExecutor:
                     < 500
                 )
             except httpx.HTTPError:
-                pass
-        return {"exec_ref": exec_ref, "running": running, "ready": ready, "target": {"host": host, "port": port}}
+                # An actual application probe failed; this is not a platform lookup failure.
+                ready = False
+            probe_state = "passed" if ready else "failed"
+            last_probe_at = datetime.now(UTC).isoformat()
+        elif operation.get("stage") == "starting" or record.get("State", {}).get("Restarting"):
+            probe_state = "pending"
+        return {
+            "exec_ref": exec_ref,
+            "running": running,
+            "ready": ready,
+            "target": {"host": host, "port": port},
+            "probe_state": probe_state,
+            "restart_count": counter(record.get("RestartCount")),
+            "started_at": timestamp(record.get("State", {}).get("StartedAt")),
+            "last_probe_at": last_probe_at,
+        }
 
     def logs(self, exec_ref, *, since=None, tail=200):
         self._record(exec_ref)

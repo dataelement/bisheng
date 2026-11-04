@@ -14,6 +14,7 @@ non-obvious contracts:
 from __future__ import annotations
 
 import shutil
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -68,6 +69,9 @@ class _FakeDao:
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     """A fake builtin dir + a real on-disk SkillStore + a fake DAO."""
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.services.skill_permission.ensure_builtin_skill_permission", AsyncMock()
+    )
     builtin = tmp_path / "builtin_skills"
     builtin.mkdir()
     monkeypatch.setattr(seeder, "BUILTIN_SKILLS_DIR", builtin)
@@ -330,7 +334,7 @@ async def test_tenant_context_is_restored_after_seeding(env):
     """Seeding runs inside per-tenant context; it must not leak into the caller's."""
     from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 
-    builtin, store, dao = env
+    builtin, store, _dao = env
     _write_bundle(builtin)
 
     token = set_current_tenant_id(99)
@@ -402,3 +406,34 @@ def test_no_shipped_bundle_is_silently_dropped():
     assert on_disk == set(seeder.discover_builtin_bundles()), (
         "a bundle directory exists but discover_builtin_bundles() rejected it"
     )
+
+
+def test_pptx_templates_ship_byte_for_byte():
+    """F111 AC-13: the built-in PPT templates reach the bundle unchanged, binary included."""
+    _, files = seeder.discover_builtin_bundles()["bisheng-pptx"]
+    template_dir = seeder.BUILTIN_SKILLS_DIR / "bisheng-pptx" / "templates"
+    shipped = {p.relative_to(template_dir.parent).as_posix(): p for p in template_dir.rglob("*") if p.is_file()}
+    assert "templates/catalog.json" in shipped
+    pptx_files = [rel for rel in shipped if rel.endswith("/template.pptx")]
+    assert len(pptx_files) == 5
+    for rel, path in shipped.items():
+        assert files.get(rel) == path.read_bytes(), f"{rel} differs from the file on disk"
+
+
+def test_pptx_templates_show_no_platform_brand():
+    """Template slide text and manifests are customer-readable (builtin_skills/AGENTS.md, Packaging)."""
+    from pptx import Presentation
+
+    _, files = seeder.discover_builtin_bundles()["bisheng-pptx"]
+    for rel, data in files.items():
+        if not rel.startswith("templates/"):
+            continue
+        if rel.endswith(".json"):
+            text = data.decode("utf-8").lower()
+        else:
+            prs = Presentation(str(seeder.BUILTIN_SKILLS_DIR / "bisheng-pptx" / rel))
+            text = "\n".join(
+                s.text_frame.text for slide in prs.slides for s in slide.shapes if s.has_text_frame
+            ).lower()
+        for word in _BRAND_WORDS:
+            assert word not in text, f"{rel} mentions {word!r}"

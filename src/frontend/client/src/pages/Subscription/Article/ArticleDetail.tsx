@@ -312,7 +312,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
 
                 {/* PC-only AI dock (self-contained component): collapsed input bar that slides
                     up into the chat panel. Mobile keeps the toolbar button + full-screen overlay. */}
-                {!isNarrowShell && <ArticleAiDock articleDocId={article.id} />}
+                {!isNarrowShell && <ArticleAiDock articleDocId={article.id} article={article} />}
             </div>
 
             {/* 3. Image Preview Overlay */}

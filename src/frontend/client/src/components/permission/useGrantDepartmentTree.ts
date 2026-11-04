@@ -183,7 +183,7 @@ export function useGrantDepartmentTree(source: GrantDepartmentTreeSource): Grant
       cancelled = true;
       controller.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [rootAttempt, storeLayer]);
 
   // Debounced server-side search.

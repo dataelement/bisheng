@@ -1,4 +1,5 @@
 import request from '@/controllers/request'
+import { createDshOperationId } from '@/util/dshOperationId'
 
 export type RuntimeAuditKind = 'model' | 'capability' | 'access'
 export type RuntimeAuditFilters = {
@@ -38,7 +39,7 @@ export async function getRuntimeAuditCandidates(kind: RuntimeAuditKind, dimensio
   return await request.get(`${base}/candidates/${dimension}`, { params: { ...filters, kind, query, offset, limit: 100 } })
 }
 export async function createRuntimeAuditExport(snapshotId: string, tenantId?: number): Promise<RuntimeAuditExport> {
-  return await request.post(`${base}/exports`, { snapshot_id: snapshotId, request_id: crypto.randomUUID(), tenant_id: tenantId })
+  return await request.post(`${base}/exports`, { snapshot_id: snapshotId, request_id: createDshOperationId(), tenant_id: tenantId })
 }
 export async function getRuntimeAuditExport(id: string, tenantId?: number): Promise<RuntimeAuditExport> {
   return await request.get(`${base}/exports/${encodeURIComponent(id)}`, { params: { tenant_id: tenantId } })

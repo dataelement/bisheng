@@ -41,9 +41,9 @@ def _actor() -> PermissionActor:
     return PermissionActor(user_id=7, current_tenant_id=5)
 
 
-def test_preview_routes_have_no_permission_action() -> None:
+def test_space_preview_requires_visible_and_download_requires_download() -> None:
     assert FILE_PREVIEW_PERMISSION_ACTION is None
-    assert SPACE_FILE_PREVIEW_PERMISSION_ACTION is None
+    assert SPACE_FILE_PREVIEW_PERMISSION_ACTION == "visible"
     assert FILE_DOWNLOAD_PERMISSION_ACTION == "download"
     assert SPACE_FILE_DOWNLOAD_PERMISSION_ACTION == "download"
 

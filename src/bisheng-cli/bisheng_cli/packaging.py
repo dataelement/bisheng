@@ -50,6 +50,8 @@ class Limits:
     max_unpacked_mb: int
     max_package_entries: int
     degraded: bool = False
+    release_notes_version: int | None = None
+    release_notes_max_codepoints: int | None = None
 
 
 # Fallback only — used when the endpoint cannot answer. Never a hard constant:
@@ -77,25 +79,35 @@ class PackageStat:
     notes: list[str] = field(default_factory=list)
 
 
-def fetch_limits(client: Any) -> Limits:
-    """Ask the platform for the ceilings; fall back rather than block.
+def fetch_limits(client: Any, *, require_release_notes: bool = False) -> Limits:
+    """Fetch ceilings, with strict capability checks when notes are present.
 
     Any failure here — endpoint not deployed yet, a flaky hop, the runtime layer
-    switched off — must not stop a deploy. The upload proceeds and the server's
+    switched off — must not stop a plain deploy. The upload proceeds and the server's
     16201 remains the authority. A soft self-check that can kill the main flow is
-    worse than no self-check.
+    worse than no self-check. Release-note submissions propagate query failures
+    instead: an old server may silently ignore their optional multipart field.
     """
     try:
         data = client.get_json(LIMITS_PATH)
     except Exception:
+        if require_release_notes:
+            raise
         return Limits(**{**_limits_kwargs(DEFAULT_LIMITS), "degraded": True})
     if not isinstance(data, dict):
         return Limits(**{**_limits_kwargs(DEFAULT_LIMITS), "degraded": True})
+    features = data.get("features")
+    notes = features.get("release_notes") if isinstance(features, dict) else None
+    notes = notes if isinstance(notes, dict) else {}
+    version = notes.get("version")
+    max_codepoints = notes.get("max_codepoints")
     return Limits(
         max_package_mb=int(data.get("max_package_mb", DEFAULT_LIMITS.max_package_mb)),
         max_unpacked_mb=int(data.get("max_unpacked_mb", DEFAULT_LIMITS.max_unpacked_mb)),
         max_package_entries=int(data.get("max_package_entries", DEFAULT_LIMITS.max_package_entries)),
         degraded=False,
+        release_notes_version=version if type(version) is int else None,
+        release_notes_max_codepoints=max_codepoints if type(max_codepoints) is int else None,
     )
 
 

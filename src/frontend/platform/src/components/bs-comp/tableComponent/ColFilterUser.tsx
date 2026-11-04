@@ -1,6 +1,6 @@
 // @ts-strict-ignore
+import { Outlined } from "bisheng-icons";
 import { Button, SearchInput } from '@bisheng/ui';
-import { FilterIcon } from "@/components/bs-icons";
 
 import { Checkbox } from '@bisheng/ui';
 
@@ -33,11 +33,11 @@ export default function ColFilterUser({ label, onFilter }) {
 
     return <Popover open={open} onOpenChange={(bln) => setOpen(bln)}>
         <PopoverTrigger>
-            <FilterIcon onClick={() => setOpen(!open)} className={value.length ? 'text-primary ml-3' : 'text-gray-400 ml-3'} />
+            <Outlined.Filter size={16} aria-hidden onClick={() => setOpen(!open)} className={value.length ? 'text-primary ml-3' : 'text-gray-400 ml-3'} />
         </PopoverTrigger>
         <PopoverContent>
             <div>
-                {!label && <SearchInput placeholder={'用户名称'} onChange={(e) => searchDb(e.target.value)} className={"w-[240px]"}></SearchInput>}
+                {!label && <SearchInput placeholder={t('system.userName')} onChange={(e) => searchDb(e.target.value)} className={"w-[240px]"}></SearchInput>}
                 <div className="mt-2 max-h-[260px] min-h-20 overflow-y-auto">
                     {options.map((el) => (
                         <div className="flex items-center space-x-2 mb-1" key={el.value}>

@@ -12,7 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from bisheng.open_api.domain.schemas.workstation import OpenDailyToolPayload
 from bisheng.workstation.domain.schemas.chat import APIChatCompletion, UseKnowledgeBaseParam
 
-TASK_TEXT_MAX_LENGTH = 20000
+# Callers put their built-in prompt template here; long reference material belongs in `files`.
+TASK_TEXT_MAX_LENGTH = 100000
 TASK_INSTRUCTIONS_MAX_LENGTH = 4000
 TASK_KNOWLEDGE_MAX_ITEMS = 50
 TASK_SKILLS_MAX_ITEMS = 50

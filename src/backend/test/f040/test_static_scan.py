@@ -47,16 +47,9 @@ def test_unread_counts_live_on_their_own_endpoint():
     assert "/{channel_id}/unread-counts" in src
 
 
-# ─────────────────────────── B — space plaza ──────────────────────────────
-
-
-def test_format_accessible_spaces_shares_context_and_parallelizes():
-    """The candidate page is filtered with one action-native batch."""
-    src = _read(_BACKEND / "knowledge" / "domain" / "services" / "knowledge_space_service.py")
-    fmt = _func_src(src, "_format_accessible_spaces")
-    assert "_batch_actions" in fmt
-    assert '"visible"' in fmt
-    assert "manage_permission" in fmt
+# F116 replaces the removed formatter with visible-ID/edit orchestration.
+# Runtime I/O-budget and role regressions live in
+# test/knowledge/test_managed_spaces_visible_edit.py.
 
 
 # ─────────────────────────── C — lists ────────────────────────────────────

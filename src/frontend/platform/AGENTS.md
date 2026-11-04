@@ -1,7 +1,7 @@
 # Frontend Rules — Platform (Admin / Builder UI)
 
 Auto-loaded when editing files in `src/frontend/platform/`.
-Cross-app boundary + hard rules common to both apps: root `AGENTS.md §4` (single source — not repeated here). The store-must-not-call-HTTP law: `docs/constitution.md` C7 (arch-guard RULE-6).
+Cross-app boundary + hard rules common to both apps: `src/frontend/AGENTS.md` (single source — not repeated here). The store-must-not-call-HTTP law: `docs/constitution.md` C7 (arch-guard RULE-6).
 
 ## Commands (cwd: `src/frontend/platform/`)
 

@@ -1,0 +1,8 @@
+PASS src/components/approval/AppPreviewPanel.test.tsx
+PASS src/api/hostedAppReview.test.ts
+
+Test Suites: 2 passed, 2 total
+Tests:       19 passed, 19 total
+Snapshots:   0 total
+Time:        1.337 s, estimated 6 s
+Ran all test suites matching /src\/api\/hostedAppReview.test.ts|src\/components\/approval\/AppPreviewPanel.test.tsx/i.

@@ -1,4 +1,4 @@
-"""Backend-only owner action signing; managers receive no signing endpoint."""
+"""Backend-only data action signing with current edit and execution fences."""
 
 from __future__ import annotations
 
@@ -83,7 +83,10 @@ class RuntimeDataGrantService:
             fresh_app = await self.repo.get_application(app.id)
             if fresh_app is None or fresh_app.state == "deleted" or fresh_app.tenant_id != app.tenant_id:
                 _refused()
-            AppDataService._require_owner(fresh_app, actor)
+            await AppDataService._require_editor(fresh_app, actor)
+            from bisheng.app_runtime.domain.services.app_authorization_service import AppAuthorizationService
+
+            actual_actor = await AppAuthorizationService.resolve_actor(actor)
             current = await self.repo.get(RuntimeOperation, operation.id, lock=True)
             if current is None:
                 _refused()
@@ -106,7 +109,7 @@ class RuntimeDataGrantService:
                 or owner is None
                 or owner.data_operation_id != current.id
                 or (owner.tenant_id, owner.app_id, owner.node_id, owner.generation, owner.owner_epoch) != expected
-                or current.payload.get("actor_ref") != "user:" + str(actor.user_id)
+                or current.payload.get("actor_ref") != actual_actor.fga_subject
                 or action not in {"tables", "schema", "rows", "update", "export", "result"}
                 or current.payload.get("action") != action
                 or current.payload.get("parameters_digest") != content_digest(parameters)

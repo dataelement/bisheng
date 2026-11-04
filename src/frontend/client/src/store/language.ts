@@ -1,10 +1,15 @@
 import Cookies from 'js-cookie';
 import { atomWithLocalStorage } from './utils';
+import { readDesktopLocale } from '~/locales/desktopLocale';
 
 /**
  * 推断并规范化默认语言，并清理不合法的本地存储
  */
 const defaultLang = (): string => {
+  // Native presentation must not run the website's legacy preference cleanup.
+  // The existing atom effect still reads its saved value; useLocalize applies the host override.
+  const desktopLocale = readDesktopLocale();
+  if (desktopLocale) return desktopLocale;
   // APP_CONFIG.disableJa (config.js) — drop ja from the supported set so any
   // saved/browser ja* value normalizes to null and falls back to en.
   const jaDisabled = !!(window.APP_CONFIG && window.APP_CONFIG.disableJa);

@@ -494,6 +494,119 @@ def test_docx_content_dump_prints_paragraphs_and_tables(samples):
 
 
 # --------------------------------------------------------------------------- #
+# docx · 照参照文档排版 (following a user's template)
+# --------------------------------------------------------------------------- #
+def build_customer_template(path: Path) -> Path:
+    """The shape of real customer templates (106, 2026-10-30): every paragraph is
+    ``Normal`` and the whole layout is direct formatting on paragraphs and runs —
+    so a dump that shows only style names reports nothing about it."""
+    helpers = _docx_helpers()
+    from docx.enum.text import WD_LINE_SPACING
+
+    doc = Document()
+    section = doc.sections[0]
+    section.top_margin = section.bottom_margin = DocxCm(2.54)
+    section.left_margin = section.right_margin = DocxCm(3.17)
+
+    def para(text, face, pt, bold=None, indent_pt=None):
+        paragraph = doc.add_paragraph()
+        helpers.set_run_font(paragraph.add_run(text), face, pt, bold=bold)
+        paragraph.paragraph_format.line_spacing_rule = WD_LINE_SPACING.EXACTLY
+        paragraph.paragraph_format.line_spacing = DocxPt(28)
+        if indent_pt:
+            paragraph.paragraph_format.first_line_indent = DocxPt(indent_pt)
+        return paragraph
+
+    para("关于审议××的议案", "方正小标宋简体", 18)
+    para("                    主办部门：×××", "仿宋", 16)
+    para("一、相关背景介绍", "仿宋", 16, bold=True, indent_pt=32)
+    para("前期工作开展情况、工作开展的必要性。", "仿宋", 16, indent_pt=32)
+    doc.save(path)
+    return path
+
+
+def build_source_with_wide_table(path: Path) -> Path:
+    doc = Document()
+    doc.add_paragraph("会议纪要正文。")
+    table = doc.add_table(rows=2, cols=2)
+    for r_index, row in enumerate(table.rows):
+        for index, cell in enumerate(row.cells):
+            cell.width = DocxCm(4 if index == 0 else 13)  # 17cm, fits only narrow margins
+            cell.paragraphs[0].add_run("测试方向" if r_index == 0 else "数据").bold = r_index == 0
+    doc.save(path)
+    return path
+
+
+def test_docx_content_dump_shows_direct_formatting(tmp_path):
+    """Both 106 sessions rebuilt the document in GB/T 9704 because the dump showed
+    the template's text and nothing of its layout."""
+    path = build_customer_template(tmp_path / "template.docx")
+    out = run_script("bisheng-docx", "inspect_docx.py", path, "--content-only").stdout
+
+    assert_mentions(
+        out,
+        "{方正小标宋简体 18pt 固定行距28pt}",
+        "{仿宋 16pt 固定行距28pt 行首20个空格}",
+        "{仿宋 16pt 加粗 首行缩进2.0字 固定行距28pt}",
+    )
+
+
+def test_docx_upload_is_never_graded_against_the_profile(tmp_path):
+    """Grading a customer template against GB/T 9704 told the model to call
+    apply_chinese_defaults on it — the one call that destroys the template."""
+    uploads = tmp_path / "uploads"
+    uploads.mkdir()
+    build_customer_template(uploads / "template.docx")
+    out = run_script("bisheng-docx", "inspect_docx.py", "uploads/template.docx", cwd=tmp_path).stdout
+
+    assert "跳过：uploads/ 下是用户原件" in out
+    assert "结论:" not in out
+    assert "apply_chinese_defaults" not in out
+
+
+def test_docx_reference_mode_passes_a_cloned_build(tmp_path):
+    helpers = _docx_helpers()
+    template = build_customer_template(tmp_path / "template.docx")
+    source = build_source_with_wide_table(tmp_path / "source.docx")
+
+    doc = Document(template)
+    paras = list(doc.paragraphs)
+    cur = helpers.clone_paragraph(paras[0], "关于智能单据审核测试情况的议案", after=paras[-1])
+    cur = helpers.clone_paragraph(paras[1], "主办部门：科技部", after=cur)
+    cur = helpers.clone_paragraph(paras[2], "一、交流及测试内容", after=cur)
+    cur = helpers.clone_paragraph(paras[3], "本次选取划款指令等材料。", after=cur)
+    helpers.copy_table(Document(source).tables[0], after=cur, font="仿宋", size_pt=16)
+    for paragraph in paras:
+        helpers.delete_paragraph(paragraph)
+    out_path = tmp_path / "out.docx"
+    doc.save(out_path)
+
+    saved = Document(out_path)
+    assert [p.text for p in saved.paragraphs][1] == "                    主办部门：科技部"  # leading spaces kept
+    out = run_script("bisheng-docx", "inspect_docx.py", out_path, "--check-only", "--reference", template).stdout
+    assert PASS in out, out
+    assert "合计: 0 ERROR / 0 WARN" in out, out  # incl. no table-overflow ERROR: copy_table fitted it
+
+
+def test_docx_reference_mode_flags_a_profile_rebuild(tmp_path):
+    """What the 106 sessions shipped: Document() + the 公文 profile."""
+    helpers = _docx_helpers()
+    template = build_customer_template(tmp_path / "template.docx")
+    doc = Document()
+    helpers.apply_chinese_defaults(doc)
+    helpers.setup_page(doc)
+    helpers.add_gongwen_title(doc, "关于智能单据审核测试情况的议案")
+    helpers.add_heading_cn(doc, "一、交流及测试内容", 1)
+    helpers.add_body(doc, "本次选取划款指令等材料。")
+    out_path = tmp_path / "rebuilt.docx"
+    doc.save(out_path)
+
+    out = run_script("bisheng-docx", "inspect_docx.py", out_path, "--check-only", "--reference", template).stdout
+    assert_mentions(out, "页边距和参照文档不一致", "在参照文档里找不到", "clone_paragraph")
+    assert "GB/T 9704" not in out  # the profile is not the spec in this mode
+
+
+# --------------------------------------------------------------------------- #
 # docx · 版式档 (style profiles)
 # --------------------------------------------------------------------------- #
 def test_docx_defaults_to_the_gongwen_profile(tmp_path):

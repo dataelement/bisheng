@@ -13,7 +13,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
 import { FormInput } from "./FormInput";
-import { clampMenuName, toStoredMenuName } from "./menuDisplayName";
+import { isMenuNameTooLong, toStoredMenuName } from "./menuDisplayName";
 
 const MAX_LEN = 1000;
 
@@ -54,6 +54,10 @@ export function AppCenter({ scopeVersion = 0 }: { scopeVersion?: number }) {
 
     const handleSave = async () => {
         if (!loadedCfgRef.current || welcome.length > MAX_LEN || description.length > MAX_LEN) return;
+        if (isMenuNameTooLong(menuDisplayName)) {
+            setErrors((prev) => ({ ...prev, menuDisplayName: t("chatConfig.menuNameTooLong") }));
+            return false;
+        }
         const dataToSave = {
             ...(loadedCfgRef.current || {}),
             // Round-tripped from the home tab; normalize so a saved default name doesn't stay frozen
@@ -80,10 +84,11 @@ export function AppCenter({ scopeVersion = 0 }: { scopeVersion?: number }) {
                         <FormInput
                             label={t("chatConfig.menuDisplayName")}
                             value={menuDisplayName}
+                            validate={(v) => isMenuNameTooLong(v) ? t("chatConfig.menuNameTooLong") : ""}
                             error={errors.menuDisplayName}
                             placeholder={t("bench.appCenter")}
                             onChange={(v) => {
-                                setMenuDisplayName(clampMenuName(v));
+                                setMenuDisplayName(v);
                                 setErrors((prev) => ({ ...prev, menuDisplayName: "" }));
                             }}
                         />

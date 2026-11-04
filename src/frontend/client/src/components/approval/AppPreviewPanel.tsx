@@ -112,6 +112,7 @@ export function AppPreviewPanel({ appId, versionId, localize }: AppPreviewPanelP
     ? BLOCKED_REASON_KEY[status.not_runnable_reason]
     : undefined;
   const reclaimedKey = status?.reclaim_reason ? RECLAIM_REASON_KEY[status.reclaim_reason] : undefined;
+  const starting = status?.state === "starting";
   const running = status?.state === "running" && !!status.entry_url;
   const expiry = running ? formatExpiry(status.expires_at) : "";
 
@@ -154,7 +155,7 @@ export function AppPreviewPanel({ appId, versionId, localize }: AppPreviewPanelP
               variant="solid"
               size="small"
               loading={busy}
-              disabled={!status || status.runnable === false}
+              disabled={starting || !status || status.runnable === false}
               onClick={handleStart}
             >
               {localize(

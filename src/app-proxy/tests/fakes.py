@@ -172,7 +172,7 @@ class FakeBackend:
 
 
 class FakeManager:
-    """The runtime-manager route endpoint.
+    """The backend v2 route projection endpoint.
 
     :attr:`script` turns a single app_id into a queue of answers so a test can
     say "first call fails, second succeeds" — which is exactly the D5.1
@@ -195,15 +195,20 @@ class FakeManager:
         raw = await request.body()
         if self.fail is not None:
             raise self.fail
-        expected = sign(request.method, request.url.path, raw, self.secret)
-        if not hmac.compare_digest(expected, request.headers.get("X-Signature", "")):
-            response: Response = JSONResponse({"detail": "bad signature"}, status_code=401)
-            await response(scope, receive, send)
+        timestamp = request.headers.get("X-Runtime-Timestamp", "")
+        nonce = request.headers.get("X-Runtime-Nonce", "")
+        key = request.headers.get("X-Runtime-Key-Id", "")
+        message = f"v2\n{request.method}\n{request.url.path}\n{hashlib.sha256(raw).hexdigest()}\n{timestamp}\n{nonce}\n{key}".encode()
+        expected = hmac.new(self.secret.encode(), message, hashlib.sha256).hexdigest()
+        if (
+            not key
+            or not nonce
+            or not timestamp
+            or not hmac.compare_digest(expected, request.headers.get("X-Runtime-Signature", ""))
+        ):
+            await JSONResponse({"detail": "bad signature"}, status_code=401)(scope, receive, send)
             return
-
-        # ``/v1/apps/{id}/route`` and ``/v1/previews/{id}/route`` both put the
-        # id in the same position, so one expression serves both.
-        app_id = request.url.path.rsplit("/", 2)[-2]
+        app_id = request.url.path.rsplit("/", 1)[-1]
         self.calls.append(app_id)
         self.paths.append(request.url.path)
         if self.status_code >= 400:
@@ -223,7 +228,17 @@ class FakeManager:
                 status_code=409,
             )
         else:
-            response = JSONResponse(route)
+            from urllib.parse import urlsplit
+
+            url = urlsplit(route["upstream"])
+            response = JSONResponse(
+                {
+                    **route,
+                    "decision": "allow",
+                    "target": {"host": url.hostname, "port": url.port or 80},
+                    "route_epoch": route.get("generation", 1),
+                }
+            )
         await response(scope, receive, send)
 
 

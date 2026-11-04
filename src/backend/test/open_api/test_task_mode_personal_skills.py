@@ -1,5 +1,8 @@
 """Task mode offers the caller's candidates. Daily chat is unchanged."""
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 from contextlib import asynccontextmanager
 
 import pytest
@@ -65,6 +68,15 @@ async def skills(monkeypatch):
     tenant_filter._tenant_aware_tables = set()
     tenant_filter.register_tenant_filter_events()
     set_current_tenant_id(TENANT)
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.services.user_skills.SkillAvailabilityRepository.disabled_ids",
+        AsyncMock(return_value=set()),
+    )
+
+    async def permitted(_user, *, resource_ids, **kwargs):
+        return {str(skill_id): {"use"} for skill_id in resource_ids}
+
+    monkeypatch.setattr("bisheng.permission.application.business_authorization.batch_check_business_actions", permitted)
     with bypass_tenant_filter():
         await LinsightSkillDao.create(_row("pdf", 0, display="企业报告"))
         await LinsightSkillDao.create(_row("he-tong", 0, display="合同审阅"))
@@ -79,15 +91,15 @@ async def skills(monkeypatch):
 
 class TestTaskModePersonalSkills:
     async def test_the_caller_sees_only_their_enabled_candidates(self, skills):
-        rows = await OpenTaskModeService.enabled_skill_rows(USER)
+        rows = await OpenTaskModeService.enabled_skill_rows(SimpleNamespace(user_id=USER))
         by_name = {row.name: row for row in rows}
         assert set(by_name) == {"pdf", "he-tong"}
         assert by_name["pdf"].owner_user_id == USER
         assert by_name["pdf"].display_name == "个人报告"
 
-        await OpenTaskModeService.check_skills(USER, ["pdf", "he-tong"])
+        await OpenTaskModeService.check_skills(["pdf", "he-tong"], SimpleNamespace(user_id=USER))
         with pytest.raises(OpenApiTaskSkillUnavailableError) as caught:
-            await OpenTaskModeService.check_skills(USER, ["secret", "ting"])
+            await OpenTaskModeService.check_skills(["secret", "ting"], SimpleNamespace(user_id=USER))
         assert caught.value.kwargs["unavailable"] == ["secret", "ting"]
         text = str(caught.value.to_dict())
         assert "别人的技能" not in text
@@ -96,10 +108,10 @@ class TestTaskModePersonalSkills:
     async def test_disabling_the_personal_copy_restores_the_tenant_skill(self, skills):
         personal = await LinsightSkillDao.get_by_name("pdf", owner_user_id=USER)
         await LinsightSkillDao.set_owner_enabled(personal.id, owner_user_id=USER, enabled=False)
-        rows = await OpenTaskModeService.enabled_skill_rows(USER)
+        rows = await OpenTaskModeService.enabled_skill_rows(SimpleNamespace(user_id=USER))
         pdf = next(row for row in rows if row.name == "pdf")
         assert pdf.owner_user_id == 0
-        await OpenTaskModeService.check_skills(USER, ["pdf"])
+        await OpenTaskModeService.check_skills(["pdf"], SimpleNamespace(user_id=USER))
 
     async def test_request_fields_stay_skill_names_and_daily_mode_is_unchanged(self):
         assert "skill_ids" not in OpenTaskSubmitReq.model_fields
@@ -120,3 +132,20 @@ class TestTaskModePersonalSkills:
         internal = daily.to_internal()
         assert internal.task_mode is False
         assert internal.skills == ["pdf"]
+
+
+async def test_open_api_honors_per_account_availability(skills, monkeypatch):
+    personal = await LinsightSkillDao.get_by_name("pdf", owner_user_id=USER)
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.services.user_skills.SkillAvailabilityRepository.disabled_ids",
+        AsyncMock(return_value={personal.id}),
+    )
+    rows = await OpenTaskModeService.enabled_skill_rows(SimpleNamespace(user_id=USER))
+    assert personal.id not in {row.id for row in rows}
+
+
+async def test_open_api_filters_revoked_personal_permission(skills, monkeypatch):
+    monkeypatch.setattr(
+        "bisheng.permission.application.business_authorization.batch_check_business_actions", AsyncMock(return_value={})
+    )
+    assert await OpenTaskModeService.enabled_skill_rows(SimpleNamespace(user_id=USER)) == []

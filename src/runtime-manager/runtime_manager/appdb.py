@@ -57,7 +57,6 @@ from pathlib import Path
 from typing import Any
 
 from runtime_manager.config import Config
-from runtime_manager.container_runner import ExecutionError
 from runtime_manager.errors import (
     DatabaseNotFoundError,
     DataBusyError,
@@ -67,6 +66,7 @@ from runtime_manager.errors import (
     SchemaMigrationFailedError,
     TableNotFoundError,
 )
+from runtime_manager.execution_errors import ExecutionError
 
 logger = logging.getLogger(__name__)
 

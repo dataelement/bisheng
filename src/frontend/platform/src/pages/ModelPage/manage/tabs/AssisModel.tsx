@@ -211,16 +211,16 @@ export default function AssisModel({ llmOptions, onBack }) {
                 <div className="mt-2 border p-4 rounded-md bg-muted">
                     <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, 1fr) 80px 110px 68px 90px 40px" }}>
                         <Label className="bisheng-label">{t('model.model')}<span className="text-red-500 text-xs">*</span></Label>
-                        <Label className="bisheng-label">
+                        <Label className="bisheng-label inline-flex items-center">
                             <span>{t('model.assistantExecutionMode')}</span>
                             <ModelFieldHint className="ml-1" content={t('model.assistantExecutionModeTooltip')} />
                         </Label>
                         <Label className="bisheng-label">{t('model.streamingOutput')}</Label>
-                        <Label className="bisheng-label">
+                        <Label className="bisheng-label inline-flex items-center">
                             <span>{t('model.assistantKnowledgeBaseMaxCharacters')}</span>
                             <ModelFieldHint className="ml-1" content={t('model.assistantKnowledgeBaseMaxCharactersTooltip')} />
                         </Label>
-                        <Label className="bisheng-label">
+                        <Label className="bisheng-label inline-flex items-center">
                             <span>{t('model.reorderAfterRetrieval')}</span>
                             <ModelFieldHint className="ml-1" content={t('model.reorderAfterRetrievalTooltip')} />
                         </Label>

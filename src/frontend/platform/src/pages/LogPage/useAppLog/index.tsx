@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { Button, Select, toast } from '@bisheng/ui';
+import { Pagination, Button, Select, toast } from '@bisheng/ui';
 
 import FilterByApp from "@/components/bs-comp/filterTableDataComponent/FilterByApp";
 import FilterByDate from "@/components/bs-comp/filterTableDataComponent/FilterByDate";
@@ -10,7 +10,7 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import { locationContext } from "@/contexts/locationContext";
@@ -61,6 +61,7 @@ const filterReducer = (state: FilterState, action: Action): FilterState => {
 
 export default function AppUseLog() {
     const { t } = useTranslation()
+    const paginationLocale = usePaginationLocale();
     const selectLabels = useSelectLabels()
     const { appConfig } = useContext(locationContext)
 
@@ -389,11 +390,8 @@ export default function AppUseLog() {
         <div className="bisheng-table-footer px-6 bg-background-login">
             <p className="desc"></p>
             <div>
-                <AutoPagination
-                    page={page}
-                    showJumpInput
-                    jumpToText={t('log.pagination.jumpTo')}
-                    pageText={t('log.pagination.page')}
+                <Pagination locale={paginationLocale}
+                    current={page}
                     pageSize={pageSize}
                     total={total}
                     showTotal={true}

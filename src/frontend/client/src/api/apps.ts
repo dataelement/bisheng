@@ -62,10 +62,24 @@ export const getAssistantDetailApi = async (
 ): Promise<any> => {
     const headers = shareToken ? { 'share-token': shareToken } : {}
 
-    return await request.get(`/api/${apiVersion}/assistant/info/${id}`, {
+    const response = await request.get<{
+        status_code: number;
+        data?: { desc?: string | null; description?: string | null };
+    }>(`/api/${apiVersion}/assistant/info/${id}`, {
         headers,
         skip403Redirect,
-    } as any)
+    })
+
+    if (response.status_code === 200 && response.data) {
+        return {
+            ...response,
+            data: {
+                ...response.data,
+                description: response.data.desc ?? response.data.description ?? '',
+            },
+        }
+    }
+    return response
 };
 
 export const baseMsgItem = {

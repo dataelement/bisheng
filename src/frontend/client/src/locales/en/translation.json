@@ -403,12 +403,12 @@
   "com_label_remove_display": "Remove from display list",
   "com_label_save": "Save",
   "com_linsight_add_skill": "Add Skill",
-  "com_linsight_exit_task_mode": "Exit task mode",
+  "com_linsight_exit_task_mode": "Turn off deep research",
   "com_linsight_input_placeholder": "Enter your task goal, then leave it to $t(bisheng)$t(linsight)",
   "com_linsight_awaiting_reply": "Answer the question above to continue the task",
   "com_linsight_skill_empty": "No skills available",
   "com_linsight_skill_search": "Search skills",
-  "com_linsight_task_mode": "Task mode",
+  "com_linsight_task_mode": "Deep research",
   "com_linsight_voice_coming_soon": "Voice input is not available yet",
   "com_linsight_intent_confirmed": "User intent confirmed",
   "com_linsight_preparing": "Preparing the task",
@@ -463,6 +463,9 @@
   "com_linsight_error_title_quota_exhausted": "Model service quota exhausted",
   "com_linsight_error_desc_quota_exhausted": "The current model has run out of quota or account balance, so the task cannot continue.",
   "com_linsight_error_hint_quota_exhausted": "Tip: ask an administrator to top up or switch to an available model, then retry.",
+  "com_linsight_error_title_credit_exhausted": "Monthly credits used up",
+  "com_linsight_error_desc_credit_exhausted": "You've used all of this month's model credits, so the model can't be called for now.",
+  "com_linsight_error_hint_credit_exhausted": "Tip: ask an administrator to raise your credit allowance. Credits reset at the start of next month.",
   "com_linsight_error_title_rate_limit": "Model service is busy",
   "com_linsight_error_desc_rate_limit": "Too many users at the moment. Please try again later.",
   "com_linsight_error_hint_rate_limit": "",
@@ -484,6 +487,9 @@
   "com_linsight_error_title_context_compress_failed": "Couldn't condense earlier steps",
   "com_linsight_error_desc_context_compress_failed": "The task has many steps, so earlier steps had to be condensed into a summary before it could continue. That failed, and the task stopped.",
   "com_linsight_error_hint_context_compress_failed": "Tip: start the task again; if it keeps failing, ask an administrator to check the model service.",
+  "com_linsight_error_title_output_truncated": "The model's reply was cut off",
+  "com_linsight_error_desc_output_truncated": "The model reasoned for too long in a single reply and reached its output limit before taking the next step, so the task stopped.",
+  "com_linsight_error_hint_output_truncated": "Tip: start the task again; if it keeps happening, ask an administrator to raise the model's maximum output length.",
   "com_linsight_stop": "Stop",
   "com_linsight_stop_confirm_title": "Stop the current task?",
   "com_linsight_stop_confirm_desc": "The running task will be stopped and cannot be resumed.",
@@ -518,9 +524,12 @@
   "com_linsight_deliverable_not_generated": "(not generated)",
   "com_linsight_deliverable_not_generated_hint": "The model mentioned this file but never wrote it, so there is nothing to open.",
   "com_linsight_preview_load_failed": "Failed to load the file",
+  "com_linsight_preview_slides_generating": "Generating preview…",
+  "com_linsight_preview_slides_notice": "This preview is rendered on the server. Fonts and layout may differ slightly from PowerPoint; the downloaded file is authoritative.",
   "com_linsight_download_failed": "Download failed, please try again later",
   "com_linsight_exporting": "Exporting, please wait…",
   "com_linsight_export_success": "File downloaded",
+  "com_linsight_md_bundled_zip": "This Markdown file uses images, so it was downloaded as a zip together with them",
   "com_linsight_export_failed": "Export failed, please try again later",
   "com_linsight": {
     "downloadAs": "Download as {{format}}",
@@ -1284,6 +1293,8 @@
     "history_deleted": "Conversation history deleted"
   },
   "com_knowledge": {
+    "tag_filter_daily_only": "Tag filters are available in daily mode. Remove the tag or switch back to daily mode.",
+    "load_tags_failed": "Could not load tags. Please retry.",
     "department_private_disabled": "Department knowledge spaces cannot be private",
     "add_new": "Add",
     "web_link": "Web link",
@@ -1719,7 +1730,13 @@
     "sort_by_size_label": "Sort by size",
     "select_all": "Select all",
     "folder_abnormal": "Has issues",
-    "sensitive_violation_words": "Your uploaded file contains prohibited content: {{words}}. Please revise it and try again."
+    "sensitive_violation_words": "Your uploaded file contains prohibited content: {{words}}. Please revise it and try again.",
+    "space_info": "Space info",
+    "space_actions": "Space actions",
+    "breadcrumb": "Breadcrumb",
+    "breadcrumb_expand_hidden": "Show the {{0}} hidden levels",
+    "ask_model_unavailable": "The selected model has changed. Choose a model and send your question again.",
+    "ask_bar_placeholder": "Ask about this knowledge space — the answer opens in a new chat…"
   },
   "com_subscription": {
     "tab_channel": "Channels",
@@ -1791,7 +1808,10 @@
     "continue_editing": "Continue editing",
     "copy": "Copy",
     "copy_failed_retry": "Copy failed, please try again",
-    "crawl_error_19003": "Parse failed. Please try again or submit a manual request.",
+    "crawl_error_invalid_url": "Enter a complete HTTP or HTTPS website URL, such as https://www.example.com/news.",
+    "crawl_error_network": "Could not connect to the crawl service. Check your network connection and try again.",
+    "crawl_error_timeout": "The crawl request timed out. Please try again later.",
+    "crawl_error_19003": "Website content could not be parsed. Check that the link is complete and accessible, then retry with a news or policy listing page. Contact your administrator if the issue continues.",
     "crawl_error_19004": "The site denied access. Please provide a valid “section list page” link (for example, a news or policy listing page).",
     "crawl_error_19005": "Detected as a single article or a non-list page. Please provide a valid “section list page” link (for example, a news or policy listing page).",
     "crawled_content_preview": "Crawled content preview",
@@ -1866,7 +1886,7 @@
     "search": "Search",
     "search_articles_of_interest": "Search for articles you're interested in",
     "search_knowledge_space_placeholder": "Enter knowledge space name to search",
-    "send_crawl_requirement_to_email": "Please send your website crawl requiremnt to: XXXX@XX",
+    "send_crawl_requirement_to_email": "Contact your administrator with the website URL and the content you want to collect for assistance.",
     "set_article_filter_conditions": "Set article filter conditions:",
     "share": "Share",
     "share_link_copied": "Share link copied to clipboard",
@@ -1980,10 +2000,13 @@
     "wechat_article_link_label": "WeChat article link",
     "wechat_link_copy_tip": "Tap \"···\" in the top-right corner of the article and choose \"Copy Link\", or choose \"Open in Browser\" and copy the URL from the address bar.",
     "channel_unavailable_or_no_permission": "This channel is unavailable or you do not have permission to view it",
-    "main_channel": "Channel name"
-  },
-  "com_tools": {
-    "image_view": "Image View"
+    "main_channel": "Channel name",
+    "channel_content_access_required": "Channel content is available after your subscription is approved or access is granted.",
+    "home_source_count": "{{0}} sources",
+    "ask_file_source": "Source",
+    "ask_file_link": "Original link",
+    "ask_file_published_at": "Published",
+    "ask_bar_placeholder": "Ask about this article — the answer opens in a new chat…"
   },
   "com_unified_permission": {
     "access_and_share": "Access and sharing",
@@ -2032,7 +2055,9 @@
     "dialog_title": "Member Management",
     "empty_departments": "No departments found",
     "empty_permissions": "No permission entries yet",
-    "empty_search": "No grantable subjects found. Check the name or ID.",
+    "empty_search": "No matching users",
+    "empty_search_departments": "No matching departments",
+    "empty_search_user_groups": "No matching user groups",
     "empty_user_groups": "No user groups found",
     "already_granted": "Granted",
     "already_granted_as": "Granted: {{model}}",
@@ -2301,6 +2326,7 @@
       "expired": "The mode impact analysis expired."
     },
     "roster": {
+      "inactive_existing_grant": "This permission is disabled for new grants. Existing access remains effective.",
       "empty": "No assignees",
       "loading": "Loading permissions…",
       "loading_more": "Loading more…",
@@ -2608,7 +2634,7 @@
   "com_skill_center_replace": "Replace",
   "com_skill_center_replace_confirm": "A skill with this name already exists. Replacing it keeps the same skill and its on or off state.",
   "com_skill_center_drop": "Drop an existing skill file here",
-  "com_skill_center_formats": "SKILL.md, .zip or .skill. Up to 50 MiB per file and 200 MiB expanded.",
+  "com_skill_center_formats": "SKILL.md, .zip or .skill. A skill file can be up to 200 MiB. A compressed package can be up to 50 MiB, or 200 MiB after it is expanded.",
   "com_skill_center_choose": "Choose file",
   "com_skill_center_reselect": "Choose another file",
   "com_skill_center_parsing": "Validating skill file…",
@@ -2646,7 +2672,8 @@
   "com_skill_center_retry_hint": "Retry to load the skills available to your account.",
   "com_skill_center_clear": "Clear search",
   "com_skill_center_error_format": "Choose a .md, .zip or .skill file.",
-  "com_skill_center_error_size": "Choose a non-empty file up to 50 MiB.",
+  "com_skill_center_error_size": "Choose a non-empty skill file up to 200 MiB.",
+  "com_skill_center_error_archive_limit": "Choose a non-empty compressed package up to 50 MiB.",
   "com_skill_center_error_manifest_size": "SKILL.md must be at most 1 MiB. Shorten the instructions and retry.",
   "com_skill_center_error_manifest": "SKILL.md needs YAML front matter with name and description, plus instructions. Description is limited to 1,024 characters.",
   "com_skill_center_error_name": "Use lowercase letters, numbers and single hyphens for name, up to 64 characters.",
@@ -2675,6 +2702,20 @@
   "com_skill_center_menu": "Skills",
   "com_skill_center_manage": "Manage skills",
   "com_skill_center_menu_available": "Available skills",
+  "knowledgeBasePicker": {
+    "search": "Search organization knowledge bases",
+    "column": "Knowledge base",
+    "selected": "{{count}} knowledge bases selected",
+    "loadError": "Could not load organization knowledge bases",
+    "loading": "Loading knowledge bases…",
+    "noMatch": "No matching knowledge bases",
+    "empty": "No organization knowledge bases available",
+    "limit": "Select up to 50 knowledge bases"
+  },
+  "modelPicker": {
+    "unknownProvider": "Other providers",
+    "back": "Back"
+  },
   "com_select": {
     "empty": "No data",
     "no_match": "No matches",
@@ -2687,6 +2728,27 @@
       "type": "Environment variable",
       "missing": "Not configured at submission",
       "present": "Configured at submission"
+    },
+    "app_release_notes": {
+      "title": "Release notes",
+      "empty": "No release notes provided"
+    },
+    "current_visibility": {
+      "title": "Visibility",
+      "refresh": "Refresh scope",
+      "currentHint": "Current visibility. Authorization changes take effect immediately and do not affect approval. Refresh to see the latest scope.",
+      "unavailable": "Current visibility could not be confirmed. Please refresh.",
+      "deleted": "The application was deleted. Current visibility is unavailable.",
+      "ownerOnly": "Only the owner can see this application",
+      "noOrdinary": "No ordinary people, departments or user groups currently have visibility.",
+      "adminHint": "Platform super administrators and this tenant’s administrators have separate implicit management access, which is excluded from this ordinary visibility scope.",
+      "checkedAt": "Checked at:",
+      "user": "Person",
+      "department": "Department",
+      "user_group": "User group",
+      "member": "Members",
+      "admin": "Administrators",
+      "children": "Includes subdepartments"
     }
   },
   "com_agent_runtime": {
@@ -2696,5 +2758,160 @@
       "deliverables_failed": "The generated files could not be saved. Run again."
     }
   },
-  "com_message_time_format": "MM/dd HH:mm"
+  "com_message_time_format": "MM/dd HH:mm",
+  "chatImage": {
+    "processingRequired": "Your images are kept. Choose a vision model or ask your administrator to configure image parsing before sending."
+  },
+  "skillReference": {
+    "readFile": "Read skill reference"
+  },
+  "com_app_featured_tag": "Featured",
+  "com_feedback_like": "Like",
+  "com_feedback_dislike": "Dislike",
+  "com_system_notice": {
+    "title": "System notice"
+  },
+  "dshChat": {
+    "backToCapabilities": "Back to capabilities",
+    "uploadDescription": "Add local files to this conversation",
+    "knowledgeDescription": "Choose knowledge spaces for context",
+    "searchDescription": "Search the web for current information",
+    "taskDescription": "Enter task mode for multi-step work",
+    "knowledgeColumn": "Knowledge space",
+    "modifiedColumn": "Modified",
+    "addContext": "Add context",
+    "selectKnowledge": "Select knowledge spaces",
+    "selectKnowledgeBases": "Select knowledge bases",
+    "searchKnowledge": "Search knowledge spaces",
+    "selectedKnowledge": "{{count}} knowledge spaces selected",
+    "confirmKnowledge": "Confirm",
+    "knowledgeLoadError": "Could not load knowledge spaces",
+    "retryKnowledge": "Retry",
+    "loadingKnowledge": "Loading knowledge spaces…",
+    "noKnowledgeMatch": "No matching knowledge spaces",
+    "noKnowledge": "No knowledge spaces available",
+    "knowledgeLimit": "Select up to 50 knowledge spaces",
+    "followupPlaceholder": "Send a message",
+    "conversationSection": "Conversation",
+    "placeholder": "Send a message, or add files and knowledge spaces",
+    "files": "Conversation files",
+    "resizePreview": "Resize file preview",
+    "loadingConversation": "Loading conversation…",
+    "recommendedApps": "Recommended apps",
+    "scrollToBottom": "Scroll to bottom",
+    "preview": "Preview",
+    "source": "Source",
+    "closeResearch": "Turn off deep research",
+    "welcome": "Let's Create Together"
+  },
+  "chat.sidebar.title": "Chat",
+  "chat.sidebar.newConversation": "New conversation",
+  "chat.sidebar.recent": "Recent",
+  "com_workbench_sidebar": {
+    "home": "Back to home",
+    "projects": "Projects",
+    "conversations": "Chats",
+    "square": "Discover",
+    "more": "More",
+    "project_new": "New project",
+    "project_rename": "Rename project",
+    "project_name_placeholder": "Enter a project name",
+    "move_to_project": "Move to project",
+    "move_out_of_project": "Remove from project",
+    "project_none": "No projects yet",
+    "project_empty": "No conversations yet",
+    "demo": {
+      "project_travel": "Travel guides",
+      "project_files": "File organizing",
+      "chat_food": "Xinjiang local food",
+      "chat_heritage": "Xinjiang cultural heritage",
+      "chat_season": "Best seasons to visit Xinjiang",
+      "chat_spots": "Top sights in Xinjiang"
+    }
+  },
+  "com_module_home": {
+    "tab_mine": "Mine",
+    "tab_square": "Square"
+  },
+  "com_capability_center": {
+    "tool": "Tools",
+    "tool_enabled_setting": "Enable tool",
+    "availability_failed": "Could not save. Try again.",
+    "web_search_setting": "Enable web search",
+    "eyebrow": "BISHENG · Enterprise capabilities",
+    "title": "Tools & skills",
+    "description": "Bring enterprise tools and expertise into your work. Capabilities follow your account permissions.",
+    "all": "All",
+    "skill": "Skills",
+    "builtin": "Built-in",
+    "api": "API",
+    "mcp": "MCP",
+    "search": "Search tools, skills or tasks",
+    "demo_title": "Try a workflow, then connect your business",
+    "demo_subtitle": "Check the time, an order or inventory. Examples are ready to run.",
+    "account_ready": "Available",
+    "ready_filter": "Available only",
+    "showing_ready": "Available to your account",
+    "showing_all": "Capabilities visible to your account",
+    "ready": "Available",
+    "needs_setup": "Setup required",
+    "demo_data": "Demo data",
+    "no_key": "No API key",
+    "try_action": "Try it",
+    "try_title": "Run a query and inspect the result",
+    "demo_explanation": "A real tool request using synthetic business data. Change the example ID to compare results.",
+    "live_explanation": "Query the actual time through a Bisheng built-in tool using your account.",
+    "field_timezone": "Time zone",
+    "field_order_id": "Order ID",
+    "field_product_code": "Product code",
+    "run": "Run query",
+    "close": "Close",
+    "trial_failed": "The tool call failed. Check parameters and retry.",
+    "copy_failed": "Copy failed. Select the prompt manually.",
+    "success": "Tool call succeeded",
+    "audit_hint": "The call checks account permissions and is recorded in the enterprise audit log.",
+    "use_title": "Use it in Work",
+    "use_hint": "Choose tools or skills in the message composer, or copy the instruction below into desktop Work.",
+    "setup_title": "Managed by your organization",
+    "setup_hint": "An administrator configures and authorizes this capability. It uses your enterprise sign-in.",
+    "skill_prompt": "Run an example with this skill, show actual tool calls, and create a results report.",
+    "tool_prompt": "Call this Bisheng enterprise tool:",
+    "prompt_title": "Continue in Work",
+    "copy_prompt": "Copy prompt",
+    "copied": "Copied",
+    "loading": "Loading capabilities",
+    "failed": "Capabilities are unavailable",
+    "retry_hint": "Refresh or check your enterprise sign-in.",
+    "retry": "Retry",
+    "empty": "No capabilities configured yet",
+    "footer": "Configured by your organization · Selected per task · Audited execution. Orders and inventory use demo data.",
+    "scenario_time": "Current time",
+    "scenario_order": "Order lookup",
+    "scenario_inventory": "Inventory lookup"
+  },
+  "com_builtin_skills": {
+    "bisheng-docx": {
+      "name": "Word document creation",
+      "description": "Create, read and edit Word documents (.docx), including reports, proposals, meeting minutes, notices, draft contracts and resumes. Organize content with headings, tables of contents, page numbers, tables and charts, and check the layout before delivery."
+    },
+    "bisheng-pptx": {
+      "name": "PowerPoint presentation creation",
+      "description": "Create, read and edit PowerPoint presentations (.pptx) for company introductions, work reports, project proposals, product launches and training. Use provided .pptx or .potx templates and check slide layout before delivery."
+    },
+    "bisheng-xlsx": {
+      "name": "Excel spreadsheet creation",
+      "description": "Create and edit Excel workbooks (.xlsx), including data tables, summaries, budgets, financial models, quotations and registers. Read and clean .xlsx, .xls and .csv data, apply formulas and formatting, and recalculate and check the workbook before delivery."
+    }
+  },
+  "appChat": {
+    "unknownApp": "Unknown app",
+    "noDescription": "No description available",
+    "emptyShared": "This shared conversation has no messages yet",
+    "stopped": "Stopped"
+  },
+  "knowledgeAccess": {
+    "checking": "Checking knowledge space access…",
+    "failed": "Could not load knowledge space permissions. Refresh the page to try again.",
+    "revoked": "Access has expired for these knowledge spaces: {{names}}. Choose accessible spaces in Add context."
+  }
 }

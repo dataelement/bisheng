@@ -1,4 +1,4 @@
-import { Button } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 import {
   Command,
   CommandInput,
@@ -12,7 +12,7 @@ import {
 } from "@/components/bs-ui/popover";
 import { getAuditUsers } from "@/controllers/API/dshModelAudit";
 import type { AuditUserOption } from "@/types/dshModelAudit";
-import { Check, ChevronDown } from "lucide-react";
+import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -110,11 +110,9 @@ export function ModelAuditUserSelect({
         }}
       >
         <PopoverTrigger asChild>
-          <Button
+          <button
             type="button"
-            size="small"
-            variant="outlined" color="default"
-            className="w-full min-w-0 justify-between text-sm font-normal [@media(pointer:coarse)]:min-h-11"
+            className="input-touch-hit relative flex h-8 w-full min-w-0 cursor-pointer items-center gap-2 overflow-hidden rounded-md border border-border-base bg-bg-page px-[11px] text-left text-[length:var(--font-size-3)] font-normal leading-[var(--line-height-3)] text-text-1 outline-none transition-colors hover:border-border-deep focus-visible:border-border-deep focus-visible:shadow-focus data-[state=open]:border-border-deep data-[state=open]:shadow-focus"
             aria-label={t("dsh.modelAuditView.selectUser")}
             aria-expanded={open}
           >
@@ -125,11 +123,11 @@ export function ModelAuditUserSelect({
                   ? selected.user_name
                   : t("dsh.modelAuditView.selectedUser", { id: value })}
             </span>
-            <ChevronDown
-              className="ml-2 size-4 shrink-0 opacity-60"
+            <Outlined.Down
+              className={`ml-auto size-4 shrink-0 text-text-3 transition-transform${open ? " rotate-180" : ""}`}
               aria-hidden="true"
             />
-          </Button>
+          </button>
         </PopoverTrigger>
         <PopoverContent
           align="start"
