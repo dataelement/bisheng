@@ -1,18 +1,24 @@
 import { DesktopShellBridge } from "./DesktopShellBridge";
-import { isDesktopEmbedded } from "~/components/Chat/desktopEmbedding";
+import { useClientEnvironment } from "~/hooks/useClientEnvironment";
 import { getBysConfigApi } from "~/api/apps";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useRef, useState } from "react";
 import KeepAlive from "react-activation";
 import { matchPath, Navigate, useLocation, useOutlet } from "react-router-dom";
 import { useRecoilState } from "recoil";
-import { usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
+import { useScrollRevealRef } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { useAuthContext, useLocalize, useWorkbenchMenuNames } from "~/hooks";
 import { Button } from "~/components/ui/Button";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/Dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "~/components/ui/Dialog";
 import store from "~/store";
 import { useAgentToolPreferences } from "~/components/Chat/Input/AgentToolSelector";
 
@@ -33,23 +39,36 @@ export default function MainLayout() {
   const { user, logout, isUserLoading } = useAuthContext();
   const localize = useLocalize();
   const menuNames = useWorkbenchMenuNames();
-  const isMobile = usePrefersMobileLayout();
+  const {
+    channel,
+    layout: { isNarrowViewport: isMobile },
+  } = useClientEnvironment();
   const outletScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
   const isAppsArea = pathname.includes("/apps");
-  /** 探索广场：横幅内已有返回，隐藏主布局左上角汉堡，避免重复一行 */
+
   let pathForMatch = (pathname.split("?")[0] || "").replace(/\/+$/, "") || "/";
   const appBase =
-    typeof __APP_ENV__ !== "undefined" ? String(__APP_ENV__.BASE_URL || "").replace(/\/$/, "") : "";
-  if (appBase && (pathForMatch === appBase || pathForMatch.startsWith(`${appBase}/`))) {
+    typeof __APP_ENV__ !== "undefined"
+      ? String(__APP_ENV__.BASE_URL || "").replace(/\/$/, "")
+      : "";
+  if (
+    appBase &&
+    (pathForMatch === appBase || pathForMatch.startsWith(`${appBase}/`))
+  ) {
     pathForMatch = pathForMatch.slice(appBase.length) || "/";
   }
-  const isAppsExploreRoute = Boolean(matchPath({ path: "/apps/explore", end: true }, pathForMatch));
+  const isAppsExploreRoute = Boolean(
+    matchPath({ path: "/apps/explore", end: true }, pathForMatch),
+  );
   const isAppChatRoute = /^\/app(\/|$)/.test(pathname);
   const isChannelRoute = /^\/channel(\/|$)/.test(pathname);
   const isSettingsRoute = /^\/settings(\/|$)/.test(pathname);
   const isKnowledgeSettingsRoute = Boolean(
     matchPath({ path: "/knowledge/create", end: true }, pathForMatch) ||
-    matchPath({ path: "/knowledge/space/:spaceId/settings", end: true }, pathForMatch),
+    matchPath(
+      { path: "/knowledge/space/:spaceId/settings", end: true },
+      pathForMatch,
+    ),
   );
   /** These full-height surfaces keep the white shell fixed and delegate scrolling to their page content. */
   const innerScrollShell =
@@ -59,7 +78,7 @@ export default function MainLayout() {
     isAppChatRoute ||
     isSettingsRoute ||
     (isAppsArea && !isAppsExploreRoute);
-  const showPlatformNavigation = !isDesktopEmbedded();
+  const showPlatformNavigation = channel === "web";
   const isChatHomeRoute = /^\/(c|linsight)(\/|$)/.test(pathname);
   const isMenuUnavailableRoute = pathname.startsWith("/menu-unavailable");
   const isSkillsRoute = /^\/skills(\/|$)/.test(pathname);
@@ -67,17 +86,22 @@ export default function MainLayout() {
   const isCapabilitiesRoute = /^\/capabilities(\/|$)/.test(pathname);
   /** Pages that read their view from the query string: a page react-activation froze keeps
    *  its old router context, so they are mounted fresh instead of cached. */
-  const isQueryDrivenRoute = isSkillsRoute || isSquareRoute || isCapabilitiesRoute;
+  const isQueryDrivenRoute =
+    isSkillsRoute || isSquareRoute || isCapabilitiesRoute;
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
   // Knowledge, channel pages and app conversations use the active router context,
   // including the selected list tab, the current conversation, and its entry surface.
-  const isLiveRoute = isQueryDrivenRoute || isKnowledgeRoute || isChannelRoute || isAppChatRoute;
-  const [systemMenuOpen, setSystemMenuOpen] = useRecoilState(store.mobileSystemMenuOpenState);
+  const isLiveRoute =
+    isQueryDrivenRoute || isKnowledgeRoute || isChannelRoute || isAppChatRoute;
+  const [systemMenuOpen, setSystemMenuOpen] = useRecoilState(
+    store.mobileSystemMenuOpenState,
+  );
   const layoutRef = useRef<HTMLDivElement | null>(null);
   const menuTriggerRef = useRef<HTMLElement | null>(null);
-  const openSidebarLabel = localize('com_nav_open_sidebar');
+  const openSidebarLabel = localize("com_nav_open_sidebar");
   const shouldHideSidebarOnMobileAppsArea = isMobile && showPlatformNavigation;
-  const systemMenuRevealing = shouldHideSidebarOnMobileAppsArea && systemMenuOpen;
+  const systemMenuRevealing =
+    shouldHideSidebarOnMobileAppsArea && systemMenuOpen;
 
   useEffect(() => {
     const root = layoutRef.current;
@@ -85,11 +109,13 @@ export default function MainLayout() {
     // KeepAlive renders cached pages outside this React event ancestry, but their
     // DOM remains inside the layout. Capture before Radix moves keyboard focus.
     const handleMenuTrigger = (event: Event) => {
-      const target = event.target instanceof Element ? event.target.closest('button') : null;
-      if (target?.getAttribute('aria-label') === openSidebarLabel) menuTriggerRef.current = target;
+      const target =
+        event.target instanceof Element ? event.target.closest("button") : null;
+      if (target?.getAttribute("aria-label") === openSidebarLabel)
+        menuTriggerRef.current = target;
     };
-    root.addEventListener('click', handleMenuTrigger, true);
-    return () => root.removeEventListener('click', handleMenuTrigger, true);
+    root.addEventListener("click", handleMenuTrigger, true);
+    return () => root.removeEventListener("click", handleMenuTrigger, true);
   }, [isMobile, isUserLoading, user, pathname, search, openSidebarLabel]);
 
   useEffect(() => {
@@ -124,10 +150,19 @@ export default function MainLayout() {
   }, []);
 
   // System notice popup — single instance above KeepAlive so dismissal is global.
-  const remoteNotice = (config as { system_notification?: string } | undefined)?.system_notification ?? "";
+  const remoteNotice =
+    (config as { system_notification?: string } | undefined)
+      ?.system_notification ?? "";
   const [noticeDismissed, setNoticeDismissed] = useState(false);
-  const hideNotice =
-    noticeDismissed || (typeof window !== "undefined" && !!sessionStorage.getItem(systemNoticeTodayKey()));
+  let rememberedNotice = false;
+  try {
+    rememberedNotice =
+      typeof window !== "undefined" &&
+      !!window.sessionStorage.getItem(systemNoticeTodayKey());
+  } catch {
+    /* A blocked store must not prevent the shell from mounting. */
+  }
+  const hideNotice = noticeDismissed || rememberedNotice;
   const systemNotice = !hideNotice && remoteNotice ? remoteNotice : "";
   const closeSystemNotice = () => {
     try {
@@ -166,19 +201,26 @@ export default function MainLayout() {
     const legacySettingsSection = legacyParams.get("open-settings");
     if (legacySettingsSection) {
       return (
-        <Navigate to={`/settings/${legacySettingsSection === "general" ? "general" : "account"}`} replace />
+        <Navigate
+          to={`/settings/${legacySettingsSection === "general" ? "general" : "account"}`}
+          replace
+        />
       );
     }
   }
 
   // Track last visited path per sidebar section.
   // Runs synchronously before Sidebar renders in the same cycle.
-  if (/^\/(c|linsight)(\/|$)/.test(pathname) && pathname !== "/c/skills") lastSectionPaths.home = pathname;
+  if (/^\/(c|linsight)(\/|$)/.test(pathname) && pathname !== "/c/skills")
+    lastSectionPaths.home = pathname;
   else if (/^\/(apps|app)(\/|$)/.test(pathname)) {
-    // 应用广场是应用中心的子页；从其它模块再点「应用」时应回到应用中心，而非恢复广场路由
-    lastSectionPaths.apps = pathname.startsWith("/apps/explore") ? "/apps" : pathname;
-  } else if (/^\/channel(\/|$)/.test(pathname)) lastSectionPaths.channel = pathname;
-  else if (pathname.startsWith("/knowledge")) lastSectionPaths.knowledge = pathname;
+    lastSectionPaths.apps = pathname.startsWith("/apps/explore")
+      ? "/apps"
+      : pathname;
+  } else if (/^\/channel(\/|$)/.test(pathname))
+    lastSectionPaths.channel = pathname;
+  else if (pathname.startsWith("/knowledge"))
+    lastSectionPaths.knowledge = pathname;
 
   // Each sidebar tab gets its own KeepAlive cache key so switching
   // between tabs triggers cache/restore instead of re-rendering.
@@ -207,7 +249,9 @@ export default function MainLayout() {
         (isChatHomeRoute || !showPlatformNavigation) && "dsh-web-chat",
         // Match the sidebar surface behind the mobile panel's exposed rounded corners.
         // Desktop remains a flat white page split by the sidebar's hairline (Figma 13139:111431).
-        isMobile ? "min-h-[100dvh] overflow-x-clip bg-white" : "h-[100dvh] overflow-hidden bg-white",
+        isMobile
+          ? "min-h-[100dvh] overflow-x-clip bg-white"
+          : "h-[100dvh] overflow-hidden bg-white",
       )}
     >
       <DesktopShellBridge />
@@ -224,10 +268,13 @@ export default function MainLayout() {
       <main
         className={cn(
           "relative min-w-0 flex-1",
-          isMobile && "z-10 w-full bg-white shadow-[0px_0px_20px_0px_#07225808]",
+          isMobile &&
+            "z-10 w-full bg-white shadow-[0px_0px_20px_0px_#07225808]",
           isMobile ? "min-h-[100dvh]" : "h-[100dvh]",
-          shouldHideSidebarOnMobileAppsArea && "transition-transform duration-300 ease-out motion-reduce:transition-none",
-          systemMenuRevealing && "translate-x-[240px] rounded-l-3xl overflow-hidden",
+          shouldHideSidebarOnMobileAppsArea &&
+            "transition-transform duration-300 ease-out motion-reduce:transition-none",
+          systemMenuRevealing &&
+            "translate-x-[240px] rounded-l-3xl overflow-hidden",
         )}
       >
         {isMenuUnavailableRoute || isLiveRoute ? (
@@ -244,9 +291,12 @@ export default function MainLayout() {
               systemMenuRevealing && "overflow-hidden",
             )}
           >
-            {/* 移动端顶栏:无权限占位页本身没有汉堡入口,这里补一个,与会话/知识页一致,
-                避免收起侧栏后用户无法唤出系统菜单。 */}
-            {shouldHideSidebarOnMobileAppsArea && !isChannelRoute && !isAppChatRoute && !isKnowledgeRoute ? (
+            {/* Unavailable pages have no menu trigger of their own; keep the
+                global menu reachable after the narrow sidebar closes. */}
+            {shouldHideSidebarOnMobileAppsArea &&
+            !isChannelRoute &&
+            !isAppChatRoute &&
+            !isKnowledgeRoute ? (
               <div
                 className={cn(
                   "top-0 z-[50] shrink-0",
@@ -267,7 +317,9 @@ export default function MainLayout() {
                   {isQueryDrivenRoute && !isSquareRoute ? (
                     <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-text-1">
                       {localize(
-                        isCapabilitiesRoute ? "com_capability_center.title" : "com_skill_center_title",
+                        isCapabilitiesRoute
+                          ? "com_capability_center.title"
+                          : "com_skill_center_title",
                       )}
                     </span>
                   ) : null}
@@ -276,7 +328,9 @@ export default function MainLayout() {
               </div>
             ) : null}
             {isLiveRoute ? (
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{outlet}</div>
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {outlet}
+              </div>
             ) : (
               outlet
             )}
@@ -291,7 +345,11 @@ export default function MainLayout() {
             autoFreeze={cacheKey !== "chat_tab"}
           >
             <div
-              ref={!isMobile && !innerScrollShell ? outletScrollRevealRef : undefined}
+              ref={
+                !isMobile && !innerScrollShell
+                  ? outletScrollRevealRef
+                  : undefined
+              }
               // Anchor + handle for panels that must cover the conversation while
               // leaving the rail alone — media playback is the one today. They
               // portal in here and lay themselves out against this box, so they
@@ -312,8 +370,11 @@ export default function MainLayout() {
                 systemMenuRevealing && "overflow-hidden",
               )}
             >
-              {/* 移动端应用中心顶栏：与频道页一致 — 菜单按钮触发系统主菜单(整页右滑) */}
-              {shouldHideSidebarOnMobileAppsArea && isAppsArea && !isAppChatRoute && !isAppsExploreRoute ? (
+                  {/* The narrow apps header opens the shared workbench menu. */}
+              {shouldHideSidebarOnMobileAppsArea &&
+              isAppsArea &&
+              !isAppChatRoute &&
+              !isAppsExploreRoute ? (
                 <div className="sticky top-0 z-[50] w-full shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
                   <div className="relative flex h-11 min-h-11 w-full flex-row items-center justify-between px-4">
                     <button
@@ -333,7 +394,9 @@ export default function MainLayout() {
                 </div>
               ) : null}
               {innerScrollShell ? (
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{outlet}</div>
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                  {outlet}
+                </div>
               ) : (
                 outlet
               )}
@@ -359,7 +422,10 @@ export default function MainLayout() {
             </div>
           </div>
           <DialogFooter className="sm:justify-center flex-row justify-center pb-2">
-            <Button onClick={closeSystemNotice} className="w-[120px] rounded-full">
+            <Button
+              onClick={closeSystemNotice}
+              className="w-[120px] rounded-full"
+            >
               {localize("com_auth.got_it")}
             </Button>
           </DialogFooter>

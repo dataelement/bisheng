@@ -1,3 +1,4 @@
+import { WorkbenchMenuButton } from "~/layouts/WorkbenchMenuButton";
 import { Badge, Button } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import type { Channel } from "~/api/channels";
@@ -109,14 +110,14 @@ export function ChannelHomePage({
                     {/* Global navigation remains available without a duplicate square switcher. */}
                     <header className="w-full shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
                         <div className="relative flex h-11 items-center px-4">
-                            <button
+                            <WorkbenchMenuButton
                                 type="button"
                                 aria-label={localize("com_nav_open_sidebar")}
                                 onClick={onOpenMobileNav}
                                 className="workbench-menu-trigger relative inline-flex size-5 shrink-0 items-center justify-center text-text-1"
                             >
                                 <Outlined.SidebarMenu className="size-5" />
-                            </button>
+                            </WorkbenchMenuButton>
                             <h1 className="pointer-events-none absolute left-1/2 max-w-[calc(100%-112px)] -translate-x-1/2 truncate text-h4 font-medium text-text-1">{menuNames.channel}</h1>
                         </div>
                     </header>

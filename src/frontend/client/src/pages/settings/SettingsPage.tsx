@@ -1,9 +1,15 @@
+import { WorkbenchMenuButton } from "~/layouts/WorkbenchMenuButton";
 import { readDesktopSettingsSection } from "./desktopSettings";
 import { DesktopSettingsPane } from "./sections/DesktopSettingsPane";
 import { Badge } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
-import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  Navigate,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 // store.mobileSystemMenuOpenState is a shared legacy atom (same usage as Subscription/knowledge pages).
 // eslint-disable-next-line no-restricted-imports
 import { useSetRecoilState } from "recoil";
@@ -34,22 +40,6 @@ import {
   type SettingsPageSection,
 } from "./settingsSections";
 
-/**
- * 设置 page — replaces the old SettingsDialog + MessageApprovalDialog pair with one
- * routed page (/settings/:section). One flat nav: approval + notifications first,
- * personal settings after the divider.
- *
- * History model differs by layout:
- * - Desktop: sidebar moves REPLACE the entry — settings holds exactly one entry, so
- *   back always leaves settings to wherever the user came from.
- * - Mobile: /settings (no section) is a menu landing; picking a module PUSHES, so
- *   both the top back button and system back pop to the menu first, and backing out
- *   of the menu leaves settings.
- *
- * Ownership stays strict (same as the retired dialog): an approval that still needs
- * handling lives only under 我的审批-待我处理, and 通知 only informs — nothing here
- * decrements the pending count except a real decision.
- */
 export default function SettingsPage() {
   const aiAccessDeploymentEnabled = usePersonalTokenEnabled();
   // The desktop section exists only where the deployment reports DSH management on.
@@ -60,7 +50,8 @@ export default function SettingsPage() {
     ...group,
     items: group.items.filter(
       (item) =>
-        (item.key !== "ai-access" || shouldShowAiAccessSection(aiAccessDeploymentEnabled)) &&
+        (item.key !== "ai-access" ||
+          shouldShowAiAccessSection(aiAccessDeploymentEnabled)) &&
         (item.key !== "desktop" || dshDesktopEnabled),
     ),
   }));
@@ -70,12 +61,16 @@ export default function SettingsPage() {
   const isMobile = usePrefersMobileLayout();
   const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
   const { section: rawSection } = useParams<{ section?: string }>();
-  const { unreadCount, pendingApprovalCount, refreshCount } = useNotificationCount();
+  const { unreadCount, pendingApprovalCount, refreshCount } =
+    useNotificationCount();
 
   // Compact (<768px) approval master-detail state, owned here so the nav can reset it.
   const [compactView, setCompactView] = useState<"list" | "detail">("list");
   /** Set when a notification jumps into an approval detail. */
-  const [deepLink, setDeepLink] = useState<{ taskId?: number | null; instanceId?: number | null } | null>(null);
+  const [deepLink, setDeepLink] = useState<{
+    taskId?: number | null;
+    instanceId?: number | null;
+  } | null>(null);
 
   /** Mobile-only menu landing: /settings with no section segment. */
   const isMenu = isMobile && rawSection == null;
@@ -96,13 +91,26 @@ export default function SettingsPage() {
   // Leaves settings for the route that opened it. Direct visits fall back to browser
   // history and then home when this is the first entry in the tab.
   const leaveSettings = () => {
-    const target = resolveSettingsExitTarget(settingsRouteState, window.history.state?.idx);
+    const target = resolveSettingsExitTarget(
+      settingsRouteState,
+      window.history.state?.idx,
+    );
     if (target.delta !== undefined) navigate(target.delta);
     else navigate(target.path, { replace: true });
   };
 
-  const desktopSection = readDesktopSettingsSection(rawSection, location.search);
-  if (desktopSection) return <DesktopSettingsPane key={desktopSection} section={desktopSection} onCountsChanged={refreshCount} />;
+  const desktopSection = readDesktopSettingsSection(
+    rawSection,
+    location.search,
+  );
+  if (desktopSection)
+    return (
+      <DesktopSettingsPane
+        key={desktopSection}
+        section={desktopSection}
+        onCountsChanged={refreshCount}
+      />
+    );
 
   if (!isMenu && !isSettingsPageSection(rawSection)) {
     // Desktop has no menu screen — /settings and unknown sections land on the default
@@ -117,7 +125,7 @@ export default function SettingsPage() {
   }
 
   // Desktop sidebar/deep-link moves REPLACE the history entry: settings keeps exactly
-  // one entry, so 返回 (and the browser's own back) leads to whatever page the user
+
   // was on before opening settings, never through the sections they browsed here.
   const goToSection = (next: SettingsPageSection) => {
     setCompactView("list");
@@ -130,7 +138,10 @@ export default function SettingsPage() {
     setCompactView("list");
     setDeepLink(null);
     navigate(`/settings/${next}`, {
-      state: { ...settingsRouteState, fromSettingsMenu: true } satisfies SettingsRouteState,
+      state: {
+        ...settingsRouteState,
+        fromSettingsMenu: true,
+      } satisfies SettingsRouteState,
     });
   };
 
@@ -151,7 +162,11 @@ export default function SettingsPage() {
   const isNotifications = section === "notifications";
 
   const navBadge = (key: SettingsPageSection) =>
-    key === "my-tasks" ? pendingApprovalCount : key === "notifications" ? unreadCount : 0;
+    key === "my-tasks"
+      ? pendingApprovalCount
+      : key === "notifications"
+        ? unreadCount
+        : 0;
 
   // Mobile menu landing — the grouped nav as a full screen. Rows mirror the desktop
   // sidebar's grouping but at touch size; the hamburger stays here (module screens
@@ -161,14 +176,14 @@ export default function SettingsPage() {
       <div className="flex min-h-0 flex-1 flex-col bg-white">
         <div className="sticky top-0 z-[50] w-full shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
           <div className="relative flex h-11 min-h-11 w-full flex-row items-center justify-between px-4">
-            <button
+            <WorkbenchMenuButton
               type="button"
               aria-label={localize("com_nav_open_sidebar")}
               onClick={() => setSystemMenuOpen(true)}
               className="inline-flex size-5 shrink-0 items-center justify-center text-text-1"
             >
               <Outlined.SidebarMenu className="size-5" />
-            </button>
+            </WorkbenchMenuButton>
             <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-text-1">
               {localize("com_nav_settings")}
             </span>
@@ -197,16 +212,22 @@ export default function SettingsPage() {
                   >
                     <span className="flex min-w-0 items-center gap-3">
                       <ItemIcon className="size-5 shrink-0" />
-                      <span className="truncate">{localize(item.labelKey)}</span>
+                      <span className="truncate">
+                        {localize(item.labelKey)}
+                      </span>
                     </span>
-                    {/* 组件-Badge徽标.md §2 — the standalone number, in danger:
+                    {/* The Badge specification §2 uses a standalone danger count:
                         these counts are things waiting on the user, not a
                         neutral item count. 0 renders nothing on its own, and
                         the count is shown as-is (the old hand-rolled badge
-                        collapsed anything past 99 into 「99+」; §3 dropped that
+                        collapsed anything past 99 into 99+; §3 dropped that
                         — a four-digit unread count is a notification-policy
                         problem, not something to hide behind a plus sign). */}
-                    <Badge color="danger" count={navBadge(item.key)} className="shrink-0" />
+                    <Badge
+                      color="danger"
+                      count={navBadge(item.key)}
+                      className="shrink-0"
+                    />
                   </button>
                 );
               })}
@@ -219,7 +240,7 @@ export default function SettingsPage() {
 
   // Every content pane carries the active section's name as its title (desktop only —
   // the mobile top bar + tabs already announce the section). Style and top spacing
-  // mirror the nav's 设置 heading (text-base leading-8, 20px from the top on desktop).
+
   const activeNavItem = SETTINGS_NAV_ITEMS.find((item) => item.key === section);
   const sectionTitle = activeNavItem ? localize(activeNavItem.labelKey) : "";
   const paneTitleClass = "text-base font-semibold leading-8 text-text-1";
@@ -236,29 +257,41 @@ export default function SettingsPage() {
         setCompactView={setCompactView}
         onPendingCountMaybeChanged={refreshCount}
         listHeader={
-          <h2 className={cn("hidden shrink-0 px-3 pt-4 md:block md:pt-5", paneTitleClass)}>
+          <h2
+            className={cn(
+              "hidden shrink-0 px-3 pt-4 md:block md:pt-5",
+              paneTitleClass,
+            )}
+          >
             {sectionTitle}
           </h2>
         }
       />
     </div>
   ) : isNotifications ? (
-    // Same single-block shell as 账号信息 / 通用: one padded pane with a centered
     // 720px column holding title, search row and list together.
     <div className="flex min-h-0 flex-1 flex-col px-5 pb-3 pt-4 md:pt-5">
       <div className="mx-auto flex min-h-0 w-full max-w-[720px] flex-1 flex-col">
-        <h2 className={cn("hidden shrink-0 pb-3 md:block", paneTitleClass)}>{sectionTitle}</h2>
+        <h2 className={cn("hidden shrink-0 pb-3 md:block", paneTitleClass)}>
+          {sectionTitle}
+        </h2>
         <NotificationPane
           open
           onOpenApprovalCenter={(approvalTarget) => {
-            setDeepLink({ taskId: approvalTarget.taskId, instanceId: approvalTarget.instanceId });
+            setDeepLink({
+              taskId: approvalTarget.taskId,
+              instanceId: approvalTarget.instanceId,
+            });
             setCompactView("detail");
             // Replace keeps the module depth flat; carrying state preserves whether
             // the mobile menu pushed this entry (so its back button still pops).
-            navigate(`/settings/${approvalTarget.tab === "my_requests" ? "my-requests" : "my-tasks"}`, {
-              replace: true,
-              state: settingsRouteState,
-            });
+            navigate(
+              `/settings/${approvalTarget.tab === "my_requests" ? "my-requests" : "my-tasks"}`,
+              {
+                replace: true,
+                state: settingsRouteState,
+              },
+            );
           }}
           onUnreadMaybeChanged={refreshCount}
         />
@@ -267,7 +300,9 @@ export default function SettingsPage() {
   ) : (
     <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4 md:pt-5">
       <div className="mx-auto w-full max-w-[720px]">
-        <h2 className={cn("hidden pb-3 md:block", paneTitleClass)}>{sectionTitle}</h2>
+        <h2 className={cn("hidden pb-3 md:block", paneTitleClass)}>
+          {sectionTitle}
+        </h2>
         {section === "account" && <AccountPane />}
         {section === "ai-access" && <AiAccessPane />}
         {section === "desktop" && <DshDesktopPane />}
@@ -348,9 +383,15 @@ export default function SettingsPage() {
                     >
                       <span className="flex min-w-0 items-center gap-2">
                         <ItemIcon className="size-4 shrink-0" />
-                        <span className="truncate">{localize(item.labelKey)}</span>
+                        <span className="truncate">
+                          {localize(item.labelKey)}
+                        </span>
                       </span>
-                      <Badge color="danger" count={navBadge(item.key)} className="shrink-0" />
+                      <Badge
+                        color="danger"
+                        count={navBadge(item.key)}
+                        className="shrink-0"
+                      />
                     </button>
                   );
                 })}

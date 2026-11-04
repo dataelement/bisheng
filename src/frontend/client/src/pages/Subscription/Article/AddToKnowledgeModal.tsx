@@ -1,1043 +1,400 @@
-import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
+import { useLocalize } from "~/hooks";
 import { EmptyStateIllustration } from "~/components/illustrations";
-import useMediaQuery from "~/hooks/useMediaQuery";
-import { ChevronDown, ChevronLeft, ChevronRight, FolderClosedIcon, Loader2, Plus, X } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { createPortal } from "react-dom";
-import { NotificationSeverity } from "~/common";
+import { ChevronLeft, Loader2, X } from "lucide-react";
+import { type RefObject } from "react";
 import { SearchInput } from "@bisheng/ui";
 import { Button } from "~/components/ui/Button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/Dialog";
-import { useToastContext } from "~/Providers";
-import { cn, generateUUID, getFullWidthLength } from "~/utils";
 import {
-    getManagedSpacesApi,
-    getMineSpacesApi,
-    getSpaceChildrenApi,
-    createFolderApi,
-    addArticleToKnowledgeApi,
-    FileType,
-} from "~/api/knowledge";
-import { ChannelNotebookOneIcon } from "~/components/icons/channels";
-
-// ─── Types ─────────────────────────────────────────────────────────────
-
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "~/components/ui/Dialog";
+import { useToastContext } from "~/Providers";
+import { cn } from "~/utils";
+import { TreeNode } from "./KnowledgePickerTree";
+import { useAddToKnowledge } from "./useAddToKnowledge";
 export interface KnowledgeNode {
-    id: string;
-    name: string;
-    type: "space" | "folder";
-    level: number;       // 1 = knowledge space, 2+ = folder
-    parentId: string | null;
-    /** The space_id this node belongs to (for API calls) */
-    spaceId: string;
-    children?: KnowledgeNode[];
-    /** Whether children have been loaded from the API */
-    childrenLoaded?: boolean;
-    /** Whether children are currently loading */
-    childrenLoading?: boolean;
+  id: string;
+  name: string;
+  type: "space" | "folder";
+  level: number; // 1 = knowledge space, 2+ = folder
+  parentId: string | null;
+  /** The space_id this node belongs to (for API calls) */
+  spaceId: string;
+  children?: KnowledgeNode[];
+  /** Whether children have been loaded from the API */
+  childrenLoaded?: boolean;
+  /** Whether children are currently loading */
+  childrenLoading?: boolean;
 }
 
 export interface AddToKnowledgeSelection {
-    knowledgeSpaceId: string;
-    knowledgeSpaceName: string;
-    folderId: string | null;
-    folderPath: string | null;
+  knowledgeSpaceId: string;
+  knowledgeSpaceName: string;
+  folderId: string | null;
+  folderPath: string | null;
 }
 
 /** Minimal space record consumed by the picker tree. */
 export interface AddToKnowledgeSpaceSummary {
-    id: string;
-    name: string;
+  id: string;
+  name: string;
 }
 
-interface AddToKnowledgeModalProps {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    /** Article ID to add to the selected knowledge space/folder (article mode). */
-    articleId?: string | number;
-    /**
-     * v2.5 Module D: when set to "channel_sync", the modal becomes a generic
-     * space/folder picker — confirm returns selection info via onSyncSelect
-     * instead of calling addArticleToKnowledgeApi.
-     */
-    mode?: "article" | "channel_sync";
-    /** Receives the chosen knowledge space / folder; only fires in channel_sync mode. */
-    onSyncSelect?: (selection: AddToKnowledgeSelection) => void;
-    /**
-     * 创建/编辑频道抽屉传入：H5 下将选择器 portal 到该节点内，与「创建频道」形成下钻层级，而非再叠一层全屏 Dialog。
-     */
-    channelSyncPortalHostRef?: RefObject<HTMLDivElement | null>;
-    /**
-     * F028: optional custom space-list loader. When provided, overrides the
-     * mode-based default (getMineSpacesApi / getManagedSpacesApi). Used by
-     * the workstation conversation-export flow to feed in the user's
-     * upload_file-eligible spaces. Original article / channel_sync callers
-     * leave this undefined and keep their existing behavior.
-     */
-    dataSourceApi?: () => Promise<AddToKnowledgeSpaceSummary[]>;
+export interface AddToKnowledgeModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Article ID to add to the selected knowledge space/folder (article mode). */
+  articleId?: string | number;
+  /**
+   * v2.5 Module D: when set to "channel_sync", the modal becomes a generic
+   * space/folder picker — confirm returns selection info via onSyncSelect
+   * instead of calling addArticleToKnowledgeApi.
+   */
+  mode?: "article" | "channel_sync";
+  /** Receives the chosen knowledge space / folder; only fires in channel_sync mode. */
+  onSyncSelect?: (selection: AddToKnowledgeSelection) => void;
+
+  /** Retained for existing callers; the picker uses its normal modal shell. */
+  channelSyncPortalHostRef?: RefObject<HTMLDivElement | null>;
+  /**
+   * F028: optional custom space-list loader. When provided, overrides the
+   * mode-based default (getMineSpacesApi / getManagedSpacesApi). Used by
+   * the workstation conversation-export flow to feed in the user's
+   * upload_file-eligible spaces. Original article / channel_sync callers
+   * leave this undefined and keep their existing behavior.
+   */
+  dataSourceApi?: () => Promise<AddToKnowledgeSpaceSummary[]>;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
-/** Deep copy tree */
-function cloneTree(nodes: KnowledgeNode[]): KnowledgeNode[] {
-    return nodes.map(n => ({ ...n, children: n.children ? cloneTree(n.children) : [] }));
-}
-
-/** Find node in tree and execute operation */
-function mapTree(
-    nodes: KnowledgeNode[],
-    predicate: (n: KnowledgeNode) => boolean,
-    transform: (n: KnowledgeNode) => KnowledgeNode
-): KnowledgeNode[] {
-    return nodes.map(n => {
-        if (predicate(n)) return transform(n);
-        return { ...n, children: n.children ? mapTree(n.children, predicate, transform) : [] };
-    });
-}
-
-/** Recursively filter matching nodes, preserving ancestor paths */
-function filterTree(nodes: KnowledgeNode[], keyword: string): KnowledgeNode[] {
-    const kw = keyword.toLowerCase();
-    return nodes.reduce<KnowledgeNode[]>((acc, node) => {
-        const filteredChildren = filterTree(node.children ?? [], keyword);
-        const matches = node.name.toLowerCase().includes(kw);
-        if (matches || filteredChildren.length > 0) {
-            acc.push({ ...node, children: filteredChildren });
-        }
-        return acc;
-    }, []);
-}
-
-/** Find a node by id recursively */
-function findNode(nodes: KnowledgeNode[], id: string): KnowledgeNode | undefined {
-    for (const n of nodes) {
-        if (n.id === id) return n;
-        if (n.children) {
-            const found = findNode(n.children, id);
-            if (found) return found;
-        }
-    }
-    return undefined;
-}
-
-// ─── Inline Editing Input ─────────────────────────────────────────────
-
-interface InlineEditProps {
-    defaultValue: string;
-    onSave: (name: string) => void;
-    onCancel: () => void;
-    onValidate: (name: string) => boolean;
-}
-
-function InlineEdit({ defaultValue, onSave, onCancel, onValidate }: InlineEditProps) {
-    const ref = useRef<HTMLInputElement>(null);
-    const [value, setValue] = useState(defaultValue);
-
-    useEffect(() => {
-        if (ref.current) {
-            ref.current.focus();
-            ref.current.select();
-        }
-    }, []);
-
-    const commit = () => {
-        const trimmed = value.trim();
-        if (!trimmed) {
-            onCancel();
-            return;
-        }
-        if (getFullWidthLength(trimmed) > 50) {
-            onCancel();
-            return;
-        }
-        if (!onValidate(trimmed)) {
-            onCancel();
-            return;
-        }
-        onSave(trimmed);
-    };
-
-    return (
-        <input
-            ref={ref}
-            value={value}
-            onChange={e => setValue(e.target.value)}
-            onKeyDown={e => {
-                if (e.key === "Enter") { e.preventDefault(); commit(); }
-                if (e.key === "Escape") { e.preventDefault(); onCancel(); }
-            }}
-            onBlur={commit}
-            maxLength={50}
-            className="flex-1 min-w-0 border border-primary rounded px-1.5 py-0 text-sm outline-none bg-white text-primary"
-            onClick={e => e.stopPropagation()}
-        />
-    );
-}
-
-// ─── Tree Node Row ─────────────────────────────────────────────────────
-
-interface TreeNodeProps {
-    node: KnowledgeNode;
-    nodes: KnowledgeNode[];
-    selectedId: string | null;
-    expandedIds: Set<string>;
-    editingId: string | null;
-    onSelect: (id: string) => void;
-    onToggle: (id: string) => void;
-    onAddFolder: (parentId: string, parentLevel: number, spaceId: string) => void;
-    onSaveEdit: (id: string, name: string) => void;
-    onCancelEdit: () => void;
-    searchMode: boolean;
-}
-
-function TreeNode({
-    node, nodes, selectedId, expandedIds, editingId,
-    onSelect, onToggle, onAddFolder, onSaveEdit, onCancelEdit, searchMode
-}: TreeNodeProps) {
-    const localize = useLocalize();
-    const isExpanded = searchMode || expandedIds.has(node.id);
-    const isSelected = selectedId === node.id;
-    const isEditing = editingId === node.id;
-    // Show expand arrow for spaces (always expandable) or folders with known children
-    const hasOrMayHaveChildren = node.type === "space" || (node.children?.length ?? 0) > 0 || !node.childrenLoaded;
-    const indent = (node.level - 1) * 16;
-
-    const { showToast } = useToastContext();
-
-    return (
-        <div className="w-full min-w-0 max-w-full space-y-1">
-            <div
-                className={`group relative flex w-full min-w-0 max-w-full box-border items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer text-sm select-none overflow-hidden
-                    ${isSelected ? "bg-blue-50 text-primary" : "fine-pointer:hover:bg-gray-50 coarse-pointer:hover:bg-transparent"}`}
-                style={{
-                    paddingLeft: `${indent + 8}px`,
-                    transitionProperty: 'background-color',
-                    transitionDuration: '350ms',
-                    transitionTimingFunction: 'ease-in-out'
-                }}
-                onClick={() => onSelect(node.id)}
-            >
-                {/* Expand toggle */}
-                <span
-                    className="shrink-0 size-4 flex items-center justify-center text-text-3"
-                    onClick={e => { e.stopPropagation(); onToggle(node.id); }}
-                >
-                    {node.childrenLoading
-                        ? <Loader2 className="size-3 animate-spin" />
-                        : hasOrMayHaveChildren
-                            ? (isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />)
-                            : <span className="size-3.5" />}
-                </span>
-
-                {/* Icon */}
-                {node.type === "space"
-                    ?
-                    <ChannelNotebookOneIcon className="size-[14px] shrink-0 object-contain opacity-90" />
-                    : <FolderClosedIcon className={`shrink-0 size-3.5 ${isSelected ? "text-primary" : "text-text-2"}`} />
-                }
-
-                {/* Name / Inline edit */}
-                {isEditing ? (
-                    <InlineEdit
-                        defaultValue={node.name}
-                        onValidate={(name) => {
-                            if (nodes.some(n => n.id !== node.id && n.name === name)) {
-                                showToast({ message: localize("com_subscription.folder_name_duplicate"), severity: NotificationSeverity.WARNING });
-                                return false;
-                            }
-                            return true;
-                        }}
-                        onSave={(name) => onSaveEdit(node.id, name)}
-                        onCancel={onCancelEdit}
-                    />
-                ) : (
-                    <span className="min-w-0 flex-1 overflow-hidden pr-0 transition-[padding-right] duration-150 fine-pointer:group-hover:pr-8 coarse-pointer:pr-8">
-                        <span className="block truncate" title={node.name}>{node.name}</span>
-                    </span>
-                )}
-
-                {/* Add folder button (hover) */}
-                {!isEditing && (
-                    <button
-                        type="button"
-                        className="absolute right-2 top-1/2 z-[1] flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-text-3 opacity-0 pointer-events-none transition-colors duration-150 fine-pointer:group-hover:pointer-events-auto fine-pointer:group-hover:opacity-100 fine-pointer:hover:text-primary coarse-pointer:pointer-events-auto coarse-pointer:opacity-100"
-                        title={localize("com_subscription.new_subfolder")}
-                        onClick={e => { e.stopPropagation(); onAddFolder(node.id, node.level, node.spaceId); }}
-                    >
-                        <Plus className="shrink-0 w-4 h-4 text-primary" strokeWidth={2} />
-                    </button>
-                )}
-            </div>
-
-            {/* Children */}
-            {isExpanded && node.children && node.children.length > 0 && (
-                <div className="w-full min-w-0 max-w-full space-y-1">
-                    {node.children.map(child => (
-                        <TreeNode
-                            key={child.id}
-                            node={child}
-                            nodes={node.children || []}
-                            selectedId={selectedId}
-                            expandedIds={expandedIds}
-                            editingId={editingId}
-                            onSelect={onSelect}
-                            onToggle={onToggle}
-                            onAddFolder={onAddFolder}
-                            onSaveEdit={onSaveEdit}
-                            onCancelEdit={onCancelEdit}
-                            searchMode={searchMode}
-                        />
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-}
-
-// ─── Main Modal ──────────────────────────────────────────────────────────
-
-export function AddToKnowledgeModal({
+export function AddToKnowledgeModal(props: AddToKnowledgeModalProps) {
+  const localize = useLocalize();
+  const { showToast } = useToastContext();
+  const {
+    treeScrollRevealRef,
+    duplicateListScrollRevealRef,
+    isFullScreenLayout,
+    isChannelSyncFullScreen,
+    isChannelSyncCentered,
+    isArticleFullScreen,
+    search,
+    setSearch,
+    selectedId,
+    expandedIds,
+    editingId,
+    isConfirming,
+    spacesLoading,
+    duplicateFiles,
+    setDuplicateFiles,
+    showDuplicate,
+    setShowDuplicate,
+    setPendingConfirm,
+    articleDialogContentRef,
+    actionFooterRef,
+    displayTree,
+    isSearchMode,
+    toggleExpand,
+    handleSelect,
+    handleAddFolder,
+    handleSaveEdit,
+    handleCancelEdit,
+    handleConfirm,
+    handleOpenChange,
+    isEmpty,
+    titleLabel,
+    goBackToChannelForm,
+    isChannelSyncFullScreenFooter,
     open,
     onOpenChange,
-    articleId,
-    mode = "article",
-    onSyncSelect,
-    channelSyncPortalHostRef,
-    dataSourceApi,
-}: AddToKnowledgeModalProps) {
-    const localize = useLocalize();
-    const isH5 = usePrefersMobileLayout();
-    const treeScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
-    const duplicateListScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
-    const isMax576 = useMediaQuery("(max-width: 576px)");
-    const isModalMobile768 = useMediaQuery("(max-width: 768px)");
-    const [viewportWidth, setViewportWidth] = useState<number>(() =>
-        typeof window !== "undefined" ? window.innerWidth : 9999
-    );
-    const [viewportHeight, setViewportHeight] = useState<number>(() =>
-        typeof window !== "undefined" ? window.innerHeight : 9999
-    );
-    useEffect(() => {
-        const update = () => {
-            setViewportWidth(window.innerWidth);
-            setViewportHeight(window.innerHeight);
-        };
-        update();
-        window.addEventListener("resize", update);
-        return () => window.removeEventListener("resize", update);
-    }, []);
-    const forceMobile768 = viewportWidth <= 768;
-    /**
-     * channel_sync:
-     * <768px：全屏弹窗
-     * >=768px：桌面样式居中弹窗（768-1024 与 >1024 一致）
-     */
-    const embedInChannelSheet = false;
-    /** 频道同步且非下钻、仍属移动端宽：居中模态 + 统一宽高规则 */
-    const isChannelSyncCenteredMobile =
-        mode === "channel_sync" && (isModalMobile768 || forceMobile768);
-    const shouldUseDesktopChannelSyncDialog =
-        mode === "channel_sync" && !(isModalMobile768 || forceMobile768);
-    const isArticleMobileFullScreen =
-        mode === "article" && (isModalMobile768 || forceMobile768);
-    const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
-    useEffect(() => {
-        if (!open) return;
-        const runtimeWidth = typeof window !== "undefined" ? window.innerWidth : viewportWidth;
-        const runtimeHeight = typeof window !== "undefined" ? window.innerHeight : viewportHeight;
-        console.info("[AddToKnowledgeModal][debug]", {
-            mode,
-            runtimeWidth,
-            runtimeHeight,
-            viewportWidth,
-            viewportHeight,
-            isH5,
-            isMax576,
-            isModalMobile768,
-            forceMobile768,
-            embedInChannelSheet,
-            isChannelSyncCenteredMobile,
-            shouldUseDesktopChannelSyncDialog,
-        });
-    }, [
-        open,
-        mode,
-        viewportWidth,
-        viewportHeight,
-        isH5,
-        isMax576,
-        isModalMobile768,
-        forceMobile768,
-        embedInChannelSheet,
-        isChannelSyncCenteredMobile,
-        shouldUseDesktopChannelSyncDialog,
-    ]);
-    useEffect(() => {
-        if (!open || mode !== "article") return;
-        const logFooterLayout = () => {
-            const contentRect = articleDialogContentRef.current?.getBoundingClientRect();
-            const footerRect = actionFooterRef.current?.getBoundingClientRect();
-            console.info("[AddToKnowledgeModal][footer-debug]", {
-                runtimeWidth: window.innerWidth,
-                runtimeHeight: window.innerHeight,
-                isModalMobile768,
-                forceMobile768,
-                isArticleMobileFullScreen,
-                contentRect: contentRect
-                    ? { top: contentRect.top, bottom: contentRect.bottom, height: contentRect.height }
-                    : null,
-                footerRect: footerRect
-                    ? { top: footerRect.top, bottom: footerRect.bottom, height: footerRect.height }
-                    : null,
-                footerInViewport: footerRect ? footerRect.bottom <= window.innerHeight && footerRect.top >= 0 : false,
-            });
-        };
-        const rafId = requestAnimationFrame(logFooterLayout);
-        window.addEventListener("resize", logFooterLayout);
-        return () => {
-            cancelAnimationFrame(rafId);
-            window.removeEventListener("resize", logFooterLayout);
-        };
-    }, [open, mode, isModalMobile768, forceMobile768, isArticleMobileFullScreen]);
+    mode,
+  } = useAddToKnowledge(props, localize, showToast);
+  const pickerBody = (
+    <>
+      {
+        <DialogHeader className="flex flex-row items-center justify-between gap-3 space-y-0 px-5 pb-0 pt-5 text-left touch-mobile:px-4 touch-mobile:pt-4">
+          <DialogTitle className="min-w-0 flex-1 text-base font-medium leading-6 text-text-1">
+            {titleLabel}
+          </DialogTitle>
+          <button
+            type="button"
+            onClick={() => handleOpenChange(false)}
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-text-2 hover:bg-fill-1"
+            aria-label={localize("com_ui_close")}
+          >
+            <X className="size-5" />
+          </button>
+        </DialogHeader>
+      }
 
-    useLayoutEffect(() => {
-        if (!open || !embedInChannelSheet) {
-            setPortalHost(null);
-            return;
+      <div className={"px-5 pt-4 touch-mobile:px-4"}>
+        {/* Spec SearchInput — built-in clear replaces the hand-rolled X. */}
+        <SearchInput
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={localize(
+            "com_subscription.search_knowledge_space_placeholder",
+          )}
+          clearLabel={localize("com_ui_clear")}
+        />
+      </div>
+
+      <div
+        className={
+          isChannelSyncFullScreen
+            ? "mb-4 flex min-h-0 flex-1 flex-col px-5 pt-4 touch-mobile:px-4"
+            : isArticleFullScreen
+              ? "flex min-h-0 flex-1 flex-col px-4 pt-4 pb-[64px]"
+              : "flex min-h-0 flex-1 flex-col px-5 pt-4 touch-mobile:px-4"
         }
-        setPortalHost(channelSyncPortalHostRef?.current ?? null);
-    }, [open, embedInChannelSheet, channelSyncPortalHostRef]);
-    const { showToast } = useToastContext();
-    const [tree, setTree] = useState<KnowledgeNode[]>([]);
-    const [search, setSearch] = useState("");
-    const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-    const [editingId, setEditingId] = useState<string | null>(null);
-    const [isConfirming, setIsConfirming] = useState(false);
-    const [spacesLoading, setSpacesLoading] = useState(false);
-    // Duplicate file detection state
-    const [duplicateFiles, setDuplicateFiles] = useState<Array<{ name: string; path: string }>>([]);
-    const [showDuplicate, setShowDuplicate] = useState(false);
-    const [pendingConfirm, setPendingConfirm] = useState<{ spaceId: string; parentFolderId: string | null } | null>(null);
-    const articleDialogContentRef = useRef<HTMLDivElement | null>(null);
-    const actionFooterRef = useRef<HTMLDivElement | null>(null);
-
-    // Filtered tree by search
-    const displayTree = search.trim() ? filterTree(tree, search) : tree;
-    const isSearchMode = !!search.trim();
-
-    // ─── Load spaces list on open ──────────────────────────────
-    useEffect(() => {
-        if (!open) return;
-        setSpacesLoading(true);
-        // F028: dataSourceApi (if provided by the workstation conversation-
-        // export flow) takes precedence. Otherwise fall back to the mode-
-        // based default — channel_sync uses "我创建的" (TC-015/TC-037,
-        // order_by=update_time per TC-017); article keeps managed scope so
-        // existing callers are untouched.
-        const loader = dataSourceApi
-            ? dataSourceApi()
-            : mode === "channel_sync"
-                ? getMineSpacesApi({ order_by: "update_time" })
-                : getManagedSpacesApi();
-        loader
-            .then((spaces) => {
-                const nodes: KnowledgeNode[] = spaces.map(s => ({
-                    id: s.id,
-                    name: s.name,
-                    type: "space" as const,
-                    level: 1,
-                    parentId: null,
-                    spaceId: s.id,
-                    children: [],
-                    childrenLoaded: false,
-                }));
-                setTree(nodes);
-            })
-            .catch(() => showToast({ message: localize("com_subscription.load_space_list_failed"), severity: NotificationSeverity.WARNING }))
-            .finally(() => setSpacesLoading(false));
-    }, [open]);
-
-    // ─── Lazy-load children on expand ─────────────────────────
-    const loadChildren = useCallback(async (nodeId: string) => {
-        const node = findNode(tree, nodeId);
-        if (!node || node.childrenLoaded || node.childrenLoading) return;
-
-        // Mark loading
-        setTree(prev => mapTree(prev, n => n.id === nodeId, n => ({ ...n, childrenLoading: true })));
-
-        try {
-            const parentId = node.type === "space" ? undefined : nodeId;
-            const res = await getSpaceChildrenApi({
-                space_id: node.spaceId,
-                parent_id: parentId,
-                page_size: 200,
-            });
-
-            // Only keep folders for the tree
-            const folderChildren: KnowledgeNode[] = res.data
-                .filter(f => f.type === FileType.FOLDER)
-                .map(f => ({
-                    id: f.id,
-                    name: f.name,
-                    type: "folder" as const,
-                    level: node.level + 1,
-                    parentId: nodeId,
-                    spaceId: node.spaceId,
-                    children: [],
-                    childrenLoaded: false,
-                }));
-
-            setTree(prev => mapTree(prev, n => n.id === nodeId, n => ({
-                ...n,
-                // Merge: keep any locally-created "new-folder-*" nodes AND add API results
-                children: [
-                    ...(n.children?.filter(c => c.id.startsWith("new-folder-")) ?? []),
-                    ...folderChildren,
-                ],
-                childrenLoaded: true,
-                childrenLoading: false,
-            })));
-        } catch {
-            setTree(prev => mapTree(prev, n => n.id === nodeId, n => ({ ...n, childrenLoading: false })));
-        }
-    }, [tree]);
-
-    const toggleExpand = useCallback((id: string) => {
-        setExpandedIds(prev => {
-            const next = new Set(prev);
-            if (next.has(id)) {
-                next.delete(id);
-            } else {
-                next.add(id);
-                // Trigger lazy-load
-                loadChildren(id);
-            }
-            return next;
-        });
-    }, [loadChildren]);
-
-    const handleSelect = (id: string) => {
-        if (editingId) return;
-        setSelectedId(id);
-    };
-
-    /** Create folder via API */
-    const handleAddFolder = async (parentId: string, parentLevel: number, spaceId: string) => {
-        if (parentLevel >= 10) {
-            showToast({ message: localize("com_subscription.folder_depth_limit"), severity: NotificationSeverity.WARNING });
-            return;
-        }
-        const code = generateUUID(12).toLocaleUpperCase()
-        const tempId = `new-folder-${Date.now()}`;
-        const defaultName = localize("com_subscription.unnamed_folder_code", { code });
-
-        // Optimistic UI: insert a temporary node
-        const tempNode: KnowledgeNode = {
-            id: tempId,
-            name: defaultName,
-            type: "folder",
-            level: parentLevel + 1,
-            parentId,
-            spaceId,
-            children: [],
-            childrenLoaded: true,
-        };
-
-        setTree(prev => mapTree(prev, n => n.id === parentId, n => ({
-            ...n,
-            children: [...(n.children ?? []), tempNode],
-        })));
-        setExpandedIds(prev => new Set([...prev, parentId]));
-        setEditingId(tempId);
-        setSelectedId(tempId);
-    };
-
-    /** Save folder name — creates via API */
-    const handleSaveEdit = async (id: string, name: string) => {
-        if (getFullWidthLength(name) > 50) {
-            showToast({ message: localize("com_subscription.folder_name_too_long"), severity: NotificationSeverity.WARNING });
-            return;
-        }
-
-        const node = findNode(tree, id);
-        if (!node) return;
-
-        // If it's a newly created temp node, call createFolder API
-        if (id.startsWith("new-folder-")) {
-            try {
-                // Determine the real parent_id: if parent is a space, parent_id is null
-                const parentNode = node.parentId ? findNode(tree, node.parentId) : null;
-                const apiParentId = parentNode?.type === "space" ? null : node.parentId;
-
-                const created = await createFolderApi(node.spaceId, {
-                    name,
-                    parent_id: apiParentId,
-                });
-
-                // Replace temp node with real node
-                setTree(prev => mapTree(prev, n => n.id === id, () => ({
-                    id: created.id,
-                    name: created.name || name,
-                    type: "folder" as const,
-                    level: node.level,
-                    parentId: node.parentId,
-                    spaceId: node.spaceId,
-                    children: [],
-                    childrenLoaded: true,
-                })));
-                setSelectedId(created.id);
-            } catch {
-                showToast({ message: localize("com_subscription.create_folder_failed"), severity: NotificationSeverity.WARNING });
-                // Remove the temp node
-                setTree(prev => {
-                    function removeNode(nodes: KnowledgeNode[]): KnowledgeNode[] {
-                        return nodes
-                            .filter(n => n.id !== id)
-                            .map(n => ({ ...n, children: n.children ? removeNode(n.children) : [] }));
-                    }
-                    return removeNode(prev);
-                });
-            }
-        } else {
-            // Just update name in local tree (rename not needed here)
-            setTree(prev => mapTree(prev, n => n.id === id, n => ({ ...n, name })));
-        }
-        setEditingId(null);
-    };
-
-    /** Cancel editing (remove newly created temp node) */
-    const handleCancelEdit = () => {
-        if (editingId?.startsWith("new-folder-")) {
-            function removeNode(nodes: KnowledgeNode[]): KnowledgeNode[] {
-                return nodes
-                    .filter(n => n.id !== editingId)
-                    .map(n => ({ ...n, children: n.children ? removeNode(n.children) : [] }));
-            }
-            setTree(prev => removeNode(prev));
-            if (selectedId === editingId) setSelectedId(null);
-        }
-        setEditingId(null);
-    };
-
-    /** Confirm — add article to selected space/folder */
-    const handleConfirm = async (forceReplace = false) => {
-        // v2.5 Module D — channel-sync mode: report selection back to caller,
-        // no article upload.
-        if (mode === "channel_sync") {
-            if (!selectedId) return;
-            const node = findNode(tree, selectedId);
-            if (!node) return;
-            const spaceNode = findNode(tree, node.spaceId) || node;
-            // Compose folder path from ancestors (excluding the space root).
-            const buildPath = (): string | null => {
-                if (node.type === "space") return null;
-                const chain: string[] = [];
-                let cur: KnowledgeNode | null = node;
-                while (cur && cur.id !== node.spaceId) {
-                    chain.unshift(cur.name);
-                    cur = cur.parentId ? (findNode(tree, cur.parentId) ?? null) : null;
-                }
-                return chain.length ? chain.join("/") : null;
-            };
-            onSyncSelect?.({
-                knowledgeSpaceId: node.spaceId,
-                knowledgeSpaceName: spaceNode.name || "",
-                folderId: node.type === "space" ? null : selectedId,
-                folderPath: buildPath(),
-            });
-            onOpenChange(false);
-            return;
-        }
-
-        if (!articleId) return;
-
-        // If forcing replace from the duplicate dialog, use pending params
-        const spaceId = forceReplace && pendingConfirm ? pendingConfirm.spaceId : (() => {
-            if (!selectedId) return null;
-            const node = findNode(tree, selectedId);
-            return node?.spaceId || null;
-        })();
-        const parentFolderId = forceReplace && pendingConfirm ? pendingConfirm.parentFolderId : (() => {
-            if (!selectedId) return null;
-            const node = findNode(tree, selectedId);
-            if (!node) return null;
-            return node.type === "space" ? null : selectedId;
-        })();
-
-        if (!spaceId) { setIsConfirming(false); return; }
-
-        setIsConfirming(true);
-        try {
-            await addArticleToKnowledgeApi(spaceId, [String(articleId)], parentFolderId, forceReplace || undefined);
-            showToast({ message: localize("com_subscription.added_to_space_success"), severity: NotificationSeverity.SUCCESS });
-            setShowDuplicate(false);
-            setPendingConfirm(null);
-            setDuplicateFiles([]);
-            onOpenChange(false);
-        } catch (err: any) {
-            // Check if error contains duplicate file info from backend
-            const errData = err?.response?.data;
-            const errMsg = errData?.status_message || errData?.message || "";
-            const dupFiles = errData?.data?.duplicate_files || errData?.duplicate_files;
-            if (dupFiles && Array.isArray(dupFiles) && dupFiles.length > 0) {
-                // Backend returned structured duplicate info
-                setDuplicateFiles(dupFiles.map((f: any) => ({
-                    name: f.name || f.file_name || "",
-                    path: f.path || f.file_path || "",
-                })));
-                setPendingConfirm({ spaceId, parentFolderId });
-                setShowDuplicate(true);
-                // } else if (errMsg.includes("duplicate") || errMsg.includes("重名") || errMsg.includes("already exists")) {
-                //     // Backend returned a text-based duplicate hint
-                //     setDuplicateFiles([{ name: errMsg, path: "" }]);
-                //     setPendingConfirm({ spaceId, parentFolderId });
-                //     setShowDuplicate(true);
-                // } else {
-                //     showToast({ message: localize("com_subscription.add_to_space_failed"), severity: NotificationSeverity.WARNING });
-            }
-        } finally {
-            setIsConfirming(false);
-        }
-    };
-
-    // Reset on close
-    const handleOpenChange = (val: boolean) => {
-        if (!val) {
-            setSearch("");
-            setSelectedId(null);
-            setEditingId(null);
-            setExpandedIds(new Set());
-            setTree([]);
-            setShowDuplicate(false);
-            setDuplicateFiles([]);
-            setPendingConfirm(null);
-        }
-        onOpenChange(val);
-    };
-
-    const isEmpty = !spacesLoading && tree.length === 0;
-
-    const titleLabel =
-        mode === "channel_sync"
-            ? localize("com_subscription.select_knowledge_space")
-            : localize("com_subscription.add_to_knowledge_space");
-
-    const goBackToChannelForm = () => handleOpenChange(false);
-
-    // Desktop centered dialogs (article + channel-sync) share the same fixed
-    // h-[80vh]/max-h-[600px] shell. On short viewports a fixed-height tree pushed
-    // the footer flush against the bottom edge; letting the tree flex lets it
-    // shrink so the footer keeps its normal padding.
-    const isArticleDesktop = mode === "article" && !(isModalMobile768 || forceMobile768);
-    const useFlexTree =
-        embedInChannelSheet ||
-        isChannelSyncCenteredMobile ||
-        isArticleMobileFullScreen ||
-        isArticleDesktop ||
-        shouldUseDesktopChannelSyncDialog;
-    const isChannelSyncMobileFooter =
-        mode === "channel_sync" && (embedInChannelSheet || isChannelSyncCenteredMobile);
-
-    const pickerBody = (
-        <>
-            {embedInChannelSheet ? (
-                <div className="flex shrink-0 flex-row items-center gap-2 px-4 pb-4 pt-4 sm:px-6">
-                    <button
-                        type="button"
-                        onClick={goBackToChannelForm}
-                        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-border-base text-text-2 fine-pointer:hover:bg-fill-1"
-                        aria-label={localize("com_ui_go_back")}
-                    >
-                        <ChevronLeft className="size-5" />
-                    </button>
-                    <h2 className="min-w-0 flex-1 text-left text-[16px] font-medium leading-7 text-text-1">
-                        {titleLabel}
-                    </h2>
-                </div>
-            ) : (
-                <DialogHeader className="flex flex-row items-center justify-between gap-3 space-y-0 px-5 pb-0 pt-5 text-left touch-mobile:px-4 touch-mobile:pt-4">
-                    <DialogTitle className="min-w-0 flex-1 text-base font-medium leading-6 text-text-1">
-                        {titleLabel}
-                    </DialogTitle>
-                    <button
-                        type="button"
-                        onClick={() => handleOpenChange(false)}
-                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-text-2 hover:bg-fill-1"
-                        aria-label={localize("com_ui_close")}
-                    >
-                        <X className="size-5" />
-                    </button>
-                </DialogHeader>
-            )}
-
-            <div className={embedInChannelSheet ? "shrink-0 px-4 pt-4 sm:px-6" : "px-5 pt-4 touch-mobile:px-4"}>
-                {/* Spec SearchInput — built-in clear replaces the hand-rolled X. */}
-                <SearchInput
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    placeholder={localize("com_subscription.search_knowledge_space_placeholder")}
-                    clearLabel={localize("com_ui_clear")}
+      >
+        <div
+          ref={treeScrollRevealRef}
+          className={
+            "scrollbar-gutter-stable flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-md border border-[#ECECEC] p-1 scrollbar-on-scroll"
+          }
+        >
+          {spacesLoading ? (
+            <div className="flex items-center justify-center h-full min-h-[200px] text-text-3">
+              <Loader2 className="size-5 animate-spin mr-2" />
+              {localize("com_subscription.loading")}
+            </div>
+          ) : isEmpty ? (
+            <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-800">
+              <EmptyStateIllustration className="size-[120px] mb-4" />
+              <p className="text-[14px] font-normal text-text-3">
+                {localize("com_subscription.no_selectable_knowledge_space")}
+              </p>
+            </div>
+          ) : displayTree.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-800">
+              <EmptyStateIllustration className="size-[120px] mb-4" />
+              <p className="text-[14px] font-normal text-text-3">
+                {localize("com_subscription.no_matching_knowledge_space")}
+              </p>
+            </div>
+          ) : (
+            <div className="w-full min-w-0 max-w-full space-y-1 pb-1">
+              {displayTree.map((node) => (
+                <TreeNode
+                  key={node.id}
+                  node={node}
+                  nodes={displayTree}
+                  selectedId={selectedId}
+                  expandedIds={expandedIds}
+                  editingId={editingId}
+                  onSelect={handleSelect}
+                  onToggle={toggleExpand}
+                  onAddFolder={handleAddFolder}
+                  onSaveEdit={handleSaveEdit}
+                  onCancelEdit={handleCancelEdit}
+                  searchMode={isSearchMode}
                 />
+              ))}
             </div>
-
-            <div
-                className={
-                    embedInChannelSheet
-                        ? "flex min-h-0 flex-1 flex-col px-4 pt-4 sm:px-6"
-                        : isChannelSyncCenteredMobile
-                            ? "mb-4 flex min-h-0 flex-1 flex-col px-5 pt-4 touch-mobile:px-4"
-                            : isArticleMobileFullScreen
-                                ? "flex min-h-0 flex-1 flex-col px-4 pt-4 pb-[64px]"
-                            : "flex min-h-0 flex-1 flex-col px-5 pt-4 touch-mobile:px-4"
-                }
-            >
-                <div
-                    ref={treeScrollRevealRef}
-                    className={
-                        useFlexTree
-                            ? "scrollbar-gutter-stable flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-md border border-[#ECECEC] p-1 scrollbar-on-scroll"
-                            : cn(
-                                "scrollbar-gutter-stable h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-md border border-[#ECECEC] p-1 scrollbar-on-scroll",
-                                mode === "article" && isH5 && "touch-mobile:h-[calc(100dvh-260px)]",
-                            )
-                    }
-                >
-                    {spacesLoading ? (
-                        <div className="flex items-center justify-center h-full min-h-[200px] text-text-3">
-                            <Loader2 className="size-5 animate-spin mr-2" />{localize("com_subscription.loading")}
-                        </div>
-                    ) : isEmpty ? (
-                        <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-800">
-                            <EmptyStateIllustration className="size-[120px] mb-4" />
-                            <p className="text-[14px] font-normal text-text-3">{localize("com_subscription.no_selectable_knowledge_space")}</p>
-                        </div>
-                    ) : displayTree.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-800">
-                            <EmptyStateIllustration className="size-[120px] mb-4" />
-                            <p className="text-[14px] font-normal text-text-3">{localize("com_subscription.no_matching_knowledge_space")}</p>
-                        </div>
-                    ) : (
-                        <div className="w-full min-w-0 max-w-full space-y-1 pb-1">
-                            {displayTree.map(node => (
-                                <TreeNode
-                                    key={node.id}
-                                    node={node}
-                                    nodes={displayTree}
-                                    selectedId={selectedId}
-                                    expandedIds={expandedIds}
-                                    editingId={editingId}
-                                    onSelect={handleSelect}
-                                    onToggle={toggleExpand}
-                                    onAddFolder={handleAddFolder}
-                                    onSaveEdit={handleSaveEdit}
-                                    onCancelEdit={handleCancelEdit}
-                                    searchMode={isSearchMode}
-                                />
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            <div
-                ref={actionFooterRef}
-                className={
-                    embedInChannelSheet
-                        ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:px-5 sm:py-3.5"
-                        : isChannelSyncCenteredMobile
-                            ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-0"
-                            : isArticleMobileFullScreen
-                                ? "fixed inset-x-0 bottom-0 z-[140] flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 py-3"
-                            : "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-end bg-white px-5 pb-5 pt-4 touch-mobile:mt-auto touch-mobile:px-4 touch-mobile:py-3"
-                }
-            >
-                <div
-                    className={cn(
-                        "min-w-0",
-                        !isChannelSyncMobileFooter && "ml-auto",
-                        embedInChannelSheet || isChannelSyncCenteredMobile || isArticleMobileFullScreen
-                            ? "flex w-full items-center gap-2"
-                            : "flex w-auto shrink-0 items-center gap-2",
-                    )}
-                >
-                    <Button
-                        color="default"
-                        variant="outlined"
-                        size="medium"
-                        onClick={goBackToChannelForm}
-                        className={cn(
-                            "min-w-[64px] shrink-0",
-                            isChannelSyncMobileFooter &&
-                            "rounded-lg border-border-base text-text-2 hover:bg-fill-1",
-                            isChannelSyncMobileFooter && "flex-1",
-                            embedInChannelSheet && "flex-1",
-                            mode === "article" && isH5 && "touch-mobile:flex-1",
-                        )}
-                    >{localize("com_subscription.cancel")}</Button>
-                    <Button
-                        color="primary"
-                        variant="solid"
-                        size="medium"
-                        onClick={() => void handleConfirm()}
-                        disabled={!selectedId || isConfirming}
-                        loading={isConfirming}
-                        className={cn(
-                            "min-w-[64px] shrink-0",
-                            isChannelSyncMobileFooter && "rounded-lg",
-                            isChannelSyncMobileFooter && "flex-1",
-                            embedInChannelSheet && "flex-1",
-                            mode === "article" && isH5 && "touch-mobile:flex-1",
-                        )}
-                    >
-                        {localize("com_subscription.add")}
-                    </Button>
-                </div>
-            </div>
-        </>
-    );
-
-    const embeddedShell = (
-        <div className="fixed inset-0 z-[100] flex min-h-0 flex-col bg-white">
-            {pickerBody}
+          )}
         </div>
-    );
+      </div>
 
-    return (
-        <>
-            {open &&
-                embedInChannelSheet &&
-                (portalHost
-                    ? createPortal(embeddedShell, portalHost)
-                    : (
-                        <Dialog open={open} onOpenChange={handleOpenChange}>
-                            <DialogContent
-                                close={false}
-                                className="!fixed !inset-0 !left-0 !top-0 !z-[100] !flex !h-[100dvh] !w-screen !max-w-none !min-h-0 !translate-x-0 !translate-y-0 !flex-col !gap-0 !overflow-hidden !rounded-none !border-0 !p-0 !shadow-none"
-                            >
-                                {pickerBody}
-                            </DialogContent>
-                        </Dialog>
-                    ))}
-            {open && isChannelSyncCenteredMobile && (
-                <Dialog open={open} onOpenChange={handleOpenChange}>
-                    <DialogContent
-                        close={false}
-                        className="!fixed !inset-0 !left-0 !top-0 !z-[100] !flex !h-[100dvh] !w-screen !max-w-none !min-h-0 !translate-x-0 !translate-y-0 !flex-col !gap-0 !overflow-hidden !rounded-none !p-0 !animate-none"
-                        style={{
-                            position: "fixed",
-                            inset: 0,
-                            left: 0,
-                            top: 0,
-                            width: "100vw",
-                            height: "100dvh",
-                            maxWidth: "none",
-                            transform: "none",
-                            borderRadius: 0,
-                            padding: 0,
-                        }}
-                    >
-                        {pickerBody}
-                    </DialogContent>
-                </Dialog>
+      <div
+        ref={actionFooterRef}
+        className={
+          isChannelSyncFullScreen
+            ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-0"
+            : isArticleFullScreen
+              ? "fixed inset-x-0 bottom-0 z-[140] flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 py-3"
+              : "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-end bg-white px-5 pb-5 pt-4 touch-mobile:mt-auto touch-mobile:px-4 touch-mobile:py-3"
+        }
+      >
+        <div
+          className={cn(
+            "min-w-0",
+            !isChannelSyncFullScreenFooter && "ml-auto",
+            isChannelSyncFullScreen || isArticleFullScreen
+              ? "flex w-full items-center gap-2"
+              : "flex w-auto shrink-0 items-center gap-2",
+          )}
+        >
+          <Button
+            color="default"
+            variant="outlined"
+            size="medium"
+            onClick={goBackToChannelForm}
+            className={cn(
+              "min-w-[64px] shrink-0",
+              isChannelSyncFullScreenFooter &&
+                "rounded-lg border-border-base text-text-2 hover:bg-fill-1",
+              isChannelSyncFullScreenFooter && "flex-1",
+              false,
+              mode === "article" && isFullScreenLayout && "touch-mobile:flex-1",
             )}
-            {open && shouldUseDesktopChannelSyncDialog && (
-                <Dialog open={open} onOpenChange={handleOpenChange}>
-                    <DialogContent
-                        close={false}
-                        overlayClassName="bg-gray-500/90 dark:bg-gray-800/90"
-                        className="flex h-[80vh] max-h-[600px] w-[576px] max-w-[92vw] min-h-0 flex-col gap-0 overflow-hidden rounded-2xl border-[#ebebeb] p-0 shadow-[0_0_16px_0_rgba(3,7,117,0.05)] sm:rounded-2xl dark:border-gray-700"
-                    >
-                        {pickerBody}
-                    </DialogContent>
-                </Dialog>
+          >
+            {localize("com_subscription.cancel")}
+          </Button>
+          <Button
+            color="primary"
+            variant="solid"
+            size="medium"
+            onClick={() => void handleConfirm()}
+            disabled={!selectedId || isConfirming}
+            loading={isConfirming}
+            className={cn(
+              "min-w-[64px] shrink-0",
+              isChannelSyncFullScreenFooter && "rounded-lg",
+              isChannelSyncFullScreenFooter && "flex-1",
+              false,
+              mode === "article" && isFullScreenLayout && "touch-mobile:flex-1",
             )}
-            {open && mode === "article" && (
-                <Dialog open={open} onOpenChange={handleOpenChange}>
-                    <DialogContent
-                        close={false}
-                        ref={articleDialogContentRef}
-                        overlayClassName="bg-gray-500/90 dark:bg-gray-800/90"
-                        className="flex h-[80vh] max-h-[600px] w-[576px] max-w-[92vw] min-h-0 flex-col gap-0 overflow-hidden rounded-2xl border-[#ebebeb] p-0 shadow-[0_0_16px_0_rgba(3,7,117,0.05)] sm:rounded-2xl dark:border-gray-700 max-[768px]:inset-0 max-[768px]:left-0 max-[768px]:top-0 max-[768px]:h-[100dvh] max-[768px]:w-screen max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:rounded-none max-[768px]:animate-none"
-                        style={
-                            (isModalMobile768 || forceMobile768)
-                                ? {
-                                    position: "fixed",
-                                    inset: 0,
-                                    left: 0,
-                                    top: 0,
-                                    width: "100vw",
-                                    height: "100dvh",
-                                    maxWidth: "none",
-                                    maxHeight: "none",
-                                    transform: "none",
-                                    borderRadius: 0,
-                                    padding: 0,
-                                }
-                                : undefined
-                        }
-                    >
-                        {pickerBody}
-                    </DialogContent>
-                </Dialog>
-            )}
+          >
+            {localize("com_subscription.add")}
+          </Button>
+        </div>
+      </div>
+    </>
+  );
 
-            {/* Duplicate File Confirmation Dialog */}
-            <Dialog open={showDuplicate} onOpenChange={setShowDuplicate}>
-                <DialogContent
-                    overlayClassName="bg-gray-500/90 dark:bg-gray-800/90"
-                    className="w-[480px] max-w-[90vw] gap-0 overflow-hidden rounded-2xl border-[#ebebeb] p-0 shadow-[0_0_16px_0_rgba(3,7,117,0.05)] sm:rounded-2xl dark:border-gray-700"
+  return (
+    <>
+      {open && isChannelSyncFullScreen && (
+        <Dialog open={open} onOpenChange={handleOpenChange}>
+          <DialogContent
+            close={false}
+            className="!fixed !inset-0 !left-0 !top-0 !z-[100] !flex !h-[100dvh] !w-screen !max-w-none !min-h-0 !translate-x-0 !translate-y-0 !flex-col !gap-0 !overflow-hidden !rounded-none !p-0 !animate-none"
+            style={{
+              position: "fixed",
+              inset: 0,
+              left: 0,
+              top: 0,
+              width: "100vw",
+              height: "100dvh",
+              maxWidth: "none",
+              transform: "none",
+              borderRadius: 0,
+              padding: 0,
+            }}
+          >
+            {pickerBody}
+          </DialogContent>
+        </Dialog>
+      )}
+      {open && isChannelSyncCentered && (
+        <Dialog open={open} onOpenChange={handleOpenChange}>
+          <DialogContent
+            close={false}
+            overlayClassName="bg-gray-500/90 dark:bg-gray-800/90"
+            className="flex h-[80vh] max-h-[600px] w-[576px] max-w-[92vw] min-h-0 flex-col gap-0 overflow-hidden rounded-2xl border-[#ebebeb] p-0 shadow-[0_0_16px_0_rgba(3,7,117,0.05)] sm:rounded-2xl dark:border-gray-700"
+          >
+            {pickerBody}
+          </DialogContent>
+        </Dialog>
+      )}
+      {open && mode === "article" && (
+        <Dialog open={open} onOpenChange={handleOpenChange}>
+          <DialogContent
+            close={false}
+            ref={articleDialogContentRef}
+            overlayClassName="bg-gray-500/90 dark:bg-gray-800/90"
+            className="flex h-[80vh] max-h-[600px] w-[576px] max-w-[92vw] min-h-0 flex-col gap-0 overflow-hidden rounded-2xl border-[#ebebeb] p-0 shadow-[0_0_16px_0_rgba(3,7,117,0.05)] sm:rounded-2xl dark:border-gray-700 max-[575px]:inset-0 max-[575px]:left-0 max-[575px]:top-0 max-[575px]:h-[100dvh] max-[575px]:w-screen max-[575px]:max-w-none max-[575px]:translate-x-0 max-[575px]:translate-y-0 max-[575px]:rounded-none max-[575px]:animate-none"
+            style={
+              isFullScreenLayout
+                ? {
+                    position: "fixed",
+                    inset: 0,
+                    left: 0,
+                    top: 0,
+                    width: "100vw",
+                    height: "100dvh",
+                    maxWidth: "none",
+                    maxHeight: "none",
+                    transform: "none",
+                    borderRadius: 0,
+                    padding: 0,
+                  }
+                : undefined
+            }
+          >
+            {pickerBody}
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Duplicate File Confirmation Dialog */}
+      <Dialog open={showDuplicate} onOpenChange={setShowDuplicate}>
+        <DialogContent
+          overlayClassName="bg-gray-500/90 dark:bg-gray-800/90"
+          className="w-[480px] max-w-[90vw] gap-0 overflow-hidden rounded-2xl border-[#ebebeb] p-0 shadow-[0_0_16px_0_rgba(3,7,117,0.05)] sm:rounded-2xl dark:border-gray-700"
+        >
+          <DialogHeader className="px-5 pb-0 pt-5">
+            <DialogTitle className="text-base font-medium leading-6 text-text-1">
+              {localize("com_subscription.duplicate_files_title")}
+            </DialogTitle>
+          </DialogHeader>
+          <div
+            ref={duplicateListScrollRevealRef}
+            className="max-h-[200px] overflow-y-auto px-5 pt-4 scrollbar-on-scroll"
+          >
+            {duplicateFiles.map((file, idx) => {
+              // Truncate file name > 10 chars with ellipsis
+              const displayName =
+                file.name.length > 10
+                  ? file.name.slice(0, 10) +
+                    "..." +
+                    (file.name.includes(".")
+                      ? file.name.slice(file.name.lastIndexOf("."))
+                      : "")
+                  : file.name;
+              return (
+                <div
+                  key={idx}
+                  className="flex items-center gap-2 py-1.5 text-sm"
                 >
-                    <DialogHeader className="px-5 pb-0 pt-5">
-                        <DialogTitle className="text-base font-medium leading-6 text-text-1">
-                            {localize("com_subscription.duplicate_files_title")}
-                        </DialogTitle>
-                    </DialogHeader>
-                    <div ref={duplicateListScrollRevealRef} className="max-h-[200px] overflow-y-auto px-5 pt-4 scrollbar-on-scroll">
-                        {duplicateFiles.map((file, idx) => {
-                            // Truncate file name > 10 chars with ellipsis
-                            const displayName = file.name.length > 10
-                                ? file.name.slice(0, 10) + "..." + (file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : "")
-                                : file.name;
-                            return (
-                                <div key={idx} className="flex items-center gap-2 py-1.5 text-sm">
-                                    <span className="text-gray-800 font-medium truncate max-w-[200px]" title={file.name}>
-                                        {displayName}
-                                    </span>
-                                    {file.path && (
-                                        <span className="text-text-3 text-xs truncate max-w-[180px]" title={file.path}>
-                                            ({file.path})
-                                        </span>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                    <DialogFooter className="flex flex-row justify-end gap-2 px-5 pb-5 pt-4">
-                        <Button
-                            color="default"
-                            variant="outlined"
-                            size="medium"
-                            onClick={() => {
-                                setShowDuplicate(false);
-                                setPendingConfirm(null);
-                                setDuplicateFiles([]);
-                            }}
-                        >{localize("com_subscription.cancel")}</Button>
-                        <Button
-                            color="primary"
-                            variant="solid"
-                            size="medium"
-                            onClick={() => handleConfirm(true)}
-                            disabled={isConfirming}
-                            loading={isConfirming}
-                        >
-                            {localize("com_subscription.replace")}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </>
-    );
+                  <span
+                    className="text-gray-800 font-medium truncate max-w-[200px]"
+                    title={file.name}
+                  >
+                    {displayName}
+                  </span>
+                  {file.path && (
+                    <span
+                      className="text-text-3 text-xs truncate max-w-[180px]"
+                      title={file.path}
+                    >
+                      ({file.path})
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <DialogFooter className="flex flex-row justify-end gap-2 px-5 pb-5 pt-4">
+            <Button
+              color="default"
+              variant="outlined"
+              size="medium"
+              onClick={() => {
+                setShowDuplicate(false);
+                setPendingConfirm(null);
+                setDuplicateFiles([]);
+              }}
+            >
+              {localize("com_subscription.cancel")}
+            </Button>
+            <Button
+              color="primary"
+              variant="solid"
+              size="medium"
+              onClick={() => handleConfirm(true)}
+              disabled={isConfirming}
+              loading={isConfirming}
+            >
+              {localize("com_subscription.replace")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }

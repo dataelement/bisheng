@@ -1,3 +1,4 @@
+import { WorkbenchMenuButton } from "~/layouts/WorkbenchMenuButton";
 import { refreshChannelState } from "./hooks/useChannelStateRefresh";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { TransitionEvent } from "react";
@@ -220,14 +221,14 @@ export function ChannelDiscoveryHome({
             return (
                 <div className="absolute inset-x-0 top-0 z-10 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
                     <div className="relative flex h-11 items-center px-4">
-                        <button
+                        <WorkbenchMenuButton
                             type="button"
                             aria-label={localize("com_nav_open_sidebar")}
                             onClick={onOpenMobileNav}
                             className="inline-flex size-5 shrink-0 items-center justify-center text-text-1"
                         >
                             <Outlined.SidebarMenu className="size-5" />
-                        </button>
+                        </WorkbenchMenuButton>
                         <h1 className="pointer-events-none absolute left-1/2 max-w-[calc(100%-112px)] -translate-x-1/2 truncate text-h4 font-medium text-text-1">{menuNames.channel}</h1>
                     </div>
                 </div>

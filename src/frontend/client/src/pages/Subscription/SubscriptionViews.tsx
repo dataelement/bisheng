@@ -1,16 +1,20 @@
-import type { MutableRefObject } from 'react';
-import { Outlined } from 'bisheng-icons';
-import type { Article } from '~/api/channels';
-import { LoadingIcon } from '~/components/ui/icon/Loading';
-import { useLocalize, useWorkbenchMenuNames } from '~/hooks';
-import FullScreenArticle from './Article/FullScreenArticle';
+import { WorkbenchMenuButton } from "~/layouts/WorkbenchMenuButton";
+import type { MutableRefObject } from "react";
+import { Outlined } from "bisheng-icons";
+import type { Article } from "~/api/channels";
+import { LoadingIcon } from "~/components/ui/icon/Loading";
+import { useLocalize, useWorkbenchMenuNames } from "~/hooks";
+import FullScreenArticle from "./Article/FullScreenArticle";
 
 interface SubscriptionLoadingViewProps {
   mobile: boolean;
   onOpenMobileNav: () => void;
 }
 
-export function SubscriptionLoadingView({ mobile, onOpenMobileNav }: SubscriptionLoadingViewProps) {
+export function SubscriptionLoadingView({
+  mobile,
+  onOpenMobileNav,
+}: SubscriptionLoadingViewProps) {
   const localize = useLocalize();
   const menuNames = useWorkbenchMenuNames();
   return (
@@ -18,11 +22,17 @@ export function SubscriptionLoadingView({ mobile, onOpenMobileNav }: Subscriptio
       {mobile && (
         <div className="absolute inset-x-0 top-0 z-10 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
           <div className="relative flex h-11 items-center px-4">
-            <button type="button" aria-label={localize('com_nav_open_sidebar')} onClick={onOpenMobileNav}
-              className="workbench-menu-trigger relative inline-flex size-5 items-center justify-center text-text-1">
+            <WorkbenchMenuButton
+              type="button"
+              aria-label={localize("com_nav_open_sidebar")}
+              onClick={onOpenMobileNav}
+              className="workbench-menu-trigger relative inline-flex size-5 items-center justify-center text-text-1"
+            >
               <Outlined.SidebarMenu className="size-5" />
-            </button>
-            <h1 className="pointer-events-none absolute left-1/2 max-w-[calc(100%-112px)] -translate-x-1/2 truncate text-h4 font-medium text-text-1">{menuNames.channel}</h1>
+            </WorkbenchMenuButton>
+            <h1 className="pointer-events-none absolute left-1/2 max-w-[calc(100%-112px)] -translate-x-1/2 truncate text-h4 font-medium text-text-1">
+              {menuNames.channel}
+            </h1>
           </div>
         </div>
       )}
@@ -43,8 +53,14 @@ interface SubscriptionArticleOverlayProps {
 }
 
 export function SubscriptionArticleOverlay({
-  article, mobile, showAiAssistant, showFullScreenBtn, enteredViaAiRef,
-  onClose, onAiAssistantChange, onShowFullScreenBtnChange,
+  article,
+  mobile,
+  showAiAssistant,
+  showFullScreenBtn,
+  enteredViaAiRef,
+  onClose,
+  onAiAssistantChange,
+  onShowFullScreenBtnChange,
 }: SubscriptionArticleOverlayProps) {
   const closeOverlay = () => {
     onClose();

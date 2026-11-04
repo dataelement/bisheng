@@ -1,28 +1,37 @@
-import { useEffect, useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
-import { useRecoilState, useRecoilValue } from 'recoil';
+import { useEffect, useState } from "react";
+import { Outlet, useLocation } from "react-router-dom";
+import { useRecoilState, useRecoilValue } from "recoil";
 import {
   AgentsMapContext,
   AssistantsMapContext,
   FileMapContext,
   SearchContext,
   SetConvoProvider,
-} from '~/Providers';
-import type { ContextType } from '~/common';
-import { Banner } from '~/components/Banners';
-import { LoadingIcon } from '~/components/ui/icon/Loading';
-import { MobileNav } from '~/components/Nav';
-import { useAgentsMap, useAssistantsMap, useAuthContext, useFileMap, useSearch } from '~/hooks';
-import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
-import store from '~/store';
-import { isDesktopEmbedded } from '~/components/Chat/desktopEmbedding';
-
+} from "~/Providers";
+import type { ContextType } from "~/common";
+import { Banner } from "~/components/Banners";
+import { LoadingIcon } from "~/components/ui/icon/Loading";
+import { MobileNav } from "~/components/Nav";
+import {
+  useAgentsMap,
+  useAssistantsMap,
+  useAuthContext,
+  useFileMap,
+  useSearch,
+} from "~/hooks";
+import { useClientEnvironment } from "~/hooks/useClientEnvironment";
+import store from "~/store";
 
 export default function Root() {
   const [, setBannerHeight] = useState(0);
-  const embedded = isDesktopEmbedded();
-  const isSmallScreen = usePrefersMobileLayout();
-  const [navVisible, setNavVisible] = useRecoilState(store.chatHistoryDrawerOpen);
+  const {
+    channel,
+    layout: { isNarrowViewport: isSmallScreen },
+  } = useClientEnvironment();
+  const embedded = channel === "desktop";
+  const [navVisible, setNavVisible] = useRecoilState(
+    store.chatHistoryDrawerOpen,
+  );
   const mobileNavHidden = useRecoilValue(store.chatMobileNavHiddenState);
   const { pathname } = useLocation();
 
@@ -31,7 +40,6 @@ export default function Root() {
   const agentsMap = useAgentsMap({ isAuthenticated });
   const fileMap = useFileMap({ isAuthenticated });
   const search = useSearch({ isAuthenticated });
-
 
   const showMobileNav = /^\/(c|linsight)(\/|$)/.test(pathname);
 
@@ -57,7 +65,6 @@ export default function Root() {
     return null;
   }
 
-
   return (
     <SetConvoProvider>
       <SearchContext.Provider value={search}>
@@ -75,8 +82,10 @@ export default function Root() {
                   <div className="relative z-0 flex min-h-0 w-full flex-1 overflow-hidden">
                     {/* Global conversation navigation belongs to MainLayout on every width. */}
                     <div className="relative flex min-h-0 max-w-full flex-1 flex-col overflow-hidden">
-                      {!embedded && showMobileNav && isSmallScreen && !mobileNavHidden ? (
-                        // 勿用 fixed 贴视口：会盖住 MainLayout 白卡 rounded-xl 上沿与两侧灰底留白（与知识库 H5、StandaloneChat 一致）
+                      {!embedded &&
+                      showMobileNav &&
+                      isSmallScreen &&
+                      !mobileNavHidden ? (
                         <div className="shrink-0 overflow-hidden rounded-t-xl bg-white">
                           <MobileNav
                             variant="chat"
@@ -87,7 +96,14 @@ export default function Root() {
                         </div>
                       ) : null}
                       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                        <Outlet context={{ navVisible: embedded || navVisible, setNavVisible } satisfies ContextType} />
+                        <Outlet
+                          context={
+                            {
+                              navVisible: embedded || navVisible,
+                              setNavVisible,
+                            } satisfies ContextType
+                          }
+                        />
                       </div>
                     </div>
                   </div>

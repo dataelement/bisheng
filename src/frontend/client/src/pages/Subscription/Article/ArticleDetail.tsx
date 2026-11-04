@@ -1,12 +1,12 @@
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import {
-    ArrowLeft,
-    ArrowUp,
-    Copy,
-    Download,
-    X,
-    ZoomIn,
-    ZoomOut
+  ArrowLeft,
+  ArrowUp,
+  Copy,
+  Download,
+  X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 
 import { useEffect, useRef, useState } from "react";
@@ -22,33 +22,47 @@ import { ArticleAiDock } from "../AiChat/ArticleAiDock";
 import { useAuthContext } from "~/hooks/AuthContext";
 
 interface ArticleDetailProps {
-    article: Article;
-    loading?: boolean;
-    screenFull?: boolean;
-    aiAssistantOpen?: boolean;
-    showFullScreenBtn?: boolean;
-    onFullScreen?: () => void;
-    onExitAiAssistant?: () => void;
-    onAiAssistant?: () => void;
-    onBack?: () => void;
+  article: Article;
+  loading?: boolean;
+  screenFull?: boolean;
+  aiAssistantOpen?: boolean;
+  showFullScreenBtn?: boolean;
+  onFullScreen?: () => void;
+  onExitAiAssistant?: () => void;
+  onAiAssistant?: () => void;
+  onBack?: () => void;
+  compactMode?: boolean;
+  preserveAiDraft?: boolean;
 }
 
-export function ArticleDetail({ article, loading = false, screenFull = false, showFullScreenBtn = true, aiAssistantOpen = false, onFullScreen, onExitAiAssistant, onAiAssistant, onBack }: ArticleDetailProps) {
-    const localize = useLocalize();
-    /** 小屏文章详情已是全幅叠层，不提供「全屏」入口；对话与正文分屏仅在大屏 */
-    const isNarrowShell = usePrefersMobileLayout();
-    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-    const [scale, setScale] = useState(1);
-    const [showBackTop, setShowBackTop] = useState(false);
-    const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
-    const iframeRef = useRef<HTMLIFrameElement>(null);
-    const { handleShare } = useArticleShare();
-    const { showToast } = useToastContext();
+export function ArticleDetail({
+  article,
+  loading = false,
+  screenFull = false,
+  showFullScreenBtn = true,
+  aiAssistantOpen = false,
+  onFullScreen,
+  onExitAiAssistant,
+  onAiAssistant,
+  onBack,
+  compactMode = false,
+  preserveAiDraft = false,
+}: ArticleDetailProps) {
+  const localize = useLocalize();
 
-    // 使用文章的真实 HTML 内容
-    const articleHtml = article.content_html || '';
+  const narrowViewport = usePrefersMobileLayout();
+  const isNarrowShell = compactMode || narrowViewport;
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [scale, setScale] = useState(1);
+  const [showBackTop, setShowBackTop] = useState(false);
+  const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const { handleShare } = useArticleShare();
+  const { showToast } = useToastContext();
 
-    const processedHtml = `
+  const articleHtml = article.content_html || "";
+
+  const processedHtml = `
     <html>
       <head>
         <style>
@@ -57,7 +71,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
           /* Source HTML (e.g. WeChat) wraps content with its own padding; zero it so only the body's 20px remains. */
           #js_content, .rich_media_area_primary, .rich_media_content { padding: 0 !important; }
           img { max-width: 100%; cursor: zoom-in; }
-          ${screenFull ? '/* Fullscreen: drop the source content wrapper\'s card shadow. */\n          body > * { box-shadow: none !important; }' : ''}
+          ${screenFull ? "/* Fullscreen: drop the source content wrapper's card shadow. */\n          body > * { box-shadow: none !important; }" : ""}
         </style>
       </head>
       <body>
@@ -99,261 +113,322 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
     </html>
   `;
 
-    useEffect(() => {
-        const handleMessage = (event: MessageEvent) => {
-            if (event.data.type === 'IMAGE_PREVIEW') {
-                setPreviewUrl(event.data.url);
-                setScale(1); // Reset scale
-            }
-            if (event.data.type === 'SCROLL_STATUS') {
-                setShowBackTop(event.data.show);
-            }
-        };
-        window.addEventListener("message", handleMessage);
-        return () => window.removeEventListener("message", handleMessage);
-    }, []);
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data.type === "IMAGE_PREVIEW") {
+        setPreviewUrl(event.data.url);
+        setScale(1); // Reset scale
+      }
+      if (event.data.type === "SCROLL_STATUS") {
+        setShowBackTop(event.data.show);
+      }
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
 
-    // Helper: draw the preview image onto a canvas and return a PNG blob.
-    // This bypasses CORS issues since the image is loaded via <img> with crossOrigin.
-    const getImageBlob = (): Promise<Blob> => {
-        return new Promise((resolve, reject) => {
-            if (!previewUrl) return reject(new Error('no url'));
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.naturalWidth;
-                canvas.height = img.naturalHeight;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) return reject(new Error('no canvas context'));
-                ctx.drawImage(img, 0, 0);
-                canvas.toBlob(blob => {
-                    if (blob) resolve(blob);
-                    else reject(new Error('toBlob failed'));
-                }, 'image/png');
-            };
-            img.onerror = () => reject(new Error('img load failed'));
-            img.src = previewUrl;
+  // Helper: draw the preview image onto a canvas and return a PNG blob.
+  // This bypasses CORS issues since the image is loaded via <img> with crossOrigin.
+  const getImageBlob = (): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      if (!previewUrl) return reject(new Error("no url"));
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject(new Error("no canvas context"));
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error("toBlob failed"));
+        }, "image/png");
+      };
+      img.onerror = () => reject(new Error("img load failed"));
+      img.src = previewUrl;
+    });
+  };
+
+  // --- Image operation logic ---
+  const handleDownload = async () => {
+    if (!previewUrl) return;
+    try {
+      const blob = await getImageBlob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `image-${Date.now()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch {
+      // Fallback: try fetch-based download
+      try {
+        const res = await fetch(previewUrl);
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `image-${Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } catch {
+        window.open(previewUrl, "_blank");
+      }
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!previewUrl) return;
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard API not available");
+      const blob = await getImageBlob();
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": blob }),
+      ]);
+      showToast({
+        message: localize("com_subscription.image_copied"),
+        severity: NotificationSeverity.SUCCESS,
+      });
+    } catch {
+      // Fallback: copy URL string via clipboard API or legacy execCommand
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(previewUrl);
+        } else {
+          const ta = document.createElement("textarea");
+          ta.value = previewUrl;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+        }
+        showToast({
+          message: localize("com_subscription.image_copy_failed_url_copied"),
+          severity: NotificationSeverity.WARNING,
         });
-    };
+      } catch {
+        showToast({
+          message: localize("com_subscription.copy_failed_retry"),
+          severity: NotificationSeverity.WARNING,
+        });
+      }
+    }
+  };
 
-    // --- Image operation logic ---
-    const handleDownload = async () => {
-        if (!previewUrl) return;
-        try {
-            const blob = await getImageBlob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `image-${Date.now()}.png`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-        } catch {
-            // Fallback: try fetch-based download
-            try {
-                const res = await fetch(previewUrl);
-                const blob = await res.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `image-${Date.now()}.png`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                window.URL.revokeObjectURL(url);
-            } catch {
-                window.open(previewUrl, '_blank');
-            }
-        }
-    };
+  const handleBackToTop = () => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: "DO_SCROLL_TOP" },
+      "*",
+    );
+  };
 
-
-    const handleCopy = async () => {
-        if (!previewUrl) return;
-        try {
-            if (!navigator.clipboard) throw new Error('Clipboard API not available');
-            const blob = await getImageBlob();
-            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-            showToast({ message: localize("com_subscription.image_copied"), severity: NotificationSeverity.SUCCESS });
-        } catch {
-            // Fallback: copy URL string via clipboard API or legacy execCommand
-            try {
-                if (navigator.clipboard?.writeText) {
-                    await navigator.clipboard.writeText(previewUrl);
-                } else {
-                    const ta = document.createElement('textarea');
-                    ta.value = previewUrl;
-                    ta.style.position = 'fixed';
-                    ta.style.opacity = '0';
-                    document.body.appendChild(ta);
-                    ta.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(ta);
-                }
-                showToast({ message: localize("com_subscription.image_copy_failed_url_copied"), severity: NotificationSeverity.WARNING });
-            } catch {
-                showToast({ message: localize("com_subscription.copy_failed_retry"), severity: NotificationSeverity.WARNING });
-            }
-        }
-    };
-
-    const handleBackToTop = () => {
-        iframeRef.current?.contentWindow?.postMessage({ type: 'DO_SCROLL_TOP' }, '*');
-    };
-
-
-    // Check if user has knowledge_space permission from web_menu
-    const { user } = useAuthContext();
-    const hasKnowledge = Array.isArray((user as any)?.plugins)
-        ? ((user as any).plugins as string[]).includes('knowledge_space')
-        : true;
-    return (
-        <div className="flex px-4 pt-5 flex-col h-full">
-            {/* Top Toolbar — closed by a newspaper-style thick-thin double rule:
+  // Check if user has knowledge_space permission from web_menu
+  const { user } = useAuthContext();
+  const hasKnowledge = Array.isArray((user as any)?.plugins)
+    ? ((user as any).plugins as string[]).includes("knowledge_space")
+    : true;
+  return (
+    <div className="flex px-4 pt-5 flex-col h-full">
+      {/* Top Toolbar — closed by a newspaper-style thick-thin double rule:
                 2px bottom border here + the 1px sibling line below. */}
-            <div className="border-b-2 border-text-2 pb-4">
-                {/* Mobile-only back button; the article title is intentionally hidden here
+      <div className="border-b-2 border-text-2 pb-4">
+        {/* Mobile-only back button; the article title is intentionally hidden here
                     (it already appears inside the article content). */}
-                {isNarrowShell && onBack ? (
-                    <div className="flex items-start">
-                        <button
-                            type="button"
-                            onClick={onBack}
-                            aria-label={localize("com_ui_go_back")}
-                            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border-base text-text-2 hover:bg-fill-1"
-                        >
-                            <ArrowLeft className="size-4" />
-                        </button>
-                    </div>
-                ) : null}
+        {isNarrowShell && onBack ? (
+          <div className="flex items-start">
+            <button
+              type="button"
+              onClick={onBack}
+              aria-label={localize("com_ui_go_back")}
+              className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border-base text-text-2 hover:bg-fill-1"
+            >
+              <ArrowLeft className="size-4" />
+            </button>
+          </div>
+        ) : null}
 
-                <div className="flex items-center justify-between">
-                    <div className="w-full h-6 flex items-center gap-4">
-                        <button
-                            onClick={() => window.open(article.url)}
-                            className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
-                        >
-                            <Outlined.ViewOnNewTab className="size-3.5 text-text-3 transition-colors group-hover:text-[#333]" />{localize("com_subscription.original_webpage")}</button>
+        <div className="flex items-center justify-between">
+          <div className="w-full h-6 flex items-center gap-4">
+            <button
+              onClick={() => window.open(article.url)}
+              className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
+            >
+              <Outlined.ViewOnNewTab className="size-3.5 text-text-3 transition-colors group-hover:text-[#333]" />
+              {localize("com_subscription.original_webpage")}
+            </button>
 
-                        <button
-                            className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
-                            onClick={() => handleShare(article)}
-                        >
-                            <Outlined.Share className="size-3.5 text-text-3 transition-colors group-hover:text-[#333]" />{localize("com_subscription.share")}</button>
+            <button
+              className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
+              onClick={() => handleShare(article)}
+            >
+              <Outlined.Share className="size-3.5 text-text-3 transition-colors group-hover:text-[#333]" />
+              {localize("com_subscription.share")}
+            </button>
 
-                        {hasKnowledge && <button
-                            className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
-                            onClick={() => setShowKnowledgeModal(true)}
-                        >
-                            <Outlined.AddToKnowledgeBase className="size-3.5 text-text-3 transition-colors group-hover:text-[#333]" />{localize("com_subscription.add_to_knowledge_space")}</button>}
+            {hasKnowledge && (
+              <button
+                className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
+                onClick={() => setShowKnowledgeModal(true)}
+              >
+                <Outlined.AddToKnowledgeBase className="size-3.5 text-text-3 transition-colors group-hover:text-[#333]" />
+                {localize("com_subscription.add_to_knowledge_space")}
+              </button>
+            )}
 
-                        {!isNarrowShell && (!screenFull || (showFullScreenBtn && aiAssistantOpen)) ? (
-                            <button
-                                type="button"
-                                className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
-                                onClick={() => {
-                                    screenFull && showFullScreenBtn ? onExitAiAssistant?.() :
-                                        onFullScreen?.();
-                                }}
-                            >
-                                <Outlined.FullScreen className="size-3.5 text-text-3 transition-colors group-hover:text-[#333]" />{localize("com_subscription.fullscreen")}
-                            </button>
-                        ) : null}
+            {!isNarrowShell &&
+            (!screenFull || (showFullScreenBtn && aiAssistantOpen)) ? (
+              <button
+                type="button"
+                className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
+                onClick={() => {
+                  screenFull && showFullScreenBtn
+                    ? onExitAiAssistant?.()
+                    : onFullScreen?.();
+                }}
+              >
+                <Outlined.FullScreen className="size-3.5 text-text-3 transition-colors group-hover:text-[#333]" />
+                {localize("com_subscription.fullscreen")}
+              </button>
+            ) : null}
 
-                        <div className="ml-auto flex gap-3 items-center">
-                            {screenFull && <div className="flex items-center text-[12px]">
-                                <img className="size-4 mr-1.5" src={article.sourceAvatar} alt="" />
-                                <span className="text-text-1">{article.sourceName}</span>
-                                <span className="text-[#e5e6eb] mx-2">|</span>
-                                <span className="text-text-3">{formatTime(article.publishedAt || '', true)}</span>
-                            </div>}
-                            {/* Mobile keeps the toolbar AI button (opens the full-screen overlay);
-                                PC uses the bottom AI dock instead. */}
-                            {isNarrowShell && !aiAssistantOpen && <button
-                                className="ai-btn-border-draw flex items-center gap-1 text-xs transition-colors px-1.5 h-6 rounded-md"
-                                onClick={() => onAiAssistant?.()}
-                            >
-                                <span className="ai-btn-shimmer-overlay" />
-                                <AiChatIcon className="size-3.5 text-blue-200" />
-                                <span className="text-[#000D4D]">{localize("com_subscription.ai_assistant")}</span>
-                            </button>}
-                        </div>
-                    </div>
+            <div className="ml-auto flex gap-3 items-center">
+              {screenFull && (
+                <div className="flex items-center text-[12px]">
+                  <img
+                    className="size-4 mr-1.5"
+                    src={article.sourceAvatar}
+                    alt=""
+                  />
+                  <span className="text-text-1">{article.sourceName}</span>
+                  <span className="text-[#e5e6eb] mx-2">|</span>
+                  <span className="text-text-3">
+                    {formatTime(article.publishedAt || "", true)}
+                  </span>
                 </div>
+              )}
+              {/* Mobile keeps the toolbar AI button (opens the full-screen overlay);
+                                PC uses the bottom AI dock instead. */}
+              {isNarrowShell && !preserveAiDraft && !aiAssistantOpen && (
+                <button
+                  className="ai-btn-border-draw flex items-center gap-1 text-xs transition-colors px-1.5 h-6 rounded-md"
+                  onClick={() => onAiAssistant?.()}
+                >
+                  <span className="ai-btn-shimmer-overlay" />
+                  <AiChatIcon className="size-3.5 text-blue-200" />
+                  <span className="text-[#000D4D]">
+                    {localize("com_subscription.ai_assistant")}
+                  </span>
+                </button>
+              )}
             </div>
-            {/* Thin second line of the double rule, 2px below the 2px one. */}
-            <div aria-hidden className="mt-[2px] shrink-0 border-b border-text-2" />
+          </div>
+        </div>
+      </div>
+      {/* Thin second line of the double rule, 2px below the 2px one. */}
+      <div aria-hidden className="mt-[2px] shrink-0 border-b border-text-2" />
 
-            {/* Iframe Content Area */}
-            <div className="flex-1 bg-white relative">
-                {loading ? (
-                    <div className="flex items-center justify-center h-full text-text-3 text-sm">{localize("com_subscription.loading")}</div>
-                ) : !articleHtml ? (
-                    <div className="flex items-center justify-center h-full text-text-3 text-sm">{localize("com_subscription.no_content")}</div>
-                ) : (
-                    <iframe
-                        ref={iframeRef}
-                        srcDoc={processedHtml}
-                        className="w-full h-full border-none"
-                    />
-                )}
+      {/* Iframe Content Area */}
+      <div className="flex-1 bg-white relative">
+        {loading ? (
+          <div className="flex items-center justify-center h-full text-text-3 text-sm">
+            {localize("com_subscription.loading")}
+          </div>
+        ) : !articleHtml ? (
+          <div className="flex items-center justify-center h-full text-text-3 text-sm">
+            {localize("com_subscription.no_content")}
+          </div>
+        ) : (
+          <iframe
+            ref={iframeRef}
+            srcDoc={processedHtml}
+            className="w-full h-full border-none"
+          />
+        )}
 
-                {/* Back to Top Button */}
-                {showBackTop && (
-                    <button
-                        onClick={handleBackToTop}
-                        className="absolute bottom-32 right-8 size-10 bg-white shadow-lg border border-border-base rounded-full flex items-center justify-center text-text-2 hover:text-[#333] transition-all animate-in fade-in slide-in-from-bottom-4"
-                    >
-                        <ArrowUp className="size-5" />
-                    </button>
-                )}
+        {/* Back to Top Button */}
+        {showBackTop && (
+          <button
+            onClick={handleBackToTop}
+            className="absolute bottom-32 right-8 size-10 bg-white shadow-lg border border-border-base rounded-full flex items-center justify-center text-text-2 hover:text-[#333] transition-all animate-in fade-in slide-in-from-bottom-4"
+          >
+            <ArrowUp className="size-5" />
+          </button>
+        )}
 
-                {/* PC-only AI dock (self-contained component): collapsed input bar that slides
+        {/* PC-only AI dock (self-contained component): collapsed input bar that slides
                     up into the chat panel. Mobile keeps the toolbar button + full-screen overlay. */}
-                {!isNarrowShell && <ArticleAiDock articleDocId={article.id} article={article} />}
-            </div>
+        {(!isNarrowShell || preserveAiDraft) && (
+          <ArticleAiDock
+            articleDocId={article.id}
+            article={article}
+            preserveAskBar={preserveAiDraft}
+          />
+        )}
+      </div>
 
-            {/* 3. Image Preview Overlay */}
-            {previewUrl && (
-                <div className="fixed inset-0 z-[999] bg-black/90 flex flex-col items-center justify-center">
-                    {/* Top Action Bar */}
-                    <div className="absolute top-0 w-full flex justify-between p-6 text-white/80">
-                        <div className="flex items-center gap-6">
-                            <button onClick={() => setScale(s => s + 0.2)} className="hover:text-white flex items-center gap-1">
-                                <ZoomIn className="size-5" />{localize("com_subscription.zoom_in")}</button>
-                            <button onClick={() => setScale(s => Math.max(0.5, s - 0.2))} className="hover:text-white flex items-center gap-1">
-                                <ZoomOut className="size-5" />{localize("com_subscription.zoom_out")}</button>
-                            {/* <div className="w-px h-4 bg-white/20 mx-2" /> */}
-                            {/* <button onClick={handleCopy} className="hover:text-white flex items-center gap-1">
+      {/* 3. Image Preview Overlay */}
+      {previewUrl && (
+        <div className="fixed inset-0 z-[999] bg-black/90 flex flex-col items-center justify-center">
+          {/* Top Action Bar */}
+          <div className="absolute top-0 w-full flex justify-between p-6 text-white/80">
+            <div className="flex items-center gap-6">
+              <button
+                onClick={() => setScale((s) => s + 0.2)}
+                className="hover:text-white flex items-center gap-1"
+              >
+                <ZoomIn className="size-5" />
+                {localize("com_subscription.zoom_in")}
+              </button>
+              <button
+                onClick={() => setScale((s) => Math.max(0.5, s - 0.2))}
+                className="hover:text-white flex items-center gap-1"
+              >
+                <ZoomOut className="size-5" />
+                {localize("com_subscription.zoom_out")}
+              </button>
+              {/* <div className="w-px h-4 bg-white/20 mx-2" /> */}
+              {/* <button onClick={handleCopy} className="hover:text-white flex items-center gap-1">
                                 <Copy className="size-5" />{localize("com_subscription.copy")}</button>
                             <button onClick={handleDownload} className="hover:text-white flex items-center gap-1">
                                 <Download className="size-5" />{localize("com_subscription.download")}</button> */}
-                        </div>
-                        <button onClick={() => setPreviewUrl(null)} className="hover:text-white text-white bg-white/10 p-2 rounded-full">
-                            <X className="size-8" />
-                        </button>
-                    </div>
+            </div>
+            <button
+              onClick={() => setPreviewUrl(null)}
+              className="hover:text-white text-white bg-white/10 p-2 rounded-full"
+            >
+              <X className="size-8" />
+            </button>
+          </div>
 
-                    {/* Image Body */}
-                    <div className="overflow-auto max-w-full max-h-full flex items-center justify-center p-10 cursor-grab active:cursor-grabbing">
-                        <img
-                            src={previewUrl}
-                            style={{ transform: `scale(${scale})`, transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)' }}
-                            className="max-w-[85vw] max-h-[85vh] object-contain shadow-2xl"
-                            alt="Preview"
-                        />
-                    </div>
-                </div>
-            )}
-
-            {/* Add to Knowledge Space Modal */}
-            <AddToKnowledgeModal
-                open={showKnowledgeModal}
-                onOpenChange={setShowKnowledgeModal}
-                articleId={article.id}
+          {/* Image Body */}
+          <div className="overflow-auto max-w-full max-h-full flex items-center justify-center p-10 cursor-grab active:cursor-grabbing">
+            <img
+              src={previewUrl}
+              style={{
+                transform: `scale(${scale})`,
+                transition: "transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+              }}
+              className="max-w-[85vw] max-h-[85vh] object-contain shadow-2xl"
+              alt="Preview"
             />
+          </div>
         </div>
-    );
+      )}
+
+      {/* Add to Knowledge Space Modal */}
+      <AddToKnowledgeModal
+        open={showKnowledgeModal}
+        onOpenChange={setShowKnowledgeModal}
+        articleId={article.id}
+      />
+    </div>
+  );
 }
