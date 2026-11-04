@@ -29,27 +29,6 @@
   column-gap: var(--vnext-grid-gap-inline);
   row-gap: var(--vnext-grid-gap-block);
 }
-.card { display: flex; flex-direction: column; min-width: 0; min-height: var(--vnext-card-min-height); padding: var(--vnext-card-padding); border-radius: var(--vnext-radius-card); background: var(--vnext-surface-card); border: 0; box-shadow: var(--vnext-shadow-card); }
-.cardHeading { display: flex; align-items: center; gap: var(--vnext-card-heading-gap); min-width: 0; min-height: var(--vnext-space-icon-size); }
-.spaceIcon { width: var(--vnext-space-icon-size); height: var(--vnext-space-icon-size); flex: none; object-fit: contain; }
-.cardTitle { min-width: 0; flex: 1; margin: 0; font-size: var(--vnext-card-title-size); line-height: var(--vnext-card-title-line-height); font-weight: var(--vnext-weight-medium); }
-.openSpace { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font: inherit; color: var(--vnext-text-primary); background: transparent; border: 0; padding: 0; }
-.openSpace::after { content: ''; position: absolute; inset: 0; border-radius: var(--vnext-radius-card); }
-.card { position: relative; }
-.iconButton { position: relative; z-index: 1; }
-.description { min-height: var(--vnext-body-line-height); margin: var(--vnext-card-description-gap-start) 0 var(--vnext-card-description-gap-end); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--vnext-text-secondary); }
-.cardFooter { display: flex; align-items: center; flex-wrap: wrap; gap: var(--vnext-card-footer-row-gap) var(--vnext-geometry-16); margin-top: auto; min-width: 0; }
-.cardFooter > .iconButton { height: var(--vnext-body-line-height); }
-.owner { display: flex; align-items: center; flex: 1; min-width: 0; gap: var(--vnext-geometry-8); color: var(--vnext-text-owner); }
-.owner > span { white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
-.updated { color: var(--vnext-text-meta); font-variant-numeric: tabular-nums; }
-.iconButton { display: inline-flex; align-items: center; justify-content: center; width: var(--vnext-geometry-28); height: var(--vnext-geometry-28); flex: none; padding: var(--vnext-geometry-2); border: 0; border-radius: var(--vnext-radius-control); background: transparent; color: var(--vnext-text-secondary); }
-/* Keep the supplied pin shapes while inheriting the semantic icon color. */
-.pinGlyph { display: grid; place-items: center; width: var(--vnext-geometry-14-4); height: var(--vnext-geometry-14-4); }
-.pinGlyph > span { grid-area: 1 / 1; width: 100%; height: 100%; background: currentColor; mask-repeat: no-repeat; mask-position: center; mask-size: contain; }
-.pinFilled { mask-image: url('./assets/Clip.svg'); }
-.pinDefault { mask-image: url('./assets/clip-2.svg'); }
-.pinHover { mask-image: url('./assets/clip-2-hover.svg'); opacity: 0; }
 .status { display: flex; flex-direction: column; align-items: center; gap: var(--vnext-geometry-16); padding: var(--vnext-geometry-48) 0; text-align: center; color: var(--vnext-text-secondary); }
 .menu { z-index: 60; min-width: var(--vnext-geometry-160); max-width: min(var(--vnext-geometry-280), calc(100vw - var(--vnext-geometry-16))); padding: var(--vnext-geometry-8); border: 1px solid var(--vnext-border-control); border-radius: var(--vnext-radius-control); background: var(--vnext-surface-page); }
 .menuItem { padding: var(--vnext-geometry-8) var(--vnext-geometry-16); border-radius: var(--vnext-radius-control); cursor: pointer; outline: none; }
@@ -63,30 +42,11 @@
 /* Keep the selected text free of underlines and the closed control free of an outer ring. */
 .page .sortTrigger:focus-visible { outline: none; box-shadow: none; }
 .sortTrigger:focus-visible .sortValue { text-decoration: none; }
-.openSpace:focus-visible { outline: none; }
-.openSpace:focus-visible::after { outline: var(--vnext-focus-width) solid var(--vnext-focus-color); outline-offset: var(--vnext-focus-offset); }
-.visuallyHidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 @media (hover: hover) {
-  .card:hover { background: var(--vnext-surface-card-hover); }
   .primaryButton:hover:not(:disabled) { background: var(--vnext-action-primary-hover); opacity: var(--vnext-action-hover-opacity); }
-  .pinButton:hover:not(:disabled) .pinDefault { opacity: 0; }
-  .pinButton:hover:not(:disabled) .pinHover { opacity: 1; }
   .sortTrigger:hover { background: var(--vnext-sort-active-bg); }
   .secondaryButton:hover:not(:disabled) { background: var(--vnext-action-secondary-hover); }
 }
-@container knowledge-home (max-width: 350px) {
-  .cardFooter { align-items: flex-start; }
-  .updated { overflow-wrap: anywhere; }
-}
-@container knowledge-home (max-width: 240px) {
-  .cardHeading { flex-wrap: wrap; }
-  .cardTitle { order: 1; flex-basis: 100%; }
-  .cardHeading > .iconButton { margin-left: auto; }
-}
-
-.emptyDescription { color: var(--vnext-text-placeholder); }
-.renameInput { height: var(--vnext-space-icon-size); box-sizing: border-box; position: relative; z-index: 2; width: 100%; min-width: 0; font: inherit; color: var(--vnext-text-primary); background: var(--vnext-surface-page); border: 1px solid var(--vnext-border-control); border-radius: var(--vnext-geometry-4); padding: 0 var(--vnext-geometry-4); }
-
 .sortItem { min-width: 0; max-width: 100%; white-space: nowrap; }
 .sortOptionLabel { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -96,9 +56,6 @@
 .productSegments { flex: 1 1 auto; min-width: 0; overflow-x: auto; }
 .segmentIcon { width: var(--vnext-geometry-16); height: var(--vnext-geometry-16); object-fit: contain; flex: none; }
 
-.pinButton[aria-pressed='false'] { opacity: 0; pointer-events: none; }
-.card:hover .pinButton[aria-pressed='false'], .card:focus-within .pinButton[aria-pressed='false'] { opacity: 1; pointer-events: auto; }
-@media (hover: none) { .pinButton[aria-pressed='false'] { opacity: 1; pointer-events: auto; } }
 .menuItem > svg { width: var(--vnext-geometry-16); height: var(--vnext-geometry-16); flex: none; }
 .menuItem { display: flex; align-items: center; gap: var(--vnext-geometry-8); }
 
