@@ -40,6 +40,7 @@ import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import { useToastContext } from '~/Providers';
 import { SopStatus } from '~/store/linsight';
 import { BreathingRow } from './BreathingRow';
+import { getMobileTaskActivity } from './mobileTaskActivity';
 import { ClarifyCard } from './ClarifyCard';
 import { QueueCard } from './QueueCard';
 import { ExecutionLiveContext } from './executionLive';
@@ -254,7 +255,10 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
             {preparing && <BreathingRow state="preparing" />}
 
             {/* planning breathing row */}
-            {planning && <BreathingRow state={isMobile ? 'researching' : 'planning'} />}
+            {planning && !isMobile && <BreathingRow state="planning" />}
+            {isMobile && running && !queueing && !pendingInput && !preparing && (
+                <BreathingRow state={getMobileTaskActivity(sessionSteps, tasks)} />
+            )}
 
             {/* task rows with nested sub-step flows — only show tasks execution has
                 actually reached; not-started ones live in the pinned TaskPanel only. */}
@@ -316,7 +320,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
                 let this row surface concurrently with 正在深度思考 during the
                 pre-task thinking phase. The deep-thinking node's live-tail owns the
                 "working" signal until the first task arrives. */}
-            {running && !queueing && !pendingInput && tasks.length > 0 && !tasks.some((t) => isTaskRunning(t.status)) && (
+            {!isMobile && running && !queueing && !pendingInput && tasks.length > 0 && !tasks.some((t) => isTaskRunning(t.status)) && (
                 <BreathingRow state="generating" />
             )}
 

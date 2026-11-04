@@ -8,6 +8,7 @@ import { toggleNav } from "~/utils";
 import { useLinsightManager } from "../useLinsightManager";
 import { MockWebSocket } from "./mock";
 import { observeModelRateLimitEvent } from "~/hooks/queries/endpoints/modelRateLimitPolling";
+import { closeCompletedTaskRows } from '../linsightCompletion';
 const MOCK = false
 
 // 每个会话单独分配一个 WebSocket实例
@@ -329,13 +330,20 @@ export const useLinsightWebSocket = (versionId) => {
                     });
                     break;
                 case 'final_result':
-                    updateLinsight(id, {
+                    updateLinsight(id, (prev) => ({
                         output_result: taskData.data.output_result,
                         // summary: taskData.data.output_result.answer,
                         file_list: taskData.data.output_result.final_files || [],
-                        status: SopStatus.completed
-                    })
+                        status: SopStatus.completed,
+                        // A completed session must not retain live checklist spinners.
+                        tasks: closeCompletedTaskRows(prev.tasks || []),
+                    }))
                     toggleNav(true)
+                    // Fetch authoritative task statuses after the backend sweep,
+                    // including TASK_END updates this socket may have missed.
+                    reconcileRef.current?.(id, taskData.data.output_result)?.catch((e) => {
+                        console.error(`Failed to reconcile completed session ${id}:`, e);
+                    });
                     // Live only: the task answer is now a persisted category="task"
                     // ChatMessage. Pull its real id (+ liked verdict) into the store so
                     // like/dislike targets the right row the moment the result panel

@@ -506,6 +506,10 @@
   "com_linsight_export_success": "File downloaded",
   "com_linsight_export_failed": "Export failed, please try again later",
   "com_linsight": {
+    "activity_reading": "Reading sources",
+    "activity_searching": "Researching online",
+    "activity_summarizing": "Preparing results",
+    "activity_writing": "Writing content",
     "downloadToLocal": "Download to local",
     "saveToKnowledge": "Save to knowledge space",
     "saveToKnowledgeSaving": "Saving to knowledge space…",

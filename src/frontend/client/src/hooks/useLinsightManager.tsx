@@ -113,7 +113,10 @@ export const useLinsightManager = () => {
      *
      * @returns true if a terminal state was adopted, false if left alone.
      */
-    const reconcileLinsightFromServer = useRecoilCallback(({ snapshot }) => async (versionId: string) => {
+    const reconcileLinsightFromServer = useRecoilCallback(({ snapshot }) => async (
+        versionId: string,
+        expectedCompletedOutput?: LinsightInfo['output_result'],
+    ) => {
         const map = await snapshot.getPromise(linsightMapState);
         const current = map.get(versionId);
         // No session_id ⇒ nothing to query by (entry not hydrated yet).
@@ -126,18 +129,25 @@ export const useLinsightManager = () => {
         // Same shape the reload path builds (switchAndUpdateLinsight), so a
         // reconciled panel is indistinguishable from a freshly loaded one.
         const tasks = await getLinsightTaskList(versionId, item, '');
-        updateLinsight(versionId, {
-            status: mapSessionVersionStatus(item.status, item.execute_feedback),
-            output_result: item.output_result,
-            execute_feedback: item.execute_feedback,
-            tasks: buildTaskTree(tasks),
-            file_list: item.output_result?.final_files || [],
-            taskError: 'failed' === item.status ? item.output_result?.error_message : '',
-            // Carry the persisted task ChatMessage id + verdict, exactly as the
-            // live final_result handler does, so like/dislike targets the right
-            // row instead of a streaming placeholder.
-            ...(item.message_id != null ? { message_id: item.message_id, liked: item.liked } : {}),
-            queueCount: 0,
+        updateLinsight(versionId, (latest) => {
+            // A follow-up reuses the version id but clears its previous output.
+            // Reject a completion fetch that arrived after that next round began.
+            if (expectedCompletedOutput !== undefined && (
+                latest.status !== SopStatus.completed || latest.output_result !== expectedCompletedOutput
+            )) return {};
+            return {
+                status: mapSessionVersionStatus(item.status, item.execute_feedback),
+                output_result: item.output_result,
+                execute_feedback: item.execute_feedback,
+                tasks: buildTaskTree(tasks),
+                file_list: item.output_result?.final_files || [],
+                taskError: 'failed' === item.status ? item.output_result?.error_message : '',
+                // Carry the persisted task ChatMessage id + verdict, exactly as the
+                // live final_result handler does, so like/dislike targets the right
+                // row instead of a streaming placeholder.
+                ...(item.message_id != null ? { message_id: item.message_id, liked: item.liked } : {}),
+                queueCount: 0,
+            };
         });
         return true;
     }, [updateLinsight]);

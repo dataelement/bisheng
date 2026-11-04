@@ -29,6 +29,7 @@ import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { resolveDisplayedModelRateLimitState } from '~/hooks/queries/endpoints/modelRateLimitPolling';
 import { useToastContext } from '~/Providers';
 import { BreathingRow } from './BreathingRow';
+import { getMobileTaskActivity } from './mobileTaskActivity';
 import { ClarifyCard } from './ClarifyCard';
 import { ConversationRound } from './ConversationRound';
 import { LegacySopRow } from './LegacySopRow';
@@ -253,7 +254,10 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                             {preparing && <BreathingRow state="preparing" />}
 
                             {/* planning breathing row */}
-                            {planning && <BreathingRow state={isMobile ? 'researching' : 'planning'} />}
+                            {planning && !isMobile && <BreathingRow state="planning" />}
+                            {isMobile && running && !queueing && !pendingInput && !preparing && (
+                                <BreathingRow state={getMobileTaskActivity(sessionSteps, tasks)} />
+                            )}
 
                             {/* task rows with nested sub-step flows — only tasks
                                 execution has reached; not-started ones stay in TaskPanel. */}
@@ -264,7 +268,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                             {/* generating breathing row — bridges the gaps between
                                 tasks / wrap-up + the final report phase so the run
                                 never looks frozen */}
-                            {generating && <BreathingRow state="generating" />}
+                            {generating && !isMobile && <BreathingRow state="generating" />}
 
                             {/* active clarify / follow-up card */}
                             {pendingInput && (

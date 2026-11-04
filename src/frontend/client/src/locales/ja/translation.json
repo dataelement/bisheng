@@ -491,6 +491,10 @@
   "com_linsight_export_success": "ファイルをダウンロードしました",
   "com_linsight_export_failed": "エクスポートに失敗しました。後でもう一度お試しください",
   "com_linsight": {
+    "activity_reading": "資料を確認中",
+    "activity_searching": "ウェブで調査中",
+    "activity_summarizing": "結果を整理中",
+    "activity_writing": "内容を作成中",
     "downloadToLocal": "ローカルにダウンロード",
     "saveToKnowledge": "ナレッジスペースに保存",
     "saveToKnowledgeSaving": "ナレッジスペースに保存中…",

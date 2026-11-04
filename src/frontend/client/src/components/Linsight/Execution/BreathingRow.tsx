@@ -16,7 +16,7 @@
 import { Outlined } from 'bisheng-icons';
 import { useLocalize } from '~/hooks';
 
-type BreathingState = 'preparing' | 'planning' | 'researching' | 'generating';
+export type BreathingState = 'preparing' | 'planning' | 'researching' | 'generating' | 'searching' | 'reading' | 'writing' | 'summarizing';
 
 // state → localize key (single source of truth for the activity copy).
 const STATE_I18N: Record<BreathingState, string> = {
@@ -24,6 +24,10 @@ const STATE_I18N: Record<BreathingState, string> = {
     planning: 'com_linsight_planning',
     researching: 'com_linsight_executing',
     generating: 'com_linsight_generating',
+    searching: 'com_linsight.activity_searching',
+    reading: 'com_linsight.activity_reading',
+    writing: 'com_linsight.activity_writing',
+    summarizing: 'com_linsight.activity_summarizing',
 };
 
 interface BreathingRowProps {

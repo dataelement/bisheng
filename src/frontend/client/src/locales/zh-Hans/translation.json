@@ -494,6 +494,10 @@
   "com_linsight_export_success": "文件下载成功",
   "com_linsight_export_failed": "导出失败，请稍后重试",
   "com_linsight": {
+    "activity_reading": "正在查阅资料",
+    "activity_searching": "正在联网调研",
+    "activity_summarizing": "正在整理结果",
+    "activity_writing": "正在撰写内容",
     "downloadToLocal": "下载到本地",
     "saveToKnowledge": "存入知识空间",
     "saveToKnowledgeSaving": "正在存入知识空间…",

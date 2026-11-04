@@ -13,7 +13,7 @@
  * one direction: it must never overwrite a live run with an async snapshot that
  * raced past newer stream events.
  */
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import React from 'react';
 // Test harness for the EXISTING recoil-backed useLinsightManager; ledger #5 bans
 // new atoms/selectors, not the provider needed to render the store under test.
@@ -78,6 +78,28 @@ const renderManager = () => {
 
 describe('reconcileLinsightFromServer', () => {
     beforeEach(() => jest.clearAllMocks());
+
+    it('does not let a late completion fetch overwrite an immediate follow-up', async () => {
+        const oldOutput = { answer: 'Previous answer', final_files: [] };
+        mockVersionList.mockResolvedValue([{ id: VERSION_ID, status: 'completed', output_result: oldOutput }]);
+        let resolveTasks!: (tasks: typeof serverTasks) => void;
+        mockTaskList.mockImplementation(() => new Promise((resolve) => { resolveTasks = resolve; }));
+        const result = renderManager();
+        act(() => result.current.updateLinsight(VERSION_ID, { status: SopStatus.completed, output_result: oldOutput }));
+        let pending!: Promise<boolean>;
+        await act(async () => {
+            pending = result.current.reconcileLinsightFromServer(VERSION_ID, oldOutput);
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        await waitFor(() => expect(mockTaskList).toHaveBeenCalled());
+        act(() => result.current.updateLinsight(VERSION_ID, { status: SopStatus.Running, output_result: null, tasks: [] }));
+        await act(async () => { resolveTasks(serverTasks); await pending; });
+        const info = result.current.getLinsight(VERSION_ID)!;
+        expect(info.status).toBe(SopStatus.Running);
+        expect(info.output_result).toBeNull();
+        expect(info.tasks).toEqual([]);
+    });
 
     it('adopts a completed run the stream never delivered', async () => {
         mockVersionList.mockResolvedValue([
