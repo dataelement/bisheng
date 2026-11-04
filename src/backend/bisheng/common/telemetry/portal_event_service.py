@@ -303,7 +303,11 @@ class PortalTelemetryEventService:
 
     @staticmethod
     async def count_dashboard_files() -> int:
-        """Count file snapshots with the global dashboard metric definition."""
+        """Count file snapshot rows, not distinct documents.
+
+        The portal homepage uses count_portal_home_documents. This snapshot
+        count remains for migration diagnosis.
+        """
         es_client = await get_statistics_es_connection()
         response = await es_client.search(
             index=KNOWLEDGE_SPACE_CONTENT_STAT_INDEX,

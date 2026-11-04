@@ -1,9 +1,12 @@
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import pytest
 
 from bisheng.common.telemetry import portal_event_service
 from bisheng.knowledge.api.endpoints import shougang_portal
+from bisheng.telemetry_search.domain.services import knowledge_document_reader
+from bisheng.telemetry_search.domain.services.knowledge_document_statistics import DocumentStatistics
 
 
 class _FakeSearchClient:
@@ -76,6 +79,47 @@ async def test_portal_file_count_uses_dashboard_es_metric(monkeypatch: pytest.Mo
 
 
 @pytest.mark.asyncio
+async def test_portal_home_document_count_collapses_shared_identity(monkeypatch: pytest.MonkeyPatch):
+    captured: dict = {}
+
+    class _Reader:
+        async def load(self, filters, *, include_usage, source_fields):
+            captured["filters"] = filters
+            captured["include_usage"] = include_usage
+            captured["source_fields"] = source_fields
+            return DocumentStatistics(
+                [
+                    {"knowledge_identity": "document:1", "file_id": 1, "timestamp": 1},
+                    {"knowledge_identity": "document:1", "file_id": 2, "timestamp": 2},
+                    {"knowledge_identity": "file:3", "file_id": 3, "timestamp": 3},
+                ],
+                {},
+            )
+
+    @asynccontextmanager
+    async def fake_reader(index):
+        captured["index"] = index
+        yield _Reader()
+
+    monkeypatch.setattr(knowledge_document_reader, "document_reader", fake_reader)
+
+    result = await knowledge_document_reader.count_portal_home_documents()
+
+    assert result == 2
+    assert captured["index"] == "mid_knowledge_space_content_stat"
+    assert captured["include_usage"] is False
+    assert captured["source_fields"] == ["file_id", "knowledge_identity", "timestamp"]
+    assert captured["filters"] == [
+        {
+            "terms": {
+                "space_level": ["public", "department", "team", "team_ks", "personal"],
+            }
+        }
+    ]
+    assert not any("tenant_id" in str(item) for item in captured["filters"])
+
+
+@pytest.mark.asyncio
 async def test_home_favorite_count_endpoint_only_reads_favorites(monkeypatch):
     async def favorite_count():
         return 7
@@ -116,7 +160,7 @@ async def test_portal_home_stats_uses_es_file_count(monkeypatch: pytest.MonkeyPa
             "qa_count": 7,
         }
 
-    async def fake_count_dashboard_files():
+    async def fake_count_portal_home_documents():
         return 41
 
     monkeypatch.setattr(
@@ -125,9 +169,9 @@ async def test_portal_home_stats_uses_es_file_count(monkeypatch: pytest.MonkeyPa
         fake_count_home_events,
     )
     monkeypatch.setattr(
-        shougang_portal.PortalTelemetryEventService,
-        "count_dashboard_files",
-        fake_count_dashboard_files,
+        shougang_portal,
+        "count_portal_home_documents",
+        fake_count_portal_home_documents,
     )
 
     response = await shougang_portal.get_shougang_portal_home_stats(
@@ -151,7 +195,7 @@ async def test_portal_home_stats_propagates_es_file_count_failure(monkeypatch: p
             "qa_count": 7,
         }
 
-    async def fail_count_dashboard_files():
+    async def fail_count_portal_home_documents():
         raise RuntimeError("statistics es unavailable")
 
     monkeypatch.setattr(
@@ -160,9 +204,9 @@ async def test_portal_home_stats_propagates_es_file_count_failure(monkeypatch: p
         fake_count_home_events,
     )
     monkeypatch.setattr(
-        shougang_portal.PortalTelemetryEventService,
-        "count_dashboard_files",
-        fail_count_dashboard_files,
+        shougang_portal,
+        "count_portal_home_documents",
+        fail_count_portal_home_documents,
     )
 
     with pytest.raises(RuntimeError, match="statistics es unavailable"):
