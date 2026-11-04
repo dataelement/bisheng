@@ -1,7 +1,9 @@
-import { Button } from "@/components/bs-ui/button"
+import { Button } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/bs-ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
-import { Check, ChevronsUpDown } from "lucide-react"
+
 import { useState } from "react"
 import { cn } from "../../../utils"
 
@@ -25,18 +27,13 @@ export default function Combobox({
 
     return <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-            <Button
-                variant="outline"
-                role="combobox"
-                aria-expanded={open}
-                className="w-[280px] justify-between"
-            >
+            <Button variant="outlined" role="combobox" aria-expanded={open} className="w-[280px] justify-between" color="default">
                 {
                     value
                         ? options.find((option) => option[valueKey] + '' === value)?.[labelKey]
                         : <span>{placeholder}</span>
                 }
-                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                <Outlined.Down className="ml-2 h-4 w-4 shrink-0 opacity-50" />
             </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[200px] p-0">
@@ -61,7 +58,7 @@ export default function Combobox({
                             }}
                         >
                             {option[labelKey]}
-                            <Check
+                            <Outlined.Check
                                 className={cn(
                                     "ml-auto h-4 w-4",
                                     value === option[valueKey] + '' ? "opacity-100" : "opacity-0"

@@ -19,9 +19,9 @@
     "remove": "削除"
   },
   "search": {
-    "user": "ユーザーを検索...",
-    "department": "部門を検索...",
-    "userGroup": "グループを検索..."
+    "user": "ユーザー名または ID で検索",
+    "department": "部署名または ID で検索",
+    "userGroup": "ユーザーグループ名または ID で検索"
   },
   "includeChildren": "サブ部門を含む",
   "list": {
@@ -29,9 +29,9 @@
   },
   "empty": {
     "permissions": "権限レコードなし",
-    "departments": "部門データなし",
-    "userGroups": "ユーザーグループなし",
-    "searchResults": "結果が見つかりません"
+    "departments": "権限を付与できる対象が見つかりません。名前または ID を確認してください",
+    "userGroups": "権限を付与できる対象が見つかりません。名前または ID を確認してください",
+    "searchResults": "権限を付与できる対象が見つかりません。名前または ID を確認してください"
   },
   "comingSoon": "近日公開",
   "managePermission": "権限管理",
@@ -198,6 +198,7 @@
     "expired": "モード影響分析の有効期限が切れました。"
   },
   "roster": {
+    "inactive_existing_grant": "新規付与には使用できません。既存のアクセス権は引き続き有効です。",
     "empty": "付与対象はありません",
     "loading": "権限を読み込み中…",
     "loadingMore": "さらに読み込み中…",
@@ -278,5 +279,10 @@
     "knowledge_space": "ナレッジスペース",
     "tool": "ツール",
     "workflow": "ワークフロー"
-  }
+  },
+  "allMembers": {
+  "title": "全メンバーが利用可能",
+  "publicHint": "企業の全メンバーが利用できます。オフにすると、以下の権限が適用されます。",
+  "selectedHint": "指定したユーザー、部署、グループに権限を付与します。"
+}
 }

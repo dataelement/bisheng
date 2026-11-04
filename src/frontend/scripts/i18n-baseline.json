@@ -108,7 +108,6 @@
     },
     "client/translation.json/en": {
       "missing": [
-        "com_subscription.main_channel",
         "com_subscription.no_related_content"
       ],
       "extra": [
@@ -193,7 +192,6 @@
         "com_app_chat_empty_line1",
         "com_app_chat_sidebar_empty",
         "com_knowledge.space_became_public_go_square",
-        "com_subscription.main_channel",
         "com_subscription.no_related_content"
       ],
       "extra": []

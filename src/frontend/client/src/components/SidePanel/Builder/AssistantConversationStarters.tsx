@@ -1,9 +1,10 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import React, { useRef, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { Transition } from 'react-transition-group';
 import { Constants } from '~/types/chat';
-import { TooltipAnchor } from '~/components/ui';
+
 import { useLocalize } from '~/hooks';
 
 interface AssistantConversationStartersProps {
@@ -107,19 +108,9 @@ const AssistantConversationStarters: React.FC<AssistantConversationStartersProps
                 }}
                 className="absolute right-1 top-1"
               >
-                <TooltipAnchor
-                  side="top"
-                  description={
-                    hasReachedMax
+                <SharedTooltip  content={hasReachedMax
                       ? localize('com_assistants_max_starters_reached')
-                      : localize('com_ui_add')
-                  }
-                  className="flex size-7 items-center justify-center rounded-lg transition-colors duration-200 hover:bg-surface-hover"
-                  onClick={handleAddStarter}
-                  disabled={hasReachedMax}
-                >
-                  <Plus className="size-4" />
-                </TooltipAnchor>
+                      : localize('com_ui_add')} side="top"  ><div className="flex size-7 items-center justify-center rounded-lg transition-colors duration-200 hover:bg-surface-hover" onClick={handleAddStarter} disabled={hasReachedMax}  ><Plus className="size-4" /></div></SharedTooltip>
               </div>
             )}
           </Transition>
@@ -138,14 +129,7 @@ const AssistantConversationStarters: React.FC<AssistantConversationStartersProps
               type="text"
               maxLength={64}
             />
-            <TooltipAnchor
-              side="top"
-              description={localize('com_ui_delete')}
-              className="absolute right-1 top-1 flex size-7 items-center justify-center rounded-lg transition-colors duration-200 hover:bg-surface-hover"
-              onClick={() => handleDeleteStarter(index)}
-            >
-              <X className="size-4" />
-            </TooltipAnchor>
+            <SharedTooltip  content={localize('com_ui_delete')} side="top"  ><div className="absolute right-1 top-1 flex size-7 items-center justify-center rounded-lg transition-colors duration-200 hover:bg-surface-hover" onClick={() => handleDeleteStarter(index)}  ><X className="size-4" /></div></SharedTooltip>
           </div>
         ))}
       </div>

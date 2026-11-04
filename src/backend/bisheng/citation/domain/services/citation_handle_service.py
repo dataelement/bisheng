@@ -31,6 +31,7 @@ from typing import Any
 
 from loguru import logger
 
+from bisheng.citation.domain.schemas.citation_schema import FETCHED_PAGE_ITEM_ID
 from bisheng.core.cache.redis_manager import get_redis_client
 
 HANDLE_RULES_HEADER = "# 来源编号"
@@ -94,7 +95,11 @@ def item_identity(item: Any) -> str | None:
 
         url = getattr(payload, "url", None) or ""
         normalized = CitationRegistryService.normalize_url(url) if url else ""
-        return f"web:{normalized}" if normalized else None
+        if not normalized:
+            return None
+        # A fetched page (F085) is a different source from a search snippet of the
+        # same URL: its full text is not what the snippet card shows.
+        return f"webpage:{normalized}" if str(item_id) == FETCHED_PAGE_ITEM_ID else f"web:{normalized}"
     document_id = getattr(payload, "documentId", None)
     if document_id is None or item_id is None:
         return None
@@ -106,7 +111,9 @@ def _item_location(item: Any) -> str:
     item_id = getattr(item, "itemId", None)
     for sub in getattr(payload, "items", None) or []:
         if str(getattr(sub, "itemId", None)) == str(item_id):
-            return _location_label(getattr(sub, "page", None), getattr(sub, "chunkIndex", None), getattr(sub, "bbox", None))
+            return _location_label(
+                getattr(sub, "page", None), getattr(sub, "chunkIndex", None), getattr(sub, "bbox", None)
+            )
     return ""
 
 
@@ -190,7 +197,7 @@ async def assign_handles(scope: Any, items: list[Any] | None) -> dict[str, str]:
     (``scope.handles`` handle→key, ``scope.key_to_handle``, ``scope.entries``).
     Any Redis failure returns an EMPTY mapping — never partial numbering. The
     task mode then keeps the raw-key contract for the batch (F069 AC-17); the
-    daily chat shows no source id at all (F072 AC-17).
+    daily chat shows no source id at all (F075 AC-17).
     """
     if not items or not getattr(scope, "enabled", True):
         return {}
@@ -220,7 +227,7 @@ async def assign_handles(scope: Any, items: list[Any] | None) -> dict[str, str]:
                 number = await redis_client.ahincrby(name, "next", 1)
                 if number == 1 and getattr(scope, "pins_contract", True):
                     # table just came into existence: pin the task-mode contract this
-                    # session runs under. The daily chat (F072) shares the table but has
+                    # session runs under. The daily chat (F075) shares the table but has
                     # no switch; it must not pin, or it would override the task-mode
                     # kill switch for this conversation.
                     await redis_client.ahsetnx(name, "meta:enabled", "1" if scope.enabled else "0")
@@ -301,16 +308,19 @@ def drop_chunk_ids(chunk: str) -> str:
 def rewrite_web_results_with_handles(annotated: Any, handles: dict[str, str], entries: list[dict] | None = None) -> Any:
     """Show the model ``"ref": "S7"`` instead of the registry key on web results.
 
-    ``annotated`` is the JSON string a web-search tool returns. Results without
+    ``annotated`` is the JSON string a web tool returns: a result list from
+    web_search or one page object from web_fetch. Results without
     a handle keep their shape. ``entries`` (the task-mode scope mirror) records
     the URL the model saw, for the task mode's URL-marker pass.
     """
     if not handles or not isinstance(annotated, str):
         return annotated
     try:
-        results = json.loads(annotated)
+        parsed = json.loads(annotated)
     except json.JSONDecodeError:
         return annotated
+    # web_search returns a list of results; web_fetch returns one page object.
+    results = [parsed] if isinstance(parsed, dict) else parsed
     if not isinstance(results, list):
         return annotated
     changed = False
@@ -327,7 +337,7 @@ def rewrite_web_results_with_handles(annotated: Any, handles: dict[str, str], en
         result.pop("citation_key", None)
         result.pop("itemId", None)
         changed = True
-    return json.dumps(results, ensure_ascii=False) if changed else annotated
+    return json.dumps(parsed, ensure_ascii=False) if changed else annotated
 
 
 def drop_web_citation_keys(annotated: Any) -> Any:
@@ -335,16 +345,17 @@ def drop_web_citation_keys(annotated: Any) -> Any:
     if not isinstance(annotated, str):
         return annotated
     try:
-        results = json.loads(annotated)
+        parsed = json.loads(annotated)
     except json.JSONDecodeError:
         return annotated
+    results = [parsed] if isinstance(parsed, dict) else parsed
     if not isinstance(results, list):
         return annotated
     for result in results:
         if isinstance(result, dict):
             result.pop("citation_key", None)
             result.pop("itemId", None)
-    return json.dumps(results, ensure_ascii=False)
+    return json.dumps(parsed, ensure_ascii=False)
 
 
 # --------------------------------------------------------------------------
@@ -469,7 +480,9 @@ def attach_web_url_markers(text: str, entries: list[dict] | None) -> str:
 
     Only URLs registered for this run are marked, and only the first
     occurrence of each source. A source whose marker is already in the text
-    is left alone. Code spans are not rewritten.
+    is left alone. One URL gets one marker even when it was both searched and
+    fetched (F085); the fetched page wins, since its full text backs the report.
+    Code spans are not rewritten.
     """
     if not text or not entries:
         return text or ""
@@ -489,8 +502,9 @@ def attach_web_url_markers(text: str, entries: list[dict] | None) -> str:
             candidates.append((url, key))
     if not candidates:
         return text
-    candidates.sort(key=lambda item: len(item[0]), reverse=True)
+    candidates.sort(key=lambda item: (-len(item[0]), not item[1].endswith(f":{FETCHED_PAGE_ITEM_ID}")))
     used: set[str] = set()
+    marked_urls: set[str] = set()
     out: list[str] = []
     for is_code, segment in _split_code(text):
         if is_code:
@@ -501,6 +515,8 @@ def attach_web_url_markers(text: str, entries: list[dict] | None) -> str:
                 if key in segment:
                     used.add(key)
                 continue
+            if url in marked_urls:
+                continue
             idx = _find_bounded_url(segment, url)
             if idx < 0:
                 continue
@@ -509,6 +525,7 @@ def attach_web_url_markers(text: str, entries: list[dict] | None) -> str:
                 end += 1
             segment = segment[:end] + _CITATION_START + key + _CITATION_END + segment[end:]
             used.add(key)
+            marked_urls.add(url)
         out.append(segment)
     return "".join(out)
 
@@ -616,7 +633,9 @@ def _export_identity(item: Any, item_id: str | None) -> str:
 def _export_location(item: Any, item_id: str | None) -> str:
     for sub in _payload_items(item):
         if str(getattr(sub, "itemId", None)) == str(item_id):
-            return _location_label(getattr(sub, "page", None), getattr(sub, "chunkIndex", None), getattr(sub, "bbox", None))
+            return _location_label(
+                getattr(sub, "page", None), getattr(sub, "chunkIndex", None), getattr(sub, "bbox", None)
+            )
     return ""
 
 

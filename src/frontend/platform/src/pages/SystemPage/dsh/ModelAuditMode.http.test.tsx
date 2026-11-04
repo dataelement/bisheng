@@ -48,7 +48,7 @@ describe("audit mode saves over HTTP through the real API wrapper", () => {
           return { ...persisted };
         },
       );
-      render(<ModelAuditMode tenantId={1} canConfigure />);
+      const view = render(<ModelAuditMode tenantId={1} canConfigure />);
       fireEvent.click(
         screen.getByRole("button", { name: "dsh.modelAuditView.configure" }),
       );
@@ -82,9 +82,10 @@ describe("audit mode saves over HTTP through the real API wrapper", () => {
         }),
       );
       await waitFor(() => expect(save).toBeDisabled());
-      fireEvent.click(
-        screen.getByRole("button", { name: "dsh.modelAuditView.refresh_mode" }),
-      );
+      expect(screen.queryByRole("button", { name: "dsh.modelAuditView.refresh_mode" })).toBeNull();
+      view.unmount();
+      render(<ModelAuditMode tenantId={1} canConfigure />);
+      fireEvent.click(screen.getByRole("button", { name: "dsh.modelAuditView.configure" }));
       await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
       await waitFor(() => {
         expect(screen.getByRole("combobox")).not.toBeDisabled();

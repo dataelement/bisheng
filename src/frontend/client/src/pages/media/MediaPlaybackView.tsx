@@ -23,7 +23,18 @@ export interface MediaPlaybackSource {
  */
 // name is part of the source but not drawn here — the chrome around the player
 // (dialog header / page title bar) already shows it.
-export function MediaPlaybackView({ url: initialUrl, filepath, kind }: MediaPlaybackSource) {
+export function MediaPlaybackView({
+    url: initialUrl,
+    filepath,
+    kind,
+    darkStage,
+    playerClassName,
+}: MediaPlaybackSource & {
+    /** Passed straight to the player: dark controls scheme for audio as well. */
+    darkStage?: boolean;
+    /** Passed straight to the player's stage. */
+    playerClassName?: string;
+}) {
     const localize = useLocalize();
     const [playbackUrl, setPlaybackUrl] = useState<string | undefined>(initialUrl);
     const [loading, setLoading] = useState(() => !!filepath && !initialUrl?.startsWith('blob:'));
@@ -101,7 +112,14 @@ export function MediaPlaybackView({ url: initialUrl, filepath, kind }: MediaPlay
             {errorMessage ? <p className="text-sm text-muted-foreground">{errorMessage}</p> : null}
             {/* The same player knowledge-space preview uses, so a clip looks and
                 behaves identically wherever it is opened from. */}
-            <MediaPlayer key={playbackUrl} kind={kind} src={playbackUrl} autoPlay />
+            <MediaPlayer
+                key={playbackUrl}
+                kind={kind}
+                src={playbackUrl}
+                autoPlay
+                darkStage={darkStage}
+                className={playerClassName}
+            />
         </>
     );
 }

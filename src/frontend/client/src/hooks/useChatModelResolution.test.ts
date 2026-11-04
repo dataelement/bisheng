@@ -220,3 +220,46 @@ describe('useChatModelResolution — applying across conversations', () => {
         expect(localStorage.getItem(keyFor('task', 'new'))).toBeNull();
     });
 });
+
+describe('late admin default loading', () => {
+    beforeEach(() => localStorage.clear());
+
+    it.each(['daily', 'task'] as const)('upgrades a %s fallback when the configured default arrives', (mode) => {
+        const onResolved = jest.fn();
+        const fallback = mode === 'daily' ? MODELS[1] : MODELS[0];
+        const configured = mode === 'daily' ? MODELS[0] : MODELS[1];
+        const { rerender } = renderHook(({ admin }: { admin: string | null }) => useChatModelResolution({
+            userId: 'new-user', conversationId: 'new', mode, models: MODELS,
+            adminDefaultId: admin, onResolved,
+        }), { initialProps: { admin: null as string | null } });
+        expect(onResolved).toHaveBeenLastCalledWith(fallback, false);
+        rerender({ admin: String(configured.id) });
+        expect(onResolved).toHaveBeenLastCalledWith(configured, false);
+        expect(onResolved).toHaveBeenCalledTimes(2);
+        expect(localStorage.getItem('bs:new-user:chatModel')).toBeNull();
+    });
+
+    it('does not overwrite a manual pick while the admin config was loading', () => {
+        const onResolved = jest.fn();
+        const { result, rerender } = renderHook(({ admin }: { admin: string | null }) => useChatModelResolution({
+            userId: 'new-user', conversationId: 'new', mode: 'daily', models: MODELS,
+            adminDefaultId: admin, onResolved,
+        }), { initialProps: { admin: null as string | null } });
+        act(() => result.current.persistPick('6'));
+        rerender({ admin: '3' });
+        expect(onResolved).toHaveBeenCalledTimes(1);
+        expect(localStorage.getItem('bs:new-user:convModel:daily:new')).toBe('6');
+    });
+
+    it('keeps an existing user preference above the later admin default', () => {
+        localStorage.setItem('bs:existing-user:chatModel', '6');
+        const onResolved = jest.fn();
+        const { rerender } = renderHook(({ admin }: { admin: string | null }) => useChatModelResolution({
+            userId: 'existing-user', conversationId: 'new', mode: 'daily', models: MODELS,
+            adminDefaultId: admin, onResolved,
+        }), { initialProps: { admin: null as string | null } });
+        rerender({ admin: '3' });
+        expect(onResolved).toHaveBeenCalledTimes(1);
+        expect(onResolved).toHaveBeenLastCalledWith(MODELS[1], true);
+    });
+});

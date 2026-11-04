@@ -1,24 +1,28 @@
 // @ts-strict-ignore
+import { Button, Input, Textarea } from '@bisheng/ui';
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
-import { LoadIcon } from "@/components/bs-icons/loading";
+import { Outlined } from "bisheng-icons";
+
 import { Accordion } from "@/components/bs-ui/accordion";
-import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input, Textarea } from "@/components/bs-ui/input";
+
+import { Dialog,DialogClose,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
+
 import Avator from "@/components/bs-ui/input/avator";
 import { generateUUID } from "@/components/bs-ui/utils";
 import AssistantSetting from "@/components/Pro/security/AssistantSetting";
 import { locationContext } from "@/contexts/locationContext";
 import { readTempsDatabase } from "@/controllers/API";
 import { createAssistantsApi } from "@/controllers/API/assistant";
-import { getAssistantModelConfig, getLlmDefaultModel } from "@/controllers/API/finetune";
-import { copyReportTemplate, createWorkflowApi } from "@/controllers/API/workflow";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { getAssistantModelConfig,getLlmDefaultModel } from "@/controllers/API/finetune";
+import { copyReportTemplate,createWorkflowApi } from "@/controllers/API/workflow";
+import { showApiError } from "@/controllers/request";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
-import { AppType, AppTypeToNum } from "@/types/app";
-import { forwardRef, useContext, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { AppType,AppTypeToNum } from "@/types/app";
+import { forwardRef,useContext,useEffect,useImperativeHandle,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { assistantRoleExample } from "./assistant/editAssistant/roleExample";
+import { instantiateAssistantTemplate, type AssistantTemplateDraft } from './assistantTemplate';
 
 type ModalProps = {};
 type ModalRef = {
@@ -37,6 +41,10 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
         const [appType, setType] = useState<AppType>(AppType.ASSISTANT); // assistant or workflow
         const [isEditMode, setIsEditMode] = useState(false); // edit mode
         const [loading, setLoading] = useState(false);
+        const [templateLoading, setTemplateLoading] = useState(false);
+        const generation = useRef(0);
+        const assistantDraft = useRef<AssistantTemplateDraft>({});
+        const submitting = useRef(false);
         const { t } = useTranslation('flow');
         const { appConfig } = useContext(locationContext);
         const securityRef = useRef<any>(null);
@@ -46,27 +54,29 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
 
         useImperativeHandle(ref, () => ({
             open(type: AppType, tempId?: number) {
+                ++generation.current;
+                assistantDraft.current = {};
+                submitting.current = false;
+                setLoading(false);
+                tempDataRef.current = null;
+                setTemplateLoading(false);
                 setType(type);
                 setIsEditMode(false);
                 setFormData({
                     url: '',
                     name: '',
-                    desc: AppType.ASSISTANT === type ? `${t('build.example', { ns: 'bs' })}：
-${t('build.exampleOne', { ns: 'bs' })}
-${t('build.exampleTwo', { ns: 'bs' })}
-1. XX
-2. XX
-3. …` : '',
+                    desc: '',
                 });
                 if (tempId) {
-                    handleSelectTemplate(type, tempId);
+                    void handleSelectTemplate(type, tempId);
                 }
                 setErrors({});
                 setOpen(true);
-                tempDataRef.current = null;
                 setAppId('');
             },
             edit(type: AppType, flow: any) {
+                ++generation.current;
+                assistantDraft.current = {};
                 setType(type);
                 setIsEditMode(true);
                 fetchDetails(type, flow);
@@ -78,14 +88,37 @@ ${t('build.exampleTwo', { ns: 'bs' })}
         }));
 
         const tempDataRef = useRef<any>(null);
+        useEffect(() => {
+            const reset = () => {
+                ++generation.current;
+                tempDataRef.current = null;
+                assistantDraft.current = {};
+                submitting.current = false;
+                setOpen(false);
+                setLoading(false);
+                setTemplateLoading(false);
+            };
+            window.addEventListener('bisheng:management-scope-changed', reset);
+            const invalidate = () => { ++generation.current; };
+            return () => {
+                invalidate();
+                window.removeEventListener('bisheng:management-scope-changed', reset);
+            };
+        }, []);
+
         const handleSelectTemplate = async (type: AppType, tempId: number) => {
-            const [flow] = await readTempsDatabase('flow', tempId)
-            tempDataRef.current = flow;
-            setFormData({
-                url: flow.logo || '',
-                name: `${flow.name}-${generateUUID(5)}`,
-                desc: flow.description
-            });
+            const request = generation.current;
+            setTemplateLoading(true);
+            try {
+                const [template] = await readTempsDatabase(type, tempId);
+                if (request !== generation.current) return;
+                tempDataRef.current = JSON.parse(JSON.stringify(template));
+                setFormData({ url: template.logo || '', name: `${template.name}-${generateUUID(5)}`, desc: template.description || '' });
+            } catch (error) {
+                if (request === generation.current) { setOpen(false); showApiError(error); }
+            } finally {
+                if (request === generation.current) setTemplateLoading(false);
+            }
         }
 
         const fetchDetails = async (type: AppType, flow: any) => {
@@ -100,9 +133,6 @@ ${t('build.exampleTwo', { ns: 'bs' })}
             switch (name) {
                 case 'name':
                     if (value.length > 50) return AppType.ASSISTANT === appType ? t('maxNameLengthAssistant') : t('maxNameLengthWorkflow');
-                    return '';
-                case 'desc':
-                    if (AppType.ASSISTANT === appType && value.length < 20) return t('minDescLengthAssistant');
                     return '';
                 default:
                     return '';
@@ -137,35 +167,49 @@ ${t('build.exampleTwo', { ns: 'bs' })}
         // Handle form submission
         const navigate = useNavigate()
         const handleSubmit = async (e: React.FormEvent) => {
+            if (templateLoading || submitting.current) return;
+        if ((String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)) return;
+
             e.preventDefault();
             const isValid = validateForm();
             if (!isValid) return;
 
             setLoading(true);
+            submitting.current = true;
+            const request = generation.current;
+            try {
             if (isEditMode) {
-                setLoading(false);
-                setOpen(false);
-                return onSave({
+                await onSave({
                     name: formData.name,
                     description: formData.desc,
                     logo: formData.url,
                     viewUrl: formData.viewUrl,
                 })
+                setOpen(false);
+                return;
             }
 
-            if (tempDataRef.current) {
+            const template = tempDataRef.current ? JSON.parse(JSON.stringify(tempDataRef.current)) : null;
+            if (template) {
+                if (AppType.ASSISTANT === appType) {
+                    const id = await instantiateAssistantTemplate(template.data, formData, assistantDraft.current);
+                    if (request === generation.current) { setOpen(false); navigate('/assistant/' + id); }
+                    return;
+                }
                 if (AppType.FLOW === appType) {
-                    for (let i = 0; i < tempDataRef.current.data.nodes.length; i++) {
-                        const node = tempDataRef.current.data.nodes[i];
+                    for (let i = 0; i < template.data.nodes.length; i++) {
+                        const node = template.data.nodes[i];
                         await copyReportTemplate(node.data)
+                        if (request !== generation.current) return;
                     }
 
                     const [workflow, assistant] = await Promise.all([getLlmDefaultModel(), getAssistantModelConfig()])
                     const workflowModelId = workflow.model_id;
                     const assistantModelId = assistant.llm_list.find(item => item.default)?.model_id;
-                    delete tempDataRef.current.data.source;
+                    if (request !== generation.current) return;
+                    delete template.data.source;
 
-                    tempDataRef.current.data.nodes.forEach(node => {
+                    template.data.nodes.forEach(node => {
                         if (['rag', 'llm', 'agent', 'qa_retriever'].includes(node.data.type)) {
                             node.data.group_params.forEach(group =>
                                 group.params.forEach(param => {
@@ -184,20 +228,20 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                             )
                         }
                     })
-                    const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(formData.name, formData.desc, formData.url, tempDataRef.current));
-                    if (res) navigate('/flow/' + res.id);
+                    const res = await createWorkflowApi(formData.name, formData.desc, formData.url, template);
+                    if (res && request === generation.current) navigate('/flow/' + res.id);
                 }
             } else {
                 if (appType === AppType.ASSISTANT) {
-                    const res = await captureAndAlertRequestErrorHoc(createAssistantsApi(formData.name, formData.desc, formData.url));
+                    const res = await createAssistantsApi(formData.name, formData.desc, formData.url);
                     if (res) {
                         //@ts-ignore
-                        window.assistantCreate = true // Mark the created assistant 
+                        window.assistantCreate = true // Mark the created assistant
                         navigate('/assistant/' + res.id)
                     }
                 } else {
                     if (appId) return navigate('/flow/' + appId);
-                    const workflow = await captureAndAlertRequestErrorHoc(createWorkflowApi(formData.name, formData.desc, formData.url));
+                    const workflow = await createWorkflowApi(formData.name, formData.desc, formData.url);
                     if (workflow) {
                         const navigateToFlow = (id) => navigate(`/flow/${id}`);
                         if (!appConfig.isPro) return navigateToFlow(workflow.id);
@@ -208,7 +252,14 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                     }
                 }
             }
-            setLoading(false);
+            } catch (error) {
+                showApiError(error);
+            } finally {
+                if (request === generation.current) {
+                    submitting.current = false;
+                    setLoading(false);
+                }
+            }
         };
 
         const uploadAvator = (file: File) => {
@@ -219,10 +270,10 @@ ${t('build.exampleTwo', { ns: 'bs' })}
 
         const previewAvatar = useMemo(() =>
             formData.url ? __APP_ENV__.BASE_URL + (formData.viewUrl || formData.url) : '',
-            [formData.url]);
+            [formData.url, formData.viewUrl]);
 
         return (
-            <Dialog open={open} onOpenChange={setOpen}>
+            <Dialog open={open} onOpenChange={(value) => { if (!value) ++generation.current; setOpen(value); }}>
                 <DialogContent className="sm:max-w-[625px] bg-background-login">
                     <DialogHeader>
                         <DialogTitle>{isEditMode ? t('edit') : t('create')}{appType === AppType.ASSISTANT ? t('assistant') : t('workflow')}</DialogTitle>
@@ -241,31 +292,14 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                                 {appType === AppType.ASSISTANT ? t('build_assistantName') : t('name')}
                                 <span className="bisheng-tip">*</span>
                             </label>
-                            <Input
-                                id="name"
-                                name="name"
-                                maxLength={50}
-                                showCount
-                                placeholder={appType === AppType.ASSISTANT ? t('giveAssistantAName') : t('giveWorkflowAName')}
-                                className="mt-3"
-                                value={formData.name}
-                                onChange={handleChange}
-                            />
+                            <Input id="name" name="name" maxLength={50} showCount placeholder={appType === AppType.ASSISTANT ? t('giveAssistantAName') : t('giveWorkflowAName')} value={formData.name} onChange={handleChange} className={"mt-3"} />
                             {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>}
                         </div>
                         <div className="mb-6">
                             <label htmlFor="desc" className="bisheng-label">
                                 {appType === AppType.ASSISTANT ? t('build_roleAndTasks') : t('description')}
                             </label>
-                            <Textarea
-                                id="desc"
-                                name="desc"
-                                placeholder={appType === AppType.ASSISTANT ? t('build_forExample') : t('enterWorkflowDescription')}
-                                maxLength={1000}
-                                className="mt-3 min-h-32 pt-3"
-                                value={formData.desc}
-                                onChange={handleChange}
-                            />
+                            <Textarea id="desc" name="desc" placeholder={appType === AppType.ASSISTANT ? assistantRoleExample() : t('enterWorkflowDescription')} maxLength={1000} value={formData.desc} onChange={handleChange} textareaClassName={"mt-3 min-h-32 pt-3"} showCount />
                             {errors.desc && <p className="bisheng-tip mt-1">{errors.desc}</p>}
                         </div>
                     </div>
@@ -277,12 +311,12 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                     </div>
                     <DialogFooter>
                         <DialogClose>
-                            <Button variant="outline" className="px-11" type="button" onClick={() => setFormData({ name: '', desc: '', url: '' })}>
+                            <Button variant="outlined" type="button" onClick={() => setFormData({ name: '', desc: '', url: '' })} color="default">
                                 {t('cancel')}
                             </Button>
                         </DialogClose>
-                        <Button disabled={!formData.name || loading} type="submit" className="px-11" onClick={handleSubmit}>
-                            {loading && <LoadIcon className="mr-2" />}
+                        <Button disabled={((String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)) || (!formData.name || loading || templateLoading)} type="submit" onClick={handleSubmit}>
+                            {(loading || templateLoading) && <Outlined.Loading className="animate-spin mr-2" />}
                             {t(isEditMode ? 'save' : 'create')}
                         </Button>
                     </DialogFooter>

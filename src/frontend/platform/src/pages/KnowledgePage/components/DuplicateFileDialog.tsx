@@ -1,6 +1,7 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { Button } from '@bisheng/ui';
+
+import { Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
 
 type RepeatFile = {
     id: number | string;
@@ -37,10 +38,10 @@ export function DialogWithRepeatFiles({
                     ))}
                 </ul>
                 <DialogFooter>
-                    <Button className="h-8" variant="outline" onClick={unRetry}>
+                    <Button variant="outlined" onClick={unRetry} color="default">
                         {t('keepOriginal')}
                     </Button>
-                    <Button className="h-8" disabled={retryLoad} onClick={() => onRetry(repeatFiles)}>
+                    <Button disabled={retryLoad} onClick={() => onRetry(repeatFiles)}>
                         {retryLoad && <span className="loading loading-spinner loading-xs mr-1"></span>}
                         {t('override')}
                     </Button>

@@ -10,6 +10,7 @@ from bisheng.common.errcode.permission import PermissionPublishNotReadyError
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import Department, UserDepartment
+from bisheng.database.models.tenant import ROOT_TENANT_ID, UserTenant
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +23,21 @@ class DepartmentContextRow:
 
 
 class DepartmentPermissionContextRepository:
+    async def load_root_membership(self, user_id: int) -> tuple[int, ...]:
+        # Root membership follows the current leaf snapshot. Relocation removes
+        # this request-local fact immediately; child membership stays projected.
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                rows = await session.exec(
+                    select(UserTenant.tenant_id).where(
+                        UserTenant.user_id == user_id,
+                        UserTenant.tenant_id == ROOT_TENANT_ID,
+                        UserTenant.is_active == 1,
+                        UserTenant.status == "active",
+                    )
+                )
+                return tuple(rows.all())
+
     async def load_ancestry(self, user_id: int, limit: int) -> tuple[tuple[int, ...], dict[int, DepartmentContextRow]]:
         # Department IDs and user memberships are global identity facts in FGA.
         # Include existing mount edges across tenants, just as the previous

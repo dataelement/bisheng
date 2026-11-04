@@ -42,7 +42,7 @@ const useSpeechToTextExternal = (
     onError: () => {
       showToast({
         message: 'An error occurred while processing the audio, maybe the audio was too short',
-        status: 'error',
+        status: 'warning',
       });
       setIsRequestBeingMade(false);
     },
@@ -144,10 +144,10 @@ const useSpeechToTextExternal = (
         }
         setIsListening(true);
       } catch (error) {
-        showToast({ message: `Error starting recording: ${error}`, status: 'error' });
+        showToast({ message: `Error starting recording: ${error}`, status: 'warning' });
       }
     } else {
-      showToast({ message: 'Microphone permission not granted', status: 'error' });
+      showToast({ message: 'Microphone permission not granted', status: 'warning' });
     }
   };
 
@@ -169,7 +169,7 @@ const useSpeechToTextExternal = (
 
       setIsListening(false);
     } else {
-      showToast({ message: 'MediaRecorder is not recording', status: 'error' });
+      showToast({ message: 'MediaRecorder is not recording', status: 'warning' });
     }
   };
 
@@ -197,7 +197,7 @@ const useSpeechToTextExternal = (
   const handleKeyDown = async (e: KeyboardEvent) => {
     if (e.shiftKey && e.altKey && e.code === 'KeyL' && isExternalSTTEnabled) {
       if (!window.MediaRecorder) {
-        showToast({ message: 'MediaRecorder is not supported in this browser', status: 'error' });
+        showToast({ message: 'MediaRecorder is not supported in this browser', status: 'warning' });
         return;
       }
 

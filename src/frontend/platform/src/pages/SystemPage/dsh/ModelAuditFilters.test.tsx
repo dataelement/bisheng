@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { userContext } from "@/contexts/userContext";
 import type { ContextType } from "react";
 import type { AuditUserPage } from "@/types/dshModelAudit";
@@ -42,7 +43,7 @@ function advanced() {
   );
 }
 function renderRequests() {
-  render(<ModelAuditRequests tenantId={2} initialView="requests" />);
+  render(<ModelAuditRequests tenantId={2} initialView="unassociated" />);
 }
 function model() {
   return screen.getByRole("combobox", {
@@ -263,7 +264,7 @@ describe("unified audit filters", () => {
         total: 21,
       };
     });
-    render(<ModelAuditRequests tenantId={2} initialView="requests" />);
+    render(<ModelAuditRequests tenantId={2} initialView="unassociated" />);
     fireEvent.click(
       screen.getByRole("button", { name: "dsh.modelAuditView.selectUser" }),
     );
@@ -307,22 +308,16 @@ describe("unified audit filters", () => {
       </userContext.Provider>,
     );
     await screen.findByText("First tenant (first)");
-    fireEvent.click(
-      screen.getByRole("button", { name: "dsh.modelAuditView.selectUser" }),
-    );
-    fireEvent.click(await screen.findByRole("option", { name: "Alice" }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "dsh.modelAuditView.selectUser" }));
+    await user.click(await screen.findByRole("option", { name: "Alice" }));
     const signal = api.users.mock.calls[0][1] as AbortSignal;
-    fireEvent.keyDown(
-      screen.getByRole("combobox", { name: "dsh.modelAuditView.selectTenant" }),
-      { key: "ArrowDown" },
-    );
-    fireEvent.click(
-      await screen.findByRole("option", { name: "Second tenant (second)" }),
-    );
+    await user.click(screen.getByRole("combobox", { name: "dsh.modelAuditView.selectTenant" }));
+    await user.click(await screen.findByRole("option", { name: "Second tenant (second)" }));
     expect(signal.aborted).toBe(true);
-    expect(
+    await waitFor(() => expect(
       screen.getByRole("button", { name: "dsh.modelAuditView.selectUser" }),
-    ).toHaveTextContent("dsh.modelAuditView.allUsers");
+    ).toHaveTextContent("dsh.modelAuditView.allUsers"));
     await waitFor(() =>
       expect(api.page).toHaveBeenLastCalledWith(
         { tenant_id: 2, limit: 20 },
@@ -344,12 +339,29 @@ describe("unified audit filters", () => {
     api.users
       .mockRejectedValueOnce(new Error("unavailable"))
       .mockResolvedValueOnce({ data: [], total: 0 });
-    render(<ModelAuditRequests tenantId={2} initialView="requests" />);
+    render(<ModelAuditRequests tenantId={2} initialView="unassociated" />);
     fireEvent.click(
       screen.getByRole("button", { name: "dsh.modelAuditView.selectUser" }),
     );
     await screen.findByText("dsh.modelAuditView.userLoadError");
     fireEvent.click(screen.getByRole("option", { name: "dsh.refresh" }));
     await screen.findByText("dsh.modelAuditView.noUsers");
+  });
+});
+
+// Coverage AC: AC-68.
+describe("simplified audit layout keeps all advanced filters", () => {
+  it("removes query explanations while preserving the seven advanced fields", async () => {
+    renderRequests();
+    await waitFor(() => expect(api.page).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "dsh.modelAuditView.query_info" })).toBeNull();
+    expect(screen.queryByText("dsh.modelAuditView.scopeHint")).toBeNull();
+    advanced();
+    expect(screen.getByRole("combobox", { name: "dsh.modelAuditView.filters.model_name" })).toBeVisible();
+    expect(await screen.findByRole("combobox", { name: "dsh.modelAuditView.summary_status" })).toBeVisible();
+    for (const key of ["has_hit", "direction", "state"])
+      expect(screen.getByRole("combobox", { name: "dsh.contentSafety.filters." + key })).toBeVisible();
+    for (const key of ["request_id", "conversation_id"])
+      expect(screen.getByLabelText("dsh.modelAuditView.filters." + key)).toBeVisible();
   });
 });

@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, SystemMessage, ToolMessage
 from loguru import logger
 from pydantic import ValidationError
 
@@ -54,6 +54,20 @@ def normalize_usage(message) -> DshTokenUsage:
     return normalized
 
 
+def accumulate_usage(previous: DshTokenUsage, message) -> DshTokenUsage:
+    """LangChain streaming usage chunks are additive; ordinary results are totals."""
+    current = normalize_usage(message)
+    if current.total_tokens is None:
+        return previous
+    if not isinstance(message, AIMessageChunk) or previous.total_tokens is None:
+        return current
+    values = {}
+    for name in DshTokenUsage.model_fields:
+        old, new = getattr(previous, name), getattr(current, name)
+        values[name] = None if old is None and new is None else (old or 0) + (new or 0)
+    return DshTokenUsage.model_validate(values)
+
+
 class ChatExecution:
     def __init__(self, llm, messages: list, parameters: dict, capabilities: ChatCapabilities):
         self.llm, self.messages, self.parameters, self.capabilities = llm, messages, parameters, capabilities
@@ -90,12 +104,7 @@ class ChatExecution:
         yield from request.messages
 
     def _observe(self, message):
-        current = normalize_usage(message)
-        if (
-            getattr(message, "usage_metadata", None) is not None
-            or getattr(message, "response_metadata", {}).get("token_usage") is not None
-        ):
-            self.usage = current
+        self.usage = accumulate_usage(self.usage, message)
         metadata = getattr(message, "response_metadata", {})
         finish = metadata.get("finish_reason") or metadata.get("stop_reason")
         if finish is not None:

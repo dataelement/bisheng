@@ -1,6 +1,5 @@
 from .base import BaseErrorCode
 
-
 # Admin-scope module error codes, module code: 197
 # Assigned by F019-admin-tenant-scope (v2.5.1). Covers the global super admin's
 # management-view switch backed by Redis `admin_scope:{user_id}` (INV-T14).
@@ -10,12 +9,24 @@ from .base import BaseErrorCode
 
 class AdminScopeForbiddenError(BaseErrorCode):
     Code: int = 19701
-    Msg: str = (
-        'Only the global super admin may set an admin tenant-scope '
-        '(INV-T14); caller is not a super admin'
-    )
+    Msg: str = "Only the global super admin may set an admin tenant-scope (INV-T14); caller is not a super admin"
 
 
 class AdminScopeTenantNotFoundError(BaseErrorCode):
     Code: int = 19702
-    Msg: str = 'Target tenant for admin scope does not exist'
+    Msg: str = "Target tenant for admin scope does not exist"
+
+
+class AdminScopeTenantRequiredError(BaseErrorCode):
+    Code: int = 19703
+    Msg: str = "Select a management tenant before changing tenant-specific configuration"
+
+
+class AdminScopeChangedError(BaseErrorCode):
+    Code: int = 19704
+    Msg: str = "The management tenant has changed; refresh before submitting"
+
+
+class AdminScopeUnavailableError(BaseErrorCode):
+    Code: int = 19705
+    Msg: str = "A valid management tenant could not be determined"

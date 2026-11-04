@@ -1,17 +1,18 @@
 // @ts-strict-ignore
-"use client"
+import { notification } from '@bisheng/ui';
 
 import { LoadingIcon } from "@/components/bs-icons/loading"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
+
 import { copyComponentTo, getDashboards } from "@/controllers/API/dashboard"
+import { showApiError } from "@/controllers/request"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { cn } from "@/utils"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import ReactGridLayout, { Layout, verticalCompactor } from "react-grid-layout"
 import "react-grid-layout/css/styles.css"
 import { useTranslation } from "react-i18next"
-import { useMutation, useQuery, useQueryClient } from "react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import "react-resizable/css/styles.css"
 import { DashboardsQueryKey, useDashboardPermissions } from "../../hook"
 import { DashboardComponent } from "../../types/dataConfig"
@@ -40,7 +41,7 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
     const { clear: clearComponentEditorStore } = useComponentEditorStore();
     const { t } = useTranslation("dashboard")
 
-    const { toast } = useToast()
+
     const queryClient = useQueryClient()
     // Query to get all dashboards for "Copy to" menu
     const { data: dashboards = [] } = useQuery({
@@ -65,17 +66,9 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
             copyComponentTo(component, targetId, layouts.find(e => e.i === component.id)),
         onSuccess: () => {
             // queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
-            toast({
-                description: t('copyToTargetSuccess'),
-                variant: "success",
-            })
+            notification.open({ type: "success", description: String(t('copyToTargetSuccess') ?? '') })
         },
-        onError: () => {
-            toast({
-                description: t('copyFailed'),
-                variant: "error",
-            })
-        },
+        onError: showApiError,
     })
 
     // When the page loads, it automatically refreshes according to the query component configuration.
@@ -197,10 +190,10 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
             <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                     <pattern id="grid" x="${padX}" y="${padY}" width="${patternWidth}" height="${patternHeight}" patternUnits="userSpaceOnUse">
-                        <rect 
-                            x="0" y="0" 
-                            width="${cellWidth}" height="${rowHeight}" 
-                            fill="transparent" 
+                        <rect
+                            x="0" y="0"
+                            width="${cellWidth}" height="${rowHeight}"
+                            fill="transparent"
                             stroke="${strokeColor}"
                             stroke-width="1"
                             stroke-dasharray="${dashArray}"
@@ -208,12 +201,12 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
                         />
                     </pattern>
                 </defs>
-               <rect 
-                    x="${padX}" 
-                    y="${padY}" 
-                    width="calc(100% - ${padX * 2}px)" 
-                    height="calc(100% - ${padY * 2}px)" 
-                    fill="url(#grid)" 
+               <rect
+                    x="${padX}"
+                    y="${padY}"
+                    width="calc(100% - ${padX * 2}px)"
+                    height="calc(100% - ${padY * 2}px)"
+                    fill="url(#grid)"
                 />
             </svg>
         `;

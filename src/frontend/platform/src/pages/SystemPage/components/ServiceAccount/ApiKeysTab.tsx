@@ -1,29 +1,27 @@
-import { Badge } from "@/components/bs-ui/badge"
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { Button } from "@/components/bs-ui/button"
+import { useServiceAccountRequestScope } from "./useServiceAccountManagementScope";
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
+import { Button, notification } from '@bisheng/ui';
+import { Tag } from "@bisheng/ui";
+
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/bs-ui/table"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+Table,
+TableBody,
+TableCell,
+TableHead,
+TableHeader,
+TableRow,
+} from "@/components/bs-ui/table";
+
+
 import {
-  Portal,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/bs-ui/tooltip"
-import {
-  listOpenApiScopesApi,
-  listServiceAccountKeysPageApi,
-  revokeAllServiceAccountKeysApi,
-  revokeServiceAccountKeyApi,
-} from "@/controllers/API/serviceAccount"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+listOpenApiScopesApi,
+listServiceAccountKeysPageApi,
+revokeAllServiceAccountKeysApi,
+revokeServiceAccountKeyApi,
+} from "@/controllers/API/serviceAccount";
+import { showApiError } from "@/controllers/request";
 import type {
   ApiKeyIssued,
   ApiKeyItem,
@@ -32,6 +30,7 @@ import type {
 import { formatIsoDateTime } from "@/util/utils"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { AccessInfoPanel } from "./AccessInfoPanel"
 import { OpenApiListFooter } from "../OpenApiList/OpenApiListFooter"
 import { useOpenApiList } from "../OpenApiList/useOpenApiList"
 import { KeyIssueDialog } from "./KeyIssueDialog"
@@ -50,6 +49,7 @@ export function ApiKeysTab({
   initialIssueOpen = false,
   onKeysChanged,
 }: ApiKeysTabProps) {
+  const requestScope = useServiceAccountRequestScope();
   const { t } = useTranslation()
   const [scopes, setScopes] = useState<OpenApiScopeItem[]>([])
   const [dialogOpen, setDialogOpen] = useState(initialIssueOpen)
@@ -59,8 +59,8 @@ export function ApiKeysTab({
   const [loadingScopes, setLoadingScopes] = useState(true)
 
   const fetchPage = useCallback((page: number, pageSize: number) =>
-    listServiceAccountKeysPageApi(serviceAccountId, { page, page_size: pageSize }),
-  [serviceAccountId])
+    listServiceAccountKeysPageApi(serviceAccountId, { page, page_size: pageSize }, requestScope),
+  [serviceAccountId, requestScope])
   const list = useOpenApiList(fetchPage)
   const keys = list.items
   const loadKeys = list.reload
@@ -68,33 +68,28 @@ export function ApiKeysTab({
 
   useEffect(() => {
     setLoadingScopes(true)
-    void captureAndAlertRequestErrorHoc(listOpenApiScopesApi())
+    void listOpenApiScopesApi()
       .then((catalog) => {
         if (catalog) setScopes(catalog.scopes)
       })
-      .finally(() => setLoadingScopes(false))
+      .catch(showApiError).finally(() => setLoadingScopes(false))
   }, [])
 
   const handleRevoke = (keyId: number) => {
     bsConfirm({
+      signal: requestScope.signal,
       title: t("openApiManagement.keys.revokeConfirmTitle"),
       desc: t("openApiManagement.keys.revokeConfirm"),
       okTxt: t("openApiManagement.actions.revoke"),
       onOk: (close) => {
-        close()
         setLoading(true)
-        void captureAndAlertRequestErrorHoc(
-          revokeServiceAccountKeyApi(serviceAccountId, keyId),
-        )
+        return revokeServiceAccountKeyApi(serviceAccountId, keyId, requestScope)
           .then(async (result) => {
             if (!result) return
-            toast({
-              title: t("openApiManagement.keys.revokeConfirmTitle"),
-              description: t("openApiManagement.feedback.keyRevoked"),
-              variant: "success",
-            })
+            notification.open({ type: "success", title: String(t("openApiManagement.keys.revokeConfirmTitle") ?? ''), description: String(t("openApiManagement.feedback.keyRevoked") ?? '') })
             await loadKeys()
             onKeysChanged?.()
+            close()
           })
           .finally(() => setLoading(false))
       },
@@ -103,27 +98,22 @@ export function ApiKeysTab({
 
   const handleRevokeAll = () => {
     bsConfirm({
+      signal: requestScope.signal,
       title: t("openApiManagement.keys.revokeAllConfirmTitle"),
       desc: t("openApiManagement.keys.revokeAllConfirm"),
       okTxt: t("openApiManagement.actions.revokeAll"),
       onOk: (close) => {
-        close()
         setLoading(true)
-        void captureAndAlertRequestErrorHoc(
-          revokeAllServiceAccountKeysApi(serviceAccountId),
-        )
+        return revokeAllServiceAccountKeysApi(serviceAccountId, requestScope)
           .then(async (result) => {
             if (!result) return
             const { revoked } = result
-            toast({
-              title: t("openApiManagement.keys.revokeAllConfirmTitle"),
-              description: t("openApiManagement.feedback.keysRevoked", {
+            notification.open({ type: "success", title: String(t("openApiManagement.keys.revokeAllConfirmTitle") ?? ''), description: String(t("openApiManagement.feedback.keysRevoked", {
                 count: revoked,
-              }),
-              variant: "success",
-            })
+              }) ?? '') })
             await loadKeys()
             onKeysChanged?.()
+            close()
           })
           .finally(() => setLoading(false))
       },
@@ -166,46 +156,32 @@ export function ApiKeysTab({
     if (!names.length) return "-"
 
     return (
-      <TooltipProvider delayDuration={100}>
-        <Tooltip>
-          <TooltipTrigger type="button" className="block w-full truncate text-left">
-            {names.join(", ")}
-          </TooltipTrigger>
-          <Portal>
-            <TooltipContent side="top" align="start" className="max-w-96">
-              <div className="max-h-64 overflow-y-auto whitespace-pre-line break-words text-left">
+      <SharedTooltipProvider delayDuration={100}><SharedTooltip  content={<><div className="max-h-64 overflow-y-auto whitespace-pre-line break-words text-left">
                 {names.join("\n")}
-              </div>
-            </TooltipContent>
-          </Portal>
-        </Tooltip>
-      </TooltipProvider>
+              </div></>} side="top"  align="start"><button type="button" className="block w-full truncate text-left">{names.join(", ")}</button></SharedTooltip></SharedTooltipProvider>
     )
   }
 
   return (
     <div className="space-y-4">
+      {/* AC-44: the access information sits above the key table — it is what an
+          administrator forwards before any key exists. Absent where the
+          open-capability layer is not deployed (the panel decides). */}
+      <AccessInfoPanel />
       <div className="flex justify-end gap-2">
-        <Button
-          variant="outline"
-          disabled={loading || loadingData || !list.response?.active_count}
-          onClick={handleRevokeAll}
-        >
+        <Button variant="outlined" disabled={loading || loadingData || !list.response?.active_count} onClick={handleRevokeAll} color="default">
           {t("openApiManagement.actions.revokeAll")}
         </Button>
-        <Button
-          disabled={
+        <Button disabled={
             loading ||
             loadingData ||
             loadingScopes ||
             !scopes.length ||
             !accountEnabled
-          }
-          onClick={() => {
+          } onClick={() => {
             setEditingKey(null)
             setDialogOpen(true)
-          }}
-        >
+          }}>
           {t("openApiManagement.keys.issue")}
         </Button>
       </div>
@@ -248,33 +224,27 @@ export function ApiKeysTab({
                     : t("openApiManagement.keys.neverExpires")}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={key.is_valid ? "outline" : "secondary"}>
+                  <Tag size="small" dot color={key.is_valid ? "success" : "danger"}>
                     {t(`openApiManagement.status.${statusKey}`)}
-                  </Badge>
+                  </Tag>
                 </TableCell>
-                <TableCell className="whitespace-nowrap text-right">
-                  <Button
-                    variant="link"
-                    disabled={
-                      loading ||
-                      loadingScopes ||
-                      !scopes.length ||
-                      !key.is_valid
-                    }
-                    onClick={() => {
-                      setEditingKey(key)
-                      setDialogOpen(true)
-                    }}
-                  >
-                    {t("edit")}
-                  </Button>
-                  <Button
-                    variant="link"
-                    disabled={loading || !key.is_valid}
-                    onClick={() => handleRevoke(key.id)}
-                  >
-                    {t("openApiManagement.actions.revoke")}
-                  </Button>
+                <TableCell className="whitespace-nowrap">
+                  <div className="flex justify-end gap-2">
+                    <Button size="small" variant="link" disabled={
+                        loading ||
+                        loadingScopes ||
+                        !scopes.length ||
+                        !key.is_valid
+                      } onClick={() => {
+                        setEditingKey(key)
+                        setDialogOpen(true)
+                      }}>
+                      {t("edit")}
+                    </Button>
+                    <Button size="small" variant="link" color="danger" disabled={loading || !key.is_valid} onClick={() => handleRevoke(key.id)}>
+                      {t("openApiManagement.actions.revoke")}
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             )

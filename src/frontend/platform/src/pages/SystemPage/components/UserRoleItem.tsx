@@ -1,30 +1,30 @@
 // @ts-strict-ignore
-import { DelIcon } from "@/components/bs-icons";
-import { Button } from "@/components/bs-ui/button";
-import MultiSelect from "@/components/bs-ui/select/multi";
-import { getRolesByGroupApi, getUserGroupsApi } from "@/controllers/API/user";
-import { useEffect, useRef, useState } from "react";
+import { Button, Select } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+
+
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import { getRolesByGroupApi,getUserGroupsApi } from "@/controllers/API/user";
+import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
-import SelectSearch from "@/components/bs-ui/select/select"
 
 export default function UserRoleItem({ showDel, groupId, selectedRoles, onDelete, onChange }:
     { showDel: boolean, groupId: null | string, selectedRoles: any[], onDelete: any, onChange: any }) {
     const { t } = useTranslation()
+    const selectLabels = useSelectLabels()
 
     // 用户组
     const [groups, setGroups] = useState([])
-    const groupsRef = useRef([])
     const [userGroupSelected, setUserGroupSelected] = useState(groupId ? [groupId] : [])
     const loadGroups = () => {
         getUserGroupsApi().then((res: any) => {
-            const groups = res.map((ug) => {
+            const groups = res.filter((ug) => ug.id != null && ug.id !== '').map((ug) => {
                 return {
                     label: ug.group_name,
                     value: ug.id.toString()
                 }
             })
             setGroups(groups)
-            groupsRef.current = groups
         })
     }
     useEffect(() => {
@@ -37,12 +37,6 @@ export default function UserRoleItem({ showDel, groupId, selectedRoles, onDelete
         setUserGroupSelected([value]);
         setSelected([])
     }
-    const handleSearch = (e) => {
-        const keyword = e.target.value
-        const newGroups = groupsRef.current.filter(g => g.label.toUpperCase().includes(keyword.toUpperCase()) 
-        || g.value === userGroupSelected[0])
-        setGroups(newGroups)
-    }
 
     // 角色
     const [roles, setRoles] = useState<any[]>([])
@@ -51,7 +45,7 @@ export default function UserRoleItem({ showDel, groupId, selectedRoles, onDelete
         // setSelected([])
         // 用户组option列表
         getRolesByGroupApi('', userGroupSelected).then((res: any) => {
-            const roleOptions = res.map(role => {
+            const roleOptions = res.filter(role => role.id != null && role.id !== '').map(role => {
                 return {
                     label: role.role_name,
                     value: role.id.toString()
@@ -67,23 +61,25 @@ export default function UserRoleItem({ showDel, groupId, selectedRoles, onDelete
     }
 
     return <div className="grid grid-cols-[44%,44%,5%] gap-4">
-        <SelectSearch contentClass="max-w-[260px] break-all" selectPlaceholder={t('system.userGroupsSel')}
-            selectClass="h-[50px]"
-            value={userGroupSelected[0]}
+        <Select
+            {...selectLabels}
+            showSearch
+            aria-label={t('system.userGroupsSel')}
+            placeholder={t('system.userGroupsSel')}
+            value={userGroupSelected[0] || null}
             options={groups}
-            onOpenChange={() => setGroups(groupsRef.current)}
-            onValueChange={handleSelectGroup}
-            onChange={handleSearch}
+            onChange={(value) => { if (value != null) handleSelectGroup(String(value)) }}
         />
-        <MultiSelect
+        <Select
+            {...selectLabels}
             multiple
-            contentClassName="max-w-[260px] break-all"
+            showSearch
+            aria-label={t('system.roleSelect')}
             value={selected}
             options={roles}
             placeholder={t('system.roleSelect')}
-            onChange={handleSelectRole}
-        >
-        </MultiSelect>
-        {showDel && <Button variant="ghost" size="icon" className="mt-2" onClick={onDelete}><DelIcon /></Button>}
+            onChange={(values) => handleSelectRole(values.map(String))}
+        />
+        {showDel && <Button variant="text" size="medium" onClick={onDelete} color="default" iconOnly><Outlined.Delete size={16} /></Button>}
     </div>
 };

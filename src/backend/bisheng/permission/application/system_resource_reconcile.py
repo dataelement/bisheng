@@ -3,7 +3,8 @@
 Business composition roots provide the canonical resource predicates. This
 module owns only the F048 state transition: missing resources are created
 through ``authorize_system_owned`` so SQL mirrors, the durable projection
-ledger, and OpenFGA tuples advance together.
+ledger, and OpenFGA tuples advance together. Existing CURRENT resources retain
+their current grants, including an administrator's removal of all-member access.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from dataclasses import dataclass
 from sqlmodel import col, select
 
 from bisheng.common.errcode.permission import PermissionPublishNotReadyError
-from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.core.context.tenant import bypass_tenant_filter, tenant_execution_scope
 from bisheng.core.database import get_async_db_session
 from bisheng.permission.domain.models import ResourcePermissionMode
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
@@ -132,7 +133,7 @@ async def reconcile_system_owned_resources(
     apply: bool,
     operator_id: int,
 ) -> SystemOwnedReconcileReport:
-    """Project only missing resources and refuse ambiguous existing states."""
+    """Create absent projections without restoring revoked grants on CURRENT resources."""
 
     if operator_id <= 0:
         raise ValueError("operator_id must be positive")
@@ -147,24 +148,26 @@ async def reconcile_system_owned_resources(
             if item.state != "MISSING":
                 continue
             resource = item.resource
-            await runtime.authorize_system_owned(
-                actor=PermissionActor(
+            with tenant_execution_scope(resource.tenant_id):
+                actor = PermissionActor(
                     user_id=operator_id,
                     current_tenant_id=resource.tenant_id,
-                ),
-                target=VerifiedPermissionTarget.from_business_service(
-                    tenant_id=resource.tenant_id,
-                    resource_type=resource.resource_type,
-                    resource_id=resource.resource_id,
-                    resource_version=0,
-                    context_version=resource.context_version,
-                ),
-                action_codes=resource.action_codes,
-                idempotency_key=(
-                    f"f048:system-bootstrap:{resource.tenant_id}:{resource.resource_type}:{resource.resource_id}"
-                ),
-            )
-    after = await inspect_system_owned_resources(normalized)
+                )
+                await runtime.authorize_system_owned(
+                    actor=actor,
+                    target=VerifiedPermissionTarget.from_business_service(
+                        tenant_id=resource.tenant_id,
+                        resource_type=resource.resource_type,
+                        resource_id=resource.resource_id,
+                        resource_version=0,
+                        context_version=resource.context_version,
+                    ),
+                    action_codes=resource.action_codes,
+                    idempotency_key=(
+                        f"f048:system-bootstrap:{resource.tenant_id}:{resource.resource_type}:{resource.resource_id}"
+                    ),
+                )
+    after = await inspect_system_owned_resources(normalized) if apply else before
     if apply and any(item.state != "CURRENT" for item in after):
         scopes = ", ".join(item.resource.object_key for item in after if item.state != "CURRENT")
         raise PermissionPublishNotReadyError(msg=f"System-owned resource projection did not finalize: {scopes}")

@@ -1,7 +1,7 @@
 """DSH's frozen real-HTTP error envelope; legacy business codes remain internal."""
 
 import asyncio
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
@@ -15,12 +15,25 @@ from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.dsh import DshInternalErrorError, DshInvalidRequestError
 
 
+def http_request_id(request: Request) -> str:
+    """Reuse one canonical UUID; ambiguous or invalid headers get a fresh ID."""
+    values = request.headers.getlist("X-Request-ID")
+    if len(values) == 1 and len(values[0]) == 36:
+        try:
+            value = UUID(values[0])
+        except ValueError:
+            value = None
+        if value is not None and value.int and str(value) == values[0].lower():
+            return str(value)
+    return str(uuid4())
+
+
 class DshRoute(APIRoute):
     def get_route_handler(self):
         handler = super().get_route_handler()
 
         async def route(request: Request):
-            request.state.request_id = str(uuid4())
+            request.state.request_id = http_request_id(request)
             try:
                 response = await handler(request)
             except RequestValidationError:

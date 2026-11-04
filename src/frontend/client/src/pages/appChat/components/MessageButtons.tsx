@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+import { useLocalize } from '~/hooks';
 import { useState } from "react";
 import { Outlined } from "bisheng-icons";
 import { useRecoilValue, useSetRecoilState } from "recoil";
@@ -12,7 +14,9 @@ import { chatIdState, chatsState } from "../store/atoms";
 const ACTION_BTN =
     "flex size-6 items-center justify-center rounded-md transition-colors hover:bg-fill-1";
 
-export default function MessageButtons({ id, text, onCopy, data, children = null }) {
+interface MessageButtonsProps { id: string | number; text: string; onCopy: () => void; data?: number; children?: ReactNode }
+export default function MessageButtons({ id, text, onCopy, data, children = null }: MessageButtonsProps) {
+    const localize = useLocalize();
     const [copied, setCopied] = useState(false)
     const chatId = useRecoilValue(chatIdState)
     const setChats = useSetRecoilState(chatsState)
@@ -32,7 +36,7 @@ export default function MessageButtons({ id, text, onCopy, data, children = null
                 [chatId]: {
                     ...chat,
                     messages: chat.messages.map((msg) =>
-                        msg.id === id ? { ...msg, liked } : msg
+                        String(msg.id) === String(id) ? { ...msg, liked } : msg
                     ),
                 },
             }
@@ -47,7 +51,7 @@ export default function MessageButtons({ id, text, onCopy, data, children = null
             setCopied(false)
         }, 2000);
 
-        copyTrackingApi(id) // 上报
+        copyTrackingApi(id)
     }
 
     return <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -57,8 +61,8 @@ export default function MessageButtons({ id, text, onCopy, data, children = null
             type="button"
             className={ACTION_BTN}
             onClick={handleCopy}
-            title={copied ? '已复制' : '复制'}
-            aria-label="复制"
+            title={copied ? localize('com_ui_copied') : localize('com_ui_copy')}
+            aria-label={localize('com_ui_copy')}
         >
             {copied
                 ? <Outlined.Copied size={14} className="text-blue-500" />

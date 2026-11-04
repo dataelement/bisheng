@@ -1,0 +1,23 @@
+
+ RUN  v3.2.7 /Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/src/frontend/platform
+
+ ✓ src/pages/LogPage/index.test.tsx (5 tests) 86ms
+stderr | src/test/runtimeAudit.test.tsx > renders real source rows and distinguishes failed loading from empty records
+Error: unavailable
+    at /Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/src/frontend/platform/src/test/runtimeAudit.test.tsx:36:38
+    at file:///Users/zhangguoqing/.codex/worktrees/vibe-k8s-runtime/bisheng/src/frontend/node_modules/.pnpm/@vitest+runner@3.2.7/node_modules/@vitest/runner/dist/chunk-hooks.js:155:11
+    at file:///Users/zhangguoqing/.codex/worktrees/vibe-k8s-runtime/bisheng/src/frontend/node_modules/.pnpm/@vitest+runner@3.2.7/node_modules/@vitest/runner/dist/chunk-hooks.js:752:26
+    at file:///Users/zhangguoqing/.codex/worktrees/vibe-k8s-runtime/bisheng/src/frontend/node_modules/.pnpm/@vitest+runner@3.2.7/node_modules/@vitest/runner/dist/chunk-hooks.js:1897:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///Users/zhangguoqing/.codex/worktrees/vibe-k8s-runtime/bisheng/src/frontend/node_modules/.pnpm/@vitest+runner@3.2.7/node_modules/@vitest/runner/dist/chunk-hooks.js:1863:10)
+    at runTest (file:///Users/zhangguoqing/.codex/worktrees/vibe-k8s-runtime/bisheng/src/frontend/node_modules/.pnpm/@vitest+runner@3.2.7/node_modules/@vitest/runner/dist/chunk-hooks.js:1574:12)
+    at runSuite (file:///Users/zhangguoqing/.codex/worktrees/vibe-k8s-runtime/bisheng/src/frontend/node_modules/.pnpm/@vitest+runner@3.2.7/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)
+    at runFiles (file:///Users/zhangguoqing/.codex/worktrees/vibe-k8s-runtime/bisheng/src/frontend/node_modules/.pnpm/@vitest+runner@3.2.7/node_modules/@vitest/runner/dist/chunk-hooks.js:1787:3)
+    at startTests (file:///Users/zhangguoqing/.codex/worktrees/vibe-k8s-runtime/bisheng/src/frontend/node_modules/.pnpm/@vitest+runner@3.2.7/node_modules/@vitest/runner/dist/chunk-hooks.js:1820:3)
+
+ ✓ src/test/runtimeAudit.test.tsx (4 tests) 314ms
+
+ Test Files  2 passed (2)
+      Tests  9 passed (9)
+   Start at  11:19:21
+   Duration  6.79s (transform 1.48s, setup 360ms, collect 10.83s, tests 400ms, environment 880ms, prepare 141ms)

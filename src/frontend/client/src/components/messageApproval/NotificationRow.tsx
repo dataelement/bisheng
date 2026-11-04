@@ -1,8 +1,9 @@
+import { HoverCard, HoverCardTrigger, HoverCardContent, HoverCardPortal } from '~/components/ui/HoverCard';
 import { Badge } from "@bisheng/ui";
 import { useState } from "react";
 import type { MessageItem } from "~/api/message";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
-import { TooltipAnchor } from "~/components/ui/Tooltip";
+
 import useLocalize, { type TranslationKeys } from "~/hooks/useLocalize";
 import { cn } from "~/utils";
 import {
@@ -188,26 +189,16 @@ export function NotificationRow({
     >
       {/* Avatar, text+time column and the unread dot are all top-aligned. */}
       <div className="flex items-start gap-2">
-        <TooltipAnchor
-          side="left"
-          hideArrow
-          className="shrink-0"
-          tooltipClassName="box-border flex h-[64px] w-[151px] flex-col justify-center overflow-hidden rounded-lg border border-solid border-border-base bg-white p-0 opacity-100 shadow-[0_4px_12px_rgba(0,0,0,0.08)] z-[100]"
-          description={
-            <div className="flex h-full w-full flex-col justify-center px-3 py-2">
+        <HoverCard openDelay={100} closeDelay={100} ><HoverCardTrigger asChild><div tabIndex={0} className="shrink-0"  ><Avatar className="h-6 w-6 shrink-0">
+            {userAvatar ? <AvatarImage src={userAvatar} alt={userName} /> : <AvatarName name={userName} className="text-[10px]" />}
+          </Avatar></div></HoverCardTrigger><HoverCardPortal><HoverCardContent side="left" className="box-border flex h-[64px] w-[151px] flex-col justify-center overflow-hidden rounded-lg border border-solid border-border-base bg-white p-0 opacity-100 shadow-[0_4px_12px_rgba(0,0,0,0.08)] z-[100]">{<div className="flex h-full w-full flex-col justify-center px-3 py-2">
               <div className="truncate text-[14px] font-normal leading-tight text-text-1">{userName}</div>
               {userGroup ? (
                 <div className="mt-0.5 line-clamp-2 text-left text-[12px] font-normal leading-tight text-[#A9AEB8]">
                   {userGroup}
                 </div>
               ) : null}
-            </div>
-          }
-        >
-          <Avatar className="h-6 w-6 shrink-0">
-            {userAvatar ? <AvatarImage src={userAvatar} alt={userName} /> : <AvatarName name={userName} className="text-[10px]" />}
-          </Avatar>
-        </TooltipAnchor>
+            </div>}</HoverCardContent></HoverCardPortal></HoverCard>
 
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div

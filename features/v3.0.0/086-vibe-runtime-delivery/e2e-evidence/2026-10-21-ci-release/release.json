@@ -1,0 +1,50 @@
+{
+  "release": "v3.0.0-test-vibe",
+  "commit": "755d4456e50c015a3fa88da0c0c35ab53bbd1650",
+  "annotated_tag_object": "cada64894bef204330e4f62d51cfa732b4046b81",
+  "initial_failed_run": "https://github.com/dataelement/bisheng/actions/runs/39566080903",
+  "failure": "runner missing rg; missing image was incorrectly rejected",
+  "fix": "Use grep -Eqi in architecture builder and service-index publication; no image tag overwrite enabled",
+  "runtime_workflow": {
+    "url": "https://github.com/dataelement/bisheng/actions/runs/39567381522",
+    "conclusion": "success",
+    "duration_seconds": 385,
+    "jobs": {
+      "native_amd64": "success",
+      "native_arm64": "success",
+      "catalog": "success"
+    },
+    "native_images_per_architecture": 7,
+    "integration_scope": [
+      "offline Python/Node/static",
+      "dependency reuse",
+      "code update",
+      "SQLite helper and backup",
+      "frontend hook/build",
+      "CPython native extension"
+    ]
+  },
+  "existing_backend_frontend_workflow": {
+    "url": "https://github.com/dataelement/bisheng/actions/runs/39567381486",
+    "conclusion": "success",
+    "duration_seconds": 454
+  },
+  "artifacts_observed_in_github_ui": [
+    {
+      "name": "runtime-images-amd64",
+      "id": 12330772370,
+      "sha256": "73f9ef1f57d410cbbad47de915e9d0cceffdc93f676a7693ef69ba4c13f2c576"
+    },
+    {
+      "name": "runtime-images-arm64",
+      "id": 12331030829,
+      "sha256": "60747d38e76958086f0b94a0c5d71c0a044b4587e0522785457149a27cf30440"
+    },
+    {
+      "name": "runtime-profiles",
+      "id": 12329913744,
+      "sha256": "2a189c8692ee86e8f1ba14edd3cead04b23e50c89a8b0427743fab47152b8a6b"
+    }
+  ],
+  "evidence_boundary": "CI status and artifact metadata observed in authenticated GitHub UI. Artifact ZIPs were not downloaded or imported into a platform. Public service images were independently downloaded and run on 109. Pending backend tenant/model edits are not part of this tagged commit."
+}

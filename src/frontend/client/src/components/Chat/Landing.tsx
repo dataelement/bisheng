@@ -4,9 +4,11 @@ import { useLocalize } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { Constants } from '~/types/chat';
 import ConvoStarter from './ConvoStarter';
+import { workbenchBranding } from './workbenchBranding';
 
-export default function Landing({ Header, isNew, hideSubtitle = false }: {
+export default function Landing({ Header, isNew, hideSubtitle = false, onStarterClick }: {
   Header?: ReactNode;
+  onStarterClick?: (text: string) => void;
   isNew?: boolean;
   /**
    * Hide the welcome subtitle while the input has a mounted knowledge space /
@@ -18,6 +20,7 @@ export default function Landing({ Header, isNew, hideSubtitle = false }: {
 }) {
   const { data: bsConfig } = useGetBsConfig();
   const localize = useLocalize();
+  const branding = workbenchBranding(bsConfig, localize('dshChat.welcome'));
   const [searchParams] = useSearchParams();
   const defaultCategory = searchParams.get('category') || 'favorites';
 
@@ -29,21 +32,21 @@ export default function Landing({ Header, isNew, hideSubtitle = false }: {
   return (
     <div className={`relative ${!isNew ? 'h-full' : ''}`}>
       <div className="absolute left-0 right-0">{Header != null ? Header : null}</div>
-      <div className="flex h-full flex-col items-center justify-center max-md:justify-start max-md:pt-2 max-md:pb-4 px-4">
-        {/* Hero: row on ≥768 (matches the desktop shell), stacked only on the H5 shell (≤767) */}
-        <div className="flex flex-col items-center gap-3 md:flex-row md:gap-4">
-          {bsConfig?.assistantIcon?.image && (
+      <div className="dsh-chat-welcome-content">
+        {/* The headline shares the native Work hero dimensions at every width. */}
+        <div className="dsh-chat-headline">
+          {branding.assistantIcon.enabled && (
             <img
-              className="overflow-hidden w-[52px] h-[52px] object-contain shrink-0"
-              src={__APP_ENV__.BASE_URL + bsConfig.assistantIcon.image}
+              className="dsh-chat-hero-mark"
+              src={branding.assistantIcon.image}
               alt=""
             />
           )}
-          <h2 className="max-w-full md:max-w-[75vw] text-center text-xl md:text-2xl font-semibold md:font-medium leading-snug md:leading-8 text-text-1 dark:text-white px-0">
-            {bsConfig?.welcomeMessage}
+          <h2 className="dsh-chat-headline-title">
+            {branding.welcomeMessage}
           </h2>
         </div>
-        {!hideSubtitle && (
+        {!hideSubtitle && bsConfig?.functionDescription?.trim() && (
           <div className="max-w-lg text-center mt-[26px] text-sm font-normal text-gray-500 leading-5">
             {bsConfig?.functionDescription}
           </div>
@@ -60,7 +63,7 @@ export default function Landing({ Header, isNew, hideSubtitle = false }: {
                   text={text}
                   onClick={() => {
                     // Conversation starter click is handled in parent
-                    console.log('Convo starter clicked:', text);
+                    onStarterClick?.(text);
                   }}
                 />
               ))}

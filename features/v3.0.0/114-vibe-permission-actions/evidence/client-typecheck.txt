@@ -1,0 +1,143 @@
+
+> bishengchat@3.0.0 typecheck <f114-worktree>/src/frontend/client
+> tsc-strict
+
+- Looking for strict files...
+🎯 Found 1625 strict files
+- Compiling with strict mode...
+src/api/knowledgeParseFailureMessage.ts(1,45): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/components/Chat/Messages/Content/citationUtils.ts(2,73): error TS2307: Cannot find module '@bisheng/chat/citations' or its corresponding type declarations.
+src/components/Chat/Messages/Content/citationUtils.ts(6,15): error TS2307: Cannot find module '@bisheng/chat/citations' or its corresponding type declarations.
+../../../../../../../works/bisheng/src/frontend/packages/ui/src/components/Input/PasswordInput.tsx(71,46): error TS2339: Property 'EyeClose' does not exist on type 'typeof index$2'.
+../../../../../../../works/bisheng/src/frontend/packages/ui/src/components/Input/PasswordInput.tsx(71,84): error TS2339: Property 'Eye' does not exist on type 'typeof index$2'.
+src/components/ApiRequestFailure.tsx(2,28): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/components/ApiRequestFailure.tsx(13,45): error TS2339: Property 'kind' does not exist on type '{}'.
+src/components/Voice/SpeechToText.tsx(2,28): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/components/Chat/Messages/Content/useClientCitationServices.ts(1,39): error TS2307: Cannot find module '@bisheng/chat/citations' or its corresponding type declarations.
+../../../../../../../works/bisheng/src/frontend/packages/file-viewers/src/viewers/MarkdownViewer.tsx(4,29): error TS2307: Cannot find module 'rehype-highlight' or its corresponding type declarations.
+src/pages/knowledge/FilePreview/index.tsx(21,15): error TS2305: Module '"~/components/Chat/Messages/Content/citationUtils"' has no exported member 'CitationPdfBBox'.
+src/components/Chat/Messages/Content/CitationDocumentPreviewDrawer.tsx(1,112): error TS2307: Cannot find module '@bisheng/chat/citation-views' or its corresponding type declarations.
+src/components/Chat/Messages/Content/CitationDocumentPreviewDrawer.tsx(2,51): error TS2307: Cannot find module '@bisheng/chat/citations' or its corresponding type declarations.
+src/components/Chat/Messages/Content/CitationDocumentPreviewDrawer.tsx(8,51): error TS2307: Cannot find module '@bisheng/chat/citations' or its corresponding type declarations.
+src/components/Chat/Messages/Content/CitationReferencesDrawer.tsx(1,66): error TS2307: Cannot find module '@bisheng/chat/citation-views' or its corresponding type declarations.
+src/components/Chat/Messages/Content/CitationReferencesDrawer.tsx(8,55): error TS2307: Cannot find module '@bisheng/chat/citation-views' or its corresponding type declarations.
+src/components/Linsight/Artifacts/artifactUtils.ts(15,5): error TS2305: Module '"~/components/Chat/Messages/Content/citationUtils"' has no exported member 'transformPrivateCitations'.
+src/components/Linsight/Artifacts/artifactUtils.ts(440,83): error TS18046: 'data' is of type 'unknown'.
+src/components/Chat/Messages/Content/CitationSourceIcon.tsx(3,56): error TS2307: Cannot find module '@bisheng/chat/citation-views' or its corresponding type declarations.
+src/components/Chat/Messages/Content/CitationSourceIcon.tsx(4,62): error TS2307: Cannot find module '@bisheng/chat/citation-views' or its corresponding type declarations.
+src/components/Chat/Messages/Content/InlineCitation.tsx(1,75): error TS2307: Cannot find module '@bisheng/chat/citation-inline' or its corresponding type declarations.
+src/components/Messages/Content/RunCode.tsx(1,37): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/components/Chat/Messages/Content/Markdown.tsx(2,36): error TS2307: Cannot find module '@bisheng/chat/citation-inline' or its corresponding type declarations.
+src/components/Chat/Messages/Content/Markdown.tsx(32,10): error TS2305: Module '"./citationUtils"' has no exported member 'transformPrivateCitations'.
+src/components/Chat/Messages/Content/Markdown.tsx(32,42): error TS2305: Module '"./citationUtils"' has no exported member 'CitationDisplayData'.
+src/pages/knowledge/hooks/useFileUpload.ts(1,78): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/pages/knowledge/hooks/useFileUpload.ts(161,31): error TS18046: 'err' is of type 'unknown'.
+src/pages/knowledge/hooks/useFileUpload.ts(161,58): error TS18046: 'err' is of type 'unknown'.
+src/pages/knowledge/hooks/useFileUpload.ts(550,37): error TS18046: 'error' is of type 'unknown'.
+src/pages/knowledge/hooks/useFileUpload.ts(550,66): error TS18046: 'error' is of type 'unknown'.
+src/pages/knowledge/hooks/useFileUpload.ts(720,32): error TS18046: 'e' is of type 'unknown'.
+src/components/Linsight/Artifacts/useSaveArtifactToKnowledge.ts(1,28): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/components/Linsight/Artifacts/SaveAsButton.tsx(1,28): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/components/Voice/TextToSpeechButton.tsx(3,28): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/components/Linsight/Artifacts/PreviewBody.tsx(1,28): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/components/Chat/ChatView.tsx(1,28): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/pages/settings/settingsSections.ts(31,76): error TS2339: Property 'PeopleEdit' does not exist on type 'typeof index$2'.
+src/pages/settings/settingsSections.ts(34,74): error TS2339: Property 'Setting' does not exist on type 'typeof index$2'.
+src/components/Conversations/ConvoOptions/ConvoOptions.tsx(92,51): error TS2339: Property 'Return' does not exist on type 'typeof index$2'.
+src/components/Nav/SettingsTabs/Speech/Speech.tsx(150,84): error TS2339: Property 'Setting' does not exist on type 'typeof index$2'.
+src/pages/MenuUnavailablePage.tsx(3,28): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/pages/MenuUnavailablePage.tsx(90,31): error TS18046: 'err' is of type 'unknown'.
+src/pages/MenuUnavailablePage.tsx(90,58): error TS18046: 'err' is of type 'unknown'.
+src/pages/MenuUnavailablePage.tsx(95,28): error TS18046: 'err' is of type 'unknown'.
+src/pages/appChat/components/ClientChatMarkdown.tsx(2,37): error TS2307: Cannot find module '@bisheng/chat/core' or its corresponding type declarations.
+src/pages/appChat/components/ClientChatMarkdown.tsx(3,78): error TS2307: Cannot find module '@bisheng/chat' or its corresponding type declarations.
+src/pages/appChat/components/ClientMessageFooter.tsx(1,35): error TS2307: Cannot find module '@bisheng/chat' or its corresponding type declarations.
+src/pages/appChat/components/ClientMessageFooter.tsx(3,55): error TS2307: Cannot find module '@bisheng/chat/core' or its corresponding type declarations.
+src/pages/appChat/components/ClientMessageAttachments.tsx(1,41): error TS2307: Cannot find module '@bisheng/chat' or its corresponding type declarations.
+src/pages/appChat/components/ClientMessageAttachments.tsx(2,50): error TS2307: Cannot find module '@bisheng/chat/core' or its corresponding type declarations.
+src/pages/appChat/components/InputForm.tsx(1,63): error TS2307: Cannot find module '@bisheng/chat' or its corresponding type declarations.
+src/pages/appChat/components/InputForm.tsx(2,54): error TS2307: Cannot find module '@bisheng/chat/core' or its corresponding type declarations.
+src/pages/appChat/useMessages.ts(3,39): error TS2307: Cannot find module '@bisheng/chat' or its corresponding type declarations.
+src/pages/appChat/useMessages.ts(4,41): error TS2307: Cannot find module '@bisheng/chat/core' or its corresponding type declarations.
+src/pages/appChat/useChatHelpers.ts(1,86): error TS2307: Cannot find module '@bisheng/chat/core' or its corresponding type declarations.
+src/pages/appChat/ChatView.tsx(1,28): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/pages/apps/components/MarkLabel.tsx(4,55): error TS2307: Cannot find module '@hello-pangea/dnd' or its corresponding type declarations.
+src/api/skillCenter.ts(1,47): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/api/skillCenter.ts(124,30): error TS18046: 'error' is of type 'unknown'.
+src/components/Skills/SkillMenuPanel.tsx(61,19): error TS2339: Property 'Setting' does not exist on type 'typeof index$2'.
+src/components/Skills/SkillUploadDialog.tsx(1,28): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/components/Skills/SkillUploadDialog.tsx(96,12): error TS18046: 'cause' is of type 'unknown'.
+src/components/Skills/SkillUploadDialog.tsx(97,37): error TS18046: 'cause' is of type 'unknown'.
+src/components/Skills/SkillUploadDialog.tsx(98,21): error TS18046: 'cause' is of type 'unknown'.
+src/components/Skills/SkillUploadDialog.tsx(127,30): error TS18046: 'cause' is of type 'unknown'.
+src/components/Skills/SkillUploadDialog.tsx(128,31): error TS18046: 'cause' is of type 'unknown'.
+src/components/Skills/SkillUploadDialog.tsx(129,35): error TS18046: 'cause' is of type 'unknown'.
+src/components/Skills/SkillUploadDialog.tsx(138,20): error TS18046: 'cause' is of type 'unknown'.
+src/components/Skills/SkillUploadDialog.tsx(140,22): error TS18046: 'cause' is of type 'unknown'.
+src/components/Skills/SkillUploadDialog.tsx(141,25): error TS18046: 'cause' is of type 'unknown'.
+src/components/Skills/SkillUploadDialog.tsx(142,15): error TS18046: 'cause' is of type 'unknown'.
+src/pages/Subscription/ArticleList/useArticleList.ts(3,28): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/pages/Subscription/ArticleList/useArticleList.ts(194,38): error TS18046: 'error' is of type 'unknown'.
+src/components/permission/SourceBadge.tsx(16,20): error TS2339: Property 'People' does not exist on type 'typeof index$2'.
+src/components/permission/SourceBadge.tsx(18,24): error TS2551: Property 'PeopleGroup' does not exist on type 'typeof index$2'. Did you mean 'PeopleRound'?
+src/components/permission/SubjectSearchUser.tsx(255,31): error TS2339: Property 'People' does not exist on type 'typeof index$2'.
+src/components/permission/SubjectSearchUserGroup.tsx(223,31): error TS2551: Property 'PeopleGroup' does not exist on type 'typeof index$2'. Did you mean 'PeopleRound'?
+src/components/permission/PermissionListTab.tsx(40,18): error TS2339: Property 'People' does not exist on type 'typeof index$2'.
+src/components/permission/PermissionListTab.tsx(42,24): error TS2551: Property 'PeopleGroup' does not exist on type 'typeof index$2'. Did you mean 'PeopleRound'?
+src/components/permission/UnifiedPermissionControls.tsx(17,19): error TS2339: Property 'Layer' does not exist on type 'typeof index$2'.
+src/components/permission/UnifiedPermissionControls.tsx(18,22): error TS2339: Property 'Setting' does not exist on type 'typeof index$2'.
+src/pages/Subscription/hooks/useSourceManager.ts(16,28): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/pages/Subscription/hooks/useSourceManager.ts(61,34): error TS18046: 'error' is of type 'unknown'.
+src/pages/Subscription/hooks/useSourceManager.ts(435,47): error TS18046: 'error' is of type 'unknown'.
+src/pages/Subscription/hooks/useSourceManager.ts(435,76): error TS18046: 'error' is of type 'unknown'.
+src/pages/Subscription/hooks/useSourceManager.ts(437,44): error TS18046: 'error' is of type 'unknown'.
+src/components/approval/AppPreviewPanel.tsx(125,19): error TS2339: Property 'Eye' does not exist on type 'typeof index$2'.
+src/pages/skills/SkillCenterPane.tsx(1,28): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/pages/skills/SkillCenterPane.tsx(61,35): error TS18046: 'error' is of type 'unknown'.
+src/pages/skills/SkillCenterPane.tsx(61,68): error TS18046: 'error' is of type 'unknown'.
+src/pages/skills/SkillCenterPane.tsx(64,26): error TS18046: 'error' is of type 'unknown'.
+src/pages/skills/SkillCenterPane.tsx(65,29): error TS18046: 'error' is of type 'unknown'.
+src/pages/skills/SkillCenterPane.tsx(66,19): error TS18046: 'error' is of type 'unknown'.
+src/pages/skills/SkillCenterPane.tsx(73,32): error TS18046: 'error' is of type 'unknown'.
+src/api/citationErrorContract.test.ts(1,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/api/clientRequestContract.test.ts(1,26): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/api/clientRequestContract.test.ts(41,10): error TS18046: 'error' is of type 'unknown'.
+src/api/clientRequestContract.test.ts(92,10): error TS18046: 'error' is of type 'unknown'.
+src/api/messageExportErrors.test.ts(1,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/api/requestUserMessages.test.ts(1,26): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/api/requestUserMessages.test.ts(41,9): error TS18046: 'error' is of type 'unknown'.
+src/api/skillCenterErrors.test.ts(1,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/api/transportFailureMessages.test.ts(2,26): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/api/transportFailureMessages.test.ts(30,10): error TS18046: 'error' is of type 'unknown'.
+src/api/transportFailureMessages.test.ts(31,10): error TS18046: 'error' is of type 'unknown'.
+src/components/Chat/importFailureContract.test.tsx(3,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/components/Chat/MessageSelection/exportFailureContract.test.tsx(3,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/components/Chat/Messages/Content/CitationDocumentPreview.test.tsx(5,35): error TS2307: Cannot find module '@bisheng/chat/citations' or its corresponding type declarations.
+src/components/Chat/Messages/Content/citationLocate.ts(1,15): error TS2307: Cannot find module '@bisheng/chat/citation-locate' or its corresponding type declarations.
+src/components/Chat/Messages/Content/citationLocate.test.ts(3,5): error TS2305: Module '"./citationLocate"' has no exported member 'buildLocateAnchors'.
+src/components/Chat/Messages/Content/citationLocate.test.ts(4,5): error TS2305: Module '"./citationLocate"' has no exported member 'clearCitedHighlight'.
+src/components/Chat/Messages/Content/citationLocate.test.ts(5,5): error TS2305: Module '"./citationLocate"' has no exported member 'findCitedSpan'.
+src/components/Chat/Messages/Content/citationLocate.test.ts(6,5): error TS2305: Module '"./citationLocate"' has no exported member 'highlightCitedText'.
+src/components/Chat/Messages/Content/citationLocate.test.ts(7,5): error TS2305: Module '"./citationLocate"' has no exported member 'normalizeForLocate'.
+src/components/Chat/Messages/Content/useCitedPassageLocate.ts(1,15): error TS2307: Cannot find module '@bisheng/chat/citation-locate-hook' or its corresponding type declarations.
+src/components/Chat/Messages/Content/useCitedPassageLocate.test.tsx(9,10): error TS2305: Module '"./useCitedPassageLocate"' has no exported member 'MISS_SETTLE_MS'.
+src/components/Chat/Messages/Content/useCitedPassageLocate.test.tsx(9,26): error TS2305: Module '"./useCitedPassageLocate"' has no exported member 'useCitedPassageLocate'.
+src/components/Chat/Messages/Content/useCitedPassageLocate.test.tsx(9,54): error TS2305: Module '"./useCitedPassageLocate"' has no exported member 'CitedPassageLocateState'.
+src/components/Nav/NavRequestErrors.test.tsx(3,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/components/Skills/SkillUploadDialog.test.tsx(1,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/components/approval/ApprovalPaneErrors.test.tsx(2,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/hooks/chatHistoryErrors.test.tsx(2,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/pages/menuApplyErrors.test.tsx(2,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/pages/shareErrors.test.tsx(2,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/pages/Subscription/ArticleList/ArticleListErrors.test.tsx(3,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/pages/Subscription/hooks/useSourceManagerErrors.test.ts(2,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/pages/appChat/sharedConversationState.test.ts(3,149): error TS2307: Cannot find module '@bisheng/chat/core' or its corresponding type declarations.
+src/pages/appChat/components/InputFileComponent.test.tsx(2,40): error TS2307: Cannot find module '@bisheng/chat' or its corresponding type declarations.
+src/pages/appChat/hooks/sidebarRequestErrors.test.tsx(5,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/pages/knowledge/SpaceDetail/CompoundSearchInput.errors.test.tsx(4,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/pages/knowledge/SpaceDetail/EditTagsModal.errors.test.tsx(5,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/pages/knowledge/hooks/uploadFailureContract.test.ts(1,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/pages/knowledge/hooks/uploadTerminalErrors.test.tsx(2,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+src/pages/skills/SkillCenterPage.test.tsx(1,35): error TS2307: Cannot find module '@bisheng/api-client' or its corresponding type declarations.
+💥 Found 134 errors
+ ELIFECYCLE  Command failed with exit code 1.

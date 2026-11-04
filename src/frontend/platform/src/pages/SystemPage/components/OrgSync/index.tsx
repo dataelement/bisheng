@@ -1,34 +1,37 @@
-import { Badge } from "@/components/bs-ui/badge"
-import { Button } from "@/components/bs-ui/button"
+import { Button, Pagination } from '@bisheng/ui';
+import { Tag } from "@bisheng/ui";
+
+
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/bs-ui/table"
-import { listGatewayOrgSyncLogsApi } from "@/controllers/API/orgSync"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { OrgSyncLog } from "@/types/api/orgSync"
-import { formatIsoDateTime } from "@/util/utils"
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { useTranslation } from "react-i18next"
-import { GatewayLogDetailDialog } from "./GatewayLogDetailDialog"
+Table,
+TableBody,
+TableCell,
+TableHead,
+TableHeader,
+TableRow,
+} from "@/components/bs-ui/table";
+import { listGatewayOrgSyncLogsApi } from "@/controllers/API/orgSync";
+import { showApiError } from "@/controllers/request";
+import { OrgSyncLog } from "@/types/api/orgSync";
+import { formatIsoDateTime } from "@/util/utils";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
+import { useCallback,useEffect,useState } from "react";
+import { useTranslation } from "react-i18next";
+import { GatewayLogDetailDialog } from "./GatewayLogDetailDialog";
 
 const PAGE_SIZE = 20
 
 function RunStatusBadge({ status }: { status: string | null | undefined }) {
   const { t } = useTranslation("orgSync")
   if (!status) return <span className="text-muted-foreground">-</span>
-  const variantMap: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-    success: "default",
-    partial: "secondary",
-    failed: "destructive",
-    running: "outline",
+  const variantMap: Record<string, "success" | "warning" | "danger" | "brand"> = {
+    success: "success",
+    partial: "warning",
+    failed: "danger",
+    running: "brand",
   }
   const label = t(`runStatus.${status}`, status)
-  return <Badge variant={variantMap[status] || "outline"}>{label}</Badge>
+  return <Tag size="small" dot color={variantMap[status] || "default"}>{label}</Tag>
 }
 
 function hasErrorDetails(log: OrgSyncLog): boolean {
@@ -37,6 +40,7 @@ function hasErrorDetails(log: OrgSyncLog): boolean {
 
 export default function OrgSync() {
   const { t } = useTranslation("orgSync")
+  const paginationLocale = usePaginationLocale()
 
   // Page-local server data — fetched here per C7 (stores must not call HTTP).
   const [gatewayLogs, setGatewayLogs] = useState<OrgSyncLog[]>([])
@@ -49,39 +53,19 @@ export default function OrgSync() {
   const fetchGatewayLogs = useCallback(async (nextPage: number) => {
     setLoading(true)
     setPage(nextPage)
-    await captureAndAlertRequestErrorHoc(
-      listGatewayOrgSyncLogsApi({ page: nextPage, limit: PAGE_SIZE }).then(({ data, total }) => {
+    await listGatewayOrgSyncLogsApi({ page: nextPage, limit: PAGE_SIZE }).then(({ data, total }) => {
         setGatewayLogs(data)
         setGatewayTotal(total)
-      })
-    )
-    setLoading(false)
+      }).catch(showApiError).finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
     fetchGatewayLogs(1)
   }, [fetchGatewayLogs])
 
-  const maxPage = useMemo(
-    () => Math.max(1, Math.ceil(gatewayTotal / PAGE_SIZE)),
-    [gatewayTotal]
-  )
-
-  const goPrev = () => {
-    if (page <= 1) return
-    fetchGatewayLogs(page - 1)
-  }
-
-  const goNext = () => {
-    if (page >= maxPage) return
-    fetchGatewayLogs(page + 1)
-  }
-
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
-      <h2 className="text-lg font-semibold">{t("title")}</h2>
-
-      <div className="rounded-lg border">
+      <div>
         <Table>
           <TableHeader>
             <TableRow>
@@ -128,17 +112,13 @@ export default function OrgSync() {
                   </TableCell>
                   <TableCell>
                     {hasErrorDetails(log) ? (
-                      <Badge variant="destructive">{t("columns.yes")}</Badge>
+                      <Tag size="small" dot color="danger">{t("columns.yes")}</Tag>
                     ) : (
                       <span className="text-muted-foreground">{t("columns.no")}</span>
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setDetailLog(log)}
-                    >
+                    <Button size="small" variant="outlined" onClick={() => setDetailLog(log)} color="default">
                       {t("actions.viewDetail")}
                     </Button>
                   </TableCell>
@@ -149,32 +129,15 @@ export default function OrgSync() {
         </Table>
       </div>
 
-      {gatewayTotal > 0 && (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>
-            {t("pagination.total", { total: gatewayTotal })}{" "}
-            {t("pagination.pageOf", { page, maxPage })}
-          </span>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={page <= 1 || loading}
-              onClick={goPrev}
-            >
-              {t("pagination.prev")}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={page >= maxPage || loading}
-              onClick={goNext}
-            >
-              {t("pagination.next")}
-            </Button>
-          </div>
-        </div>
-      )}
+      <Pagination
+        locale={paginationLocale}
+        current={page}
+        pageSize={PAGE_SIZE}
+        total={gatewayTotal}
+        showTotal
+        disabled={loading}
+        onChange={(nextPage) => void fetchGatewayLogs(nextPage)}
+      />
 
       <GatewayLogDetailDialog log={detailLog} onClose={() => setDetailLog(null)} />
     </div>

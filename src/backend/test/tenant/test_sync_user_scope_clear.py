@@ -28,6 +28,8 @@ def _patch_deps(monkeypatch, new_leaf_id: int, current_leaf_id=None):
     - ``UserTenantDao`` / ``UserDao`` DAO calls become AsyncMocks.
     - the permission application becomes an AsyncMock.
     - ``AuditLogDao.ainsert_v2`` becomes AsyncMock.
+    - ``PersonalTokenService.migrate_tenant`` (F053 D19) becomes AsyncMock —
+      the real one opens a DB session against ``api_credential``.
     - The F019 ``TenantScopeService`` module is inserted into sys.modules
       so the late import inside the service resolves to our spy.
     """
@@ -79,6 +81,11 @@ def _patch_deps(monkeypatch, new_leaf_id: int, current_leaf_id=None):
         "_invalidate_redis_caches",
         AsyncMock(),
     )
+    # D19 PAT tenant migration runs on both the relocate and the no-op exit;
+    # it is imported lazily inside the service, so patch the class attribute.
+    from bisheng.open_api.domain.services.personal_token_service import PersonalTokenService
+
+    monkeypatch.setattr(PersonalTokenService, "migrate_tenant", AsyncMock(return_value=0))
 
     # Install fake TenantScopeService — the service uses a local import, so
     # we inject it through sys.modules.

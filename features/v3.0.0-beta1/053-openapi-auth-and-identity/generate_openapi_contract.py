@@ -10,6 +10,12 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 BACKEND_ROOT = REPOSITORY_ROOT / "src" / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
+# The model protocol face (F051) is the one v2 sub-router mounted only where
+# ``open_platform.enabled`` is on, and ``bisheng.api.router`` decides that at
+# import time. The customer contract documents the complete surface, so force
+# the switch on **before** importing the app rather than depending on whichever
+# config.yaml the person running this happens to have.
+importlib.import_module("bisheng.common.services.config_service").settings.open_platform.enabled = True
 app = importlib.import_module("bisheng.main").app
 
 OUTPUT = Path(__file__).with_name("openapi-v2-key-auth-api.json")
@@ -20,8 +26,7 @@ def _schema_references(value: object) -> set[str]:
         references = {
             item["$ref"].removeprefix("#/components/schemas/")
             for item in [value]
-            if isinstance(item.get("$ref"), str)
-            and item["$ref"].startswith("#/components/schemas/")
+            if isinstance(item.get("$ref"), str) and item["$ref"].startswith("#/components/schemas/")
         }
         for item in value.values():
             references.update(_schema_references(item))
@@ -56,9 +61,7 @@ def generate() -> dict:
         "paths": paths,
         "components": {
             "schemas": dict(sorted(schemas.items())),
-            "securitySchemes": {
-                "OpenApiBearer": {"type": "http", "scheme": "bearer", "bearerFormat": "API Key"}
-            },
+            "securitySchemes": {"OpenApiBearer": {"type": "http", "scheme": "bearer", "bearerFormat": "API Key"}},
         },
         "x-websocket-endpoints": [
             {

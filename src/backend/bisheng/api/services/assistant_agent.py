@@ -18,12 +18,17 @@ from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
     CitationRegistryCollector,
+    FetchedPageCitationRegistry,
+    annotate_fetched_page_with_citation,
     annotate_rag_documents_with_citations,
     annotate_web_results_with_citations,
     cache_citation_registry_items,
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
     collect_web_citation_registry_items,
+    exclude_known_registry_items,
+    is_web_citation_tool,
+    is_web_fetch_tool,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.errcode.assistant import (
@@ -35,15 +40,15 @@ from bisheng.database.models.assistant import Assistant, AssistantLink, Assistan
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain.services import LLMService
+from bisheng.llm.domain.utils import to_llm_invoke_error
 from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
 from bisheng_langchain.gpts.auto_optimization import (
-    generate_breif_description,
     generate_opening_dialog,
     optimize_assistant_prompt,
 )
 from bisheng_langchain.gpts.auto_tool_selected import ToolInfo, ToolSelector
-from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
+from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT, BREIF_DES_PROMPT
 
 
 class AssistantCitationToolWrapper(BaseTool):
@@ -56,6 +61,7 @@ class AssistantCitationToolWrapper(BaseTool):
     citation_registry_items: list[CitationRegistryItemSchema] = Field(default_factory=list, exclude=True)
     citation_collector: CitationRegistryCollector | None = Field(default=None, exclude=True)
     kb_name_by_id: dict[str, str] = Field(default_factory=dict, exclude=True)
+    fetched_pages: FetchedPageCitationRegistry = Field(default_factory=FetchedPageCitationRegistry, exclude=True)
 
     @classmethod
     def wrap(cls, tool: BaseTool, citation_collector: CitationRegistryCollector) -> BaseTool:
@@ -68,7 +74,20 @@ class AssistantCitationToolWrapper(BaseTool):
         )
 
     def _is_web_search_tool(self) -> bool:
-        return self.tool.name == "web_search" or getattr(self.tool, "tool_name", None) == "web_search"
+        return is_web_citation_tool(self.tool) and not is_web_fetch_tool(self.tool)
+
+    def _known_citation_items(self) -> list[CitationRegistryItemSchema]:
+        return self.citation_collector.list_items() if self.citation_collector else self.citation_registry_items
+
+    def _append_fetch_citation(self, output: Any) -> Any:
+        output, items = annotate_fetched_page_with_citation(output, self.fetched_pages)
+        self._extend_citation_registry_items(exclude_known_registry_items(self._known_citation_items(), items))
+        return output
+
+    async def _aappend_fetch_citation(self, output: Any) -> Any:
+        output, items = annotate_fetched_page_with_citation(output, self.fetched_pages)
+        await self._aextend_citation_registry_items(exclude_known_registry_items(self._known_citation_items(), items))
+        return output
 
     def _has_knowledge_rag_tool(self) -> bool:
         return hasattr(self.tool, "knowledge_retriever_tool")
@@ -136,7 +155,11 @@ class AssistantCitationToolWrapper(BaseTool):
         if self.citation_collector:
             self.citation_collector.extend(items)
 
-    def _run(self, query: str, **kwargs: Any) -> Any:
+    def _run(self, query: str = "", **kwargs: Any) -> Any:
+        if is_web_fetch_tool(self.tool):
+            return self._append_fetch_citation(
+                self.tool.invoke({"url": kwargs.get("url", "")}, config=kwargs.get("config"))
+            )
         if self._is_web_search_tool():
             return self._append_web_citation(self.tool.invoke({"query": query}, config=kwargs.get("config")))
         if not self._has_knowledge_rag_tool():
@@ -150,7 +173,11 @@ class AssistantCitationToolWrapper(BaseTool):
         retrieval_result = self.tool.knowledge_retriever_tool._run(query)
         return self._format_knowledge_results(retrieval_result)
 
-    async def _arun(self, query: str, **kwargs: Any) -> Any:
+    async def _arun(self, query: str = "", **kwargs: Any) -> Any:
+        if is_web_fetch_tool(self.tool):
+            return await self._aappend_fetch_citation(
+                await self.tool.ainvoke({"url": kwargs.get("url", "")}, config=kwargs.get("config"))
+            )
         if self._is_web_search_tool():
             return await self._aappend_web_citation(
                 await self.tool.ainvoke({"query": query}, config=kwargs.get("config"))
@@ -368,7 +395,7 @@ class AssistantAgent(AssistantUtils):
         return {str(kb.id): (kb.name or "") for kb in KnowledgeDao.get_list_by_ids(ids)}
 
     def wrap_citation_tool(self, tool: BaseTool) -> BaseTool:
-        if tool.name == "web_search" or hasattr(tool, "knowledge_retriever_tool"):
+        if is_web_citation_tool(tool) or hasattr(tool, "knowledge_retriever_tool"):
             return AssistantCitationToolWrapper.wrap(tool, self.citation_registry_collector)
         return tool
 
@@ -440,24 +467,38 @@ class AssistantAgent(AssistantUtils):
             | ASSISTANT_PROMPT_OPT
             | self.llm
         )
-        async for one in chain.astream(
-            {
-                "assistant_name": self.assistant.name,
-                "assistant_description": self.assistant.prompt,
-            }
-        ):
-            yield one
+        try:
+            async for one in chain.astream(
+                {
+                    "assistant_name": self.assistant.name,
+                    "assistant_description": self.assistant.prompt,
+                }
+            ):
+                yield one
+        except Exception as e:
+            logger.exception("assistant prompt optimization failed")
+            raise to_llm_invoke_error(self.llm, e) from e
 
     def sync_optimize_assistant_prompt(self):
         return optimize_assistant_prompt(self.llm, self.assistant.name, self.assistant.desc)
 
     def generate_guide(self, prompt: str):
         """Generate opening dialogue and opening questions"""
-        return generate_opening_dialog(self.llm, prompt)
+        try:
+            return generate_opening_dialog(self.llm, prompt)
+        except Exception as e:
+            logger.exception("assistant guide generation failed")
+            raise to_llm_invoke_error(self.llm, e) from e
 
-    def generate_description(self, prompt: str):
-        """Generate description dialog"""
-        return generate_breif_description(self.llm, prompt)
+    async def astream_description(self, prompt: str):
+        """Stream a short assistant description generated from its prompt"""
+        chain = BREIF_DES_PROMPT | self.llm
+        try:
+            async for one in chain.astream({"description": prompt}):
+                yield one.content
+        except Exception as e:
+            logger.exception("assistant description generation failed")
+            raise to_llm_invoke_error(self.llm, e) from e
 
     def choose_tools(self, tool_list: list[dict[str, str]], prompt: str) -> list[str]:
         """
@@ -466,7 +507,11 @@ class AssistantAgent(AssistantUtils):
         """
         tool_list = [ToolInfo(tool_name=one["name"], tool_description=one["description"]) for one in tool_list]
         tool_selector = ToolSelector(llm=self.llm, tools=tool_list)
-        return tool_selector.select(self.assistant.name, prompt)
+        try:
+            return tool_selector.select(self.assistant.name, prompt)
+        except Exception as e:
+            logger.exception("assistant tool selection failed")
+            raise to_llm_invoke_error(self.llm, e) from e
 
     async def fake_callback(self, callback: Callbacks):
         if not callback:
@@ -532,6 +577,9 @@ class AssistantAgent(AssistantUtils):
         """
         Run Agent Conversation
         """
+        from bisheng_langchain.gpts.tools.code_interpreter.factory import refresh_open_code_executors
+
+        refresh_open_code_executors(self.tools)
         await self.fake_callback(callback)
 
         if chat_history:

@@ -1,4 +1,4 @@
-"""F068: ``order_field`` / ``order_sort`` reach ``ORDER BY`` as raw SQL text.
+"""F072: ``order_field`` / ``order_sort`` reach ``ORDER BY`` as raw SQL text.
 
 Both the space children/search endpoints (typed query params → 422) and the DAO
 (``ValueError``) must refuse anything outside the whitelist.

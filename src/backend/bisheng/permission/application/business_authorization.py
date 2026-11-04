@@ -288,3 +288,43 @@ async def batch_check_verified_business_visible(
         for target, is_allowed in zip(batch_targets, allowed, strict=True):
             result[(target.resource_type, target.resource_id)] = bool(is_allowed)
     return result
+
+
+@contextual_operation
+async def batch_check_verified_business_actions(
+    *,
+    actor: PermissionActor,
+    targets: Iterable[VerifiedPermissionTarget],
+    actions: Iterable[str],
+) -> dict[tuple[str, str], frozenset[str]]:
+    """Check already business-verified targets without resolving IDs again.
+
+    Disabled Catalog actions are absent from a listing's capability set, just
+    as in ``batch_check_business_actions``. Runtime and transport failures
+    continue to propagate; the caller cannot substitute membership roles.
+    """
+    normalized_targets = tuple({(target.resource_type, target.resource_id): target for target in targets}.values())
+    normalized_actions = tuple(dict.fromkeys(actions))
+    result: dict[tuple[str, str], set[str]] = {
+        (target.resource_type, target.resource_id): set() for target in normalized_targets
+    }
+    if not normalized_targets or not normalized_actions:
+        return {key: frozenset() for key in result}
+    runtime = await get_f048_runtime()
+    for action in normalized_actions:
+        for offset in range(0, len(normalized_targets), _MAX_BATCH_CHECKS):
+            batch = normalized_targets[offset : offset + _MAX_BATCH_CHECKS]
+            try:
+                allowed = await runtime.batch_check_actions(actor, batch, action)
+            except InvalidCatalogActionError:
+                # A Catalog change during a multi-batch list must not retain
+                # grants collected earlier for an action now unavailable.
+                for granted_actions in result.values():
+                    granted_actions.discard(action)
+                break
+            if len(allowed) != len(batch):
+                raise PermissionPublishNotReadyError(msg="Permission batch returned an incomplete result")
+            for target, is_allowed in zip(batch, allowed, strict=True):
+                if is_allowed:
+                    result[(target.resource_type, target.resource_id)].add(action)
+    return {key: frozenset(value) for key, value in result.items()}

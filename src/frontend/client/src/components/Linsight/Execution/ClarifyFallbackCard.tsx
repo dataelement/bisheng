@@ -13,7 +13,7 @@
  * unchanged and only runs when there ARE parseable questions.
  */
 import { useMemo, useState } from 'react';
-import { Textarea } from '~/components/ui';
+import { Textarea } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
 import type { ExecStepEventData } from './stepUtils';
 import { CLARIFY_SKIP_SIGNAL, parseClarifyRequest } from './stepUtils';
@@ -39,7 +39,7 @@ export function ClarifyFallbackCard({ data, disabled = false, onSubmit }: Clarif
         onSubmit(request.taskId, answer);
     };
     const handleSkip = () => finish(CLARIFY_SKIP_SIGNAL);
-    const handleSupplement = () => finish(text.trim());
+    const handleSupplement = () => { if (text.length <= 10000) finish(text.trim()); };
 
     return (
         <div
@@ -64,6 +64,7 @@ export function ClarifyFallbackCard({ data, disabled = false, onSubmit }: Clarif
                     disabled={disabled || submitted}
                     rows={3}
                     maxLength={10000}
+                    showCount
                     placeholder={localize('com_linsight_clarify_input_placeholder')}
                     onChange={(e) => setText(e.target.value)}
                     onKeyDown={(e) => {
@@ -74,7 +75,8 @@ export function ClarifyFallbackCard({ data, disabled = false, onSubmit }: Clarif
                             handleSupplement();
                         }
                     }}
-                    className="mt-3 resize-none text-sm rounded-xl border-none shadow-none bg-[#F5F7FA] placeholder:text-text-3 focus-visible:ring-0 focus-visible:outline-none"
+                    className="mt-3"
+                    textareaClassName="resize-none"
                 />
             )}
 
@@ -91,7 +93,7 @@ export function ClarifyFallbackCard({ data, disabled = false, onSubmit }: Clarif
                 {showSupplement ? (
                     <button
                         type="button"
-                        disabled={disabled || submitted || !text.trim()}
+                        disabled={disabled || submitted || !text.trim() || text.length > 10000}
                         onClick={handleSupplement}
                         className="h-10 flex-1 rounded-xl bg-[#212121] text-sm font-medium text-white hover:bg-black disabled:opacity-50 transition-colors"
                     >

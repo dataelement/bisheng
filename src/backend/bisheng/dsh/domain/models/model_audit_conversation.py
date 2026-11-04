@@ -12,6 +12,7 @@ from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, Pr
 class DshModelAuditConversation(SQLModelSerializable, table=True):
     __tablename__ = "dsh_model_audit_conversation"
     __table_args__ = (
+        Index("ix_dma_conversation_safety", "tenant_id", "has_sensitive_hit", "listed_at", "conversation_key"),
         Index("ix_dma_conversation_list", "tenant_id", "listed_at", "conversation_key"),
         Index("ix_dma_conversation_user", "tenant_id", "user_id", "listed_at", "conversation_key"),
     )
@@ -40,3 +41,5 @@ class DshModelAuditConversation(SQLModelSerializable, table=True):
         default=False, sa_column=Column(Boolean, nullable=False, server_default=text("0"))
     )
     relation_conflict: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default=text("0")))
+    sensitive_hit_count: int = Field(default=0, sa_column=Column(BigInteger, nullable=False, server_default=text("0")))
+    has_sensitive_hit: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default=text("0")))

@@ -1,3 +1,5 @@
+import { SubjectIdentity } from "./SubjectIdentity";
+import { permissionModelLabel } from "./permissionModelLabel";
 import { useLocalize } from "~/hooks";
 import { PermissionLevelMenu } from "./PermissionLevelMenu";
 import { canMutatePermissionDraftRow } from "./permissionDraftPolicy";
@@ -7,6 +9,7 @@ import {
 } from "./usePermissionDraft";
 import type { PermissionDraftRow } from "./usePermissionDraft";
 import { SourceBadge } from "./SourceBadge";
+import { PermissionModelStatus } from "./PermissionModelStatus";
 
 export interface PermissionDraftEditorCapabilities {
   canChangeRelation: boolean;
@@ -41,7 +44,7 @@ export function PermissionDraftEditor({
     const rowKey = getPermissionDraftRowKey(row);
     onChange(value.map((candidate) => (
       getPermissionDraftRowKey(candidate) === rowKey
-        ? { ...candidate, modelKey: model.id, modelName: model.name, modelLevel: model.level }
+        ? { ...candidate, modelKey: model.id, modelName: model.name, modelLevel: model.level, modelActive: true }
         : candidate
     )));
   };
@@ -74,10 +77,17 @@ export function PermissionDraftEditor({
           relationModels,
         );
         const activeModelId = row.modelKey;
-        const relationLabel =
+        const relationLabel = permissionModelLabel(
+          activeModelId,
           capabilities.relationModels.find((model) => model.id === activeModelId)?.name
-          ?? row.modelName
-          ?? row.modelKey;
+            ?? row.modelName,
+          localize,
+        );
+        // Source, read-only state and inheritance provide the row metadata.
+        const showReadOnly =
+          !row.protected && (row.scope === "INHERITED" || row.editable === false);
+        const showInheritedFrom = row.scope === "INHERITED" && !!row.inheritedFromName;
+        const hasMeta = !!row.sourceType || showReadOnly || showInheritedFrom || row.modelActive === false;
 
         return (
           <div key={rowKey} className="flex min-h-11 items-center gap-3 py-2">
@@ -85,10 +95,13 @@ export function PermissionDraftEditor({
               <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-fill-4 text-caption text-white">
                 {row.subjectName.trim().slice(0, 1).toUpperCase()}
               </span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-body text-text-1">{row.subjectName}</div>
-                {(row.sourceType || row.protected || row.scope === "INHERITED" || row.editable === false) && (
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-text-3">
+              {/* Name and its meta (source tag, read-only note) sit on one line:
+                  the name truncates, the meta keeps its width. */}
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <div className="min-w-0 truncate text-body text-text-1">{row.subjectName}</div>
+                {(row.externalId || row.departmentPath) && <SubjectIdentity type={row.subjectType} externalId={row.externalId} path={row.departmentPath} />}
+                {hasMeta && (
+                  <div className="flex shrink-0 flex-wrap items-center gap-1.5 text-caption text-text-3">
                     {row.sourceType && (
                       <SourceBadge
                         source={{
@@ -97,13 +110,11 @@ export function PermissionDraftEditor({
                         }}
                       />
                     )}
-                    {row.protected && (
-                      <span>{localize("f048_permission.roster.protected")}</span>
-                    )}
-                    {!row.protected && (row.scope === "INHERITED" || row.editable === false) && (
+                    {showReadOnly && (
                       <span>{localize("f048_permission.roster.read_only")}</span>
                     )}
-                    {row.scope === "INHERITED" && row.inheritedFromName && (
+                    <PermissionModelStatus active={row.modelActive} />
+                    {showInheritedFrom && (
                       <span>
                         {localize("f048_permission.roster.inherited_from")}: {row.inheritedFromName}
                       </span>

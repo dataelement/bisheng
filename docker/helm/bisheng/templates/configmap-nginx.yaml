@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "bisheng.fullname" . }}-nginx
+  labels:
+    {{- include "bisheng.labels" . | nindent 4 }}
+data:
+  default.conf: |
+    map $http_upgrade $connection_upgrade {
+      default upgrade;
+      '' close;
+    }
+    map $http_x_forwarded_proto $bs_forwarded_proto {
+      default $http_x_forwarded_proto;
+      "" $scheme;
+    }
+    map $http_x_forwarded_host $bs_forwarded_host {
+      default $http_x_forwarded_host;
+      "" $http_host;
+    }
+    server {
+      gzip on;
+      gzip_comp_level 2;
+      gzip_min_length 1000;
+      gzip_types text/xml text/css;
+      gzip_http_version 1.1;
+      gzip_vary on;
+      listen {{ .Values.frontend.service.port }};
+
+      location / {
+        root /usr/share/nginx/html/platform;
+        index index.html index.htm;
+        try_files $uri $uri/ /index.html =404;
+        add_header X-Frame-Options SAMEORIGIN;
+      }
+
+      location /workspace/ {
+        alias /usr/share/nginx/html/client/;
+        index index.html index.htm;
+        try_files $uri $uri/ /workspace/index.html;
+      }
+
+      location ~ ^(/workspace)?/api(/|$) {
+        rewrite ^/workspace(/.*)$ $1 break;
+        proxy_pass http://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }};
+        proxy_read_timeout 300s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $bs_forwarded_proto;
+        proxy_set_header X-Forwarded-Host $bs_forwarded_host;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        client_max_body_size 1024m;
+        add_header X-Frame-Options SAMEORIGIN;
+      }
+
+      location ~ ^/(workspace/bisheng|bisheng|tmp-dir)/ {
+        rewrite ^/workspace(/.*)$ $1 break;
+        # SigV4 signs Host; must match object_storage.minio.sharepoint.
+        proxy_set_header Host {{ .Values.middleware.minio.sharepoint }};
+        proxy_pass http://{{ .Values.middleware.minio.endpoint }};
+      }
+    }
+    {{- if .Values.frontend.service.clientPort }}
+    server {
+      gzip on;
+      gzip_comp_level 2;
+      gzip_min_length 1000;
+      gzip_types text/xml text/css;
+      gzip_http_version 1.1;
+      gzip_vary on;
+      listen {{ .Values.frontend.service.clientPort }};
+
+      location = / {
+        return 302 /workspace/;
+      }
+
+      location /workspace/ {
+        alias /usr/share/nginx/html/client/;
+        index index.html index.htm;
+        try_files $uri $uri/ /workspace/index.html;
+      }
+
+      location ~ ^(/workspace)?/api(/|$) {
+        rewrite ^/workspace(/.*)$ $1 break;
+        proxy_pass http://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }};
+        proxy_read_timeout 300s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $bs_forwarded_proto;
+        proxy_set_header X-Forwarded-Host $bs_forwarded_host;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        client_max_body_size 1024m;
+        add_header X-Frame-Options SAMEORIGIN;
+      }
+
+      location ~ ^/(workspace/bisheng|bisheng|tmp-dir)/ {
+        rewrite ^/workspace(/.*)$ $1 break;
+        # SigV4 signs Host; must match object_storage.minio.sharepoint.
+        proxy_set_header Host {{ .Values.middleware.minio.sharepoint }};
+        proxy_pass http://{{ .Values.middleware.minio.endpoint }};
+      }
+    }
+    {{- end }}

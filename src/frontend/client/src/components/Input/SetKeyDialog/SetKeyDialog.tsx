@@ -127,7 +127,7 @@ const SetKeyDialog = ({
         if (emptyValues.length > 0) {
           showToast({
             message: 'The following fields are required: ' + emptyValues.join(', '),
-            status: 'error',
+            status: 'warning',
           });
           onOpenChange(true);
           return;

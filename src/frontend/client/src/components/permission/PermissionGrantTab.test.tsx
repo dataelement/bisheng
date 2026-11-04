@@ -15,7 +15,11 @@ jest.mock("~/api/permission", () => ({
 }));
 
 jest.mock("~/hooks", () => ({
-  useLocalize: () => (key: string) => key,
+  useLocalize: () => (key: string) => {
+    const labels = jest.requireActual("~/locales/en/translation.json").com_permission;
+    return key.startsWith("com_permission.level_")
+      ? labels[key.split(".")[1]] : key;
+  },
 }));
 
 jest.mock("./SubjectSearchUser", () => ({
@@ -302,7 +306,7 @@ describe("F048 Client PermissionGrantTab", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps an inactive existing row read-only when it is not grantable", async () => {
+  it("respects server read-only eligibility for an inactive existing row", async () => {
     render(
       <PermissionGrantTab
         resourceType="channel"
@@ -310,6 +314,7 @@ describe("F048 Client PermissionGrantTab", () => {
         context={context}
         assignees={[
           existing("8", {
+            editable: false,
             model: {
               key: "inactive",
               name: "Inactive",
@@ -538,5 +543,31 @@ describe("F048 Client PermissionGrantTab", () => {
     expect(
       await screen.findByText("f048_permission.grant.conflict"),
     ).toBeInTheDocument();
+  });
+
+  it("keeps the old model visible and permits precise revocation when authorized", async () => {
+    const row = existing("8", {
+      model: { key: "retired", name: "Old permission", level: 1, active: false },
+    });
+    render(
+      <PermissionGrantTab
+        resourceType="channel"
+        resourceId="channel-1"
+        context={context}
+        assignees={[row]}
+        onSuccess={jest.fn()}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("f048_permission.grant.model.8")).toBeEnabled(),
+    );
+    expect(screen.getByText("f048_permission.roster.inactive_existing_grant")).toBeInTheDocument();
+    expect(screen.getByLabelText("f048_permission.grant.add_model")).not.toHaveTextContent("Old permission");
+    fireEvent.click(screen.getByLabelText("f048_permission.grant.remove.8"));
+    fireEvent.click(screen.getByRole("button", { name: "f048_permission.grant.submit" }));
+    await waitFor(() => expect(mockedMutate).toHaveBeenCalled());
+    expect(mockedMutate.mock.calls.at(-1)?.[2].changes).toEqual([
+      { op: "REMOVE", assignee_id: "8", expected_assignee_version: 2 },
+    ]);
   });
 });

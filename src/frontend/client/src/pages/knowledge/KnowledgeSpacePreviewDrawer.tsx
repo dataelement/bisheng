@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
+import { useCallback, useEffect, useRef, useState } from "react";
 import { EmptyStateIllustration, NoPermissionIllustration } from "~/components/illustrations";
-import { ChevronRight, X } from "lucide-react";
+import { KnowledgePreviewNavigation } from "./KnowledgePreviewNavigation";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "~/components/ui/Sheet";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+
 import { Button } from "~/components/ui/Button";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
@@ -10,7 +11,6 @@ import { FileCard } from "./SpaceDetail/FileCard";
 import {
     KnowledgeFile,
     KnowledgeSpace,
-    SPACE_CHILDREN_STATUS_SUCCESS_ONLY,
     SpaceRole,
     VisibilityType,
     getJoinedSpacesApi,
@@ -24,6 +24,7 @@ import { cn } from "~/utils";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
 import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
+import { getPreviewFileStatusFilter, getSpaceJoinButton, resolveSpaceJoinStatus, type SpaceJoinStatus } from "./spaceSubscriptionState";
 
 interface KnowledgeSpacePreviewDrawerProps {
     spaceId: string | undefined;
@@ -42,13 +43,13 @@ export function KnowledgeSpacePreviewDrawer({
     onSquareStatusChange,
 }: KnowledgeSpacePreviewDrawerProps) {
     const localize = useLocalize();
-    const isH5 = usePrefersMobileLayout();
+    const isMobileLayout = usePrefersMobileLayout();
     const spacePreviewScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const { showToast } = useToastContext();
     const { isOverQuota } = useEffectiveQuota();
 
     const [space, setSpace] = useState<KnowledgeSpace | null>(null);
-    const [status, setStatus] = useState<"none" | "joined" | "pending" | "rejected">("none");
+    const [status, setStatus] = useState<SpaceJoinStatus>("none");
     const [subscribing, setSubscribing] = useState(false);
     const [filesPreview, setFilesPreview] = useState<KnowledgeFile[]>([]);
     // Bumped on every drawer open. The file-list effect below keys on values derived from
@@ -101,51 +102,15 @@ export function KnowledgeSpacePreviewDrawer({
         showToastRef.current = showToast;
     }, [showToast]);
 
-    const syncPreviewStatus = (info: KnowledgeSpace) => {
-        const emitSquareStatus = (nextStatus: "join" | "joined" | "pending" | "rejected") => {
-            const syncKey = `${String(info.id)}:${nextStatus}`;
-            if (lastSyncedSquareStatusRef.current === syncKey) {
-                return;
-            }
+    const syncPreviewStatus = useCallback((info: KnowledgeSpace) => {
+        const nextStatus = resolveSpaceJoinStatus(info);
+        setStatus(nextStatus);
+        const squareStatus = nextStatus === "none" ? "join" : nextStatus;
+        const syncKey = `${String(info.id)}:${squareStatus}`;
+        if (lastSyncedSquareStatusRef.current === syncKey) return;
             lastSyncedSquareStatusRef.current = syncKey;
-            onSquareStatusChangeRef.current?.(String(info.id), nextStatus);
-        };
-
-        const subscriptionStatus = String(info.subscriptionStatus ?? info.squareStatus ?? "").toLowerCase();
-        if (subscriptionStatus === "rejected") {
-            setStatus("rejected");
-            emitSquareStatus("rejected");
-            return;
-        }
-        if (info.isPending || subscriptionStatus === "pending") {
-            setStatus("pending");
-            emitSquareStatus("pending");
-            return;
-        }
-        if (
-            info.isFollowed ||
-            subscriptionStatus === "subscribed" ||
-            subscriptionStatus === "joined"
-        ) {
-            setStatus("joined");
-            emitSquareStatus("joined");
-            return;
-        }
-        setStatus("none");
-        emitSquareStatus("join");
-    };
-
-    /**
-     * 广场预览文件列表状态过滤（对齐 /space/{id}/info 的 user_role）：
-     * - creator / admin：不限制
-     * - member 与 user_role 为 null（映射为 member）：仅展示解析成功的文件
-     */
-    const getPreviewFileStatusFilter = (s: KnowledgeSpace): number[] | undefined => {
-        if (s.role === SpaceRole.CREATOR || s.role === SpaceRole.ADMIN) {
-            return undefined;
-        }
-        return SPACE_CHILDREN_STATUS_SUCCESS_ONLY;
-    };
+        onSquareStatusChangeRef.current?.(String(info.id), squareStatus);
+    }, []);
 
     useEffect(() => {
         if (!open || !spaceId) return;
@@ -199,7 +164,7 @@ export function KnowledgeSpacePreviewDrawer({
             .finally(() => {
                 setLoadingSpace(false);
             });
-    }, [open, spaceId]);
+    }, [open, spaceId, syncPreviewStatus]);
 
     // Load file preview list for spaces that are visible to the current user
     useEffect(() => {
@@ -343,6 +308,16 @@ export function KnowledgeSpacePreviewDrawer({
             .then((res) => {
                 if (!cancelled) {
                     setCanViewApprovalContent(Boolean(res?.allowed));
+                    if (res?.allowed === false && status === "joined") {
+                        const nextSpace: KnowledgeSpace = {
+                            ...space,
+                            isFollowed: false,
+                            subscriptionStatus: "not_subscribed",
+                            squareStatus: "join",
+                        };
+                        setSpace(nextSpace);
+                        syncPreviewStatus(nextSpace);
+                    }
                 }
             })
             .catch(() => {
@@ -355,7 +330,7 @@ export function KnowledgeSpacePreviewDrawer({
             cancelled = true;
             controller.abort();
         };
-    }, [space?.id, space?.visibility, isOwnerOrAdmin, hasReadableGrant]);
+    }, [space, isOwnerOrAdmin, hasReadableGrant, status, syncPreviewStatus]);
 
     const handleClickAction = () => {
         if (!space) return;
@@ -424,7 +399,7 @@ export function KnowledgeSpacePreviewDrawer({
                     const message =
                         rawMessage ||
                         localize("com_knowledge.operation_failed_retry");
-                    showToast({ message, severity: NotificationSeverity.ERROR });
+                    showToast({ message, severity: NotificationSeverity.WARNING });
                 }
             } finally {
                 setSubscribing(false);
@@ -432,62 +407,40 @@ export function KnowledgeSpacePreviewDrawer({
         })();
     };
 
-    const getButtonConfig = () => {
-        if (status === "joined") return { label: localize("com_knowledge.joined"), variant: "secondary" as const, disabled: true };
-        if (status === "pending") return { label: localize("com_knowledge.pending"), variant: "secondary" as const, disabled: true };
-        if (status === "rejected") return { label: localize("com_knowledge.reapply"), variant: "outline" as const, disabled: subscribing };
-        if (isPublic) return { label: localize("com_knowledge.join"), variant: "default" as const, disabled: subscribing };
-        return { label: localize("com_knowledge.join"), variant: "outline" as const, disabled: subscribing };
-    };
-
-    const btn = getButtonConfig();
+    const btn = getSpaceJoinButton(status, isPublic, subscribing);
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent
                 side="right"
                 className={cn(
-                    "flex h-full min-h-0 flex-col overflow-hidden p-0 px-12 w-[1000px] sm:max-w-[1000px]",
+                    "flex h-full min-h-0 flex-col gap-0 overflow-hidden p-0 px-6 w-full sm:max-w-[1000px]",
                     "touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:px-4"
                 )}
                 hideClose
             >
-                {!isH5 ? (
-                    <button
-                        type="button"
-                        aria-label={localize("com_knowledge.collapse_drawer")}
-                        onClick={() => onOpenChange(false)}
-                        className="absolute left-1 top-1/2 z-20 flex h-16 w-6 -translate-y-1/2 items-center justify-center bg-white text-text-4 hover:text-[#B6BBC5]"
-                    >
-                        <ChevronRight className="size-6 stroke-[2.75]" />
-                    </button>
-                ) : (
-                    <button
-                        type="button"
-                        aria-label={localize("com_knowledge.close")}
-                        onClick={() => onOpenChange(false)}
-                        className="absolute right-4 top-4 z-20 inline-flex size-8 items-center justify-center rounded-md text-text-2 hover:bg-fill-1"
-                    >
-                        <X className="size-4" />
-                    </button>
-                )}
+                <KnowledgePreviewNavigation onClose={() => onOpenChange(false)} />
                 {space ? (
                     <>
-                        <SheetHeader className="gap-0 border-b border-gray-100 px-6 pb-4 pt-6 text-left touch-mobile:px-0 touch-mobile:pt-6">
-                            <SheetTitle className="mb-1 text-text-1 leading-tight font-semibold touch-mobile:pr-10">
-                                {space.name}
-                            </SheetTitle>
+                        <SheetHeader className={cn("gap-0 border-b border-border-base px-0 py-4 text-left", isMobileLayout && "pt-14")}>
+                            <div className="flex items-start justify-between gap-4">
+                                <SheetTitle className="min-w-0 flex-1 break-words text-text-1 leading-tight font-semibold">
+                                    {space.name}
+                                </SheetTitle>
+                                <Button
+                                    variant={btn.variant}
+                                    size="medium"
+                                    className="shrink-0"
+                                    disabled={btn.disabled}
+                                    onClick={handleClickAction}
+                                >
+                                    {localize(btn.label)}
+                                </Button>
+                            </div>
                             {space.description && (
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <p className="text-sm text-text-3 leading-relaxed line-clamp-2 cursor-default text-left">
+                                <SharedTooltip  content={space.description} ><p className="text-sm text-text-3 leading-relaxed line-clamp-2 cursor-default text-left">
                                             {space.description}
-                                        </p>
-                                    </TooltipTrigger>
-                                    <TooltipContent className="shadow-lg py-2 max-w-md text-sm">
-                                        {space.description}
-                                    </TooltipContent>
-                                </Tooltip>
+                                        </p></SharedTooltip>
                             )}
 
                             <div className="flex items-center gap-1.5 mb-3 mt-4">
@@ -497,30 +450,15 @@ export function KnowledgeSpacePreviewDrawer({
                                 <span className="text-sm text-text-3">{space.creator}</span>
                             </div>
 
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center text-sm text-text-3">
-                                    <span className="mr-3">{space.fileCount ?? 0} {localize("com_knowledge.articles_count")}</span>
-                                    <span>{space.memberCount ?? 0} {localize("com_knowledge.users_count")}</span>
-                                </div>
-                                <Button
-                                    variant={btn.variant}
-                                    className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${status === "joined"
-                                        ? "bg-fill-2 text-text-3 border-border-base"
-                                        : status === "pending"
-                                            ? "bg-fill-2 text-text-4 border-border-base"
-                                            : ""
-                                        }`}
-                                    disabled={btn.disabled}
-                                    onClick={handleClickAction}
-                                >
-                                    {btn.label}
-                                </Button>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body text-text-3">
+                                <span>{space.fileCount ?? 0} {localize("com_knowledge.articles_count")}</span>
+                                <span>{space.memberCount ?? 0} {localize("com_knowledge.users_count")}</span>
                             </div>
                         </SheetHeader>
 
                         <div
                             ref={spacePreviewScrollRevealRef}
-                            className="scrollbar-on-scroll flex-1 min-h-0 overflow-y-auto px-6 py-4 touch-mobile:px-0"
+                            className="scrollbar-on-scroll flex-1 min-h-0 overflow-y-auto py-4"
                             onScroll={(e) => {
                                 const el = e.currentTarget;
                                 if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {
@@ -620,7 +558,7 @@ export function KnowledgeSpacePreviewDrawer({
                         </div>
                     </>
                 ) : (
-                    <div className="flex flex-1 items-center justify-center px-6 py-4 text-sm text-text-3 touch-mobile:px-0">
+                    <div className="flex flex-1 items-center justify-center py-4 text-sm text-text-3">
                         {loadingSpace ? (
                             <LoadingIcon className="size-20 text-primary" />
                         ) : (

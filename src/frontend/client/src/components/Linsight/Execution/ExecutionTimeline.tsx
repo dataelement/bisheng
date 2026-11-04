@@ -29,15 +29,11 @@ interface ExecutionTimelineProps {
 
 export function ExecutionTimeline({ history }: ExecutionTimelineProps) {
     // F3 perf: building the node tree is several O(n) passes (merge + group +
-    // episode aggregation). The WS pump mutates `history` in place (same array
-    // reference), so the reference alone is not enough to invalidate the memo — a
-    // composite signature (length + last frame's status / call_id) re-fires it on
-    // each appended/closed frame while skipping the wasteful per-render rebuild.
-    const frames = history || [];
-    const last = frames[frames.length - 1];
-    const sig = `${frames.length}:${last?.status ?? ''}:${last?.call_id ?? ''}`;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional composite key over the in-place-mutated history array
-    const nodes = useMemo(() => buildTimelineGroups(mergeStepFrames(history)), [sig]);
+    // episode aggregation). The WS pump replaces `history` immutably on every
+    // frame (appendStepFrame), so the array reference is the change signal. A
+    // length-based key would miss a token folded into an existing entry, since
+    // folding keeps the length unchanged.
+    const nodes = useMemo(() => buildTimelineGroups(mergeStepFrames(history)), [history]);
     // Container liveness (session turn / running task), provided by the carrier via
     // ExecutionLiveContext. The ACTIVE episode is the LAST node while the container
     // is live — that one carries the live facets (正在 label, header pulse); every

@@ -27,6 +27,22 @@ const PLATFORM_LANG = { 'zh-Hans': 'zh-Hans', en: 'en-US', ja: 'ja' };
  */
 const TARGETS = [
   {
+    domain: 'tool',
+    app: 'platform',
+    emit: (lang, data) => ({
+      file: path.join(WORKSPACE, 'platform', 'public', 'locales', PLATFORM_LANG[lang], 'tool.json'),
+      content: data,
+    }),
+  },
+  {
+    domain: 'tool',
+    app: 'client',
+    emit: (lang, data) => ({
+      file: path.join(WORKSPACE, 'client', 'src', 'locales', lang, 'tool.gen.json'),
+      content: data,
+    }),
+  },
+  {
     domain: 'api_errors',
     app: 'platform',
     emit: (lang, data) => ({

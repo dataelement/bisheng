@@ -102,6 +102,11 @@ async def test_square_orders_unsubscribed_before_applied_then_by_unique_subscrib
         await connection.run_sync(SpaceChannelMember.__table__.create)
 
     now = datetime(2026, 1, 1)
+    unlisted_public = _space(6, now)
+    unlisted_public.is_released = False
+    unlisted_approval = _space(7, now)
+    unlisted_approval.is_released = False
+    unlisted_approval.auth_type = AuthTypeEnum.APPROVAL
     async with AsyncSession(engine, expire_on_commit=False) as session:
         session.add_all(
             [
@@ -110,6 +115,8 @@ async def test_square_orders_unsubscribed_before_applied_then_by_unique_subscrib
                 _space(3, now),
                 _space(4, now),
                 _space(5, now),
+                unlisted_public,
+                unlisted_approval,
                 _member(1, 7, MembershipStatusEnum.PENDING),
                 _member(1, 10),
                 _member(1, 10),

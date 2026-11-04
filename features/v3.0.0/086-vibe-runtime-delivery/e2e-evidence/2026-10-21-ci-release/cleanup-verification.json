@@ -1,0 +1,9 @@
+{
+  "original_running_containers": 27,
+  "same_ids_still_running": true,
+  "differences": {},
+  "test_containers_remaining": [],
+  "test_directory_removed": true,
+  "cached_images_retained": true,
+  "docker_daemon_configuration_changed": false
+}

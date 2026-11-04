@@ -1,0 +1,51 @@
+登录成功：http://nginx:3001
+  服务账号: e2e-f086-publisher
+  资源归属人: 用户 #2（姓名请在服务账号详情页核对）
+  租户: 1
+  密钥: bs-sak-********v_ss
+  到期时间: 未设置
+  凭据已写入 /root/.bisheng/credentials.json（仅当前用户可读写）
+✓ deploy-hosting（版本 3.0.0）：5 个文件已同步
+警告: 技能包已下载，但本机未接入任何 AI 编程工具——AI 读不到平台规矩。
+✓ platform-wiring（版本 3.0.0）：8 个文件已同步
+警告: 技能包已下载，但本机未接入任何 AI 编程工具——AI 读不到平台规矩。
+
+技能包落点：/root/.bisheng/skills/nginx-3001.260949c2（按平台分目录，切换平台不会互相覆盖）
+  · 已同步：deploy-hosting、platform-wiring
+  · 本机未发现 Claude Code / Codex；技能包只是下载了，还没有任何工具能读到。
+  · 其它 AI 编程工具（Cursor、Cline 等）：在项目 AGENTS.md 里指向
+    /root/.bisheng/skills/nginx-3001.260949c2/<包名>/SKILL.md；bisheng deploy 会自动写好这一行。
+{"event": "result", "command": "login", "ok": true, "exit_code": 0, "data": {"base_url": "http://nginx:3001", "actor_kind": "service_account", "actor_id": 1, "actor_name": "e2e-f086-publisher", "resource_owner": {"user_id": 2}, "tenant_id": 1, "key_mask": "bs-sak-********v_ss", "expires_at": null}, "failure": null}
+本项目不在 git 仓库内（或本机没有 git），忽略规则按子集解析；复杂规则请写进 .bishengignore（同 .gitignore 语法，最后加载、优先级最高）。
+已排除 0 项（版本控制元数据 / 依赖目录 / 缓存 / 本地数据文件等）
+打包条目 3 个，解包后 0.00 MB，压缩后 0.00 MB（上限：50 MB / 解包 200 MB / 20000 条目）
+说明: 本项目不在 git 仓库内（或本机没有 git），忽略规则按子集解析；复杂规则请写进 .bishengignore（同 .gitignore 语法，最后加载、优先级最高）。
+Top 目录:
+  (项目根)  0.00 MB
+Top 文件:
+  main.py  0.00 MB
+  bisheng-app.yaml  0.00 MB
+  requirements.txt  0.00 MB
+目标应用：(名称未知，本次发布后回填)（标识 3192b1ee03c943ce9fd15f91727ccb4d）
+若这不是要更新的应用，请中止并用 --app-id 指定正确的目标。
+开始上传（3 个条目，sha256 2ab85fda1204…）
+{"event": "progress", "command": "deploy", "phase": "upload", "sent_bytes": 1273, "total_bytes": 1273}
+已上传 0.0 MB / 0.0 MB (100%)
+平台已接收，应用标识 3192b1ee03c943ce9fd15f91727ccb4d，发布单 0ea77ee2b5cb47f09fd3f496e2c4c78e
+入口地址暂不可得，请在 应用详情页 · 发布 获取。
+已创建 AGENTS.md，写明技能包位置（供其它 AI 工具查阅，建议提交到仓库）
+{"event": "stage", "command": "deploy", "stage": "received", "status": "running", "ts": "2026-10-20T12:26:23+0000"}
+[running] 已接收
+[running] 依赖构建
+{"event": "stage", "command": "deploy", "stage": "precheck_build", "status": "running", "ts": "2026-10-20T12:26:25+0000"}
+[running] 启动探活
+{"event": "stage", "command": "deploy", "stage": "precheck_probe", "status": "running", "ts": "2026-10-20T12:26:53+0000"}
+{"event": "stage", "command": "deploy", "stage": "approval_created", "status": "running", "ts": "2026-10-20T12:27:06+0000"}
+[running] 审批单已生成
+审批单已生成：4。审批是人工动作，可能跨天。
+跟踪方式：
+  - 在 应用详情页 · 发布 查看审批与上线进度
+  - 用 MCP 的应用状态工具查询
+  - 重新执行 bisheng deploy --wait 继续等待
+{"event": "result", "command": "deploy", "ok": true, "exit_code": 0, "data": {"deployment_id": "0ea77ee2b5cb47f09fd3f496e2c4c78e", "app_id": "3192b1ee03c943ce9fd15f91727ccb4d", "version_id": "e7d5b023450d4b4283c727e5cf0211f9", "entry_url": "http://nginx:3001/apps/e2e-f086-sqlite", "stage": "approval_created", "app_state": "online", "pending_reason": null, "approval": {"instance_id": 4, "status": "pending", "version_id": "e7d5b023450d4b4283c727e5cf0211f9", "submitted_at": "2026-10-20T12:27:03", "decided_at": null, "reject_reason": null, "approver_names": ["e2e-f086-admin"]}}, "failure": null}
+Actual packaged CLI deploy exit: 0

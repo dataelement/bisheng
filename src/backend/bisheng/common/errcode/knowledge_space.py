@@ -162,3 +162,8 @@ class KnowledgeSpaceInvalidCursorError(BaseErrorCode):
 class SpaceGrantedNotJoinedError(BaseErrorCode):
     Code: int = 18080
     Msg: str = "This space is open to you through a permission grant and cannot be exited"
+
+
+class DepartmentKnowledgeSpacePrivateError(BaseErrorCode):
+    Code: int = 18081
+    Msg: str = "Department knowledge spaces cannot be private"

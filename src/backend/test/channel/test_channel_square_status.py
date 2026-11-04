@@ -36,7 +36,7 @@ def _channel(cid: str):
         id=cid,
         name=f"name-{cid}",
         description="",
-        visibility=ChannelVisibilityEnum.PUBLIC,
+        visibility=ChannelVisibilityEnum.REVIEW,
         filter_rules=[],
         source_list=[],
         latest_article_update_time=None,
@@ -73,9 +73,7 @@ async def test_square_status_visible_is_subscribed_else_membership_fallback(monk
     )
     service = _service(rows, counts=[0, 0, 0, 0])
 
-    result = await service.get_channel_square(
-        keyword=None, page=1, page_size=20, login_user=SimpleNamespace(user_id=1)
-    )
+    result = await service.get_channel_square(keyword=None, page=1, page_size=20, login_user=SimpleNamespace(user_id=1))
 
     status_by_id = {item.id: item.subscription_status for item in result.data}
     assert status_by_id["v1"] == SubscriptionStatusEnum.SUBSCRIBED

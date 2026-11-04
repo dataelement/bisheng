@@ -1,3 +1,4 @@
+import { formatErrorTime } from "@bisheng/ui";
 import { useEffect, useState } from "react";
 import { Button } from "~/components/ui/Button";
 import { SystemMaintenanceIllustration } from "~/components/illustrations";
@@ -17,10 +18,13 @@ export const SERVICE_MAINTENANCE_EVENT = "bs:service-maintenance";
  */
 export function SystemMaintenanceOverlay() {
     const localize = useLocalize();
-    const [visible, setVisible] = useState(false);
+    // When the first failure surfaced, written as on the crash page, so a
+    // screenshot can be matched against backend logs. Later 500s keep the first.
+    const [occurredAt, setOccurredAt] = useState<string | null>(null);
+    const visible = occurredAt !== null;
 
     useEffect(() => {
-        const show = () => setVisible(true);
+        const show = () => setOccurredAt((prev) => prev ?? formatErrorTime(new Date()));
         window.addEventListener(SERVICE_MAINTENANCE_EVENT, show);
         return () => window.removeEventListener(SERVICE_MAINTENANCE_EVENT, show);
     }, []);
@@ -38,6 +42,11 @@ export function SystemMaintenanceOverlay() {
                     {localize("com_app.service_maintenance")}
                 </p>
             </div>
+            {/* Below the description, above refresh; same label and value as the crash page. */}
+            <p className="flex items-center gap-2 text-sm leading-[22px]">
+                <span className="font-medium text-text-1/80">{localize("com_error_page.time")}</span>
+                <span className="select-text font-mono text-text-3">{occurredAt}</span>
+            </p>
             <Button variant="outline" className="h-8 rounded-md px-4" onClick={() => window.location.reload()}>
                 {localize("com_app.refresh")}
             </Button>

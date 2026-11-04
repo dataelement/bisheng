@@ -1,0 +1,31 @@
+{
+  "deployment_id": "313564fac2eb43c396d612a4ce0213f6",
+  "app_id": "56e7f26a33884f6eb0cc526e394fc8c2",
+  "version_id": "12e94dbdb8284c34955c6c82ebe7068c",
+  "version_no": null,
+  "stage": "precheck_probe",
+  "status": "failed",
+  "failure": {
+    "code": 16124,
+    "hints": [],
+    "stage": "precheck_probe",
+    "details": {
+      "reason": "readiness_timeout",
+      "maintenance": false,
+      "operation_id": "b3d4a49ffe2144aca37b7866198a9c27",
+      "runtime_stage": "starting",
+      "data_may_have_changed": false
+    },
+    "message": "\u5e94\u7528\u6267\u884c\u5931\u8d25"
+  },
+  "approval": null,
+  "app_state": "draft",
+  "entry_url": "http://nginx:3001/apps/e2e-f086-bad-port",
+  "scan_result": {
+    "hits": [],
+    "blocked": false,
+    "skipped": [],
+    "files_scanned": 1,
+    "files_skipped": 0
+  }
+}

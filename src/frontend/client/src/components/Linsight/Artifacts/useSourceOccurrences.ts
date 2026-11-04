@@ -1,5 +1,5 @@
 /**
- * F071: ties the report's citation badges to the source pane.
+ * F074: ties the report's citation badges to the source pane.
  *
  *  - marks the badges citing the passage being checked (`data-compare-active`)
  *    so they stay visible while the reader's eyes are on the source;

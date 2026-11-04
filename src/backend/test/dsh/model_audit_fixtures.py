@@ -1,4 +1,7 @@
-"""Deterministic audit fixtures; no network or application credentials."""
+"""Deterministic audit fixtures; no network or application credentials.
+
+Coverage AC: AC-03, AC-46.
+"""
 
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -10,6 +13,7 @@ from sqlmodel import Session, SQLModel
 from bisheng.core.context.tenant import set_current_tenant_id, strict_tenant_filter
 from bisheng.core.database import tenant_filter
 from bisheng.dsh.domain.models import model_audit_content, model_audit_request, model_audit_setting
+from bisheng.dsh.domain.models.content_safety_event import DshContentSafetyEvent
 from bisheng.dsh.domain.models.model_audit_conversation import DshModelAuditConversation
 from bisheng.dsh.domain.models.model_audit_title import DshModelAuditConversationTitle
 from bisheng.dsh.domain.models.model_audit_tree import DshAuditTreeNode, DshAuditTreePath, DshAuditTreeState
@@ -18,6 +22,7 @@ from bisheng.user.domain.models.user import User
 
 NOW = datetime(2026, 10, 14, tzinfo=UTC)
 AUDIT_MODELS = (
+    DshContentSafetyEvent,
     DshModelAuditConversationTitle,
     DshAuditTreeState,
     DshAuditTreeNode,

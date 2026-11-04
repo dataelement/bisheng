@@ -1,13 +1,6 @@
 import type { TModelSelectProps } from '~/common';
-import {
-  Switch,
-  Label,
-  Slider,
-  HoverCard,
-  InputNumber,
-  SelectDropDown,
-  HoverCardTrigger,
-} from '~/components';
+import { Label, Slider, HoverCard, InputNumber, SelectDropDown, HoverCardTrigger } from '~/components';
+import { Switch } from '@bisheng/ui';
 import { cn, optionText, defaultTextProps, removeFocusRings } from '~/utils';
 import OptionHover from './OptionHover';
 import { useLocalize } from '~/hooks';
@@ -100,7 +93,7 @@ export default function Settings({ conversation, setOption, models, readonly }: 
                 checked={agent === 'functions'}
                 onCheckedChange={onCheckedChangeAgent}
                 disabled={readonly}
-                className="ml-4 mt-2"
+                className="peer ml-4 mt-2"
               />
             </HoverCardTrigger>
             <OptionHover endpoint={conversation.endpoint ?? ''} type="func" side={ESide.Bottom} />
@@ -118,7 +111,7 @@ export default function Settings({ conversation, setOption, models, readonly }: 
                 checked={skipCompletion === true}
                 onCheckedChange={onCheckedChangeSkip}
                 disabled={readonly}
-                className="ml-4 mt-2"
+                className="peer ml-4 mt-2"
               />
             </HoverCardTrigger>
             <OptionHover endpoint={conversation.endpoint ?? ''} type="skip" side={ESide.Bottom} />

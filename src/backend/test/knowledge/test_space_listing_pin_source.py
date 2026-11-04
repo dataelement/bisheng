@@ -42,20 +42,9 @@ async def test_accessible_spaces_pin_comes_from_pin_table_and_sorts_first():
     spaces = [_space(100, "alpha"), _space(200, "beta")]  # both creator-owned (user 5)
 
     with (
-        patch(f"{_KS}.KnowledgeDao.async_get_spaces_by_ids", new=AsyncMock(return_value=spaces)),
         patch(
             f"{_KS}.KnowledgeSpaceUserPinDao.list_pinned_space_ids",
             new=AsyncMock(return_value={200}),
-        ),
-        patch.object(
-            service,
-            "_batch_actions",
-            new=AsyncMock(
-                return_value={
-                    "100": frozenset({"visible"}),
-                    "200": frozenset({"visible"}),
-                }
-            ),
         ),
         patch.object(
             service,
@@ -64,7 +53,11 @@ async def test_accessible_spaces_pin_comes_from_pin_table_and_sorts_first():
         ),
         patch.object(service, "_decorate_department_metadata", new=AsyncMock(side_effect=lambda x: x)),
     ):
-        result = await service._format_accessible_spaces([100, 200], "name")
+        result = await service._format_managed_space_rows(
+            spaces,
+            memberships=[],
+            action_map={"100": frozenset({"visible", "edit"}), "200": frozenset({"visible", "edit"})},
+        )
 
     assert [r.id for r in result] == [200, 100]  # pinned first
     by_id = {r.id: r.is_pinned for r in result}

@@ -1,6 +1,8 @@
-import { Input } from "@/components/bs-ui/input";
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Input } from '@bisheng/ui';
+
 import { Label } from "@/components/bs-ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
+import { RadioGroup, Radio } from '@bisheng/ui';
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -35,27 +37,21 @@ export function FlowRadio({ limit, onChange }: { limit: number; onChange: (val: 
             onValueChange={(value: LimitType) => handleCommit(value, value === LimitType.LIMITED ? '10' : '0')}>
             <div>
                 <Label className="flex justify-center">
-                    <RadioGroupItem className="mr-2" value={LimitType.UNLIMITED} />{t('system.unlimited')}
+                    <Radio className="mr-2" value={LimitType.UNLIMITED} />{t('system.unlimited')}
                 </Label>
             </div>
             <div>
                 <Label className="flex justify-center">
-                    <RadioGroupItem className="mr-2" value={LimitType.LIMITED} />{t('system.limit')}
+                    <Radio className="mr-2" value={LimitType.LIMITED} />{t('system.limit')}
                 </Label>
             </div>
             {status === LimitType.LIMITED && <div className="mt-[-3px] flex items-center">
                 <Label className="whitespace-nowrap">{t('system.maximum')}</Label>
-                <Input
-                    type="number"
-                    value={limitState}
-                    className="inline h-5 w-[70px] font-medium"
-                    onChange={(e) => handleCommit(LimitType.LIMITED, e.target.value)}
-                    onBlur={(e) => {
+                <Input type="number" value={limitState} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, {  })) return; return handleCommit(LimitType.LIMITED, e.target.value); }} onBlur={(e) => {
                         if (e.target.value === '') {
                             e.target.value = limitRef.current + ''
                         }
-                    }}
-                />
+                    }} className={"inline h-5 w-[70px] font-medium"} />
                 <Label className="min-w-[100px]">{t('system.perMinute')}</Label>
             </div>}
         </RadioGroup>

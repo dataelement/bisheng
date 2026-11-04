@@ -66,7 +66,7 @@ export default function ContextButton({
       console.error(error);
       showToast({
         message: localize('com_ui_assistant_delete_error'),
-        status: 'error',
+        status: 'warning',
       });
     },
   });

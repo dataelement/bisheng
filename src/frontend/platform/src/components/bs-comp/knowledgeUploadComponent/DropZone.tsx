@@ -1,4 +1,5 @@
-import { message } from "@/components/bs-ui/toast/use-toast";
+import { toast } from '@bisheng/ui';
+
 import { locationContext } from "@/contexts/locationContext";
 import { UploadIcon } from "lucide-react";
 import { useContext } from "react";
@@ -63,11 +64,7 @@ export default function DropZone({ onDrop }) {
                         .map(f => f.file.name.split('.').pop()?.toLowerCase())
                         .filter(Boolean)
                 )];
-                message({
-                    title: t('prompt'),
-                    description: t('unsupportedFileType', { extensions: uniqueExtensions.join(', ') }),
-                    variant: 'error'
-                });
+                toast.show({ type: 'error', message: [String(t('prompt') ?? ''), String(t('unsupportedFileType', { extensions: uniqueExtensions.join(', ') }) ?? '')].filter(Boolean).join('\n') });
             }
 
             // Only pass valid files to parent component

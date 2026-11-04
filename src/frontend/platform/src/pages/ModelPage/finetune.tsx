@@ -1,11 +1,11 @@
+import { Pagination } from "@bisheng/ui";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/bs-ui/table";
 import { alertContext } from "../../contexts/alertContext";
 import { deleteTaskApi, getTasksApi } from "../../controllers/API/finetune";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useDebounce, useTable } from "../../util/hook";
 import CreateTask from "./components/CreateTask";
 import FinetuneDetail, { BadgeView } from "./components/FinetuneDetail";
@@ -16,6 +16,7 @@ import { CpuDetail } from "./cpuInfo";
 export const Finetune = () => {
     const { setSuccessData } = useContext(alertContext);
     const { t, i18n } = useTranslation();
+    const paginationLocale = usePaginationLocale();
 
     useEffect(() => {
         i18n.loadNamespaces('model');
@@ -41,7 +42,7 @@ export const Finetune = () => {
 
     // del
     const handleDeleteTask = async () => {
-        const res = await captureAndAlertRequestErrorHoc(deleteTaskApi(taskId))
+        const res = await deleteTaskApi(taskId)
         if (res !== null) return
 
         setSuccessData({ title: t('deleteSuccess') })
@@ -72,7 +73,7 @@ export const Finetune = () => {
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead className="w-[100px]">{t('finetune.modelName')}</TableHead>
-                                        <TableHead></TableHead>
+                                        <TableHead className="w-[100px]"></TableHead>
                                         <TableHead>{t('finetune.rtService')}</TableHead>
                                         <TableHead className="text-right">{t('finetune.createTime')}</TableHead>
                                     </TableRow>
@@ -81,7 +82,7 @@ export const Finetune = () => {
                                     {tasks.map((task: any) => (
                                         <TableRow key={task.id} onClick={() => changeItem(task.id)} className={`cursor-pointer ${task.id === taskId && 'bg-gray-100'}`}>
                                             <TableCell className="font-medium">{task.model_name}</TableCell>
-                                            <TableCell><BadgeView value={task.status}></BadgeView></TableCell>
+                                            <TableCell className="whitespace-nowrap"><BadgeView value={task.status}></BadgeView></TableCell>
                                             <TableCell>{task.server_name}</TableCell>
                                             <TableCell className="text-right">{task.create_time.replace('T', ' ')}</TableCell>
                                         </TableRow>
@@ -91,8 +92,8 @@ export const Finetune = () => {
                         </div>
                         <div className="bisheng-table-footer bg-background-login">
                             <p className="desc"></p>
-                            <AutoPagination
-                                page={page}
+                            <Pagination locale={paginationLocale}
+                                current={page}
                                 pageSize={pageSize}
                                 total={total}
                                 onChange={(newPage) => setPage(newPage)}

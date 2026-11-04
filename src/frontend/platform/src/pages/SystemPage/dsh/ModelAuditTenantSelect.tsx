@@ -1,4 +1,4 @@
-import { Button } from "@/components/bs-ui/button";
+import { Button } from "@bisheng/ui";
 import { getTenantsApi } from "@/controllers/API/tenant";
 import type { Tenant } from "@/types/api/tenant";
 import { displayTenantName } from "@/utils/tenantDisplayName";
@@ -77,7 +77,7 @@ export function ModelAuditTenantSelect({
         <div role="alert" className="flex flex-wrap items-center gap-2">
           <span>{t("dsh.modelAuditView.tenantLoadError")}</span>
           <Button
-            variant="outline"
+            variant="outlined" color="default"
             onClick={() => setRevision((old) => old + 1)}
           >
             {t("dsh.refresh")}

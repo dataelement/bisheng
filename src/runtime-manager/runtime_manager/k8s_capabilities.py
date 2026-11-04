@@ -1,0 +1,437 @@
+"""Derive readiness from installer-owned, scoped live probe evidence.
+
+The installer performs privileged and negative checks. The manager has no
+permission to change that baseline or to replace unknown evidence with flags.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+import re
+from uuid import UUID
+
+REQUIRED_CHECKS = frozenset(
+    {
+        "namespace-budget",
+        "restricted-psa",
+        "admission-create",
+        "status-provenance",
+        "binding-delete-fence",
+        "rbac-namespace",
+        "no-exec",
+        "network-ingress",
+        "network-direct-denied",
+        "network-egress-allowed",
+        "network-dns-denied",
+        "storage-sqlite",
+        "image-cri",
+        "material-tls",
+        "platform-capabilities",
+    }
+)
+_REASON = re.compile(r"[A-Za-z0-9_.-]{1,128}")
+_EVIDENCE = {"uid", "control_uid", "resource_version", "profile", "policy_revision", "code", "digest"}
+_PINNED_IMAGE = re.compile(r"[A-Za-z0-9][A-Za-z0-9./:_-]*@sha256:[a-f0-9]{64}")
+
+
+def descriptor_digest(document):
+    return hashlib.sha256(
+        json.dumps(
+            {key: value for key, value in document.items() if key != "probe_report"},
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode()
+    ).hexdigest()
+
+
+def protection_baseline_digest(document):
+    return hashlib.sha256(
+        json.dumps(
+            {key: value for key, value in document.items() if key not in {"probe_report", "helper_image"}},
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode()
+    ).hexdigest()
+
+
+def _finite_time(value):
+    if type(value) not in {int, float}:
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
+def report_validity(document, *, now):
+    """Separate report age from malformed, future or differently scoped input."""
+    raw = document.get("probe_report")
+    if not isinstance(raw, dict):
+        return "unconfirmed"
+    observed = raw.get("observed_at")
+    if (
+        not _finite_time(observed)
+        or not _finite_time(now)
+        or now < observed
+        or raw.get("source") != "cluster-probe"
+        or raw.get("descriptor_digest") != descriptor_digest(document)
+    ):
+        return "unconfirmed"
+    return "current" if now - observed <= 86400 else "report_expired"
+
+
+def _check(raw, name):
+    if not isinstance(raw, dict) or raw.get("name") != name or raw.get("ok") is not True:
+        return {"name": name, "ok": False, "reason": "not_verified", "evidence": {}}
+    evidence = raw.get("evidence")
+    try:
+        if not isinstance(evidence, dict) or str(UUID(evidence.get("uid", ""))) != evidence["uid"]:
+            raise ValueError()
+        safe = {
+            key: value
+            for key, value in evidence.items()
+            if key in _EVIDENCE and isinstance(value, str) and len(value) <= 256 and "\n" not in value
+        }
+        reason = raw.get("reason", "verified")
+        if not isinstance(reason, str) or not _REASON.fullmatch(reason):
+            raise ValueError()
+        return {"name": name, "ok": True, "reason": reason, "evidence": safe}
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return {"name": name, "ok": False, "reason": "invalid_evidence", "evidence": {}}
+
+
+def _verified_protection_rows(document):
+    rows = (document.get("probe_report") or {}).get("checks")
+    if not isinstance(rows, list):
+        return False
+    known = {}
+    for row in rows:
+        if not isinstance(row, dict) or not isinstance(row.get("name"), str):
+            return False
+        name = row["name"]
+        if name not in REQUIRED_CHECKS:
+            continue
+        if name in known or type(row.get("ok")) is not bool:
+            return False
+        # A negative non-guard result must still carry valid scoped evidence.
+        if not _check({**row, "ok": True}, name)["ok"]:
+            return False
+        known[name] = row
+    return set(known) == REQUIRED_CHECKS and all(
+        known[name]["ok"] for name in ("status-provenance", "binding-delete-fence")
+    )
+
+
+def protection_observation(document, *, now, projected=None):
+    """Report-only uncertainty never asserts that current protection is active."""
+    baseline = protection_baseline_digest(projected if projected is not None else document)
+    state = report_validity(document, now=now)
+    if projected is not None:
+        state = "unconfirmed"
+        old_helper, new_helper = document.get("helper_image"), projected.get("helper_image")
+        original_valid = report_validity(document, now=now) in {"current", "report_expired"}
+        if (
+            baseline == protection_baseline_digest(document)
+            and old_helper != new_helper
+            and isinstance(old_helper, str)
+            and isinstance(new_helper, str)
+            and _PINNED_IMAGE.fullmatch(old_helper)
+            and _PINNED_IMAGE.fullmatch(new_helper)
+            and original_valid
+            and _verified_protection_rows(document)
+        ):
+            # The projected report must still be valid for the old descriptor,
+            # or fresh and positive for the new one. Never hide a new failure.
+            old_scope = {**document, "probe_report": projected.get("probe_report")}
+            if (
+                report_validity(old_scope, now=now) in {"current", "report_expired"}
+                and _verified_protection_rows(old_scope)
+            ) or (report_validity(projected, now=now) == "current" and _verified_protection_rows(projected)):
+                state = "helper_changed"
+    elif state == "report_expired" and not _verified_protection_rows(document):
+        state = "unconfirmed"
+    return {"version": 1, "baseline_digest": baseline, "state": state}
+
+
+def assess_capabilities(document, *, now):
+    raw = document.get("probe_report") or {}
+    observed = raw.get("observed_at") if isinstance(raw, dict) else None
+    if not _finite_time(observed):
+        observed = None
+    valid = report_validity(document, now=now) == "current"
+    rows = raw.get("checks", []) if valid else []
+    known = {}
+    if isinstance(rows, list):
+        for row in rows:
+            if isinstance(row, dict) and isinstance(row.get("name"), str):
+                name = row["name"]
+                known[name] = (
+                    _check(row, name)
+                    if name not in known
+                    else {"name": name, "ok": False, "reason": "duplicate_check", "evidence": {}}
+                )
+    checks = [_check(known.get(name), name) for name in sorted(REQUIRED_CHECKS)]
+    storage = document.get("storage", {})
+    storage_ok = storage.get("sqlite_compatible") is True and storage.get("filesystem", "").lower() not in {
+        "nfs",
+        "nfs4",
+        "cifs",
+        "smb",
+        "smbfs",
+    }
+    if not storage_ok:
+        checks = [
+            item
+            if item["name"] != "storage-sqlite"
+            else {"name": "storage-sqlite", "ok": False, "reason": "storage_incompatible", "evidence": {}}
+            for item in checks
+        ]
+    ready = bool(valid and all(item["ok"] for item in checks))
+    registry = _check(known.get("registry-push"), "registry-push")["ok"]
+    paths = {
+        "bundle": ready,
+        "image": ready,
+        "source-image": ready
+        and registry
+        and bool(document.get("image_repository"))
+        and bool(document.get("assembler_image")),
+    }
+    choice = document.get("sandbox", {})
+    requested = choice.get("requested", "default")
+    if requested not in {"default", "recommended", "hardened"}:
+        ready = False
+        requested = "default"
+    selected = choice.get("runtime_classes", {}).get(requested, "")
+    verified = (
+        requested != "default"
+        and bool(selected)
+        and _check(known.get("sandbox-" + requested), "sandbox-" + requested)["ok"]
+    )
+    fallback = requested != "default" and not verified
+    sandbox = {
+        "requested": requested,
+        "effective": requested if verified else "default",
+        "runtime_class": selected if verified else "",
+        "fallback": fallback,
+        "reason": "sandbox_unavailable" if fallback else "verified",
+    }
+    warnings = ["node_local_storage"] if storage.get("node_local") else []
+    if fallback:
+        warnings.append("sandbox_fallback_default")
+    if not valid:
+        warnings.append("live_probe_report_missing_stale_or_changed")
+    return {
+        "ready": ready,
+        "observed_at": observed,
+        "checks": checks,
+        "paths": paths,
+        "warnings": warnings,
+        "sandbox": sandbox,
+    }
+
+
+def run_checks(drivers, *, observed_at):
+    results = []
+    for name, driver in sorted(drivers.items()):
+        try:
+            result = _check({"name": name, **driver()}, name)
+        except Exception:
+            result = {"name": name, "ok": False, "reason": "probe_failed", "evidence": {}}
+        results.append({**result, "observed_at": observed_at})
+    return results
+
+
+def network_checks(plan):
+    import socket
+
+    if (
+        not isinstance(plan, dict)
+        or set(plan) != {"targets"}
+        or not isinstance(plan["targets"], list)
+        or len(plan["targets"]) > 32
+    ):
+        raise ValueError("probe_network_plan_invalid")
+    results = []
+    for target in plan["targets"]:
+        if (
+            set(target) - {"name", "host", "port", "expected", "protocol"}
+            or not {"name", "host", "port", "expected"} <= set(target)
+            or not _REASON.fullmatch(target["name"])
+            or target["expected"] not in {"allowed", "denied"}
+        ):
+            raise ValueError("probe_network_target_invalid")
+        if type(target["port"]) is not int or not 1 <= target["port"] <= 65535:
+            raise ValueError("probe_network_port_invalid")
+        try:
+            if target.get("protocol", "tcp") == "udp-dns":
+                import os
+                import struct
+
+                ident = os.urandom(2)
+                query = (
+                    ident
+                    + struct.pack("!HHHHH", 0x0100, 1, 0, 0, 0)
+                    + b"\x0akubernetes\x07default\x03svc\x00"
+                    + struct.pack("!HH", 1, 1)
+                )
+                family = socket.AF_INET6 if ":" in target["host"] else socket.AF_INET
+                with socket.socket(family, socket.SOCK_DGRAM) as dns:
+                    dns.settimeout(1)
+                    dns.connect((target["host"], target["port"]))
+                    dns.send(query)
+                    response = dns.recv(4096)
+                    if len(response) < 12 or response[:2] != ident or not response[2] & 0x80:
+                        raise OSError("probe_dns_response_invalid")
+                reason, reached = "dns_response", True
+            elif target.get("protocol", "tcp") == "tcp":
+                with socket.create_connection((target["host"], target["port"]), timeout=1):
+                    reason, reached = "connected", True
+            else:
+                raise ValueError("probe_network_protocol_invalid")
+        except TimeoutError:
+            reason, reached = "timeout", False
+        except OSError:
+            # An inactive target is not evidence that a policy denied access.
+            results.append({"name": target["name"], "ok": False, "reason": "target_unconfirmed"})
+            continue
+        results.append({"name": target["name"], "ok": reached is (target["expected"] == "allowed"), "reason": reason})
+    return {"checks": results}
+
+
+def mounted_filesystem(path):
+    import os
+    from pathlib import Path
+
+    selected, length = "", -1
+    for line in Path("/proc/self/mountinfo").read_text().splitlines():
+        left, separator, right = line.partition(" - ")
+        if not separator:
+            continue
+        parts = left.split()
+        if len(parts) < 5:
+            continue
+        mount = parts[4]
+        for escaped, actual in (("\\040", " "), ("\\011", "\t"), ("\\134", "\\")):
+            mount = mount.replace(escaped, actual)
+        try:
+            matches = os.path.commonpath((str(Path(path).resolve()), mount)) == mount
+        except ValueError:
+            continue
+        if matches and len(mount) > length:
+            selected, length = right.split()[0], len(mount)
+    return selected
+
+
+def volume_capacity(path):
+    import os
+
+    stats = os.statvfs(path)
+    return stats.f_blocks * stats.f_frsize
+
+
+def storage_checks(volume, *, require_filesystem=True):
+    import fcntl
+    import os
+    from pathlib import Path
+    from tempfile import TemporaryDirectory
+
+    from runtime_manager.appdb import AppDbSchemaService, integrity
+    from runtime_manager.config import Config
+
+    root = Path(volume)
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("probe_storage_unavailable")
+    filesystem = mounted_filesystem(root) if Path("/proc/self/mountinfo").is_file() else "unverified"
+    if require_filesystem and filesystem not in {"ext4", "xfs"}:
+        raise ValueError("probe_storage_filesystem_incompatible")
+    with TemporaryDirectory(prefix="preflight-", dir=root) as temporary:
+        temporary = Path(temporary)
+        descriptor = os.open(temporary / "lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            child = os.fork()
+            if child == 0:
+                os.close(descriptor)
+                try:
+                    with (temporary / "lock").open("rb") as other:
+                        fcntl.flock(other.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    os._exit(0)
+                os._exit(1)
+            _, status = os.waitpid(child, 0)
+            if status != 0:
+                raise ValueError("probe_storage_lock_ineffective")
+        finally:
+            os.close(descriptor)
+        config = Config(data_root=temporary)
+        AppDbSchemaService(config).migrate(
+            "preflight",
+            [
+                {
+                    "op": "create_table",
+                    "table": "probe",
+                    "columns": [{"name": "id", "type": "INTEGER", "primary_key": True}],
+                }
+            ],
+        )
+        database = config.app_data_dir("preflight") / "app.db"
+        integrity(database)
+        with database.open("rb") as source:
+            os.fsync(source.fileno())
+        directory = os.open(database.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    return {
+        "locking": True,
+        "fsync": True,
+        "sqlite_integrity": True,
+        "filesystem": filesystem,
+        "capacity_bytes": volume_capacity(root),
+    }
+
+
+def main():
+    import os
+    import sys
+
+    action = sys.argv[1] if len(sys.argv) == 2 else ""
+    if action == "network":
+        result = network_checks(json.loads(os.environ["CAPABILITY_PLAN"]))
+    elif action == "storage":
+        result = storage_checks("/probe-volume")
+    elif action == "idle":
+        import signal
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from threading import Thread
+
+        class Health(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200 if self.path == "/healthz" else 404)
+                self.end_headers()
+                self.wfile.write(b'{"status":"ok"}')
+
+            def log_message(self, *_args):
+                return
+
+        servers = [ThreadingHTTPServer(("0.0.0.0", port), Health) for port in (8080, 8092)]
+        for server in servers:
+            Thread(target=server.serve_forever, daemon=True).start()
+        signal.pause()
+        return
+    else:
+        raise ValueError("probe_action_invalid")
+    print("BISHENG_RUNTIME_RESULT " + json.dumps(result, sort_keys=True, separators=(",", ":")), flush=True)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as exc:
+        print("Runtime capability probe failed (" + type(exc).__name__ + ")", flush=True)
+        raise SystemExit(1) from None

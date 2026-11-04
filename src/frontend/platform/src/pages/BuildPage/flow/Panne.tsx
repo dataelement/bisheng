@@ -2,14 +2,14 @@
 import ApiMainPage from "@/components/bs-comp/apiComponent";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { copyReportTemplate } from "@/controllers/API/workflow";
-import { WorkFlow, WorkflowNode } from "@/types/flow";
-import { autoNodeName, calculatePosition, filterUselessFlow, initNode, useCopyPasteNode } from "@/util/flowUtils";
+import { WorkFlow,WorkflowNode } from "@/types/flow";
+import { autoNodeName,calculatePosition,filterUselessFlow,initNode,useCopyPasteNode } from "@/util/flowUtils";
 import { useUndoRedo } from "@/util/hook";
-import { Background, BackgroundVariant, Connection, ReactFlow, addEdge, applyEdgeChanges, applyNodeChanges, useReactFlow } from '@xyflow/react';
+import { Background,BackgroundVariant,Connection,ReactFlow,addEdge,applyEdgeChanges,applyNodeChanges,useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
 import '@xyflow/react/dist/style.css';
 import cloneDeep from "lodash-es/cloneDeep";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback,useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Controls } from "./Controls";
 import CustomEdge from "./FlowEdge";

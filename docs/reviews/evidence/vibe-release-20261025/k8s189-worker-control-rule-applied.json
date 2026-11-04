@@ -1,0 +1,49 @@
+{
+  "apiVersion": "networking.k8s.io/v1",
+  "kind": "NetworkPolicy",
+  "metadata": {
+    "name": "vibe-platform-control-ingress",
+    "namespace": "bisheng-vibe-runtime-system"
+  },
+  "spec": {
+    "podSelector": {
+      "matchLabels": {
+        "app": "runtime-manager"
+      }
+    },
+    "policyTypes": [
+      "Ingress"
+    ],
+    "ingress": [
+      {
+        "from": [
+          {
+            "namespaceSelector": {
+              "matchLabels": {
+                "kubernetes.io/metadata.name": "bisheng-vibe-platform"
+              }
+            },
+            "podSelector": {
+              "matchExpressions": [
+                {
+                  "key": "app.kubernetes.io/component",
+                  "operator": "In",
+                  "values": [
+                    "backend",
+                    "worker"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "ports": [
+          {
+            "protocol": "TCP",
+            "port": 8091
+          }
+        ]
+      }
+    ]
+  }
+}

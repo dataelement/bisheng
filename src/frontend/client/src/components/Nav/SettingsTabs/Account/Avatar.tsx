@@ -52,7 +52,7 @@ function Avatar() {
     },
     onError: (error) => {
       console.error('Error:', error);
-      showToast({ message: localize('com_ui_upload_error'), status: 'error' });
+      showToast({ message: localize('com_ui_upload_error'), status: 'warning' });
     },
   });
 
@@ -71,7 +71,7 @@ function Avatar() {
         fileConfig.avatarSizeLimit != null ? formatBytes(fileConfig.avatarSizeLimit) : 2;
       showToast({
         message: localize('com_ui_upload_invalid_var', { 0: megabytes + '' }),
-        status: 'error',
+        status: 'warning',
       });
     }
   };

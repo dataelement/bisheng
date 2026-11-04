@@ -1,6 +1,7 @@
-import { Badge } from '@/components/bs-ui/badge';
+import { toast } from '@bisheng/ui';
+import { Tag } from '@bisheng/ui';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
-import { useToast } from '@/components/bs-ui/toast/use-toast';
+
 import { copyText } from '@/utils';
 import type { MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -14,10 +15,10 @@ export function ApiAccessFlow() {
     const { t } = useTranslation()
     const { id } = useParams()
 
-    const { message } = useToast()
+
     const handleCopyLink = (event: MouseEvent<HTMLElement>) => {
         copyText(event.currentTarget).then(() => {
-            message({ variant: 'success', description: t('api.copySuccess') })
+            toast.show({ type: 'success', message: String(t('api.copySuccess') ?? '') })
         })
     }
 
@@ -30,11 +31,11 @@ export function ApiAccessFlow() {
                 <CardContent>
                     <h3 className='py-2' id="guide-word">{t("api.workflowDoc.invoke_endpoint")}</h3>
                     <h3 className="mb-2 bg-secondary px-4 py-2 inline-flex items-center rounded-md gap-1">
-                        <Badge>POST</Badge> <span className='hover:underline cursor-pointer' onClick={handleCopyLink}>{location.origin}/api/v2/workflow/invoke</span>
+                        <Tag size="small" color="brand">POST</Tag> <span className='hover:underline cursor-pointer' onClick={handleCopyLink}>{location.origin}/api/v2/workflow/invoke</span>
                     </h3>
                     <h3 className='py-2' id="guide-word">{t("api.workflowDoc.stop_endpoint")}</h3>
                     <h3 className="mb-2 bg-secondary px-4 py-2 inline-flex items-center rounded-md gap-1">
-                        <Badge>POST</Badge> <span className='hover:underline cursor-pointer' onClick={handleCopyLink}>{location.origin}/api/v2/workflow/stop</span>
+                        <Tag size="small" color="brand">POST</Tag> <span className='hover:underline cursor-pointer' onClick={handleCopyLink}>{location.origin}/api/v2/workflow/stop</span>
                     </h3>
                 </CardContent>
             </Card>

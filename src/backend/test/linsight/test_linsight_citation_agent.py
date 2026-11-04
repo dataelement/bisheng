@@ -17,7 +17,7 @@ from bisheng.linsight.domain.services.agent_factory import (
     _annotate_web_search_output,
     _build_researcher_prompt,
     _build_researcher_subagent,
-    _is_web_search_tool,
+    _is_web_citation_tool,
     _with_citation_rules,
     _wrap_linsight_web_citation_tools,
 )
@@ -109,10 +109,10 @@ async def test_wrap_web_search_annotate_failure_returns_bare(monkeypatch: pytest
     assert result == inner.payload
 
 
-def test_is_web_search_tool_matches_name_or_tool_name():
-    assert _is_web_search_tool(_FakeWeb())
-    assert _is_web_search_tool(type("T", (), {"name": "other", "tool_name": "web_search"})())
-    assert not _is_web_search_tool(_FakeOther())
+def test_is_web_citation_tool_matches_name_or_tool_name():
+    assert _is_web_citation_tool(_FakeWeb())
+    assert _is_web_citation_tool(type("T", (), {"name": "other", "tool_name": "web_search"})())
+    assert not _is_web_citation_tool(_FakeOther())
 
 
 def test_citation_rules_only_when_kb_or_web():

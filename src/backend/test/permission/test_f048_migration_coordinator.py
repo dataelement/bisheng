@@ -492,6 +492,55 @@ async def test_formal_migration_compiles_one_single_slot_visible_aggregate() -> 
     )
 
 
+async def test_formal_migration_retires_group_admin_manager_without_new_grant_or_visibility() -> None:
+    base = _snapshot()
+    admin = LegacyTupleSource(
+        tenant_id=7,
+        user="user_group:8#admin",
+        relation="manager",
+        object="workflow:wf-1",
+    )
+    member = replace(admin, user="user_group:8#member", relation="viewer")
+    snapshot = replace(base, tuples=(*base.tuples, admin, member))
+    store = FakeRunStore(frozen_snapshot=snapshot)
+    writer = FakeTargetWriter()
+    coordinator = F048MigrationCoordinator(
+        source_provider=FakeSourceProvider(snapshot),
+        run_store=store,
+        model_publisher=FakeModelPublisher(),
+        target_writer=writer,
+    )
+
+    result = await coordinator.migrate(expected_store_id="store-live", lock_token="operator-1")
+
+    assert result.phase == "VERIFYING"
+    assert all(row["user"] != admin.user for row in writer.written_tuples)
+    member_grants = [
+        row["object"]
+        for row in writer.written_tuples
+        if row["user"] == member.user and row["relation"] == "ordinary_assignee"
+    ]
+    assert len(member_grants) == 1
+    assert {
+        "user": "permission_model:viewer",
+        "relation": "model",
+        "object": member_grants[0],
+    } in writer.written_tuples
+    assert {
+        "user": member.user,
+        "relation": "visible",
+        "object": member.object,
+    } in writer.written_tuples
+    assert {
+        "user": admin.user,
+        "relation": admin.relation,
+        "object": admin.object,
+    } in writer.deleted_tuples
+    assert any(item.difference_type == "LEGACY_USER_GROUP_ADMIN_MANAGER_RETIRED" for item in store.items)
+    events = [event[0] for event in writer.events]
+    assert events.index("verify") < events.index("delete")
+
+
 async def test_formal_migration_maintains_both_subject_types_at_every_hierarchy_level():
     base = _snapshot()
     nodes = (

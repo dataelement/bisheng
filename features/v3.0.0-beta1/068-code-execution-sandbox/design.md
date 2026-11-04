@@ -1,8 +1,8 @@
 # Design: 代码执行沙箱统一底座
 
-**关联**: [spec.md](./spec.md) · [沙箱架构设计说明书.md](./沙箱架构设计说明书.md)（评审用） · tasks.md（尚未编写）
+**关联**: [spec.md](./spec.md) · [沙箱架构设计说明书.md](./沙箱架构设计说明书.md)（评审用） · [tasks.md](./tasks.md)
 **版本**: v3.0.0-beta1
-**最后更新**: 2026-09-16
+**最后更新**: 2026-09-20
 
 ---
 
@@ -145,14 +145,15 @@
 - **原因**：读、写、删在 DAC 上是同一套权限：读要目录搜索+文件读；写要文件写；删（unlink）要**父目录写权限**。独立 uid + 目录 `0700` 挡住读和写；父目录 `/tmp/sessions` 仅 root 可写（`0711`）挡住把邻居目录项删掉。A 在同一 uid 下三项全假。仅靠文件系统不够：用户代码与 runner 同 netns，可以用 `DELETE /v1/sessions/<邻居>` 删别人的租约——必须再加**按会话的 lease_token**，全局 runner token 只给 worker 的 `POST /v1/sessions`。C 信创内核经常没有，不能当默认。
 - **何时该重新考虑**：F103 按次新容器后同容器多 session 不再需要；或目标内核统一有 Landlock，可把 B 的 cap 再收紧回去。
 
-### 决策 12：副本列表由 worker 在领租约时发现，runner 不自注册
+### 决策 12：副本列表只认配置里的服务地址，runner 不自注册，也不做主机名扫描
 
 - **备选**：
-  - A. 静态 `endpoints` 写死每一台（原稿）
+  - A. 静态 `endpoints` 写死每一台
   - B. runner 启动后向 Redis / FastAPI 注册，worker 读注册表
-  - C. worker 领租约时发现：对约定主机名模式做 DNS/连通探测（短 TTL 缓存**集合**），粘滞仍绑到解析出的那一台具体 URL
-- **选定**：C 为默认；A 作为显式覆盖（探测失败或离线手工拓扑时）
-- **原因**：B 要求 runner 能连 Redis 或 API。用户代码与 runner 同容器、同 netns，这条注册通道等于把中间件暴露给执行侧，直接推翻 AC-12。C 是反向的：执行侧继续只听 `:8080`、零出站；发现发生在可信的 worker 上，用的是编排已经写入 DNS 的名字（compose 服务名 / K8s headless + StatefulSet 序号），不引 docker/k8s 客户端。粘滞对象仍然是「这一次解析到的那台 URL」，不是发现用的通配名。
+  - C. worker 领租约时按主机名模式做 DNS/连通探测（短 TTL 缓存**集合**），粘滞仍绑到解析出的那一台具体 URL
+- **选定**：A
+- **原因**：B 要求 runner 能连 Redis 或 API。用户代码与 runner 同容器、同 netns，这条注册通道等于把中间件暴露给执行侧，直接推翻 AC-12。C 曾作为默认：执行侧继续只听 `:8080`、零出站，扫描发生在可信的 worker 上。落地后扫描结果与粘滞绑在同一进程的后台缓存上，清空地址或关掉扫描都接不回「重新按主机名找副本」。副本列表改为只认 `endpoints`。compose 与 Helm 把每一台 runner 的 URL 写进 `BS_SANDBOX_CONF__ENDPOINTS`。粘滞仍绑具体 URL，不是 Service 名或 VIP。应用不读 kube-apiserver / docker。
+- **配置不含编排类型，也不含扫描字段**：`sandbox_conf` **没有** `deploy_mode` / `orchestrator: k8s|compose`，也**没有** `discover_host_pattern` / `discover_index_start` / `discover_max` / `discover_ttl_s` / `discover_port`。旧 yaml 里的 `discover_*` 被忽略；环境变量 `BS_SANDBOX_CONF__DISCOVER_*` 不再生效。`endpoints` 为空表示没有副本，领租约时报不可达，平台仍能启动。
 - **何时该重新考虑**：F103 提供带会话亲和的注册面；或执行侧为用户代码单独做了 network namespace，注册通道与用户代码网络彻底断开。
 
 ---
@@ -219,7 +220,7 @@ flowchart TB
 要点：
 
 - 五条业务路径（灵思 / 日常 / 助手 / 工作流 Agent / 工作流工具节点）加上工作流代码节点，全部汇合到 `BaseExecutor`，不各自连沙箱。
-- 只有 **worker** 同时连可信网与 `sandbox_net`。runner 不挂到承载 MySQL / Redis / MinIO 的网络，因此即使用户代码扫内网，也解析不到中间件主机名（AC-12）。
+- **backend**（编辑器「运行一次」在 API 进程里执行）和 **worker** 同时连可信网与 `sandbox_net`。runner 不挂到承载 MySQL / Redis / MinIO 的网络，因此即使用户代码扫内网，也解析不到中间件主机名（AC-12）。
 - 产物进 MinIO 由 worker 上传，执行侧零凭据（决策 3）。
 - 云沙箱是 `BaseExecutor` 的另一个子类，不伪装成副本。
 
@@ -236,14 +237,31 @@ flowchart TB
 
 `模型发起 tool_call` → `CodeInterpreterTool._run` → `ContainerExecutor.run`（继承共享的 `run_with_dir`）→ `execute_code`：`领租约 → copy-in 工作目录（tar, md5 delta）→ exec → copy-out` → 回到共享实现：`快照 diff → 根级产物归位 output/ → upload_minio → sync_to_workspace` → `{exitcode, log, file_list}` 进 `ToolMessage`。
 
-- 装配入口：`bisheng_langchain/gpts/load_tools.py:_get_native_code_interpreter`（按 `type` 三分支 dispatch）
-- 五条路径的共同装配层：`bisheng/tool/domain/services/executor.py:ToolExecutor`（它负责给代码执行器注入 MinIO 配置）
-- 灵思独有的绑定：`bisheng/linsight/domain/services/workbench_impl.py:_init_bisheng_code_tool`（新增 `config.container` 分支）
+需要进沙箱的，是 **会执行不可信 Python** 的入口。五条路径不各自连 runner，装配汇合如下：
+
+| # | 产品入口 | 今天的装配锚点 | F068 怎么用沙箱 |
+|---|---|---|---|
+| 1 | 灵思任务模式 | `linsight/.../workbench_impl.py:_init_bisheng_code_tool` → `ToolExecutor` | `keep_session=True`；`run()` 时刻 copy-in 整个任务工作区（含已物化 `skills/`）；产物 `sync_to_workspace`；任务结束才 DELETE |
+| 2 | 工作台日常会话 | `workstation/.../chat_service.py:_prepare_tools` → `ToolExecutor`（`DAILY_CHAT`） | `keep_session=False`；**原件不进沙箱**；一次 `run` 结束 DELETE |
+| 3 | 助手 | `api/services/assistant_agent.py` → `ToolExecutor`（`ASSISTANT`） | 同路径 2 |
+| 4 | 工作流 Agent 节点 | `workflow/nodes/agent/agent.py:_init_tools` | 一次一清；copy-in 该次工具工作目录 |
+| 5 | 工作流工具节点 | `workflow/nodes/tool/tool.py` `invoke` | 同路径 4，无多轮粘滞 |
+
+共同 dispatch：`tool/domain/services/executor.py:ToolExecutor` 注入 MinIO → `bisheng_langchain/gpts/load_tools.py:_get_native_code_interpreter` 按 `type` 显式三分支 `local | container | e2b`（禁止 `else` 吞未知 type，§5 坑 7）。
 
 **档 B：工作流代码节点**
 
 `CodeNode._run` → `SandboxCodeParser.exec_method('main', **params)` → 生成 wrapper → 同一执行端点 → 解析哨兵行得到出参 dict → `_parse_code_output` 校验字段 → 写入 `graph_state`。
 `parse_code()` 仍在本地做 `ast.parse` 静态语法校验（不 `exec`），保持搭建期报错时机不变。
+
+**明确不是「增加沙箱」的入口**（本期不改其执行位置）：
+
+| 入口 | 原因 |
+|---|---|
+| 灵思 `ls` / `read_file` / `write_file` / `grep` | MinIO 工作区，worker 进程内；FilesystemMiddleware 不是隔离边界 |
+| 知识库 / 附件解析 LibreOffice | 平台可信代码，留在解析链 |
+| 工作台附件预览 | 不 exec 模型代码 |
+| 技能包物化 | 写进工作区后再被路径 1 copy-in，本身不是执行器 |
 
 ### 4.2 关键数据结构 / 字段约定
 
@@ -252,7 +270,7 @@ flowchart TB
 | 方法 | 路径 | 鉴权 | 语义 |
 |---|---|---|---|
 | `POST` | `/v1/sessions` | 全局 `token`（只给 worker） | 领租约 → `{session_id, lease_token, lease_expires_at}` |
-| `PUT` | `/v1/sessions/{id}/files` | 该会话 `lease_token` | tar.gz 流式 copy-in，随带 `{rel_path: md5}` 清单做 delta |
+| `PUT` | `/v1/sessions/{id}/files` | 该会话 `lease_token` | body：4 字节大端长度 + UTF-8 JSON `{rel_path: md5}` + tar.gz |
 | `POST` | `/v1/sessions/{id}/exec` | 该会话 `lease_token` | `{code, lang, timeout_s}` → `{exitcode, stdout, stderr, duration_ms}` |
 | `GET` | `/v1/sessions/{id}/files` | 该会话 `lease_token` | tar.gz 拉回本轮新增/修改文件 |
 | `DELETE` | `/v1/sessions/{id}` | 该会话 `lease_token` | 擦除运行目录、释放租约 |
@@ -269,7 +287,7 @@ copy-in：
 2. 只收普通文件和目录；跳过 socket / 设备；相对路径与 tar 成员都拒绝 `..` 和绝对路径（zip-slip）。
 3. 单文件超过 `max_copy_in_bytes`：跳过并在日志点名（AC-10），不拆整租约。
 4. 按相对路径算 md5，对比 runner 内存表 `md5_index`：相同则本轮不进 tar。
-5. `PUT .../files`，body 为流式 tar.gz，旁路带 `{rel_path: md5}` 清单（请求头或并列 JSON，实现时二选一）。不要按文件拆多次 HTTP。
+5. `PUT .../files`。body 依次是 4 字节大端长度、UTF-8 JSON 清单 `{rel_path: md5}`、tar.gz。清单不放请求头：请求头在没收齐时只缓冲 16 KiB，几百个文件就会被 HTTP 解析器直接丢掉。不要按文件拆多次 HTTP。
 6. runner 校验租约 → 跳过已命中路径 → 解到本 UUID 目录 → 更新 `md5_index`。独立 uid 模式：root 写入再 `chown -R`。
 7. copy-in 是按相对路径 **upsert**。worker 侧已删除的文件本期不从 runner 删（整租约 DELETE 才清空）。sticky 第二轮因此只补增量。
 
@@ -304,11 +322,24 @@ sequenceDiagram
 
 各路径实际拷什么：灵思 = 当前工作区全量（含技能包），后续轮次只传 md5 变化；日常 / 助手 = 通常空目录，脚本写出的文件仍走 `file_list`、不回写会话附件；工作流 Agent / 工具 = 该次工具目录；代码节点 = 通常无业务文件，出参走 stdout 哨兵。
 
+**何时整目录打 tar**：只发生在 `type=container` 的 `execute_code` 里、`POST /exec` 之前（以及成功后的 copy-out）。`local` 就地跑、`e2b` 走逐文件 `files.write`，都没有目录 tar。扫描是全目录；**进 tar 的只有 md5 对不上的文件**——「整目录打包」指一次 HTTP、一份 tar.gz，不是每次把全部字节再传一遍。
+
+| 时机 | tar 里实际是什么 |
+|---|---|
+| 新租约第一次 copy-in | 工作区里未超 `max_copy_in_bytes` 的普通文件，接近全量 |
+| 灵思 sticky 后续轮次、文件未改 | 空包或几乎空（md5 命中跳过） |
+| sticky 后续轮次、脚本刚写出文件 | 只含变更相对路径 |
+| 租约 404 / 副本重启后再 exec | 重新领约，从 worker 工作区 **全量** 再打一份 |
+| copy-out（`GET .../files`） | 相对 **执行前快照** 新增或内容变了的文件，不是整盘 |
+| 日常 / 助手 | `keep_session=False`，每次新租约；`dir_path` 常为空，tar 常为空 |
+
+容器模式 **没有** E2B 那条 5MB 自动推送天花板（那是 F035 产品阈值，见 §4.8 / §5 坑 17）。单文件超 `max_copy_in_bytes` 跳过并点名（AC-10），其余仍进同一份 tar。
+
 **工具结果**（模型可见，与本地模式一致）：`{"exitcode": int, "log": str, "file_list": [presigned_url]}`
 
 **工具配置** `gpts_tools.extra`：`type` 取值扩展为 `local | e2b | container`；新增 `config.container = {profile, timeout}`。接入参数（endpoint / token / 池容量）**不进** `extra`，走系统配置。
 
-**系统配置**：新增 `Settings.sandbox_conf`。发现相关：`endpoints`（显式覆盖，非空则跳过发现）/ `discover_host_pattern`（默认 `code-runner-{n}`，K8s 配 `code-runner-{n}.code-runner`）/ `discover_index_start`（compose 1，K8s 0）/ `discover_max` / `discover_ttl_s` / `discover_port`。其余：`token` / `pool_lease_ttl_s` / `max_sessions_per_replica` / `pool_acquire_timeout_s` / `default_timeout_s` / `max_copy_in_bytes` / `code_node_enabled`。env 覆盖形如 `BS_SANDBOX_CONF__DISCOVER_HOST_PATTERN`。
+**系统配置**：新增 `Settings.sandbox_conf`。副本地址只认 `endpoints`（URL 列表；空列表表示没有副本）。其余：`token` / `pool_lease_ttl_s` / `max_sessions_per_replica` / `pool_acquire_timeout_s` / `default_timeout_s` / `max_copy_in_bytes` / `code_node_enabled`。env 覆盖形如 `BS_SANDBOX_CONF__ENDPOINTS`。**不要**增加 `deploy_mode` / `orchestrator`，也不要加主机名扫描字段（决策 12）。
 
 **错误码**：模块 **280**，`28001` 执行环境不可达 / `28002` 容量已满 / `28003` 执行超时 / `28004` copy-in 超限 / `28005` 代码节点出参不可序列化 / `28006` 执行环境响应不合契约。落码时按 C5 回写 `docs/constitution.md` 与本版 release-contract。
 
@@ -316,7 +347,7 @@ sequenceDiagram
 
 | 模块 / 文件 | 职责 | 不做什么 |
 |---|---|---|
-| `code_interpreter/base_executor.py` | 路径规则文案、日志裁剪、逃逸拒绝、产物归位、MinIO 上传、工作区镜像；`execute_code` 抽象 | 不知道代码在哪执行 |
+| `code_interpreter/base_executor.py` | 路径规则文案、日志裁剪、逃逸拒绝、产物归位、MinIO 上传、工作区镜像；`execute_code` 为可覆盖缝（**不是** `@abstractmethod`：冻结的 `E2bCodeExecutor` 只 override `run`，标成抽象会让它无法实例化） | 不知道代码在哪执行 |
 | `code_interpreter/local_executor.py` | 以子进程在本机执行 | 不再持有产物收割逻辑（上提共享） |
 | `code_interpreter/container_executor.py`（新） | 租约、tar copy-in/out、调 exec | 不做快照 diff、不上传 MinIO |
 | 执行侧 runner 服务（新） | 收文件、跑子进程、回文件、清目录 | 不认识 `main`、不认识工作区、不连任何中间件 |
@@ -343,8 +374,8 @@ sequenceDiagram
 | 基础 | `python:3.11-slim` | 与后端同一条 Python 线 |
 | 办公二进制 | **完整** LibreOffice（须含 Writer / Impress / Calc，不能只装 `libreoffice-writer`）、`pandoc` 3.6.4（`/usr/bin/pandoc`）、中文字体 `fonts-wqy-zenhei` | 灵思价值链是 docx / pptx / xlsx / pdf；缺组件时技能包探测并降级，不把整任务打成失败 |
 | 媒体 | `ffmpeg`（随 base 带入） | 存量技能 / 代码节点可能调到 |
-| Python | 按后端 `uv.lock` **全量** `uv sync --frozen --no-dev`，venv 在镜像内（如 `/app/.venv`） | 代码节点能 `import` 后端环境里的任意包；不对等 = 某客户某条工作流 `ImportError`（决策 7） |
-| 进程 | runner HTTP 监听 8080，不映射到宿主 | 租约 / tar / exec / 清理；与执行环境同一容器 |
+| Python | 按后端 `uv.lock` **全量** `uv sync --frozen --no-dev --no-install-project`，venv 在镜像内（如 `/app/.venv`） | 代码节点能 `import` 后端环境里的任意第三方包；`--no-install-project` 把 FastAPI / Celery / 灵思源码留在镜像外（AC-15 / AC-28）。不对等 = 某客户某条工作流 `ImportError`（决策 7） |
+| 进程 | runner HTTP 监听 8080（PID 1 = `serve.py`），不映射到宿主。监督进程读 `SANDBOX_TOKEN`；worker 侧对应 `BS_SANDBOX_CONF__TOKEN`，compose 用同一插值，token 不进镜像层 | 租约 / tar / exec / 清理；与执行环境同一容器 |
 | 运行时挂载（不进镜像层） | `/tmp` tmpfs：`sessions/<uuid>/`、LibreOffice profile、fontconfig | 只读 rootfs 下 soffice 不能写镜像路径；按 session 覆盖 `HOME`/`TMPDIR` |
 
 对模型承诺、须写进工具描述的库（与本地模式对齐，AC-04）：`pandas` · `numpy` · `matplotlib` · `openpyxl` / `XlsxWriter` · `python-docx` · `python-pptx` · `Pillow` · `reportlab` · `PyMuPDF`（`import fitz`）。不承诺 `pdfminer` / `pdfplumber` / `PyPDF2`；`pip install` 不可用（只读根文件系统 + 执行侧无外网）。
@@ -508,77 +539,60 @@ AC-13 在此模式下收窄为：用户代码非 root、只读 rootfs、默认 s
 **领租约（worker 侧，决策 9 + 决策 12）**
 
 ```
-urls = sandbox_conf.endpoints 或 discover()   # 短 TTL 缓存的具体 URL 集合
+urls = list(sandbox_conf.endpoints)   # 配置里的具体 URL，不扫描 DNS
+if not urls:
+    raise 28001 执行环境不可达
 shuffle(urls)
+saw_503 = False
 for url in urls:
-    r = POST url/v1/sessions
+    try:
+        r = POST url/v1/sessions
+    except 连不上:
+        continue
     if r.status == 200:
-        bind (url, session_id, lease_token) on this executor instance   # 粘滞这台，不再走发现名
+        bind (url, session_id, lease_token) on this executor instance   # 粘滞这台
         return
     if r.status == 503:
+        saw_503 = True
         continue
-raise 28002 容量已满
+if saw_503:
+    raise 28002 容量已满
+raise 28001 执行环境不可达
 ```
 
-**执行流程（发现 + 领租约）**
+**执行流程（领租约）**
 
 ```mermaid
 flowchart TB
     Start([业务路径调用 execute_code]) --> Sticky{本实例已绑定 url?}
     Sticky -->|是 keep_session 续租| Bound[files / exec / DELETE 只打绑定 URL]
-    Sticky -->|否 新租约| Override{endpoints 非空?}
-    Override -->|是 显式覆盖| Urls[得到 URL 列表]
-    Override -->|否| Cache{发现缓存 TTL 内?}
-    Cache -->|命中| Urls
-    Cache -->|过期或空| Init["n = discover_index_start<br/>found = 空列表"]
-    Init --> Resolve["解析 discover_host_pattern<br/>替换 n → host"]
-    Resolve --> Dns{DNS 能解析?}
-    Dns -->|否 NXDOMAIN| Stop[停止递增]
-    Dns -->|是| Health["可选 GET http://host:port/health"]
-    Health --> Ok{可达?}
-    Ok -->|是| Add["found 追加 http://host:port<br/>n = n+1"]
-    Ok -->|否| Stop
-    Add --> Cap{n 超过 discover_max?}
-    Cap -->|否| Resolve
-    Cap -->|是| Stop
-    Stop --> Save["缓存 found 主机名 URL<br/>TTL = discover_ttl_s"]
-    Save --> Urls
+    Sticky -->|否 新租约| Urls[读取 endpoints]
     Urls --> Empty{列表为空?}
     Empty -->|是| Unreachable[28001 执行环境不可达]
     Empty -->|否| Shuffle[shuffle 列表]
     Shuffle --> Try["POST url /v1/sessions"]
     Try --> Resp{响应}
-    Resp -->|200| Bind["bind 该 url + session_id<br/>本轮不再走发现"]
-    Resp -->|503 槽满| Next{还有下一台?}
-    Resp -->|连不上 / 其它| Next
+    Resp -->|200| Bind["bind 该 url + session_id"]
+    Resp -->|503 槽满| Mark[记下见过 503] --> Next{还有下一台?}
+    Resp -->|连不上| Next
     Next -->|是| Try
-    Next -->|否| Full[28002 容量已满]
+    Next -->|否| Which{见过 503?}
+    Which -->|是| Full[28002 容量已满]
+    Which -->|否| Unreachable
     Bind --> Bound
 ```
 
-**时序（发现 + 领租约 + 粘滞）** — 算法与 HTTP 在两种编排下相同；下面用 compose 主机名举例。DNS 问谁、序号从几开始，见 §4.6 两条对照时序。
+**时序（领租约 + 粘滞）** — HTTP 在两种编排下相同；下面用 compose 里配置的两台地址举例。地址写在哪，见 §4.6。
 
 ```mermaid
 sequenceDiagram
     participant Path as 业务路径
     participant W as ContainerExecutor
-    participant DNS as 集群 DNS
     participant R1 as code-runner-1
     participant R2 as code-runner-2
 
     Path->>W: execute_code 新租约
-    Note over W: endpoints 为空且发现缓存过期
-    W->>DNS: 解析 code-runner-1
-    DNS-->>W: 命中
-    W->>R1: GET /health
-    R1-->>W: 200
-    W->>DNS: 解析 code-runner-2
-    DNS-->>W: 命中
-    W->>R2: GET /health
-    R2-->>W: 200
-    W->>DNS: 解析 code-runner-3
-    DNS-->>W: NXDOMAIN
-    Note over W: 停止递增；缓存两台主机名 URL<br/>TTL = discover_ttl_s
+    Note over W: endpoints 已列出两台
     W->>R1: POST /v1/sessions
     R1-->>W: 503 槽满
     W->>R2: POST /v1/sessions
@@ -588,13 +602,13 @@ sequenceDiagram
     W->>R2: PUT files / POST exec / GET files
     R2-->>W: 执行结果
     Path->>W: execute_code keep_session
-    Note over W: 已绑定，跳过发现
+    Note over W: 已绑定，不再挑选
     W->>R2: POST exec
     R2-->>W: 执行结果
     W->>R2: DELETE session
 ```
 
-`discover()`：按 `discover_host_pattern` 从 `discover_index_start` 递增替换 `{n}`，对 `host:port` 做 DNS 解析（可选再探 `GET /health`）。连续 NXDOMAIN / 连不上则停止（StatefulSet / 具名 compose 服务都是连续序号）。结果缓存 `discover_ttl_s`（建议 15～30s），缓存的是主机名 URL 不是 Pod IP。TTL 过期后下次领租约再发现，扩容无需重启 worker。已绑定的 sticky 会话不重新发现。
+`endpoints` 是唯一的副本列表。compose 默认写出 `http://code-runner-1:8080` 与 `http://code-runner-2:8080`；Helm 默认列出 `code-runner-0`、`code-runner-1` 的 Pod 地址。加副本要把新 URL 追加进这份列表并升级平台，不会按主机名模式扫出来。列表为空则 `28001`。已绑定的 sticky 会话不再重新挑选，直到租约 404 或实例结束。
 
 之后所有 `files` / `exec` / `DELETE` 都打到绑定的那台 `url`，不再重新挑选。灵思 `keep_session=True` 时，同一 `ContainerExecutor` 实例跨多轮 tool_call 复用这组 `(url, session_id)`。日常 / 助手 / 工作流工具 / 代码节点 `keep_session=False`：一次 `run()` 结束就 `DELETE`。
 
@@ -640,7 +654,7 @@ sequenceDiagram
 | exec / copy 中途 **协议不合 / 连不上** | 能杀则 `killpg` | worker 尽最大努力 DELETE；失败交给 TTL | `28001` / `28006`，禁止回落进程内 `exec`（AC-05） |
 | **worker 崩溃** / DELETE 丢失 | 当时无感知 | idle TTL 到期视同 DELETE | 槽不会永久占死 |
 | sticky 间隙 **租约过期** 后再 exec | 回 404，目录已擦 | 已释放 | worker 解绑，重新领约 + 全量 copy-in |
-| **runner 容器重启** | tmpfs + 内存表清空 | 立刻 | 粘滞失败 → 重新发现 / 领约 + copy-in |
+| **runner 容器重启** | tmpfs + 内存表清空 | 立刻 | 粘滞失败 → 按 endpoints 重新领约 + copy-in |
 | K8s **缩容**掉被粘滞的 Pod | 同重启 | 旧 Pod 消失即释放 | 按租约 404 处理，换一台 |
 | 池满，**根本没领到**租约 | 无 session 可回收 | — | `28002`，与执行失败分列（AC-27） |
 
@@ -654,34 +668,32 @@ sequenceDiagram
 
 ### 4.6 compose 与 K8s 如何挂沙箱
 
-两种编排支持的是**同一件事**：声明 N 个 `bisheng-sandbox` 副本，worker 在领租约时按主机名模式发现它们，并用网络策略把 runner 从中间件网段里摘出去。应用代码看不到 docker / kube-apiserver。**本期交付 compose；K8s 协议兼容，不强制交清单、不要求客户新上集群。**
+两种编排支持的是**同一件事**：声明 N 个 `bisheng-sandbox` 副本，把每一台的 URL 写进平台的 `endpoints`，并用网络策略把 runner 从中间件网段里摘出去。应用代码看不到 docker / kube-apiserver，也不按主机名扫描副本。**本期交付 compose；K8s 协议兼容，不强制交清单、不要求客户新上集群。**
 
 | 维度 | docker compose（本期交付） | Kubernetes（协议兼容） |
 |---|---|---|
-| 副本怎么声明 | 显式服务 `code-runner-1` / `code-runner-2`，**不用** `deploy.replicas`（匿名实例没有稳定 DNS，粘滞会丢） | `StatefulSet` + headless Service；**不用** `Deployment` + ClusterIP |
-| worker 怎么找到副本 | 默认发现 `code-runner-{n}`（n 从 1 递增到连不上为止）；`endpoints` 非空则覆盖 | 发现 `code-runner-{n}.code-runner`（n 从 0）；粘滞具体主机名，不粘滞 Service 名 |
-| 网络隔离怎么做 | 独立网络 `sandbox_net`：runner 只连它；worker 双挂（default + sandbox_net）；**不**把 runner 端口映射到宿主 | `NetworkPolicy`：只允许来自 worker Pod 的 8080；runner 不加入中间件 Service 的 selector |
+| 副本怎么声明 | 显式服务 `code-runner-1` / `code-runner-2`，**不用** `deploy.replicas`（匿名实例没有稳定主机名，粘滞会丢） | `StatefulSet` + headless Service；**不用** `Deployment` + ClusterIP |
+| worker 怎么找到副本 | `BS_SANDBOX_CONF__ENDPOINTS` 列出 `http://code-runner-1:8080`、`http://code-runner-2:8080` | `sandbox.endpoints` 列出每个 Pod URL（从 `code-runner-0` 起）；粘滞具体 URL，不粘滞 Service 名 |
+| 网络隔离怎么做 | 独立网络 `sandbox_net`：runner 只连它；backend 与 worker 双挂（default + sandbox_net）；**不**把 runner 端口映射到宿主 | `NetworkPolicy`：允许来自 backend 与 worker Pod 的 8080；runner 不加入中间件 Service 的 selector |
 | 加固怎么落 | compose：`cap_drop: ALL`、`read_only: true`、`mem_limit` / `pids_limit`、`security_opt: no-new-privileges`、`tmpfs`、`user: 65534` | 等价的 `securityContext` + `resources.limits` + `emptyDir.medium: Memory` 作为 `/tmp` |
-| 扩缩容 | 加一个具名服务；worker 在 TTL 后自动发现，不必改 endpoints | 改 `spec.replicas`；同样等 TTL 后发现。缩容中被粘滞的副本按租约 404 处理 |
-| 明确不做 | runner 向 Redis/API 自注册；前面加 nginx / VIP；挂 `docker.sock` | 普通 ClusterIP 当唯一入口；backend 引 `kubernetes` 包；runner 出站注册 |
+| 扩缩容 | 加一个具名服务，并把其 URL 追加进 `endpoints` | 改 `spec.replicas` 后，把每个新 Pod URL 追加进平台 `sandbox.endpoints` 再升级。缩容中被粘滞的副本按租约 404 处理 |
+| 明确不做 | runner 向 Redis/API 自注册；按主机名模式扫描；前面加 nginx / VIP；挂 `docker.sock` | 普通 ClusterIP 当唯一入口；backend 引 `kubernetes` 包；runner 出站注册；按 ordinal 自动扫描 |
 
-发现时序**结构相同**，差别只在「问哪套 DNS、主机名怎么写」：
+地址**写法不同**，领租约的 HTTP 相同。差别是 URL 写在哪、主机名长什么样，不是两套发现算法：
 
 | | docker compose | Kubernetes |
 |---|---|---|
-| DNS 谁答 | Compose 项目内嵌 DNS（`sandbox_net`） | CoreDNS；headless Service 把 StatefulSet 序号写成 A 记录 |
-| 查询名 | `code-runner-1`、`code-runner-2`、… | `code-runner-0.code-runner`、`code-runner-1.code-runner`、… |
-| `{n}` 起点 | 1（compose 服务名习惯从 1） | 0（StatefulSet ordinal） |
-| 停的条件 | 下一个服务名 NXDOMAIN | 下一个 ordinal NXDOMAIN |
+| 地址写在哪 | backend / worker 的 `BS_SANDBOX_CONF__ENDPOINTS` | 平台 chart 的 `sandbox.endpoints`，注入同一环境变量 |
+| 默认两台 | `http://code-runner-1:8080`、`http://code-runner-2:8080` | `http://code-runner-0.code-runner.bisheng-sandbox.svc.cluster.local:8080`、`…-1…` |
 | 粘滞绑什么 | `http://code-runner-2:8080` | `http://code-runner-1.code-runner:8080` |
 | 与 runner 的 HTTP | 相同：`POST /v1/sessions` → files/exec/DELETE | 相同 |
-| 不做什么 | 不查一个叫 `code-runner` 的 VIP | 不把 Service 名 `code-runner` 当唯一入口（那会变成多 A / kube-proxy 打散） |
+| 不做什么 | 不扫描 `code-runner-{n}`，不查一个叫 `code-runner` 的 VIP | 不按 ordinal 递增解析到 NXDOMAIN；不把 Service 名 `code-runner` 当唯一入口（那会变成多 A / kube-proxy 打散） |
 
-worker 代码是同一段 `discover()`，只换 `discover_host_pattern` 与 `discover_index_start`。
+worker 只读 `endpoints`。`config.yaml` **不**写「部署方案 = k8s / compose」，也**不**写主机名模式：没有作用对象（零 docker / 零 k8s 客户端），也避免和编排清单各写一份互相漂移。加副本改地址列表。
 
 **docker compose 运行拓扑**
 
-worker 必须同时加入默认网络（访问 MySQL / Redis / MinIO）和 `sandbox_net`（访问 runner）。runner **只**加入 `sandbox_net`，且不 `ports:` 发布到宿主——隔离靠网络不可达，不靠「不告诉用户端口」。
+backend 与 worker 都必须同时加入默认网络（访问 MySQL / Redis / MinIO）和 `sandbox_net`（访问 runner）。编辑器「运行一次」在 backend 进程里执行。runner **只**加入 `sandbox_net`，且不 `ports:` 发布到宿主——隔离靠网络不可达，不靠「不告诉用户端口」。
 
 ```mermaid
 flowchart TB
@@ -696,8 +708,9 @@ flowchart TB
             R2["code-runner-2"]
         end
     end
-    Worker -->|"发现 code-runner-n 后直连"| R1
-    Worker -->|"发现 code-runner-n 后直连"| R2
+    Worker -->|"endpoints 直连"| R1
+    Worker -->|"endpoints 直连"| R2
+    API -->|"运行一次"| R1
     Worker --> DB
     API --> DB
     API --> Worker
@@ -712,9 +725,8 @@ networks:
 services:
   backend_worker:
     networks: [default, sandbox_net]
-    # 默认发现 code-runner-{n}；不必再写 ENDPOINTS
-    # environment:
-    #   BS_SANDBOX_CONF__ENDPOINTS: "http://code-runner-1:8080,http://code-runner-2:8080"
+    environment:
+      BS_SANDBOX_CONF__ENDPOINTS: '["http://code-runner-1:8080","http://code-runner-2:8080"]'
 
   code-runner-1: &runner
     image: dataelement/bisheng-sandbox:${TAG}
@@ -725,26 +737,15 @@ services:
     <<: *runner
 ```
 
-**compose 发现时序**（Docker 内嵌 DNS；n 从 1）
+**compose 领租约时序**（地址来自 `BS_SANDBOX_CONF__ENDPOINTS`，不扫描 DNS）
 
 ```mermaid
 sequenceDiagram
     participant W as worker
-    participant DNS as Compose DNS
     participant R1 as code-runner-1
     participant R2 as code-runner-2
 
-    W->>DNS: A code-runner-1
-    DNS-->>W: 命中 sandbox_net IP
-    W->>R1: GET /health
-    R1-->>W: 200
-    W->>DNS: A code-runner-2
-    DNS-->>W: 命中
-    W->>R2: GET /health
-    R2-->>W: 200
-    W->>DNS: A code-runner-3
-    DNS-->>W: NXDOMAIN
-    Note over W: 缓存 http://code-runner-1:8080<br/>http://code-runner-2:8080
+    Note over W: endpoints 已是两台 URL
     W->>R1: POST /v1/sessions
     R1-->>W: 503
     W->>R2: POST /v1/sessions
@@ -797,38 +798,27 @@ spec:
   ports: [{ port: 8080 }]
 ```
 
-worker **不必**列出每一台 Pod。配 `discover_host_pattern=code-runner-{n}.code-runner`、`discover_index_start=0`，领租约时从 0 递增解析直到 NXDOMAIN。粘滞的是 `http://code-runner-0.code-runner:8080` 这种具体主机名，不是 Service 名 `code-runner`。headless Service 的作用是让这些序号 DNS 存在，不是当 VIP。
+worker **必须**列出每一台 Pod。平台 `sandbox.endpoints` 写入 `http://code-runner-0.code-runner.bisheng-sandbox.svc.cluster.local:8080` 这种具体 URL，领租约时只打这份列表。粘滞的是这份 URL，不是 Service 名 `code-runner`。headless Service 的作用是让序号 DNS 能被这份列表引用，不是当 VIP，也不是给 worker 做扫描。
 
 **不要**用普通 ClusterIP 当唯一入口——kube-proxy 会把第二次 `exec` 打到另一台 Pod。也**不要**让 runner 向 Redis / API 注册：用户代码与 runner 同 netns，注册出站等于给执行侧开中间件通道（决策 12）。
 
-backend / worker **不**引入 `kubernetes` / `docker` Python 包，不挂 `docker.sock`，不访问 kube-apiserver。编排系统负责把 Pod 拉起来并写入 DNS；应用只做 DNS 查询 + HTTP。
+backend / worker **不**引入 `kubernetes` / `docker` Python 包，不挂 `docker.sock`，不访问 kube-apiserver。编排系统负责把 Pod 拉起来；应用只按配置里的 URL 做 HTTP。
 
-**K8s 发现时序**（CoreDNS + headless；n 从 0。与 compose 相比只换查询名，HTTP 段不变）
+**K8s 领租约时序**（地址来自 `sandbox.endpoints`。与 compose 相比只换 URL 写法，HTTP 段不变）
 
 ```mermaid
 sequenceDiagram
     participant W as worker
-    participant DNS as CoreDNS
     participant P0 as code-runner-0
     participant P1 as code-runner-1
 
-    Note over W: 不要查 Service 名 code-runner<br/>那是多 A / 无粘滞
-    W->>DNS: A code-runner-0.code-runner
-    DNS-->>W: 命中 Pod IP
-    W->>P0: GET /health
-    P0-->>W: 200
-    W->>DNS: A code-runner-1.code-runner
-    DNS-->>W: 命中
-    W->>P1: GET /health
-    P1-->>W: 200
-    W->>DNS: A code-runner-2.code-runner
-    DNS-->>W: NXDOMAIN
-    Note over W: 缓存 http://code-runner-0.code-runner:8080<br/>http://code-runner-1.code-runner:8080
+    Note over W: 不要用 Service 名 code-runner<br/>那是多 A / 无粘滞
+    Note over W: endpoints 已是两台 Pod URL
     W->>P0: POST /v1/sessions
     P0-->>W: 503
     W->>P1: POST /v1/sessions
     P1-->>W: 200
-    Note over W: bind 主机名 URL 不是 Pod IP
+    Note over W: bind 配置里的 Pod URL，不是 Service 名
 ```
 
 ### 4.7 沙箱抽象层与云后端插拔
@@ -855,13 +845,13 @@ flowchart TB
 ```yaml
 # 发布稿里整段注释掉（坑 9）
 # sandbox_conf:
-#   discover_host_pattern: "code-runner-{n}"
-#   discover_index_start: 1
-#   discover_ttl_s: 15
+#   endpoints:
+#     - "http://code-runner-1:8080"
+#     - "http://code-runner-2:8080"
 #   token: "..."
 #   pool_lease_ttl_s: 900
 #   max_sessions_per_replica: 1
-#   # endpoints: ["http://code-runner-1:8080"]  # 非空则跳过发现
+#   # 不要加 deploy_mode / orchestrator，也不要加主机名扫描字段（决策 12）
 ```
 
 云后端**不**走 `/v1/sessions`。E2B 继续用 SDK 的 `Sandbox` / `files.write`；新云厂商实现同一对 `execute_code` + `close`，在自己的 `__init__` 里读自己的密钥。把云 API 伪装成自建副本只会把两种生命周期缠在一起。
@@ -870,11 +860,23 @@ flowchart TB
 
 ### 4.8 后续若要正式支持 E2B（本期不做，只定接法）
 
-本期冻结 E2B 功能改进（spec 排除项）。代码里 `E2bCodeExecutor` 已经能跑；「正式支持」是指把它收进 F068 同一套 `execute_code` 语义，并还掉已知债，而不是再接一套业务路径。
+本期冻结 E2B 功能改进（spec 排除项）。代码里 `E2bCodeExecutor` 已经能跑；「正式支持」是指把它收进 F068 同一套 `execute_code` 语义，并还掉已知债，而不是再接一套业务路径。现网依赖 `e2b-code-interpreter==1.5.2`（`Sandbox(api_key, domain, timeout)` 构造，不是较新的 `Sandbox.create()`）。
+
+**E2B 线上是三层协议，不是一条 `/exec`**（所以不能伪装成副本池的 `/v1/sessions`）：
+
+| 层 | 地址 | 鉴权 | 毕昇实际调用 |
+|---|---|---|---|
+| ① 控制面 | `https://api.e2b.app` REST：`POST/DELETE /sandboxes` 等 | `X-API-Key` | `Sandbox(...)` / `sandbox.kill()` |
+| ② 数据面 envd | 默认端口 **49983**：`POST/GET /files`、ConnectRPC `Filesystem.*` / `Process.Start` | `E2b-Sandbox-Id` + `E2b-Sandbox-Port`；`secure: true` 时还有 `X-Access-Token` | `files.write` / `read` / `list` / `make_dir`。解释器 **不用** Process RPC |
+| ③ Code Interpreter | 端口 **49999**：`POST /execute` NDJSON 流；健康检查 `/health` | 同上 access token | `sandbox.run_code(code)` → Jupyter kernel（沙箱内再转 `ws://localhost:8888/api/kernels/{context_id}/channels`） |
+
+`run_code` **跨调用保留 kernel 变量**（上一轮 `x = 1` 下一轮还能用）。F068 `/exec` 是一次独立子进程，磁盘靠 sticky 目录保留，Python 进程不保留。访问沙箱的新写法是共享主机 `sandbox.{domain}` + 两个路由 header；旧写法 `https://{port}-{sandboxID}.e2b.app`。worker **直连**云控制面；runner 零出站。
+
+**`SIZE_AUTOPUSH = 5MB` 不是 E2B 接口上限。** 是 F035（design §9.3.9）给「自动 copy-in」定的产品阈值：沙箱碰不到 MinIO，worker 必须 `f.read()` 整文件再 `files.write`；每次 `run` 把工作区全量出境会变成 silent bulk transfer。设计意图是 ≤5MB 自动 delta push，>5MB 由模型在 `required_files` 声明后再中转。现状对不上：工具 schema 只有 `python_code`；`_materialize_working_set()` 固定 `{}`；`workbench_impl._init_bisheng_code_tool` 装配时把 oversized 从 `file_list` 剔除。所以 **E2B 模式下 >5MB 等于进不去沙箱**。本地执行器不受影响（cwd=`file_dir`，原件可到 `_RAW_KEEP_MAX_BYTES` 50MB）。本期不还这笔债；容器模式用 `max_copy_in_bytes` + AC-10 点名跳过，不套 5MB 自动推送。
 
 **不要做的**
 
-- 不要把 E2B 伪装成副本池：不实现 `/v1/sessions`，不走 `discover_host_pattern`，不把 `Sandbox` 登记进 runner DNS。
+- 不要把 E2B 伪装成副本池：不实现 `/v1/sessions`，不把 `Sandbox` 登记进 runner 的地址列表。
 - 不要在 runner 容器里调 E2B SDK。worker 直连 E2B 控制面，执行侧零出站（AC-12）继续成立。
 - 不要把决策 13 的 uid / `lease_token` 套到 E2B 上。E2B 的隔离单元是 **一台 `Sandbox`（Firecracker）**，两个会话 = 两个 Sandbox，不是一个 VM 里两个目录。
 - 不要继续在 `else: E2bCodeExecutor` 里吞掉未知 `type`。dispatch 必须显式 `local | container | e2b`。
@@ -915,11 +917,12 @@ sequenceDiagram
 |---|---|
 | `POST /v1/sessions` 领常驻副本上的目录 | `Sandbox.create`（或 pause 后 resume） |
 | `(url, session_id, lease_token)` 粘滞 | `sandbox_id`；SDK 鉴权用 `api_key`，没有 localhost DELETE 问题 |
-| `files` tar HTTP | `sandbox.files.write` / 读；worker 居中，沙箱仍不连 MinIO |
-| `exec` | `sandbox.run_code` |
+| `files` tar HTTP | `sandbox.files.write` / 读（逐文件，不是目录 tar）；worker 居中，沙箱仍不连 MinIO |
+| `exec` 一次子进程 | `sandbox.run_code` → `:49999/execute` Jupyter 流；kernel 状态跨轮保留 |
 | `DELETE` | `sandbox.kill` |
 | 并发隔离 = 另一台 runner 容器 | 并发隔离 = 另一个 Sandbox |
-| `sandbox_conf.endpoints` / 发现 | `config.e2b.api_key` + 可选 `domain`（有 domain = 私有，无 = 官方云） |
+| `sandbox_conf.endpoints` + token | `config.e2b.api_key` + 可选 `domain`（有 domain = 私有，无 = 官方云）。**不要**把 E2B 写进 `sandbox_conf` |
+| 无 5MB 自动推送天花板（有 `max_copy_in_bytes`） | `SIZE_AUTOPUSH` 5MB 自动推送；超限须 `required_files`（现状未接到工具 schema） |
 
 **改造清单（独立 Feature，不并进 F068）**
 
@@ -956,6 +959,8 @@ sequenceDiagram
 | 14 | 同容器、同 uid 下的兄弟目录**不是**会话数据隔离；全局 Bearer 也挡不住同网 DELETE 邻居租约 | 把槽位调到 2 或只靠目录权限，用户代码能读/写邻居文件，或打 localhost 删邻居 session | 决策 13：独立 uid + 父目录 0711 + `/tmp` 0755 + 按会话 lease_token |
 | 15 | tar 解包若不校验成员路径，`../` 或绝对路径会写出 session 目录（zip-slip） | copy-in 被用户代码或被污染的工作区带着逃出 `work_dir` | PUT/GET 两侧都拒绝 `..` 与绝对路径；成员必须落在该 UUID 目录内 |
 | 16 | 决策 7 的「venv 对等」会把 `minio` / `playwright` 等客户端库带进沙箱，但 Chromium 二进制默认不装、中间件也连不上 | 以为能 `playwright.launch()` 或 `Minio(...)` 上传；或反过来把 playwright 包从锁文件里删掉导致代码节点 ImportError | 工具描述只承诺办公/数据那批库；浏览器技能运行时探测；`import minio` 成功 ≠ 能连 MinIO |
+| 17 | E2B 自动 copy-in 的 5MB（`SIZE_AUTOPUSH`）是 F035 防 silent bulk transfer 的产品阈值，**不是** E2B `files.write` 的协议上限；`required_files` 设计了但工具 schema 未接线，oversized 在装配期被静默剔出 `file_list` | 以为容器模式也要 5MB 自动推送；或以为声明 `required_files` 就能把大文件推进现网 E2B | 容器模式只用 `max_copy_in_bytes` + AC-10 点名；E2B 改进冻结（§4.8） |
+| 18 | `sandbox_conf` 没有 `deploy_mode`，也没有主机名扫描字段 | 加枚举却零编排客户端，两套清单必然漂移；或按 `code-runner-{n}` 扫描，扩容和清空地址都接不回一份确定的列表 | 决策 12：只写 `endpoints`。旧的 `discover_*` 配置被忽略 |
 
 ---
 
@@ -966,7 +971,7 @@ sequenceDiagram
 | 契约 | 形式 | 谁在用 |
 |---|---|---|
 | 工具结果 `{exitcode, log, file_list}` | 隐式数据契约（进 `ToolMessage`） | 模型本身、灵思中间件（循环检测 / 部分结果打捞 / 二进制守卫）、既有用例 |
-| `BaseExecutor.execute_code` 抽象 | 内部 Python 契约 | 三种执行后端；未来新后端 |
+| `BaseExecutor.execute_code` 可覆盖缝（非 ABC 抽象，见 §4.3） | 内部 Python 契约 | 三种执行后端；未来新后端 |
 | 执行侧 `/v1/*` HTTP 协议 | 内部 HTTP | 仅 worker 侧执行器；不对外暴露 |
 | `gpts_tools.extra.type` 取值集 | 数据契约 | 管理端配置弹窗、`ToolExecutor` |
 | 错误码模块 280 | 对外可观测行为 | 运维、日志检索 |
@@ -1027,7 +1032,8 @@ docker compose exec code-runner env | grep -i -E 'minio|hmac|mysql'
 - **按次新建容器**：等 3.0 应用工场 F103 `runtime-manager` 落地后复用其编排面，不在本 Feature 自造特权控制面（决策 2）。
 - **工具结果契约归一**：E2B 下线、只剩两种后端时一次性做（决策 5）。
 - **日常会话把上传原件送进执行环境**：今天只抽文本进 prompt，因此「打开我刚传的 xlsx 改完另存」在日常会话做不到。这是产品缺口而非本 Feature 的技术债，需产品先定语义。
-- **runner 向 Redis / API 自注册**：执行侧与用户代码同 netns，注册出站等于给不可信代码开中间件通道（决策 12）。副本发现由 worker 做 DNS/连通探测。
+- **runner 向 Redis / API 自注册**：执行侧与用户代码同 netns，注册出站等于给不可信代码开中间件通道（决策 12）。
+- **按主机名模式扫描副本**：`discover_*` 配置已删除。副本只认 `endpoints`。加副本改列表并升级平台。
 - **知识库解析链路的 LibreOffice 不进沙箱**：那是平台自有可信代码，占用执行容量只会互相拖慢。
 - **E2B 模式不再投入**：含其产物枚举只列一层目录的缺陷（§5 坑 12）；冻结为境外部署与存量兼容。正式支持的接法见 §4.8，不并进本 Feature。
 
@@ -1042,3 +1048,6 @@ docker compose exec code-runner env | grep -i -E 'minio|hmac|mysql'
 | 2026-09-16 | §4.6 补 compose / K8s 发现对照表与两条时序：算法相同，仅 DNS 名与序号起点不同 | 用户问两种编排的发现实现和时序是否有区别 |
 | 2026-09-16 | 补 §4.8：后续正式支持 E2B 走 execute_code 插件，不进副本池；列出技能包/递归 copy-out/结果形状等必还债 | 用户问后续要支持 E2B 应如何实现 |
 | 2026-09-16 | 从评审说明书回写：五条路径表；§4.2 HTTP tar copy-in/out 步骤与 zip-slip；§4.4 镜像分层 / 承诺库 / 不装 Chromium；§4.5 异常回收双保险与 sticky 拆租约边界；坑 15–16 | 说明书补路径、文件进出、镜像内容、异常回收后要求同步 design |
+| 2026-09-20 | §4.1 补调用点锚点与「不是调用点」；§4.2 澄清何时整目录打 tar（扫描≠全量字节）；决策 12 / §4.6 / §4.7 明确配置无 k8s\|compose 枚举；§4.8 补 E2B 三层协议、kernel 粘滞、`SIZE_AUTOPUSH` 5MB 为产品阈值且 `required_files` 未接线；坑 17–18 | 评审讨论：调用点、E2B 协议、5MB 原因、何时打 tar、配置要不要写部署方案 |
+| 2026-09-20 | 实现收口：`execute_code` 不以 `@abstractmethod` 落地（保住冻结 E2B 可实例化）；沙箱镜像 `uv sync --no-install-project`；runner PID 1 读 `SANDBOX_TOKEN`，与 worker `BS_SANDBOX_CONF__TOKEN` 同源插值 | Wave 2–10 落地后回写与代码一致的契约 |
+| 2026-10-21 | 决策 12、§4.2、§4.5、§4.6、§4.7、坑 18、§8：去掉主机名发现。副本只认 `endpoints`；compose 与 Helm 列出两台 runner URL | 主机名扫描与粘滞缓存接不回「清空地址后重新发现」，改为显式地址列表 |

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from bisheng.common.errcode.permission import PermissionInvalidResourceError
+from bisheng.common.errcode.permission import PermissionInvalidResourceError, PermissionSubjectUnavailableError
 from bisheng.database.models.department import (
     DepartmentDao,
     UserDepartmentDao,
@@ -10,6 +10,7 @@ from bisheng.database.models.department import (
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.tenant import UserTenantDao
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.department.domain.services.department_service import _dept_node_dict
 from bisheng.open_api.domain.repositories.service_account_repository import ServiceAccountRepository
 from bisheng.permission.domain.services import grant_subject_service
 from bisheng.permission.domain.services.grant_source_service import (
@@ -20,6 +21,10 @@ from bisheng.permission.domain.services.grant_subject_service import GrantSubjec
 from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
 )
+from bisheng.tenant.domain.repositories.grant_department_repository import GrantDepartmentRepository
+from bisheng.tenant.domain.repositories.grant_subject_search_repository import GrantSubjectSearchRepository
+from bisheng.tenant.domain.repositories.permission_subject_repository import PermissionSubjectRepository
+from bisheng.user.application.runtime_identity import read_current_person_facts
 from bisheng.user.domain.models.user import UserDao
 
 
@@ -28,6 +33,116 @@ class TenantPermissionSubjectDirectory:
 
     def __init__(self) -> None:
         self._sources = GrantSourceService()
+        self._candidate_queries = GrantSubjectSearchRepository()
+        self._departments = GrantDepartmentRepository()
+        self._summary_queries = PermissionSubjectRepository()
+
+    async def describe_active_sources(self, *, tenant_id, sources):
+        """Read names and current identity eligibility, never expand usersets."""
+        supported = {"user", "department", "user_group", "service_account"}
+        for source in sources:
+            if source.subject_type not in supported or not source.subject_id.isdigit():
+                raise PermissionSubjectUnavailableError(reason="unsupported_summary_subject")
+        keys = tuple({(row.subject_type, row.subject_id) for row in sources})
+        users = await read_current_person_facts([int(ident) for kind, ident in keys if kind == "user"])
+        names = await self._summary_queries.load(tenant_id, keys)
+        result, seen = [], set()
+        for source in sources:
+            kind, ident = source.subject_type, source.subject_id
+            if kind == "service_account":
+                continue
+            if kind == "user":
+                person = users.get(int(ident))
+                if person is None or person["state"] == "ambiguous":
+                    raise PermissionSubjectUnavailableError(reason="summary_person_unresolved")
+                if person["state"] != "active" or person["tenant_id"] != tenant_id:
+                    continue
+                name = person["name"]
+            else:
+                row = names.get((kind, ident))
+                if row is None or row.tenant_id != tenant_id:
+                    continue
+                name = row.name if kind == "department" else row.group_name
+            relation, children = source.userset_relation, source.include_children
+            if (
+                (kind == "user" and (relation is not None or children))
+                or (kind == "user_group" and (relation not in {"admin", "member"} or children))
+                or (kind == "department" and relation != ("subtree_member" if children else "member"))
+            ):
+                raise PermissionSubjectUnavailableError(reason="summary_userset_unresolved")
+            if not name:
+                raise PermissionSubjectUnavailableError(reason="summary_name_unresolved")
+            key = (kind, ident, relation, children)
+            if key not in seen:
+                seen.add(key)
+                result.append(
+                    {
+                        "type": kind,
+                        "id": ident,
+                        "name": name,
+                        "userset_relation": relation,
+                        "include_children": children,
+                    }
+                )
+        return result
+
+    async def candidate_users(self, scope, *, keyword: str, page: int, page_size: int):
+        return await self._candidate_queries.users(scope, keyword=keyword, page=page, page_size=page_size)
+
+    async def count_candidate_users(self, scope, *, keyword: str):
+        return await self._candidate_queries.count_users(scope, keyword=keyword)
+
+    async def candidate_groups(self, scope, *, keyword: str, page: int, page_size: int):
+        return await self._candidate_queries.groups(scope, keyword=keyword, page=page, page_size=page_size)
+
+    async def count_candidate_groups(self, scope, *, keyword: str):
+        return await self._candidate_queries.count_groups(scope, keyword=keyword)
+
+    async def candidate_departments(self, scope, *, keyword: str, limit: int):
+        return await self._candidate_queries.departments(scope, keyword=keyword, limit=limit)
+
+    async def candidate_department_layer(self, scope, *, parent_id: int | None) -> list[dict]:
+        rows, children = await self._departments.layer(scope, parent_id=parent_id)
+        return [_dept_node_dict(row, has_children=int(row.id) in children) for row in rows]
+
+    async def _department_forest(self, boundary, matches) -> list[dict]:
+        if boundary is None or not matches:
+            return []
+        rows, children = await self._departments.forest(boundary, matches)
+        matched_ids = {int(row.id) for row in matches}
+        nodes = {
+            int(row.id): _dept_node_dict(row, has_children=int(row.id) in children, matched=int(row.id) in matched_ids)
+            for row in rows
+        }
+        roots = []
+        for row in rows:
+            parent = nodes.get(row.parent_id)
+            if parent is None:
+                roots.append(nodes[int(row.id)])
+            else:
+                parent["children"].append(nodes[int(row.id)])
+
+        def sort_layer(layer):
+            layer.sort(key=lambda node: (node["sort_order"], node["id"]))
+            for node in layer:
+                sort_layer(node["children"])
+
+        sort_layer(roots)
+        return roots
+
+    async def search_candidate_departments(self, scope, *, keyword: str, limit: int) -> dict:
+        boundary, rows = await self._departments.search(scope, keyword=keyword, limit=limit + 1)
+        matches = rows[:limit]
+        return {
+            "roots": await self._department_forest(boundary, matches),
+            "total_matches": len(matches),
+            "truncated": len(rows) > limit,
+        }
+
+    async def candidate_department_path(self, scope, *, dept_id: int) -> dict:
+        boundary, row = await self._departments.get(scope, department_id=dept_id)
+        roots = await self._department_forest(boundary, [row] if row is not None else [])
+        return {"roots": roots, "total_matches": int(row is not None), "truncated": False}
 
     @staticmethod
     def _prospective_scope(tenant_id: int, resource_type: str) -> GrantSubjectScope:
@@ -117,7 +232,7 @@ class TenantPermissionSubjectDirectory:
     ) -> frozenset[str]:
         if actor.subject_type == "service_account":
             return frozenset({actor.fga_subject})
-        projected = {actor.fga_subject}
+        projected = {actor.fga_subject, f"tenant:{actor.current_tenant_id}#member"}
         memberships = await UserDepartmentDao.aget_user_departments(actor.user_id)
         departments = await DepartmentDao.aget_by_ids([row.department_id for row in memberships])
         for department in departments:
@@ -152,17 +267,24 @@ class TenantPermissionSubjectDirectory:
         if not normalized_id.isdigit():
             raise PermissionInvalidResourceError()
         identifier = int(normalized_id)
-        if normalized_type == "user":
+        if normalized_type == "tenant":
+            valid = identifier == tenant_id
+            source_type = "TENANT"
+        elif normalized_type == "user":
             rows = await UserTenantDao.aget_user_tenants(identifier)
             valid = any(row.tenant_id == tenant_id and row.status == "active" and row.is_active == 1 for row in rows)
+            if not valid:
+                raise PermissionSubjectUnavailableError()
             source_type = "DIRECT"
         elif normalized_type == "service_account":
             row = await ServiceAccountRepository.get(identifier)
             valid = bool(row and row.is_enabled and row.tenant_id == tenant_id)
             source_type = "DIRECT"
         elif normalized_type == "department":
-            row = await DepartmentDao.aget_by_id(identifier)
-            valid = bool(row and row.status == "active" and row.tenant_id == tenant_id)
+            _, row = await self._departments.get(
+                GrantSubjectScope(tenant_id=tenant_id, department_path=None), department_id=identifier
+            )
+            valid = row is not None
             source_type = "DEPARTMENT"
         elif normalized_type == "user_group":
             row = await GroupDao.aget_by_id(identifier)
@@ -270,29 +392,22 @@ class TenantPermissionSubjectDirectory:
 
         from bisheng.channel.domain.models.channel import Channel
         from bisheng.core.database import get_async_db_session
+        from bisheng.database.models.app import APP_STATE_DELETED, App
         from bisheng.database.models.assistant import Assistant
         from bisheng.database.models.flow import Flow
         from bisheng.telemetry_search.domain.models.dashboard import Dashboard
         from bisheng.tool.domain.models.gpts_tools import GptsToolsType
 
         ids_by_type = {
-            resource_type: tuple(
-                resource_id
-                for item_type, resource_id in resources
-                if item_type == resource_type
-            )
-            for resource_type in ("workflow", "assistant", "channel", "tool", "dashboard")
+            resource_type: tuple(resource_id for item_type, resource_id in resources if item_type == resource_type)
+            for resource_type in ("workflow", "assistant", "channel", "tool", "dashboard", "app")
         }
         if not any(ids_by_type.values()):
             return {}
         labels: dict[tuple[str, str], str] = {}
         async with get_async_db_session() as session:
             if ids_by_type["workflow"]:
-                rows = (
-                    await session.exec(
-                        select(Flow).where(col(Flow.id).in_(ids_by_type["workflow"]))
-                    )
-                ).all()
+                rows = (await session.exec(select(Flow).where(col(Flow.id).in_(ids_by_type["workflow"])))).all()
                 labels.update({("workflow", str(row.id)): row.name for row in rows})
             if ids_by_type["assistant"]:
                 rows = (
@@ -305,12 +420,20 @@ class TenantPermissionSubjectDirectory:
                 ).all()
                 labels.update({("assistant", str(row.id)): row.name for row in rows})
             if ids_by_type["channel"]:
+                rows = (await session.exec(select(Channel).where(col(Channel.id).in_(ids_by_type["channel"])))).all()
+                labels.update({("channel", str(row.id)): row.name for row in rows})
+            if ids_by_type["app"]:
+                # Hosted applications (F054): ``app.id`` is a str like Flow /
+                # Assistant, and "deleted" is a state, not an ``is_delete`` flag.
                 rows = (
                     await session.exec(
-                        select(Channel).where(col(Channel.id).in_(ids_by_type["channel"]))
+                        select(App).where(
+                            col(App.id).in_(ids_by_type["app"]),
+                            App.state != APP_STATE_DELETED,
+                        )
                     )
                 ).all()
-                labels.update({("channel", str(row.id)): row.name for row in rows})
+                labels.update({("app", str(row.id)): row.name for row in rows})
 
             tool_ids = tuple(int(value) for value in ids_by_type["tool"] if value.isdigit())
             if tool_ids:
@@ -324,14 +447,8 @@ class TenantPermissionSubjectDirectory:
                 ).all()
                 labels.update({("tool", str(row.id)): row.name for row in rows})
 
-            dashboard_ids = tuple(
-                int(value) for value in ids_by_type["dashboard"] if value.isdigit()
-            )
+            dashboard_ids = tuple(int(value) for value in ids_by_type["dashboard"] if value.isdigit())
             if dashboard_ids:
-                rows = (
-                    await session.exec(
-                        select(Dashboard).where(col(Dashboard.id).in_(dashboard_ids))
-                    )
-                ).all()
+                rows = (await session.exec(select(Dashboard).where(col(Dashboard.id).in_(dashboard_ids)))).all()
                 labels.update({("dashboard", str(row.id)): row.title for row in rows})
         return labels

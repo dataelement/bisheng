@@ -1,6 +1,8 @@
+import { workflowStreamForHost, startAssistantForHost, assistantStreamForHost } from '@bisheng/chat/core';
 /**
  * websocket辅助函数
  */
+import { finishStoppedAppMessage, stopAppMessages } from "./appMessageStop"
 import { produce } from "immer"
 import { useMemo } from "react"
 import { useRecoilState, useRecoilValue } from "recoil"
@@ -67,6 +69,8 @@ export default function useChatHelpers() {
                 running: false,
                 showStop: false,
                 showUpload: false,
+                inputForm: false,
+                showReRun: false,
                 inputDisabled: close || !!errorMsg.code, //chatState?.flow.flow_type !== 1, // 技能不禁止输入
                 // showReRun: chatState?.flow.flow_type === 10, // 错误时工作流展示重试按钮
                 error: close ? prev[chatId].error : errorMsg,
@@ -90,7 +94,7 @@ export default function useChatHelpers() {
             ...prev,
             [chatId]: {
                 ...prev[chatId],
-                running: true,
+                running: show,
                 showStop: show,
             },
         }))
@@ -150,6 +154,24 @@ export default function useChatHelpers() {
 
     // 更新消息
     const message = {
+        stopMsg: (chatid: string) => {
+            setChats((prev) => updateChatMessages(prev, chatid, (messages) => {
+                const stopped = stopAppMessages(messages)
+                const hasStoppedAnswer = stopped.some((msg, index) => msg !== messages[index]
+                    && ['stream_msg', 'answer', 'output_msg'].includes(msg.category))
+                return hasStoppedAnswer ? stopped : [...stopped, {
+                    ...baseMsgItem,
+                    id: 'tmp-stop-' + generateUUID(8),
+                    is_bot: true,
+                    category: 'stream_msg',
+                    end: true,
+                    stopped: true,
+                }]
+            }))
+        },
+        finishStoppedMsg: (chatid: string, frame: Parameters<typeof finishStoppedAppMessage>[1]) => {
+            setChats((prev) => updateChatMessages(prev, chatid, (messages) => finishStoppedAppMessage(messages, frame)))
+        },
         createNodeMsg: (chatid: string, data: any) => {
             if (['output', 'condition'].includes(data.message?.node_id.split('_')[0])) return
 
@@ -187,6 +209,9 @@ export default function useChatHelpers() {
         createMsg: (chatid: string, data: any) => {
             setChats((prev) =>
                 updateChatMessages(prev, chatid, (messages) => {
+                    if (chatState?.flow?.flow_type === FLOW_TYPES.ASSISTANT && data.type === 'start') {
+                        return startAssistantForHost(messages, data, chatid) as typeof messages
+                    }
                     const {
                         category,
                         flow_id,
@@ -253,62 +278,7 @@ export default function useChatHelpers() {
         streamMsg: (chatid: string, data: any) => {
             setChats((prev) =>
                 updateChatMessages(prev, chatid, (messages) => {
-                    const { unique_id, output_key, reasoning_content } = data.message
-                    const messageId = unique_id + output_key
-                    const currentMessageIndex = messages.findIndex((msg) => msg.id === messageId)
-
-                    if (currentMessageIndex === -1) {
-                        // Create new message
-                        const { category, flow_id, chat_id, files, is_bot, extra, liked, receiver, type, source, user_id } = data
-                        const { citations } = data
-                        const message = data.message.msg
-                        const reasoning_log = reasoning_content || ""
-
-                        const filteredMessages = deduplicateMessages(messages, messageId)
-                        return [
-                            ...filteredMessages,
-                            {
-                                category,
-                                flow_id,
-                                chat_id,
-                                id: messageId,
-                                files,
-                                is_bot,
-                                message,
-                                receiver,
-                                source,
-                                citations,
-                                user_id,
-                                liked: !!liked,
-                                end: type === "over",
-                                sender: "",
-                                node_id: data.message?.node_id || "",
-                                create_time: formatDate(new Date(), "yyyy-MM-ddTHH:mm:ss"),
-                                extra,
-                                reasoning_log,
-                            },
-                        ]
-                    } else {
-                        // Update existing message
-                        const currentMsg = messages[currentMessageIndex]
-                        const updatedMessages = [...messages]
-                        updatedMessages[currentMessageIndex] = {
-                            ...currentMsg,
-                            // On end, prefer the real DB message_id; if the backend omits it,
-                            // fall back to the existing temp id rather than wiping it to undefined.
-                            id: data.type === "end" ? (data.message_id || currentMsg.id) : currentMsg.id,
-                            message: data.type === "end" ? data.message.msg : currentMsg.message + data.message.msg,
-                            reasoning_log: reasoning_content
-                                ? currentMsg.reasoning_log + reasoning_content
-                                : currentMsg.reasoning_log,
-                            create_time: formatDate(new Date(), "yyyy-MM-ddTHH:mm:ss"),
-                            source: data.source,
-                            citations: data.citations ?? currentMsg.citations,
-                            end: data.type === "end",
-                            extra: data.extra,
-                        }
-                        return updatedMessages
-                    }
+                    return workflowStreamForHost(messages, data, chatid) as typeof messages
                 }),
             )
         },
@@ -334,6 +304,9 @@ export default function useChatHelpers() {
         skillStreamMsg: (chatid: string, data: any) => {
             setChats((prev) =>
                 updateChatMessages(prev, chatid, (messages) => {
+                    if (chatState?.flow?.flow_type === FLOW_TYPES.ASSISTANT) {
+                        return assistantStreamForHost(messages, data, chatid) as typeof messages
+                    }
                     const next = SkillMethod.updateStreamMessage(data, chatid, messages,
                         data.type === 'end_cover' && data.category === 'anwser'
                     )
@@ -391,7 +364,6 @@ export default function useChatHelpers() {
         endMsg: (chatid: string, data: any) => {
             // 删除所有未结束消息
             if (data.type === "end_cover" && data.message) {
-                console.log("触发安全审计,删除所有未结束消息")
                 data.category = "stream_msg"
                 data.type = "over"
                 data.id = generateUUID(8)

@@ -53,6 +53,7 @@ function toPermissionDraftRows(
     subjectName: entry.subject.name || entry.subject.id,
     modelKey: entry.model.key,
     modelName: entry.model.name,
+    modelActive: entry.model.active,
     modelLevel: entry.model.level,
     includeChildren: entry.source.include_children,
     assigneeId: entry.assignee_id,

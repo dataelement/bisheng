@@ -45,7 +45,7 @@ def _context_version(*parts: object) -> str:
 
 
 async def load_system_owned_resource_inventory() -> SystemOwnedResourceInventory:
-    """Load preset tool categories satisfying the strict system predicate."""
+    """Load active preset tool categories regardless of historical creator metadata."""
 
     with bypass_tenant_filter():
         async with get_async_db_session() as session:
@@ -64,9 +64,6 @@ async def load_system_owned_resource_inventory() -> SystemOwnedResourceInventory
     for row in tool_types:
         if row.id is None or not row.tenant_id:
             invalid.append(InvalidSystemOwnedResource("tool", str(row.id or ""), "missing tenant or resource identity"))
-            continue
-        if row.user_id is not None:
-            invalid.append(InvalidSystemOwnedResource("tool", str(row.id), "preset tool category has a user owner"))
             continue
         resources.append(
             SystemOwnedResourceSpec(

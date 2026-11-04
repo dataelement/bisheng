@@ -15,26 +15,10 @@ vi.mock("react-i18next", () => ({
   }),
 }))
 
-// SearchInput pulls in an SVG via ?react which vite-plugin-svgr does not
-// handle in the vitest environment. Stub the whole module so the picker can
-// mount under jsdom.
-vi.mock("@/components/bs-ui/input", async () => {
-  const React = await import("react")
-  const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-    (props, ref) => <input ref={ref} {...props} />,
-  )
-  return {
-    Input,
-    PasswordInput: Input,
-    PassInput: Input,
-    InputList: Input,
-    NonNegativeInput: Input,
-    Textarea: Input,
-    SearchInput: Input,
-  }
-})
 
-vi.mock("@/controllers/request", () => ({
+
+vi.mock("@/controllers/request", async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/controllers/request')>(),
   captureAndAlertRequestErrorHoc: vi.fn((promise: Promise<unknown>) =>
     Promise.resolve(promise),
   ),
@@ -233,7 +217,7 @@ describe("DepartmentUsersSelect — rootDeptId scope", () => {
     )
     openPicker()
 
-    fireEvent.change(screen.getByPlaceholderText("system.searchUser"), {
+    fireEvent.change(screen.getByPlaceholderText("subjectSearch.userPlaceholder"), {
       target: { value: "Zhang" },
     })
 
@@ -265,7 +249,7 @@ describe("DepartmentUsersSelect — rootDeptId scope", () => {
     render(<DepartmentUsersSelect value={[]} onChange={vi.fn()} />)
     openPicker()
 
-    fireEvent.change(screen.getByPlaceholderText("system.searchUser"), {
+    fireEvent.change(screen.getByPlaceholderText("subjectSearch.userPlaceholder"), {
       target: { value: "Zhang" },
     })
 
@@ -308,7 +292,7 @@ describe("DepartmentUsersSelect candidate eligibility", () => {
     const filterUserIds = vi.fn(async () => [5])
     render(<DepartmentUsersSelect value={[]} onChange={vi.fn()} filterUserIds={filterUserIds} />)
     openPicker()
-    fireEvent.change(screen.getByPlaceholderText("system.searchUser"), { target: { value: "user" } })
+    fireEvent.change(screen.getByPlaceholderText("subjectSearch.userPlaceholder"), { target: { value: "user" } })
 
     await screen.findByText("Active")
     expect(filterUserIds).toHaveBeenCalledWith([5, 6], expect.any(AbortSignal))
@@ -322,7 +306,7 @@ describe("DepartmentUsersSelect candidate eligibility", () => {
     openPicker()
 
     await waitFor(() => expect(filterUserIds).toHaveBeenCalledWith([5]))
-    await waitFor(() => expect(screen.getByText("system.treeDepartmentSelectEmpty")).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText("subjectSearch.emptyUsers")).toBeInTheDocument())
     expect(screen.queryByText("Leaf User")).not.toBeInTheDocument()
   })
 })

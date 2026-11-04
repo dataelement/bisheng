@@ -1,0 +1,4 @@
+# noise the developer already told git to ignore
+*.log
+build-artifacts/
+!important.log

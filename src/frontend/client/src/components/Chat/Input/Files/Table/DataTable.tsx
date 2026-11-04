@@ -26,11 +26,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
 } from '~/components/ui';
+import { Dropdown, DropdownItem } from '@bisheng/ui';
 import { useDeleteFilesFromTable } from '~/hooks/Files';
 import { TrashIcon, Spinner } from '~/components/svg';
 import useLocalize from '~/hooks/useLocalize';
@@ -115,31 +112,25 @@ export default function DataTable<TData, TValue>({ columns, data }: DataTablePro
           onChange={(event) => table.getColumn('filename')?.setFilterValue(event.target.value)}
           className="flex-1"
         />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className={cn('min-w-[40px]', isSmallScreen && 'px-2 py-1')}>
-              <ListFilter className="size-3.5 sm:size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="max-h-[300px] overflow-y-auto dark:border-gray-700 dark:bg-gray-850"
-          >
-            {table
-              .getAllColumns()
-              .filter((column) => column.getCanHide())
-              .map((column) => (
-                <DropdownMenuCheckboxItem
-                  key={column.id}
-                  className="cursor-pointer text-sm capitalize dark:text-white dark:hover:bg-gray-800"
-                  checked={column.getIsVisible()}
-                  onCheckedChange={(value) => column.toggleVisibility(Boolean(value))}
-                >
-                  {localize(contextMap[column.id])}
-                </DropdownMenuCheckboxItem>
-              ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Dropdown
+          align="end"
+          menu={table
+            .getAllColumns()
+            .filter((column) => column.getCanHide())
+            .map((column) => (
+              <DropdownItem
+                key={column.id}
+                checked={column.getIsVisible()}
+                onCheckedChange={(value) => column.toggleVisibility(Boolean(value))}
+              >
+                {localize(contextMap[column.id])}
+              </DropdownItem>
+            ))}
+        >
+          <Button variant="outline" className={cn('min-w-[40px]', isSmallScreen && 'px-2 py-1')}>
+            <ListFilter className="size-3.5 sm:size-4" />
+          </Button>
+        </Dropdown>
       </div>
       <div className="relative grid h-full max-h-[calc(100vh-20rem)] w-full flex-1 overflow-hidden overflow-x-auto overflow-y-auto rounded-md border border-black/10 dark:border-white/10">
         <Table className="w-full min-w-[300px] border-separate border-spacing-0">

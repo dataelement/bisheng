@@ -1,4 +1,7 @@
-import { AlertTriangle, Loader2, ShieldCheck } from "lucide-react";
+import { Outlined } from "bisheng-icons";
+// `ShieldCheck` stays on lucide: bisheng-icons has no shield / verified glyph
+// (PeopleSafe and SafeRetrieval carry other meanings).
+import { ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import {
   applyResourcePermissionModeDraft,
@@ -143,7 +146,7 @@ export function ModeHeader({
                   onClick={() => void handleCreateDraft(mode)}
                 >
                   {creating && !active ? (
-                    <Loader2
+                    <Outlined.Loading
                       aria-hidden="true"
                       className="mr-1 inline size-3.5 animate-spin"
                     />
@@ -174,7 +177,7 @@ export function ModeHeader({
             className="mt-2 flex items-center gap-2 text-sm text-red-600"
             role="alert"
           >
-            <AlertTriangle aria-hidden="true" className="size-4" />
+            <Outlined.Attention aria-hidden="true" className="size-4" />
             {localize("f048_permission.mode.conflict")}
           </p>
         )}

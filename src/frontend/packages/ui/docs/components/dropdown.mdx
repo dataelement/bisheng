@@ -1,0 +1,237 @@
+---
+status: draft
+component: Dropdown
+statusNote: 桌面端已落地；手机档底部面板（§8）待做，业务未迁移
+---
+
+# 下拉菜单 Dropdown
+
+把**一组相关的动作**收进一个按钮里，点开再选；点完就执行，触发器本身不变。组件库 `@bisheng/ui` 导出 **`Dropdown`** 与 `DropdownItem` / `DropdownGroup` / `DropdownSeparator` / `DropdownSub` / `DropdownChevron` / `DropdownButton`。规范全文见「文档 → 组件规范 → 下拉菜单 Dropdown」。
+
+**壳把规范写死的部分**：面板外壳、32px 菜单项、分组标题、分隔线与[选择器](/components/select)面板同一套；宽度随内容、最小 120px 最大 280px，不与触发器等宽；菜单开着时触发器保持悬停态、`DropdownChevron` 翻转；禁用项置灰不隐藏；危险项红字、悬停换红色浅底；点菜单项先关菜单再执行。这些没有 prop。
+
+要选一个值、选完回显在框里的，用[选择器](/components/select)。**少于 3 项不做菜单**，直接放按钮。
+
+## 「⋯」更多按钮
+
+卡片、列表行上的次要操作。触发器是现成的图标按钮（`iconOnly` 必须带 `aria-label`）；触发器靠右时 `align="end"` 右边对齐。危险项放最后、用分隔线隔开，**确认弹窗由调用方在 `onSelect` 里调 `useConfirm`**——这时菜单已经关了，两层浮层不会叠着。
+
+```tsx
+import React from 'react';
+import { Outlined } from 'bisheng-icons';
+import { Button, Dropdown, DropdownItem, DropdownSeparator } from '@bisheng/ui';
+
+export default () => (
+  <Dropdown
+    align="end"
+    menu={
+      <>
+        <DropdownItem icon={<Outlined.Edit />}>重命名</DropdownItem>
+        <DropdownItem icon={<Outlined.Copy />}>复制</DropdownItem>
+        <DropdownItem icon={<Outlined.MoveToFolder />}>移动到…</DropdownItem>
+        <DropdownSeparator />
+        <DropdownItem icon={<Outlined.Delete />} danger>
+          删除
+        </DropdownItem>
+      </>
+    }
+  >
+    <Button color="default" variant="text" iconOnly aria-label="更多操作">
+      <Outlined.More />
+    </Button>
+  </Dropdown>
+);
+```
+
+## 按钮 + 下箭头
+
+一个动作有几种做法（新建、导出）。任意按钮类型，文字后跟 `DropdownChevron`，菜单开着时箭头翻转。
+
+```tsx
+import React from 'react';
+import { Button, Dropdown, DropdownChevron, DropdownItem } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', gap: 12 }}>
+    <Dropdown
+      menu={
+        <>
+          <DropdownItem>新建文档</DropdownItem>
+          <DropdownItem>新建文件夹</DropdownItem>
+          <DropdownItem>从模板新建…</DropdownItem>
+        </>
+      }
+    >
+      <Button>
+        新建
+        <DropdownChevron />
+      </Button>
+    </Dropdown>
+    <Dropdown
+      menu={
+        <>
+          <DropdownItem>导出为 PDF</DropdownItem>
+          <DropdownItem>导出为 Word</DropdownItem>
+          <DropdownItem>导出为 Markdown</DropdownItem>
+        </>
+      }
+    >
+      <Button color="default">
+        导出
+        <DropdownChevron />
+      </Button>
+    </Dropdown>
+  </div>
+);
+```
+
+### 组合按钮
+
+主按钮直接执行最常用的做法，旁边的箭头放「同一件事的其他做法」（「发送 ▾」里的定时发送）。用 **`DropdownButton`**：两半共用一圈描边、中间 1px 分隔线、圆角只留外侧四角，尺寸与颜色两半一致；两半各自悬停、各自按下——它们是两个动作。箭头没有文字，`arrowLabel` 必传，写清里面是什么。菜单默认与箭头右边对齐。只有描边与实底两种画法。
+
+```tsx
+import React from 'react';
+import { DropdownButton, DropdownItem } from '@bisheng/ui';
+
+const MENU = (
+  <>
+    <DropdownItem>定时发送…</DropdownItem>
+    <DropdownItem>保存为草稿</DropdownItem>
+    <DropdownItem>发送并归档</DropdownItem>
+  </>
+);
+
+export default () => (
+  <div style={{ display: 'grid', gap: 12, justifyItems: 'start' }}>
+    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+      <DropdownButton arrowLabel="更多发送方式" menu={MENU}>发送</DropdownButton>
+      <DropdownButton arrowLabel="更多发送方式" menu={MENU} color="primary" variant="solid">
+        发送
+      </DropdownButton>
+      <DropdownButton arrowLabel="更多发送方式" menu={MENU} disabled>
+        发送
+      </DropdownButton>
+    </div>
+    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+      {['small', 'medium', 'large'].map((size) => (
+        <DropdownButton key={size} size={size} arrowLabel="更多发送方式" menu={MENU}>
+          发送
+        </DropdownButton>
+      ))}
+    </div>
+  </div>
+);
+```
+
+## 分组、快捷键、禁用与开关项
+
+不超过 3 组，组间用分隔线；快捷键放最右。禁用项**置灰不隐藏**，`disabledReason` 悬停说明原因。少数「开 / 关某个设置」的项传 `checked`，开着时右侧打 ✓。
+
+```tsx
+import React from 'react';
+import { Button, Dropdown, DropdownChevron, DropdownGroup, DropdownItem, DropdownSeparator } from '@bisheng/ui';
+
+export default () => {
+  const [showArchived, setShowArchived] = React.useState(true);
+  return (
+    <Dropdown
+      menu={
+        <>
+          <DropdownGroup label="编辑">
+            <DropdownItem shortcut="⌘C">复制</DropdownItem>
+            <DropdownItem shortcut="⌘V">粘贴</DropdownItem>
+            <DropdownItem disabled disabledReason="无编辑权限">
+              重命名
+            </DropdownItem>
+          </DropdownGroup>
+          <DropdownSeparator />
+          <DropdownItem checked={showArchived} onCheckedChange={setShowArchived}>
+            显示已归档
+          </DropdownItem>
+        </>
+      }
+    >
+      <Button color="default" variant="text">
+        视图
+        <DropdownChevron />
+      </Button>
+    </Dropdown>
+  );
+};
+```
+
+## 子菜单
+
+**最多一层**，子菜单项控制在 5 个左右；父项文案要让人猜到里面是什么。
+
+```tsx
+import React from 'react';
+import { Outlined } from 'bisheng-icons';
+import { Button, Dropdown, DropdownItem, DropdownSub } from '@bisheng/ui';
+
+export default () => (
+  <Dropdown
+    menu={
+      <>
+        <DropdownItem icon={<Outlined.Edit />}>重命名</DropdownItem>
+        <DropdownSub label="导出为" icon={<Outlined.FileExport />}>
+          <DropdownItem>PDF</DropdownItem>
+          <DropdownItem>Word</DropdownItem>
+          <DropdownItem>Markdown</DropdownItem>
+        </DropdownSub>
+        <DropdownItem icon={<Outlined.Share />}>分享…</DropdownItem>
+      </>
+    }
+  >
+    <Button color="default" variant="outlined" iconOnly aria-label="更多操作">
+      <Outlined.More />
+    </Button>
+  </Dropdown>
+);
+```
+
+## 悬停触发
+
+只给导航栏、工具栏里「扫一眼有什么」的菜单：指针进入 100ms 后打开，可以移进面板操作，移出后关闭。触屏没有悬停，自动降级为轻点。
+
+```tsx
+import React from 'react';
+import { Button, Dropdown, DropdownChevron, DropdownItem } from '@bisheng/ui';
+
+export default () => (
+  <Dropdown
+    trigger="hover"
+    menu={
+      <>
+        <DropdownItem>使用文档</DropdownItem>
+        <DropdownItem>更新日志</DropdownItem>
+        <DropdownItem>联系我们</DropdownItem>
+      </>
+    }
+  >
+    <Button color="default" variant="text">
+      帮助
+      <DropdownChevron />
+    </Button>
+  </Dropdown>
+);
+```
+
+## API
+
+**Dropdown**
+
+| 属性 | 说明 | 类型 | 默认 |
+|---|---|---|---|
+| `children` | 触发器，用现成的按钮 | `ReactElement` | — |
+| `menu` | 菜单内容 | `ReactNode` | — |
+| `trigger` | 触发方式 | `'click' \| 'hover'` | `'click'` |
+| `align` | 对齐；触发器靠右用 `end` | `'start' \| 'end'` | `'start'` |
+| `side` | 弹出方向，空间不够自动翻转 | `'top' \| 'bottom'` | `'bottom'` |
+| `panelRadius` | 面板圆角档，菜单项自动同心 | `sm`–`4xl` | `'xl'` |
+| `open` / `defaultOpen` / `onOpenChange` | 受控展开 | — | — |
+| `disabled` | 禁用触发器 | `boolean` | `false` |
+
+**DropdownItem**：`icon`、`shortcut`、`danger`、`disabled`、`disabledReason`、`checked` + `onCheckedChange`（开关项）、`onSelect`。
+**DropdownGroup**：`label`。**DropdownSub**：`label`、`icon`、`disabled`，子节点只放 `DropdownItem`。
+**DropdownButton**：`children`（主按钮文字）、`onClick`（主动作）、`arrowLabel`（必传）、`menu`、`color`、`variant`（`outlined` / `solid`）、`size`、`icon`、`loading`（只作用于主按钮）、`disabled`（两半一起）、`align`（默认 `end`）。

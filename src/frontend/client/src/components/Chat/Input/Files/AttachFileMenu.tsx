@@ -1,9 +1,10 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import * as Ariakit from '@ariakit/react';
 import React, { useRef, useState, useMemo } from 'react';
 import { FileSearch, ImageUpIcon, TerminalSquareIcon } from 'lucide-react';
 import { EToolResources, EModelEndpoint } from '~/types/chat';
-import { FileUpload, TooltipAnchor, DropdownPopup } from '~/components/ui';
+import { FileUpload, DropdownPopup } from '~/components/ui';
 import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import { AttachmentIcon } from '~/components/svg';
 import { useLocalize } from '~/hooks';
@@ -76,9 +77,7 @@ const AttachFile = ({ isRTL, disabled, handleFileChange }: AttachFileProps) => {
   }, [capabilities, localize, setToolResource]);
 
   const menuTrigger = (
-    <TooltipAnchor
-      render={
-        <Ariakit.MenuButton
+    <SharedTooltip  content={localize('com_sidepanel_attach_files')}  ><div id="attach-file-menu-button" disabled={isUploadDisabled}  ><Ariakit.MenuButton
           disabled={isUploadDisabled}
           id="attach-file-menu-button"
           aria-label="Attach File Options"
@@ -90,12 +89,7 @@ const AttachFile = ({ isRTL, disabled, handleFileChange }: AttachFileProps) => {
           <div className="flex w-full items-center justify-center gap-2">
             <AttachmentIcon />
           </div>
-        </Ariakit.MenuButton>
-      }
-      id="attach-file-menu-button"
-      description={localize('com_sidepanel_attach_files')}
-      disabled={isUploadDisabled}
-    />
+        </Ariakit.MenuButton></div></SharedTooltip>
   );
 
   return (

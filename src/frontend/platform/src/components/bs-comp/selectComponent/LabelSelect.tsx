@@ -1,11 +1,12 @@
 // @ts-strict-ignore
+import { Input, SearchInput, toast } from '@bisheng/ui';
 import { TrashIcon } from "@/components/bs-icons";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Checkbox } from "@/components/bs-ui/checkBox";
-import { Input, SearchInput } from "@/components/bs-ui/input";
+import { Checkbox } from '@bisheng/ui';
+
 import { Label } from "@/components/bs-ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { userContext } from "@/contexts/userContext";
 import {
     createLabelApi,
@@ -14,7 +15,7 @@ import {
     deleteLinkApi,
     updateLabelApi
 } from "@/controllers/API/label";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { Plus, SquarePen } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -32,7 +33,7 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
     const [data, setData] = useState([])
     const { user } = useContext(userContext)
     const dataRef = useRef([])
-    const { message } = useToast()
+
     const { t } = useTranslation()
 
     useEffect(() => {
@@ -53,19 +54,25 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
         setData(pre => pre.map(d => ({ ...d, edit: d.value === id })))
     }
 
+    // flow_type -> ResourceTypeEnum. 5 (assistant) -> 3, 1 (legacy skill) -> 2,
+    // 35 (F054 hosted application) -> 10, everything else (10 = workflow) -> 5.
+    const resourceTypeOf = (flowType) =>
+        flowType === 5 ? 3 : flowType === 1 ? 2 : flowType === 35 ? 10 : 5
+
     const handleChecked = (id) => {
-        const type = resource.type === 5 ? 3 : resource.type === 1 ? 2 : 5
+        const type = resourceTypeOf(resource.type)
         setData(pre => {
             const newData = pre.map(d => d.value === id ? { ...d, selected: !d.selected } : d)
             const cur = newData.find(d => d.value === id)
-            captureAndAlertRequestErrorHoc(
-                (cur.selected ? createLinkApi(id, resource.id, type) : deleteLinkApi(id, resource.id, type)).then(() => {
+            ;(cur.selected ? createLinkApi(id, resource.id, type) : deleteLinkApi(id, resource.id, type)).then(() => {
                     onUpdate({
                         type: cur.selected ? UPDATETYPE.CREATELINK : UPDATETYPE.DELETELINK,
                         data: cur
                     })
+                }).catch(error => {
+                    setData(previous => previous.map(d => d.value === id ? { ...d, selected: !cur.selected } : d))
+                    showApiError(error)
                 })
-            )
             return newData
         })
     }
@@ -88,9 +95,9 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
             const label = data.find(d => d.value === id)
             if (label.label.length > 10) {
                 errorRestName(nameRef.current, id)
-                return message({ title: t('prompt'), variant: 'warning', description: t('tag.labelMaxLength') })
+                return toast.show({ type: 'warning', message: [String(t('prompt') ?? ''), String(t('tag.labelMaxLength') ?? '')].filter(Boolean).join('\n') })
             }
-            const err = await captureAndAlertRequestErrorHoc(updateLabelApi(id, label.label).then((res: any) => {
+            await updateLabelApi(id, label.label).then((res: any) => {
                 setData(pre => {
                     const newData = pre.map(d => d.value ? d : { ...d, label: res.name, value: res.id })
                     dataRef.current = newData
@@ -100,11 +107,11 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
                     type: UPDATETYPE.UPDATENAME,
                     data: label
                 })
-                return message({ title: t('prompt'), variant: 'success', description: id ? t('updateSuccess') : t('createSuccess') })
-            }))
-            if (!err) {
+                return toast.show({ type: 'success', message: [String(t('prompt') ?? ''), String(id ? t('updateSuccess') : t('createSuccess') ?? '')].filter(Boolean).join('\n') })
+            }).catch(error => {
                 errorRestName(nameRef.current, id)
-            }
+                showApiError(error)
+            })
         }
     }
 
@@ -114,14 +121,14 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
             desc: t('tag.confirmDeleteLabel', { label: label.label }),
             okTxt: t('confirm'),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteLabelApi(label.value).then(() => {
+                return deleteLabelApi(label.value).then(() => {
                     onUpdate({
                         type: UPDATETYPE.DELETELABEL,
                         data: label
                     })
-                    message({ title: t('prompt'), variant: 'success', description: t('deleteSuccess') })
-                }))
-                next()
+                    toast.show({ type: 'success', message: [String(t('prompt') ?? ''), String(t('deleteSuccess') ?? '')].filter(Boolean).join('\n') })
+                    next()
+                })
             }
         })
     }
@@ -141,7 +148,7 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
 
     const handleAdd = () => {
         if (keyword.length > 10) {
-            return message({ title: t('prompt'), variant: 'warning', description: t('tag.labelMaxLength') })
+            return toast.show({ type: 'warning', message: [String(t('prompt') ?? ''), String(t('tag.labelMaxLength') ?? '')].filter(Boolean).join('\n') })
         }
         createLabelApi(keyword).then((res: any) => {
             const addItem = { label: res.name, value: res.id, edit: false, selected: false }
@@ -167,22 +174,19 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
         </PopoverTrigger>
         <PopoverContent className="z-[20]" onClick={(e) => e.stopPropagation()}>
             <div>
-                <SearchInput placeholder={t('chat.searchLabels')} value={keyword} onChange={handleSearch} className="w-[240px]"
-                    onKeyDown={(e) => {
+                <SearchInput placeholder={t('chat.searchLabels')} value={keyword} onChange={handleSearch} onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                             (!data.length && user.role === 'admin') ? handleAdd() : null
                         }
-                    }} />
+                    }} className={"w-[240px]"} />
             </div>
             <div className="mt-4 h-[200px] overflow-y-auto">
                 {data.map(d => <div className="flex group justify-between h-8 rounded-sm px-2 hover:bg-[#EBF0FF] dark:hover:bg-gray-700">
                     <div className="flex place-items-center space-x-2">
-                        <Checkbox id={d.value} checked={d.selected} onCheckedChange={() => handleChecked(d.value)} />
+                        <Checkbox className="peer" id={d.value} checked={d.selected} onCheckedChange={() => handleChecked(d.value)} />
                         {
                             d.edit
-                                ? <Input autoFocus className="h-6" type="text" value={d.label || ''}
-                                    onChange={(e) => handleChange(e, d.value)}
-                                    onKeyDown={(e) => handleSave(e, d.value)} />
+                                ? <Input autoFocus type="text" value={d.label || ''} onChange={(e) => handleChange(e, d.value)} onKeyDown={(e) => handleSave(e, d.value)} className={"h-6"} />
                                 : <Label htmlFor={d.value} className="cursor-pointer">{d.label}</Label>
                         }
                     </div>

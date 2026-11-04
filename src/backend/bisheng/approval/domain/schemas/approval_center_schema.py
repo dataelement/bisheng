@@ -7,9 +7,9 @@ from pydantic import BaseModel, Field
 
 
 class ApprovalGateDecision(str, Enum):
-    PASS = 'pass'
-    PENDING = 'pending'
-    EXCEPTION = 'exception'
+    PASS = "pass"
+    PENDING = "pending"
+    EXCEPTION = "exception"
 
 
 class ApprovalGateRequest(BaseModel):
@@ -41,3 +41,11 @@ class ApprovalScenarioPreset(BaseModel):
     handler_key: str
     condition_fields: list[str] = Field(default_factory=list)
     approver_source_types: list[str] = Field(default_factory=list)
+    #: The scenario admits no exemption: every request goes to a human, and a
+    #: ``pass`` route may not be configured for it. Declared per scenario rather
+    #: than hardcoded in the engine — the approval centre is a generic module and
+    #: must not carry a list of business scenario codes. Enforced twice: the
+    #: admin surface refuses to save such a route (18119), and the gate treats
+    #: one that reached the table anyway as "no usable route" rather than
+    #: letting it through.
+    mandatory_approval: bool = False

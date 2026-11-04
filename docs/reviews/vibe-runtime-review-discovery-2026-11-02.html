@@ -1,0 +1,151 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>F115 已确认需求发现</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#f6f7fa;color:#202737;font:15px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1260px;margin:auto;padding:32px}article{background:white;border:1px solid #e1e6ef;border-radius:12px;padding:32px}h1{font-size:29px;line-height:1.4}h2{margin-top:40px;border-bottom:1px solid #e2e6ee;padding-bottom:8px}h3{margin-top:28px}a{color:#2458d6;text-decoration:none}a:hover{text-decoration:underline}nav{padding:16px 24px;background:#f2f5fc;border-radius:8px;margin:24px 0}nav ul{padding-left:22px;margin:4px 0}table{border-collapse:collapse;width:100%;font-size:14px;margin:18px 0}th,td{border:1px solid #dce2eb;padding:10px 12px;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{background:#f2f5fc}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.9em;background:#f1f3f7;padding:2px 4px;border-radius:3px;overflow-wrap:anywhere}blockquote{margin:18px 0;border-left:4px solid #9badd5;padding:8px 16px;background:#f7f9fd}li{margin:8px 0}li[id^="ac-"]{scroll-margin-top:20px}li[id^="ac-"]:target{background:#fff4ca;border-radius:4px;outline:6px solid #fff4ca}.state{display:inline-block;padding:4px 12px;border-radius:5px;background:#fff2cf;color:#775300}.meta{font-size:13px;color:#667184}.facts{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}.fact{background:#edf4fd;border:1px solid #dae6fa;padding:8px 14px;border-radius:6px;font-size:14px}.review-break{margin:48px 0;border:0;border-top:3px solid #dbe3f0}@media(max-width:720px){main{padding:12px}article{padding:18px}h1{font-size:23px}table{display:block;overflow-x:auto;min-width:100%}th,td{min-width:150px;padding:8px}nav{padding:12px 16px}}@media print{body{background:white;font-size:10pt}main,article{max-width:none;margin:0;padding:0;border:0}nav{display:none}h2,h3{break-after:avoid}tr,li{break-inside:avoid}a{color:inherit}table{font-size:9pt}code{white-space:normal}.facts{display:none}}</style></head><body><main><article><span class="state">需求发现 D1–D4 · 已确认</span><p class="meta">2026-11-02 · 基线 497256d28 · 需求发现与正式规格均已确认 · 尚未修改业务代码</p><nav aria-label="目录"><div class="toc">
+<ul>
+<li><a href="#1">1. 已核实的问题</a></li>
+<li><a href="#2">2. 已确认的业务边界</a><ul>
+<li><a href="#d1">D1. 运行信息表示真实当前执行体</a></li>
+<li><a href="#d2">D2. 模型调用保留真实身份</a></li>
+<li><a href="#d3">D3. 审批只读展示当前授权</a></li>
+<li><a href="#d4">D4. 知识库创建资格</a></li>
+</ul>
+</li>
+<li><a href="#3">3. 证据锚点</a></li>
+<li><a href="#4">4. 定向验证计划</a></li>
+<li><a href="#5">5. 下一阶段与暂停依据</a></li>
+</ul>
+</div>
+</nav><h1 id="f115">F115 应用运行信息、审批可见范围与知识库创建：需求发现</h1>
+<p>日期：2026-11-02。阶段：用户已确认 D1–D4，进入正式规格；尚未修改业务代码。</p>
+<ul>
+<li>基线：<code>origin/feat/3.0.0@497256d28</code>。</li>
+<li>分支：<code>codex/vibe-runtime-review-20261102</code>；独立工作树，主工作区保留。</li>
+<li>来源：用户本轮五项问题与六张截图；116 Docker 环境只读核对。</li>
+<li>交付约束：沿 SDD 推进，只做本功能定向验证；不迁移存量应用、不改角色绑定、不替用户修改应用代码、不运行全量回归。</li>
+</ul>
+<h2 id="1">1. 已核实的问题</h2>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>当前事实与原因</th>
+<th>建议范围</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. 健康、重启、启动时间</td>
+<td>页面已有三个字段。116 的实例 API 返回 <code>health=null</code>、<code>restart_count=0</code>，缺少 <code>started_at</code>。同一容器实际 <code>StartedAt=2026-10-30T10:33:15.363879485Z</code>、重启 0 次，未配置 Docker HEALTHCHECK。v2 状态投影遗漏启动时间，并只读取 Docker Health，未用平台已有 HTTP 探活结果；K8s 投影也遗漏启动时间。</td>
+<td>补齐 Docker/K8s 当前应用执行体的启动时间；健康沿已有实际探活/Ready 事实呈现，不能把 Running 或缺失数据冒充健康。真实 0 次保留为 0，未知不可显示成 0。</td>
+</tr>
+<tr>
+<td>2. 模型调用访问用户为空</td>
+<td>当前 116 Root、近 7 天查询返回 34 条记录，访问用户候选已有用户 ID 3。截图中的“应用自身”记录未保存自然人访问身份，现有候选只枚举日志中真实存在的 user/natural_person。未复现当前候选整体为空。</td>
+<td>保留真实身份过滤；存在用户记录时应能选、能筛选。只有应用自身调用时明确说明无访问用户记录；查询失败、搜索无匹配与无用户记录不能混为一谈。不从应用负责人、登录人或访问时间推测历史访问者，不回填旧日志。</td>
+</tr>
+<tr>
+<td>3. 审批可见范围为空</td>
+<td>发布场景 Handler 只复制 <code>payload.visibility_snapshot</code>，发布管线未填充此字段；客户端始终读取历史 <code>detail_snapshot</code>，该字段为空就展示空文案。</td>
+<td>打开审批详情时读取应用当前有效的人员、部门和用户组授权摘要；只读展示，修改授权仍走既有权限流程并立即生效。保留原审批快照，不重写历史记录。</td>
+</tr>
+<tr>
+<td>4. 首次提交空文案</td>
+<td>客户端把空数组统一翻译为“暂无可见范围信息”，没有区分“确认只有负责人”与“未知/查询失败”。</td>
+<td>仅当当前权限查询成功、确认没有负责人以外的有效普通访问授权时，显示“仅负责人可见”。首发后若已新增授权，仍展示最新对象。缺失数据、失败、应用已删除不能伪装为负责人可见。</td>
+</tr>
+<tr>
+<td>5. 租管没有新建知识库按钮</td>
+<td>116 正式 <code>GET /tenants/60/admins</code> 确认 gzx01（849）为租户 60 管理员。角色菜单查询没有 create_knowledge。前端路由为租管补了 knowledge，但页面新建按钮仍只认 admin/create_knowledge；后端 create 也只认 create_knowledge 菜单，单改按钮会继续被拒绝。</td>
+<td>统一前后端的本租户知识库新建资格：当前租户管理员可新建文档/QA 知识库；普通用户继续走原创建菜单。租管不能借此选择其它租户。保留模型可用性、容量等既有检查。</td>
+</tr>
+</tbody>
+</table>
+<p>已通过截图使用的 <code>120:3002</code> 入口再次对照：近 7 天、不限制应用时访问用户候选为 1；限定截图中的应用自身调用示例 <code>c117490880544bf9b695019394488478</code> 时候选为 0，两次均为业务码 200。先核对 120/116 鉴权公钥一致，再使用内存会话查询；未更新任一环境服务。</p>
+<h2 id="2">2. 已确认的业务边界</h2>
+<p>用户于 2026-11-02 明确回复“确认边界，进入正式规格”，确认以下 D1–D4；这不代替后续 spec、design 的单独确认。</p>
+<h3 id="d1">D1. 运行信息表示真实当前执行体</h3>
+<ul>
+<li>Docker 使用精确绑定的当前容器；K8s 使用精确绑定的当前 Pod/应用容器，不混入初始化/维护容器。</li>
+<li>健康优先反映已有平台探活/Ready 结果，明确区分正常、异常、启动中、未知；本次不新增独立监控系统或定时探活体系。</li>
+<li>重启次数表示当前应用执行体的实际重启计数，不把版本升级、替换实例和应用历史发布次数累加为重启次数。</li>
+<li>不重建现有应用来补显示信息；时间按现有统一时间展示工具转换。</li>
+</ul>
+<h3 id="d2">D2. 模型调用保留真实身份</h3>
+<ul>
+<li>候选来自当前授权租户/应用/时间范围内的真实用户调用记录；过滤使用相同范围。</li>
+<li>应用以自身身份调用模型时，记录不代表某个自然人。需要按人查询的新调用，应由应用按现有 SDK/OBO 契约转发访问者身份，本次不替已有应用改码。</li>
+<li>不新增虚构人员候选，不把“用户不存在于这些记录”解释为全租户人员都可筛选；无记录提示三语交付。</li>
+</ul>
+<h3 id="d3">D3. 审批只读展示当前授权</h3>
+<ul>
+<li>这是对 F055 AC-24“提交时可见范围快照”的明确修订：代码、声明、版本、审批决策仍冻结；仅可见范围区改为查询时的最新授权，并标注“当前可见范围，授权变更即时生效，不影响审批”。</li>
+<li>按现有 F048 <code>use</code> 生效动作识别访问授权，涵盖直接及现有继承语义；不能按模型名字认定权限。</li>
+<li>展示人员、部门、用户组名称与类型；部门/组不展开成全部成员。服务账号不是普通浏览者，不作为人员行列出。</li>
+<li>不枚举所有因管理员身份而隐式可见的账号；这些身份继续按既有平台规则生效。</li>
+<li>当前审批阅读资格仍须校验。跨租户、失去资格、权限依赖不可用时不得泄露当前授权目录；不能借当前摘要获得应用 edit/manage_permission 或源码访问权。</li>
+<li>进行中和已进入终态的、仍有合法阅读资格的审批详情，均显示当前授权；历史快照不改写。已删除应用与不可确认权限分别提示原因。</li>
+<li>人员迁租户、停用、授权撤销与模型动作变化不能被误写成“仍可访问”；不迁移应用或授权，不修补存量历史数据。</li>
+</ul>
+<h3 id="d4">D4. 知识库创建资格</h3>
+<ul>
+<li>当前有效的租户管理员默认可在自己所属租户新建文档/QA 知识库，前端入口和后端资格一致；不信任前端传来的管理员标记。</li>
+<li>新资源仍归当前创建人及其所属租户，不用页面管理视角改变归属。超管与普通用户沿现有创建规则。</li>
+<li>不扩大一般部门管理员的权限，不新增角色或批量补写用户授权。</li>
+<li>本次只修新建，复制仍保留原创建菜单和源资源读取资格；页面共享条件需拆清，不能顺带放开复制。</li>
+</ul>
+<h2 id="3">3. 证据锚点</h2>
+<p>以下源码均已在固定基线 497256d28 核对，116 运行层仍使用 10 月 30 日的本机 F114 镜像；后端和前端 release 镜像已有后续更新。截图中“整个平台”不作为当前最新代码仍保留该选项的证据。</p>
+<table>
+<thead>
+<tr>
+<th>链路</th>
+<th>源码位置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>v2 实例状态投影</td>
+<td><code>src/runtime-manager/runtime_manager/api/platform_observe.py::status</code></td>
+</tr>
+<tr>
+<td>Docker 实际 HTTP 探活</td>
+<td><code>src/runtime-manager/runtime_manager/executors/docker.py::observe</code></td>
+</tr>
+<tr>
+<td>K8s Ready 与应用容器重启计数</td>
+<td><code>src/runtime-manager/runtime_manager/executors/kubernetes.py::_observed</code></td>
+</tr>
+<tr>
+<td>后端实例字段白名单</td>
+<td><code>src/backend/bisheng/app_runtime/domain/services/app_query_service.py::get_instance</code></td>
+</tr>
+<tr>
+<td>发布页已有显示字段</td>
+<td><code>src/frontend/platform/src/pages/BuildPage/hostedApp/tabs/PublishTab.tsx</code></td>
+</tr>
+<tr>
+<td>审计候选/过滤</td>
+<td><code>src/backend/bisheng/app_governance/domain/repositories/runtime_audit_repository.py::candidates / statement</code></td>
+</tr>
+<tr>
+<td>审批快照占位与客户端读取</td>
+<td><code>app_publish/.../app_publish_scenario_handler.py::build_detail</code>、<code>client/.../approval/AppPublishDetailPanel.tsx</code></td>
+</tr>
+<tr>
+<td>租管前端路由补全</td>
+<td><code>src/frontend/platform/src/routes/index.tsx::CHILD_ADMIN_ROUTE_PERMISSIONS</code></td>
+</tr>
+<tr>
+<td>知识库按钮与后端创建菜单</td>
+<td><code>KnowledgePage/KnowledgeFile.tsx</code>、<code>KnowledgeQa.tsx</code>、<code>knowledge/api/endpoints/knowledge.py::create_knowledge</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="4">4. 定向验证计划</h2>
+<ol>
+<li>状态投影：Docker 有/无原生健康检查、探活成功/失败/未知、重启为 0/正数/缺失；启动时间、执行体身份匹配；K8s 应用容器与初始化容器分离。</li>
+<li>模型记录：自然人/OBO 与应用自身配对；候选和列表过滤一致；租户、应用、时间与无候选/搜索空/加载失败边界；不篡改历史记录。</li>
+<li>审批范围：负责人可见、多类授权、授权变更后刷新、进行中/终态、use 与其它动作区分、继承、人员失效、跨租户与无权拒绝；当前摘要失败不影响不可变审批数据。</li>
+<li>新建知识库：无 create_knowledge 菜单的本租管允许；无菜单普通用户拒绝、有菜单普通用户允许；跨租户拒绝、文档与 QA 一致、复制资格不扩展。</li>
+<li>仅运行上述相关测试、变更文件静态检查与必要页面验证；真实部署/写入验收另行明确，不自动更新 116 或 120 服务。</li>
+</ol>
+<h2 id="5">5. 下一阶段与暂停依据</h2>
+<p>依据仓库 AGENTS.md §6 与 SDD-Guide §1/§3，第 3 项修改已经确认的审批快照契约，第 5 项涉及创建菜单资格的前后端一致性，采用完整 SDD。D1–D4 已获用户确认；当前进入正式 spec 编写和评审，经用户单独确认 spec 后进入设计。设计仍须单独确认，之后才能拆任务与编码。</p></article></main></body></html>

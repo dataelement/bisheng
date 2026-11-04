@@ -1,8 +1,8 @@
-import { Label } from "@/components/bs-ui/label"
-import { Switch } from "@/components/bs-ui/switch"
-import { QuestionTooltip } from "@/components/bs-ui/tooltip"
-import { useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Label } from "@/components/bs-ui/label";
+import { AppHint as QuestionTooltip } from "@/pages/BuildPage/components/AppHint";
+import { Switch } from "@bisheng/ui";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export default function SwitchItem({ data, onChange, i18nPrefix }) {
     const [value, setValue] = useState(data.value)

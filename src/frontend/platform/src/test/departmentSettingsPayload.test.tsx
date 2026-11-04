@@ -34,13 +34,19 @@ vi.mock("@/controllers/API/department", () => ({
   updateDepartmentApi: vi.fn(),
 }));
 
-vi.mock("@/controllers/request", () => ({
+vi.mock("@/controllers/request", async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/controllers/request')>(),
   captureAndAlertRequestErrorHoc: vi.fn((promise: Promise<unknown>) => promise),
 }));
 
-vi.mock("@/components/bs-ui/toast/use-toast", () => ({
+vi.mock('@bisheng/ui', async () => {
+const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const previous = await (() => ({
   toast: vi.fn(),
-}));
+}))();
+const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
+return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+});
 
 vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
   bsConfirm: vi.fn(),
@@ -53,11 +59,6 @@ vi.mock("@/components/bs-comp/department/TreeDepartmentSelect", () => ({
 vi.mock("@/components/bs-comp/selectComponent/DepartmentUsersSelect", () => ({
   __esModule: true,
   default: () => <div data-testid="admin-select" />,
-}));
-
-vi.mock("@/components/bs-ui/select/multi", () => ({
-  __esModule: true,
-  default: () => <div data-testid="roles-select" />,
 }));
 
 const mockedGetDepartmentAdminsApi = vi.mocked(getDepartmentAdminsApi);

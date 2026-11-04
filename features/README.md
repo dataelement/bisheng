@@ -27,7 +27,7 @@
    ↓
 7.5. /e2e-test <dir>            E2E 测试（强制）
    ↓
-8. /code-review --base 2.5.0-PM 多维度代码审查（自动）
+8. /sdd-code-review --base <目标分支> 多维度代码审查（自动）
    ↓
 9. 合并回 2.5.0-PM
 ```
@@ -90,7 +90,7 @@ feat/v2.5.0/{NNN}-{short-name}
 | `/sdd-review <dir> spec` | spec.md 编写后 | 11 项需求+架构检查 |
 | `/sdd-review <dir> tasks` | tasks.md 编写后 | 17 项拆解质量检查（自动） |
 | `/task-review <dir> <task_id>` | 每个任务完成后 | L1 约定合规（6 项） |
-| `/code-review --base 2.5.0-PM` | Feature 全部完成后 | L2 多维度深度审查 |
+| `/sdd-code-review --base <目标分支>` | Feature 全部完成后 | L2 多维度深度审查 |
 | `/e2e-test <dir>` | 全部任务完成后 | 生成并运行 E2E 测试 |
 
 ---

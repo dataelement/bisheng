@@ -84,7 +84,7 @@ export default function AgentPanel({
         message: `${localize('com_agents_update_error')}${
           error.message ? ` ${localize('com_ui_error')}: ${error.message}` : ''
         }`,
-        status: 'error',
+        status: 'warning',
       });
     },
   });
@@ -104,7 +104,7 @@ export default function AgentPanel({
         message: `${localize('com_agents_create_error')}${
           error.message ? ` ${localize('com_ui_error')}: ${error.message}` : ''
         }`,
-        status: 'error',
+        status: 'warning',
       });
     },
   });
@@ -160,7 +160,7 @@ export default function AgentPanel({
       if (!provider || !model) {
         return showToast({
           message: localize('com_agents_missing_provider_model'),
-          status: 'error',
+          status: 'warning',
         });
       }
 

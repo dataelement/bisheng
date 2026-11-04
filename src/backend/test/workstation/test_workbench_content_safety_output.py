@@ -7,12 +7,13 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from langchain_core.messages import AIMessageChunk
 
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion
 from bisheng.sensitive_word.domain.schemas import SensitiveWordCheckResult, SensitiveWordHit
 from bisheng.workstation.domain.services import chat_service
 
-AUTO_REPLY = "当前对话内容违反相关规范，请修改后重新输入"
+AUTO_REPLY = "当前对话内容违反相关规范，请修改后重新输入"  # noqa: RUF001 - Match the localized policy reply.
 HIT = SensitiveWordCheckResult(
     enabled=True,
     hits=[SensitiveWordHit(word="禁", count=1)],
@@ -75,6 +76,11 @@ def stream_env(monkeypatch: pytest.MonkeyPatch):
         AsyncMock(return_value=(ws_config, conversation, message, _LLM(), model_info, False)),
     )
     monkeypatch.setattr(chat_service, "_resolve_user_kb_selection", AsyncMock(return_value=[]))
+    monkeypatch.setattr("bisheng.common.image_view.loop.image_view_configured", AsyncMock(return_value=False))
+    monkeypatch.setattr(
+        "bisheng.citation.domain.services.daily_citation_scope.load_handle_table", AsyncMock(return_value=({}, None))
+    )
+    monkeypatch.setattr(chat_service, "gen_title", AsyncMock(return_value=None))
     monkeypatch.setattr(chat_service, "_prepare_tools", AsyncMock(return_value=([], [])))
     monkeypatch.setattr(chat_service, "_process_agent_files", AsyncMock(return_value=("", [], [])))
     monkeypatch.setattr(chat_service, "_get_history_max_tokens", AsyncMock(return_value=4096))
@@ -114,6 +120,26 @@ def stream_env(monkeypatch: pytest.MonkeyPatch):
 
 async def _drain(response) -> list[str]:
     return [chunk async for chunk in response.body_iterator]
+
+
+async def test_daily_title_survives_disconnect_at_final(stream_env, monkeypatch):
+    import asyncio
+
+    completed = asyncio.Event()
+
+    async def generate(*_args):
+        completed.set()
+
+    monkeypatch.setattr(chat_service, "gen_title", generate)
+    monkeypatch.setattr(
+        chat_service.SensitiveWordPolicyService, "is_workbench_content_safety_active", lambda *_a: False
+    )
+    response = await chat_service._agent_stream_chat_completion(MagicMock(), _data(), MagicMock())
+    async for chunk in response.body_iterator:
+        if '"final": true' in chunk:
+            break
+    await response.body_iterator.aclose()
+    await asyncio.wait_for(completed.wait(), 0.1)
 
 
 def _answer_rows(inserted: list):
@@ -220,3 +246,58 @@ async def test_tools_astream_events_branch_also_scans(stream_env, monkeypatch):
     assert body["msg"] == AUTO_REPLY
     assert "should-not-appear" not in "".join(chunks)
     assert "should-not-appear" not in body["msg"]
+
+
+@pytest.mark.parametrize("with_tools", [False, True])
+@pytest.mark.parametrize("inline_thinking", [False, True])
+async def test_model_content_keeps_thinking_out_of_answer(stream_env, monkeypatch, with_tools, inline_thinking):
+    chunks = [
+        AIMessageChunk(content=[{"type": "reasoning", "summary": [{"type": "summary_text", "text": "Plan first"}]}]),
+        AIMessageChunk(content=[{"type": "text", "text": "Safe answer", "index": 1}]),
+    ]
+    if inline_thinking:
+        chunks = [AIMessageChunk(content=text) for text in ["<thi", "nk>Private secret", "</thi", "nk>Safe answer"]]
+
+    class BlockLLM:
+        async def astream(self, _messages):
+            for chunk in chunks:
+                yield chunk
+
+    initialized = chat_service._agent_initialize_chat.return_value
+    monkeypatch.setattr(
+        chat_service,
+        "_agent_initialize_chat",
+        AsyncMock(return_value=(*initialized[:3], BlockLLM(), *initialized[4:])),
+    )
+    if with_tools:
+        tool = MagicMock(name="search")
+        monkeypatch.setattr(chat_service, "_prepare_tools", AsyncMock(return_value=([tool], [])))
+        monkeypatch.setattr(chat_service, "_get_agent_max_iterations", AsyncMock(return_value=8))
+
+        class BlockAgent:
+            async def astream_events(self, *_a, **_k):
+                for chunk in chunks:
+                    yield {"event": "on_chat_model_stream", "name": "model", "data": {"chunk": chunk}}
+
+        monkeypatch.setattr("langgraph.prebuilt.ToolNode", lambda *_a, **_k: MagicMock())
+        monkeypatch.setattr("langgraph.prebuilt.create_react_agent", lambda *_a, **_k: BlockAgent())
+
+    scanners = []
+
+    class ScannerFactory:
+        def __new__(cls, tenant_id):
+            scanner = _HitOnLenScanner(tenant_id, threshold=10_000)
+            scanners.append(scanner)
+            return scanner
+
+    _install_scanner(monkeypatch, ScannerFactory)
+    events = await _drain(await chat_service._agent_stream_chat_completion(MagicMock(), _data(), MagicMock()))
+    body = json.loads(_answer_rows(stream_env.inserted)[0].message)
+    assert body["msg"] == "Safe answer"
+    assert scanners[0].fed == ["Safe answer"]
+    if not inline_thinking:
+        assert any('"agent_thinking"' in event and "Plan first" in event for event in events)
+    assert "Private secret" not in "".join(events)
+    assert "Private secret" not in json.dumps(body)
+    assert "<think>" not in "".join(events)
+    assert not any('"code": 500' in event for event in events)

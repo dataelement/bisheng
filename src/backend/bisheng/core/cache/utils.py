@@ -30,7 +30,7 @@ CACHE: dict[str, Any] = {}
 
 CACHE_DIR = user_cache_dir("bisheng", "bisheng")
 
-# F068: a bare local path is only honoured inside the directories this process
+# F072: a bare local path is only honoured inside the directories this process
 # writes downloads to. ``file_download`` / ``async_file_download`` are reachable
 # from user-controlled strings (finetune preset files, chat attachments), so
 # "the file exists" alone turned them into an arbitrary-file read.
@@ -44,6 +44,24 @@ def _ensure_allowed_local_file(path: str) -> None:
         raise ValueError(f"File path {path} is not accessible") from e
     if not any(resolved.is_relative_to(root.resolve()) for root in _LOCAL_FILE_ROOTS):
         raise ValueError(f"File path {path} is outside the allowed local directories")
+
+
+def resolve_inside(directory: str | Path, *parts: str) -> Path:
+    """Join ``parts`` onto ``directory`` and refuse anything that leaves it.
+
+    A name taken from an upload, a MinIO key or a stored file entry is data, not
+    a path: ``../../etc/x`` and ``/etc/x`` both escape a plain ``join``. Callers
+    that legitimately carry a sub-path (a folder upload) still work -- only the
+    resolved result has to stay under the directory.
+    """
+    root = Path(directory).resolve()
+    try:
+        candidate = root.joinpath(*parts).resolve()
+    except OSError as e:
+        raise ValueError(f"Path {parts} is not accessible under {directory}") from e
+    if candidate != root and not candidate.is_relative_to(root):
+        raise ValueError(f"Path {parts} escapes {directory}")
+    return candidate
 
 
 def create_cache_folder(func):
@@ -367,9 +385,15 @@ def save_download_file(file_input: Union[bytes, BinaryIO, BaseHTTPResponse], fol
         safe_filename = filename
         if len(filename) > 60:
             safe_filename = filename[-60:]
+        # The name comes straight from the upload's multipart header. Today the
+        # hash prefix happens to keep `../../x` from resolving anywhere -- the
+        # first segment becomes a literal `<hash>_..` -- but that is an accident
+        # of the prefix, not a check, and it fails the write instead of storing
+        # the file. Keep the name to one path segment and let the join assert it.
+        safe_filename = safe_filename.replace("/", "_").replace("\\", "_")
 
         final_file_name = f"{file_hash}_{safe_filename}"
-        final_file_path = folder_path / final_file_name
+        final_file_path = resolve_inside(folder_path, final_file_name)
 
         # Rename (Move) Temporary File to Final Path
         # If the file already exists, decide whether to overwrite or skip it based on your needs. This example demonstrates overwriting.
