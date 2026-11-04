@@ -1762,7 +1762,8 @@
       "tenant": "Tenant Management",
       "llm": "Model Management",
       "approval": "Approval Management",
-      "filelib_sync": "Filelib Sync"
+      "filelib_sync": "Filelib Sync",
+      "points": "Points"
     },
     "eventTypeEnum": {
       "createChat": "Create Session",
@@ -1839,7 +1840,8 @@
       "filelibSyncUploadSuccess": "File Sync Succeeded",
       "filelibSyncUploadFailed": "File Sync Failed",
       "filelibSyncInspectionStandardBatchSuccess": "Inspection Standard Batch Sync Succeeded",
-      "filelibSyncInspectionStandardBatchFailed": "Inspection Standard Batch Sync Failed"
+      "filelibSyncInspectionStandardBatchFailed": "Inspection Standard Batch Sync Failed",
+      "pointsRuleUpdate": "Update Points Rule"
     },
     "objectTypeEnum": {
       "none": "None",
@@ -1862,7 +1864,24 @@
       "approval_task": "Approval Task",
       "approval_exception": "Approval Exception",
       "approval_scenario": "Approval Scenario",
-      "approval_flow": "Approval Flow"
+      "approval_flow": "Approval Flow",
+      "point_rule": "Points Rule"
+    },
+    "pointsRuleChangeLine": "{{field}}: {{before}} → {{after}}",
+    "pointsRuleValue": {
+      "empty": "empty",
+      "enabled": "enabled",
+      "disabled": "disabled"
+    },
+    "pointsRuleField": {
+      "score": "Score",
+      "display_name": "Display name",
+      "remark": "Remark",
+      "status": "Status",
+      "daily_cap": "Daily cap",
+      "beneficiary": "Beneficiary",
+      "sort_order": "Sort order",
+      "score_expr": "Score expression"
     },
     "appUsage": "App Usage",
     "systemOperations": "System Operations",

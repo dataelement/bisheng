@@ -1,3 +1,4 @@
+# ruff: noqa: RUF002, RUF003
 """积分规则 display_name 与默认 name 分离。"""
 
 import importlib
@@ -57,13 +58,13 @@ async def test_update_rule_persists_display_name_not_default_name():
         get_rule_by_id=AsyncMock(return_value=rule),
         save_rule=AsyncMock(side_effect=lambda r: r),
     )
-    session = SimpleNamespace(commit=AsyncMock())
+    session = SimpleNamespace(commit=AsyncMock(), add=lambda *_args, **_kwargs: None)
     service = PointsRuleService(session=session, repository=repo)
     body = PointRuleRequest(display_name="运营自定义名")
 
     out = await service.update_rule(
         1,
-        SimpleNamespace(is_admin=lambda: True, is_global_super=True),
+        SimpleNamespace(is_admin=lambda: True, is_global_super=True, user_id=7, user_name="运营"),
         1,
         body,
     )

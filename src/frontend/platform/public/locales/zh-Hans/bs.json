@@ -1745,7 +1745,8 @@
       "tenant": "租户管理",
       "llm": "模型管理",
       "approval": "审批管理",
-      "filelib_sync": "Filelib 同步"
+      "filelib_sync": "Filelib 同步",
+      "points": "积分"
     },
     "eventTypeEnum": {
       "createChat": "新建会话",
@@ -1822,7 +1823,8 @@
       "filelibSyncUploadSuccess": "文件同步成功",
       "filelibSyncUploadFailed": "文件同步失败",
       "filelibSyncInspectionStandardBatchSuccess": "检验标准批量同步成功",
-      "filelibSyncInspectionStandardBatchFailed": "检验标准批量同步失败"
+      "filelibSyncInspectionStandardBatchFailed": "检验标准批量同步失败",
+      "pointsRuleUpdate": "修改积分规则"
     },
     "objectTypeEnum": {
       "none": "无",
@@ -1845,7 +1847,24 @@
       "approval_task": "审批任务",
       "approval_exception": "审批异常",
       "approval_scenario": "审批场景",
-      "approval_flow": "审批流程"
+      "approval_flow": "审批流程",
+      "point_rule": "积分规则"
+    },
+    "pointsRuleChangeLine": "{{field}}：{{before}} → {{after}}",
+    "pointsRuleValue": {
+      "empty": "空",
+      "enabled": "启用",
+      "disabled": "禁用"
+    },
+    "pointsRuleField": {
+      "score": "分值",
+      "display_name": "展示名称",
+      "remark": "备注",
+      "status": "状态",
+      "daily_cap": "每日上限",
+      "beneficiary": "受益人",
+      "sort_order": "排序",
+      "score_expr": "计分表达式"
     },
     "appUsage": "应用使用",
     "systemOperations": "系统操作",
