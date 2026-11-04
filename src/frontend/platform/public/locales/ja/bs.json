@@ -474,6 +474,71 @@
     "viewPermission": "閲覧権限",
     "themeColor": "テーマ配色",
     "appearanceSettings": "外観設定",
+    "inviteCode": {
+      "tab": "招待コード",
+      "hint": "招待コードを生成してユーザーに渡します。ユーザーはタスクモードで紐づけます。新しいタスクごとに 1 回消費します。",
+      "searchPlaceholder": "招待コードまたはバッチ名を検索",
+      "create": "招待コードを生成",
+      "empty": "招待コードはまだありません",
+      "loading": "読み込み中",
+      "unbound": "未紐づけ",
+      "columns": {
+        "code": "招待コード",
+        "batch": "バッチ",
+        "limit": "利用可能回数",
+        "used": "使用済み",
+        "remaining": "残り回数",
+        "user": "紐づけユーザー",
+        "created": "作成日時"
+      },
+      "actions": {
+        "edit": "編集",
+        "delete": "削除",
+        "save": "保存",
+        "cancel": "キャンセル",
+        "copy": "コピー",
+        "done": "完了",
+        "increase": "増やす",
+        "decrease": "減らす"
+      },
+      "createDialog": {
+        "title": "招待コードを生成",
+        "name": "バッチ名",
+        "namePlaceholder": "例：体験バッチ",
+        "num": "生成数",
+        "limit": "1 コードあたりの回数",
+        "submit": "生成",
+        "result": "{{count}} 件の招待コードを生成しました",
+        "rangeHint": "生成数は 1～100、回数は 1～100000 です"
+      },
+      "editDialog": {
+        "title": "招待コードを編集",
+        "name": "バッチ名",
+        "limit": "利用可能回数",
+        "limitHint": "使用済みの {{used}} 回より小さくできません"
+      },
+      "deleteConfirm": {
+        "title": "招待コードを削除",
+        "desc": "{{code}} を削除すると元に戻せません。紐づけ済みのユーザーは、このコードの残り回数を失います。"
+      },
+      "feedback": {
+        "created": "招待コードを生成しました",
+        "saved": "保存しました",
+        "deleted": "削除しました",
+        "copied": "コピーしました",
+        "invalid": "バッチ名を入力してください。生成数は 1～100、回数は 1～100000 です"
+      },
+      "pagination": {
+        "total": "全 {{total}} 件",
+        "pageSize": "{{size}} 件/ページ",
+        "jumpPrefix": "移動",
+        "jumpSuffix": "ページ",
+        "jumpError": "1～{{totalPages}} を入力",
+        "prev": "前のページ",
+        "next": "次のページ",
+        "nav": "ページング"
+      }
+    },
     "toolAuthorization": "ツール権限付与",
     "createUser": "ユーザー作成",
     "usernamePlaceholder": "今後このユーザー名でログインします。ユーザー名は変更できません。",
@@ -1497,7 +1562,12 @@
       "appReleaseRollback": "公開をロールバック",
       "appSecretSet": "アプリ環境変数を保存",
       "appSecretDelete": "アプリ環境変数を削除",
-      "appSecretRebuild": "アプリインスタンス再構築を確認"
+      "appSecretRebuild": "アプリインスタンス再構築を確認",
+      "update_sandbox_conf": "サンドボックス設定を変更",
+      "link_file_version": "ファイルバージョンを関連付け",
+      "set_primary_version": "ファイルのメインバージョンを設定",
+      "delete_file_version": "履歴ファイルバージョンを削除",
+      "dismiss_similar_file": "類似ファイルの提案を無視"
     },
     "objectTypeEnum": {
       "app": "アプリ",
@@ -1607,7 +1677,9 @@
       "like": "高評価",
       "dislike": "低評価",
       "copy": "コピー",
-      "sensitiveStatus": "コンテンツ安全審査"
+      "sensitiveStatus": "コンテンツ安全審査",
+      "org": "組織",
+      "usageType": "利用タイプ"
     },
     "userRole": "ユーザー",
     "aiRole": "AI",
@@ -1720,7 +1792,8 @@
         "http_status": "HTTP 状態",
         "ttft_ms": "最初のトークン（ミリ秒）",
         "request_id": "リクエスト ID",
-        "version_id": "アプリバージョン ID"
+        "version_id": "アプリバージョン ID",
+        "operator_dept_path": "組織"
       },
       "values": {
         "service_account": "サービスアカウント",
@@ -1739,6 +1812,34 @@
         "capability_undeclared": "機能未宣言",
         "client_disconnected": "クライアント切断"
       }
+    },
+    "org": {
+      "column": "組織",
+      "placeholder": "組織を選択",
+      "search": "部門名または番号で検索",
+      "includeDescendants": "下位部門を含む",
+      "archivedSection": "アーカイブ済み部門",
+      "archived": "アーカイブ済み",
+      "none": "所属部門なし",
+      "unrecorded": "未記録",
+      "notApplicable": "該当なし",
+      "clear": "選択をクリア",
+      "confirm": "確定",
+      "empty": "選択できる部門がありません",
+      "selected": "{{count}} 件選択",
+      "loading": "読み込み中…",
+      "loadFailed": "部門の読み込みに失敗しました",
+      "retry": "再試行",
+      "expand": "{{name}} を展開",
+      "collapse": "{{name}} を折りたたむ",
+      "tenantGroup": "テナント {{id}}"
+    },
+    "usageType": {
+      "label": "利用タイプ",
+      "daily": "日常会話",
+      "assistant": "アシスタント会話",
+      "workflow": "ワークフロー会話",
+      "task": "タスクモード"
     }
   },
   "tag": {
@@ -2533,6 +2634,7 @@
       "title": "スキルをインポート",
       "tabFile": "ローカルファイル",
       "tabGithub": "GitHub URL",
+      "tabGitee": "Gitee URL",
       "dropHint": "ドラッグ＆ドロップまたはクリック",
       "dropSub": ".md ファイル、.zip / .skill アーカイブに対応（ルートに SKILL.md 必須）",
       "selected": "選択済み",
@@ -2545,6 +2647,9 @@
       "githubUrlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill",
       "githubHint": "スキルディレクトリを指す GitHub URL を貼り付け（SKILL.md を含むこと）",
       "githubReqHost": "公開 github.com リポジトリのみ対応",
+      "giteeUrlPlaceholder": "https://gitee.com/owner/repo/tree/master/path/to/skill",
+      "giteeHint": "スキルディレクトリを指す Gitee URL を貼り付け（SKILL.md を含むこと）",
+      "giteeReqHost": "公開 gitee.com リポジトリのみ対応",
       "githubReqDir": "URL は SKILL.md を含むディレクトリを指すこと。スラッシュを含むブランチ名は非対応",
       "unsupported": "未対応のファイル形式です（.md / .zip / .skill）",
       "confirm": "インポート",
@@ -2567,6 +2672,9 @@
       "githubUrlInvalid": "GitHub URL の形式が不正です（例: https://github.com/{owner}/{repo}/tree/{branch}/{path}）",
       "githubFetch": "GitHub からの取得に失敗：リポジトリ / ブランチ / パスが存在しないか、ネットワークエラーです。URL を確認して再試行してください",
       "githubRateLimit": "GitHub のレート制限に達しました。しばらくしてから再試行してください",
+      "giteeUrlInvalid": "Gitee URL の形式が不正です（例: https://gitee.com/{owner}/{repo}/tree/{branch}/{path}）",
+      "giteeFetch": "Gitee からの取得に失敗：リポジトリ / ブランチ / パスが存在しないか、ネットワークエラーです。URL を確認して再試行してください",
+      "giteeRateLimit": "Gitee のレート制限に達しました。しばらくしてから再試行してください",
       "unknown": "操作に失敗しました。再試行してください"
     },
     "catalogHint": "保存したスキルは企業権限に従って提供され、タスクごとに選択します。無効化すると提供を停止します。"
@@ -2820,6 +2928,7 @@
     "permissionTiers": {
       "editor": "編集者",
       "manager": "管理者",
+      "owner": "所有者",
       "viewer": "閲覧者"
     },
     "resourceTypes": {

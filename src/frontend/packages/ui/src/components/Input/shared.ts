@@ -31,17 +31,15 @@ export const shellStyles = cva(
   'group relative flex w-full items-stretch overflow-hidden border transition-colors',
   {
     variants: {
-      // Height + radius + type size per §3. Font size references the PRIMITIVE
-      // scale vars on purpose: the semantic --text-body remaps 14→16 under
-      // 768px for READING text, while a control's own mobile rule is the iOS
-      // anti-zoom one, which `.input-no-zoom` applies to the field only (§6).
+      // Field roles resize the whole shell, including selected values and addons.
+      // Compact controls use their own role instead of the reading-text ladder.
       size: {
         small:
-          'input-touch-hit h-6 rounded text-[length:var(--font-size-3)] leading-[var(--line-height-3)]',
+          'input-touch-hit h-6 rounded text-field',
         medium:
-          'input-touch-hit h-8 rounded-md text-[length:var(--font-size-3)] leading-[var(--line-height-3)]',
+          'input-touch-hit h-8 rounded-md text-field',
         large:
-          'input-touch-hit h-10 rounded-lg text-[length:var(--font-size-4)] leading-[var(--line-height-4)]',
+          'input-touch-hit h-10 rounded-lg text-field-lg',
       },
       // Validation border. The ring color rides along as a CSS var so the focus
       // ring switches to the matching tint without a second shadow token (§5.2).
@@ -119,7 +117,8 @@ export const ADDON_BASE =
 
 /**
  * The field itself: no chrome of its own (the shell owns it), inheriting the
- * shell's type size. `.input-no-zoom` is the iOS anti-zoom rule (§6).
+ * shell's type size. `.input-no-zoom` reserves an opt-in iOS input floor,
+ * disabled by default with the rest of mobile typography.
  * `::-ms-*` (Edge reveal / clear) and `::-webkit-search-*` (the native ×
  * Chrome / Safari draw on type="search") are hidden — they would double up
  * with our own clear button.

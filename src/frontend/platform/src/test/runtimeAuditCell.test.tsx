@@ -26,4 +26,15 @@ describe('runtime audit identity and missing-value presentation', () => {
     view.rerender(<RuntimeAuditCell kind="model" field="total_tokens" row={{ total_tokens: null }} />)
     expect(screen.getByText('log.runtime.notRecorded')).toBeVisible()
   })
+
+  it('captions the organisation sentinels and shows the recorded path otherwise', () => {
+    const view = render(<RuntimeAuditCell kind="access" field="operator_dept_path" row={{ operator_dept_id: null, operator_dept_path: null }} />)
+    expect(screen.getByText('log.org.unrecorded')).toBeVisible()
+    view.rerender(<RuntimeAuditCell kind="access" field="operator_dept_path" row={{ operator_dept_id: 0, operator_dept_path: null }} />)
+    expect(screen.getByText('log.org.none')).toBeVisible()
+    view.rerender(<RuntimeAuditCell kind="model" field="operator_dept_path" row={{ operator_dept_id: -1, operator_dept_path: null }} />)
+    expect(screen.getByText('log.org.notApplicable')).toBeVisible()
+    view.rerender(<RuntimeAuditCell kind="capability" field="operator_dept_path" row={{ operator_dept_id: 3, operator_dept_path: 'Root/Sales' }} />)
+    expect(screen.getByText('Root/Sales')).toBeVisible()
+  })
 })

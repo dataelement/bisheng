@@ -32,7 +32,13 @@ async def get_assistant_info(request: Request, assistant_id: UUID):
 
 
 @router.websocket("/chat/{assistant_id}")
-async def assistant_ws(*, websocket: WebSocket, assistant_id: str, chat_id: str | None = None):
+async def assistant_ws(
+    *,
+    websocket: WebSocket,
+    assistant_id: str,
+    chat_id: str | None = None,
+    flow_lease_id: str | None = None,
+):
     try:
         normalized_id = UUID(assistant_id).hex
         async with public_execution("assistant", normalized_id) as execution:
@@ -49,6 +55,7 @@ async def assistant_ws(*, websocket: WebSocket, assistant_id: str, chat_id: str 
                 WorkType.GPTS,
                 websocket,
                 session_subject=execution.session_subject,
+                flow_lease_id=flow_lease_id,
             )
     except PublicAccessError as exc:
         await deny_public_websocket(websocket, exc)

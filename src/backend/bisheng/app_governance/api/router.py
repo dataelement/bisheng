@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from bisheng.app_governance.domain.schemas.runtime_audit import DEPT_FILTER_KEYS
 from bisheng.app_governance.domain.services.runtime_audit_export_service import RuntimeAuditExportService
 from bisheng.app_governance.domain.services.runtime_audit_query_service import RuntimeAuditQueryService
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -30,6 +31,7 @@ def filters(request, *, candidate=False):
         "kind",
         "query",
         "offset",
+        *DEPT_FILTER_KEYS,
     }
     if not candidate:
         allowed -= {"kind", "query", "offset"}
@@ -41,7 +43,7 @@ def filters(request, *, candidate=False):
         raise RuntimeAuditFilterInvalidError()
     return {
         key: request.query_params[key]
-        for key in ("time_range", "start_time", "end_time", "app_id", "visitor_id", "credential_id")
+        for key in ("time_range", "start_time", "end_time", "app_id", "visitor_id", "credential_id", *DEPT_FILTER_KEYS)
         if key in request.query_params
     }
 

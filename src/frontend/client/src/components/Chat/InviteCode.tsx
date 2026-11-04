@@ -3,9 +3,14 @@ import { bindInviteCode } from "~/api/linsight";
 import { useGetBsConfig, useGetUserLinsightCountQuery } from "~/hooks/queries/data-provider";
 import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
-import { Button, Dialog, DialogContent, Input } from "../ui";
+import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Input } from "../ui";
 
-export default function InvitationCodeForm({ showCode, setShowCode }) {
+interface InvitationCodeFormProps {
+    showCode: boolean;
+    setShowCode: (open: boolean) => void;
+}
+
+export default function InvitationCodeForm({ showCode, setShowCode }: InvitationCodeFormProps) {
     const [invitationCode, setInvitationCode] = useState("")
     const [error, setError] = useState("")
     const [isLoading, setIsLoading] = useState(false)
@@ -27,22 +32,16 @@ export default function InvitationCodeForm({ showCode, setShowCode }) {
 
         try {
             const result = await bindInviteCode(invitationCode.trim())
-            console.log('result :>> ', result);
-            if (result.status_code === 500) {
-                setError(result.status_message || localize('com_invite_submit_failed'))
-                // setError("您输入的邀请码无效")
-                // setError("已绑定其他邀请码")
-            } else {
-                refetch()
-                // 成功处理
-                setInvitationCode("")
-                setError("")
-                setShowCode(false)
-                showToast({ message: result.status_message, status: 'success' });
-            }
-
+            refetch()
+            setInvitationCode("")
+            setError("")
+            setShowCode(false)
+            showToast({ message: result.status_message, status: 'success' });
         } catch (err) {
-            setError("网络错误，请稍后重试")
+            const message = err instanceof Error && err.message.trim()
+                ? err.message
+                : localize('com_invite_network_error')
+            setError(message)
         } finally {
             setIsLoading(false)
         }
@@ -50,42 +49,62 @@ export default function InvitationCodeForm({ showCode, setShowCode }) {
 
     return (
         <Dialog open={showCode} onOpenChange={setShowCode}>
-            <DialogContent className="sm:max-w-[560px]">
-                <div className="p-2">
-                    {/* BISHENG Logo */}
-                    <div className="" style={{ backgroundImage: `url('${__APP_ENV__.BASE_URL}/assets/diandian.png')` }}>
-                        <div className="text-2xl font-bold text-primary pt-20 pl-8">{localize('com_invite_title')}</div>
-                        {/* Description */}
-                        <p className="text-sm mt-3 pl-8">{localize('com_invite_desc')}</p>
+            <DialogContent className="gap-0 overflow-hidden border-0 p-0 sm:max-w-[520px] sm:rounded-2xl">
+                <div className="relative px-8 pb-8 pt-16">
+                    <div
+                        aria-hidden
+                        className="pointer-events-none absolute inset-x-0 top-0 h-40 overflow-hidden"
+                        style={{
+                            backgroundImage: 'radial-gradient(circle, rgb(var(--text-4) / 0.55) 0.7px, transparent 0.8px)',
+                            backgroundSize: '6px 6px',
+                            WebkitMaskImage: 'linear-gradient(to bottom, black 35%, transparent)',
+                            maskImage: 'linear-gradient(to bottom, black 35%, transparent)',
+                        }}
+                    >
+                        <div className="absolute inset-x-0 top-1 text-center text-[68px] font-bold leading-none tracking-[0.12em] text-text-4/20">
+                            LINSIGHT
+                        </div>
                     </div>
-
-                    {/* Form */}
-                    <form onSubmit={handleSubmit} className="mt-10 px-8">
-                        {/* Input Field */}
-                        <div className="flex gap-3">
+                    <DialogTitle className="relative text-h3 font-bold text-primary">
+                        {localize('com_invite_title')}
+                    </DialogTitle>
+                    <DialogDescription className="relative mt-3 text-body text-text-1">
+                        {localize('com_invite_desc')}
+                    </DialogDescription>
+                    <form onSubmit={handleSubmit} className="relative mt-8">
+                        <div className="flex items-center gap-3">
                             <Input
                                 type="text"
+                                size="large"
+                                className="min-w-0 flex-1"
                                 value={invitationCode}
                                 onChange={(e) => setInvitationCode(e.target.value)}
                                 placeholder={localize('com_invite_placeholder')}
                                 maxLength={50}
                                 disabled={isLoading}
+                                status={error ? 'error' : undefined}
                             />
-                            {/* Submit Button */}
                             <Button
                                 type="submit"
-                                disabled={isLoading || !invitationCode.trim()}
-                                className="px-8 h-10"
+                                size="large"
+                                className="shrink-0 px-8"
+                                disabled={isLoading}
                             >
                                 {isLoading ? localize('com_invite_submitting') : localize('com_invite_submit')}
                             </Button>
                         </div>
-                        {/* Error Message */}
-                        <p className="text-red-500 text-sm mt-3 px-2 h-6">{error}</p>
-                        {bsConfig?.waiting_list_url && <p className="text-xs mt-3 px-2 h-6">{localize('com_invite_no_code_tip')}<a className="text-primary" href={bsConfig.waiting_list_url} target="_blank" rel="noreferrer">{localize('com_invite_apply_access')}</a></p>}
+                        <p className="mt-3 h-5 text-caption text-danger">{error}</p>
+                        {bsConfig?.waiting_list_url && (
+                            <p className="text-caption text-text-2">
+                                {localize('com_invite_no_code_tip')}
+                                <a className="text-primary" href={bsConfig.waiting_list_url} target="_blank" rel="noreferrer">
+                                    {localize('com_invite_apply_access')}
+                                </a>
+                            </p>
+                        )}
                     </form>
                 </div>
             </DialogContent>
-        </Dialog >
+        </Dialog>
     )
 }

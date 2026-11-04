@@ -5,7 +5,9 @@ from bisheng.app_governance.domain.schemas.runtime_audit import AuthorizedRuntim
 from bisheng.app_runtime.application.authorization import authorize_app, editable_app_ids
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.app_governance import RuntimeAuditAccessDeniedError
+from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.department.domain.services.audit_dept_scope import AuditDeptScopeService
 from bisheng.permission.application import is_tenant_admin
 
 
@@ -26,11 +28,18 @@ async def resolve_scope(user, tenant_id=None, *, app_id=None):
         raise RuntimeAuditAccessDeniedError()
     if not fresh.is_global_super and effective != own.tenant_id:
         raise RuntimeAuditAccessDeniedError()
+    dept_scope = None
     if app_id:
+        # The per-app audit_read grant is its own authority; department scope
+        # applies to the audit-menu entry only (F003 decision 10).
         await authorize_app(fresh, app_id, "audit_read")
         apps = (app_id,)
     else:
         if not fresh.is_global_super and not await is_tenant_admin(fresh.user_id, effective):
             await UserPayload.assert_effective_web_menu_contains(fresh.user_id, "log")
+            try:
+                dept_scope = await AuditDeptScopeService.resolve(fresh, effective)
+            except UnAuthorizedError as exc:
+                raise RuntimeAuditAccessDeniedError() from exc
         apps = await editable_app_ids(fresh, effective)
-    return AuthorizedRuntimeAuditScope(user.user_id, effective, effective, tuple(apps))
+    return AuthorizedRuntimeAuditScope(user.user_id, effective, effective, tuple(apps), dept_scope)

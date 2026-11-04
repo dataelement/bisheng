@@ -45,6 +45,60 @@ and citations in Work. Keep the account enable switch and document permissions i
 the acceptance path. Code deployment, successful data upgrade, and real Work task
 acceptance are separate delivery states.
 
+## Departed membership visibility repair
+
+`repair_f048_membership_orphan.py` cleans the exact direct `visible` tuple left
+by the membership reactivation version bug. Deploy the code fix first. Run from
+`src/backend` with the same `config` as the live service:
+
+```bash
+python scripts/repair_f048_membership_orphan.py \
+  --tenant-id 1 --resource-key knowledge_space:14 --user-id 10
+```
+
+The default is read-only. The JSON plan contains the Store/model, resource
+version, historical source evidence, exact tuple selection and `plan_checksum`.
+It requires no ACTIVE business membership, only INACTIVE unprotected membership
+sources, and evidence of a RETIRED projection with an older source version.
+All current SQL source contributions are checked before selecting an orphan.
+An ACTIVE persisted contribution (including protected/non-Grant sources) also
+prevents deletion. Other users' tuples are never selected.
+
+For apply, back up the business and OpenFGA databases, stop **all permission
+writers using this Store**, including API, workers and periodic jobs, then wait
+for F048 heartbeats to expire (default TTL 45 seconds). Use an isolated maintenance
+process with the same config, mounts, network and installed backend image;
+copying this script is sufficient because it reuses the shipped reconciliation
+module. Do not restart the normal API entrypoint to run maintenance.
+
+```bash
+python scripts/repair_f048_membership_orphan.py \
+  --tenant-id 1 --resource-key knowledge_space:14 --user-id 10 \
+  --apply --operator-id 1 --confirm-store-id <preview-store-id> \
+  --confirm-plan-checksum <preview-plan-checksum>
+```
+
+Apply repeats the preview, checks Store/plan confirmations, refuses live runtime
+heartbeats or nonterminal projections, and deletes through the durable F048
+projection ledger. It verifies that the selected tuple disappeared and all other
+direct visible tuples stayed unchanged. The resource version advances through
+the normal finalizer; retired source records and memberships remain as history.
+Repeated successful apply is a no-op. A changed plan must be previewed again.
+
+Resume the stopped services and verify the departed ordinary user's joined list
+and resource/file visibility, as well as the creator's access. No full-Store
+reconcile, model publication, Catalog cutover or table deletion is performed.
+For another confirmed case, repeat with its exact tenant/resource/user; channels
+use `--resource-key channel:<id>`. The script intentionally does not infer that
+every unsupported relation was caused by this bug.
+
+Exit codes: `0` success/read-only preview; `2` invalid arguments; `3` a safety or
+data invariant blocked the operation; other nonzero codes indicate runtime failure.
+Retain the preview, database backups and projection operation IDs. On a partial
+failure, keep writers stopped and recover the recorded operation with the existing
+projection recovery procedure; do not restore a tuple without reviewing current
+authorization sources.
+
 ## Diagnostic Scripts
 
 ### `measure_dsh_model_audit.py`
@@ -95,6 +149,54 @@ The script never writes to the database. Exit `0` means reflection found the
 column, exit `2` confirms a catalog/reflection mismatch, exit `3` means the
 column is absent from the DM catalog, and exit `4` means the diagnostic itself
 failed.
+
+## Model Configuration Upgrade
+
+### `migrate_model_token_configs.py`
+
+Convert legacy LLM `config.max_tokens` into advanced `config.user_kwargs` while
+preserving the effective limit and other parameters. Ollama writes `num_ctx`;
+other LLM providers write `max_tokens`. Model IDs, status, tenant ownership and
+provider daily-call quotas retain their values.
+
+Run from `src/backend/` with the live service's `config` environment:
+
+```bash
+python scripts/migrate_model_token_configs.py --all-tenants
+python scripts/migrate_model_token_configs.py --tenant-id 1
+```
+
+Dry-run is the default. After draining model calls and stopping API/Worker/
+Linsight configuration writers, use the new backend runtime and a fresh private
+backup path to apply. Complete the target schema upgrade first:
+
+```bash
+python scripts/migrate_model_token_configs.py --all-tenants --apply \
+  --backup-file /secure-backups/model-tokens-before.json
+```
+
+Any invalid legacy configuration blocks the entire batch. The script creates
+an exclusive mode-0600 backup before writing; an existing backup path blocks
+writes. Re-running migrated rows is a no-op. Reports contain identifiers and
+counts; protect the backup because model configuration can contain credentials.
+Restart API/Worker/Linsight after migration to clear process-local model caches.
+Never delete daily-call Redis counters during this upgrade.
+
+To restore from a reviewed backup in the same maintenance window:
+
+```bash
+python scripts/migrate_model_token_configs.py --all-tenants \
+  --restore-backup /secure-backups/model-tokens-before.json
+python scripts/migrate_model_token_configs.py --all-tenants --apply \
+  --restore-backup /secure-backups/model-tokens-before.json \
+  --backup-file /secure-backups/model-tokens-before-restore.json
+```
+
+Restore checks the saved identity and post-upgrade configuration before writing.
+A later edit or a missing model blocks the batch; newly created models stay
+intact. Fix reported conflicts before retrying. MySQL/DM8 JSON conversion runs
+in Python; this procedure performs data maintenance outside Alembic revisions.
+See [the feature upgrade runbook](../../../features/v3.0.0/model-discovery/upgrade.md).
 
 ### `verify_mcp_stdio_blocked.py`
 

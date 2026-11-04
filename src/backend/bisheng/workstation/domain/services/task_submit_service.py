@@ -14,9 +14,12 @@ from __future__ import annotations
 
 from loguru import logger
 
+from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.linsight import LinsightUseUpError
 from bisheng.common.errcode.open_api import OpenApiTaskQueueUnavailableError
+from bisheng.common.services.config_service import settings
 from bisheng.database.models.session import MessageSession
 from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersion,
@@ -51,19 +54,25 @@ async def submit_task_turn(
     from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
     from bisheng.workstation.domain.services.chat_service import _to_linsight_submit
 
+    consumed = await _consume_task_invite(login_user.user_id)
     submit_obj = _to_linsight_submit(data)
     # Pass the original daily-shape files (filepath/type/file_id) so the user
     # question turn persists its attachments and they render after a refresh
     # (the submit schema's SubmitFileSchema drops the display fields).
-    session, session_version = await LinsightWorkbenchImpl.submit_user_question(
-        submit_obj,
-        login_user,
-        display_files=data.files,
-        session_subject=session_subject,
-        api_meta=api_meta,
-        telemetry_source=telemetry_source,
-        session_name=session_name,
-    )
+    try:
+        session, session_version = await LinsightWorkbenchImpl.submit_user_question(
+            submit_obj,
+            login_user,
+            display_files=data.files,
+            session_subject=session_subject,
+            api_meta=api_meta,
+            telemetry_source=telemetry_source,
+            session_name=session_name,
+        )
+    except Exception:
+        if consumed:
+            await InviteCodeService.revoke_invite_code(user_id=login_user.user_id)
+        raise
 
     # Persist the bot task turn BEFORE enqueueing. The worker's start-time call
     # (`_execute_workflow`) is the same find-then-insert upsert with no unique
@@ -98,6 +107,8 @@ async def submit_task_turn(
             f"svid={session_version.id}; marking the version failed"
         )
         await _mark_enqueue_failed(session_version, linsight_execute_utils)
+        if consumed:
+            await InviteCodeService.revoke_invite_code(user_id=login_user.user_id)
         raise OpenApiTaskQueueUnavailableError() from exc
 
     return session, session_version
@@ -114,6 +125,20 @@ async def _mark_enqueue_failed(session_version: LinsightSessionVersion, linsight
         await linsight_execute_utils.persist_task_turn_message(session_version)
     except Exception:
         logger.exception(f"[TASK_SUBMIT] could not record the enqueue failure svid={session_version.id}")
+
+
+async def _consume_task_invite(user_id: int) -> bool:
+    """Consume one invite use when the switch is on.
+
+    Returns whether a use was taken, so the caller can give it back if the
+    turn is never created. A missing switch stays off.
+    """
+    system_config = await settings.aget_all_config()
+    if not system_config.get("linsight_invitation_code", False):
+        return False
+    if await InviteCodeService.use_invite_code(user_id=user_id) is False:
+        raise LinsightUseUpError()
+    return True
 
 
 __all__ = ["ENQUEUE_FAILED_MESSAGE", "submit_task_turn"]

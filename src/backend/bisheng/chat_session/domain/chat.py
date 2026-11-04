@@ -32,6 +32,7 @@ from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.user.domain.models.user import UserDao
+from bisheng.workflow.domain.repositories.history_repository import WorkflowHistoryRepository
 
 if TYPE_CHECKING:
     from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
@@ -236,7 +237,7 @@ class ChatSessionService:
         elif session_chat.flow_type == FlowType.WORKSTATION.value:
             await AuditLogService.delete_chat_message(login_user, request_ip, session_chat)
         else:
-            flow_info = await FlowDao.aget_flow_by_id(session_chat.flow_id)
+            flow_info = next(iter(await WorkflowHistoryRepository.aget_by_ids([session_chat.flow_id])), None)
             if flow_info and flow_info.flow_type == FlowType.WORKFLOW.value:
                 await AuditLogService.delete_chat_workflow(login_user, request_ip, flow_info)
 
@@ -290,7 +291,7 @@ class ChatSessionService:
                 group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
 
         if keyword:
-            flows = FlowDao.get_flow_list_by_name(name=keyword)
+            flows = WorkflowHistoryRepository.search_by_name(keyword)
             assistants, _ = AssistantDao.get_all_assistants(name=keyword, page=0, limit=0)
             users = UserDao.search_user_by_name(user_name=keyword)
             if flows:

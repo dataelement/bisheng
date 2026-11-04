@@ -2,9 +2,9 @@ import { Dropdown, DropdownItem } from "@bisheng/ui";
 import { Tooltip } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
 import { useMemo, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import Convo from '~/components/Conversations/Convo';
-import { useAuthContext, useLocalize } from '~/hooks';
-import { useConversationsInfiniteQuery } from '~/hooks/queries/data-provider';
+import { useLocalize } from '~/hooks';
 import type { TConversation } from '~/types/chat';
 import { cn } from '~/utils';
 import { ProjectNameDialog } from './ProjectNameDialog';
@@ -12,18 +12,19 @@ import { SIDEBAR_ICON_BUTTON_CLASS_NAME as ICON_BUTTON } from './sidebarIconButt
 import { createMockProject, deleteMockProject, renameMockProject, useMockProjectChats } from './projectsStore';
 import { useSidebarProjects } from './useSidebarProjects';
 
-const noop = () => undefined;
-
-const ROW = 'flex w-full items-center rounded-lg py-[5px] pr-2 text-left text-body text-text-1 transition-colors';
+const ROW = 'flex w-full items-center rounded-lg py-[5px] pr-2 text-left text-body text-text-1 transition-colors coarse-pointer:min-h-11 coarse-pointer:py-0';
 const PROJECT_ACTION_BUTTON = cn(
   ICON_BUTTON,
-  'opacity-0 focus-visible:opacity-100 group-hover/project:opacity-100 data-[state=open]:opacity-100 coarse-pointer:opacity-100',
+  'opacity-0 focus-visible:opacity-100 group-hover/project:opacity-100 group-has-[[data-menu-open]]/project:opacity-100 data-[state=open]:opacity-100 coarse-pointer:opacity-100',
 );
 
 type NameDialogTarget = { mode: 'create' } | { mode: 'rename'; id: string; name: string };
 
 interface SidebarProjectsProps {
-  /** Opens a blank draft whose first conversation is filed into this project. */
+  conversations: TConversation[];
+  openIds: string[];
+  onOpenIdsChange: Dispatch<SetStateAction<string[]>>;
+  onNavigate: () => void;
   onStartChat: (projectId: string) => void;
 }
 
@@ -32,21 +33,13 @@ interface SidebarProjectsProps {
  * projects — and which conversations were moved into them — live in localStorage
  * (see projectsStore); a conversation filed here leaves the flat 对话 list below.
  */
-export function SidebarProjects({ onStartChat }: SidebarProjectsProps) {
+export function SidebarProjects({ conversations, openIds, onOpenIdsChange, onNavigate, onStartChat }: SidebarProjectsProps) {
   const localize = useLocalize();
-  const { isAuthenticated } = useAuthContext();
   const projects = useSidebarProjects();
   const projectChats = useMockProjectChats();
-
-  // Same query (and cache entry) as the 对话 list below: this only reads the pages it
-  // already loaded, so a moved conversation renders from the data that is in hand.
-  const { data } = useConversationsInfiniteQuery(
-    { pageNumber: '1', isArchived: false },
-    { enabled: isAuthenticated },
-  );
   const conversationsByProject = useMemo(() => {
     const grouped = new Map<string, TConversation[]>();
-    for (const convo of data?.pages.flatMap((page) => page.conversations) ?? []) {
+    for (const convo of conversations) {
       const projectId = convo == null ? undefined : projectChats[convo.conversationId ?? ''];
       if (projectId == null || convo == null) continue;
       const list = grouped.get(projectId);
@@ -54,8 +47,7 @@ export function SidebarProjects({ onStartChat }: SidebarProjectsProps) {
       else grouped.set(projectId, [convo]);
     }
     return grouped;
-  }, [data, projectChats]);
-  const [openIds, setOpenIds] = useState<string[]>([]);
+  }, [conversations, projectChats]);
   // The target outlives `open` so the dialog keeps its title while it animates out.
   const [nameDialog, setNameDialog] = useState<NameDialogTarget>({ mode: 'create' });
   const [nameDialogOpen, setNameDialogOpen] = useState(false);
@@ -65,7 +57,7 @@ export function SidebarProjects({ onStartChat }: SidebarProjectsProps) {
   };
 
   const handleToggle = (id: string) => {
-    setOpenIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    onOpenIdsChange((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
   const handleNameSubmit = (name: string) => {
@@ -75,7 +67,7 @@ export function SidebarProjects({ onStartChat }: SidebarProjectsProps) {
     }
     // A new project opens at once, so the user sees where its conversations will go.
     const project = createMockProject(name);
-    setOpenIds((prev) => [...prev, project.id]);
+    onOpenIdsChange((prev) => [...prev, project.id]);
   };
 
   return (
@@ -115,7 +107,7 @@ export function SidebarProjects({ onStartChat }: SidebarProjectsProps) {
                 type="button"
                 aria-expanded={open}
                 onClick={() => handleToggle(project.id)}
-                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                className="flex min-w-0 flex-1 items-center gap-2 text-left coarse-pointer:min-h-11"
               >
                 {open ? (
                   <Outlined.FolderOpen className="size-4 shrink-0" />
@@ -156,8 +148,9 @@ export function SidebarProjects({ onStartChat }: SidebarProjectsProps) {
                         aria-label={`${localize('com_nav_start_new_chat')} · ${project.name}`}
                         className={PROJECT_ACTION_BUTTON}
                         onClick={() => {
-                          setOpenIds((prev) => (prev.includes(project.id) ? prev : [...prev, project.id]));
+                          onOpenIdsChange((prev) => prev.includes(project.id) ? prev : [...prev, project.id]);
                           onStartChat(project.id);
+                          onNavigate();
                         }}
                       >
                         <Outlined.MessagePlus className="size-4" />
@@ -177,8 +170,8 @@ export function SidebarProjects({ onStartChat }: SidebarProjectsProps) {
                       className="pl-8"
                       isLatestConvo={false}
                       conversation={convo}
-                      retainView={noop}
-                      toggleNav={noop}
+                      retainView={() => undefined}
+                      toggleNav={onNavigate}
                     />
                   </div>
                 ))}

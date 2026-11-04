@@ -183,10 +183,10 @@ class AppCapacityInsufficientError(AppPublishError):
 
 
 class AppDependencyBuildFailedError(AppPublishError):
-    """Dependency installation / image build failed; ``data`` carries the log tail."""
+    """Delivery preparation failed; retained diagnostics are read separately."""
 
     Code: int = 16227
-    Msg: str = "Dependency installation failed while building the application"
+    Msg: str = "Application delivery preparation failed"
 
 
 class AppStartupProbeFailedError(AppPublishError):

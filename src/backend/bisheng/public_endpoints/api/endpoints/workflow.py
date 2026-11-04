@@ -26,6 +26,7 @@ async def workflow_ws(
     workflow_id: UUID = Path(..., description="Workflow UniqueID"),
     websocket: WebSocket,
     chat_id: str | None = None,
+    flow_lease_id: str | None = None,
 ):
     normalized_id = workflow_id.hex
     try:
@@ -45,6 +46,7 @@ async def workflow_ws(
                 websocket,
                 session_subject=execution.session_subject,
                 execution_snapshot=snapshot.model_dump(mode="json"),
+                flow_lease_id=flow_lease_id,
             )
     except PublicAccessError as exc:
         await deny_public_websocket(websocket, exc)

@@ -3,7 +3,6 @@ import { Pagination, Button, Select, toast } from '@bisheng/ui';
 
 import FilterByApp from "@/components/bs-comp/filterTableDataComponent/FilterByApp";
 import FilterByDate from "@/components/bs-comp/filterTableDataComponent/FilterByDate";
-import FilterByUser from "@/components/bs-comp/filterTableDataComponent/FilterByUser";
 import FilterByUsergroup from "@/components/bs-comp/filterTableDataComponent/FilterByUsergroup";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { LoadingIcon } from "@/components/bs-icons/loading";
@@ -15,7 +14,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
-import { exportCsvDataApi, getAuditAppListApi } from "@/controllers/API/log";
+import { AuditUsageType, EMPTY_ORG_SELECTION, exportCsvDataApi, getAuditAppListApi, getAuditSessionUsersApi } from "@/controllers/API/log";
+import type { OrgSelection } from "@/types/api/audit";
+import { OrgFilter } from "../components/OrgFilter";
+import { orgLabel } from "../components/OrgFilter/orgLabel";
 import { useTable } from "@/util/hook";
 import { exportCsv, formatDate } from "@/util/utils";
 import { useContext, useEffect, useMemo, useReducer, useState } from "react";
@@ -30,11 +32,43 @@ const getStrTime = (date) => {
 
 type FilterState = {
     appName: any[];
-    userName: any[];
+    userId: number | null;
     userGroup: string;
     dateRange: any[];
     feedback: string;
     sensitive_status: string;
+    org: OrgSelection;
+    usageType: AuditUsageType | '';
+};
+
+const INITIAL_FILTERS: FilterState = {
+    appName: [],
+    userId: null,
+    userGroup: '',
+    dateRange: [],
+    feedback: '',
+    sensitive_status: '',
+    org: EMPTY_ORG_SELECTION,
+    usageType: '',
+};
+
+// Daily chat, knowledge-space QA and channel-article QA all open the daily
+// detail; their task-mode rows too (F003 AC-36).
+const DAILY_FLOW_TYPES = [15, 20, 25, 30];
+const USAGE_TYPES: AuditUsageType[] = ['daily', 'assistant', 'workflow', 'task'];
+
+const appNameOf = (row, t) => (row.flow_type === 15 ? t('log.workbench_daily') : row.flow_name);
+const usageTypeOf = (row, t) => (row.usage_type ? t(`log.usageType.${row.usage_type}`) : '');
+
+// User candidates come from the audit scope, not the shared user directory (F003 decision 6).
+const useSessionUsers = () => {
+    const [options, setOptions] = useState<{ value: number, label: string }[]>([]);
+    const load = (keyword = '') => {
+        getAuditSessionUsersApi(keyword).then(res => setOptions(
+            (res || []).filter(u => u.user_id != null).map(u => ({ value: u.user_id, label: u.user_name })),
+        ));
+    };
+    return { options, load };
 };
 
 type Action =
@@ -46,14 +80,7 @@ const filterReducer = (state: FilterState, action: Action): FilterState => {
         case 'SET_FILTER':
             return { ...state, ...action.payload };
         case 'RESET':
-            return {
-                appName: [],
-                userName: [],
-                userGroup: '',
-                dateRange: [],
-                feedback: '',
-                sensitive_status: ''
-            };
+            return { ...INITIAL_FILTERS };
         default:
             return state;
     }
@@ -72,14 +99,17 @@ export default function AppUseLog() {
             page: page,
             page_size: param.pageSize,
             flow_ids: param.appName?.length ? param.appName : undefined,
-            user_ids: param.userName?.[0]?.value || undefined,
+            user_ids: param.userId || undefined,
             group_ids: param.userGroup || undefined,
             start_date,
             end_date,
             feedback: param.feedback || undefined,
             sensitive_status: param.sensitive_status || undefined,
+            org: param.org,
+            usage_type: param.usageType || undefined,
         })
     });
+    const sessionUsers = useSessionUsers();
     const processedData = useMemo(() =>
         datalist.map(el => ({
             ...el,
@@ -88,25 +118,11 @@ export default function AppUseLog() {
         [datalist] // Dependency: datalist
     );
 
-    const [filters, dispatch] = useReducer(filterReducer, {
-        appName: [],
-        userName: [],
-        userGroup: '',
-        dateRange: [],
-        feedback: '',
-        sensitive_status: ''
-    });
+    const [filters, dispatch] = useReducer(filterReducer, { ...INITIAL_FILTERS });
 
     const resetClick = () => {
         dispatch({ type: 'RESET' });
-        filterData({
-            appName: [],
-            userName: [],
-            userGroup: '',
-            dateRange: [],
-            feedback: '',
-            sensitive_status: ''
-        })
+        filterData({ ...INITIAL_FILTERS })
     }
     // Cache page before entering detail page, temporary solution
     const handleCachePage = () => {
@@ -189,19 +205,23 @@ export default function AppUseLog() {
 
         exportCsvDataApi({
             flow_ids: filters.appName?.length ? filters.appName : undefined,
-            user_ids: filters.userName?.[0]?.value || undefined,
+            user_ids: filters.userId || undefined,
             group_ids: filters.userGroup || undefined,
             start_date,
             end_date,
             feedback: filters.feedback || undefined,
             sensitive_status: filters.sensitive_status || undefined,
+            org: filters.org,
+            usage_type: filters.usageType || undefined,
         }).then(async res => {
             const data = [
                 [
                     t('log.csvHeaders.sessionId'),
                     t('log.csvHeaders.appName'),
+                    t('log.csvHeaders.usageType'),
                     t('log.csvHeaders.sessionCreationTime'),
                     t('log.csvHeaders.userName'),
+                    t('log.csvHeaders.org'),
                     t('log.csvHeaders.userGroup'),
                     t('log.csvHeaders.messageRole'),
                     t('log.csvHeaders.messageSendTime'),
@@ -233,9 +253,11 @@ export default function AppUseLog() {
                     const usefulMsg = !['flow', 'tool_call', 'tool_result'].includes(category) && message
                     usefulMsg && data.push([
                         item.chat_id,
-                        item.flow_type === 15 ? t('log.workbench_daily') : item.flow_name,
+                        appNameOf(item, t),
+                        usageTypeOf(item, t),
                         item.create_time.replace('T', ' '),
                         item.user_name,
+                        orgLabel(item.operator_dept_id, item.operator_dept_path, t),
                         // Join user group names with comma separator
                         (item.user_groups?.map((g: { name: string }) => g.name).join(',') ?? ''),
                         msg.category === 'question' ? t('log.userRole') : t('log.aiRole'),
@@ -268,9 +290,32 @@ export default function AppUseLog() {
         <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto px-2 py-4 pb-20">
             <div className="flex flex-wrap gap-4">
                 <FilterByApp value={filters.appName} placeholder={t('log.appName')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['appName']: value } })} />
-                <FilterByUser value={filters.userName} placeholder={t('log.userName')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['userName']: value } })} />
+                <Select
+                    {...selectLabels}
+                    allowClear
+                    showSearch
+                    className="w-[200px]"
+                    aria-label={t('log.userName')}
+                    placeholder={t('log.userName')}
+                    options={sessionUsers.options}
+                    value={filters.userId}
+                    onOpenChange={(open) => { if (open) sessionUsers.load() }}
+                    onSearch={sessionUsers.load}
+                    onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { userId: value == null ? null : Number(value) } })}
+                />
                 <FilterByUsergroup value={filters.userGroup} placeholder={t('log.userGroup')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['userGroup']: value } })} />
                 <FilterByDate value={filters.dateRange} placeholders={[`${t('log.startDate')}`, `${t('log.endDate')}`]} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['dateRange']: value } })} />
+                <OrgFilter value={filters.org} onChange={(org) => dispatch({ type: 'SET_FILTER', payload: { org } })} />
+                <Select
+                    {...selectLabels}
+                    allowClear
+                    className="w-[160px]"
+                    aria-label={t('log.usageType.label')}
+                    placeholder={t('log.usageType.label')}
+                    value={filters.usageType || null}
+                    onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { usageType: value == null ? '' : value as AuditUsageType } })}
+                    options={USAGE_TYPES.map(value => ({ value, label: t(`log.usageType.${value}`) }))}
+                />
                 <Select
                     {...selectLabels}
                     allowClear
@@ -321,6 +366,7 @@ export default function AppUseLog() {
                     <TableRow>
                         <TableHead className="w-[200px]">{t('log.appName')}</TableHead>
                         <TableHead>{t('log.userName')}</TableHead>
+                        <TableHead>{t('log.org.column')}</TableHead>
                         <TableHead>{t('log.userGroup')}</TableHead>
                         <TableHead>{t('createTime')}</TableHead>
                         <TableHead>{t('log.userFeedback')}</TableHead>
@@ -335,10 +381,13 @@ export default function AppUseLog() {
                             <TableCell className="font-medium max-w-[200px]">
                                 {/* <div className=" truncate-multiline"></div> */}
                                 <div className="truncate-multiline">
-                                    {el.flow_type === 15 ? t('log.workbench_daily') : el.flow_name}
+                                    {appNameOf(el, t)}
                                 </div>
                             </TableCell>
                             <TableCell>{el.user_name}</TableCell>
+                            <TableCell className="max-w-[200px]">
+                                <div className="truncate-multiline break-all">{orgLabel(el.operator_dept_id, el.operator_dept_path, t)}</div>
+                            </TableCell>
                             <TableCell>{el.userGroupsString}</TableCell>
                             <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                             <TableCell className="break-all flex gap-2">
@@ -376,7 +425,7 @@ export default function AppUseLog() {
                                 {/* <Button variant="link" className="" onClick={() => setOpenData(true)}>Add to dataset</Button> */}
                                 {
                                     el.chat_id && <Button asChild size="small" variant="link"><Link
-                                        to={el.flow_type === 15 ? `/log/chatlog/${el.chat_id}` : `/log/chatlog/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
+                                        to={DAILY_FLOW_TYPES.includes(el.flow_type) ? `/log/chatlog/${el.chat_id}` : `/log/chatlog/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
                                         onClick={handleCachePage}
                                     >{t('lib.details')}</Link></Button>
                                 }

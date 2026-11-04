@@ -95,7 +95,7 @@ _RESOURCE_COUNT_TEMPLATES: dict[str, str] = {
         "AND scm.status IN ('ACTIVE','PENDING') "
         "AND {qualified_col}=:{param}"
     ),
-    "workflow": "SELECT COUNT(*) FROM flow WHERE {col}=:{param} AND flow_type=10 AND status!=0",
+    "workflow": "SELECT COUNT(*) FROM flow WHERE {col}=:{param} AND flow_type=10 AND status!=0 AND is_delete=0",
     "assistant": "SELECT COUNT(*) FROM flow WHERE {col}=:{param} AND flow_type=5 AND status!=0",
     # KI-01 fix: actual table is `t_gpts_tools` (t_ prefix); `gpts_tools`
     # does not exist on any deployment.

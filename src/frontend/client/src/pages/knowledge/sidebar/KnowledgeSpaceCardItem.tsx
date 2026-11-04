@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import { KnowledgeSpaceFolderArt } from "./KnowledgeSpaceFolderArt";
 
 import { KnowledgeSpace } from "~/api/knowledge";
-import { KnowledgeSpaceIcon } from "~/components/illustrations";
 import { Dropdown, DropdownItem, DropdownSeparator } from "@bisheng/ui";
 import { ActionMenuLoadingRow } from "~/components/ActionMenu";
 import { useConfirm } from "~/Providers";
@@ -13,6 +12,7 @@ import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import { DemoTag } from "~/mock/demo/DemoTag";
 import { formatTimeCard } from "../knowledgeUtils";
+import { knowledgeSpaceIcons } from "../knowledgeSpaceIcons";
 
 
 interface KnowledgeSpaceCardItemProps {
@@ -214,7 +214,7 @@ export default function KnowledgeSpaceCardItem({
       }`}
       onClick={() => onSelect(space)}
     >
-      <KnowledgeSpaceIcon className="size-12 shrink-0" aria-hidden />
+      <img src={knowledgeSpaceIcons[type]} className="size-8 shrink-0 object-contain" width={32} height={32} alt="" />
       <div className="min-w-0 flex-1">
         {nameRow}
         {updatedAt}

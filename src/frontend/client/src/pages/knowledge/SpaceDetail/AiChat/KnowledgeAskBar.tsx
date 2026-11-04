@@ -1,9 +1,9 @@
 /**
- * KnowledgeAskBar — desktop bottom bar of a knowledge space. It only TAKES the question:
+ * KnowledgeAskBar — bottom bar of a knowledge space on every screen size. It takes the question:
  * sending hands it to the main chat (see ~/components/Chat/chatAskHandoff), which
  * opens a fresh conversation with this space mounted. The answer, and every later turn,
  * live on the 对话 page and in the workbench sidebar's conversation list — the space page
- * keeps no chat panel or history of its own on desktop.
+ * keeps no chat panel or history of its own.
  *
  * The current space and optional tag filter accompany the handoff. Folder scope
  * remains local to the mobile in-place dock.
@@ -14,7 +14,7 @@
 import { useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getSpaceTagsApi } from "~/api/knowledge";
-import type { FolderChatTag } from "~/hooks/useFolderChat";
+import type { KnowledgeInputTag } from "./KnowledgeAiInput";
 import { useNavigate } from "react-router-dom";
 import { parkChatAsk } from "~/components/Chat/chatAskHandoff";
 import { useLocalize, useNewConvo } from "~/hooks";
@@ -46,7 +46,7 @@ export function KnowledgeAskBar({ spaceId, spaceName, modelValue }: KnowledgeAsk
         retry: false,
     });
     const refreshTags = useCallback(() => { void refetch(); }, [refetch]);
-    const handleSend = (text: string, _files?: unknown[] | null, tag?: FolderChatTag) => {
+    const handleSend = (text: string, _files?: unknown[] | null, tag?: KnowledgeInputTag) => {
         const question = text.trim();
         if (!question || !model) return;
         parkChatAsk({ text: question, modelId: Number(model.id), space: { id: spaceId, name: spaceName, ...(tag ? { tag } : {}) } });
@@ -56,7 +56,7 @@ export function KnowledgeAskBar({ spaceId, spaceName, modelValue }: KnowledgeAsk
     };
 
     return (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex flex-col bg-gradient-to-b from-white/0 to-white px-4 pb-4 pt-10">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex flex-col bg-gradient-to-b from-white/0 to-white px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-10">
             <div className="pointer-events-auto relative mx-auto flex w-full max-w-[800px] flex-col">
                 <KnowledgeAiInput
                     key={spaceId}

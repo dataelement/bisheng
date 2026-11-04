@@ -69,3 +69,12 @@ async def test_expired_runtime_settles_stale_card(monkeypatch, runtime_exists):
     client.workflow = callback if runtime_exists else None
     await client.handle_user_input({})
     assert sent == [{"category": "processing", "type": "close", "message": ""}]
+
+
+async def test_deleted_builder_preview_cannot_execute(monkeypatch):
+    client, _sent = make_client(monkeypatch, FakeRedisCallback(), online=False)
+    client.chat_id = ""
+    client.websocket = SimpleNamespace(send_json=AsyncMock())
+    monkeypatch.setattr(module.FlowDao, "get_flow_by_id", lambda _: None)
+    assert await client.ensure_workflow_available("deleted") is False
+    assert client.websocket.send_json.call_args.args[0]["message"]["status_code"] == 13010

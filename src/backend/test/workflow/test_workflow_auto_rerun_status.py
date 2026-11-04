@@ -1,5 +1,6 @@
 import asyncio
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -51,6 +52,7 @@ def make_client(monkeypatch, callback, *, has_history=True, online=True):
     client.session_subject = None
     client.execution_snapshot = None
     client.hash_key = None
+    monkeypatch.setattr(workflow_client_module, "ensure_client_execution_lease", AsyncMock(return_value="skipped"))
     client.websocket = object()
     client.run_lock = asyncio.Lock()
 

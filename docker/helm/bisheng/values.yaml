@@ -10,7 +10,7 @@ backend:
   replicaCount: 1
   image:
     repository: dataelement/bisheng-backend
-    tag: v3.0.0-beta1
+    tag: v3.0.0
     pullPolicy: IfNotPresent
   service:
     port: 7860
@@ -26,7 +26,7 @@ worker:
   replicaCount: 1
   image:
     repository: dataelement/bisheng-backend
-    tag: v3.0.0-beta1
+    tag: v3.0.0
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -42,7 +42,7 @@ linsight:
   replicaCount: 1
   image:
     repository: dataelement/bisheng-backend
-    tag: v3.0.0-beta1
+    tag: v3.0.0
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -56,7 +56,7 @@ frontend:
   replicaCount: 1
   image:
     repository: dataelement/bisheng-frontend
-    tag: v3.0.0-beta1
+    tag: v3.0.0
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
