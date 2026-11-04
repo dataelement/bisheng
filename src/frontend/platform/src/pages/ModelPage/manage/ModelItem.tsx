@@ -280,6 +280,9 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                                 {t('model.insertParamsExample')}
                             </Button>
                         </div>
+                        {modelType === 'llm' && type !== 'ollama' && (
+                            <p className="mt-1 text-xs text-muted-foreground">{t('model.contextWindowParamTip')}</p>
+                        )}
                         <Textarea aria-label={t('model.pasteAdvancedParamsHere')} value={draftParams} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => handleDraftChange(e.target.value)} rows={10} placeholder={paramsTemplate} textareaClassName={`mt-1 font-mono text-sm ${jsonError ? 'border-red-500 focus-visible:ring-red-500' : ''}`} />
                         {jsonError && (
                             <span className="mt-1 inline-block text-xs text-red-500">
