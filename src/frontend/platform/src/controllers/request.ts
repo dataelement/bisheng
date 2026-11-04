@@ -1,5 +1,7 @@
 // @ts-strict-ignore
 import { decodeErrorEnvelope, isApiError, isErrorEnvelope, normalizeApiError, resolveErrorMessageTemplate } from '@bisheng/api-client';
+import { KUNLIAN_CSRF_PATH, isBrowserIdentityUrl, kunlianFailure } from '@bisheng/api-client';
+import { kunlianSession } from './kunlianSession';
 import { notification } from '@bisheng/ui';
 
 import axios from "axios";
@@ -68,8 +70,14 @@ function beginSessionKick(envelope: unknown): boolean {
     return true
 }
 
-customAxios.interceptors.request.use(function (config) {
+customAxios.interceptors.request.use(async function (config) {
     Object.assign(config.headers, requestAuthHeaders(config.url || ''));
+    if (kunlianSession.isKunlian() && isBrowserIdentityUrl(config.url || '')) {
+        for (const name of Object.keys(config.headers)) if (name.toLowerCase() === 'authorization') delete config.headers[name];
+        if (!['get', 'head', 'options'].includes((config.method || 'get').toLowerCase())) {
+            Object.assign(config.headers, await requestWriteHeaders(config.url || ''));
+        }
+    }
     config.managementScopeSnapshot = managementRequestScope();
     if (requiresManagementScope(config.method || 'get',config.url || '') && config.managementScopeSnapshot !== null) {
         config.headers['X-Management-Tenant'] = String(config.managementScopeSnapshot);
@@ -182,11 +190,18 @@ export async function handleRequestResponse(response) {
     if (!isErrorEnvelope(envelope)) return response.data;
     if (envelope.status_code === 200) {
         const url = response.config?.url || '';
+        if (url.split('?')[0] === '/api/v1/user/login') kunlianSession.resetAfterExplicitLogin();
+        if (url.split('?')[0] === '/api/v1/user/info' && !kunlianSession.confirmUser(envelope.data)) {
+            return Promise.reject(normalizeApiError(new Error('KUNLIAN_LOGIN_SOURCE_MISMATCH'), {
+                message: String(i18next.t('shared:kunlian.source_mismatch')),
+            }));
+        }
         if (url.includes('/user/login') || url.includes('/user/info')) clearSessionKickAck();
         return binary ? response.data : envelope.data;
     }
     if (envelope.status_code === 11010) return envelope;
     const error = await responseError(envelope, response);
+    if (presentKunlianFailure(error, response.config?.url || '', response.config?.silent)) return Promise.reject(error);
     if (response.config.silent) return Promise.reject(error);
     const statusCode = envelope.status_code;
     if (statusCode === 11001) {
@@ -221,6 +236,8 @@ export async function handleRequestResponse(response) {
 
 export async function handleRequestError(cause) {
     const error = await responseError(cause);
+    if (presentKunlianFailure(error, cause.config?.url || '', cause.config?.silent)) return Promise.reject(error);
+    if (cause.config?.url?.split('?')[0] === KUNLIAN_CSRF_PATH) return Promise.reject(error);
     if (error.httpStatus === 401) {
         error.presentation = 'global';
         if (sessionKickInProgress) return Promise.reject(error);
@@ -262,6 +279,40 @@ export function handleUiRequest<Args extends unknown[]>(handler: (...args: Args)
 }
 
 export function requestAuthHeaders(url: string): Record<string, string> {
+    if (kunlianSession.isKunlian() && isBrowserIdentityUrl(url)) return {};
     const token = localStorage.getItem("ws_token");
     return token && !/^\/bisheng/.test(url) ? { Authorization: `Bearer ${token}` } : {};
+}
+
+let csrfPending: Promise<string> | null = null;
+export async function requestWriteHeaders(url: string): Promise<Record<string, string>> {
+    const headers = requestAuthHeaders(url);
+    if (!kunlianSession.isKunlian() || !isBrowserIdentityUrl(url)) return headers;
+    if (!csrfPending) {
+        csrfPending = customAxios.get(KUNLIAN_CSRF_PATH, { silent: true }).then(reply => {
+            const data = reply as unknown as { auth_source?: unknown; csrf_token?: unknown };
+            if (data?.auth_source !== 'kunlian' || typeof data.csrf_token !== 'string' || !/^[0-9a-f]{64}$/.test(data.csrf_token)) {
+                throw new Error('KUNLIAN_CSRF_UNAVAILABLE');
+            }
+            return data.csrf_token;
+        }).finally(() => { csrfPending = null; });
+    }
+    return { ...headers, 'X-CSRF-Token': await csrfPending };
+}
+
+function presentKunlianFailure(error, url: string, silent = false): boolean {
+    const reason = kunlianFailure(error, error.httpStatus);
+    if (!reason) return false;
+    if (url.split('?')[0] === '/api/v1/user/info') {
+        kunlianSession.expectLocalProtocol();
+        if (reason !== 'SESSION_EXPIRED') kunlianSession.deferAutomaticLogin();
+    }
+    kunlianSession.observeFailure(reason);
+    if (reason === 'SESSION_EXPIRED' && !silent && ![KUNLIAN_CSRF_PATH, '/api/v1/user/logout'].includes(url.split('?')[0])) {
+        kunlianSession.reauthorize();
+    } else if (!silent && kunlianSession.shouldPresent(reason)) {
+        showApiError(error);
+    }
+    if (!silent) error.presentation = 'global';
+    return true;
 }

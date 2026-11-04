@@ -83,7 +83,11 @@ class UserService:
     @classmethod
     def _persist_profile_in_session(cls, session, changed: User) -> User:
         from bisheng.user.domain.repositories.dsh_profile import UserDshProfileRepository
+        from bisheng.user.domain.repositories.external_identity_projection import (
+            UserExternalIdentityProjectionRepository,
+        )
 
+        UserExternalIdentityProjectionRepository.guard_profile_update(session, changed)
         user, profile_changed = UserDshProfileRepository.apply_detached_changes(session, changed)
         if cls._dsh_enabled() and profile_changed:
             cls._record_profile_in_session(session, user)
@@ -110,6 +114,31 @@ class UserService:
             user = await session.run_sync(lambda sync: cls._persist_profile_in_session(sync, changed))
             await session.commit()
             return user
+
+    @staticmethod
+    def assert_unreserved_identity(source: str, external_id: str | None):
+        from bisheng.user.domain.repositories.external_identity_projection import (
+            UserExternalIdentityProjectionRepository,
+        )
+
+        UserExternalIdentityProjectionRepository.reject_reserved_creation(source, external_id)
+
+    @classmethod
+    async def aset_kunlian_account_status(cls, user_id: int, *, disabled: bool) -> User:
+        from bisheng.core.context.tenant import tenant_execution_scope
+        from bisheng.sso_sync.application.kunlian import KunlianManualAccountApplication
+        from bisheng.user.application.external_identity import (
+            KunlianExternalIdentityApplication,
+            UserExternalIdentityProjectionRepository,
+        )
+
+        with tenant_execution_scope(1):
+            await KunlianManualAccountApplication().set_account_status(
+                user_id,
+                disabled=disabled,
+                user_owner=KunlianExternalIdentityApplication(UserExternalIdentityProjectionRepository()),
+            )
+            return await UserDao.aget_user(user_id)
 
     @classmethod
     async def activate_tenant_with_profile(cls, user_id: int, tenant_id: int):
@@ -286,6 +315,7 @@ class UserService:
         """
         Create User
         """
+        cls.assert_unreserved_identity("local", req_data.user_name)
         user = User(
             user_name=req_data.user_name,
             password=cls.decrypt_md5_password_strict(req_data.password),
@@ -350,6 +380,7 @@ class UserService:
 
     @classmethod
     async def user_register(cls, user: UserCreate):
+        cls.assert_unreserved_identity(user.source, user.external_id)
         # Captcha Verification
         if settings.get_from_db("use_captcha"):
             if not user.captcha_key or not await verify_captcha(user.captcha, user.captcha_key):
@@ -545,6 +576,15 @@ class UserService:
 
         # Accept names or external_id; check each matching account when names repeat.
         candidates = await UserDao.aget_login_candidates_by_account(user.user_name)
+        if candidates:
+            candidates = [
+                candidate
+                for candidate in candidates
+                if (getattr(candidate, "source", "local") or "").strip().casefold() != "kunlian"
+            ]
+            if not candidates:
+                # 即使管理员重设过密码。专属账号仍必须完成统一身份认证。
+                return UserValidateError.return_resp()
         if not candidates:
             # Disabled users are excluded from candidates; report the disabled account separately.
             if await UserDao.aexists_disabled_login_account(user.user_name):

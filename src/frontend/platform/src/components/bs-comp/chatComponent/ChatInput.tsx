@@ -133,7 +133,8 @@ export default function ChatInput({ clear, form, inputForm, wsUrl, onBeforSend, 
 
         return new Promise((res, rej) => {
             try {
-                const ws = new WebSocket(`${webSocketProtocol}://${wsUrl}&chat_id=${chatId}`)
+                const separator = wsUrl.includes('?') ? '&' : '?';
+                const ws = new WebSocket(`${webSocketProtocol}://${wsUrl}${separator}chat_id=${encodeURIComponent(chatId)}`)
                 wsRef.current = ws
                 // websocket linsen
                 ws.onopen = () => {

@@ -5,6 +5,7 @@ import type { UseMutationResult } from '@tanstack/react-query';
 import type * as t from '~/types/chat';
 import useClearStates from '~/hooks/Config/useClearStates';
 import store from '~/store';
+import { logoutUserApi } from '~/api/user';
 
 /* login/logout */
 export const useLogoutUserMutation = (
@@ -16,7 +17,7 @@ export const useLogoutUserMutation = (
   const setQueriesEnabled = useSetRecoilState<boolean>(store.queriesEnabled);
 
   return useMutation([MutationKeys.logoutUser], {
-    mutationFn: () => dataService.logout(),
+    mutationFn: logoutUserApi,
     ...(options || {}),
     onSuccess: (...args) => {
       setQueriesEnabled(false);

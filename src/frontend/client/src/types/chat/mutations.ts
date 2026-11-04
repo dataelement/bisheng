@@ -1,4 +1,5 @@
 import * as types from './types';
+import type { KunlianLogoutAction } from '@bisheng/api-client';
 import * as r from './roles';
 import {
   Tools,
@@ -333,6 +334,9 @@ export type EditArtifactOptions = MutationOptions<
 export type TLogoutResponse = {
   message: string;
   redirect?: string;
+    auth_source?: 'kunlian';
+    local_logged_out?: true;
+    next_action?: KunlianLogoutAction | null;
 };
 
 export type LogoutOptions = MutationOptions<TLogoutResponse, undefined>;

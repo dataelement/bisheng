@@ -217,6 +217,11 @@ class ChatManager:
         client_id,
         message_admission: Callable[[], AbstractAsyncContextManager[ChatMessageExecution]] | None = None,
     ) -> bool:
+        if message_admission is None and getattr(login_user, "auth_source", None) == "kunlian":
+            from bisheng.common.errcode.sso_sync import KunlianTrustRejectedError
+
+            raise KunlianTrustRejectedError()
+
         async def deliver(execution=None):
             operator = execution.operator if execution is not None else login_user
             if not await self._has_use_action(operator, work_type, client_id):

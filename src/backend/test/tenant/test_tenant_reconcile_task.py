@@ -64,7 +64,7 @@ def patches(monkeypatch):
         sys.modules["bisheng.user.domain.models.user"] = user_mod
     user_dao = MagicMock()
     user_dao.alist_users_after_id = list_users
-    user_mod.UserDao = user_dao
+    monkeypatch.setattr(user_mod, "UserDao", user_dao)
 
     monkeypatch.setattr(
         reconcile_mod.UserTenantReconcileService,
@@ -140,3 +140,60 @@ class TestReconcileAsync:
 
         patches.find_drifted.assert_not_awaited()
         patches.sync.assert_not_awaited()
+
+
+def test_registered_task_uses_real_reconcile_service_and_excludes_kunlian():
+    # 通用 conftest 预模拟整个 Celery 包。独立进程验证真实注册与 apply。
+    import subprocess
+    import textwrap
+
+    script = textwrap.dedent("""
+        import asyncio
+        import importlib
+        import sys
+        from types import ModuleType, SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+        from celery import Celery
+        for name in ('celery.schedules', 'celery.app', 'celery.app.task', 'celery.signals'):
+            importlib.import_module(name)
+        app = Celery('f118-reconcile-fixture', broker='memory://', backend='cache+memory://')
+        from test.fixtures.mock_services import premock_import_chain
+        premock_import_chain()
+        main = ModuleType('bisheng.worker.main')
+        main.bisheng_celery = app
+        sys.modules['bisheng.worker.main'] = main
+        name = 'bisheng.worker.tenant_reconcile.tasks'
+        from pathlib import Path
+        for package_name, directory in (('bisheng.worker', 'bisheng/worker'), ('bisheng.worker.tenant_reconcile', 'bisheng/worker/tenant_reconcile')):
+            package = ModuleType(package_name)
+            package.__path__ = [str(Path(directory).resolve())]
+            sys.modules[package_name] = package
+        spec = importlib.util.spec_from_file_location(name, 'bisheng/worker/tenant_reconcile/tasks.py')
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        from bisheng.database.models.department import UserDepartmentDao
+        from bisheng.database.models.tenant import UserTenantDao
+        from bisheng.tenant.domain.repositories.external_membership import ExternalMembershipRepository
+        from bisheng.tenant.domain.services.user_tenant_reconcile_service import UserTenantReconcileContext, UserTenantReconcileService
+        from bisheng.tenant.domain.services.user_tenant_sync_service import UserTenantSyncService
+        from bisheng.tenant.domain.constants import UserTenantSyncTrigger
+        from bisheng.user.domain.models.user import UserDao
+        sync = AsyncMock()
+        with (patch.object(module, 'run_async_task', lambda fn: asyncio.run(fn())),
+              patch.object(UserDao, 'alist_users_after_id', AsyncMock(side_effect=[[SimpleNamespace(user_id=17), SimpleNamespace(user_id=18)], []])),
+              patch.object(ExternalMembershipRepository, 'find_external_user_ids', AsyncMock(return_value=frozenset({17}))),
+              patch.object(UserDepartmentDao, 'aget_primary_department_paths_by_user_ids', AsyncMock(return_value={})),
+              patch.object(UserTenantDao, 'aget_active_tenant_ids_by_user_ids', AsyncMock(return_value={17: 7, 18: 7})),
+              patch.object(UserTenantReconcileService, 'load_context', AsyncMock(return_value=UserTenantReconcileContext({}, frozenset({1, 7})))),
+              patch.object(UserTenantSyncService, 'sync_user', sync)):
+            task = app.tasks[name + '.reconcile_user_tenant_assignments']
+            assert task.run.__globals__ is module.__dict__
+            assert task.apply(throw=True, headers={'tenant_id': 1}).successful()
+            sync.assert_awaited_once_with(18, trigger=UserTenantSyncTrigger.CELERY_RECONCILE)
+        app.close()
+        print('PASS registered Celery task -> real reconciliation service')
+    """)
+    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "PASS registered Celery task" in result.stdout

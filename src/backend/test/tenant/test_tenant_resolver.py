@@ -20,46 +20,50 @@ from bisheng.tenant.domain.services.tenant_resolver import (
     _parent_dept_id_from_path,
 )
 
-
 # -------------------------------------------------------------------------
 # _parent_dept_id_from_path helper
 # -------------------------------------------------------------------------
 
-class TestParentDeptIdFromPath:
 
+class TestParentDeptIdFromPath:
     def test_typical_path_finds_parent(self):
         # path /1/5/12/ with current=12 → parent=5
-        assert _parent_dept_id_from_path('/1/5/12/', 12) == 5
+        assert _parent_dept_id_from_path("/1/5/12/", 12) == 5
 
     def test_path_current_is_root_segment(self):
-        assert _parent_dept_id_from_path('/1/', 1) is None
+        assert _parent_dept_id_from_path("/1/", 1) is None
 
     def test_empty_path(self):
-        assert _parent_dept_id_from_path('', 1) is None
+        assert _parent_dept_id_from_path("", 1) is None
 
     def test_non_numeric_segments_skipped(self):
-        assert _parent_dept_id_from_path('/1/bad/5/', 5) == 1
+        assert _parent_dept_id_from_path("/1/bad/5/", 5) == 1
 
     def test_current_not_in_path_returns_last(self):
         # defensive: caller passed dept that's been removed from path
-        assert _parent_dept_id_from_path('/1/5/', 99) == 5
+        assert _parent_dept_id_from_path("/1/5/", 99) == 5
 
 
 # -------------------------------------------------------------------------
 # resolve_user_leaf_tenant
 # -------------------------------------------------------------------------
 
-def _tenant(tid: int, status: str = 'active'):
+
+def _tenant(tid: int, status: str = "active"):
     return SimpleNamespace(
-        id=tid, tenant_code=f't{tid}', tenant_name=f'T{tid}',
+        id=tid,
+        tenant_code=f"t{tid}",
+        tenant_name=f"T{tid}",
         parent_tenant_id=None if tid == 1 else 1,
-        status=status, share_default_to_children=True,
+        status=status,
+        share_default_to_children=True,
     )
 
 
 def _dept(did: int, path: str, mounted_tenant_id=None, is_tenant_root=1):
     return SimpleNamespace(
-        id=did, path=path,
+        id=did,
+        path=path,
         mounted_tenant_id=mounted_tenant_id,
         is_tenant_root=is_tenant_root,
     )
@@ -67,7 +71,9 @@ def _dept(did: int, path: str, mounted_tenant_id=None, is_tenant_root=1):
 
 def _user_dept(user_id: int, department_id: int):
     return SimpleNamespace(
-        user_id=user_id, department_id=department_id, is_primary=1,
+        user_id=user_id,
+        department_id=department_id,
+        is_primary=1,
     )
 
 
@@ -79,28 +85,32 @@ def patch_daos(monkeypatch):
     """
     from bisheng.tenant.domain.services import tenant_resolver as tr
 
-    primary_mock = AsyncMock(name='aget_user_primary_department')
-    mount_mock = AsyncMock(name='aget_ancestors_with_mount')
-    tenant_mock = AsyncMock(name='aget_by_id')
+    monkeypatch.setattr(tr, "resolve_external_tenant_if_any", AsyncMock(return_value=None), raising=False)
+    primary_mock = AsyncMock(name="aget_user_primary_department")
+    mount_mock = AsyncMock(name="aget_ancestors_with_mount")
+    tenant_mock = AsyncMock(name="aget_by_id")
 
-    monkeypatch.setattr(tr.UserDepartmentDao, 'aget_user_primary_department', primary_mock)
-    monkeypatch.setattr(tr.DepartmentDao, 'aget_ancestors_with_mount', mount_mock)
-    monkeypatch.setattr(tr.TenantDao, 'aget_by_id', tenant_mock)
+    monkeypatch.setattr(tr.UserDepartmentDao, "aget_user_primary_department", primary_mock)
+    monkeypatch.setattr(tr.DepartmentDao, "aget_ancestors_with_mount", mount_mock)
+    monkeypatch.setattr(tr.TenantDao, "aget_by_id", tenant_mock)
 
     return SimpleNamespace(
-        primary=primary_mock, mount=mount_mock, tenant=tenant_mock,
+        primary=primary_mock,
+        mount=mount_mock,
+        tenant=tenant_mock,
     )
 
 
 class TestResolveUserLeafTenant:
-
     def test_happy_path_active_mount(self, patch_daos):
         """User's dept path hits an active mount → returns that Tenant."""
         patch_daos.primary.return_value = _user_dept(100, 12)
         patch_daos.mount.return_value = _dept(
-            12, '/1/5/12/', mounted_tenant_id=5,
+            12,
+            "/1/5/12/",
+            mounted_tenant_id=5,
         )
-        patch_daos.tenant.return_value = _tenant(5, status='active')
+        patch_daos.tenant.return_value = _tenant(5, status="active")
 
         result = asyncio.run(TenantResolver.resolve_user_leaf_tenant(100))
         assert result.id == 5
@@ -109,7 +119,7 @@ class TestResolveUserLeafTenant:
     def test_no_primary_dept_returns_root(self, patch_daos):
         """AC-03: no primary dept → Root."""
         patch_daos.primary.return_value = None
-        patch_daos.tenant.return_value = _tenant(1, status='active')
+        patch_daos.tenant.return_value = _tenant(1, status="active")
 
         result = asyncio.run(TenantResolver.resolve_user_leaf_tenant(101))
         assert result.id == 1
@@ -124,12 +134,12 @@ class TestResolveUserLeafTenant:
         # First call: dept 12 is mount point to tenant 5 (disabled).
         # Second call (with current_dept_id = parent 5): mount point → tenant 3.
         patch_daos.mount.side_effect = [
-            _dept(12, '/1/5/12/', mounted_tenant_id=5),
-            _dept(5, '/1/5/', mounted_tenant_id=3),
+            _dept(12, "/1/5/12/", mounted_tenant_id=5),
+            _dept(5, "/1/5/", mounted_tenant_id=3),
         ]
         patch_daos.tenant.side_effect = [
-            _tenant(5, status='disabled'),
-            _tenant(3, status='active'),
+            _tenant(5, status="disabled"),
+            _tenant(3, status="active"),
         ]
 
         result = asyncio.run(TenantResolver.resolve_user_leaf_tenant(102))
@@ -143,15 +153,15 @@ class TestResolveUserLeafTenant:
         # dept 5 mount → tenant 3 archived → walk to parent 1 (root dept)
         # dept 1 is the root segment; no parent → stop walking
         patch_daos.mount.side_effect = [
-            _dept(12, '/1/5/12/', mounted_tenant_id=5),
-            _dept(5, '/1/5/', mounted_tenant_id=3),
+            _dept(12, "/1/5/12/", mounted_tenant_id=5),
+            _dept(5, "/1/5/", mounted_tenant_id=3),
             None,  # no mount point at or above dept 1
         ]
         patch_daos.tenant.side_effect = [
-            _tenant(5, status='disabled'),
-            _tenant(3, status='archived'),
+            _tenant(5, status="disabled"),
+            _tenant(3, status="archived"),
             # Final fallback: Root (id=1) fetch
-            _tenant(1, status='active'),
+            _tenant(1, status="active"),
         ]
 
         result = asyncio.run(TenantResolver.resolve_user_leaf_tenant(103))
@@ -161,7 +171,7 @@ class TestResolveUserLeafTenant:
         """Primary dept path has no mount points at all → Root."""
         patch_daos.primary.return_value = _user_dept(104, 20)
         patch_daos.mount.return_value = None  # no mount point up the tree
-        patch_daos.tenant.return_value = _tenant(1, status='active')
+        patch_daos.tenant.return_value = _tenant(1, status="active")
 
         result = asyncio.run(TenantResolver.resolve_user_leaf_tenant(104))
         assert result.id == 1
@@ -170,12 +180,12 @@ class TestResolveUserLeafTenant:
         """Mount points to tenant_id=99 but row was deleted → continue up."""
         patch_daos.primary.return_value = _user_dept(105, 12)
         patch_daos.mount.side_effect = [
-            _dept(12, '/1/12/', mounted_tenant_id=99),
+            _dept(12, "/1/12/", mounted_tenant_id=99),
             None,  # no more mount points up the tree
         ]
         patch_daos.tenant.side_effect = [
-            None,               # tenant 99 not in DB
-            _tenant(1, status='active'),  # Root fallback
+            None,  # tenant 99 not in DB
+            _tenant(1, status="active"),  # Root fallback
         ]
 
         result = asyncio.run(TenantResolver.resolve_user_leaf_tenant(105))
@@ -194,13 +204,32 @@ class TestResolveUserLeafTenant:
         #         returns 5 (current_id-not-in-path branch: last segment).
         #         current becomes 5 again — revisit detected.
         patch_daos.mount.side_effect = [
-            _dept(12, '/1/5/12/', mounted_tenant_id=5),
-            _dept(12, '/1/5/', mounted_tenant_id=5),  # id-not-in-path
+            _dept(12, "/1/5/12/", mounted_tenant_id=5),
+            _dept(12, "/1/5/", mounted_tenant_id=5),  # id-not-in-path
         ]
         patch_daos.tenant.side_effect = [
-            _tenant(5, status='disabled'),
-            _tenant(5, status='disabled'),
+            _tenant(5, status="disabled"),
+            _tenant(5, status="disabled"),
         ]
 
         with pytest.raises(TenantCycleDetectedError):
             asyncio.run(TenantResolver.resolve_user_leaf_tenant(106))
+
+
+@pytest.mark.parametrize("missing", [False, True])
+async def test_kunlian_explicit_authority_never_uses_department_root_fallback(patch_daos, monkeypatch, missing):
+    from bisheng.common.errcode.sso_sync import KunlianIdentityUnavailableError
+    from bisheng.tenant.domain.services import tenant_resolver as module
+
+    authority = AsyncMock(return_value=_tenant(7))
+    if missing:
+        authority.side_effect = KunlianIdentityUnavailableError()
+    monkeypatch.setattr(module, "resolve_external_tenant_if_any", authority, raising=False)
+    patch_daos.primary.return_value = None
+    patch_daos.tenant.return_value = _tenant(1)
+    if missing:
+        with pytest.raises(KunlianIdentityUnavailableError):
+            await module.TenantResolver.resolve_user_leaf_tenant(17)
+    else:
+        assert (await module.TenantResolver.resolve_user_leaf_tenant(17)).id == 7
+    patch_daos.primary.assert_not_awaited()

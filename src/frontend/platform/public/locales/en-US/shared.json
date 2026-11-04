@@ -156,5 +156,15 @@
       "source_untitled": "Untitled"
     },
     "com_msg_source_reference": "Reference"
+  },
+  "kunlian": {
+    "dependency_unavailable": "Identity verification is unavailable. Try again later.",
+    "directory_pending": "The directory is not ready. Sign in again after synchronization.",
+    "local_signed_out": "Signed out of the local BiSheng session.",
+    "login": "Sign in with Kunlian",
+    "logout_retry": "Sign-out did not complete. Try again.",
+    "reauthorize": "Sign in again",
+    "remote_incomplete": "Signed out of BiSheng. Kunlian sign-out is incomplete.",
+    "source_mismatch": "Single sign-on did not complete. Sign in again through Kunlian."
   }
 }

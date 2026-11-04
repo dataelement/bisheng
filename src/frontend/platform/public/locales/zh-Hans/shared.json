@@ -156,5 +156,15 @@
       "source_untitled": "暂无标题"
     },
     "com_msg_source_reference": "参考来源"
+  },
+  "kunlian": {
+    "dependency_unavailable": "认证服务暂时不可用，请稍后重试。",
+    "directory_pending": "用户目录尚未就绪，请同步完成后重新登录。",
+    "local_signed_out": "已退出毕昇本地会话。",
+    "login": "昆联统一登录",
+    "logout_retry": "退出未完成，请重试。",
+    "reauthorize": "重新登录",
+    "remote_incomplete": "已退出毕昇，昆联退出尚未完成。",
+    "source_mismatch": "本次统一登录未完成，请从昆联入口重新登录。"
   }
 }

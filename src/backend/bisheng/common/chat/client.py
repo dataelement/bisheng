@@ -45,11 +45,15 @@ from bisheng_langchain.gpts.message_types import LiberalToolMessage
 @dataclass(frozen=True, slots=True)
 class ChatMessageExecution:
     operator: UserPayload
-    execution_snapshot: Mapping[str, object]
+    execution_snapshot: Mapping[str, object] | None
     session_subject: object | None = None
+    causal_context: Mapping[str, object] | None = None
 
     def __post_init__(self):
-        object.__setattr__(self, "execution_snapshot", MappingProxyType(dict(self.execution_snapshot)))
+        if self.execution_snapshot is not None:
+            object.__setattr__(self, "execution_snapshot", MappingProxyType(dict(self.execution_snapshot)))
+        if self.causal_context is not None:
+            object.__setattr__(self, "causal_context", MappingProxyType(dict(self.causal_context)))
 
 
 class ChatClient:

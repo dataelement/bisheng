@@ -1,6 +1,123 @@
 """SSO realtime sync configuration model (F014-sso-org-realtime-sync)."""
 
+from ipaddress import ip_network
+from urllib.parse import urlsplit
+
 from pydantic import BaseModel, Field
+
+
+class KunlianConf(BaseModel):
+    """只声明受控配置。未就绪不允许开启昆联登录。"""
+
+    directory_enabled: bool = False
+    login_enabled: bool = False
+    connection_id: str = ""
+    policy_revision: int = Field(default=1, ge=1, strict=True)
+    issuer: str = ""
+    client_id: str = ""
+    allowed_tenant_id: str = ""
+    public_origin: str = ""
+    redirect_uri: str = ""
+    logout_redirect_uri: str = ""
+    endpoint_allowlist: list[str] = Field(default_factory=list)
+    approved_test_origins: list[str] = Field(default_factory=list)
+    client_secret_reference: str = Field(default="", repr=False)
+    sync_key_reference: str = Field(default="", repr=False)
+    internal_key_id: str = ""
+    internal_secret_reference: str = Field(default="", repr=False)
+    trusted_gateway_networks: list[str] = Field(default_factory=list)
+    csrf_secret_reference: str = Field(default="", repr=False)
+    encryption_secret_reference: str = Field(default="", repr=False)
+    max_directory_age_seconds: int | None = Field(default=None, gt=0)
+    allowed_workspace_ids: list[str] = Field(default_factory=list)
+    state_semantics_revision: str = ""
+    session_max_seconds: int = Field(default=28800, gt=0, le=28800)
+    introspection_timeout_seconds: float = Field(default=2, gt=0)
+    http_pool_limit: int = Field(default=20, gt=0)
+    sync_timeout_seconds: int = Field(default=900, gt=0)
+    get_retry_budget: int = Field(default=3, ge=0, le=10)
+    transaction_ttl_seconds: int = Field(default=300, gt=0)
+    page_size: int = Field(default=20, ge=1, le=100)
+    sync_interval_seconds: int = Field(default=300, gt=0)
+
+    def readiness_reasons(self, *, multi_tenant_enabled: bool) -> tuple[str, ...]:
+        """只评估配置前置条件。完整目录和投影就绪由应用服务检查。"""
+        reasons = []
+        if not self.login_enabled:
+            reasons.append("LOGIN_DISABLED")
+        if not self.directory_enabled:
+            reasons.append("DIRECTORY_DISABLED")
+        if not multi_tenant_enabled:
+            reasons.append("MULTI_TENANT_REQUIRED")
+        if self.max_directory_age_seconds is None:
+            reasons.append("DIRECTORY_MAX_AGE_MISSING")
+        if not self.allowed_workspace_ids or any(not value.strip() for value in self.allowed_workspace_ids):
+            reasons.append("WORKSPACE_POLICY_MISSING")
+        if not self.state_semantics_revision.strip():
+            reasons.append("STATE_SEMANTICS_MISSING")
+        required = (
+            "connection_id",
+            "issuer",
+            "client_id",
+            "allowed_tenant_id",
+            "public_origin",
+            "redirect_uri",
+            "logout_redirect_uri",
+            "client_secret_reference",
+            "sync_key_reference",
+            "internal_key_id",
+            "internal_secret_reference",
+            "csrf_secret_reference",
+            "encryption_secret_reference",
+        )
+        if any(not getattr(self, name).strip() for name in required):
+            reasons.append("REGISTRATION_INCOMPLETE")
+        if not self.endpoint_allowlist:
+            reasons.append("ENDPOINT_ALLOWLIST_MISSING")
+        if not self.trusted_gateway_networks:
+            reasons.append("GATEWAY_SOURCE_POLICY_MISSING")
+        else:
+            try:
+                for network in self.trusted_gateway_networks:
+                    ip_network(network, strict=True)
+            except ValueError:
+                reasons.append("GATEWAY_SOURCE_POLICY_INVALID")
+        try:
+            origin = urlsplit(self.public_origin)
+            urls = [
+                urlsplit(value)
+                for value in (
+                    self.issuer,
+                    self.public_origin,
+                    self.redirect_uri,
+                    self.logout_redirect_uri,
+                    *self.endpoint_allowlist,
+                )
+            ]
+            if any(
+                (
+                    url.scheme != "https"
+                    and not (url.scheme == "http" and f"http://{url.netloc}" in self.approved_test_origins)
+                )
+                or not url.hostname
+                or url.username is not None
+                or url.password is not None
+                or url.fragment
+                or url.query
+                for url in urls
+            ):
+                reasons.append("HTTPS_REGISTRATION_REQUIRED")
+            if (
+                origin.path
+                or self.public_origin != self.public_origin.lower()
+                or origin.port == (443 if origin.scheme == "https" else 80)
+            ):
+                reasons.append("PUBLIC_ORIGIN_INVALID")
+            if any((url.scheme, url.netloc) != (origin.scheme, origin.netloc) for url in urls[2:4]):
+                reasons.append("CALLBACK_ORIGIN_MISMATCH")
+        except ValueError:
+            reasons.append("REGISTRATION_URL_INVALID")
+        return tuple(reasons)
 
 
 class SSOSyncConf(BaseModel):
@@ -43,3 +160,5 @@ class SSOSyncConf(BaseModel):
             "synthetic config row."
         ),
     )
+
+    kunlian: KunlianConf = Field(default_factory=KunlianConf)

@@ -842,9 +842,6 @@
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }

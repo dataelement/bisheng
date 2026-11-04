@@ -1,4 +1,30 @@
 import request from "./request";
+import { KUNLIAN_CSRF_PATH, isApiError } from '@bisheng/api-client';
+import { kunlianSession } from '~/utils/kunlianSession';
+import type { TLogoutResponse } from '~/types/chat/mutations';
+
+export async function getKunlianCsrfApi(): Promise<{ auth_source: 'kunlian'; csrf_token: string }> {
+  const body = await request.get<{ status_code: number; data: { auth_source: 'kunlian'; csrf_token: string } }>(KUNLIAN_CSRF_PATH,
+    { showError: false, skip403Redirect: true, skipMaintenance: true });
+  if (body?.status_code !== 200 || body.data?.auth_source !== 'kunlian' || !/^[0-9a-f]{64}$/.test(body.data?.csrf_token || '')) throw new Error('KUNLIAN_CSRF_UNAVAILABLE');
+  return body.data;
+}
+
+export async function logoutUserApi(): Promise<TLogoutResponse> {
+  if (kunlianSession.needsProtocolProbe()) {
+    try {
+      await getKunlianCsrfApi();
+      kunlianSession.expectLocalProtocol();
+    } catch (error) {
+      if (kunlianSession.isKunlian() || !isApiError(error) || error.httpStatus !== 401) throw error;
+    }
+  }
+  const body = await request.post('/api/v1/user/logout', undefined, kunlianSession.isKunlian()
+    ? { showError: false, skip403Redirect: true, skipMaintenance: true } : undefined);
+  const result = body?.status_code === 200 ? body.data : body;
+  if (kunlianSession.validateLogout(result)) return { ...result, message: '' };
+  return body;
+}
 
 /**
  * 修改密码（复用后端已有 /user/change_password）

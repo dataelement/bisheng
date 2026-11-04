@@ -386,14 +386,19 @@ async def workflow_ws(
     chat_id: str | None = None,
     login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws),
 ):
+    from bisheng.common.errcode.sso_sync import KunlianError
+    from bisheng.sso_sync.application.browser import browser_entry_scope, websocket_message_admission
+
     try:
-        await require_business_action(
-            login_user,
-            resource_type="workflow",
-            resource_id=workflow_id,
-            action="use",
-        )
-        await chat_manager.dispatch_client(websocket, workflow_id, chat_id, login_user, WorkType.WORKFLOW, websocket)
+        async with browser_entry_scope(login_user):
+            await require_business_action(login_user, resource_type="workflow", resource_id=workflow_id, action="use")
+            admission = websocket_message_admission(websocket, login_user)
+            options = {"message_admission": admission} if admission is not None else {}
+            await chat_manager.dispatch_client(
+                websocket, workflow_id, chat_id, login_user, WorkType.WORKFLOW, websocket, **options
+            )
+    except KunlianError as error:
+        await websocket.close(code=1013 if error.http_status == 503 else 1008, reason=error.reason_code)
     except UnAuthorizedError:
         await websocket.close(
             code=http_status.WS_1008_POLICY_VIOLATION,

@@ -258,12 +258,16 @@ class LoginSyncService:
         row_source: str,
     ) -> tuple[User, bool]:
         ext = payload.external_user_id
+        UserService.assert_unreserved_identity(row_source, ext)
         attrs = payload.user_attrs
         full_department_override = False
         user = await UserDao.aget_by_source_external_id(row_source, ext)
+        if user is not None:
+            UserService.assert_unreserved_identity(user.source, user.external_id)
         if user is None:
             legacy = await UserDao.aget_by_external_id(ext)
             if legacy is not None:
+                UserService.assert_unreserved_identity(legacy.source, legacy.external_id)
                 if int(getattr(legacy, "delete", 0) or 0) == 1:
                     # Do not re-adopt disabled rows unless the sync payload
                     # explicitly states account state (e.g. WeCom enable/disable).

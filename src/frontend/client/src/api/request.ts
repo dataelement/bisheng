@@ -13,6 +13,8 @@ import i18next from "i18next";
 import { redirectToLogin } from "~/utils/loginRedirect";
 import * as endpoints from "~/api/chat/api-endpoints";
 import type * as t from "~/types/chat/types";
+import { KUNLIAN_CSRF_PATH, isBrowserIdentityUrl, kunlianFailure } from '@bisheng/api-client';
+import { kunlianSession } from '~/utils/kunlianSession';
 
 // Controls automatic error notifications.
 type ErrorOptions = {
@@ -25,6 +27,25 @@ type ErrorOptions = {
 
 const customAxios = axios.create({
   baseURL: import.meta.env.BASE_URL,
+});
+
+let csrfPending: Promise<string> | null = null;
+customAxios.interceptors.request.use(async config => {
+  if (kunlianSession.isKunlian() && isBrowserIdentityUrl(config.url || '')) {
+    config.withCredentials = true;
+    for (const name of Object.keys(config.headers)) if (name.toLowerCase() === 'authorization') delete config.headers[name];
+    if (!['get', 'head', 'options'].includes((config.method || 'get').toLowerCase())) {
+      if (!csrfPending) {
+        csrfPending = customAxios.get(KUNLIAN_CSRF_PATH, { showError: false, skip403Redirect: true, skipMaintenance: true }).then(reply => {
+          const body = reply.data;
+          if (body?.status_code !== 200 || body.data?.auth_source !== 'kunlian' || !/^[0-9a-f]{64}$/.test(body.data?.csrf_token || '')) throw new Error('KUNLIAN_CSRF_UNAVAILABLE');
+          return body.data.csrf_token;
+        }).finally(() => { csrfPending = null; });
+      }
+      config.headers['X-CSRF-Token'] = await csrfPending;
+    }
+  }
+  return config;
 });
 
 async function _get<T>(url: string, options?: AxiosRequestConfig & ErrorOptions): Promise<T> {
@@ -200,6 +221,20 @@ customAxios.interceptors.response.use(
   async (response) => {
     const envelope = (await decodeErrorEnvelope(response.data)) ?? response.data;
     const url = response.config?.url || "";
+    if (url.split('?')[0] === '/api/v1/user/login' && response.status >= 200 && response.status < 300 && envelope?.status_code === 200) {
+      kunlianSession.resetAfterExplicitLogin();
+    }
+    const reason = kunlianFailure(envelope, response.status);
+    if (reason) {
+      const error = await normalizeRequestFailure(envelope, response);
+      presentKunlianFailure(error, reason, response.config);
+      return Promise.reject(error);
+    }
+    if (url.split('?')[0] === '/api/v1/user/info' && response.status >= 200 && response.status < 300
+        && (envelope?.status_code === 200 || envelope?.status_code == null)
+        && !kunlianSession.confirmUser(envelope?.status_code === 200 ? envelope.data : envelope)) {
+      return Promise.reject(normalizeApiError(new Error('KUNLIAN_LOGIN_SOURCE_MISMATCH'), { message: String(i18next.t('shared:kunlian.source_mismatch')) }));
+    }
     if (
       response.status >= 200 &&
       response.status < 300 &&
@@ -282,6 +317,14 @@ customAxios.interceptors.response.use(
     if (!error.response) {
       return Promise.reject(error);
     }
+    const envelope = (await decodeErrorEnvelope(error.response.data, { httpFailure: true })) ?? error.response.data;
+    const reason = kunlianFailure(envelope, error.response.status);
+    if (reason) {
+      const normalized = await normalizeRequestFailure(error);
+      presentKunlianFailure(normalized, reason, originalRequest);
+      return Promise.reject(normalized);
+    }
+    if (originalRequest?.url?.split('?')[0] === KUNLIAN_CSRF_PATH) return Promise.reject(error);
 
     // Gateway/backend service exception → surface the global maintenance overlay.
     // Event name mirrors SERVICE_MAINTENANCE_EVENT in SystemMaintenanceOverlay.tsx.
@@ -338,6 +381,21 @@ customAxios.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+function presentKunlianFailure(error, reason: string, config) {
+  if (config?.url?.split('?')[0] === '/api/v1/user/info') {
+    kunlianSession.expectLocalProtocol();
+    if (reason !== 'SESSION_EXPIRED') kunlianSession.deferAutomaticLogin();
+  }
+  kunlianSession.observeFailure(reason);
+  const protocol = [KUNLIAN_CSRF_PATH, '/api/v1/user/logout'].includes((config?.url || '').split('?')[0]);
+  if (reason === 'SESSION_EXPIRED' && !protocol) {
+    kunlianSession.reauthorize();
+  } else if (config?.showError !== false && kunlianSession.shouldPresent(reason)) {
+    window.showToast?.({ message: error.message, status: 'warning' });
+  }
+  if (config?.showError !== false || !protocol) error.presentation = 'global';
+}
 
 /** Keep authentication and routing intact; localize only outgoing failures. */
 function normalizeRequestError(cause: unknown, options: Parameters<typeof normalizeApiError>[1]) {

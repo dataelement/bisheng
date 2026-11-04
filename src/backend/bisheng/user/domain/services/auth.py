@@ -2,6 +2,7 @@ import asyncio
 import functools
 import json
 import logging
+import re
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from functools import cached_property
@@ -9,11 +10,12 @@ from typing import Any, Self
 
 import jwt
 from fastapi import Depends, Request, Response
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr, SecretStr
 from starlette.websockets import WebSocket
 
 from bisheng.approval.domain.services.user_menu_access_service import UserMenuAccessService
 from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.errcode.sso_sync import KunlianTrustRejectedError
 from bisheng.common.exceptions.auth import JWTDecodeError
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
@@ -126,6 +128,30 @@ _ACCESS_TYPE_TO_REBAC: dict[
 ] = {}
 
 
+def is_kunlian_subject(subject) -> bool:
+    if not isinstance(subject, dict):
+        return False
+    source = subject.get("auth_source")
+    return (isinstance(source, str) and source.strip().casefold() == "kunlian") or "kunlian_session" in subject
+
+
+def validate_kunlian_subject(subject: dict) -> None:
+    expected_keys = {"user_id", "user_name", "tenant_id", "token_version", "auth_source", "kunlian_session"}
+    if (
+        not isinstance(subject, dict)
+        or set(subject) != expected_keys
+        or subject.get("auth_source") != "kunlian"
+        or not isinstance(subject.get("kunlian_session"), str)
+        or not re.fullmatch(r"[A-Za-z0-9_-]{22,512}", subject["kunlian_session"])
+        or any(type(subject.get(key)) is not int or subject[key] <= 0 for key in ("user_id", "tenant_id"))
+        or type(subject.get("token_version")) is not int
+        or subject["token_version"] < 0
+        or not isinstance(subject.get("user_name"), str)
+        or not 1 <= len(subject["user_name"]) <= 128
+    ):
+        raise KunlianTrustRejectedError()
+
+
 class AuthJwt:
     def __init__(self, req: Request = None, res: Response = None):
         self.req = req
@@ -140,8 +166,35 @@ class AuthJwt:
         self._encode_algorithm = "HS256"
         self._decode_algorithms = [self._encode_algorithm]
 
-    def create_access_token(self, subject: dict, *, expires_in: int | None = None) -> str:
+    def create_access_token(
+        self,
+        subject: dict,
+        *,
+        expires_in: int | None = None,
+        issued_at: int | None = None,
+        absolute_expires_at: int | None = None,
+    ) -> str:
         """create jwt token"""
+        parsed = subject
+        if isinstance(subject, str):
+            try:
+                parsed = json.loads(subject)
+            except ValueError:
+                parsed = None
+        fixed = issued_at is not None or absolute_expires_at is not None
+        now = int(datetime.now(UTC).timestamp())
+        if is_kunlian_subject(parsed) or fixed:
+            validate_kunlian_subject(parsed)
+            if (
+                expires_in is not None
+                or type(issued_at) is not int
+                or type(absolute_expires_at) is not int
+                or issued_at <= 0
+                or issued_at > now
+                or absolute_expires_at <= now
+                or not 0 < absolute_expires_at - issued_at <= 28800
+            ):
+                raise KunlianTrustRejectedError()
         if isinstance(subject, dict):
             subject = json.dumps(subject)
         payload = {
@@ -150,6 +203,8 @@ class AuthJwt:
             + (expires_in if expires_in is not None else self.cookie_conf.jwt_token_expire_time),
             "iss": self.cookie_conf.jwt_iss,
         }
+        if fixed:
+            payload["iat"], payload["exp"] = issued_at, absolute_expires_at
         token = jwt.encode(payload, self.jwt_secret, algorithm=self._encode_algorithm)
         return token
 
@@ -193,9 +248,12 @@ class AuthJwt:
             payload = jwt.decode(
                 token, self.jwt_secret, issuer=self.cookie_conf.jwt_iss, algorithms=self._decode_algorithms
             )
-            return json.loads(payload.get("sub"))
+            subject = json.loads(payload.get("sub"))
         except Exception as e:
             raise JWTDecodeError(status_code=422, message=str(e))
+        if is_kunlian_subject(subject):
+            validate_kunlian_subject(subject)
+        return subject
 
 
 class LoginUser(BaseModel):
@@ -497,6 +555,11 @@ class LoginUser(BaseModel):
         auth_jwt: AuthJwt,
         tenant_id: int | None = None,
         token_version: int | None = None,
+        *,
+        auth_source: str | None = None,
+        kunlian_session: str | SecretStr | None = None,
+        issued_at: int | None = None,
+        absolute_expires_at: int | None = None,
     ) -> str:
         """Create access token for user with tenant_id + token_version.
 
@@ -513,6 +576,21 @@ class LoginUser(BaseModel):
             "tenant_id": tenant_id or DEFAULT_TENANT_ID,
             "token_version": token_version,
         }
+        source = (getattr(user, "source", "local") or "").strip().casefold()
+        restricted = source == "kunlian" or any(
+            value is not None for value in (auth_source, kunlian_session, issued_at, absolute_expires_at)
+        )
+        if restricted:
+            if source != "kunlian" or auth_source != "kunlian":
+                raise KunlianTrustRejectedError()
+            reference = (
+                kunlian_session.get_secret_value() if isinstance(kunlian_session, SecretStr) else kunlian_session
+            )
+            payload.update(auth_source=auth_source, kunlian_session=reference)
+            validate_kunlian_subject(payload)
+            return auth_jwt.create_access_token(
+                subject=payload, issued_at=issued_at, absolute_expires_at=absolute_expires_at
+            )
         token = auth_jwt.create_access_token(subject=payload)
         return token
 
@@ -587,7 +665,16 @@ class LoginUser(BaseModel):
 
     @classmethod
     async def get_login_user(cls, auth_jwt: AuthJwt = Depends()) -> Self:
+        request = getattr(auth_jwt, "req", None)
+        if isinstance(request, Request):
+            from bisheng.sso_sync.application.browser import resolve_browser_identity
+
+            current = await resolve_browser_identity(request, auth_jwt)
+            if current is not None:
+                return current
         subject = auth_jwt.get_subject()
+        if is_kunlian_subject(subject):
+            raise KunlianTrustRejectedError()
         user = await cls.init_login_user(
             user_id=subject["user_id"],
             user_name=subject["user_name"],
@@ -643,6 +730,23 @@ class LoginUser(BaseModel):
     async def get_login_user_from_ws(
         cls, websocket: WebSocket, auth_jwt: AuthJwt = Depends(), t: str | None = None
     ) -> Self:
+        from fastapi import WebSocketException
+
+        from bisheng.common.errcode.sso_sync import KunlianError
+        from bisheng.sso_sync.application.browser import resolve_browser_identity
+
+        try:
+            current = (
+                await resolve_browser_identity(websocket, auth_jwt, websocket=True)
+                if isinstance(websocket, WebSocket)
+                else None
+            )
+        except KunlianError as error:
+            raise WebSocketException(
+                code=1013 if error.http_status == 503 else 1008, reason=error.reason_code
+            ) from None
+        if current is not None:
+            return current
         subject = auth_jwt.get_subject(auth_from="websocket", websocket=websocket, token=t)
         if "dsh_web_session" in subject:
             from bisheng.dsh.domain.services.web_session import validate_web_session

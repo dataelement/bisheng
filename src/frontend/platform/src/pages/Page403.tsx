@@ -2,6 +2,8 @@
 import { Button } from '@bisheng/ui';
 
 import { logoutApi } from "@/controllers/API/user";
+import { showApiError } from '@/controllers/request';
+import { kunlianSession } from '@/utils/loginReturnTo';
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -23,12 +25,19 @@ export default function Page403() {
         const thirdPartyLogoutUrl = localStorage.getItem("THIRD_PARTY_LOGOUT_URL");
 
         try {
-            await logoutApi();
-        } catch {
-            // Clear local credentials even when the remote logout fails.
-        } finally {
+            const result = await logoutApi();
+            if (kunlianSession.completeLogout(result)) return;
             clearLocalSession();
             window.location.href = thirdPartyLogoutUrl || __APP_ENV__.BASE_URL + "/";
+        } catch (error) {
+            if (kunlianSession.isKunlian() || kunlianSession.needsProtocolProbe()) {
+                showApiError(error);
+                return;
+            }
+            clearLocalSession();
+            window.location.href = thirdPartyLogoutUrl || __APP_ENV__.BASE_URL + "/";
+        } finally {
+            setLoggingOut(false);
         }
     };
 

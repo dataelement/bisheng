@@ -701,5 +701,15 @@
   "25025": "A permission model with this name already exists.",
   "25026": "The last owner of this resource cannot be removed.",
   "19704": "The tenant view changed. Refresh the page before continuing.",
-  "19705": "No valid tenant view is available. Contact an administrator."
+  "19705": "No valid tenant view is available. Contact an administrator.",
+  "19320": "Login verification failed. Sign in again.",
+  "19321": "The directory is not ready. Sign in again after synchronization.",
+  "19322": "The current identity or tenant is unavailable.",
+  "19323": "Your session has expired. Sign in again.",
+  "19324": "Identity verification is unavailable. Try again later.",
+  "19325": "Directory synchronization failed. Contact your administrator.",
+  "19326": "Synchronization is running or its state has changed. Refresh and try again.",
+  "19327": "Identity or tenant mapping conflict. Contact your administrator.",
+  "19328": "Request verification failed. Start the operation again.",
+  "19329": "Signed out of BiSheng. Kunlian sign-out is incomplete."
 }

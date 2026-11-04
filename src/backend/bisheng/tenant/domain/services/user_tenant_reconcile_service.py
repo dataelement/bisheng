@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao, UserTenantDao
+from bisheng.tenant.domain.repositories.external_membership import ExternalMembershipRepository
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,10 @@ class UserTenantReconcileService:
             return []
 
         with bypass_tenant_filter():
+            external = await ExternalMembershipRepository().find_external_user_ids(user_ids)
+            user_ids = [user_id for user_id in user_ids if user_id not in external]
+            if not user_ids:
+                return []
             primary_departments = await UserDepartmentDao.aget_primary_department_paths_by_user_ids(user_ids)
             current_tenants = await UserTenantDao.aget_active_tenant_ids_by_user_ids(user_ids)
 

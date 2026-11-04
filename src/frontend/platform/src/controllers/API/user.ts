@@ -2,6 +2,8 @@
 import { paramsSerializer } from ".";
 import { ROLE, User } from "../../types/api/user";
 import axios from "../request";
+import { KUNLIAN_CSRF_PATH, isApiError, type KunlianLogoutResult } from '@bisheng/api-client';
+import { kunlianSession } from '@/utils/loginReturnTo';
 
 // 获取 key
 export const getPublicKeyApi = async (): Promise<{ public_key: string }> => {
@@ -17,8 +19,20 @@ export async function getUserInfo(): Promise<User> {
   return await axios.get(`/api/v1/user/info`);
 }
 // 退出登录
-export async function logoutApi() {
-  return await axios.post(`/api/v1/user/logout`);
+export async function logoutApi(): Promise<KunlianLogoutResult | undefined> {
+  if (kunlianSession.needsProtocolProbe()) {
+    try {
+      const reply = await axios.get(KUNLIAN_CSRF_PATH, { silent: true }) as unknown as { auth_source?: string; csrf_token?: string };
+      if (reply?.auth_source !== 'kunlian' || !/^[0-9a-f]{64}$/.test(reply.csrf_token || '')) throw new Error('KUNLIAN_CSRF_UNAVAILABLE');
+      kunlianSession.expectLocalProtocol();
+    } catch (error) {
+      // 只有明确的普通未登录响应可继续旧 logout。协议或依赖失败不能降级。
+      if (kunlianSession.isKunlian() || !isApiError(error) || error.httpStatus !== 401) throw error;
+    }
+  }
+  const result = await axios.post(`/api/v1/user/logout`);
+  kunlianSession.validateLogout(result);
+  return result as unknown as KunlianLogoutResult | undefined;
 }
 // 登录
 export async function loginApi(personId, pwd, captcha_key?, captcha?) {

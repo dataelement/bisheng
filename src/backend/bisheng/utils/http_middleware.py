@@ -124,6 +124,20 @@ def _uses_browser_identity(path: str) -> bool:
     )
 
 
+def _is_explicit_auth_bootstrap(request: Request) -> bool:
+    # 这些既有入口不消费旧 Cookie 的业务身份。密码仍由原 UserService 验证。
+    routes = {
+        ("POST", "/api/v1/user/login"),
+        ("POST", "/api/v1/user/regist"),
+        ("GET", "/api/v1/user/public_key"),
+        ("GET", "/api/v1/user/get_captcha"),
+        ("GET", "/api/v1/env"),
+    }
+    return (request.method, request.url.path) in routes and request.scope.get("raw_path") == request.url.path.encode(
+        "ascii"
+    )
+
+
 def _decode_jwt_subject(token: str) -> dict | None:
     """Decode a JWT token and return the decoded subject dict, or None on failure."""
     try:
@@ -436,8 +450,59 @@ class CustomMiddleware(BaseHTTPMiddleware):
         ip = get_request_ip(request)
         req_path = request.url.path
         dsh_owned = owns_dsh_credential(request.method, req_path)
-        path = req_path if req_path.startswith(("/api/v1/dsh/", "/api/dsh/", "/api/v1/internal/dsh/")) else request.url
+        path = (
+            req_path
+            if req_path.startswith(
+                (
+                    "/api/v1/dsh/",
+                    "/api/dsh/",
+                    "/api/v1/internal/dsh/",
+                    "/api/v1/internal/kunlian/",
+                    "/api/v1/identity-integrations/kunlian/",
+                )
+            )
+            else request.url
+        )
         trace_id_var.set(trace_id)
+
+        kunlian_scope = None
+        kunlian_user = None
+        kunlian_protocol = None
+        if _uses_browser_identity(req_path) and not dsh_owned and not _is_explicit_auth_bootstrap(request):
+            from bisheng.common.errcode.sso_sync import KunlianError
+            from bisheng.sso_sync.application.browser import (
+                admitted_request_scope,
+                resolve_browser_identity,
+                resolve_browser_protocol,
+            )
+
+            try:
+                kunlian_protocol = await resolve_browser_protocol(request)
+                if kunlian_protocol is None:
+                    kunlian_user = await resolve_browser_identity(request)
+            except KunlianError as error:
+                response = error.to_response()
+                response.headers["Cache-Control"] = "no-store"
+                return response
+            if kunlian_user is not None:
+                kunlian_scope = admitted_request_scope(kunlian_user)
+                await kunlian_scope.__aenter__()
+                from bisheng.core.context.tenant import set_visible_tenant_ids
+
+                set_visible_tenant_ids(
+                    _compute_visible_tenant_ids(kunlian_user.tenant_id, kunlian_user.is_global_super)
+                )
+                path = req_path
+            elif kunlian_protocol is not None:
+                from contextlib import AsyncExitStack
+
+                from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
+
+                kunlian_scope = AsyncExitStack()
+                await kunlian_scope.__aenter__()
+                kunlian_scope.enter_context(tenant_execution_scope(1))
+                kunlian_scope.enter_context(strict_tenant_filter())
+                path = req_path
 
         # Tenant context injection from JWT cookie. Decode the JWT once and
         # share it with the F012 token_version + visible_tenant_ids step so
@@ -446,10 +511,23 @@ class CustomMiddleware(BaseHTTPMiddleware):
         # owns its own credential. Browser credentials must not change any of
         # those channels' identity or errors.
         token = (
-            _extract_http_access_token(request) if _uses_browser_identity(request.url.path) and not dsh_owned else None
+            _extract_http_access_token(request)
+            if _uses_browser_identity(request.url.path)
+            and not dsh_owned
+            and kunlian_user is None
+            and kunlian_protocol is None
+            else None
         )
         decoded_subject = _decode_jwt_subject(token) if token else None
-        tenant_id = None if dsh_owned else _set_tenant_context(token, decoded_subject=decoded_subject)
+        tenant_id = (
+            kunlian_user.tenant_id
+            if kunlian_user is not None
+            else 1
+            if kunlian_protocol is not None
+            else None
+            if dsh_owned
+            else _set_tenant_context(token, decoded_subject=decoded_subject)
+        )
 
         dsh_scope_tokens = []
         if dsh_owned:
@@ -465,8 +543,13 @@ class CustomMiddleware(BaseHTTPMiddleware):
             ]
 
         req_path = request.url.path
-        is_exempt = req_path.startswith(TENANT_CHECK_EXEMPT_PATHS) or bool(
-            re.fullmatch(r"/api/v1/apps/[A-Za-z0-9_-]+/storage(?:/.*)?", req_path)
+        is_exempt = (
+            kunlian_user is None
+            and kunlian_protocol is None
+            and (
+                req_path.startswith(TENANT_CHECK_EXEMPT_PATHS)
+                or bool(re.fullmatch(r"/api/v1/apps/[A-Za-z0-9_-]+/storage(?:/.*)?", req_path))
+            )
         )
 
         # Exempt paths run before tenant context is established (login,
@@ -520,6 +603,8 @@ class CustomMiddleware(BaseHTTPMiddleware):
             status_code = 500
             try:
                 response = await call_next(request)
+                if kunlian_user is not None or kunlian_protocol is not None:
+                    response.headers["Cache-Control"] = "no-store"
                 status_code = response.status_code
                 response.headers["X-Process-Time"] = str(round(time() - start_time, 4))
                 response.headers["X-Trace-ID"] = trace_id
@@ -541,6 +626,8 @@ class CustomMiddleware(BaseHTTPMiddleware):
                 _bypass_tenant_filter.reset(bypass_token)
             for scope_token in reversed(dsh_scope_tokens):
                 scope_token.var.reset(scope_token)
+            if kunlian_scope is not None:
+                await kunlian_scope.__aexit__(None, None, None)
 
 
 class WebSocketLoggingMiddleware:

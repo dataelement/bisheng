@@ -1,7 +1,7 @@
 import request, {
   handleRequestError,
   handleRequestResponse,
-  requestAuthHeaders,
+  requestWriteHeaders,
 } from "./request";
 
 export async function requestStream(
@@ -21,7 +21,7 @@ export async function requestStream(
       credentials: "include",
       signal,
       headers: {
-        ...requestAuthHeaders(url),
+        ...await requestWriteHeaders(url),
         "Content-Type": "application/json",
         Accept: "application/x-ndjson",
       },

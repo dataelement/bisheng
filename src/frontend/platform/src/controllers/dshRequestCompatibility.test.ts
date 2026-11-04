@@ -29,7 +29,7 @@ const previous = await (() => ({ toast: captured.toast }))();
 const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
 return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
 })
-vi.mock('i18next', () => ({ default: { t: (key: string) => key } }))
+vi.mock('i18next', () => ({ default: { exists: () => false, t: (key: string) => key } }))
 import './request'
 import { consumeLoginReturnTo, rememberDesktopLoginReturnTo } from '@/utils/loginReturnTo'
 import { isDshRequestRejected } from './API/dsh'
@@ -41,7 +41,7 @@ afterEach(() => vi.unstubAllGlobals())
 describe('structured errors after shared request handling', () => {
     it('preserves business rejection evidence for every caller', async () => {
         const response = { status: 200, config: {}, data: { status_code: 26130, status_message: 'conflict' } }
-        await expect(captured.success!(response)).rejects.toMatchObject({ status_code: 26130, httpStatus: 200, message: 'conflict' })
+        await expect(captured.success!(response)).rejects.toMatchObject({ status_code: 26130, httpStatus: 200, message: 'Request failed. Please try again.' })
         const rejected = await captured.success!({ ...response, config: { preserveError: true } }).catch(error => error)
         expect(rejected).toMatchObject({ response })
         expect(isDshRequestRejected(rejected)).toBe(true)

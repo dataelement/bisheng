@@ -53,6 +53,7 @@ def _user_tenant(user_id, tenant_id):
 @pytest.fixture()
 def patches(monkeypatch):
     """One fixture wires up every collaborator the service touches."""
+    monkeypatch.setattr(uts_module, "resolve_external_tenant_if_any", AsyncMock(return_value=None), raising=False)
     resolver_mock = AsyncMock(name="resolve_user_leaf_tenant")
     active_mock = AsyncMock(name="aget_active_user_tenant")
     activate_mock = AsyncMock(name="aactivate_user_tenant")
@@ -379,3 +380,16 @@ class TestPermissionTolerance:
         patches.activate.assert_awaited_once()
         patches.increment.assert_awaited_once()
         patches.audit.assert_awaited_once()
+
+
+async def test_kunlian_sync_returns_authority_without_legacy_relocation(patches, monkeypatch):
+    patches.resolve.side_effect = AssertionError("external identity reached department resolver")
+    authority = AsyncMock(return_value=_tenant(7))
+    monkeypatch.setattr(uts_module, "resolve_external_tenant_if_any", authority, raising=False)
+    result = await UserTenantSyncService.sync_user(17)
+    assert result.id == 7
+    patches.resolve.assert_not_awaited()
+    patches.activate.assert_not_awaited()
+    patches.increment.assert_not_awaited()
+    patches.apply_changes.assert_not_awaited()
+    patches.migrate_token.assert_not_awaited()

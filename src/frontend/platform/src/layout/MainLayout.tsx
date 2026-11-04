@@ -21,6 +21,7 @@ import { Separator } from "../components/bs-ui/separator";
 import { darkContext } from "../contexts/darkContext";
 import { userContext } from "../contexts/userContext";
 import { logoutApi } from "../controllers/API/user";
+import { kunlianSession } from '@/utils/loginReturnTo';
 import { User } from "../types/api/user";
 import { getBrandAssetUrl } from "../utils/brand";
 import { HeaderMenu } from "./HeaderMenu";
@@ -57,7 +58,12 @@ export default function MainLayout() {
             desc: `${t("menu.logoutContent")}？`,
             okTxt: t("system.confirm"),
             onOk(next) {
-                return logoutApi().then((_) => {
+                return logoutApi().then((result) => {
+                    if (kunlianSession.completeLogout(result)) {
+                        setUser(null);
+                        next();
+                        return;
+                    }
                     const thirdPartyLogoutUrl = localStorage.getItem("THIRD_PARTY_LOGOUT_URL");
                     localStorage.removeItem("isLogin");
                     if (thirdPartyLogoutUrl) {

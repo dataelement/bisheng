@@ -45,6 +45,7 @@ from bisheng.worker.permission.retry_failed_tuples import (
     retry_failed_tuples,
 )
 from bisheng.worker.runtime_audit.tasks import runtime_audit_export, runtime_audit_reconcile
+from bisheng.worker.sso_sync.tasks import dispatch_sync, recover_projection, sync_directory
 from bisheng.worker.telemetry.mid_table import (
     sync_mid_app_increment,
     sync_mid_knowledge_increment,
@@ -66,6 +67,7 @@ __all__ = [
     "dispatch_information_article_poll",
     "dispatch_information_subscription_reconcile",
     "dispatch_personal_skill_orphan_sweep",
+    "dispatch_sync",
     "execute_approval_outbox",
     "execute_workflow",
     "file_copy_celery",
@@ -78,11 +80,13 @@ __all__ = [
     "reconcile_file_scheduler_task",
     "reconcile_information_subscriptions",
     "reconcile_user_tenant_assignments",
+    "recover_projection",
     "retry_approval_outbox",
     "retry_failed_tuples",
     "retry_knowledge_file_celery",
     "stop_workflow",
     "sweep_personal_skill_orphans",
+    "sync_directory",
     "sync_information_articles",
     "sync_mid_app_increment",
     "sync_mid_knowledge_increment",

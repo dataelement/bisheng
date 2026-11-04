@@ -3,6 +3,7 @@ import { LoginHandoff } from '~/components/Auth';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { useAuthContext } from '~/hooks';
 import { buildReturnTo, redirectToLogin } from '~/utils/loginRedirect';
+import { kunlianSession } from '~/utils/kunlianSession';
 
 /**
  * One-shot marker recording that we already sent this exact URL to the login
@@ -61,6 +62,7 @@ export function RequireLogin({ children }: { children: ReactNode }) {
   // to the login page. A `user` object only exists after /user/info succeeded,
   // so it is the earlier, equally trustworthy signal.
   const authed = isAuthenticated || Boolean(user);
+  const manualLoginRequired = kunlianSession.requiresManualLogin();
 
   useEffect(() => {
     if (isUserLoading) {
@@ -71,6 +73,10 @@ export function RequireLogin({ children }: { children: ReactNode }) {
       setBlocked(false);
       return;
     }
+    if (manualLoginRequired) {
+      setBlocked(true);
+      return;
+    }
     if (readHandoffMark() === returnTo) {
       // Already made the round trip for this URL and came back anonymous.
       setBlocked(true);
@@ -78,7 +84,7 @@ export function RequireLogin({ children }: { children: ReactNode }) {
     }
     writeHandoffMark(returnTo);
     redirectToLogin(returnTo);
-  }, [authed, isUserLoading, returnTo]);
+  }, [authed, isUserLoading, returnTo, manualLoginRequired]);
 
   const handleLogin = () => {
     // A user-initiated attempt gets a clean slate: clear the loop marker and

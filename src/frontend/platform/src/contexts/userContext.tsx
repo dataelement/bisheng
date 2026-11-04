@@ -9,7 +9,8 @@ import i18next from "i18next";
 import { ReactNode, createContext, useLayoutEffect, useState } from "react";
 import { delComponentApi, getComponents, overridComponent, saveComponent } from "../controllers/API";
 import { getUserInfo, logoutApi } from "../controllers/API/user";
-import { markSessionKickAck, requestInterceptor } from "../controllers/request";
+import { kunlianSession } from '@/utils/loginReturnTo';
+import { markSessionKickAck, requestInterceptor, showApiError } from "../controllers/request";
 import { User } from "../types/api/user";
 
 type userContextType = {
@@ -142,8 +143,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 hideCancel: true,
                 showClose: false,
                 onOk: (next) => {
-                    markSessionKickAck()
-                    logoutApi().catch(() => undefined).finally(() => {
+                    const kunlian = kunlianSession.isKunlian()
+                    if (!kunlian) markSessionKickAck()
+                    return logoutApi().then(result => {
+                        if (kunlianSession.completeLogout(result)) {
+                            markSessionKickAck()
+                            next()
+                            return
+                        }
+                        next()
+                        finishLogout()
+                    }).catch(error => {
+                        if (kunlian || kunlianSession.isKunlian() || kunlianSession.needsProtocolProbe()) throw showApiError(error)
                         next()
                         finishLogout()
                     })

@@ -41,6 +41,7 @@ from bisheng.permission.application import (
     PermissionSubject,
     get_permission_relation_api,
 )
+from bisheng.tenant.application.external_membership import resolve_external_tenant_if_any
 from bisheng.tenant.domain.constants import (
     TenantAuditAction,
     UserTenantSyncTrigger,
@@ -86,6 +87,10 @@ class UserTenantSyncService:
         demands it *and* the user owns resources under the old tenant.
         """
         trigger_value = cls._trigger_str(trigger)
+
+        external = await resolve_external_tenant_if_any(user_id)
+        if external is not None:
+            return external
 
         new_leaf = await TenantResolver.resolve_user_leaf_tenant(user_id)
         current = await UserTenantDao.aget_active_user_tenant(user_id)

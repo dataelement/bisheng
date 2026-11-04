@@ -156,5 +156,15 @@
       "source_untitled": "タイトルなし"
     },
     "com_msg_source_reference": "参照元"
+  },
+  "kunlian": {
+    "dependency_unavailable": "認証サービスを利用できません。しばらくしてから再度お試しください。",
+    "directory_pending": "ユーザー情報の同期が完了していません。同期後に再度ログインしてください。",
+    "local_signed_out": "畢昇のローカルセッションからログアウトしました。",
+    "login": "昆聯でログイン",
+    "logout_retry": "ログアウトが完了していません。もう一度お試しください。",
+    "reauthorize": "再ログイン",
+    "remote_incomplete": "畢昇からログアウトしました。昆聯のログアウトは完了していません。",
+    "source_mismatch": "統合ログインが完了していません。昆聯から再度ログインしてください。"
   }
 }

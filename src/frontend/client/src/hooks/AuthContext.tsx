@@ -23,6 +23,8 @@ import { TAuthConfig, TUserContext, TAuthContext, TResError } from '~/common';
 import useTimeout from './useTimeout';
 import store from '~/store';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
+import { kunlianSession } from '~/utils/kunlianSession';
+import i18next from 'i18next';
 
 const AuthContext = createContext<TAuthContext | undefined>(undefined);
 
@@ -93,6 +95,10 @@ const AuthContextProvider = ({
   });
   const logoutUser = useLogoutUserMutation({
     onSuccess: (data) => {
+      if (kunlianSession.completeLogout(data)) {
+        setUserContext({ token: undefined, isAuthenticated: false, user: undefined });
+        return;
+      }
       // Drop the auth-state sentinel so the next /api/user/me success is
       // detected as a fresh login and wipes cached chat preferences.
       try { localStorage.removeItem('bs:auth-state'); } catch { /* ignore */ }
@@ -109,6 +115,10 @@ const AuthContextProvider = ({
       });
     },
     onError: (error) => {
+      if (kunlianSession.isKunlian() || kunlianSession.needsProtocolProbe()) {
+        doSetError(String(i18next.t('shared:kunlian.logout_retry')));
+        return;
+      }
       try { localStorage.removeItem('bs:auth-state'); } catch { /* ignore */ }
       doSetError((error as Error).message);
       const thirdPartyLogoutUrl = localStorage.getItem('THIRD_PARTY_LOGOUT_URL');

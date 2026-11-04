@@ -1,3 +1,14 @@
+import { kunlianLoginUrl } from '@bisheng/api-client';
+
+export { kunlianSession } from '@/controllers/kunlianSession';
+
+export function buildKunlianLoginUrl(): string {
+    const remembered = consumeLoginReturnTo();
+    if (!remembered) return kunlianLoginUrl();
+    const target = new URL(remembered, location.origin);
+    return kunlianLoginUrl(`${target.pathname}${target.search}`);
+}
+
 /**
  * Post-login "return to where you were" handoff.
  *

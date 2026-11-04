@@ -14,6 +14,7 @@ from bisheng.open_api.domain.services.execution_context import restore_execution
 from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.permission.application.identity import get_current_permission_actor
 from bisheng.public_endpoints.domain.services.guest_policy import should_skip_public_workflow_use
+from bisheng.sso_sync.application.workflow_context import workflow_causal_scope
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.main import bisheng_celery
@@ -158,7 +159,14 @@ def execute_workflow(
     trace_id_var.set(unique_id)
     start_time = time.time()
     try:
-        with restore_execution_context(execution_snapshot) as snapshot:
+        with (
+            workflow_causal_scope(
+                getattr(getattr(execute_workflow, "request", None), "headers", None),
+                user_id=user_id,
+                execution_snapshot=execution_snapshot,
+            ),
+            restore_execution_context(execution_snapshot) as snapshot,
+        ):
             # Guest runs skip `use` only when session.flow_id matches this workflow.
             _authorize_workflow_use(snapshot, user_id, workflow_id, chat_id)
             _execute_workflow(unique_id, workflow_id, chat_id, user_id, source)
@@ -204,7 +212,14 @@ def continue_workflow(
     trace_id_var.set(unique_id)
     start_time = time.time()
     try:
-        with restore_execution_context(execution_snapshot) as snapshot:
+        with (
+            workflow_causal_scope(
+                getattr(getattr(continue_workflow, "request", None), "headers", None),
+                user_id=user_id,
+                execution_snapshot=execution_snapshot,
+            ),
+            restore_execution_context(execution_snapshot) as snapshot,
+        ):
             _authorize_workflow_use(snapshot, user_id, workflow_id, chat_id)
             _continue_workflow(unique_id, workflow_id, chat_id, user_id, source)
     finally:

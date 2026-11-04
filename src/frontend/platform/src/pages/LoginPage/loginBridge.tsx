@@ -1,5 +1,6 @@
 import { Button } from '@bisheng/ui';
 import Separator from "@/components/bs-comp/chatComponent/Separator";
+import { buildKunlianLoginUrl } from '@/utils/loginReturnTo';
 
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -16,17 +17,21 @@ export default function LoginBridge({ oauthData, onHasLdap }: LoginBridgeProps) 
 
     const ssoUrl = oauthData?.sso || "";
     const wxUrl = oauthData?.wx || "";
+    const hasKunlian = oauthData?.kunlian === '/api/oauth2/kunlian';
 
     useEffect(() => {
         if (oauthData?.ldap) onHasLdap(true);
     }, [oauthData]);
 
-    if (!ssoUrl && !wxUrl) return null;
+    if (!ssoUrl && !wxUrl && !hasKunlian) return null;
 
     return (
         <div>
             <Separator className="my-4" text={t("login.otherMethods")}></Separator>
             <div className="flex justify-center items-center gap-4">
+                {hasKunlian && <Button size="small" color="default" variant="outlined" onClick={() => { location.href = buildKunlianLoginUrl(); }}>
+                    {t('shared:kunlian.login')}
+                </Button>}
                 {ssoUrl && (
                     <Button size="small" iconOnly onClick={() => (location.href = ssoUrl)}>
                         SSO

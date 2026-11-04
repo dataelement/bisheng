@@ -199,12 +199,12 @@ class TestCrossSourceReuseAndMigrate:
         feishu_user = _user(user_id=7, source="feishu", external_id="u1", user_name="Alice", email="alice@x.com")
         aget_src = AsyncMock(return_value=None)
         aget_any = AsyncMock(return_value=feishu_user)
-        update = AsyncMock(return_value=None)
+        update = AsyncMock(side_effect=lambda user: user)
         audit = AsyncMock(return_value=None)
         add = AsyncMock(return_value=None)
         patches.UserDao.aget_by_source_external_id = aget_src
         patches.UserDao.aget_by_external_id = aget_any
-        patches.UserDao.aupdate_user = update
+        patches.UserService.apersist_profile_update = update
         patches.UserDao.add_user_and_default_role = add
         patches.AuditLogDao.ainsert_v2 = audit
 
@@ -238,8 +238,8 @@ class TestCrossSourceReuseAndMigrate:
         )
         patches.UserDao.aget_by_source_external_id = AsyncMock(return_value=None)
         patches.UserDao.aget_by_external_id = AsyncMock(return_value=local_user)
-        update = AsyncMock(return_value=None)
-        patches.UserDao.aupdate_user = update
+        update = AsyncMock(side_effect=lambda user: user)
+        patches.UserService.apersist_profile_update = update
         patches.UserDao.add_user_and_default_role = AsyncMock()
         patches.AuditLogDao.ainsert_v2 = AsyncMock(return_value=None)
 
@@ -329,3 +329,20 @@ class TestCrossSourceReuseAndMigrate:
         assert resp.user_id == 7
         audit.assert_not_awaited()
         patches.UserDao.add_user_and_default_role.assert_not_awaited()
+
+
+@pytest.mark.parametrize("source", ["sso", "wecom", "kunlian"])
+async def test_reserved_kunlian_account_is_never_adopted(patches, monkeypatch, source):
+    from bisheng.common.errcode.sso_sync import KunlianBindingConflictError
+
+    existing = _user(source="kunlian")
+    monkeypatch.setattr(
+        patches.UserDao, "aget_by_source_external_id", AsyncMock(return_value=None if source != "kunlian" else existing)
+    )
+    monkeypatch.setattr(patches.UserDao, "aget_by_external_id", AsyncMock(return_value=existing))
+    write = AsyncMock(return_value=existing)
+    monkeypatch.setattr(patches.UserService, "apersist_profile_update", write)
+    with pytest.raises(KunlianBindingConflictError):
+        await patches.LoginSyncService._upsert_user(_payload(), "127.0.0.1", source)
+    assert existing.source == "kunlian"
+    write.assert_not_awaited()

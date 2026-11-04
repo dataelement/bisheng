@@ -30,7 +30,7 @@ it('throttles concurrent license failures while every caller still receives its 
   expect(notices).toHaveBeenCalledTimes(1);
 });
 it('keeps forced permission routing for showError=false while the legacy silent exception stays quiet', async () => {
-  const current = { href: '/current' };
+  const current = { href: new URL('/current', window.location.origin).href, origin: window.location.origin };
   vi.stubGlobal('location', current);
   const { default: request } = await setup({ status_code: 403, status_message: 'Forbidden', data: { reason: 'role' } });
   const forced = await request.get('/api/v1/restricted', { showError: false }).catch(cause => cause);

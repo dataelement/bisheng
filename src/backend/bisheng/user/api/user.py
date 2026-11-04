@@ -239,28 +239,64 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         role_ids=role_ids,
         is_department_admin=is_department_admin,
     )
-    return resp_200(
-        await UserService.build_user_read(
-            db_user,
-            role=str(role),
-            web_menu=web_menu,
-            menu_approval_mode=menu_approval_mode,
-            menu_approval_mode_workbench=menu_approval_mode_workbench,
-            menu_approval_mode_admin=menu_approval_mode_admin,
-            admin_groups=admin_group,
-            can_manage_user_groups=can_manage_user_groups,
-            is_department_admin=is_department_admin,
-            is_global_super=is_global_super,
-            is_child_admin=is_child_admin,
-            leaf_tenant_id=leaf_tenant_id,
-            leaf_tenant_name=leaf_tenant_name,
-            **entry,
-        )
+    payload = await UserService.build_user_read(
+        db_user,
+        role=str(role),
+        web_menu=web_menu,
+        menu_approval_mode=menu_approval_mode,
+        menu_approval_mode_workbench=menu_approval_mode_workbench,
+        menu_approval_mode_admin=menu_approval_mode_admin,
+        admin_groups=admin_group,
+        can_manage_user_groups=can_manage_user_groups,
+        is_department_admin=is_department_admin,
+        is_global_super=is_global_super,
+        is_child_admin=is_child_admin,
+        leaf_tenant_id=leaf_tenant_id,
+        leaf_tenant_name=leaf_tenant_name,
+        **entry,
     )
+    if getattr(login_user, "auth_source", None) == "kunlian":
+        return resp_200({**payload.model_dump(), "auth_source": "kunlian"})
+    return resp_200(payload)
 
 
 @router.post("/user/logout", status_code=201)
 async def logout(auth_jwt: AuthJwt = Depends()):
+    request = getattr(auth_jwt, "req", None)
+    if isinstance(request, Request):
+        from fastapi.encoders import jsonable_encoder
+        from fastapi.responses import JSONResponse
+
+        from bisheng.common.errcode.sso_sync import KunlianError, KunlianTrustRejectedError
+        from bisheng.sso_sync.application.browser import get_browser_application, resolve_browser_protocol
+
+        try:
+            admission = await resolve_browser_protocol(request, auth_jwt)
+            if admission is not None:
+                application = await get_browser_application(request)
+                csrf = request.headers.getlist("x-csrf-token")
+                if len(csrf) != 1:
+                    raise KunlianTrustRejectedError()
+                result = await application.protocol.logout(
+                    admission.reference,
+                    admission.browser_binding_hash,
+                    csrf=csrf[0],
+                    origin=request.headers.get("origin", ""),
+                )
+                response = JSONResponse(status_code=200, content=jsonable_encoder(resp_200(result.browser_payload())))
+                response.delete_cookie(
+                    "access_token_cookie",
+                    path="/",
+                    httponly=True,
+                    secure=application.config.public_origin.startswith("https://"),
+                    samesite="lax",
+                )
+                response.headers["Cache-Control"] = "no-store"
+                return response
+        except KunlianError as error:
+            response = error.to_response()
+            response.headers["Cache-Control"] = "no-store"
+            return response
     # F019 AC-10: clear any Redis admin-scope for this user before the JWT
     # disappears. Best-effort — a decode failure or Redis outage must not
     # prevent the cookie from being unset. Local import avoids a cross-
@@ -687,6 +723,8 @@ async def update(*, request: Request, user: UserUpdate, login_user: LoginUser = 
     # check if user already exist
     disabled_just_now = False
     if db_user and user.delete is not None:
+        if db_user.source == "kunlian" and user.delete not in (0, 1):
+            raise HTTPException(status_code=400, detail="Invalid account status")
         # Determine if it's an admin
         with get_sync_db_session() as session:
             admin = session.exec(
@@ -704,6 +742,15 @@ async def update(*, request: Request, user: UserUpdate, login_user: LoginUser = 
                 status_code=403,
                 detail="Account disabled by organization sync; only a super admin can re-enable.",
             )
+        if db_user.source == "kunlian":
+            # 先通过原权限闸门。Owner 协议在同一身份锁下记录人工状态与准入版本。
+            db_user = await UserService.aset_kunlian_account_status(db_user.user_id, disabled=user.delete == 1)
+            if user.delete == 1:
+                await UserService.ainvalidate_jwt_after_account_disabled(db_user.user_id)
+            if db_user.delete == 0:
+                clear_error_password_key(db_user.user_id)
+            update_user_delete_hook(request, login_user, db_user)
+            return resp_200()
         if user.delete == db_user.delete:
             return resp_200()
         disabled_just_now = user.delete == 1

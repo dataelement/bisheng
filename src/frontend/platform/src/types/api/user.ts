@@ -1,4 +1,5 @@
 export type User = {
+    auth_source?: 'kunlian';
     user_name: string;
     external_id?: string | null;
     email: string | null;

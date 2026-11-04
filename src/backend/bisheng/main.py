@@ -181,6 +181,9 @@ async def lifespan(app: FastAPI):
             # goes away, so a deploy restart is not a silent gap in an audit asset.
             await flush_pending_access_records(timeout=5.0)
             try:
+                kunlian_runtime = getattr(app.state, "kunlian_runtime_provider", None)
+                if kunlian_runtime is not None:
+                    await kunlian_runtime.aclose()
                 dsh_runtime = getattr(app.state, "dsh_runtime", None)
                 if dsh_runtime is not None:
                     await dsh_runtime.close()

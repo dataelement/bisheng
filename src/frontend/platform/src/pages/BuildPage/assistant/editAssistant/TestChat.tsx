@@ -1,4 +1,5 @@
 import { messagesForTransport } from '@bisheng/chat/core';
+import { kunlianSession } from '@/utils/loginReturnTo';
 // @ts-strict-ignore
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import ChatComponent from "@/components/bs-comp/chatComponent";
@@ -11,7 +12,8 @@ import { useTranslation } from "react-i18next";
 
 export default function TestChat({ assisId, guideQuestion, onClear }) {
     const token = localStorage.getItem("ws_token") || '';
-    const wsUrl = `${location.host}${__APP_ENV__.BASE_URL}/api/v1/assistant/chat/${assisId}?t=${token}`
+    const suffix = kunlianSession.isKunlian() ? '' : `?t=${encodeURIComponent(token)}`;
+    const wsUrl = `${location.host}${__APP_ENV__.BASE_URL}/api/v1/assistant/chat/${assisId}${suffix}`
 
     const { messages, changeChatId, inputLocked } = useMessageStore()
     const { assistantState } = useAssistantStore()

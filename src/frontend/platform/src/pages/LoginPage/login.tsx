@@ -17,6 +17,7 @@ import { locationContext } from "@/contexts/locationContext";
 import { getSSOurlApi, ldapLoginApi } from "@/controllers/API/pro";
 import { getBrandAssetUrl } from "@/utils/brand";
 import { consumeLoginReturnTo } from "@/utils/loginReturnTo";
+import { kunlianSession } from '@/controllers/kunlianSession';
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getCaptchaApi, loginApi, registerApi } from "../../controllers/API/user";
@@ -70,6 +71,11 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                 }
                 if (forceLocal) {
                     // Backdoor route: never persist redirect URLs and never auto-jump.
+                    setOauthLoading(false);
+                    return;
+                }
+                if (kunlianSession.isKunlian()) {
+                    // 昆联失败保留手动入口。旧自动登录设置不得抢走当前流程。
                     setOauthLoading(false);
                     return;
                 }

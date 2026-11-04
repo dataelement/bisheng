@@ -1,4 +1,6 @@
 import { getPlatformAdminPanelUrl } from './platformAdminUrl';
+import { kunlianLoginUrl } from '@bisheng/api-client';
+import { kunlianSession } from './kunlianSession';
 
 /**
  * Single implementation of "send this browser to the login page, and bring it
@@ -60,6 +62,7 @@ function rememberReturnTo(returnTo: string): void {
 
 /** Where the login form lives: the IdP when SSO is configured, else the platform app. */
 export function getLoginUrl(): string {
+  if (kunlianSession.isKunlian()) return kunlianLoginUrl();
   try {
     const thirdPartyLoginUrl = localStorage.getItem('THIRD_PARTY_LOGIN_URL');
     if (thirdPartyLoginUrl) {
@@ -102,7 +105,7 @@ export function redirectToLogin(
   }
 
   rememberReturnTo(returnTo);
-  location.href = getLoginUrl();
+  location.href = kunlianSession.isKunlian() ? kunlianLoginUrl(returnTo) : getLoginUrl();
 }
 
 /** Test-only: reset the one-shot guard between cases. */

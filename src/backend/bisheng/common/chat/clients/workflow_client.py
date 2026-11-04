@@ -26,6 +26,32 @@ WORKFLOW_STATUS_CHECK_FINISHED = {
 
 
 class WorkflowClient(BaseClient):
+    @property
+    def execution_snapshot(self):
+        context = self.current_execution_context
+        return context.execution_snapshot if context is not None else self._connection_execution_snapshot
+
+    @execution_snapshot.setter
+    def execution_snapshot(self, value):
+        self._connection_execution_snapshot = value
+
+    @property
+    def session_subject(self):
+        context = self.current_execution_context
+        return context.session_subject if context is not None else self._connection_session_subject
+
+    @session_subject.setter
+    def session_subject(self, value):
+        self._connection_session_subject = value
+
+    def _causal_headers(self):
+        context = self.current_execution_context
+        if context is None or context.causal_context is None:
+            return {}
+        return {
+            "headers": {"kunlian_causal_context": dict(context.causal_context), "tenant_id": context.operator.tenant_id}
+        }
+
     def __init__(
         self,
         request: Request,
@@ -54,7 +80,7 @@ class WorkflowClient(BaseClient):
             self.ws_closed = True
         # Non-Session Mode OffworkflowImplementation, Session mode determines if the user took the initiative to close
         if self.workflow:
-            if force_stop or not self.chat_id:
+            if force_stop or (not self.chat_id and getattr(self.login_user, "auth_source", None) != "kunlian"):
                 await self.workflow.async_set_workflow_stop()
                 workflow_over = await self.workflow_run()
                 while not workflow_over:
@@ -187,9 +213,10 @@ class WorkflowClient(BaseClient):
                     self.chat_id,
                     self.user_id,
                     "api" if self.execution_snapshot is not None else "platform",
-                    self.execution_snapshot,
+                    dict(self.execution_snapshot) if self.execution_snapshot is not None else None,
                 ],
                 queue=await self.get_execute_worker(),
+                **self._causal_headers(),
             )
             await self.send_response("processing", "begin", "")
             await self.workflow_run()
@@ -279,11 +306,12 @@ class WorkflowClient(BaseClient):
                     self.workflow.unique_id,
                     self.workflow.workflow_id,
                     self.workflow.chat_id,
-                    self.workflow.user_id,
+                    self.user_id,
                     "api" if self.execution_snapshot is not None else "platform",
-                    self.execution_snapshot,
+                    dict(self.execution_snapshot) if self.execution_snapshot is not None else None,
                 ],
                 queue=await self.get_execute_worker(),
+                **self._causal_headers(),
             )
             await self.workflow_run()
         # await self.workflow_run()

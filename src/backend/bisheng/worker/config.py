@@ -16,10 +16,29 @@ enable_utc = False
 # queue is reserved for workflow DAG execution only.
 task_routes = {**settings.celery_task.task_routers}
 task_routes.setdefault("bisheng.worker.knowledge.space_delete.*", {"queue": "knowledge_celery"})
+task_routes.setdefault("bisheng.worker.sso_sync.tasks.*", {"queue": "celery"})
 # redisHealth check interval, unit sec
 redis_backend_health_check_interval = 5
 
 beat_schedule = dict(settings.celery_task.beat_schedule)
+if settings.sso_sync.kunlian.connection_id:
+    beat_schedule.setdefault(
+        "kunlian-session-material-expiry",
+        {
+            "task": "bisheng.worker.sso_sync.tasks.expire_session_material",
+            "schedule": 60.0,
+            "options": {"queue": "celery", "headers": {"tenant_id": 1}},
+        },
+    )
+if settings.sso_sync.kunlian.directory_enabled:
+    beat_schedule.setdefault(
+        "kunlian-directory-recovery",
+        {
+            "task": "bisheng.worker.sso_sync.tasks.dispatch_sync",
+            "schedule": float(settings.sso_sync.kunlian.sync_interval_seconds),
+            "options": {"queue": "celery", "headers": {"tenant_id": 1}},
+        },
+    )
 beat_schedule.setdefault(
     "knowledge-space-delete-recovery",
     {"task": "bisheng.worker.knowledge.space_delete.dispatch_pending_deletes", "schedule": 60.0},

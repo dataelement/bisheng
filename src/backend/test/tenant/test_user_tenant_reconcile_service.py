@@ -12,6 +12,13 @@ from bisheng.tenant.domain.services.user_tenant_reconcile_service import (
 )
 
 
+@pytest.fixture(autouse=True)
+def ordinary_sources(monkeypatch):
+    from bisheng.tenant.domain.repositories.external_membership import ExternalMembershipRepository
+
+    monkeypatch.setattr(ExternalMembershipRepository, "find_external_user_ids", AsyncMock(return_value=frozenset()))
+
+
 def _context(
     mounts: dict[int, int] | None = None,
     active_tenants: set[int] | None = None,
@@ -99,3 +106,15 @@ async def test_find_drifted_users_uses_two_batch_queries(monkeypatch):
     assert drifted == [3]
     primary.assert_awaited_once_with([1, 2, 3])
     current.assert_awaited_once_with([1, 2, 3])
+
+
+async def test_kunlian_candidates_are_excluded_before_department_drift(monkeypatch):
+    from bisheng.tenant.domain.repositories.external_membership import ExternalMembershipRepository
+
+    monkeypatch.setattr(ExternalMembershipRepository, "find_external_user_ids", AsyncMock(return_value=frozenset({17})))
+    primary = AsyncMock(return_value={})
+    current = AsyncMock(return_value={17: 7, 18: 7})
+    monkeypatch.setattr(UserDepartmentDao, "aget_primary_department_paths_by_user_ids", primary)
+    monkeypatch.setattr(UserTenantDao, "aget_active_tenant_ids_by_user_ids", current)
+    assert await UserTenantReconcileService.find_drifted_user_ids([17, 18], _context()) == [18]
+    primary.assert_awaited_once_with([18])
