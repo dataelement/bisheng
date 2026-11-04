@@ -103,7 +103,7 @@ const CollapsibleTimelineItem: FC<CollapsibleTimelineItemProps> = ({
                     className={cn('grid transition-all duration-300 ease-out', open && 'mt-2')}
                     style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
                 >
-                    <div className="min-h-0 overflow-hidden">{children}</div>
+                    <div className="min-h-0 overflow-hidden">{open ? children : null}</div>
                 </div>
             </div>
         </div>

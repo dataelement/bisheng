@@ -491,6 +491,12 @@
   "com_linsight_export_success": "ファイルをダウンロードしました",
   "com_linsight_export_failed": "エクスポートに失敗しました。後でもう一度お試しください",
   "com_linsight": {
+    "tool_knowledge_done": "ナレッジ検索済み",
+    "tool_running": "{{0}} を呼び出し中",
+    "tool_search_done": "ウェブ検索済み",
+    "tool_todos_done": "タスクリスト更新済み",
+    "tool_used": "{{0}} を使用済み",
+    "tool_write_done": "ファイル作成済み",
     "activity_reading": "資料を確認中",
     "activity_searching": "ウェブで調査中",
     "activity_summarizing": "結果を整理中",

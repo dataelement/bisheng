@@ -30,11 +30,11 @@ export interface ToolRowLiteProps {
  * both `search_knowledge_base` and `search_knowledge_bases` resolve.
  */
 const TOOL_VERB_I18N: Record<string, string> = {
-    web_search: '已联网搜索',
-    search_knowledge_base: '已检索知识',
-    search_knowledge_bases: '已检索知识',
-    write_file: '已写入文件',
-    write_todos: '已更新任务清单',
+    web_search: 'com_linsight.tool_search_done',
+    search_knowledge_base: 'com_linsight.tool_knowledge_done',
+    search_knowledge_bases: 'com_linsight.tool_knowledge_done',
+    write_file: 'com_linsight.tool_write_done',
+    write_todos: 'com_linsight.tool_todos_done',
 };
 
 /** Detail text class (color applied via the Body token at the call site). */
@@ -55,11 +55,11 @@ function resolveTitle(step: MergedStep, localize: ReturnType<typeof useLocalize>
     if (step.running) {
         // Mirror ToolCallDisplay inflight phrasing; verb maps are past-tense, so
         // running steps use the generic "正在调用 X" form against the raw name.
-        return `正在调用 ${step.name || localize('com_tools_generic_fallback')}`;
+        return localize('com_linsight.tool_running', { 0: step.name || localize('com_tools_generic_fallback') });
     }
-    if (verb) return verb;
+    if (verb) return localize(verb);
     // Fallback: "已使用 {name}" (North Star generic-tool phrasing).
-    return `已使用 ${step.name || localize('com_tools_generic_fallback')}`;
+    return localize('com_linsight.tool_used', { 0: step.name || localize('com_tools_generic_fallback') });
 }
 
 const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step }) => {
@@ -72,8 +72,8 @@ const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step }) => {
     // local; the parent DeepStepGroup owns the group-level fold.
     const [open, setOpen] = useState<boolean>(false);
 
-    const paramsText = formatStepParams(step.params);
-    const hasDetails = !!(step.callReason || paramsText || step.output);
+    const paramsText = open ? formatStepParams(step.params) : '';
+    const hasDetails = !!(step.callReason || (step.params && Object.keys(step.params).length) || step.output);
 
     const title = resolveTitle(step, localize);
     // Unified icon system (§1.3): running → Accent Loading spinner; done →

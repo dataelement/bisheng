@@ -189,14 +189,10 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
     // from lingering next to real task rows.
     const queueing = running && noProgressYet && (linsight?.queueCount || 0) > 0;
 
-    // Does the session timeline already have content to render? Once deep-thinking
-    // starts streaming, ExecutionTimeline owns the "working" signal (+ live-tail
-    // through the gap), so the planning row must not run concurrently. Memo keyed
-    // on a composite signature because the WS pump mutates sessionSteps in place.
+    // Folded deltas replace the array without changing its length.
     const hasSessionTimeline = useMemo(
         () => !isMobile && hasRenderableTimeline(sessionSteps),
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- composite key over the in-place-mutated sessionSteps array
-        [isMobile, sessionSteps.length, sessionSteps[sessionSteps.length - 1]?.status, sessionSteps[sessionSteps.length - 1]?.call_id],
+        [isMobile, sessionSteps],
     );
 
     // Attachment ingest was moved off the submit request into the worker, which

@@ -1004,11 +1004,6 @@
       "count": 1
     }
   },
-  "src/components/Linsight/Execution/ToolRowLite.tsx": {
-    "no-restricted-syntax": {
-      "count": 7
-    }
-  },
   "src/components/Linsight/Execution/clarify.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
@@ -2099,13 +2094,13 @@
       "count": 1
     },
     "@typescript-eslint/no-explicit-any": {
-      "count": 9
+      "count": 8
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 2
     },
     "no-console": {
-      "count": 3
+      "count": 2
     },
     "no-empty": {
       "count": 1

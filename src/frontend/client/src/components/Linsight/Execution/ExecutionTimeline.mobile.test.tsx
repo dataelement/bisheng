@@ -57,7 +57,8 @@ it('keeps full reasoning and tool output available on desktop', () => {
     mockMobile = false;
     const html = renderTimeline(history);
     expect(html).toContain('Private reasoning');
-    expect(html).toContain('Large tool result');
+    // Tool details remain lazy even inside an expanded desktop thinking group.
+    expect(html).not.toContain('Large tool result');
     expect(html).toContain('Subagent reasoning');
 });
 

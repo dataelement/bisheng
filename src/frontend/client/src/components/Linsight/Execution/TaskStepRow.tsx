@@ -15,6 +15,7 @@
  * tool rows), plus any answered clarify (IntentRow), nested started children, and
  * a terminal error. A task with no real execution renders nothing.
  */
+import { memo } from 'react';
 import { ExecutionLiveContext } from './executionLive';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import type { ExecStepEventData } from './stepUtils';
@@ -30,7 +31,7 @@ export interface ExecTask {
     [key: string]: any;
 }
 
-export function TaskStepRow({ task }: { task: ExecTask }) {
+export const TaskStepRow = memo(function TaskStepRowView({ task }: { task: ExecTask }) {
     // Answered clarify entries render as inline IntentRows inside ExecutionTimeline
     // (时序内联); kept here only to gate the "render nothing" guard below so a task
     // whose only history is an answered clarify still surfaces that intent row.
@@ -67,4 +68,4 @@ export function TaskStepRow({ task }: { task: ExecTask }) {
             {hasError && <p className="px-2 py-1 text-xs text-red-500">{task.errorMsg}</p>}
         </div>
     );
-}
+});

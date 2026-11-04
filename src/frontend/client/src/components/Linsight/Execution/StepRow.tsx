@@ -124,7 +124,7 @@ export function StepRow({ icon, title, children, running = false, defaultOpen, r
                 {/* Expanded content: grid-rows 0fr→1fr animates open/close smoothly
                     (same technique as the daily "深度思考" module). The left rail
                     supplies the indent, so no extra left margin here. */}
-                {collapsible && (
+                {collapsible && open && (
                     <div
                         className="grid transition-all duration-300 ease-out"
                         style={{ gridTemplateRows: open ? '1fr' : '0fr' }}

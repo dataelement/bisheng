@@ -11,7 +11,7 @@
  * visual tokens live in the task-mode primitives (CollapsibleTimelineItem /
  * TimelineRail) and the Wave2 group components below.
  */
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import { DeepStepGroup } from './DeepStepGroup';
 import { useExecutionLive } from './executionLive';
@@ -28,14 +28,14 @@ interface ExecutionTimelineProps {
     history: ExecStepEventData[] | null | undefined;
 }
 
-export function ExecutionTimeline({ history }: ExecutionTimelineProps) {
+export const ExecutionTimeline = memo(function ExecutionTimeline({ history }: ExecutionTimelineProps) {
     const isMobile = usePrefersMobileLayout();
     // Branch before mounting the detailed renderer: CSS-only folding still
     // builds every thinking/tool/subagent subtree and keeps its text in the DOM.
     return isMobile
         ? <MobileExecutionNotices history={history} />
         : <DetailedExecutionTimeline history={history} />;
-}
+});
 
 /** Retain preparation/availability notices without merging process bodies. */
 function MobileExecutionNotices({ history }: ExecutionTimelineProps) {
@@ -61,16 +61,8 @@ function MobileExecutionNotices({ history }: ExecutionTimelineProps) {
 }
 
 function DetailedExecutionTimeline({ history }: ExecutionTimelineProps) {
-    // F3 perf: building the node tree is several O(n) passes (merge + group +
-    // episode aggregation). The WS pump mutates `history` in place (same array
-    // reference), so the reference alone is not enough to invalidate the memo — a
-    // composite signature (length + last frame's status / call_id) re-fires it on
-    // each appended/closed frame while skipping the wasteful per-render rebuild.
-    const frames = history || [];
-    const last = frames[frames.length - 1];
-    const sig = `${frames.length}:${last?.status ?? ''}:${last?.call_id ?? ''}`;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional composite key over the in-place-mutated history array
-    const nodes = useMemo(() => buildTimelineGroups(mergeStepFrames(history)), [sig]);
+    // Folding replaces the array even when the number of steps stays constant.
+    const nodes = useMemo(() => buildTimelineGroups(mergeStepFrames(history)), [history]);
     // Container liveness (session turn / running task), provided by the carrier via
     // ExecutionLiveContext. The ACTIVE episode is the LAST node while the container
     // is live — that one carries the live facets (正在 label, header pulse); every

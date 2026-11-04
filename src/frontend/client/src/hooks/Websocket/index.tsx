@@ -1,13 +1,14 @@
 // @ts-strict-ignore
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { getLinsightSessionVersionList, userInputLinsightEvent, userStopLinsightEvent } from "~/api/linsight";
+import { userInputLinsightEvent, userStopLinsightEvent } from "~/api/linsight";
 import { SopStatus } from "~/store/linsight";
 import { useToastContext } from "~/Providers";
 import { toggleNav } from "~/utils";
 import { useLinsightManager } from "../useLinsightManager";
 import { MockWebSocket } from "./mock";
 import { observeModelRateLimitEvent } from "~/hooks/queries/endpoints/modelRateLimitPolling";
+import { appendStepFrame } from '~/components/Linsight/Execution/stepFold';
 import { closeCompletedTaskRows } from '../linsightCompletion';
 const MOCK = false
 
@@ -98,7 +99,6 @@ export const useLinsightWebSocket = (versionId) => {
 
         websocket.onmessage = (event) => {
             const taskData = JSON.parse(event.data);
-            console.log('ws data :>> ', taskData);
             /**
              * 生成一级任务list
              * 生成当前一级任务下的二级任务list
@@ -302,22 +302,17 @@ export const useLinsightWebSocket = (versionId) => {
                                 matched = true;
                                 return {
                                     ...task,
-                                    history: [...(task.history || []), taskData.data]
+                                    history: appendStepFrame(task.history, taskData.data)
                                 };
                             } else {
-                                return {
-                                    ...task,
-                                    children: (task.children || []).map(child => {
-                                        if (child.id === taskData.data.task_id) {
-                                            matched = true;
-                                            return {
-                                                ...child,
-                                                history: [...(child.history || []), taskData.data]
-                                            };
-                                        }
-                                        return child;
-                                    })
-                                };
+                                const children = (task.children || []).map(child => {
+                                    if (child.id !== taskData.data.task_id) return child;
+                                    matched = true;
+                                    return { ...child, history: appendStepFrame(child.history, taskData.data) };
+                                });
+                                return children.every((child, index) => child === task.children?.[index])
+                                    ? task
+                                    : { ...task, children };
                             }
                         });
 
@@ -325,7 +320,7 @@ export const useLinsightWebSocket = (versionId) => {
                         // F035 Track H: session-level steps (task_id == session_version_id,
                         // e.g. planning-stage tool calls) live at flow level
                         return {
-                            sessionSteps: [...(prev.sessionSteps || []), taskData.data]
+                            sessionSteps: appendStepFrame(prev.sessionSteps, taskData.data)
                         };
                     });
                     break;
@@ -344,27 +339,6 @@ export const useLinsightWebSocket = (versionId) => {
                     reconcileRef.current?.(id, taskData.data.output_result)?.catch((e) => {
                         console.error(`Failed to reconcile completed session ${id}:`, e);
                     });
-                    // Live only: the task answer is now a persisted category="task"
-                    // ChatMessage. Pull its real id (+ liked verdict) into the store so
-                    // like/dislike targets the right row the moment the result panel
-                    // appears — without this the panel showed while the message still
-                    // held its streaming placeholder id, so a like clicked before a
-                    // reload was lost.
-                    // The version-list already carries message_id (backend enrichment);
-                    // history hydration seeds the store from the same endpoint.
-                    {
-                        const sessionId = getLinsight(id)?.session_id;
-                        if (sessionId) {
-                            getLinsightSessionVersionList(sessionId, '')
-                                .then((list: any[]) => {
-                                    const v = (list || []).find((x) => String(x.id) === String(id));
-                                    if (v?.message_id != null) {
-                                        updateLinsight(id, { message_id: v.message_id, liked: v.liked });
-                                    }
-                                })
-                                .catch(() => { /* best-effort: a reload seeds it from the same endpoint */ });
-                        }
-                    }
                     break;
                 case 'task_terminated':
 

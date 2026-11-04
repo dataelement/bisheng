@@ -506,6 +506,12 @@
   "com_linsight_export_success": "File downloaded",
   "com_linsight_export_failed": "Export failed, please try again later",
   "com_linsight": {
+    "tool_knowledge_done": "Searched knowledge",
+    "tool_running": "Calling {{0}}",
+    "tool_search_done": "Searched the web",
+    "tool_todos_done": "Updated the task list",
+    "tool_used": "Used {{0}}",
+    "tool_write_done": "Wrote a file",
     "activity_reading": "Reading sources",
     "activity_searching": "Researching online",
     "activity_summarizing": "Preparing results",

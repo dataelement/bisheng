@@ -193,7 +193,7 @@ const DeepStepGroupBase: FC<DeepStepGroupProps> = ({ group, compact = false, sub
         [compact, group.steps, running],
     );
 
-    const segments = useMemo(() => buildSegments(group.steps), [group.steps]);
+    const segments = useMemo(() => open ? buildSegments(group.steps) : [], [group.steps, open]);
 
     const body: ReactNode = segments.map((seg) => {
         if (seg.kind === 'thinking') {
@@ -306,7 +306,7 @@ const DeepStepGroupBase: FC<DeepStepGroupProps> = ({ group, compact = false, sub
                 style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
             >
                 <div className="min-h-0 overflow-hidden">
-                    <div className="flex flex-col gap-1.5 pl-6">{body}</div>
+                    <div className="flex flex-col gap-1.5 pl-6">{open ? body : null}</div>
                 </div>
             </div>
         </div>

@@ -221,6 +221,8 @@ export function isLinsightParked(info: { sessionSteps?: any[]; tasks?: any[] }):
  */
 export const conversationTaskRunningState = selectorFamily<boolean, string>({
     key: 'conversationTaskRunningState',
+    // Do not retain a historical dependency snapshot for every stream frame.
+    cachePolicy_UNSTABLE: { eviction: 'most-recent' },
     get:
         (conversationId: string) =>
         ({ get }) => {

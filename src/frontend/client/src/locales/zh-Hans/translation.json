@@ -494,6 +494,12 @@
   "com_linsight_export_success": "文件下载成功",
   "com_linsight_export_failed": "导出失败，请稍后重试",
   "com_linsight": {
+    "tool_knowledge_done": "已检索知识",
+    "tool_running": "正在调用 {{0}}",
+    "tool_search_done": "已联网搜索",
+    "tool_todos_done": "已更新任务清单",
+    "tool_used": "已使用 {{0}}",
+    "tool_write_done": "已写入文件",
     "activity_reading": "正在查阅资料",
     "activity_searching": "正在联网调研",
     "activity_summarizing": "正在整理结果",

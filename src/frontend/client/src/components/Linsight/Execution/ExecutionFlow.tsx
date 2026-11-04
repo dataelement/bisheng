@@ -156,14 +156,10 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     // sessionSteps).
     const realTasks = useMemo(() => tasks.filter((t: any) => t.id !== versionId), [tasks, versionId]);
 
-    // Does the session timeline already have content to render? Once deep-thinking
-    // starts streaming, ExecutionTimeline owns the "working" signal (+ live-tail
-    // through the gap), so the planning row must not run concurrently. Memo keyed
-    // on a composite signature because the WS pump mutates sessionSteps in place.
+    // Folded deltas replace the array without changing its length.
     const hasSessionTimeline = useMemo(
         () => !isMobile && hasRenderableTimeline(sessionSteps),
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- composite key over the in-place-mutated sessionSteps array
-        [isMobile, sessionSteps.length, sessionSteps[sessionSteps.length - 1]?.status, sessionSteps[sessionSteps.length - 1]?.call_id],
+        [isMobile, sessionSteps],
     );
 
     // preparing row: the worker has claimed the session (IN_PROGRESS ⇒ running,

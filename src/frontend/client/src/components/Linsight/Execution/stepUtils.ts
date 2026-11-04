@@ -18,3 +18,4 @@ export * from './narration';
 export * from './activity';
 export * from './clarify';
 export * from './taskStatus';
+export * from './stepFold';
