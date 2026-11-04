@@ -88,6 +88,7 @@ function useChatView(
   // Core chat state — replaces old ChatContext + useSSE + useChatHelpers
   const {
     selectedOrgKbs,
+    knowledgeAccessMessage,
     setSelectedOrgKbs,
     messages,
     conversationId: activeConvoId,
@@ -494,6 +495,7 @@ function useChatView(
     landingHasSelection,
     setLandingHasSelection,
     selectedOrgKbs,
+    knowledgeAccessMessage,
     setSelectedOrgKbs,
     messages,
     activeConvoId,

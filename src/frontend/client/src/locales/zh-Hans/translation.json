@@ -1238,6 +1238,8 @@
       "square": "知识广场",
       "updated_at": "更新于{{date}}"
     },
+    "tag_filter_daily_only": "标签筛选仅支持日常模式，请取消标签或切回日常模式。",
+    "load_tags_failed": "标签获取失败，请重试。",
     "department_private_disabled": "部门知识空间不支持设为私有",
     "add_new": "新增",
     "web_link": "网页链接",
@@ -2840,6 +2842,14 @@
     }
   },
   "appChat": {
+    "unknownApp": "未知应用",
+    "noDescription": "暂无描述信息",
+    "emptyShared": "该分享暂无对话记录",
     "stopped": "已停止"
+  },
+  "knowledgeAccess": {
+    "checking": "正在核验知识空间访问权限…",
+    "failed": "知识空间权限加载失败，请刷新页面后重试。",
+    "revoked": "以下知识空间的访问权限已失效：{{names}}。请在“添加上下文”中重新选择可访问的空间。"
   }
 }

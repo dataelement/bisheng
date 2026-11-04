@@ -180,3 +180,26 @@ async def test_interrupt_after_completion_does_not_double_insert(stream_env):
     await body_iterator.aclose()
 
     assert len(_answer_rows(stream_env.inserted)) == 1
+
+
+@pytest.mark.parametrize("error_type", ["file_parse_failed", "file_parse_busy"])
+async def test_attachment_parse_failure_ends_stream_without_calling_model(stream_env, monkeypatch, error_type):
+    from bisheng.common.errcode.workstation import ChatFileParseError
+
+    monkeypatch.setattr(
+        chat_service,
+        "_process_agent_files",
+        AsyncMock(
+            side_effect=ChatFileParseError(error_type=error_type, filename="photo.png", detail="photo.png: OCR failed")
+        ),
+    )
+    stream_env.state["chunks"] = ["The model must not receive this image"]
+    chunks = await _drain(await chat_service._agent_stream_chat_completion(MagicMock(), _data(), MagicMock()))
+    output = "".join(chunks)
+    assert '"status_code": 12047' in output
+    assert error_type in output
+    assert '"final": true' in output
+    assert "The model must not receive this image" not in output
+    rows = _answer_rows(stream_env.inserted)
+    assert len(rows) == 1
+    assert json.loads(rows[0].extra)["error"] is True

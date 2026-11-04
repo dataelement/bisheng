@@ -5,21 +5,22 @@
  * live on the 对话 page and in the workbench sidebar's conversation list — the space page
  * keeps no chat panel or history of its own.
  *
- * What does not carry over: the main chat scopes a question to whole spaces, so the
- * current folder and the `#` tag filter of the old in-place dock have no equivalent
- * there. The tag picker is therefore not offered here.
+ * The current space and optional tag filter accompany the handoff. Folder scope
+ * remains local to the mobile in-place dock.
  *
  * Parent contract is the dock's: render inside a `position: relative` container; the bar
  * is `absolute inset-x-0 bottom-0` and overlays the bottom of the file list.
  */
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { getSpaceTagsApi } from "~/api/knowledge";
+import type { KnowledgeInputTag } from "./KnowledgeAiInput";
 import { useNavigate } from "react-router-dom";
 import { parkChatAsk } from "~/components/Chat/chatAskHandoff";
 import { useLocalize, useNewConvo } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
 import { KnowledgeAiInput } from "./KnowledgeAiInput";
 
-const NO_TAGS: { id: number; name: string }[] = [];
 const noop = () => undefined;
 
 interface KnowledgeAskBarProps {
@@ -38,10 +39,17 @@ export function KnowledgeAskBar({ spaceId, spaceName, modelValue }: KnowledgeAsk
     const model = bsConfig?.models?.find((option) => String(option.id) === String(selectedModelId));
     const handleModelChange = (value: string) => setSelectedModelId(Number(value));
 
-    const handleSend = (text: string) => {
+    const { data: tags = [], isFetching, isError, refetch } = useQuery({
+        queryKey: ["spaceTags", spaceId],
+        queryFn: () => getSpaceTagsApi(spaceId),
+        enabled: !!spaceId,
+        retry: false,
+    });
+    const refreshTags = useCallback(() => { void refetch(); }, [refetch]);
+    const handleSend = (text: string, _files?: unknown[] | null, tag?: KnowledgeInputTag) => {
         const question = text.trim();
         if (!question || !model) return;
-        parkChatAsk({ text: question, modelId: Number(model.id), space: { id: spaceId, name: spaceName } });
+        parkChatAsk({ text: question, modelId: Number(model.id), space: { id: spaceId, name: spaceName, ...(tag ? { tag } : {}) } });
         // Same pair the 新建对话 entry uses to land on an empty conversation.
         newConversation();
         navigate("/c/new");
@@ -52,7 +60,11 @@ export function KnowledgeAskBar({ spaceId, spaceName, modelValue }: KnowledgeAsk
             <div className="pointer-events-auto relative mx-auto flex w-full max-w-[800px] flex-col">
                 <KnowledgeAiInput
                     key={spaceId}
-                    availableTags={NO_TAGS}
+                    availableTags={tags}
+                    tagsLoading={isFetching}
+                    tagsError={isError}
+                    onTagPickerOpen={refreshTags}
+                    onRetryTags={refreshTags}
                     modelOptions={bsConfig?.models}
                     modelValue={selectedModelId}
                     onModelChange={handleModelChange}

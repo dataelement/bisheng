@@ -12,6 +12,9 @@
 FROM python:3.11-slim
 
 ARG TARGETARCH
+ARG APT_MIRROR=mirrors.tuna.tsinghua.edu.cn
+ARG APT_SECURITY_MIRROR=mirrors.tuna.tsinghua.edu.cn
+ARG PYPI_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 ARG http_proxy
 ARG https_proxy
 ARG HTTP_PROXY
@@ -24,8 +27,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     NLTK_DATA=/usr/local/share/nltk_data \
     PATH="/app/.venv/bin:/usr/local/bin:/usr/bin:/bin" \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-    UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
+    PIP_INDEX_URL=${PYPI_INDEX_URL} \
+    UV_DEFAULT_INDEX=${PYPI_INDEX_URL}
 
 WORKDIR /app
 
@@ -34,18 +37,18 @@ WORKDIR /app
 # a failed proxy response there sticks as NODATA/NOSPLIT on the next build.
 #
 # deb.debian.org through the CI proxy returns invalid Release signatures; use
-# tuna and keep the mirror on no_proxy (build-arg) so apt does not MITM.
+# tuna by default; public CI supplies the official Debian/PyPI sources.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     rm -f /etc/apt/apt.conf.d/docker-clean && \
     if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
-      sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' \
+      sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_SECURITY_MIRROR}|g" \
         /etc/apt/sources.list.d/debian.sources; \
     fi && \
     if [ -f /etc/apt/sources.list ]; then \
-      sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g; s/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' \
+      sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_SECURITY_MIRROR}|g" \
         /etc/apt/sources.list; \
     fi && \
-    apt-get update && \
+    apt-get -o APT::Update::Error-Mode=any update && \
     apt-get install -y --no-install-recommends \
         gcc g++ build-essential wget curl ca-certificates \
         libreoffice-writer libreoffice-impress libreoffice-calc \

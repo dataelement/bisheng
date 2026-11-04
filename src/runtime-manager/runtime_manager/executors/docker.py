@@ -64,6 +64,17 @@ class DockerExecutor:
             )
         return BundlePreparer(self.config, self.platform, runner=runner).prepare(operation)
 
+    def preflight(self, operation):
+        delivery = operation["payload"]["resolved_delivery"]
+        profile = delivery.get("profile") or {}
+        reference = delivery.get("image_ref") or profile.get("runtime_image")
+        return self._runner(operation).ensure_image(
+            reference,
+            platform=delivery.get("platform") or profile.get("platform"),
+            expected_id=delivery.get("image_id") or profile.get("runtime_image_id"),
+            role="runtime" if delivery["mode"] == "bundle" else "image",
+        )
+
     def executions(self, app_id=None, operation_id=None):
         labels = ["bisheng.managed=v2", f"bisheng.runtime.node={self.config.node_id}"]
         if app_id:
@@ -244,6 +255,24 @@ class DockerExecutor:
             raise
         stopped = not record.get("State", {}).get("Running", True)
         return {"stopped": stopped, "evidence_kind": "engine_stopped" if stopped else "unknown", "exec_ref": exec_ref}
+
+    def diagnostics(self, operation):
+        parts = []
+        for item in self.executions(app_id=operation["app_id"], operation_id=operation["operation_id"]):
+            record = self._record(item["Id"], operation)
+            labels = record.get("Config", {}).get("Labels", {})
+            if labels.get(OP_LABEL) != operation["operation_id"] or labels.get("bisheng.runtime.epoch") != str(
+                operation["owner_epoch"]
+            ):
+                continue
+            parts.append(self._runner(operation).diagnostic(operation, item["Id"]))
+        from runtime_manager.secret_redaction import bounded_diagnostic, diagnostic_environment
+
+        return bounded_diagnostic(
+            "\n".join(parts),
+            diagnostic_environment(self.config, operation["payload"]),
+            operation["payload"].get("sensitive_env_names", []),
+        )
 
     def cleanup(self, operation):
         for item in self.executions(operation_id=operation["operation_id"]):

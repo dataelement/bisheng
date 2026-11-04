@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { KnowledgeSpace } from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
 import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
@@ -14,9 +15,9 @@ type SquareSpaceStatus = "join" | "joined" | "pending" | "rejected";
  */
 export function KnowledgeSquarePane() {
     const localize = useLocalize();
-    const [previewSpaceId, setPreviewSpaceId] = useState<string>();
+    const [params, setParams] = useSearchParams();
+    const previewSpaceId = params.get("previewSpace") || undefined;
     const [previewSpace, setPreviewSpace] = useState<KnowledgeSpace | null>(null);
-    const [previewOpen, setPreviewOpen] = useState(false);
     const [statusOverride, setStatusOverride] = useState<Record<string, SquareSpaceStatus>>({});
 
     const handleStatusChange = (id: string, status: SquareSpaceStatus) => {
@@ -32,9 +33,13 @@ export function KnowledgeSquarePane() {
                 emptyText={localize("com_knowledge.no_matched_space")}
                 joinToastPrefix={localize("com_knowledge.applied_to_join_space")}
                 onPreviewSpace={(space) => {
-                    setPreviewSpaceId(space.id);
                     setPreviewSpace(space);
-                    setPreviewOpen(true);
+                    // The host can distinguish a preview from its square entry URL.
+                    setParams((current) => {
+                        const next = new URLSearchParams(current);
+                        next.set("previewSpace", space.id);
+                        return next;
+                    });
                 }}
                 statusOverride={statusOverride}
                 onSquareStatusChange={handleStatusChange}
@@ -42,16 +47,19 @@ export function KnowledgeSquarePane() {
             <KnowledgeSpacePreviewDrawer
                 spaceId={previewSpaceId}
                 initialSpace={
-                    previewSpace
+                    previewSpace && previewSpace.id === previewSpaceId
                         ? { ...previewSpace, squareStatus: statusOverride[String(previewSpace.id)] ?? previewSpace.squareStatus }
                         : null
                 }
-                open={previewOpen}
+                open={Boolean(previewSpaceId)}
                 onOpenChange={(open) => {
-                    setPreviewOpen(open);
                     if (!open) {
-                        setPreviewSpaceId(undefined);
                         setPreviewSpace(null);
+                        setParams((current) => {
+                            const next = new URLSearchParams(current);
+                            next.delete("previewSpace");
+                            return next;
+                        }, { replace: true });
                     }
                 }}
                 onSquareStatusChange={handleStatusChange}

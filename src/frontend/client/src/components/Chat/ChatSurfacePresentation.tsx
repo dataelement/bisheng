@@ -39,6 +39,7 @@ export function ChatSurfacePresentation({
     landingHasSelection,
     setLandingHasSelection,
     selectedOrgKbs,
+    knowledgeAccessMessage,
     setSelectedOrgKbs,
     messages,
     activeConvoId,
@@ -295,6 +296,7 @@ export function ChatSurfacePresentation({
                                 onChange={setInputText}
                                 bsConfig={bsConfig}
                                 selectedOrgKbs={selectedOrgKbs}
+                              knowledgeAccessMessage={knowledgeAccessMessage}
                                 onSelectedOrgKbsChange={setSelectedOrgKbs}
                                 searchType={searchType}
                                 onSearchTypeChange={setSearchType}
@@ -529,6 +531,7 @@ export function ChatSurfacePresentation({
                               onChange={setInputText}
                               bsConfig={bsConfig}
                               selectedOrgKbs={selectedOrgKbs}
+                              knowledgeAccessMessage={knowledgeAccessMessage}
                               onSelectedOrgKbsChange={setSelectedOrgKbs}
                               searchType={searchType}
                               onSearchTypeChange={setSearchType}
