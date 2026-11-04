@@ -13,11 +13,12 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       - name: ssh-key
         path: /root/.ssh
     commands:
-    # github.com:443 is being reset from this network, and the PROXY host lost
-    # its GitHub route as well, so clone over SSH (port 22) using the runner
-    # host's GitHub key instead of HTTPS.
+    # Clone over SSH (port 22) with the runner host's GitHub key: github.com:443
+    # was being reset from this network in 2026-08. When SSH fails (GitHub's
+    # Git-over-SSH outage on 2026-11-04 returned "Permission denied
+    # (publickey)"), fall back to anonymous HTTPS; the repository is public.
     - git config --global core.compression 0
-    - git clone git@github.com:dataelement/bisheng.git .
+    - git clone git@github.com:dataelement/bisheng.git . || { rm -rf .git; git clone https://github.com/dataelement/bisheng.git .; }
     - git checkout $DRONE_COMMIT
 
   - name: set poetry
@@ -228,11 +229,12 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       - name: ssh-key
         path: /root/.ssh
     commands:
-    # github.com:443 is being reset from this network, and the PROXY host lost
-    # its GitHub route as well, so clone over SSH (port 22) using the runner
-    # host's GitHub key instead of HTTPS.
+    # Clone over SSH (port 22) with the runner host's GitHub key: github.com:443
+    # was being reset from this network in 2026-08. When SSH fails (GitHub's
+    # Git-over-SSH outage on 2026-11-04 returned "Permission denied
+    # (publickey)"), fall back to anonymous HTTPS; the repository is public.
     - git config --global core.compression 0
-    - git clone git@github.com:dataelement/bisheng.git .
+    - git clone git@github.com:dataelement/bisheng.git . || { rm -rf .git; git clone https://github.com/dataelement/bisheng.git .; }
     - git checkout $DRONE_COMMIT
 
   - name: set uv mirrors

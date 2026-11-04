@@ -30,6 +30,7 @@ export interface AdvancedParams {
     num_ctx?: number;
     num_gpu?: any;
     chunk_size?: number;
+    context_window?: number | null;
     [key: string]: any; // 允许其他自定义参数
   }
   
@@ -275,7 +276,14 @@ export interface AdvancedParams {
     const templateKey = templateMap[modelType] || (modelCategory === 'llm' ? 'openai-llm' : 'openai-embedding');
     
     // 返回深拷贝的模板，避免原对象被修改
-    return JSON.parse(JSON.stringify(templates[templateKey]));
+    const template: AdvancedParams = JSON.parse(JSON.stringify(templates[templateKey]));
+    // Task mode reads `context_window` from the advanced config (F087); list it
+    // first so admins can find the key. Ollama is skipped: its "context length"
+    // field (num_ctx) already supplies the window.
+    if (modelCategory === 'llm' && templateKey !== 'ollama-llm') {
+      return { context_window: null, ...template };
+    }
+    return template;
   };
   
   // 将模板对象转换为格式化的JSON字符串

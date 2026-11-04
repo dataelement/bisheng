@@ -682,6 +682,7 @@
     "modelStatusChecking": "检测中",
     "notBeEmpty": "不能为空",
     "pasteAdvancedParamsHere": "请在下方的文本框中粘贴或输入你的高级参数配置",
+    "contextWindowParamTip": "任务模式用 context_window 判断模型的上下文长度（单位 token，含输入和输出）。不填时，系统尝试从服务商接口自动获取。",
     "rerank": "重排(Rerank)",
     "save": "保存",
     "saveSuccess": "保存成功",
