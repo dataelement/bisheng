@@ -2790,7 +2790,7 @@ class DepartmentService:
                 ),
             )
             f = await session.scalar(
-                select(func.count(Flow.id)).where(Flow.user_id == user_id),
+                select(func.count(Flow.id)).where(Flow.is_delete == 0).where(Flow.user_id == user_id),
             )
             a = await session.scalar(
                 select(func.count(Assistant.id)).where(

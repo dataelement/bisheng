@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from bisheng.chat_session.domain.session_subject import SessionSubject
+from bisheng.common.errcode.linsight import LinsightUseUpError
 from bisheng.common.errcode.open_api import OpenApiTaskQueueUnavailableError
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
@@ -29,6 +30,10 @@ from bisheng.workstation.domain.services import task_submit_service
 
 @pytest.fixture
 def io(monkeypatch: pytest.MonkeyPatch):
+    async def _config_off(self):
+        return {}
+
+    monkeypatch.setattr(type(task_submit_service.settings), "aget_all_config", _config_off)
     captured: dict = {"versions": [], "promote_kwargs": None, "telemetry": None}
 
     async def _insert_session(_cls, data: MessageSession):
@@ -156,3 +161,20 @@ async def test_task_turn_is_persisted_before_enqueue(io, monkeypatch):
     await task_submit_service.submit_task_turn(_request(), _user(), strict_enqueue=True)
 
     assert order == ["persist", "enqueue"]
+
+
+async def test_invite_switch_rejects_a_submit_with_no_remaining_uses(io, monkeypatch):
+    async def _config_on(self):
+        return {"linsight_invitation_code": True}
+
+    monkeypatch.setattr(type(task_submit_service.settings), "aget_all_config", _config_on)
+    monkeypatch.setattr(
+        task_submit_service.InviteCodeService,
+        "use_invite_code",
+        AsyncMock(return_value=False),
+    )
+
+    with pytest.raises(LinsightUseUpError):
+        await task_submit_service.submit_task_turn(_request(), _user())
+
+    assert io["versions"] == []

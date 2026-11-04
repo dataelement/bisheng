@@ -1,5 +1,4 @@
-import useMediaQuery from './useMediaQuery';
-import { isDesktopEmbedded } from '~/components/Chat/desktopEmbedding';
+import useMediaQuery from "./useMediaQuery";
 
 /**
  * Narrow viewport / H5-style shell (overlay nav, drawers, stacked regions).
@@ -7,7 +6,5 @@ import { isDesktopEmbedded } from '~/components/Chat/desktopEmbedding';
  * Use coarse-pointer / touch-only CSS (or a dedicated hook) for hover-vs-tap affordances — not this hook.
  */
 export default function usePrefersMobileLayout(): boolean {
-  const narrowViewport = useMediaQuery('(max-width: 767px)');
-  // The host owns navigation; its content pane keeps the desktop page layout.
-  return isDesktopEmbedded() ? false : narrowViewport;
+  return useMediaQuery("(max-width: 767px)");
 }

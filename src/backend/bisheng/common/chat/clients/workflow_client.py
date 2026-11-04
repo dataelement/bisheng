@@ -7,10 +7,11 @@ from loguru import logger
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.chat_session.domain.chat import ChatSessionService
-from bisheng.common.chat.clients.base import BaseClient
+from bisheng.common.chat.clients.base import BaseClient, ensure_client_execution_lease
 from bisheng.common.chat.types import WorkType
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.chat import WorkflowOfflineError
+from bisheng.common.errcode.workstation import DepartmentDailyChatConcurrentLimitError
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession
@@ -107,6 +108,10 @@ class WorkflowClient(BaseClient):
                 raise NotFoundError.http_exception()
             if session is None:
                 workflow_db = FlowDao.get_flow_by_id(workflow_id)
+                if workflow_db is None:
+                    from bisheng.common.errcode.http_error import NotFoundError
+
+                    raise NotFoundError.http_exception()
                 await ChatSessionService.create_subject_session(
                     MessageSession(
                         chat_id=self.chat_id,
@@ -174,6 +179,18 @@ class WorkflowClient(BaseClient):
             # Description workflow In operation or offline
             if not flag:
                 return
+            # Department concurrency: a page lease is only re-asserted; without
+            # one this connection takes its own execution lease. Checked before
+            # the workflow record is created so a rejection leaves no stale
+            # WAITING run behind.
+            flow_outcome = await ensure_client_execution_lease(self)
+            if flow_outcome == "rejected":
+                # Do not raise: the ``except Exception`` below would rewrite this
+                # to status_code 500 and the page would never see 12045.
+                await DepartmentDailyChatConcurrentLimitError().websocket_close_message(
+                    websocket=self.websocket, close_ws=False
+                )
+                return
             # Start a new workflow
             self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, self.user_id)
             await self.workflow.async_set_workflow_data(workflow_data)
@@ -227,11 +244,9 @@ class WorkflowClient(BaseClient):
         return False
 
     async def ensure_workflow_available(self, workflow_id: str) -> bool:
-        # Builder preview uses an empty chat ID and may execute draft workflows.
-        if not self.chat_id:
-            return True
+        # Draft previews may run offline flows, but never deleted ones.
         workflow_db = FlowDao.get_flow_by_id(workflow_id)
-        if workflow_db and workflow_db.status == FlowStatus.ONLINE.value:
+        if workflow_db and (not self.chat_id or workflow_db.status == FlowStatus.ONLINE.value):
             return True
 
         if self.workflow:
@@ -257,6 +272,18 @@ class WorkflowClient(BaseClient):
         if status_info["status"] != WorkflowStatus.INPUT.value:
             logger.warning(f"workflow is not input status: {status_info}")
         else:
+            # Department concurrency: checked before the input is written, so a
+            # rejection leaves the run in INPUT rather than a stranded
+            # INPUT_OVER with no worker behind it.
+            flow_outcome = await ensure_client_execution_lease(self)
+            if flow_outcome == "rejected":
+                # Not raised on purpose: this path runs inside ``wrapper_task``,
+                # whose ``except Exception`` only logs — the page would never
+                # receive 12045.
+                await DepartmentDailyChatConcurrentLimitError().websocket_close_message(
+                    websocket=self.websocket, close_ws=False
+                )
+                return
             user_input = {}
             message_id = None
             new_message = None

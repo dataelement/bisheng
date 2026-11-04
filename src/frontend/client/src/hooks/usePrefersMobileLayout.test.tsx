@@ -1,14 +1,19 @@
-import usePrefersMobileLayout from './usePrefersMobileLayout';
+import usePrefersMobileLayout from "./usePrefersMobileLayout";
 
 let mockNarrow = true;
 let mockEmbedded = false;
-jest.mock('./useMediaQuery', () => ({ __esModule: true, default: () => mockNarrow }));
-jest.mock('~/components/Chat/desktopEmbedding', () => ({ isDesktopEmbedded: () => mockEmbedded }));
+jest.mock("./useMediaQuery", () => ({
+  __esModule: true,
+  default: () => mockNarrow,
+}));
+jest.mock("~/components/Chat/desktopEmbedding", () => ({
+  isDesktopEmbedded: () => mockEmbedded,
+}));
 
-it('uses desktop pages inside the host and viewport-based layouts in the browser', () => {
+it("uses the same available-space rule for Web and desktop hosts", () => {
   expect(usePrefersMobileLayout()).toBe(true);
   mockEmbedded = true;
-  expect(usePrefersMobileLayout()).toBe(false);
+  expect(usePrefersMobileLayout()).toBe(true);
   mockNarrow = false;
   expect(usePrefersMobileLayout()).toBe(false);
   mockEmbedded = false;

@@ -3,7 +3,7 @@ import type { SelectedOrgKb } from '~/store/modeltype';
 import { useActivate } from 'react-activation';
 
 /**
- * Module page → 对话 handoff (desktop). A question typed into a module's ask bar — a
+ * Module page to main chat handoff. A question typed into a module's ask bar — a
  * knowledge space, a channel article — is not answered in place any more: the bar parks
  * it here and routes to /c/new, and the chat view picks it up and sends it in a fresh
  * conversation. The exchange is then an ordinary conversation that shows up in the
@@ -52,7 +52,7 @@ interface UseChatAskHandoffParams {
   locationKey: string;
   selectedKbs: KbSelection[];
   setSelectedKbs: (next: KbSelection[]) => void;
-  sendMessage: (text: string) => boolean;
+  sendMessage: (text: string) => boolean | Promise<boolean>;
   /** Daily mode, model catalog and the fresh chat state are ready. */
   ready: boolean;
   selectedModelId: number;
@@ -132,14 +132,25 @@ export function useChatAskHandoff({
       submittedAskRef.current = ask;
       setAttachmentAsk({ key: `ask-${askSeq}`, text: ask.text, file: ask.attachment });
       setMountedAsk(null);
-    } else if (sendMessage(ask.text)) {
-      // A rejected send stays staged until the sender accepts it.
+    } else {
+      // Claimed before the (possibly async) send resolves so a re-run cannot send it
+      // twice; a rejected send stays staged until the sender accepts it.
       submittedAskRef.current = ask;
-      setMountedAsk(null);
+      void Promise.resolve(sendMessage(ask.text)).then((accepted) => {
+        if (submittedAskRef.current !== ask) return;
+        if (accepted) setMountedAsk(null);
+        else submittedAskRef.current = null;
+      });
     }
   }, [mountedAsk, preparedAsk, conversationId, activeConversationId, ready, selectedModelId, selectModel, onModelUnavailable, selectedKbs, setSelectedKbs, sendMessage]);
 
   const retireAttachmentAsk = useCallback(() => setAttachmentAsk(null), []);
 
-  return { attachmentAsk, retireAttachmentAsk };
+  // Read the parked ask during render, before the effect claims it. The next
+  // render is covered by mountedAsk until sending is accepted. Attachment asks
+  // keep the landing composer mounted because it owns their upload lifecycle.
+  const incomingAsk = pendingAsk ?? mountedAsk;
+  const isTextAskPending = conversationId === 'new' && !!incomingAsk && !incomingAsk.attachment;
+
+  return { attachmentAsk, retireAttachmentAsk, isTextAskPending };
 }

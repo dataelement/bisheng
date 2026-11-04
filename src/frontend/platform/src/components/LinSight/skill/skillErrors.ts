@@ -14,6 +14,9 @@ const SKILL_ERROR_KEYS: Record<number, string> = {
     11056: 'skillManage.errors.githubUrlInvalid',
     11057: 'skillManage.errors.githubFetch',
     11058: 'skillManage.errors.githubRateLimit',
+    11077: 'skillManage.errors.giteeUrlInvalid',
+    11078: 'skillManage.errors.giteeFetch',
+    11079: 'skillManage.errors.giteeRateLimit',
     // 11052 = the uploaded payload is too big; 11059 = its unpacked contents are.
     // A well-compressing 7MB archive can trip 11059 alone, so they must not share copy.
     11059: 'skillManage.errors.bundleTooLarge',

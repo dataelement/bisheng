@@ -544,7 +544,9 @@ class WorkStationService(BaseService):
             return []
         with strict_tenant_filter():
             async with get_async_db_session() as session:
-                rows = await session.exec(select(Flow.id).where(col(Flow.id).in_(recommended_apps)))
+                rows = await session.exec(
+                    select(Flow.id).where(Flow.is_delete == 0).where(col(Flow.id).in_(recommended_apps))
+                )
                 existing_ids = rows.all()
         normalized: list[str] = []
         for row in existing_ids:

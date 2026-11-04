@@ -31,6 +31,7 @@ from bisheng.chat_session.api.router import router as session_router
 from bisheng.citation.api.router import router as citation_router
 from bisheng.commercial_license.api.router import router as commercial_license_router
 from bisheng.common.services.config_service import settings
+from bisheng.department.api.endpoints.department_flow import router as department_flow_router
 from bisheng.department.api.router import router as department_router
 from bisheng.dev_toolkit.api.router import router as dev_toolkit_router
 from bisheng.dsh.api.router import router as dsh_router
@@ -114,6 +115,11 @@ router.include_router(telemetry_search_router)
 router.include_router(channel_router)
 router.include_router(message_router)
 router.include_router(department_router)
+# Department concurrent-session page leases (docs/部门流量控制方案.md). Its own
+# prefix is deliberately NOT mounted under ``department/api/router.py`` — that
+# router carries ``/departments``, and the client calls
+# ``/api/v1/department-flow/presence/*``.
+router.include_router(department_flow_router)
 router.include_router(user_group_router)
 router.include_router(permission_router)
 router.include_router(guest_link_router)

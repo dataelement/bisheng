@@ -1,4 +1,4 @@
-import { FONT_FAMILY, TYPE_SCALE, FONT_WEIGHT } from '~/design-token.cjs';
+import { FONT_FAMILY, TYPE_SCALE, CONTROL_TYPE_SCALE, FONT_WEIGHT } from '~/design-token.cjs';
 
 export const th = { padding: '8px 12px', color: 'rgb(var(--text-1))', whiteSpace: 'nowrap' };
 export const td = { padding: '8px 12px', color: 'rgb(var(--text-1))', borderBottom: '1px solid rgb(var(--border-base))' };
@@ -45,13 +45,12 @@ export const PrimitiveTable = () => (
 
 export const SemanticTable = () => (
   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-    <thead><tr style={headRow}><th style={th}>Token</th><th style={th}>桌面 size/line</th><th style={th}>移动 size/line</th><th style={th}>字重</th><th style={th}>用途</th><th style={th}>示例</th></tr></thead>
+    <thead><tr style={headRow}><th style={th}>Token</th><th style={th}>字号 / 行高</th><th style={th}>字重</th><th style={th}>用途</th><th style={th}>示例</th></tr></thead>
     <tbody>
       {TYPE_SCALE.map((s) => (
         <tr key={s.name} style={{ height: 60 }}>
           <td style={{ ...td, whiteSpace: 'nowrap' }}><code>text-{s.name}</code></td>
           <td style={{ ...td, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{s.desktop[0]} / {s.desktop[1]}</td>
-          <td style={{ ...td, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{s.mobile[0]} / {s.mobile[1]}</td>
           <td style={{ ...td, whiteSpace: 'nowrap' }}>{s.weight}</td>
           <td style={{ ...td, whiteSpace: 'nowrap' }}>{s.usage}</td>
           <td style={{ ...td, whiteSpace: 'nowrap' }}><span className={`text-${s.name}`}>示例 Ag</span></td>
@@ -76,7 +75,26 @@ export const WeightTable = () => (
   </table>
 );
 
+export const ControlTypeTable = () => (
+  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+    <thead><tr style={headRow}><th style={th}>Token</th><th style={th}>字号 / 行高</th><th style={th}>用途</th><th style={th}>示例</th></tr></thead>
+    <tbody>
+      {CONTROL_TYPE_SCALE.map((s) => (
+        <tr key={s.name}>
+          <td style={td}><code>text-{s.name}</code></td>
+          <td style={td}>{s.desktop[0]} / {s.desktop[1]}</td>
+          <td style={td}>{s.usage}</td>
+          <td style={td}><span className={`text-${s.name}`}>示例 Ag</span></td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+);
+
 # 文字规范 Typography
+
+> 设计系统 · 字体 v2.1 · 2026-11-02
+> 适用：阅读文字、表单字段和紧凑控件。调研依据与本次改动记录见 [基础-多端适配原则.md](基础-多端适配原则.md) 的隐藏区。
 
 字体是体系化界面设计中最基本的构成之一。我们的用户通过文本来理解内容和完成工作，科学的字体系统将大大提升用户的阅读体验及工作效率。BISHENG 字体方案以「行高 = 字号 + 8px」的偶数栅格规律构建十档字阶（九档常规 12～36px，外加一档 10px 例外小字），经过大量中后台产品的实际验证后沉淀为规范，推荐给大家。在中后台视觉体系中定义字体系统，我们从下面四个方面出发：
 
@@ -103,25 +121,42 @@ ID、哈希、代码、日志等需要等宽对齐的内容，使用等宽字体
 
 字阶分成两层。**Primitive（数值层）** 只登记十个具体字号（10～36px），像一套标好刻度的尺子，本身不关心用在哪里；**Semantic（语义层）** 再给每个字号起一个说明用途的名字——正文、卡片标题、页面标题……界面里只用这些名字，不直接写数字。
 
-多这一层，换来三个好处：
+多这一层，换来两个好处：
 
 - **改一处、全站生效**：想把正文从 14px 调到 15px，只改「正文」这一个指向，所有正文一起变，不用满仓库翻数字。
 - **不会各写各的**：大家统一用「正文」「标题」这类有含义的名字，同一层级不会冒出 14、15、16 各种随手值，界面自然整齐。
-- **换端不用动代码**：移动端只要把「正文」重新指向大一号的字号即可，页面一个字都不用改（下面 Semantic 表就是这样切换的）。
 
-### Primitive（桌面基准）
+### Primitive（数值基准）
 
-primitive 即十档桌面字号的数值源，行高规律 **行高 = 字号 + 8px**（全偶数、对齐 4px 栅格）。编号 1～9 为常规阶梯；`font-size-0`（10px）位于阶梯下方，是**例外档**——仅用于角标、徽标数字等纯展示信息，不参与常规排版层级。
+primitive 即十档字号的数值源，行高规律 **行高 = 字号 + 8px**（全偶数、对齐 4px 栅格）。编号 1～9 为常规阶梯；`font-size-0`（10px）位于阶梯下方，是**例外档**——仅用于角标、徽标数字等纯展示信息，不参与常规排版层级。
 
 <PrimitiveTable />
 
-### Semantic
+### 2.1 阅读文字
 
-下表给每个字号都列了桌面、移动两套值。手机等窄屏（宽度 768px 以内）会自动切到移动那一套，页面不用为此改任何代码——这正是上面「换端不用动代码」的落地。最右「示例」列按真实样式渲染，所见即所得。
+阅读文字用于正文、说明、表格内容和标题。下表列出各层级的字号与行高，最右「示例」列按真实样式渲染。
 
 <SemanticTable />
 
-移动端的调整思路：正文放大（14→16）方便阅读，标题收小（24→22）节省空间，整个阶梯更「扁」；字号差变小后，层级主要靠字重和间距来拉开。
+
+### 2.2 表单字段与紧凑控件
+
+**先看文字在做什么，再选字号。**填写或搜索内容、显示字段答案时用表单字段字阶；执行操作、浏览候选项时用紧凑控件字阶。控件的外壳尺寸不能代替这个判断。
+
+<ControlTypeTable />
+
+- **表单字段**包括 Input、SearchInput、Textarea、PasswordInput、InputNumber，以及描边形态的 Select、Cascader。字段里的占位文字、已选值、输入文字和单位使用同一字阶；多选已选标签与「+N」也跟随字段字阶。
+- **紧凑控件**包括按钮、菜单选项，以及工具栏中的无边框选择器。small / medium 使用 `text-control`，large 使用 `text-control-lg`。独立标签、徽标等保留各自规范中的字阶。
+- **内联搜索按表单字段处理。**触发器里的已选值、占位与输入文字使用同一字阶。搜索框独立放在面板里时，触发器使用紧凑字阶，搜索框使用字段字阶。
+- **候选项使用紧凑字阶。**Select、Cascader 的菜单选项与字段当前答案分别按用途取值。
+- **字重沿用所属组件。**字段与紧凑控件 token 只定义字号、行高，不覆盖按钮、选项等组件自己的字重。
+
+表内 px 数值按默认根字号 16px 换算；用户放大文字时允许继续增大，不把它们钉死在该数值。
+
+| ✅ 推荐 | ❌ 不推荐 | 原因 |
+|---|---|---|
+| 同一表单内，同尺寸的输入框与选择器使用同一字号 | 同尺寸字段混用不同字号 | 同一层级的字段答案应保持一致 |
+| 可搜索选择器从收起到输入始终使用同一字阶 | 聚焦后突然改变搜索词字号 | 聚焦只改变状态，不改变同一文字区的字号 |
 
 ## 3. 字重 Font Weight
 
@@ -133,14 +168,13 @@ primitive 即十档桌面字号的数值源，行高规律 **行高 = 字号 + 8
 
 ### Token 约定
 
-- 组件与业务代码只引用 semantic token，不直接使用 primitive 或裸值。
+- 组件与业务代码按用途引用阅读、字段或紧凑控件的语义 token，不直接使用数值层或裸值；不要拿 `text-body` 代替所有控件字号。
 - 新增字号需求先在现有阶梯中找替代；确需新增走 token 评审加入 primitive 层。
 - `text-caption-sm`（10px）是**例外档**：仅用于角标、徽标数字、图表注记等纯展示信息，禁用于可点击文字和正文层级；浏览器开启「最小字号」设置时可能被强制放大，不要用它承载关键信息。存量 `text-[10px]` 硬编码在改动到时收编为 `text-caption-sm`。
 - 同一视图中标题层级连续使用（h1→h2→h3），不跳级取字号。
 
-### 移动端硬性规则
+### 阅读与缩放
 
-1. **输入框字号 ≥ 16px**。iOS Safari 会在点击字号小于 16px 的输入框时自动放大页面，导致布局错位；保持 ≥ 16px 可完全避免。
-2. **可点击文字 ≥ 14px**，触达区域 ≥ 44×44px。12px 及以下（含 10px `caption-sm`）仅用于纯展示信息（按输入方式生效）。
-3. **尊重系统缩放**：token 以 rem 输出，`html` 的 font-size 保持 100%（不写死 px）。
-4. **Android 中文渲染**：思源黑体比苹方视觉偏大偏宽，同字号下行高不缩减，宁松勿紧。
+1. **分别检查字大小与点击范围。**触达范围见 [基础-多端适配原则.md](基础-多端适配原则.md) §3，不能用放大字体代替。
+2. **允许用户继续放大文字。**token 以 rem 输出，`html` 的 font-size 保持 100%；不禁用页面缩放。验证文字放大到 200% 后仍能阅读和操作，容器不能裁掉内容。rem 跟随根字号，不等于已经接入系统的动态字体。
+3. **Android 中文渲染**：思源黑体比苹方视觉偏大偏宽，同字号下行高不缩减，宁松勿紧。

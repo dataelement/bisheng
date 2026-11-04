@@ -1,69 +1,75 @@
 # Path: src/backend/bisheng/database/models/flow.py
 
 from datetime import datetime
-from typing import Dict, List, Optional
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import func, Integer, String
-from sqlmodel import Field, select, update, text, Column, DateTime
+from sqlalchemy import Integer, String, func
+from sqlmodel import Column, DateTime, Field, select, text, update
 
-from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
+from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 from bisheng.database.models.flow import Flow, FlowType
 
+
 class FlowVersionBase(SQLModelSerializable):
-    id: Optional[int] = Field(default=None, primary_key=True, unique=True)
+    id: int | None = Field(default=None, primary_key=True, unique=True)
     flow_id: str = Field(index=True, max_length=32, description="Belonging SkillsID")
     name: str = Field(index=True, description="Version Name")
-    data: Optional[Dict] = Field(default=None, description="Version Data")
-    description: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
-    user_id: Optional[int] = Field(default=None, index=True, description="creator")
-    flow_type: Optional[int] = Field(default=FlowType.WORKFLOW.value, description="Type of version")
-    is_current: Optional[int] = Field(default=0, description="Is version in use")
-    is_delete: Optional[int] = Field(default=0, description="whether delete")
-    original_version_id: Optional[int] = Field(default=None, description="Source Version ofID")
-    tenant_id: Optional[int] = Field(
+    data: dict | None = Field(default=None, description="Version Data")
+    description: str | None = Field(default=None, sa_column=Column(String(length=1000)))
+    user_id: int | None = Field(default=None, index=True, description="creator")
+    flow_type: int | None = Field(default=FlowType.WORKFLOW.value, description="Type of version")
+    is_current: int | None = Field(default=0, description="Is version in use")
+    is_delete: int | None = Field(default=0, description="whether delete")
+    original_version_id: int | None = Field(default=None, description="Source Version ofID")
+    tenant_id: int | None = Field(
         default=None,
-        sa_column=Column(Integer, nullable=False, server_default=text('1'),
-                         index=True, comment='Tenant ID'),
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
     )
-    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
+    create_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, index=True, server_default=text("CURRENT_TIMESTAMP"))
+    )
+    update_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT)
+    )
 
-    @field_validator('data')
+    @field_validator("data")
     @classmethod
     def validate_json(cls, v):
         # dict_keys(['description', 'name', 'id', 'data'])
         if not v:
             return v
         if not isinstance(v, dict):
-            raise ValueError('Flow must be a valid JSON')
+            raise ValueError("Flow must be a valid JSON")
 
         # data must contain nodes and edges
-        if 'nodes' not in v.keys():
-            raise ValueError('Flow must have nodes')
-        if 'edges' not in v.keys():
-            raise ValueError('Flow must have edges')
+        if "nodes" not in v.keys():
+            raise ValueError("Flow must have nodes")
+        if "edges" not in v.keys():
+            raise ValueError("Flow must have edges")
         return v
 
+
 class FlowVersion(FlowVersionBase, table=True):
-    data: Optional[Dict] = Field(default=None, sa_column=Column(JsonType), description="Version Data")
+    data: dict | None = Field(default=None, sa_column=Column(JsonType), description="Version Data")
+
 
 class FlowVersionRead(FlowVersionBase):
     pass
 
-class FlowVersionDao(FlowVersionBase):
 
+class FlowVersionDao(FlowVersionBase):
     @classmethod
     def create_version(cls, version: FlowVersion) -> FlowVersion:
-        """
-        Create New Version
-        """
         with get_sync_db_session() as session:
+            parent = session.exec(
+                select(Flow).where(Flow.id == version.flow_id, Flow.is_delete == 0).with_for_update()
+            ).first()
+            if parent is None:
+                raise NotFoundError()
             session.add(version)
             session.commit()
             session.refresh(version)
@@ -71,51 +77,67 @@ class FlowVersionDao(FlowVersionBase):
 
     @classmethod
     def update_version(cls, version: FlowVersion) -> FlowVersion:
-        """
-        Update the version information while updating the Skill SheetdataDATA
-        """
         with get_sync_db_session() as session:
-            session.add(version)
+            parent = session.exec(
+                select(Flow).where(Flow.id == version.flow_id, Flow.is_delete == 0).with_for_update()
+            ).first()
+            if parent is None:
+                raise NotFoundError()
+            current = session.exec(
+                select(FlowVersion).where(FlowVersion.id == version.id, FlowVersion.flow_id == parent.id)
+            ).first()
+            if current is None:
+                raise NotFoundError()
+            for key in ("name", "description", "data", "is_delete"):
+                setattr(current, key, getattr(version, key))
+            if current.is_current == 1:
+                parent.data = current.data
+                session.add(parent)
+            session.add(current)
             session.commit()
-            # Update the data in the skill sheet if it is the current version
-            if version.is_current == 1:
-                # Update Skill SheetdataDATA
-                update_flow = update(Flow).where(Flow.id == version.flow_id).values(data=version.data)
-                session.exec(update_flow)
-                session.commit()
-            session.refresh(version)
-            return version
+            session.refresh(current)
+            return current
 
     @classmethod
     async def aupdate_version(cls, version: FlowVersion) -> FlowVersion:
-        """
-        Update version information asynchronously while updating the Skill SheetdataDATA
-        """
         async with get_async_db_session() as session:
-            session.add(version)
+            parent = (
+                await session.exec(
+                    select(Flow).where(Flow.id == version.flow_id, Flow.is_delete == 0).with_for_update()
+                )
+            ).first()
+            if parent is None:
+                raise NotFoundError()
+            current = (
+                await session.exec(
+                    select(FlowVersion).where(FlowVersion.id == version.id, FlowVersion.flow_id == parent.id)
+                )
+            ).first()
+            if current is None:
+                raise NotFoundError()
+            for key in ("name", "description", "data", "is_delete"):
+                setattr(current, key, getattr(version, key))
+            if current.is_current == 1:
+                parent.data = current.data
+                session.add(parent)
+            session.add(current)
             await session.commit()
-            # Update the data in the skill sheet if it is the current version
-            if version.is_current == 1:
-                # Update Skill SheetdataDATA
-                update_flow = update(Flow).where(Flow.id == version.flow_id).values(data=version.data)
-                await session.exec(update_flow)
-                await session.commit()
-            await session.refresh(version)
-            return version
+            await session.refresh(current)
+            return current
 
     @classmethod
-    def get_version_by_name(cls, flow_id: str, name: str) -> Optional[FlowVersion]:
+    def get_version_by_name(cls, flow_id: str, name: str) -> FlowVersion | None:
         """
         By SkillIDand version name for version information
         """
         with get_sync_db_session() as session:
-            statement = select(FlowVersion).where(FlowVersion.flow_id == flow_id,
-                                                  FlowVersion.name == name,
-                                                  FlowVersion.is_delete == 0)
+            statement = select(FlowVersion).where(
+                FlowVersion.flow_id == flow_id, FlowVersion.name == name, FlowVersion.is_delete == 0
+            )
             return session.exec(statement).first()
 
     @classmethod
-    def get_version_by_id(cls, version_id: int, include_delete: bool = False) -> Optional[FlowVersion]:
+    def get_version_by_id(cls, version_id: int, include_delete: bool = False) -> FlowVersion | None:
         """
         According to versionIDGet information on the skill version
         """
@@ -126,7 +148,7 @@ class FlowVersionDao(FlowVersionBase):
             return session.exec(statement).first()
 
     @classmethod
-    async def aget_version_by_id(cls, version_id: int, include_delete: bool = False) -> Optional[FlowVersion]:
+    async def aget_version_by_id(cls, version_id: int, include_delete: bool = False) -> FlowVersion | None:
         """
         According to versionIDGet skill version information (asynchronous)
         """
@@ -138,18 +160,18 @@ class FlowVersionDao(FlowVersionBase):
             return result.first()
 
     @classmethod
-    def get_version_by_flow(cls, flow_id: str) -> Optional[FlowVersion]:
+    def get_version_by_flow(cls, flow_id: str) -> FlowVersion | None:
         """
         By SkillIDGet information on the current skill version
         """
         with get_sync_db_session() as session:
-            statement = select(FlowVersion).where(FlowVersion.flow_id == flow_id,
-                                                  FlowVersion.is_current == 1,
-                                                  FlowVersion.is_delete == 0)
+            statement = select(FlowVersion).where(
+                FlowVersion.flow_id == flow_id, FlowVersion.is_current == 1, FlowVersion.is_delete == 0
+            )
             return session.exec(statement).first()
 
     @classmethod
-    def get_list_by_ids(cls, ids: List[int]) -> List[FlowVersion]:
+    def get_list_by_ids(cls, ids: list[int]) -> list[FlowVersion]:
         """
         accordingIDList for all version details
         """
@@ -158,14 +180,24 @@ class FlowVersionDao(FlowVersionBase):
             return session.exec(statement).all()
 
     @classmethod
-    def get_list_by_flow(cls, flow_id: str) -> List[FlowVersionRead]:
+    def get_list_by_flow(cls, flow_id: str) -> list[FlowVersionRead]:
         """
         By SkillID Get all skill versions
         """
         with get_sync_db_session() as session:
-            statement = select(FlowVersion.id, FlowVersion.flow_id, FlowVersion.name, FlowVersion.description,
-                               FlowVersion.is_current, FlowVersion.create_time, FlowVersion.update_time).where(
-                FlowVersion.flow_id == flow_id, FlowVersion.is_delete == 0).order_by(FlowVersion.id.desc())
+            statement = (
+                select(
+                    FlowVersion.id,
+                    FlowVersion.flow_id,
+                    FlowVersion.name,
+                    FlowVersion.description,
+                    FlowVersion.is_current,
+                    FlowVersion.create_time,
+                    FlowVersion.update_time,
+                )
+                .where(FlowVersion.flow_id == flow_id, FlowVersion.is_delete == 0)
+                .order_by(FlowVersion.id.desc())
+            )
             ret = session.exec(statement).mappings().all()
             return [FlowVersionRead.model_validate(f) for f in ret]
 
@@ -181,14 +213,24 @@ class FlowVersionDao(FlowVersionBase):
             return count_statement.scalar()
 
     @classmethod
-    def get_list_by_flow_ids(cls, flow_ids: List[str]) -> List[FlowVersionRead]:
+    def get_list_by_flow_ids(cls, flow_ids: list[str]) -> list[FlowVersionRead]:
         """
         By SkillIDVertical Get all versions of all skills
         """
         with get_sync_db_session() as session:
-            statement = select(FlowVersion.id, FlowVersion.flow_id, FlowVersion.name, FlowVersion.description,
-                               FlowVersion.is_current, FlowVersion.create_time, FlowVersion.update_time).where(
-                FlowVersion.flow_id.in_(flow_ids), FlowVersion.is_delete == 0).order_by(FlowVersion.id.desc())
+            statement = (
+                select(
+                    FlowVersion.id,
+                    FlowVersion.flow_id,
+                    FlowVersion.name,
+                    FlowVersion.description,
+                    FlowVersion.is_current,
+                    FlowVersion.create_time,
+                    FlowVersion.update_time,
+                )
+                .where(FlowVersion.flow_id.in_(flow_ids), FlowVersion.is_delete == 0)
+                .order_by(FlowVersion.id.desc())
+            )
             ret = session.exec(statement).mappings().all()
             return [FlowVersionRead.model_validate(f) for f in ret]
 
@@ -198,41 +240,39 @@ class FlowVersionDao(FlowVersionBase):
         Deleting a version, the version in use cannot be deleted
         """
         with get_sync_db_session() as session:
-            update_statement = update(FlowVersion).where(
-                FlowVersion.id == version_id, FlowVersion.is_current == 0).values(is_delete=1)
+            update_statement = (
+                update(FlowVersion).where(FlowVersion.id == version_id, FlowVersion.is_current == 0).values(is_delete=1)
+            )
             session.exec(update_statement)
             session.commit()
 
     @classmethod
     async def change_current_version(cls, flow_id: str, new_version_info: FlowVersion) -> bool:
-        """
-        Modify the current version of the skill, Determine if the current version exists
-        Also modify the Skill SheetdataDATA
-        """
         async with get_async_db_session() as session:
-            # Set current version
-            set_statement = update(FlowVersion).where(
-                FlowVersion.flow_id == flow_id,
-                FlowVersion.id == new_version_info.id,
-                FlowVersion.is_delete == 0,
-            ).values(is_current=1)
-            update_ret = await session.exec(set_statement)
-            if update_ret.rowcount == 0:
-                # If the update is not successful, the current version of the previous setting is not canceled
+            parent = (
+                await session.exec(select(Flow).where(Flow.id == flow_id, Flow.is_delete == 0).with_for_update())
+            ).first()
+            if parent is None:
                 return False
-
-            # Update Skill SheetdataDATA
-            update_flow = update(Flow).where(Flow.id == flow_id).values(data=new_version_info.data)
-            await session.exec(update_flow)
+            target = (
+                await session.exec(
+                    select(FlowVersion).where(
+                        FlowVersion.id == new_version_info.id,
+                        FlowVersion.flow_id == flow_id,
+                        FlowVersion.is_delete == 0,
+                    )
+                )
+            ).first()
+            if target is None:
+                return False
+            await session.exec(
+                update(FlowVersion)
+                .where(FlowVersion.flow_id == flow_id, FlowVersion.id != target.id)
+                .values(is_current=0)
+            )
+            target.is_current = 1
+            parent.data = target.data
+            session.add(target)
+            session.add(parent)
             await session.commit()
-
-            # Modify another version to not the current version
-            statement = update(FlowVersion).where(
-                FlowVersion.flow_id == flow_id,
-                FlowVersion.id != new_version_info.id,
-                FlowVersion.is_current == 1).values(
-                is_current=0)
-            await session.exec(statement)
-            await session.commit()
-
             return True

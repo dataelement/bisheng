@@ -6,8 +6,9 @@ import { useRuntimeAudit } from '@/pages/LogPage/runtime/useRuntimeAudit'
 import { RuntimeAuditPanel } from '@/pages/LogPage/runtime/RuntimeAuditPanel'
 import userEvent from '@testing-library/user-event'
 
-const mock = vi.hoisted(() => ({ records: vi.fn(), candidates: vi.fn(), exportJob: vi.fn(), createExport: vi.fn(), cancelExport: vi.fn() }))
-vi.mock('@/controllers/API/runtimeAudit', () => ({ getRuntimeAuditRecords: mock.records, getRuntimeAuditCandidates: mock.candidates, getRuntimeAuditExport: mock.exportJob, createRuntimeAuditExport: mock.createExport, cancelRuntimeAuditExport: mock.cancelExport, downloadRuntimeAuditExport: vi.fn() }))
+const mock = vi.hoisted(() => ({ records: vi.fn(), candidates: vi.fn(), exportJob: vi.fn(), createExport: vi.fn(), cancelExport: vi.fn(), departments: vi.fn() }))
+vi.mock('@/controllers/API/log', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/controllers/API/log')>()), getAuditDepartmentsApi: mock.departments }))
+vi.mock('@/controllers/API/runtimeAudit', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/controllers/API/runtimeAudit')>()), getRuntimeAuditRecords: mock.records, getRuntimeAuditCandidates: mock.candidates, getRuntimeAuditExport: mock.exportJob, createRuntimeAuditExport: mock.createExport, cancelRuntimeAuditExport: mock.cancelExport, downloadRuntimeAuditExport: vi.fn() }))
 vi.mock('@/hooks/useAdminScope', () => ({ useAdminScope: () => ({ scope: { scope_tenant_id: null }, loading: false }) }))
 vi.mock('@/controllers/API/tenant', () => ({ getTenantsApi: vi.fn().mockResolvedValue({ data: [] }) }))
 vi.mock('@/controllers/request', () => ({ showApiError: vi.fn() }))
@@ -94,6 +95,29 @@ it('shows the recorded visitor name without a redundant numeric user column', as
   fireEvent.click(screen.getByRole('radio', { name: 'log.runtime.accessTab' }))
   expect(await screen.findByText('Recorded visitor')).toBeVisible()
   expect(screen.queryByRole('columnheader', { name: 'log.runtime.fields.user_id' })).not.toBeInTheDocument()
+  expect(screen.getByRole('columnheader', { name: 'log.runtime.fields.operator_dept_path' })).toBeVisible()
+})
+
+it('sends the organisation as a comma string only after apply', async () => {
+  mock.departments.mockResolvedValue({
+    active: [
+      { id: 2, dept_id: 'BS@2', external_id: null, name: 'Sales', path_name: 'Root/Sales', parent_id: 1, tenant_id: 1, has_children: false },
+      { id: 9, dept_id: 'BS@9', external_id: null, name: 'Ops', path_name: 'Root/Ops', parent_id: 1, tenant_id: 1, has_children: false },
+    ],
+    archived: [], show_none: true, show_unrecorded: false,
+  })
+  render(<RuntimeAuditPanel />, { wrapper })
+  await waitFor(() => expect(mock.records).toHaveBeenCalled())
+  fireEvent.click(screen.getByRole('button', { name: 'log.org.placeholder' }))
+  fireEvent.click(await screen.findByRole('checkbox', { name: /Sales/ }))
+  fireEvent.click(screen.getByRole('checkbox', { name: /Ops/ }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'log.org.none' }))
+  fireEvent.click(screen.getByRole('button', { name: 'log.org.confirm' }))
+  expect(mock.records).not.toHaveBeenLastCalledWith('model', expect.objectContaining({ dept_ids: expect.anything() }), undefined)
+  fireEvent.click(screen.getByRole('button', { name: 'log.runtime.apply' }))
+  await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', expect.objectContaining({
+    dept_ids: '2,9', include_descendants: 'true', include_none: 'true',
+  }), undefined))
 })
 
 it('keeps a pending export on close and cancels only through the explicit cancel action', async () => {

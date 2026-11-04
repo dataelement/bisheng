@@ -247,7 +247,7 @@ def _get_spark_params(params: dict, server_config: dict, model_config: dict) -> 
 
     user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
-    return params
+    return user_kwargs
 
 
 _llm_node_type: dict = {

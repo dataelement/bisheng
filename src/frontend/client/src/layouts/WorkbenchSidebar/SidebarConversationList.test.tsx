@@ -1,6 +1,7 @@
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react';
 import { SidebarConversationList } from './SidebarConversationList';
+import type { useConversationsInfiniteQuery } from '~/hooks/queries/data-provider';
 
 const mockFetchNextPage = jest.fn();
 const mockProjects = {};
@@ -22,7 +23,8 @@ jest.mock('~/utils', () => ({ cn: (...values: string[]) => values.filter(Boolean
 it('reveals the workbench history scrollbar on scroll, keeps pagination and hides after idle', () => {
   jest.useFakeTimers();
   try {
-    const { container, unmount } = render(<SidebarConversationList leading={<div>Projects</div>} />);
+    const query = { data: mockData, fetchNextPage: mockFetchNextPage, hasNextPage: true, isFetchingNextPage: false } as unknown as ReturnType<typeof useConversationsInfiniteQuery>;
+    const { container, unmount } = render(<SidebarConversationList query={query} scrollPosition={{ current: 0 }} onNavigate={jest.fn()} leading={<div>Projects</div>} />);
     const scroller = container.querySelector<HTMLDivElement>('.scrollbar-on-scroll');
     expect(scroller).not.toBeNull();
     expect(scroller).not.toHaveClass('scroll-no-hover');

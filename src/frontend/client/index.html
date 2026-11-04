@@ -22,10 +22,29 @@
     // Paint the native host theme before loading bundles or checking enterprise identity.
     (function () {
       var params = new URLSearchParams(location.search);
-      if (params.get('embed') !== 'dsh') return;
+      var presentation;
+      try { presentation = window.dshChatPresentation; } catch (e) { /* No bridge. */ }
+      var info;
+      try { info = presentation && presentation.hostInfo; } catch (e) { /* Ignore malformed metadata. */ }
+      var host = false;
+      var legacy = false;
+      try {
+        host = info && info.protocolVersion === 1 && info.channel === 'desktop' && info.deviceType === 'desktop';
+        legacy = presentation && typeof presentation.reportLanding === 'function';
+      } catch (e) { /* Ignore malformed preload fields. */ }
+      var remembered = false;
+      var savedTheme;
+      try {
+        remembered = sessionStorage.getItem('dsh:embedded-chat') === 'true';
+        savedTheme = sessionStorage.getItem('dsh:host-theme');
+      } catch (e) { /* Entry and preload remain usable. */ }
+      if (params.get('embed') !== 'dsh' && !host && !legacy && !remembered) return;
       var theme = params.get('dshTheme');
-      document.documentElement.dataset.dshHostTheme = theme === 'dark' || theme === 'light'
-        ? theme : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      if (theme !== 'dark' && theme !== 'light') theme = savedTheme;
+      if (theme !== 'dark' && theme !== 'light') {
+        theme = typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      document.documentElement.dataset.dshHostTheme = theme;
     })();
   </script>
   <style>

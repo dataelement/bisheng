@@ -11,12 +11,14 @@ interface CustomFormProps {
     showDefault: boolean;
     provider: string;
     formData: ProviderConfig;
-    modelTypes: string[];
+    modelTypes?: string[];
+    onConnectionChange?: () => void;
     providerName?: string;
     apiKeySite?: string;
 }
 export interface CustomFormHandle {
     getData(): [ProviderConfig, string];
+    getCatalogError(): string;
 }
 interface FormFieldProps {
     field: ConfigField;
@@ -49,20 +51,31 @@ function FormField({ field, value, providerName, apiKeySite, onChange }: FormFie
 }
 
 export const CustomForm = forwardRef<CustomFormHandle, CustomFormProps>(function CustomForm(
-    { showDefault, provider, formData, modelTypes, providerName, apiKeySite }, ref,
+    { showDefault, provider, formData, modelTypes = [], providerName, apiKeySite, onConnectionChange }, ref,
 ) {
     const { t } = useTranslation();
     const [form, setForm] = useState(formData);
     const hasSpeech = speechProviders.includes(provider) && modelTypes.some(isSpeechModelType);
     const speechOnly = hasSpeech && modelTypes.every(isSpeechModelType);
-    const commonFields = speechOnly ? [] : getModelProviders()[provider] || [];
+    // Speech-only rows still need the catalog API key to list models. Saving
+    // does not require it until a non-speech model is added.
+    const providerFields = getModelProviders()[provider] || [];
+    const commonFields = providerFields.map((field) =>
+        speechOnly ? { ...field, required: false } : field,
+    );
     const speechFields = hasSpeech ? getSpeechFields(provider, form, t) : [];
     const fields = [...commonFields, ...speechFields];
     const values = configWithDefaults(form, fields, showDefault);
-    const handleChange = (key: string, value: string) => setForm(previous => ({ ...previous, [key]: value }));
+    const handleChange = (key: string, value: string) => {
+        setForm(previous => ({ ...previous, [key]: value }));
+        onConnectionChange?.();
+    };
     useEffect(() => { setForm(formData); }, [formData]);
     useImperativeHandle(ref, () => ({
         getData: () => [values, getConfigError(values, fields)],
+        // Listing needs a credential. A blank address that already has a vendor
+        // default is filled in by the discovery service, so it does not block.
+        getCatalogError: () => getConfigError(values, providerFields.filter((field) => !field.default?.trim())),
     }));
     return <div className="space-y-4">
         {commonFields.map(field => <FormField key={field.key} field={field} value={values[field.key] || ''}
@@ -75,3 +88,5 @@ export const CustomForm = forwardRef<CustomFormHandle, CustomFormProps>(function
         </div>}
     </div>;
 });
+
+export default CustomForm;

@@ -28,6 +28,7 @@ from bisheng.common.errcode.linsight import (
 from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.audit_log import AuditLog
+from bisheng.database.models.org_snapshot import astamp_audit_logs
 from bisheng.linsight.domain.models.linsight_skill import (
     SKILL_SOURCE_MANUAL,
     LinsightSkill,
@@ -495,6 +496,7 @@ class PersonalSkillService:
                     "result": "success",
                 },
             )
+            await astamp_audit_logs([entry])
             with bypass_tenant_filter():
                 async with get_async_db_session() as session:
                     session.add(entry)

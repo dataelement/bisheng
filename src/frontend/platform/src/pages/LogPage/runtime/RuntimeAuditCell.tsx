@@ -2,6 +2,7 @@ import { Tooltip } from '@bisheng/ui'
 import { useTranslation } from 'react-i18next'
 import type { RuntimeAuditKind, RuntimeAuditRow } from '@/controllers/API/runtimeAudit'
 import { formatTimestamp } from '@/utils/displayTimestamp'
+import { orgLabel } from '../components/OrgFilter/orgLabel'
 
 interface RuntimeAuditCellProps {
   kind: RuntimeAuditKind
@@ -31,6 +32,9 @@ export function RuntimeAuditCell({ kind, field, row }: RuntimeAuditCellProps) {
   } else if (field === 'user_name') {
     identifier = row.user_id
     label = text(row, field) ?? (identifier != null ? t('log.runtime.personWithId', { id: identifier }) : undefined)
+  } else if (field === 'operator_dept_path') {
+    const deptId = row.operator_dept_id
+    label = orgLabel(typeof deptId === 'number' ? deptId : null, text(row, field), t)
   } else if (field === 'credential_mask') {
     identifier = row.credential_id
     label = text(row, field) ?? (identifier != null ? t('log.runtime.keyWithId', { id: identifier }) : undefined)

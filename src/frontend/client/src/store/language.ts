@@ -34,7 +34,19 @@ const defaultLang = (): string => {
 
   // 读取并规范化历史值
   const cookieRaw = Cookies.get('lang');
-  const storageRaw = localStorage.getItem('lang');
+  // The atom stores JSON strings; older clients also wrote plain locale codes.
+  const readStorageLang = (): string | null => {
+    let raw: string | null = null;
+    try { raw = localStorage.getItem('lang'); } catch { return null; }
+    if (raw === null) return null;
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return typeof parsed === 'string' ? parsed : raw;
+    } catch {
+      return raw;
+    }
+  };
+  const storageRaw = readStorageLang();
 
   const cookieNorm = normalize(cookieRaw);
   if (cookieRaw && !cookieNorm) {

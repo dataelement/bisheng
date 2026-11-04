@@ -1,7 +1,7 @@
 import { useState, useRef, memo } from "react";
 import { Outlined } from "bisheng-icons";
 
-import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize } from "~/hooks";
 import { useChatContext } from "~/Providers";
 import { Dropdown, DropdownItem, DropdownSeparator, DropdownSub, Tooltip } from "@bisheng/ui";
 import {
@@ -46,9 +46,7 @@ function ConvoOptions({
   const projects = useSidebarProjects();
   const projectChats = useMockProjectChats();
   const currentProjectId = conversationId ? projectChats[conversationId] : undefined;
-  // 项目 only exists in the desktop workbench sidebar, so mobile hides the row
-  // rather than filing a conversation into a folder it cannot show.
-  const isSmallScreen = usePrefersMobileLayout();
+  // Projects are accessible from the global workbench sidebar on every width.
 
   const handleMoveToProject = (projectId: string) => {
     if (!conversationId) {
@@ -108,7 +106,6 @@ function ConvoOptions({
               <DropdownItem icon={<Outlined.Edit />} onSelect={renameHandler}>
                 {localize("com_ui_rename")}
               </DropdownItem>
-              {!isSmallScreen && (
                 <DropdownSub label={localize("com_workbench_sidebar.move_to_project")} icon={<Outlined.MoveToFolder />}>
                   <DropdownItem icon={<Outlined.Plus />} disabled={!conversationId} onSelect={handleNewProject}>
                     {localize("com_workbench_sidebar.project_new")}
@@ -128,7 +125,6 @@ function ConvoOptions({
                     </>
                   )}
                 </DropdownSub>
-              )}
               <DropdownSeparator />
               <DropdownItem danger icon={<Outlined.Delete />} onSelect={handleDelete}>
                 {localize("com_ui_delete")}

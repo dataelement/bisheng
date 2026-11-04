@@ -113,6 +113,7 @@ class SqlApplicationMigrationRepository:
             return [], "assistant:"
         statement = (
             select(Flow)
+            .where(Flow.is_delete == 0)
             .where(
                 col(Flow.id) > after_id,
                 Flow.flow_type == FlowType.WORKFLOW.value,

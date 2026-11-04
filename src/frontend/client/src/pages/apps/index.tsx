@@ -1,7 +1,7 @@
 import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { useCallback, useEffect, useRef, useState, type UIEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { ModuleHomeHeader } from '~/components/ModuleHome';
+import { MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader } from '~/components/ModuleHome';
 import { AgentCard } from './components/AgentCard';
 import { AppEmptyState } from './components/AppEmptyState';
 import { AppSearchBar } from './components/AppSearchBar';
@@ -164,16 +164,16 @@ export default function AppCenter() {
     return (
         <div
             className={cn(
-                // 填满 MainLayout 白卡片；正文区单独滚动 + scroll-on-scroll（含 PC 窄屏）
-                'bg-white flex h-full min-h-0 flex-1 w-full flex-col items-center relative overflow-hidden',
-                // 与首页 MobileNav（px-4）水平对齐；顶栏由 MainLayout 提供，正文略留底距
-                isMobileLayout ? 'px-4 pb-5 pt-3' : 'px-[12px] py-[20px]',
+                MODULE_HOME_FRAME,
+                'relative flex-1',
+                // Align with the mobile shell's navigation and preserve its content spacing.
+                isMobileLayout && 'px-4 pb-5 pt-3',
             )}
         >
             {isMobileLayout ? (
                 <>
                     {/* H5：标题已上移到顶栏（MainLayout）。此行只保留 最近使用文案（可省略）| 探索；下一行搜索占满宽 */}
-                    <header className="flex w-full max-w-[1000px] shrink-0 items-center gap-2 min-w-0">
+                    <header className={cn(MODULE_HOME_COLUMN, 'flex shrink-0 items-center gap-2 min-w-0')}>
                         <p
                             className="font-['PingFang_SC'] text-[#666] text-[13px] leading-[20px] min-w-0 flex-1 truncate"
                             title={recentAppsHint}
@@ -182,7 +182,7 @@ export default function AppCenter() {
                         </p>
                         {exploreLink}
                     </header>
-                    <div className="mt-3 mb-4 w-full max-w-[1000px] shrink-0 min-w-0">
+                    <div className={cn(MODULE_HOME_COLUMN, 'mt-3 mb-4 shrink-0 min-w-0')}>
                         <AppSearchBar query={searchQuery} onSearch={setSearchQuery} forceExpanded />
                     </div>
                 </>
@@ -198,7 +198,7 @@ export default function AppCenter() {
                         </div>
                     </ModuleHomeHeader>
 
-                    <div className="mt-4 mb-4 flex w-full max-w-[1000px] min-w-0 shrink-0 items-center gap-4 sm:gap-6">
+                    <div className={cn(MODULE_HOME_COLUMN, 'mt-4 mb-4 flex min-w-0 shrink-0 items-center gap-4 sm:gap-6')}>
                         <div className="flex min-w-0 flex-1 items-center justify-start overflow-hidden">
                             <div className="flex w-max max-w-full min-w-0 items-center gap-[24px]">
                                 <p
@@ -221,7 +221,7 @@ export default function AppCenter() {
                 onScroll={handleMainScroll}
                 data-scrolling={isMainScrolling ? 'true' : 'false'}
             >
-                <div className="flex w-full max-w-[1000px] flex-1 flex-col items-start gap-[14px]">
+                <div className={cn(MODULE_HOME_COLUMN, 'flex flex-1 flex-col items-start gap-[14px]')}>
                     {loading ? (
                         <div className="flex w-full flex-1 flex-col items-center justify-center gap-3 text-text-3">
                             <LoadingIcon className="size-20 text-primary" />

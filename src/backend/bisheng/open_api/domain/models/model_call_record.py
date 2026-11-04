@@ -105,6 +105,9 @@ class ModelCallRecord(SQLModelSerializable, table=True):
     ttft_ms: int | None = Field(default=None, sa_column=Column(Integer, nullable=True))
     request_id: str | None = Field(default=None, sa_column=Column(String(64), nullable=True))
     trace_id: str | None = Field(default=None, sa_column=Column(String(64), nullable=True))
+    # F003 organisation snapshot of the subject; sentinels in ``database/models/org_snapshot.py``.
+    operator_dept_id: int | None = Field(default=None, sa_column=Column(Integer, nullable=True, index=True))
+    operator_dept_path: str | None = Field(default=None, sa_column=Column(String(1024), nullable=True))
     create_time: datetime | None = Field(
         default=None,
         # ``text("CURRENT_TIMESTAMP")`` rather than ``func.now()``: the same

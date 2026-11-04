@@ -48,6 +48,19 @@ it('sanitizes an already canonical rejection even when automatic display is disa
  expect(error.message).toBe(messages.fallback); expect(notices).not.toHaveBeenCalled();
 });
 
+it('shows the rate-limit copy when model discovery is throttled', async () => {
+ i18next.addResource('en', 'model', 'discoveryError_rate_limit', 'The model service rate limit was reached. Retry later.');
+ request.defaults.adapter = async config => ({ config, status: 200, statusText: 'OK', headers: {}, data: { status_code: 10812, status_message: 'secret', data: { reason: 'rate_limit', exception: 'SECRET' } } });
+ const limited = await request.get('/api/v1/llm/models/discover').catch(cause => cause);
+ expect(limited.message).toBe('The model service rate limit was reached. Retry later.');
+ expect(limited.message).not.toContain('SECRET');
+ expect(notices).toHaveBeenCalledWith(expect.objectContaining({ description: limited.message }));
+ notices.mockClear();
+ request.defaults.adapter = async config => ({ config, status: 200, statusText: 'OK', headers: {}, data: { status_code: 10812, status_message: 'secret', data: { reason: 'auth' } } });
+ const other = await request.get('/api/v1/llm/models/discover').catch(cause => cause);
+ expect(other.message).toBe(messages['10812']);
+});
+
 it('keeps a readable fallback before translations have initialized', () => {
  vi.spyOn(i18next, 'exists').mockReturnValue(false);
  vi.spyOn(i18next, 't').mockReturnValue(undefined as never);

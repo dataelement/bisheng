@@ -1,4 +1,5 @@
 import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { normalizeApiError } from '@bisheng/api-client';
 import { getArticlesApi } from '~/api/channels';
@@ -6,7 +7,7 @@ import { ArticleList } from './ArticleList';
 const localize = (key: string) => key;
 const detail = { source_infos: [], filter_rules: [] };
 const mockSetMobile = jest.fn();
-jest.mock('~/hooks', () => ({ useLocalize: () => localize, usePrefersMobileLayout: () => false, useDebounce: (v: unknown) => v }));
+jest.mock('~/hooks', () => ({ useLocalize: () => localize, usePrefersMobileLayout: () => false, useWorkbenchMenuNames: () => ({ channel: 'Subscription' }), useDebounce: (v: unknown) => v }));
 jest.mock('~/Providers', () => ({ useToastContext: () => ({ showToast: jest.fn() }) }));
 jest.mock('recoil', () => ({ atom: () => ({}), useSetRecoilState: () => mockSetMobile }));
 jest.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: detail, isLoading: false }), useQueryClient: () => ({}) }));
@@ -27,7 +28,7 @@ const first = { data: [{ doc_id: 'first', title: 'First article' }], total: 40 }
 beforeEach(() => { (getArticlesApi as jest.Mock).mockReset(); });
 it('shows first-page failure instead of no content and retry can display a successful empty list', async () => {
   (getArticlesApi as jest.Mock).mockRejectedValueOnce(error).mockResolvedValue({ data: [], total: 0 });
-  render(<ArticleList channel={channel} onArticleSelect={jest.fn()} />);
+  render(<MemoryRouter><ArticleList channel={channel} onArticleSelect={jest.fn()} /></MemoryRouter>);
   expect(await screen.findByText('Articles unavailable')).toBeInTheDocument();
   expect(screen.queryByText('com_subscription.no_related_content')).not.toBeInTheDocument();
   fireEvent.click(screen.getByText('com_ui_retry'));
@@ -35,7 +36,7 @@ it('shows first-page failure instead of no content and retry can display a succe
 });
 it('keeps existing articles on failed reload and failed pagination; retry continues the failed page', async () => {
   (getArticlesApi as jest.Mock).mockResolvedValueOnce(first).mockRejectedValue(error);
-  render(<ArticleList channel={channel} onArticleSelect={jest.fn()} />);
+  render(<MemoryRouter><ArticleList channel={channel} onArticleSelect={jest.fn()} /></MemoryRouter>);
   expect(await screen.findByText('First article')).toBeInTheDocument();
   fireEvent.click(screen.getByText('filter'));
   expect(await screen.findByText('Articles unavailable')).toBeInTheDocument();

@@ -69,7 +69,7 @@
     "@tanstack/react-table": "^8.11.7",
     "@tanstack/react-virtual": "^3",
     "axios": "catalog:",
-    "bisheng-icons": "^0.2.36",
+    "bisheng-icons": "catalog:",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "copy-to-clipboard": "^3.3.3",
