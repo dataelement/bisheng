@@ -7,6 +7,7 @@ import {
     ChevronRightIcon,
 } from "lucide-react";
 import { memo, useMemo } from "react";
+import { MessageTime } from "./MessageTime";
 import DeepThinkingGroup from "~/components/Chat/Messages/DeepThinkingGroup";
 import ThinkingContent from "~/components/Chat/Messages/ThinkingContent";
 import { groupEventsForDisplay, type DisplayBlock } from "~/components/Chat/Messages/groupEvents";
@@ -45,11 +46,11 @@ const RETRYABLE_ERROR_CODES = new Set([12046, 429, 503, 10540, 12045]);
 
 /**
  * Uploaded-file list for a user message. Every attachment — pictures, media,
- * documents — is a square tile in one wrapping grid, right-aligned under the
+ * documents — keeps its type-specific preview in upload order, right-aligned under the
  * bubble. No horizontal scroll and no cap of its own: the row wraps at the
  * bubble's width, exactly as the picture row always did.
  */
-function UploadedFileList({ files, conversationId }: { files: any[]; conversationId?: string }) {
+function UploadedFileList({ files, conversationId, onPreviewFile }: { files: any[]; conversationId?: string; onPreviewFile?: (file: ArtifactFile) => void }) {
     if (!files || files.length === 0) return null;
 
     return (
@@ -73,7 +74,7 @@ function UploadedFileList({ files, conversationId }: { files: any[]; conversatio
                 if (isMediaChipFile(file)) {
                     return <MediaAttachmentChip key={`media-${i}`} file={file} variant="message" />;
                 }
-                return <ChatHistoryFileRow key={`file-${i}`} file={file} />;
+                return <ChatHistoryFileRow key={`file-${i}`} file={file} onPreviewFile={onPreviewFile} />;
             })}
         </div>
     );
@@ -234,8 +235,10 @@ function AgentTimeline({
         return -1;
     })();
 
+    if (blocks.every((block, index) => block.kind === "text" && index === finalTextIdx)) return null;
+
     return (
-        <div className="flex w-full min-w-0 flex-col gap-3">
+        <div className="mb-3 flex w-full min-w-0 flex-col gap-3">
             {blocks.map((block, i) => {
                 if (block.kind === "text") {
                     if (i === finalTextIdx) return null;
@@ -291,6 +294,7 @@ const AiMessageBubble = memo(
                     siblingCount={siblingCount}
                     setSiblingIdx={setSiblingIdx}
                     knowledgeChatLayout={knowledgeChatLayout}
+                    onPreviewFile={onPreviewFile}
                 />
             );
         }
@@ -324,12 +328,14 @@ function UserBubble({
     siblingCount,
     setSiblingIdx,
     knowledgeChatLayout,
+    onPreviewFile,
 }: {
     message: ChatMessage;
     siblingIdx?: number;
     siblingCount?: number;
     setSiblingIdx?: (idx: number) => void;
     knowledgeChatLayout?: boolean;
+    onPreviewFile?: (file: ArtifactFile) => void;
 }) {
     const { user } = useAuthContext();
 
@@ -348,7 +354,7 @@ function UserBubble({
     );
 
     return (
-        <div className={cn("flex justify-end py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
+        <div className={cn("dsh-user-message flex justify-end py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
             {showCheckbox && message.conversationId && (
                 <MessageCheckbox
                     chatId={message.conversationId}
@@ -359,8 +365,8 @@ function UserBubble({
             {/* Mobile: cap the bubble so its left edge keeps a 40px gap from the
                 content area (long URLs were overflowing off the left edge). */}
             <div className={cn("flex min-w-0 flex-col items-end touch-mobile:max-w-[calc(100%-40px)]", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
-                {/* Uploaded files: square tiles wrapping under the bubble. */}
-                <UploadedFileList files={message.files || []} conversationId={message.conversationId} />
+                {/* Uploaded files preserve order and open documents in the preview panel. */}
+                <UploadedFileList files={message.files || []} conversationId={message.conversationId} onPreviewFile={onPreviewFile} />
                 {/* min-w-0: without it this flex row's `min-width: auto` floors at
                     the URL's (unbreakable) min-content width, defeating the bubble's
                     max-width and letting long content overflow off the left edge. */}
@@ -384,7 +390,7 @@ function UserBubble({
                                 // sizing the box to a long unbreakable URL and max-width
                                 // can't clamp it — `anywhere` reduces min-content so the
                                 // box shrinks and the URL wraps inside max-w-full.
-                                "w-fit max-w-full px-3 py-2 whitespace-pre-wrap [overflow-wrap:anywhere] rounded-lg",
+                                "dsh-user-bubble w-fit max-w-full px-3 py-2 whitespace-pre-wrap [overflow-wrap:anywhere] rounded-lg",
                                 knowledgeChatLayout
                                     ? "bg-[#F2F3F5] text-[#4E5969] text-[14px] leading-[22px]"
                                     : "rounded-[10px] bg-blue-500/[0.07] text-[#1d2129] text-sm"
@@ -411,7 +417,8 @@ function UserBubble({
                     </div>
                 </div>
                 {/* Action buttons */}
-                <div className="flex items-center justify-end gap-1 mt-1.5">
+                <div className="dsh-message-actions flex items-center justify-end gap-1 mt-1.5">
+                    <MessageTime message={message} />
                     <CopyButton text={tag ? `#${tag.name} ${bodyText}` : message.text} />
                     {siblingIdx !== undefined && siblingCount !== undefined && setSiblingIdx && (
                         <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />
@@ -571,7 +578,7 @@ function AssistantBubble({
     // bubble is the preceding (daily) user row; this row owns the rich panel.
     if (message.category === "task") {
         return (
-            <div className={cn("flex justify-start py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
+            <div className={cn("dsh-assistant-message flex justify-start py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
                 {showCheckbox && message.conversationId && (
                     <MessageCheckbox
                         chatId={message.conversationId}
@@ -594,7 +601,7 @@ function AssistantBubble({
     }
 
     return (
-        <div className={cn("flex justify-start py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
+        <div className={cn("dsh-assistant-message flex justify-start py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
             {showCheckbox && message.conversationId && (
                 <MessageCheckbox
                     chatId={message.conversationId}
@@ -614,7 +621,6 @@ function AssistantBubble({
 
                 {/* v2.5 Agent-native rendering: ordered events (thinking + tool calls) */}
                 {isAgentNative ? (
-                    <div className="mb-3 w-full min-w-0">
                         <AgentTimeline
                             events={message.events || []}
                             isStreaming={Boolean(isStreaming && isLatest)}
@@ -622,7 +628,6 @@ function AssistantBubble({
                             messageId={message.messageId}
                             compactImages={knowledgeChatLayout}
                         />
-                    </div>
                 ) : (
                     <>
                         {/* Legacy :::thinking::: — render with the same "思考内容" block as the
@@ -725,7 +730,7 @@ function AssistantBubble({
                     transient busy notice — copy/feedback on a "try again" status is
                     meaningless; the notice carries its own Retry. */}
                 {!isStreaming && regularContent && !isTransientError && (
-                    <div className="flex items-center gap-1 mt-1.5 text-gray-400">
+                    <div className="dsh-message-actions dsh-response-actions flex items-center gap-1 mt-1.5 text-gray-400">
                         <CitationReferencesDrawer
                             content={regularContent}
                             webContent={webContent}
@@ -748,21 +753,7 @@ function AssistantBubble({
                             actionButtons={
                                 <>
                                     <CopyButton text={regularContent} stripHandles={stripCitationHandlesOnCopy} />
-                                    {/* Export is only offered where the host opts in via allowExport
-                                        (the full homepage/task chat). The lightweight knowledge/file/
-                                        article docks and the share view leave it off. */}
-                                    {allowExport && message.conversationId && message.messageId && (
-                                        <ExportSelectionButton
-                                            chatId={message.conversationId}
-                                            messageId={message.messageId}
-                                        />
-                                    )}
-                                    <TextToSpeechButton
-                                        className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-[#F7F7F7]"
-                                        messageId={message.messageId || ""}
-                                        text={regularContent}
-                                    />
-                                    {/* 点赞/点踩 — the answer persists as a chatmessage row, so
+                                    {/* Feedback persists as a chatmessage row, so
                                         reuse the existing /liked + /chat/comment endpoints keyed
                                         by message_id. Hidden on the read-only share view. */}
                                     {allowFeedback && message.messageId && (
@@ -774,9 +765,25 @@ function AssistantBubble({
                                             }
                                         />
                                     )}
+                                    {/* Export is only offered where the host opts in via allowExport
+                                        (the full homepage/task chat). The lightweight knowledge/file/
+                                        article docks and the share view leave it off. */}
+                                    {allowExport && message.conversationId && message.messageId && (
+                                        <ExportSelectionButton
+                                            className="dsh-message-action"
+                                            chatId={message.conversationId}
+                                            messageId={message.messageId}
+                                        />
+                                    )}
+                                    <TextToSpeechButton
+                                        className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-[#F7F7F7]"
+                                        messageId={message.messageId || ""}
+                                        text={regularContent}
+                                    />
                                 </>
                             }
                         />
+                        <MessageTime message={message} />
                         {/* Sibling paging */}
                         {siblingIdx !== undefined && siblingCount !== undefined && setSiblingIdx && (
                             <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />

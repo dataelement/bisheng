@@ -276,6 +276,9 @@ async def _materialize_candidates(
     occupied = {entry["name"] for entry in prior}
     service = PersonalSkillService(store=store)
     candidates = await service.list_candidates(user_id)
+    from bisheng.linsight.domain.services.user_skills import UserSkillsService
+
+    candidates = [row for row, _ in await UserSkillsService(user_id).records(candidates=candidates)]
     if strict and selected:
         present = {row.name for row in candidates} | occupied
         missing = [name for name in selected if name not in present]

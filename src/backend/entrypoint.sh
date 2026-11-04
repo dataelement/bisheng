@@ -54,6 +54,9 @@ if [ "$start_mode" = "api" ]; then
     fi
     echo "Starting API server..."
     uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --no-access-log --workers 2
+elif [ "$start_mode" = "upgrade-work-knowledge" ]; then
+    shift
+    exec python scripts/register_work_knowledge_tool.py "$@"
 elif [ "$start_mode" = "knowledge" ]; then
     echo "Starting Knowledge Celery worker..."
     start_knowledge
@@ -87,6 +90,6 @@ elif [ "$start_mode" = "worker" ]; then
 
     echo "All workers started successfully."
 else
-    echo "Invalid start mode. Use api、worker、knowledge、knowledge_ocr、workflow、beat、default、linsight."
+    echo "Invalid start mode. Use api、worker、knowledge、knowledge_ocr、workflow、beat、default、linsight、upgrade-work-knowledge."
     exit 1
 fi

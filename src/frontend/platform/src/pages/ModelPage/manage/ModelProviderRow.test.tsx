@@ -27,6 +27,19 @@ describe('model provider list interactions', () => {
         expect(props.onModel).toHaveBeenCalledWith(1)
     })
 
+    it('toggles from row whitespace without toggling when configuring the provider', () => {
+        const props = setup()
+        const toggle = screen.getByRole('button', { name: 'Provider' })
+        const row = toggle.parentElement!.parentElement!
+        fireEvent.click(row)
+        expect(toggle).toHaveAttribute('aria-expanded', 'false')
+        fireEvent.click(row)
+        expect(toggle).toHaveAttribute('aria-expanded', 'true')
+        fireEvent.click(screen.getByRole('button', { name: 'model.modelConfiguration' }))
+        expect(props.onModel).toHaveBeenCalledExactlyOnceWith(1)
+        expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    })
+
     it('locks a pending toggle and restores its previous state when the server rejects it', async () => {
         let finish!: (success: boolean) => void
         const onToggle = vi.fn(() => new Promise<boolean>(resolve => { finish = resolve }))

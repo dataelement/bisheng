@@ -9,7 +9,7 @@ component: Cascader
 
 ## 基础用法
 
-默认只选择叶子。点父项打开下一列，点叶子完成选择并关闭；回显保留完整路径，值也是完整路径数组。
+默认只选择叶子。点父项打开下一列，点叶子完成选择并关闭；选择框只回显最后一级名称，值仍是完整路径数组。
 
 ```tsx
 import React from 'react';
@@ -66,7 +66,7 @@ export default () => {
 
 ## 多选
 
-父项复选框默认联动所有已加载叶子；只选一部分时显示半选。标签默认只显示叶子名，出现同名叶子时自动补足最短可区分路径。
+父项复选框默认联动所有已加载叶子；只选一部分时显示半选。标签只显示最后一级名称，同名叶子也不补上父级路径；完整层级可在面板和搜索结果中查看。
 
 ```tsx
 import React from 'react';
@@ -193,6 +193,7 @@ export default () => (
 | `checkStrictly` | 任意层级独立可选 | `boolean` | `false` |
 | `expandTrigger` | 桌面端展开方式；手机始终轻点进入 | `'click' \| 'hover'` | `'click'` |
 | `showSearch` / `onSearch` / `filterOption` | 本地或服务端路径搜索 | — | 可选节点 > 10 时开启 |
+| `autoWidth` | 触发器随所选名称自然伸缩，仍遵守外部最大宽度；搜索时保持所选名称宽度 | `boolean` | `false` |
 | `loadData` / `onLoadError` | 懒加载子节点与失败回调 | — | — |
 | `size` / `status` / `variant` | 与 Select 同义 | — | `medium` / `default` / `outlined` |
 | `radius` / `panelRadius` | 触发器与面板圆角 token | — | 随尺寸 / `xl` |

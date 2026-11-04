@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { Button, SearchInput, notification } from '@bisheng/ui';
+import { Pagination, Button, SearchInput, notification } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 import { useNavigate,useParams,useSearchParams } from "react-router-dom";
 
@@ -28,7 +28,7 @@ import { locationContext } from "@/contexts/locationContext";
 import { useContext,useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { batchDownloadFileApi,deleteFile,getKnowledgeDetailApi,readFileByLibDatabase,retryKnowledgeFileApi } from "../../../controllers/API";
 import { showApiError } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
@@ -54,6 +54,7 @@ function getKnowledgeFileDisplayName(file: Record<string, any>): string {
 export default function Files({ onPreview, canEditKb = false, canDeleteKb = false }) {
     const { appConfig } = useContext(locationContext);
     const { t } = useTranslation('knowledge')
+    const paginationLocale = usePaginationLocale();
     const { id } = useParams()
     const [searchParams] = useSearchParams()
 
@@ -223,7 +224,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                         String(now.getMonth() + 1).padStart(2, '0') +
                         String(now.getDate()).padStart(2, '0');
                     const timeStr = String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
-                    const libName = localStorage.getItem('libname') || '知识库';
+                    const libName = localStorage.getItem('libname') || t('bs:build.knowledgeBase');
                     downloadFile(url, `${libName}_${dateStr}_${timeStr}.zip`);
                 }
             } else {
@@ -531,8 +532,8 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
             <div className="bisheng-table-footer px-6">
                 <p></p>
                 <div>
-                    <AutoPagination
-                        page={page}
+                    <Pagination locale={paginationLocale}
+                        current={page}
                         pageSize={pageSize}
                         total={total}
                         showTotal={true}

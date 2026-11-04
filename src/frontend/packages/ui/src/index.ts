@@ -60,8 +60,8 @@ export * from './components/Switch';
 // (判别表 in 组件-Segmented分段控制器.md §1).
 export * from './components/Tabs';
 // Segmented — the same content shown a different way, applied immediately
-// (组件-Segmented分段控制器.md). The gray track + sliding thumb, equal-width
-// segments and the touch rules are baked in; every label is a prop.
+// (组件-Segmented分段控制器.md). The translucent track + sliding thumb, content-sized
+// segments (equal in block mode) and touch rules are baked in; every label is a prop.
 export * from './components/Segmented';
 // Badge — 「is there anything new」,「how many」and「which source」, in five
 // forms: the corner count, the corner dot, the standalone number after a

@@ -8,7 +8,8 @@ import { createFileLib, updateKnowledge } from "@/controllers/API";
 import { getKnowledgeModelConfig } from "@/controllers/API/finetune";
 import { showApiError } from "@/controllers/request";
 import { ModelSelect } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
+import { userContext } from '@/contexts/userContext';
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useModel } from "../../ModelPage/manage";
@@ -23,6 +24,16 @@ interface LibraryDialogProps {
 
 export function QaLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode = 'create', currentLib = null }: LibraryDialogProps) {
     const { t } = useTranslation('knowledge')
+    const { user } = useContext(userContext)
+    const expectedTenant = useRef<number | null>(null)
+    const wasOpen = useRef(false)
+    useEffect(() => {
+        if (open && !wasOpen.current) {
+            const tenant = user?.leaf_tenant_id
+            expectedTenant.current = Number.isInteger(tenant) && tenant > 0 ? tenant : null
+        }
+        wasOpen.current = open
+    }, [open, user?.leaf_tenant_id])
 
     const navigate = useNavigate()
     const nameRef = useRef<HTMLInputElement>(null)
@@ -72,6 +83,10 @@ export function QaLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode 
 
 
     const handleCreate = async (isImport = false) => {
+        if (mode === 'create' && expectedTenant.current === null) {
+            notification.open({ type: 'error', description: t('f115.knowledge.membershipUnknown', { ns: 'bs' }) })
+            return
+        }
         const name = nameRef.current!.value || '';
         let desc = descRef.current!.value || '';
 
@@ -112,6 +127,7 @@ export function QaLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode 
                     name,
                     description: desc,
                     model: modelId,
+                    expected_tenant_id: expectedTenant.current,
                     type: 1
                 }).then((response) => {
                     const res = response as unknown as { id: string | number };

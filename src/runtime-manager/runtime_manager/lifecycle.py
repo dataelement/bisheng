@@ -70,6 +70,7 @@ from runtime_manager.desired_state import (
 from runtime_manager.docker_backend import DockerBackend, get_docker_backend
 from runtime_manager.egress import egress_env, forget_principal, register_principal, runtime_destinations
 from runtime_manager.errors import CapacityExhaustedError, ProbeFailedError
+from runtime_manager.runtime_environment import platform_environment
 from runtime_manager.storage import ENV_STORAGE_TOKEN, AppStorageService, mint_storage_token, storage_env
 
 logger = logging.getLogger(__name__)
@@ -184,25 +185,17 @@ def build_env(
         env.update(storage_env(config, app_id=app_id, token=storage_token))
     if egress_token:
         env.update(egress_env(config, principal=egress_principal or app_id, token=egress_token))
-    env.update(
-        {
-            "BISHENG_APP_DB_URL": "sqlite:////data/app.db",
-            "BISHENG_APP_DB_PATH": "/data/app.db",
-            "BISHENG_APP_ID": app_id,
-            "BISHENG_APP_SLUG": slug,
-            "BISHENG_APP_VERSION": str(version_no),
-            "BISHENG_APP_VERSION_ID": version_id,
-            "BISHENG_PLATFORM_API_BASE": platform_api_base,
-            "PORT": str(port),
-            "BISHENG_APP_PORT": str(port),
-            # Empty under `bisheng dev`, `/apps/{slug}` here — the name is the
-            # contract, the value is environment specific (INV-32 / D5.2).
-            "BISHENG_APP_BASE_PATH": base_path or f"/apps/{slug}",
-            # Read by the template's HEALTHCHECK script so the probe path is
-            # defined in exactly one place.
-            "BISHENG_APP_HEALTH_PATH": health_path,
-        }
+    env = platform_environment(
+        app_id=app_id,
+        slug=slug,
+        version_id=version_id,
+        version_no=version_no,
+        port=port,
+        health_path=health_path,
+        base_path=base_path,
+        extra=env,
     )
+    env["BISHENG_PLATFORM_API_BASE"] = platform_api_base
     return env
 
 

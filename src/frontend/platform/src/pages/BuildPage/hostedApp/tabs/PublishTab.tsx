@@ -14,12 +14,12 @@
  * then the danger zone. The tab fills the content width like its sibling
  * tabs; the left column carries two panels so the columns end level.
  *
- * The entry link — and the QR code, which encodes the very same string — is
- * rendered from `app.entry_url` exactly as the backend sent it. Composing it
- * from `location.origin` would produce `localhost:3001/apps/…` in dev — a link
- * that goes nowhere, since `/apps` is not in the vite proxy, and a QR code that
- * scans to nowhere.
+ * The displayed address, copy action, open action and QR code share the
+ * browser's current origin and deployment prefix, just like the app tutorial.
+ * The backend's configured address remains available to API/CLI consumers.
+ * Local development forwards `/apps/` to the installed app entry via Vite.
  */
+import { appActionState } from "../appActions"
 import { Button } from "@bisheng/ui"
 import { notification } from "@bisheng/ui"
 import type {
@@ -75,7 +75,7 @@ interface PublishTabProps {
   pendingReason?: HostedAppPendingReason | null
 }
 
-/** Container health → label; an unknown value is shown as sent. */
+/** Only normalized, current runtime facts are displayable. */
 const HEALTH_I18N: Record<string, string> = {
   healthy: "hostedApp.publish.healthValue.healthy",
   unhealthy: "hostedApp.publish.healthValue.unhealthy",
@@ -100,9 +100,13 @@ export function PublishTab({
   })
 
   const appRef = { appId: app.app_id, name: app.name, state: app.state }
+  const actions = appActionState(app.allowed_actions)
   const online = app.state === "online"
   const stopped = app.state === "stopped"
   const parked = app.state === "pending_capacity"
+  const entryUrl = app.entry_url
+    ? `${window.location.origin}${__APP_ENV__.BASE_URL}/apps/${encodeURIComponent(app.slug)}/`
+    : ""
 
   // These calls wait on the orchestrator — taking an app offline sits through
   // `docker stop`'s 10s SIGTERM grace. Without a busy button the wait reads as
@@ -122,7 +126,7 @@ export function PublishTab({
   }
 
   const handleCopy = async () => {
-    await copyText(app.entry_url)
+    await copyText(entryUrl)
     notification.open({
       title: t("prompt"),
       type: "success",
@@ -146,11 +150,23 @@ export function PublishTab({
     </Button>
   )
 
-  const health = instance?.health
-    ? HEALTH_I18N[instance.health]
-      ? t(HEALTH_I18N[instance.health])
-      : instance.health
-    : "-"
+  const current = instance?.observation_state === 'current'
+  const unknown = t('f115.runtime.unknown', { ns: 'bs' })
+  const health = current && instance?.phase === 'stopped'
+    ? t('f115.runtime.notRunning', { ns: 'bs' })
+    : current && instance?.health && HEALTH_I18N[instance.health]
+      ? t(HEALTH_I18N[instance.health]) : unknown
+  const restartCount = current && typeof instance?.restart_count === 'number'
+    && Number.isInteger(instance.restart_count) && instance.restart_count >= 0 ? instance.restart_count : unknown
+  const startedAt = current && instance?.started_at
+    && /(Z|[+-]\d{2}:\d{2})$/i.test(instance.started_at)
+    && Number.isFinite(Date.parse(instance.started_at))
+    && new Date(instance.started_at).getUTCFullYear() > 1 ? formatTimestamp(instance.started_at) : unknown
+  const phase = instance?.observation_state === 'no_execution'
+    ? t('f115.runtime.noExecution', { ns: 'bs' })
+    : instance?.observation_state === 'execution_missing'
+      ? t('f115.runtime.executionMissing', { ns: 'bs' })
+      : current ? t(phaseI18nKey(instance.phase)) : unknown
 
   return (
     <div className="flex flex-col gap-4 pb-6 pt-1">
@@ -158,11 +174,11 @@ export function PublishTab({
         title={t("hostedApp.publish.overviewTitle")}
         actions={
           <>
-            {online && actionButton("stop", stopApp, t("hostedApp.publish.stop"))}
-            {stopped &&
+            {online && actions.unpublish && actionButton("stop", stopApp, t("hostedApp.publish.stop"))}
+            {stopped && actions.publish &&
               actionButton("resume", resumeApp, t("hostedApp.publish.resume"))}
-            {parked &&
-              canManualPublish !== false &&
+            {parked && actions.publish &&
+              canManualPublish === true &&
               actionButton(
                 "manualPublish",
                 manualPublishApp,
@@ -178,14 +194,14 @@ export function PublishTab({
             below covers both — a scanned code lands on the same notice page
             the link does.
           */}
-          {app.entry_url && (
+          {entryUrl && (
             <div
               className="flex shrink-0 flex-col items-center gap-1.5"
               data-testid="hosted-app-entry-qr"
             >
               <div className="rounded-md border bg-white p-2">
                 <QRCodeSVG
-                  value={app.entry_url}
+                  value={entryUrl}
                   size={88}
                   aria-label={t("hostedApp.publish.qrLabel")}
                 />
@@ -202,14 +218,14 @@ export function PublishTab({
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <code className="min-w-0 max-w-full break-all rounded bg-muted px-2 py-1 font-mono text-sm">
-                  {app.entry_url}
+                  {entryUrl}
                 </code>
                 <Button variant="outline" size="sm" onClick={handleCopy}>
                   <Copy className="mr-1 size-3.5" />
                   {t("hostedApp.publish.copy")}
                 </Button>
                 <Button variant="outline" size="sm" asChild>
-                  <a href={app.entry_url} target="_blank" rel="noreferrer">
+                  <a href={entryUrl} target="_blank" rel="noreferrer">
                     <ExternalLink className="mr-1 size-3.5" />
                     {t("hostedApp.publish.open")}
                   </a>
@@ -231,19 +247,19 @@ export function PublishTab({
               {instance ? (
                 <>
                   <Field label={t("hostedApp.publish.instancePhase")}>
-                    {t(phaseI18nKey(instance.phase))}
+                    {phase}
                   </Field>
                   <Field label={t("hostedApp.publish.instanceHealth")}>
                     {health}
                   </Field>
                   <Field label={t("hostedApp.publish.instanceRestart")}>
                     <span className="tabular-nums">
-                      {instance.restart_count ?? 0}
+                      {restartCount}
                     </span>
                   </Field>
                   <Field label={t("hostedApp.publish.instanceStartedAt")}>
                     <span className="tabular-nums">
-                      {formatTimestamp(instance.started_at)}
+                      {startedAt}
                     </span>
                   </Field>
                 </>

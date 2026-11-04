@@ -889,6 +889,10 @@ class SandboxConf(BaseModel):
     pool_acquire_timeout_s: int = Field(default=30, description="How long a worker waits for a free replica")
     default_timeout_s: int = Field(default=600, description="Default exec timeout in seconds")
     max_copy_in_bytes: int = Field(default=50 * 1024 * 1024, description="Skip a copy-in file above this size")
+    max_copy_in_total_bytes: int = Field(
+        default=512 * 1024 * 1024,
+        description="Skip copy-in files once the session's workspace would exceed this total size",
+    )
     kb_image_stage_max_files: int = Field(
         default=100,
         description="Max knowledge-base images written into the code interpreter workspace per run",
@@ -1004,6 +1008,7 @@ class Settings(BaseModel):
     system_login_method: SystemLoginMethod = SystemLoginMethod()
     vector_stores: VectorStores = VectorStores()
     object_storage: ObjectStore = ObjectStore()
+    sandbox_conf: SandboxConf = Field(default_factory=SandboxConf)
     workflow_conf: WorkflowConf = WorkflowConf()
     celery_task: CeleryConf = CeleryConf()
     knowledge_file_worker: KnowledgeFileWorkerConf = KnowledgeFileWorkerConf()

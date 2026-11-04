@@ -1,0 +1,217 @@
+{
+  "created": [
+    {
+      "id": "demo-channel-1",
+      "name": "粮油市场早报",
+      "source_list": [
+        "demo-source-1-0",
+        "demo-source-1-1",
+        "demo-source-1-2",
+        "demo-source-1-3",
+        "demo-source-1-4",
+        "demo-source-1-5",
+        "demo-source-1-6",
+        "demo-source-1-7",
+        "demo-source-1-8"
+      ],
+      "visibility": "review",
+      "is_released": true,
+      "latest_article_update_time": "2026-09-17T07:30:00",
+      "create_time": "2026-07-01T09:00:00",
+      "user_role": "creator",
+      "relation": "owner",
+      "actions": [],
+      "is_pinned": true,
+      "subscribed_at": "2026-07-01T09:00:00"
+    },
+    {
+      "id": "demo-channel-2",
+      "name": "AI 行业动态",
+      "source_list": [
+        "demo-source-2-0",
+        "demo-source-2-1",
+        "demo-source-2-2",
+        "demo-source-2-3",
+        "demo-source-2-4",
+        "demo-source-2-5",
+        "demo-source-2-6",
+        "demo-source-2-7",
+        "demo-source-2-8",
+        "demo-source-2-9",
+        "demo-source-2-10",
+        "demo-source-2-11",
+        "demo-source-2-12",
+        "demo-source-2-13"
+      ],
+      "visibility": "review",
+      "is_released": true,
+      "latest_article_update_time": "2026-09-16T19:12:00",
+      "create_time": "2026-07-01T09:00:00",
+      "user_role": "creator",
+      "relation": "owner",
+      "actions": [],
+      "is_pinned": false,
+      "subscribed_at": "2026-07-01T09:00:00"
+    },
+    {
+      "id": "demo-channel-3",
+      "name": "政策法规速递",
+      "source_list": [
+        "demo-source-3-0",
+        "demo-source-3-1",
+        "demo-source-3-2",
+        "demo-source-3-3",
+        "demo-source-3-4",
+        "demo-source-3-5"
+      ],
+      "visibility": "review",
+      "is_released": true,
+      "latest_article_update_time": "2026-09-15T16:40:00",
+      "create_time": "2026-07-01T09:00:00",
+      "user_role": "creator",
+      "relation": "owner",
+      "actions": [],
+      "is_pinned": false,
+      "subscribed_at": "2026-07-01T09:00:00"
+    }
+  ],
+  "followed": [
+    {
+      "id": "demo-channel-11",
+      "name": "集团要闻",
+      "source_list": [
+        "demo-source-11-0",
+        "demo-source-11-1",
+        "demo-source-11-2",
+        "demo-source-11-3"
+      ],
+      "visibility": "public",
+      "is_released": true,
+      "latest_article_update_time": "2026-09-17T08:05:00",
+      "create_time": "2026-07-01T09:00:00",
+      "user_role": "member",
+      "relation": "subscriber",
+      "actions": [],
+      "is_pinned": true,
+      "subscribed_at": "2026-07-01T09:00:00"
+    },
+    {
+      "id": "demo-channel-12",
+      "name": "大宗商品价格监测",
+      "source_list": [
+        "demo-source-12-0",
+        "demo-source-12-1",
+        "demo-source-12-2",
+        "demo-source-12-3",
+        "demo-source-12-4",
+        "demo-source-12-5",
+        "demo-source-12-6",
+        "demo-source-12-7",
+        "demo-source-12-8",
+        "demo-source-12-9",
+        "demo-source-12-10"
+      ],
+      "visibility": "review",
+      "is_released": true,
+      "latest_article_update_time": "2026-09-16T22:00:00",
+      "create_time": "2026-07-01T09:00:00",
+      "user_role": "member",
+      "relation": "subscriber",
+      "actions": [],
+      "is_pinned": false,
+      "subscribed_at": "2026-07-01T09:00:00"
+    },
+    {
+      "id": "demo-channel-13",
+      "name": "数字化转型观察",
+      "source_list": [
+        "demo-source-13-0",
+        "demo-source-13-1",
+        "demo-source-13-2",
+        "demo-source-13-3",
+        "demo-source-13-4",
+        "demo-source-13-5",
+        "demo-source-13-6",
+        "demo-source-13-7"
+      ],
+      "visibility": "public",
+      "is_released": true,
+      "latest_article_update_time": "2026-09-16T10:18:00",
+      "create_time": "2026-07-01T09:00:00",
+      "user_role": "member",
+      "relation": "subscriber",
+      "actions": [],
+      "is_pinned": false,
+      "subscribed_at": "2026-07-01T09:00:00"
+    },
+    {
+      "id": "demo-channel-14",
+      "name": "食品安全舆情",
+      "source_list": [
+        "demo-source-14-0",
+        "demo-source-14-1",
+        "demo-source-14-2",
+        "demo-source-14-3",
+        "demo-source-14-4",
+        "demo-source-14-5",
+        "demo-source-14-6"
+      ],
+      "visibility": "review",
+      "is_released": true,
+      "latest_article_update_time": "2026-09-14T09:30:00",
+      "create_time": "2026-07-01T09:00:00",
+      "user_role": "admin",
+      "relation": "subscriber",
+      "actions": [],
+      "is_pinned": false,
+      "subscribed_at": "2026-07-01T09:00:00"
+    },
+    {
+      "id": "demo-channel-15",
+      "name": "海外农业资讯",
+      "source_list": [
+        "demo-source-15-0",
+        "demo-source-15-1",
+        "demo-source-15-2",
+        "demo-source-15-3",
+        "demo-source-15-4",
+        "demo-source-15-5",
+        "demo-source-15-6",
+        "demo-source-15-7",
+        "demo-source-15-8",
+        "demo-source-15-9",
+        "demo-source-15-10",
+        "demo-source-15-11"
+      ],
+      "visibility": "public",
+      "is_released": true,
+      "latest_article_update_time": "2026-09-12T18:45:00",
+      "create_time": "2026-07-01T09:00:00",
+      "user_role": "member",
+      "relation": "subscriber",
+      "actions": [],
+      "is_pinned": false,
+      "subscribed_at": "2026-07-01T09:00:00"
+    },
+    {
+      "id": "demo-channel-16",
+      "name": "ESG 与可持续发展",
+      "source_list": [
+        "demo-source-16-0",
+        "demo-source-16-1",
+        "demo-source-16-2",
+        "demo-source-16-3",
+        "demo-source-16-4"
+      ],
+      "visibility": "public",
+      "is_released": true,
+      "latest_article_update_time": "2026-09-08T14:20:00",
+      "create_time": "2026-07-01T09:00:00",
+      "user_role": "member",
+      "relation": "subscriber",
+      "actions": [],
+      "is_pinned": false,
+      "subscribed_at": "2026-07-01T09:00:00"
+    }
+  ]
+}

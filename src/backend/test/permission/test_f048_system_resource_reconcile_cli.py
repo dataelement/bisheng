@@ -21,13 +21,9 @@ def test_apply_requires_store_confirmation():
 
 
 @pytest.mark.parametrize("apply", [False, True])
-async def test_cli_reports_missing_system_tuples_and_passes_explicit_mode(monkeypatch, capsys, apply):
+async def test_cli_reports_missing_resources_and_passes_explicit_mode(monkeypatch, capsys, apply):
     spec = SystemOwnedResourceSpec(1, "tool", "902", ("use", "visible"), "preset")
-    before = (
-        SystemOwnedResourceState(
-            spec, "MISSING_TUPLES", mode="CUSTOM", version=3, missing_relations=("visible", "system_use_marker")
-        ),
-    )
+    before = (SystemOwnedResourceState(spec, "MISSING"),)
     after = (SystemOwnedResourceState(spec, "CURRENT", mode="CUSTOM", version=4),) if apply else before
     report = SystemOwnedReconcileReport("apply" if apply else "dry-run", before, after)
     client = SimpleNamespace(store_id="store", model_id="model")
@@ -50,10 +46,8 @@ async def test_cli_reports_missing_system_tuples_and_passes_explicit_mode(monkey
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["mode"] == report.mode
-    assert payload["missing_count"] == 0
-    assert payload["incomplete_count"] == 1
-    assert payload["missing_tuple_count"] == 2
-    assert payload["before"][0]["missing_relations"] == ["visible", "system_use_marker"]
+    assert payload["missing_count"] == 1
+    assert payload["before"][0]["state"] == "MISSING"
     reconcile.assert_awaited_once_with(components.facade, (spec,), apply=apply, operator_id=1)
 
 

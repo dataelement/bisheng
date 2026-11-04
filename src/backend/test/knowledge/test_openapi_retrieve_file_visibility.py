@@ -208,4 +208,4 @@ async def test_v2_adapter_maps_permission_outage_to_503_without_chunks(monkeypat
             version_repo=MagicMock(),
         )
     assert open_api_http_status(exc.value) == 503
-    assert exc.value.code == 19002
+    assert exc.value.code == 25021

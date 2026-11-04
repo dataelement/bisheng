@@ -14,14 +14,14 @@ vi.mock('@bisheng/ui', async importOriginal => {
   const actual = await importOriginal<typeof import('@bisheng/ui')>();
   return { ...actual, toast: { show: mocks.toast } };
 });
-vi.mock('@/pages/BuildPage/bench/ModelManagement', () => ({ ModelManagement: (props: unknown) => { mocks.managementProps = props; return null; } }));
+vi.mock('@/pages/ModelPage/manage/UserSelectableModels', () => ({ UserSelectableModels: (props: unknown) => { mocks.managementProps = props; return null; } }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 it('acknowledges a committed write once when the following refresh fails', async () => {
   const failure = normalizeApiError({ status_code: 25001 }, { message: 'refresh unavailable' });
   mocks.load.mockResolvedValueOnce({ data: { models: [{ id: '9', displayName: 'Chat' }], embedding_model: { id: '1' } } }).mockRejectedValue(failure);
   mocks.save.mockResolvedValue(undefined);
   const client = createPlatformQueryClient();
-  render(<QueryClientProvider client={client}><WorkbenchModel onBack={vi.fn()} /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><WorkbenchModel data={[]} onBack={vi.fn()} /></QueryClientProvider>);
   const save = await screen.findByRole('button', { name: 'model.save' });
   await waitFor(() => expect(save).toBeEnabled());
   fireEvent.click(save);
@@ -33,25 +33,25 @@ it('acknowledges a committed write once when the following refresh fails', async
   expect(client.getQueryData(['linsightModelEnvelope'])).toMatchObject({ data: { embedding_model: { id: '1' } } });
   client.clear();
 });
-it('moves both defaults along when their row switches to another model', async () => {
+it('keeps both defaults when selectable model metadata changes', async () => {
   mocks.load.mockResolvedValue({ data: {
     models: [{ key: 'a', id: '9', displayName: 'Chat' }, { key: 'b', id: '10', displayName: 'Other' }],
     embedding_model: { id: '1' }, chat_default_model_id: '9', linsight_default_model_id: '9',
   } });
   mocks.save.mockResolvedValue(undefined);
   const client = createPlatformQueryClient();
-  render(<QueryClientProvider client={client}><WorkbenchModel onBack={vi.fn()} /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><WorkbenchModel data={[]} onBack={vi.fn()} /></QueryClientProvider>);
   const save = await screen.findByRole('button', { name: 'model.save' });
   await waitFor(() => expect(save).toBeEnabled());
-  await waitFor(() => expect(mocks.managementProps?.chatDefaultModelId).toBe('9'));
-  act(() => mocks.managementProps.onModelChange(0, '11'));
-  await waitFor(() => expect(mocks.managementProps.chatDefaultModelId).toBe('11'));
+  await waitFor(() => expect(mocks.managementProps?.configuredModels[0]?.id).toBe('9'));
+  act(() => mocks.managementProps.onMetadataChange({ id: 9, model_name: 'Chat' }, { displayName: 'Renamed', visual: true }));
+  await waitFor(() => expect(mocks.managementProps.configuredModels[0].displayName).toBe('Renamed'));
   fireEvent.click(save);
   await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
   expect(mocks.save.mock.calls[0][0]).toMatchObject({
-    models: [{ id: '11' }, { id: '10' }],
-    chat_default_model_id: '11',
-    linsight_default_model_id: '11',
+    models: [{ id: '9', displayName: 'Renamed', visual: true }, { id: '10' }],
+    chat_default_model_id: '9',
+    linsight_default_model_id: '9',
   });
   client.clear();
 });

@@ -12,6 +12,9 @@ import Templates from '@/pages/BuildPage/appTemps';
 import { installDragDimensions, keyboardDrag } from './keyboardDrag';
 
 const api = vi.hoisted(() => ({ templates: vi.fn(), saveTemplate: vi.fn() }));
+vi.mock('@/contexts/userContext', async () => ({
+  userContext: (await import('react')).createContext({ user: { is_child_admin: true } }),
+}));
 vi.mock('@/controllers/API', () => ({
   readFileLibDatabase: vi.fn(async () => ({ data: [] })),
   readTempsDatabase: api.templates,
@@ -116,9 +119,13 @@ it('keeps variable edits local until explicit save and preserves option keys', a
 });
 
 it('persists only the moved template using the existing order-number protocol', async () => {
+  api.templates.mockResolvedValue([
+    { id: 1, name: 'Template One', description: 'Historical description '.repeat(12), order_num: 131070 },
+    { id: 2, name: 'Template Two', description: '', order_num: 65535 },
+  ]);
   render(<StrictMode><MemoryRouter initialEntries={['/build/temps/10']}><Routes><Route path="/build/temps/:type" element={<Templates />} /></Routes></MemoryRouter></StrictMode>);
   await screen.findByText('Template One');
   await keyboardDrag();
   await waitFor(() => expect(api.saveTemplate).toHaveBeenCalledTimes(1));
-  expect(api.saveTemplate).toHaveBeenCalledWith(1, { name: 'Template One', description: '', order_num: 0 });
+  expect(api.saveTemplate).toHaveBeenCalledWith(1, { order_num: 0 });
 });

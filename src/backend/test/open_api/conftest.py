@@ -47,7 +47,7 @@ async def open_api_db(monkeypatch):
 
     from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
     from bisheng.database.models.department import Department
-    from bisheng.database.models.tenant import UserTenant
+    from bisheng.database.models.tenant import Tenant, UserTenant
     from bisheng.open_api.domain.models import (
         ApiCredential,
         ApiCredentialDelegateScope,
@@ -63,6 +63,7 @@ async def open_api_db(monkeypatch):
     )
     async with engine.begin() as connection:
         await connection.run_sync(User.__table__.create)
+        await connection.run_sync(Tenant.__table__.create)
         await connection.run_sync(UserTenant.__table__.create)
         await connection.run_sync(Department.__table__.create)
         await connection.run_sync(ServiceAccount.__table__.create)
@@ -80,6 +81,7 @@ async def open_api_db(monkeypatch):
             await session.close()
 
     for module_name in (
+        "bisheng.database.models.tenant",
         "bisheng.open_api.domain.repositories.credential_repository",
         "bisheng.open_api.domain.repositories.delegate_scope_repository",
         "bisheng.open_api.domain.repositories.owner_repository",

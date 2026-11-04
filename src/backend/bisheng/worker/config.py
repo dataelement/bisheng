@@ -26,6 +26,10 @@ beat_schedule.setdefault(
 )
 if settings.dsh.enabled:
     beat_schedule.setdefault(
+        "dsh-content-safety-projection",
+        {"task": "dsh.scan_content_safety", "schedule": settings.dsh.audit_state_scan_interval_seconds},
+    )
+    beat_schedule.setdefault(
         "dsh-audit-tree-preparation",
         {"task": "dsh.scan_audit_trees", "schedule": settings.dsh.audit_state_scan_interval_seconds},
     )

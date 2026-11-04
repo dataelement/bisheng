@@ -69,7 +69,7 @@ export function LicenseBanner() {
         // padding of its own. `flex` keeps those margins inside the measured
         // box — collapsed through a plain block they would leave
         // `--license-banner-h` 16px short of what the strip actually occupies.
-        <div ref={ref} className="flex shrink-0 flex-col bg-background-main">
+        <div ref={ref} className="flex shrink-0 flex-col bg-[#f8f8f8] dark:bg-background-main">
             <Alert live type="warning" description={message} />
         </div>
     );

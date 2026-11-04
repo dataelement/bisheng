@@ -510,3 +510,31 @@ def test_daily_chat_path_sees_context_overflow():
 
 def test_other_errors_keep_the_umbrella_code():
     assert classify_for_event(make_exc(openai.BadRequestError, message="bad", status_code=400)).error_code == 11090
+
+
+# --------------------------------------------------------------------------- #
+# Platform credits (client module / DSH) — the user's own monthly allowance
+# --------------------------------------------------------------------------- #
+
+
+def test_platform_credit_rejection_is_its_own_label_and_fails_fast():
+    from bisheng.common.errcode.dsh import DshMonthlyTokenLimitExceededError
+
+    exc = DshMonthlyTokenLimitExceededError()
+    assert classify_behavior(exc) is Behavior.FAIL_FAST
+    assert label_error(exc) is ErrorType.CREDIT_EXHAUSTED
+
+
+def test_task_mode_wrapper_unwraps_to_credit_exhausted():
+    """task_exec raises TaskExecutionError(...) from the rejection; the card must not read 'unknown'."""
+    from bisheng.common.errcode.dsh import DshMonthlyTokenLimitExceededError
+
+    try:
+        try:
+            raise DshMonthlyTokenLimitExceededError()
+        except Exception as e:
+            raise RuntimeError("Agent task execution failed: model=deepseek-v4-pro: Monthly token limit reached") from e
+    except RuntimeError as wrapper:
+        result = classify_for_event(wrapper)
+
+    assert (result.error_type, result.error_code) == ("credit_exhausted", 26121)

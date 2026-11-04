@@ -16,7 +16,7 @@ import {
 
 jest.mock("~/api/request", () => ({
   __esModule: true,
-  default: { get: jest.fn() },
+  default: { get: jest.fn(),post:jest.fn(),delete:jest.fn() },
   translateApiErrorMessage: jest.fn(),
 }));
 
@@ -80,6 +80,19 @@ describe("the review reads", () => {
 
     // Never resolves with an empty payload: a caller that renders whatever came
     // back would show an empty file tree as though the package held no files.
-    await expect(getSnapshotTreeApi("app-1", "ver-2")).rejects.toThrow(/16256/);
+    await expect(getSnapshotTreeApi("app-1", "ver-2")).rejects.toMatchObject({ status_code:16256 });
+  });
+});
+
+
+describe('F114 personal preview purpose',()=>{
+  it('pins approval purpose across creation, read and cleanup',async()=>{
+    const {getPreviewStatusApi,startPreviewApi,reclaimPreviewApi}=await import('./hostedAppPreview');
+    const api=request as unknown as {get:jest.Mock;post:jest.Mock;delete:jest.Mock};
+    api.get.mockResolvedValue({state:'absent'});api.post.mockResolvedValue({state:'running'});api.delete.mockResolvedValue({state:'reclaimed'});
+    await getPreviewStatusApi('app','version');await startPreviewApi('app','version');await reclaimPreviewApi('app','version','session');
+    expect(api.get).toHaveBeenCalledWith(expect.stringContaining('purpose=approval'));
+    expect(api.post).toHaveBeenCalledWith(expect.stringContaining('purpose=approval'),{});
+    expect(api.delete).toHaveBeenCalledWith(expect.stringMatching(/session\?purpose=approval$/));
   });
 });

@@ -2,6 +2,9 @@ import tempfile
 from abc import abstractmethod
 from functools import cached_property
 
+from loguru import logger
+from sqlalchemy.exc import SQLAlchemyError
+
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.common.services.config_service import settings
@@ -24,6 +27,7 @@ from bisheng.knowledge.rag.pipeline.loader.txt import BishengTextLoader
 from bisheng.knowledge.rag.pipeline.loader.word import BishengWordLoader
 from bisheng.knowledge.rag.pipeline.loader.x_create import XinChuangFormatterLoader
 from bisheng.knowledge.rag.pipeline.types import ImageStorageContext, PipelineConfig, PipelineResult
+from bisheng.user.domain.models.user import UserDao
 
 FileExtensionMap = {
     "xlsx": {"loader": "_init_excel_loader", "transformers": "_init_excel_transformers"},
@@ -121,6 +125,20 @@ class BaseFilePipeline(BasePipeline):
     @abstractmethod
     def file_metadata(self) -> dict:
         pass
+
+    @staticmethod
+    def _get_display_user_name(user_id: int) -> str | None:
+        """Best-effort user name lookup for display-only chunk metadata."""
+        try:
+            user = UserDao.get_user(user_id)
+        except SQLAlchemyError:
+            # uploader/updater are display-only for temp/preview chunks; a DB hiccup
+            # (e.g. 1040 Too many connections) must not fail the whole file parse.
+            logger.opt(exception=True).warning(
+                "uploader name lookup failed, parsing continues without it: user_id={}", user_id
+            )
+            return None
+        return user.user_name if user else None
 
     def prepare_local_file(self):
         """Override to download file if not already present."""

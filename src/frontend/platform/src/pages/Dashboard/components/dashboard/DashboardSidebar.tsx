@@ -10,12 +10,10 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { userContext } from "@/contexts/userContext";
 import { showApiError } from "@/controllers/request";
 import { copyDashboard,createDashboard,deleteDashboard } from "@/controllers/API/dashboard";
-import { useMiniDebounce } from "@/util/hook";
 import { generateUniqueName } from "@/util/utils";
 import { cn } from "@/utils";
 import { Tooltip as Tip } from "@bisheng/ui";
 
-import type React from "react";
 import { useContext,useMemo,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation,useQueryClient } from "@tanstack/react-query";
@@ -64,15 +62,6 @@ export function DashboardSidebar({
         return dashboards.filter((dashboard) => dashboard.title.toLowerCase().includes(searchQuery.toLowerCase()))
     }, [dashboards, searchQuery])
 
-    const handleSearch = useMiniDebounce((e: React.ChangeEvent<HTMLInputElement>) => {
-        setSearchQuery(e.target.value)
-    }, 300)
-
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === "Enter") {
-            // Search is already triggered by debounce
-        }
-    }
     const navigator = useNavigate()
 
     const queryClient = useQueryClient()
@@ -187,7 +176,7 @@ export function DashboardSidebar({
             {!isCollapsed && (
                 <div className="flex flex-col p-2 gap-2">
                     <div className="relative">
-                        <SearchInput placeholder={t('system.boardName', { ns: 'bs' })} value={searchQuery} onChange={handleSearch} onKeyDown={handleKeyDown} />
+                        <SearchInput placeholder={t('system.boardName', { ns: 'bs' })} value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
                     </div>
 
                     <div className="overflow-y-auto space-y-2 h-[calc(100vh-174px-var(--license-banner-h,0px))]">

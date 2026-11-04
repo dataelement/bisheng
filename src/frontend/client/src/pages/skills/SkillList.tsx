@@ -65,15 +65,15 @@ function SkillRow({ skill, pendingId, onSelect, onToggle }: SkillRowProps) {
           {skill.description}
         </p>
       </div>
-      {personal && (
+      {(
         <Switch
           size="small"
           className="relative z-[1] shrink-0"
-          checked={personal.enabled}
-          loading={pendingId === personal.id}
-          disabled={pendingId !== undefined && pendingId !== personal.id}
+          checked={skill.enabled}
+          loading={pendingId === skill.id}
+          disabled={pendingId !== undefined && pendingId !== skill.id}
           aria-label={switchLabel}
-          onCheckedChange={(enabled) => onToggle(personal, enabled)}
+          onCheckedChange={(enabled) => onToggle(skill, enabled)}
         />
       )}
     </li>

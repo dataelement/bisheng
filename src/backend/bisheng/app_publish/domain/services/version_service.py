@@ -204,6 +204,7 @@ class VersionService:
         async with get_async_db_session() as session:
             previous = await AppVersionDao.amax_version_no(session, deployment.app_id)
             row = AppVersion(
+                release_notes=deployment.release_notes,
                 id=deployment.version_id,
                 app_id=deployment.app_id,
                 version_no=previous + 1,

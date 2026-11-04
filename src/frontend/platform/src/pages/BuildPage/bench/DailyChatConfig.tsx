@@ -2,7 +2,6 @@ import { Button } from '@bisheng/ui';
 
 import { CardContent } from "@/components/bs-ui/card";
 import { Label } from "@/components/bs-ui/label";
-import { SkillManagement } from "@/components/LinSight/skill/SkillManagement";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
@@ -11,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import ConfigInheritanceBanner from "./ConfigInheritanceBanner";
 import { FormInput } from "./FormInput";
+import { isMenuNameTooLong } from "./menuDisplayName";
 import { IconUploadSection } from "./IconUploadSection";
 import { useChatConfig } from "./index";
 import { handleUiRequest } from "@/controllers/request";
@@ -101,6 +101,7 @@ export function DailyChatConfig({ scopeVersion = 0 }: DailyChatConfigProps) {
                             <FormInput
                                 label={t("chatConfig.menuDisplayName")}
                                 value={formData.homeMenuDisplayName}
+                                validate={(v) => isMenuNameTooLong(v) ? t("chatConfig.menuNameTooLong") : ""}
                                 error={errors.homeMenuDisplayName}
                                 placeholder={t("bench.home")}
                                 onChange={(v) => handleMenuNameChange("homeMenuDisplayName", v)}
@@ -246,11 +247,7 @@ export function DailyChatConfig({ scopeVersion = 0 }: DailyChatConfigProps) {
 
                         {/* F035 (PRD §4.5): skill management replaces the legacy SOP manual library.
                             The header toggle (default off) gates the client 添加技能 entry. */}
-                        <SkillManagement
-                            scopeVersion={scopeVersion}
-                            entryEnabled={formData.skillEntry.enabled}
-                            onEntryToggle={(enabled) => toggleFeature("skillEntry", enabled)}
-                        />
+
 
                         {/* Recommended Apps */}
                         <RecommendedAppsConfig

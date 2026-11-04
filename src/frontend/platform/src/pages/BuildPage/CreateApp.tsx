@@ -18,10 +18,11 @@ import { copyReportTemplate,createWorkflowApi } from "@/controllers/API/workflow
 import { showApiError } from "@/controllers/request";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import { AppType,AppTypeToNum } from "@/types/app";
-import { forwardRef,useContext,useImperativeHandle,useMemo,useRef,useState } from "react";
+import { forwardRef,useContext,useEffect,useImperativeHandle,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { assistantRoleExample } from "./assistant/editAssistant/roleExample";
+import { instantiateAssistantTemplate, type AssistantTemplateDraft } from './assistantTemplate';
 
 type ModalProps = {};
 type ModalRef = {
@@ -40,6 +41,10 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
         const [appType, setType] = useState<AppType>(AppType.ASSISTANT); // assistant or workflow
         const [isEditMode, setIsEditMode] = useState(false); // edit mode
         const [loading, setLoading] = useState(false);
+        const [templateLoading, setTemplateLoading] = useState(false);
+        const generation = useRef(0);
+        const assistantDraft = useRef<AssistantTemplateDraft>({});
+        const submitting = useRef(false);
         const { t } = useTranslation('flow');
         const { appConfig } = useContext(locationContext);
         const securityRef = useRef<any>(null);
@@ -49,6 +54,12 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
 
         useImperativeHandle(ref, () => ({
             open(type: AppType, tempId?: number) {
+                ++generation.current;
+                assistantDraft.current = {};
+                submitting.current = false;
+                setLoading(false);
+                tempDataRef.current = null;
+                setTemplateLoading(false);
                 setType(type);
                 setIsEditMode(false);
                 setFormData({
@@ -57,14 +68,15 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                     desc: '',
                 });
                 if (tempId) {
-                    handleSelectTemplate(type, tempId);
+                    void handleSelectTemplate(type, tempId);
                 }
                 setErrors({});
                 setOpen(true);
-                tempDataRef.current = null;
                 setAppId('');
             },
             edit(type: AppType, flow: any) {
+                ++generation.current;
+                assistantDraft.current = {};
                 setType(type);
                 setIsEditMode(true);
                 fetchDetails(type, flow);
@@ -76,14 +88,37 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
         }));
 
         const tempDataRef = useRef<any>(null);
+        useEffect(() => {
+            const reset = () => {
+                ++generation.current;
+                tempDataRef.current = null;
+                assistantDraft.current = {};
+                submitting.current = false;
+                setOpen(false);
+                setLoading(false);
+                setTemplateLoading(false);
+            };
+            window.addEventListener('bisheng:management-scope-changed', reset);
+            const invalidate = () => { ++generation.current; };
+            return () => {
+                invalidate();
+                window.removeEventListener('bisheng:management-scope-changed', reset);
+            };
+        }, []);
+
         const handleSelectTemplate = async (type: AppType, tempId: number) => {
-            const [flow] = await readTempsDatabase('flow', tempId)
-            tempDataRef.current = flow;
-            setFormData({
-                url: flow.logo || '',
-                name: `${flow.name}-${generateUUID(5)}`,
-                desc: flow.description
-            });
+            const request = generation.current;
+            setTemplateLoading(true);
+            try {
+                const [template] = await readTempsDatabase(type, tempId);
+                if (request !== generation.current) return;
+                tempDataRef.current = JSON.parse(JSON.stringify(template));
+                setFormData({ url: template.logo || '', name: `${template.name}-${generateUUID(5)}`, desc: template.description || '' });
+            } catch (error) {
+                if (request === generation.current) { setOpen(false); showApiError(error); }
+            } finally {
+                if (request === generation.current) setTemplateLoading(false);
+            }
         }
 
         const fetchDetails = async (type: AppType, flow: any) => {
@@ -132,6 +167,7 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
         // Handle form submission
         const navigate = useNavigate()
         const handleSubmit = async (e: React.FormEvent) => {
+            if (templateLoading || submitting.current) return;
         if ((String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)) return;
 
             e.preventDefault();
@@ -139,6 +175,8 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
             if (!isValid) return;
 
             setLoading(true);
+            submitting.current = true;
+            const request = generation.current;
             try {
             if (isEditMode) {
                 await onSave({
@@ -151,19 +189,27 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                 return;
             }
 
-            if (tempDataRef.current) {
+            const template = tempDataRef.current ? JSON.parse(JSON.stringify(tempDataRef.current)) : null;
+            if (template) {
+                if (AppType.ASSISTANT === appType) {
+                    const id = await instantiateAssistantTemplate(template.data, formData, assistantDraft.current);
+                    if (request === generation.current) { setOpen(false); navigate('/assistant/' + id); }
+                    return;
+                }
                 if (AppType.FLOW === appType) {
-                    for (let i = 0; i < tempDataRef.current.data.nodes.length; i++) {
-                        const node = tempDataRef.current.data.nodes[i];
+                    for (let i = 0; i < template.data.nodes.length; i++) {
+                        const node = template.data.nodes[i];
                         await copyReportTemplate(node.data)
+                        if (request !== generation.current) return;
                     }
 
                     const [workflow, assistant] = await Promise.all([getLlmDefaultModel(), getAssistantModelConfig()])
                     const workflowModelId = workflow.model_id;
                     const assistantModelId = assistant.llm_list.find(item => item.default)?.model_id;
-                    delete tempDataRef.current.data.source;
+                    if (request !== generation.current) return;
+                    delete template.data.source;
 
-                    tempDataRef.current.data.nodes.forEach(node => {
+                    template.data.nodes.forEach(node => {
                         if (['rag', 'llm', 'agent', 'qa_retriever'].includes(node.data.type)) {
                             node.data.group_params.forEach(group =>
                                 group.params.forEach(param => {
@@ -182,8 +228,8 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                             )
                         }
                     })
-                    const res = await createWorkflowApi(formData.name, formData.desc, formData.url, tempDataRef.current);
-                    if (res) navigate('/flow/' + res.id);
+                    const res = await createWorkflowApi(formData.name, formData.desc, formData.url, template);
+                    if (res && request === generation.current) navigate('/flow/' + res.id);
                 }
             } else {
                 if (appType === AppType.ASSISTANT) {
@@ -209,7 +255,10 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
             } catch (error) {
                 showApiError(error);
             } finally {
-                setLoading(false);
+                if (request === generation.current) {
+                    submitting.current = false;
+                    setLoading(false);
+                }
             }
         };
 
@@ -221,10 +270,10 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
 
         const previewAvatar = useMemo(() =>
             formData.url ? __APP_ENV__.BASE_URL + (formData.viewUrl || formData.url) : '',
-            [formData.url]);
+            [formData.url, formData.viewUrl]);
 
         return (
-            <Dialog open={open} onOpenChange={setOpen}>
+            <Dialog open={open} onOpenChange={(value) => { if (!value) ++generation.current; setOpen(value); }}>
                 <DialogContent className="sm:max-w-[625px] bg-background-login">
                     <DialogHeader>
                         <DialogTitle>{isEditMode ? t('edit') : t('create')}{appType === AppType.ASSISTANT ? t('assistant') : t('workflow')}</DialogTitle>
@@ -266,8 +315,8 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                                 {t('cancel')}
                             </Button>
                         </DialogClose>
-                        <Button disabled={((String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)) || (!formData.name || loading)} type="submit" onClick={handleSubmit}>
-                            {loading && <Outlined.Loading className="animate-spin mr-2" />}
+                        <Button disabled={((String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)) || (!formData.name || loading || templateLoading)} type="submit" onClick={handleSubmit}>
+                            {(loading || templateLoading) && <Outlined.Loading className="animate-spin mr-2" />}
                             {t(isEditMode ? 'save' : 'create')}
                         </Button>
                     </DialogFooter>

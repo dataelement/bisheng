@@ -23,3 +23,24 @@ it('renders client-style suggested questions in normal message flow and guards r
   rerender(<SuggestedQuestions questions={['First']} canExecute={false} onSelect={onSelect} />);
   expect(screen.queryByRole('button', { name: 'First' })).toBeNull();
 });
+
+it.each([
+  { category: 'answer', message: 'Partial answer', stopped: true },
+  { category: 'answer', message: 'Stored partial answer', remark: 'break_answer' },
+  { category: 'reasoning', message: 'Partial thinking', stopped: true },
+])('renders the stopped state for current and historical $category messages', row => {
+  render(<ConversationMessages messages={normalizeHistory([{ ...row, is_bot: true, end: true }], { mode: 'assistant', sessionKey: 'stopped' })}
+    canExecute labels={{ confirm: 'Confirm', confirmed: 'Confirmed', thinking: 'Thinking', completed: 'Done', stopped: 'Stopped' }}
+    slots={{ content: text => text }} />);
+  expect(screen.getByText(row.message)).toBeTruthy();
+  expect(screen.getByRole('status').textContent).toBe('Stopped');
+  expect(screen.queryByText('Done')).toBeNull();
+});
+
+it('keeps normal completed answers free of a stopped marker', () => {
+  render(<ConversationMessages messages={normalizeHistory([{ category: 'answer', message: 'Complete', is_bot: true, end: true }], { mode: 'assistant', sessionKey: 'complete' })}
+    canExecute labels={{ confirm: 'Confirm', confirmed: 'Confirmed', thinking: 'Thinking', completed: 'Done', stopped: 'Stopped' }}
+    slots={{ content: text => text }} />);
+  expect(screen.getByText('Complete')).toBeTruthy();
+  expect(screen.queryByRole('status')).toBeNull();
+});

@@ -18,6 +18,8 @@ import { getShareTokenFromPath } from '~/utils/shareToken';
 
 /** Output file shape of `output_result.final_files` (= store `file_list`). */
 export interface ArtifactFile {
+    /** Original uploaded attachment URL, already authorized by the conversation. */
+    directUrl?: string;
     file_id: string;
     file_name: string;
     file_url: string;
@@ -36,16 +38,37 @@ export interface ArtifactFile {
      * markdown. Absent on legacy entries → falls back to markdown.
      */
     previewAsImage?: boolean;
+    /**
+     * An uploaded SPREADSHEET that lands in the workspace as the original
+     * workbook (`ingest_mode: 'spreadsheet_original'`), with no markdown view.
+     * The user previews and downloads the workbook itself.
+     */
+    previewAsOriginal?: boolean;
+    /**
+     * The task turn (session version) this file belongs to. The conversation
+     * workspace merges files from every turn, while its panel holds only the
+     * latest turn's id; the backend authorizes a file against the version that
+     * produced it (`owned_file_key`), so an earlier turn's file must resolve
+     * with its own id. Absent → the caller's versionId (single-turn surfaces).
+     */
+    versionId?: string;
 }
 
-export type PreviewKind = 'markdown' | 'text' | 'image' | 'document' | 'unsupported';
+/** The version to resolve `file` against: its own turn, else the caller's. */
+export function artifactVersionId(file: ArtifactFile, fallback: string): string {
+    return file.versionId || fallback;
+}
+
+export type PreviewKind = 'markdown' | 'text' | 'image' | 'document' | 'slides' | 'unsupported';
 
 const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'];
 // Rich file types rendered inline by the shared FilePreview viewer (pdfjs /
-// mammoth / xlsx). Explicitly excludes `doc` (legacy binary mammoth can't parse)
-// and `ppt`/`pptx` (need a backend pptx→pdf conversion) — those stay 'unsupported'
-// so they keep the "download to view" fallback.
-const DOCUMENT_EXTS = ['pdf', 'docx', 'xls', 'xlsx', 'csv'];
+// mammoth / xlsx). Explicitly excludes `doc` (legacy binary mammoth can't parse),
+// which stays 'unsupported' and keeps the "download to view" fallback.
+const DOCUMENT_EXTS = ['pdf', 'docx', 'xls', 'xlsx', 'csv', 'html', 'htm'];
+// F111: slide decks are previewed through a backend pptx→pdf conversion
+// (see useSlidesPreview), then rendered by the same PDF viewer.
+const SLIDES_EXTS = ['ppt', 'pptx'];
 // Deliverable extensions whose bytes are markdown TEXT - the only artifacts
 // fetchArtifactBlob decodes (to strip citation markers); everything else is
 // handed out as raw bytes.
@@ -63,6 +86,7 @@ export function getPreviewKind(fileName: string): PreviewKind {
     if (ext === 'txt') return 'text';
     if (IMAGE_EXTS.includes(ext)) return 'image';
     if (DOCUMENT_EXTS.includes(ext)) return 'document';
+    if (SLIDES_EXTS.includes(ext)) return 'slides';
     return 'unsupported';
 }
 
@@ -74,6 +98,7 @@ export function getPreviewKind(fileName: string): PreviewKind {
 export function getArtifactPreviewKind(file: ArtifactFile): PreviewKind {
     // Image uploads with a persisted original preview as the picture itself.
     if (file.previewAsImage) return 'image';
+    if (file.previewAsOriginal) return getPreviewKind(file.file_name);
     if (file.source === 'upload') return 'markdown';
     return getPreviewKind(file.file_name);
 }
@@ -118,13 +143,16 @@ export function toUploadedArtifacts(files: any[] | undefined): ArtifactFile[] {
             // persisted it (`original_file_path`); otherwise fall back to the
             // parsed-markdown wrapper (legacy entries / non-image files).
             const previewAsImage = IMAGE_EXTS.includes(getFileExtension(name)) && !!f.original_file_path;
+            const previewAsOriginal =
+                !previewAsImage && f.ingest_mode === 'spreadsheet_original' && !!f.original_file_path;
             return {
                 file_id: f.file_id,
                 file_name: name,
-                file_url: previewAsImage ? f.original_file_path : f.markdown_file_path,
+                file_url: previewAsImage || previewAsOriginal ? f.original_file_path : f.markdown_file_path,
                 file_md5: f.file_md5,
                 source: 'upload' as const,
                 previewAsImage,
+                previewAsOriginal,
             };
         });
 }
@@ -155,27 +183,50 @@ function getWorkspaceArtifactKey(file: ArtifactFile): string {
  * replacing an older entry at the same workspace path.
  */
 export function collectConversationWorkspaceFiles(
-    snapshots: Array<WorkspaceArtifactSnapshot | null | undefined>,
+    turns: Array<{ versionId: string; snapshot: WorkspaceArtifactSnapshot | null | undefined }>,
 ): ArtifactFile[] {
     const collected = new Map<string, ArtifactFile>();
 
-    const addFiles = (files: ArtifactFile[] | undefined) => {
+    // Tag each file with the turn that produced it, so preview / download resolve
+    // it against that version rather than the latest one (see ArtifactFile.versionId).
+    const addFiles = (files: ArtifactFile[] | undefined, versionId: string) => {
         for (const file of files || []) {
             if (!file?.file_name || !file?.file_url) continue;
-            collected.set(getWorkspaceArtifactKey(file), file);
+            collected.set(getWorkspaceArtifactKey(file), { ...file, versionId });
         }
     };
 
-    for (const snapshot of snapshots) {
+    for (const { versionId, snapshot } of turns) {
         if (!snapshot) continue;
-        addFiles(toUploadedArtifacts(snapshot.files));
+        addFiles(toUploadedArtifacts(snapshot.files), versionId);
         for (const round of snapshot.history || []) {
-            addFiles(round.file_list);
+            addFiles(round.file_list, versionId);
         }
-        addFiles(snapshot.file_list);
+        addFiles(snapshot.file_list, versionId);
     }
 
     return Array.from(collected.values());
+}
+
+export type WorkspaceLoadState = 'loading' | 'failed' | 'ready';
+
+/**
+ * Whether every task turn of the conversation has its detail in the store.
+ * A turn that is neither loaded nor marked failed is still loading; without
+ * this the workspace shows its empty state during the cold load.
+ */
+export function getWorkspaceLoadState(
+    versionIds: string[],
+    loadedIds: { has: (id: string) => boolean },
+    failedIds: { has: (id: string) => boolean },
+): WorkspaceLoadState {
+    let failed = false;
+    for (const id of versionIds) {
+        if (loadedIds.has(id)) continue;
+        if (!failedIds.has(id)) return 'loading';
+        failed = true;
+    }
+    return failed ? 'failed' : 'ready';
 }
 
 /**
@@ -339,7 +390,7 @@ export function isHtmlArtifact(file: ArtifactFile): boolean {
  * when we are on a share route, or a share recipient's HTML report 403s.
  */
 export function openHtmlArtifactViewer(file: ArtifactFile, versionId: string): void {
-    const params = new URLSearchParams({ url: file.file_url, vid: versionId || '' });
+    const params = new URLSearchParams({ url: file.file_url, vid: artifactVersionId(file, versionId) || '' });
     const shareToken = getShareTokenFromPath();
     if (shareToken) {
         params.set('share', shareToken);
@@ -481,12 +532,12 @@ export async function fetchArtifactBlob(
   versionId: string,
   options?: ArtifactBlobOptions,
 ): Promise<{ blob: Blob; fileName: string }> {
-  const url = await resolveArtifactUrl(file.file_url, versionId);
+  const url = file.directUrl || await resolveArtifactUrl(file.file_url, artifactVersionId(file, versionId));
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to download file: ${response.status}`);
   }
-  const isUploadMarkdown = file.source === 'upload' && !file.previewAsImage;
+  const isUploadMarkdown = file.source === 'upload' && !file.previewAsImage && !file.previewAsOriginal;
   const isMarkdown = isUploadMarkdown || MARKDOWN_EXTS.includes(getFileExtension(file.file_name));
   const blob = isMarkdown
     ? await readCitationFreeMarkdown(response, options?.citations)

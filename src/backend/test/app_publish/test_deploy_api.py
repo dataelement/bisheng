@@ -75,7 +75,12 @@ async def test_deploy_limits_returns_settings_values(
     async with api_app(principal=service_account_principal()) as client:
         payload = _body(await client.get("/api/v2/apps/deploy-limits"))
 
-    assert payload["data"] == {"max_package_mb": 7, "max_unpacked_mb": 11, "max_package_entries": 13}
+    assert payload["data"] == {
+        "max_package_mb": 7,
+        "max_unpacked_mb": 11,
+        "max_package_entries": 13,
+        "features": {"release_notes": {"version": 1, "max_codepoints": 2000}},
+    }
 
 
 async def test_first_deploy_creates_a_draft_owned_by_the_resource_owner(
@@ -263,7 +268,7 @@ async def test_deployment_polling_returns_failure_tuple(
 
 @pytest.mark.parametrize(
     ("instance_status", "reason"),
-    [("rejected", "接口缺少鉴权，请补上后重新提交。"), ("withdrawn", None), ("exception", None)],
+    [("rejected", "接口缺少鉴权,请补上后重新提交。"), ("withdrawn", None), ("exception", None)],
 )
 async def test_deployment_polling_carries_the_approval_outcome(
     publish_db,

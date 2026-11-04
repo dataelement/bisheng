@@ -15,7 +15,7 @@ from sqlalchemy import (
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, PreciseDateTime
 
 
 class DshModelAuditSetting(SQLModelSerializable, table=True):
@@ -38,6 +38,10 @@ class DshModelAuditSetting(SQLModelSerializable, table=True):
     )
     mode: str = Field(default="OFF", sa_column=Column(String(16), nullable=False))
     version: int = Field(default=0, sa_column=Column(BigInteger, nullable=False))
+    audit_deleted_before: datetime | None = Field(default=None, sa_column=Column(PreciseDateTime()))
+    cleanup_before: datetime | None = Field(default=None, sa_column=Column(PreciseDateTime()))
+    cleanup_after_started_at: datetime | None = Field(default=None, sa_column=Column(PreciseDateTime()))
+    cleanup_after_request_id: str | None = Field(default=None, sa_column=Column(String(36)))
     updated_by: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
 
 

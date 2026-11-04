@@ -24,6 +24,16 @@ class RuntimeCleanupService:
     async def cleanup(self, op):
         if op.kind not in {"preview", "destroy"}:
             return
+        if op.kind == "preview":
+            from bisheng.app_publish.application.preview_runtime import close, lock_operation_version
+
+            async with self.repo.transaction() as session:
+                await lock_operation_version(session, op)
+                # Lifecycle closure is independent of the later external object deletion.
+                from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeOperation
+
+                current = await self.repo.get(RuntimeOperation, op.id, lock=True)
+                await close(session, current, reason="cleanup")
         bindings = await self.repo.find(RuntimeStorageBinding, app_id=op.app_id)
         for row in bindings:
             if op.kind == "preview" and row.operation_id != op.id:

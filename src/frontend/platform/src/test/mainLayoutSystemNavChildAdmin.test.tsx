@@ -166,7 +166,7 @@ describe("MainLayout identity-specific navigation", () => {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
     expect(screen.getByRole("link", { name: "menu.dshDesktop" })).toBeInTheDocument();
-    expect(screen.queryByText("tenant.management")).toBeNull();
+    expect(screen.queryByText("menu.tenant")).toBeNull();
   });
 
   it("department admin sees system but not unassigned business menus", () => {
@@ -196,14 +196,14 @@ describe("MainLayout identity-specific navigation", () => {
     renderLayout();
     expect(screen.queryByText("menu.system")).toBeNull();
     expect(screen.queryByRole("link", { name: "menu.dshDesktop" })).toBeNull();
-    expect(screen.queryByText("tenant.management")).toBeNull();
+    expect(screen.queryByText("menu.tenant")).toBeNull();
   });
 
   it("global super admin still sees both system and tenant management entries", () => {
     renderLayout({ role: "admin" });
     expect(screen.getByText("menu.system")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "menu.dshDesktop" })).toBeInTheDocument();
-    expect(screen.getByText("tenant.management")).toBeInTheDocument();
+    expect(screen.getByText("menu.tenant")).toBeInTheDocument();
   });
 
   it("aligns the DSH icon column with adjacent menus and distributes the label across three em", () => {
@@ -224,6 +224,6 @@ describe("MainLayout identity-specific navigation", () => {
     renderLayout({ role: "admin" }, { multiTenantEnabled: false });
     expect(screen.getByText("menu.system")).toBeInTheDocument();
     expect(screen.queryByText("tenant.profile")).toBeNull();
-    expect(screen.queryByText("tenant.management")).toBeNull();
+    expect(screen.queryByText("menu.tenant")).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 // @ts-strict-ignore
 import { captureQaOperation, type QaOperation } from '@bisheng/chat/core';
 import { Button, Input, Textarea, toast } from '@bisheng/ui';
-import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
+import { QaKnowledgeSelect } from "@/components/bs-comp/selectComponent/QaKnowledgeSelect";
 
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { InputList } from '@/components/bs-comp/formFields/InputList';
@@ -170,11 +170,12 @@ const SaveQaLibForm = forwardRef<AnnotationFormHandle, AnnotationFormProps>(({ o
                 <div className="flex flex-col gap-4 py-2">
                     <div>
                         <label htmlFor="knowledgeLib" className="bisheng-label"><span className="text-red-500">*</span>{t('log.qaKnowledgeLib')}</label>
-                        <KnowledgeSelect
-                            type="qa"
+                        <QaKnowledgeSelect
+                            multiple={false}
+                            label={t('log.qaKnowledgeLib')}
                             value={form.knowledgeLib}
                             onChange={handleKnowledgeLibChange}
-                            className={`${error.knowledgeLib && 'border-red-400'}`}
+                            error={error.knowledgeLib}
                         />
                     </div>
                     <div>

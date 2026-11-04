@@ -1,7 +1,7 @@
 import { Input, Textarea } from '@bisheng/ui';
 // src/features/chat-config/components/FormInput.tsx
 
-import { ReactNode, useId } from "react";
+import { ReactNode, useId, useState } from "react";
 
 export const FormInput = ({
     label,
@@ -9,6 +9,7 @@ export const FormInput = ({
     error,
     placeholder = "",
     maxLength,
+    validate,
     type = "text",
     onChange,
     isTextarea = false,
@@ -17,12 +18,15 @@ export const FormInput = ({
     value: string | number;
     error: string;
     maxLength?: number;
+    validate?: (value: string) => string;
     onChange: (value: string) => void;
     type?: string;
     placeholder?: string;
     isTextarea?: boolean;
 }) => {
     const fieldId = useId();
+    const [isComposing, setIsComposing] = useState(false);
+    const visibleError = validate && isComposing ? "" : (validate?.(String(value)) || error);
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const newValue = e.target.value;
         onChange(newValue);
@@ -40,9 +44,9 @@ export const FormInput = ({
             {isTextarea ? (
                 <Textarea id={fieldId} value={value} placeholder={placeholder} onChange={handleChange} maxLength={maxLength} textareaClassName={"mt-3 min-h-48"} showCount />
             ) : (
-                <Input id={fieldId} value={value} type={type} placeholder={placeholder} onChange={handleChange} maxLength={maxLength} className={"mt-3"} showCount />
+                <Input id={fieldId} value={value} type={type} placeholder={placeholder} onChange={handleChange} maxLength={maxLength} onCompositionStart={() => setIsComposing(true)} onCompositionEnd={() => setIsComposing(false)} aria-invalid={Boolean(visibleError)} aria-describedby={visibleError ? `${fieldId}-error` : undefined} className={"mt-3"} showCount />
             )}
-            {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+            {visibleError && <p id={`${fieldId}-error`} className="text-red-500 text-xs mt-1">{visibleError}</p>}
         </div>
     );
 };

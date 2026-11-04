@@ -1,6 +1,10 @@
-"""Audit names follow authorized historical records, never a directory-wide join."""
+"""Audit names follow authorized historical records, never a directory-wide join.
+
+Coverage AC: AC-03, AC-45, AC-49.
+"""
 
 import json
+from datetime import timedelta
 
 from sqlalchemy import event
 
@@ -13,6 +17,8 @@ from test.dsh.test_model_audit_groups import row
 
 async def test_names_on_request_detail_pages_and_conversation_groups():
     async with fixture() as (harness, client, _objects):
+        # Keep manually inserted fixed-time records inside the relative query window.
+        harness.queries.now = lambda: NOW + timedelta(seconds=1)
         with audit_session(harness.engine) as session, session.begin():
             session.add(User(user_id=20, user_name="Audit Alice", password="unused-test-only"))
             session.add(User(user_id=21, user_name="Former User", password="unused-test-only", delete=1))

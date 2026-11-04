@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { canMutatePermissionAssignee } from "./assigneePolicy"
 import { SourceBadge } from "./SourceBadge"
+import { PermissionModelStatus } from "./PermissionModelStatus"
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment"
 import { SubjectSearchUser } from "./SubjectSearchUser"
 import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup"
@@ -95,6 +96,7 @@ function ExistingAssigneeRow({
         </div>
         <div className="mt-1 flex flex-wrap gap-1">
           <SourceBadge source={assignee.source} />
+          <PermissionModelStatus active={assignee.model.active} />
           {assignee.scope === "INHERITED" && (
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
               {t("scope.inherited")}

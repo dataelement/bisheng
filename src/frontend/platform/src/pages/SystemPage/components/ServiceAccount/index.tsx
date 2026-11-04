@@ -1,3 +1,9 @@
+import { useContext } from "react";
+import { userContext } from "@/contexts/userContext";
+import { locationContext } from "@/contexts/locationContext";
+import type { User } from "@/types/api/user";
+import { ServiceAccountRequestScopeContext, useServiceAccountManagementScope } from "./useServiceAccountManagementScope";
+import { useServiceAccountRequestScope } from "./useServiceAccountManagementScope";
 import { Button, SearchInput } from '@bisheng/ui';
 import { Tooltip as SharedTooltip, Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
@@ -8,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { getServiceAccountApi, listServiceAccountsApi } from "@/controllers/API/serviceAccount";
 import { handleUiRequest, showApiError } from "@/controllers/request";
 import type { ServiceAccountItem } from "@/types/api/openApi";
+import { displayTenantName } from "@/utils/tenantDisplayName";
 import { formatIsoDateTime } from "@/util/utils";
 import { Tabs } from "@bisheng/ui";
 
@@ -20,7 +27,10 @@ import { CreateServiceAccountDialog } from "./CreateServiceAccountDialog";
 import { OverviewTab } from "./OverviewTab";
 import { ResourceGrantsTab } from "./ResourceGrantsTab";
 
-export function ServiceAccount() {
+function ServiceAccountView() {
+  const requestScope = useServiceAccountRequestScope();
+  const { appConfig } = useContext(locationContext);
+  const showTenant = !!appConfig?.multiTenantEnabled;
   const { t } = useTranslation();
   const [selected, setSelected] = useState<ServiceAccountItem | null>(null);
   const [keyword, setKeyword] = useState("");
@@ -31,15 +41,15 @@ export function ServiceAccount() {
 
   const fetchPage = useCallback(
     (page: number, pageSize: number) =>
-      listServiceAccountsApi({ keyword: searchKeyword || undefined, page, page_size: pageSize }),
-    [searchKeyword],
+      listServiceAccountsApi({ keyword: searchKeyword || undefined, page, page_size: pageSize }, requestScope),
+    [searchKeyword, requestScope],
   );
   const list = useOpenApiList(fetchPage);
   const accounts = list.items;
   const idleDays = list.response?.idle_days ?? 0;
 
   const openDetail = async (id: number, tab: "overview" | "keys" = "overview") => {
-    const account = await getServiceAccountApi(id);
+    const account = await getServiceAccountApi(id, requestScope);
     if (account) {
       setInitialTab(tab);
       setAutoOpenIssue(tab === "keys");
@@ -100,7 +110,7 @@ export function ServiceAccount() {
                       accountEnabled={isEnabled}
                       initialIssueOpen={autoOpenIssue}
                       onKeysChanged={() => {
-                        void getServiceAccountApi(selected.id).then((updated) => {
+                        void getServiceAccountApi(selected.id, requestScope).then((updated) => {
                           if (updated) setSelected(updated);
                         }).catch(showApiError);
                         void list.reload();
@@ -143,6 +153,7 @@ export function ServiceAccount() {
         <TableHeader>
           <TableRow>
             <TableHead>{t("openApiManagement.fields.name")}</TableHead>
+            {showTenant && <TableHead>{t("openApiManagement.fields.tenant")}</TableHead>}
             <TableHead>{t("openApiManagement.fields.status")}</TableHead>
             <TableHead>{t("openApiManagement.fields.activeKeys")}</TableHead>
             <TableHead>{t("openApiManagement.fields.owner")}</TableHead>
@@ -160,6 +171,7 @@ export function ServiceAccount() {
                     <span className="truncate">{account.name}</span>
                   </Button>
                 </TableCell>
+                {showTenant && <TableCell>{displayTenantName(account.tenant_name) || "-"}</TableCell>}
                 <TableCell>
                   <Tag size="small" dot color={isEnabled ? "success" : "danger"}>
                     {t(isEnabled ? "openApiManagement.status.enabled" : "openApiManagement.status.disabled")}
@@ -218,7 +230,7 @@ export function ServiceAccount() {
           })}
           {list.isEmpty ? (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
+              <TableCell colSpan={showTenant ? 7 : 6} className="text-center text-muted-foreground">
                 {t("openApiManagement.empty")}
               </TableCell>
             </TableRow>
@@ -241,4 +253,25 @@ export function ServiceAccount() {
       />
     </div>
   );
+}
+
+export function ServiceAccount() {
+  const { t } = useTranslation()
+  const user = useContext(userContext).user as User | null
+  const { appConfig } = useContext(locationContext)
+  const canSelect = !!appConfig?.multiTenantEnabled && !!user && (user.is_global_super || user.role === "admin")
+  const management = useServiceAccountManagementScope({ enabled: !!canSelect,
+    userId: user?.user_id ?? 0, tenantId: appConfig?.multiTenantEnabled ? user?.tenant_id ?? 0 : 1 })
+  return <div className="flex h-full min-h-0 flex-1 flex-col">
+    {user?.user_id && management.ready && management.requestScope ? (
+      <ServiceAccountRequestScopeContext.Provider key={management.viewKey} value={management.requestScope}>
+        <ServiceAccountView />
+      </ServiceAccountRequestScopeContext.Provider>
+    ) : <div className="space-y-2 text-sm text-muted-foreground">
+      <p>{t(management.loading || management.switching ? "loading" : management.refreshRequired
+        ? "openApiManagement.tenantScope.changed" : "openApiManagement.tenantScope.choose")}</p>
+      {!management.loading && !management.switching && <Button variant="outlined" color="default"
+        onClick={handleUiRequest(management.refresh)}>{t("openApiManagement.tenantScope.refresh")}</Button>}
+    </div>}
+  </div>
 }

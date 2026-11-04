@@ -3,6 +3,7 @@ import { Button, Input, Select, Textarea } from '@bisheng/ui';
 import { Switch, Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { asrHintKey, speechModelTypes, ttsProviders } from "./speechConfig";
+import { rerankProviders } from "./modelProviderFields";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
@@ -201,7 +202,8 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                         options={[
                             { value: 'llm', label: 'LLM' },
                             { value: 'embedding', label: 'Embedding' },
-                            { value: 'rerank', label: 'Rerank' },
+                            // Keep the option on existing rerank rows so their current value still renders.
+                            ...(rerankProviders.includes(type) || modelType === 'rerank' ? [{ value: 'rerank', label: 'Rerank' }] : []),
                             ...(typeOptions.includes('asr') ? [{ value: 'asr', label: 'ASR' }] : []),
                             ...(typeOptions.includes('asr_rt') ? [{ value: 'asr_rt', label: 'ASR Realtime' }] : []),
                             ...(ttsProviders.includes(type) ? [{ value: 'tts', label: 'TTS' }] : []),
@@ -214,7 +216,7 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
 
             {modelType === 'tts' && (
                 <div className="mt-4 space-y-2">
-                    <Label className="bisheng-label">
+                    <Label className="bisheng-label inline-flex items-center">
                         <span>{t('model.voiceType')}</span>
                         <span className="text-red-500">*</span>
                         <ModelFieldHint className="ml-1" content={t('model.voiceTypeTooltip')} />
@@ -225,7 +227,7 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
 
             {modelType === 'llm' && (
                 <div className="mt-4 space-y-2">
-                    <Label className="bisheng-label">
+                    <Label className="bisheng-label inline-flex items-center">
                         <span>{paramName === 'num_ctx' ? t('model.contextLength') : t('model.maxOutputTokens')}</span>
                         <ModelFieldHint
                             className="ml-1"
@@ -238,7 +240,7 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
 
             {webSearchTipKey && (
                 <div className="mt-4 flex items-center justify-between gap-4 border-t pt-4">
-                    <Label className="bisheng-label">
+                    <Label className="bisheng-label inline-flex items-center">
                         <span>{t('model.webSearch')}</span>
                         <ModelFieldHint className="ml-1" content={t(webSearchTipKey)} />
                     </Label>
@@ -278,6 +280,9 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                                 {t('model.insertParamsExample')}
                             </Button>
                         </div>
+                        {modelType === 'llm' && type !== 'ollama' && (
+                            <p className="mt-1 text-xs text-muted-foreground">{t('model.contextWindowParamTip')}</p>
+                        )}
                         <Textarea aria-label={t('model.pasteAdvancedParamsHere')} value={draftParams} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => handleDraftChange(e.target.value)} rows={10} placeholder={paramsTemplate} textareaClassName={`mt-1 font-mono text-sm ${jsonError ? 'border-red-500 focus-visible:ring-red-500' : ''}`} />
                         {jsonError && (
                             <span className="mt-1 inline-block text-xs text-red-500">

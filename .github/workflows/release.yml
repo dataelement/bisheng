@@ -49,6 +49,18 @@ jobs:
 
           docker manifest create ${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64 ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-amd64
           docker manifest push ${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest
+
+          docker manifest create ${{ env.DOCKERHUB_REPO }}bisheng-sandbox:${{ steps.get_version.outputs.VERSION }} ${{ env.DOCKERHUB_REPO }}bisheng-sandbox:${{ steps.get_version.outputs.VERSION }}-arm64 ${{ env.DOCKERHUB_REPO }}bisheng-sandbox:${{ steps.get_version.outputs.VERSION }}-amd64
+          docker manifest push ${{ env.DOCKERHUB_REPO }}bisheng-sandbox:${{ steps.get_version.outputs.VERSION }}
+
+          docker manifest create ${{ env.DOCKERHUB_REPO }}bisheng-sandbox:latest ${{ env.DOCKERHUB_REPO }}bisheng-sandbox:${{ steps.get_version.outputs.VERSION }}-arm64 ${{ env.DOCKERHUB_REPO }}bisheng-sandbox:${{ steps.get_version.outputs.VERSION }}-amd64
+          docker manifest push ${{ env.DOCKERHUB_REPO }}bisheng-sandbox:latest
+
+          for service in runtime-manager app-proxy runtime-helper runtime-assembler; do
+            image="${{ env.DOCKERHUB_REPO }}bisheng-$service"
+            docker manifest create "$image:${{ steps.get_version.outputs.VERSION }}" "$image:${{ steps.get_version.outputs.VERSION }}-amd64" "$image:${{ steps.get_version.outputs.VERSION }}-arm64"
+            docker manifest push "$image:${{ steps.get_version.outputs.VERSION }}"
+          done
   
   sync_dataelem_repos:
     runs-on: ubuntu-latest
@@ -98,6 +110,24 @@ jobs:
           docker pull ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64
           docker tag ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64 cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64
           docker push cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64
+          # CR uses a single-platform default tag; ARM64 retains its suffix.
+          docker pull ${{ env.DOCKERHUB_REPO }}bisheng-sandbox:${{ steps.get_version.outputs.VERSION }}-amd64
+          docker tag ${{ env.DOCKERHUB_REPO }}bisheng-sandbox:${{ steps.get_version.outputs.VERSION }}-amd64 cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-sandbox:${{ steps.get_version.outputs.VERSION }}
+          docker tag ${{ env.DOCKERHUB_REPO }}bisheng-sandbox:${{ steps.get_version.outputs.VERSION }}-amd64 cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-sandbox:latest
+          docker push cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-sandbox:${{ steps.get_version.outputs.VERSION }}
+          docker push cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-sandbox:latest
+          docker pull ${{ env.DOCKERHUB_REPO }}bisheng-sandbox:${{ steps.get_version.outputs.VERSION }}-arm64
+          docker tag ${{ env.DOCKERHUB_REPO }}bisheng-sandbox:${{ steps.get_version.outputs.VERSION }}-arm64 cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-sandbox:${{ steps.get_version.outputs.VERSION }}-arm64
+          docker push cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-sandbox:${{ steps.get_version.outputs.VERSION }}-arm64
+          for service in runtime-manager app-proxy runtime-helper runtime-assembler; do
+            image="${{ env.DOCKERHUB_REPO }}bisheng-$service"
+            docker pull "$image:${{ steps.get_version.outputs.VERSION }}-amd64"
+            docker tag "$image:${{ steps.get_version.outputs.VERSION }}-amd64" "cr.dataelem.com/$image:${{ steps.get_version.outputs.VERSION }}"
+            docker push "cr.dataelem.com/$image:${{ steps.get_version.outputs.VERSION }}"
+            docker pull "$image:${{ steps.get_version.outputs.VERSION }}-arm64"
+            docker tag "$image:${{ steps.get_version.outputs.VERSION }}-arm64" "cr.dataelem.com/$image:${{ steps.get_version.outputs.VERSION }}-arm64"
+            docker push "cr.dataelem.com/$image:${{ steps.get_version.outputs.VERSION }}-arm64"
+          done
           echo "--- sync over ---"
 
   test_pull_images:
@@ -137,6 +167,16 @@ jobs:
           
           docker pull ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
           docker pull cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
+
+          docker pull ${{ env.DOCKERHUB_REPO }}bisheng-sandbox:${{ steps.get_version.outputs.VERSION }}
+          docker pull cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-sandbox:${{ steps.get_version.outputs.VERSION }}
+          docker pull cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-sandbox:${{ steps.get_version.outputs.VERSION }}-arm64
+
+          for service in runtime-manager app-proxy runtime-helper runtime-assembler; do
+            docker pull "${{ env.DOCKERHUB_REPO }}bisheng-$service:${{ steps.get_version.outputs.VERSION }}"
+            docker pull "cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-$service:${{ steps.get_version.outputs.VERSION }}"
+            docker pull "cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-$service:${{ steps.get_version.outputs.VERSION }}-arm64"
+          done
 
 
   notify_feishu:

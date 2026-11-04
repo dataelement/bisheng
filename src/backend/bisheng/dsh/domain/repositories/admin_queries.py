@@ -69,6 +69,7 @@ class DshAdminQueryRepository:
             "input_tokens": 0,
             "output_tokens": 0,
             "total_tokens": 0,
+            "billed_tokens": 0,
         }
 
     @staticmethod
@@ -85,6 +86,7 @@ class DshAdminQueryRepository:
             func.coalesce(func.sum(DshModelCall.input_tokens), 0),
             func.coalesce(func.sum(DshModelCall.output_tokens), 0),
             func.coalesce(func.sum(DshModelCall.total_tokens), 0),
+            func.coalesce(func.sum(func.coalesce(DshModelCall.billed_tokens, DshModelCall.total_tokens)), 0),
         )
 
     @classmethod
@@ -97,6 +99,7 @@ class DshAdminQueryRepository:
             result["input_tokens"] = None
             result["output_tokens"] = None
             result["total_tokens"] = None
+            result["billed_tokens"] = None
         return result
 
     def usage_overview(
@@ -278,7 +281,7 @@ class DshAdminQueryRepository:
 
         totals = self._empty_metrics()
 
-        def add(metrics, status, input_tokens, output_tokens, total_tokens):
+        def add(metrics, status, input_tokens, output_tokens, total_tokens, billed_tokens):
             metrics["message_count"] += 1
             metrics[
                 {
@@ -298,6 +301,7 @@ class DshAdminQueryRepository:
             metrics["input_tokens"] += input_tokens
             metrics["output_tokens"] += output_tokens
             metrics["total_tokens"] += total_tokens
+            metrics["billed_tokens"] += billed_tokens
 
         with strict_tenant_filter():
             rows = self.session.exec(
@@ -307,6 +311,7 @@ class DshAdminQueryRepository:
                     DshModelCall.input_tokens,
                     DshModelCall.output_tokens,
                     DshModelCall.total_tokens,
+                    func.coalesce(DshModelCall.billed_tokens, DshModelCall.total_tokens),
                 )
                 .where(
                     DshModelCall.tenant_id == tenant_id,
@@ -317,7 +322,7 @@ class DshAdminQueryRepository:
                 )
                 .order_by(DshModelCall.started_at, DshModelCall.request_id)
             ).yield_per(1000)
-            for started_at, status, input_tokens, output_tokens, total_tokens in rows:
+            for started_at, status, input_tokens, output_tokens, total_tokens, billed_tokens in rows:
                 if started_at is None or status not in MESSAGE_STATUSES:
                     raise ValueError("Stored DSH call is outside the usage aggregation contract")
                 recorded_at = (
@@ -332,14 +337,15 @@ class DshAdminQueryRepository:
                 point = by_anchor.get(row_anchor.isoformat())
                 if point is None:
                     raise ValueError("Stored DSH call is outside the requested buckets")
-                add(point, status, input_tokens, output_tokens, total_tokens)
-                add(totals, status, input_tokens, output_tokens, total_tokens)
+                add(point, status, input_tokens, output_tokens, total_tokens, billed_tokens)
+                add(totals, status, input_tokens, output_tokens, total_tokens, billed_tokens)
 
         def preserve_unknown(metrics):
             if metrics["message_count"] > 0 and metrics["recorded_usage_count"] == 0:
                 metrics["input_tokens"] = None
                 metrics["output_tokens"] = None
                 metrics["total_tokens"] = None
+                metrics["billed_tokens"] = None
             return metrics
 
         return UsageTimeSummary.model_validate(

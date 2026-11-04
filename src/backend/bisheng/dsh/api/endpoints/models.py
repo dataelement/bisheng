@@ -137,7 +137,7 @@ async def usage(
         Query(
             pattern=r"^bisheng:[1-9][0-9]*$",
             max_length=27,
-            description="Optional selected model; omitted returns informational totals without pooling allowances.",
+            description="Optional model authorization check. All models share the same personal allowance.",
         ),
     ] = None,
 ):

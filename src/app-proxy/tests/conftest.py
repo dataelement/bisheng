@@ -139,6 +139,7 @@ def wired(fake_backend, fake_manager, upstream_transport, ws_transport, frozen_c
     manager_client = clients.ManagerRouteClient(
         MANAGER_BASE,
         MANAGER_SECRET,
+        key_id="entry-reader",
         ttl_seconds=config.route_ttl_seconds,
         clock=frozen_clock,
         transport=httpx.ASGITransport(app=fake_manager),

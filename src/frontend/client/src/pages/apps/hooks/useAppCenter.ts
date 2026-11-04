@@ -1,19 +1,24 @@
-import { useCallback, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { useRecoilState, useRecoilValue } from 'recoil';
-import { NotificationSeverity } from '~/common';
-import type { AppItem } from '~/@types/app';
-import { getFrequently, pinAppApi, recordUsedAppApi } from '~/api/apps';
-import { useToastContext } from '~/Providers';
-import { useLocalize } from '~/hooks';
-import { getAppShareUrl } from '~/pages/apps/appUtils';
+import { useCallback, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useRecoilState, useRecoilValue } from "recoil";
+import { NotificationSeverity } from "~/common";
+import type { AppItem } from "~/@types/app";
+import { getFrequently, pinAppApi, recordUsedAppApi } from "~/api/apps";
+import { useToastContext } from "~/Providers";
+import { useLocalize } from "~/hooks";
+import { getAppShareUrl } from "~/pages/apps/appUtils";
 import {
   appSearchQueryState,
   filteredAppsSelector,
   recentAppsState,
-} from '~/pages/apps/store/appCenterAtoms';
-import { normalizeAppChatReturn, writeAppChatOrigin, writeAppChatReturnTo } from '~/pages/appChat/appChatOrigin';
-import { copyText, generateUUID } from '~/utils';
+} from "~/pages/apps/store/appCenterAtoms";
+import {
+  normalizeAppChatReturn,
+  writeAppChatOrigin,
+  writeAppChatReturnTo,
+} from "~/pages/appChat/appChatOrigin";
+import { isDemoId } from "~/mock/demo/ids";
+import { copyText, generateUUID } from "~/utils";
 
 const APP_CENTER_PAGE_SIZE = 20;
 
@@ -40,7 +45,16 @@ export function useAppCenter() {
   const { showToast } = useToastContext();
   const localize = useLocalize();
   const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
-  const appLastOriginKey = 'app-last-origin';
+  /** DEV sample rows (~/mock/demo) exist only in the list response: say so instead of acting. */
+  const blockDemoApp = useCallback(
+    (app: AppItem) => {
+      if (!isDemoId(app.id)) return false;
+      showToast?.({ message: localize("com_demo_data.readonly_toast"), severity: NotificationSeverity.INFO });
+      return true;
+    },
+    [localize, showToast],
+  );
+  const appLastOriginKey = "app-last-origin";
 
   const [, setRecentApps] = useRecoilState(recentAppsState);
   const [searchQuery, setSearchQuery] = useRecoilState(appSearchQueryState);
@@ -56,60 +70,66 @@ export function useAppCenter() {
   const requestSeqRef = useRef(0);
 
   /** Fetch apps with recent history */
-  const fetchApps = useCallback(async (nextPage: number = 1, isAppend: boolean = false) => {
-    const requestId = ++requestSeqRef.current;
-    if (isAppend) {
-      setLoadingMore(true);
-      setLoadMoreError(false);
-    } else {
-      setLoading(true);
-      setLoadingMore(false);
-      setLoadError(false);
-      setLoadMoreError(false);
-      appsRef.current = [];
-      setRecentApps([]);
-    }
-
-    try {
-      const res: unknown = await getFrequently(nextPage, APP_CENTER_PAGE_SIZE);
-      if (requestId !== requestSeqRef.current) return;
-
-      const payload = ((res as { data?: { list?: AppItem[]; total?: number } })?.data ?? {}) as { list?: AppItem[]; total?: number };
-      const list = Array.isArray(payload.list) ? payload.list : [];
-      const total = Number(payload.total ?? 0);
-      const previous = isAppend ? appsRef.current : [];
-      const nextApps = isAppend ? mergeAppsById(previous, list) : list;
-      const uniqueAddedCount = nextApps.length - previous.length;
-
-      if (nextApps.length < total && (list.length === 0 || (isAppend && uniqueAddedCount === 0))) {
-        if (isAppend) setLoadMoreError(true);
-        else setLoadError(true);
-        setHasMore(false);
-        return;
-      }
-
-      appsRef.current = nextApps;
-      setRecentApps(nextApps);
-      setPage(nextPage);
-      setHasMore(nextApps.length < total);
-    } catch (error) {
-      console.error('Failed to load app center list:', error);
-      if (requestId !== requestSeqRef.current) return;
+  const fetchApps = useCallback(
+    async (nextPage: number = 1, isAppend: boolean = false) => {
+      const requestId = ++requestSeqRef.current;
       if (isAppend) {
-        setLoadMoreError(true);
+        setLoadingMore(true);
+        setLoadMoreError(false);
       } else {
+        setLoading(true);
+        setLoadingMore(false);
+        setLoadError(false);
+        setLoadMoreError(false);
         appsRef.current = [];
         setRecentApps([]);
-        setLoadError(true);
       }
-      setHasMore(false);
-    } finally {
-      if (requestId === requestSeqRef.current) {
-        if (isAppend) setLoadingMore(false);
-        else setLoading(false);
+
+      try {
+        const res: unknown = await getFrequently(nextPage, APP_CENTER_PAGE_SIZE);
+        if (requestId !== requestSeqRef.current) return;
+
+        const payload = ((res as { data?: { list?: AppItem[]; total?: number } })?.data ?? {}) as {
+          list?: AppItem[];
+          total?: number;
+        };
+        const list = Array.isArray(payload.list) ? payload.list : [];
+        const total = Number(payload.total ?? 0);
+        const previous = isAppend ? appsRef.current : [];
+        const nextApps = isAppend ? mergeAppsById(previous, list) : list;
+        const uniqueAddedCount = nextApps.length - previous.length;
+
+        if (nextApps.length < total && (list.length === 0 || (isAppend && uniqueAddedCount === 0))) {
+          if (isAppend) setLoadMoreError(true);
+          else setLoadError(true);
+          setHasMore(false);
+          return;
+        }
+
+        appsRef.current = nextApps;
+        setRecentApps(nextApps);
+        setPage(nextPage);
+        setHasMore(nextApps.length < total);
+      } catch (error) {
+        console.error("Failed to load app center list:", error);
+        if (requestId !== requestSeqRef.current) return;
+        if (isAppend) {
+          setLoadMoreError(true);
+        } else {
+          appsRef.current = [];
+          setRecentApps([]);
+          setLoadError(true);
+        }
+        setHasMore(false);
+      } finally {
+        if (requestId === requestSeqRef.current) {
+          if (isAppend) setLoadingMore(false);
+          else setLoading(false);
+        }
       }
-    }
-  }, [setRecentApps]);
+    },
+    [setRecentApps],
+  );
 
   const loadMore = useCallback(() => {
     if (loading || loadingMore || loadMoreError || !hasMore) return;
@@ -119,24 +139,29 @@ export function useAppCenter() {
   /** Toggle pin state for an app */
   const togglePin = useCallback(
     async (app: AppItem) => {
+      if (blockDemoApp(app)) return;
       const shouldPin = !app.is_pinned;
       try {
-        await pinAppApi(app.id, shouldPin);
+        const response = await pinAppApi(app.id, shouldPin);
+        if (response?.status_code !== 200) {
+          throw new Error("App pin request failed");
+        }
         // Refresh the list to get updated pin state from backend
         await fetchApps();
       } catch {
         showToast?.({
-          message: shouldPin ? localize('com_app_pin_failed') : localize('com_app_unpin_failed'),
+          message: shouldPin ? localize("com_app_pin_failed") : localize("com_app_unpin_failed"),
           severity: NotificationSeverity.WARNING,
         });
       }
     },
-    [fetchApps, localize, showToast],
+    [blockDemoApp, fetchApps, localize, showToast],
   );
 
   /** Navigate into an app — always create a new conversation */
   const continueChat = useCallback(
     (app: AppItem) => {
+      if (blockDemoApp(app)) return;
       // Hosted applications (flow_type 35) are web surfaces, not conversations:
       // they must open `/apps/{slug}` (served outside this SPA), not the chat route
       // they have none of. Open in a NEW tab so the app center stays put — a
@@ -145,45 +170,52 @@ export function useAppCenter() {
       // is blocked; the record is then fire-and-forget (this tab does not navigate).
       // `noopener`: the app may run arbitrary code and must not reach this tab.
       if (app.flow_type === 35 && app.slug) {
-        window.open(`/apps/${app.slug}`, '_blank', 'noopener');
+        window.open(`/apps/${app.slug}`, "_blank", "noopener");
         recordUsedAppApi(String(app.id)).catch(() => {});
         return;
       }
       const chatId = generateUUID(32);
-      const returnTo = normalizeAppChatReturn(location.pathname) ?? '/apps';
-      writeAppChatOrigin(chatId, 'center');
-      if (returnTo === '/apps') writeAppChatReturnTo(chatId, returnTo);
+      const returnTo = normalizeAppChatReturn(location.pathname) ?? "/apps";
+      writeAppChatOrigin(chatId, "center");
+      if (returnTo === "/apps") writeAppChatReturnTo(chatId, returnTo);
       try {
-        sessionStorage.setItem(appFlowOriginKey(String(app.id)), 'center');
-        sessionStorage.setItem(appLastOriginKey, 'center');
+        sessionStorage.setItem(appFlowOriginKey(String(app.id)), "center");
+        sessionStorage.setItem(appLastOriginKey, "center");
       } catch {
         // ignore storage failures
       }
-      navigate(`/app/${chatId}/${app.id}/${app.flow_type}?from=center&returnTo=${encodeURIComponent(returnTo)}`, {
-        state: { appSurfaceReturn: returnTo },
-      });
+      navigate(
+        `/app/${chatId}/${app.id}/${app.flow_type}?from=center&returnTo=${encodeURIComponent(returnTo)}`,
+        {
+          state: { appSurfaceReturn: returnTo },
+        },
+      );
     },
-    [location.pathname, navigate],
+    [blockDemoApp, location.pathname, navigate],
   );
 
   /** Create a new conversation and navigate */
   const startChat = useCallback(
     (app: AppItem) => {
+      if (blockDemoApp(app)) return;
       const chatId = generateUUID(32);
-      const returnTo = normalizeAppChatReturn(location.pathname) ?? '/apps';
-      writeAppChatOrigin(chatId, 'center');
-      if (returnTo === '/apps') writeAppChatReturnTo(chatId, returnTo);
+      const returnTo = normalizeAppChatReturn(location.pathname) ?? "/apps";
+      writeAppChatOrigin(chatId, "center");
+      if (returnTo === "/apps") writeAppChatReturnTo(chatId, returnTo);
       try {
-        sessionStorage.setItem(appFlowOriginKey(String(app.id)), 'center');
-        sessionStorage.setItem(appLastOriginKey, 'center');
+        sessionStorage.setItem(appFlowOriginKey(String(app.id)), "center");
+        sessionStorage.setItem(appLastOriginKey, "center");
       } catch {
         // ignore storage failures
       }
-      navigate(`/app/${chatId}/${app.id}/${app.flow_type}?from=center&returnTo=${encodeURIComponent(returnTo)}`, {
-        state: { appSurfaceReturn: returnTo },
-      });
+      navigate(
+        `/app/${chatId}/${app.id}/${app.flow_type}?from=center&returnTo=${encodeURIComponent(returnTo)}`,
+        {
+          state: { appSurfaceReturn: returnTo },
+        },
+      );
     },
-    [location.pathname, navigate],
+    [blockDemoApp, location.pathname, navigate],
   );
 
   /** Copy share link to clipboard */
@@ -193,9 +225,15 @@ export function useAppCenter() {
       const url = getAppShareUrl(app.id, app.flow_type);
       try {
         await copyText(url);
-        showToast?.({ message: localize('com_app_share_link_copied'), severity: NotificationSeverity.SUCCESS });
+        showToast?.({
+          message: localize("com_app_share_link_copied"),
+          severity: NotificationSeverity.SUCCESS,
+        });
       } catch {
-        showToast?.({ message: localize('com_app_share_link_copy_failed'), severity: NotificationSeverity.WARNING });
+        showToast?.({
+          message: localize("com_app_share_link_copy_failed"),
+          severity: NotificationSeverity.WARNING,
+        });
       }
     },
     [localize, showToast],

@@ -14,11 +14,11 @@ export function DocxViewer({ resource, zoomLevel = 100, locale, onError }: Previ
     const scale = zoomLevel / 100;
 
     return (
-        <div className="scrollbar-os min-w-0 flex-1 overflow-auto bg-[#fbfbfb]">
+        <div className="scrollbar-os min-w-0 flex-1 overflow-auto bg-fill-1">
             <div className="box-border flex w-full justify-center py-6 px-3 sm:px-4">
                 <div
 
-                    className="w-full max-w-[800px] rounded-sm bg-white shadow-md"
+                    className="w-full max-w-[800px] rounded-sm bg-white document-canvas shadow-md"
                     style={{
                         transform: `scale(${scale})`,
                         transformOrigin: "top center",

@@ -358,3 +358,21 @@ class OpenApiTaskQueueUnavailableError(OpenApiAuthError):
     Code = 26068
     Msg = "The task queue is temporarily unavailable; submit again later"
     http_status = 503
+
+
+class ServiceAccountOwnerTenantMismatchError(OpenApiAuthError):
+    Code = 26071
+    Msg = "The service account owner's tenant differs from the account tenant; contact an administrator"
+    http_status = 403
+
+
+class ServiceAccountOwnerTenantUnresolvedError(OpenApiAuthError):
+    Code = 26072
+    Msg = "The service account owner's current tenant cannot be determined; contact an administrator"
+    http_status = 403
+
+
+class ServiceAccountManagementScopeChangedError(OpenApiAuthError):
+    Code = 26073
+    Msg = "The service account management tenant has changed; select the tenant and refresh before retrying"
+    http_status = 409

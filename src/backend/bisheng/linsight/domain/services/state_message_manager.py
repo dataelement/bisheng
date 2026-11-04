@@ -1,6 +1,6 @@
 import asyncio
 import pickle
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from loguru import logger
@@ -15,6 +15,7 @@ from bisheng.linsight.domain.models.linsight_execute_task import (
 )
 from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersion, LinsightSessionVersionDao
 from bisheng.linsight.domain.schemas.linsight_schema import UserInputEventSchema
+from bisheng.linsight.domain.services.task_message_broadcast import task_message_subscription
 from bisheng.utils.util import retry_async
 from bisheng_langchain.linsight.event import BaseEvent
 
@@ -29,7 +30,7 @@ def _preview(value: Any) -> str:
     return text if len(text) <= _PREVIEW_LIMIT else f"{text[:_PREVIEW_LIMIT]}…(+{len(text) - _PREVIEW_LIMIT} chars)"
 
 
-class MessageEventType(str, Enum):
+class MessageEventType(StrEnum):
     """
     Message event type enumeration
     """
@@ -67,7 +68,6 @@ class MessageData(BaseModel):
 class LinsightStateMessageManager:
     """Idea State and Message Manager"""
 
-    # Class Constant
     DEFAULT_EXPIRATION = 3600
     DEFAULT_RETRY_ATTEMPTS = 3
     DEFAULT_RETRY_DELAY = 1
@@ -86,17 +86,9 @@ class LinsightStateMessageManager:
     THINKING_DB_FLUSH_INTERVAL = 2.0
 
     def __init__(self, session_version_id: str):
-        """
-        Initializing the Inspiration State and Message Manager
-
-        Args:
-            session_version_id: Session VersionID
-        """
         self._session_version_id = session_version_id
         self._redis_client = get_redis_client_sync()
         self._logger = logger
-
-        # Redis keyManaging
         self._key_prefix = f"{self.KEY_PREFIX}{session_version_id}:"
         self._keys = {
             "session_version_info": f"{self._key_prefix}session_version_info",
@@ -113,20 +105,7 @@ class LinsightStateMessageManager:
         self._pending_history: dict[str, list] = {}
 
     async def _handle_redis_operation(self, operation, *args, **kwargs):
-        """
-        ImpuestoRedisOperation error handling
-
-        Args:
-            operation: RedisAction Function
-            *args: Position JSON
-            **kwargs: Keyword Parameters
-
-        Returns:
-            Operating result
-
-        Raises:
-            Exception: RedisException thrown when operation failed
-        """
+        """Log Redis failures and propagate them to the caller."""
         try:
             return await operation(*args, **kwargs)
         except Exception as e:
@@ -146,24 +125,9 @@ class LinsightStateMessageManager:
         await self._handle_redis_operation(self._redis_client.arpush, self._keys["messages"], message.model_dump())
         self._logger.info(f"Message pushed: {message.event_type}")
 
-    @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
-    async def pop_message(self) -> MessageData | None:
-        """
-        FROMRedisA message pops up in the list
-
-        Returns:
-            Message Model orNone
-        """
-        try:
-            message_data = await self._redis_client.ablpop(self._keys["messages"])
-
-            if message_data:
-                return MessageData.model_validate(message_data)
-            return None
-
-        except Exception as e:
-            self._logger.error(f"Failed to pop message: {e}")
-            raise e
+    def message_stream(self):
+        """Each WebSocket subscribes independently to the shared task broadcast."""
+        return task_message_subscription(self._redis_client.async_connection, self._keys["messages"])
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
     async def set_session_version_info(self, session_version_model) -> None:
@@ -297,7 +261,7 @@ class LinsightStateMessageManager:
             raise
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
-    async def set_user_input(self, task_id: str, user_input: str, files: list[dict[str, str]] = None) -> None:
+    async def set_user_input(self, task_id: str, user_input: str, files: list[dict[str, str]] | None = None) -> None:
         """
         Set User Input
 

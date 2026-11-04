@@ -4,18 +4,22 @@
  * Triggered when user types '#' in the chat input.
  * Supports keyboard navigation and click selection.
  */
+import { Button } from "@bisheng/ui";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "~/utils";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 
 interface TagPickerProps {
     tags: string[];
+    loading?: boolean;
+    failed?: boolean;
+    onRetry?: () => void;
     searchText: string; // text after '#' for filtering
     onSelect: (tag: string) => void;
     onClose: () => void;
 }
 
-export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProps) {
+export function TagPicker({ tags, searchText, onSelect, onClose, loading = false, failed = false, onRetry }: TagPickerProps) {
     const localize = useLocalize();
     const [activeIndex, setActiveIndex] = useState(0);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -29,20 +33,21 @@ export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProp
     // Reset active index when filter changes
     useEffect(() => {
         setActiveIndex(0);
-    }, [searchText]);
+    }, [searchText, tags]);
 
     // Keyboard navigation
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            if (loading || failed) { if (e.key === "Escape") onClose(); return; }
             if (e.key === "ArrowDown") {
                 e.preventDefault();
-                setActiveIndex(prev => Math.min(prev + 1, filtered.length - 1));
+                setActiveIndex(prev => Math.max(0, Math.min(prev + 1, filtered.length - 1)));
             } else if (e.key === "ArrowUp") {
                 e.preventDefault();
                 setActiveIndex(prev => Math.max(prev - 1, 0));
             } else if (e.key === "Enter" && filtered.length > 0) {
                 e.preventDefault();
-                onSelect(filtered[activeIndex]);
+                onSelect(filtered[Math.min(activeIndex, filtered.length - 1)]);
             } else if (e.key === "Escape") {
                 e.preventDefault();
                 onClose();
@@ -51,9 +56,9 @@ export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProp
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [filtered, activeIndex, onSelect, onClose]);
+    }, [filtered, activeIndex, onSelect, onClose, loading, failed]);
 
-    if (filtered.length === 0) {
+    if (loading || failed || filtered.length === 0) {
         return (
             <div
                 ref={(el) => {
@@ -61,7 +66,11 @@ export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProp
                 }}
                 className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-border-base rounded-lg shadow-lg p-3 z-50"
             >
-                <p className="text-sm text-text-3 text-center">{localize("com_knowledge.no_matched_tags")}</p>
+                {loading ? <p role="status" className="text-body-sm text-text-3 text-center">{localize("com_ui_loading")}</p>
+                    : failed ? <div role="alert" className="text-body-sm text-danger text-center">
+                        {localize("com_knowledge.load_tags_failed")}
+                        <Button type="button" color="primary" variant="text" size="small" className="ml-2" onClick={onRetry}>{localize("com_ui_retry")}</Button>
+                    </div> : <p className="text-body-sm text-text-3 text-center">{localize(tags.length ? "com_knowledge.no_matched_tags" : "com_knowledge.no_tags")}</p>}
             </div>
         );
     }

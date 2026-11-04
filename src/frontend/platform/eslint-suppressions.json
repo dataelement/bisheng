@@ -35,14 +35,6 @@
       "count": 1
     }
   },
-  "src/components/Pro/security/AssistantSetting.tsx": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    }
-  },
   "src/components/Pro/security/FlowSetting.tsx": {
     "@typescript-eslint/no-unused-expressions": {
       "count": 3
@@ -55,11 +47,8 @@
     "@typescript-eslint/ban-ts-comment": {
       "count": 2
     },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "@typescript-eslint/no-unused-expressions": {
-      "count": 2
+      "count": 1
     },
     "no-restricted-syntax": {
       "count": 1
@@ -142,9 +131,6 @@
     }
   },
   "src/components/bs-comp/department/LazyDepartmentTree.tsx": {
-    "no-restricted-syntax": {
-      "count": 3
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -266,9 +252,6 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 2
     },
-    "no-restricted-syntax": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -289,11 +272,6 @@
     },
     "@typescript-eslint/no-explicit-any": {
       "count": 2
-    }
-  },
-  "src/components/bs-icons/filter/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
     }
   },
   "src/components/bs-icons/flag/index.tsx": {
@@ -392,9 +370,6 @@
   },
   "src/components/bs-ui/input/avator.tsx": {
     "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
       "count": 1
     }
   },
@@ -655,7 +630,7 @@
   },
   "src/controllers/API/index.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 52
+      "count": 51
     },
     "@typescript-eslint/no-unused-expressions": {
       "count": 2
@@ -867,9 +842,6 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 1
     },
-    "no-restricted-syntax": {
-      "count": 3
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -935,7 +907,7 @@
   },
   "src/modals/formModal/chatMessage/index.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 8
+      "count": 4
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
@@ -981,9 +953,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 2
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
     }
   },
   "src/pages/BuildPage/appTemps.tsx": {
@@ -1072,11 +1041,6 @@
   "src/pages/BuildPage/bench/DepartmentKnowledgeSpaceManagerDialog.tsx": {
     "no-restricted-syntax": {
       "count": 1
-    }
-  },
-  "src/pages/BuildPage/bench/IconUploadSection.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 3
     }
   },
   "src/pages/BuildPage/bench/KnowledgeSpace.tsx": {
@@ -1908,11 +1872,6 @@
       "count": 2
     }
   },
-  "src/pages/DataSetPage/index.tsx": {
-    "react-hooks/rules-of-hooks": {
-      "count": 3
-    }
-  },
   "src/pages/DepartmentPage/components/DepartmentSettings.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -1942,9 +1901,6 @@
     }
   },
   "src/pages/KnowledgePage/KnowledgeQa.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -2026,9 +1982,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -2162,9 +2115,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "src/pages/KnowledgePage/components/RuleTable.tsx": {
@@ -2204,11 +2154,6 @@
       "count": 3
     },
     "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/KnowledgePage/index.tsx": {
-    "react-hooks/rules-of-hooks": {
       "count": 1
     }
   },
@@ -2469,12 +2414,6 @@
   },
   "src/pages/ModelPage/manage/tabs/WorkbenchModel.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {

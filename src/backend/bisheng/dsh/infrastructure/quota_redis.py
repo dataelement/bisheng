@@ -121,7 +121,17 @@ class QuotaRedis:
             raise QuotaRejected("request_already_started")
         return UsageEvent.model_validate_json(result[1])
 
-    async def check_and_start(self, event: UsageEvent, *, monthly_token_limit: int | None = None) -> UsageEvent:
+    async def check_and_start(
+        self, event: UsageEvent, *, monthly_token_limit: int | None = None, mode: str = ""
+    ) -> UsageEvent:
+        """Admit one model request.
+
+        ``mode``: ``""`` checks and writes; ``"probe"`` runs every check but writes
+        nothing (task-mode round start); ``"unmetered"`` writes but skips the
+        monthly-limit comparison (calls inside an already-checked round).
+        """
+        if mode not in {"", "probe", "unmetered"}:
+            raise ValueError("Unknown admission mode")
         event = UsageEvent.model_validate(event.model_dump())
         if event.status != "RUNNING" or event.event_version != 1:
             raise ValueError("Admission requires a new server-owned running event")
@@ -146,6 +156,7 @@ class QuotaRedis:
                 event.request_id,
                 str(int(event.started_at.replace(tzinfo=UTC).timestamp() * 1000)),
                 "" if monthly_token_limit is None else str(monthly_token_limit),
+                mode,
             ],
         )
 
@@ -171,7 +182,7 @@ class QuotaRedis:
                     str(event.model_id),
                     event.usage_month,
                     event.status,
-                    "" if event.total_tokens is None else str(event.total_tokens),
+                    "" if event.total_tokens is None else str(event.billed_tokens),
                     event.request_id,
                     event.model_dump_json(),
                     event.operation_id or "",
@@ -371,6 +382,9 @@ class QuotaRedis:
             "started_at",
         )
         data = event.model_dump(mode="json", include=set(fields))
+        # Preserve hashes of historical 1x events while fencing nondefault rates.
+        if event.credit_rate != 100:
+            data["credit_rate"] = event.credit_rate
         started = event.started_at
         if started.tzinfo is None:
             started = started.replace(tzinfo=UTC)

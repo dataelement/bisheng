@@ -2,7 +2,7 @@
 import { Lock, LucideSend, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { classNames } from "../../../utils";
-import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
+import { useWorkbenchRuntimeConfig } from "@/hooks/useWorkbenchRuntimeConfig";
 import SpeechToTextComponent from "@/components/voiceFunction/speechToText";
 
 export default function ChatInput({
@@ -13,7 +13,7 @@ export default function ChatInput({
   inputRef,
   noInput,
 }) {
-  const { data: linsightConfig } = useLinsightConfig();
+  const { data: linsightConfig } = useWorkbenchRuntimeConfig();
   // 新增状态管理输入锁定状态
   const [inputLock, setInputLock] = useState({ locked: false });
 

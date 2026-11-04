@@ -128,14 +128,20 @@ export function Select(props: SelectProps) {
   const { highlight, setHighlight, move, reset } = useHighlight(visible);
   const typeahead = useTypeahead(visible, setHighlight);
 
-  // §8 — open on the current value (scrolled into view by the panel), else the first option.
+  // §8 — open on the current value (scrolled into view by the panel). With no value, only a
+  // keyboard open starts on the first option; a pointer open highlights nothing, so the gray
+  // highlight is never mistaken for a selection.
+  const openedByKeyboard = React.useRef(false);
   React.useEffect(() => {
     if (!isOpen) {
+      openedByKeyboard.current = false;
       setHighlight(-1);
       return;
     }
     const current = visible.findIndex((option) => selected.includes(option.value));
-    reset(current >= 0 ? current : 0);
+    if (current >= 0) reset(current);
+    else if (openedByKeyboard.current) reset(0);
+    else setHighlight(-1);
     // Only on open: re-running on every value change would yank the highlight
     // back while the user is ticking boxes in a multiple select.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -194,25 +200,30 @@ export function Select(props: SelectProps) {
     onClear?.();
   };
 
+  const openByKeyboard = () => {
+    openedByKeyboard.current = true;
+    setOpen(true);
+  };
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     if (!interactive) return;
     switch (event.key) {
       case 'ArrowDown':
       case 'ArrowUp':
         event.preventDefault();
-        if (!isOpen) setOpen(true);
+        if (!isOpen) openByKeyboard();
         else move(event.key === 'ArrowDown' ? 1 : -1);
         return;
       case 'Enter':
         event.preventDefault();
-        if (!isOpen) setOpen(true);
+        if (!isOpen) openByKeyboard();
         else if (highlight >= 0 && visible[highlight]) handlePick(visible[highlight]);
         return;
       case ' ':
         // Space types a space into a search box; elsewhere it acts like Enter.
         if (searchable) return;
         event.preventDefault();
-        if (!isOpen) setOpen(true);
+        if (!isOpen) openByKeyboard();
         else if (highlight >= 0 && visible[highlight]) handlePick(visible[highlight]);
         return;
       case 'Escape':
@@ -235,7 +246,7 @@ export function Select(props: SelectProps) {
       default:
         // §8 — no search: a letter jumps to the first option starting with it.
         if (!searchable && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
-          if (!isOpen) setOpen(true);
+          if (!isOpen) openByKeyboard();
           typeahead(event.key);
         }
     }

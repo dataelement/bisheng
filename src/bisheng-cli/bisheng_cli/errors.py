@@ -77,6 +77,7 @@ _DELEGATE_ONLY_SENTENCE = "这把密钥被配置为委托专用（delegate），
 _DELEGATE_ONLY_NEXT_STEP = "请平台管理员另外签发一把不含 delegate 位的服务账号密钥用于 CLI。"
 
 ERROR_HINTS: dict[int, tuple[str, str]] = {
+    16233: ("Release notes exceed the limit", "Shorten the release notes to 2,000 characters and retry."),
     # --- F049, 260 segment: credential and scope ---
     26001: (
         "请求没有携带可识别的 Authorization 头",
@@ -159,6 +160,10 @@ ERROR_HINTS: dict[int, tuple[str, str]] = {
         "应用标识（slug）已被占用",
         "在 bisheng-app.yaml 里换一个 slug 再部署。已删除的应用同样占用它原来的标识，不能复用。",
     ),
+    16124: (
+        "应用执行失败",
+        "先核对操作阶段；启动失败时检查启动命令、监听地址和端口，涉及数据维护时先确认操作状态再重试。",
+    ),
     16121: (
         "编排器不可用（容器守护进程或 runtime-manager 不可达），可重试",
         "稍后重试；持续不恢复请联系运维检查 runtime-manager 与 dockerd。注意这不代表应用实例不存在。",
@@ -202,13 +207,12 @@ ERROR_HINTS: dict[int, tuple[str, str]] = {
         "修正 bisheng-app.yaml 里 capabilities 段的写法后重发。",
     ),
     16227: (
-        "依赖构建失败",
-        "看下面的构建日志与提示: 依赖装不上就改依赖清单（requirements.txt / package.json）,"
-        " 连不上软件源则是构建环境的网络问题, 找管理员而不是改代码。",
+        "交付准备失败",
+        "检查固定镜像、启动入口和精确版本依赖材料；离线缺包时导入对应材料后重试。",
     ),
     16228: (
         "应用启动探活失败",
-        "先看下方应用启动输出的末尾；再确认应用监听声明的端口、绑定 0.0.0.0，且 / 返回 500 以下的状态码。用 bisheng dev 本地复现后再重发。",
+        "确认应用监听声明的端口、绑定 0.0.0.0，且健康路径返回 500 以下状态码。用 bisheng dev 本地复现后再重发。",
     ),
     16230: (
         "bisheng-app.yaml 里含密钥或密钥引用",
@@ -256,6 +260,7 @@ ERROR_HINTS: dict[int, tuple[str, str]] = {
 ERROR_HINTS[16125] = ERROR_HINTS[16226]
 
 ERROR_EXIT_CODES: dict[int, int] = {
+    16233: EXIT_LOCAL_INVALID,
     26001: EXIT_AUTH,
     26002: EXIT_AUTH,
     26027: EXIT_AUTH,
@@ -291,6 +296,7 @@ ERROR_EXIT_CODES: dict[int, int] = {
     16222: EXIT_PRECHECK_FAILED,
     16223: EXIT_PRECHECK_FAILED,
     16224: EXIT_PRECHECK_FAILED,
+    16124: EXIT_PRECHECK_FAILED,
     16227: EXIT_PRECHECK_FAILED,
     16228: EXIT_PRECHECK_FAILED,
     16230: EXIT_PRECHECK_FAILED,
@@ -363,6 +369,11 @@ def error_from_platform(
 ) -> CliError:
     """Translate a platform error code into a CliError."""
     hint = ERROR_HINTS.get(code)
+    if code == 16233:
+        from bisheng_cli.release_notes import MAX_CODEPOINTS
+        from bisheng_cli.release_notes import message as release_notes_message
+
+        hint = (release_notes_message("too_long", limit=MAX_CODEPOINTS), release_notes_message("fix_input"))
     if hint is not None:
         human, next_step = hint
         next_step = _augment_next_step(code, next_step, details)
@@ -468,10 +479,16 @@ def render_human(err: CliError) -> str:
         lines.append(f"  下一步: {err.next_step}")
     for hint in err.hints:
         lines.append(f"  提示: {hint}")
+    if err.code in {16124, 16227, 16228} and isinstance(err.details, dict):
+        for key, label in (("reason", "原因"), ("runtime_stage", "阶段"), ("operation_id", "操作")):
+            value = err.details.get(key)
+            if isinstance(value, str) and value:
+                lines.append(f"  {label}: {value}")
     excerpt = _log_excerpt(err.details)
     if excerpt:
-        # 16228 carries the start-up probe instance's output, everything else
-        # with a tail is a build.
-        lines.append("  应用启动输出(末尾):" if err.code == 16228 else "  构建日志(末尾):")
+        label = "应用启动输出" if err.code == 16228 else ("交付准备输出" if err.code == 16227 else "运行输出")
+        lines.append(f"  {label}(末尾):")
         lines.extend(f"    {one}" for one in excerpt)
+    elif err.code in {16124, 16227, 16228}:
+        lines.append("  暂无可用的运行输出；诊断可能未生成或已到期。")
     return mask("\n".join(lines))

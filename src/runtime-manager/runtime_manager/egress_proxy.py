@@ -53,7 +53,6 @@ from runtime_manager.egress import (
     EgressPolicyStore,
     address_decision,
     authorize,
-    get_policy_store,
 )
 
 logger = logging.getLogger(__name__)
@@ -173,12 +172,14 @@ class EgressProxy:
 
     def __init__(self, config: Config, store: EgressPolicyStore | None = None) -> None:
         self._config = config
-        if config.protocol_version == 2 and store is None:
+        if config.protocol_version != 2:
+            raise ValueError("egress_requires_protocol_v2")
+        if store is None:
             from runtime_manager.platform_egress import PlatformPolicyStore
 
             self._store = PlatformPolicyStore(config)
         else:
-            self._store = store if store is not None else get_policy_store(config)
+            self._store = store
         self._policy_task = None
         self._server: asyncio.AbstractServer | None = None
 
@@ -350,14 +351,11 @@ class EgressProxy:
                     _close(writer)
                     return
 
-        if self._config.protocol_version == 2:
-            task = asyncio.create_task(guard())
-            try:
-                await asyncio.gather(_pump(reader, up_writer), _pump(up_reader, writer))
-            finally:
-                task.cancel()
-        else:
+        task = asyncio.create_task(guard())
+        try:
             await asyncio.gather(_pump(reader, up_writer), _pump(up_reader, writer))
+        finally:
+            task.cancel()
 
 
 def _split_listen(listen: str) -> tuple[str, int]:

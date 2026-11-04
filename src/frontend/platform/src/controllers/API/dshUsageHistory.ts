@@ -38,7 +38,7 @@ export function sumUsageMetrics(metrics: DshUsageMetrics[]): DshUsageMetrics {
         result[key] = metrics.reduce((sum, value) => sum + (value[key] ?? 0), 0)
     }
     if (result.message_count > 0 && result.recorded_usage_count === 0) {
-        result.input_tokens = result.output_tokens = result.total_tokens = null
+        result.input_tokens = result.output_tokens = result.total_tokens = result.billed_tokens = null
     }
     return result
 }

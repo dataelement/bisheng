@@ -1,3 +1,4 @@
+import { permissionModelLabel } from "./permissionModelLabel";
 import { Outlined } from "bisheng-icons";
 // `LockKeyhole` stays on lucide: bisheng-icons has no lock glyph.
 import { LockKeyhole } from "lucide-react";
@@ -23,6 +24,7 @@ import { useConfirm } from "~/Providers";
 import { canMutatePermissionAssignee } from "./assigneePolicy";
 import { PermissionEmptyState } from "./PermissionEmptyState";
 import { SourceBadge } from "./SourceBadge";
+import { PermissionModelStatus } from "./PermissionModelStatus";
 
 interface PermissionListTabProps {
   resourceType: ResourceType;
@@ -40,6 +42,12 @@ const SUBJECT_ICONS = {
   department: Outlined.City,
   user_group: Outlined.PeopleGroup,
 };
+
+const SUBJECT_SEARCH_EMPTY_KEYS = {
+  user: "com_permission.empty_search",
+  department: "com_permission.empty_search_departments",
+  user_group: "com_permission.empty_search_user_groups",
+} as const;
 
 function createMutationIdempotencyKey(): string {
   return `grant-mutate-${Date.now()}-${Math.random()
@@ -121,6 +129,7 @@ function RosterRow({
           </p>
           <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1 text-xs text-[#86909C]">
             <SourceBadge source={assignee.source} />
+            <PermissionModelStatus active={assignee.model.active} />
             <span>
               {localize(
                 `f048_permission.scope.${assignee.scope.toLowerCase()}`,
@@ -153,12 +162,12 @@ function RosterRow({
               >
                 {!currentIsGrantable && (
                   <option value={assignee.model.key}>
-                    {assignee.model.name}
+                    {permissionModelLabel(assignee.model.key, assignee.model.name, localize)}
                   </option>
                 )}
                 {models.map((model) => (
                   <option key={model.key} value={model.key}>
-                    {model.name}
+                    {permissionModelLabel(model.key, model.name, localize)}
                   </option>
                 ))}
               </select>
@@ -181,7 +190,7 @@ function RosterRow({
           </>
         ) : (
           <span className="inline-flex items-center gap-1 truncate text-sm text-[#86909C]">
-            {assignee.model.name}
+            {permissionModelLabel(assignee.model.key, assignee.model.name, localize)}
             {assignee.protected && (
               <LockKeyhole
                 aria-label={localize("f048_permission.roster.protected")}
@@ -339,7 +348,7 @@ export function PermissionListTab({
       return [
         assignee.subject.name,
         assignee.subject.id,
-        assignee.model.name,
+        permissionModelLabel(assignee.model.key, assignee.model.name, localize),
         assignee.source.type,
         assignee.inherited_from,
       ]
@@ -348,7 +357,7 @@ export function PermissionListTab({
         .toLowerCase()
         .includes(query);
     });
-  }, [assignees, fixedSubjectType, searchQuery]);
+  }, [assignees, fixedSubjectType, localize, searchQuery]);
 
   const mutateAssignee = async (
     assignee: PermissionGrantAssignee,
@@ -477,7 +486,7 @@ export function PermissionListTab({
             <PermissionEmptyState
               message={localize(
                 searchQuery.trim()
-                  ? "com_permission.empty_search"
+                  ? SUBJECT_SEARCH_EMPTY_KEYS[fixedSubjectType]
                   : "com_permission.list_empty_for_subject",
               )}
             />

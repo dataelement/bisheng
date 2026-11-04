@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Sequence
+from contextlib import nullcontext
 from datetime import datetime
 from time import perf_counter
 from typing import TYPE_CHECKING
@@ -27,6 +28,7 @@ from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
 from bisheng.common.services.config_service import settings
 from bisheng.common.services.metric_log import emit_metric
+from bisheng.core.context.tenant import strict_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType, UserLinkType
@@ -195,6 +197,7 @@ class WorkFlowService(BaseService):
         # Get user information in the list
         user_infos = UserDao.get_user_by_ids(user_ids)
         user_dict = {one.user_id: one.user_name for one in user_infos}
+        owner_activity = {one.user_id: int(getattr(one, "delete", 0) or 0) != 1 for one in user_infos}
 
         # Get version information in the list
         version_infos = FlowVersionDao.get_list_by_flow_ids(resource_ids)
@@ -210,7 +213,14 @@ class WorkFlowService(BaseService):
         # Add additional information (F008: removed group_ids, AC-08)
         for one in data:
             one["user_name"] = user_dict.get(one["user_id"], one["user_id"])
-            one["write"] = managed or str(one["id"]) in writeable_ids
+            if int(one.get("flow_type") or 0) == FlowType.HOSTED_APP.value:
+                # Owner activity is informational; exact actions decide management.
+                one["owner_active"] = owner_activity.get(one["user_id"], False)
+            one["write"] = (
+                "edit" in one.get("allowed_actions", ())
+                if int(one.get("flow_type") or 0) == FlowType.HOSTED_APP.value and managed
+                else managed or str(one["id"]) in writeable_ids
+            )
             one["version_list"] = flow_versions.get(one["id"], [])
             one["tags"] = resource_tag_dict.get(one["id"], [])
             one["logo"] = cls.get_logo_share_link(one["logo"])
@@ -388,7 +398,17 @@ class WorkFlowService(BaseService):
                 data,
                 tuple(dict.fromkeys((required_action, "edit"))),
             )
-            data = [one for one in data if required_action in permission_map.get(str(one.get("id")), frozenset())]
+            if managed:
+                await cls._managed_hosted_actions(user, data)
+            data = [
+                one
+                for one in data
+                if (
+                    cls._managed_visible(one, permission_map, required_action)
+                    if managed
+                    else required_action in permission_map.get(str(one.get("id")), frozenset())
+                )
+            ]
             writeable_ids = {str(app_id) for app_id, action_codes in permission_map.items() if "edit" in action_codes}
             logger.info(
                 "[perf][workflow.list.permission_map] user_id={} flow_type={} rows={} kept={} writeable={} "
@@ -425,6 +445,23 @@ class WorkFlowService(BaseService):
             (perf_counter() - total_start) * 1000,
         )
         return data, has_more
+
+    @classmethod
+    async def _managed_hosted_actions(cls, user, rows):
+        from bisheng.app_runtime.application.authorization import management_actions_for_ids
+
+        ids = [str(row["id"]) for row in rows if int(row.get("flow_type") or 0) == FlowType.HOSTED_APP.value]
+        actions = await management_actions_for_ids(user, ids)
+        for row in rows:
+            if int(row.get("flow_type") or 0) == FlowType.HOSTED_APP.value:
+                row["allowed_actions"] = sorted(actions.get(str(row["id"]), ()))
+        return actions
+
+    @classmethod
+    def _managed_visible(cls, item, permission_map, required_action):
+        if int(item.get("flow_type") or 0) == FlowType.HOSTED_APP.value:
+            return bool(set(item.get("allowed_actions", ())) - {"use"})
+        return required_action in permission_map.get(str(item.get("id")), frozenset())
 
     @classmethod
     async def _scan_visible_flows_cursor(
@@ -494,11 +531,24 @@ class WorkFlowService(BaseService):
             if not batch:
                 return visible[:page_size], False, writeable_ids
 
+            if managed:
+                await cls._managed_hosted_actions(user, batch)
             if admin_bypass:
                 # Admin sees everything and edits everything — no BatchCheck,
                 # every row is kept and every id counts toward writeable_ids.
-                kept = batch
-                writeable_ids |= {str(one.get("id")) for one in batch}
+                kept = [
+                    one
+                    for one in batch
+                    if not managed
+                    or int(one.get("flow_type") or 0) != FlowType.HOSTED_APP.value
+                    or bool(set(one.get("allowed_actions", ())) - {"use"})
+                ]
+                writeable_ids |= {
+                    str(one.get("id"))
+                    for one in kept
+                    if int(one.get("flow_type") or 0) != FlowType.HOSTED_APP.value
+                    or "edit" in one.get("allowed_actions", ())
+                }
             else:
                 permission_map_start = perf_counter()
                 permission_map = await cls._application_action_map(
@@ -506,7 +556,15 @@ class WorkFlowService(BaseService):
                     batch,
                     tuple(dict.fromkeys((required_action, "edit"))),
                 )
-                kept = [one for one in batch if required_action in permission_map.get(str(one.get("id")), frozenset())]
+                kept = [
+                    one
+                    for one in batch
+                    if (
+                        cls._managed_visible(one, permission_map, required_action)
+                        if managed
+                        else required_action in permission_map.get(str(one.get("id")), frozenset())
+                    )
+                ]
                 writeable_ids |= {
                     str(app_id) for app_id, action_codes in permission_map.items() if "edit" in action_codes
                 }
@@ -843,7 +901,9 @@ class WorkFlowService(BaseService):
         # F048 visible-first strategy:
         #   * Super admins and tenant admins skip the permission system
         #     entirely and scan the business DB directly; every returned row
-        #     gets ``write=True`` because they are effectively unrestricted.
+        #     gets ``write=True`` within their management scope. A tenant
+        #     admin's managed list must exclude root-tenant candidates before
+        #     pagination; the default readable scope also includes root rows.
         #     Enumerating "all apps in a tenant" through OpenFGA is wasteful
         #     for these identities and prone to trip the 5 000-object visible
         #     enumeration cap.
@@ -900,20 +960,22 @@ class WorkFlowService(BaseService):
                 )
             effective_flow_ids = visible_id_list
 
-        data, has_more, writeable_ids = await cls._scan_visible_flows_cursor(
-            user=user,
-            name=name,
-            status=status,
-            flow_ids=effective_flow_ids,
-            flow_type=flow_type,
-            cursor=decoded,
-            page_size=page_size,
-            managed=managed,
-            search_description=search_description,
-            required_action=required_action,
-            app_state=app_state,
-            admin_bypass=is_admin,
-        )
+        management_scope = strict_tenant_filter() if managed and is_admin and not actor.super_admin else nullcontext()
+        with management_scope:
+            data, has_more, writeable_ids = await cls._scan_visible_flows_cursor(
+                user=user,
+                name=name,
+                status=status,
+                flow_ids=effective_flow_ids,
+                flow_type=flow_type,
+                cursor=decoded,
+                page_size=page_size,
+                managed=managed,
+                search_description=search_description,
+                required_action=required_action,
+                app_state=app_state,
+                admin_bypass=is_admin,
+            )
 
         enrich_start = perf_counter()
         data = cls.add_extra_field(

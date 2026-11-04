@@ -227,10 +227,18 @@ async def test_configured_vision_model_reads_pixels_without_view_image(monkeypat
         vision_llm=vision,
     )
     runnable = wrapper({}, None)
-    result = await runnable.ainvoke([HumanMessage(content="文档里有哪些图片")])
+    question = [HumanMessage(content="文档里有哪些图片")]
+    result = await runnable.ainvoke(question)
     assert chat.bind_calls == [["web_search"]]
     assert "view_image" not in chat.bind_calls[0]
     assert vision.seen
-    joined = "".join(str(m.content) for m in vision.seen[0])
-    assert "data:image/png;base64,aaa" in joined
-    assert "/bisheng/knowledge/images/1/2/c.png" in result.content
+    seen = "".join(str(m.content) for m in vision.seen[0])
+    assert "data:image/png;base64,aaa" in seen
+    assert result.content == "ok"
+    assert not result.tool_calls
+    handed = "".join(str(m.content) for m in chat.stream_messages[0])
+    assert "图片查看结果：" in handed
+    assert "/bisheng/knowledge/images/1/2/c.png" in handed
+    assert "data:image/png;base64,aaa" not in handed
+    await runnable.ainvoke(question)
+    assert len(vision.seen) == 1

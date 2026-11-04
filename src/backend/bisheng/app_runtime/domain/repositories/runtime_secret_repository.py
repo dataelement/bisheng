@@ -35,7 +35,9 @@ class RuntimeSecretRepository:
             or op.tenant_id != app.tenant_id
             or op.version_id != route.version_id
             or op.node_id != route.node_id
-            or op.stage != "serving"
+            or op.status not in {"running", "completed"}
+            or op.stage not in {"serving", "completed"}
+            or (op.stage == "completed" and op.status != "completed")
             or op.generation != route.generation
             or op.owner_epoch != route.owner_epoch
             or not op.payload.get("sealed_env")

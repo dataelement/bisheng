@@ -21,7 +21,7 @@ import type { CitationDocumentPreviewState } from '~/components/Chat/Messages/Co
 export type SourcePreview = CitationDocumentPreviewState & { badgeIndex?: number };
 import { isHtmlArtifact, openHtmlArtifactViewer, type ArtifactFile } from './artifactUtils';
 
-export function useWorkspacePanel(versionId: string) {
+export function useWorkspacePanel(versionId: string, conversationId = versionId) {
     const [open, setOpen] = useState(false);
     const [previewFile, setPreviewFile] = useState<ArtifactFile | null>(null);
     const [fullscreen, setFullscreen] = useState(false);
@@ -29,17 +29,14 @@ export function useWorkspacePanel(versionId: string) {
     // being read, so every path that leaves that report also drops it.
     const [sourcePreview, setSourcePreview] = useState<SourcePreview | null>(null);
 
-    // The panel is bound to ChatView's latest task turn (versionId). ChatView is
-    // KeepAlive-cached, so switching conversations / new task / new chat never
-    // unmounts this hook — it only changes versionId. Reset the panel whenever the
-    // bound version changes, otherwise the file opened in the previous conversation
-    // stays docked on the right of the new one (F035 stale-preview bug).
+    // KeepAlive retains the hook. Each conversation owns its preview state;
+    // new research turns in that same conversation retain the open document.
     useEffect(() => {
         setPreviewFile(null);
         setSourcePreview(null);
         setFullscreen(false);
         setOpen(false);
-    }, [versionId]);
+    }, [conversationId]);
 
     /** Open the panel on the file list (entry button). */
     const openWorkspace = () => {
@@ -62,7 +59,7 @@ export function useWorkspacePanel(versionId: string) {
     /** Preview a file in place. html artifacts still open in the standalone tab
      *  (needs versionId to resolve the MinIO object key into a presigned link). */
     const openPreview = (file: ArtifactFile) => {
-        if (isHtmlArtifact(file)) {
+        if (isHtmlArtifact(file) && !file.directUrl) {
             openHtmlArtifactViewer(file, versionId);
             return;
         }

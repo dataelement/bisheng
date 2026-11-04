@@ -18,7 +18,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from runtime_manager.builder import render_build_context
 from runtime_manager.executors.protocol import ExecutorError
-from runtime_manager.source_facts import STATIC_ROOT_CANDIDATES
+from runtime_manager.static_inputs import select_static_root
 
 _IMAGE = re.compile(r"[A-Za-z0-9][A-Za-z0-9./:_-]*@sha256:[a-f0-9]{64}")
 _REPOSITORY_PART = re.compile(r"[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*")
@@ -134,12 +134,7 @@ def write_layer(document, source, environment, destination):
     code = source
     prefix = "app"
     if language == "static":
-        code = next(
-            (source / part for part in STATIC_ROOT_CANDIDATES if (source / part / "index.html").is_file()),
-            None,
-        )
-        if code is None or code.is_symlink():
-            raise ExecutorError("oci_static_entry_missing")
+        code = select_static_root(source, built=False)
         prefix = "app/www"
     templates = render_build_context(
         language,

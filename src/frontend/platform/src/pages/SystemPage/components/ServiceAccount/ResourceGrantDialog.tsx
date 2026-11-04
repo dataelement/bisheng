@@ -1,3 +1,4 @@
+import { useServiceAccountRequestScope } from "./useServiceAccountManagementScope";
 import { Button, SearchInput, Select, notification } from '@bisheng/ui';
 
 import { Checkbox } from "@bisheng/ui";
@@ -63,6 +64,7 @@ export function ResourceGrantDialog({
   onOpenChange,
   onGranted,
 }: ResourceGrantDialogProps) {
+  const requestScope = useServiceAccountRequestScope();
   const { t } = useTranslation()
   const selectLabels = useSelectLabels()
   const [resourceType, setResourceType] = useState<string>(
@@ -98,7 +100,7 @@ export function ResourceGrantDialog({
       void listServiceAccountGrantableResourcesApi(serviceAccountId, {
           resource_type: resourceType,
           keyword: keyword.trim() || undefined,
-        })
+        }, requestScope)
         .then((rows) => {
           if (active && rows) setResources(rows)
         })
@@ -110,7 +112,7 @@ export function ResourceGrantDialog({
       active = false
       window.clearTimeout(timer)
     }
-  }, [editingGrant, keyword, open, resourceType, serviceAccountId])
+  }, [editingGrant, keyword, open, resourceType, serviceAccountId, requestScope])
 
   useEffect(() => {
     if (!open || !editingGrant) return
@@ -220,8 +222,7 @@ export function ResourceGrantDialog({
                       },
                     },
                   ],
-            },
-          )
+            }, requestScope)
         if (!result) {
           completed = false
           break

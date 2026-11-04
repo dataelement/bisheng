@@ -1,12 +1,11 @@
-import copy from "./fixtures/f067LicenseBannerCopy.zh.json"
 import { describe, expect, it } from "vitest"
 
 import { buildLicenseBannerCopy, type AggregatedLicense } from "@/layout/licenseBannerCopy"
 
 const NAMES: Record<string, string> = {
-    gateway: copy.gatewayName,
-    etl: copy.etlName,
-    dashboard: copy.dashboardName,
+    gateway: "Gateway license",
+    etl: "ETL license",
+    dashboard: "Dashboard license",
 }
 
 function t(key: string, options?: Record<string, unknown>): string {
@@ -14,13 +13,13 @@ function t(key: string, options?: Record<string, unknown>): string {
         return NAMES[key.slice("license.name.".length)] ?? key
     }
     if (key === "license.expiring") {
-        return copy.expiring.replace('{{name}}', String(options?.name)).replace('{{date}}', String(options?.date)).replace('{{days}}', String(options?.days))
+        return `${options?.name} expires on ${options?.date} with ${options?.days} days remaining`
     }
     if (key === "license.expired") {
-        return copy.expired.replace('{{name}}', String(options?.name)).replace('{{date}}', String(options?.date))
+        return `${options?.name} expired on ${options?.date}`
     }
     if (key === "license.renewHint") {
-        return copy.renewHint
+        return "Contact your provider to renew."
     }
     return key
 }
@@ -52,7 +51,7 @@ describe("buildLicenseBannerCopy", () => {
                 [license({ license_code: "etl", display_state: "expiring", expire_date: "2026-09-30", days_remaining: 16 })],
                 t,
             ),
-        ).toBe(copy.singleExpiring)
+        ).toBe("ETL license expires on 2026-09-30 with 16 days remaining。Contact your provider to renew.")
     })
 
     it("builds an expired sentence with the business name", () => {
@@ -61,7 +60,7 @@ describe("buildLicenseBannerCopy", () => {
                 [license({ license_code: "gateway", display_state: "expired", expire_date: "2026-09-01" })],
                 t,
             ),
-        ).toBe(copy.singleExpired)
+        ).toBe("Gateway license expired on 2026-09-01。Contact your provider to renew.")
     })
 
     it("joins multiple items without a count summary", () => {
@@ -72,11 +71,11 @@ describe("buildLicenseBannerCopy", () => {
             ],
             t,
         )
-        expect(text).toContain(copy.multipleExpired)
-        expect(text).toContain(copy.multipleExpiring)
+        expect(text).toContain("Gateway license expired on 2026-09-30")
+        expect(text).toContain("Dashboard license expires on 2026-09-30 with 16 days remaining")
         expect(text).toContain("；")
-        expect(text).not.toContain(copy.countSummary)
-        expect(text).toContain(copy.renewHint)
-        expect(text).not.toContain(copy.genericLicenseName)
+        expect(text).not.toContain("total")
+        expect(text).toContain("Contact your provider to renew.")
+        expect(text).not.toContain("software license")
     })
 })

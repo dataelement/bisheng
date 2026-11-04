@@ -528,7 +528,7 @@ class LinsightWorkflowTask:
         # again covers it while a worker is genuinely driving it).
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
-        self.llm = await self._get_llm(session_model)
+        self.llm = await self._get_round_llm(session_model)
         # The previous round deleted file_dir. Put this session's output/ back
         # before the code interpreter copies the directory into the sandbox.
         await self._sync_workspace_originals(session_model)
@@ -659,7 +659,7 @@ class LinsightWorkflowTask:
         # frontend leaves the "done" state and re-opens the WS event stream.
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
-        self.llm = await self._get_llm(session_model)
+        self.llm = await self._get_round_llm(session_model)
         # Same session workspace, new local dir: output/ from the previous round
         # is still in MinIO and must be back in file_dir before copy-in.
         await self._sync_workspace_originals(session_model)
@@ -745,7 +745,7 @@ class LinsightWorkflowTask:
         await self._provision_session_skills(session_model)
 
         # Initialization Execution Component
-        self.llm = await self._get_llm(session_model)
+        self.llm = await self._get_round_llm(session_model)
         tools = await self._generate_tools(session_model)
         try:
             # Build Tool List. The knowledge tool is gated by the user's
@@ -808,6 +808,20 @@ class LinsightWorkflowTask:
         await self._state_manager.set_session_version_info(session_model)
 
     # ==================== Component Initialization ====================
+
+    async def _get_round_llm(self, session_model: LinsightSessionVersion) -> BaseChatModel:
+        """Resolve the round's LLM and check the DSH monthly allowance once.
+
+        With ``dsh.enabled`` every model call is still settled in the credit
+        ledger, but only this round-start check compares usage with the limit,
+        so a round that has started runs to completion. Outside the
+        ``_get_llm`` try so a credit error keeps its own type and error_type.
+        """
+        from bisheng.dsh.domain.services.chat_credits import admit_round
+
+        llm = await self._get_llm(session_model)
+        await admit_round(llm)
+        return llm
 
     async def _get_llm(self, session_model: LinsightSessionVersion) -> BaseChatModel:
         """Resolve the per-task execution LLM (tool init / helper calls).
@@ -974,13 +988,15 @@ class LinsightWorkflowTask:
             if skipped:
                 logger.warning(f"{skipped} uploaded file(s) without markdown_file_path skipped for local prefetch")
 
-            # A passthrough file has no separate markdown view — its seed object and
-            # its original are the same bytes. It is fetched by the raw track below,
+            # A passthrough file (text, or an Excel original) has no separate
+            # markdown view — its seed object and its original are the same bytes. It is fetched by the raw track below,
             # which lands it under ``uploads/`` where the pointer block says it is;
             # letting it through here as well would ALSO drop a flat copy at the task
             # root, and the code interpreter's file list (``os.walk``) would show the
             # same file twice under two different paths.
-            downloadable = [f for f in entries if f.get("ingest_mode") != "passthrough"]
+            downloadable = [
+                f for f in entries if f.get("ingest_mode") not in LinsightWorkbenchImpl._ORIGINAL_ONLY_MODES
+            ]
 
             # Concurrent downloads
             download_tasks = [self._download_file(file_info, file_dir) for file_info in downloadable]
@@ -1079,9 +1095,8 @@ class LinsightWorkflowTask:
         return file_path
 
     async def _generate_tools(self, session_model: LinsightSessionVersion) -> list:
-        """Build Tool List"""
-        if not session_model.tools:
-            return []
+        """Resolve authorized task infrastructure and the selected optional tools."""
+        await self._sync_workspace_originals(session_model)
 
         return await LinsightWorkbenchImpl.init_linsight_config_tools(
             session_version=session_model, llm=self.llm, need_upload=True, file_dir=self.file_dir
@@ -1134,7 +1149,7 @@ class LinsightWorkflowTask:
         from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
 
         # Whether the code interpreter is actually bound this run (it is injected
-        # only when the user selected it). Everything that points the model at it —
+        # through the current user permission policy). Everything that points the model at it —
         # the uploaded-files pointer block and the binary read guard — must stay in
         # lockstep with this flag, or we recreate the "told to call a tool that
         # isn't there" failure mode.

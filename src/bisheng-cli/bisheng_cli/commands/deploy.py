@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO
 
-from bisheng_cli import agent_skills, credentials, packaging, project
+from bisheng_cli import agent_skills, credentials, packaging, project, release_notes
 from bisheng_cli import ignore as ignore_rules
 from bisheng_cli.cli import confirm
 from bisheng_cli.commands import skills
@@ -39,6 +39,7 @@ from bisheng_cli.errors import (
     EXIT_CANCELLED,
     EXIT_OK,
     EXIT_PENDING_ONLINE,
+    EXIT_PLATFORM_TOO_OLD,
     EXIT_REJECTED,
     EXIT_UNKNOWN_CODE,
     EXIT_USAGE,
@@ -162,6 +163,9 @@ class _ProgressReader:
 
 
 def run(args: Any, emitter: Emitter) -> int:
+    notes = release_notes.load_release_notes(
+        getattr(args, "release_notes", None), getattr(args, "release_notes_file", None)
+    )
     profile = credentials.load_selected(args)
     base_url = profile.base_url
     root = project.find_project_root(args.path)
@@ -184,6 +188,8 @@ def run(args: Any, emitter: Emitter) -> int:
                 exit_code=EXIT_OK,
                 data={
                     "dry_run": True,
+                    "has_release_notes": notes is not None,
+                    "release_notes_codepoints": len(notes) if notes else 0,
                     "entry_count": package_stat.entry_count,
                     "compressed_bytes": package_stat.compressed_bytes,
                     "raw_bytes": package_stat.raw_bytes,
@@ -213,9 +219,9 @@ def run(args: Any, emitter: Emitter) -> int:
         }
         try:
             with client:
-                _check_size(client, emitter, package_stat)
+                _check_size(client, emitter, package_stat, notes=notes)
                 _confirm_target(args, emitter, root, base_url, target_app_id)
-                accepted = _upload(client, emitter, args, package_path, package_stat, target_app_id)
+                accepted = _upload(client, emitter, args, package_path, package_stat, target_app_id, notes=notes)
                 package_path.unlink(missing_ok=True)
                 _accept(emitter, root, base_url, accepted, state)
                 _ensure_agents_pointer(args, emitter, root, base_url)
@@ -263,7 +269,9 @@ def _ensure_agents_pointer(args: Any, emitter: Emitter, root: Path, base_url: st
         emitter.debug(f"AGENTS.md 指针未写入：{outcome.get('reason')}")
 
 
-def _check_size(client: PlatformClient, emitter: Emitter, package_stat: packaging.PackageStat) -> None:
+def _check_size(
+    client: PlatformClient, emitter: Emitter, package_stat: packaging.PackageStat, *, notes: str | None = None
+) -> packaging.Limits:
     """Self-check against the server's ceilings — advisory when they are unknown.
 
     `deploy-limits` failing must never be able to block a deploy: the endpoint
@@ -271,12 +279,23 @@ def _check_size(client: PlatformClient, emitter: Emitter, package_stat: packagin
     kill the main flow is worse than no check. The server's 16201 stays the
     authority either way.
     """
-    limits = packaging.fetch_limits(client)
+    limits = packaging.fetch_limits(client, require_release_notes=notes is not None)
+    if notes is not None and (
+        limits.release_notes_version != release_notes.CONTRACT_VERSION
+        or not limits.release_notes_max_codepoints
+        or limits.release_notes_max_codepoints < len(notes)
+    ):
+        raise CliError(
+            release_notes.message("unsupported"),
+            exit_code=EXIT_PLATFORM_TOO_OLD,
+            next_step=release_notes.message("next_step"),
+        )
     if limits.degraded:
         emitter.warn("未能从平台取到包体上限，已按内置默认值提示并继续上传；是否超限最终由平台判定。")
     else:
         packaging.check_limits(package_stat, limits)
     emitter.info(packaging.format_size_report(package_stat, limits))
+    return limits
 
 
 def _confirm_target(args: Any, emitter: Emitter, root: Path, base_url: str, app_id: str | None) -> None:
@@ -309,6 +328,8 @@ def _upload(
     package_path: Path,
     package_stat: packaging.PackageStat,
     app_id: str | None,
+    *,
+    notes: str | None = None,
 ) -> dict[str, Any]:
     """POST the package; on 16229, show the structure change and ask once.
 
@@ -325,7 +346,9 @@ def _upload(
     """
     confirmed = bool(args.confirm_schema_change)
     try:
-        return _post_package(client, emitter, package_path, package_stat, app_id, confirm_schema_change=confirmed)
+        return _post_package(
+            client, emitter, package_path, package_stat, app_id, confirm_schema_change=confirmed, notes=notes
+        )
     except CliError as exc:
         if exc.code != SCHEMA_CHANGE_UNCONFIRMED or confirmed:
             raise
@@ -351,7 +374,9 @@ def _upload(
                 hints=exc.hints,
             ) from exc
         emitter.info("已确认结构变更，重新上传同一个包…")
-        return _post_package(client, emitter, package_path, package_stat, app_id, confirm_schema_change=True)
+        return _post_package(
+            client, emitter, package_path, package_stat, app_id, confirm_schema_change=True, notes=notes
+        )
 
 
 def _post_package(
@@ -362,10 +387,13 @@ def _post_package(
     app_id: str | None,
     *,
     confirm_schema_change: bool,
+    notes: str | None = None,
 ) -> dict[str, Any]:
     fields: dict[str, str] = {"confirm_schema_change": "true" if confirm_schema_change else "false"}
     if app_id:
         fields["app_id"] = app_id
+    if notes is not None:
+        fields["release_notes"] = notes
     emitter.info(f"开始上传（{package_stat.entry_count} 个条目，sha256 {package_stat.sha256[:12]}…）")
     with open(package_path, "rb") as fh:
         reader = _ProgressReader(fh, package_stat.compressed_bytes, emitter)

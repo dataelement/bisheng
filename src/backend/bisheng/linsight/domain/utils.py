@@ -798,6 +798,8 @@ async def check_and_terminate_incomplete_tasks(node_id: str) -> None:
 
             tasks_to_terminate = []
             user_ids_to_rollback = set()
+            # Sessions whose owner still had a heartbeat key on the first look.
+            looks_alive: list[tuple[Any, str]] = []
 
             for session in incomplete_tasks:
                 session_id = session.id
@@ -806,25 +808,34 @@ async def check_and_terminate_incomplete_tasks(node_id: str) -> None:
                 owner_key = f"linsight:task:owner:{session_id}"
                 owner_node_id = await redis_client.aget(owner_key)
 
-                should_terminate = False
-
                 if not owner_node_id:
                     # No owned node, task needs to be cleaned up.
-                    should_terminate = True
                     logger.warning(f"Task {session_id} has no owner in Redis. Marking as failed.")
-                else:
-                    # There is an owned node, check if the node is alive
-                    is_alive = await node_manager.is_node_alive(owner_node_id)
-                    if not is_alive:
-                        # Node is dead, task needs to be cleaned up.
-                        should_terminate = True
-                        logger.warning(f"Task {session_id} owner {owner_node_id} is dead. Marking as failed.")
-                    else:
-                        # Node is alive, skip cleanup
-                        logger.info(f"Task {session_id} is running on active node {owner_node_id}. Skipping.")
-
-                if should_terminate:
                     tasks_to_terminate.append(session_id)
+                    user_ids_to_rollback.add(session.user_id)
+                elif not await node_manager.is_node_alive(owner_node_id):
+                    # Node is dead, task needs to be cleaned up.
+                    logger.warning(f"Task {session_id} owner {owner_node_id} is dead. Marking as failed.")
+                    tasks_to_terminate.append(session_id)
+                    user_ids_to_rollback.add(session.user_id)
+                else:
+                    looks_alive.append((session, owner_node_id))
+
+            # A heartbeat key outlives its node by up to one TTL. A replacement pod
+            # usually starts within seconds of the old one being killed (eviction:
+            # old pod ended 15:07:20, new one started 15:07:24), so on the first
+            # look the dead node's key is still there and its tasks were skipped
+            # for good: this sweep runs once, and nothing else ever fails them.
+            # Wait one TTL and look again. A live node refreshes its key every
+            # ``interval`` seconds and is still there; a dead node's key is gone.
+            if looks_alive:
+                await asyncio.sleep(node_manager.ttl + 1)
+                for session, owner_node_id in looks_alive:
+                    if await node_manager.is_node_alive(owner_node_id):
+                        logger.info(f"Task {session.id} is running on active node {owner_node_id}. Skipping.")
+                        continue
+                    logger.warning(f"Task {session.id} owner {owner_node_id} stopped its heartbeat. Marking as failed.")
+                    tasks_to_terminate.append(session.id)
                     user_ids_to_rollback.add(session.user_id)
 
             # 3. Batch-terminate only the sessions selected above.

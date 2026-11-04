@@ -104,6 +104,17 @@ class AppStorageService:
                     raise AppStorageError("unauthorized", "Attachment handle no longer active", 401)
             else:
                 op = await self.repo.get(RuntimeOperation, binding.operation_id)
+                if op is not None and op.kind == "preview":
+                    from bisheng.app_publish.application.preview_access import resolve_preview_context
+
+                    context = await resolve_preview_context(operation_id=op.id)
+                    if context is None or (
+                        context.tenant_id,
+                        context.app_id,
+                        context.version_id,
+                        "preview:" + context.session_id,
+                    ) != (binding.tenant_id, binding.app_id, binding.version_id, binding.namespace):
+                        raise AppStorageError("unauthorized", "Preview handle refused", 401)
                 if (
                     op is None
                     or op.payload.get("cancel_requested")
@@ -130,6 +141,18 @@ class AppStorageService:
                     or routes[0].operation_id != binding.operation_id
                 ):
                     raise AppStorageError("unauthorized", "Attachment handle no longer active", 401)
+
+            else:
+                # Revalidate at the final object operation as well as initial token admission.
+                op = await self.repo.get(RuntimeOperation, current.operation_id)
+                if op is None or op.payload.get("cancel_requested"):
+                    raise AppStorageError("unauthorized", "Preview handle expired", 401)
+                if op.kind == "preview":
+                    from bisheng.app_publish.application.preview_access import resolve_preview_context
+
+                    context = await resolve_preview_context(operation_id=op.id)
+                    if context is None or "preview:" + context.session_id != current.namespace:
+                        raise AppStorageError("unauthorized", "Preview handle expired", 401)
 
     @staticmethod
     def object_key(binding, key):

@@ -21,6 +21,47 @@ NOTE: several other call sites still inline their own
 
 import re
 
+
+class ThinkBlockStreamFilter:
+    """Discard inline reasoning without leaking tags split across deltas."""
+
+    _tag = re.compile(r"</?think\s*>", re.IGNORECASE)
+
+    def __init__(self):
+        self._buffer = ""
+        self._inside = False
+
+    def feed(self, text: str) -> str:
+        self._buffer += text
+        visible = []
+        while self._buffer:
+            start = self._buffer.find("<")
+            if start != 0:
+                end = start if start > 0 else len(self._buffer)
+                if not self._inside:
+                    visible.append(self._buffer[:end])
+                self._buffer = self._buffer[end:]
+                continue
+            match = self._tag.match(self._buffer)
+            if match:
+                self._inside = not self._buffer.startswith("</")
+                self._buffer = self._buffer[match.end() :]
+                continue
+            lowered = self._buffer.lower()
+            if any(tag.startswith(lowered) for tag in ("<think", "</think")) or re.fullmatch(r"</?think\s*", lowered):
+                break
+            if not self._inside:
+                visible.append("<")
+            self._buffer = self._buffer[1:]
+        return "".join(visible)
+
+    def flush(self) -> str:
+        # An unfinished tag or reasoning block is withheld, never shown at EOF.
+        self._buffer = ""
+        self._inside = False
+        return ""
+
+
 # A complete reasoning block. Non-greedy so multiple blocks are each removed
 # (the legacy copies use greedy ``.*``, which over-deletes across blocks).
 _THINK_BLOCK_RE = re.compile(r"<think\s*>.*?</think\s*>", re.IGNORECASE | re.DOTALL)

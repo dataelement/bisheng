@@ -1,5 +1,7 @@
 # F086：Vibe 开源托管与应用交付演进
 
+> **当前后继合同（F114，2026-10-30，本地实现，未部署）**：Docker 与 K8s 只接受运行控制协议 v2；旧 inventory/import/upgrade/rebind 退役，不保留双协议回退。v2 共用构建/SQLite/SDK/附件、bundle/image/source-image 保留，私有材料/快照改用当前 edit。 详见 [F114 已确认规格](../114-vibe-permission-actions/spec.md) 与 [验证记录](../114-vibe-permission-actions/verification.md)。下文保留原 Feature 的 AC 编号、当时口径及历史证据，不将历史通过记录当作 F114 部署证明。
+
 > 本文只定义需求、验收和边界。运行进程、协议字段、数据模型、镜像及挂载实现进入 design.md。
 
 **状态**：4 项发现已修订，第二轮规格自审通过；按用户“修复这4个问题，更新spec并重新评审，通过后继续推进SDD流程”的条件授权进入设计；用户已确认设计，代码和Docker主链路验证已完成，完整交付门见[live-validation.md](./live-validation.md)。

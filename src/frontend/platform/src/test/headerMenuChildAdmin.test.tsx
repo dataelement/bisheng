@@ -62,7 +62,7 @@ describe("HeaderMenu for Child Admin", () => {
     expect(screen.queryByText("build.dsh")).toBeNull()
   })
 
-  it("navigates with the text-only segments and synchronizes selection", async () => {
+  it("navigates with labeled icon segments and synchronizes selection", async () => {
     function CurrentPath() {
       return <output>{useLocation().pathname}</output>
     }
@@ -76,7 +76,9 @@ describe("HeaderMenu for Child Admin", () => {
       </MemoryRouter>,
     )
     expect(screen.getByRole("radio", { name: "build.app" })).toBeChecked()
-    expect(container.querySelector("svg")).toBeNull()
+    const icons = container.querySelectorAll("svg")
+    expect(icons).toHaveLength(3)
+    icons.forEach(icon => expect(icon).toHaveAttribute("aria-hidden", "true"))
     await user.click(screen.getByRole("radio", { name: "build.tools" }))
     expect(screen.getByText("/build/tools")).toBeInTheDocument()
     expect(screen.getByRole("radio", { name: "build.tools" })).toBeChecked()

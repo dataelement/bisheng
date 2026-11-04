@@ -66,8 +66,8 @@ export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
         <div className="flex flex-1 overflow-hidden">
           {/* left: scenario list */}
           <aside className="flex w-[268px] shrink-0 flex-col border-r border-border bg-card">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <span className="text-sm font-semibold text-foreground">{t("approvalPage.scenarioSection")}</span>
+            <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
+              <span className="text-base font-semibold text-foreground">{t("approvalPage.scenarioSection")}</span>
               <Button size="small" variant="outlined" type="button" onClick={() => setShowAddScenario(true)} color="default">
                 <Outlined.Plus size={12} />
                 {t("approvalPage.add")}
@@ -140,7 +140,7 @@ export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
             ) : (
               <div className="flex flex-col gap-0">
                 {/* scenario header */}
-                <div className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
+                <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-6">
                   <div className="flex items-center gap-3">
                     <span className="text-base font-semibold text-foreground">{selectedScenario.scenario_name}</span>
                     <StatusBadge enabled={selectedScenario.enabled} />

@@ -1,4 +1,5 @@
-import { Button } from "@bisheng/ui";
+import { Button, Pagination } from "@bisheng/ui";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input } from "@bisheng/ui";
 import { notification } from "@bisheng/ui";
@@ -15,6 +16,7 @@ const MAX_UPLOAD = 8 * 1024 * 1024;
 
 export function WorkbenchMarketSection() {
     const { t } = useTranslation("dshMarket");
+    const paginationLocale = usePaginationLocale();
     const [tenant, setTenant] = useState<number | null>(null);
     const [page, setPage] = useState(1);
     const [data, setData] = useState<{ data: MarketWorkbench[]; total: number }>({ data: [], total: 0 });
@@ -139,9 +141,15 @@ export function WorkbenchMarketSection() {
             </tr>)}</tbody></table>
             {!data.data.length && <p className="p-10 text-center text-muted-foreground">{t("workbenchEmpty")}</p>}
         </div>}
-        <div className="flex items-center justify-end gap-4"><span>{t("workbenchTotal", { count: data.total })}</span>
-            {data.total > 20 && <><Button variant="outlined" color="default" disabled={page === 1 || loading} onClick={() => setPage(value => value - 1)}>{t("previous")}</Button>
-                <span>{page}</span><Button variant="outlined" color="default" disabled={page * 20 >= data.total || loading} onClick={() => setPage(value => value + 1)}>{t("next")}</Button></>}</div>
+        <Pagination
+            locale={paginationLocale}
+            current={page}
+            pageSize={20}
+            total={data.total}
+            showTotal
+            disabled={loading}
+            onChange={(nextPage) => setPage(nextPage)}
+        />
         {imports.some(job => job.status !== "completed") && <section className="border rounded-lg p-4 space-y-3">
             <h3 className="font-semibold">{t("imports")}</h3>
             {imports.filter(job => job.status !== "completed").map(job => <div key={job.id} className="flex gap-3 items-center text-sm">

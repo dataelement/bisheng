@@ -1,4 +1,4 @@
-import { Button, SearchInput, Select, Slider, Textarea } from '@bisheng/ui';
+import { Pagination, Button, SearchInput, Select, Slider, Textarea } from '@bisheng/ui';
 import { Accordion,AccordionContent,AccordionItem,AccordionTrigger } from "@/components/bs-ui/accordion";
 import { Checkbox,RadioGroup,Radio as RadioGroupItem,Switch,Tag } from "@bisheng/ui";
 
@@ -8,7 +8,7 @@ import { Card,CardContent,CardDescription,CardFooter,CardHeader,CardTitle } from
 
 
 import { Label } from "@/components/bs-ui/label";
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
@@ -38,6 +38,7 @@ const invoices = [
 
 export default function Example(params) {
     const { t } = useTranslation(); // Initialize translation hook
+    const paginationLocale = usePaginationLocale();
     const selectLabels = useSelectLabels();
     const fruitOptions = ['apple', 'banana', 'blueberry', 'grapes', 'pineapple']
         .map((fruit) => ({ value: fruit, label: t(`example.${fruit}`), group: t('example.fruits') }));
@@ -132,7 +133,7 @@ export default function Example(params) {
                     </TableRow>
                 </TableFooter>
             </Table>
-            <AutoPagination page={1} pageSize={10} total={100} />
+            <Pagination locale={paginationLocale} defaultCurrent={1} pageSize={10} total={100} />
         </div>
         <Label>{t('example.calendar')}</Label>
         <div className="flex gap-2 mb-6">

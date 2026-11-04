@@ -267,12 +267,12 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                         <div>
                             <img
                                 src={getBrandAssetUrl("headerLogoLight", "/assets/bisheng/login-logo-small.png")}
-                                className="block w-[114px] h-[36px] m-auto mt-[140px] dark:w-[124px] dark:pr-[10px] dark:hidden"
+                                className="block w-[114px] h-[36px] m-auto mt-[96px] dark:w-[124px] dark:pr-[10px] dark:hidden"
                                 alt=""
                             />
                             <img
                                 src={getBrandAssetUrl("headerLogoDark", "/assets/bisheng/logo-small-dark.png")}
-                                className="w-[114px] h-[36px] m-auto mt-[140px] dark:w-[124px] dark:pr-[10px] dark:block hidden"
+                                className="w-[114px] h-[36px] m-auto mt-[96px] dark:w-[124px] dark:pr-[10px] dark:block hidden"
                                 alt=""
                             />
                             <span className="block w-fit m-auto font-normal text-[14px] text-tx-color mt-[24px]">

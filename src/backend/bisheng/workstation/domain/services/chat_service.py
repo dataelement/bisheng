@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 import time
 from datetime import datetime
 from typing import Annotated, Any
@@ -49,7 +50,6 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.errcode.knowledge import (
-    KnowledgeFileNotSupportedError,
     KnowledgeMediaNoRecognizableAudioError,
     KnowledgeMediaTranscriptionError,
 )
@@ -61,11 +61,12 @@ from bisheng.common.errcode.workstation import (
     LLMRateLimitError,
 )
 from bisheng.common.image_view import (
+    ImageIdLineConverter,
     ImageRegistry,
     VisionToolBindWrapper,
     annotate,
-    missing_viewed_markdown,
 )
+from bisheng.common.image_view.annotate import has_markdown_image
 from bisheng.common.image_view.loop import IMAGE_VIEW_TOOL_KEY
 from bisheng.common.schemas.telemetry.event_data_schema import (
     ApplicationAliveEventData,
@@ -75,6 +76,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import (
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.llm_error_classifier import ErrorType, label_error, unwrap
 from bisheng.common.utils.message_content import extract_message_reasoning, extract_message_text
+from bisheng.common.utils.think_tags import ThinkBlockStreamFilter
 from bisheng.core.cache.utils import async_file_download
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.chat_attachment import promote_chat_attachments
@@ -124,7 +126,7 @@ NO_SPEECH_PLACEHOLDER = "(No recognizable speech was detected in this audio/vide
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
 
 
-async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: int):
+async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: int, *, image_storage=None):
     """Extract uploaded file content for prompt building."""
     from bisheng.api.v1.schemas import FileProcessBase
     from bisheng.knowledge.rag.temp_file_pipeline import TempFilePipeline
@@ -141,12 +143,11 @@ async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: 
         local_file_path=filepath_local,
         file_name=file_name,
         file_rule=file_rule,
+        image_storage=image_storage,
     )
     try:
         result = await pipeline.arun()
         raw_texts = [doc.page_content for doc in result.documents]
-    except KnowledgeFileNotSupportedError:
-        raw_texts = []
     except KnowledgeMediaNoRecognizableAudioError:
         # A clip with no speech in it is not a failure — the user attached a
         # file, not a transcription request. Failing the turn would throw away
@@ -168,6 +169,11 @@ async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: 
 async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
     """Initialize chat session, message, and llm."""
     ws_config = await WorkStationService.aget_config()
+    from bisheng.common.services.config_service import settings as enterprise_settings
+    from bisheng.dsh.domain.services.model_catalog import authorized_workbench_models
+
+    if enterprise_settings.dsh.enabled:
+        ws_config.models = await authorized_workbench_models(login_user.user_id)
     model_info = next((model for model in ws_config.models if model.id == data.model), None)
     if not model_info:
         raise ValueError(f"Model with id '{data.model}' not found.")
@@ -423,6 +429,31 @@ def _annotate_retrieved_chunk(
     if image_registry is None:
         return chunk
     return annotate(chunk, image_registry)
+
+
+def _close_quietly(executor: Any) -> None:
+    try:
+        executor.close()
+    except Exception:
+        logger.exception("Agent chat: failed to stop the code executor of an interrupted turn")
+
+
+def _stop_code_executors(tools: list[BaseTool]) -> None:
+    """Stop sandbox runs of a torn-down turn without blocking the event loop.
+
+    A cancelled turn leaves its code-interpreter thread blocked on the runner's
+    exec call. ``ContainerExecutor.close`` deletes the session, and the runner
+    then kills the running process group, so the code does not run on to its
+    own timeout. Each close runs on its own daemon thread: the cancel path must
+    not wait for an HTTP round trip.
+    """
+    from bisheng_langchain.gpts.tools.code_interpreter.container_executor import ContainerExecutor
+
+    for tool in tools:
+        inner = getattr(tool, "tool_instance", tool)
+        executor = getattr(inner, "executor", None)
+        if isinstance(executor, ContainerExecutor):
+            threading.Thread(target=_close_quietly, args=(executor,), name="code-executor-stop", daemon=True).start()
 
 
 def _attach_kb_image_stage(tool: BaseTool, stage: KbImageStage) -> None:
@@ -795,6 +826,11 @@ async def _build_knowledge_search_tool(
     if not knowledge_bases_info:
         return None
 
+    selected_tag_filters = {
+        int(kb["id"]): int(kb["selected_tag_id"])
+        for kb in knowledge_bases_info
+        if kb.get("source") == "space" and kb.get("selected_tag_id") is not None
+    }
     kb_id_whitelist = [str(kb["id"]) for kb in knowledge_bases_info]
     # Space-type KBs skip auth check in queryChunksFromDB; org-type go
     # through KnowledgeDao.ajudge_knowledge_permission. Preserve the
@@ -1022,12 +1058,19 @@ async def _build_knowledge_search_tool(
             kb_ids_int = [int(k) for k in kb_id_whitelist]
             logger.info(f"[search_kb] hallucinated kb_ids; falling back to whitelist={kb_ids_int}")
 
+        # Fixed user tags are enforced before retrieval; model filters cannot replace them.
+        model_filters = [
+            item
+            for item in ((filters.knowledge_base_filters if filters else None) or [])
+            if str(item.knowledge_base_id).isdigit()
+            if int(item.knowledge_base_id) not in selected_tag_filters
+        ]
         # Resolve tag filters into {kb_id: allowed_file_ids}. Applied as a
         # post-retrieval filter on the docs returned by queryChunksFromDB so
         # we don't have to plumb file-id filters into the milvus/es layer.
         try:
             file_filter = await _resolve_tag_filter_file_ids(
-                (filters.knowledge_base_filters if filters else None) or [],
+                model_filters,
             )
         except Exception as exc:
             logger.warning(f"[search_kb] tag resolution failed: {exc}")
@@ -1044,6 +1087,11 @@ async def _build_knowledge_search_tool(
                 use_knowledge_param=UseKnowledgeBaseParam(
                     knowledge_space_ids=space_bucket,
                     organization_knowledge_ids=org_bucket,
+                    knowledge_space_tag_filters={
+                        space_id: selected_tag_filters[space_id]
+                        for space_id in space_bucket
+                        if space_id in selected_tag_filters
+                    },
                 ),
                 max_token=max_token,
                 login_user=login_user,
@@ -1128,6 +1176,9 @@ async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
     ukb = data.use_knowledge_base
     if not ukb:
         return []
+    from bisheng.knowledge.domain.services.knowledge_space_tag_filter_service import KnowledgeSpaceTagFilterService
+
+    await KnowledgeSpaceTagFilterService().validate_selection(ukb.knowledge_space_tag_filters)
     org_ids = list(ukb.organization_knowledge_ids or [])
     space_ids = list(ukb.knowledge_space_ids or [])
     ids = org_ids + space_ids
@@ -1198,6 +1249,11 @@ async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
             "description": kb.description or "",
             "tags": tags_by_kb.get(kb.id, []),
             "source": "space" if kb.id in space_id_set else "organization",
+            **(
+                {"selected_tag_id": ukb.knowledge_space_tag_filters[kb.id]}
+                if kb.id in ukb.knowledge_space_tag_filters
+                else {}
+            ),
         }
         for kb in kbs
     ]
@@ -1238,8 +1294,8 @@ async def _prepare_tools(
             continue
         tool_key = tp.get("tool_key") if isinstance(tp, dict) else getattr(tp, "tool_key", None)
         tool_id = tp.get("id") if isinstance(tp, dict) else getattr(tp, "id", None)
-        # Image View stores which visual model to use. Pixel viewing is wired
-        # separately, so loading this row as a LangChain tool always fails.
+        # Retired builtin row. Saved selections may still name it; loading it
+        # as a LangChain tool fails.
         if tool_key == IMAGE_VIEW_TOOL_KEY:
             continue
 
@@ -1349,6 +1405,11 @@ async def _agent_initialize_chat(
       - `overrideParentMessageId` is ignored (regenerate UI removed)
     """
     ws_config = await WorkStationService.aget_config()
+    from bisheng.common.services.config_service import settings as enterprise_settings
+    from bisheng.dsh.domain.services.model_catalog import authorized_workbench_models
+
+    if enterprise_settings.dsh.enabled:
+        ws_config.models = await authorized_workbench_models(login_user.user_id)
     model_info = next((m for m in ws_config.models if m.id == data.model), None)
     if not model_info:
         raise ValueError(f"Model with id '{data.model}' not found.")
@@ -1449,7 +1510,15 @@ _TRUNCATION_NOTICE = (
 )
 
 
-async def _extract_doc_text(filepath: str, filename: str, invoke_user_id: int) -> str:
+async def _extract_doc_text(
+    filepath: str,
+    filename: str,
+    invoke_user_id: int,
+    *,
+    chat_id: str | None = None,
+    source_url: str = "",
+    tenant_id: int = 0,
+) -> str:
     """Extract one attachment's text, turning a parser failure into a domain error.
 
     Without this the raw ``EtlException`` reached the generic handler and the user
@@ -1457,11 +1526,40 @@ async def _extract_doc_text(filepath: str, filename: str, invoke_user_id: int) -
     filename plus the parser's own message to the chat bubble, and lets a throttled
     OCR service be told apart from a genuinely unparseable file.
     """
+    # This helper is the OCR path; vision-capable images bypass it entirely.
+    if filename.rsplit(".", 1)[-1].lower() in {*VISUAL_MODEL_FILE_TYPES, "bmp"}:
+        from bisheng.common.services.config_service import settings
+
+        knowledge_config = await settings.async_get_knowledge()
+        if not knowledge_config.image_parser_enabled:
+            raise ChatFileParseError(
+                error_type="file_parse_failed",
+                detail=f"{filename}: image parsing is not configured; select a vision-capable model or configure an image parser",
+                filename=filename,
+            )
     try:
+        image_storage = None
+        if chat_id:
+            from bisheng.chat_session.domain.services.workflow_file_service import WorkflowFileService
+
+            # The existing attachment store also accepts daily sessions (empty flow_id).
+            # Its manifests retain images, refresh signed links and own deletion cleanup.
+            image_storage = await asyncio.to_thread(
+                WorkflowFileService.image_storage,
+                chat_id=chat_id,
+                user_id=invoke_user_id,
+                tenant_id=tenant_id,
+                workflow_id="",
+                run_id=uuid4().hex,
+                node_id="daily-attachment",
+                source_url=source_url,
+                file_name=filename,
+            )
         return await get_file_content(
             filepath_local=filepath,
             file_name=filename,
             invoke_user_id=invoke_user_id,
+            image_storage=image_storage,
         )
     except Exception as exc:
         logger.exception(f"[process_agent_files] parse failed for {filename}")
@@ -1473,7 +1571,7 @@ async def _extract_doc_text(filepath: str, filename: str, invoke_user_id: int) -
         ) from exc
 
 
-async def _process_agent_files(data: APIChatCompletion, model_info, login_user, ws_config):
+async def _process_agent_files(data: APIChatCompletion, model_info, login_user, ws_config, *, conversation_id=None):
     """Split uploaded files into visual (image base64 data URLs) and doc
     (extracted text chunks concatenated up to maxTokens).
 
@@ -1492,12 +1590,21 @@ async def _process_agent_files(data: APIChatCompletion, model_info, login_user, 
     downloaded_files = await asyncio.gather(*download_tasks)
 
     visual_tasks, doc_tasks = [], []
-    for filepath, filename in downloaded_files:
+    for file_item, (filepath, filename) in zip(valid_files, downloaded_files, strict=True):
         ext = filename.split(".")[-1].lower()
         if model_info.visual and ext in VISUAL_MODEL_FILE_TYPES:
             visual_tasks.append(read_image_as_data_url(filepath=filepath, filename=filename))
         else:
-            doc_tasks.append(_extract_doc_text(filepath, filename, login_user.user_id))
+            image_context = (
+                {
+                    "chat_id": conversation_id,
+                    "source_url": file_item["filepath"],
+                    "tenant_id": workbench_tenant_id(login_user),
+                }
+                if conversation_id
+                else {}
+            )
+            doc_tasks.append(_extract_doc_text(filepath, filename, login_user.user_id, **image_context))
     visual_results, doc_results = await asyncio.gather(
         asyncio.gather(*visual_tasks),
         asyncio.gather(*doc_tasks),
@@ -1684,8 +1791,18 @@ async def _agent_stream_chat_completion(
         # F075: the model cites with [Sn] handles from the session table shared
         # with the task mode; answer text is converted before it is stored or sent.
         citation_scope = DailyCitationScope(conversation_id)
-        stream_converter = HandleStreamConverter(citation_scope.handles)
         image_registry = ImageRegistry()
+        # A line holding only img#N is the model choosing to show that picture.
+        stream_converter = ImageIdLineConverter(image_registry, HandleStreamConverter(citation_scope.handles))
+        inline_thinking_filter = ThinkBlockStreamFilter()
+
+        def feed_answer(text: str) -> str:
+            return stream_converter.feed(inline_thinking_filter.feed(text))
+
+        def flush_answer() -> str:
+            inline_thinking_filter.flush()
+            return stream_converter.flush()
+
         from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
         from bisheng.common.image_view.loop import image_view_configured, resolve_image_view_llm
 
@@ -1756,23 +1873,12 @@ async def _agent_stream_chat_completion(
                             ev["duration_ms"] = max(0, now_ms - ev["started_at"])
             inflight_tool_idx.clear()
 
-        def splice_viewed_image_markdown() -> str:
-            """Append `![](url)` for images the model already viewed.
-
-            Weak VL models often say they will show img#N without emitting the
-            original markdown the chat bubble needs to render.
-            """
-            nonlocal final_msg
-            extra = missing_viewed_markdown(final_msg, image_registry)
-            if not extra:
-                return ""
-            logger.info("image_view splice markdown viewed_ids={}", image_registry.viewed_ids())
-            final_msg += extra
-            if events and events[-1].get("type") == "text":
-                events[-1]["content"] = events[-1].get("content", "") + extra
-            else:
-                events.append({"type": "text", "content": extra.lstrip()})
-            return extra
+        def log_picture_outcome() -> None:
+            """Record whether the model showed a picture; nothing is filled in for it."""
+            if stream_converter.rendered_ids:
+                logger.info("image_view rendered id lines ids={}", stream_converter.rendered_ids)
+            elif image_registry.viewed_ids() and not has_markdown_image(final_msg):
+                logger.info("image_view answer has no picture viewed_ids={}", image_registry.viewed_ids())
 
         def record_answer_text(text: str) -> str:
             """Append converted answer text to the message and return its SSE delta."""
@@ -1848,11 +1954,11 @@ async def _agent_stream_chat_completion(
             persisted = True
             error_flag = True
             error_msg = error_msg or reason
-            pending = stream_converter.flush()
+            pending = flush_answer()
             if pending:
                 record_answer_text(pending)
             finalise_dangling_events()
-            splice_viewed_image_markdown()
+            log_picture_outcome()
             try:
                 citation_items = select_cited_items_sync(citation_collector.list_items(), final_msg)
                 log_citation_audit(
@@ -1888,6 +1994,7 @@ async def _agent_stream_chat_completion(
             is_bot=False,
         )
 
+        langchain_tools: list[BaseTool] = []
         try:
             # ---- Step 1: resolve user-selected KBs ----
             knowledge_bases_info = await _resolve_user_kb_selection(data)
@@ -1945,6 +2052,7 @@ async def _agent_stream_chat_completion(
                 model_info,
                 login_user,
                 ws_config,
+                conversation_id=conversation_id,
             )
             if merged_files and any(
                 merged.get("cover_filepath") and not (orig or {}).get("cover_filepath")
@@ -2141,7 +2249,7 @@ async def _agent_stream_chat_completion(
                                     {"duration_ms": d},
                                     conversation_id,
                                 )
-                            text = stream_converter.feed(text)
+                            text = feed_answer(text)
                             if not text:
                                 continue
                             yield record_answer_text(text)
@@ -2165,7 +2273,7 @@ async def _agent_stream_chat_completion(
 
                         # A text run ends here: release whatever the handle
                         # converter was still holding back.
-                        pending = stream_converter.flush()
+                        pending = flush_answer()
                         if pending:
                             yield record_answer_text(pending)
                             if scanner:
@@ -2331,7 +2439,7 @@ async def _agent_stream_chat_completion(
                                 {"duration_ms": d},
                                 conversation_id,
                             )
-                        text = stream_converter.feed(text)
+                        text = feed_answer(text)
                         if not text:
                             continue
                         yield record_answer_text(text)
@@ -2349,7 +2457,7 @@ async def _agent_stream_chat_completion(
             # Release whatever the handle converter was still holding back.
             # Inside the try: a client hang-up on this yield must still reach
             # the interruption branch that persists the turn.
-            pending = stream_converter.flush()
+            pending = flush_answer()
             if pending:
                 yield record_answer_text(pending)
                 if scanner:
@@ -2367,7 +2475,14 @@ async def _agent_stream_chat_completion(
             error_flag = True
             error_msg = str(exc)
             logger.exception("Agent chat BaseErrorCode")
-            yield exc.to_sse_event_instance_str()
+            # Out of platform credits: tag the type so the bubble renders the
+            # credit card (who to ask, when it resets) rather than the bare line.
+            if label_error(exc) == ErrorType.CREDIT_EXHAUSTED:
+                yield exc.to_sse_event_instance_str(
+                    data={"exception": str(exc), "error_type": ErrorType.CREDIT_EXHAUSTED.value, "detail": str(exc)}
+                )
+            else:
+                yield exc.to_sse_event_instance_str()
         except Exception as exc:
             error_flag = True
             error_msg = str(exc)
@@ -2395,13 +2510,14 @@ async def _agent_stream_chat_completion(
             # the conversation reloads showing only the question, even though the
             # user watched a full answer stream in.
             logger.warning("Agent chat stream interrupted; persisting partial answer")
+            _stop_code_executors(langchain_tools)
             persist_interrupted_turn("stream interrupted")
             raise
 
         # Error paths skip the in-try flush above; keep the held-back tail in
         # the stored answer (nothing is yielded out here — a client hang-up on
         # a yield outside the try would lose the whole turn).
-        pending = stream_converter.flush()
+        pending = flush_answer()
         if pending:
             record_answer_text(pending)
 
@@ -2409,14 +2525,7 @@ async def _agent_stream_chat_completion(
         # mid-reasoning or mid-tool).
         finalise_dangling_events()
 
-        extra_images = splice_viewed_image_markdown()
-        if extra_images and not error_flag:
-            yield _sse_resp(
-                "agent_answer",
-                "stream",
-                {"msg": extra_images},
-                conversation_id,
-            )
+        log_picture_outcome()
 
         if scanner:
             hit = scanner.finish()
@@ -2466,6 +2575,15 @@ async def _agent_stream_chat_completion(
         )
         yield _sse_resp("processing", "close", "", conversation_id)
 
+        # Schedule BEFORE final: the client closes the stream on that event.
+        # Retain the task so disconnecting cannot cancel conversation naming.
+        if is_new_conv or (conversation.name in (None, "", "New Chat")):
+            title_task = asyncio.create_task(
+                gen_title(data.text or "", bisheng_llm, conversation_id, login_user, request)
+            )
+            _BACKGROUND_TASKS.add(title_task)
+            title_task.add_done_callback(_BACKGROUND_TASKS.discard)
+
         # Terminal `final` sentinel so the frontend SSE hook's onEnd() fires
         # reliably (it listens for `data.final != null`). Without this the send
         # button stays stuck in "stop" state until the TCP stream closes.
@@ -2479,16 +2597,6 @@ async def _agent_stream_chat_completion(
         }
         yield f"data: {json.dumps(final_payload, ensure_ascii=False)}\n\n"
 
-        # Title generation runs in the background (fire-and-forget) so it survives
-        # the frontend closing this stream on `final`. The client then reads the
-        # title via the gen_title poll endpoint, which waits until the background
-        # task has persisted a real name (slow models take >5s).
-        if is_new_conv or (conversation.name in (None, "", "New Chat")):
-            title_task = asyncio.create_task(
-                gen_title(data.text or "", bisheng_llm, conversation_id, login_user, request)
-            )
-            _BACKGROUND_TASKS.add(title_task)
-            title_task.add_done_callback(_BACKGROUND_TASKS.discard)
         await log_telemetry_events(str(login_user.user_id), conversation_id, start_time)
 
     async def event_stream():
@@ -2541,12 +2649,8 @@ async def stream_chat_completion(
     """
     if data.task_mode:
         return await _task_mode_stream_completion(request, data, login_user)
-    return await _agent_stream_chat_completion(request, data, login_user, session_subject)
-
-
-# Upper bound for in-stream title generation (task mode). Matches the gen_title
-# poll endpoint deadline so a hung LLM can't hold the handoff stream open forever.
-_TITLE_GEN_TIMEOUT_S = 30.0
+    daily_data = data.model_copy(update={"skills": []})
+    return await _agent_stream_chat_completion(request, daily_data, login_user, session_subject)
 
 
 async def _task_mode_stream_completion(request: Request, data: APIChatCompletion, login_user: UserPayload):
@@ -2611,6 +2715,15 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
         user_id=login_user.user_id,
     )
 
+    # Naming must outlive the short handoff connection. Keep a strong reference
+    # just as in daily mode; the shared generator bounds the model call.
+    if _session.name in (None, "", "New Chat"):
+        title_task = asyncio.create_task(
+            gen_title(data.text or "", title_llm, session_version.session_id, login_user, request)
+        )
+        _BACKGROUND_TASKS.add(title_task)
+        title_task.add_done_callback(_BACKGROUND_TASKS.discard)
+
     async def _handoff_event():
         payload = {
             "event": "linsight_task_handoff",
@@ -2620,42 +2733,6 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
             },
         }
         yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-
-        # Persist the title AFTER the handoff is emitted (so the task panel isn't
-        # blocked on the LLM) but WITHIN this generator — a fire-and-forget
-        # asyncio task would be garbage-collected once this short-lived request
-        # returns, before the LLM call completes, leaving the name as "New Chat".
-        # Task mode has no `final` event, so the stream stays open until this
-        # completes. The client reads the title via the gen_title poll endpoint,
-        # which waits until a real name is persisted (slow models take >5s).
-        #
-        # Bounded by a timeout: a hung LLM would otherwise hold this stream open
-        # forever, leaving the frontend's send button stuck in the streaming
-        # state (onEnd only fires when the server closes the stream). On timeout
-        # we just close — the name keeps its "New Chat" default.
-        try:
-            await asyncio.wait_for(
-                gen_title(
-                    data.text or "",
-                    title_llm,
-                    session_version.session_id,
-                    login_user,
-                    request,
-                ),
-                timeout=_TITLE_GEN_TIMEOUT_S,
-            )
-            persisted = await MessageSessionDao.async_get_one(session_version.session_id)
-            logger.info(
-                f"[TASK_TITLE] done chat_id={session_version.session_id} "
-                f"persisted_name={(persisted.name if persisted else None)!r}"
-            )
-        except TimeoutError:
-            logger.warning(
-                f"[TASK_TITLE] timed out after {_TITLE_GEN_TIMEOUT_S}s "
-                f"chat_id={session_version.session_id}; keeping default name"
-            )
-        except Exception as exc:
-            logger.exception(f"[TASK_TITLE] failed chat_id={session_version.session_id}: {exc}")
 
     return StreamingResponse(_handoff_event(), media_type="text/event-stream")
 

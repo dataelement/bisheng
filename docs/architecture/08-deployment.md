@@ -43,7 +43,6 @@ bisheng-milvus-standalone
 
 | 文件 | 容器名 | 镜像 | 端口 | 用途 |
 |------|--------|------|------|------|
-| `docker-compose-ft.yml` | `bisheng-ft-server` | `dataelement/bisheng-ft:v0.5.0` | 8000 | 模型微调服务，需要 GPU（nvidia driver） |
 | `docker-compose-uns.yml` | `bisheng-unstructured` | `dataelement/bisheng-unstructured:v0.0.3.14` | 10001 | 非结构化文档解析服务 |
 | `docker-compose-office.yml` | `bisheng-office` | `onlyoffice/documentserver:7.1.1` | 8701:80 | OnlyOffice 文档预览与编辑 |
 
@@ -233,26 +232,18 @@ npm start -- --host 0.0.0.0   # 端口 3001，API 代理到 localhost:7860
 
 ## 远程开发工作流
 
-项目支持本地编辑、远程运行的开发模式。代码在本地 Mac 编辑，通过 rsync 同步到远程服务器执行。
+个人开发机用「git 检出 + systemd」部署：目标机上的 `/opt/bisheng` 是真实的 git 检出，部署就是把它收敛到分支头再重启服务，`git rev-parse HEAD` 就是这台机器的版本。
 
-### 同步脚本
+旧的 rsync 同步脚本 `bisheng-sync.sh`（个人本地文件，已被 `.gitignore` 排除）**不要再用来部署**。rsync 只覆盖有改动的文件，目标机上更早落后的文件和已删除的文件都不会被处理，「目标机是否等于某个提交」无法回答。
 
-项目根目录的 `bisheng-sync.sh` 提供三种同步模式：
+### 114（192.168.106.114）
 
-| 命令 | 说明 |
-|------|------|
-| `./bisheng-sync.sh up` | 本地代码推送到远程服务器 |
-| `./bisheng-sync.sh down` | 远程代码拉取到本地 |
-| `./bisheng-sync.sh watch` | 监听本地文件变化，自动推送到远程 |
-
-### 日常流程
-
-1. 终端 A 常驻 `./bisheng-sync.sh watch`，监听文件变化自动同步
-2. 本地 IDE（Claude Code / Cursor 等）编辑 `/Users/lilu/Projects/bisheng` 下的代码
-3. 改动自动推送到远程服务器，远程进程加载新代码
-4. 浏览器通过 `http://192.168.106.114:8860` 访问（Nginx 反向代理）
-
-注意：如果未开启 watch 模式，修改代码后需手动执行 `./bisheng-sync.sh up` 推送到远程。
+| 项 | 内容 |
+|----|------|
+| 部署 | `bash /opt/bisheng-ops/deploy.sh`（默认分支 `feat/3.0.0-vibe`）。脚本和运维说明在独立的运维仓 `/opt/bisheng-ops/`，不进产品仓，先读它的 README |
+| 后端 | 6 个 systemd unit（`bisheng-api`、4 个 `bisheng-celery-*`、`bisheng-linsight-worker`）+ `bisheng.target` |
+| 入口 | `http://192.168.106.114:4101/`（管理端，vite 开发服务）、`/workspace/`（用户端静态包）、`/apps/<slug>/`（托管应用） |
+| 托管应用运行时层 | 2026-10-27 起以容器运行（协议 v2 + 宿主隔离），`deploy.sh` 不更新它；换镜像的步骤见运维仓 README。为什么不能再用 systemd 形态见 [14-app-factory-deployment.md](14-app-factory-deployment.md) 「形态二」 |
 
 ## Celery Worker 启动模式
 
@@ -282,17 +273,78 @@ npm start -- --host 0.0.0.0   # 端口 3001，API 代理到 localhost:7860
 
 ## 运维管理脚本
 
-`docker/deploy.sh` 提供常用运维操作的快捷命令：
+`scripts/deploy.sh` 提供常用运维操作的快捷命令：
 
 | 命令 | 用法 | 说明 |
 |------|------|------|
-| `logs` | `./deploy.sh logs backend [-n 200]` | 实时跟踪容器日志 |
-| `version` | `./deploy.sh version [v3.0.0]` | 查看或修改镜像版本号 |
-| `exec` | `./deploy.sh exec backend` | 进入容器 Shell |
-| `update` | `./deploy.sh update [backend]` | 拉取最新镜像并重启 |
-| `restart` | `./deploy.sh restart [backend worker]` | 重启指定服务 |
+| `logs` | `bash scripts/deploy.sh logs backend [-n 200]` | 实时跟踪容器日志 |
+| `version` | `bash scripts/deploy.sh version [v3.0.0]` | 查看或修改镜像版本号 |
+| `exec` | `bash scripts/deploy.sh exec backend` | 进入容器 Shell |
+| `update` | `bash scripts/deploy.sh update [backend]` | 拉取最新镜像并重启 |
+| `restart` | `bash scripts/deploy.sh restart [backend worker]` | 重启指定服务 |
 
 支持的 service 别名：`backend`、`worker`（backend_worker）、`frontend`、`mysql`、`redis`、`es`（elasticsearch）、`minio`、`milvus`、`etcd`。
+
+### Existing-environment updates
+
+Compose image references live in `.env`; use the template when adding new
+settings manually. `BISHENG_SANDBOX_IMAGE` replaces `SANDBOX_IMAGE_TAG`.
+
+Use `bash scripts/deploy.sh` from the matching release checkout to update an existing Compose
+deployment. Keep the release's Compose file, mounted entrypoint and image versions
+together. Run one deployment job in a maintenance window; control ingress and
+queue consumers according to the environment's release procedure.
+
+### Work knowledge retrieval
+
+The backend image must include the Work knowledge registration script from PR
+#2546. Set the intended image version with `bash scripts/deploy.sh version <tag>`,
+then preview the target image against the service's existing configuration:
+
+```bash
+bash scripts/deploy.sh upgrade-preview
+```
+
+This pulls the configured backend image and runs a read-only catalog/permission
+preview in a disposable container with the backend service's mounts, environment
+and network. Existing infrastructure must be running. The preview requires a
+compatible database schema and CURRENT F048 permission runtime; complete their
+version-specific prerequisites when the preview reports an error.
+
+Use the preview's Store ID and the actual audit operator's user ID to update:
+
+```bash
+bash scripts/deploy.sh update --confirm-store-id <store-id> --operator-id <user-id>
+# To update only the backend:
+bash scripts/deploy.sh update backend --confirm-store-id <store-id> --operator-id <user-id>
+```
+
+For an update containing `backend`, the release script:
+
+1. Validates the required confirmation arguments before Docker operations.
+2. Pulls the selected images, starts the backend and waits up to 180 seconds for
+   readiness. The API entrypoint owns the schema migration.
+3. Executes the knowledge tool's registration and permission reconciliation using
+   the running backend's configuration. Apply exits successfully only after the
+   tool exists and its permission projection is CURRENT.
+4. Updates the remaining selected services, waits for readiness, and reports
+   completion after the service status command succeeds.
+
+Any failed stage returns a nonzero exit status and stops subsequent stages. If
+knowledge maintenance fails, the backend has already been updated; maintain the
+release window, resolve the reported error and repeat the same update command.
+Registration and permission reconciliation support repeated execution. The
+deployment script leaves schema/data recovery to the release operator.
+
+Worker-only and frontend-only updates retain their selected service scope.
+`restart` restarts the existing deployment. Direct `docker compose up` and external
+deployment pipelines must explicitly run the same maintenance operation and
+require its successful exit before declaring their release complete; see
+[`src/backend/scripts/README.md`](../../src/backend/scripts/README.md).
+
+After deployment, verify ordinary-user tool discovery and single-space plus K1/K2
+multi-space retrieval with the expected document citations. Deployment checks and
+real-account acceptance are recorded separately.
 
 ## 升级 checklist
 

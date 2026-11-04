@@ -282,6 +282,7 @@ async def _probe_qwen(snapshot: ModelSnapshot, client: httpx.AsyncClient) -> Pro
 PROBES: dict[str, ProbeFn] = {
     LLMServerType.QWEN.value: _probe_qwen,
     LLMServerType.VLLM.value: _probe_openai_models,
+    LLMServerType.OPENAI_COMPATIBLE.value: _probe_openai_models,
     LLMServerType.OPENAI.value: _probe_openai_type,
     LLMServerType.LLAMACPP.value: _probe_llamacpp,
     LLMServerType.OLLAMA.value: _probe_ollama,

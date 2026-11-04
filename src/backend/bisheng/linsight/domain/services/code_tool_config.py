@@ -49,39 +49,38 @@ def build_e2b_file_list(file_dir: str) -> list[WriteEntry]:
 
 
 def bind_code_config_to_workspace(code_config: dict, file_dir: str, workspace_prefix: str | None) -> dict:
-    """Point every executor kind at ``file_dir`` and mirror writes to ``workspace_prefix``.
+    """Point the configured executor at ``file_dir`` and mirror writes to ``workspace_prefix``.
 
     ``code_config`` is the tool's preset extra (``{"type": ..., "config": {...}}``)
-    and is modified in place. The E2B copy-in list is built from ``file_dir`` as it
-    is NOW, so call this only after the workspace has been fully prepared.
+    and is modified in place. Only the executor named by ``type`` is configured;
+    an unknown type raises ``SandboxConfigurationError``. The E2B copy-in list is
+    built from ``file_dir`` as it is NOW, so call this only after the workspace
+    has been fully prepared.
     """
+    from bisheng.common.errcode.sandbox import SandboxConfigurationError
+
     executor_type = code_config.get("type") or "local"
-    config = code_config.setdefault("config", {})
-
-    local = config.setdefault("local", {})
-    local["local_sync_path"] = file_dir
-    # With local isolation on, keep one run dir for the whole run; the caller
-    # releases it (release_local_run) before deleting file_dir.
-    local["keep_run_dir"] = True
-
-    container = config.setdefault("container", {})
-    container["local_sync_path"] = file_dir
-    # Sticky replica + work dir across tool calls of one run.
-    container["keep_session"] = True
-    container["timeout"] = 3600
-
+    if executor_type not in {"local", "container", "e2b"}:
+        raise SandboxConfigurationError()
+    # Normalize the default before the factory selects config[executor_type].
+    code_config["type"] = executor_type
+    executor_config = code_config.setdefault("config", {}).setdefault(executor_type, {})
+    executor_config["local_sync_path"] = file_dir
     if workspace_prefix:
-        # Lets the executor mirror what it writes into the MinIO workspace, so the
-        # file tools and the next run can see code-generated files.
-        local["workspace_prefix"] = workspace_prefix
-        container["workspace_prefix"] = workspace_prefix
-
-    e2b = config.setdefault("e2b", {})
-    e2b["local_sync_path"] = file_dir
-    e2b["timeout"] = 3600
-    e2b["keep_sandbox"] = True
-    # ``file_list`` is the E2B copy-in set, capped by E2B at SIZE_AUTOPUSH. The
-    # container executor copies in at run time, so it needs no pre-scan.
-    if executor_type != "container":
-        e2b["file_list"] = build_e2b_file_list(file_dir)
+        # File tools and follow-up runs read the same durable workspace.
+        executor_config["workspace_prefix"] = workspace_prefix
+    if executor_type == "local":
+        # Keep one run dir for the whole run; the caller releases it
+        # (release_local_run) before deleting file_dir.
+        executor_config["keep_run_dir"] = True
+    elif executor_type == "container":
+        # Sticky replica + work dir across tool calls of one run.
+        executor_config["keep_session"] = True
+        executor_config["timeout"] = 3600
+    elif executor_type == "e2b":
+        executor_config["timeout"] = 3600
+        executor_config["keep_sandbox"] = True
+        # E2B eagerly reads this copy-in set. Local uses the task directory
+        # directly; container copies its working set at run().
+        executor_config["file_list"] = build_e2b_file_list(file_dir)
     return code_config

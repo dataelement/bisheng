@@ -37,6 +37,7 @@ MIGRATED_RESOURCE_TYPES: frozenset[str] = frozenset(
         "workflow",
         "assistant",
         "tool",
+        "linsight_skill",
         "channel",
         "dashboard",
         # F054 hosted applications. Twin of the list in
@@ -45,7 +46,6 @@ MIGRATED_RESOURCE_TYPES: frozenset[str] = frozenset(
         # while the DB already carries `app` scope rows fails the whole release
         # (not just hosted apps).
         "app",
-        "linsight_skill",
     }
 )
 
@@ -59,10 +59,10 @@ ACTION_RESOURCE_SCOPES: Mapping[str, frozenset[str]] = {
             "workflow",
             "assistant",
             "tool",
+            "linsight_skill",
             "channel",
             "dashboard",
             "app",
-            "linsight_skill",
         }
     ),
     "create_folder": frozenset({"knowledge_space", "folder"}),
@@ -71,7 +71,7 @@ ACTION_RESOURCE_SCOPES: Mapping[str, frozenset[str]] = {
     "download": frozenset({"folder", "knowledge_file"}),
     "delete": MIGRATED_RESOURCE_TYPES,
     "share": frozenset({"knowledge_space", "knowledge_file", "workflow", "assistant"}),
-    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool", "app"}),
+    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool", "app", "linsight_skill"}),
     "publish": frozenset({"workflow", "assistant", "app"}),
     "unpublish": frozenset({"workflow", "assistant", "app"}),
 }

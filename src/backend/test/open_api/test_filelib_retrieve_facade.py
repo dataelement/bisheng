@@ -286,7 +286,7 @@ async def test_unreachable_maps_to_26321_http_404(facade_spy, as_principal):
     assert open_api_http_status(exc.value) == 404
 
 
-async def test_permission_unavailable_is_503_with_19002_not_26030(facade_spy, as_principal):
+async def test_permission_unavailable_is_503_with_25021_not_26030(facade_spy, as_principal):
     """design D6: 26030 means "credential validation is down" — wrong thing to say."""
 
     as_principal(_service_account_principal())
@@ -298,7 +298,7 @@ async def test_permission_unavailable_is_503_with_19002_not_26030(facade_spy, as
     from bisheng.open_api.api.exception_handlers import open_api_http_status
 
     assert open_api_http_status(exc.value) == 503
-    assert exc.value.code == 19002
+    assert exc.value.code == 25021
 
 
 # ---------------------------------------------------------------------------

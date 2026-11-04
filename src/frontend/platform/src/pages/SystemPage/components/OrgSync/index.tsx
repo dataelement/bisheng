@@ -1,4 +1,4 @@
-import { Button } from '@bisheng/ui';
+import { Button, Pagination } from '@bisheng/ui';
 import { Tag } from "@bisheng/ui";
 
 
@@ -14,7 +14,8 @@ import { listGatewayOrgSyncLogsApi } from "@/controllers/API/orgSync";
 import { showApiError } from "@/controllers/request";
 import { OrgSyncLog } from "@/types/api/orgSync";
 import { formatIsoDateTime } from "@/util/utils";
-import { useCallback,useEffect,useMemo,useState } from "react";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
+import { useCallback,useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { GatewayLogDetailDialog } from "./GatewayLogDetailDialog";
 
@@ -39,6 +40,7 @@ function hasErrorDetails(log: OrgSyncLog): boolean {
 
 export default function OrgSync() {
   const { t } = useTranslation("orgSync")
+  const paginationLocale = usePaginationLocale()
 
   // Page-local server data — fetched here per C7 (stores must not call HTTP).
   const [gatewayLogs, setGatewayLogs] = useState<OrgSyncLog[]>([])
@@ -61,26 +63,9 @@ export default function OrgSync() {
     fetchGatewayLogs(1)
   }, [fetchGatewayLogs])
 
-  const maxPage = useMemo(
-    () => Math.max(1, Math.ceil(gatewayTotal / PAGE_SIZE)),
-    [gatewayTotal]
-  )
-
-  const goPrev = () => {
-    if (page <= 1) return
-    fetchGatewayLogs(page - 1)
-  }
-
-  const goNext = () => {
-    if (page >= maxPage) return
-    fetchGatewayLogs(page + 1)
-  }
-
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
-      <h2 className="text-lg font-semibold">{t("title")}</h2>
-
-      <div className="rounded-lg border">
+      <div>
         <Table>
           <TableHeader>
             <TableRow>
@@ -144,22 +129,15 @@ export default function OrgSync() {
         </Table>
       </div>
 
-      {gatewayTotal > 0 && (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>
-            {t("pagination.total", { total: gatewayTotal })}{" "}
-            {t("pagination.pageOf", { page, maxPage })}
-          </span>
-          <div className="flex gap-2">
-            <Button size="small" variant="outlined" disabled={page <= 1 || loading} onClick={goPrev} color="default">
-              {t("pagination.prev")}
-            </Button>
-            <Button size="small" variant="outlined" disabled={page >= maxPage || loading} onClick={goNext} color="default">
-              {t("pagination.next")}
-            </Button>
-          </div>
-        </div>
-      )}
+      <Pagination
+        locale={paginationLocale}
+        current={page}
+        pageSize={PAGE_SIZE}
+        total={gatewayTotal}
+        showTotal
+        disabled={loading}
+        onChange={(nextPage) => void fetchGatewayLogs(nextPage)}
+      />
 
       <GatewayLogDetailDialog log={detailLog} onClose={() => setDetailLog(null)} />
     </div>

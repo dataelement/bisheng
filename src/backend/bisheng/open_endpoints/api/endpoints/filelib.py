@@ -762,7 +762,7 @@ async def retrieve_chunks(
     request and response shapes are unchanged; the errors are not. A knowledge
     base that is missing, ungranted or of an unsupported type now answers with
     one 26321 instead of three distinguishable refusals, and a permission
-    outage surfaces as itself (503 / 19002) rather than being relabelled as a
+    outage surfaces as itself (503 / 25021) rather than being relabelled as a
     credential-validation outage.
 
     F055: a **hosted application** does not reach the facade directly. Its

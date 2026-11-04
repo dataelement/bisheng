@@ -10,7 +10,6 @@ from bisheng.knowledge.rag.pipeline.transformer.direct_chunk import DirectChunkT
 from bisheng.knowledge.rag.pipeline.transformer.hierarchical_splitter import HierarchicalSplitterTransformer
 from bisheng.knowledge.rag.pipeline.transformer.image_upload import ImageUploadTransformer
 from bisheng.knowledge.rag.pipeline.transformer.splitter import SplitterTransformer
-from bisheng.user.domain.models.user import UserDao
 
 
 class TempFilePipeline(BaseFilePipeline):
@@ -22,8 +21,7 @@ class TempFilePipeline(BaseFilePipeline):
 
     @cached_property
     def file_metadata(self) -> dict:
-        uploader = UserDao.get_user(self.invoke_user_id)
-        uploader_name = uploader.user_name if uploader else None
+        uploader_name = self._get_display_user_name(self.invoke_user_id)
 
         now = int(time.time())
         return Metadata(

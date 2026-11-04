@@ -11,6 +11,7 @@ from loguru import logger
 from bisheng.common.errcode.permission import (
     AuthorizationModelMismatchError,
     InvalidPermissionModeError,
+    PermissionEnumerationIncompleteError,
     PermissionInvalidResourceError,
     PermissionPublishNotReadyError,
     PermissionVersionConflictError,
@@ -345,6 +346,35 @@ class F048PermissionRuntime:
     ) -> dict[tuple[int, str, str], PermissionResourceSnapshot]:
         return await self._state.permission_snapshots(resources)
 
+    def tenant_use_grant(self, target, catalog):
+        """Build a revocable grant for the current tenant's members."""
+        candidates = [
+            row.snapshot
+            for row in catalog.models
+            if row.snapshot.active
+            and row.snapshot.derived_level is not None
+            and "use" in row.snapshot.action_codes
+            and set(row.snapshot.action_codes) <= {"use", "download"}
+        ]
+        if not candidates:
+            raise PermissionPublishNotReadyError(msg="A use-only permission model is required")
+        model = min(candidates, key=lambda item: (item.derived_level or 0, item.model_key))
+        grant = self._empty_grant(target=target, model=model)
+        source = self._sources.canonicalize_source(
+            source_id=1,
+            subject_type="tenant",
+            subject_id=str(target.tenant_id),
+            source_type="TENANT",
+        )
+        source = replace(
+            source,
+            source_id=stable_assignee_id(
+                grant_key=grant.grant_id,
+                source_fingerprint=source.source_fingerprint,
+            ),
+        )
+        return self._sources.add_source(grant, source)
+
     async def authorize_created(
         self,
         *,
@@ -354,6 +384,7 @@ class F048PermissionRuntime:
         mode: str,
         source_type: str = "CREATOR",
         protected: bool = True,
+        shared_with_tenant: bool = False,
         idempotency_key: str | None = None,
     ):
         if (
@@ -380,6 +411,12 @@ class F048PermissionRuntime:
         )
         creation_grants: tuple[GrantSnapshot, ...] = ()
         creation_deltas: tuple[ProjectionTupleDelta, ...] = ()
+        if shared_with_tenant:
+            if target.resource_type != "linsight_skill":
+                raise PermissionInvalidResourceError()
+            shared = self.tenant_use_grant(target, catalog)
+            creation_grants = (shared.grant,)
+            creation_deltas = shared.deltas
         if actor.subject_type == "service_account" and mode.upper() == "CUSTOM":
             manager_model = next(
                 (
@@ -408,8 +445,8 @@ class F048PermissionRuntime:
                 ),
             )
             creator_mutation = self._sources.add_source(manager_grant, creator_source)
-            creation_grants = (creator_mutation.grant,)
-            creation_deltas = creator_mutation.deltas
+            creation_grants += (creator_mutation.grant,)
+            creation_deltas += creator_mutation.deltas
         return await self._owner.project_created(
             OwnerProjectionContext(
                 target=target,
@@ -452,9 +489,12 @@ class F048PermissionRuntime:
         if expected_mode != "CUSTOM":
             raise InvalidPermissionModeError()
         catalog = await self._runtime_catalog()
+        shared = self.tenant_use_grant(target, catalog) if target.resource_type in {"tool", "linsight_skill"} else None
         return await self._owner.project_created(
             OwnerProjectionContext(
                 target=target,
+                creation_grants=(shared.grant,) if shared else (),
+                creation_deltas=shared.deltas if shared else (),
                 owner_grant=None,
                 source_id=1,
                 owner_user_id=None,
@@ -475,97 +515,6 @@ class F048PermissionRuntime:
             )
         )
 
-    async def missing_system_owned_relations(
-        self,
-        *,
-        target: VerifiedPermissionTarget,
-        action_codes: tuple[str, ...],
-    ) -> tuple[str, ...]:
-        """Read exact system tuples for a business-verified existing preset tool."""
-
-        if (
-            target.resource_type != "tool"
-            or target.resource_version <= 0
-            or target.parent_type is not None
-            or set(action_codes) != {"visible", "use"}
-        ):
-            raise PermissionInvalidResourceError()
-        await self._runtime_catalog()
-        mode = await self._require_current_target(target)
-        if mode.mode != "CUSTOM":
-            raise InvalidPermissionModeError()
-        object_key = f"{target.resource_type}:{target.resource_id}"
-        required = ("visible", "system_use_marker")
-        rows = await self._client.read_tuples(
-            user="user:*",
-            object=object_key,
-            consistency=HIGHER_CONSISTENCY,
-        )
-        present: set[str] = set()
-        for row in rows:
-            if row.get("user") != "user:*" or row.get("object") != object_key or row.get("relation") not in required:
-                continue
-            if row.get("condition") is not None:
-                raise PermissionPublishNotReadyError(
-                    msg=f"System-owned resource has a conditional system tuple: {object_key}"
-                )
-            present.add(row["relation"])
-        return tuple(relation for relation in required if relation not in present)
-
-    async def repair_system_owned(
-        self,
-        *,
-        actor: PermissionActor,
-        target: VerifiedPermissionTarget,
-        action_codes: tuple[str, ...],
-    ):
-        """Add missing preset-tool system tuples without replacing existing grants."""
-
-        if actor.subject_type != "user" or actor.user_id <= 0 or actor.current_tenant_id != target.tenant_id:
-            raise PermissionInvalidResourceError()
-        missing = await self.missing_system_owned_relations(target=target, action_codes=action_codes)
-        if not missing:
-            return None
-        catalog = await self._runtime_catalog()
-        plan = ProjectionPlan(
-            tenant_id=target.tenant_id,
-            idempotency_key=_idempotency_key(
-                "system-repair", target.tenant_id, target.resource_type, target.resource_id, target.resource_version
-            ),
-            operation_type="RESOURCE_SYSTEM_REPAIR",
-            scope_type="resource",
-            scope_key=f"{target.resource_type}:{target.resource_id}",
-            expected_version=target.resource_version,
-            target_version=target.resource_version + 1,
-            store_id=catalog.store_id,
-            model_id=catalog.model_id,
-            operator_id=actor.user_id,
-            change_item_count=1,
-            deltas=tuple(
-                ProjectionTupleDelta(
-                    phase="COMMIT",
-                    sequence=index,
-                    action="WRITE",
-                    user="user:*",
-                    relation=relation,
-                    object=f"{target.resource_type}:{target.resource_id}",
-                )
-                for index, relation in enumerate(missing)
-            ),
-        )
-        operation = await self._projection.prepare(plan)
-        if str(operation.status) == ProjectionOperationStatus.PREPARED.value:
-            try:
-                await self._state.mark_projecting(
-                    target=target,
-                    expected_catalog_release_id=catalog.release_id,
-                    operation_id=int(operation.id),
-                )
-            except Exception as exc:
-                await self._projection.abandon_prepared(plan, exc)
-                raise
-        return await self._projection.execute(plan)
-
     async def rollback_created(
         self,
         *,
@@ -574,7 +523,7 @@ class F048PermissionRuntime:
         owner_user_id: int,
     ) -> None:
         """Undo a fresh file/folder creation using its frozen projection ledger."""
-        if target.resource_type not in {"folder", "knowledge_file"} or target.resource_version != 0:
+        if target.resource_type not in {"folder", "knowledge_file", "app"} or target.resource_version != 0:
             raise PermissionInvalidResourceError()
         repository = CreationRollbackRepository()
         creation = await repository.aget_operation_by_idempotency(
@@ -947,6 +896,34 @@ class F048PermissionRuntime:
     ) -> tuple[GrantModelSnapshot, ...]:
         return self._grants.grantable_models(await self.build_grant_context(actor=actor, target=target))
 
+    async def manageable_model_keys(
+        self,
+        *,
+        actor: PermissionActor,
+        target: VerifiedPermissionTarget,
+    ) -> frozenset[str]:
+        """Read existing-binding eligibility without loading the complete roster."""
+
+        await self._require_manage_permission(actor, target)
+        await self._require_current_target(target)
+        catalog = await self._runtime_catalog()
+        return await self._manageable_model_keys(actor, target, catalog)
+
+    async def _manageable_model_keys(
+        self,
+        actor: PermissionActor,
+        target: VerifiedPermissionTarget,
+        catalog: RuntimeCatalogSnapshot,
+    ) -> frozenset[str]:
+        system_authorized = self._system_authorized(actor, target)
+        capabilities = () if system_authorized else await self._grant_capabilities(actor, target)
+        models = self._grants.manageable_models_for_capabilities(
+            models=tuple(item.snapshot for item in catalog.models),
+            capabilities=capabilities,
+            system_authorized=system_authorized,
+        )
+        return frozenset(model.model_key for model in models)
+
     async def mutate_grants(
         self,
         *,
@@ -967,6 +944,36 @@ class F048PermissionRuntime:
             expected_resource_version=expected_resource_version,
             expected_catalog_release_id=expected_catalog_release_id,
             idempotency_key=idempotency_key,
+        )
+
+    async def migrate_capability_default(self, *, actor, target, remove_public_markers: bool):
+        """Replace legacy public access with an ordinary tenant grant atomically."""
+        if target.resource_type not in {"tool", "linsight_skill"} or not actor.super_admin:
+            raise PermissionInvalidResourceError()
+        context = await self.build_grant_context(actor=actor, target=target)
+        shared = self.tenant_use_grant(target, await self.current_catalog())
+        deltas = tuple(
+            ProjectionTupleDelta(
+                phase="STAGE",
+                sequence=index,
+                action="DELETE",
+                user="user:*",
+                relation=relation,
+                object=f"{target.resource_type}:{target.resource_id}",
+            )
+            for index, relation in enumerate(("visible", "system_use_marker") if remove_public_markers else ())
+        )
+        return await self._grants.mutate(
+            context,
+            changes=(
+                CanonicalGrantChange(
+                    operation="ADD", model_key=shared.grant.model.model_key, source=shared.grant.sources[0]
+                ),
+            ),
+            expected_resource_version=target.resource_version,
+            expected_catalog_release_id=context.current_catalog_release_id,
+            idempotency_key=f"capability-default-v1:{target.tenant_id}:{target.resource_type}:{target.resource_id}",
+            migration_deltas=deltas,
         )
 
     async def remove_absent_resource_sources(
@@ -1112,6 +1119,10 @@ class F048PermissionRuntime:
                         grant_key=target_grant.grant_id,
                         source_fingerprint=source.source_fingerprint,
                     ),
+                )
+                stable_source = await self._state.resolve_business_source_version(
+                    target=target,
+                    source=stable_source,
                 )
                 changes.append(
                     CanonicalGrantChange(
@@ -1325,13 +1336,53 @@ class F048PermissionRuntime:
         await self._require_manage_permission(actor, target)
         catalog = await self._runtime_catalog()
         mode = await self._require_current_target(target)
-        return await self._state.load_source_page(
+        rows, has_more = await self._state.load_source_page(
             target=target,
             mode=mode.mode,
             models=tuple(item.snapshot for item in catalog.models),
             after_id=after_id,
             limit=limit,
         )
+        if not any(row.editable for row in rows):
+            return rows, has_more
+        manageable = await self._manageable_model_keys(actor, target, catalog)
+        return tuple(replace(row, editable=row.editable and row.model_key in manageable) for row in rows), has_more
+
+    async def read_effective_action_sources(self, *, target, action):
+        """Trusted business read after its own qualification; not an HTTP roster.
+
+        The owning business service must verify the target and reader first.
+        This does not change the manage_permission gate on ordinary rosters.
+        """
+        catalog = await self._runtime_catalog()
+        models = tuple(item.snapshot for item in catalog.models)
+        before = await self._state.source_read_stamp(target=target, models=models)
+        mode = await self._require_current_target(target)
+        eligible = tuple(model for model in models if action in model.action_codes)
+        rows, after_id = [], 0
+        while eligible:
+            page, more = await self._state.load_source_page(
+                target=target, mode=mode.mode, models=eligible, after_id=after_id, limit=500
+            )
+            rows.extend(page)
+            if len(rows) > 5000:
+                raise PermissionEnumerationIncompleteError(reason="summary_limit")
+            if not more:
+                break
+            next_id = max((row.source_id for row in page), default=after_id)
+            if next_id <= after_id or len(rows) >= 5000:
+                raise PermissionEnumerationIncompleteError(reason="source_pagination_incomplete")
+            after_id = next_id
+        after = await self._state.source_read_stamp(target=target, models=models)
+        latest = await self._runtime_catalog()
+        await self._require_current_target(target)
+        if before != after or (catalog.release_id, catalog.version, catalog.checksum) != (
+            latest.release_id,
+            latest.version,
+            latest.checksum,
+        ):
+            raise PermissionPublishNotReadyError(reason="summary_scope_changed")
+        return tuple(rows)
 
     async def list_effective_direct_user_ids_by_model(
         self,

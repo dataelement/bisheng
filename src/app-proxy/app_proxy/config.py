@@ -50,10 +50,10 @@ ACCESS_TOKEN_COOKIE = "access_token_cookie"
 #: bounces to the IdP itself (D7).
 DEFAULT_LOGIN_PATH = "/admin"
 
-#: "返回广场" target on the fallback pages. The square is F056's page and its
-#: final route is not fixed yet, so this stays an env knob; the default points
-#: at the end-user SPA root.
-DEFAULT_SQUARE_URL = "/workspace"
+#: Visitor-facing app square, not the administrator's builder. Keep the full
+#: client route: bare `/workspace` can fall into the platform SPA and show 404.
+#: Deployments with an outer prefix can override APP_PROXY_SQUARE_URL.
+DEFAULT_SQUARE_URL = "/workspace/apps/explore"
 
 #: Variables a deployment must set explicitly. Every default below is a
 #: single-host loopback convenience, so a deployment that leaves any of these
@@ -61,7 +61,7 @@ DEFAULT_SQUARE_URL = "/workspace"
 #: ``127.0.0.1`` (in a container, that is the container), and both secrets
 #: default to empty, which is **fail closed** — the process still starts, still
 #: reports healthy, and renders the fallback page on every single request.
-#: ``docker/verify-app-runtime-compose.sh`` asserts the compose file sets them.
+#: ``scripts/tests/compose/verify-app-runtime-compose.sh`` asserts the compose file sets them.
 REQUIRED_ENV: tuple[str, ...] = (
     "APP_PROXY_HOST",
     "APP_PROXY_PORT",
@@ -115,7 +115,7 @@ class Config:
     manager_base: str = "http://127.0.0.1:8091"
     backend_secret: str = ""
     manager_secret: str = ""
-    protocol_version: int = 1
+    protocol_version: int = 2
     route_key_id: str = ""
     route_secret: str = ""
     signature_header: str = "X-Signature"
@@ -157,6 +157,10 @@ class Config:
     #: for a node the backend's close push did not reach). Deny → close.
     ws_reauthorize_interval_seconds: float = 30.0
 
+    def __post_init__(self):
+        if self.protocol_version != 2:
+            raise ValueError("entry_requires_protocol_v2")
+
     def with_overrides(self, **kwargs) -> Config:
         return replace(self, **kwargs)
 
@@ -171,7 +175,7 @@ def load_config() -> Config:
         manager_base=_env_str("APP_PROXY_MANAGER_BASE", "http://127.0.0.1:8091") or "http://127.0.0.1:8091",
         backend_secret=_env_str("APP_PROXY_BACKEND_SECRET"),
         manager_secret=_env_str("APP_PROXY_MANAGER_SECRET"),
-        protocol_version=int(_env_str("APP_PROXY_PROTOCOL_VERSION", "1")),
+        protocol_version=int(_env_str("APP_PROXY_PROTOCOL_VERSION", "2")),
         route_key_id=_env_str("APP_PROXY_ROUTE_KEY_ID"),
         route_secret=_env_str("APP_PROXY_ROUTE_SECRET"),
         signature_header=_env_str("APP_PROXY_SIGNATURE_HEADER", "X-Signature") or "X-Signature",

@@ -1,4 +1,5 @@
-import { render, screen } from "@/test/test-utils"
+import { screen } from "@/test/test-utils"
+import { renderWithServiceAccountScope as render } from "@/test/serviceAccountTestScope"
 import type { ApiKeyItem, OpenApiScopeItem } from "@/types/api/openApi"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"

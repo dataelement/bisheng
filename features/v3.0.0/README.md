@@ -1,5 +1,11 @@
 # v3.0.0 Feature 索引（应用工场）
 
+2026-11-03 增量：[F119 应用工场交付契约与诊断修复](./119-app-factory-deploy-repairs/spec.md) — 42条AC和设计已确认，本地实现与分发制品已完成，真实116部署E2E与原生服务镜像验证待完成；历史聊天暂用F118，因发版线已占用而顺延。见[验证记录](./119-app-factory-deploy-repairs/verification.md)。
+
+2026-11-03 增量：[F118 项目内新建对话](./118-project-new-chat/spec.md) — 用户定为高优，将 3.1 分支上的工作台项目内新建对话（原 `573a62d10d`）提前适配到 3.0；纯前端，项目归属仍存浏览器本地，不改 API。自动化验证完成，3.0 页面实测待执行，见 [验证记录](./118-project-new-chat/e2e-checklist.md)。
+
+2026-11-02 增量：[F117 知识空间详情读取优化](./117-space-info-read-optimization/spec.md) — 按用户要求将已评审的中粮 `/info` 优化适配到主线；保留撤权重入、分享预览和主线下载契约。本地验证完成，真实部署验收待执行，见 [验证记录](./117-space-info-read-optimization/validation.md)。
+
 **版本目标**：交付《3.0 应用工场 PRD-1》**v2.0**——专业开发者通道（DEV）、应用运行时与发布（RT）、治理与管理面（GOV）共 21 项，及伴生《3.0 开放 API 鉴权与身份传递 PRD》**v2.1** 的 v2 开放 API 鉴权改造。界面承载面落 platform「构建 → 应用」（托管应用 = 与工作流 / 助手并列的第三种类型），运行时 compose / k8s 双形态。
 
 **版本契约**：[release-contract.md](./release-contract.md)
@@ -106,3 +112,12 @@
 | 2026-10-09 | PRD-1 评审拍板：k8s 形态本版交付（F059 恢复）、应用密钥最小版本版交付、GOV-04 方案 A、轻量档 0.5C/1G、维持三档、F057 达标线 6/6、「应用工场」定名；F050 标为已由 beta2 交付、F058 取消；两项安全缺口定为合入前修。`docs/PRD/3.0-release/` 收敛为 PRD-1 / PRD-2 / 技术架构方案三篇。 |
 
 2026-10-23：按用户授权收尾并整合 F086/F059 开发到 feat/3.0.0-vibe，保留完整交付门；当前证据与合入范围见 [整合报告](../../docs/reviews/vibe-development-integration-2026-10-23.md)。本次仅刷新两项运行交付 Feature，其他旧条目的验收状态未重新核定。
+
+
+## 2026-10-28 增量：F113 服务账号租户一致性
+
+| Feature | 当前阶段 | 范围与证据 |
+|---|---|---|
+| [F113-service-account-tenant-consistency](./113-service-account-tenant-consistency/spec.md) | 38条AC规格已确认；设计已单独确认，开发及L1完成51/53；用户授权合入feat/3.0.0，真实E2E及剩余审查仍待完成 | 38条AC；统一业务租户失配拒绝、超管选择管理/创建租户、在途发布及待生效版本复核、应用操作租户校验；不做移交/迁移，存量不变。见[需求发现](./113-service-account-tenant-consistency/discovery.md)、[规格自审](./113-service-account-tenant-consistency/spec-review.md)、[设计](./113-service-account-tenant-consistency/design.md)及[设计自审](./113-service-account-tenant-consistency/design-review.md) |
+
+本登记不改变前文历史任务数，不表示已交付；与产品方案旧F1xx拆解编号区分。发版线为feat/3.0.0，本次仅本功能定向验证，不安排全量回归。

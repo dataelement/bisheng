@@ -1,4 +1,5 @@
 import request from "@/controllers/request";
+import { contentSafetyStates } from "@/types/dshContentSafety";
 import { createDshOperationId } from "@/util/dshOperationId";
 import { requestStream } from "@/controllers/requestStream";
 import type {
@@ -17,6 +18,126 @@ import type {
 } from "@/types/dshModelAudit";
 
 const base = "/api/v1/dsh/admin/model-audit";
+const object = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+const nonnegative = (value: unknown) =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+
+function validSafetySummary(value: unknown): boolean {
+  if (!object(value)) return false;
+  return (
+    ["has_sensitive_hit", "safety_ready"].every(
+      (key) => value[key] === undefined || typeof value[key] === "boolean",
+    ) &&
+    ["sensitive_hit_count", "matching_sensitive_hit_count"].every(
+      (key) =>
+        value[key] === undefined ||
+        value[key] === null ||
+        nonnegative(value[key]),
+    )
+  );
+}
+
+function validSafetyMetadata(value: unknown): boolean {
+  if (!object(value) || !validSafetySummary(value)) return false;
+  // Older backends omit these fields. Absence stays unknown, never PASSED or false.
+  if (
+    value.content_safety_state !== undefined &&
+    !contentSafetyStates.some((state) => state === value.content_safety_state)
+  )
+    return false;
+  if (
+    value.details_status !== undefined &&
+    !["AVAILABLE", "PENDING", "PURGED", "UNREPORTED"].some(
+      (state) => state === value.details_status,
+    )
+  )
+    return false;
+  if (
+    value.record_origin !== undefined &&
+    value.record_origin !== "MODEL" &&
+    value.record_origin !== "EXTERNAL_SAFETY"
+  )
+    return false;
+  if (
+    ["input_sensitive_hit", "output_sensitive_hit"].some(
+      (key) => value[key] !== undefined && typeof value[key] !== "boolean",
+    )
+  )
+    return false;
+  if (
+    value.model_entered !== undefined &&
+    value.model_entered !== null &&
+    typeof value.model_entered !== "boolean"
+  )
+    return false;
+  if (
+    value.policy_version !== undefined &&
+    value.policy_version !== null &&
+    !nonnegative(value.policy_version)
+  )
+    return false;
+  if (
+    [
+      "source_id",
+      "gateway_request_id",
+      "session_id",
+      "model_started_at",
+      "builtin_digest",
+      "safety_observed_at",
+    ].some(
+      (key) =>
+        value[key] !== undefined &&
+        value[key] !== null &&
+        typeof value[key] !== "string",
+    )
+  )
+    return false;
+  const states = value.stage_results,
+    versions = value.stage_versions;
+  if (
+    states !== undefined &&
+    (!object(states) ||
+      !["input", "output"].every((stage) =>
+        contentSafetyStates.some((state) => state === states[stage]),
+      ))
+  )
+    return false;
+  if (
+    versions !== undefined &&
+    (!object(versions) ||
+      !["input", "output"].every((stage) => nonnegative(versions[stage])))
+  )
+    return false;
+  return (
+    !object(states) ||
+    !object(versions) ||
+    ["input", "output"].every(
+      (stage) => (states[stage] === "UNREPORTED") === (versions[stage] === 0),
+    )
+  );
+}
+
+function validSafetyProgress(value: unknown): boolean {
+  return (
+    object(value) &&
+    (value.safety_ready === undefined ||
+      typeof value.safety_ready === "boolean") &&
+    (value.safety_summary_version === undefined ||
+      nonnegative(value.safety_summary_version)) &&
+    (value.safety_summary_as_of === undefined ||
+      value.safety_summary_as_of === null ||
+      typeof value.safety_summary_as_of === "string")
+  );
+}
+
+function validTreeSafety(node: AuditTreePage["items"][number]): boolean {
+  return (
+    validSafetySummary(node) &&
+    validSafetySummary(node.own_summary) &&
+    validSafetySummary(node.branch_summary)
+  );
+}
 export async function getAuditTree(
   query: ModelAuditQuery,
   signal?: AbortSignal,
@@ -35,7 +156,8 @@ export async function getAuditTree(
     !result ||
     !Array.isArray(result.items) ||
     result.items.length > query.limit ||
-    !result.progress ||
+    !result.items.every(validSafetySummary) ||
+    !validSafetyProgress(result.progress) ||
     (result.next_cursor !== null &&
       (typeof result.next_cursor !== "string" ||
         result.next_cursor.length > 2048)) ||
@@ -46,6 +168,7 @@ export async function getAuditTree(
         !/^[a-f0-9-]{36}$/.test(node.generation) ||
         !node.own_summary ||
         !node.branch_summary ||
+        !validTreeSafety(node) ||
         !["SELF", "DESCENDANT", "BOTH"].includes(node.match_scope),
     )
   ) {
@@ -71,7 +194,8 @@ export async function getAuditTreeLocation(
     !result ||
     !Array.isArray(result.items) ||
     result.items.length > 33 ||
-    !result.progress
+    !validSafetyProgress(result.progress) ||
+    !result.items.every(validTreeSafety)
   )
     throw new Error("Invalid audit tree location");
   return result;
@@ -80,10 +204,16 @@ export async function getAuditReadiness(
   tenantId?: number,
   signal?: AbortSignal,
 ): Promise<AuditQueryReadiness> {
-  return await request.get(base + "/query-readiness", {
-    params: { tenant_id: tenantId },
-    signal,
-  });
+  const result: AuditQueryReadiness = await request.get(
+    base + "/query-readiness",
+    {
+      params: { tenant_id: tenantId },
+      signal,
+    },
+  );
+  if (!validSafetyProgress(result))
+    throw new Error("Invalid audit query readiness");
+  return result;
 }
 function groupQuery(query: ModelAuditQuery) {
   const {
@@ -93,6 +223,9 @@ function groupQuery(query: ModelAuditQuery) {
     conversation_id,
     model_name,
     audit_status,
+    has_sensitive_hit,
+    sensitive_direction,
+    content_safety_state,
     start_at,
     end_at,
     cursor,
@@ -105,6 +238,9 @@ function groupQuery(query: ModelAuditQuery) {
     conversation_id,
     model_name,
     audit_status,
+    has_sensitive_hit,
+    sensitive_direction,
+    content_safety_state,
     start_at,
     end_at,
     cursor,
@@ -123,7 +259,8 @@ export async function getAuditGroups(
     !result ||
     !Array.isArray(result.items) ||
     result.items.length > query.limit ||
-    !result.progress ||
+    !result.items.every(validSafetySummary) ||
+    !validSafetyProgress(result.progress) ||
     (result.next_cursor !== null && typeof result.next_cursor !== "string")
   )
     throw new Error("Invalid audit group page");
@@ -142,6 +279,7 @@ export async function getAuditGroupRequests(
     !result ||
     !Array.isArray(result.items) ||
     result.items.length > query.limit ||
+    !result.items.every(validSafetyMetadata) ||
     (result.next_cursor !== null && typeof result.next_cursor !== "string")
   )
     throw new Error("Invalid audit group requests");
@@ -195,10 +333,16 @@ export async function getModelAuditDetail(
   tenantId?: number,
   signal?: AbortSignal,
 ): Promise<ModelAuditRecord | MissingModelAudit> {
-  return await request.get(
+  const result: ModelAuditRecord | MissingModelAudit = await request.get(
     base + "/requests/" + encodeURIComponent(requestId),
     { params: { tenant_id: tenantId }, signal },
   );
+  if (
+    !object(result) ||
+    (!("audit_record_missing" in result) && !validSafetyMetadata(result))
+  )
+    throw new Error("Invalid audit request detail");
+  return result;
 }
 export async function getModelAudit(
   query: ModelAuditQuery,
@@ -212,6 +356,7 @@ export async function getModelAudit(
     !page ||
     !Array.isArray(page.items) ||
     page.items.length > query.limit ||
+    !page.items.every(validSafetyMetadata) ||
     (page.next_cursor !== null && typeof page.next_cursor !== "string")
   )
     throw new Error("Invalid audit page");

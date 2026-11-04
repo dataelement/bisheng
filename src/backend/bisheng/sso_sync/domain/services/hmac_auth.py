@@ -31,7 +31,6 @@ Silent acceptance would let unsigned requests through during mis-configured
 rollouts — the whole point of HMAC would be defeated.
 """
 
-import hashlib
 import hmac
 
 from fastapi import Request
@@ -39,20 +38,21 @@ from loguru import logger
 
 from bisheng.common.errcode.sso_sync import SsoHmacInvalidError
 from bisheng.common.services.config_service import settings
+from bisheng.common.utils.hmac_signature import compute_hmac_signature
 
 
 def compute_signature(
-    method: str, path: str, raw_body: bytes, secret: str,
+    method: str,
+    path: str,
+    raw_body: bytes,
+    secret: str,
 ) -> str:
     """Compute the canonical HMAC-SHA256 hex digest for F014 Gateway calls.
 
     Exposed separately so tests + Gateway-side tooling can share the exact
     same signing function.
     """
-    msg = f'{method.upper()}\n{path}\n'.encode() + (raw_body or b'')
-    return hmac.new(
-        secret.encode('utf-8'), msg, hashlib.sha256,
-    ).hexdigest()
+    return compute_hmac_signature(method, path, raw_body, secret)
 
 
 async def verify_hmac(request: Request) -> None:
@@ -66,21 +66,21 @@ async def verify_hmac(request: Request) -> None:
     secret = settings.sso_sync.gateway_hmac_secret
     if not secret:
         logger.error(
-            'F014 HMAC verification failed: sso_sync.gateway_hmac_secret '
-            'is not configured; rejecting request (fail-closed).'
+            "F014 HMAC verification failed: sso_sync.gateway_hmac_secret "
+            "is not configured; rejecting request (fail-closed)."
         )
-        raise SsoHmacInvalidError.http_exception('hmac secret not configured')
+        raise SsoHmacInvalidError.http_exception("hmac secret not configured")
 
-    header_name = settings.sso_sync.signature_header or 'X-Signature'
-    provided = (request.headers.get(header_name, '') or '').lower().strip()
+    header_name = settings.sso_sync.signature_header or "X-Signature"
+    provided = (request.headers.get(header_name, "") or "").lower().strip()
     if not provided:
         logger.warning(
-            'F014 HMAC verification failed: missing %s header from %s on %s',
+            "F014 HMAC verification failed: missing %s header from %s on %s",
             header_name,
-            getattr(request.client, 'host', '?'),
+            getattr(request.client, "host", "?"),
             request.url.path,
         )
-        raise SsoHmacInvalidError.http_exception('missing signature header')
+        raise SsoHmacInvalidError.http_exception("missing signature header")
 
     raw = await request.body()
 
@@ -90,20 +90,23 @@ async def verify_hmac(request: Request) -> None:
     # FastAPI reads the body more than once.
     async def _receive_replay():
         return {
-            'type': 'http.request',
-            'body': raw,
-            'more_body': False,
+            "type": "http.request",
+            "body": raw,
+            "more_body": False,
         }
 
     request._receive = _receive_replay
 
     expected = compute_signature(
-        request.method, request.url.path, raw, secret,
+        request.method,
+        request.url.path,
+        raw,
+        secret,
     )
     if not hmac.compare_digest(expected, provided):
         logger.warning(
-            'F014 HMAC verification failed: signature mismatch from %s on %s',
-            getattr(request.client, 'host', '?'),
+            "F014 HMAC verification failed: signature mismatch from %s on %s",
+            getattr(request.client, "host", "?"),
             request.url.path,
         )
-        raise SsoHmacInvalidError.http_exception('invalid signature')
+        raise SsoHmacInvalidError.http_exception("invalid signature")

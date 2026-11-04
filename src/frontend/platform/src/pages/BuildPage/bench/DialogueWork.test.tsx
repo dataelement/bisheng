@@ -6,34 +6,28 @@ vi.mock("@/contexts/userContext", async () => ({ userContext: (await import("rea
 vi.mock("react-i18next", () => ({
     useTranslation: () => ({ t: (key: string) => key, i18n: { loadNamespaces: vi.fn() } }),
 }));
-vi.mock("@/pages/ModelPage/manage/ScopeBar", () => ({
-    ScopeBar: ({ onScopeChange }: { onScopeChange: () => void }) => (
-        <button onClick={onScopeChange}>Change scope</button>
-    ),
-}));
-vi.mock("./index", () => ({ default: ({ scopeVersion }: { scopeVersion: number }) => <div>Home {scopeVersion}</div> }));
+vi.mock("./index", () => ({ default: ({ scopeVersion = 0 }: { scopeVersion?: number }) => <div>Home {scopeVersion}</div> }));
 vi.mock("./KnowledgeSpace", () => ({
-    default: ({ scopeVersion }: { scopeVersion: number }) => <div>Knowledge {scopeVersion}</div>,
+    default: ({ scopeVersion = 0 }: { scopeVersion?: number }) => <div>Knowledge {scopeVersion}</div>,
 }));
 vi.mock("./Subscribe", () => ({
-    default: ({ scopeVersion }: { scopeVersion: number }) => <div>Subscribe {scopeVersion}</div>,
+    default: ({ scopeVersion = 0 }: { scopeVersion?: number }) => <div>Subscribe {scopeVersion}</div>,
 }));
 vi.mock("./AppCenter", () => ({
-    AppCenter: ({ scopeVersion }: { scopeVersion: number }) => <div>Apps {scopeVersion}</div>,
+    AppCenter: ({ scopeVersion = 0 }: { scopeVersion?: number }) => <div>Apps {scopeVersion}</div>,
 }));
-it("switches all four workbench panels and refreshes the current scope without mounting inactive panels", async () => {
+it("switches panels without a second page-specific tenant selector", async () => {
     const user = userEvent.setup();
     render(<DialogueWork />);
     expect(screen.getByText("Home 0")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "bench.knowledgeSpace" }));
     expect(screen.getByText("Knowledge 0")).toBeInTheDocument();
     expect(screen.queryByText("Home 0")).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Change scope" }));
-    expect(screen.getByText("Knowledge 1")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Change scope" })).toBeNull();
     await user.click(screen.getByRole("tab", { name: "bench.subscribe" }));
-    expect(screen.getByText("Subscribe 1")).toBeInTheDocument();
+    expect(screen.getByText("Subscribe 0")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "bench.appCenter" }));
-    expect(screen.getByText("Apps 1")).toBeInTheDocument();
+    expect(screen.getByText("Apps 0")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "bench.home" }));
-    expect(screen.getByText("Home 1")).toBeInTheDocument();
+    expect(screen.getByText("Home 0")).toBeInTheDocument();
 });

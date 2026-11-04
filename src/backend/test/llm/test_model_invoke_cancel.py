@@ -45,6 +45,24 @@ async def test_cancelled_call_is_recorded_as_failed(telemetry):
     model.update_model_status.assert_not_awaited()
 
 
+async def test_failed_call_names_the_model_in_the_error(telemetry):
+    @llm_utils.wrapper_bisheng_model_limit_check_async
+    async def fail(self):
+        raise RuntimeError("Model not exist.")
+
+    model = _fake_model()
+    model.model_info.model_name = "qwen3-vl-flash"
+    with pytest.raises(RuntimeError) as info:
+        await fail(model)
+
+    assert str(info.value) == "model=qwen3-vl-flash: Model not exist."
+    model.update_model_status.assert_awaited_once_with(
+        LLMModelStatus.ERROR.value,
+        "model=qwen3-vl-flash: Model not exist.",
+    )
+    assert telemetry.call_args.args[4] == StatusEnum.FAILED
+
+
 async def test_successful_call_still_marks_the_model_normal(telemetry):
     @llm_utils.wrapper_bisheng_model_limit_check_async
     async def ok(self):

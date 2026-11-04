@@ -99,8 +99,7 @@ LABEL_PREVIEW_SESSION = "bisheng.preview.session"
 LABEL_PREVIEW_EXPIRES_AT = "bisheng.preview.expires_at"
 
 #: Variables a deployment must set explicitly — the dataclass defaults below are
-#: development conveniences, not deployment values. ``docker/verify-app-runtime-
-#: compose.sh`` asserts the compose file provides every one of them, which is the
+#: development conveniences, not deployment values. ``scripts/tests/compose/verify-app-runtime-compose.sh`` asserts the compose file provides every one of them, which is the
 #: gate that would have caught the 3.0 compose file shipping ``APP_PROXY_*``
 #: names nothing reads.
 REQUIRED_ENV: tuple[str, ...] = (
@@ -186,7 +185,7 @@ class Config:
     inbound_secret: str = field(default="", repr=False)
     task_timeout_seconds: int = 1800
     cleanup_seconds: int = 900
-    protocol_version: int = 1
+    protocol_version: int = 2
     image_pull_policy: str = "if-not-present"
     data_helper_image: str = ""
     data_helper_uid: int = 10001
@@ -369,8 +368,8 @@ class Config:
                 raise ValueError("runtime_identity_path_invalid")
         if self.executor_kind not in {"docker", "kubernetes"}:
             raise ValueError("runtime_executor_invalid")
-        if self.executor_kind == "kubernetes" and self.protocol_version != 2:
-            raise ValueError("kubernetes_requires_protocol_v2")
+        if self.protocol_version != 2:
+            raise ValueError("runtime_requires_protocol_v2")
 
     def with_overrides(self, **kwargs) -> Config:
         return replace(self, **kwargs)
@@ -392,7 +391,7 @@ def load_config() -> Config:
         inbound_secret=_env_str("RTM_INBOUND_SECRET"),
         task_timeout_seconds=_env_int("RTM_TASK_TIMEOUT_SECONDS", 1800),
         cleanup_seconds=_env_int("RTM_CLEANUP_SECONDS", 900),
-        protocol_version=_env_int("RTM_PROTOCOL_VERSION", 1),
+        protocol_version=_env_int("RTM_PROTOCOL_VERSION", 2),
         image_pull_policy=_env_str("RTM_IMAGE_PULL_POLICY", "if-not-present"),
         data_helper_image=_env_str("RTM_DATA_HELPER_IMAGE"),
         executor_kind=_env_str("RTM_EXECUTOR", "docker"),
@@ -421,7 +420,7 @@ def load_config() -> Config:
         build_timeout_seconds=_env_int("RTM_BUILD_TIMEOUT_SECONDS", 1800),
         retire_grace_seconds=_env_int("RTM_RETIRE_GRACE_SECONDS", 30),
         reconcile_interval_seconds=_env_int(
-            "RTM_RECONCILE_INTERVAL_SECONDS", 5 if _env_int("RTM_PROTOCOL_VERSION", 1) == 2 else 15
+            "RTM_RECONCILE_INTERVAL_SECONDS", 5 if _env_int("RTM_PROTOCOL_VERSION", 2) == 2 else 15
         ),
         reconcile_enabled=_env_bool("RTM_RECONCILE_ENABLED", True),
         probe_timeout_seconds=_env_int("RTM_PROBE_TIMEOUT_SECONDS", 90),

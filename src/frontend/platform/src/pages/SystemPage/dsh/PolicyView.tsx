@@ -9,20 +9,15 @@ import {
 import type { DshUsageOverviewUser, DshUsageTimeSummary } from "@/types/dsh";
 import { Segmented } from "@bisheng/ui";
 import { useContext, useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { UsageRangeSelect } from "./UsageRangeSelect";
 import { UsageSummaryView } from "./UsageSummaryView";
 import { UsageUserSelect } from "./UsageUserSelect";
-import { localInputValue, usageGranularity, usagePresetRange, type UsagePreset, type UsageRange } from "./usageRange";
+import { usageGranularity, usagePresetRange, type UsagePreset, type UsageRange } from "./usageRange";
 
 type Dimension = "user" | "department";
 
-interface PolicyViewProps {
-  toolbarTarget?: HTMLDivElement | null;
-}
-
-export function PolicyView({ toolbarTarget }: PolicyViewProps) {
+export function PolicyView() {
   const { t } = useTranslation();
   const { user: currentUser } = useContext(userContext);
   const [dimension, setDimension] = useState<Dimension>("user");
@@ -109,13 +104,8 @@ export function PolicyView({ toolbarTarget }: PolicyViewProps) {
     setPreset(next);
     setRange(nextRange);
   };
-  const targetName =
-    dimension === "department"
-      ? (department?.name ?? tenantLabel)
-      : [user?.department_name, user?.user_name].filter(Boolean).join(" / ");
-
   const toolbar = (
-    <div className="flex max-w-full flex-wrap items-center justify-end gap-2" aria-label={t("dsh.usageFilters")}>
+    <div className="flex min-w-0 flex-wrap items-center gap-2" aria-label={t("dsh.usageFilters")}>
       <Segmented
         aria-label={t("dsh.usageDimension")}
         value={dimension}
@@ -137,20 +127,23 @@ export function PolicyView({ toolbarTarget }: PolicyViewProps) {
           searchPlaceholder={t("dsh.searchDepartments")}
           modal={false}
           className="w-72 max-w-full"
+          triggerClassName="input-touch-hit h-8 gap-2 overflow-hidden rounded-md border-border-base bg-bg-page px-[11px] text-[length:var(--font-size-3)] leading-[var(--line-height-3)] text-text-1 shadow-none hover:border-border-deep hover:bg-bg-page focus-visible:border-border-deep focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-focus data-[state=open]:border-border-deep data-[state=open]:shadow-focus [&>svg]:ml-0 [&>svg]:size-4 [&>svg]:text-text-3 [&>svg]:opacity-100 [&>svg]:transition-transform [&[data-state=open]>svg]:rotate-180"
         />
       ) : (
         <UsageUserSelect value={user} range={range} onChange={handleUser} />
       )}
       <UsageRangeSelect preset={preset} onChange={handleRange} />
-      <Button variant="outlined" onClick={() => setRange(usagePresetRange(preset))} color="default">
-        {t("dsh.refresh")}
-      </Button>
     </div>
   );
 
   return (
     <section className="space-y-4">
-      {toolbarTarget ? createPortal(toolbar, toolbarTarget) : toolbarTarget === undefined ? toolbar : null}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {toolbar}
+        <Button size="medium" variant="outlined" onClick={() => setRange(usagePresetRange(preset))} color="default">
+          {t("dsh.refresh")}
+        </Button>
+      </div>
       {!hasTarget ? (
         <div
           role={defaultUserError ? "alert" : "status"}
@@ -160,12 +153,6 @@ export function PolicyView({ toolbarTarget }: PolicyViewProps) {
         </div>
       ) : (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-base font-medium">{targetName}</h2>
-            <span className="text-xs text-muted-foreground">
-              {localInputValue(range.startAt).replace("T", " ")} — {localInputValue(range.endAt).replace("T", " ")}
-            </span>
-          </div>
           {summary ? (
             <UsageSummaryView summary={summary} />
           ) : (

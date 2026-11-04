@@ -45,6 +45,7 @@ from app_proxy.authz import (
     DECISION_STOPPED,
     DECISION_UNAVAILABLE,
 )
+from app_proxy.config import DEFAULT_SQUARE_URL
 from app_proxy.recovery_appearance import ILLUSTRATION as RECOVERY_ILLUSTRATION
 from app_proxy.recovery_appearance import STYLE as RECOVERY_STYLE
 
@@ -425,7 +426,7 @@ def render_page(
     *,
     app_name: str | None = None,
     owner_name: str | None = None,
-    square_url: str = "/workspace",
+    square_url: str = DEFAULT_SQUARE_URL,
     request_id: str = "",
     accept_language: str | None = None,
     reason: str | None = None,

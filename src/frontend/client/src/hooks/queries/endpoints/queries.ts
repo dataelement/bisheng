@@ -5,6 +5,7 @@ import { useRecoilValue } from 'recoil';
 import { getKnowledgeStatusApi } from '~/api';
 import { BsConfig, QueryKeys, TEndpointsConfig, TStartupConfig, dataService } from '~/types/chat';
 import store from '~/store';
+import { modelConfigRefresh, normalizeModelNames } from '../modelConfig';
 
 const externalUrlRE = /^(?:https?:|data:|blob:|\/\/)/i;
 
@@ -64,6 +65,7 @@ export const useGetBsConfig = (
   return useQuery<BsConfig>(
     [QueryKeys.bishengConfig],
     () => dataService.getBishengConfig().then(data => {
+      if (data.models) data.models = normalizeModelNames(data.models);
       // Ensure nested object fields have defaults to prevent runtime errors
       const defaultIcon = { image: '', enabled: false };
       if (!data.sidebarIcon) data.sidebarIcon = defaultIcon;
@@ -86,14 +88,9 @@ export const useGetBsConfig = (
       return data;
     }),
     {
-      refetchOnWindowFocus: true,
-      refetchOnReconnect: true,
-      // Config rarely changes within a session; don't refetch on every new
-      // consumer mount (the send-triggered layout flip mounts several config
-      // consumers and fired workstation/config repeatedly). Cache is shared by
-      // key, so one fetch covers all consumers.
+      ...modelConfigRefresh,
+      // Share refreshes by query key while keeping consumer mounts inexpensive.
       refetchOnMount: false,
-      staleTime: 5 * 60 * 1000,
       ...config,
       enabled: (config?.enabled ?? true) === true && queriesEnabled,
     },

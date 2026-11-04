@@ -4,7 +4,7 @@ import { TipIcon } from "@/components/bs-icons/tip"
 import { showApiError } from "@/controllers/request"
 import i18next from "i18next"
 import { X } from "lucide-react"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { createRoot } from "react-dom/client"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "."
 
@@ -16,6 +16,8 @@ interface ConfirmParams {
     showClose?: boolean
     /** Acknowledge-only: hide Cancel so the user has a single way out. */
     hideCancel?: boolean
+    /** Close only this confirmation when its owning view is invalidated. */
+    signal?: AbortSignal
     onClose?: () => void
     onCancel?: () => void
     onOk?: (next: () => void) => unknown
@@ -27,6 +29,7 @@ function ConfirmWrapper() {
 
     const [open, setOpen] = useState(false)
     const [pending, setPending] = useState(false)
+    const [revision, setRevision] = useState(0)
     const paramRef = useRef(null)
     const settledRef = useRef(false)
 
@@ -35,12 +38,27 @@ function ConfirmWrapper() {
         settledRef.current = false
         setPending(false)
         setOpen(true)
+        setRevision(value => value + 1)
     }
 
     const close = () => {
         paramRef.current?.onClose?.()
         setOpen(false)
     }
+
+    useEffect(() => {
+        const params = paramRef.current
+        const signal = params?.signal as AbortSignal | undefined
+        if (!open || !signal) return
+        const abort = () => {
+            if (paramRef.current !== params) return
+            params.onClose?.()
+            setOpen(false)
+        }
+        signal.addEventListener("abort", abort, { once: true })
+        if (signal.aborted) abort()
+        return () => signal.removeEventListener("abort", abort)
+    }, [open, revision])
 
     const handleOkClick = () => {
         if (settledRef.current) return

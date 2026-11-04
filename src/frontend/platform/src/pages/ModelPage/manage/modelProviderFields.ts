@@ -50,6 +50,24 @@ export function getModelProviders(): Record<string, ConfigField[]> {
             key: "openai_api_key",
         },
     ],
+    openai_compatible: [
+        {
+            label: "Base URL",
+            type: "text",
+            example: "https://your-gateway.example.com/v1",
+            default: "",
+            required: true,
+            key: "openai_api_base",
+        },
+        {
+            label: "API Key",
+            type: "password",
+            placeholder: "",
+            default: "",
+            required: false,
+            key: "openai_api_key",
+        },
+    ],
     openai: [
         {
             label: "OpenAI API Base",
@@ -345,3 +363,6 @@ export function getModelProviders(): Record<string, ConfigField[]> {
     ]
 };
 }
+
+/** Providers the backend can serve rerank models for (backend: bisheng/llm/domain/llm/rerank.py). */
+export const rerankProviders = ['openai', 'xinference', 'llamacpp', 'vllm', 'qwen', 'qianfan', 'silicon'];

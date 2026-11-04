@@ -182,6 +182,7 @@ def test_usage_summary_counts_only_platform_accounted_requests(usage_db):  # noq
         "input_tokens": 12,
         "output_tokens": 8,
         "total_tokens": 20,
+        "billed_tokens": 20,
     }
     assert [point["message_count"] for point in summary["points"]] == [1, 1, 0]
     assert summary["points"][0]["start_at"] == "2026-09-09T08:00:00+08:00"
@@ -402,3 +403,18 @@ async def test_usage_overview_route_passes_department_and_search_filters(include
         include_summary=include_summary,
         granularity=granularity,
     )
+
+
+def test_weighted_summary_keeps_provider_tokens_separate(overview_db):
+    from bisheng.dsh.domain.repositories.admin_queries import DshAdminQueryRepository
+
+    start = datetime(2026, 9, 9, tzinfo=UTC)
+    with Session(overview_db) as session, session.begin(), profile_scope(2):
+        row = session.get(DshModelCall, "alice-call")
+        row.credit_rate = 125
+        row.billed_tokens = 19
+    with Session(overview_db) as session, profile_scope(2):
+        repo = DshAdminQueryRepository(session)
+        result = repo.usage_time_summary(20, start_at=start, end_at=start + timedelta(days=1), granularity="day")
+        assert result["totals"]["total_tokens"] == 15
+        assert result["totals"]["billed_tokens"] == 19

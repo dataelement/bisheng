@@ -354,6 +354,8 @@ class TestVersionsAndList:
             "version_no",
             "kind",
             "terminal_state",
+            "approval_status",
+            "release_notes",
             "submitted_at",
             "is_current",
             "is_pending",
@@ -380,3 +382,45 @@ class TestVersionsAndList:
         scoped = await AppQueryService.list_apps(actor=admin)
         assert {row["app_id"] for row in scoped} == {mine.id, theirs.id}
         assert other_tenant.id not in {row["app_id"] for row in scoped}
+
+
+@pytest.mark.parametrize("approval_status", ["pending", "rejected", "withdrawn"])
+async def test_version_history_joins_its_exact_approval(app_db, app_factory, app_owner, approval_status):
+    from bisheng.app_publish.domain.models.app_deployment import AppDeployment
+    from bisheng.app_runtime.domain.services.app_query_service import AppQueryService
+    from bisheng.approval.domain.models.approval_instance import ApprovalInstance
+
+    app, version = await app_factory()
+    async with app_db() as session:
+        instance = ApprovalInstance(
+            tenant_id=app.tenant_id,
+            scenario_code="app_publish_request",
+            scenario_name="App release",
+            handler_key="app_publish_request",
+            business_key="deploy-history",
+            business_resource_type="app",
+            business_resource_id=app.id,
+            business_name=app.name,
+            applicant_user_id=app.owner_user_id,
+            applicant_user_name="owner",
+            status=approval_status,
+        )
+        session.add(instance)
+        await session.flush()
+        session.add(
+            AppDeployment(
+                id="deploy-history",
+                app_id=app.id,
+                tenant_id=app.tenant_id,
+                owner_user_id=app.owner_user_id,
+                submitted_by_user_id=app.owner_user_id,
+                version_id=version.id,
+                approval_instance_id=instance.id,
+                stage="approval_created",
+                status="waiting_approval",
+            )
+        )
+        await session.commit()
+    rows = await AppQueryService.list_versions(app.id, actor=app_owner.payload)
+    assert rows[0]["terminal_state"] is None
+    assert rows[0]["approval_status"] == approval_status

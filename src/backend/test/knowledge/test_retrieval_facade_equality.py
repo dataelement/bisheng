@@ -577,7 +577,7 @@ async def test_a_permission_outage_returns_an_error_and_zero_chunks_at_every_doo
 #   AC-42  U1's PAT through the open face equals what U1 browses in S1 with
 #          their own session; f2 / f3 / f4 absent from both.
 #   AC-44  with OpenFGA actually stopped: v2 and the MCP tool each answer
-#          19002 / 19201 with zero chunks. The *decision* is asserted above by
+#          25021 / 19201 with zero chunks. The *decision* is asserted above by
 #          fault injection at all four doors; what a stopped engine adds is
 #          that the permission layer really does raise rather than time out
 #          into an empty allow-map, which cannot be checked without it.

@@ -110,6 +110,11 @@ def build_parser() -> argparse.ArgumentParser:
     deploy.add_argument("--wait", action="store_true", help="等待审批与上线结果落定")
     deploy.add_argument("--wait-timeout", type=int, default=1800, help="--wait 的最长等待秒数，默认 1800")
     deploy.add_argument("--confirm-schema-change", action="store_true", help="确认本次发布包含应用数据表结构变更")
+    from bisheng_cli.release_notes import message
+
+    notes_source = deploy.add_mutually_exclusive_group()
+    notes_source.add_argument("--release-notes", default=None, help=message("text_help"))
+    notes_source.add_argument("--release-notes-file", default=None, help=message("file_help"))
     deploy.add_argument("--yes", action="store_true", help="跳过目标应用确认（非交互环境必须显式带上）")
     deploy.add_argument("--dry-run", action="store_true", help="只打包与本地校验，打印体量统计，不上传")
     deploy.add_argument(

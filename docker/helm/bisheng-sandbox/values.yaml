@@ -7,7 +7,7 @@ nameOverride: code-runner
 
 image:
   repository: dataelement/bisheng-sandbox
-  tag: v3.0.0-beta1
+  tag: v3.0.0
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -25,6 +25,8 @@ token:
 
 env:
   SANDBOX_MAX_SESSIONS: "50"
+  # Total bytes copied into one session (512 MiB); files past it are skipped and reported.
+  SANDBOX_MAX_COPY_IN_TOTAL_BYTES: "536870912"
   SANDBOX_ENABLE_UID_ISOLATION: "true"
   SANDBOX_LEASE_TTL_S: "900"
   SANDBOX_LOG_LEVEL: INFO
@@ -35,6 +37,8 @@ resources:
     cpu: 200m
     memory: 512Mi
   limits:
+    # Shared by every session on the pod (compose: SANDBOX_CPUS). Keep it set:
+    # without a CPU limit one runaway session starves the node.
     cpu: "2"
     memory: 2Gi
 
@@ -46,15 +50,17 @@ securityContext:
   allowPrivilegeEscalation: false
   capabilities:
     drop: ["ALL"]
-    add: ["SETUID", "SETGID", "CHOWN", "DAC_OVERRIDE"]
+    # KILL: signal a session uid's process group on timeout / session delete.
+    add: ["SETUID", "SETGID", "CHOWN", "DAC_OVERRIDE", "KILL"]
 
 podSecurityContext: {}
 
 # Who may call POST /v1/sessions. Uses the automatic namespace name label.
 networkPolicy:
   enabled: true
-  # Deny all egress (user code shares the runner netns).
-  denyEgress: true
+  # User code shares the runner netns. Egress is allowed so the sandbox
+  # can reach the public internet. Ingress stays limited to platform pods.
+  denyEgress: false
   allowFrom:
     - namespaceSelector:
         matchLabels:

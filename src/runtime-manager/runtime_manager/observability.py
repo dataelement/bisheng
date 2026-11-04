@@ -34,7 +34,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
-from fastapi import HTTPException
+from starlette.exceptions import HTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ def intent_span(kind: str, app_id: str | None):
 
     A failure is *also* an outcome worth a line, so the event is emitted from a
     ``finally``: the exception propagates untouched (FastAPI still turns a
-    :class:`~fastapi.HTTPException` into the manager's error envelope) and the
+    :class:`~starlette.exceptions.HTTPException` into the manager's error envelope) and the
     log records which machine code the caller got. That is the difference
     between "the deploy was refused for capacity" and "the deploy crashed",
     which is otherwise only visible in the caller's own logs.

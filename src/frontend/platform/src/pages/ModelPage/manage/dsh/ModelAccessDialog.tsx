@@ -1,235 +1,100 @@
-import { Button, Input, toast } from '@bisheng/ui';
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { bsConfirm } from '@/components/bs-ui/alertDialog/useConfirm'
+import { Button } from "@bisheng/ui";
+import { Switch } from "@bisheng/ui";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/bs-ui/dialog'
+import {
+    getModelVisibility, getPolicySubjects, saveModelVisibility,
+    type ModelVisibility, type PolicySubjectOption,
+} from '@/controllers/API/dshUnified'
+import { getDshRequestErrorKey } from '@/utils/dshRequestError'
+import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { ModelPermissionRoster } from './ModelPermissionRoster'
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-
-
-import { getDshModelSubjects, getDshModelUserPermissions, saveDshSubjectPolicy } from "@/controllers/API/dsh";
-import type { DshModelUserPermission, DshSubjectPolicy, DshSubjectPolicyInventory } from "@/types/dsh";
-import { getDshRequestErrorKey } from "@/utils/dshRequestError";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { DepartmentAccessTree } from "./DepartmentAccessTree";
-import { policyKey, type PolicyDrafts } from "./SubjectPolicyControls";
-import { useUserPolicyDrafts, withinSaveDeadline } from "./useUserPolicyDrafts";
-
-export type DshAccessModel = { id: number; name: string };
-export const quotaValid = (value: string) => /^\d*$/.test(value) && Number.isSafeInteger(Number(value));
-
+export type DshAccessModel = { id: number; name: string }
 interface ModelAccessDialogProps {
-  model: DshAccessModel | null;
-  onClose: () => void;
+    model: DshAccessModel | null
+    onClose: () => void
 }
 
 export function ModelAccessDialog({ model, onClose }: ModelAccessDialogProps) {
-  const { t } = useTranslation();
+    const { t } = useTranslation()
+    const [value, setValue] = useState<ModelVisibility | null>(null)
+    const [options, setOptions] = useState<PolicySubjectOption[]>([])
+    const [dirty, setDirty] = useState(false)
+    const [saving, setSaving] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const [revision, setRevision] = useState(0)
+    const modelId = model?.id
 
-  const [inventory, setInventory] = useState<DshSubjectPolicyInventory | null>(null);
-  const [drafts, setDrafts] = useState<PolicyDrafts>({});
-  const [query, setQuery] = useState("");
-  const [loadError, setLoadError] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [refresh, setRefresh] = useState(0);
-  const [membersVersion, setMembersVersion] = useState(0);
-  const [savedRevision, setSavedRevision] = useState(0);
-  const busy = useRef(false);
-  const modelId = model?.id;
-  const reloadUser = useCallback(
-    async (user: DshModelUserPermission) => {
-      if (!modelId) throw new Error("Model context unavailable");
-      let cursor: string | undefined;
-      const visited = new Set<string>();
-      do {
-        const page = await getDshModelUserPermissions(modelId, {
-          keyword: String(user.user_id),
-          limit: 50,
-          cursor,
-        });
-        const item = page.items.find((row) => row.user_id === user.user_id);
-        if (item) return item;
-        cursor = page.has_more ? (page.next_cursor ?? undefined) : undefined;
-        if (cursor && visited.has(cursor)) break;
-        if (cursor) visited.add(cursor);
-      } while (cursor);
-      throw new Error("User permission unavailable");
-    },
-    [modelId],
-  );
-  const users = useUserPolicyDrafts(modelId, reloadUser);
+    useEffect(() => {
+        setValue(null)
+        setDirty(false)
+        setError(null)
+        if (!modelId) return
+        const abort = new AbortController()
+        Promise.all([getModelVisibility(modelId, abort.signal), getPolicySubjects(abort.signal)])
+            .then(([policy, subjects]) => {
+                if (abort.signal.aborted) return
+                setValue(policy)
+                setOptions(subjects)
+            })
+            .catch(() => { if (!abort.signal.aborted) setError('dsh.unavailable') })
+        return () => abort.abort()
+    }, [modelId, revision])
 
-  useEffect(() => {
-    setDrafts({});
-    setQuery("");
-    setSaveError(null);
-  }, [modelId]);
-  useEffect(() => {
-    if (!modelId) return;
-    const abort = new AbortController();
-    setInventory(null);
-    setLoadError(false);
-    getDshModelSubjects(modelId, abort.signal)
-      .then((value) => {
-        if (!abort.signal.aborted) setInventory(value);
-      })
-      .catch(() => {
-        if (!abort.signal.aborted) setLoadError(true);
-      });
-    return () => abort.abort();
-  }, [modelId, refresh]);
-
-  const departments = inventory?.departments ?? [];
-  const dirty = departments.filter((item) => {
-    const draft = drafts[policyKey(item)];
-    return draft && (!quotaValid(draft.limit) || Number(draft.limit) !== (item.enabled ? item.monthly_token_limit : 0));
-  });
-  const hasChanges = dirty.length > 0 || users.hasChanges;
-  const canSave = hasChanges || users.hasPending || Object.keys(drafts).length > 0;
-  const valid = users.valid && dirty.every((item) => quotaValid(drafts[policyKey(item)].limit));
-  const changeDepartment = (item: DshSubjectPolicy, value: string) => {
-    setSaveError(null);
-    setDrafts((current) => ({
-      ...current,
-      [policyKey(item)]: { limit: value, enabled: Number(value) > 0 },
-    }));
-  };
-  const close = () => {
-    if (busy.current) return;
-    if (hasChanges || users.hasPending)
-      bsConfirm({
-        title: t("dsh.discardPolicyEdits"),
-        desc: t("dsh.discardPolicyEditsHelp"),
-        okTxt: t("dsh.discardEdits"),
-        onOk(next) {
-          onClose();
-          next();
-        },
-      });
-    else onClose();
-  };
-  async function save() {
-    if (!modelId || !inventory || busy.current || !valid || !canSave) return;
-    busy.current = true;
-    setSaving(true);
-    setSaveError(null);
-    let complete = true;
-    try {
-      // Each successful item advances independently and remains committed on retry.
-      if (!(await users.save(inventory.tenant_id))) complete = false;
-      for (const item of dirty) {
-        const limit = Number(drafts[policyKey(item)].limit);
-        const value = await withinSaveDeadline(
-          saveDshSubjectPolicy(modelId, "DEPARTMENT", item.subject_id, inventory.tenant_id, {
-            expected_version: item.version,
-            enabled: limit > 0,
-            monthly_token_limit: limit,
-          }),
-        );
-        setInventory((current) =>
-          current
-            ? {
-                ...current,
-                departments: current.departments.map((row) =>
-                  row.subject_id === item.subject_id ? { ...row, ...value, subject_type: "DEPARTMENT" as const } : row,
-                ),
-              }
-            : current,
-        );
-        setDrafts((current) => {
-          const next = { ...current };
-          delete next[policyKey(item)];
-          return next;
-        });
-      }
-      setMembersVersion((value) => value + 1);
-      if (complete) {
-        setDrafts({});
-        setSavedRevision((value) => value + 1);
-      }
-      setSaveError(complete ? null : "dsh.policySaveFailed");
-      toast.show({ type: complete ? "success" : "error", message: String(t(complete ? "dsh.policySaved" : "dsh.policySaveFailed") ?? '') });
-    } catch (error) {
-      const errorKey = getDshRequestErrorKey(error) ?? "dsh.policySaveFailed";
-      setSaveError(errorKey);
-      setMembersVersion((value) => value + 1);
-      toast.show({ type: "error", message: String(t(errorKey) ?? '') });
-    } finally {
-      busy.current = false;
-      setSaving(false);
+    const close = () => {
+        if (saving) return
+        if (!dirty) { onClose(); return }
+        bsConfirm({
+            title: t('dsh.discardPolicyEdits'), desc: t('dsh.discardPolicyEditsHelp'),
+            okTxt: t('dsh.discardEdits'), onOk(next) { onClose(); next() },
+        })
     }
-  }
-  async function reload() {
-    if (busy.current || !modelId) return;
-    busy.current = true;
-    setSaving(true);
-    try {
-      await users.refresh();
-      setInventory(await withinSaveDeadline(getDshModelSubjects(modelId)));
-      setMembersVersion((value) => value + 1);
-      setSaveError(null);
-    } catch (error) {
-      setSaveError(getDshRequestErrorKey(error) ?? "dsh.policySaveFailed");
-    } finally {
-      busy.current = false;
-      setSaving(false);
+    const save = async () => {
+        if (!modelId || !value || saving) return
+        setSaving(true)
+        setError(null)
+        try {
+            await saveModelVisibility(modelId, value)
+            setDirty(false)
+            onClose()
+        } catch (reason) {
+            setError(getDshRequestErrorKey(reason) ?? 'dsh.unavailable')
+        } finally { setSaving(false) }
     }
-  }
-  return (
-    <Dialog
-      open={!!model}
-      onOpenChange={(open) => {
-        if (!open) close();
-      }}
-    >
-      <DialogContent
-        aria-describedby={undefined}
-        className="flex h-[88vh] max-h-[calc(100vh-64px)] min-h-0 flex-col overflow-hidden sm:max-w-6xl"
-      >
-        <DialogHeader className="shrink-0">
-          <DialogTitle className="break-words pr-8">{model?.name}</DialogTitle>
-        </DialogHeader>
-        {!inventory || !modelId ? (
-          <div className="py-6">
-            <p role={loadError ? "alert" : "status"}>{t(loadError ? "dsh.unavailable" : "dsh.loading")}</p>
-            {loadError && <Button onClick={() => setRefresh((value) => value + 1)}>{t("dsh.refresh")}</Button>}
-          </div>
-        ) : (
-          <>
-            <div className="flex shrink-0 justify-end gap-2">
-              <Input aria-label={t("dsh.searchUsername")} placeholder={t("dsh.searchUsername")} value={query} disabled={saving} onChange={(event) => setQuery(event.target.value)} className={"w-72"} />
-              <Button loading={saving} onClick={save} disabled={Boolean(saving) || (!canSave || !valid)}>
-                {t(saving ? "dsh.savingPolicies" : "save")}
-              </Button>
-            </div>
-            {saveError && (
-              <div className="flex items-center justify-end gap-2 text-sm">
-                <span role="alert" className="text-destructive">
-                  {t(saveError)}
-                </span>
-                <Button size="small" variant="outlined" disabled={saving} onClick={reload} color="default">
-                  {t("dsh.refresh")}
-                </Button>
-              </div>
-            )}
-            <div className="min-h-0 flex-1 overflow-auto overscroll-contain rounded-lg border">
-              <DepartmentAccessTree
-                tenantId={inventory.tenant_id}
-                key={modelId}
-                modelId={modelId}
-                items={departments}
-                drafts={drafts}
-                query={query}
-                onQueryClear={() => setQuery("")}
-                users={users}
-                saving={saving}
-                refresh={membersVersion}
-                savedRevision={savedRevision}
-                onDepartmentChange={changeDepartment}
-              />
-            </div>
-          </>
-        )}
-      </DialogContent>
+
+    return <Dialog open={!!model} onOpenChange={open => { if (!open) close() }}>
+        <DialogContent className="flex max-h-[calc(100dvh-48px)] w-[calc(100vw-48px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-y-auto p-5">
+            <DialogHeader className="mb-4"><DialogTitle>{t('dsh.unified.visibility')} · {model?.name}</DialogTitle><DialogDescription className="sr-only">{t('dsh.unified.visibilityHelp')}</DialogDescription></DialogHeader>
+            {error && <p role="alert">{t(error)}</p>}
+            {!value ? <Button variant="outlined" onClick={() => setRevision(old => old + 1)}>
+                {t(error ? 'dsh.refresh' : 'dsh.loading')}
+            </Button> : <>
+                <div className="flex shrink-0 items-center justify-between gap-4 rounded-lg border px-4 py-3">
+                    <div className="min-w-0 space-y-1">
+                        <label htmlFor="model-visible-to-everyone" className="cursor-pointer text-sm font-medium">{t('dsh.unified.everyoneVisible')}</label>
+                        <p id="model-visibility-description" className="text-xs text-muted-foreground">
+                            {t(value.everyone ? 'dsh.unified.everyoneVisibleHelp' : 'dsh.unified.selectedVisibleHelp')}
+                        </p>
+                    </div>
+                    <Switch id="model-visible-to-everyone" checked={value.everyone} disabled={saving}
+                        aria-describedby="model-visibility-description"
+                        onCheckedChange={everyone => { setValue({ ...value, everyone }); setDirty(true) }} />
+                </div>
+                {!value.everyone && model && <section aria-label={t('dsh.unified.selectedVisible')}
+                    className="mt-4 flex h-[clamp(180px,32vh,300px)] shrink-0 flex-col">
+                    <ModelPermissionRoster key={model.id} model={model} value={value}
+                        options={options} disabled={saving}
+                        onChange={next => { setValue(next); setDirty(true) }} />
+                </section>}
+                <div className="mt-4 flex shrink-0 justify-end gap-2">
+                    <Button variant="outlined" onClick={close} disabled={saving}>{t('dsh.unified.cancel')}</Button>
+                    <Button onClick={save} disabled={saving || !dirty}>
+                        {t(saving ? 'dsh.unified.saving' : 'dsh.unified.save')}
+                    </Button>
+                </div>
+            </>}
+        </DialogContent>
     </Dialog>
-  );
 }

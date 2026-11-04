@@ -106,12 +106,15 @@ def test_child_env_has_no_secrets(client: TestClient, monkeypatch: pytest.Monkey
             "timeout_s": 5,
         },
     )
-    lines = probe.json()["stdout"].strip().splitlines()
-    assert lines[0] == lines[1]
-    assert sid in lines[0]
+    home, tmpdir = probe.json()["stdout"].strip().splitlines()
+    # HOME lives beside the work dir (D13), TMPDIR stays in it.
+    assert sid in home and sid in tmpdir
+    assert home != tmpdir
+    assert not home.startswith(tmpdir.rstrip("/") + "/")
 
 
-def test_exit_137_deletes_lease(client: TestClient):
+def test_exit_137_keeps_lease(client: TestClient):
+    """C2: an OOM / signal kill only ends that process; the session stays usable."""
     sid, headers = _session(client)
     resp = client.post(
         f"/v1/sessions/{sid}/exec",
@@ -120,12 +123,14 @@ def test_exit_137_deletes_lease(client: TestClient):
     )
     assert resp.status_code == 200
     assert resp.json()["exitcode"] == 137
+    assert resp.json()["killed_reason"] is None
     again = client.post(
         f"/v1/sessions/{sid}/exec",
         headers=headers,
         json={"code": "print(1)", "lang": "python", "timeout_s": 5},
     )
-    assert again.status_code == 404
+    assert again.status_code == 200
+    assert again.json()["exitcode"] == 0
 
 
 def test_two_execs_on_same_session_are_serial(client: TestClient):
