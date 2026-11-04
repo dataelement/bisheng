@@ -34,8 +34,9 @@ jest.mock('~/Providers', () => ({
     useToastContext: () => ({ showToast: jest.fn() }),
 }));
 
-jest.mock('~/hooks/useAutoScroll', () => ({
-    useAutoScroll: jest.fn(),
+jest.mock('~/hooks/usePrefersMobileLayout', () => ({
+    __esModule: true,
+    default: () => false,
 }));
 
 jest.mock('~/hooks/useLinsightManager', () => ({

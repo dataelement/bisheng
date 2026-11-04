@@ -65,8 +65,13 @@ jest.mock('~/hooks/useLinsightQueuePolling', () => ({
     useLinsightQueuePolling: jest.fn(),
 }));
 
-jest.mock('~/hooks/useAutoScroll', () => ({
-    useAutoScroll: jest.fn(),
+jest.mock('~/hooks/useTaskAutoScroll', () => ({
+    useTaskAutoScroll: () => ({ containerRef: jest.fn(), contentRef: jest.fn() }),
+}));
+
+jest.mock('~/hooks/usePrefersMobileLayout', () => ({
+    __esModule: true,
+    default: () => false,
 }));
 
 jest.mock('~/components/ChatErrorCard', () => ({

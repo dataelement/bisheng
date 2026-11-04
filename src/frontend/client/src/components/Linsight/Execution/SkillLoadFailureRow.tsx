@@ -19,7 +19,7 @@ import { readSkillLoadFailure } from './execTypes';
 import type { MergedStep } from './stepUtils';
 
 export interface SkillLoadFailureRowProps {
-    step: MergedStep;
+    step: Pick<MergedStep, 'name' | 'extraInfo'>;
 }
 
 export const SkillLoadFailureRow: FC<SkillLoadFailureRowProps> = ({ step }) => {

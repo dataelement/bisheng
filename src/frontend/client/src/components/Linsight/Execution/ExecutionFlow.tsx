@@ -22,7 +22,8 @@ import { getRecoveryModelCandidates } from '~/components/modelRateLimitRecoveryD
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { useLinsightWebSocket } from '~/hooks/Websocket';
 import { useLinsightQueuePolling } from '~/hooks/useLinsightQueuePolling';
-import { useAutoScroll } from '~/hooks/useAutoScroll';
+import { useTaskAutoScroll } from '~/hooks/useTaskAutoScroll';
+import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import { useLocalize } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { resolveDisplayedModelRateLimitState } from '~/hooks/queries/endpoints/modelRateLimitPolling';
@@ -57,6 +58,7 @@ interface ExecutionFlowProps {
 
 export function ExecutionFlow({ versionId, conversationId, isSharePage = false, readOnly = false, artifactsPanel }: ExecutionFlowProps) {
     const localize = useLocalize();
+    const isMobile = usePrefersMobileLayout();
     const { showToast } = useToastContext();
     const { getLinsight, continueConversation, updateLinsight } = useLinsightManager();
     // Mount the WS pump here (the legacy TaskFlow used to own it).
@@ -158,9 +160,9 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     // through the gap), so the planning row must not run concurrently. Memo keyed
     // on a composite signature because the WS pump mutates sessionSteps in place.
     const hasSessionTimeline = useMemo(
-        () => hasRenderableTimeline(sessionSteps),
+        () => !isMobile && hasRenderableTimeline(sessionSteps),
         // eslint-disable-next-line react-hooks/exhaustive-deps -- composite key over the in-place-mutated sessionSteps array
-        [sessionSteps.length, sessionSteps[sessionSteps.length - 1]?.status, sessionSteps[sessionSteps.length - 1]?.call_id],
+        [isMobile, sessionSteps.length, sessionSteps[sessionSteps.length - 1]?.status, sessionSteps[sessionSteps.length - 1]?.call_id],
     );
 
     // preparing row: the worker has claimed the session (IN_PROGRESS ⇒ running,
@@ -187,15 +189,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
         sendInput({ task_id: taskId || versionId, user_input: answer, files: [] });
     };
 
-    const scrollRef = useRef<HTMLDivElement>(null);
-    // Streaming-tuned auto-scroll (F6): instant follow (no per-frame smooth
-    // jitter), a tight 64px stick threshold, and release-on-scroll-up so a
-    // manual scroll-up detaches the follow until the user returns to bottom.
-    useAutoScroll(scrollRef, [tasks, sessionSteps, status], {
-        scrollBehavior: 'auto',
-        threshold: 64,
-        releaseOnScrollUp: true,
-    });
+    const { containerRef, contentRef } = useTaskAutoScroll({ sessionKey: versionId });
 
     return (
         // Liveness for the SESSION-LEVEL timeline (the active round's planning
@@ -214,8 +208,8 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                 bubbles up to outrank this overlay and stays crisp. */}
             <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-white to-transparent" />
             {/* ── conversational flow ─────────────────────────────────────── */}
-            <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto scroll-hover">
-                <div className="mx-auto w-full max-w-[800px] px-4 pb-6 pt-4">
+            <div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto scroll-hover">
+                <div ref={contentRef} className="mx-auto w-full max-w-[800px] px-4 pb-6 pt-4">
                     {/* F035 multi-turn: completed prior rounds, stacked above the
                         active round so the conversation reads top-to-bottom. */}
                     {(linsight?.history || []).map((round, i) => (
@@ -237,7 +231,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                     )}
 
                     {/* legacy SOP document (read-only, pre-F035 sessions only) */}
-                    <LegacySopRow sop={linsight?.sop} />
+                    {!isMobile && <LegacySopRow sop={linsight?.sop} />}
 
                     {/* queueing card (auto-disappears when the worker picks us up) */}
                     {queueing && <QueueCard position={linsight!.queueCount} onCancel={stop} />}
@@ -259,7 +253,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                             {preparing && <BreathingRow state="preparing" />}
 
                             {/* planning breathing row */}
-                            {planning && <BreathingRow state="planning" />}
+                            {planning && <BreathingRow state={isMobile ? 'researching' : 'planning'} />}
 
                             {/* task rows with nested sub-step flows — only tasks
                                 execution has reached; not-started ones stay in TaskPanel. */}

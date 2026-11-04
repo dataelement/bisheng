@@ -12,9 +12,10 @@
  * TimelineRail) and the Wave2 group components below.
  */
 import { useMemo } from 'react';
+import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import { DeepStepGroup } from './DeepStepGroup';
 import { useExecutionLive } from './executionLive';
-import { readIngestProgress, readSkillLoadFailure } from './execTypes';
+import { INGEST_STEP_NAME, SKILL_LOAD_FAILED_STEP_NAME, readIngestProgress, readSkillLoadFailure } from './execTypes';
 import { IngestPhaseRow } from './IngestPhaseRow';
 import { SkillLoadFailureRow } from './SkillLoadFailureRow';
 import { IntentRow } from './IntentRow';
@@ -28,6 +29,38 @@ interface ExecutionTimelineProps {
 }
 
 export function ExecutionTimeline({ history }: ExecutionTimelineProps) {
+    const isMobile = usePrefersMobileLayout();
+    // Branch before mounting the detailed renderer: CSS-only folding still
+    // builds every thinking/tool/subagent subtree and keeps its text in the DOM.
+    return isMobile
+        ? <MobileExecutionNotices history={history} />
+        : <DetailedExecutionTimeline history={history} />;
+}
+
+/** Retain preparation/availability notices without merging process bodies. */
+function MobileExecutionNotices({ history }: ExecutionTimelineProps) {
+    const notices = new Map<string, { name: string; extraInfo: Record<string, unknown>; output: string }>();
+    for (const frame of history || []) {
+        const key = frame.call_id || frame.name || '';
+        const previous = notices.get(key);
+        const name = frame.name || previous?.name;
+        if (name !== INGEST_STEP_NAME && name !== SKILL_LOAD_FAILED_STEP_NAME) continue;
+        notices.set(key, {
+            name,
+            extraInfo: { ...previous?.extraInfo, ...frame.extra_info },
+            output: name === INGEST_STEP_NAME ? frame.output ?? previous?.output ?? '' : '',
+        });
+    }
+    return (
+        <>
+            {Array.from(notices, ([key, step]) => step.name === INGEST_STEP_NAME
+                ? <IngestPhaseRow key={key} step={step} />
+                : <SkillLoadFailureRow key={key} step={step} />)}
+        </>
+    );
+}
+
+function DetailedExecutionTimeline({ history }: ExecutionTimelineProps) {
     // F3 perf: building the node tree is several O(n) passes (merge + group +
     // episode aggregation). The WS pump mutates `history` in place (same array
     // reference), so the reference alone is not enough to invalidate the memo — a

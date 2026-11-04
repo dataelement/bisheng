@@ -30,7 +30,7 @@ import { NarrationTicker } from './NarrationTicker';
 import type { MergedStep } from './stepUtils';
 
 export interface IngestPhaseRowProps {
-    step: MergedStep;
+    step: Pick<MergedStep, 'name' | 'extraInfo' | 'output'>;
 }
 
 export const IngestPhaseRow: FC<IngestPhaseRowProps> = ({ step }) => {

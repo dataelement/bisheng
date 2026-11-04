@@ -2027,6 +2027,7 @@
     "channel_unavailable_or_no_permission": "This channel is unavailable or you do not have permission to view it"
   },
   "com_ui": {
+    "scroll_to_bottom": "Back to bottom",
     "system_notice_acknowledge": "Got it",
     "system_notice_title": "System notification"
   },

@@ -33,10 +33,10 @@ import { getRecoveryModelCandidates } from '~/components/modelRateLimitRecoveryD
 import { useLocalize } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { resolveDisplayedModelRateLimitState } from '~/hooks/queries/endpoints/modelRateLimitPolling';
-import { useAutoScroll } from '~/hooks/useAutoScroll';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { useLinsightWebSocket } from '~/hooks/Websocket';
 import { useLinsightQueuePolling } from '~/hooks/useLinsightQueuePolling';
+import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import { useToastContext } from '~/Providers';
 import { SopStatus } from '~/store/linsight';
 import { BreathingRow } from './BreathingRow';
@@ -71,6 +71,7 @@ interface TaskTurnPanelProps {
 
 export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversationId, answer, readOnly = false, onPreviewFile, onModelChange }: TaskTurnPanelProps) {
     const localize = useLocalize();
+    const isMobile = usePrefersMobileLayout();
     const { showToast } = useToastContext();
     const { data: bsConfig } = useGetBsConfig();
     const { continueConversation, getLinsight, switchAndUpdateLinsight, updateLinsight } = useLinsightManager();
@@ -192,9 +193,9 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
     // through the gap), so the planning row must not run concurrently. Memo keyed
     // on a composite signature because the WS pump mutates sessionSteps in place.
     const hasSessionTimeline = useMemo(
-        () => hasRenderableTimeline(sessionSteps),
+        () => !isMobile && hasRenderableTimeline(sessionSteps),
         // eslint-disable-next-line react-hooks/exhaustive-deps -- composite key over the in-place-mutated sessionSteps array
-        [sessionSteps.length, sessionSteps[sessionSteps.length - 1]?.status, sessionSteps[sessionSteps.length - 1]?.call_id],
+        [isMobile, sessionSteps.length, sessionSteps[sessionSteps.length - 1]?.status, sessionSteps[sessionSteps.length - 1]?.call_id],
     );
 
     // Attachment ingest was moved off the submit request into the worker, which
@@ -210,28 +211,8 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
         sendInput({ task_id: taskId || versionId, user_input: ans, files: [] });
     };
 
-    // Auto-scroll (F6): this panel is embedded in the daily message stream and
-    // owns no scroll container of its own (the message list does), and the daily
-    // list only auto-scrolls on `messages` changes — NOT on this turn's internal
-    // streaming (which mutates the Recoil store). So we follow new content here:
-    // resolve the nearest scrollable ancestor of the panel root, then drive
-    // useAutoScroll on it with the same streaming-tuned params as ExecutionFlow.
-    const rootRef = useRef<HTMLDivElement>(null);
-    const scrollRef = useRef<HTMLElement | null>(null);
-    useEffect(() => {
-        let el: HTMLElement | null = rootRef.current?.parentElement || null;
-        while (el) {
-            const overflowY = getComputedStyle(el).overflowY;
-            if (overflowY === 'auto' || overflowY === 'scroll') break;
-            el = el.parentElement;
-        }
-        scrollRef.current = el;
-    }, []);
-    useAutoScroll(scrollRef, [tasks, sessionSteps, status], {
-        scrollBehavior: 'auto',
-        threshold: 64,
-        releaseOnScrollUp: true,
-    });
+    // The hosting message list owns follow-to-bottom for all task turns. A
+    // controller per historical turn would compete over the same scroll box.
 
     // Not hydrated yet — show the answer text fallback (or a thin loading hint).
     if (!linsight) {
@@ -259,7 +240,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
         // done, so the planning thinking must collapse to "已深度思考" instead of
         // lingering as a pulsing "正在深度思考" concurrent with the running task.
         <ExecutionLiveContext.Provider value={running && !pendingInput && !tasks.length}>
-        <div ref={rootRef} className="w-full">
+        <div className="w-full">
             {/* queueing card (auto-disappears when the worker picks us up) */}
             {queueing && <QueueCard position={linsight!.queueCount} onCancel={stop} />}
 
@@ -273,7 +254,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
             {preparing && <BreathingRow state="preparing" />}
 
             {/* planning breathing row */}
-            {planning && <BreathingRow state="planning" />}
+            {planning && <BreathingRow state={isMobile ? 'researching' : 'planning'} />}
 
             {/* task rows with nested sub-step flows — only show tasks execution has
                 actually reached; not-started ones live in the pinned TaskPanel only. */}

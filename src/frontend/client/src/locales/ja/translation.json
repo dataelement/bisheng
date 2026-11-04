@@ -1951,6 +1951,7 @@
     "channel_unavailable_or_no_permission": "このチャンネルは利用できないか、閲覧権限がありません"
   },
   "com_ui": {
+    "scroll_to_bottom": "一番下へ",
     "system_notice_acknowledge": "承知しました",
     "system_notice_title": "システム通知"
   },

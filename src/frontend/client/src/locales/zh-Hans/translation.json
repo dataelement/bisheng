@@ -1957,6 +1957,7 @@
     "channel_unavailable_or_no_permission": "该频道已失效或暂无查看权限"
   },
   "com_ui": {
+    "scroll_to_bottom": "回到底部",
     "system_notice_acknowledge": "我知道了",
     "system_notice_title": "系统通知"
   },

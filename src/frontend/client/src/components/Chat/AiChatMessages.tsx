@@ -4,7 +4,7 @@
  * Each node with multiple children shows SiblingSwitch for navigation.
  */
 import { ArrowDownIcon, CornerDownRightIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSetRecoilState } from "recoil";
 import { Button } from "~/components";
@@ -17,6 +17,7 @@ import { useMessageSelection } from "~/hooks/useMessageSelection";
 import type { ChatMessage } from "~/api/chatApi";
 import { buildMessageTree } from "~/api/chatApi";
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
+import { useTaskAutoScroll } from "~/hooks/useTaskAutoScroll";
 import { ArticleQAIllustration } from "~/components/illustrations";
 import store from "~/store";
 import HeaderTitle from "./HeaderTitle";
@@ -201,6 +202,14 @@ export default function AiChatMessages({
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const messagesScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const emptyScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
+    const hasTaskMessages = messages.some((message) => message.category === 'task');
+    const taskScroll = useTaskAutoScroll({ sessionKey: conversationId, enabled: hasTaskMessages });
+    const { containerRef: taskContainerRef, contentRef: taskContentRef } = taskScroll;
+    const setScrollContainer = useCallback((element: HTMLDivElement | null) => {
+        scrollRef.current = element;
+        messagesScrollRevealRef(element);
+        taskContainerRef(element);
+    }, [messagesScrollRevealRef, taskContainerRef]);
     const endRef = useRef<HTMLDivElement>(null);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     // Track whether user has manually scrolled up
@@ -257,13 +266,15 @@ export default function AiChatMessages({
 
     // Auto-scroll to bottom on new messages — only if user hasn't scrolled up
     useEffect(() => {
+        if (hasTaskMessages) return;
         if (!isUserScrolledUp.current && endRef.current) {
             endRef.current.scrollIntoView({ behavior: "smooth" });
         }
-    }, [messages]);
+    }, [messages, hasTaskMessages]);
 
     // ResizeObserver to detect content height changes (e.g. thinking block collapse/expand)
     useEffect(() => {
+        if (hasTaskMessages) return;
         const container = scrollRef.current;
         if (!container) return;
         const observer = new ResizeObserver(() => {
@@ -273,14 +284,18 @@ export default function AiChatMessages({
         const inner = container.firstElementChild;
         if (inner) observer.observe(inner);
         return () => observer.disconnect();
-    }, []);
+    }, [hasTaskMessages]);
 
     // Show/hide scroll-to-bottom button and track user scroll position
     const handleScroll = () => {
-        checkNearBottom();
+        if (!hasTaskMessages) checkNearBottom();
     };
 
     const scrollToBottom = () => {
+        if (hasTaskMessages) {
+            taskScroll.scrollToBottom();
+            return;
+        }
         isUserScrolledUp.current = false;
         endRef.current?.scrollIntoView({ behavior: "smooth" });
     };
@@ -367,10 +382,7 @@ export default function AiChatMessages({
                 bubbles up to outrank this overlay and stays crisp. */}
             <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-10 bg-gradient-to-b from-white to-transparent" />
             <div
-                ref={(el) => {
-                    scrollRef.current = el;
-                    messagesScrollRevealRef(el);
-                }}
+                ref={setScrollContainer}
                 // `scrollbar-on-scroll` reserves the scrollbar gutter with
                 // `scrollbar-gutter: stable`, i.e. entirely on the end edge. That
                 // makes this box asymmetric, so the centered message column sits
@@ -396,6 +408,7 @@ export default function AiChatMessages({
                 onScroll={handleScroll}
             >
                 <div
+                    ref={taskContentRef}
                     className={cn(
                         "flex min-h-full w-full flex-col pt-2 pb-10",
                         contentWidthClassName ?? (knowledgeChatLayout ? "max-w-none" : "max-w-[768px] mx-auto")
@@ -457,7 +470,7 @@ export default function AiChatMessages({
             </div>
             </div>
             {/* Scroll to bottom button */}
-            {showScrollBtn && (
+            {(hasTaskMessages ? taskScroll.showScrollButton : showScrollBtn) && (
                 <div className="absolute -bottom-4 w-full h-0 flex justify-center z-10">
                     <button
                         type="button"
@@ -465,7 +478,7 @@ export default function AiChatMessages({
                         className="flex items-center h-8 justify-center gap-2 rounded-md border border-border-base bg-white/80 px-2.5 text-sm leading-5 text-neutral-800 hover:bg-white/90 transition-colors"
                     >
                         <ArrowDownIcon size={16} />
-                        <span className="text-sm">回到底部</span>
+                        <span className="text-sm">{localize('com_ui.scroll_to_bottom')}</span>
                     </button>
                 </div>
             )}
