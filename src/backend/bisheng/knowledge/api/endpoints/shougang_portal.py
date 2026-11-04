@@ -50,9 +50,9 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalHomeResp,
     ShougangPortalHomeStatsResp,
     ShougangPortalPersonalSpacesResp,
-    ShougangPortalQaCategoryFilesReq,
     ShougangPortalQaCategoryFileRefsReq,
     ShougangPortalQaCategoryFileRefsResp,
+    ShougangPortalQaCategoryFilesReq,
     ShougangPortalQaFileSearchReq,
     ShougangPortalQaFileSearchResp,
     ShougangPortalRelatedFilesResp,
@@ -87,6 +87,7 @@ from bisheng.knowledge.domain.services.portal_hot_search_admin_service import (
 from bisheng.telemetry.domain.mid_table.realtime_qa_question import (
     RealtimeQaQuestionFact,
 )
+from bisheng.telemetry_search.domain.services.knowledge_document_reader import count_portal_home_documents
 from bisheng.utils import generate_uuid
 
 router = APIRouter(prefix="/knowledge/shougang-portal", tags=["shougang_portal"])
@@ -417,7 +418,7 @@ async def get_shougang_portal_home_stats(
     _ = login_user
     result, total_files = await asyncio.gather(
         PortalTelemetryEventService.count_home_events(),
-        PortalTelemetryEventService.count_dashboard_files(),
+        count_portal_home_documents(),
     )
     return resp_200(ShougangPortalHomeStatsResp(**result, total_files=total_files).model_dump(mode="json"))
 
@@ -607,7 +608,7 @@ async def search_shougang_portal_qa_files(
     return resp_200(ShougangPortalQaFileSearchResp(**result).model_dump(mode="json"))
 
 
-# 与 /spaces 列表对齐。门户登录选库会传 portal_configured；只接受 public 时会 422，门户再翻成 502。
+# 与 /spaces 列表对齐。门户登录选库会传 portal_configured; 只接受 public 时会 422, 门户再翻成 502。
 PortalQaChildrenDiscoveryScope = Literal[
     "public",
     "public_and_department",
