@@ -34,7 +34,6 @@
   --vnext-surface-page: rgb(var(--bg-page));
   --vnext-surface-card: rgb(var(--fill-1));
   --vnext-surface-card-hover: rgb(var(--fill-2));
-  --vnext-surface-card-pressed: rgb(var(--fill-3));
   --vnext-text-strong: #000;
   --vnext-text-primary: rgb(var(--text-1));
   --vnext-text-secondary: rgb(var(--text-3));

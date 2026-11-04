@@ -17,6 +17,7 @@ import {
 } from "~/components/Chat/MessageSelection";
 import { AddToKnowledgeModal } from "~/pages/Subscription/Article/AddToKnowledgeModal";
 import type { ChatViewModel } from "./ChatView";
+import "./chat-surface.css";
 
 interface ChatSurfacePresentationProps {
   model: ChatViewModel;

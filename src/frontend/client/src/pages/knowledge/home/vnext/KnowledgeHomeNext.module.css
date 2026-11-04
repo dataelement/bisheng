@@ -74,7 +74,6 @@
   .sortTrigger:hover { background: var(--vnext-sort-active-bg); }
   .secondaryButton:hover:not(:disabled) { background: var(--vnext-action-secondary-hover); }
 }
-.card:active { background: var(--vnext-surface-card-pressed); }
 @container knowledge-home (max-width: 350px) {
   .cardFooter { align-items: flex-start; }
   .updated { overflow-wrap: anywhere; }
