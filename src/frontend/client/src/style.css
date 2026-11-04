@@ -90,6 +90,8 @@ html {
   --foreground: 0 0% 3.9%;
   --card: 0 0% 100%;
   --card-foreground: 0 0% 3.9%;
+  --popover: var(--background);
+  --popover-foreground: var(--foreground);
   /* #165DFF — design brand blue. Fractional HSL so hsl(var(--primary)) rounds to
      exactly rgb(22,93,255) = --brand-500; integer 222 100% 54% drifted to (20,91,255). */
   --primary: 221.51 100% 54.22%;
@@ -166,6 +168,7 @@ html {
   --foreground: 0 0% 98%;
   --card: 0 0% 3.9%;
   --card-foreground: 0 0% 98%;
+  --popover: var(--secondary);
   --primary: 0 0% 98%;
   --primary-foreground: 0 0% 9%;
   --secondary: 0 0% 14.9%;
