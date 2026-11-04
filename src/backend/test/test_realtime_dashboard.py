@@ -190,10 +190,18 @@ async def test_daily_participation_login_is_atomic_and_department_scoped(
         "aget_user_primary_department",
         AsyncMock(return_value=SimpleNamespace(department_id=9)),
     )
+    department = SimpleNamespace(
+        id=9, name="炼钢部", path="/9", org_level="dept", tenant_id=2, status="active", is_deleted=0
+    )
     monkeypatch.setattr(
         module.DepartmentDao,
         "aget_by_id",
-        AsyncMock(return_value=SimpleNamespace(id=9, name="炼钢部")),
+        AsyncMock(return_value=department),
+    )
+    monkeypatch.setattr(
+        module.DepartmentDao,
+        "aget_by_ids",
+        AsyncMock(return_value=[department]),
     )
 
     record = await module.DailyParticipationFact.record_login(
@@ -313,12 +321,19 @@ async def test_realtime_qa_question_uses_event_time_primary_department(
     assert record.asker_company_name == "首钢股份"
     assert record.asker_department_name == "制造部"
     assert record.asker_office_name == "炼钢科"
+    assert record.belonging_company_name == "首钢股份"
+    assert record.belonging_department_name == "制造部"
+    assert record.belonging_office_name == "炼钢科"
     assert record.department_source == "event_time"
     document = fake_es.index_calls[0]["document"]
     assert document["question_id"] == "q-001"
     assert document["asker_company_name"] == "首钢股份"
     assert document["asker_department_name"] == "制造部"
     assert document["asker_office_name"] == "炼钢科"
+    assert document["belonging_company_name"] == "首钢股份"
+    assert document["belonging_department_name"] == "制造部"
+    assert document["belonging_office_name"] == "炼钢科"
+    assert "未分类" not in document.values()
 
 
 @pytest.mark.asyncio

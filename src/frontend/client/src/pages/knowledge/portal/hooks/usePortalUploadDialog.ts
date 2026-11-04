@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { v4 as createUploadBatchKey } from "uuid";
 import {
     addFilesApi,
     createFolderApi,
@@ -597,6 +598,7 @@ export function usePortalUploadDialog({
         filePaths: string[],
         recommendations: Map<string, UploadFolderRecommendationItem>,
         uploadMetadataPayload: UploadFileRegistrationMetadata,
+        uploadBatchKey: string,
     ) => {
         const groups = new Map<string, { parentId: number | null; filePaths: string[] }>();
         uploadItems.forEach((item, index) => {
@@ -614,6 +616,7 @@ export function usePortalUploadDialog({
             const files = await addFilesApi(activeSpace!.id, {
                 file_path: group.filePaths,
                 parent_id: group.parentId,
+                upload_batch_key: uploadBatchKey,
                 ...uploadMetadataPayload,
             });
             registeredFiles.push(...files);
@@ -638,6 +641,7 @@ export function usePortalUploadDialog({
         uploadSubmittingRef.current = true;
         setUploadSubmitting(true);
         try {
+            const uploadBatchKey = createUploadBatchKey();
             const uploadMetadataPayload = buildPortalUploadMetadataPayload(
                 { businessDomainCode, selectedTagValues: selectedUploadTagValues },
                 selectedFileSubcategory,
@@ -755,6 +759,7 @@ export function usePortalUploadDialog({
                     const registered = await addFilesApi(activeSpace.id, {
                         file_path: filePaths,
                         parent_id: Number(parentFolderId),
+                        upload_batch_key: uploadBatchKey,
                         ...uploadMetadataPayload,
                     });
                     allRegistered.push(...registered);
@@ -772,7 +777,13 @@ export function usePortalUploadDialog({
                 filesToUpload.map((item) => uploadFileToServerApi(activeSpace.id, item.file)),
             );
             const filePaths = uploadResults.map((item) => item.file_path);
-            const registeredFiles = await registerUploadedFiles(filesToUpload, filePaths, recommendations, uploadMetadataPayload);
+            const registeredFiles = await registerUploadedFiles(
+                filesToUpload,
+                filePaths,
+                recommendations,
+                uploadMetadataPayload,
+                uploadBatchKey,
+            );
             await finishUploadedFiles(registeredFiles, uploadMetadataPayload);
             if (sensitiveFileList.length) setSensitiveWordFiles(sensitiveFileList);
         } catch (error) {

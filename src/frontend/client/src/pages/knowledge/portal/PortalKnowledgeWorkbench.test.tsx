@@ -5787,6 +5787,7 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(addFilesApi).toHaveBeenCalledWith("personal-1", {
             file_path: ["/tmp/测试文档.pdf"],
             parent_id: null,
+            upload_batch_key: expect.any(String),
         });
         expect(getSimilarCandidatesApi).not.toHaveBeenCalled();
         expect(linkAsNewVersionApi).not.toHaveBeenCalled();
@@ -5848,6 +5849,7 @@ describe("PortalKnowledgeWorkbench", () => {
             parent_id: 777,
             file_category_code: "RPT",
             file_subcategory_code: "RPT",
+            upload_batch_key: expect.any(String),
         });
         expect(getSimilarCandidatesApi).not.toHaveBeenCalled();
         expect(screen.queryByTestId("portal-upload-review-dialog")).not.toBeInTheDocument();

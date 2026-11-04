@@ -6,7 +6,6 @@ from pydantic import ConfigDict
 from bisheng.mcp_server.api.endpoints.content_tools import register_content_tools
 from bisheng.mcp_server.api.endpoints.query_tools import register_query_tools
 from bisheng.mcp_server.api.endpoints.write_tools import register_write_tools
-from bisheng.mcp_server.domain.schemas.identity import ExternalAccount
 from bisheng.mcp_server.domain.schemas.search import KnowledgeIds, MaxContent, McpSearchRequest, SearchQuery, TopK
 from bisheng.mcp_server.domain.services.search_service import McpSearchService
 from bisheng.mcp_server.domain.services.tool_runtime import McpToolRuntime
@@ -19,7 +18,6 @@ def register_tools(server: FastMCP, search_service: McpSearchService, runtime: M
         annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False),
     )
     async def search_knowledge(
-        external_id: ExternalAccount,
         query: SearchQuery,
         knowledge_base_ids: KnowledgeIds,
         ctx: Context,
@@ -33,7 +31,6 @@ def register_tools(server: FastMCP, search_service: McpSearchService, runtime: M
             raise ToolError("MCP authentication required")
         principal = request.scope["state"]["mcp_principal"]
         req = McpSearchRequest(
-            external_id=external_id,
             query=query,
             knowledge_base_ids=knowledge_base_ids,
             top_k=top_k,

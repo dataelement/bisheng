@@ -1,11 +1,8 @@
 from dataclasses import dataclass
-from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict
 
 from bisheng.common.dependencies.user_deps import UserPayload
-
-ExternalAccount = Annotated[str, StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=255)]
 
 
 class StrictRequest(BaseModel):
@@ -13,7 +10,7 @@ class StrictRequest(BaseModel):
 
 
 class McpIdentityRequest(StrictRequest):
-    external_id: ExternalAccount
+    """工具身份由认证 Token 提供, 请求只接收业务参数。"""
 
 
 @dataclass(frozen=True)

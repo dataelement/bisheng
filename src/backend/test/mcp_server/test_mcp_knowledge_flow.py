@@ -9,14 +9,15 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 from langchain_core.documents import Document
-from sqlalchemy import DefaultClause, MetaData, text
-from sqlmodel import Field, SQLModel, select
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
+from test.knowledge.test_mcp_knowledge_content_service import real_utilities  # noqa: F401
+from test.knowledge.test_mcp_knowledge_repository import repository  # noqa: F401
+from test.mcp_server.test_mcp_server import server, session
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge_space import SpaceFileDuplicateError
 from bisheng.core.context.tenant import current_tenant_id
-from bisheng.database.models.tenant import Tenant, UserTenant
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
@@ -31,21 +32,6 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_mcp_reposit
     KnowledgeMcpRepositoryImpl,
 )
 from bisheng.knowledge.domain.services.knowledge_mcp_ingestion_service import KnowledgeMcpIngestionService
-from bisheng.user.domain.repositories.implementations import user_repository_impl
-from test.knowledge.test_mcp_knowledge_content_service import real_utilities  # noqa: F401
-from test.knowledge.test_mcp_knowledge_repository import repository  # noqa: F401
-from test.mcp_server.test_mcp_server import server, session
-
-
-class IdentityUserFixture(SQLModel, table=True):
-    # 全局 User import 预桩存在时。用真实映射表运行原 UserRepository 查询。
-    __tablename__ = "f081_mcp_user_fixture"
-    user_id: int | None = Field(default=None, primary_key=True)
-    external_id: str
-    user_name: str
-    source: str = "e2e"
-    delete: int = 0
-    token_version: int = 0
 
 
 class ResponseBytes(io.BytesIO):
@@ -162,21 +148,6 @@ async def test_nine_tools_sdk_flow_uses_real_services_and_repositories(monkeypat
     token = current_tenant_id.set(7)
     try:
         db = repository.session
-        metadata = MetaData()
-        for model in (IdentityUserFixture, Tenant, UserTenant):
-            table = model.__table__.to_metadata(metadata)
-            for column in table.columns:
-                if column.server_default is not None and "ON UPDATE" in str(column.server_default.arg):
-                    column.server_default = DefaultClause(text("CURRENT_TIMESTAMP"))
-        async with db.bind.begin() as connection:
-            await connection.run_sync(metadata.create_all)
-        for user_id, tenant_id in [(7, 7), (8, 8), (9, 7)]:
-            db.add(
-                IdentityUserFixture(user_id=user_id, user_name=f"e2e-mcp-user-{user_id}", external_id=f"000{user_id}")
-            )
-            db.add(UserTenant(user_id=user_id, tenant_id=tenant_id, is_active=1, status="active"))
-        for tenant_id in [7, 8]:
-            db.add(Tenant(id=tenant_id, tenant_code=f"e2e-mcp-{tenant_id}", tenant_name=f"e2e-mcp-{tenant_id}"))
         db.add(Knowledge(id=118, tenant_id=7, name="e2e-mcp-space", type=3, user_id=7))
         db.add(
             KnowledgeFile(
@@ -227,14 +198,13 @@ async def test_nine_tools_sdk_flow_uses_real_services_and_repositories(monkeypat
             )
         await db.commit()
         factory = importlib.import_module("bisheng.mcp_server.domain.services.factory")
-        monkeypatch.setattr(user_repository_impl, "User", IdentityUserFixture)
         storage, active = StoragePort(), []
 
-        async def login_user(**kwargs):
-            return UserPayload(user_role=[2], **kwargs)
-
-        monkeypatch.setattr(UserPayload, "init_login_user", login_user)
-        monkeypatch.setattr(factory.settings, "multi_tenant", type("Mode", (), {"enabled": True})())
+        monkeypatch.setattr(
+            UserPayload,
+            "init_login_user",
+            AsyncMock(side_effect=AssertionError("MCP must not reload target identity")),
+        )
 
         @asynccontextmanager
         async def session_scope():
@@ -294,10 +264,10 @@ async def test_nine_tools_sdk_flow_uses_real_services_and_repositories(monkeypat
             )
 
         async with server(monkeypatch, identity_resolver=factory.resolve_execution_identity) as (app, calls, _):
-            async with session(app, token="second") as client:
+            async with session(app, token="first") as client:
 
                 async def call(name, **args):
-                    result = await client.call_tool(name, {"external_id": "0007", **args})
+                    result = await client.call_tool(name, args)
                     assert not result.isError, str(result)
                     return result.structuredContent
 
@@ -357,7 +327,6 @@ async def test_nine_tools_sdk_flow_uses_real_services_and_repositories(monkeypat
                 duplicate = await client.call_tool(
                     "create_document",
                     {
-                        "external_id": "0007",
                         "knowledge_id": 118,
                         "folder_id": 305,
                         "file_name": "e2e-note.md",
@@ -373,28 +342,22 @@ async def test_nine_tools_sdk_flow_uses_real_services_and_repositories(monkeypat
                 assert ready["content"] == "# note" and ready["content_ready"]
                 listed = await call("list_files", knowledge_id=118, folder_id=305)
                 assert {r["id"] for r in listed["data"]} == {created["file_id"], 901}
-            async with session(app, token="first") as other:
-                denied = await other.call_tool(
-                    "get_file_detail", {"external_id": "0008", "knowledge_id": 118, "file_id": 1}
-                )
+            async with session(app, token="second") as other:
+                denied = await other.call_tool("get_file_detail", {"knowledge_id": 118, "file_id": 1})
                 assert denied.isError and "policy" not in str(denied)
                 cross_tenant_folder = await other.call_tool(
                     "retrieve_folder_chunks",
-                    {
-                        "external_id": "0008",
-                        "query": "policy",
-                        "knowledge_id": 118,
-                        "folder_id": 305,
-                    },
+                    {"query": "policy", "knowledge_id": 118, "folder_id": 305},
                 )
                 assert cross_tenant_folder.isError and "scoped policy" not in str(cross_tenant_folder)
+            async with session(app, token="denied") as other:
                 for name, args in [
                     ("get_file_detail", {"knowledge_id": 118, "file_id": 1}),
                     ("retrieve_folder_chunks", {"query": "policy", "knowledge_id": 118, "folder_id": 305}),
                     ("create_document", {"knowledge_id": 118, "file_name": "e2e-denied.md", "content": "denied"}),
                     ("upload_file", {"knowledge_id": 118, "file_name": "e2e-denied.txt", "content_base64": "YQ=="}),
                 ]:
-                    result = await other.call_tool(name, {"external_id": "0009", **args})
+                    result = await other.call_tool(name, args)
                     assert result.isError
         assert not active and not storage.staged
     finally:

@@ -11,6 +11,13 @@ from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.telemetry.domain.mid_table.base import BaseMidTable, BaseRecord
+from bisheng.telemetry.domain.mid_table.belonging_organization import (
+    BELONGING_NAME_MAPPING,
+    BELONGING_ORGANIZATION_FIELDS,
+    belonging_names,
+    organization_department_ids,
+    without_empty_belonging,
+)
 from bisheng.telemetry.domain.mid_table.content_stat_reconcile import ContentStatReconciler
 from bisheng.telemetry.domain.mid_table.user_engagement_shared import (
     METRIC_SOURCE_PARTICIPATION,
@@ -26,14 +33,21 @@ def merge_participation_document(current: dict, desired: dict) -> dict:
     preserved = set()
     if roster_only:
         preserved.update({"logged_in", "login_count", "first_login_at", "last_login_at"})
-    if (roster_only and current.get("logged_in")) or current.get("department_source") == "event_time":
+    # Keep the three names with the department id that survives this merge.
+    preserve_department = (roster_only and current.get("logged_in")) or current.get("department_source") == "event_time"
+    if preserve_department:
         preserved.update({"primary_department_id", "primary_department_name", "department_source"})
+        preserved.update(BELONGING_ORGANIZATION_FIELDS)
     for field in preserved:
         if field in current:
             result[field] = current[field]
         elif current:
             result.pop(field, None)
-    return result
+    if not preserve_department:
+        for field in BELONGING_ORGANIZATION_FIELDS:
+            if desired.get(field) in (None, ""):
+                result.pop(field, None)
+    return without_empty_belonging(result)
 
 
 def participation_day(
@@ -44,9 +58,7 @@ def participation_day(
         local_value = datetime.now(CHINA_STANDARD_TIME)
     elif isinstance(value, datetime):
         local_value = (
-            value.replace(tzinfo=CHINA_STANDARD_TIME)
-            if value.tzinfo is None
-            else value.astimezone(CHINA_STANDARD_TIME)
+            value.replace(tzinfo=CHINA_STANDARD_TIME) if value.tzinfo is None else value.astimezone(CHINA_STANDARD_TIME)
         )
     else:
         local_value = datetime.combine(value, time.min, CHINA_STANDARD_TIME)
@@ -69,10 +81,14 @@ def aggregate_historical_login_hits(
             tenant_id = int(source.get("tenant_id") or 1)
         except (TypeError, ValueError):
             continue
-        local_date = datetime.fromtimestamp(
-            timestamp,
-            CHINA_STANDARD_TIME,
-        ).date().isoformat()
+        local_date = (
+            datetime.fromtimestamp(
+                timestamp,
+                CHINA_STANDARD_TIME,
+            )
+            .date()
+            .isoformat()
+        )
         key = (tenant_id, local_date, user_id)
         aggregate = aggregates.setdefault(
             key,
@@ -109,6 +125,9 @@ class DailyParticipationRecord(BaseRecord):
     last_login_at: int | None = None
     primary_department_id: int | None = None
     primary_department_name: str | None = None
+    belonging_company_name: str | None = None
+    belonging_department_name: str | None = None
+    belonging_office_name: str | None = None
     department_source: str = "current_roster"
     sync_run_id: str | None = None
     projection_updated_at: int
@@ -119,9 +138,7 @@ class DailyParticipationFact(BaseMidTable):
 
     _index_name = USER_ENGAGEMENT_ES_INDEX
     _update_mappings_on_existing = True
-    ROSTER_SCHEDULED_KEY: ClassVar[str] = (
-        "telemetry:user_daily_participation:roster_scheduled"
-    )
+    ROSTER_SCHEDULED_KEY: ClassVar[str] = "telemetry:user_daily_participation:roster_scheduled"
     ROSTER_SCHEDULE_TTL_SECONDS: ClassVar[int] = 5
     _mappings: dict[str, Any] = {
         "metric_source": {"type": "keyword"},
@@ -146,6 +163,7 @@ class DailyParticipationFact(BaseMidTable):
             },
         },
         "department_source": {"type": "keyword"},
+        **BELONGING_NAME_MAPPING,
         "sync_run_id": {"type": "keyword"},
         "projection_updated_at": {
             "type": "date",
@@ -178,9 +196,7 @@ class DailyParticipationFact(BaseMidTable):
                 sync_mid_user_daily_participation_fact,
             )
 
-            sync_mid_user_daily_participation_fact.apply_async(
-                countdown=countdown
-            )
+            sync_mid_user_daily_participation_fact.apply_async(countdown=countdown)
         except Exception:
             logger.exception("Failed to schedule participation roster sync.")
 
@@ -198,9 +214,7 @@ class DailyParticipationFact(BaseMidTable):
                 sync_mid_user_daily_participation_fact,
             )
 
-            sync_mid_user_daily_participation_fact.apply_async(
-                countdown=countdown
-            )
+            sync_mid_user_daily_participation_fact.apply_async(countdown=countdown)
         except Exception:
             logger.exception("Failed to schedule participation roster sync.")
 
@@ -209,9 +223,7 @@ class DailyParticipationFact(BaseMidTable):
         try:
             get_redis_client_sync().delete(cls.ROSTER_SCHEDULED_KEY)
         except Exception:
-            logger.exception(
-                "Failed to clear participation roster scheduled marker."
-            )
+            logger.exception("Failed to clear participation roster scheduled marker.")
 
     @classmethod
     async def record_login(
@@ -233,14 +245,14 @@ class DailyParticipationFact(BaseMidTable):
         now = int(event_time.timestamp())
         normalized_tenant_id = int(tenant_id or DEFAULT_TENANT_ID)
 
-        primary_membership = await UserDepartmentDao.aget_user_primary_department(
-            int(user_id)
-        )
+        primary_membership = await UserDepartmentDao.aget_user_primary_department(int(user_id))
         primary_department = (
-            await DepartmentDao.aget_by_id(primary_membership.department_id)
-            if primary_membership
-            else None
+            await DepartmentDao.aget_by_id(primary_membership.department_id) if primary_membership else None
         )
+        departments_by_id = {}
+        if primary_department is not None:
+            rows = await DepartmentDao.aget_by_ids(organization_department_ids(primary_department))
+            departments_by_id = {int(row.id): row for row in rows if getattr(row, "id", None) is not None}
         base_document = {
             "metric_source": METRIC_SOURCE_PARTICIPATION,
             "tenant_id": normalized_tenant_id,
@@ -256,14 +268,11 @@ class DailyParticipationFact(BaseMidTable):
             "login_count": 1,
             "first_login_at": now,
             "last_login_at": now,
-            "primary_department_id": (
-                int(primary_department.id) if primary_department else None
-            ),
-            "primary_department_name": (
-                primary_department.name if primary_department else None
-            ),
+            "primary_department_id": (int(primary_department.id) if primary_department else None),
+            "primary_department_name": (primary_department.name if primary_department else None),
             "department_source": "event_time",
             "projection_updated_at": now,
+            **belonging_names(primary_department, departments_by_id, normalized_tenant_id),
         }
 
         fact = cls(ensure_sync_index=False)
@@ -290,6 +299,18 @@ class DailyParticipationFact(BaseMidTable):
                     ctx._source.primary_department_id = params.doc.primary_department_id;
                     ctx._source.primary_department_name = params.doc.primary_department_name;
                     ctx._source.department_source = params.doc.department_source;
+                    ctx._source.remove('belonging_company_name');
+                    ctx._source.remove('belonging_department_name');
+                    ctx._source.remove('belonging_office_name');
+                    if (params.doc.belonging_company_name != null) {
+                        ctx._source.belonging_company_name = params.doc.belonging_company_name;
+                    }
+                    if (params.doc.belonging_department_name != null) {
+                        ctx._source.belonging_department_name = params.doc.belonging_department_name;
+                    }
+                    if (params.doc.belonging_office_name != null) {
+                        ctx._source.belonging_office_name = params.doc.belonging_office_name;
+                    }
                     ctx._source.projection_updated_at = params.doc.projection_updated_at;
                 """,
                 "params": {"doc": base_document},
@@ -298,9 +319,7 @@ class DailyParticipationFact(BaseMidTable):
             retry_on_conflict=3,
         )
         return DailyParticipationRecord(
-            es_id=cls.build_es_id(
-                normalized_tenant_id, local_date, int(user_id)
-            ),
+            es_id=cls.build_es_id(normalized_tenant_id, local_date, int(user_id)),
             **base_document,
         )
 
@@ -314,13 +333,15 @@ class DailyParticipationFact(BaseMidTable):
         self.ensure_index_exists_sync()
         actions = []
         for record in records:
-            document = record.model_dump(
-                exclude={
-                    "es_id",
-                    "logged_in",
-                    "login_count",
-                    "last_login_at",
-                }
+            document = without_empty_belonging(
+                record.model_dump(
+                    exclude={
+                        "es_id",
+                        "logged_in",
+                        "login_count",
+                        "last_login_at",
+                    }
+                )
             )
             actions.append(
                 {
@@ -339,6 +360,9 @@ class DailyParticipationFact(BaseMidTable):
                                         entry.getKey() == 'primary_department_id' ||
                                         entry.getKey() == 'primary_department_name' ||
                                         entry.getKey() == 'department_source' ||
+                                        entry.getKey() == 'belonging_company_name' ||
+                                        entry.getKey() == 'belonging_department_name' ||
+                                        entry.getKey() == 'belonging_office_name' ||
                                         entry.getKey() == 'first_login_at'
                                     )
                                 ) {
@@ -364,7 +388,7 @@ class DailyParticipationFact(BaseMidTable):
         self.ensure_index_exists_sync()
         actions = []
         for record in records:
-            document = record.model_dump(exclude={"es_id"})
+            document = without_empty_belonging(record.model_dump(exclude={"es_id"}))
             actions.append(
                 {
                     "_op_type": "update",
@@ -381,7 +405,10 @@ class DailyParticipationFact(BaseMidTable):
                                     (
                                         entry.getKey() == 'primary_department_id' ||
                                         entry.getKey() == 'primary_department_name' ||
-                                        entry.getKey() == 'department_source'
+                                        entry.getKey() == 'department_source' ||
+                                        entry.getKey() == 'belonging_company_name' ||
+                                        entry.getKey() == 'belonging_department_name' ||
+                                        entry.getKey() == 'belonging_office_name'
                                     )
                                 ) {
                                     continue;

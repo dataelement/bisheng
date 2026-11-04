@@ -5,14 +5,14 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
+from test.mcp_server.test_mcp_server import server, session
 
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.core.context.tenant import get_current_tenant_id, get_visible_tenant_ids
-from test.mcp_server.test_mcp_server import server, session
 
 
-async def test_all_tools_require_external_account_before_business(monkeypatch, caplog):
-    """F081/F083 AC-01: 十一个工具的 schema 及缺参执行一致拒绝。"""
+async def test_all_tools_reject_external_account_before_business(monkeypatch, caplog):
+    """F084 AC-01: 十工具不暴露账号参数并拒绝旧账号字段。"""
     import logging
 
     caplog.set_level(logging.INFO)
@@ -34,9 +34,9 @@ async def test_all_tools_require_external_account_before_business(monkeypatch, c
         async with session(app) as client:
             tools = (await client.list_tools()).tools
             for tool in tools:
-                assert "external_id" in tool.inputSchema["required"]
-                assert tool.inputSchema["properties"]["external_id"]["type"] == "string"
-                result = await client.call_tool(tool.name, arguments[tool.name])
+                assert "external_id" not in tool.inputSchema.get("properties", {})
+                assert "external_id" not in tool.inputSchema.get("required", [])
+                result = await client.call_tool(tool.name, {"external_id": "0008", **arguments[tool.name]})
                 assert result.isError
         assert not calls
         resolver.assert_not_called()
@@ -46,7 +46,7 @@ async def test_all_tools_require_external_account_before_business(monkeypatch, c
 
 @pytest.mark.parametrize("value", [None, 7, True, "", " ", "sensitive-account-" * 20])
 async def test_sdk_rejects_invalid_accounts_before_resolution(monkeypatch, value):
-    """F081 AC-01, AC-03, AC-09: SDK 非法账号拒绝且不回显输入。"""
+    """F084 AC-01/03: 已移除的账号参数拒绝且不回显输入。"""
     resolver = AsyncMock(side_effect=AssertionError("must not resolve"))
     async with server(monkeypatch, identity_resolver=resolver) as (app, _, _):
         async with session(app) as client:
@@ -59,12 +59,12 @@ async def test_sdk_rejects_invalid_accounts_before_resolution(monkeypatch, value
 
 @pytest.mark.parametrize("tool", ["search_knowledge", "list_knowledge", "retrieve_folder_chunks"])
 async def test_identity_timeout_prevents_business_and_audits_no_actor(monkeypatch, caplog, tool):
-    """F081 AC-08, AC-09: 两入口身份超时释放作用域。不使用 Token 充当执行用户。"""
+    """F084 AC-03: 两入口身份适配超时释放作用域, 未完成时执行身份审计为空。"""
     import logging
 
     released = []
 
-    async def resolve(principal, external_id):
+    async def resolve(principal):
         try:
             await asyncio.Event().wait()
         finally:
@@ -76,7 +76,7 @@ async def test_identity_timeout_prevents_business_and_audits_no_actor(monkeypatc
     async with server(monkeypatch, identity_resolver=resolve) as (app, calls, active):
         app.routes[0].endpoint.tool_runtime.factory = AsyncMock(side_effect=AssertionError("must not open"))
         async with session(app) as client:
-            args = {"external_id": "0008"}
+            args = {}
             if tool == "search_knowledge":
                 args.update(query="q", knowledge_base_ids=[118])
             elif tool == "retrieve_folder_chunks":
@@ -87,8 +87,8 @@ async def test_identity_timeout_prevents_business_and_audits_no_actor(monkeypatc
         assert "token_user_id=7 token_tenant_id=7 user_id=None tenant_id=None" in caplog.text
 
 
-async def test_one_token_concurrent_accounts_use_distinct_identities(monkeypatch, caplog):
-    """F081 AC-04, AC-08, AC-09: 同一 Token 并发账号不串权限或审计身份。"""
+async def test_concurrent_tokens_use_distinct_bound_identities(monkeypatch, caplog):
+    """F084 AC-02/03: 并发 Token 不串绑定权限或审计身份。"""
     import logging
 
     @asynccontextmanager
@@ -105,37 +105,40 @@ async def test_one_token_concurrent_accounts_use_distinct_identities(monkeypatch
     caplog.set_level(logging.INFO)
     async with server(monkeypatch) as (app, _, _):
         app.routes[0].endpoint.tool_runtime.factory = factory
-        async with session(app) as client:
-            results = await asyncio.gather(
-                *[client.call_tool("list_knowledge", {"external_id": account}) for account in ["0007", "0008"]]
-            )
-            assert [result.structuredContent["data"][0]["id"] for result in results] == [7, 8]
-        assert "token_user_id=7 token_tenant_id=7 user_id=8 tenant_id=8" in caplog.text
+
+        async def invoke(token):
+            async with session(app, token=token) as client:
+                return await client.call_tool("list_knowledge", {})
+
+        results = await asyncio.gather(invoke("first"), invoke("second"))
+        assert [result.structuredContent["data"][0]["id"] for result in results] == [7, 8]
+        assert "token_user_id=7 token_tenant_id=7 user_id=7 tenant_id=7" in caplog.text
+        assert "token_user_id=8 token_tenant_id=8 user_id=8 tenant_id=8" in caplog.text
 
 
 @pytest.mark.parametrize("tool", ["search_knowledge", "list_knowledge"])
 @pytest.mark.parametrize("denied", [True, False])
 async def test_identity_failure_is_safe_and_never_opens_business(monkeypatch, tool, denied, caplog):
-    """F081 AC-03, AC-08, AC-09: 身份拒绝与设施异常均失败。不回退或泄漏。"""
+    """F084 AC-03: 绑定身份拒绝与适配异常均失败, 不伪造身份或泄漏。"""
 
-    async def resolve(principal, external_id):
+    async def resolve(principal):
         if denied:
-            raise BaseErrorCode(msg="sensitive-account-detail", code=403, mcp_identity_denied=True)
-        raise RuntimeError("sensitive-account-detail")
+            raise BaseErrorCode(msg="sensitive-token-detail", code=403, mcp_identity_denied=True)
+        raise RuntimeError("sensitive-token-detail")
 
     async with server(monkeypatch, identity_resolver=resolve) as (app, calls, active):
         factory = AsyncMock(side_effect=AssertionError("must not open"))
         app.routes[0].endpoint.tool_runtime.factory = factory
         async with session(app) as client:
-            args = {"external_id": "0008"}
+            args = {}
             if tool == "search_knowledge":
                 args.update(query="q", knowledge_base_ids=[118])
             result = await client.call_tool(tool, args)
-            assert result.isError and "sensitive-account-detail" not in str(result)
+            assert result.isError and "sensitive-token-detail" not in str(result)
             if denied:
-                assert "指定账号或当前租户不可用" in str(result)
+                assert "Token 绑定用户或租户不可用" in str(result)
         factory.assert_not_called()
-        assert not calls and not active and "sensitive-account-detail" not in caplog.text
+        assert not calls and not active and "sensitive-token-detail" not in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -170,7 +173,7 @@ async def test_new_tool_invalid_arguments_never_open_services(monkeypatch, tool,
         factory = AsyncMock(side_effect=AssertionError("business must not open"))
         runtime.tool_runtime.factory = factory
         async with session(app) as client:
-            result = await client.call_tool(tool, {"external_id": "0007", **args})
+            result = await client.call_tool(tool, args)
             assert result.isError
         factory.assert_not_called()
 
@@ -257,7 +260,7 @@ async def test_folder_id_is_normalized_before_all_tool_services(monkeypatch, fol
             else:
                 requests[0][1].pop("folder_id")
             for name, args in requests:
-                result = await client.call_tool(name, {"external_id": "0007", **args})
+                result = await client.call_tool(name, args)
                 assert not result.isError, (name, result)
                 params = seen[-1]
                 actual = params["folder_scope"]["folder_id"] if name == "search_files" else params["folder_id"]
@@ -276,9 +279,7 @@ async def test_invalid_folder_id_never_opens_business_services(monkeypatch, fold
         factory = AsyncMock(side_effect=AssertionError("business must not open"))
         app.routes[0].endpoint.tool_runtime.factory = factory
         async with session(app) as client:
-            result = await client.call_tool(
-                "list_files", {"external_id": "0007", "knowledge_id": 1, "folder_id": folder_id}
-            )
+            result = await client.call_tool("list_files", {"knowledge_id": 1, "folder_id": folder_id})
             assert result.isError
         factory.assert_not_called()
 
@@ -434,14 +435,12 @@ async def test_new_tool_tasks_isolate_tenants_and_sanitize_failures(monkeypatch,
 
         async def invoke(token):
             async with session(app, token=token) as client:
-                return await client.call_tool(
-                    "list_knowledge", {"external_id": "0008" if token == "second" else "0007"}
-                )
+                return await client.call_tool("list_knowledge", {})
 
         first, second = await asyncio.gather(invoke("first"), invoke("second"))
         assert first.structuredContent["data"] == [{"id": 7}]
         assert second.structuredContent["data"] == [{"id": 8}]
         async with session(app) as client:
-            error = await client.call_tool("list_knowledge", {"external_id": "0007", "name": "failure"})
+            error = await client.call_tool("list_knowledge", {"name": "failure"})
             assert error.isError and "sensitive-connection" not in str(error)
     assert not active and "sensitive-connection-password" not in caplog.text

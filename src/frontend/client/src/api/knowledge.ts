@@ -728,6 +728,7 @@ export interface UploadFileRegistrationMetadata {
     business_domain_code?: string;
     manual_tag_ids?: number[];
     manual_tag_names?: string[];
+    upload_batch_key?: string;
 }
 
 interface RawSpaceChild {

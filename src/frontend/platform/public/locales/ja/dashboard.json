@@ -107,6 +107,10 @@
       "dimensionLimitReached": "ディメンションの上限に達しました",
       "metricReached": "メトリックの上限に達しました",
       "metricLimitReached": "現在のメトリクス数は上限に達しました",
+      "lineAxisSingleKind": "縦軸は数量またはパーセントだけを共有できます",
+      "lineMaxTwo": "折れ線グラフは最大2本です",
+      "lineMaxThree": "組み合わせ折れ線は最大3本です",
+      "lineSingleDimension": "折れ線グラフの横軸は1つの次元だけです",
       "virtualMetricConflict": "仮想指標と通常の指標を同時に追加することはできません",
       "multipleVirtualMetric": "複数の仮想指標を同時に追加することはできません"
     },

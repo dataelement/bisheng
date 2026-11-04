@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>研发用例 · 用户与问答的所属组织筛选</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#202733;--sub:#515d6d;--line:#dce2eb;--accent:#245bb1;--ok:#17683b;--warn:#8a4b00}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  a{color:var(--accent)}
+  .wrap{max-width:1100px;margin:auto;padding:28px 24px 72px}
+  .hero{background:#164789;color:#fff;padding:28px;border-radius:16px;margin-bottom:20px}
+  h1{margin:0 0 8px;font-size:26px}
+  .meta{font-size:13px;margin:0 0 6px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:24px;margin:0 0 20px}
+  h2{font-size:21px;margin:0 0 8px} h3{font-size:16px;margin:20px 0 8px}
+  .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin:12px 0}
+  table{border-collapse:collapse;width:100%;min-width:960px;font-size:13px}
+  th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{background:#f0f3f8}
+  code{font:12px ui-monospace,Menlo,Consolas,monospace;background:#f0f3f8;padding:1px 4px;border-radius:4px}
+  .callout{border-left:4px solid var(--warn);background:#fff8ef;padding:12px 16px;margin:14px 0}
+  .callout.ok{border-color:var(--ok);background:#eff8f2}
+  ol.toc{columns:2;margin:0;padding-left:20px}
+  @media print{body{background:#fff}.hero{background:#fff;color:#111;border:1px solid #777}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero">
+  <h1>用户与问答的所属组织筛选 · 研发用例</h1>
+  <p class="meta">版本 1.0 · 2026-11-03 · 状态：研发用例定义就绪 · 用途：研发验证 · 隔离测试已执行一部分，页面和真实索引未执行</p>
+  <p class="meta">需求 USER-QA-ORG 1.0 与设计 1.0 已确认。本文件不代替独立验收。</p>
+  <p class="meta">岗位：研发。工程：毕昇 <code>src/backend/test/telemetry/</code> 与 <code>src/backend/test/telemetry_search/</code>。独立验收用例不在本文件定义，也不在本次执行。</p>
+</header>
+
+<section class="card" id="overview">
+  <h2>1. 用例覆盖概览</h2>
+  <p>定义覆盖，不是执行结果。全部为研发隔离测试。页面和真实索引验收标为待测试岗位，不计入本文件通过。</p>
+  <div class="table-wrap"><table>
+    <caption>需求覆盖</caption>
+    <thead><tr><th>验收</th><th>正常</th><th>异常</th><th>边界</th><th>独立验收</th></tr></thead>
+    <tbody>
+      <tr><td>AC-UQ-001</td><td>TC-UQ-001</td><td>不适用。缺维度时现有查询跳过，由 TC-UQ-006 覆盖</td><td>不适用</td><td>待测试岗位在页面核对维度列表</td></tr>
+      <tr><td>AC-UQ-002</td><td>TC-UQ-002</td><td>不适用</td><td>TC-UQ-003 路径只有公司</td><td>待测试岗位</td></tr>
+      <tr><td>AC-UQ-003</td><td>不适用</td><td>不适用</td><td>TC-UQ-003、TC-UQ-010</td><td>待测试岗位看「未分类」展示</td></tr>
+      <tr><td>AC-UQ-004</td><td>TC-UQ-004</td><td>不适用</td><td>空组织与未选组织在同一例的两个断言中</td><td>待测试岗位</td></tr>
+      <tr><td>AC-UQ-005</td><td>TC-UQ-005</td><td>不适用</td><td>只选一列</td><td>待测试岗位</td></tr>
+      <tr><td>AC-UQ-006</td><td>TC-UQ-006</td><td>不适用</td><td>不适用</td><td>待测试岗位看已发布内容统计图</td></tr>
+      <tr><td>AC-UQ-007</td><td>TC-UQ-007</td><td>TC-UQ-009 重复回刷</td><td>问答没有提问人三级、只有主部门编号</td><td>真实回刷计数待发布时核对，本次不执行</td></tr>
+      <tr><td>AC-UQ-008</td><td>TC-UQ-008</td><td>不适用</td><td>不适用</td><td>待发布核对两类文档</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="card" id="prep">
+  <h2>2. 用例清单</h2>
+  <h3 id="PREP-UQ-001">PREP-UQ-001 组织替身</h3>
+  <p>每个用例自己构造下面的部门对象，不读取 171，不依赖其他用例的输出。</p>
+  <div class="table-wrap"><table>
+    <caption>DATA-UQ-ORG</caption>
+    <thead><tr><th>编号</th><th>名称</th><th>层级</th><th>路径</th><th>状态</th><th>租户</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>首钢股份</td><td>company</td><td>/1</td><td>active</td><td>1</td></tr>
+      <tr><td>10</td><td>制造部</td><td>dept</td><td>/1/10</td><td>active</td><td>1</td></tr>
+      <tr><td>30</td><td>轧钢科</td><td>office</td><td>/1/10/30</td><td>active</td><td>1</td></tr>
+      <tr><td>40</td><td>设备部</td><td>dept</td><td>/1/40</td><td>active</td><td>1</td></tr>
+      <tr><td>50</td><td>停用部</td><td>dept</td><td>/1/50</td><td>inactive</td><td>1</td></tr>
+      <tr><td>60</td><td>外租户部</td><td>dept</td><td>/60</td><td>active</td><td>2</td></tr>
+    </tbody>
+  </table></div>
+  <p>人员：U-1001 唯一主部门 30。U-1002 主部门同时是 10 和 40。U-1003 无主部门。U-1004 唯一主部门 50。U-1005 唯一主部门 60，统计行租户是 1。提问 Q-1 已记下提问人部门「制造部」、主部门编号 10；该人今天的主部门是 40。参与度行 P-1 的 <code>department_source</code> 为 event_time，主部门编号 10；该人今天的主部门是 40。</p>
+
+  <div class="table-wrap"><table>
+    <caption>用例九列</caption>
+    <thead><tr><th>ID</th><th>标题</th><th>优先级</th><th>类型</th><th>关联需求</th><th>前置条件</th><th>步骤</th><th>测试数据</th><th>预期结果</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>TC-UQ-001</td>
+        <td>两个可见数据集列出三列，其他数据集不增加</td>
+        <td>P0</td>
+        <td>功能</td>
+        <td>需求 1.0 AC-UQ-001</td>
+        <td>使用设计 0.9 的种子数据集定义。不连接数据库</td>
+        <td>1. 读取用户数据统计和实时问答的维度列表。2. 读取应用数量表的维度列表</td>
+        <td>字段标识 belonging_company_name、belonging_department_name、belonging_office_name</td>
+        <td>前两个数据集三个字段都在，显示名是所属公司、所属部门、所属科室。应用数量表没有这三个字段</td>
+      </tr>
+      <tr>
+        <td>TC-UQ-002</td>
+        <td>科室主部门展开为公司、上级部门、科室全称</td>
+        <td>P0</td>
+        <td>功能</td>
+        <td>需求 1.0 AC-UQ-002</td>
+        <td>PREP-UQ-001</td>
+        <td>1. 以部门 30 为起点展开三列</td>
+        <td>DATA-UQ-ORG 的 1、10、30</td>
+        <td>所属公司是「首钢股份」，所属部门是「制造部」，所属科室是「轧钢科」。三列都是 name 全称</td>
+      </tr>
+      <tr>
+        <td>TC-UQ-003</td>
+        <td>无唯一主部门、停用和跨租户时三列为空</td>
+        <td>P0</td>
+        <td>边界</td>
+        <td>需求 1.0 AC-UQ-003</td>
+        <td>PREP-UQ-001</td>
+        <td>1. 分别计算 U-1002、U-1003、U-1004、U-1005。2. 再以一个只有公司、没有部门的路径计算</td>
+        <td>U-1002 两条主部门；U-1003 零条；U-1004 部门 50；U-1005 部门 60 且行租户为 1。另用部门 1 作为起点</td>
+        <td>前四个结果三列都为空，文档中不出现「未分类」和空字符串。只有公司的路径里所属公司是「首钢股份」，所属部门和所属科室为空</td>
+      </tr>
+      <tr>
+        <td>TC-UQ-004</td>
+        <td>选中制造部只保留匹配行，取消选择后空组织行回来</td>
+        <td>P0</td>
+        <td>功能</td>
+        <td>需求 1.0 AC-UQ-004</td>
+        <td>用户图数据集已有三列。查询组装使用真实筛选转换，搜索执行使用替身</td>
+        <td>1. 提交所属部门等于「制造部」。2. 再提交这三列都没有选中值</td>
+        <td>三行：所属部门「制造部」、字段缺失、所属部门「设备部」</td>
+        <td>第一步条件包含所属部门「制造部」，缺字段和「设备部」不能命中。第二步没有这三列的 terms 条件</td>
+      </tr>
+      <tr>
+        <td>TC-UQ-005</td>
+        <td>公司和部门同时选择时按并且关系过滤</td>
+        <td>P0</td>
+        <td>功能</td>
+        <td>需求 1.0 AC-UQ-005</td>
+        <td>问答数据集已有三列</td>
+        <td>1. 同时选择所属公司「首钢股份」和所属部门「制造部」。2. 把部门改成「设备部」。3. 只保留公司</td>
+        <td>一行公司「首钢股份」、部门「制造部」</td>
+        <td>第一步两个条件都在。第二步部门条件是「设备部」，该行不应同时满足。第三步只有公司条件</td>
+      </tr>
+      <tr>
+        <td>TC-UQ-006</td>
+        <td>内容统计和其他数据集不因这三列改变</td>
+        <td>P0</td>
+        <td>功能</td>
+        <td>需求 1.0 AC-UQ-006</td>
+        <td>内容统计维度保持文件所属字段。应用数据集没有这三列</td>
+        <td>1. 对应用数据集提交 belonging_department_name。2. 检查组合筛选可选图的过滤条件</td>
+        <td>应用图数据集编码 mid_app_increment。内容统计数据集编码不变</td>
+        <td>应用数据集的运行时筛选被跳过且不报错。组合筛选仍只保留同一数据集的图。内容统计投影来源测试不改用人员主部门</td>
+      </tr>
+      <tr>
+        <td>TC-UQ-007</td>
+        <td>问答和已登录参与度不改成今天的主部门</td>
+        <td>P0</td>
+        <td>功能</td>
+        <td>需求 1.0 AC-UQ-007</td>
+        <td>PREP-UQ-001。回刷函数接收当前文档和部门替身</td>
+        <td>1. 回刷 Q-1。2. 回刷 P-1。3. 回刷一条没有提问人三级、主部门编号为 10 的问答。4. 回刷一条没有主部门快照的新增用户，此时唯一主部门是 40</td>
+        <td>Q-1 提问人部门「制造部」，今天主部门 40。P-1 编号 10，今天主部门 40。新增用户回刷当时主部门是「设备部」</td>
+        <td>Q-1 所属部门变为「制造部」，提问人部门和主部门编号不变。P-1 所属部门按编号 10 展开为「制造部」，编号不变。第三条问答所属部门是「制造部」。新增用户所属部门是「设备部」。四处都不读取「今天的主部门」来覆盖已记下的编号</td>
+      </tr>
+      <tr>
+        <td>TC-UQ-008</td>
+        <td>回刷必须同时处理新增用户和参与度</td>
+        <td>P0</td>
+        <td>功能</td>
+        <td>需求 1.0 AC-UQ-008</td>
+        <td>替身索引各有一条 increment 和一条 participation</td>
+        <td>1. 执行用户回刷</td>
+        <td>两类各一条，且都有可用部门</td>
+        <td>两类文档都写入三列。只处理一类时测试失败</td>
+      </tr>
+      <tr>
+        <td>TC-UQ-009</td>
+        <td>同一回刷再执行一次不新增文档</td>
+        <td>P1</td>
+        <td>边界</td>
+        <td>需求 1.0 异常表「重复提交」</td>
+        <td>TC-UQ-007 的输入文档</td>
+        <td>1. 对同一批文档连续计算两次回刷结果</td>
+        <td>与 TC-UQ-007 相同，本例单独构造，不读取上一例输出</td>
+        <td>两次结果的三列相同。文档编号数量不变。无可用部门的行两次都是删除三列</td>
+      </tr>
+      <tr>
+        <td>TC-UQ-010</td>
+        <td>只有用户和问答分组把缺字段归进空键</td>
+        <td>P1</td>
+        <td>边界</td>
+        <td>需求 1.0 AC-UQ-003；设计 0.9 分组契约</td>
+        <td>设计 0.9 的 missing 规则</td>
+        <td>1. 组装用户数据集按所属部门分组。2. 组装内容统计按所属部门分组</td>
+        <td>维度字段 belonging_department_name</td>
+        <td>用户聚合含 missing 空字符串。内容统计聚合不含该 missing。空字符串不是写入文档的值</td>
+      </tr>
+    </tbody>
+  </table></div>
+  <p>优先级口径：P0 是需求验收条件直接对应的隔离测试。P1 是重复执行和分组空键，失败不会让主筛选规则无法判断，但设计 0.9 已把它列为契约。执行顺序不是前提。</p>
+  <p>清理：用例只构造内存对象，无外部资源要删。副作用断言：不调用真实 Elasticsearch 写入；组织表无写入；不写「未分类」。</p>
+</section>
+
+<section class="card" id="exceptions">
+  <h2>3. 异常与边界专项清单</h2>
+  <div class="table-wrap"><table>
+    <caption>专项</caption>
+    <thead><tr><th>专项</th><th>适用</th><th>数据或触发</th><th>用例</th><th>缺口</th></tr></thead>
+    <tbody>
+      <tr><td>空值</td><td>适用。缺字段与无主部门都留空</td><td>U-1003；文档无三列</td><td>TC-UQ-003、TC-UQ-004</td><td>无</td></tr>
+      <tr><td>超长</td><td>不适用。需求没有给部门名称长度上限</td><td>不自定 255</td><td>无</td><td>无</td></tr>
+      <tr><td>特殊字符</td><td>不适用新规则。全称原样保存，不另做转义</td><td>无</td><td>无</td><td>无</td></tr>
+      <tr><td>重复提交</td><td>适用</td><td>同一文档回刷两次</td><td>TC-UQ-009</td><td>无</td></tr>
+      <tr><td>并发</td><td>设计声明沿用现有对账版本冲突重试，不新增锁</td><td>无新的重叠脚本</td><td>无新用例</td><td>真实重叠写入留待发布观察，不在开发期宣称已证明</td></tr>
+      <tr><td>超时</td><td>不适用。无新的看板等待</td><td>无</td><td>无</td><td>无</td></tr>
+      <tr><td>弱网</td><td>不适用</td><td>无</td><td>无</td><td>无</td></tr>
+      <tr><td>权限</td><td>需求明确不改授权</td><td>无新拒绝</td><td>无</td><td>原看板权限回归不在本次研发用例中重复</td></tr>
+      <tr><td>数据不存在</td><td>适用。主部门编号指向已删除部门</td><td>编号 999，部门表无此行</td><td>并入 TC-UQ-003 的空结果判断；实施时用编号 999 作为第四个空值样本</td><td>若实现把删除和停用写成两个函数，需在该用例里各断言一次</td></tr>
+      <tr><td>状态非法流转</td><td>适用。禁止只更新三列而留下旧部门编号</td><td>P-1</td><td>TC-UQ-007</td><td>无</td></tr>
+    </tbody>
+  </table></div>
+  <p>副作用：数据库不新增行。统计文档只改变三列。无新埋点、无通知。日志不要求出现部门全称。开发测试用内存结果断言，不能称为真实索引已更新。</p>
+</section>
+
+<section class="card" id="automation">
+  <h2>4. 自动化可行性标注</h2>
+  <div class="table-wrap"><table>
+    <caption>自动化</caption>
+    <thead><tr><th>用例</th><th>标注</th><th>层级</th><th>阶段</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>TC-UQ-001</td><td>可自动化</td><td>单元</td><td>开发期。设计确认后实现时编写，现在未执行</td><td>断言种子列表</td></tr>
+      <tr><td>TC-UQ-002、TC-UQ-003</td><td>可自动化</td><td>单元</td><td>同上</td><td>部门对象替身</td></tr>
+      <tr><td>TC-UQ-004、TC-UQ-005、TC-UQ-010</td><td>可自动化</td><td>查询组装</td><td>同上</td><td>真实筛选转换，不连 Elasticsearch</td></tr>
+      <tr><td>TC-UQ-006</td><td>可自动化</td><td>单元</td><td>同上</td><td>数据集过滤与投影来源回归</td></tr>
+      <tr><td>TC-UQ-007、TC-UQ-008、TC-UQ-009</td><td>可自动化</td><td>纯函数</td><td>同上</td><td>不跑真实回刷任务</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout">复核限制：用例由实现作者按需求 1.0 和设计 1.0 编写，没有另一人复核。隔离测试已执行。页面、真实索引和已发布看板仍未执行。</div>
+</section>
+</div>
+</body>
+</html>

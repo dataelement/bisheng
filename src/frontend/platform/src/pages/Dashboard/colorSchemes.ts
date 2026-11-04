@@ -445,6 +445,35 @@ export const colorSchemes: ColorScheme[] = [
 
 
 
+const ORANGE = "#F59E0B"
+const BLUE = "#3B82F6"
+const GREEN = "#10B981"
+const ORANGE_HUES = new Set(["#f59e0b", "#fbbf24", "#d97706", "#b45309", "#92400e"])
+
+export function combinationLineSeriesColors(
+  themeId: string | undefined,
+  mode: "light" | "dark" = "light",
+  count = 2,
+): string[] {
+  const scheme = colorSchemes.find(item => item.id === themeId) ?? colorSchemes[0]
+  const primary = scheme.colors[mode][0]
+  const second = ORANGE_HUES.has(primary.toLowerCase()) ? BLUE : ORANGE
+  const colors = [primary]
+  for (const candidate of [second, BLUE, ORANGE, GREEN, "#8B5CF6"]) {
+    if (colors.length >= count) break
+    if (!colors.some(color => color.toLowerCase() === candidate.toLowerCase())) colors.push(candidate)
+  }
+  return colors.slice(0, count)
+}
+
+export function twoSeriesCombinationLineColors(
+  themeId: string | undefined,
+  mode: "light" | "dark" = "light",
+): [string, string] {
+  const colors = combinationLineSeriesColors(themeId, mode, 2)
+  return [colors[0], colors[1]]
+}
+
 export const convertToEChartsTheme = (scheme: ColorScheme, mode: 'light' | 'dark' = 'light') => {
     const isDark = mode === 'dark';
     const mainColors = scheme.colors[mode];

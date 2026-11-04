@@ -504,6 +504,29 @@ CREATE TABLE IF NOT EXISTS knowledge_file_similarity_candidate (
     CONSTRAINT uk_kf_similarity_source_document UNIQUE (source_file_id, candidate_document_id)
 )"""
 
+TABLE_KNOWLEDGE_UPLOAD_BATCH = """\
+CREATE TABLE IF NOT EXISTS knowledge_upload_batch (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL,
+    knowledge_id INTEGER NOT NULL,
+    batch_key VARCHAR(36) NOT NULL,
+    created_by INTEGER NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 0,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT uk_upload_batch_tenant_key UNIQUE (tenant_id, batch_key)
+)"""
+
+TABLE_KNOWLEDGE_UPLOAD_BATCH_FILE = """\
+CREATE TABLE IF NOT EXISTS knowledge_upload_batch_file (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL,
+    batch_id INTEGER NOT NULL,
+    file_id INTEGER NOT NULL,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT uk_upload_batch_file UNIQUE (file_id)
+)"""
+
 TABLE_KNOWLEDGE_FULLTEXT_OUTBOX = """\
 CREATE TABLE IF NOT EXISTS knowledge_fulltext_outbox (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -978,6 +1001,8 @@ TABLE_DEFINITIONS: dict[str, str] = {
     "knowledge_document": TABLE_KNOWLEDGE_DOCUMENT,
     "knowledge_document_version": TABLE_KNOWLEDGE_DOCUMENT_VERSION,
     "knowledge_file_similarity_candidate": TABLE_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE,
+    "knowledge_upload_batch": TABLE_KNOWLEDGE_UPLOAD_BATCH,
+    "knowledge_upload_batch_file": TABLE_KNOWLEDGE_UPLOAD_BATCH_FILE,
     "knowledge_fulltext_outbox": TABLE_KNOWLEDGE_FULLTEXT_OUTBOX,
     "t_gpts_tools": TABLE_GPTS_TOOLS,
     "channel": TABLE_CHANNEL,

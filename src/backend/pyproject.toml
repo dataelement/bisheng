@@ -183,6 +183,65 @@ convention = "google"
     "RUF005",
     "RUF006",
 ]
+# Legacy knowledge paths: pre-commit passes repo-root paths (src/backend/...).
+"src/backend/bisheng/api/services/knowledge_imp.py" = [
+    "C416",
+    "RUF013",
+    "RUF003",
+    "RUF059",
+    "F841",
+]
+"src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py" = [
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    "B905",
+    "RUF013",
+    "C416",
+    "RUF005",
+    "RUF059",
+    "C403",
+    "F821",
+    "E712",
+]
+"src/backend/bisheng/knowledge/domain/services/knowledge_version_service.py" = ["RUF003"]
+"src/backend/bisheng/common/errcode/knowledge_space.py" = ["RUF001"]
+"src/backend/bisheng/knowledge/api/endpoints/knowledge_space.py" = [
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    "RUF013",
+    "B905",
+]
+"bisheng/api/services/knowledge_imp.py" = [
+    "C416",
+    "RUF013",
+    "RUF003",
+    "RUF059",
+    "F841",
+]
+"bisheng/knowledge/domain/services/knowledge_space_service.py" = [
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    "B905",
+    "RUF013",
+    "C416",
+    "RUF005",
+    "RUF059",
+    "C403",
+    "F821",
+    "E712",
+]
+"bisheng/knowledge/domain/services/knowledge_version_service.py" = ["RUF003"]
+"bisheng/common/errcode/knowledge_space.py" = ["RUF001"]
+"bisheng/knowledge/api/endpoints/knowledge_space.py" = [
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    "RUF013",
+    "B905",
+]
 
 [tool.ruff.format]
 quote-style = "double"

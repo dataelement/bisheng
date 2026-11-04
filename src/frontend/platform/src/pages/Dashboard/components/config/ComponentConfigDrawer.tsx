@@ -24,6 +24,7 @@ import { DimensionBlock } from "./DimensionBlock"
 import { FilterConditionDialog } from "./FilterConditionDialog"
 import { StyleConfigPanel } from "./StyleConfigPanel"
 import { resolveAppliedComponentTitle } from "./componentConfigDraft"
+import { canAddLineMetric, canChangeLineMetricFormat, isSharedAxisLineChart, lineLimitToastKey, maxCategoryDimensions, maxSharedLineMetrics } from "./lineAxisRules"
 import { getMaxStackDimensionCount, useChartState } from "./useChartState"
 import { generateUUID } from "@/components/bs-ui/utils"
 
@@ -261,7 +262,7 @@ export function ComponentConfigDrawer() {
         })
         return
       }
-      if (categoryDimensions.length < 2 && isMetricCard) {
+      if (categoryDimensions.length < maxCategoryDimensions(chartType) && isMetricCard) {
         if (isFieldAlreadyAdded(safeFieldId, 'category')) {
           toast({
             description: t("componentConfigDrawer.toast.fieldAlreadyExists", {
@@ -283,6 +284,11 @@ export function ComponentConfigDrawer() {
           sort: null
         }
         chartState.setCategoryDimensions(prev => [...prev, newDimension])
+      } else if (isSharedAxisLineChart(chartType) && isMetricCard) {
+        toast({
+          description: t("componentConfigDrawer.toast.lineSingleDimension"),
+          variant: "warning"
+        })
       } else if (currentChartHasStack && stackDimensions.length < maxStackDimensions && isMetricCard) {
         if (isFieldInCategoryOrStack(safeFieldId)) {
           toast({
@@ -330,7 +336,21 @@ export function ComponentConfigDrawer() {
       const hasVirtualMetric = valueDimensions.some(d => d.isVirtual)
       const currentIsVirtual = isVirtualMetric(field)
 
-      if (valueDimensions.length >= maxMetricCount) {
+      if (isSharedAxisLineChart(chartType)) {
+        const decision = canAddLineMetric(valueDimensions, {
+          isDivide: field.isDivide,
+          numberFormat: field.numberFormat,
+        }, maxSharedLineMetrics(chartType))
+        if (!decision.ok) {
+          toast({
+            description: decision.reason === "max"
+              ? t(lineLimitToastKey(chartType))
+              : t("componentConfigDrawer.toast.lineAxisSingleKind"),
+            variant: "warning"
+          })
+          return
+        }
+      } else if (valueDimensions.length >= maxMetricCount) {
         toast({
           description: t("componentConfigDrawer.toast.metricLimitReached", {
             count: maxMetricCount
@@ -394,7 +414,7 @@ export function ComponentConfigDrawer() {
       chartState.setValueDimensions(prev => [...prev, newMetric])
     }
 
-  }, [editingComponent, categoryDimensions, stackDimensions, valueDimensions, currentChartHasStack, chartState, maxStackDimensions, toast, t])
+  }, [editingComponent, categoryDimensions, stackDimensions, valueDimensions, currentChartHasStack, chartState, chartType, maxStackDimensions, toast, t])
 
   const invalidFieldIds = useMemo(() => {
     const validSet = new Set(
@@ -442,6 +462,17 @@ export function ComponentConfigDrawer() {
 
   const handleMetricFormatChange = useCallback(
     (dimensionId: string, format: any) => {
+      if (isSharedAxisLineChart(chartType)) {
+        const index = valueDimensions.findIndex(metric => metric.id === dimensionId)
+        const decision = canChangeLineMetricFormat(valueDimensions, index, format)
+        if (!decision.ok) {
+          toast({
+            description: t("componentConfigDrawer.toast.lineAxisSingleKind"),
+            variant: "warning"
+          })
+          return
+        }
+      }
       chartState.setValueDimensions(prev =>
         prev.map(d =>
           d.id === dimensionId
@@ -450,7 +481,7 @@ export function ComponentConfigDrawer() {
         )
       )
     },
-    [chartState]
+    [chartState, chartType, t, toast, valueDimensions]
   )
 
   const saveDisplayName = useCallback(() => {

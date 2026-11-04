@@ -176,18 +176,13 @@ class KnowledgeVersionService:
         projection time), and the old version exits default retrieval because
         the shared store only ever holds the primary version's chunks.
         """
-        new_generation = await self.doc_repo.increment_content_generation(
-            int(document_id)
-        )
-        marked = (
-            await self.knowledge_file_repo.mark_document_entries_content_generation(
-                int(document_id),
-                int(new_generation),
-            )
+        new_generation = await self.doc_repo.increment_content_generation(int(document_id))
+        marked = await self.knowledge_file_repo.mark_document_entries_content_generation(
+            int(document_id),
+            int(new_generation),
         )
         logger.info(
-            "shared-space primary switch content_generation bump: "
-            "document_id={} new_generation={} marked_entries={}",
+            "shared-space primary switch content_generation bump: document_id={} new_generation={} marked_entries={}",
             document_id,
             new_generation,
             marked,
@@ -888,6 +883,7 @@ class KnowledgeVersionService:
         *,
         threshold: float | None = None,
         limit: int = 3,
+        batch_epoch: tuple[int, int] | None = None,
     ) -> int:
         """Compute similarity once, replace cached rows, and update pending status."""
         from bisheng.knowledge.domain.services.knowledge_similarity_entry_service import KnowledgeSimilarityEntryService
@@ -918,9 +914,16 @@ class KnowledgeVersionService:
                 attempt + 1,
             )
         else:
-            if self.similar_candidate_repo is not None:
+            if batch_epoch is not None:
+                await self._commit_batch_similarity(knowledge_file_id, [], None, False, batch_epoch)
+            elif self.similar_candidate_repo is not None:
                 await self.similar_candidate_repo.delete_by_source_file_id(knowledge_file_id)
             return 0
+
+        snapshot = entries.snapshot(current, rows) if current is not None else None
+        if batch_epoch is not None:
+            outcome = await self._commit_batch_similarity(knowledge_file_id, rows, snapshot, bool(rows), batch_epoch)
+            return len(rows) if outcome == "written" else 0
 
         if self.similar_candidate_repo is not None:
             await self.similar_candidate_repo.replace_for_source_file(knowledge_file_id, rows)
@@ -928,9 +931,37 @@ class KnowledgeVersionService:
         if kf is None:
             return 0
         await self.knowledge_file_repo.store_similarity_state(
-            knowledge_file_id, entries.snapshot(current, rows) if current is not None else None, bool(rows),
+            knowledge_file_id,
+            snapshot,
+            bool(rows),
         )
         return len(rows)
+
+    async def _commit_batch_similarity(
+        self,
+        knowledge_file_id: int,
+        rows: list[KnowledgeFileSimilarityCandidate],
+        snapshot: dict | None,
+        has_candidates: bool,
+        batch_epoch: tuple[int, int],
+    ) -> str:
+        from bisheng.knowledge.domain.services.knowledge_upload_batch_service import (
+            UploadBatchEpochStale,
+            commit_similarity_if_epoch,
+        )
+
+        outcome = await commit_similarity_if_epoch(
+            self,
+            knowledge_file_id,
+            rows,
+            snapshot,
+            has_candidates,
+            batch_id=batch_epoch[0],
+            epoch=batch_epoch[1],
+        )
+        if outcome == "stale":
+            raise UploadBatchEpochStale()
+        return outcome
 
     async def _calculate_similarity_candidate_rows(
         self,
@@ -941,7 +972,9 @@ class KnowledgeVersionService:
     ) -> list[KnowledgeFileSimilarityCandidate]:
         from bisheng.knowledge.domain.services.knowledge_similarity_entry_service import KnowledgeSimilarityEntryService
 
-        return await KnowledgeSimilarityEntryService(self).calculate(knowledge_file_id, threshold=threshold, limit=limit)
+        return await KnowledgeSimilarityEntryService(self).calculate(
+            knowledge_file_id, threshold=threshold, limit=limit
+        )
 
     async def _similar_candidate_entries_from_cache(
         self,
@@ -953,7 +986,9 @@ class KnowledgeVersionService:
     ) -> list:
         from bisheng.knowledge.domain.services.knowledge_similarity_entry_service import KnowledgeSimilarityEntryService
 
-        return await KnowledgeSimilarityEntryService(self).cached(knowledge_file_id, cached_rows, limit=limit, check_permissions=check_permissions)
+        return await KnowledgeSimilarityEntryService(self).cached(
+            knowledge_file_id, cached_rows, limit=limit, check_permissions=check_permissions
+        )
 
     async def list_pending_similar_files(self, knowledge_id: int) -> list:
         """List files in this space with similar_status=1 (pending user action).
@@ -1012,7 +1047,9 @@ class KnowledgeVersionService:
                     file_name=kf.file_name,
                     file_code=getattr(kf, "file_encoding", None),
                     candidate_count=len(candidates),
-                    current_primary_version_no=context.version.version_no if context and context.version else (v.version_no if v else 1),
+                    current_primary_version_no=context.version.version_no
+                    if context and context.version
+                    else (v.version_no if v else 1),
                     primary_uploader_name=kf.user_name,
                     can_associate=context.can_associate if context else False,
                 )
@@ -1239,10 +1276,14 @@ class KnowledgeVersionService:
                 response = await client.search(
                     index=route.index_name,
                     size=10000,
-                    query={"bool": {"filter": [
-                        {"terms": {"metadata.content_file_id": file_ids}},
-                        {"term": {"metadata.knowledge_ids": int(knowledge.id)}},
-                    ]}},
+                    query={
+                        "bool": {
+                            "filter": [
+                                {"terms": {"metadata.content_file_id": file_ids}},
+                                {"term": {"metadata.knowledge_ids": int(knowledge.id)}},
+                            ]
+                        }
+                    },
                     _source=["text", "metadata.content_file_id"],
                 )
             except Exception as exc:
@@ -1343,6 +1384,7 @@ class KnowledgeVersionService:
         # 2) Tokenize misses locally.
         to_write: dict[str, list[str]] = {}
         missing = [(i, text) for i, (_, text) in enumerate(items) if results[i] is None]
+
         def tokenize_missing():
             return [(i, tokenize(text)) for i, text in missing]
 
@@ -1815,5 +1857,8 @@ class KnowledgeVersionService:
         from bisheng.knowledge.domain.services.knowledge_similarity_entry_service import KnowledgeSimilarityEntryService
 
         return await KnowledgeSimilarityEntryService(self).publish(
-            knowledge_file_id, target_knowledge_id, limit=limit, can_view_file=can_view_file,
+            knowledge_file_id,
+            target_knowledge_id,
+            limit=limit,
+            can_view_file=can_view_file,
         )

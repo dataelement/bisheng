@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>需求稿 · 折线图共用纵轴</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#202733;--sub:#515d6d;--line:#dce2eb;--accent:#245bb1;--weak:#edf3ff;--ok:#17683b;--warn:#8a4b00}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  a{color:var(--accent)}
+  .wrap{max-width:1060px;margin:auto;padding:28px 24px 72px}
+  .hero{background:#164789;color:#fff;padding:28px;border-radius:16px;margin-bottom:20px}
+  h1{margin:0 0 8px;font-size:26px;line-height:1.4}
+  .meta{font-size:13px;margin:0}
+  .card,.toc{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:24px;margin:0 0 20px}
+  h2{font-size:21px;margin:0 0 8px} h3{font-size:16px;margin:22px 0 8px}
+  .lead{color:var(--sub);font-size:13px;margin:0 0 14px}
+  table{border-collapse:collapse;width:100%;min-width:720px;font-size:13px}
+  .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin:12px 0}
+  th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{background:#f0f3f8}
+  code{font:12px/1.6 ui-monospace,Menlo,Consolas,monospace;background:#f0f3f8;padding:1px 4px;border-radius:4px}
+  .callout{border-left:4px solid var(--accent);background:#f1f5fc;padding:12px 16px;margin:14px 0}
+  .callout.ok{border-color:var(--ok);background:#eff8f2}
+  .toc ol{columns:2;margin:0;padding-left:20px}
+  @media(max-width:680px){.toc ol{columns:1}.wrap{padding:16px 12px 48px}}
+  @media print{body{background:#fff}.hero{background:#fff;color:#111;border:1px solid #777}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero">
+  <h1>折线图共用纵轴</h1>
+  <p class="meta">版本 1.1 · 2026-11-02 · 状态：需求已闭环 · 项目：毕昇平台数据看板 · 标识 LINE-AXIS</p>
+  <p class="meta">确认依据：2026-11-02 用户回复「OK，按照你的建议来」。该回复确认了当时列出的 Q1–Q4 建议，以及同时声明将直接执行的两条规则：两条线时图例固定在右上角；类型不一致时拒绝加入或修改格式。</p>
+</header>
+<nav class="toc card">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#s1">背景与问题</a></li>
+    <li><a href="#s2">目标与指标</a></li>
+    <li><a href="#s3">范围</a></li>
+    <li><a href="#s4">用户场景与流程</a></li>
+    <li><a href="#s5">功能需求</a></li>
+    <li><a href="#s6">非功能与依赖</a></li>
+    <li><a href="#s7">数据与埋点</a></li>
+    <li><a href="#s8">验收标准</a></li>
+    <li><a href="#s9">风险与回滚</a></li>
+    <li><a href="#s10">变更记录</a></li>
+  </ol>
+</nav>
+
+<section class="card" id="s1">
+  <h2>1. 背景与问题</h2>
+  <p>看板编辑者配置折线图时，需要把两个同类指标画成两条线，并看出每条线是什么。横轴只表达一个维度，例如时间。</p>
+  <p>现状观察（源码，尚未在本轮用页面复测）：基础折线图 <code>line</code> 的值轴最多 1 个指标。组合折线图 <code>multiple-line</code> 在点击加入时最多 3 个指标，拖拽加入第二个会被拒绝。两条线共用一根纵轴时，刻度和提示都按第一个指标的格式显示。折线图类别轴目前最多 2 个维度。指标格式有数量、百分比、时长、存储大小四种。图例位置可在样式里改为上、下、左、右，也可以关闭。</p>
+  <p>已确认的产品判断：一根纵轴只能表示一种数。数量和数量、百分比和百分比可以共用。时长和存储大小不能因为“类型相同”而共用。</p>
+</section>
+
+<section class="card" id="s2">
+  <h2>2. 目标与指标</h2>
+  <p>编辑者能在基础折线图和组合折线图上放置两条同为数量或同为百分比的线，右上角用颜色和名称区分；横轴只有一个维度。不符合规则的新操作被拒绝，已保存的旧配置不被自动删除。</p>
+  <div class="table-wrap"><table>
+    <caption>目标指标</caption>
+    <thead><tr><th>名称</th><th>口径</th><th>基线</th><th>目标</th><th>观察</th><th>来源</th></tr></thead>
+    <tbody>
+      <tr><td>规则符合率</td><td>第 8 节验收条件全部可观察通过</td><td>无历史测量。当前点击与拖拽上限不一致。</td><td>所列 AC 均通过</td><td>开发验证与独立验收各一次</td><td>本需求，无量化运营指标</td></tr>
+    </tbody>
+  </table></div>
+  <p>没有单独的点击率或时延目标。不把“更好看”写成验收条件。</p>
+</section>
+
+<section class="card" id="s3">
+  <h2>3. 范围</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>类别</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td>包含，一期，P0</td><td>基础折线图、组合折线图的指标共用规则、横轴维度上限、两条线的右上角图例、旧配置保留。</td></tr>
+      <tr><td>排除</td><td>面积图、柱状图、条形图、饼图、环形图、指标卡、交叉表。已从选择器隐藏的堆叠折线图 <code>stacked-line</code>。双纵轴。按部门拆开同一个指标形成多条线。自动删除或迁移旧配置。</td></tr>
+      <tr><td>角色</td><td>已能编辑该看板的用户。不新增角色，不改变看板权限。</td></tr>
+      <tr><td>未定，不承诺</td><td>两个数量的展示单位不同（例如一个是个、一个是 K）时，不新增第二套刻度。刻度仍按第一个指标的现有格式换算。</td></tr>
+    </tbody>
+  </table></div>
+  <p>优先级采用本需求自定义：P0 是本期必须同时交付的规则。没有二期。</p>
+</section>
+
+<section class="card" id="s4">
+  <h2>4. 用户场景与流程</h2>
+  <h3>主路径</h3>
+  <p>编辑者打开基础折线图或组合折线图，类别轴放入一个维度（例如时间），值轴放入两个数量指标（例如用户在线数、用户活跃数）。图上出现两条不同颜色的线，右上角标出颜色和指标名称。保存后再次打开，两条线和一个横轴维度仍在。</p>
+  <h3>拒绝路径</h3>
+  <p>第二个指标不是同一类数，或已经有两条线，或再加第二个横轴维度时，字段不加入，出现对应提示，已加入的字段保持不变。</p>
+  <h3>旧配置</h3>
+  <p>打开已有两个横轴维度，或两条不同类型指标的折线图时，配置原样显示，查询仍使用原配置。不能再添加违规项。用户手动删除后，才按新规则继续编辑。</p>
+</section>
+
+<section class="card" id="s5">
+  <h2>5. 功能需求</h2>
+
+  <h3 id="REQ-LINE-001">REQ-LINE-001 纵轴只放同类线</h3>
+  <p>优先级 P0，一期。来源：用户确认的 Q2、Q3，以及“类型不一致时拒绝加入或改格式”。</p>
+  <p>入口是图表配置里的值轴。点击字段或拖入字段都走同一规则。适用图表：基础折线图、组合折线图。</p>
+  <div class="table-wrap"><table>
+    <caption>加入指标决策表</caption>
+    <thead><tr><th>已有指标</th><th>准备加入的指标</th><th>结果</th></tr></thead>
+    <tbody>
+      <tr><td>0 个</td><td>数量、百分比、时长、存储大小之一</td><td>允许，成为唯一指标</td></tr>
+      <tr><td>1 个数量</td><td>数量</td><td>允许，共 2 条线</td></tr>
+      <tr><td>1 个百分比</td><td>百分比</td><td>允许，共 2 条线</td></tr>
+      <tr><td>1 个数量或百分比</td><td>另一类，或时长，或存储大小</td><td>拒绝。提示「纵轴只能共用数量或百分比」。已有指标不变</td></tr>
+      <tr><td>1 个时长或存储大小</td><td>任意第二个指标</td><td>拒绝。同一句提示。已有指标不变</td></tr>
+      <tr><td>基础折线图已经 2 个</td><td>任意</td><td>拒绝。提示「折线图最多两条线」。已有指标不变</td></tr>
+      <tr><td>组合折线图已经 2 个且同为数量或同为百分比</td><td>再一个同类指标</td><td>允许，共 3 条线</td></tr>
+      <tr><td>组合折线图已经 3 个</td><td>任意</td><td>拒绝。提示「组合折线图最多三条线」。已有指标不变</td></tr>
+    </tbody>
+  </table></div>
+  <p>数量指保存时数值格式类型为 <code>number</code>。百分比指 <code>percent</code>。数据集里按比例计算、保存时会变成百分比的指标，按百分比判断。时长是 <code>duration</code>，存储大小是 <code>storage</code>。</p>
+  <p>把已有两条合法线中的一条改成另一种格式，使它们不再同为数量或同为百分比时，这次修改不生效，两条都保持修改前的格式，并提示「纵轴只能共用数量或百分比」。只有一条线时，可以改成四种格式中的任意一种。</p>
+  <p>旧配置已经是不同类型的两条线时，允许把其中一条改成与另一条同为数量或同为百分比。改完仍不构成合法一对时，修改不生效。</p>
+
+  <h3 id="REQ-LINE-002">REQ-LINE-002 两条线的右上角图例</h3>
+  <p>优先级 P0，一期。来源：用户要求用文字和颜色区分折线，以及已确认的右上角固定图例。</p>
+  <p>基础折线图或组合折线图出现 2 条线时，图例固定在图表右上角，即使样式里关闭了图例或把位置设在别处。每条图例包含主题配色中的一个颜色和该线的指标显示名。第一条线用配色的第一个颜色，第二条用第二个颜色。只有 1 条线时，仍按样式里的图例开关和位置显示。</p>
+
+  <h3 id="REQ-LINE-003">REQ-LINE-003 横轴只有一个维度</h3>
+  <p>优先级 P0，一期。来源：用户确认的 Q1 范围和“横轴只能有一个维度”。</p>
+  <p>基础折线图和组合折线图的类别轴最多新加入 1 个维度。时间只是例子，任意一个维度字段都可以。再加入第二个维度时拒绝，提示「折线图的横轴只能有一个维度」，已有维度不变。其他图表的类别轴上限仍是 2 个。</p>
+
+  <h3 id="REQ-LINE-004">REQ-LINE-004 旧配置不自动删除</h3>
+  <p>优先级 P0，一期。来源：用户确认的 Q4。</p>
+  <p>已经保存的折线图若有 2 个类别维度，或有 2 个以上指标，或指标类型不符合 REQ-LINE-001，打开编辑和查询时都保留原配置。保存时也不删除这些已有项。只拒绝新增的违规操作。</p>
+
+  <h3>字段</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>名称</th><th>含义</th><th>类型</th><th>必填</th><th>范围</th><th>默认</th><th>校验</th><th>来源</th></tr></thead>
+    <tbody>
+      <tr><td>图表类型</td><td>是否适用本规则</td><td>枚举</td><td>是</td><td><code>line</code>、<code>multiple-line</code> 适用</td><td>无</td><td>其他类型不使用本决策表</td><td>现有图表类型</td></tr>
+      <tr><td>指标格式类型</td><td>纵轴能否共用</td><td>枚举</td><td>是</td><td><code>number</code>、<code>percent</code>、<code>duration</code>、<code>storage</code></td><td>无格式时按现有保存逻辑视为数量</td><td>见 REQ-LINE-001</td><td>指标数值格式</td></tr>
+      <tr><td>指标显示名</td><td>图例文字</td><td>文本</td><td>是</td><td>沿用现有显示名编辑限制，最长 15 个字符</td><td>字段原名</td><td>空名称不能保存，沿用现有规则</td><td>现有显示名</td></tr>
+      <tr><td>类别维度个数</td><td>横轴维度</td><td>整数</td><td>新建时至少应能配置</td><td>新操作最多 1 个；旧数据可以大于 1</td><td>空</td><td>见 REQ-LINE-003、REQ-LINE-004</td><td>类别轴</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>异常适用性</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>类型</th><th>结论</th></tr></thead>
+    <tbody>
+      <tr><td>失败</td><td>适用。拒绝加入或拒绝改格式时，提示上表中的原句，配置保持拒绝前的内容，可以立刻重试另一次合法操作。</td></tr>
+      <tr><td>超时</td><td>不适用。本规则在编辑器本地判断，不新增等待中的请求。</td></tr>
+      <tr><td>并发</td><td>不适用。不新增多人同时编辑同一图表的规则，沿用看板现有保存方式。</td></tr>
+      <tr><td>重复提交</td><td>适用。同一不合法字段再次加入，结果仍是拒绝，不新增多余指标或维度。</td></tr>
+      <tr><td>权限不足</td><td>不适用。不改变谁可以编辑看板。</td></tr>
+      <tr><td>空数据</td><td>适用。没有指标或没有维度时，图表保持现有的未完成或无数据表现，不为本需求新增空状态文案。</td></tr>
+      <tr><td>边界值</td><td>适用。0、1、2 个指标，以及旧数据中多于 2 个指标或 2 个维度。2 是新操作上限，不是把旧数据截断为 2。</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="card" id="s6">
+  <h2>6. 非功能与依赖</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>项</th><th>要求</th><th>验证</th></tr></thead>
+    <tbody>
+      <tr><td>性能</td><td>不适用单独指标。判断发生在编辑器本地，不新增查询。</td><td>不测时延</td></tr>
+      <tr><td>安全与权限</td><td>不改变看板读写权限，不记录指标值到新日志。</td><td>对照权限代码无新入口</td></tr>
+      <tr><td>合规</td><td>无新的个人信息处理。</td><td>不适用</td></tr>
+      <tr><td>依赖</td><td>依赖现有图表主题配色和现有查询接口。查询请求形状不变。</td><td>设计阶段核对调用点</td></tr>
+      <tr><td>发布</td><td>随平台前端发布，无开关，无分批放量设施。</td><td>见第 9 节</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="card" id="s7">
+  <h2>7. 数据与埋点</h2>
+  <p>配置仍写在已有看板组件的 <code>data_config</code> 中，包含已有的指标列表和维度列表。不新增表、不新增列、不新增埋点事件。</p>
+  <p>隐私：图例只显示用户已经配置的指标显示名，不新增用户身份字段。</p>
+</section>
+
+<section class="card" id="s8">
+  <h2>8. 验收标准</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>ID</th><th>关联</th><th>前提</th><th>动作</th><th>预期</th></tr></thead>
+    <tbody>
+      <tr><td id="AC-LINE-001-01">AC-LINE-001-01</td><td>REQ-LINE-001</td><td>基础折线图，已有 1 个数量指标</td><td>加入另一个数量指标</td><td>值轴有 2 个指标，无拒绝提示</td></tr>
+      <tr><td id="AC-LINE-001-02">AC-LINE-001-02</td><td>REQ-LINE-001</td><td>组合折线图，已有 1 个百分比指标</td><td>加入另一个百分比指标</td><td>值轴有 2 个指标，无拒绝提示</td></tr>
+      <tr><td id="AC-LINE-001-03">AC-LINE-001-03</td><td>REQ-LINE-001</td><td>折线图已有 1 个数量指标</td><td>加入百分比、时长或存储大小</td><td>仍是 1 个指标，提示「纵轴只能共用数量或百分比」</td></tr>
+      <tr><td id="AC-LINE-001-04">AC-LINE-001-04</td><td>REQ-LINE-001</td><td>折线图已有 1 个时长或存储大小</td><td>加入任意第二个指标</td><td>仍是 1 个指标，提示同上</td></tr>
+      <tr><td id="AC-LINE-001-05">AC-LINE-001-05</td><td>REQ-LINE-001</td><td>基础折线图已有 2 个数量指标</td><td>加入第三个数量指标</td><td>仍是 2 个，提示「折线图最多两条线」</td></tr>
+      <tr><td id="AC-LINE-001-07">AC-LINE-001-07</td><td>REQ-LINE-001</td><td>组合折线图已有 2 个数量指标</td><td>加入第三个数量指标，再加入第四个</td><td>第三条加入成功；第四条被拒绝，提示「组合折线图最多三条线」</td></tr>
+      <tr><td id="AC-LINE-001-06">AC-LINE-001-06</td><td>REQ-LINE-001</td><td>两条线都是数量</td><td>把其中一条改成百分比</td><td>两条都仍是数量，提示「纵轴只能共用数量或百分比」</td></tr>
+      <tr><td id="AC-LINE-002-01">AC-LINE-002-01</td><td>REQ-LINE-002</td><td>折线图有 2 条线，样式中图例关闭或位于底部</td><td>显示图表</td><td>右上角仍显示两条图例，文字为两个指标显示名，颜色不同且按主题色序</td></tr>
+      <tr><td id="AC-LINE-002-02">AC-LINE-002-02</td><td>REQ-LINE-002</td><td>折线图只有 1 条线，样式关闭图例</td><td>显示图表</td><td>不强制显示图例</td></tr>
+      <tr><td id="AC-LINE-003-01">AC-LINE-003-01</td><td>REQ-LINE-003</td><td>折线图已有 1 个类别维度</td><td>再加入一个维度</td><td>仍是 1 个维度，提示「折线图的横轴只能有一个维度」</td></tr>
+      <tr><td id="AC-LINE-003-02">AC-LINE-003-02</td><td>REQ-LINE-003</td><td>基础柱状图已有 1 个类别维度</td><td>再加入一个维度</td><td>可以有 2 个维度</td></tr>
+      <tr><td id="AC-LINE-004-01">AC-LINE-004-01</td><td>REQ-LINE-004</td><td>已保存的折线图有 2 个类别维度</td><td>打开并查询，不手动删除</td><td>2 个维度都在，查询配置仍带这 2 个维度</td></tr>
+      <tr><td id="AC-LINE-004-02">AC-LINE-004-02</td><td>REQ-LINE-004</td><td>已保存的折线图有数量和百分比各一条</td><td>打开并查询</td><td>两个指标都在；不能再加入第三个指标</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="card" id="s9">
+  <h2>9. 风险与回滚</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>ID</th><th>风险</th><th>触发</th><th>影响</th><th>应对</th></tr></thead>
+    <tbody>
+      <tr><td>R1</td><td>两个数量的量级差很大，第二条线看起来贴在轴上</td><td>例如 50 和 5,000,000 共用数量轴</td><td>图可读性差，但符合“同为数量可共用”</td><td>本期不自动拆轴。回滚代码即恢复原上限，已保存配置不因本规则被改写</td></tr>
+      <tr><td>R2</td><td>点击和拖拽漏改一处</td><td>只改一条加入路径</td><td>两条路径结果不同</td><td>验收同时覆盖点击和拖拽。设计要求共用同一判断</td></tr>
+    </tbody>
+  </table></div>
+  <p>无灰度开关。回滚方式是撤回前端改动。回滚不需要改数据库，因为本需求不改已保存内容。</p>
+</section>
+
+<section class="card" id="s10">
+  <h2>10. 变更记录</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>版本</th><th>日期</th><th>变更</th><th>依据</th></tr></thead>
+    <tbody>
+      <tr><td>1.0</td><td>2026-11-02</td><td>首次闭环。记录 Q1–Q4 及图例、拒绝提示规则。</td><td>用户「OK，按照你的建议来」</td></tr>
+      <tr><td>1.1</td><td>2026-11-02</td><td>组合折线图同类指标上限由 2 改为 3。基础折线图仍为 2。三条线使用蓝、橙、绿，不用浅蓝。</td><td>用户「组合折线图的折线条数上限调至 3」</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout ok"><strong>四维与四问</strong>合理、闭环、边界、可验收均为成立。阻塞问题为 0。研发可以按本文规则开工，但实现前仍要确认技术设计。测试可以把第 8 节写成用例。业务结果是两条同类线、右上角图例、横轴一个维度、旧配置不自动删除。取舍保留在第 1 节和第 3 节。</div>
+</section>
+</div>
+</body>
+</html>

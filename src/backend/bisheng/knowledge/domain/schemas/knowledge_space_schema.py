@@ -556,7 +556,8 @@ class ShougangPortalFileSearchReq(ShougangPortalFileBrowseReq):
     @model_validator(mode="after")
     def validate_retrieval_profile(self):
         if self.retrieval_profile == "portal_global_shared" and (
-            not (self.q or "").strip() or self.recommendation
+            not (self.q or "").strip()
+            or self.recommendation
             or self.discovery_scope not in {"portal_public", "portal_configured", "portal_enabled"}
         ):
             raise ValueError("shared global search requires a portal keyword scope without recommendation")
@@ -654,7 +655,8 @@ class ShougangPortalFileCountReq(ShougangPortalAdvancedFileSearchReq):
     def validate_count_mode(self):
         self.cursor = None
         if self.retrieval_profile == "portal_global_shared" and (
-            self.query_type != "keyword" or self.recommendation
+            self.query_type != "keyword"
+            or self.recommendation
             or self.discovery_scope not in {"portal_public", "portal_configured", "portal_enabled"}
         ):
             raise ValueError("shared global count requires a portal keyword scope without recommendation")
@@ -1041,6 +1043,10 @@ class FileCreateReq(BaseModel):
     business_domain_code: str | None = Field(None, max_length=16, description="Selected business domain code")
     manual_tag_ids: list[int] = Field(default_factory=list, description="Selected existing tag IDs")
     manual_tag_names: list[str] = Field(default_factory=list, description="Selected tag names")
+    upload_batch_key: str | None = Field(
+        default=None,
+        description="UUID shared by one upload confirmation. Blank means one key for this request.",
+    )
 
     @field_validator("business_domain_code", mode="before")
     @classmethod
@@ -1075,6 +1081,28 @@ class FileCreateReq(BaseModel):
         if value is None:
             return []
         return value
+
+    @field_validator("upload_batch_key", mode="before")
+    @classmethod
+    def normalize_upload_batch_key_field(cls, value: Any):
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("upload_batch_key is invalid")
+        text = value.strip()
+        if not text:
+            return None
+        from uuid import UUID
+
+        if len(text) != 36:
+            raise ValueError("upload_batch_key is invalid")
+        try:
+            parsed = UUID(text)
+        except ValueError as exc:
+            raise ValueError("upload_batch_key is invalid") from exc
+        if str(parsed) != text.lower():
+            raise ValueError("upload_batch_key is invalid")
+        return str(parsed)
 
 
 class WebLinkCreateReq(BaseModel):

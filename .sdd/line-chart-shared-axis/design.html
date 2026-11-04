@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>技术设计 · 折线图共用纵轴</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#202733;--sub:#515d6d;--line:#dce2eb;--accent:#245bb1;--weak:#edf3ff;--ok:#17683b;--warn:#8a4b00}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  a{color:var(--accent)}
+  .wrap{max-width:1060px;margin:auto;padding:28px 24px 72px}
+  .hero{background:linear-gradient(135deg,#164789,#285eae);color:#fff;padding:28px;border-radius:16px;margin-bottom:20px}
+  h1{margin:0 0 8px;font-size:26px}
+  .meta{font-size:13px;margin:0 0 12px}
+  .summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  .summary-grid .item{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);padding:12px;border-radius:10px}
+  .item b{display:block;font-size:12px}
+  .item p{margin:4px 0 0;font-size:14px}
+  .card,.toc{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:24px;margin:0 0 20px}
+  h2{font-size:21px;margin:0 0 8px} h3{font-size:16px;margin:22px 0 8px}
+  .lead{color:var(--sub);font-size:13px}
+  .status{color:var(--warn);font-weight:600}
+  table{border-collapse:collapse;width:100%;min-width:720px;font-size:13px}
+  .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin:12px 0}
+  th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{background:#f0f3f8}
+  code{font:12px/1.6 ui-monospace,Menlo,Consolas,monospace;background:#f0f3f8;padding:1px 4px;border-radius:4px}
+  .callout{border-left:4px solid var(--accent);background:#f1f5fc;padding:12px 16px;margin:14px 0}
+  .callout.warn{border-color:var(--warn);background:#fff8e9}
+  .diagram{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:12px;margin:14px 0;overflow-x:auto}
+  .diagram svg{display:block;width:100%;min-width:640px;height:auto}
+  figcaption{font-size:12px;color:var(--sub);margin-top:6px}
+  details{border:1px solid var(--line);border-radius:9px;margin:12px 0;background:#fff}
+  summary{padding:12px 16px;font-weight:600;cursor:pointer}
+  details .inner{padding:0 16px 14px}
+  @media(max-width:680px){.summary-grid{grid-template-columns:1fr}.wrap{padding:16px 12px 48px}}
+  @media print{body{background:#fff}.hero{background:#fff;color:#111;border:1px solid #777}details{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero">
+  <h1>折线图共用纵轴 · 技术设计</h1>
+  <p class="meta">版本 0.1 · 2026-11-02 · 状态：设计已确认 · 需求 <a href="requirements.html">LINE-AXIS 1.0</a></p>
+  <p class="meta">确认依据：2026-11-02 用户回复「确认」，对应本文件 0.1。</p>
+  <div class="summary-grid">
+    <div class="item"><b>改变什么</b><p>基础折线图和组合折线图在编辑器里用同一套规则决定能不能加指标、能不能加第二个横轴维度，以及两条线时图例放在哪。</p></div>
+    <div class="item"><b>不改变什么</b><p>查询接口、数据库表、其他图表类型。已保存的不合规则配置不会被自动删掉。</p></div>
+    <div class="item"><b>失败时</b><p>违规的加入或改格式不生效，并弹出规定中文提示。图表查询失败仍走现有错误提示。</p></div>
+  </div>
+</header>
+
+<nav class="toc card"><h2>目录</h2>
+<ol>
+  <li><a href="#d1">依据与范围</a></li>
+  <li><a href="#d2">现状与改动位置</a></li>
+  <li><a href="#d3">规则怎么执行</a></li>
+  <li><a href="#d4">关键决策</a></li>
+  <li><a href="#d5">契约与数据</a></li>
+  <li><a href="#d6">影响与验证</a></li>
+  <li><a href="#d7">发布与待决</a></li>
+</ol>
+</nav>
+
+<section class="card" id="d1">
+  <h2>1. 依据与范围</h2>
+  <p class="lead">需求版本 LINE-AXIS 1.0，确认依据是 2026-11-02「OK，按照你的建议来」。本设计尚未经用户确认，确认前不改业务代码。</p>
+  <div class="table-wrap"><table>
+    <caption>正确性约束</caption>
+    <thead><tr><th>ID</th><th>规则</th><th>来源</th><th>范围</th><th>保证</th><th>失败时</th><th>验证</th></tr></thead>
+    <tbody>
+      <tr><td>INV-1</td><td>新加入的第二个指标必须与第一个同为数量或同为百分比，且总数不超过 2</td><td>REQ-LINE-001</td><td>基础折线图、组合折线图的点击和拖拽</td><td>两条路径调用同一个纯函数，通过后才写入值轴</td><td>不写入，提示规定句子</td><td>开发测试直接调用该函数和两条加入路径</td></tr>
+      <tr><td>INV-2</td><td>改格式不得把合法的一对变成不合法</td><td>REQ-LINE-001</td><td>上述两种图、已有至少 2 个指标时</td><td>先算出改完后的格式类型，不合法则不调用状态更新</td><td>保持原格式并提示</td><td>开发测试断言格式对象未变</td></tr>
+      <tr><td>INV-3</td><td>新加入的类别维度最多 1 个</td><td>REQ-LINE-003</td><td>上述两种图</td><td>加入前检查已有个数</td><td>不写入并提示</td><td>开发测试；柱状图仍允许 2 个作为对照</td></tr>
+      <tr><td>INV-4</td><td>打开、查询、保存不删除已有违规项</td><td>REQ-LINE-004</td><td>已加载进编辑状态的维度和指标</td><td>初始化全量载入；生成保存配置时不按新上限截断</td><td>不适用删除恢复。用户可手动删除</td><td>用含 2 个维度的初始配置断言保存结果仍为 2 个</td></tr>
+      <tr><td>INV-5</td><td>2 条线时图例固定右上角</td><td>REQ-LINE-002</td><td>上述两种图且系列数大于等于 2</td><td>生成图表选项时覆盖图例位置，并忽略“关闭图例”</td><td>1 条线不覆盖</td><td>断言图表选项对象，不启动浏览器</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="card" id="d2">
+  <h2>2. 现状与改动位置</h2>
+  <p>证据类型是源码阅读，不是本轮页面操作记录。</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>位置</th><th>现在</th><th>改后</th></tr></thead>
+    <tbody>
+      <tr><td><code>ComponentConfigDrawer.tsx</code> 点击加入</td><td>组合折线图最多 3 个指标。基础折线图最多 1 个。类别轴最多 2 个。不比较格式类型。</td><td>两种折线图都调用同一判断。</td></tr>
+      <tr><td><code>useChartState.tsx</code> 拖拽加入</td><td>组合折线图因仍判断废弃类型 <code>stacked-line</code>，第二个指标被拒绝。类别轴最多 2 个。</td><td>与点击使用同一判断。不把组合折线图放宽到 3 个。</td></tr>
+      <tr><td><code>resolveMetricNumberFormat</code></td><td>按比例计算的指标保存为百分比。</td><td>共用判断使用它的结果，避免比例指标被当成数量。</td></tr>
+      <tr><td><code>BaseChart.tsx</code> 的 <code>buildLegendOption</code></td><td><code>showLegend === false</code> 时不显示。位置来自样式。</td><td>仅两种折线图且系列不少于 2 时，强制显示在右上角。</td></tr>
+      <tr><td><code>unitConversion</code></td><td>刻度和提示使用第一个指标的格式。</td><td>不改。两个数量的单位不一致时，仍按第一个指标换算。这是需求第 3 节的已知限制。</td></tr>
+      <tr><td>查询接口 <code>/api/v1/telemetry/dashboard/component/query</code></td><td>按 <code>data_config.metrics</code> 返回各指标的值。</td><td>不改请求和响应。</td></tr>
+    </tbody>
+  </table></div>
+  <figure class="diagram">
+    <svg viewBox="0 0 760 220" role="img" aria-labelledby="archTitle archDesc">
+      <title id="archTitle">编辑器判断和图表绘制的关系</title>
+      <desc id="archDesc">点击和拖拽都进入同一套折线图规则。规则通过后才写入编辑状态。保存配置不截断旧数据。绘图只负责两条线时的右上角图例。</desc>
+      <rect x="20" y="30" width="150" height="48" rx="8" fill="#e8f0ff" stroke="#245bb1"/>
+      <text x="95" y="58" text-anchor="middle" font-size="13">点击字段</text>
+      <rect x="20" y="110" width="150" height="48" rx="8" fill="#e8f0ff" stroke="#245bb1"/>
+      <text x="95" y="138" text-anchor="middle" font-size="13">拖入字段</text>
+      <rect x="250" y="70" width="180" height="48" rx="8" fill="#fff8e6" stroke="#8a4b00"/>
+      <text x="340" y="98" text-anchor="middle" font-size="13">折线图规则函数</text>
+      <rect x="510" y="30" width="220" height="48" rx="8" fill="#eff8f2" stroke="#17683b"/>
+      <text x="620" y="58" text-anchor="middle" font-size="13">编辑状态与保存配置</text>
+      <rect x="510" y="130" width="220" height="48" rx="8" fill="#eff8f2" stroke="#17683b"/>
+      <text x="620" y="158" text-anchor="middle" font-size="13">图表选项中的图例</text>
+      <path d="M170 54 H230 L250 84" fill="none" stroke="#245bb1" marker-end="url(#arr)"/>
+      <path d="M170 134 H230 L250 104" fill="none" stroke="#245bb1"/>
+      <path d="M430 94 H510" fill="none" stroke="#17683b"/>
+      <path d="M620 78 V130" fill="none" stroke="#17683b"/>
+      <defs><marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6" fill="#245bb1"/></marker></defs>
+    </svg>
+    <figcaption>图 D1。难点是两条加入路径现在规则不同。图的结论是它们在写入编辑状态之前汇合到同一个函数。查询服务不在这条链路里。</figcaption>
+  </figure>
+</section>
+
+<section class="card" id="d3">
+  <h2>3. 规则怎么执行</h2>
+  <p>选图：加入指标有多个失败出口，用流程图回答“什么时候拒绝”。图例位置是一次条件覆盖，不单独画架构图。</p>
+  <figure class="diagram">
+    <svg viewBox="0 0 760 300" role="img" aria-labelledby="flowTitle flowDesc">
+      <title id="flowTitle">折线图加入指标的判断</title>
+      <desc id="flowDesc">不是折线图则走原规则。折线图已有两个指标就拒绝。只有一个时，只有数量配数量或百分比配百分比才允许。</desc>
+      <rect x="280" y="12" width="200" height="36" rx="8" fill="#e8f0ff" stroke="#245bb1"/>
+      <text x="380" y="35" text-anchor="middle" font-size="13">准备加入指标</text>
+      <rect x="280" y="68" width="200" height="36" rx="8" fill="#fff" stroke="#8a4b00"/>
+      <text x="380" y="91" text-anchor="middle" font-size="13">是两种折线图吗</text>
+      <rect x="40" y="130" width="180" height="36" rx="8" fill="#f3f4f6" stroke="#667"/>
+      <text x="130" y="153" text-anchor="middle" font-size="13">否：保持原上限</text>
+      <rect x="300" y="130" width="160" height="36" rx="8" fill="#fff" stroke="#8a4b00"/>
+      <text x="380" y="153" text-anchor="middle" font-size="13">已有几个指标</text>
+      <rect x="540" y="190" width="190" height="40" rx="8" fill="#fdecec" stroke="#a92525"/>
+      <text x="635" y="215" text-anchor="middle" font-size="13">2 个：拒绝，最多两条</text>
+      <rect x="250" y="190" width="250" height="40" rx="8" fill="#fff" stroke="#8a4b00"/>
+      <text x="375" y="215" text-anchor="middle" font-size="13">1 个：格式是否可共用</text>
+      <rect x="80" y="250" width="200" height="36" rx="8" fill="#eff8f2" stroke="#17683b"/>
+      <text x="180" y="273" text-anchor="middle" font-size="13">可共用：写入</text>
+      <rect x="360" y="250" width="230" height="36" rx="8" fill="#fdecec" stroke="#a92525"/>
+      <text x="475" y="273" text-anchor="middle" font-size="13">不可共用：拒绝并提示</text>
+      <path d="M380 48 V68" stroke="#334" fill="none"/>
+      <path d="M300 86 L130 130" stroke="#334" fill="none"/>
+      <path d="M380 104 V130" stroke="#334" fill="none"/>
+      <path d="M460 148 H635 V190" stroke="#a92525" fill="none"/>
+      <path d="M380 166 V190" stroke="#334" fill="none"/>
+      <path d="M300 230 L180 250" stroke="#17683b" fill="none"/>
+      <path d="M450 230 L475 250" stroke="#a92525" fill="none"/>
+    </svg>
+    <figcaption>图 D2。0 个指标时直接写入，图中省略。拒绝不修改已有列表。横轴第二个维度不走这张图，单独计数后拒绝。</figcaption>
+  </figure>
+  <p>格式类型先经过现有的 <code>resolveMetricNumberFormat</code>。按比例计算的指标得到百分比。没有格式信息时，该函数现有结果是数量。</p>
+  <p>图例：系列数大于等于 2 时，<code>buildLegendOption</code> 的返回值改为显示，<code>top</code> 为 0，<code>right</code> 为 0，<code>left</code> 为 auto，方向水平。图例文字用现有系列名，也就是指标显示名；现有绘图会把超过 24 个字符的系列名截断，图例与线条使用同一个名字。颜色不单独指定，沿用当前主题注册进 ECharts 的配色顺序。</p>
+  <p>只有 1 条线时不进入这个分支。<code>showLegend === false</code> 仍然不显示图例。</p>
+  <h3>重复、并发、超时</h3>
+  <p>重复加入同一个不合法字段：每次都在写入前拒绝，值轴长度不变。不新增加锁。判断是同步的本地状态更新，没有超时窗口。两人同时编辑沿用现有看板保存，后保存的整份配置覆盖先保存的，本需求不新增合并。</p>
+</section>
+
+<section class="card" id="d4">
+  <h2>4. 关键决策</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>ID</th><th>决定</th><th>未采用</th><th>理由</th><th>重审条件</th></tr></thead>
+    <tbody>
+      <tr><td>AD-1</td><td>抽出纯函数供点击和拖拽调用</td><td>只改拖拽路径</td><td>现状两条路径上限不同。只改一条会继续违背 INV-1。</td><td>若以后只剩一条加入入口，函数仍保留给改格式和测试使用</td></tr>
+      <tr><td>AD-2</td><td>不修改查询接口和 <code>unitConversion</code></td><td>为第二个指标做第二根纵轴</td><td>需求已排除双纵轴，并接受刻度按第一个指标换算。</td><td>需求改为不同单位必须拆轴时</td></tr>
+      <tr><td>AD-3</td><td>保存配置不按新上限截断</td><td>打开或保存时只留第一个维度</td><td>REQ-LINE-004 禁止自动删除。</td><td>出现单独的数据修复任务时</td></tr>
+      <tr><td>AD-4</td><td>图例覆盖只在系列数不少于 2 时发生</td><td>所有折线图都忽略样式里的图例位置</td><td>需求只要求两条线必须能区分。一条线继续尊重样式。</td><td>需求改为一条线也固定右上角时</td></tr>
+    </tbody>
+  </table></div>
+  <p>这些决定来自已闭环需求。本设计 0.1 已于 2026-11-02 经用户确认。</p>
+</section>
+
+<section class="card" id="d5">
+  <h2>5. 契约与数据</h2>
+  <div class="table-wrap"><table>
+    <caption>提示文案。中文是验收原句。英文和日文文件同步增加同一键。</caption>
+    <thead><tr><th>键</th><th>中文</th><th>何时</th></tr></thead>
+    <tbody>
+      <tr><td><code>componentConfigDrawer.toast.lineAxisSingleKind</code></td><td>纵轴只能共用数量或百分比</td><td>INV-1、INV-2 的类型拒绝</td></tr>
+      <tr><td><code>componentConfigDrawer.toast.lineMaxTwo</code></td><td>折线图最多两条线</td><td>基础折线图已有 2 个指标再加入</td></tr>
+      <tr><td><code>componentConfigDrawer.toast.lineMaxThree</code></td><td>组合折线图最多三条线</td><td>组合折线图已有 3 个指标再加入</td></tr>
+      <tr><td><code>componentConfigDrawer.toast.lineSingleDimension</code></td><td>折线图的横轴只能有一个维度</td><td>INV-3</td></tr>
+    </tbody>
+  </table></div>
+  <p>文件：<code>public/locales/zh-Hans/dashboard.json</code>、<code>en-US/dashboard.json</code>、<code>ja/dashboard.json</code>。点击和拖拽都读这些键，避免两句不同的话。</p>
+  <div class="table-wrap"><table>
+    <caption>数据</caption>
+    <thead><tr><th>表</th><th>动作</th><th>字段</th><th>结构变化</th></tr></thead>
+    <tbody>
+      <tr><td><code>dashboard_component</code></td><td>保存图表时写，打开时读。本设计不新增查询。</td><td>已有 <code>type</code>、<code>data_config</code> 中的 <code>metrics</code>、<code>dimensions</code>、<code>numberFormat.type</code></td><td>无 DDL，无字段增删改</td></tr>
+    </tbody>
+  </table></div>
+  <p>建议的新模块是平台前端 <code>src/pages/Dashboard/components/config/lineAxisRules.ts</code>，只放无界面依赖的判断。不新增后端模块，不改权限。</p>
+  <details>
+    <summary>函数结果，供实施和测试对齐</summary>
+    <div class="inner">
+      <p><code>lineMetricShareKind(metric) -&gt; "number" | "percent" | "duration" | "storage"</code>，内部调用 <code>resolveMetricNumberFormat</code>。</p>
+      <p><code>canAddLineMetric(existing, incoming) -&gt; { ok: true } | { ok: false, reason: "max" | "kind" }</code>。只用于两种折线图。</p>
+      <p><code>canChangeLineMetricFormat(metrics, index, nextFormat) -&gt;</code> 同样的结果。只有一个指标时 <code>ok: true</code>。旧的不合法一对若改完变成合法一对，<code>ok: true</code>。</p>
+      <p><code>maxCategoryDimensions(chartType)</code>：两种折线图返回 1，其他仍返回 2。<code>getDataConfig</code> 继续输出当前内存中的全部类别维度，不改为 <code>slice(0, 1)</code>。</p>
+    </div>
+  </details>
+</section>
+
+<section class="card" id="d6">
+  <h2>6. 影响与验证</h2>
+  <p>使用方只有平台数据看板编辑器和同一套图表绘制。门户通过嵌入看板页面看到结果，但本改动不在门户仓库。</p>
+  <div class="table-wrap"><table>
+    <caption>验证安排</caption>
+    <thead><tr><th>AC</th><th>模块</th><th>方法</th><th>岗位</th><th>阶段</th></tr></thead>
+    <tbody>
+      <tr><td>AC-LINE-001-01 至 06、003、004</td><td><code>lineAxisRules.ts</code>、<code>useChartState</code>、点击处理</td><td>Vitest。真实执行判断和状态更新。文案函数和看板 store 用替身。</td><td>研发</td><td>开发期。文件放在 <code>src/frontend/platform/src/test/</code></td></tr>
+      <tr><td>AC-LINE-002</td><td><code>generateChartOption</code></td><td>Vitest 断言选项对象中的图例位置和数据。不启动 ECharts 页面。</td><td>研发</td><td>开发期</td></tr>
+      <tr><td>页面上右上角是否挡住标题、旧看板是否仍能查出数</td><td>编辑页和查询</td><td>浏览器与真实查询</td><td>测试</td><td>独立验收。开发期不跑</td></tr>
+    </tbody>
+  </table></div>
+  <p>用例定义见 <a href="test-cases.html">test-cases.html</a>。查询服务是真实环境验收项，开发测试不连接它。</p>
+</section>
+
+<section class="card" id="d7">
+  <h2>7. 发布与待决</h2>
+  <p>随平台前端一起发布。没有配置开关。回滚前端版本后，编辑器回到旧上限；已保存的 <code>data_config</code> 不被本功能改写，因此回滚不需要数据修复。</p>
+  <p>待决事项：无产品规则缺口。作者自查对照了需求 1.0 和上述源码，没有另开独立评审。用户已确认本版本。</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>版本</th><th>日期</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>0.1</td><td>2026-11-02</td><td>首版。等待确认后再实施。</td></tr>
+    </tbody>
+  </table></div>
+</section>
+</div>
+</body>
+</html>
