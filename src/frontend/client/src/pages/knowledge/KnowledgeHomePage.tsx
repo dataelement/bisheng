@@ -13,7 +13,8 @@ import { useKnowledgeSpaceActions } from './hooks/useKnowledgeSpacePermissions';
 import { useSpaceActions } from './hooks/useSpaceActions';
 import { KnowledgeHomeSort } from './home/vnext/KnowledgeHomeSort';
 import { KnowledgeHomeCard } from './home/vnext/KnowledgeHomeCard';
-import { groupHomeSpaces, mergePinnedOrder, sortHomeSpaces, type HomeCategory, type HomeSort, type HomeSpace } from './home/vnext/homeSpaces';
+import { useKnowledgeHomeSort } from './home/vnext/useKnowledgeHomeSort';
+import { groupHomeSpaces, mergePinnedOrder, sortHomeSpaces, type HomeCategory, type HomeSpace } from './home/vnext/homeSpaces';
 import tokens from './home/vnext/tokens.module.css';
 import styles from './home/vnext/KnowledgeHomeNext.module.css';
 
@@ -48,7 +49,7 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
       panel.setAttribute('aria-labelledby', tab.id);
     }
   }, [category]);
-  const [sort, setSort] = useState<HomeSort>('create_time');
+  const [sort, setSort] = useKnowledgeHomeSort();
   // Retain the canonical query keys used by the existing action hook. Complete
   // lists are sorted locally, including the merged category and creation dates.
   const lists = useKnowledgeSpaceLists({ enabled });
@@ -126,7 +127,8 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
               return {
                 key,
                 icon: Icon ? <Icon aria-hidden /> : undefined,
-                label: <>{localize(`com_knowledge.home_next.${key}`)}{' '}{resolved ? `(${groups[key].length})` : '—'}</>,
+                label: localize(`com_knowledge.home_next.${key}`),
+                badge: resolved ? groups[key].length : undefined,
               };
             })} />
         </div>

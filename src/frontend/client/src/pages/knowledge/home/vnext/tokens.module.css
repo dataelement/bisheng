@@ -69,7 +69,8 @@
   --vnext-grid-gap-block: var(--vnext-geometry-24);
   --vnext-card-min-width: 300px;
   --vnext-card-min-height: 126px;
-  --vnext-card-padding: 14px 18px;
+  --vnext-card-padding-block: 16px;
+  --vnext-card-padding-inline: 16px;
   --vnext-card-description-gap-start: max(2px, calc(var(--vnext-geometry-16) - 2px));
   --vnext-card-description-gap-end: max(2px, calc(var(--vnext-geometry-14) - 6px));
   --vnext-card-footer-row-gap: max(2px, calc(var(--vnext-geometry-8) - 4px));

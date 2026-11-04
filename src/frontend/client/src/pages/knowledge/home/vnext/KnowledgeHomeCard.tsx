@@ -1,21 +1,18 @@
 import { Outlined } from 'bisheng-icons';
-import { Button, Dropdown, DropdownItem, Tooltip } from '@bisheng/ui';
-import { USE_PRODUCT_COMPONENTS } from './componentMode';
-import * as Menu from '@radix-ui/react-dropdown-menu';
 import { motion } from 'framer-motion';
-import { useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getSpaceInfoApi } from '~/api/knowledge';
+import { useId, type MouseEvent } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import type { KnowledgeSpace } from '~/api/knowledge';
-import { showApiError } from '~/api/request';
 import { useLocalize } from '~/hooks';
-import { useConfirm } from '~/Providers';
 import { isDemoId } from '~/mock/demo/ids';
+import cn from '~/utils/cn';
 import type { KnowledgeSpaceAction } from '../../hooks/useKnowledgeSpacePermissions';
-import { homeTimestamp, type HomeSpace } from './homeSpaces';
+import { knowledgePathWithTab } from '../../knowledgeListNavigation';
 import { knowledgeSpaceIcons } from '../../knowledgeSpaceIcons';
-import tokens from './tokens.module.css';
-import styles from './KnowledgeHomeNext.module.css';
+import { homeTimestamp, type HomeSpace } from './homeSpaces';
+import { KnowledgeHomeCardMenu } from './KnowledgeHomeCardMenu';
+import { useKnowledgeHomeCardCreator } from './useKnowledgeHomeCardCreator';
+import styles from './KnowledgeHomeCard.module.css';
 
 interface KnowledgeHomeCardProps {
   animateLayout: boolean;
@@ -32,116 +29,71 @@ interface KnowledgeHomeCardProps {
   onEdit: () => void;
 }
 
-export function KnowledgeHomeCard({ animateLayout, moving, layoutDelay, layoutOrder, item, pending, permissions, permissionsLoading, onMenuOpen, onSelect, onAction, onEdit }: KnowledgeHomeCardProps) {
+export function KnowledgeHomeCard({
+  animateLayout, moving, layoutDelay, layoutOrder, item, pending,
+  permissions, permissionsLoading, onMenuOpen, onSelect, onAction, onEdit,
+}: KnowledgeHomeCardProps) {
   const localize = useLocalize();
-  const confirm = useConfirm();
+  const location = useLocation();
+  const titleId = useId();
   const { space, source } = item;
-  const canEdit = permissions.includes('edit') || permissions.includes('manage_permission');
-  const canDelete = permissions.includes('delete');
+  const { cardRef, creator } = useKnowledgeHomeCardCreator(space);
   const demo = isDemoId(space.id);
-  const cardRef = useRef<HTMLElement>(null);
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    if (!cardRef.current || space.creator?.trim() || !space.creatorId || demo) return;
-    if (typeof IntersectionObserver === 'undefined') { setVisible(true); return; }
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) { setVisible(true); observer.disconnect(); }
-    });
-    observer.observe(cardRef.current);
-    return () => observer.disconnect();
-  }, [space.creator, space.creatorId, demo]);
-  const creatorInfo = useQuery({
-    queryKey: ['knowledgeHomeCreator', space.id, space.creatorId],
-    queryFn: () => getSpaceInfoApi(space.id),
-    enabled: visible && !demo && !!space.creatorId && !space.creator?.trim(),
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-    refetchOnWindowFocus: false,
-  });
-  const owner = space.creator?.trim() || creatorInfo.data?.creator?.trim();
-  const updated = homeTimestamp(space.updatedAt);
+  const disabled = pending || demo;
+  const description = space.description?.trim();
+  const updatedTimestamp = homeTimestamp(space.updatedAt);
+  const updated = updatedTimestamp ? new Date(updatedTimestamp) : null;
   const pinLabel = localize(space.isPinned ? 'com_knowledge.unpin' : 'com_knowledge.pin_space');
-  const moreLabel = localize('com_knowledge.home_next.more');
-  const moreButton = <Button type="button" color="default" variant="text" size="small" iconOnly
-    data-product-control aria-label={moreLabel} disabled={pending || demo} icon={<Outlined.More aria-hidden />} />;
-  // Category artwork follows the confirmed API source, including in the merged tab.
-  const icon = knowledgeSpaceIcons[source];
+  const to = demo
+    ? `${location.pathname}${location.search}`
+    : knowledgePathWithTab(`/knowledge/space/${space.id}`, location.search);
 
-  const handleRemove = async () => {
-    if (!canDelete || pending || demo) return;
-    const ok = await confirm({
-      description: `${localize('com_knowledge.confirm_delete_space')}${localize('com_knowledge.delete_irreversible_warning')}`,
-      variant: 'destructive',
-    });
-    if (ok) onAction('delete');
+  const handleSelect = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.defaultPrevented) return;
+    if (!demo && (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return;
+    // Preserve native new-tab behavior; ordinary clicks use the existing detail loader.
+    event.preventDefault();
+    onSelect(space);
   };
 
   return (
-    <motion.article ref={cardRef} className={styles.card} aria-busy={pending} layout={animateLayout ? 'position' : false}
-      layoutDependency={layoutOrder}
+    <motion.article ref={cardRef} className={styles.card} aria-busy={pending}
+      layout={animateLayout ? 'position' : false} layoutDependency={layoutOrder}
       initial={false} style={{ zIndex: moving ? 2 : 0 }}
       transition={{ layout: { duration: .6, delay: layoutDelay, ease: [.22, 1, .36, 1] } }}>
-      <div className={styles.cardHeading}>
-        <img className={styles.spaceIcon} src={icon} width={36} height={36} alt="" />
-        <h2 className={styles.cardTitle}>
-          <button type="button" className={styles.openSpace} title={space.name} onClick={() => onSelect(space)}>
-            {space.name}
-          </button>
-        </h2>
-        <button type="button" className={`${styles.iconButton} ${styles.pinButton}`} aria-label={pinLabel} title={pinLabel}
-          aria-pressed={space.isPinned} disabled={pending || demo} onClick={() => onAction('pin')}>
-          <span className={styles.pinGlyph} aria-hidden="true">
-            <span className={space.isPinned ? styles.pinFilled : styles.pinDefault} />
-            {!space.isPinned ? <span className={styles.pinHover} /> : null}
+      <Link className={styles.cardLink} to={to} aria-labelledby={titleId} onClick={handleSelect}>
+        <div className={styles.cardHeading}>
+          <img className={styles.spaceIcon} src={knowledgeSpaceIcons[source]} width={36} height={36} alt="" />
+          <h2 id={titleId} className={styles.cardTitle} title={space.name}>{space.name}</h2>
+        </div>
+        <p className={cn(styles.description, !description && styles.emptyDescription)} title={description}>
+          {description || localize('com_knowledge.home_next.no_description')}
+        </p>
+        <footer className={`${styles.cardFooter} text-caption`}>
+          <span className={styles.owner} title={creator}>
+            {creator && <><Outlined.People size={14} className="shrink-0" aria-hidden /><span>{creator}</span></>}
           </span>
-        </button>
-      </div>
-      <p className={`${styles.description} ${space.description?.trim() ? '' : styles.emptyDescription}`} title={space.description || undefined}>
-        {space.description?.trim() || localize('com_knowledge.home_next.no_description')}
-      </p>
-      <footer className={`${styles.cardFooter} text-caption`}>
-        <span className={styles.owner} title={owner}>
-          {owner ? <><Outlined.People size={14} className="shrink-0" aria-hidden /><span>{owner}</span></> : null}
+          {updated && (
+            <time dateTime={updated.toISOString()} className={styles.updated}>
+              {localize('com_knowledge.home_next.updated_at', {
+                date: new Intl.DateTimeFormat(undefined, {
+                  year: 'numeric', month: '2-digit', day: '2-digit',
+                }).format(updated),
+              })}
+            </time>
+          )}
+        </footer>
+      </Link>
+      <button type="button" className={styles.pinButton} aria-label={pinLabel} title={pinLabel}
+        aria-pressed={space.isPinned} disabled={disabled} onClick={() => onAction('pin')}>
+        <span className={styles.pinGlyph} aria-hidden="true">
+          <span className={space.isPinned ? styles.pinFilled : styles.pinDefault} />
+          {!space.isPinned && <span className={styles.pinHover} />}
         </span>
-        {updated ? <time dateTime={new Date(updated).toISOString()} className={styles.updated}>
-          {localize('com_knowledge.home_next.updated_at', { date: new Intl.DateTimeFormat(undefined, {
-            year: 'numeric', month: '2-digit', day: '2-digit',
-          }).format(new Date(updated)) })}
-        </time> : null}
-        <Tooltip content={moreLabel}>
-          <span className="relative z-[1] inline-flex shrink-0">
-            {USE_PRODUCT_COMPONENTS ? <Dropdown align="end" panelClassName={`${tokens.geometry} ${styles.productMenu}`}
-              onOpenChange={(open) => { if (open) onMenuOpen(); }}
-              menu={permissionsLoading ? <DropdownItem disabled>{localize('com_knowledge.loading')}</DropdownItem> : <>
-                {canEdit ? <DropdownItem icon={<Outlined.Edit />} disabled={pending} onSelect={onEdit}>{localize('com_knowledge.space_settings')}</DropdownItem> : null}
-                {canDelete ? <DropdownItem icon={<Outlined.Delete />} danger disabled={pending} onSelect={() => { void handleRemove().catch(showApiError); }}>{localize('com_knowledge.delete_space')}</DropdownItem> : null}
-                {!canEdit && !canDelete ? <DropdownItem disabled>{localize('com_knowledge.home_next.no_actions')}</DropdownItem> : null}
-              </>}>
-              {moreButton}
-            </Dropdown> : <Menu.Root onOpenChange={(open) => { if (open) onMenuOpen(); }}>
-              <Menu.Trigger asChild>
-                {moreButton}
-              </Menu.Trigger>
-              <Menu.Portal>
-                <Menu.Content align="end" sideOffset={4} collisionPadding={8} className={`${tokens.scope} ${styles.menu}`}>
-                  {permissionsLoading ? <Menu.Item disabled className={styles.menuItem}>{localize('com_knowledge.loading')}</Menu.Item>
-                    : <>
-                      {canEdit ? <Menu.Item className={styles.menuItem} disabled={pending} onSelect={onEdit}><Outlined.Edit aria-hidden />{localize('com_knowledge.space_settings')}</Menu.Item> : null}
-                      {canDelete ? <Menu.Item className={styles.menuItem} disabled={pending}
-                        onSelect={() => { void handleRemove().catch(showApiError); }}>
-                        <Outlined.Delete aria-hidden />{localize('com_knowledge.delete_space')}
-                      </Menu.Item> : null}
-                      {!canEdit && !canDelete ? <Menu.Item disabled className={styles.menuItem}>
-                        {localize('com_knowledge.home_next.no_actions')}
-                      </Menu.Item> : null}
-                    </>}
-
-                </Menu.Content>
-              </Menu.Portal>
-            </Menu.Root>}
-          </span>
-        </Tooltip>
-      </footer>
+      </button>
+      <KnowledgeHomeCardMenu disabled={disabled} permissions={permissions}
+        permissionsLoading={permissionsLoading} onOpen={onMenuOpen} onEdit={onEdit}
+        onDelete={() => onAction('delete')} />
     </motion.article>
   );
 }
