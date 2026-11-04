@@ -95,7 +95,10 @@ function setup(path = '/knowledge') {
   render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>);
   return router;
 }
-beforeEach(() => { jest.spyOn(console, 'info').mockImplementation(() => undefined); });
+beforeEach(() => {
+  window.localStorage.clear();
+  jest.spyOn(console, 'info').mockImplementation(() => undefined);
+});
 it('confirms and executes exit from the detail page without deleting the space', async () => {
   setup('/knowledge/space/joined?tab=joined');
   fireEvent.click(await screen.findByRole('button', { name: 'Leave joined space' }));
@@ -119,7 +122,7 @@ it('keeps the space and membership when exiting from detail is cancelled', async
 it.each(['department', 'created', 'joined'])('returns to %s through the actual detail Back button', async (tab) => {
   const router = setup();
   fireEvent.mouseDown(await screen.findByRole('tab', { name: new RegExp(`home_next.${tab}`) }));
-  fireEvent.click(await screen.findByRole('button', { name: `${tab} space` }));
+  fireEvent.click(await screen.findByRole('link', { name: `${tab} space` }));
   await waitFor(() => expect(router.state.location.pathname).toBe(`/knowledge/space/${tab}`));
   fireEvent.click(await screen.findByRole('button', { name: 'com_ui_go_back' }));
   expect(await screen.findByRole('tabpanel', { name: new RegExp(`home_next.${tab}`) })).toBeInTheDocument();
@@ -129,7 +132,7 @@ it.each(['department', 'created', 'joined'])('returns to %s through the actual d
 it('retains joined through folders and both levels of Back', async () => {
   const router = setup();
   fireEvent.mouseDown(await screen.findByRole('tab', { name: /home_next.joined/ }));
-  fireEvent.click(await screen.findByRole('button', { name: 'joined space' }));
+  fireEvent.click(await screen.findByRole('link', { name: 'joined space' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Open folder' }));
   await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/space/joined/folder/folder-1'));
   fireEvent.click(screen.getByRole('button', { name: 'com_ui_go_back' }));
@@ -140,7 +143,7 @@ it('retains joined through folders and both levels of Back', async () => {
 it('retains joined across browser Back and Forward', async () => {
   const router = setup();
   fireEvent.mouseDown(await screen.findByRole('tab', { name: /home_next.joined/ }));
-  fireEvent.click(await screen.findByRole('button', { name: 'joined space' }));
+  fireEvent.click(await screen.findByRole('link', { name: 'joined space' }));
   await screen.findByRole('button', { name: 'com_ui_go_back' });
   await act(async () => { await router.navigate(-1); });
   expect(await screen.findByRole('tabpanel', { name: /home_next.joined/ })).toBeInTheDocument();
@@ -174,4 +177,15 @@ it('restores the requested tab after leaving the cached knowledge module', async
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); });
   await act(async () => { await router.navigate('/knowledge?tab=joined'); });
   expect(await screen.findByRole('tabpanel', { name: /home_next.joined/ })).toBeInTheDocument();
+});
+
+it('retains the chosen sort when leaving and returning to the knowledge module', async () => {
+  const router = setup();
+  const sort = await screen.findByRole('combobox');
+  fireEvent.keyDown(sort, { key: 'ArrowDown' });
+  fireEvent.click(await screen.findByRole('option', { name: 'com_knowledge.home_next.sort_name' }));
+  await act(async () => { await router.navigate('/before'); });
+  expect(screen.getByText('Previous page')).toBeInTheDocument();
+  await act(async () => { await router.navigate('/knowledge'); });
+  expect(await screen.findByRole('combobox')).toHaveTextContent('com_knowledge.home_next.sort_name');
 });
