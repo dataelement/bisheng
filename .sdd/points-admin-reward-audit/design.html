@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>技术设计 · 积分规则修改留痕</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#202733;--sub:#515d6d;--line:#dce2eb;--accent:#245bb1;--weak:#edf3ff;--ok:#17683b;--warn:#8a4b00;--bad:#a92525}
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;overflow-wrap:anywhere}
+  a{color:var(--accent);text-underline-offset:3px}
+  .wrap{max-width:1060px;margin:auto;padding:28px 24px 72px}
+  #progress{position:fixed;inset:0 auto auto 0;height:3px;background:var(--accent);width:0;z-index:20}
+  .hero{background:linear-gradient(135deg,#164789,#285eae);color:#fff;padding:28px;border-radius:16px;margin-bottom:20px}
+  h1{margin:0 0 8px;font-size:27px;line-height:1.45}
+  .meta{font-size:13px;margin:0 0 16px}
+  .summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  .summary-grid .item{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);padding:12px 14px;border-radius:10px}
+  .item b{display:block;font-size:12px;margin-bottom:4px}
+  .item p{font-size:14px;margin:0}
+  .toc,.card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:24px;margin:0 0 20px}
+  .toc h2{font-size:15px;margin:0 0 10px}
+  .toc ol{columns:2;column-gap:32px;padding-left:22px;margin:0}
+  .toc li{break-inside:avoid;margin:3px 0}
+  .toolbar{display:flex;flex-wrap:wrap;gap:9px;margin:14px 0 0}
+  [hidden]{display:none!important}
+  button{font:inherit;font-size:13px;padding:7px 13px;min-height:38px;color:var(--accent);background:#fff;border:1px solid #b9c9e4;border-radius:8px;cursor:pointer}
+  button:hover{background:var(--weak)}
+  .card,h3,[id]{scroll-margin-top:22px}
+  h2{font-size:21px;line-height:1.5;margin:0 0 6px}
+  h3{font-size:16px;line-height:1.6;margin:23px 0 8px}
+  .lead,.hint{color:var(--sub);font-size:13px}
+  .lead{margin:0 0 16px}
+  p{margin:10px 0}
+  .badge{display:inline-block;font-size:11px;font-weight:600;color:var(--accent);background:var(--weak);padding:2px 8px;border-radius:12px;vertical-align:middle}
+  .callout{border-left:4px solid var(--accent);background:#f1f5fc;padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0}
+  .callout.warn{border-color:var(--warn);background:#fff8e9}
+  .callout.ok{border-color:var(--ok);background:#eff8f2}
+  .callout strong{display:block;margin-bottom:4px}
+  .table-wrap{overflow-x:auto;max-width:100%;margin:12px 0;border:1px solid var(--line);border-radius:8px}
+  table{border-collapse:collapse;width:100%;min-width:700px;font-size:13px}
+  th,td{text-align:left;vertical-align:top;padding:10px 12px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+  th{background:#f0f3f8;color:#364459;font-weight:650}
+  tr:last-child td{border-bottom:0}
+  tr>*:last-child{border-right:0}
+  caption{text-align:left;font-weight:600;padding:10px 12px;background:#fafbfc}
+  .status{font-weight:600;color:var(--warn)}
+  code{font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#f0f3f8;padding:1px 4px;border-radius:4px}
+  .footer{font-size:12px;color:var(--sub);text-align:center;margin-top:26px}
+  .diagram{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:15px;margin:14px 0}
+  .diagram-scroll{overflow-x:auto}
+  .diagram svg{display:block;width:100%;min-width:720px;height:auto}
+  figcaption{font-size:12px;color:var(--sub);margin-top:8px}
+  details{border:1px solid var(--line);border-radius:9px;margin:12px 0;background:#fafbfd}
+  details[open]{background:#fff}
+  summary{font-size:14px;font-weight:600;padding:13px 16px;cursor:pointer}
+  details .inner{padding:0 16px 15px}
+  @media(max-width:680px){.wrap{padding:16px 12px 48px}.hero,.card,.toc{padding:20px 16px}h1{font-size:23px}.summary-grid,.toc ol{columns:1;grid-template-columns:1fr}}
+  @media print{#progress,.toolbar{display:none!important}body{background:#fff}.hero{background:#fff!important;color:#111!important;border:1px solid #777}.hero *{color:#111!important}.summary-grid .item{background:#fff;border:1px solid #aaa}details{background:#fff!important}details .inner{display:block}}
+</style>
+</head>
+<body>
+<div id="progress" aria-hidden="true"></div>
+<main class="wrap">
+<header class="hero" id="top">
+  <h1>积分规则修改留痕</h1>
+  <p class="meta">设计版本 0.10 · 2026-11-04 · 状态：已确认 · 需求 PAR-LOG 1.1</p>
+  <div class="summary-grid">
+    <div class="item"><b>做什么</b><p>获取、扣减、管理员奖励的配置真正改动时，同一次保存写入规则和一条审计记录，并打应用日志。</p></div>
+    <div class="item"><b>为什么</b><p>需求 1.1 要求能回答谁改了哪条积分规则。今天保存成功后没有这两者。</p></div>
+    <div class="item"><b>影响谁</b><p>平台超管、平台管理员。三种积分规则的保存都留痕。门户页面不改。说明文案不留痕。</p></div>
+    <div class="item"><b>关键选择</b><p>审计行跟规则放在同一次数据库提交里。不调用会单独提交的现成插入方法。</p></div>
+    <div class="item"><b>失败后怎么办</b><p>提交失败则回滚。规则保持修改前。接口说明为指定的失败文案。管理员可再保存。</p></div>
+    <div class="item"><b>当前进度与待决</b><p>无阻塞待决。上线时间未定。确认本设计后才编码。</p></div>
+  </div>
+</header>
+<nav class="toc" aria-label="文档目录">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#summary">方案摘要</a></li>
+    <li><a href="#basis">依据与范围</a></li>
+    <li><a href="#architecture">现状及目标架构</a></li>
+    <li><a href="#flows">核心流程与状态</a></li>
+    <li><a href="#decisions">关键决策</a></li>
+    <li><a href="#contracts">详细契约</a></li>
+    <li><a href="#impact">影响与依赖</a></li>
+    <li><a href="#verification">验证安排</a></li>
+    <li><a href="#release">发布与恢复</a></li>
+    <li><a href="#records">待决事项及变更记录</a></li>
+  </ol>
+  <div class="toolbar" id="toolbar" hidden>
+    <button type="button" id="expand-all">展开技术细节</button>
+    <button type="button" id="collapse-all">收起技术细节</button>
+    <button type="button" id="print-document">打印／另存 PDF</button>
+  </div>
+</nav>
+
+<section class="card" id="summary">
+  <h2>1. 方案摘要 <span class="badge">所有人可读</span></h2>
+  <p>平台超管或平台管理员保存一条已经存在的积分规则时，毕昇先比较保存后的生效配置和当前配置。获取、扣减、管理员奖励用同一套比较。没有差异就不写留痕，保存仍然成功。有差异时，规则新值和一条操作日志放进同一次数据库提交。提交成功才算改成了。提交失败则两边都不要，接口告诉管理员积分规则未更改。</p>
+  <p>操作日志写在现有审计表 <code>audit_log</code>。应用日志用普通信息日志和错误日志，不另建日志文件。积分账本 <code>user_point_log</code>、积分管理「操作记录」、平台「系统操作」都不接收这条记录。</p>
+  <div class="callout ok"><strong>方案结论与状态</strong>2026-11-04 用户对设计 0.10 回复「确认」。执行验证在编码后记录，不在本段宣称已通过。</div>
+</section>
+
+<section class="card" id="basis">
+  <h2>2. 依据与范围</h2>
+  <div class="table-wrap" tabindex="0"><table>
+    <caption>来源</caption>
+    <thead><tr><th>依据</th><th>版本／定位</th><th>已知内容</th><th>确认或限制</th></tr></thead>
+    <tbody>
+      <tr><td>需求</td><td><a href="requirements.html">requirements.html</a> 版本 1.1，REQ-PAR-01，AC-PAR-01 至 AC-PAR-08</td><td>1.0 只覆盖管理员奖励。1.1 改为全部积分规则的实际修改</td><td>范围更正来自 2026-11-04 用户原话。2026-11-04 用户确认需求 1.1 和设计 0.10</td></tr>
+      <tr><td>代码基线</td><td>毕昇 <code>404fa3e3b</code>。观察文件：<code>points_rule_service.py</code>、<code>admin.py</code>、<code>audit_log.py</code>、<code>connection.py</code></td><td>源码观察，不是线上复测</td><td>工作区另有未跟踪目录 <code>.sdd/points-admin-reward-audit/</code>，没有改业务代码</td></tr>
+    </tbody>
+  </table></div>
+  <div class="table-wrap" tabindex="0"><table>
+    <caption>范围</caption>
+    <thead><tr><th>本次改变</th><th>明确不做</th><th>继续沿用</th><th>约束</th></tr></thead>
+    <tbody>
+      <tr><td><code>PointsRuleService.update_rule</code> 在任一积分规则实际变化时同事务写审计，并打日志。新增业务错误码 18209</td><td>新建规则、说明文案；两个现有日志页面；新表新列；门户页面</td><td>谁可以保存、分值和名称校验、成功时的规则响应、权限错误文案</td><td>需求禁止加列。审计明细放进现有 <code>metadata</code> JSON，该列已存在</td></tr>
+    </tbody>
+  </table></div>
+  <h3 id="correctness">2.1 正确性约束</h3>
+  <div class="table-wrap" tabindex="0"><table>
+    <caption>必须守住的结果</caption>
+    <thead><tr><th>约束</th><th>来源</th><th>范围</th><th>机制</th><th>失败与并发</th><th>验证边界</th></tr></thead>
+    <tbody>
+      <tr><td id="INV-1">INV-1 规则新值与本类操作日志要么同时存在，要么都不存在</td><td>AC-PAR-01、AC-PAR-05、AC-PAR-06</td><td>一次积分规则保存，从比较结束到这次数据库提交结束。获取、扣减、管理员奖励都适用</td><td>同一数据库会话里先放入规则和审计行，只调用一次 <code>commit</code>。禁止调用 <code>AuditLogDao.ainsert_v2</code>，因为它自己开会话并单独提交</td><td>提交抛错时本服务先 <code>rollback</code>，再把内存里的规则字段改回修改前，然后抛出 18209。接口层会吃掉业务错误，所以不能指望外层会话管理器看到异常后再回滚</td><td>开发测试用假会话断言只提交一次、失败时调用回滚且字段回到旧值。真实数据库的事务原子性留到验收</td></tr>
+      <tr><td id="INV-2">INV-2 积分规则没有实际变化时，不写本类日志，也不把保存变成失败</td><td>AC-PAR-03、AC-PAR-08</td><td>三种规则类型</td><td>比较结果相同则直接返回当前规则，不调用 <code>save_rule</code>，不 <code>commit</code></td><td>重复提交走这条。不产生第二条审计</td><td>假仓储断言 <code>commit</code> 未被调用</td></tr>
+      <tr><td id="INV-3">INV-3 说明文案不写本类审计；三种积分规则有变化时都写</td><td>AC-PAR-06</td><td><code>update_copies</code> 不进入本逻辑。<code>update_rule</code> 不按规则类型跳过审计</td><td>获取、扣减、管理员奖励只要比较后有差异，就创建 <code>AuditLog</code>。<code>metadata.rule_type</code> 记下类型</td><td>说明文案失败不使用 18209</td><td>获取规则和扣减规则各有一条成功留痕测试。文案保存不在 <code>update_rule</code> 内，测试不断言它写出审计</td></tr>
+      <tr><td id="INV-4">INV-4 一次有变化的成功保存只追加一条审计，旧审计不改</td><td>REQ-PAR-01</td><td>该次提交</td><td>只 <code>add</code> 一个新 <code>AuditLog</code>，不查询后更新旧行</td><td>两次不同的成功修改得到两行</td><td>假会话统计 <code>add</code> 到的审计对象个数</td></tr>
+      <tr><td id="INV-5">INV-5 不写积分账本，不进入两个现有日志页面</td><td>需求第 3 节</td><td>本改动</td><td>不写 <code>user_point_log</code>。动作名不加入 <code>_UI_VISIBLE_V2_ACTIONS</code></td><td>不适用</td><td>代码审查加测试断言动作名不在该白名单</td></tr>
+    </tbody>
+  </table></div>
+  <h3 id="visual-plan">2.2 图解导读</h3>
+  <div class="table-wrap" tabindex="0"><table>
+    <thead><tr><th>要回答的问题</th><th>图</th><th>位置</th><th>依据</th><th>为什么用这张图</th></tr></thead>
+    <tbody>
+      <tr><td>保存、规则、审计怎样在一次提交里绑在一起，失败时谁回滚</td><td>时序</td><td><a href="#fig-seq">图 SEQ-1</a></td><td>INV-1</td><td>单独提交和同一次提交的差别要看调用顺序</td></tr>
+      <tr><td>无变化、成功、提交失败分别停在哪</td><td>状态</td><td><a href="#fig-state">图 ST-1</a></td><td>INV-1、INV-2</td><td>流程概览不能代替三种结束状态</td></tr>
+    </tbody>
+  </table></div>
+  <p class="hint">不画部署图和 ER 图。没有新机器，也没有新表。审计表沿用现有列。</p>
+</section>
+
+<section class="card" id="architecture">
+  <h2>3. 现状及目标架构</h2>
+  <p>门户积分管理调用毕昇 <code>PUT /api/v1/points/admin/rules/{rule_id}</code>。路由在 <code>points/api/endpoints/admin.py</code> 的 <code>update_rule</code>，它只把请求交给 <code>PointsRuleService.update_rule</code>。今天该服务改内存中的规则、调用仓储 <code>save_rule</code>（flush）、再 <code>commit</code>。没有任何审计写入。<code>AuditLogDao.ainsert_v2</code> 会新开一个会话并自己 <code>commit</code>，不能和规则回滚绑在一起。</p>
+  <p>目标仍是这条接口。变化只在 <code>PointsRuleService.update_rule</code>：任一积分规则确有变化时，向同一个会话放入一条 <code>AuditLog</code>，然后一次提交。路由、门户、仓储签名都不改。</p>
+  <figure class="diagram" id="fig-ctx">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 880 150" role="img" aria-labelledby="ctxTitle ctxDesc">
+        <title id="ctxTitle">保存入口</title>
+        <desc id="ctxDesc">门户把保存交给毕昇规则服务。规则服务在同一会话写入积分规则和审计表。</desc>
+        <rect x="16" y="40" width="200" height="70" rx="8" fill="#fff" stroke="#9baec9"/>
+        <text x="116" y="70" text-anchor="middle" font-size="14">门户积分管理</text>
+        <text x="116" y="92" text-anchor="middle" font-size="12">不改页面</text>
+        <rect x="280" y="40" width="280" height="70" rx="8" fill="#edf3ff" stroke="#4f79b5"/>
+        <text x="420" y="70" text-anchor="middle" font-size="14">规则服务 update_rule</text>
+        <text x="420" y="92" text-anchor="middle" font-size="12">比较、日志、一次提交</text>
+        <rect x="620" y="28" width="240" height="40" rx="8" fill="#fff" stroke="#9baec9"/>
+        <text x="740" y="53" text-anchor="middle" font-size="13">point_rule 当前配置</text>
+        <rect x="620" y="82" width="240" height="40" rx="8" fill="#fff" stroke="#9baec9"/>
+        <text x="740" y="107" text-anchor="middle" font-size="13">audit_log 追加一行</text>
+        <path d="M216 75 H280" fill="none" stroke="#40618e" stroke-width="2"/>
+        <path d="M560 62 H620" fill="none" stroke="#40618e" stroke-width="2"/>
+        <path d="M560 100 H620" fill="none" stroke="#40618e" stroke-width="2"/>
+      </svg>
+    </div>
+    <figcaption>图 CTX-1。门户只消费原有成功响应和新的失败文案。两个表在同一次提交中写入。</figcaption>
+  </figure>
+</section>
+
+<section class="card" id="flows">
+  <h2>4. 核心流程与状态</h2>
+  <figure class="diagram" id="fig-seq">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 880 280" role="img" aria-labelledby="seqTitle seqDesc">
+        <title id="seqTitle">一次有变化的保存</title>
+        <desc id="seqDesc">规则服务比较后把规则和审计放进同一会话，只提交一次。提交失败则回滚并返回 18209。</desc>
+        <text x="80" y="24" text-anchor="middle" font-size="13">调用方</text>
+        <text x="280" y="24" text-anchor="middle" font-size="13">规则服务</text>
+        <text x="500" y="24" text-anchor="middle" font-size="13">同一数据库会话</text>
+        <text x="740" y="24" text-anchor="middle" font-size="13">应用日志</text>
+        <path d="M80 36 V260" stroke="#9baec9"/>
+        <path d="M280 36 V260" stroke="#9baec9"/>
+        <path d="M500 36 V260" stroke="#9baec9"/>
+        <path d="M740 36 V260" stroke="#9baec9"/>
+        <path d="M80 60 H270" stroke="#40618e"/>
+        <text x="170" y="54" font-size="12">保存积分规则</text>
+        <path d="M280 90 H490" stroke="#40618e"/>
+        <text x="300" y="84" font-size="12">放入新规则值</text>
+        <path d="M280 120 H490" stroke="#40618e"/>
+        <text x="300" y="114" font-size="12">放入一条审计</text>
+        <path d="M280 160 H490" stroke="#17683b"/>
+        <text x="300" y="154" font-size="12">只 commit 一次</text>
+        <path d="M280 200 H730" stroke="#17683b"/>
+        <text x="520" y="194" font-size="12">成功：信息日志。失败：回滚后错误日志</text>
+        <path d="M270 240 H90" stroke="#40618e"/>
+        <text x="120" y="234" font-size="12">成功响应，或 18209</text>
+      </svg>
+    </div>
+    <figcaption>图 SEQ-1。无变化时序列在比较后就返回，不到达会话写入。</figcaption>
+  </figure>
+  <figure class="diagram" id="fig-state">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 880 120" role="img" aria-labelledby="stTitle stDesc">
+        <title id="stTitle">三种结束状态</title>
+        <desc id="stDesc">无变化保持原配置且无审计。提交成功则新配置加一条审计。提交失败则原配置且无新审计。</desc>
+        <rect x="20" y="36" width="250" height="58" rx="8" fill="#eff8f2" stroke="#17683b"/>
+        <text x="145" y="60" text-anchor="middle" font-size="13">无变化</text>
+        <text x="145" y="80" text-anchor="middle" font-size="12">原配置，无新审计，保存成功</text>
+        <rect x="310" y="36" width="250" height="58" rx="8" fill="#edf3ff" stroke="#245bb1"/>
+        <text x="435" y="60" text-anchor="middle" font-size="13">提交成功</text>
+        <text x="435" y="80" text-anchor="middle" font-size="12">新配置，恰好一条新审计</text>
+        <rect x="600" y="36" width="260" height="58" rx="8" fill="#fff0f0" stroke="#9b2c2c"/>
+        <text x="730" y="60" text-anchor="middle" font-size="13">提交失败</text>
+        <text x="730" y="80" text-anchor="middle" font-size="12">原配置，无新审计，18209</text>
+      </svg>
+    </div>
+    <figcaption>图 ST-1。不允许停在「新配置但没有审计」或「有审计但配置仍是旧的」。</figcaption>
+  </figure>
+  <div class="table-wrap" tabindex="0"><table>
+    <caption>路径结果</caption>
+    <thead><tr><th>路径</th><th>规则表</th><th>审计表</th><th>应用日志</th><th>调用方</th></tr></thead>
+    <tbody>
+      <tr><td>积分规则，比较后相同</td><td>不写</td><td>不写</td><td>不写本需求的成功或失败日志</td><td>现有保存成功和当前规则内容</td></tr>
+      <tr><td>积分规则，有变化，提交成功</td><td>新值</td><td>新增一行</td><td>一条 info：<code>points.rule.updated</code></td><td>现有保存成功</td></tr>
+      <tr><td>积分规则，有变化，flush 或 commit 抛错</td><td>修改前</td><td>不新增</td><td>一条 exception：<code>points.rule.update_failed</code></td><td>18209，文案见契约</td></tr>
+      <tr><td>校验失败、无权限、规则不存在</td><td>不写</td><td>不写</td><td>不写本需求成功日志</td><td>今天的 18201、18203 或 18204</td></tr>
+      <tr><td>说明文案</td><td>按今天写入</td><td>不写本类行</td><td>不写上述两条日志名</td><td>与今天相同</td></tr>
+      <tr><td>调用方超时</td><td colspan="3">服务端要么停在成功态，要么停在失败态。不提供新的查询接口</td><td>用现有规则列表看配置，直接查 <code>audit_log</code> 看有没有对应新行</td></tr>
+      <tr><td>两人同时保存</td><td>后提交的整行覆盖先提交的</td><td>各自相对自己读到的旧值有变化且提交成功，就各有一行</td><td>各自一条成功日志</td><td>不新增冲突提示。不在开发假会话里宣称证明了真实隔离级别</td></tr>
+    </tbody>
+  </table></div>
+  <p>取消和后台任务不适用于这次同步保存。会话由现有请求依赖创建和关闭。本服务在失败时自己 <code>rollback</code>，避免关闭前又把脏的规则对象写出去。</p>
+</section>
+
+<section class="card" id="decisions">
+  <h2>5. 关键决策</h2>
+  <div class="table-wrap" tabindex="0"><table>
+    <caption>取舍</caption>
+    <thead><tr><th>事项</th><th>选项</th><th>决定</th><th>理由</th><th>重审条件</th></tr></thead>
+    <tbody>
+      <tr><td>怎样保证同成败</td><td>调用 <code>ainsert_v2</code> 后再补救回写规则；或同一会话一次 <code>commit</code></td><td>同一会话一次 <code>commit</code></td><td><code>ainsert_v2</code> 在 2026-11-04 的源码里自己 <code>commit</code>。规则先提交后再写审计，审计失败时规则已经是新值，补救回写还可能再失败</td><td>审计插入被改成接受外部会话且不再自行提交</td></tr>
+      <tr><td>无变化是否更新 <code>update_time</code></td><td>仍提交以保持今天的空保存；或不提交</td><td>三种积分规则无变化时都不提交</td><td>需求要求规则不变。空提交会改更新时间。说明文案不走这条</td><td>产品要求无变化也刷新更新时间</td></tr>
+      <tr><td>失败文案用哪个错误码</td><td>复用 18203「积分规则配置冲突」；或新码</td><td>新码 18209</td><td>18203 的文案和「配置未更改，请重试」不是一回事。18209 目前没有占用</td><td>错误码表已占用 18209</td></tr>
+      <tr><td>系统操作页面</td><td>把动作加入白名单；或不加入</td><td>不加入</td><td>需求排除该页。白名单在 <code>audit_log.py</code> 的 <code>_UI_VISIBLE_V2_ACTIONS</code></td><td>需求改为要在该页展示</td></tr>
+    </tbody>
+  </table></div>
+  <p>以上是设计决定，不是新的产品决定。它们都为了实现已经确认的需求。</p>
+</section>
+
+<section class="card" id="contracts">
+  <h2>6. 详细契约</h2>
+  <p>成功时 <code>PUT /api/v1/points/admin/rules/{rule_id}</code> 的响应形状不变：业务 <code>status_code</code> 200，<code>data</code> 仍是当前规则对象。门户成功提示不改。</p>
+  <p>仅当积分规则确有变化且本次提交失败时，HTTP 仍按现有积分业务错误返回（门户把非 200 的业务 <code>status_code</code> 当失败）。<code>status_code</code> 为 18209，<code>status_message</code> 固定为「保存失败，积分规则未更改，请重试」。获取、扣减、管理员奖励用这一句。错误类放在 <code>bisheng/common/errcode/points.py</code>，类名 <code>PointsRuleAuditError</code>。</p>
+  <h3 id="contract-fields">比较与审计内容</h3>
+  <p>比较在校验通过之后、提交之前。展示名和备注先去掉首尾空白；空白备注和空备注都视为没有备注。分值表达式按键名排序后比较内容，不比较键的书写顺序。固定分模式下只有分值整数不同时，审计明细用字段名 <code>score</code>，前后值是整数。表达式还有其他内容差异时，字段名用 <code>score_expr</code>，前后值是两个对象。其余字段名使用 <code>display_name</code>、<code>remark</code>、<code>status</code>、<code>daily_cap</code>、<code>beneficiary</code>、<code>sort_order</code>。未变化的字段不放进明细。</p>
+  <div class="table-wrap" tabindex="0"><table>
+    <caption>audit_log 这一行怎么填</caption>
+    <thead><tr><th>列</th><th>值</th></tr></thead>
+    <tbody>
+      <tr><td><code>operator_id</code></td><td>登录用户 <code>user_id</code>。不写 0，也不写系统</td></tr>
+      <tr><td><code>operator_name</code></td><td>登录用户 <code>user_name</code>。名字为空时留空，仍以 <code>operator_id</code> 标识本人</td></tr>
+      <tr><td><code>tenant_id</code>、<code>operator_tenant_id</code></td><td>都写这条规则所属租户。保存前已经要求规则租户等于本次租户</td></tr>
+      <tr><td><code>action</code></td><td><code>points.rule.update</code></td></tr>
+      <tr><td><code>target_type</code></td><td><code>point_rule</code></td></tr>
+      <tr><td><code>target_id</code></td><td>规则主键的十进制字符串</td></tr>
+      <tr><td><code>object_name</code></td><td>规则编码，例如 <code>M1</code></td></tr>
+      <tr><td><code>metadata</code></td><td>JSON：<code>rule_code</code>、<code>rule_type</code>（earn、deduct 或 admin_reward），以及 <code>changes</code> 数组。每项含 <code>field</code>、<code>before</code>、<code>after</code></td></tr>
+      <tr><td>旧的 <code>system_id</code>、<code>event_type</code></td><td>留空。因此不会靠旧字段出现在系统操作列表</td></tr>
+      <tr><td><code>ip_address</code></td><td>本次不填。需求没有要求 IP，路由今天也没有把 IP 传进服务</td></tr>
+    </tbody>
+  </table></div>
+  <p>成功信息日志名是 <code>points.rule.updated</code>，至少包含操作人编号、租户、规则主键、规则编码、规则类型和 <code>changes</code>。失败错误日志名是 <code>points.rule.update_failed</code>，包含同样的定位字段和异常栈，并写明未生效。两类日志都不写口令、令牌、Cookie。</p>
+  <details data-technical>
+    <summary>实现落点</summary>
+    <div class="inner">
+      <ul>
+        <li><code>PointsRuleService.update_rule</code> 增加比较、同会话审计和失败回滚。使用 <code>logging.getLogger(__name__)</code>。</li>
+        <li>直接构造现有 <code>AuditLog</code> 并 <code>session.add</code>。不修改 <code>AuditLogDao.ainsert_v2</code>。</li>
+        <li><code>points.py</code> 增加 18209。不改 <code>admin.py</code> 的成功响应组装；它已经会把 <code>BaseErrorCode</code> 交回调用方。</li>
+        <li>不改门户。<code>putJson</code> 已经展示 <code>status_message</code>。</li>
+        <li>不改 <code>_UI_VISIBLE_V2_ACTIONS</code>，不改 <code>user_point_log</code>，不做数据库迁移。</li>
+      </ul>
+    </div>
+  </details>
+</section>
+
+<section class="card" id="impact">
+  <h2>7. 影响与依赖</h2>
+  <div class="table-wrap" tabindex="0"><table>
+    <caption>使用方</caption>
+    <thead><tr><th>使用方</th><th>影响</th></tr></thead>
+    <tbody>
+      <tr><td>门户获取、扣减、管理员奖励的编辑、禁用、再次启用</td><td>都走 <code>PUT /admin/rules/{id}</code>。有变化且提交成功时行为与今天的成功提示相同，多了留痕。提交失败时看到 18209 的文案</td></tr>
+      <tr><td>说明文案</td><td>不写本类审计</td></tr>
+      <tr><td>积分「操作记录」<code>GET /admin/audit-logs</code></td><td>仍只读账本里的手动调分和扣减。本记录不会出现</td></tr>
+      <tr><td>已有测试 <code>test_update_rule_persists_display_name_not_default_name</code></td><td>用的是获取规则，而且展示名确有变化。实现后这次保存也要提交审计。该测试的假会话需要能接受 <code>add</code>，否则会在编码时失败。这是预期内的测试调整，不是把获取规则排除在审计之外</td></tr>
+    </tbody>
+  </table></div>
+  <p>无配置开关，无数据迁移，无历史回填。依赖现有 <code>audit_log.metadata</code> 能存下变更数组。这是源码里的 <code>JsonType</code>，不是本次新列。若实现时发现该列写不进上述 JSON，停下来改设计，不要加列。</p>
+</section>
+
+<section class="card" id="verification">
+  <h2>8. 验证安排</h2>
+  <p>开发验证跑毕昇 <code>test/points/</code> 里的假会话测试，被测对象是真实的 <code>PointsRuleService.update_rule</code> 和真实的比较规则。数据库会话、提交和回滚用假对象。这不能证明真实数据库的事务隔离。真实库、并发和超时放在独立验收，本次不执行。</p>
+  <p>门户不改，所以没有新的前端测试。页面点击不在开发期执行。</p>
+  <div class="table-wrap" tabindex="0"><table>
+    <caption>需求到验证</caption>
+    <thead><tr><th>验收</th><th>开发用例</th><th>真实保留</th><th>替身</th><th>验收仍需</th></tr></thead>
+    <tbody>
+      <tr><td>AC-PAR-01 至 AC-PAR-03、AC-PAR-05 至 AC-PAR-08</td><td>见 <a href="test-cases.html">test-cases.html</a> 对应 TC</td><td>规则服务与比较</td><td>会话、仓储</td><td>真实库提交是否同时可见</td></tr>
+      <tr><td>AC-PAR-04 权限</td><td>TC-PAR-04</td><td>现有 <code>require_platform_admin</code></td><td>用户对象</td><td>无额外页面验收</td></tr>
+      <tr><td>并发、调用方超时</td><td>开发期不执行</td><td>无</td><td>无</td><td>独立验收在共享环境核对两种终态不会拆开</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="card" id="release">
+  <h2>9. 发布与恢复</h2>
+  <p>随毕昇该版本发布即生效，没有单独开关。发布前不需要迁移。上线后各抽查一条获取规则和一条管理员奖励修改：规则是新值，<code>audit_log</code> 有一行 <code>action=points.rule.update</code>，<code>metadata.rule_type</code> 与该规则一致，应用日志有对应的 info。系统操作页面和积分操作记录里不应出现它。</p>
+  <p>回滚是撤回该版本。已写下的审计行保留。规则不会自动回到旧分值。撤回后新的保存不再写本类审计。</p>
+</section>
+
+<section class="card" id="records">
+  <h2>10. 待决事项及变更记录</h2>
+  <p>没有需要用户再选的设计问题。真实数据库事务和并发不在本设计里被说成已经证明。</p>
+  <div class="table-wrap" tabindex="0"><table>
+    <caption>自检</caption>
+    <thead><tr><th>项</th><th>结果</th></tr></thead>
+    <tbody>
+      <tr><td>需求覆盖</td><td>REQ-PAR-01 和 AC-PAR-01 至 AC-PAR-08 都有对应机制。作者对照需求 1.1 和源码 <code>404fa3e3b</code> 自查，没有第二人复核。1.1 尚未被用户确认</td></tr>
+      <tr><td>同成败</td><td>写明了不能用 <code>ainsert_v2</code>，以及接口吞掉异常后必须自己回滚并恢复内存字段</td></tr>
+      <tr><td>图</td><td>SEQ-1、ST-1、CTX-1 与契约一致。未做浏览器打印检查</td></tr>
+      <tr><td>用户确认</td><td>2026-11-04 用户回复「确认」，对应设计 0.10 与需求 1.1</td></tr>
+    </tbody>
+  </table></div>
+  <h3>术语</h3>
+  <div class="table-wrap" tabindex="0"><table>
+    <thead><tr><th>术语</th><th>含义</th><th>边界</th></tr></thead>
+    <tbody>
+      <tr><td>同一次提交 <code>commit</code></td><td>规则和审计在同一个数据库事务里一起成功或一起取消</td><td>不表示两个独立保存「尽量都成功」</td></tr>
+      <tr><td>操作日志</td><td><code>audit_log</code> 里动作名为 <code>points.rule.update</code> 的新行</td><td>不是积分账本，也不是系统操作页面上的列表。三种规则类型共用这个动作，用 <code>rule_type</code> 区分</td></tr>
+      <tr><td>业务日志</td><td>应用进程里的 info 或 exception 日志</td><td>现有访问日志只记 IP、方法和路径，不算本需求的业务日志</td></tr>
+    </tbody>
+  </table></div>
+  <h3>变更记录</h3>
+  <div class="table-wrap" tabindex="0"><table>
+    <thead><tr><th>版本</th><th>日期</th><th>变更</th><th>关联</th><th>依据</th></tr></thead>
+    <tbody>
+      <tr><td>0.9</td><td>2026-11-04</td><td>首稿，只覆盖管理员奖励</td><td>需求 1.0</td><td>已被 0.10 取代，未获确认</td></tr>
+      <tr><td>0.10</td><td>2026-11-04</td><td>范围改为全部积分规则的实际修改。动作名改为 <code>points.rule.update</code>。失败文案改为「积分规则未更改」</td><td>需求 1.1，用例 test-cases.html 0.10</td><td>2026-11-04 用户回复「确认」</td></tr>
+    </tbody>
+  </table></div>
+</section>
+<p class="footer"><a href="#top">返回顶部</a></p>
+</main>
+<script>
+(function () {
+  "use strict";
+  var panels = Array.from(document.querySelectorAll("details[data-technical]"));
+  var bar = document.getElementById("progress");
+  var printState = null;
+  var toolbar = document.getElementById("toolbar");
+  if (toolbar) toolbar.hidden = false;
+  panels.forEach(function (panel) { panel.open = false; });
+  var expand = document.getElementById("expand-all");
+  var collapse = document.getElementById("collapse-all");
+  var printBtn = document.getElementById("print-document");
+  if (expand) expand.addEventListener("click", function () { panels.forEach(function (panel) { panel.open = true; }); });
+  if (collapse) collapse.addEventListener("click", function () { panels.forEach(function (panel) { panel.open = false; }); });
+  if (printBtn) printBtn.addEventListener("click", function () { window.print(); });
+  function revealHash() {
+    var id;
+    try { id = decodeURIComponent(window.location.hash.slice(1)); } catch (error) { return; }
+    if (!id) return;
+    var target = document.getElementById(id);
+    if (!target) return;
+    var node = target.parentElement;
+    while (node) {
+      if (node.tagName === "DETAILS") node.open = true;
+      node = node.parentElement;
+    }
+  }
+  function preparePrint() {
+    if (printState !== null) return;
+    printState = panels.map(function (panel) { return panel.open; });
+    panels.forEach(function (panel) { panel.open = true; });
+  }
+  function restorePrint() {
+    if (printState === null) return;
+    panels.forEach(function (panel, index) { panel.open = printState[index]; });
+    printState = null;
+  }
+  window.addEventListener("hashchange", revealHash);
+  window.addEventListener("beforeprint", preparePrint);
+  window.addEventListener("afterprint", restorePrint);
+  window.addEventListener("scroll", function () {
+    var root = document.documentElement;
+    var range = root.scrollHeight - root.clientHeight;
+    var percentage = range > 0 ? Math.max(0, Math.min(100, root.scrollTop / range * 100)) : 0;
+    if (bar) bar.style.width = percentage + "%";
+  }, { passive: true });
+  revealHash();
+}());
+</script>
+</body>
+</html>

@@ -1,23 +1,25 @@
+# ruff: noqa: RUF013
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from sqlalchemy import Integer, String
-from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, col
+from sqlmodel import Column, DateTime, Field, Text, col, func, or_, select, text
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.context.tenant import bypass_tenant_filter
-from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT, json_array_contains
+from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, json_array_contains
 from bisheng.utils import generate_uuid
 
 
 def _db_dialect() -> str:
     try:
         from bisheng.core.database.manager import sync_get_database_connection
+
         return sync_get_database_connection().engine.dialect.name
     except Exception:
-        return 'mysql'
+        return "mysql"
 
 
 # System Module Enumeration
@@ -98,71 +100,83 @@ class AuditLogBase(SQLModelSerializable):
     """
     Audit Log Table
     """
+
     operator_id: int = Field(index=True, description="Operating User'sID")
-    operator_name: Optional[str] = Field(description="Username")
-    group_ids: Optional[List[int | str]] = Field(sa_column=Column(JsonType),
-                                                 description="Belongs to a user groupIDVertical")
-    system_id: Optional[str] = Field(index=True, description="Module Item")
-    event_type: Optional[str] = Field(index=True, description="Operation behaviors")
-    object_type: Optional[str] = Field(index=True, description="Action object type")
-    object_id: Optional[str] = Field(index=True, description="Operation ObjectID")
-    object_name: Optional[str] = Field(sa_column=Column(Text), description="Action object name")
-    note: Optional[str] = Field(sa_column=Column(Text), description="Action notes")
-    ip_address: Optional[str] = Field(index=True,
-                                      description="Client's at time of operationIP<g id='Bold'>Address:</g>")
+    operator_name: str | None = Field(description="Username")
+    group_ids: list[int | str] | None = Field(
+        sa_column=Column(JsonType), description="Belongs to a user groupIDVertical"
+    )
+    system_id: str | None = Field(index=True, description="Module Item")
+    event_type: str | None = Field(index=True, description="Operation behaviors")
+    object_type: str | None = Field(index=True, description="Action object type")
+    object_id: str | None = Field(index=True, description="Operation ObjectID")
+    object_name: str | None = Field(sa_column=Column(Text), description="Action object name")
+    note: str | None = Field(sa_column=Column(Text), description="Action notes")
+    ip_address: str | None = Field(index=True, description="Client's at time of operationIP<g id='Bold'>Address:</g>")
     # v2.5.1 F011: structured audit fields.
     # Coexist with legacy system_id/event_type/object_* columns — old callers
     # keep writing legacy fields (new columns NULL); new callers use the
     # structured fields below. See spec §5.4 "字段填值规则".
-    tenant_id: Optional[int] = Field(
+    tenant_id: int | None = Field(
         default=None,
         sa_column=Column(
-            Integer, nullable=True, index=True,
-            comment='v2.5.1: leaf tenant of the resource being acted on',
+            Integer,
+            nullable=True,
+            index=True,
+            comment="v2.5.1: leaf tenant of the resource being acted on",
         ),
     )
-    operator_tenant_id: Optional[int] = Field(
+    operator_tenant_id: int | None = Field(
         default=None,
         sa_column=Column(
-            Integer, nullable=True,
-            comment='v2.5.1: operator leaf (may differ from tenant_id for super-admin cross-child ops)',
+            Integer,
+            nullable=True,
+            comment="v2.5.1: operator leaf (may differ from tenant_id for super-admin cross-child ops)",
         ),
     )
-    action: Optional[str] = Field(
+    action: str | None = Field(
         default=None,
         sa_column=Column(
-            String(64), nullable=True, index=True,
-            comment='v2.5.1: structured action name; see spec §5.4.2 allowlist',
+            String(64),
+            nullable=True,
+            index=True,
+            comment="v2.5.1: structured action name; see spec §5.4.2 allowlist",
         ),
     )
-    target_type: Optional[str] = Field(
+    target_type: str | None = Field(
         default=None,
         sa_column=Column(
-            String(32), nullable=True,
-            comment='v2.5.1: tenant/department/resource/user/llm_server/llm_model/...',
+            String(32),
+            nullable=True,
+            comment="v2.5.1: tenant/department/resource/user/llm_server/llm_model/...",
         ),
     )
-    target_id: Optional[str] = Field(
+    target_id: str | None = Field(
         default=None,
         sa_column=Column(String(64), nullable=True),
     )
-    reason: Optional[str] = Field(
+    reason: str | None = Field(
         default=None,
         sa_column=Column(Text, nullable=True),
     )
     # SQL column name stays `metadata`; Python attribute is `audit_metadata`
     # to avoid clashing with SQLModel's declarative `metadata` attribute.
-    audit_metadata: Optional[Dict[str, Any]] = Field(
+    audit_metadata: dict[str, Any] | None = Field(
         default=None,
         sa_column=Column(
-            'metadata', JsonType, nullable=True,
-            comment='v2.5.1: extended fields (from/to values, affected ids, etc.)',
+            "metadata",
+            JsonType,
+            nullable=True,
+            comment="v2.5.1: extended fields (from/to values, affected ids, etc.)",
         ),
     )
-    create_time: Optional[datetime] = Field(sa_column=Column(
-        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')), description="operate time")
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
+    create_time: datetime | None = Field(
+        sa_column=Column(DateTime, nullable=False, index=True, server_default=text("CURRENT_TIMESTAMP")),
+        description="operate time",
+    )
+    update_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT)
+    )
 
 
 class AuditLog(AuditLogBase, table=True):
@@ -176,49 +190,50 @@ class AuditLog(AuditLogBase, table=True):
 # llm.model.*) keep writing for compliance/forensics but stay hidden from
 # the UI list and filter dropdowns. Update this tuple in lockstep with the
 # frontend `getActionsApi` / `getActionsByModuleApi` whitelist.
-_UI_VISIBLE_V2_ACTIONS: Tuple[str, ...] = (
-    'tenant.mount',
-    'tenant.unmount',
-    'tenant.disable',
-    'llm.server.create',
-    'llm.server.update',
-    'llm.server.delete',
-    'approval.request.submit',
-    'approval.task.approve',
-    'approval.task.reject',
-    'approval.request.withdraw',
-    'approval.route.pass',
-    'approval.handler.success',
-    'approval.handler.failed',
-    'approval.exception.retry',
-    'approval.exception.assign_approver',
-    'approval.exception.cancel',
-    'approval.flow.update',
-    'approval.scenario.toggle',
+_UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
+    "tenant.mount",
+    "tenant.unmount",
+    "tenant.disable",
+    "llm.server.create",
+    "llm.server.update",
+    "llm.server.delete",
+    "approval.request.submit",
+    "approval.task.approve",
+    "approval.task.reject",
+    "approval.request.withdraw",
+    "approval.route.pass",
+    "approval.handler.success",
+    "approval.handler.failed",
+    "approval.exception.retry",
+    "approval.exception.assign_approver",
+    "approval.exception.cancel",
+    "approval.flow.update",
+    "approval.scenario.toggle",
     # Extras kept for compliance/forensics (not in PRD §9.1 surface list but
     # already in use by admin flows).
-    'approval.scenario.create',
-    'approval.exception.skip_node',
-    'approval.menu_access.revoke_grant',
-    'filelib_sync.upload.success',
-    'filelib_sync.upload.failed',
-    'filelib_sync.inspection_standard.batch.success',
-    'filelib_sync.inspection_standard.batch.failed',
+    "approval.scenario.create",
+    "approval.exception.skip_node",
+    "approval.menu_access.revoke_grant",
+    "filelib_sync.upload.success",
+    "filelib_sync.upload.failed",
+    "filelib_sync.inspection_standard.batch.success",
+    "filelib_sync.inspection_standard.batch.failed",
+    "points.rule.update",
 )
 
 # Synthetic system_id namespace → action prefix. The frontend `getModulesApi`
 # emits these synthetic module values for v2 namespaces (legacy modules like
 # `chat`, `build`, ... still match the literal `system_id` column).
-_V2_NAMESPACE_TO_ACTION_PREFIX: Dict[str, str] = {
-    'tenant': 'tenant.',
-    'llm': 'llm.server.',
-    'approval': 'approval.',
-    'filelib_sync': 'filelib_sync.',
+_V2_NAMESPACE_TO_ACTION_PREFIX: dict[str, str] = {
+    "tenant": "tenant.",
+    "llm": "llm.server.",
+    "approval": "approval.",
+    "filelib_sync": "filelib_sync.",
+    "points": "points.",
 }
 
 
 class AuditLogDao(AuditLogBase):
-
     @classmethod
     def _ui_visible_predicate(cls):
         """Whitelist for the legacy audit page: keep all legacy rows
@@ -242,7 +257,7 @@ class AuditLogDao(AuditLogBase):
         )
 
     @classmethod
-    def _metadata_responsible_user_ids_predicate(cls, user_ids: List[int]):
+    def _metadata_responsible_user_ids_predicate(cls, user_ids: list[int]):
         """Match v2 filelib_sync rows by ``metadata.responsible_user_id``."""
         if not user_ids:
             return None
@@ -251,11 +266,11 @@ class AuditLogDao(AuditLogBase):
         clauses = []
         for user_id in user_ids:
             uid = int(user_id)
-            if dialect == 'sqlite':
-                extracted = func.json_extract(metadata_col, '$.responsible_user_id')
+            if dialect == "sqlite":
+                extracted = func.json_extract(metadata_col, "$.responsible_user_id")
                 clauses.append(or_(extracted == uid, extracted == str(uid)))
-            elif dialect in ('mysql', 'mariadb'):
-                extracted = func.json_unquote(func.json_extract(metadata_col, '$.responsible_user_id'))
+            elif dialect in ("mysql", "mariadb"):
+                extracted = func.json_unquote(func.json_extract(metadata_col, "$.responsible_user_id"))
                 clauses.append(or_(extracted == str(uid), extracted == uid))
             else:
                 clauses.append(metadata_col.like(f'%"responsible_user_id": {uid}%'))
@@ -263,12 +278,19 @@ class AuditLogDao(AuditLogBase):
         return or_(*clauses)
 
     @classmethod
-    async def get_audit_logs(cls, group_ids: List[int], operator_ids: List[int] = 0,
-                             start_time: datetime = None,
-                             end_time: datetime = None, system_id: str = None, event_type: str = None,
-                             responsible_user_ids: Optional[List[int]] = None,
-                             page: int = 0, limit: int = 0,
-                             tenant_scope: Optional[int] = None) -> (List[AuditLog], int):
+    async def get_audit_logs(
+        cls,
+        group_ids: list[int],
+        operator_ids: list[int] = 0,
+        start_time: datetime = None,
+        end_time: datetime = None,
+        system_id: str = None,
+        event_type: str = None,
+        responsible_user_ids: list[int] | None = None,
+        page: int = 0,
+        limit: int = 0,
+        tenant_scope: int | None = None,
+    ) -> (list[AuditLog], int):
         """
         Filter logs by user group.
 
@@ -317,7 +339,7 @@ class AuditLogDao(AuditLogBase):
             # ``action`` prefix; legacy module values match ``system_id``.
             prefix = _V2_NAMESPACE_TO_ACTION_PREFIX.get(system_id)
             if prefix:
-                module_predicate = col(AuditLog.action).like(f'{prefix}%')
+                module_predicate = col(AuditLog.action).like(f"{prefix}%")
             else:
                 module_predicate = AuditLog.system_id == system_id
             statement = statement.where(module_predicate)
@@ -325,7 +347,7 @@ class AuditLogDao(AuditLogBase):
         if event_type:
             # v2 action strings always contain a dot (``tenant.mount`` etc.);
             # legacy event_type values are plain snake_case (``create_chat``).
-            if '.' in event_type:
+            if "." in event_type:
                 action_predicate = AuditLog.action == event_type
             else:
                 action_predicate = AuditLog.event_type == event_type
@@ -347,19 +369,19 @@ class AuditLogDao(AuditLogBase):
             return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
-    def insert_audit_logs(cls, audit_logs: List[AuditLog]):
+    def insert_audit_logs(cls, audit_logs: list[AuditLog]):
         with get_sync_db_session() as session:
             session.add_all(audit_logs)
             session.commit()
 
     @classmethod
-    async def ainsert_audit_logs(cls, audit_logs: List[AuditLog]):
+    async def ainsert_audit_logs(cls, audit_logs: list[AuditLog]):
         async with get_async_db_session() as session:
             session.add_all(audit_logs)
             await session.commit()
 
     @classmethod
-    def get_all_operators(cls, group_ids: List[int], tenant_scope: Optional[int] = None):
+    def get_all_operators(cls, group_ids: list[int], tenant_scope: int | None = None):
         """List distinct operators across audit log rows.
 
         ``tenant_scope`` (v2.5.0 audit isolation):
@@ -392,12 +414,12 @@ class AuditLogDao(AuditLogBase):
     @classmethod
     def get_all_responsible_persons(
         cls,
-        group_ids: List[int],
-        tenant_scope: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+        group_ids: list[int],
+        tenant_scope: int | None = None,
+    ) -> list[dict[str, Any]]:
         """Distinct filelib sync responsible persons for the audit filter dropdown."""
         statement = select(AuditLog.audit_metadata).where(
-            col(AuditLog.action).like('filelib_sync.%'),
+            col(AuditLog.action).like("filelib_sync.%"),
             cls._ui_visible_predicate(),
         )
         if group_ids:
@@ -408,30 +430,30 @@ class AuditLogDao(AuditLogBase):
         if tenant_scope is not None:
             statement = statement.where(cls._visible_for_tenant(tenant_scope))
 
-        persons: Dict[int, Dict[str, Any]] = {}
+        persons: dict[int, dict[str, Any]] = {}
         with bypass_tenant_filter(), get_sync_db_session() as session:
             for metadata in session.exec(statement).all():
                 if not isinstance(metadata, dict):
                     continue
-                raw_user_id = metadata.get('responsible_user_id')
-                if raw_user_id in (None, ''):
+                raw_user_id = metadata.get("responsible_user_id")
+                if raw_user_id in (None, ""):
                     continue
                 user_id = int(raw_user_id)
                 if user_id in persons:
                     continue
-                external_id = str(metadata.get('responsible_person_external_id') or '').strip()
-                user_name = str(metadata.get('responsible_user_name') or '').strip()
+                external_id = str(metadata.get("responsible_person_external_id") or "").strip()
+                user_name = str(metadata.get("responsible_user_name") or "").strip()
                 if external_id and user_name:
-                    label = f'{external_id} ({user_name})'
+                    label = f"{external_id} ({user_name})"
                 else:
-                    label = external_id or user_name or f'#{user_id}'
+                    label = external_id or user_name or f"#{user_id}"
                 persons[user_id] = {
-                    'user_id': user_id,
-                    'external_id': external_id or None,
-                    'user_name': user_name or None,
-                    'label': label,
+                    "user_id": user_id,
+                    "external_id": external_id or None,
+                    "user_name": user_name or None,
+                    "label": label,
                 }
-        return sorted(persons.values(), key=lambda item: str(item['label']).lower())
+        return sorted(persons.values(), key=lambda item: str(item["label"]).lower())
 
     # -----------------------------------------------------------------------
     # v2.5.1 F011: structured audit_log API.
@@ -443,18 +465,18 @@ class AuditLogDao(AuditLogBase):
     @classmethod
     async def ainsert_v2(
         cls,
-        tenant_id: Optional[int],
+        tenant_id: int | None,
         operator_id: int,
-        operator_tenant_id: Optional[int],
+        operator_tenant_id: int | None,
         action: str,
-        target_type: Optional[str] = None,
-        target_id: Optional[str] = None,
-        reason: Optional[str] = None,
-        note: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        ip_address: Optional[str] = None,
-        operator_name: Optional[str] = None,
-        object_name: Optional[str] = None,
+        target_type: str | None = None,
+        target_id: str | None = None,
+        reason: str | None = None,
+        note: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        ip_address: str | None = None,
+        operator_name: str | None = None,
+        object_name: str | None = None,
     ) -> AuditLog:
         """Structured audit_log insert (v2.5.1 schema).
 
@@ -474,20 +496,24 @@ class AuditLogDao(AuditLogBase):
         """
         if operator_name is None:
             if operator_id == 0:
-                operator_name = 'system'
+                operator_name = "system"
             else:
                 # Lazy import: UserDao lives in a higher-level package and a
                 # top-level import would cycle through user → role → audit.
-                from bisheng.user.domain.models.user import UserDao  # noqa: PLC0415
+                from bisheng.user.domain.models.user import UserDao
+
                 try:
                     user = await UserDao.aget_user(operator_id)
                     if user is not None:
                         operator_name = user.user_name
-                except Exception as e:  # noqa: BLE001 — never block the insert
-                    from loguru import logger  # noqa: PLC0415
+                except Exception as e:
+                    from loguru import logger
+
                     logger.warning(
-                        'audit_log operator_name lookup failed for operator_id=%s action=%s: %s',
-                        operator_id, action, e,
+                        "audit_log operator_name lookup failed for operator_id=%s action=%s: %s",
+                        operator_id,
+                        action,
+                        e,
                     )
 
         entry = AuditLog(
@@ -515,10 +541,10 @@ class AuditLogDao(AuditLogBase):
     async def aget_by_action(
         cls,
         action: str,
-        tenant_id: Optional[int] = None,
+        tenant_id: int | None = None,
         page: int = 1,
         limit: int = 20,
-    ) -> Tuple[List[AuditLog], int]:
+    ) -> tuple[list[AuditLog], int]:
         """Paginated lookup by structured ``action`` (v2.5.1 schema).
 
         Uses ``bypass_tenant_filter()`` to prevent the auto-injected
@@ -529,19 +555,12 @@ class AuditLogDao(AuditLogBase):
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
                 stmt = select(AuditLog).where(AuditLog.action == action)
-                count_stmt = (
-                    select(func.count())
-                    .select_from(AuditLog)
-                    .where(AuditLog.action == action)
-                )
+                count_stmt = select(func.count()).select_from(AuditLog).where(AuditLog.action == action)
                 if tenant_id is not None:
                     stmt = stmt.where(AuditLog.tenant_id == tenant_id)
                     count_stmt = count_stmt.where(AuditLog.tenant_id == tenant_id)
                 total = (await session.exec(count_stmt)).one()
-                stmt = (
-                    stmt.order_by(AuditLog.create_time.desc())
-                    .offset(offset).limit(limit)
-                )
+                stmt = stmt.order_by(AuditLog.create_time.desc()).offset(offset).limit(limit)
                 rows = (await session.exec(stmt)).all()
                 return list(rows), total
 
@@ -551,7 +570,7 @@ class AuditLogDao(AuditLogBase):
         tenant_id: int,
         page: int = 1,
         limit: int = 20,
-    ) -> Tuple[List[AuditLog], int]:
+    ) -> tuple[list[AuditLog], int]:
         """Child Admin visibility (spec §5.4 "可见性规则").
 
         A Child Admin sees rows where:
@@ -567,13 +586,8 @@ class AuditLogDao(AuditLogBase):
             predicate = cls._visible_for_tenant(tenant_id)
             async with get_async_db_session() as session:
                 stmt = select(AuditLog).where(predicate)
-                count_stmt = (
-                    select(func.count()).select_from(AuditLog).where(predicate)
-                )
+                count_stmt = select(func.count()).select_from(AuditLog).where(predicate)
                 total = (await session.exec(count_stmt)).one()
-                stmt = (
-                    stmt.order_by(AuditLog.create_time.desc())
-                    .offset(offset).limit(limit)
-                )
+                stmt = stmt.order_by(AuditLog.create_time.desc()).offset(offset).limit(limit)
                 rows = (await session.exec(stmt)).all()
                 return list(rows), total

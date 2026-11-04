@@ -1745,7 +1745,8 @@
       "tenant": "テナント管理",
       "llm": "モデル管理",
       "approval": "承認管理",
-      "filelib_sync": "Filelib 同期"
+      "filelib_sync": "Filelib 同期",
+      "points": "ポイント"
     },
     "eventTypeEnum": {
       "createChat": "新規チャット作成",
@@ -1822,7 +1823,8 @@
       "filelibSyncUploadSuccess": "ファイル同期成功",
       "filelibSyncUploadFailed": "ファイル同期失敗",
       "filelibSyncInspectionStandardBatchSuccess": "検査標準一括同期成功",
-      "filelibSyncInspectionStandardBatchFailed": "検査標準一括同期失敗"
+      "filelibSyncInspectionStandardBatchFailed": "検査標準一括同期失敗",
+      "pointsRuleUpdate": "ポイントルールを変更"
     },
     "objectTypeEnum": {
       "none": "なし",
@@ -1845,7 +1847,24 @@
       "approval_task": "審査タスク",
       "approval_exception": "審査例外",
       "approval_scenario": "審査シナリオ",
-      "approval_flow": "審査フロー"
+      "approval_flow": "審査フロー",
+      "point_rule": "ポイントルール"
+    },
+    "pointsRuleChangeLine": "{{field}}：{{before}} → {{after}}",
+    "pointsRuleValue": {
+      "empty": "空",
+      "enabled": "有効",
+      "disabled": "無効"
+    },
+    "pointsRuleField": {
+      "score": "点数",
+      "display_name": "表示名",
+      "remark": "備考",
+      "status": "状態",
+      "daily_cap": "1日上限",
+      "beneficiary": "受益者",
+      "sort_order": "並び順",
+      "score_expr": "点数式"
     },
     "appUsage": "アプリ利用状況",
     "systemOperations": "システム操作",
