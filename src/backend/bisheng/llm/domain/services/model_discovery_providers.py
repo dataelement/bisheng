@@ -28,6 +28,17 @@ DEFAULT_BASES = {
     "minimax": "https://api.minimax.cn/v1",
 }
 PROVIDERS = set(DEFAULT_BASES) | {"azure_openai", "ollama", "xinference", "vllm", "llamacpp", "MindIE"}
+TOKENHUB_HOSTS = {
+    "tokenhub.tencentmaas.com",
+    "tokenhub.tencentmaas.cn",
+    "tokenhub-intl.tencentmaas.com",
+    "tokenhub-intl.tencentmaas.cn",
+}
+# Domestic TokenHub API region. The plan fixes Guangzhou instead of inferring it from the API key.
+TOKENHUB_REGION = "ap-guangzhou"
+TOKENHUB_VERSION = "2026-03-22"
+# Name tokens for image, video, and OCR rows. Kept here so catalog paging and type identification share one rule.
+GENERATION_NAME = re.compile(r"z-image|ocr|(?:^|[-_/])(?:i2v|t2v|t2i|i2i)(?:$|[-_/])|(?:^|[-_/])wan\d*(?:$|[-_/.])")
 
 
 def validate_url(url: str):
@@ -149,6 +160,55 @@ def sign_ark(url: str, body: str, options: dict, now: datetime | None = None) ->
     return headers
 
 
+def catalog_options(provider: str, config: dict, options: dict) -> dict:
+    """Tencent catalog signing reuses the speech SecretId and SecretKey on the connection form."""
+    if provider != "tencent":
+        return options
+    merged = dict(options)
+    if not (merged.get("secret_id") or "").strip():
+        merged["secret_id"] = (config.get("speech_secret_id") or "").strip()
+    if not (merged.get("secret_key") or "").strip():
+        merged["secret_key"] = (config.get("speech_secret_key") or "").strip()
+    return merged
+
+
+def sign_tokenhub(body: str, options: dict, now: datetime | None = None) -> dict:
+    """Tencent Cloud API 3.0 signature for DescribeModelList.
+
+    The secret key is only an HMAC input. It is not placed in a header.
+    """
+    secret_id = credential(options.get("secret_id"))
+    secret_key = credential(options.get("secret_key"))
+    if not secret_id or not secret_key:
+        raise ModelDiscoveryError(reason="credentials")
+    service = "tokenhub"
+    host = "tokenhub.tencentcloudapi.com"
+    action = "DescribeModelList"
+    moment = now or datetime.now(UTC)
+    timestamp = str(int(moment.timestamp()))
+    date = moment.strftime("%Y-%m-%d")
+    content_type = "application/json; charset=utf-8"
+    canonical_headers = f"content-type:{content_type}\nhost:{host}\nx-tc-action:{action.lower()}\n"
+    signed_headers = "content-type;host;x-tc-action"
+    hashed_payload = hashlib.sha256(body.encode()).hexdigest()
+    canonical = "\n".join(["POST", "/", "", canonical_headers, signed_headers, hashed_payload])
+    scope = f"{date}/{service}/tc3_request"
+    string_to_sign = "\n".join(["TC3-HMAC-SHA256", timestamp, scope, hashlib.sha256(canonical.encode()).hexdigest()])
+    secret_date = hmac.new(f"TC3{secret_key}".encode(), date.encode(), hashlib.sha256).digest()
+    secret_service = hmac.new(secret_date, service.encode(), hashlib.sha256).digest()
+    signing_key = hmac.new(secret_service, b"tc3_request", hashlib.sha256).digest()
+    signature = hmac.new(signing_key, string_to_sign.encode(), hashlib.sha256).hexdigest()
+    return {
+        "Authorization": f"TC3-HMAC-SHA256 Credential={secret_id}/{scope}, SignedHeaders={signed_headers}, Signature={signature}",
+        "Content-Type": content_type,
+        "Host": host,
+        "X-TC-Action": action,
+        "X-TC-Timestamp": timestamp,
+        "X-TC-Version": TOKENHUB_VERSION,
+        "X-TC-Region": TOKENHUB_REGION,
+    }
+
+
 @dataclass
 class CatalogPlan:
     url: str
@@ -167,6 +227,10 @@ class CatalogPlan:
                 body["ProjectName"] = options["project_name"].strip()
             content = json.dumps(body, separators=(",", ":"), ensure_ascii=True)
             return "POST", self.url, {"headers": sign_ark(self.url, content, options), "content": content}
+        if self.protocol == "tokenhub":
+            body = {"Limit": 100, "Offset": (self.page - 1) * 100}
+            content = json.dumps(body, separators=(",", ":"), ensure_ascii=True)
+            return "POST", self.url, {"headers": sign_tokenhub(content, options), "content": content}
         if self.protocol == "bailian":
             self.params = {"page_no": self.page, "page_size": 100}
         return "GET", self.next_url or self.url, {"headers": self.headers, "params": self.params or None}
@@ -177,6 +241,11 @@ def prefer_connection_catalog(provider: str, config: dict, options: dict) -> boo
     if any(value.strip() for value in options.values()):
         return False
     host = urlsplit(base_url(provider, config)).hostname
+    # Zhipu's live list is partial. TokenHub's compatible list has no task type.
+    if provider == "zhipu" and host in PRESETS["zhipu"]["hosts"]:
+        return False
+    if provider == "tencent" and host in TOKENHUB_HOSTS:
+        return False
     return (
         (provider == "qwen" and host == "dashscope.aliyuncs.com")
         or (provider == "volcengine" and host == "ark.cn-beijing.volces.com")
@@ -187,9 +256,16 @@ def prefer_connection_catalog(provider: str, config: dict, options: dict) -> boo
 def build_plan(provider: str, config: dict, source: str, options: dict) -> CatalogPlan:
     base = base_url(provider, config)
     host = urlsplit(base).hostname
-    if source == "preset" or (source == "auto" and provider in PRESETS and host in PRESETS[provider]["hosts"]):
+    tokenhub = provider == "tencent" and host in TOKENHUB_HOSTS
+    if source == "preset" or (
+        source == "auto" and provider in PRESETS and host in PRESETS[provider]["hosts"] and not tokenhub
+    ):
         preset_catalog(provider)
         return CatalogPlan(base, {}, "preset")
+    if tokenhub and source != "live":
+        if not credential(options.get("secret_id")) or not credential(options.get("secret_key")):
+            raise ModelDiscoveryError(reason="credentials")
+        return CatalogPlan("https://tokenhub.tencentcloudapi.com/", {}, "tokenhub")
     url, headers = connection(provider, config)
     plan = CatalogPlan(url, headers)
     if provider == "anthropic":
@@ -286,6 +362,44 @@ def next_page(plan: CatalogPlan, payload: dict) -> tuple[dict, bool]:
                 }
             )
         return {"data": normalized}, paged(plan, rows, result.get("TotalCount"))
+    if plan.protocol == "tokenhub":
+        response = payload.get("Response")
+        if not isinstance(response, dict):
+            raise ModelDiscoveryError(reason="format")
+        error = response.get("Error")
+        if error:
+            code = error.get("Code") if isinstance(error, dict) else ""
+            if isinstance(code, str) and (code.startswith("Auth") or code.startswith("Unauthorized")):
+                raise ModelDiscoveryError(reason="auth")
+            raise ModelDiscoveryError()
+        rows = response.get("ModelSet")
+        if not isinstance(rows, list):
+            raise ModelDiscoveryError(reason="format")
+        normalized = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            model_id = row.get("ModelId")
+            model_type = row.get("ModelType")
+            generated = isinstance(model_id, str) and bool(GENERATION_NAME.search(model_id.lower()))
+            if model_type in {"Vision", "Multimodal"} and generated:
+                fields = {"task": "image_generation"}
+            elif model_type in {"Vision", "Multimodal", "Text"}:
+                fields = {"model_type": "llm"}
+            elif model_type == "Embedding":
+                fields = {"model_type": "embedding"}
+            elif model_type == "Speech":
+                fields = {"model_type": "asr"}
+            else:
+                fields = {}
+            normalized.append(
+                {
+                    "id": model_id,
+                    "display_name": row.get("DisplayName") or row.get("ModelName") or model_id,
+                    **fields,
+                }
+            )
+        return {"data": normalized}, paged(plan, rows, response.get("TotalCount"))
     if plan.protocol == "azure_deployments":
         rows = payload.get("value")
         if not isinstance(rows, list):

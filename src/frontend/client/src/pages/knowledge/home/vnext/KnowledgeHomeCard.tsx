@@ -8,7 +8,7 @@ import { isDemoId } from '~/mock/demo/ids';
 import cn from '~/utils/cn';
 import type { KnowledgeSpaceAction } from '../../hooks/useKnowledgeSpacePermissions';
 import { knowledgePathWithTab } from '../../knowledgeListNavigation';
-import { knowledgeSpaceIcons } from '../../knowledgeSpaceIcons';
+import { KnowledgeSpaceCategoryIcon } from '../../KnowledgeSpaceCategoryIcon';
 import { homeTimestamp, type HomeSpace } from './homeSpaces';
 import { KnowledgeHomeCardMenu } from './KnowledgeHomeCardMenu';
 import { useKnowledgeHomeCardCreator } from './useKnowledgeHomeCardCreator';
@@ -63,7 +63,7 @@ export function KnowledgeHomeCard({
       transition={{ layout: { duration: .6, delay: layoutDelay, ease: [.22, 1, .36, 1] } }}>
       <Link className={styles.cardLink} to={to} aria-labelledby={titleId} onClick={handleSelect}>
         <div className={styles.cardHeading}>
-          <img className={styles.spaceIcon} src={knowledgeSpaceIcons[source]} width={36} height={36} alt="" />
+          <KnowledgeSpaceCategoryIcon source={source} className={styles.spaceIcon} size={36} />
           <h2 id={titleId} className={styles.cardTitle} title={space.name}>{space.name}</h2>
         </div>
         <p className={cn(styles.description, !description && styles.emptyDescription)} title={description}>

@@ -12,7 +12,7 @@ import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import { DemoTag } from "~/mock/demo/DemoTag";
 import { formatTimeCard } from "../knowledgeUtils";
-import { knowledgeSpaceIcons } from "../knowledgeSpaceIcons";
+import { KnowledgeSpaceCategoryIcon } from "../KnowledgeSpaceCategoryIcon";
 
 
 interface KnowledgeSpaceCardItemProps {
@@ -214,7 +214,7 @@ export default function KnowledgeSpaceCardItem({
       }`}
       onClick={() => onSelect(space)}
     >
-      <img src={knowledgeSpaceIcons[type]} className="size-8 shrink-0 object-contain" width={32} height={32} alt="" />
+      <KnowledgeSpaceCategoryIcon source={type} className="size-8 shrink-0 object-contain" size={32} />
       <div className="min-w-0 flex-1">
         {nameRow}
         {updatedAt}

@@ -410,6 +410,38 @@ describe("progressive model discovery", () => {
     expect(screen.queryByLabelText("model.discoveryWorkspace")).toBeNull();
   });
 
+  it("shows an adapter badge and the manual speech note", async () => {
+    vi.mocked(discoverModels).mockResolvedValue({
+      models: [
+        {
+          model_name: "image-model",
+          display_name: "Image",
+          model_type: null,
+          type_source: "unsupported",
+        },
+      ],
+    });
+    render(<ModelDiscovery {...props()} provider="qianfan" />);
+    fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+    await screen.findByText("model.discoveryAdapterBadge");
+    expect(screen.getByText("model.discoverySpeechManual")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "image-model" })).toBeDisabled();
+    expect(screen.queryByText("model.unknownModelType")).toBeNull();
+  });
+
+  it("keeps Tencent catalog secrets out of the model dialog", async () => {
+    vi.mocked(discoverModels).mockRejectedValueOnce({
+      response: { data: { data: { reason: "credentials" } } },
+    });
+    render(<ModelDiscovery {...props()} provider="tencent" />);
+    fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "model.discoveryError_credentials",
+    );
+    expect(screen.queryByLabelText("model.discoverySecretId")).toBeNull();
+    expect(screen.queryByLabelText("model.discoverySecretKey")).toBeNull();
+  });
+
   it("shows required management credentials after an unsupported list route", async () => {
     vi.mocked(discoverModels).mockRejectedValueOnce({ response: { data: { data: { reason: "credentials" } } } });
     render(<ModelDiscovery {...props()} provider="volcengine" />);

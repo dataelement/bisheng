@@ -53,6 +53,6 @@ describe('native speech provider configuration', () => {
         const config = configWithDefaults({ openai_api_key: '  ' }, fields, true);
         expect(config.openai_api_base).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1');
         expect(getConfigError(config, fields)).toBe('API Key');
-        expect(getSpeechFields('tencent', {}, t).map(field => field.key)).toEqual(['speech_app_id', 'speech_secret_id', 'speech_secret_key']);
+        expect(getSpeechFields('tencent', {}, t).map(field => field.key)).toEqual(['speech_app_id']);
     });
 });
