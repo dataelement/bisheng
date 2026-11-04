@@ -612,6 +612,7 @@
     "modelStatusChecking": "確認中",
     "notBeEmpty": "空欄にはできません",
     "pasteAdvancedParamsHere": "下のテキストボックスに高度なパラメータ設定を貼り付けまたは入力してください",
+    "contextWindowParamTip": "タスクモードは context_window からモデルのコンテキスト長（トークン数、入力と出力の合計）を読み取ります。未入力の場合、システムはプロバイダーの API から取得を試みます。",
     "rerank": "リランキング(Rerank)",
     "save": "保存",
     "saveSuccess": "保存に成功しました",
