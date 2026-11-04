@@ -11,6 +11,7 @@ import pytest
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from starlette.applications import Starlette
+from test.developer_token.test_developer_token_dependency import _prepare_principal_auth
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.developer_token import (
@@ -36,7 +37,6 @@ from bisheng.developer_token.domain.schemas import DeveloperTokenPrincipal
 from bisheng.developer_token.domain.services import DeveloperTokenService
 from bisheng.mcp_server.api.router import McpServerApp, mcp_routes
 from bisheng.open_endpoints.domain.schemas.filelib import RetrieveChunk, RetrieveResp
-from test.developer_token.test_developer_token_dependency import _prepare_principal_auth
 
 EXPECTED_TOOL_NAMES = {
     "search_knowledge",
@@ -47,6 +47,7 @@ EXPECTED_TOOL_NAMES = {
     "get_file_detail",
     "get_file_source",
     "retrieve_chunks",
+    "retrieve_folder_chunks",
     "create_document",
     "upload_file",
 }

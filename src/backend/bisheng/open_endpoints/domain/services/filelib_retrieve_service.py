@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
 from bisheng.open_endpoints.domain.schemas.filelib import RetrieveChunk, RetrieveReq, RetrieveResp
@@ -30,20 +31,43 @@ class FilelibRetrieveService:
         self.retrieval_runtime = retrieval_runtime
         self.timeout_seconds = retrieval_runtime.config.total_timeout_seconds
 
-    async def retrieve(self, req: RetrieveReq) -> RetrieveResp:
+    async def retrieve(
+        self, req: RetrieveReq, *, file_ids_by_knowledge: Mapping[int, Sequence[int]] | None = None
+    ) -> RetrieveResp:
         kb_filters = None
         if req.filters and req.filters.knowledge_base_filters:
             kb_filters = {
                 item.knowledge_base_id: {"tags": item.tags, "tag_match_mode": item.tag_match_mode}
                 for item in req.filters.knowledge_base_filters
             }
+        scope: dict[int, set[int]] | None = None
+        if file_ids_by_knowledge is not None:
+            if any(type(key) is not int for key in file_ids_by_knowledge) or set(file_ids_by_knowledge) != set(
+                req.knowledge_base_ids
+            ):
+                raise ValueError("file scope must cover exactly the requested knowledge spaces")
+            scope = {}
+            kb_filters = kb_filters or {}
+            for knowledge_id, file_ids in file_ids_by_knowledge.items():
+                if not isinstance(file_ids, Sequence) or any(type(item) is not int or item <= 0 for item in file_ids):
+                    raise ValueError("file scope requires positive integer entry ids")
+                scope[knowledge_id] = set(file_ids)
+                kb_filters.setdefault(knowledge_id, {})["file_ids"] = sorted(scope[knowledge_id])
+            if not any(scope.values()):
+                return RetrieveResp(chunks=[], total=0)
+
         results = await self.chat_service.aretrieve_chunks(
             query=req.query,
             knowledge_base_ids=req.knowledge_base_ids,
             kb_filters=kb_filters,
             top_k=req.top_k,
             max_content=req.max_content,
+            **({"strict_file_scope": True} if scope is not None else {}),
         )
+        if scope is not None and any(
+            kb_id not in scope or int(doc.metadata.get("document_id", 0)) not in scope[kb_id] for kb_id, doc in results
+        ):
+            raise ValueError("retrieval returned an entry outside the requested file scope")
         prepared_results = [
             (
                 kb_id,

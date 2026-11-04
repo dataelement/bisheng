@@ -1,9 +1,10 @@
 from typing import Annotated, Any, Literal
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_validator
 
-from bisheng.mcp_server.domain.schemas.browse import Cursor, ResourceId, StrictRequest
+from bisheng.mcp_server.domain.schemas.browse import Cursor, FolderId, ResourceId, StrictRequest
 from bisheng.mcp_server.domain.schemas.identity import McpIdentityRequest
+from bisheng.mcp_server.domain.schemas.search import MaxContent, SearchQuery, TopK
 from bisheng.open_endpoints.domain.schemas.filelib import KnowledgeBaseFilter, RetrieveFilters
 
 MaxChars = Annotated[int, Field(strict=True, ge=1, le=50000)]
@@ -17,6 +18,25 @@ class McpKnowledgeBaseFilter(KnowledgeBaseFilter):
 class McpRetrieveFilters(RetrieveFilters):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
     knowledge_base_filters: list[McpKnowledgeBaseFilter] = Field(default_factory=list, max_length=20)
+
+
+class FolderRetrieveRequest(McpIdentityRequest):
+    query: SearchQuery
+    knowledge_id: ResourceId
+    folder_id: FolderId
+    recursive: bool = Field(default=True, strict=True)
+    top_k: TopK = 5
+    max_content: MaxContent = 15000
+    filters: McpRetrieveFilters | None = None
+
+    @model_validator(mode="after")
+    def validate_folder_filters(self) -> "FolderRetrieveRequest":
+        items = self.filters.knowledge_base_filters if self.filters else []
+        if len(items) > 1 or any(
+            item.knowledge_base_id != self.knowledge_id or item.tag_match_mode != "ANY" for item in items
+        ):
+            raise ValueError("folder filters require one matching knowledge space and tag_match_mode=ANY")
+        return self
 
 
 class FileDetailRequest(McpIdentityRequest):

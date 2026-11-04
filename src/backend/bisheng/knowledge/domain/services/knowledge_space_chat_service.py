@@ -764,6 +764,17 @@ class KnowledgeSpaceChatService:
         )
         return [int(link.resource_id) for link in tag_links]
 
+    @staticmethod
+    def _validate_strict_file_scope(
+        knowledge_base_ids: list[int], kb_filters: dict[int, dict[str, Any]] | None
+    ) -> None:
+        if kb_filters is None or set(kb_filters) != set(knowledge_base_ids):
+            raise ValueError("strict file scope must cover all requested knowledge spaces")
+        for spec in kb_filters.values():
+            file_ids = spec.get("file_ids")
+            if not isinstance(file_ids, (list, tuple)) or any(type(item) is not int or item <= 0 for item in file_ids):
+                raise ValueError("strict file scope requires explicit positive integer file ids")
+
     async def aretrieve_chunks(
         self,
         *,
@@ -774,6 +785,7 @@ class KnowledgeSpaceChatService:
         max_content: int = 15000,
         skip_unauthorized: bool = False,
         preauthorized_file_ids: set[int] | None = None,
+        strict_file_scope: bool = False,
     ) -> list[tuple[int, Document]]:
         """Retrieve chunks across one or more knowledge bases without LLM generation.
 
@@ -792,6 +804,10 @@ class KnowledgeSpaceChatService:
         """
         if not knowledge_base_ids:
             raise HTTPException(status_code=400, detail="knowledge_base_ids must not be empty")
+        if strict_file_scope:
+            self._validate_strict_file_scope(knowledge_base_ids, kb_filters)
+            if preauthorized_file_ids:
+                raise ValueError("strict file scope cannot bypass space authorization")
 
         runtime = await self._get_retrieval_runtime()
         knowledge_base_ids = list(dict.fromkeys(int(item) for item in knowledge_base_ids))
@@ -829,6 +845,7 @@ class KnowledgeSpaceChatService:
                     top_k=top_k,
                     max_content=max_content,
                     preauthorized_file_ids=preauthorized_file_ids,
+                    **({"strict_file_scope": True} if strict_file_scope else {}),
                 )
             except SharedStorageContractError as exc:
                 if exc.code == SharedStorageErrorCode.RETRIEVAL_BACKEND_UNAVAILABLE:
@@ -838,6 +855,8 @@ class KnowledgeSpaceChatService:
                     ) from exc
                 raise
 
+        if strict_file_scope:
+            raise ValueError("strict file scope requires shared knowledge space retrieval")
         kb_semaphore = asyncio.Semaphore(runtime.config.max_knowledge_base_concurrency)
 
         async def _retrieve_one(kb_id: int):
@@ -922,6 +941,7 @@ class KnowledgeSpaceChatService:
         top_k: int,
         max_content: int,
         preauthorized_file_ids: set[int] | None = None,
+        strict_file_scope: bool = False,
     ) -> list[tuple[int, Document]]:
         """B1: Retrieve chunks via the shared store reader + scope resolver.
 
@@ -930,6 +950,11 @@ class KnowledgeSpaceChatService:
         Once shared routing is active, every dependency/backend failure is
         fail-closed and must never fall back to per-space storage.
         """
+        if strict_file_scope:
+            self._validate_strict_file_scope(knowledge_base_ids, kb_filters)
+            if preauthorized_file_ids:
+                raise ValueError("strict file scope cannot bypass space authorization")
+
         from bisheng.knowledge.domain.contracts.errors import (
             SharedStorageContractError,
             SharedStorageErrorCode,
@@ -1210,7 +1235,9 @@ class KnowledgeSpaceChatService:
                 merged.append(hit)
 
             async with self._retrieval_stage("authorization_mapping", kb_id):
-                mapped = await resolver.map_and_authorize_hits(scope, merged)
+                mapped = await resolver.map_and_authorize_hits(
+                    scope, merged, **({"strict_explicit": True} if strict_file_scope else {})
+                )
             for hit in mapped[:top_k]:
                 doc = Document(
                     page_content=getattr(hit, 'text', '')[:max_content],

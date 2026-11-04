@@ -72,3 +72,38 @@ async def test_repository_filters_inventory_and_uses_stable_keys(repository):
     )
     assert [r.id for r in next_page] == [2]
     assert await repository.scan_files([2], file_type=1, parent_path="") == []
+
+
+@pytest.mark.parametrize("recursive,expected", [(True, [1, 2]), (False, [1])])
+async def test_folder_scope_matches_path_segments_and_direct_layer(repository, recursive, expected):
+    """F083 覆盖 AC: AC-02;相似目录/兄弟/其他空间/未成功文件不进入范围。"""
+    for file_id, space_id, path, status in [
+        (1, 1, "/305", 2),
+        (2, 1, "/305/400", 2),
+        (3, 1, "/3050", 2),
+        (4, 1, "/306", 2),
+        (5, 2, "/305", 2),
+        (6, 1, "/305", 5),
+    ]:
+        repository.session.add(
+            KnowledgeFile(
+                id=file_id,
+                knowledge_id=space_id,
+                tenant_id=1,
+                file_type=1,
+                file_name=f"{file_id}.txt",
+                file_level_path=path,
+                status=status,
+            )
+        )
+    await repository.session.commit()
+    rows = await repository.scan_files(
+        [1],
+        file_type=1,
+        parent_path="/305",
+        recursive=recursive,
+        statuses=[2],
+        sort_by="file_name",
+        order="asc",
+    )
+    assert [row.id for row in rows] == expected
