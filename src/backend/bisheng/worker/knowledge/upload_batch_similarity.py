@@ -1,4 +1,4 @@
-"""Repair same-batch similarity after the parse result has already been committed."""
+"""Drop queued same-batch repairs. Marking happens only on the file that just parsed."""
 
 from bisheng.worker.main import bisheng_celery
 
