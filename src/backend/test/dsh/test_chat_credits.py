@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -195,3 +196,44 @@ async def test_chat_finishes_through_real_shared_settlement(succeeded, known, st
     assert terminal.provider_request_id == "provider-request"
     assert terminal.error_code == (None if succeeded else "chat_call_interrupted")
     assert version == 1
+
+
+async def test_round_admission_probes_once_then_calls_skip_the_limit(monkeypatch):
+    modes = []
+
+    async def start(model, *, mode=""):
+        modes.append(mode)
+        return (None, None, SimpleNamespace(usage=DshTokenUsage(), provider_request_id=None))
+
+    monkeypatch.setattr(chat_credits, "governed", lambda model: True)
+    monkeypatch.setattr(chat_credits, "start", start)
+    monkeypatch.setattr(chat_credits, "finish", AsyncMock())
+
+    @chat_credits.account_async
+    async def generate(model):
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content="ok"))])
+
+    async def round_():
+        await chat_credits.admit_round(object())
+        await generate(object())
+        await generate(object())
+
+    # A worker runs each round in its own task, so the flag stays inside that round.
+    await asyncio.create_task(round_())
+    # Outside the round context a call is admitted with the limit check again.
+    await generate(object())
+    assert modes == ["probe", "unmetered", "unmetered", ""]
+
+
+async def test_round_admission_failure_propagates_and_is_noop_when_ungoverned(monkeypatch):
+    from bisheng.common.errcode.dsh import DshMonthlyTokenLimitExceededError
+
+    start = AsyncMock(side_effect=DshMonthlyTokenLimitExceededError())
+    monkeypatch.setattr(chat_credits, "start", start)
+    monkeypatch.setattr(chat_credits, "governed", lambda model: False)
+    await chat_credits.admit_round(object())
+    start.assert_not_awaited()
+    monkeypatch.setattr(chat_credits, "governed", lambda model: True)
+    with pytest.raises(DshMonthlyTokenLimitExceededError):
+        await chat_credits.admit_round(object())
+    assert chat_credits._round_admitted.get() is False

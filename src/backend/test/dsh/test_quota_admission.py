@@ -192,3 +192,21 @@ async def test_live_usage_snapshot_is_coherent_and_not_missing_as_zero(quota):
     assert blocked["unknown_pending"] == 1
     with pytest.raises(QuotaRejected):
         await quota.read_usage(2, 20, "2026-10")
+
+
+async def test_probe_checks_quota_without_writing_and_unmetered_skips_limit(quota):
+    # Task-mode round start: the probe runs every admission check but leaves no request behind.
+    probe = running()
+    assert (await quota.check_and_start(probe, monthly_token_limit=1000, mode="probe")).status == "RUNNING"
+    assert await quota.redis.exists(quota.keys(probe)[4]) == 0
+    assert await quota.redis.xlen(quota.keys(probe)[5]) == 0
+    assert await quota.redis.hget(quota.keys(probe)[0], "running_count") == "0"
+    with pytest.raises(QuotaRejected, match="quota_exceeded"):
+        await quota.check_and_start(running(), monthly_token_limit=800, mode="probe")
+    # Calls inside an admitted round are recorded even past the limit.
+    inside = running()
+    assert (await quota.check_and_start(inside, monthly_token_limit=800, mode="unmetered")).status == "RUNNING"
+    assert await quota.redis.exists(quota.keys(inside)[4]) == 1
+    assert await quota.redis.hget(quota.keys(inside)[0], "running_count") == "1"
+    with pytest.raises(ValueError, match="Unknown admission mode"):
+        await quota.check_and_start(running(), mode="skip")
