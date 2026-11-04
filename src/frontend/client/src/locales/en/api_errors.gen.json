@@ -296,7 +296,7 @@
   "16224": "A declared capability could not be resolved",
   "16225": "The application publish approval scenario is not enabled in this environment",
   "16226": "Insufficient runtime capacity",
-  "16227": "Dependency installation failed while building the application",
+  "16227": "Application delivery preparation failed",
   "16228": "The application failed to start: readiness probe did not pass",
   "16229": "The table structure change must be confirmed explicitly",
   "16230": "Secrets and secret references in bisheng-app.yaml are not supported in this version",

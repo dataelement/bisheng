@@ -28,6 +28,7 @@ from runtime_manager.bundle_inputs import (
     startup_command,
 )
 from runtime_manager.material_client import MaterialClient, MaterialClientError
+from runtime_manager.static_inputs import has_static_build, select_static_root
 
 _RESULT = "BISHENG_RUNTIME_RESULT "
 _LANGUAGES = {"python3.11", "node20", "static"}
@@ -233,6 +234,13 @@ def resolve_download(document, source, offline, output):
             os.environ["BISHENG_DEPENDENCY_LOCK"] = previous
 
 
+def _inputs_marker(document, original, key):
+    marker = {"source_artifact_id": document["source_artifact_id"], "input_key": key}
+    if document["profile"]["language"] == "static":
+        marker["static_built"] = has_static_build(original)
+    return marker
+
+
 def prepare_download(client, document, *, work=Path("/work"), resolver=resolve_download):
     lock = _dependency_lock(document)
     work = _directory(work)
@@ -268,19 +276,16 @@ def prepare_download(client, document, *, work=Path("/work"), resolver=resolve_d
         shutil.copytree(original, source, dirs_exist_ok=True)
         shutil.copyfile(Path(__file__).with_name("k8s_prepare.py"), tools / "k8s_prepare.py")
         key = _input_key(document, original)
-        (work / "inputs.json").write_text(
-            json.dumps({"source_artifact_id": document["source_artifact_id"], "input_key": key}, sort_keys=True)
-        )
+        if profile["language"] == "static" and not has_static_build(original):
+            select_static_root(original, built=False)
+        (work / "inputs.json").write_text(json.dumps(_inputs_marker(document, original, key), sort_keys=True))
         return {"input_key": key, "phase": "inputs"}
     for path in (original, source, materials, output, tools):
         _directory(path)
     key = _input_key(document, original)
     selected = document.get("dependency_resolution") or {}
     marker = json.loads(safe_relative(work, "inputs.json").read_text())
-    if selected.get("input_key") != key or marker != {
-        "source_artifact_id": document["source_artifact_id"],
-        "input_key": key,
-    }:
+    if selected.get("input_key") != key or marker != _inputs_marker(document, original, key):
         raise ValueError("helper_dependency_selection_changed")
     cached = bool(selected.get("artifact_id"))
     if cached:
@@ -338,7 +343,7 @@ def prepare_upload(client, document, *, work=Path("/work")):
         _directory(path)
     key = _input_key(document, original)
     marker = json.loads(safe_relative(work, "inputs.json").read_text())
-    if marker != {"source_artifact_id": document["source_artifact_id"], "input_key": key}:
+    if marker != _inputs_marker(document, original, key):
         raise ValueError("helper_dependency_inputs_changed")
     profile = document["profile"]
     for startup_file in ("Procfile", "package.json"):
@@ -352,6 +357,8 @@ def prepare_upload(client, document, *, work=Path("/work")):
     else:
         dependency_root = output
     lock = safe_relative(dependency_root, "runtime.lock").read_bytes()
+    language = profile["language"]
+    code = select_static_root(source, built=marker["static_built"]) if language == "static" else source
     with TemporaryDirectory(prefix="helper-outputs-") as directory:
         directory = Path(directory)
         if not dependency_id:
@@ -364,18 +371,6 @@ def prepare_upload(client, document, *, work=Path("/work")):
                     metadata={"input_key": key, "profile_id": profile["profile_id"]},
                 )
             )
-        language = profile["language"]
-        if language == "static" and document.get("source_image"):
-            code = next(
-                (
-                    source / part
-                    for part in (".", "dist", "build", "public")
-                    if (source / part / "index.html").is_file()
-                ),
-                source,
-            )
-        else:
-            code = source / "dist" if language == "static" and (source / "dist/index.html").is_file() else source
         if code.is_symlink() or not code.resolve().is_relative_to(work.resolve()):
             raise ValueError("helper_output_path_escape")
         archive = archive_directory(

@@ -2876,6 +2876,7 @@
     "permissionTiers": {
       "editor": "Editor",
       "manager": "Manager",
+      "owner": "Owner",
       "viewer": "Viewer"
     },
     "resourceTypes": {

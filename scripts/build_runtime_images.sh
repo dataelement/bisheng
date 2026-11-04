@@ -7,6 +7,9 @@ RUNTIME_PUBLISH="${RUNTIME_PUBLISH:-0}"
 RUNTIME_IMAGE_NAMESPACE="${RUNTIME_IMAGE_NAMESPACE:-dataelement}"
 [[ "$RUNTIME_RELEASE" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,100}$ ]] || exit 64
 [[ "$TARGET_ARCH" == amd64 || "$TARGET_ARCH" == arm64 ]] || exit 64
+# A forced Git tag update may explicitly reissue this exact release. Normal builds remain immutable.
+RUNTIME_REPLACE_RELEASE="${RUNTIME_REPLACE_RELEASE:-}"
+[[ -z "$RUNTIME_REPLACE_RELEASE" || "$RUNTIME_REPLACE_RELEASE" == "$RUNTIME_RELEASE" ]] || exit 64
 [[ "$RUNTIME_PUBLISH" == 0 || "$RUNTIME_PUBLISH" == 1 ]] || exit 64
 [[ "$RUNTIME_IMAGE_NAMESPACE" =~ ^[A-Za-z0-9][A-Za-z0-9./:_-]+$ ]] || exit 64
 if [[ "$RUNTIME_PUBLISH" == 1 && -n "$(git status --porcelain)" ]]; then
@@ -35,7 +38,10 @@ if [[ "$RUNTIME_PUBLISH" == 1 ]]; then
   for name in "${names[@]}"; do
     image="$(image_for "$name")"
     if docker buildx imagetools inspect "$image" >"$metadata_dir/$name.existing" 2>"$metadata_dir/$name.error"; then
-      echo "Refusing to overwrite published image: $image" >&2; exit 1
+      if [[ "$RUNTIME_REPLACE_RELEASE" != "$RUNTIME_RELEASE" ]]; then
+        echo "Refusing to overwrite published image: $image" >&2; exit 1
+      fi
+      echo "Explicit release reissue: $image; publication still requires all native smokes"
     elif ! grep -Eqi 'manifest unknown|not found|no such manifest' "$metadata_dir/$name.error"; then
       echo "Cannot establish tag absence for $name; publication refused" >&2; exit 1
     fi
@@ -79,7 +85,7 @@ for name in "${names[@]}"; do
     runtime-helper|runtime-assembler)
       docker run "${common[@]}" --workdir /smoke --env PYTHONPATH=/smoke \
         --mount "type=bind,src=$shadow,dst=/smoke,readonly" --entrypoint python "$image" -I -c \
-        'import os,sys,sysconfig,importlib,pathlib,tempfile; assert sys.flags.isolated == 1 and os.getuid() == 10001; assert pathlib.Path("/smoke/runtime_manager.py").read_text().startswith("raise RuntimeError"); modules=[importlib.import_module("runtime_manager."+name) for name in ("k8s_helper","k8s_prepare","k8s_data_helper","k8s_capabilities","oci_assembler")]; assert all(pathlib.Path(m.__file__).is_relative_to(sysconfig.get_paths()["purelib"]) for m in modules); from runtime_manager.k8s_capabilities import storage_checks; assert all(storage_checks("/tmp", require_filesystem=False).values()); assert not os.access("/",os.W_OK)'
+        'import os,sys,sysconfig,importlib,pathlib,tempfile; assert sys.flags.isolated == 1 and os.getuid() == 10001; assert pathlib.Path("/smoke/runtime_manager.py").read_text().startswith("raise RuntimeError"); modules=[importlib.import_module("runtime_manager."+name) for name in ("k8s_helper","k8s_prepare","k8s_data_helper","k8s_capabilities","oci_assembler","image_check")]; assert all(pathlib.Path(m.__file__).is_relative_to(sysconfig.get_paths()["purelib"]) for m in modules); from runtime_manager.k8s_capabilities import storage_checks; assert all(storage_checks("/tmp", require_filesystem=False).values()); assert not os.access("/",os.W_OK)'
       # Exercise the production fixed-path resolver, not just import/version checks.
       # No credential, application execution or network is allowed in this smoke.
       docker run "${common[@]}" -i --entrypoint python "$image" -I - <<'PY_RESOLVE'
@@ -93,6 +99,9 @@ os.environ.update({"PIP_NO_INDEX": "1", "PIP_DISABLE_PIP_VERSION_CHECK": "1", "U
 assert Path("/opt/bisheng/prepare.py").is_file()
 assert list(Path("/opt/bisheng/wheelhouse").glob("bisheng_sdk-0.1.1-*.whl"))
 assert Path("/usr/share/licenses/node/Node.LICENSE").is_file()
+assert Path("/usr/local/bin/crane").is_file()
+assert Path("/usr/share/licenses/crane/crane-build.txt").is_file()
+assert Path("/usr/share/licenses/crane/modules.json").is_file()
 assert Path("/usr/share/licenses/node/npm.LICENSE").is_file()
 
 with TemporaryDirectory(prefix="native-resolve-") as temporary:

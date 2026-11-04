@@ -19,7 +19,8 @@ import {
   SERVICE_ACCOUNT_PERMISSION_TIERS,
   SERVICE_ACCOUNT_RESOURCE_TYPES,
 } from "@/pages/SystemPage/components/ServiceAccount/resourceGrantUtils"
-import { render, screen, waitFor, within } from "@/test/test-utils"
+import { screen, waitFor, within } from "@/test/test-utils"
+import { renderWithServiceAccountScope as render } from "@/test/serviceAccountTestScope"
 import type {
   ApiKeyItem,
   ServiceAccountResourceGrant,
@@ -465,6 +466,7 @@ describe("service-account resource grants", () => {
       { key: "manager", name: "Manager", level: 3, active: true },
       { key: "viewer", name: "Viewer", level: 1, active: true },
       { key: "editor", name: "Editor", level: 2, active: true },
+      { key: "custom_auditor", name: "Auditor", level: 2, active: true },
     ])
     const user = userEvent.setup()
 
@@ -504,7 +506,11 @@ describe("service-account resource grants", () => {
     expect(await screen.findAllByRole("option")).toHaveLength(
       SERVICE_ACCOUNT_PERMISSION_TIERS.length,
     )
-    expect(screen.queryByRole("option", { name: /owner/i })).toBeNull()
+    expect(
+      screen.getByRole("option", {
+        name: "openApiManagement.permissionTiers.owner",
+      }),
+    ).toBeVisible()
   })
 
   it("requires an active key with the matching non-delegate scope", () => {
