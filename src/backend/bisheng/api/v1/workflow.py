@@ -427,7 +427,9 @@ async def create_flow(
     # Determine if the user repeats the skill name
     with get_sync_db_session() as session:
         if session.exec(
-            select(Flow).where(
+            select(Flow)
+            .where(Flow.is_delete == 0)
+            .where(
                 Flow.name == flow.name, Flow.flow_type == FlowType.WORKFLOW.value, Flow.user_id == login_user.user_id
             )
         ).first():

@@ -38,6 +38,7 @@ from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.open_api.domain.repositories.credential_repository import CredentialRepository
 from bisheng.tool.domain.models.gpts_tools import GptsToolsType
 from bisheng.user.domain.models.user import User, UserDao
+from bisheng.workflow.domain.repositories.history_repository import WorkflowHistoryRepository
 
 
 def _db_dialect() -> str:
@@ -1379,7 +1380,7 @@ class AuditLogService:
 
         users_data, flows_data, assistants_data, user_groups_map, versioned = await asyncio.gather(
             UserDao.aget_user_by_ids(target_user_ids_list),
-            FlowDao.aget_flow_by_ids(list(target_flow_ids)),
+            WorkflowHistoryRepository.aget_by_ids(list(target_flow_ids)),
             AssistantDao.aget_assistants_by_ids(list(target_assistant_ids)),
             get_users_groups_map(target_user_ids_list),
             AuditSessionRepository.chat_ids_with_task_version(session.chat_id for session in res),
