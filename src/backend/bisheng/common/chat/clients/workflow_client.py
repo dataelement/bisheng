@@ -108,6 +108,10 @@ class WorkflowClient(BaseClient):
                 raise NotFoundError.http_exception()
             if session is None:
                 workflow_db = FlowDao.get_flow_by_id(workflow_id)
+                if workflow_db is None:
+                    from bisheng.common.errcode.http_error import NotFoundError
+
+                    raise NotFoundError.http_exception()
                 await ChatSessionService.create_subject_session(
                     MessageSession(
                         chat_id=self.chat_id,
@@ -240,11 +244,9 @@ class WorkflowClient(BaseClient):
         return False
 
     async def ensure_workflow_available(self, workflow_id: str) -> bool:
-        # Builder preview uses an empty chat ID and may execute draft workflows.
-        if not self.chat_id:
-            return True
+        # Draft previews may run offline flows, but never deleted ones.
         workflow_db = FlowDao.get_flow_by_id(workflow_id)
-        if workflow_db and workflow_db.status == FlowStatus.ONLINE.value:
+        if workflow_db and (not self.chat_id or workflow_db.status == FlowStatus.ONLINE.value):
             return True
 
         if self.workflow:

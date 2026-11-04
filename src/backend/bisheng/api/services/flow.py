@@ -254,7 +254,7 @@ class FlowService(BaseService):
 
         flow_info.logo = await cls.get_logo_share_link_async(flow_info.logo)
 
-        payload = jsonable_encoder(flow_info)
+        payload = jsonable_encoder(flow_info, exclude={"is_delete"})
         payload["can_share"] = await check_business_action(
             login_user,
             resource_type="workflow",
