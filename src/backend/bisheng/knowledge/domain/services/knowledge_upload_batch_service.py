@@ -1,7 +1,6 @@
-"""Upload-confirmation batches and the similarity repair that runs after parse commit."""
+"""Upload-confirmation batches. Similarity marking follows the file that just finished parsing."""
 
 from collections.abc import Awaitable, Callable
-from datetime import datetime
 from uuid import UUID, uuid4
 
 from loguru import logger
@@ -10,11 +9,9 @@ from sqlmodel import col, delete, select
 
 from bisheng.common.errcode.knowledge_space import UploadBatchKeyRejectedError
 from bisheng.core.database import get_async_db_session
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileStatus
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_file_similarity_candidate import KnowledgeFileSimilarityCandidate
 from bisheng.knowledge.domain.models.knowledge_upload_batch import KnowledgeUploadBatch, KnowledgeUploadBatchFile
-
-Schedule = Callable[[int, int], None]
 
 
 class UploadBatchEpochStale(Exception):
@@ -109,43 +106,6 @@ async def delete_upload_batch_members(file_ids: list[int]) -> None:
         await session.commit()
 
 
-async def bump_upload_batch_revision(batch_id: int) -> int:
-    async with get_async_db_session() as session:
-        batch = (
-            await session.exec(
-                select(KnowledgeUploadBatch).where(KnowledgeUploadBatch.id == batch_id).with_for_update()
-            )
-        ).one()
-        batch.revision = int(batch.revision or 0) + 1
-        batch.update_time = datetime.now()
-        session.add(batch)
-        await session.commit()
-        await session.refresh(batch)
-        return int(batch.revision)
-
-
-async def find_upload_batch_id(file_id: int) -> int | None:
-    async with get_async_db_session() as session:
-        member = (
-            await session.exec(select(KnowledgeUploadBatchFile).where(KnowledgeUploadBatchFile.file_id == file_id))
-        ).first()
-        if member is None:
-            return None
-        return int(member.batch_id)
-
-
-async def list_upload_batch_file_ids(batch_id: int) -> list[int]:
-    async with get_async_db_session() as session:
-        rows = (
-            await session.exec(
-                select(KnowledgeUploadBatchFile.file_id)
-                .where(KnowledgeUploadBatchFile.batch_id == batch_id)
-                .order_by(KnowledgeUploadBatchFile.file_id)
-            )
-        ).all()
-        return [int(file_id) for file_id in rows]
-
-
 async def commit_similarity_if_epoch(
     version_service,
     file_id: int,
@@ -181,12 +141,6 @@ async def commit_similarity_if_epoch(
     return "written"
 
 
-def _default_schedule(batch_id: int, epoch: int) -> None:
-    from bisheng.worker.knowledge.upload_batch_similarity import reconcile_upload_batch_similarity
-
-    reconcile_upload_batch_similarity.delay(batch_id, epoch)
-
-
 async def _refresh_file(file_id: int, batch_epoch: tuple[int, int] | None) -> int:
     from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
         KnowledgeDocumentRepositoryImpl,
@@ -216,36 +170,13 @@ async def _refresh_file(file_id: int, batch_epoch: tuple[int, int] | None) -> in
         return await service.refresh_similar_candidates_for_file(file_id, batch_epoch=batch_epoch)
 
 
-async def finish_parsed_file_similarity(
-    file_id: int,
-    *,
-    schedule: Schedule | None = None,
-) -> None:
-    """Called after the parse status commit. Files without a batch only refresh themselves."""
-    batch_id = await find_upload_batch_id(file_id)
-    if batch_id is None:
-        await _refresh_file(file_id, None)
-        return
-    epoch = await bump_upload_batch_revision(batch_id)
-    try:
-        await _refresh_file(file_id, (batch_id, epoch))
-    except UploadBatchEpochStale:
-        logger.info(
-            "upload batch similarity epoch moved file_id={} batch_id={} epoch={}",
-            file_id,
-            batch_id,
-            epoch,
-        )
-    except Exception:
-        logger.exception("upload batch self similarity failed file_id={}", file_id)
-    try:
-        (schedule or _default_schedule)(batch_id, epoch)
-    except Exception:
-        logger.exception(
-            "upload batch similarity schedule failed file_id={} batch_id={}",
-            file_id,
-            batch_id,
-        )
+async def finish_parsed_file_similarity(file_id: int) -> None:
+    """Refresh only the file that just finished parsing.
+
+    Same-batch files stay unmarked until their own parse succeeds, matching uploads
+    that were registered separately.
+    """
+    await _refresh_file(file_id, None)
 
 
 def run_similarity_after_parse(
@@ -261,30 +192,11 @@ def run_similarity_after_parse(
         logger.exception("inline similarity candidate refresh failed file_id={}", file_id)
 
 
-async def _file_ready_for_batch_similarity(file_id: int) -> bool:
-    async with get_async_db_session() as session:
-        current = await session.get(KnowledgeFile, file_id)
-        if current is None or current.deleted_at is not None:
-            return False
-        if current.status != KnowledgeFileStatus.SUCCESS.value or current.similar_status == 2:
-            return False
-        return True
-
-
 async def reconcile_upload_batch(batch_id: int, epoch: int) -> str:
-    async with get_async_db_session() as session:
-        batch = await session.get(KnowledgeUploadBatch, batch_id)
-        if batch is None or int(batch.revision or 0) != epoch:
-            return "skipped"
-    for file_id in await list_upload_batch_file_ids(batch_id):
-        async with get_async_db_session() as session:
-            batch = await session.get(KnowledgeUploadBatch, batch_id)
-            if batch is None or int(batch.revision or 0) != epoch:
-                return "skipped"
-        if not await _file_ready_for_batch_similarity(file_id):
-            continue
-        try:
-            await _refresh_file(file_id, (batch_id, epoch))
-        except UploadBatchEpochStale:
-            return "skipped"
-    return "done"
+    """Ignore previously queued batch repairs.
+
+    Those jobs rewrote earlier files. Marking now happens only on the file that
+    just finished parsing, so a queued repair must not add badges.
+    """
+    logger.info("upload batch similarity repair skipped batch_id={} epoch={}", batch_id, epoch)
+    return "skipped"

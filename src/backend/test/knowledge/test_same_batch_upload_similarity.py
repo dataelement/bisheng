@@ -78,32 +78,61 @@ async def test_same_key_is_one_batch_and_omitted_key_starts_another(async_db_ses
     assert third != first
 
 
-async def test_later_file_makes_both_sides_list_each_other(async_db_session, monkeypatch):
+async def test_same_batch_marks_only_the_file_that_finishes_later(async_db_session, monkeypatch):
     configure(monkeypatch, enable_tfidf_refine=False)
     _bind_session(monkeypatch, async_db_session)
     async_db_session.add(Knowledge(id=1, name="space", type=3, user_id=11, tenant_id=1))
     await async_db_session.commit()
     await seed(async_db_session, 101, tenant_id=1)
-    later = await seed(async_db_session, 102, tenant_id=1)
-    later.status = KnowledgeFileStatus.PROCESSING.value
-    async_db_session.add(later)
+    second = await seed(async_db_session, 102, tenant_id=1)
+    third = await seed(async_db_session, 103, tenant_id=1)
+    second.status = KnowledgeFileStatus.PROCESSING.value
+    third.status = KnowledgeFileStatus.PROCESSING.value
+    async_db_session.add(second)
+    async_db_session.add(third)
     await async_db_session.commit()
+    batch_id = await prepare_upload_batch(tenant_id=1, knowledge_id=1, user_id=11, upload_batch_key=KEY_A)
+    for file_id in (101, 102, 103):
+        await attach_upload_batch_file(batch_id=batch_id, file_id=file_id, tenant_id=1)
+
+    await finish_parsed_file_similarity(101)
+    assert await _candidate_targets(async_db_session, 101) == set()
+
+    second.status = KnowledgeFileStatus.SUCCESS.value
+    async_db_session.add(second)
+    await async_db_session.commit()
+    await finish_parsed_file_similarity(102)
+    assert await _candidate_targets(async_db_session, 101) == set()
+    assert await _candidate_targets(async_db_session, 102) == {101}
+
+    third.status = KnowledgeFileStatus.SUCCESS.value
+    async_db_session.add(third)
+    await async_db_session.commit()
+    await finish_parsed_file_similarity(103)
+    assert await _candidate_targets(async_db_session, 101) == set()
+    assert await _candidate_targets(async_db_session, 102) == {101}
+    assert await _candidate_targets(async_db_session, 103) == {101, 102}
+    first = await async_db_session.get(KnowledgeFile, 101)
+    marked_second = await async_db_session.get(KnowledgeFile, 102)
+    marked_third = await async_db_session.get(KnowledgeFile, 103)
+    assert first.similar_status == 0
+    assert marked_second.similar_status == 1
+    assert marked_third.similar_status == 1
+
+
+async def test_queued_batch_repair_does_not_mark_earlier_files(async_db_session, monkeypatch):
+    configure(monkeypatch, enable_tfidf_refine=False)
+    _bind_session(monkeypatch, async_db_session)
+    async_db_session.add(Knowledge(id=1, name="space", type=3, user_id=11, tenant_id=1))
+    await async_db_session.commit()
+    await seed(async_db_session, 101, tenant_id=1)
+    await seed(async_db_session, 102, tenant_id=1)
     batch_id = await prepare_upload_batch(tenant_id=1, knowledge_id=1, user_id=11, upload_batch_key=KEY_A)
     await attach_upload_batch_file(batch_id=batch_id, file_id=101, tenant_id=1)
     await attach_upload_batch_file(batch_id=batch_id, file_id=102, tenant_id=1)
-    scheduled: list[tuple[int, int]] = []
-
-    await finish_parsed_file_similarity(101, schedule=lambda batch, epoch: scheduled.append((batch, epoch)))
-    assert 102 not in await _candidate_targets(async_db_session, 101)
-
-    later.status = KnowledgeFileStatus.SUCCESS.value
-    async_db_session.add(later)
-    await async_db_session.commit()
-    await finish_parsed_file_similarity(102, schedule=lambda batch, epoch: scheduled.append((batch, epoch)))
-    await reconcile_upload_batch(scheduled[-1][0], scheduled[-1][1])
-
-    assert await _candidate_targets(async_db_session, 101) == {102}
-    assert await _candidate_targets(async_db_session, 102) == {101}
+    assert await reconcile_upload_batch(batch_id, 1) == "skipped"
+    assert await _candidate_targets(async_db_session, 101) == set()
+    assert await _candidate_targets(async_db_session, 102) == set()
 
 
 async def test_failed_parse_does_not_join_similarity(async_db_session, monkeypatch):
@@ -119,9 +148,7 @@ async def test_failed_parse_does_not_join_similarity(async_db_session, monkeypat
     batch_id = await prepare_upload_batch(tenant_id=1, knowledge_id=1, user_id=11, upload_batch_key=KEY_A)
     await attach_upload_batch_file(batch_id=batch_id, file_id=101, tenant_id=1)
     await attach_upload_batch_file(batch_id=batch_id, file_id=103, tenant_id=1)
-    scheduled: list[tuple[int, int]] = []
-    await finish_parsed_file_similarity(101, schedule=lambda batch, epoch: scheduled.append((batch, epoch)))
-    await reconcile_upload_batch(scheduled[-1][0], scheduled[-1][1])
+    await finish_parsed_file_similarity(101)
     assert await _candidate_targets(async_db_session, 101) == set()
     assert await _candidate_targets(async_db_session, 103) == set()
     refreshed = await async_db_session.get(KnowledgeFile, 103)
@@ -141,9 +168,7 @@ async def test_dismissed_file_is_not_recalculated(async_db_session, monkeypatch)
     batch_id = await prepare_upload_batch(tenant_id=1, knowledge_id=1, user_id=11, upload_batch_key=KEY_A)
     await attach_upload_batch_file(batch_id=batch_id, file_id=101, tenant_id=1)
     await attach_upload_batch_file(batch_id=batch_id, file_id=102, tenant_id=1)
-    scheduled: list[tuple[int, int]] = []
-    await finish_parsed_file_similarity(102, schedule=lambda batch, epoch: scheduled.append((batch, epoch)))
-    await reconcile_upload_batch(scheduled[-1][0], scheduled[-1][1])
+    await finish_parsed_file_similarity(102)
     kept = await async_db_session.get(KnowledgeFile, 101)
     assert kept.similar_status == 2
     assert await _candidate_targets(async_db_session, 101) == set()
@@ -183,9 +208,7 @@ async def test_separate_confirmations_do_not_rescore_the_earlier_file(async_db_s
     second = await prepare_upload_batch(tenant_id=1, knowledge_id=1, user_id=11, upload_batch_key=KEY_B)
     await attach_upload_batch_file(batch_id=first, file_id=101, tenant_id=1)
     await attach_upload_batch_file(batch_id=second, file_id=102, tenant_id=1)
-    scheduled: list[tuple[int, int]] = []
-    await finish_parsed_file_similarity(102, schedule=lambda batch, epoch: scheduled.append((batch, epoch)))
-    await reconcile_upload_batch(scheduled[-1][0], scheduled[-1][1])
+    await finish_parsed_file_similarity(102)
     assert await _candidate_targets(async_db_session, 101) == set()
     assert await _candidate_targets(async_db_session, 102) == {101}
 
@@ -200,9 +223,7 @@ async def test_different_company_is_not_a_candidate(async_db_session, monkeypatc
     batch_id = await prepare_upload_batch(tenant_id=1, knowledge_id=1, user_id=11, upload_batch_key=KEY_A)
     await attach_upload_batch_file(batch_id=batch_id, file_id=101, tenant_id=1)
     await attach_upload_batch_file(batch_id=batch_id, file_id=102, tenant_id=1)
-    scheduled: list[tuple[int, int]] = []
-    await finish_parsed_file_similarity(102, schedule=lambda batch, epoch: scheduled.append((batch, epoch)))
-    await reconcile_upload_batch(scheduled[-1][0], scheduled[-1][1])
+    await finish_parsed_file_similarity(102)
     assert 102 not in await _candidate_targets(async_db_session, 101)
     assert 101 not in await _candidate_targets(async_db_session, 102)
 
@@ -219,11 +240,11 @@ async def test_similarity_failure_keeps_parse_success(async_db_session, monkeypa
         raise RuntimeError("similarity down")
 
     monkeypatch.setattr(batch_service, "_refresh_file", explode)
-    scheduled: list[tuple[int, int]] = []
-    await finish_parsed_file_similarity(101, schedule=lambda batch, epoch: scheduled.append((batch, epoch)))
+    with pytest.raises(RuntimeError, match="similarity down"):
+        await finish_parsed_file_similarity(101)
     current = await async_db_session.get(KnowledgeFile, ready.id)
     assert current.status == KnowledgeFileStatus.SUCCESS.value
-    assert scheduled == [(batch_id, 1)]
+    assert current.similar_status == 0
 
 
 def test_parse_hook_swallows_similarity_errors():
