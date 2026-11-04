@@ -214,7 +214,7 @@
     "workbenchApps": "Apps",
     "workbench1": "Subscribe",
     "workbench2": "Knowledge Space",
-    "linsightTaskMode": "Task Mode",
+    "linsightTaskMode": "Deep research",
     "annotation": "Annotation",
     "approval": "Approval",
     "models": "Models",
@@ -351,7 +351,7 @@
     "treeDepartmentSelectEmpty": "No departments yet. Create the org tree under Organization & Members first.",
     "menuPermissionSection": "Menu permissions",
     "menuPermissionHint": "Turning off Admin Console hides its entry in the workspace and disables its child menus; turning off Workspace blocks the workspace entry.",
-    "workbenchTaskModeHint": "Sub-capability of Home. When off, the workspace home hides skills and the task-mode switch, and the top-left \"New Task\" entry is hidden too.",
+    "workbenchTaskModeHint": "Sub-capability of Home. When off, the workspace home hides skills and the deep research switch, and the top-left \"New Task\" entry is hidden too.",
     "menuApprovalMode": "Show unauthorized menus (supports requests)",
     "menuApprovalModeHint": "When on, unauthorized menu entries stay visible and users may request permission; when off, all menus without access are hidden automatically.",
     "menuApprovalModeWorkbenchHint": "When on, unauthorized workbench menu entries stay visible and users may request permission; when off, all workbench menus without access are hidden automatically.",
@@ -480,7 +480,7 @@
     "appearanceSettings": "Appearance",
     "inviteCode": {
       "tab": "Invite codes",
-      "hint": "Generate a code and send it to the user. They bind it in task mode. Each new task uses one time.",
+      "hint": "Generate a code and send it to the user. They bind it in deep research. Each new task uses one time.",
       "searchPlaceholder": "Search code or batch name",
       "create": "Generate codes",
       "empty": "No invite codes yet",
@@ -801,14 +801,14 @@
       "modelNameDuplicate": "Display name cannot be duplicated",
       "required": "Cannot be empty",
       "voiceTypeRequired": "Voice type is required",
-      "taskModeNameRequired": "Task mode display name is required"
+      "taskModeNameRequired": "Deep research display name is required"
     },
     "systemPrompt2": "# Role\nYou are the $t(bisheng) Intelligent Q&A Assistant. Your task is to answer user questions by combining the query with available tools (such as knowledge base retrieval and web search) when necessary to obtain supporting evidence.\n\n# General Requirements\n1. Always respond in the language currently used by the user.\n2. Maintain a rigorous, professional, and clear style.\n3. Prefer answers based on known information or tool results; if tools are needed, search first, then answer.\n4. Do not present unverified guesses or assumptions as facts.\n\n# Tool Usage Rules\n## 1. Knowledge Base / Web Search\nWhen a question depends on knowledge base or web search results, only answer if the retrieved information is clearly relevant and sufficient to support the response.\n\nDo NOT answer based on results if:\n- Results are empty\n- Results are irrelevant\n- Relevance is weak and cannot support a clear conclusion\n- Information is insufficient\n\n## 2. No Fabrication\n- Do NOT fabricate any knowledge base results, search results, images, document snippets, or reference IDs\n- Do NOT claim \"according to search results\" without actual evidence\n- Do NOT invent or complete nonexistent reference IDs\n\n# Rendering Rules\n## 1. Image Rendering\nIf results include image references like: `![image](path/IMAGE_1.png)`\n\nYou must:\n- Preserve original Markdown format\n- Not modify, delete, or transform it\n\n## 2. Chart Rendering\nIf charts are needed, use ```echarts code blocks:\n\n```echarts\n{\n  \\\"title\\\": {\n    \\\"text\\\": \\\"ECharts Example\\\"\n  },\n  \\\"tooltip\\\": {},\n  \\\"legend\\\": {\n    \\\"data\\\": [\\\"Sales\\\"]\n  },\n  \\\"xAxis\\\": {\n    \\\"data\\\": [\\\"Shirts\\\", \\\"Sweaters\\\", \\\"Chiffon\\\", \\\"Pants\\\", \\\"Heels\\\", \\\"Socks\\\"]\n  },\n  \\\"yAxis\\\": {},\n  \\\"series\\\": [{\n    \\\"name\\\": \\\"Sales\\\",\n    \\\"type\\\": \\\"bar\\\",\n    \\\"data\\\": [5, 20, 36, 10, 10, 20]\n  }]\n}\n```\n\n# Source Numbers\n\nEvery retrieved item carries a number (knowledge base `<ref>S3</ref>`, web search `\"ref\": \"S7\"`). Whenever a fact, figure or quotation in your answer comes from retrieved material, put its number at the end of that sentence or paragraph: `…market share is 31%.[S3]`; for several sources write `[S3][S7]`. Only use numbers that appear in the retrieval results or in earlier answers, and never invent one; a number from an earlier answer still refers to the same item. Do not number sentences that are not based on retrieved material. The number is the whole citation: do not add a reference list or source names. If other parts of this prompt describe a different citation format, this section prevails.\n\n## Other\nCurrent time: {cur_date}。",
     "webSearchPrompt": "# The following content is based on the search results of the message sent by the user:\n{search_results}\nIn the search results I provide you, each result is in the format [webpage X begin]...[webpage X end], where X represents the numerical index of each article. Please cite the context at the end of sentences when appropriate. Use the citation number [citation:X] format in the corresponding part of the answer. If a sentence comes from multiple contexts, list all relevant citation numbers, for example: cite[3]:cite[5]. Remember not to concentrate citations at the end but list them in the corresponding parts of the answer.\nWhen answering, please note the following points:\n- Today is {cur_date}.\n- Not all content in the search results is closely related to the user's question. You need to combine the question and filter the search results.\n- For enumeration questions (such as listing all flight information), try to keep the answer within 10 key points and inform the user that they can check the source for complete information. Prioritize providing complete and most relevant items; do not proactively inform the user of content not provided in the search results unless necessary.\n- For creative questions (such as writing an essay), ensure that you cite the corresponding reference numbers in the body paragraphs, for example: cite[3]:cite[5]. Do not only cite at the end of the article. Interpret and summarize the user's requirements, choose an appropriate format, fully utilize the search results, and extract important information to generate answers that meet the user's requirements, are highly insightful, creative, and professional. Extend the length of your creation as much as possible, infer the user's intent for each key point, and provide multi-angle answers with substantial information and detailed explanations.\n- If the answer is long, try to structure it and summarize in paragraphs. If you need to answer in points, try to limit it to 5 points and merge related content.\n- For objective questions, if the answer is very short, you can add one or two additional pieces of relevant information to enrich the content.\n- Choose an appropriate and aesthetically pleasing answer format based on the user's requirements and content to ensure readability.\n- Your answer should be based on multiple relevant web pages and should not repeatedly cite the same page.\n- Unless the user requests otherwise, the language of your answer should match the language of the user's question.\n\n# User message is:\n{question}",
     "internationalization": "You are a knowledge base Q&A assistant:\n1. Answer questions in the language used by the user, and ensure the answers are rigorous and professional.\n2. You need to answer based on the content in the following [Reference Text]. Only respond when the [Reference Text] has relevant information directly related to the user's question. Do not provide answers based on your own knowledge. If the relevant content includes images, output the image source file directly. If placeholders like `![image](path/IMAGE_1.png)` are found, please retain these placeholders without modifying or deleting them.\n3. If the document contains tables, do not make any modifications or return the table in markdown format.\n4. Since the [Reference Text] may contain information from different sources, which might lead to different or conflicting answers, please list these answers if discrepancies arise. If there is no conflict, provide the final result only.\n5. If the content in the [Reference Text] is not related to the user's question, reply with \"No relevant content found.\"\n\n# Reference Text\n{retrieved_file_content}\n\n# User's Question\n{question}",
-    "taskModeName": "Task Mode Display Name",
-    "taskModeInputPlaceholder": "Task Mode Input Placeholder",
-    "taskModeFullName": "Task Mode",
+    "taskModeName": "Deep Research Display Name",
+    "taskModeInputPlaceholder": "Deep Research Input Placeholder",
+    "taskModeFullName": "Deep research",
     "blindOverwriteTitle": "Save these settings?",
     "blindOverwriteDesc": "This page is showing default settings — the saved workbench configuration could not be loaded. If one already exists, saving will overwrite it entirely with defaults. Refresh the page to check before saving.",
     "blindOverwriteOk": "Save anyway"
@@ -842,7 +842,7 @@
     "modelStatusChecking": "Checking",
     "notBeEmpty": "cannot be empty",
     "pasteAdvancedParamsHere": "Please paste or enter your advanced parameter configuration in the text box below",
-    "contextWindowParamTip": "Task mode reads the model's context length (in tokens, input plus output) from context_window. If it is empty, the system tries to get the length from the provider's API.",
+    "contextWindowParamTip": "Deep research reads the model's context length (in tokens, input plus output) from context_window. If it is empty, the system tries to get the length from the provider's API.",
     "rerank": "Rerank",
     "save": "Save",
     "saveSuccess": "Save Success",
@@ -1287,7 +1287,7 @@
     "modelDescription": "Description",
     "modelDescriptionPlaceholder": "Shown in the model picker",
     "vision": "Vision",
-    "visionText": "When enabled, the model will answer based on image content (supports PNG, JPEG, WEBP, non-animated GIF formats). Note that only multimodal models support this capability. While it is off, task mode will not hand images to this model either.",
+    "visionText": "When enabled, the model will answer based on image content (supports PNG, JPEG, WEBP, non-animated GIF formats). Note that only multimodal models support this capability. While it is off, deep research will not hand images to this model either.",
     "webSearchPrompt": "Web Search Prompt",
     "confirmDelete": "Are you sure you want to delete?",
     "deleteFailed": "Delete failed",
@@ -1895,7 +1895,7 @@
       "daily": "Daily chat",
       "assistant": "Assistant session",
       "workflow": "Workflow session",
-      "task": "Task mode"
+      "task": "Deep research"
     }
   },
   "tag": {
@@ -2684,7 +2684,7 @@
       "save": "Save",
       "cancel": "Cancel",
       "editSubtitle": "Changes take effect for end users as soon as you save",
-      "createSubtitle": "Create a skill end users can select in task mode"
+      "createSubtitle": "Create a skill end users can select in deep research"
     },
     "uploadDialog": {
       "title": "Import Skill",
@@ -2897,7 +2897,7 @@
       },
       "chat_invoke": {
         "label": "Invoke chats and tasks",
-        "desc": "Start daily-mode chats and task-mode tasks, read chat configuration, upload attachments, and query, download or stop tasks."
+        "desc": "Start daily-mode chats and deep research tasks, read chat configuration, upload attachments, and query, download or stop tasks."
       },
       "knowledge_read": {
         "label": "Read knowledge",
