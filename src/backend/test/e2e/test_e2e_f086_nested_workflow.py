@@ -185,6 +185,17 @@ class Flows:
         self.token = token
         self.headers = auth_headers(token)
 
+    @classmethod
+    async def for_caller(cls, client: httpx.AsyncClient, token: str) -> Flows:
+        """Bind the caller's management tenant: 3.0 rejects workflow writes without it (19703)."""
+        flows = cls(client, token)
+        resp = await client.get(
+            f"{API_BASE}/workflow/list", params={"page_num": 1, "page_size": 1, "flow_type": 10}, headers=flows.headers
+        )
+        assert_resp_200(resp)
+        flows.headers["X-Management-Tenant"] = resp.headers["X-Management-Tenant"]
+        return flows
+
     async def create(self, name: str, data: dict) -> dict:
         resp = await self.client.post(
             f"{API_BASE}/workflow/create",
@@ -375,7 +386,7 @@ async def client():
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def admin(client: httpx.AsyncClient):
-    flows = Flows(client, await get_admin_token(client))
+    flows = await Flows.for_caller(client, await get_admin_token(client))
     await cleanup(flows)
     yield flows
     await cleanup(flows)
@@ -390,7 +401,7 @@ async def user(client: httpx.AsyncClient, admin: Flows) -> tuple[int, Flows]:
         await create_test_user(client, admin.token, USER_NAME, password=USER_PASSWORD)
         token = await get_user_token(client, USER_NAME, USER_PASSWORD)
     info = assert_resp_200(await client.get(f"{API_BASE}/user/info", headers=auth_headers(token)))
-    return info["user_id"], Flows(client, token)
+    return info["user_id"], await Flows.for_caller(client, token)
 
 
 @pytest.fixture
