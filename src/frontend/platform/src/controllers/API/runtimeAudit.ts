@@ -1,7 +1,5 @@
 import request from '@/controllers/request'
 import { createDshOperationId } from '@/util/dshOperationId'
-import { toDeptParams } from '@/controllers/API/log'
-import type { OrgSelection } from '@/types/api/audit'
 
 export type RuntimeAuditKind = 'model' | 'capability' | 'access'
 export type RuntimeAuditFilters = {
@@ -12,21 +10,6 @@ export type RuntimeAuditFilters = {
   visitor_id?: number
   credential_id?: number
   tenant_id?: number
-  // F003 organisation selection, in the runtime-record wire form (design §6.1).
-  dept_ids?: string
-  include_descendants?: string
-  include_none?: string
-  include_unrecorded?: string
-}
-
-/** Replace the organisation keys of `filters` with `selection`, dropping stale ones. */
-export const withRuntimeOrg = (filters: RuntimeAuditFilters, selection: OrgSelection): RuntimeAuditFilters => {
-  const rest = { ...filters }
-  delete rest.dept_ids
-  delete rest.include_descendants
-  delete rest.include_none
-  delete rest.include_unrecorded
-  return { ...rest, ...(toDeptParams(selection, 'csv') as Partial<RuntimeAuditFilters>) }
 }
 export type RuntimeAuditRow = Record<string, string | number | boolean | null>
 export interface RuntimeAuditPage {

@@ -455,25 +455,6 @@ class AdmissionPolicy:
             _deny("admission_pod_identity_refused")
         if not spec.get("containers") or spec.get("ephemeralContainers"):
             _deny("admission_containers_invalid")
-        if meta.get("labels", {}).get("runtime.bisheng.io/purpose") == "image-check":
-            containers = spec.get("containers", [])
-            if (
-                len(containers) != 1
-                or spec.get("initContainers")
-                or containers[0].get("name") != "image-check"
-                or containers[0].get("command") != ["python", "-I", "-m", "runtime_manager.image_check"]
-                or any(
-                    m.get("mountPath") not in {"/tmp", "/run/registry"} for m in containers[0].get("volumeMounts", [])
-                )
-                or containers[0].get("args")
-                or type(spec.get("activeDeadlineSeconds")) is not int
-                or not 1 <= spec.get("activeDeadlineSeconds", 0) <= 120
-                or any(
-                    "persistentVolumeClaim" in v or v.get("name") not in {"tmp", "registry-auth"}
-                    for v in spec.get("volumes", [])
-                )
-            ):
-                _deny("admission_pod_baseline_refused")
         for volume in spec.get("volumes", []):
             if set(volume) - {"name", "emptyDir", "secret", "persistentVolumeClaim", "configMap"}:
                 _deny("admission_volume_refused")

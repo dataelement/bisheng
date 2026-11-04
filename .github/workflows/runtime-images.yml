@@ -43,13 +43,11 @@ jobs:
           RUNTIME_RELEASE: ${{ inputs.version || github.ref_name }}
           TARGET_ARCH: ${{ matrix.arch }}
           RUNTIME_PUBLISH: '1'
-          RUNTIME_REPLACE_RELEASE: ${{ github.event_name == 'push' && github.event.forced && github.ref_name || '' }}
         run: bash scripts/build_runtime_images.sh
       - name: Sync verified native images to CR
         env:
           RUNTIME_RELEASE: ${{ inputs.version || github.ref_name }}
           TARGET_ARCH: ${{ matrix.arch }}
-          RUNTIME_REPLACE_RELEASE: ${{ github.event_name == 'push' && github.event.forced && github.ref_name || '' }}
         run: bash scripts/sync_runtime_images_cr.sh
       - uses: actions/upload-artifact@v4
         with:
@@ -92,13 +90,30 @@ jobs:
           registry: cr.dataelem.com
           username: ${{ secrets.CR_DOCKERHUB_USERNAME }}
           password: ${{ secrets.CR_DOCKERHUB_TOKEN }}
-      - name: Verify matching native inventories before generating catalogs
+      - name: Verify matching native inventories before publishing any service index
         run: |
           python src/runtime-manager/runtime_manager/image_catalog.py merge \
             --inventory "$CATALOG_DIR/runtime-images-amd64.json" --inventory "$CATALOG_DIR/runtime-images-arm64.json" \
             --output "$CATALOG_DIR/runtime-release.json"
-      # Tag builds produce architecture images and evidence only. Formal service
-      # tags are promoted by release.yml after internal validation and Release publication.
+          python src/runtime-manager/runtime_manager/image_catalog.py indexes \
+            --release-manifest "$CATALOG_DIR/runtime-release.json" > "$CATALOG_DIR/service-indexes.tsv"
+      - name: Publish immutable service indexes from frozen per-platform digests
+        run: |
+          set -euo pipefail
+          while IFS=$'\t' read -r name image amd arm; do
+            if docker buildx imagetools inspect "$image" > /tmp/index-existing 2>/tmp/index-error; then
+              echo "Refusing existing index $image"; exit 1
+            elif grep -Eqi 'unauthorized|forbidden|denied|authentication|authorization' /tmp/index-error || \
+              ! grep -Eqi 'manifest unknown|not found|no such manifest' /tmp/index-error; then
+              echo 'Cannot establish index absence; publication refused' >&2; exit 1
+            fi
+          done < "$CATALOG_DIR/service-indexes.tsv"
+          while IFS=$'\t' read -r name image amd arm; do
+            docker buildx imagetools create --tag "$image" "$amd" "$arm"
+            docker buildx imagetools inspect "$image" --format '{{json .Manifest}}' > "$CATALOG_DIR/${name}-index.json"
+          done < "$CATALOG_DIR/service-indexes.tsv"
+          python src/runtime-manager/runtime_manager/image_catalog.py finalize \
+            --release-manifest "$CATALOG_DIR/runtime-release.json" --index-dir "$CATALOG_DIR" --output "$CATALOG_DIR/runtime-release.json"
       - name: Generate both-platform application catalog
         run: python src/runtime-manager/tools/runtime_materials.py catalog --inventory "$CATALOG_DIR/runtime-images-amd64.json" --inventory "$CATALOG_DIR/runtime-images-arm64.json" --output "$CATALOG_DIR/runtime-profiles.json" --revision ${{ github.run_number }}
       - uses: actions/upload-artifact@v4
@@ -107,3 +122,4 @@ jobs:
           path: |
             ${{ matrix.inventory_dir }}/runtime-profiles.json
             ${{ matrix.inventory_dir }}/runtime-release.json
+            ${{ matrix.inventory_dir }}/*-index.json

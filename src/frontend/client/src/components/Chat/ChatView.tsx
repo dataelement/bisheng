@@ -1,59 +1,75 @@
-import { useVisibleKnowledgeSelections } from "./hooks/useVisibleKnowledgeSelections";
-import { useTaskModeNavigation } from "./hooks/useTaskModeNavigation";
-import { useChatModelSelection } from "./hooks/useChatModelSelection";
 import { isApiError } from "@bisheng/api-client";
+import { ApiRequestFailure } from "~/components/ApiRequestFailure";
 import { useQuery } from "@tanstack/react-query";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useUnactivate } from "react-activation";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useRecoilState } from "recoil";
-import { useTaskInviteQuota } from "~/components/Chat/TaskInviteQuota";
+import AiChatInput from "~/components/Chat/AiChatInput";
+import { preserveTaskModeChoice, resolveTaskModeOnNavigation } from "~/components/Chat/resolveTaskMode";
+import AiChatMessages from "~/components/Chat/AiChatMessages";
+import { PinnedTaskPanel } from "~/components/Linsight/Execution/PinnedTaskPanel";
+import { WorkspacePanel } from "~/components/Linsight/Artifacts/WorkspacePanel";
+import { useWorkspacePanel } from "~/components/Linsight/Artifacts/useWorkspacePanel";
+import { useCompareTransitionFreeze } from "~/components/Linsight/Artifacts/useCompareTransitionFreeze";
 import {
-  getLinsightSessionVersionList,
-  userStopLinsightEvent,
-} from "~/api/linsight";
+  collectConversationWorkspaceFiles,
+  getWorkspaceLoadState,
+} from "~/components/Linsight/Artifacts/artifactUtils";
+import { TaskTurnLoadContext } from "~/components/Linsight/Execution/taskTurnLoad";
+import { useLinsightManager } from "~/hooks/useLinsightManager";
+import { getLinsightSessionVersionList, userStopLinsightEvent } from "~/api/linsight";
 import { SopStatus, taskModeState } from "~/store/linsight";
+import { findPendingUserInput, splitSessionPseudoTask } from "~/components/Linsight/Execution/stepUtils";
+import type { ExecStepEventData } from "~/components/Linsight/Execution/stepUtils";
 import { useCitationReferencePanel } from "~/components/Chat/Messages/Content/useCitationReferencePanel";
+import { collectChatAttachments } from "./attachments/collectChatAttachments";
+import "./chat-surface.css";
 import { useDesktopConversation } from "./useDesktopConversation";
 import { useAuthContext } from "~/hooks/AuthContext";
-import { useGetBsConfig } from "~/hooks/queries/data-provider";
+import { useGetBsConfig, useGetOrgToolList } from "~/hooks/queries/data-provider";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/queries";
 import useAiChat from "~/hooks/useAiChat";
-import { useSessionPresence } from "~/hooks/useSessionPresence";
 import {
   moveConversationModel,
   readAdminDefaultModelId,
+  useChatModelResolution,
   type ChatModelMode,
+  type ChatModelOption,
 } from "~/hooks/useChatModelResolution";
 import { useChatAskHandoff, type ChatAsk } from "./chatAskHandoff";
 import useLocalize from "~/hooks/useLocalize";
 import store from "~/store";
+import { cn } from "~/utils";
+import Landing from "./Landing";
+import { DailyFeaturedApps } from "./DailyFeaturedApps";
+import Presentation from "./Presentation";
 import { QueryKeys } from "~/types/chat";
-import { importMessagesToKnowledgeApi } from "~/api/messageExport";
+import { importMessagesToKnowledgeApi, listUploadableSpacesApi } from "~/api/messageExport";
 import { showApiError } from "~/api/request";
-import {
-  useExitSelectionOnChatChange,
-  useMessageSelection,
-} from "~/hooks/useMessageSelection";
+import { ExportFormatSheet, MessageSelectionToolbar } from "~/components/Chat/MessageSelection";
+import { retainVisibleOrgKnowledgeSelections } from "./filterVisibleKnowledgeSelections";
+import { useExitSelectionOnChatChange, useMessageSelection } from "~/hooks/useMessageSelection";
 import usePrefersMobileLayout from "~/hooks/usePrefersMobileLayout";
 import useMediaQuery from "~/hooks/useMediaQuery";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
-import { type AddToKnowledgeSelection } from "~/pages/Subscription/Article/AddToKnowledgeModal";
-import { useChatSurfaceLayout } from "./hooks/useChatSurfaceLayout";
-import { useTaskWorkspaceState } from "./hooks/useTaskWorkspaceState";
-import { ChatSurfacePresentation } from "./ChatSurfacePresentation";
+import {
+  AddToKnowledgeModal,
+  type AddToKnowledgeSelection,
+} from "~/pages/Subscription/Article/AddToKnowledgeModal";
 
-interface ChatViewProps {
+const ChatView = ({
+  id = "",
+  index = 0,
+  shareToken = "",
+}: {
   id?: string;
   index?: number;
   shareToken?: string;
-}
-
-function useChatView(
-  { id = "", shareToken = "" }: ChatViewProps,
-  t: ReturnType<typeof useLocalize>,
-  showToast: ReturnType<typeof useToastContext>["showToast"],
-) {
+}) => {
+  const t = useLocalize();
   const { conversationId: cid } = useParams();
   const location = useLocation();
   const conversationId = (cid ?? id) || "new";
@@ -64,7 +80,7 @@ function useChatView(
   // The route stays `/c`; only submitting in task mode navigates to /linsight.
   // Driven by a GLOBAL atom (not local state): ChatView is KeepAlive-cached, so a
   // nav-state/effect-based toggle goes stale after returning from another tab.
-
+  // The sidebar "新建任务/新建对话" buttons set the atom directly (see Nav/NewChat),
   // which the re-activated ChatView reads immediately.
   const [taskMode, setTaskMode] = useRecoilState(taskModeState);
 
@@ -75,15 +91,6 @@ function useChatView(
   // Landing-only: the input box reports whether its attachment bar is showing
   // so the welcome subtitle can hide without shifting the title / input box.
   const [landingHasSelection, setLandingHasSelection] = useState(false);
-
-  // Department concurrency: one page lease per session page. Share pages are
-  // read-only views of somebody else's session and must not consume a slot.
-  const presence = useSessionPresence(
-    conversationId === "new" ? "" : conversationId,
-    {
-      disabled: Boolean(shareToken),
-    },
-  );
 
   // Core chat state — replaces old ChatContext + useSSE + useChatHelpers
   const {
@@ -102,15 +109,38 @@ function useChatView(
     sendMessage,
     stopGenerating,
     regenerate,
-  } = useAiChat(
-    conversationId,
-    false,
-    shareToken,
-    "chat",
-    presence.ensureLeaseId,
+  } = useAiChat(conversationId, false, shareToken);
+
+  const selectedOrgKbIds = useMemo(
+    () => selectedOrgKbs.filter((item) => item.type === "org").map((item) => String(item.id)),
+    [selectedOrgKbs],
+  );
+  const selectedOrgKbIdsKey = selectedOrgKbIds.join(",");
+  const { data: visibleSelectedOrgKbs = [], isSuccess: selectedOrgKbVisibilityReady } = useGetOrgToolList(
+    {
+      page: 1,
+      page_size: Math.max(1, selectedOrgKbIds.length),
+      sort_by: "name",
+      preferred_ids: selectedOrgKbIdsKey,
+      action: "visible",
+    },
+    { enabled: !!user?.id && selectedOrgKbIds.length > 0 },
   );
 
-  useVisibleKnowledgeSelections({ user, selectedOrgKbs, setSelectedOrgKbs });
+  // Revalidate persisted selections as well as new defaults. Without this,
+  // an org KB cached before its visibility was revoked remains exposed as a
+  // chip even after the user-facing workstation config starts filtering it.
+  useEffect(() => {
+    if (!selectedOrgKbVisibilityReady || !selectedOrgKbIds.length) return;
+    const visibleIds = visibleSelectedOrgKbs.map((item: { id: string | number }) => item.id);
+    setSelectedOrgKbs((current) => retainVisibleOrgKnowledgeSelections(current, visibleIds));
+  }, [
+    selectedOrgKbIdsKey,
+    selectedOrgKbIds.length,
+    selectedOrgKbVisibilityReady,
+    visibleSelectedOrgKbs,
+    setSelectedOrgKbs,
+  ]);
 
   // Model and knowledge selections are owned by their conversation.
   const { data: workbenchCfg } = useGetWorkbenchModelsQuery();
@@ -147,22 +177,17 @@ function useChatView(
   // ── F028: workstation conversation export / import-to-knowledge ──
   // Auto-exit selection mode whenever the user switches to another chat.
   useExitSelectionOnChatChange(activeConvoId);
-  const {
-    state: selectionState,
-    getSelectedIds,
-    exitSelectionMode,
-  } = useMessageSelection();
+  const { state: selectionState, getSelectedIds, exitSelectionMode } = useMessageSelection();
   const isH5 = usePrefersMobileLayout();
   // Matches the CSS `touch-mobile` variant (≤1023px) so the JS-measured apps
   // offset stays in sync with the CSS-based welcome-block centering.
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  const { contentWidth, isCompactLayout } =
-    useChatSurfaceLayout(chatContainerRef);
+  const isTouchLayout = useMediaQuery("(max-width: 1023px)");
   // F035: task-mode workspace panel responsive tiers — mirror the daily-mode
   // citation panel (useCitationReferencePanel): ≤576 full-screen overlay,
   // 577–767 right drawer, 768–1023 portaled right drawer, ≥1024 in-flow docked.
-  // isH5 (above) = ≤767; isCompactLayout = ≤1023.
+  // isH5 (above) = ≤767; isTouchLayout = ≤1023.
   const isPhoneViewport = useMediaQuery("(max-width: 576px)");
+  const { showToast } = useToastContext();
   const [exportSheetOpen, setExportSheetOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
 
@@ -170,9 +195,7 @@ function useChatView(
     async (selection: AddToKnowledgeSelection) => {
       if (!activeConvoId) return;
       const ids = getSelectedIds(messages);
-      const messageIds = ids
-        .map((s) => Number.parseInt(s, 10))
-        .filter((n) => Number.isFinite(n));
+      const messageIds = ids.map((s) => Number.parseInt(s, 10)).filter((n) => Number.isFinite(n));
       if (!messageIds.length) return;
 
       try {
@@ -234,53 +257,35 @@ function useChatView(
     }
   }, [activeConvoId]); // intentionally ONLY on activeConvoId — don't add navigate/conversationId
 
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
   // F035: task mode is a ROLE permission. The backend folds each role's
   // menu_ids into web_menu → client `user.plugins`; `linsight_task_mode` is the
   // workbench-home sub-capability toggled per role in the admin console. When
   // the current user's role lacks it, hide the input's task-mode entry + skill
-
+  // submenu (the sidebar "新建任务" button gates on the same key in Nav/NewChat).
   // plugins absent / non-array → allow (matches the NewChat default, and keeps
   // super-admin/dept-admin — who always carry the key — unaffected).
   const canUseTaskMode = useMemo(() => {
     const plugins = (user as any)?.plugins;
-    return Array.isArray(plugins)
-      ? plugins.includes("linsight_task_mode")
-      : true;
+    return Array.isArray(plugins) ? plugins.includes("linsight_task_mode") : true;
   }, [user]);
 
-  const inviteOn =
-    taskMode &&
-    canUseTaskMode &&
-    !!(bsConfig as { linsight_invitation_code?: boolean } | undefined)
-      ?.linsight_invitation_code;
-  const {
-    bar: inviteQuotaBar,
-    dialog: inviteQuotaDialog,
-    allowSend: allowInviteSend,
-  } = useTaskInviteQuota(inviteOn);
-
   const handleSend = useCallback(
-    async (text: string, files?: any[] | null) => {
-      const isTaskTurn = taskMode && canUseTaskMode;
-      if (isTaskTurn && !allowInviteSend()) return false;
-      // Capture the turn's resources before resetting its composer draft. A
-      // `false` result (e.g. the department is full) keeps the draft so the
-      // user can send again once a slot frees up.
-      const accepted = await sendMessage(text, files, { taskMode: isTaskTurn });
+    (text: string, files?: any[] | null) => {
+      // Capture the turn's resources before resetting its composer draft.
+      const accepted = sendMessage(text, files, { taskMode: taskMode && canUseTaskMode });
       if (accepted) setInputText("");
       return accepted;
     },
-    [taskMode, canUseTaskMode, sendMessage, allowInviteSend],
+    [taskMode, canUseTaskMode, sendMessage],
   );
 
   const isNew = conversationId === "new";
   const hasMessages = messages.length > 0;
-  const {
-    activeCitationMessageId,
-    citationPanelElement,
-    onOpenCitationPanel,
-    closeCitationPanel,
-  } = useCitationReferencePanel({ hasMessages, contentWidth });
+  useDesktopConversation(conversationId, isNew && !hasMessages && !isStreaming);
+  const { activeCitationMessageId, citationPanelElement, onOpenCitationPanel, closeCitationPanel } =
+    useCitationReferencePanel({ hasMessages });
 
   // F035: the task checklist is pinned above the input (Figma 12221-39902 /
   // 12221-40080) for the conversation's latest task turn — it tracks that turn's
@@ -291,8 +296,7 @@ function useChatView(
     const seen = new Set<string>();
     for (const message of messages) {
       const m = message as any;
-      const versionId =
-        m?.category === "task" ? m?.linsightSessionVersionId : "";
+      const versionId = m?.category === "task" ? m?.linsightSessionVersionId : "";
       if (versionId && !seen.has(versionId)) {
         seen.add(versionId);
         ids.push(versionId);
@@ -312,9 +316,7 @@ function useChatView(
     () =>
       messages.some(
         (m: any) =>
-          m?.category === "task" &&
-          m?.linsightSessionVersionId &&
-          m?.conversationId === conversationId,
+          m?.category === "task" && m?.linsightSessionVersionId && m?.conversationId === conversationId,
       ),
     [messages, conversationId],
   );
@@ -332,10 +334,7 @@ function useChatView(
   const { data: taskConversationModelId = null } = useQuery(
     [QueryKeys.linsightSessionVersions, conversationId, shareToken],
     async () => {
-      const versions = await getLinsightSessionVersionList(
-        conversationId,
-        shareToken || "",
-      );
+      const versions = await getLinsightSessionVersionList(conversationId, shareToken || "");
       const latest = (versions || [])[(versions || []).length - 1];
       return latest?.model ? String(latest.model) : null;
     },
@@ -347,33 +346,116 @@ function useChatView(
     },
   );
 
-  const { handleModelChange, handleModelAutoChange } = useChatModelSelection({
+  const handleModelResolved = useCallback(
+    (target: ChatModelOption, deliberate: boolean) => {
+      setChatModel({
+        id: Number(target.id),
+        name: target.displayName || target.name || "",
+        manual: deliberate,
+        mode: modelMode,
+      });
+    },
+    [setChatModel, modelMode],
+  );
+
+  const { persistPick: persistModelPick } = useChatModelResolution({
+    userId: user?.id,
     conversationId,
-    bsConfig,
-    user,
-    setChatModel,
-    modelMode,
-    adminDefaultModelId,
-    taskConversationModelId,
+    mode: modelMode,
+    models: (bsConfig?.models || []) as ChatModelOption[],
+    adminDefaultId: adminDefaultModelId,
+    serverModelId: taskConversationModelId,
+    ready: !!bsConfig?.models?.length && !!user?.id,
+    onResolved: handleModelResolved,
   });
 
-  useTaskModeNavigation({
-    location,
-    conversationId,
-    setTaskMode,
-    keepTaskModeOnRewriteRef,
-    userToggledRef,
-    lastConversationIdRef,
-    canUseTaskMode,
-    isTaskConversation,
-  });
+  // The picker writes both the conversation record and the user-level default,
+  // so this conversation keeps the choice and the next new one inherits it.
+  const handleModelChange = useCallback(
+    (val: string | number) => {
+      const model = bsConfig?.models?.find((m: ChatModelOption) => String(m.id) === String(val));
+      persistModelPick(val);
+      setChatModel({
+        id: Number(val),
+        name: model?.displayName || "",
+        manual: true,
+        mode: modelMode,
+      });
+    },
+    [bsConfig, persistModelPick, setChatModel, modelMode],
+  );
+
+  // AiModelSelect repairing an invalid value is NOT a user pick — never persist it.
+  const handleModelAutoChange = useCallback(
+    (val: string | number) => {
+      const model = bsConfig?.models?.find((m: ChatModelOption) => String(m.id) === String(val));
+      setChatModel((prev) => ({
+        id: Number(val),
+        name: model?.displayName || prev.name || "",
+        manual: prev.manual ?? false,
+        mode: prev.mode,
+      }));
+    },
+    [bsConfig, setChatModel],
+  );
+
+  // F035: sync the task-mode toggle to navigation. ChatView is NOT remounted
+  // across `/c/:id` param changes (same route element), so the atom's initial
+  // value only applies on first mount. This effect picks up subsequent
+  // navigations:
+  //  - sidebar "新建任务" lands on /c/new with state.taskMode=true → enter task mode.
+  //  - the first submit on /c/new self-rewrites the URL to the real id; that is
+  //    the SAME conversation, so the user's chosen mode is preserved (they can
+  //    keep composing task turns, or toggle off manually).
+  //  - any OTHER navigation to an existing conversation (id !== 'new') DERIVES
+  //    the mode from that conversation's own history (isTaskConversation), so a
+  //    stale mode from another tab can't leak in AND a task conversation keeps
+  //    its mode.
+  // Deriving and resetting MUST stay in one effect. They used to be two: the
+  // reset (`setTaskMode(false)`) ran on every location.key change, while the
+  // restore's deps — [conversationId, isTaskConversation, canUseTaskMode] — are
+  // all constant within a visit, so it could never fire a second time. A single
+  // in-conversation navigation (e.g. the sidebar 首页 link, whose target IS the
+  // current pathname) therefore parked the toggle on off for good, and
+  // `taskMode || taskRunning` below kept the button lit until the running task
+  // ended — so the drop was invisible and the NEXT turn silently went daily.
+  // Placed after isTaskConversation on purpose: it is in the dep array.
+  useEffect(() => {
+    // Only consumable once we are ON the rewritten URL. This effect is declared
+    // AFTER the effect that raises the flag (it has to be — isTaskConversation is
+    // in its dep array), so within the commit that raises it we would otherwise
+    // eat the flag while still on /c/new and then derive `false` on the real
+    // landing, knocking the user out of the mode they just submitted in.
+    const isSelfRewrite = conversationId !== "new" && keepTaskModeOnRewriteRef.current;
+    userToggledRef.current = preserveTaskModeChoice(
+      lastConversationIdRef.current,
+      conversationId,
+      isSelfRewrite,
+      userToggledRef.current,
+    );
+    lastConversationIdRef.current = conversationId;
+    if (isSelfRewrite) {
+      keepTaskModeOnRewriteRef.current = false;
+    }
+
+    const next = resolveTaskModeOnNavigation({
+      conversationId,
+      isTaskConversation,
+      canUseTaskMode,
+      navTaskMode: (location.state as { taskMode?: boolean } | null)?.taskMode,
+      isSelfRewrite,
+      userToggled: userToggledRef.current,
+    });
+    if (next !== null) {
+      setTaskMode(next);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key, conversationId, isTaskConversation, canUseTaskMode]);
 
   const leaveTaskMode = useCallback(() => setTaskMode(false), [setTaskMode]);
   const selectAskModel = useCallback(
     (modelId: number) => {
-      const available = bsConfig?.models?.some(
-        (model) => String(model.id) === String(modelId),
-      );
+      const available = bsConfig?.models?.some((model) => String(model.id) === String(modelId));
       if (!available) return false;
       handleModelChange(modelId);
       return true;
@@ -390,24 +472,19 @@ function useChatView(
     },
     [showToast, t],
   );
-  const { attachmentAsk, retireAttachmentAsk, isTextAskPending } =
-    useChatAskHandoff({
-      conversationId,
-      activeConversationId: activeConvoId,
-      locationKey: location.key,
-      selectedKbs: selectedOrgKbs,
-      setSelectedKbs: setSelectedOrgKbs,
-      sendMessage,
-      ready: modelMode === "daily" && !!user?.id && !!bsConfig?.models,
-      selectedModelId: chatModel.id,
-      selectModel: selectAskModel,
-      onModelUnavailable: handleAskModelUnavailable,
-      onTake: leaveTaskMode,
-    });
-  useDesktopConversation(
+  const { attachmentAsk, retireAttachmentAsk } = useChatAskHandoff({
     conversationId,
-    isNew && !hasMessages && !isStreaming && !isTextAskPending,
-  );
+    activeConversationId: activeConvoId,
+    locationKey: location.key,
+    selectedKbs: selectedOrgKbs,
+    setSelectedKbs: setSelectedOrgKbs,
+    sendMessage,
+    ready: modelMode === "daily" && !!user?.id && !!bsConfig?.models,
+    selectedModelId: chatModel.id,
+    selectModel: selectAskModel,
+    onModelUnavailable: handleAskModelUnavailable,
+    onTake: leaveTaskMode,
+  });
 
   // Flipping the toggle by hand pins the mode for the rest of this conversation
   // — without the flag, the effect above would re-derive it from the history on
@@ -423,31 +500,167 @@ function useChatView(
   // the file list accumulates formal artifacts from every task turn because the
   // workspace itself belongs to the conversation. The drawer only opens on the
   // header button — no auto-expand (the entry icon appearing is enough).
-  const {
-    updateLinsight,
-    taskArtifacts,
-    chatAttachments,
+  const { getLinsight, updateLinsight, linsightMap } = useLinsightManager();
+  const taskArtifacts = useWorkspacePanel(latestTaskVersionId, conversationId);
+  const chatAttachments = useMemo(() => collectChatAttachments(messages), [messages]);
+
+  // F035: enter/exit animation for the fullscreen workspace overlay. The overlay
+  // is a separate instance from the docked panel (only one is ever mounted at a
+  // time). It's portaled to document.body + position:fixed so it can escape
+  // chatContainer and cover the sidebar conversation list. It expands to fill the
+  // rounded content card (the white panel inside <main>'s gutter that holds the
+  // sidebar + chat) — NOT the whole window — so the icon rail and the card's
+  // surrounding gap + radius are preserved. `fsMounted` keeps it in the DOM
+  // across the collapse transition; `fsExpanded` drives the geometry between the
+  // docked card's box and the content card's box, both measured in viewport-inset
+  // form on enter (still mounted that render). Exiting: collapse, unmount on end.
+  const dockedCardRef = useRef<HTMLDivElement>(null);
+  const compareFreeze = useCompareTransitionFreeze(
+    taskArtifacts.comparing,
+    taskArtifacts.open,
+    !isTouchLayout,
     dockedCardRef,
-    compareFreeze,
-    fsMounted,
-    setFsMounted,
-    fsExpanded,
-    fsBox,
-    taskLinsight,
-    taskWorkspaceFiles,
-    reportTaskTurnLoadFailed,
-    taskWorkspaceLoadState,
-    taskRunning,
-    awaitingUserInput,
-  } = useTaskWorkspaceState({
-    conversationId,
-    messages,
-    chatContainerRef,
-    isCompactLayout,
-    closeCitationPanel,
-    taskVersionIds,
-    latestTaskVersionId,
+  );
+  const [fsMounted, setFsMounted] = useState(false);
+  const [fsExpanded, setFsExpanded] = useState(false);
+  type FsInset = { top: number; left: number; right: number; bottom: number };
+  const [fsBox, setFsBox] = useState<{ collapsed: FsInset; expanded: FsInset } | null>(null);
+  useEffect(() => {
+    if (taskArtifacts.fullscreen) {
+      // Measure the docked card (collapsed) and <main> (expanded) in viewport-inset
+      // coords. Both are still in the DOM this render (card gated on !fsMounted,
+      // flipped just below). Inset form lets us animate to <main>'s edges cleanly.
+      const card = dockedCardRef.current;
+      // Climb to the OUTERMOST <main>: Presentation wraps ChatView in its own
+      // <main> (chat content only), but MainLayout's outer <main> is the one that
+      // also contains the sidebar conversation list — that's the box to fill.
+      let main = card?.closest("main") ?? chatContainerRef.current?.closest("main") ?? null;
+      for (let p = main?.parentElement?.closest("main"); p; p = p.parentElement?.closest("main")) {
+        main = p;
+      }
+      if (card && main) {
+        const W = window.innerWidth;
+        const H = window.innerHeight;
+        const c = card.getBoundingClientRect();
+        const m = main.getBoundingClientRect();
+        // Collapsed = the docked panel's measured box (it keeps its 4px p-1 margin),
+        // overlay padding 0. Expanded grows the BOX outward by 4px on top/right/
+        // bottom (border reaches the card edge) and left to the card's left
+        // (main.left + 8px p-2 gutter), while the overlay's padding goes 0 → 4px.
+        // Net: the inner content (toolbar buttons) stays at the exact docked
+        // position the whole time — only the gray border slides out to the card edge
+        // and the left edge fills the card. No button shift, smooth border, uniform
+        // #FBFBFB fill (the 4px is overlay bg, not a white ring).
+        // The content card sits inside <main>'s content box, so its left edge is
+        // main.left + main's (possibly-asymmetric / zero) left padding. Read it live
+        // instead of hardcoding so changing the layout gutter never desyncs the
+        // fullscreen left edge.
+        const mainPadLeft = parseFloat(getComputedStyle(main).paddingLeft) || 0;
+        const collapsed = { top: c.top, left: c.left, right: W - c.right, bottom: H - c.bottom };
+        setFsBox({
+          collapsed,
+          expanded: {
+            top: collapsed.top - 4,
+            right: collapsed.right - 4,
+            bottom: collapsed.bottom - 4,
+            left: m.left + mainPadLeft,
+          },
+        });
+      }
+      setFsMounted(true);
+      // Double rAF: let the collapsed state paint before flipping to expanded,
+      // otherwise React can batch both and the enter transition is skipped.
+      let r2 = 0;
+      const r1 = requestAnimationFrame(() => {
+        r2 = requestAnimationFrame(() => setFsExpanded(true));
+      });
+      return () => {
+        cancelAnimationFrame(r1);
+        cancelAnimationFrame(r2);
+      };
+    }
+    setFsExpanded(false);
+    // Fallback unmount in case transitionEnd never fires (e.g. reduced-motion
+    // disables the transition) — otherwise the overlay would stay mounted and the
+    // docked panel would never re-render. Slightly longer than the 300ms anim.
+    const t = setTimeout(() => setFsMounted(false), 360);
+    return () => clearTimeout(t);
+  }, [taskArtifacts.fullscreen]);
+
+  // F035: the fullscreen overlay is desktop-only. Resizing into the touch layout
+  // (≤1023px) while it's open would otherwise leave `fullscreen` true with the
+  // overlay suppressed; clear it so the mobile overlay/drawer branch renders.
+  useEffect(() => {
+    if (isTouchLayout && taskArtifacts.fullscreen) {
+      taskArtifacts.setFullscreen(false);
+    }
+  }, [isTouchLayout, taskArtifacts.fullscreen, taskArtifacts.setFullscreen]);
+
+  // KeepAlive freezes (but doesn't unmount) ChatView when the user switches to
+  // another sidebar section, so the <body>-portaled fullscreen overlay would keep
+  // floating over the new page. Collapse the workspace + force-unmount the overlay
+  // on deactivate so the new section is shown unobstructed.
+  useUnactivate(() => {
+    taskArtifacts.closeWorkspace();
+    setFsExpanded(false);
+    setFsMounted(false);
+    // The citation panel portals to <body> in the 768–1023 / mobile tiers, so it
+    // also outlives the cached view — collapse it so it doesn't hang over the
+    // section the user switched to.
+    closeCitationPanel();
   });
+
+  const taskLinsight = latestTaskVersionId ? getLinsight(latestTaskVersionId) : null;
+  const taskWorkspaceFiles = useMemo(() => {
+    return collectConversationWorkspaceFiles(
+      taskVersionIds.map((versionId) => ({ versionId, snapshot: linsightMap.get(versionId) })),
+    );
+  }, [taskVersionIds, linsightMap]);
+  // Task turns hydrate lazily (TaskTurnPanel), so on a cold load (share page,
+  // full refresh) the store is still empty — that must not read as "no files".
+  // A turn whose load failed reports it here; it never reaches the store.
+  const [taskLoadFailedIds, setTaskLoadFailedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const reportTaskTurnLoadFailed = useCallback((versionId: string, failed: boolean) => {
+    setTaskLoadFailedIds((prev) => {
+      if (prev.has(versionId) === failed) return prev;
+      const next = new Set(prev);
+      if (failed) next.add(versionId);
+      else next.delete(versionId);
+      return next;
+    });
+  }, []);
+  const taskWorkspaceLoadState = useMemo(
+    () => getWorkspaceLoadState(taskVersionIds, linsightMap, taskLoadFailedIds),
+    [taskVersionIds, linsightMap, taskLoadFailedIds],
+  );
+
+  // F035: while the latest task round is in a non-terminal state (generating /
+  // running / queued), the input stays editable but the send button is disabled
+  // — the next round can only be submitted after the current one finishes.
+  const taskRunning = useMemo(() => {
+    const status = (taskLinsight as any)?.status;
+    return (
+      status === SopStatus.NotStarted ||
+      status === SopStatus.SopGenerating ||
+      status === SopStatus.SopGenerated ||
+      status === SopStatus.Running
+    );
+  }, [taskLinsight]);
+
+  // A parked task (ask_user awaiting the user's reply) keeps status === Running —
+  // park is not a distinct live status — so taskRunning stays true even though the
+  // agent is suspended on an interrupt and nothing is executing. Detect the park
+  // (an unanswered call_user_input in the latest task turn) so the input can drop
+  // the misleading "running" Stop button and show a "waiting for your reply" hint;
+  // the user answers via the ClarifyCard in the message stream, not this input.
+  const awaitingUserInput = useMemo(() => {
+    if (!taskRunning || !taskLinsight) return false;
+    const { tasks, sessionSteps } = splitSessionPseudoTask(
+      ((taskLinsight as any).tasks as any[]) || [],
+      ((taskLinsight as any).sessionSteps as ExecStepEventData[]) || [],
+    );
+    return !!findPendingUserInput(sessionSteps, tasks);
+  }, [taskRunning, taskLinsight]);
 
   // Stop button handler. A task round runs via the linsight worker/WS, normally
   // AFTER the handoff SSE stream closed — route the stop to terminate-execute.
@@ -482,98 +695,454 @@ function useChatView(
     stopGenerating();
   }, [taskRunning, latestTaskVersionId, updateLinsight, stopGenerating]);
 
-  return {
-    t,
-    conversationId,
-    inputText,
-    setInputText,
-    taskMode,
-    bsConfig,
-    chatModel,
-    searchType,
-    setSearchType,
-    landingHasSelection,
-    setLandingHasSelection,
-    selectedOrgKbs,
-    knowledgeAccessMessage,
-    setSelectedOrgKbs,
-    messages,
-    activeConvoId,
-    chatTitle,
-    isLoading,
-    historyError,
-    isClearing,
-    retryHistory,
-    isStreaming,
-    isParsingMedia,
-    stopGenerating,
-    regenerate,
-    selectionState,
-    isH5,
-    chatContainerRef,
-    isCompactLayout,
-    isPhoneViewport,
-    exportSheetOpen,
-    setExportSheetOpen,
-    importModalOpen,
-    setImportModalOpen,
-    handleImportSelect,
-    canUseTaskMode,
-    inviteQuotaBar,
-    inviteQuotaDialog,
-    handleSend,
-    isNew,
-    hasMessages,
-    activeCitationMessageId,
-    citationPanelElement,
-    onOpenCitationPanel,
-    closeCitationPanel,
-    latestTaskVersionId,
-    handleModelChange,
-    handleModelAutoChange,
-    attachmentAsk,
-    retireAttachmentAsk,
-    isTextAskPending,
-    handleToggleTaskMode,
-    taskArtifacts,
-    chatAttachments,
-    dockedCardRef,
-    compareFreeze,
-    fsMounted,
-    setFsMounted,
-    fsExpanded,
-    fsBox,
-    taskLinsight,
-    taskWorkspaceFiles,
-    reportTaskTurnLoadFailed,
-    taskWorkspaceLoadState,
-    taskRunning,
-    awaitingUserInput,
-    handleStop,
-    id,
-    shareToken,
-    taskVersionIds,
-    user,
-    setChatModel,
-    modelMode,
-    adminDefaultModelId,
-    taskConversationModelId,
-    location,
-    setTaskMode,
-    keepTaskModeOnRewriteRef,
-    userToggledRef,
-    lastConversationIdRef,
-    isTaskConversation,
-  };
-}
+  return (
+    <TaskTurnLoadContext.Provider value={reportTaskTurnLoadFailed}>
+    <Presentation isLingsi={false}>
+      <div className="dsh-chat-surface" data-testid="dsh-chat-surface">
+        <div ref={chatContainerRef} className="relative z-10 flex h-full min-w-0 flex-1 flex-col">
+          {/* Layout: treat "loading an existing conversation" the same as
+              "has messages" so the input stays pinned to the bottom during
+              sidebar navigation (otherwise the centered welcome-page layout
+              briefly floats the input up before messages arrive). */}
+          {(() => {
+            // A history fetch must not blank a turn that is already on screen.
+            // Content-safety replies finish in one SSE tick, which used to flip
+            // isLoading while the just-sent messages were still mounted.
+            const loadingExistingConvo = isLoading && conversationId !== "new" && !hasMessages;
+            // Keep input pinned to bottom as soon as a send starts (before first token lands),
+            // otherwise mobile can briefly fall back to the centered landing layout.
+            // An EXISTING conversation (id !== 'new') always uses the detail layout,
+            // even with zero messages — opening an empty conversation must show the
+            // conversation view, not the welcome/landing page (landing is /c/new only).
+            const useMessagesLayout = hasMessages || loadingExistingConvo || isStreaming || !isNew;
+            return (
+              <div
+                className={cn(
+                  "flex min-h-0 flex-1 flex-col relative",
+                  // Landing (non-messages) layout keeps auto height on the desktop
+                  // shell (≥768) so the vh-positioned welcome block + apps flow
+                  // naturally. The H5 shell (≤767) needs a definite height so the
+                  // landing block's `min-h-full` centering resolves against the
+                  // visible scroll-area height.
+                  useMessagesLayout ? "h-full" : "dsh-chat-column h-full",
+                )}
+              >
+                {/* Content area: Split into Chat Main and Citation Sidebar */}
+                {loadingExistingConvo ? (
+                  <div className="flex h-full items-center justify-center text-text-3" role="status">
+                    {t("dshChat.loadingConversation")}
+                  </div>
+                ) : hasMessages || !isNew ? (
+                  <div ref={compareFreeze.rowRef} className="flex min-h-0 flex-1 overflow-hidden">
+                    {/* Left: Chat Main (Messages + Input). F071: while the report is
+                        compared with a cited source the workspace takes this column's
+                        width; fade it, and pin its children's width while compare is
+                        open so the hidden messages are clipped, never re-wrapped at
+                        ~0px (useCompareTransitionFreeze). */}
+                    <div
+                      ref={compareFreeze.chatRef}
+                      className={cn(
+                        "dsh-chat-column relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden transition-opacity duration-200",
+                        "[&>*]:min-w-[var(--compare-freeze-w,0px)]",
+                        taskArtifacts.comparing && !isTouchLayout && "pointer-events-none opacity-0",
+                      )}
+                      aria-hidden={taskArtifacts.comparing && !isTouchLayout ? true : undefined}
+                    >
+                      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+                        {Boolean(historyError) && <ApiRequestFailure error={historyError} onRetry={retryHistory} />}
+                      <AiChatMessages
+                          messages={messages}
+                          conversationId={activeConvoId}
+                          title={chatTitle}
+                          isLoading={false}
+                          isStreaming={isStreaming}
+                          shareToken={shareToken}
+                          knowledgeChatLayout
+                          allowExport
+                          stripCitationHandlesOnCopy
+                          contentWidthClassName="dsh-chat-content"
+                          onRegenerate={regenerate}
+                          onOpenCitationPanel={(payload) => {
+                            taskArtifacts.closeWorkspace();
+                            onOpenCitationPanel(payload);
+                          }}
+                          activeCitationMessageId={activeCitationMessageId}
+                          onOpenWorkspace={() => {
+                            closeCitationPanel();
+                            taskArtifacts.openWorkspace();
+                          }}
+                          // Show the workspace entry whenever this is a task
+                          // conversation (regardless of whether files exist yet);
+                          // it's hidden only while the panel itself is open.
+                          hasWorkspaceFiles={!!latestTaskVersionId || chatAttachments.length > 0}
+                          workspaceOpen={taskArtifacts.open}
+                          onPreviewFile={(file) => {
+                            closeCitationPanel();
+                            taskArtifacts.openPreview(file);
+                          }}
+                          hideEmptyState
+                          flatMode
+                        />
+                        {/* Soft translucent fade so the scrolling step flow
+                            dissolves into the pinned task panel / input instead of
+                            ending on a hard cut. */}
+                        <div aria-hidden className="dsh-chat-scroll-fade" />
+                      </div>
 
-export type ChatViewModel = ReturnType<typeof useChatView>;
+                        {/* Input area — moved inside the left column to be independent of sidebar.
+                          When F028 selection mode is active, the input is replaced by the
+                          selection toolbar at 100% width. */}
+                      {!shareToken &&
+                        (activeConvoId && selectionState.active && selectionState.chatId === activeConvoId ? (
+                          <div className="dsh-chat-composer-seat">
+                            <MessageSelectionToolbar
+                              chatId={activeConvoId}
+                              messages={messages}
+                              onExportToLocal={isH5 ? () => setExportSheetOpen(true) : undefined}
+                              onImportToKnowledge={() => setImportModalOpen(true)}
+                            />
+                          </div>
+                        ) : (
+                          <div className="dsh-chat-composer-seat">
+                            {latestTaskVersionId && <PinnedTaskPanel versionId={latestTaskVersionId} />}
+                            <AiChatInput
+                              allowConfiguration={false}
+                              disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length || !!shareToken}
+                              sendDisabled={taskRunning}
+                              isStreaming={isStreaming}
+                              isParsingMedia={isParsingMedia}
+                              // Parked awaiting the user → not "running": drop the Stop
+                              // button (sendDisabled still blocks a new round until the
+                              // current one resolves). The user replies via the
+                              // ClarifyCard in the stream above, not this input.
+                              taskRunning={taskRunning && !awaitingUserInput}
+                              features={{
+                                taskModeEntry: canUseTaskMode,
+                                taskMode: (taskMode || taskRunning) && canUseTaskMode,
+                              }}
+                              onToggleTaskMode={handleToggleTaskMode}
+                              placeholder={
+                                awaitingUserInput
+                                  ? t("com_linsight_awaiting_reply")
+                                  : taskMode
+                                    ? (bsConfig as any)?.linsightConfig?.input_placeholder ||
+                                      t("com_linsight_input_placeholder")
+                                    : undefined
+                              }
+                              onScrollToBottom={() => {}}
+                              modelOptions={bsConfig?.models}
+                              modelValue={chatModel.id}
+                              onModelChange={handleModelChange}
+                              onModelAutoChange={handleModelAutoChange}
+                              onSend={handleSend}
+                              onStop={handleStop}
+                              value={inputText}
+                              onChange={setInputText}
+                              bsConfig={bsConfig}
+                              selectedOrgKbs={selectedOrgKbs}
+                              knowledgeAccessMessage={knowledgeAccessMessage}
+                              onSelectedOrgKbsChange={setSelectedOrgKbs}
+                              searchType={searchType}
+                              onSearchTypeChange={setSearchType}
+                            />
+                          </div>
+                        ))}
+                    </div>
 
-export function ChatView(props: ChatViewProps) {
-  const t = useLocalize();
-  const { showToast } = useToastContext();
-  const model = useChatView(props, t, showToast);
-  return <ChatSurfacePresentation model={model} />;
-}
+                      {/* F035: inline workspace panel docked to the right of the chat
+                        main for the latest task turn. Opens from the header entry
+                        button; the file preview renders in place. Fullscreen is a
+                        separate overlay (below) covering the whole route viewport.
+
+                        The wrapper stays mounted whenever a task turn exists so
+                        open/close animates its width + opacity instead of hard
+                        mount/unmount. Width uses an inline clamp() (not min/max-w
+                        classes) so it interpolates smoothly 0px → 46% — min-width
+                        doesn't transition and would otherwise snap to 440px on the
+                        first frame. The inner box keeps a min-width so the panel
+                        content slides/clips rather than reflowing while it collapses.
+
+                        The inner WorkspacePanel renders only while the fullscreen
+                        overlay is NOT mounted (`!fsMounted`): the overlay is its own
+                        instance, so showing both would double the preview fetch and
+                        flash two toolbars during the fullscreen transition. The
+                        wrapper still reserves its docked width throughout (so the
+                        chat column doesn't reflow), it's just emptied — the overlay
+                        collapses back onto exactly this box before unmounting.
+
+                        ≤1023px is handled by the mobile branch below instead — the
+                        docked clamp() width would otherwise squeeze the chat column
+                        on small screens instead of taking over the viewport. */}
+                    {(latestTaskVersionId || chatAttachments.length > 0) && !isTouchLayout && (
+                      <div
+                        className={cn(
+                          "min-h-0 shrink-0 overflow-hidden transition-[width,opacity,padding] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+                          taskArtifacts.open ? "p-1 opacity-100" : "pointer-events-none p-0 opacity-0",
+                        )}
+                        // F071: compare view → the whole row (the chat column gives way).
+                        style={{
+                          width: !taskArtifacts.open
+                            ? "0px"
+                            : taskArtifacts.comparing
+                              ? "100%"
+                              : "clamp(440px, 46%, 720px)",
+                        }}
+                      >
+                        {!fsMounted && (
+                          // F071: pinned to its end width while entering/leaving compare
+                          // (useCompareTransitionFreeze) so the wrapper's width animation
+                          // clips the report + source instead of re-laying them out.
+                          <div ref={dockedCardRef} className="h-full min-w-[420px]">
+                            <WorkspacePanel
+                              files={[...chatAttachments, ...taskWorkspaceFiles]}
+ loading={taskWorkspaceLoadState === "loading"}
+ loadFailed={taskWorkspaceLoadState === "failed"}
+                              versionId={latestTaskVersionId}
+                              citations={taskLinsight?.output_result?.citations}
+                              messageId={taskLinsight?.message_id ?? undefined}
+                              previewFile={taskArtifacts.previewFile}
+                              fullscreen={false}
+                              sourcePreview={taskArtifacts.sourcePreview}
+                              onOpenSource={taskArtifacts.openSource}
+                              onCloseSource={taskArtifacts.closeSource}
+                              onPreview={taskArtifacts.openPreview}
+                              onBack={taskArtifacts.backToList}
+                              onClose={taskArtifacts.closeWorkspace}
+                              onToggleFullscreen={taskArtifacts.toggleFullscreen}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                      {/* F035: mobile (≤1023px) workspace panel — mirrors the daily-mode
+                        citation panel's responsive tiers. Renders only while open
+                        (hard mount/unmount, no width reservation, so the chat column
+                        keeps full width behind it). The fullscreen toggle is hidden
+                        (`hideFullscreenToggle`) since the panel already takes over the
+                        screen / docks as a drawer here. `fullscreen` is passed so the
+                        inner card drops its own border/radius — the overlay/drawer
+                        container provides the chrome. */}
+                    {(latestTaskVersionId || chatAttachments.length > 0) &&
+                      isTouchLayout &&
+                      taskArtifacts.open &&
+                      (() => {
+                        const mobilePanel = (
+                          <WorkspacePanel
+                            files={[...chatAttachments, ...taskWorkspaceFiles]}
+ loading={taskWorkspaceLoadState === "loading"}
+ loadFailed={taskWorkspaceLoadState === "failed"}
+                            versionId={latestTaskVersionId}
+                            citations={taskLinsight?.output_result?.citations}
+                            messageId={taskLinsight?.message_id ?? undefined}
+                            previewFile={taskArtifacts.previewFile}
+                            fullscreen
+                            hideFullscreenToggle
+                            sourcePreview={taskArtifacts.sourcePreview}
+                            compareLayout="tabs"
+                            onOpenSource={taskArtifacts.openSource}
+                            onCloseSource={taskArtifacts.closeSource}
+                            onPreview={taskArtifacts.openPreview}
+                            onBack={taskArtifacts.backToList}
+                            onClose={taskArtifacts.closeWorkspace}
+                            onToggleFullscreen={taskArtifacts.toggleFullscreen}
+                          />
+                        );
+
+                          // ≤576: full-screen overlay flush to the viewport edges.
+                          if (isPhoneViewport) {
+                            return (
+                              <div className="fixed inset-0 z-[120] flex h-[100dvh] min-h-0 flex-col overflow-hidden overscroll-contain bg-[#FBFBFB]">
+                                {mobilePanel}
+                              </div>
+                            );
+                          }
+
+                          // 768–1023: flex-inline would interleave with HeaderTitle / main
+                          // stacking contexts; portal a fixed right drawer to <body> at a
+                          // higher z so it clears the chrome (mirrors the citation panel).
+                          if (!isH5) {
+                            return createPortal(
+                              <div className="fixed inset-y-0 right-0 z-[150] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-border-base bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.1)] animate-in slide-in-from-right duration-300 w-[min(480px,100vw)]">
+                                {mobilePanel}
+                              </div>,
+                              document.body,
+                            );
+                          }
+
+                          // 577–767: right drawer docked to the viewport edge (z above
+                          // MobileNav z-60), full height, slide-in from the right.
+                          return (
+                            <div className="dsh-chat-preview-modal fixed inset-0 z-[120] flex h-[100dvh] min-h-0 flex-col overflow-hidden overscroll-contain bg-bg-page">
+                              {mobilePanel}
+                            </div>
+                          );
+                        })()}
+
+                    {citationPanelElement}
+                  </div>
+                ) : (
+                  /* Landing page branch — the welcome block is pinned to the
+                     region's vertical center via absolute positioning, so its
+                     position is INDEPENDENT of whether recommended apps exist
+                     (apps just flow below it and scroll if they overflow).
+
+                     ≥768 (desktop): center at 45vh; apps sit 40px below via
+                     `paddingTop: calc(45vh + halfBlock + 40px)`.
+
+                     ≤767 (H5 shell): can't use `vh` (MobileNav + Banner sit above
+                     this scroll container). The parent is a definite `h-full` box,
+                     so the block centers at 35% of it (`top-[35%]`) and the apps
+                     offset is computed in px from the measured region height
+                     (landingParentHeight) — a `%` paddingTop would resolve against
+                     width, not height. */
+                  <div className="dsh-chat-landing">
+                    {/* Welcome message + input, absolutely centered. ≥768 at 45vh,
+                        ≤767 at 40% of the definite-height region. */}
+                    <div className="dsh-chat-hero">
+                      {/* F035 Track H (P5): daily/task mode switch removed —
+                          task mode is reached via the sidebar "new task" entry
+                          and the input-bar task-mode button. */}
+                      <Landing
+                        isNew={isNew}
+                        hideSubtitle={landingHasSelection}
+                        onStarterClick={setInputText}
+                      />
+
+                      {/* Input area for landing page */}
+                      {!shareToken && (
+                        <div className="w-full">
+                          <AiChatInput
+                            elevated
+                            disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length || !!shareToken}
+                            sendDisabled={taskRunning}
+                            isStreaming={isStreaming}
+                            isParsingMedia={isParsingMedia}
+                            features={{ taskModeEntry: canUseTaskMode, taskMode: taskMode && canUseTaskMode }}
+                            onToggleTaskMode={handleToggleTaskMode}
+                            placeholder={
+                              taskMode
+                                ? (bsConfig as any)?.linsightConfig?.input_placeholder ||
+                                  t("com_linsight_input_placeholder")
+                                : undefined
+                            }
+                            onScrollToBottom={() => {}}
+                            modelOptions={bsConfig?.models}
+                            modelValue={chatModel.id}
+                            onModelChange={handleModelChange}
+                            onModelAutoChange={handleModelAutoChange}
+                            onSend={handleSend}
+                            onStop={stopGenerating}
+                            value={inputText}
+                            onChange={setInputText}
+                            bsConfig={bsConfig}
+                            selectedOrgKbs={selectedOrgKbs}
+                            knowledgeAccessMessage={knowledgeAccessMessage}
+                            onSelectedOrgKbsChange={setSelectedOrgKbs}
+                            searchType={searchType}
+                            onSearchTypeChange={setSearchType}
+                            onSelectionPresenceChange={setLandingHasSelection}
+                            attachmentAsk={attachmentAsk}
+                            onAttachmentAskDone={retireAttachmentAsk}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                      {/* Recommended apps: 40px below the centered block, so the
+                        block's own position never shifts when apps appear.
+                        offset = (block center) + (half block height) + 40px.
+                        ≥768 block center = 45vh; ≤767 = 40% of the measured region
+                        height (px, since `vh`/`%`-padding don't work here). */}
+                    <DailyFeaturedApps t={t} />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+            {/* F035: fullscreen workspace preview — portaled to <body> + fixed so it
+              escapes chatContainer and can cover the sidebar conversation list.
+              Separate instance from the inline panel above (only one is ever
+              mounted, so the preview never double fetches). The box animates between
+              the docked panel's measured box (padding 0) and the content card's box
+              (padding 4px): the gray border slides out from the docked 4px margin to
+              the card edge while the inner content — and the toolbar buttons — stay
+              fixed (box grows +4px exactly as padding grows +4px). Fills the card
+              edge-to-edge in #FBFBFB (the 4px is overlay bg, not a white ring) with
+              the border on the outermost ring. Unmounts on transitionEnd.
+              Desktop-only (≥1024px): below that the panel is already an overlay /
+              drawer (mobile branch above), so the fullscreen overlay is suppressed
+              and resizing desktop→mobile tears any open overlay down cleanly. */}
+          {(latestTaskVersionId || chatAttachments.length > 0) &&
+            !isTouchLayout &&
+            fsMounted &&
+            fsBox &&
+            createPortal(
+              <div
+                className="dsh-chat-preview-modal fixed z-[100] overflow-hidden border border-border-base bg-bg-page transition-[top,left,right,bottom,padding,border-radius] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+                style={{
+                  ...(fsExpanded ? fsBox.expanded : fsBox.collapsed),
+                  padding: fsExpanded ? 4 : 0,
+                  borderRadius: fsExpanded ? 12 : 8,
+                }}
+                onTransitionEnd={(e) => {
+                  // Unmount only after the collapse finishes (ignore the expand end
+                  // and bubbled child transitions).
+                  if (
+                    e.target === e.currentTarget &&
+                    e.propertyName === "left" &&
+                    !taskArtifacts.fullscreen
+                  ) {
+                    setFsMounted(false);
+                  }
+                }}
+              >
+                <WorkspacePanel
+                  files={[...chatAttachments, ...taskWorkspaceFiles]}
+ loading={taskWorkspaceLoadState === "loading"}
+ loadFailed={taskWorkspaceLoadState === "failed"}
+                  versionId={latestTaskVersionId}
+                  citations={taskLinsight?.output_result?.citations}
+                  messageId={taskLinsight?.message_id ?? undefined}
+                  previewFile={taskArtifacts.previewFile}
+                  fullscreen={true}
+                  sourcePreview={taskArtifacts.sourcePreview}
+                  onOpenSource={taskArtifacts.openSource}
+                  onCloseSource={taskArtifacts.closeSource}
+                  onPreview={taskArtifacts.openPreview}
+                  onBack={taskArtifacts.backToList}
+                  onClose={taskArtifacts.closeWorkspace}
+                  onToggleFullscreen={taskArtifacts.toggleFullscreen}
+                />
+              </div>,
+              document.body,
+            )}
+        </div>
+
+          {/* F028: portal-style sheets/modals (the floating toolbar lives next to the input) */}
+          {activeConvoId && selectionState.active && selectionState.chatId === activeConvoId && (
+            <>
+              <ExportFormatSheet
+                open={exportSheetOpen}
+                onOpenChange={setExportSheetOpen}
+                chatId={activeConvoId}
+                messages={messages}
+              />
+              <AddToKnowledgeModal
+                open={importModalOpen}
+                onOpenChange={setImportModalOpen}
+                mode="channel_sync"
+                dataSourceApi={listUploadableSpacesApi}
+                onSyncSelect={handleImportSelect}
+              />
+            </>
+          )}
+        </div>
+      </Presentation>
+    </TaskTurnLoadContext.Provider>
+  );
+};
+
 
 export default memo(ChatView);

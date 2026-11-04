@@ -25,9 +25,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from runtime_manager.bundle_inputs import BundleInputError
-from runtime_manager.static_inputs import STATIC_ROOT_CANDIDATES, select_static_root
-
 #: Lockfiles that make ``npm ci`` (reproducible, refuses drift) the right verb.
 #: The ones present are listed in the facts so the Dockerfile COPYs exactly
 #: them into the dependency layer — ``npm ci`` fails outright when the lockfile
@@ -39,6 +36,7 @@ NODE_LOCKFILES = ("package-lock.json", "npm-shrinkwrap.json")
 #: and come back with a ``!dist/`` line in ``.bishengignore`` — the error below
 #: says so, because "I ran vite build and the platform says no index.html" is
 #: the failure this ordering produces.
+STATIC_ROOT_CANDIDATES = (".", "dist", "build", "public")
 
 NODE_INSTALL_NONE = "none"
 NODE_INSTALL_CI = "ci"
@@ -93,11 +91,9 @@ def _node_facts(context_dir: Path) -> dict[str, Any]:
 
 
 def _static_facts(context_dir: Path) -> dict[str, Any]:
-    try:
-        return {"static_root": select_static_root(context_dir, built=False).relative_to(context_dir).as_posix()}
-    except BundleInputError as exc:
-        if str(exc) != "static_entry_missing":
-            raise SourceFactsError("the static runtime refuses linked or escaped entry paths") from exc
+    for candidate in STATIC_ROOT_CANDIDATES:
+        if (context_dir / candidate / "index.html").is_file():
+            return {"static_root": candidate}
     raise SourceFactsError(
         "the static runtime needs an index.html at the package root or in one of "
         + ", ".join(f"{name}/" for name in STATIC_ROOT_CANDIDATES if name != ".")

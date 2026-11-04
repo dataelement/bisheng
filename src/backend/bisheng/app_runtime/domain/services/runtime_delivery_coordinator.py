@@ -30,16 +30,8 @@ from bisheng.common.errcode.app_factory import (
     AppOrchestratorUnavailableError,
     AppProbeFailedError,
 )
+from bisheng.common.errcode.app_publish import AppDependencyBuildFailedError
 from bisheng.common.services.config_service import settings
-
-
-def runtime_metadata(manifest):
-    """Freeze only runtime facts; precheck does not invent an AppVersion number."""
-    health = manifest.get("health")
-    return {
-        "runtime": manifest.get("runtime", ""),
-        "health": {"path": "/", **(health if isinstance(health, dict) else {})},
-    }
 
 
 class RuntimeDeliveryCoordinator:
@@ -95,11 +87,24 @@ class RuntimeDeliveryCoordinator:
     async def wait(self, op, *, ready=False):
         while True:
             current = await self.repo.get(RuntimeOperation, op.id)
-            if current.status in {"failed", "timed_out", "cancelled"}:
-                from bisheng.app_runtime.domain.services.runtime_public_diagnostics import runtime_failure_error
-
-                raise runtime_failure_error(current)
             result = await self.operations.describe(current)
+            if current.status in {"failed", "timed_out", "cancelled"}:
+                raise AppProbeFailedError(
+                    msg="应用执行失败",
+                    reason=current.failure.get("reason", "execution_failed"),
+                    operation_id=op.id,
+                    runtime_stage=current.failure.get("failed_stage") or current.stage,
+                    details={
+                        "operation_id": op.id,
+                        "reason": current.failure.get("reason", "execution_failed"),
+                        "runtime_stage": current.failure.get("failed_stage") or current.stage,
+                        "maintenance": bool(current.failure.get("maintenance")),
+                        "data_may_have_changed": bool(current.failure.get("data_may_have_changed")),
+                    },
+                    maintenance=bool(current.failure.get("maintenance")),
+                    data_may_have_changed=bool(current.failure.get("data_may_have_changed")),
+                    failure=current.failure,
+                )
             if current.status == "completed" or (ready and current.stage in {"ready", "serving"}):
                 return result
             if datetime.utcnow() > current.deadline:
@@ -228,7 +233,13 @@ class RuntimeDeliveryCoordinator:
             payload=payload,
         )
         await self.wake(op)
-        result = await self.wait(op)
+        try:
+            result = await self.wait(op)
+        except AppProbeFailedError as exc:
+            raise AppDependencyBuildFailedError(
+                msg="应用依赖或交付准备失败",
+                details={**exc.kwargs.get("details", {}), "operation_id": op.id},
+            ) from exc
         content = result["result"]["delivery"]
         return await self.repo.freeze_delivery(
             RuntimeDelivery(
@@ -255,7 +266,6 @@ class RuntimeDeliveryCoordinator:
         from bisheng.app_publish.domain.services.schema_evolution_service import migration_plan, tables_of
 
         body = {
-            **runtime_metadata(manifest.model_dump(mode="json")),
             "authorization_context": deployment.authorization_context,
             "resolved_delivery": delivery.content,
             "migration_plan": migration_plan([], tables_of(manifest)),
@@ -389,7 +399,6 @@ class RuntimeDeliveryCoordinator:
             return {"instance_id": routes[0].exec_ref, "phase": "running", "operation_id": op.id}
         delivery = await self.delivery(app.id, version.id)
         body = {
-            **runtime_metadata(version.manifest),
             "authorization_context": authorization_context,
             "resolved_delivery": delivery.content,
             "slug": app.slug,
@@ -471,7 +480,6 @@ class RuntimeDeliveryCoordinator:
         delivery = await self.delivery(app.id, version.id)
         tier = await AppStateService._resolve_tier(version.tier_id)
         payload = {
-            **runtime_metadata(version.manifest),
             "resolved_delivery": delivery.content,
             "slug": app.slug,
             "version_no": version.version_no,

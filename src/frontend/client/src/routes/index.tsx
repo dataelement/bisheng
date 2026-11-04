@@ -1,87 +1,67 @@
-import { ClientEnvironmentSync } from "./ClientEnvironmentSync";
-import { ApiErrorWatcher, Login, TwoFactorScreen } from "@/components/Auth";
-import { AuthContextProvider } from "@/hooks/AuthContext";
-import { lazy, Suspense, type ReactNode } from "react";
 import {
-  createBrowserRouter,
-  Navigate,
-  Outlet,
-  useParams,
-} from "react-router-dom";
-import ChatRoute from "./ChatRoute";
-import LoginLayout from "./Layouts/Login";
-import { RequireLogin } from "./RequireLogin";
-import RouteErrorBoundary from "./RouteErrorBoundary";
+  ApiErrorWatcher,
+  Login,
+  TwoFactorScreen
+} from '@/components/Auth';
+import { AuthContextProvider } from '@/hooks/AuthContext';
+import { lazy, Suspense, type ReactNode } from 'react';
+import { createBrowserRouter, Navigate, Outlet, useParams } from 'react-router-dom';
+import ChatRoute from './ChatRoute';
+import LoginLayout from './Layouts/Login';
+import { RequireLogin } from './RequireLogin';
+import RouteErrorBoundary from './RouteErrorBoundary';
 // import ShareRoute from './ShareRoute';
-import MainLayout from "@/layouts/MainLayout";
-import Page404 from "@/pages/Page404";
-import Page403 from "@/pages/Page403";
-import { AliveScope } from "react-activation";
-import AppRoot from "./AppRoot";
-import Root from "./Root";
-import MenuUnavailablePage from "@/pages/MenuUnavailablePage";
-import { useAuthContext } from "@/hooks";
-import MenuApprovalPluginGate from "@/layouts/MenuApprovalPluginGate";
-import { appsSectionLinkTarget } from "@/layouts/appModuleNavPaths";
-import { canOpenWorkbench } from "@/utils/platformAccess";
-import { LoadingIcon } from "~/components/ui/icon/Loading";
+import MainLayout from '@/layouts/MainLayout';
+import Page404 from '@/pages/Page404';
+import Page403 from '@/pages/Page403';
+import { AliveScope } from 'react-activation';
+import AppRoot from './AppRoot';
+import Root from './Root';
+import MenuUnavailablePage from '@/pages/MenuUnavailablePage';
+import { useAuthContext } from '@/hooks';
+import MenuApprovalPluginGate from '@/layouts/MenuApprovalPluginGate';
+import { appsSectionLinkTarget } from '@/layouts/appModuleNavPaths';
+import { canOpenWorkbench } from '@/utils/platformAccess';
+import { LoadingIcon } from '~/components/ui/icon/Loading';
 
-import { usePrefersMobileLayout } from "~/hooks";
-import { squareTypePath } from "~/pages/square/squarePaths";
+import { usePrefersMobileLayout } from '~/hooks';
+import { squareTypePath } from '~/pages/square/squarePaths';
 
 // Route-level code splitting (ledger #27): only the primary landing path
 // (login + main layout + chat home) ships in the entry chunk; every other
 // page loads on first navigation.
-const WebView = lazy(() => import("@/components/WebView"));
-const AppChat = lazy(() => import("@/pages/appChat"));
-const AppChatEntry = lazy(() => import("@/pages/appChat/AppChatEntry"));
-const AgentCenter = lazy(() => import("@/pages/apps"));
-const ExplorePlaza = lazy(() => import("@/pages/apps/explore"));
-const Share = lazy(() => import("@/pages/share"));
+const WebView = lazy(() => import('@/components/WebView'));
+const AppChat = lazy(() => import('@/pages/appChat'));
+const AppChatEntry = lazy(() => import('@/pages/appChat/AppChatEntry'));
+const AgentCenter = lazy(() => import('@/pages/apps'));
+const ExplorePlaza = lazy(() => import('@/pages/apps/explore'));
+const Share = lazy(() => import('@/pages/share'));
 const SkillCenterPage = lazy(() =>
-  import("~/pages/skills/SkillCenterPage").then((module) => ({
-    default: module.SkillCenterPage,
-  })),
+  import('~/pages/skills/SkillCenterPage').then((module) => ({ default: module.SkillCenterPage })),
 );
-const Sop = lazy(() => import("@/components/Sop"));
-const Subscription = lazy(() => import("~/pages/Subscription"));
-const Knowledge = lazy(() => import("~/pages/knowledge"));
+const Sop = lazy(() => import('@/components/Sop'));
+const Subscription = lazy(() => import('~/pages/Subscription'));
+const Knowledge = lazy(() => import('~/pages/knowledge'));
 const ChannelSettingsPage = lazy(() =>
-  import("~/pages/Subscription/ChannelSettings/ChannelSettingsPage").then(
-    (module) => ({
-      default: module.ChannelSettingsPage,
-    }),
-  ),
+  import('~/pages/Subscription/ChannelSettings/ChannelSettingsPage').then((module) => ({
+    default: module.ChannelSettingsPage,
+  })),
 );
 const KnowledgeSpaceSettingsPage = lazy(() =>
-  import("~/pages/knowledge/SpaceSettings/KnowledgeSpaceSettingsPage").then(
-    (module) => ({
-      default: module.KnowledgeSpaceSettingsPage,
-    }),
-  ),
+  import('~/pages/knowledge/SpaceSettings/KnowledgeSpaceSettingsPage').then((module) => ({
+    default: module.KnowledgeSpaceSettingsPage,
+  })),
 );
-const FilePreviewPage = lazy(
-  () => import("~/pages/knowledge/FilePreview/FilePreviewPage"),
-);
-const ArticlePage = lazy(
-  () => import("~/pages/Subscription/Article/ArticlePage"),
-);
-const DevLogin = lazy(() => import("~/pages/DevLogin"));
-const StandaloneChatPage = lazy(
-  () => import("~/pages/standaloneChat/StandaloneChatPage"),
-);
-const MediaPlaybackPage = lazy(() => import("~/pages/media/MediaPlaybackPage"));
-const SettingsPage = lazy(() => import("~/pages/settings/SettingsPage"));
+const FilePreviewPage = lazy(() => import('~/pages/knowledge/FilePreview/FilePreviewPage'));
+const ArticlePage = lazy(() => import('~/pages/Subscription/Article/ArticlePage'));
+const DevLogin = lazy(() => import('~/pages/DevLogin'));
+const StandaloneChatPage = lazy(() => import('~/pages/standaloneChat/StandaloneChatPage'));
+const MediaPlaybackPage = lazy(() => import('~/pages/media/MediaPlaybackPage'));
+const SettingsPage = lazy(() => import('~/pages/settings/SettingsPage'));
 const SquarePage = lazy(() =>
-  import("~/pages/square/SquarePage").then((module) => ({
-    default: module.SquarePage,
-  })),
+  import('~/pages/square/SquarePage').then((module) => ({ default: module.SquarePage })),
 );
-const CapabilityCenterPage = lazy(() =>
-  import("~/pages/capabilities/CapabilityCenterPage").then((module) => ({
-    default: module.CapabilityCenterPage,
-  })),
-);
+const CapabilityCenterPage = lazy(() => import('~/pages/capabilities/CapabilityCenterPage').then(module => ({ default: module.CapabilityCenterPage })));
 
 function RouteLoading() {
   return (
@@ -91,9 +71,7 @@ function RouteLoading() {
   );
 }
 
-const suspended = (node: ReactNode) => (
-  <Suspense fallback={<RouteLoading />}>{node}</Suspense>
-);
+const suspended = (node: ReactNode) => <Suspense fallback={<RouteLoading />}>{node}</Suspense>;
 
 function HomeEntryRedirect() {
   const { user } = useAuthContext();
@@ -104,8 +82,7 @@ function HomeEntryRedirect() {
   const canOpenWorkbenchEntry = canOpenWorkbench({
     role: user?.role,
     plugins,
-    is_department_admin: (user as { is_department_admin?: boolean } | null)
-      ?.is_department_admin,
+    is_department_admin: (user as { is_department_admin?: boolean } | null)?.is_department_admin,
   });
   if (!canOpenWorkbenchEntry) {
     return <Navigate to="/404" replace />;
@@ -113,16 +90,16 @@ function HomeEntryRedirect() {
   const has = (id: string) => plugins.includes(id);
   // Only users with WEB_MENU `home` land on chat home; do not use menu_approval_mode here — it incorrectly
   // forced /c/new for every user when approval was on (same class of bug as apps center).
-  if (has("home")) {
+  if (has('home')) {
     return <Navigate to="/c/new" replace />;
   }
-  if (has("apps")) {
+  if (has('apps')) {
     return <Navigate to={appsSectionLinkTarget()} replace />;
   }
-  if (has("subscription")) {
+  if (has('subscription')) {
     return <Navigate to="/channel" replace />;
   }
-  if (has("knowledge_space")) {
+  if (has('knowledge_space')) {
     return <Navigate to="/knowledge" replace />;
   }
   // In approval mode, a new user may have workbench entry but no nav plugins yet.
@@ -130,13 +107,9 @@ function HomeEntryRedirect() {
   // a dead-end generic message.
   // Workspace landing fallback uses the workbench approval scope (legacy flag as fallback).
   const menuApprovalMode = Boolean(
-    (
-      user as {
-        menu_approval_mode_workbench?: boolean;
-        menu_approval_mode?: boolean;
-      } | null
-    )?.menu_approval_mode_workbench ??
-    (user as { menu_approval_mode?: boolean } | null)?.menu_approval_mode,
+    (user as { menu_approval_mode_workbench?: boolean; menu_approval_mode?: boolean } | null)
+      ?.menu_approval_mode_workbench
+    ?? (user as { menu_approval_mode?: boolean } | null)?.menu_approval_mode,
   );
   if (menuApprovalMode) {
     return <Navigate to="/menu-unavailable?plugin=home" replace />;
@@ -144,13 +117,10 @@ function HomeEntryRedirect() {
   return <Navigate to="/menu-unavailable" replace />;
 }
 
+/** 应用广场: desktop has it as a tab of 广场; mobile keeps the standalone page. */
 function AppsExploreRoute() {
   const isMobile = usePrefersMobileLayout();
-  return isMobile ? (
-    <ExplorePlaza />
-  ) : (
-    <Navigate to={squareTypePath("apps")} replace />
-  );
+  return isMobile ? <ExplorePlaza /> : <Navigate to={squareTypePath('apps')} replace />;
 }
 
 const AuthLayout = () => (
@@ -162,300 +132,190 @@ const AuthLayout = () => (
   </AuthContextProvider>
 );
 
-export const LegacyRedirect = ({
-  toPattern,
-}: {
-  toPattern: (params: Record<string, string | undefined>) => string;
-}) => {
+export const LegacyRedirect = ({ toPattern }: { toPattern: (params: Record<string, string | undefined>) => string }) => {
   const params = useParams();
   return <Navigate to={toPattern(params)} replace />;
 };
 
 const baseConfig = {
   //@ts-ignore
-  basename: __APP_ENV__.BASE_URL,
-};
+  basename: __APP_ENV__.BASE_URL
+}
 
-export const router = createBrowserRouter(
-  [
-    {
-      element: (
-        <>
-          <ClientEnvironmentSync />
-          <Outlet />
-        </>
-      ),
-      children: [
-        {
-          element: <AuthLayout />,
-          errorElement: <RouteErrorBoundary />,
-          children: [
-            {
-              path: __APP_ENV__.BISHENG_HOST,
-              element: <LoginLayout />,
-              children: [
-                { path: "login", element: <Login /> },
-                { path: "login/2fa", element: <TwoFactorScreen /> },
-              ],
-            },
-            {
-              path: "/",
-              element: <MainLayout />,
-              children: [
-                {
-                  path: "",
-                  element: <Root />,
-                  children: [
-                    { index: true, element: <HomeEntryRedirect /> },
-                    {
-                      path: "c/skills",
-                      element: (
-                        <MenuApprovalPluginGate pluginId="home">
-                          {suspended(<SkillCenterPage />)}
-                        </MenuApprovalPluginGate>
-                      ),
-                    },
-                    {
-                      path: "c/media-playback",
-                      element: (
-                        <MenuApprovalPluginGate pluginId="home">
-                          {suspended(<MediaPlaybackPage />)}
-                        </MenuApprovalPluginGate>
-                      ),
-                    },
-                    {
-                      path: "c/:conversationId?",
-                      element: (
-                        <MenuApprovalPluginGate pluginId="home">
-                          <ChatRoute />
-                        </MenuApprovalPluginGate>
-                      ),
-                    },
-                    {
-                      path: "linsight/:conversationId?",
-                      element: suspended(
-                        // F035: task mode has its own menu permission key, split from `home`
-                        <MenuApprovalPluginGate pluginId="linsight_task_mode">
-                          <Sop />
-                        </MenuApprovalPluginGate>,
-                      ),
-                    },
-                    {
-                      path: "linsight/case/:sopId",
-                      element: suspended(
-                        <MenuApprovalPluginGate pluginId="linsight_task_mode">
-                          <Sop />
-                        </MenuApprovalPluginGate>,
-                      ),
-                    },
-                    // { path: 'apps', element: <AgentCenter /> },
-                  ],
-                },
-                {
-                  path: "app",
-                  element: <AppRoot />,
-                  children: [
-                    {
-                      path: ":fid/:type",
-                      element: suspended(<AppChatEntry />),
-                    },
-                    {
-                      path: ":conversationId/:fid/:type",
-                      element: suspended(<AppChat />),
-                    },
-                  ],
-                },
-                {
-                  path: "chat/:conversationId/:fid/:type",
-                  element: (
-                    <LegacyRedirect
-                      toPattern={(p) =>
-                        `/app/${p.conversationId}/${p.fid}/${p.type}`
-                      }
-                    />
-                  ),
-                },
-                {
-                  path: "apps",
-                  element: suspended(
-                    <MenuApprovalPluginGate pluginId="apps">
-                      <AgentCenter />
-                    </MenuApprovalPluginGate>,
-                  ),
-                },
-                {
-                  path: "apps/explore",
-                  element: suspended(
-                    <MenuApprovalPluginGate pluginId="apps">
-                      <AppsExploreRoute />
-                    </MenuApprovalPluginGate>,
-                  ),
-                },
+export const router = createBrowserRouter([
+  {
+    element: <AuthLayout />,
+    errorElement: <RouteErrorBoundary />,
+    children: [
+      {
+        path: __APP_ENV__.BISHENG_HOST,
+        element: <LoginLayout />,
+        children: [
+          { path: 'login', element: <Login /> },
+          { path: 'login/2fa', element: <TwoFactorScreen /> },
+        ],
+      },
+      {
+        path: '/',
+        element: <MainLayout />,
+        children: [
+          {
+            path: '',
+            element: <Root />,
+            children: [
+              { index: true, element: <HomeEntryRedirect /> },
+              {
+                path: 'c/skills',
+                element: (
+                  <MenuApprovalPluginGate pluginId="home">{suspended(<SkillCenterPage />)}</MenuApprovalPluginGate>
+                ),
+              },
+              {
+                path: 'c/media-playback',
+                element: (
+                  <MenuApprovalPluginGate pluginId="home">
+                    {suspended(<MediaPlaybackPage />)}
+                  </MenuApprovalPluginGate>
+                ),
+              },
+              {
+                path: 'c/:conversationId?',
+                element: (
+                  <MenuApprovalPluginGate pluginId="home">
+                    <ChatRoute />
+                  </MenuApprovalPluginGate>
+                ),
+              },
+              {
+                path: 'linsight/:conversationId?',
+                element: suspended(
+                  // F035: task mode has its own menu permission key, split from `home`
+                  <MenuApprovalPluginGate pluginId="linsight_task_mode">
+                    <Sop />
+                  </MenuApprovalPluginGate>
+                ),
+              },
+              {
+                path: 'linsight/case/:sopId',
+                element: suspended(
+                  <MenuApprovalPluginGate pluginId="linsight_task_mode">
+                    <Sop />
+                  </MenuApprovalPluginGate>
+                ),
+              },
+              // { path: 'apps', element: <AgentCenter /> },
+            ],
+          },
+          {
+            path: 'app', element: <AppRoot />, children: [
+              { path: ':fid/:type', element: suspended(<AppChatEntry />) },
+              { path: ':conversationId/:fid/:type', element: suspended(<AppChat />) }
+            ]
+          },
+          {
+            // === 兼容旧路由 ===
+            path: 'chat/:conversationId/:fid/:type',
+            element: <LegacyRedirect toPattern={(p) => `/app/${p.conversationId}/${p.fid}/${p.type}`} />
+          },
+          {
+            path: 'apps',
+            element: suspended(
+              <MenuApprovalPluginGate pluginId="apps">
+                <AgentCenter />
+              </MenuApprovalPluginGate>
+            ),
+          },
+          {
+            path: 'apps/explore',
+            element: suspended(
+              <MenuApprovalPluginGate pluginId="apps">
+                <AppsExploreRoute />
+              </MenuApprovalPluginGate>
+            ),
+          },
+          // 广场 — every module's discover view behind one entry (tabs follow the module
+          // grants, so the page needs no plugin gate of its own).
+          { path: 'square', element: suspended(<SquarePage />) },
+          { path: 'capabilities', element: suspended(<MenuApprovalPluginGate pluginId="home"><CapabilityCenterPage /></MenuApprovalPluginGate>) },
+          {
+            // Skill entry follows the home module grant.
+            path: 'skills',
+            element: suspended(
+              <MenuApprovalPluginGate pluginId="home">
+                <SkillCenterPage />
+              </MenuApprovalPluginGate>
+            ),
+          },
+          { path: 'channel', element: suspended(
+            <MenuApprovalPluginGate pluginId="subscription">
+              <Subscription />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'channel/create', element: suspended(
+            <MenuApprovalPluginGate pluginId="subscription">
+              <ChannelSettingsPage />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'channel/:channelId/settings', element: suspended(
+            <MenuApprovalPluginGate pluginId="subscription">
+              <ChannelSettingsPage />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'channel/share/:channelId', element: suspended(<Subscription />) },
+          { path: 'channel/:channelId', element: suspended(
+            <MenuApprovalPluginGate pluginId="subscription">
+              <Subscription />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'knowledge', element: suspended(
+            <MenuApprovalPluginGate pluginId="knowledge_space">
+              <Knowledge />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'knowledge/create', element: suspended(
+            <MenuApprovalPluginGate pluginId="knowledge_space">
+              <KnowledgeSpaceSettingsPage />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'knowledge/space/:spaceId/settings', element: suspended(
+            <MenuApprovalPluginGate pluginId="knowledge_space">
+              <KnowledgeSpaceSettingsPage />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'knowledge/space/:spaceId', element: suspended(
+            <MenuApprovalPluginGate pluginId="knowledge_space">
+              <Knowledge />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'knowledge/space/:spaceId/folder/:folderId', element: suspended(
+            <MenuApprovalPluginGate pluginId="knowledge_space">
+              <Knowledge />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'knowledge/share/:spaceId', element: suspended(<Knowledge />) },
+          // Personal settings + 消息与审批, merged into one routed page (no plugin gate — always available).
+          { path: 'settings/:section?', element: suspended(<SettingsPage />) },
+          { path: 'menu-unavailable', element: <MenuUnavailablePage /> },
+        ],
+      },
+      // Standalone chat — auth (login required, inside AuthLayout)
+      { path: 'chat/flow/auth/:flowId', element: suspended(<StandaloneChatPage mode="auth" flowType="workflow" />) },
+      { path: 'chat/assistant/auth/:flowId', element: suspended(<StandaloneChatPage mode="auth" flowType="assistant" />) },
 
-                // grants, so the page needs no plugin gate of its own).
-                { path: "square", element: suspended(<SquarePage />) },
-                {
-                  path: "capabilities",
-                  element: suspended(
-                    <MenuApprovalPluginGate pluginId="home">
-                      <CapabilityCenterPage />
-                    </MenuApprovalPluginGate>,
-                  ),
-                },
-                {
-                  // Skill entry follows the home module grant.
-                  path: "skills",
-                  element: suspended(
-                    <MenuApprovalPluginGate pluginId="home">
-                      <SkillCenterPage />
-                    </MenuApprovalPluginGate>,
-                  ),
-                },
-                {
-                  path: "channel",
-                  element: suspended(
-                    <MenuApprovalPluginGate pluginId="subscription">
-                      <Subscription />
-                    </MenuApprovalPluginGate>,
-                  ),
-                },
-                {
-                  path: "channel/create",
-                  element: suspended(
-                    <MenuApprovalPluginGate pluginId="subscription">
-                      <ChannelSettingsPage />
-                    </MenuApprovalPluginGate>,
-                  ),
-                },
-                {
-                  path: "channel/:channelId/settings",
-                  element: suspended(
-                    <MenuApprovalPluginGate pluginId="subscription">
-                      <ChannelSettingsPage />
-                    </MenuApprovalPluginGate>,
-                  ),
-                },
-                {
-                  path: "channel/share/:channelId",
-                  element: suspended(<Subscription />),
-                },
-                {
-                  path: "channel/:channelId",
-                  element: suspended(
-                    <MenuApprovalPluginGate pluginId="subscription">
-                      <Subscription />
-                    </MenuApprovalPluginGate>,
-                  ),
-                },
-                {
-                  path: "knowledge",
-                  element: suspended(
-                    <MenuApprovalPluginGate pluginId="knowledge_space">
-                      <Knowledge />
-                    </MenuApprovalPluginGate>,
-                  ),
-                },
-                {
-                  path: "knowledge/create",
-                  element: suspended(
-                    <MenuApprovalPluginGate pluginId="knowledge_space">
-                      <KnowledgeSpaceSettingsPage />
-                    </MenuApprovalPluginGate>,
-                  ),
-                },
-                {
-                  path: "knowledge/space/:spaceId/settings",
-                  element: suspended(
-                    <MenuApprovalPluginGate pluginId="knowledge_space">
-                      <KnowledgeSpaceSettingsPage />
-                    </MenuApprovalPluginGate>,
-                  ),
-                },
-                {
-                  path: "knowledge/space/:spaceId",
-                  element: suspended(
-                    <MenuApprovalPluginGate pluginId="knowledge_space">
-                      <Knowledge />
-                    </MenuApprovalPluginGate>,
-                  ),
-                },
-                {
-                  path: "knowledge/space/:spaceId/folder/:folderId",
-                  element: suspended(
-                    <MenuApprovalPluginGate pluginId="knowledge_space">
-                      <Knowledge />
-                    </MenuApprovalPluginGate>,
-                  ),
-                },
-                {
-                  path: "knowledge/share/:spaceId",
-                  element: suspended(<Knowledge />),
-                },
-
-                {
-                  path: "settings/:section?",
-                  element: suspended(<SettingsPage />),
-                },
-                { path: "menu-unavailable", element: <MenuUnavailablePage /> },
-              ],
-            },
-            // Standalone chat — auth (login required, inside AuthLayout)
-            {
-              path: "chat/flow/auth/:flowId",
-              element: suspended(
-                <StandaloneChatPage mode="auth" flowType="workflow" />,
-              ),
-            },
-            {
-              path: "chat/assistant/auth/:flowId",
-              element: suspended(
-                <StandaloneChatPage mode="auth" flowType="assistant" />,
-              ),
-            },
-
-            // Share links are viewable by any LOGGED-IN user (owner or not) — every
-            // endpoint behind them is login-gated, so an anonymous visitor must go
-            // through login first and is returned here afterwards.
-            {
-              path: "share/:token/:vid?",
-              element: suspended(
-                <RequireLogin>
-                  <Share />
-                </RequireLogin>,
-              ),
-            },
-            {
-              path: "knowledge/file/:fileId",
-              element: suspended(<FilePreviewPage />),
-            },
-            {
-              path: "channel/:channelId/article/:articleId",
-              element: suspended(<ArticlePage />),
-            },
-          ],
-        },
-        // Standalone chat — guest (no login, outside AuthLayout to avoid 401 redirect)
-        {
-          path: "chat/flow/:flowId",
-          element: suspended(
-            <StandaloneChatPage mode="guest" flowType="workflow" />,
-          ),
-          errorElement: <RouteErrorBoundary />,
-        },
-        {
-          path: "chat/assistant/:flowId",
-          element: suspended(
-            <StandaloneChatPage mode="guest" flowType="assistant" />,
-          ),
-          errorElement: <RouteErrorBoundary />,
-        },
-        { path: "/html", element: suspended(<WebView />) },
-        { path: "/__dev/login", element: suspended(<DevLogin />) },
-        { path: "/404", element: <Page404 /> },
-        { path: "/403", element: <Page403 /> },
-        { path: "*", element: <Navigate to="/404" replace /> },
-      ],
-    },
-  ],
-  baseConfig,
-);
+      // Share links are viewable by any LOGGED-IN user (owner or not) — every
+      // endpoint behind them is login-gated, so an anonymous visitor must go
+      // through login first and is returned here afterwards.
+      { path: 'share/:token/:vid?', element: suspended(<RequireLogin><Share /></RequireLogin>) },
+      { path: 'knowledge/file/:fileId', element: suspended(<FilePreviewPage />) },
+      { path: 'channel/:channelId/article/:articleId', element: suspended(<ArticlePage />) },
+    ],
+  },
+  // Standalone chat — guest (no login, outside AuthLayout to avoid 401 redirect)
+  { path: 'chat/flow/:flowId', element: suspended(<StandaloneChatPage mode="guest" flowType="workflow" />), errorElement: <RouteErrorBoundary /> },
+  { path: 'chat/assistant/:flowId', element: suspended(<StandaloneChatPage mode="guest" flowType="assistant" />), errorElement: <RouteErrorBoundary /> },
+  { path: '/html', element: suspended(<WebView />) },
+  { path: '/__dev/login', element: suspended(<DevLogin />) },
+  { path: '/404', element: <Page404 /> },
+  { path: '/403', element: <Page403 /> },
+  { path: "*", element: <Navigate to="/404" replace /> }
+], baseConfig);

@@ -9,7 +9,6 @@ from sqlmodel import col, select
 
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session, get_sync_db_session
-from bisheng.database.models.org_snapshot import astamp_audit_logs
 from bisheng.open_api.domain.models.api_credential import ApiCredential
 from bisheng.open_api.domain.models.credential_delegate_scope import ApiCredentialDelegateScope
 
@@ -59,27 +58,27 @@ class CredentialRepository:
                 )
             )
         if audit_operator is not None:
-            entry = AuditLog(
-                tenant_id=row.tenant_id,
-                operator_id=audit_operator.user_id,
-                operator_name=getattr(audit_operator, "user_name", None)
-                or ("system" if audit_operator.user_id == 0 else None),
-                operator_tenant_id=audit_operator.tenant_id,
-                action="open_api.api_key.issue",
-                target_type="api_credential",
-                target_id=str(row.id),
-                object_name=row.name,
-                audit_metadata={
-                    "credential_id": row.id,
-                    "subject_kind": row.subject_kind,
-                    "subject_id": row.subject_id,
-                    "scopes": list(row.scopes or []),
-                    "key_mask": row.key_mask,
-                    **await cls.trusted_app_metadata(session, row),
-                },
+            session.add(
+                AuditLog(
+                    tenant_id=row.tenant_id,
+                    operator_id=audit_operator.user_id,
+                    operator_name=getattr(audit_operator, "user_name", None)
+                    or ("system" if audit_operator.user_id == 0 else None),
+                    operator_tenant_id=audit_operator.tenant_id,
+                    action="open_api.api_key.issue",
+                    target_type="api_credential",
+                    target_id=str(row.id),
+                    object_name=row.name,
+                    audit_metadata={
+                        "credential_id": row.id,
+                        "subject_kind": row.subject_kind,
+                        "subject_id": row.subject_id,
+                        "scopes": list(row.scopes or []),
+                        "key_mask": row.key_mask,
+                        **await cls.trusted_app_metadata(session, row),
+                    },
+                )
             )
-            await astamp_audit_logs([entry])
-            session.add(entry)
         await session.flush()
         # MySQL does not return server defaults on INSERT. Load them explicitly
         # before synchronous DTO construction, without committing the caller's UoW.
@@ -115,27 +114,27 @@ class CredentialRepository:
     async def append_runtime_revoke_audit(session, *, row, binding, operation, reason):
         from bisheng.database.models.audit_log import AuditLog
 
-        entry = AuditLog(
-            tenant_id=row.tenant_id,
-            operator_id=0,
-            operator_name="system",
-            operator_tenant_id=row.tenant_id,
-            action="open_api.api_key.revoke",
-            target_type="api_credential",
-            target_id=str(row.id),
-            object_name=row.name,
-            audit_metadata={
-                "app_id": binding.app_id,
-                "credential_id": row.id,
-                "operation_id": operation.id,
-                "reason": reason,
-                "subject_kind": row.subject_kind,
-                "subject_id": row.subject_id,
-                "key_mask": row.key_mask,
-            },
+        session.add(
+            AuditLog(
+                tenant_id=row.tenant_id,
+                operator_id=0,
+                operator_name="system",
+                operator_tenant_id=row.tenant_id,
+                action="open_api.api_key.revoke",
+                target_type="api_credential",
+                target_id=str(row.id),
+                object_name=row.name,
+                audit_metadata={
+                    "app_id": binding.app_id,
+                    "credential_id": row.id,
+                    "operation_id": operation.id,
+                    "reason": reason,
+                    "subject_kind": row.subject_kind,
+                    "subject_id": row.subject_id,
+                    "key_mask": row.key_mask,
+                },
+            )
         )
-        await astamp_audit_logs([entry])
-        session.add(entry)
         await session.flush()
 
     @classmethod
@@ -454,25 +453,25 @@ class CredentialRepository:
         row.revoked_at = datetime.utcnow()
         row.revoke_reason = reason[:32]
         session.add(row)
-        entry = AuditLog(
-            tenant_id=tenant_id,
-            operator_id=0,
-            operator_name="system",
-            operator_tenant_id=tenant_id,
-            action="open_api.api_key.revoke",
-            target_type="api_credential",
-            target_id=str(row.id),
-            object_name=row.name,
-            audit_metadata={
-                "credential_id": row.id,
-                "subject_kind": row.subject_kind,
-                "subject_id": subject_id,
-                "reason": reason,
-                "preview": True,
-            },
+        session.add(
+            AuditLog(
+                tenant_id=tenant_id,
+                operator_id=0,
+                operator_name="system",
+                operator_tenant_id=tenant_id,
+                action="open_api.api_key.revoke",
+                target_type="api_credential",
+                target_id=str(row.id),
+                object_name=row.name,
+                audit_metadata={
+                    "credential_id": row.id,
+                    "subject_kind": row.subject_kind,
+                    "subject_id": subject_id,
+                    "reason": reason,
+                    "preview": True,
+                },
+            )
         )
-        await astamp_audit_logs([entry])
-        session.add(entry)
         await session.flush()
         return True
 

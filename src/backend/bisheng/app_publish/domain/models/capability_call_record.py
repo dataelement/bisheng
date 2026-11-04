@@ -89,9 +89,6 @@ class AppCapabilityCallRecord(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(String(36), nullable=True, comment="Version whose declaration authorised the call"),
     )
-    # F003 organisation snapshot of the subject; sentinels in ``database/models/org_snapshot.py``.
-    operator_dept_id: int | None = Field(default=None, sa_column=Column(Integer, nullable=True, index=True))
-    operator_dept_path: str | None = Field(default=None, sa_column=Column(String(1024), nullable=True))
     create_time: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP")),

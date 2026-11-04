@@ -365,7 +365,6 @@ export function Select(props: SelectProps) {
       allowClear={allowClear}
       clearLabel={clearLabel}
       body={body}
-      hasSearchInput={searchable}
       hasMultipleTags={multiple && hasValue}
       customTrigger={trigger}
       className={className}

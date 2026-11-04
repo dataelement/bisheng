@@ -15,7 +15,7 @@ import { type ClassValue, clsx } from 'clsx';
  */
 const classGroups = {
   'font-size': [
-    { text: ['caption-sm', 'caption', 'body-sm', 'body', 'h1', 'h2', 'h3', 'h4', 'display', 'metric', 'field', 'field-lg', 'control', 'control-lg'] },
+    { text: ['caption-sm', 'caption', 'body-sm', 'body', 'h1', 'h2', 'h3', 'h4', 'display', 'metric'] },
   ],
 };
 // The transformer API works with both v1 and v2. The v2-only `extend` object

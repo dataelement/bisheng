@@ -42,55 +42,6 @@ function useLanding({ cid = 'new', ready = true, catalog = models, task = false 
 const question: ChatAsk = { text: 'Count entries', modelId: 2, space: { id: 'space-1', name: 'Knowledge' } };
 beforeEach(() => localStorage.clear());
 
-test('selects the conversation layout on the first render while the fresh chat and config are pending', () => {
-  const commits: boolean[] = [];
-  const sendMessage = jest.fn(() => true);
-  parkChatAsk(question);
-  const { result, rerender, unmount } = renderHook(({ activeId }) => {
-    const [selectedKbs, setSelectedKbs] = useState<Kb[]>([]);
-    const handoff = useChatAskHandoff({
-      conversationId: 'new', activeConversationId: activeId, locationKey: 'landing',
-      selectedKbs, setSelectedKbs, sendMessage, ready: false,
-      selectedModelId: 1, selectModel: () => true, onModelUnavailable: rejected,
-    });
-    useLayoutEffect(() => { commits.push(handoff.isTextAskPending); });
-    return handoff;
-  }, { initialProps: { activeId: 'previous' } });
-  expect(commits).toEqual([true]);
-  expect(result.current.isTextAskPending).toBe(true);
-  expect(sendMessage).not.toHaveBeenCalled();
-  rerender({ activeId: 'new' });
-  expect(commits.every(Boolean)).toBe(true);
-  expect(sendMessage).not.toHaveBeenCalled();
-  unmount();
-});
-
-test('keeps the conversation layout through preparation and async send, then allows an ordinary new chat', async () => {
-  let accept: (value: boolean) => void = () => undefined;
-  const sendMessage = jest.fn(() => new Promise<boolean>((resolve) => { accept = resolve; }));
-  const selectModel = jest.fn(() => true);
-  const commits: boolean[] = [];
-  parkChatAsk({ ...question, modelId: 1 });
-  const { result, rerender } = renderHook(({ ready }) => {
-    const [selectedKbs, setSelectedKbs] = useState<Kb[]>([]);
-    const handoff = useChatAskHandoff({
-      conversationId: 'new', activeConversationId: 'new', locationKey: 'landing',
-      selectedKbs, setSelectedKbs, sendMessage, ready,
-      selectedModelId: 1, selectModel, onModelUnavailable: rejected,
-    });
-    useLayoutEffect(() => { commits.push(handoff.isTextAskPending); });
-    return handoff;
-  }, { initialProps: { ready: false } });
-  expect(result.current.isTextAskPending).toBe(true);
-  rerender({ ready: true });
-  expect(sendMessage).toHaveBeenCalledTimes(1);
-  expect(result.current.isTextAskPending).toBe(true);
-  expect(commits.every(Boolean)).toBe(true);
-  await act(async () => { accept(true); });
-  expect(result.current.isTextAskPending).toBe(false);
-  expect(sendMessage).toHaveBeenCalledTimes(1);
-});
-
 test('a cached task conversation waits for the fresh daily chat and sends once with the chosen model and space', () => {
   parkChatAsk(question);
   const view = renderHook(useLanding, { initialProps: { cid: 'old-conversation', ready: false, catalog: models, task: true }, wrapper: StrictMode });
@@ -151,8 +102,7 @@ test.each([1, 2])('a knowledge ask settles once with shared model %s and survive
 
 test('an unavailable model returns the question for editing and requires a fresh pick', () => {
   parkChatAsk({ ...question, modelId: 99 });
-  const { result } = renderHook(useLanding);
-  expect(result.current.isTextAskPending).toBe(false);
+  renderHook(useLanding);
   expect(send).toHaveBeenCalledTimes(0);
   expect(rejected).toHaveBeenCalledWith({ ...question, modelId: 99 });
 });
@@ -163,7 +113,6 @@ test('an article attachment is released once after the old knowledge selection c
   const { result } = renderHook(useLanding);
   expect(send).toHaveBeenCalledTimes(0);
   expect(result.current.attachmentAsk).toEqual({ key: expect.any(String), text: 'Summarize', file });
-  expect(result.current.isTextAskPending).toBe(false);
   act(() => result.current.retireAttachmentAsk());
   act(() => mockActivate());
   expect(result.current.attachmentAsk).toBeNull();
@@ -202,11 +151,11 @@ test('waits for the sending conversation to reach the new route', () => {
   expect(sendMessage).toHaveBeenCalledWith('question');
 });
 
-test('keeps a rejected ask until a ready sender accepts it', async () => {
+test('keeps a rejected ask until a ready sender accepts it', () => {
   const { rerender, sendMessage } = renderHandoff();
   sendMessage.mockReturnValue(false);
   parkChatAsk({ text: 'question', space });
-  await act(async () => mockActivate());
+  act(() => mockActivate());
   expect(sendMessage).toHaveBeenCalledWith('question');
   const readySend = jest.fn(() => true);
   rerender({ activeId: 'new', locationKey: 'landing', send: readySend });

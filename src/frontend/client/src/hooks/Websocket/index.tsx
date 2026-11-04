@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { getLinsightSessionVersionList, userInputLinsightEvent, userStopLinsightEvent } from "~/api/linsight";
 import { appendStepFrame } from "~/components/Linsight/Execution/stepFold";
-import { refreshInviteQuota } from "~/hooks/inviteQuotaRefresh";
 import { SopStatus } from "~/store/linsight";
 import { useToastContext } from "~/Providers";
 import { toggleNav } from "~/utils";
@@ -349,9 +348,6 @@ export const useLinsightWebSocket = (versionId) => {
                         };
                     })
                     toggleNav(true)
-                    // A finished run may have kept the consumed use, or a failure
-                    // path may have refunded it. Reload so the badge matches the DB.
-                    refreshInviteQuota();
                     // Authority: pick up the DB sweep even if this socket missed TASK_END.
                     void reconcileRef.current(id);
                     // Live only: the task answer is now a persisted category="task"
@@ -381,7 +377,6 @@ export const useLinsightWebSocket = (versionId) => {
                     updateLinsight(id, {
                         status: SopStatus.Stoped
                     })
-                    refreshInviteQuota();
                     break;
                 case 'error_message':
                     console.error(taskData.data.error, id, activeVersionIdRef.current)
@@ -399,7 +394,6 @@ export const useLinsightWebSocket = (versionId) => {
                         })
                         // showToast({ message: taskData.data.error, status: 'warning' });
                     }
-                    refreshInviteQuota();
             }
         };
 

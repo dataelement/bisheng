@@ -26,7 +26,7 @@ catalog:
   '@radix-ui/react-switch': 1.4.1
   '@radix-ui/react-tabs': 1.2.1
   '@radix-ui/react-tooltip': 1.4.1
-  bisheng-icons: ^0.2.37
+  bisheng-icons: ^0.2.36
   class-variance-authority: 0.7.1
   clsx: 2.1.1
   qrcode.react: ^4.2.0

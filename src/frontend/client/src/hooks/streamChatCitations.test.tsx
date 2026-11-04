@@ -1,12 +1,13 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import useFileChat from './useFileChat';
 import useChannelChat from './useChannelChat';
+import useFolderChat from './useFolderChat';
 import useStreamChatSSE, { type StreamChatSSESubmission } from './useStreamChatSSE';
 import * as api from '~/api/chatApi';
 
 jest.mock('~/api/chatApi', () => ({
-  getFileChatHistory: jest.fn(), getChannelChatHistory: jest.fn(),
-  getFileChatSSEUrl: jest.fn(), getChannelSSEUrl: jest.fn(),
+  getFileChatHistory: jest.fn(), getChannelChatHistory: jest.fn(), getFolderSessions: jest.fn(), getFolderChatHistory: jest.fn(),
+  getFileChatSSEUrl: jest.fn(), getChannelSSEUrl: jest.fn(), getFolderChatSSEUrl: jest.fn(),
 }));
 jest.mock('~/api/request', () => ({ showApiError: jest.fn() }));
 jest.mock('recoil', () => ({ useRecoilValue: () => ({ id: 1, name: 'Model' }) }));
@@ -17,11 +18,14 @@ beforeEach(() => {
   jest.clearAllMocks();
   (api.getFileChatHistory as jest.Mock).mockResolvedValue([]);
   (api.getChannelChatHistory as jest.Mock).mockResolvedValue([]);
+  (api.getFolderSessions as jest.Mock).mockResolvedValue([{ chat_id: 'session' }]);
+  (api.getFolderChatHistory as jest.Mock).mockResolvedValue([]);
 });
 
 it.each([
   { name: 'file', useChat: () => useFileChat('4064', '97428') },
   { name: 'article', useChat: () => useChannelChat('article') },
+  { name: 'folder', useChat: () => useFolderChat('4064') },
 ])('retains final citations in $name answers before reloading', async ({ useChat }) => {
   const { result } = renderHook(() => {
     const { isLoading, messages, sendMessage } = useChat();

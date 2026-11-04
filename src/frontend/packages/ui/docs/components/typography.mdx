@@ -5,43 +5,9 @@ statusNote: 规范 v1
 
 # 字体 Typography
 
-阅读文字、表单字段与紧凑控件各有语义字阶，共用纯系统字体栈与两档字重。**按文字用途选择 token**，完整取值与用途见 [基础-字体规范.mdx](../基础-字体规范.mdx)。
+十档 semantic 字号（自带字重，含 10px caption-sm 例外档）+ 两档字重，纯系统字体栈（零 webfont 加载）。**组件与业务代码只用 semantic 类**（`text-body` / `text-h1`…），不写裸 `text-sm` 或数值。规范全文见「文档 → 设计规范 → 字体 Typography」。
 
 > 本页表格均从设计 token 单一源 `~/design-token.cjs` 渲染，与 Tailwind 主题、组件消费的是同一份数据。
-
-## 表单与紧凑控件
-
-同一表单里的输入、选择和已选值使用一致的字阶。展开搜索时，同一文字区的字号保持一致；工具栏入口和候选项使用紧凑字阶。
-
-```tsx
-import { Input, SearchInput, Select, Cascader, Button, InputNumber, Textarea } from '@bisheng/ui';
-
-export default () => {
-  const options = [
-    { value: 'design', label: '设计规范' },
-    { value: 'product', label: '产品手册' },
-    { value: 'research', label: '调研记录' },
-  ];
-  const tree = [{ value: 'team', label: '产品团队', children: options }];
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 360 }}>
-      <Input aria-label="名称输入" defaultValue="设计规范" />
-      <SearchInput aria-label="文档搜索" placeholder="搜索文档" clearLabel="清除搜索" />
-      <Select aria-label="表单选择器" options={options} defaultValue="design" showSearch={false} />
-      <Select aria-label="可搜索选择器" options={options} defaultValue="design" showSearch />
-      <Select aria-label="多选字段" options={options} defaultValue={['design', 'product']} multiple showSearch={false} removeLabel="移除" />
-      <Cascader aria-label="表单级联选择" options={tree} defaultValue={['team', 'design']} showSearch searchPlaceholder="搜索分类" clearLabel="清除搜索" />
-      <InputNumber aria-label="数量输入" defaultValue={10} suffix="条" increaseLabel="增加" decreaseLabel="减少" />
-      <Textarea aria-label="描述输入" defaultValue="填写规范说明" rows={1} />
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <Button variant="text">管理文档</Button>
-        <Select aria-label="紧凑选择器" variant="ghost" options={options} defaultValue="design" showSearch={false} />
-        <Select aria-label="可搜索紧凑选择器" variant="ghost" options={options} defaultValue="design" showSearch />
-      </div>
-    </div>
-  );
-};
-```
 
 ## 字体栈 Font Family
 
@@ -82,9 +48,9 @@ export default () => (
 
 同一份字体栈覆盖所有设备：macOS/iOS 命中 San Francisco + 苹方，Windows 命中 Segoe UI + 微软雅黑，Android 命中 Roboto + 思源黑体，无需为移动端单独配置。
 
-## 阅读字阶 Semantic
+## 字号阶梯 Semantic
 
-十档，token 即 Tailwind 类名，**自带字重与行高**。示例为该档实时渲染。
+十档，token 即 Tailwind 类名，**自带字重与行高**。示例为该档实时渲染；窗口缩到 ≤768px 可看移动端重映射（同一类名自动换档）。
 
 ```tsx
 import { TYPE_SCALE } from '~/design-token.cjs';
@@ -93,7 +59,8 @@ export default () => (
   <div style={{ display: 'flex', flexDirection: 'column' }}>
     <div style={{ display: 'flex', gap: 16, padding: '6px 0', fontSize: 12, color: 'rgb(var(--text-3))' }}>
       <span style={{ width: 110, flexShrink: 0 }}>Token</span>
-      <span style={{ width: 80, flexShrink: 0 }}>字号 / 行高</span>
+      <span style={{ width: 80, flexShrink: 0 }}>桌面</span>
+      <span style={{ width: 80, flexShrink: 0 }}>移动</span>
       <span style={{ width: 40, flexShrink: 0 }}>字重</span>
       <span>实时示例</span>
     </div>
@@ -104,6 +71,7 @@ export default () => (
       >
         <code style={{ width: 110, flexShrink: 0, fontSize: 13 }}>text-{s.name}</code>
         <span style={{ width: 80, flexShrink: 0, fontSize: 12, color: 'rgb(var(--text-3))', fontVariantNumeric: 'tabular-nums' }}>{s.desktop[0]} / {s.desktop[1]}</span>
+        <span style={{ width: 80, flexShrink: 0, fontSize: 12, color: 'rgb(var(--text-3))', fontVariantNumeric: 'tabular-nums' }}>{s.mobile[0]} / {s.mobile[1]}</span>
         <span style={{ width: 40, flexShrink: 0, fontSize: 12, color: 'rgb(var(--text-3))' }}>{s.weight}</span>
         <div className={`text-${s.name}`} style={{ color: 'rgb(var(--text-1))', minWidth: 0 }}>{s.usage}</div>
       </div>
@@ -138,7 +106,7 @@ export default () => (
 
 ## 使用规则
 
-- 按用途使用阅读、字段或紧凑控件 token，不把 `text-body` 当作所有组件的默认字号。
+- 组件与业务代码只用 semantic 类（`text-body` / `text-h1`…），不写裸 `text-sm` 或数值字号。
 - 字重只用 `font-normal`(400) / `font-medium`(500) 两档。
 - 标题层级连续使用（h1→h2→h3），不跳级取字号。
 - 数字/金额加 `tabular-nums`；ID、代码用 `font-mono`。

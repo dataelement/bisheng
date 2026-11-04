@@ -8,7 +8,6 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from threading import Event, Lock, Thread
 
-from runtime_manager.bundle_inputs import BundleInputError
 from runtime_manager.container_runner import OP_LABEL, PHASE_LABEL, ExecutionError
 from runtime_manager.docker_backend import get_docker_backend
 from runtime_manager.executors.docker import DockerExecutor
@@ -331,26 +330,16 @@ class OperationExecutor:
                 if self.config.executor_kind == "docker":
                     self.runtime.cleanup_local_scratch(operation)
 
-    def _safe_diagnostic(self, operation, text):
-        from runtime_manager.secret_redaction import bounded_diagnostic, diagnostic_environment
+    @staticmethod
+    def _safe_diagnostic(operation, text):
+        from runtime_manager.secret_redaction import redact_output
 
         payload = operation.get("payload", {})
-        return bounded_diagnostic(
-            text, diagnostic_environment(self.config, payload), payload.get("sensitive_env_names", [])
-        )
+        return redact_output(text, payload.get("runtime_env", {}), payload.get("sensitive_env_names", []))[-16384:]
 
     def _deploy(self, operation, runner=None):
         body, kind = operation["payload"], operation["kind"]
         current = self.checkpoint(operation)
-        if kind in {"deploy", "restore"} and current["stage"] not in {"serving", "retiring"}:
-            if kind != "restore" or body.get("resume_after_restore", True):
-                phase = (
-                    "starting"
-                    if current["stage"] in {"snapshot_confirmed", "migrating", "starting", "ready"}
-                    else "maintenance"
-                )
-                self._permit(operation, phase)
-                self.runtime.preflight(operation)
         if current["stage"] not in {"starting", "ready", "serving", "retiring"} and (
             body.get("uses_sqlite", True) or kind in {"restore", "migrate"}
         ):
@@ -537,13 +526,6 @@ class OperationExecutor:
         unknown_build = current.get("payload", {}).get("legacy_build_state") == "started"
         if unknown_build and current["status"] in TERMINAL:
             return
-        tail = getattr(exc, "tail", "")
-        if not tail and current["status"] not in TERMINAL and hasattr(self.runtime, "diagnostics"):
-            try:
-                tail = self.runtime.diagnostics(operation)
-            except Exception as diagnostic_error:
-                # A failed optional read cannot change the primary failure/cleanup result.
-                logger.warning("operation output unavailable (%s)", type(diagnostic_error).__name__)
         stopped = complete = False
         try:
             # A stop owns no serving Pod itself; its empty resource set cannot
@@ -557,9 +539,7 @@ class OperationExecutor:
         reason = (
             "legacy_build_stop_unconfirmed"
             if unknown_build
-            else (
-                str(exc) if isinstance(exc, (ExecutionError, ExecutorError, BundleInputError)) else "execution_failed"
-            )
+            else (str(exc) if isinstance(exc, (ExecutionError, ExecutorError)) else "execution_failed")
         )
         phase = (
             current["status"]
@@ -572,12 +552,9 @@ class OperationExecutor:
                 else "failed"
             )
         )
-        from runtime_manager.secret_redaction import image_failure_context
-
         failure = {
-            **image_failure_context(exc),
             "reason": reason,
-            "diagnostic_tail": self._safe_diagnostic(operation, tail),
+            "diagnostic_tail": self._safe_diagnostic(operation, getattr(exc, "tail", "")),
             "failed_stage": current["stage"],
             "maintenance": operation["kind"] in {"deploy", "restore", "migrate"}
             and current["stage"] in {"maintenance", "snapshot_confirmed", "migrating", "starting", "ready"},
@@ -586,20 +563,7 @@ class OperationExecutor:
         }
         if current["status"] in TERMINAL:
             # Cleanup progress must not replace the original failure or revive expired diagnostics.
-            failure = {
-                key: value
-                for key, value in current.get("failure", {}).items()
-                if key
-                in {
-                    "reason",
-                    "diagnostic_tail",
-                    "failed_stage",
-                    "maintenance",
-                    "data_may_have_changed",
-                    "image_role",
-                    "image_ref",
-                }
-            }
+            failure = {key: value for key, value in current.get("failure", {}).items() if key in failure}
         try:
             self.report(
                 operation,

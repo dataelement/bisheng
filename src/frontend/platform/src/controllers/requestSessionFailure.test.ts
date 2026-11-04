@@ -7,7 +7,7 @@ it('lets the session-kick interaction handle an untyped HTTP401 Blob before clea
   const kicked = vi.fn();
   requestInterceptor.remoteLoginFuc = kicked;
   localStorage.setItem('ws_token', 'existing-session');
-  const location = { href: '/current', origin: 'http://localhost' };
+  const location = { href: '/current' };
   vi.stubGlobal('location', location);
   const data = new Blob(['{"status_code":10604,"status_message":"session revoked","data":{"device":"other"}}']);
   request.defaults.adapter = async config => { throw Object.assign(new Error('HTTP401'), { config, response: { status: 401, data } }); };

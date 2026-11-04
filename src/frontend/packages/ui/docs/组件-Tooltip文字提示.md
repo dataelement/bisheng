@@ -81,13 +81,11 @@
 ## 6. 触发与时序
 
 - **悬停触发**：指针进入 100ms 后出现，响应近乎即时。同一组控件间快速移动时（间隔 300ms 内），下一个提示立即出现，不再各等一次。
-- **聚焦触发**：键盘 Tab、方向键等导航聚焦立即出现，不延时——键盘导航本身就是逐个停留，没有「扫过」一说。脚本自动聚焦、菜单关闭后的焦点恢复不作为新的提示请求。
+- **聚焦触发**：键盘 Tab 聚焦立即出现，不延时——键盘导航本身就是逐个停留，没有「扫过」一说。
 - **消失**：指针移出触发元素与浮层后消失；**指针可以移进浮层**（读长内容、复制文字），移入期间不消失。
 - **ESC 立即关闭**，焦点留在原处。
 - **不自动超时消失**：只要还悬停 / 聚焦着就一直显示。「显示几秒后自动消失」违反 WCAG 1.4.13（悬停内容必须保持可见），禁止。
 - **一次只显示一个 tooltip**。
-- **与菜单 / 选择面板配合**：触发器的面板展开时关闭提示；选择菜单项、按 Esc 或点外部关闭面板后，保留正常的焦点恢复，不自动重新弹出提示。再次悬停或用键盘导航到触发器时才重新提示。共享 Tooltip 统一处理，业务页不用逐处设置开关或调用 blur。
-- **Portal 中的焦点不属于触发器**：菜单项即使通过 React 事件冒泡经过 Tooltip，也不能触发按钮的提示。
 
 ## 7. 挂在什么元素上
 
@@ -108,7 +106,7 @@
 
 ## 落地（给实现窗口）
 
-1. 基座用 Radix Tooltip 原语：`delayDuration=100`、`skipDelayDuration=300`、`disableHoverableContent` 保持 `false`（关掉即违反 WCAG 1.4.13 Hoverable）。共享封装补充真实键盘导航的焦点来源判断，忽略 Portal 焦点冒泡，并根据触发器自身或后代的 `aria-haspopup` + `aria-expanded` / `data-menu-open` 判断面板展开；提示可见时才观察属性变化，面板展开便关闭提示。焦点来源监听按 Document 共享并在最后一个 Tooltip 卸载时清理。
+1. 基座用 Radix Tooltip 原语（client 依赖里已有 @radix-ui/react-tooltip，具体封装路径开工时核实）：`delayDuration=100`、`skipDelayDuration=300`、`disableHoverableContent` 保持 `false`（关掉即违反 WCAG 1.4.13 Hoverable）。ESC 关闭、focus 即时出现为 Radix 内置行为，核实即可。
 2. 样式 token（2026-08-25 定稿，组件已于同日回改到位：`--tooltip-bg` 建在 `packages/ui/src/styles/tokens.css`，暗色档已归到 `gray-2`，气泡类名 `bg-tooltip text-white`）：底色**实色无 alpha**——建 `--tooltip-bg` 语义变量：浅色 = `rgb(var(--gray-10))`，`.dark` 下覆写为 `var(--arco-gray-2)`（= 暗色 `#2E2E30`，由初值 `#373739` 按 L\* 归到最近档，全链路无裸值）。**底色不要直接引用会翻转的 `--gray-10`**（暗色下变浅）；**文字写死白（`#fff`），不再取会翻转的 `rgb(var(--arco-gray-1))`**——深色模式定为恒深底后，翻转文字色会变成深字压深底。其余不变：无 backdrop-blur、圆角 6px、内边距 `6px 12px`、`text-sm`（14/22）、`max-w-[250px]`、浮层投影档（阴影规范落 token 后接线）、无边框。**箭头沿用 Radix 的 `Tooltip.Arrow`（SVG，11×6）**，贴在气泡外侧不与之重叠；`sideOffset` 记为 `4 + 箭头高`，让 4px 落在箭头尖而不是气泡边。组件内除 token 定义外不留裸 hex。
 3. 触屏不显示：Radix Tooltip 原生不响应 touch，保持默认；**禁止业务页用 onTouchStart 自造长按提示**。
 4. 禁用控件的提示：封装组件属性，内部对 disabled 触发元素包一层可聚焦热区（`span` + `tabIndex=0`）；禁止业务页各自手包。
@@ -121,7 +119,6 @@
 
 | 日期 | 改了什么 | 提交 |
 |---|---|---|
-| 2026-11-03 | 修复菜单关闭后 Tooltip 被焦点恢复重新打开：只接受真实键盘导航聚焦，忽略 Portal 中的焦点，面板展开期间关闭并拦截提示；保留焦点恢复、正常悬停、键盘和触屏行为。共享交互回归覆盖鼠标 / 键盘关闭、外部点击、快速开关、通用弹层及重新进入 | 待提交 |
 | 2026-08-25 | **组件回改到位**（跟随同日三项定稿）：新建 `--tooltip-bg` 语义变量（`packages/ui/src/styles/tokens.css`，浅色 = `var(--arco-gray-10)`、`.dark` 覆写为 `var(--arco-gray-2)`），preset 挂出 `bg-tooltip` / `fill-tooltip`；组件由 `rgb(var(--arco-gray-10)/0.9)` 内联样式改为类名 `bg-tooltip text-white`，箭头 fill 走同一变量；文字由会翻转的 `--arco-gray-1` 改为恒白。**暗色初值 `#373739` 同步按 L\* 归档到最近的 `gray-2`（`#2E2E30`，ΔL\* 4.1；gray-3 为 7.5）**——白字对比度 13.55:1，与 `#121212` 页面相隔 ΔL\* 13.5，全链路不再有暗色专用裸值。§3 表格、落地 §2、demo 页 `components/tooltip.mdx` 的「长相」段同步 | 待 committer 窗口提交 |
 | 2026-08-25 | **三项定稿**：① 底色回**实色**（推翻 07-30 的 90%）——实机目检 90% 与实色无差；调研：业内真半透明仅 antd 一家（黑底 85%），且半透明有三重工程代价——多层 alpha 叠出箭头接缝（antd #35358/#17740 实证）、背景不可知使对比度不可判定且自动化检查失效（WCAG「specified background」/ axe-core incomplete）、非不透明图层关闭 subpixel 抗锯齿致小字发虚（Chromium `kBackgroundColorNotOpaque`）。② 深色模式**恒深底、不反转**：暗色底用亮一档深灰 `#373739`（初值，待对照暗色灰阶归档），文字恒白——同派 antd/Arco/Windows；反转派（M3/Carbon/Bootstrap/Chakra/Mantine/Radix Themes 六家）不取。顺带修正「gray-10 暗色翻转变浅 × 白字」的矛盾：底色改走不翻转的 `--tooltip-bg` 语义变量。（已落地组件当时用了翻转的 gray-1 文字，暗色下呈反转效果；已随本条回改为恒白。）③ 箭头**恒定带**：确认 08-24 拍板并补依据——业内仅 TDesign 给出区分依据「指向性」；本规范 §7 已限定 tooltip 只挂具体控件，无指向性场景不存在；图表跟随浮层归图表库。§3 / 落地 §2 / meta 拍板行同步 | 待 committer 窗口提交 |
 | 2026-08-24 | 拍板：**取消无箭头档**——箭头由「默认带」改为「恒定带」，组件的 `arrow` prop 移除，面包屑（截断补全、`…` 展开、当前页）四处 `arrow={false}` 一并改回带箭头。理由：tooltip 只保留一种长相，用户在哪里见到都认得出，不为「小字旁边省点墨」分叉。§3 表格与 `components/tooltip.mdx`（删「没有箭头的场合」一节 + API 行）、面包屑文档同步 | 待 committer 窗口提交 |

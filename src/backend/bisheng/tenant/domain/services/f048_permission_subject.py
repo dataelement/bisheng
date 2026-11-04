@@ -407,11 +407,7 @@ class TenantPermissionSubjectDirectory:
         labels: dict[tuple[str, str], str] = {}
         async with get_async_db_session() as session:
             if ids_by_type["workflow"]:
-                rows = (
-                    await session.exec(
-                        select(Flow).where(Flow.is_delete == 0).where(col(Flow.id).in_(ids_by_type["workflow"]))
-                    )
-                ).all()
+                rows = (await session.exec(select(Flow).where(col(Flow.id).in_(ids_by_type["workflow"])))).all()
                 labels.update({("workflow", str(row.id)): row.name for row in rows})
             if ids_by_type["assistant"]:
                 rows = (

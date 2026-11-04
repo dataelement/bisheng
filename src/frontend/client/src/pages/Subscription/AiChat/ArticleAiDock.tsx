@@ -1,10 +1,8 @@
 import { ApiRequestFailure } from "~/components/ApiRequestFailure";
-import {
-  Tooltip as SharedTooltip,
-  TooltipProvider as SharedTooltipProvider,
-} from "@bisheng/ui";
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from "@bisheng/ui";
 import { useEffect, useRef, useState } from "react";
 import { Outlined } from "bisheng-icons";
+
 
 import AiChatMessages from "~/components/Chat/AiChatMessages";
 import { ArticleQAIllustration } from "~/components/illustrations";
@@ -12,10 +10,7 @@ import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import useChannelChat from "~/hooks/useChannelChat";
-import {
-  readAdminDefaultModelId,
-  type ChatModelOption,
-} from "~/hooks/useChatModelResolution";
+import { readAdminDefaultModelId, type ChatModelOption } from "~/hooks/useChatModelResolution";
 import { useSurfaceModel } from "~/hooks/useSurfaceModel";
 import type { Article } from "~/api/channels";
 import { ArticleAskBar } from "./ArticleAskBar";
@@ -30,7 +25,6 @@ interface ArticleAiDockProps {
   /** The article itself. With it, desktop hands questions to the main chat (ArticleAskBar);
    *  without it there is nothing to attach, so the in-place dock stays. */
   article?: Article;
-  preserveAskBar?: boolean;
 }
 
 function useDockModel(): ModelSelectProps {
@@ -52,15 +46,14 @@ function useDockModel(): ModelSelectProps {
   };
 }
 
-export function ArticleAiDock({
-  articleDocId,
-  article,
-  preserveAskBar = false,
-}: ArticleAiDockProps) {
+/**
+ * Entry point. Desktop: ArticleAskBar — the question is answered on the 对话 page, so its
+ * history joins the workbench conversation list. Mobile: the in-place dock, unchanged.
+ */
+export function ArticleAiDock({ articleDocId, article }: ArticleAiDockProps) {
   const isH5 = usePrefersMobileLayout();
   const model = useDockModel();
-  if ((!isH5 || preserveAskBar) && article)
-    return <ArticleAskBar article={article} model={model} />;
+  if (!isH5 && article) return <ArticleAskBar article={article} model={model} />;
   return <ArticleAiInPlaceDock articleDocId={articleDocId} />;
 }
 
@@ -74,17 +67,14 @@ export function ArticleAiDock({
  * Self-contained (channel chat only) so the shared AiAssistantPanel — still used by
  * the knowledge-space file preview — stays untouched.
  */
-function ArticleAiInPlaceDock({
-  articleDocId,
-}: Pick<ArticleAiDockProps, "articleDocId">) {
+function ArticleAiInPlaceDock({ articleDocId }: Pick<ArticleAiDockProps, "articleDocId">) {
   const localize = useLocalize();
   const confirm = useConfirm();
   const { user } = useAuthContext();
   const { data: bsConfig } = useGetBsConfig();
   // Admin-customizable assistant name; empty/absent falls back to the localized default.
   const assistantTitle =
-    bsConfig?.subscription?.assistant_name?.trim() ||
-    localize("com_subscription.ai_assistant");
+    bsConfig?.subscription?.assistant_name?.trim() || localize("com_subscription.ai_assistant");
   // Own model selection, isolated from /c: picking a model here must not
   // change what the main chat shows (see useSurfaceModel).
   const { data: workbenchCfg } = useGetWorkbenchModelsQuery();
@@ -105,7 +95,13 @@ function ArticleAiInPlaceDock({
    *  and follows any iOS-Safari scroll that happens when the focused input is brought into view. */
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [viewportOffsetTop, setViewportOffsetTop] = useState(0);
-
+  /** Drives the grey overlay. Two signals push it open/closed:
+   *   - textarea focus/blur via `DockInput.onFocusChange` — instant response on tap and
+   *     on the keyboard's "完成"/Done button (which fires blur).
+   *   - visualViewport restoring after having been shrunk — catches the keyboard's
+   *     "关闭"/dismiss button which hides the keyboard WITHOUT blurring the textarea.
+   *   We don't drive it ON from viewport alone because the keyboard animation lags the
+   *   focus event by ~250ms and we want the overlay up immediately on tap. */
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const peakVvHeightRef = useRef(0);
   const keyboardUpRef = useRef(false);
@@ -117,8 +113,7 @@ function ArticleAiInPlaceDock({
     const sync = () => {
       setViewportHeight(vv.height);
       setViewportOffsetTop(vv.offsetTop);
-      if (vv.height > peakVvHeightRef.current)
-        peakVvHeightRef.current = vv.height;
+      if (vv.height > peakVvHeightRef.current) peakVvHeightRef.current = vv.height;
       if (peakVvHeightRef.current === 0) return;
       const ratio = vv.height / peakVvHeightRef.current;
       if (ratio < 0.6) {
@@ -127,13 +122,10 @@ function ArticleAiInPlaceDock({
         keyboardUpRef.current = false;
         setKeyboardVisible(false);
         // Force blur the active textarea/input so the next tap re-fires the focus event.
-
+        // iOS WeChat WKWebView's "收起" keyboard button hides the keyboard but keeps focus
         // on the textarea, so the next tap is a no-op (no focus change → no onFocus).
         const active = document.activeElement;
-        if (
-          active &&
-          (active.tagName === "TEXTAREA" || active.tagName === "INPUT")
-        ) {
+        if (active && (active.tagName === "TEXTAREA" || active.tagName === "INPUT")) {
           (active as HTMLElement).blur();
         }
       }
@@ -200,9 +192,7 @@ function ArticleAiInPlaceDock({
       // outer pt = safe-area + 8px, inner row is a fixed h-11 (44px) with the px-4 gutter.
       <div className="shrink-0 pt-[calc(env(safe-area-inset-top,0px)+8px)]">
         <div className="relative flex h-11 w-full min-w-0 items-center px-4">
-          <h3 className="mx-auto truncate text-base font-medium leading-6 text-text-1">
-            {assistantTitle}
-          </h3>
+          <h3 className="mx-auto truncate text-base font-medium leading-6 text-text-1">{assistantTitle}</h3>
           <div className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center justify-end gap-3">
             <button
               type="button"
@@ -264,12 +254,7 @@ function ArticleAiInPlaceDock({
               flatMode
               knowledgeChatLayout
               contentWidthClassName="max-w-none px-4"
-              emptyStateIllustration={
-                <ArticleQAIllustration
-                  grey
-                  className="mx-auto block size-[80px]"
-                />
-              }
+              emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
               onPresetClick={(q) => setInputText(q)}
               onRegenerate={regenerate}
             />
@@ -301,12 +286,7 @@ function ArticleAiInPlaceDock({
             onChange={setInputText}
             onSend={handleSend}
             model={model}
-            disabled={
-              Boolean(historyError) ||
-              isLoading ||
-              isClearing ||
-              !modelOptions?.length
-            }
+            disabled={Boolean(historyError) || isLoading || isClearing || !modelOptions?.length}
             isStreaming={isStreaming}
             placeholder={localize("com_subscription.ask_article_placeholder")}
             variant="box"
@@ -342,9 +322,7 @@ function ArticleAiInPlaceDock({
           !open && "pt-10",
           // On mobile the fade hides while focused (grey keyboard overlay carries through);
           // on desktop there is no such overlay, so keep the fade consistent regardless of focus.
-          !open &&
-            (!isH5 || !keyboardVisible) &&
-            "bg-gradient-to-b from-white/0 to-white",
+          !open && (!isH5 || !keyboardVisible) && "bg-gradient-to-b from-white/0 to-white",
           // Expanded: same transparent→white fade masks the content behind the dialog.
           open && "bg-gradient-to-b from-white/0 to-white",
         )}
@@ -383,9 +361,7 @@ function ArticleAiInPlaceDock({
           <div
             className={cn(
               "overflow-hidden transition-[max-height] duration-300 ease-out",
-              open
-                ? "max-h-[clamp(440px,70vh,calc(100vh_-_160px))]"
-                : "max-h-0",
+              open ? "max-h-[clamp(440px,70vh,calc(100vh_-_160px))]" : "max-h-0",
             )}
           >
             <div className="flex h-[clamp(440px,70vh,calc(100vh_-_160px))] flex-col">
@@ -438,10 +414,7 @@ function ArticleAiInPlaceDock({
               </div>
 
               {historyError ? (
-                <ApiRequestFailure
-                  error={historyError}
-                  onRetry={retryHistory}
-                />
+                <ApiRequestFailure error={historyError} onRetry={retryHistory} />
               ) : (
                 <AiChatMessages
                   messages={messages}
@@ -459,10 +432,7 @@ function ArticleAiInPlaceDock({
                   knowledgeChatLayout
                   contentWidthClassName="max-w-none px-4"
                   emptyStateIllustration={
-                    <ArticleQAIllustration
-                      grey
-                      className="mx-auto block size-[80px]"
-                    />
+                    <ArticleQAIllustration grey className="mx-auto block size-[80px]" />
                   }
                   onPresetClick={(q) => setInputText(q)}
                   onRegenerate={regenerate}
@@ -478,12 +448,7 @@ function ArticleAiInPlaceDock({
             onChange={setInputText}
             onSend={handleSend}
             model={model}
-            disabled={
-              Boolean(historyError) ||
-              isLoading ||
-              isClearing ||
-              !modelOptions?.length
-            }
+            disabled={Boolean(historyError) || isLoading || isClearing || !modelOptions?.length}
             isStreaming={isStreaming}
             placeholder={localize("com_subscription.ask_article_placeholder")}
             variant={open ? "line" : "box"}

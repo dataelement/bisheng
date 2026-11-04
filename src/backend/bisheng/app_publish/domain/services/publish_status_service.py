@@ -88,19 +88,6 @@ class PublishStatusService:
         can_edit = "edit" in actions
         withdrawable = instance is not None and instance.status == _WITHDRAWABLE_INSTANCE_STATUS
         deleted = app.state == _APP_STATE_DELETED
-        deployment_payload = (
-            cls._deployment_payload(deployment)
-            if can_edit
-            else (
-                {"id": deployment.id, "stage": deployment.stage, "status": deployment.status, "failure": None}
-                if deployment
-                else None
-            )
-        )
-        if can_edit and deployment:
-            from bisheng.app_runtime.application.publish_diagnostics import publish_failure
-
-            deployment_payload["failure"] = await publish_failure(deployment, actor=actor)
 
         return {
             "app_id": app.id,
@@ -108,7 +95,13 @@ class PublishStatusService:
             "pending_reason": cls._pending_reason(app, deployment),
             "current_version": cls._version_payload(current_version, app),
             "pending_version": cls._version_payload(pending_version, app),
-            "deployment": deployment_payload,
+            "deployment": cls._deployment_payload(deployment)
+            if can_edit
+            else (
+                {"id": deployment.id, "stage": deployment.stage, "status": deployment.status, "failure": None}
+                if deployment
+                else None
+            ),
             "approval": approval,
             "tier": await cls._tier_payload(current_version or pending_version),
             "capabilities": await cls._capabilities_payload(app, pending_version or current_version)

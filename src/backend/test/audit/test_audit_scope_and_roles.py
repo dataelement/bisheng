@@ -37,9 +37,7 @@ APP_ID = "app-scope-1"
 @pytest.fixture()
 def no_log_menu(monkeypatch):
     """Nobody in this file gets in through the ``log`` web menu unless asked."""
-    from bisheng.department.domain.services.audit_dept_scope import AuditDeptScopeService
-
-    monkeypatch.setattr(AuditDeptScopeService, "_has_audit_menu", AsyncMock(return_value=False))
+    monkeypatch.setattr(AuditLogService, "_user_has_log_web_menu", AsyncMock(return_value=False))
 
 
 @pytest.fixture()
@@ -142,36 +140,40 @@ class TestRoleBoundary:
         assert total == 1
         assert [row["action"] for row in exported] == ["app.publish"]
 
-    async def test_log_menu_role_reads_its_primary_department_only(
-        self, patch_audit_dao, audit_lookups, audit_session, audit_identity
+    async def test_log_menu_role_reads_without_being_an_admin(
+        self, patch_audit_dao, audit_lookups, audit_session, monkeypatch, no_group_admin
     ):
-        """A role carrying the ``log`` menu is allowed in, limited to its own
-        primary department (F003 AC-15)."""
-        audit_identity.menu = True
-        audit_identity.primary_dept_id = 3
-        insert_audit(audit_session, action="app.publish", target_id=APP_ID, tenant_id=2, operator_dept_id=3)
-        insert_audit(audit_session, action="app.stop", target_id=APP_ID, tenant_id=2, operator_dept_id=4)
+        """A role carrying the ``log`` menu is the non-admin case that *is* allowed."""
+        monkeypatch.setattr(AuditLogService, "_user_has_log_web_menu", AsyncMock(return_value=True))
+        insert_audit(audit_session, action="app.publish", target_type="app", target_id=APP_ID, tenant_id=2)
 
         resp = await _list(make_user_payload(user_id=502, is_admin=False, is_global_super=False))
 
         assert resp["data"]["total"] == 1
-        assert resp["data"]["data"][0]["action"] == "app.publish"
 
-    async def test_group_admin_without_menu_is_refused(
-        self, patch_audit_dao, audit_lookups, audit_session, monkeypatch
+    async def test_group_admin_keeps_its_legacy_reach_only(
+        self, patch_audit_dao, audit_lookups, audit_session, no_log_menu, monkeypatch
     ):
-        """F003 decision 9: user-group administration no longer opens the audit page."""
+        """A user-group admin is pinned to their groups, exactly as before.
+
+        This is not a hosted-application entry: a v2 row is returned only when
+        its operator is a member of the administered group (design pit 15), so
+        a group admin never gains a view of the whole tenant.
+        """
         from types import SimpleNamespace
 
         monkeypatch.setattr(
-            "bisheng.database.models.user_group.UserGroupDao.aget_user_admin_group",
+            "bisheng.api.services.audit_log.UserGroupDao.aget_user_admin_group",
             AsyncMock(return_value=[SimpleNamespace(group_id=5)]),
         )
+        audit_lookups.group_users = [SimpleNamespace(group_id=5, user_id=42)]
         insert_audit(audit_session, action="app.publish", operator_id=42, group_ids=None, tenant_id=2)
+        insert_audit(audit_session, action="app.stop", operator_id=99, group_ids=None, tenant_id=2)
 
         resp = await _list(make_user_payload(user_id=503, is_admin=False, is_global_super=False))
 
-        assert resp.status_code == UnAuthorizedError.Code
+        assert resp["data"]["total"] == 1
+        assert resp["data"]["data"][0]["operator_id"] == 42
 
 
 class TestSingleQueryEntry:

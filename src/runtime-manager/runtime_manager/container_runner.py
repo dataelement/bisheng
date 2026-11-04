@@ -11,7 +11,6 @@ from runtime_manager.bundle_inputs import BundleInputError
 from runtime_manager.config import Config
 from runtime_manager.docker_backend import get_docker_backend
 from runtime_manager.execution_errors import ExecutionError  # Public compatibility export.
-from runtime_manager.secret_redaction import bounded_diagnostic, diagnostic_environment
 
 logger = logging.getLogger(__name__)
 
@@ -40,14 +39,7 @@ class ContainerRunner:
         self.checkpoint = checkpoint or (lambda: None)
         self.clock = clock
 
-    def ensure_image(self, reference, *, platform, expected_id=None, role=""):
-        try:
-            return self._ensure_image(reference, platform=platform, expected_id=expected_id)
-        except ExecutionError as exc:
-            exc.image_role, exc.image_ref = role, reference
-            raise
-
-    def _ensure_image(self, reference, *, platform, expected_id=None):
+    def ensure_image(self, reference, *, platform, expected_id=None):
         if self.config.image_pull_policy not in {"never", "if-not-present"}:
             raise BundleInputError("image_pull_policy_invalid")
         try:
@@ -144,7 +136,11 @@ class ContainerRunner:
             self.checkpoint()
             state = self.docker.inspect_container(container).get("State", {})
             if not state.get("Running"):
-                tail = self.diagnostic(operation, container, env)
+                tail = redact(
+                    self.docker.container_logs(container, tail=40),
+                    env,
+                    operation.get("payload", {}).get("sensitive_env_names", []),
+                )[-16384:]
                 if state.get("ExitCode", 1) != 0:
                     raise ExecutionError("preparation_process_failed", tail)
                 return tail
@@ -152,20 +148,8 @@ class ContainerRunner:
                 self.docker.stop_container(container, timeout=self.config.stop_timeout_seconds)
                 if self.docker.inspect_container(container).get("State", {}).get("Running"):
                     raise ExecutionError("cleanup_pending")
-                raise ExecutionError("preparation_timeout", self.diagnostic(operation, container, env))
+                raise ExecutionError("preparation_timeout")
             self.clock.sleep(0.2)
-
-    def diagnostic(self, operation, container, env=None):
-        try:
-            payload = operation.get("payload", {})
-            environment = {**diagnostic_environment(self.config, payload), **(env or {})}
-            return bounded_diagnostic(
-                self.docker.container_logs(container, tail=40), environment, payload.get("sensitive_env_names", [])
-            )
-        except Exception as exc:
-            # Best-effort output is subordinate to process exit/timeout facts.
-            logger.warning("preparation output unavailable (%s)", type(exc).__name__)
-            return ""
 
     def cleanup(self, operation_id):
         pending = []

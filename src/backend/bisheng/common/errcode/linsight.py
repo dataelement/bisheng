@@ -113,21 +113,6 @@ class InviteCodeBindError(BaseErrorCode):
     Msg: str = "Additional invite codes bound"
 
 
-class InviteCodeNotFoundError(BaseErrorCode):
-    Code: int = 11191
-    Msg: str = "Invite code does not exist"
-
-
-class InviteCodeLimitError(BaseErrorCode):
-    Code: int = 11192
-    Msg: str = "The usage limit cannot be lower than the times already used"
-
-
-class InviteCodeBatchInvalidError(BaseErrorCode):
-    Code: int = 11193
-    Msg: str = "Invalid invite-code batch. Name is required, count is 1-100, and the limit is 1-100000"
-
-
 # ---------------------------------------------------------------------------
 # F035 灵思任务模式 · Skill 管理错误码（段位 11050–11069）
 #
@@ -195,23 +180,6 @@ class SkillGitHubFetchError(BaseErrorCode):
 class SkillGitHubRateLimitError(BaseErrorCode):
     Code: int = 11058
     Msg: str = "GitHub API rate limit exceeded, please retry later"
-
-
-# The pasted URL is not a parseable public Gitee directory link.
-# 11060 and 11075-11076 were already assigned, so this trio sits at 11077-11079.
-class SkillGiteeUrlInvalidError(BaseErrorCode):
-    Code: int = 11077
-    Msg: str = "Invalid Gitee URL: expecting https://gitee.com/{owner}/{repo}/tree/{branch}/{path}"
-
-
-class SkillGiteeFetchError(BaseErrorCode):
-    Code: int = 11078
-    Msg: str = "Failed to fetch skill from Gitee (repo/branch/path not found or network error)"
-
-
-class SkillGiteeRateLimitError(BaseErrorCode):
-    Code: int = 11079
-    Msg: str = "Gitee API rate limit exceeded, please retry later"
 
 
 # Bundle contents exceed the unpacked-size limit: sum of the extracted files (upload)

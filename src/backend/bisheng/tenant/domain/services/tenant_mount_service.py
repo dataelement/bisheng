@@ -464,7 +464,7 @@ class TenantMountService:
         sql = sa_text(
             "SELECT * FROM ("
             "    SELECT 'knowledge_space' AS type, CAST(id AS CHAR) AS id FROM knowledge WHERE tenant_id = :t AND is_shared = 1"
-            "    UNION ALL SELECT 'workflow',    CAST(id AS CHAR) FROM flow              WHERE tenant_id = :t AND is_shared = 1 AND is_delete = 0"
+            "    UNION ALL SELECT 'workflow',    CAST(id AS CHAR) FROM flow              WHERE tenant_id = :t AND is_shared = 1"
             "    UNION ALL SELECT 'assistant',   CAST(id AS CHAR) FROM assistant         WHERE tenant_id = :t AND is_shared = 1"
             "    UNION ALL SELECT 'channel',     CAST(id AS CHAR) FROM channel           WHERE tenant_id = :t AND is_shared = 1"
             "    UNION ALL SELECT 'tool',        CAST(id AS CHAR) FROM t_gpts_tools_type WHERE tenant_id = :t AND is_shared = 1"

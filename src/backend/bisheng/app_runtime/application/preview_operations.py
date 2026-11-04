@@ -13,10 +13,7 @@ from bisheng.app_runtime.domain.models.runtime_delivery import (
 )
 from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import RuntimeConflict
 from bisheng.app_runtime.domain.services.runtime_authorization_service import RuntimeAuthorizationService
-from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import (
-    RuntimeDeliveryCoordinator,
-    runtime_metadata,
-)
+from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
 from bisheng.common.services.config_service import settings
 from bisheng.database.models.app_version import AppVersion
 
@@ -91,7 +88,6 @@ async def start_preview(qualification, *, actor, payload_factory, coordinator=No
                     else await RuntimeAuthorizationService.capture_approval_preview(actor, app, q)
                 )
                 body = {
-                    **runtime_metadata(version.manifest),
                     "resolved_delivery": delivery.content,
                     "session_id": preview.session_id,
                     "preview_purpose": q.purpose,

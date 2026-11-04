@@ -110,8 +110,6 @@ async def validate_manifest(raw: str | bytes) -> ManifestValidation:
     ``failure_from_error`` and never has to invent copy of its own.
     """
     document = _load_yaml(raw)
-    # Only new submissions adopt v2; AppManifest also reads frozen legacy records.
-    document.setdefault("manifest_version", 2)
     _reject_secret_references(document)
     _check_manifest_version(document)
     _reject_websocket_declaration(document)

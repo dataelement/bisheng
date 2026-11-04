@@ -28,7 +28,7 @@ to be deleted — the same device T015 used for the ``app.release.*`` frontend
 gap, which is how that gap got closed instead of being narrated.
 """
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -126,6 +126,12 @@ KEY_EVENT_ACTIONS = ["open_api.api_key.issue", "open_api.api_key.update", "open_
 @pytest.fixture()
 def admin():
     return make_user_payload(user_id=77, is_admin=True, is_global_super=False)
+
+
+@pytest.fixture(autouse=True)
+def _no_log_menu_lookup(monkeypatch):
+    """The role gate is T027's subject; here every caller is an admin already."""
+    monkeypatch.setattr(AuditLogService, "_user_has_log_web_menu", AsyncMock(return_value=False))
 
 
 async def _query(user, **kwargs):

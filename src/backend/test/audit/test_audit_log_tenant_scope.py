@@ -1084,10 +1084,6 @@ def _patch_session_dao_helpers(monkeypatch, session):
         "bisheng.api.services.audit_log.AssistantDao.aget_assistants_by_ids",
         AsyncMock(return_value=[]),
     )
-    monkeypatch.setattr(
-        "bisheng.api.services.audit_log.AuditSessionRepository.chat_ids_with_task_version",
-        AsyncMock(return_value=set()),
-    )
 
 
 class TestGetSessionListServiceEndToEnd:

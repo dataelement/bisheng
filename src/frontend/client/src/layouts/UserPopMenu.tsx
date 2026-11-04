@@ -18,7 +18,6 @@ export type UserPopMenuVariant = "rail" | "drawer" | "sidebar";
 
 export interface UserPopMenuProps {
     variant?: UserPopMenuVariant;
-    onNavigate?: () => void;
 }
 
 /**
@@ -27,7 +26,7 @@ export interface UserPopMenuProps {
  * actually waiting on the user (pending approvals > unread notifications > account).
  * 退出登录 moved into the 账号信息 section of that page.
  */
-export function UserPopMenu({ variant = "rail", onNavigate }: UserPopMenuProps) {
+export function UserPopMenu({ variant = "rail" }: UserPopMenuProps) {
     const isDrawer = variant === "drawer";
     const navigate = useNavigate();
     const location = useLocation();
@@ -49,7 +48,6 @@ export function UserPopMenu({ variant = "rail", onNavigate }: UserPopMenuProps) 
         // Reopening the avatar entry while settings is visible must not create a new
         // settings history entry or replace the original return destination.
         navigate(target, { replace: alreadyInSettings, state });
-        onNavigate?.();
     };
 
     // Avatar edits on the settings page flow back through the user query cache.
@@ -74,7 +72,7 @@ export function UserPopMenu({ variant = "rail", onNavigate }: UserPopMenuProps) 
             <button
                 type="button"
                 // Same row chrome as the sidebar's nav rows: 32px tall, 8px radius, fill-1 on hover.
-                className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1 text-left outline-none transition-colors hover:bg-fill-1 focus-visible:bg-fill-1 coarse-pointer:min-h-11"
+                className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1 text-left outline-none transition-colors hover:bg-fill-1 focus-visible:bg-fill-1"
                 onClick={openSettings}
             >
                 {withUnreadDot(<Avatar className="h-6 w-6">{avatarInner}</Avatar>)}

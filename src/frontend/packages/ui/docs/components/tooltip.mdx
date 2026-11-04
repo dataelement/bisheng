@@ -36,8 +36,6 @@ export default () => (
 
 指针进入 **100ms** 后出现；同组控件间快速移动（300ms 内）时下一个提示立即出现，不再各等一次。键盘 Tab 聚焦**立即**出现。ESC 关闭；指针可移进浮层（读长内容、复制文字），移入期间不消失；不自动超时消失。
 
-菜单关闭后自动还给按钮的焦点不会重新弹出提示；脚本自动聚焦也不会。菜单或选择面板展开期间提示关闭，再次悬停或键盘导航进入时正常显示。该行为由共享 Tooltip 管理，不需要业务页另行关闭或移走按钮焦点。
-
 「300ms 内不再等一次」需要一个**共享的** `TooltipProvider`——所以应用根上挂一个。不挂也能用（每个 `Tooltip` 自带兜底 provider），只是各自计时。试试在下面一排图标按钮上滑动，或用 Tab 逐个聚焦：
 
 ```tsx
@@ -141,7 +139,7 @@ export default () => (
 | `side` | `'top' \| 'right' \| 'bottom' \| 'left'` | `'top'` | 方位，空间不足自动翻面 |
 | `align` | `'start' \| 'center' \| 'end'` | `'center'` | 交叉轴对齐 |
 | `disabled` | `boolean` | `false` | 只保留触发元素、整个浮层不挂载——用于「只在真的截断时才提示」这类场合 |
-| `open` / `defaultOpen` / `onOpenChange` | — | — | 受控 / 非受控开合；交互触发的开启请求遵循上面的焦点与面板规则 |
+| `open` / `defaultOpen` / `onOpenChange` | — | — | 受控 / 非受控开合，转交 Radix |
 | `contentClassName` | `string` | — | 气泡的附加类名。底色、字号这些不是页面级决定 |
 
 `TooltipProvider`：`delayDuration`（默认 100）、`skipDelayDuration`（默认 300）。**默认值就是规范**，改它要有理由。

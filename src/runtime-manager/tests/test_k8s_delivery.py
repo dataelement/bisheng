@@ -23,8 +23,7 @@ def test_full_image_preparation_keeps_frozen_digest_command_and_platform(runtime
     result = executor.prepare(operation)
     assert result["mode"] == "image" and result["image_ref"] == IMAGE
     assert result["platform"] == "linux/amd64" and result["startup"]["command"] == ["python", "server.py"]
-    assert platform.rows and all(row["purpose"] == "image-check" for row in platform.rows.values())
-    assert not any(kind == "persistentvolumeclaims" for kind, _ in cluster.objects)
+    assert not cluster.objects and not platform.rows
     operation["payload"]["delivery"]["image"] = "example/python:latest"
     with pytest.raises(ExecutorError, match="digest"):
         executor.prepare(operation)
@@ -91,7 +90,6 @@ def test_isolated_schema_initialization_reuses_validated_database_logic(tmp_path
 def test_source_image_uses_bundle_preparation_then_the_restricted_assembler(runtime, monkeypatch):
     executor, _platform, _, operation, _, _ = runtime
     operation.update(kind="prepare", stage="preparing")
-    executor.document["assembler_image"] = IMAGE
     operation["payload"]["source_artifact_id"] = "source-a"
     operation["payload"]["delivery"] = {"mode": "source-image", "dependencies": {}}
     operation["payload"]["profile"] = copy.deepcopy(operation["payload"]["resolved_delivery"]["profile"])
@@ -168,27 +166,3 @@ def test_restarted_app_logs_include_previous_and_current_same_uid(runtime):
     assert "previous crash" in result and "current app" in result
     assert {c.get("previous", False) for c in calls} == {True, False}
     assert all(c["container"] == "app" for c in calls)
-
-
-@pytest.mark.parametrize("language", ["python3.11", "node20", "static"])
-def test_shared_environment_is_used_by_kubernetes_without_putting_secrets_in_literals(runtime, language):
-    """F119 覆盖 AC: AC-06, AC-07, AC-08, AC-09, AC-10, AC-11."""
-    executor, _, _, operation, _, _ = runtime
-    body = operation["payload"]
-    body.update(slug="fixture", base_path="/apps/fixture/_preview/session", version_no=9)
-    body["resolved_delivery"]["profile"]["language"] = language
-    body["runtime_env"].update(BISHENG_APP_SLUG="wrong", BISHENG_APP_VERSION="1")
-    plan = executor._plan(operation, "probe")
-    assert plan.env["BISHENG_APP_SLUG"] == "fixture"
-    assert plan.env["BISHENG_APP_VERSION"] == "9"
-    assert plan.env["BISHENG_APP_VERSION_ID"] == operation["version_id"]
-    assert plan.env["BISHENG_APP_DB_PATH"] == "/data/app.db"
-    assert plan.env["BISHENG_APP_HEALTH_PATH"] == body["health"]["path"]
-    assert "BISHENG_APP_TOKEN" not in plan.env
-    assert "BISHENG_APP_SLUG" not in plan.secret_env
-    if language == "node20":
-        assert plan.env["BASE_PATH"] == "/apps/fixture/_preview/session"
-    if language == "python3.11":
-        assert plan.env["UVICORN_ROOT_PATH"] == "/apps/fixture/_preview/session"
-    del body["version_no"]
-    assert executor._plan(operation, "probe").env["BISHENG_APP_VERSION"] == ""

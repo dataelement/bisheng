@@ -75,29 +75,24 @@ export const skillApi = {
   createSkillForm: (data: SkillFormPayload): Promise<SkillDetail> => {
     const form = new FormData();
     Object.entries(data).forEach(([k, v]) => form.append(k, v));
-    return axios.post(SKILL_BASE, form, { silent: true });
+    return axios.post(SKILL_BASE, form, { silent: true } as any);
   },
 
   createSkillUpload: (file: File): Promise<SkillDetail> => {
     const form = new FormData();
     form.append('file', file);
-    return axios.post(SKILL_BASE, form, { silent: true });
+    return axios.post(SKILL_BASE, form, { silent: true } as any);
   },
 
   // Import a skill from a public GitHub directory URL (must contain SKILL.md at root).
   importSkillFromGithub: (url: string): Promise<SkillDetail> => {
-    return axios.post(`${SKILL_BASE}/import-github`, { url }, { silent: true });
-  },
-
-  // Import a skill from a public Gitee directory URL (must contain SKILL.md at root).
-  importSkillFromGitee: (url: string): Promise<SkillDetail> => {
-    return axios.post(`${SKILL_BASE}/import-gitee`, { url }, { silent: true });
+    return axios.post(`${SKILL_BASE}/import-github`, { url }, { silent: true } as any);
   },
 
   updateSkillForm: (name: string, data: SkillFormPayload): Promise<SkillDetail> => {
     const form = new FormData();
     Object.entries(data).forEach(([k, v]) => form.append(k, v));
-    return axios.put(`${SKILL_BASE}/${encodeURIComponent(name)}`, form, { silent: true });
+    return axios.put(`${SKILL_BASE}/${encodeURIComponent(name)}`, form, { silent: true } as any);
   },
 
   setSkillStatus: (name: string, enabled: boolean) => {

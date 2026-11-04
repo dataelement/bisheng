@@ -22,7 +22,6 @@ import type { ChatMessage } from "~/api/chatApi";
 import { getAgentMessages, getSessionName } from "~/api/chatApi";
 import { openChatStream, type SSESubmission } from "~/hooks/useAiChatSSE";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
-import { refreshInviteQuota } from "~/hooks/inviteQuotaRefresh";
 import { useLinsightManager } from "~/hooks/useLinsightManager";
 import { startLinsight, getLinsightSessionVersionList } from "~/api/linsight";
 import { SopStatus, taskModeSkillsState } from "~/store/linsight";
@@ -102,18 +101,7 @@ interface OutgoingAttachment {
     file_name?: string;
 }
 
-export default function useAiChat(
-    initialConversationId: string = "new",
-    isLingsi: boolean = false,
-    shareToken: string = "",
-    draftScope = "chat",
-    /**
-     * Department page lease accessor for this session page. Returns the lease id
-     * to send (or null for pages that do not count) and whether the department
-     * is full, in which case the turn must not be sent.
-     */
-    ensureFlowLeaseId?: () => Promise<{ leaseId: string | null; blocked: boolean }>,
-) {
+export default function useAiChat(initialConversationId: string = "new", isLingsi: boolean = false, shareToken: string = "", draftScope = "chat") {
     const [historyError, setHistoryError] = useState<unknown>(null);
     const [historyReload, setHistoryReload] = useState(0);
     const retryHistory = () => setHistoryReload(value => value + 1);
@@ -520,7 +508,7 @@ export default function useAiChat(
     }, [setIsParsingMedia, setMessages]);
 
     const sendMessage = useCallback(
-        async (text: string, files?: any[] | null, opts?: { taskMode?: boolean }) => {
+        (text: string, files?: any[] | null, opts?: { taskMode?: boolean }) => {
             if ((!text.trim() && !(files?.length)) || isStreaming) return false;
             if (knowledgeAccessBlocked) {
                 showToast({ message: knowledgeAccessMessage, status: "warning" });
@@ -535,14 +523,6 @@ export default function useAiChat(
                 file.name || file.filename || file.file_name || '', vision, !!bsConfig?.enable_etl4lm,
             ))) {
                 showToast({ message: localize("chatImage.processingRequired"), status: "warning" });
-                return false;
-            }
-            // Department concurrency (docs/部门流量控制方案.md): take/refresh this
-            // page's lease before anything is written to the message list or sent.
-            // `blocked` means the department is full — leave the composer state
-            // untouched so the user can retry once a slot frees up.
-            const presence = ensureFlowLeaseId ? await ensureFlowLeaseId() : null;
-            if (presence?.blocked) {
                 return false;
             }
             // This turn belongs to the conversation it started in, and every
@@ -690,7 +670,6 @@ export default function useAiChat(
             const submission: SSESubmission = {
                 payload,
                 userMessage,
-                flowLeaseId: presence?.leaseId ?? undefined,
                 onStart: () => {
                     console.log('[AiChat] SSE stream started');
                     setIsStreaming(true);
@@ -757,11 +736,6 @@ export default function useAiChat(
                 // seed the per-SV store, and kick off execution. The inline task
                 // bubble (TJ-7) hosts the WS and renders the live run from there.
                 onTaskHandoff: ({ session_version_id: svid, chat_id }) => {
-                    // Consume is committed before this event. Reload the badge
-                    // so the remaining count drops without a full page refresh.
-                    if (taskMode) {
-                        refreshInviteQuota();
-                    }
                     if (!svid) return;
 
                     // The handoff is the daily SSE's last act: the task now runs via
@@ -1139,7 +1113,7 @@ export default function useAiChat(
             beginStream(turn.cid, submission);
             return true;
         },
-        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, showToast, queryClient, finishMediaParsing, ensureFlowLeaseId]
+        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, showToast, queryClient, finishMediaParsing]
     );
 
     // --- Stop generating ---
@@ -1162,17 +1136,10 @@ export default function useAiChat(
 
     // --- Regenerate: add a new sibling response under the same parent ---
     const regenerate = useCallback(
-        async (parentMessageId: string) => {
+        (parentMessageId: string) => {
             if (isStreaming) return;
             if (knowledgeAccessBlocked) {
                 showToast({ message: knowledgeAccessMessage, status: "warning" });
-                return;
-            }
-            // Department concurrency: same rule as a fresh send — check before the
-            // placeholder bubble is added, so a full department leaves no stray
-            // empty answer behind.
-            const presence = ensureFlowLeaseId ? await ensureFlowLeaseId() : null;
-            if (presence?.blocked) {
                 return;
             }
             // This turn belongs to the conversation it started in, and every
@@ -1254,12 +1221,9 @@ export default function useAiChat(
                 linsight: isLingsi,
             };
 
-            // Department concurrency: the lease was checked at the top of this
-            // callback, before any placeholder was added.
             const submission: SSESubmission = {
                 payload,
                 userMessage: parentMsg,
-                flowLeaseId: presence?.leaseId ?? undefined,
                 onStart: () => {
                     console.log("[AiChat] Regenerate SSE started");
                     setIsStreaming(true);
@@ -1349,7 +1313,7 @@ export default function useAiChat(
             setIsStreaming(true);
             beginStream(turn.cid, submission);
         },
-        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, localize, showToast, ensureFlowLeaseId]
+        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, localize, showToast]
     );
 
     return {

@@ -31,12 +31,12 @@ _FINALIZER = _PREFIX + "stop-confirmed"
 _PRODUCTION = {"serve", "migrate", "restore", "data", "purge"}
 _KINDS = {"Pod", "Service", "PersistentVolumeClaim", "Secret"}
 _PURPOSES = {
-    "prepare": {"prepare-download", "prepare-install", "prepare-upload", "assemble", "image-check"},
+    "prepare": {"prepare-download", "prepare-install", "prepare-upload", "assemble"},
     "probe": {"probe"},
     "preview": {"preview"},
-    "deploy": {"serve", "migrate", "image-check"},
+    "deploy": {"serve", "migrate"},
     "migrate": {"migrate"},
-    "restore": {"restore", "image-check"},
+    "restore": {"restore"},
     "data": {"data"},
     "destroy": {"purge"},
 }
@@ -275,8 +275,6 @@ class RuntimeKubernetesService:
             raise RuntimeConflict("resource_frozen_scope_refused")
         if meta.get("ownerReferences") or meta.get("uid") or meta.get("generateName") or template.get("status"):
             raise RuntimeConflict("resource_server_fields_refused")
-        if purpose == "image-check" and kind != "Pod":
-            raise RuntimeConflict("image_check_resource_kind_refused")
         if kind == "Pod":
             self._validate_pod(template, op, node, purpose, body["resource_ref"])
         return template, name, kind, expected_annotations[_PREFIX + "status-policy"]
@@ -342,8 +340,6 @@ class RuntimeKubernetesService:
             raise RuntimeConflict("scratch_volume_scope_refused")
         if purpose == "purge" and any("secret" in volume for volume in spec.get("volumes", [])):
             raise RuntimeConflict("purge_volume_scope_refused")
-        if purpose == "image-check":
-            RuntimeKubernetesService._validate_image_check(spec, op, node, claims)
         containers = [*spec.get("containers", []), *spec.get("initContainers", [])]
         if not containers:
             raise RuntimeConflict("resource_pod_containers_required")
@@ -353,60 +349,6 @@ class RuntimeKubernetesService:
                 raise RuntimeConflict("resource_image_not_frozen")
             if container.get("name") in trusted and ref != helper:
                 raise RuntimeConflict("resource_helper_image_refused")
-
-    @staticmethod
-    def _validate_image_check(spec, op, node, claims):
-        import json
-
-        from bisheng.app_runtime.domain.services.runtime_image_check_policy import check_document
-
-        containers = spec.get("containers", [])
-        if (
-            claims
-            or spec.get("initContainers")
-            or len(containers) != 1
-            or type(spec.get("activeDeadlineSeconds")) is not int
-            or not 1 <= spec.get("activeDeadlineSeconds", 0) <= 120
-        ):
-            raise RuntimeConflict("image_check_scope_refused")
-        container = containers[0]
-        if (
-            container.get("name") != "image-check"
-            or container.get("image") != (node.capabilities or {}).get("helper_image")
-            or container.get("command") != ["python", "-I", "-m", "runtime_manager.image_check"]
-            or container.get("args")
-        ):
-            raise RuntimeConflict("image_check_command_refused")
-        allowed = {"IMAGE_CHECK_PLAN", "DOCKER_CONFIG", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"}
-        env = container.get("env", [])
-        if len({e.get("name") for e in env}) != len(env) or any(
-            e.get("name") not in allowed or "valueFrom" in e for e in env
-        ):
-            raise RuntimeConflict("image_check_environment_refused")
-        expected = json.dumps(check_document(op, node), sort_keys=True, separators=(",", ":"))
-        hashes = {e["name"]: e.get("value_sha256") for e in env}
-        if hashes.get("IMAGE_CHECK_PLAN") != hashlib.sha256(expected.encode()).hexdigest():
-            raise RuntimeConflict("image_check_targets_refused")
-        if hashes.get("DOCKER_CONFIG") != hashlib.sha256(b"/run/registry").hexdigest():
-            raise RuntimeConflict("image_check_environment_refused")
-        for volume in spec.get("volumes", []):
-            if volume.get("name") == "tmp" and set(volume) == {"name", "emptyDir"}:
-                continue
-            secret = volume.get("secret", {})
-            if (
-                volume.get("name") != "registry-auth"
-                or set(volume) != {"name", "secret"}
-                or not (node.capabilities or {}).get("image_check_registry_secret")
-                or secret
-                != {
-                    "secretName": node.capabilities["image_check_registry_secret"],
-                    "defaultMode": 288,
-                    "items": [{"key": ".dockerconfigjson", "path": "config.json"}],
-                }
-            ):
-                raise RuntimeConflict("image_check_volume_refused")
-        if any(m.get("mountPath") not in {"/tmp", "/run/registry"} for m in container.get("volumeMounts", [])):
-            raise RuntimeConflict("image_check_volume_refused")
 
     async def register_resource(self, identity, body):
         _identity(identity, "manager")

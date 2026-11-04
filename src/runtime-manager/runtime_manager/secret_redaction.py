@@ -45,38 +45,3 @@ def redact_output(text, environment, sensitive_names=()):
         output,
         flags=re.IGNORECASE,
     )
-
-
-def diagnostic_environment(config, payload):
-    env = dict(payload.get("runtime_env", {}))
-    for name in (
-        "hmac_secret",
-        "platform_secret",
-        "inbound_secret",
-        "minio_access_key",
-        "minio_secret_key",
-        "build_index_url",
-        "build_extra_index_url",
-        "build_npm_registry",
-    ):
-        env["RTM_" + name.upper()] = getattr(config, name, "")
-    return env
-
-
-def bounded_diagnostic(text, environment, sensitive_names=()):
-    """Redact before truncation so clipping cannot reveal a fragment of a secret."""
-    output = redact_output(text, environment, sensitive_names)
-    return "\n".join(output.splitlines()[-40:]).encode("utf-8")[-16384:].decode("utf-8", errors="ignore")
-
-
-def image_failure_context(error):
-    role, reference = getattr(error, "image_role", ""), getattr(error, "image_ref", "")
-    if (
-        not isinstance(role, str)
-        or role not in {"runtime", "preparer", "base", "image", "helper", "assembler"}
-        or not isinstance(reference, str)
-        or len(reference) > 512
-        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9./:_-]*(?:@sha256:[a-f0-9]{64})?", reference)
-    ):
-        return {}
-    return {"image_role": role, "image_ref": reference}

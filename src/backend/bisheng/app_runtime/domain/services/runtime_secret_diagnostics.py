@@ -57,5 +57,4 @@ def safe_diagnostic_tail(text, operation):
         environment = unseal(payload["sealed_env"]) if payload.get("sealed_env") else {}
     except RuntimeConflict:
         return ""
-    output = redact_output(text, environment, names)
-    return "\n".join(output.splitlines()[-40:]).encode()[-16384:].decode("utf-8", errors="ignore")
+    return redact_output(text, environment, names)[-16384:]

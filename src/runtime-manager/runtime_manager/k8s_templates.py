@@ -13,14 +13,13 @@ import re
 from dataclasses import dataclass, field
 
 from runtime_manager.k8s_config import validate_namespace
-from runtime_manager.runtime_environment import BUNDLE_PATH
 
 STOP_FINALIZER = "runtime.bisheng.io/stop-confirmed"
 POLICY_ANNOTATION = "runtime.bisheng.io/status-policy"
 RESOURCE_LABEL = "runtime.bisheng.io/resource"
 PRODUCTION = {"serve", "migrate", "restore", "data", "purge"}
 PREPARATION = {"prepare-download", "prepare-install", "prepare-upload", "assemble"}
-PURPOSES = PRODUCTION | PREPARATION | {"probe", "preview", "image-check"}
+PURPOSES = PRODUCTION | PREPARATION | {"probe", "preview"}
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 _NAME = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 _IMAGE = re.compile(r"[A-Za-z0-9][A-Za-z0-9./:_-]*@sha256:[a-f0-9]{64}")
@@ -143,23 +142,6 @@ class PodPlan:
             604800 if self.purpose == "preview" else 1800
         ):
             raise ValueError("k8s_task_deadline_required")
-        if self.purpose == "image-check" and (
-            self.image != self.helper_image
-            or self.command != ("python", "-I", "-m", "runtime_manager.image_check")
-            or self.deadline_seconds > 120
-            or self.pvc_name
-            or self.scratch_pvc
-            or self.material_secret
-            or self.app_secret
-            or self.secret_env
-            or self.env
-            or self.schema_plan
-            or self.volume_guard
-            or self.mode != "image"
-            or self.temporary_mb > 256
-            or set(self.helper_env) - {"IMAGE_CHECK_PLAN", "DOCKER_CONFIG", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"}
-        ):
-            raise ValueError("k8s_image_check_scope_refused")
         if self.purpose == "data" and self.deadline_seconds > 60:
             raise ValueError("k8s_data_deadline_invalid")
         if self.purpose in PRODUCTION and not self.pvc_name:
@@ -175,7 +157,7 @@ class PodPlan:
             self.prepare_environment and self.purpose != "prepare-install"
         ):
             raise ValueError("k8s_preparation_environment_refused")
-        if self.registry_secret and self.purpose not in {"assemble", "image-check"}:
+        if self.registry_secret and self.purpose != "assemble":
             raise ValueError("k8s_registry_secret_purpose_refused")
         if material and not self.material_secret:
             raise ValueError("k8s_material_secret_required")
@@ -324,32 +306,7 @@ def pod_template(plan: PodPlan) -> dict:
                 env={"VOLUME_GUARD": json.dumps(plan.volume_guard, sort_keys=True)},
             )
         )
-    if plan.purpose == "image-check":
-        mounts = []
-        if plan.registry_secret:
-            volumes.append(
-                {
-                    "name": "registry-auth",
-                    "secret": {
-                        "secretName": plan.registry_secret,
-                        "defaultMode": 288,
-                        "items": [{"key": ".dockerconfigjson", "path": "config.json"}],
-                    },
-                }
-            )
-            mounts.append(_mount("registry-auth", "/run/registry", readonly=True))
-        containers.append(
-            _container(
-                plan,
-                "image-check",
-                image=plan.helper_image,
-                command=plan.command,
-                mounts=mounts,
-                env=plan.helper_env,
-                helper=True,
-            )
-        )
-    elif plan.purpose == "assemble":
+    if plan.purpose == "assemble":
         volumes.append({"name": "scratch", "persistentVolumeClaim": {"claimName": plan.scratch_pvc}})
         mounts = [_mount("scratch", "/work", readonly=True)]
         if plan.registry_secret:
@@ -490,7 +447,7 @@ def pod_template(plan: PodPlan) -> dict:
                 app["env"].append(
                     {
                         "name": "PATH",
-                        "value": BUNDLE_PATH,
+                        "value": "/opt/venv/bin:/workspace/app/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
                     }
                 )
             app["ports"] = [{"name": "http", "containerPort": plan.port, "protocol": "TCP"}]

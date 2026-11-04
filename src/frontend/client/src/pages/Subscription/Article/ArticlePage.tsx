@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Dropdown, DropdownItem } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { Article, getArticleDetailApi } from "~/api/channels";
 import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
@@ -26,7 +26,6 @@ import { ArticleDetail } from "./ArticleDetail";
 export default function ArticlePage() {
     const { channelId, articleId } = useParams<{ channelId: string; articleId: string }>();
     const localize = useLocalize();
-    const navigate = useNavigate();
     const isH5 = usePrefersMobileLayout();
     const { showToast } = useToastContext();
     const [scrolled, setScrolled] = useState(false);
@@ -66,21 +65,10 @@ export default function ArticlePage() {
         if (!iframe) return;
         let cleanup: (() => void) | undefined;
         const bind = () => {
-            cleanup?.();
             const win = iframe.contentWindow;
             if (!win) return;
-            let previousY = Math.max(0, win.scrollY);
-            setScrolled(false);
-            const onScroll = () => {
-                const currentY = Math.max(0, win.scrollY);
-                if (currentY <= 40) {
-                    setScrolled(false);
-                    previousY = currentY;
-                } else if (Math.abs(currentY - previousY) >= 4) {
-                    setScrolled(currentY > previousY);
-                    previousY = currentY;
-                }
-            };
+            const onScroll = () => setScrolled(win.scrollY > 40);
+            onScroll();
             win.addEventListener("scroll", onScroll, { passive: true });
             cleanup = () => win.removeEventListener("scroll", onScroll);
         };
@@ -90,7 +78,7 @@ export default function ArticlePage() {
             iframe.removeEventListener("load", bind);
             cleanup?.();
         };
-    }, [isH5, isLoading, article?.id, article?.content_html]);
+    }, [isH5, article?.content_html]);
 
     const handleShare = async () => {
         if (!channelId || !articleId) return;
@@ -205,26 +193,11 @@ export default function ArticlePage() {
                 className="absolute inset-0 size-full border-0"
             />
 
-            {/* Both floating actions share the same scroll-direction visibility. */}
+            {/* Floating top-right menu — fades on scroll */}
             <div
                 className={cn(
-                    "fixed left-4 top-[calc(env(safe-area-inset-top,0px)+12px)] z-10 transition-opacity duration-300 motion-reduce:transition-none",
-                    scrolled ? "invisible pointer-events-none opacity-0" : "opacity-100",
-                )}
-            >
-                <button
-                    type="button"
-                    aria-label={localize("com_ui_go_back")}
-                    onClick={() => navigate(`/channel/${encodeURIComponent(channelId!)}`, { replace: true })}
-                    className="workbench-menu-trigger relative inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-white/70 text-text-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-colors hover:bg-white/85"
-                >
-                    <Outlined.ArrowLeft className="size-5" />
-                </button>
-            </div>
-            <div
-                className={cn(
-                    "fixed right-4 top-[calc(env(safe-area-inset-top,0px)+12px)] z-10 transition-opacity duration-300 motion-reduce:transition-none",
-                    scrolled ? "invisible pointer-events-none opacity-0" : "opacity-100",
+                    "fixed right-4 top-[calc(env(safe-area-inset-top,0px)+12px)] z-10 transition-opacity duration-300",
+                    scrolled ? "pointer-events-none opacity-0" : "opacity-100",
                 )}
             >
                 <Dropdown

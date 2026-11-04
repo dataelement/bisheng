@@ -8,12 +8,11 @@ from sqlalchemy import and_, case, func, or_
 from sqlmodel import select
 
 from bisheng.app_governance.domain.models.runtime_audit import RuntimeAuditQuerySnapshot
-from bisheng.app_governance.domain.schemas.runtime_audit import DEPT_FILTER_KEYS, FIELDS
+from bisheng.app_governance.domain.schemas.runtime_audit import FIELDS
 from bisheng.app_publish.domain.models.capability_call_record import AppCapabilityCallRecord
 from bisheng.core.context.tenant import bypass_tenant_filter, tenant_execution_scope
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.app_access_log import AppAccessLog
-from bisheng.database.models.org_snapshot import AuditDeptScope, DeptSelection, build_dept_predicate
 from bisheng.open_api.domain.models.model_call_record import ModelCallRecord
 
 SOURCES = {"model": ModelCallRecord, "capability": AppCapabilityCallRecord, "access": AppAccessLog}
@@ -36,20 +35,6 @@ def source_time(value, filters):
         .astimezone(ZoneInfo(filters.get("source_timezone", "UTC")))
         .replace(tzinfo=None)
     )
-
-
-def dept_predicate(column, scope, filters):
-    """Department scope intersected with the panel selection (F003 decision 10)."""
-    selected = any(key in filters for key in DEPT_FILTER_KEYS)
-    if scope.dept_scope is None and not selected:
-        return None
-    selection = DeptSelection.of(
-        filters.get("dept_ids"),
-        filters.get("include_descendants", True),
-        filters.get("include_none", False),
-        filters.get("include_unrecorded", False),
-    )
-    return build_dept_predicate(column, scope.dept_scope or AuditDeptScope.unlimited(), selection)
 
 
 def project(row, kind, filters):
@@ -125,9 +110,6 @@ class RuntimeAuditRepository:
                 stmt = stmt.where(visitor == filters["visitor_id"])
         if filters.get("credential_id"):
             stmt = stmt.where(model.credential_id == filters["credential_id"])
-        dept = dept_predicate(model.operator_dept_id, scope, filters)
-        if dept is not None:
-            stmt = stmt.where(dept)
         return stmt, model, time
 
     @staticmethod

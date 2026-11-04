@@ -2,7 +2,6 @@ import { createDelegateCandidateSource } from "@/controllers/API/serviceAccountC
 import { getDepartmentChildrenApi, getDepartmentPathTreeApi, searchDepartmentsApi } from "@/controllers/API/department"
 import { filterDelegateCandidatesApi } from "@/controllers/API/serviceAccount"
 import type { DepartmentTreeNode } from "@/types/api/department"
-import { testServiceAccountScope } from "@/test/serviceAccountTestScope"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/controllers/API/serviceAccount", () => ({ filterDelegateCandidatesApi: vi.fn() }))
@@ -26,11 +25,11 @@ describe("service-account delegation candidates", () => {
   it("uses the target service account and preserves cancellation for user filtering", async () => {
     const signal = new AbortController().signal
     vi.mocked(filterDelegateCandidatesApi).mockResolvedValue([{ subject_type: "user", subject_id: 2 }])
-    const source = createDelegateCandidateSource(12, testServiceAccountScope)
+    const source = createDelegateCandidateSource(12)
     expect(await source.filterUserIds([1, 2], signal)).toEqual([2])
     expect(filterDelegateCandidatesApi).toHaveBeenCalledWith(12, [
       { subject_type: "user", subject_id: 1 }, { subject_type: "user", subject_id: 2 },
-    ], signal, testServiceAccountScope)
+    ], signal)
   })
 
   it("filters every lazy department layer", async () => {
@@ -47,7 +46,7 @@ describe("service-account delegation candidates", () => {
     vi.mocked(searchDepartmentsApi).mockResolvedValue(result)
     vi.mocked(getDepartmentPathTreeApi).mockResolvedValue(result)
     vi.mocked(filterDelegateCandidatesApi).mockResolvedValue([{ subject_type: "department", subject_id: 2 }])
-    const source = createDelegateCandidateSource(12, testServiceAccountScope).departmentSource
+    const source = createDelegateCandidateSource(12).departmentSource
 
     expect(await source.fetchSearch("Department")).toEqual({ ...result, roots: [node(2)], total_matches: 1 })
     expect((await source.fetchPathTree(2)).roots).toEqual([node(2)])
@@ -55,7 +54,7 @@ describe("service-account delegation candidates", () => {
       { subject_type: "department", subject_id: 1 },
       { subject_type: "department", subject_id: 2 },
       { subject_type: "department", subject_id: 3 },
-    ], undefined, testServiceAccountScope)
+    ])
   })
 
   it("does not fall back to unfiltered departments on failure", async () => {

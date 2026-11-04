@@ -34,23 +34,12 @@ class RuntimeEgressService:
         self.repo = repository
 
     async def issue(self, op, *, phase, declared=(), platform_base="", package_sources=()):
-        if phase not in {"build", "runtime", "image-check"}:
+        if phase not in {"build", "runtime"}:
             raise RuntimeConflict("egress_phase_invalid")
-        if phase == "image-check":
-            from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeNode
-            from bisheng.app_runtime.domain.services.runtime_image_check_policy import registry_sources
-
-            node = await self.repo.get(RuntimeNode, op.node_id)
-            if node is None or node.executor_kind != "kubernetes" or op.kind not in {"prepare", "deploy", "restore"}:
-                raise RuntimeConflict("egress_phase_invalid")
-            expected = registry_sources(op, node)
-            if sorted(set(package_sources)) != expected:
-                raise RuntimeConflict("image_check_registry_scope_refused")
-            declared, platform_base = (), ""
         destinations = [destination(value) for value in declared]
         if platform_base:
             destinations.append(destination(platform_base, trusted=True))
-        if phase in {"build", "image-check"}:
+        if phase == "build":
             destinations.extend(destination(value, trusted=True) for value in package_sources if value)
         if phase == "runtime" and op.payload.get("sealed_env"):
             from bisheng.app_runtime.domain.services.runtime_payload import unseal

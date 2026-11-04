@@ -5,7 +5,6 @@
 // compliance reviewer notices first.
 
 import type { AuditAppOption, AuditRow } from "@/types/api/audit"
-import { orgLabel } from "../components/OrgFilter/orgLabel"
 
 export type { AuditAppOption, AuditRow }
 
@@ -22,10 +21,6 @@ export const renderSystemId = (log: AuditRow, t: Translate): string => {
     }
     return '-'
 }
-
-/** F003 organisation column: the operator's department when the row was written. */
-export const renderOrg = (log: AuditRow, t: Translate): string =>
-    orgLabel(log.operator_dept_id, log.operator_dept_path, t)
 
 export const renderEventType = (log: AuditRow, t: Translate, actionToKey: ActionKeyFn): string => {
     if (log.event_type) return t(`log.eventTypeEnum.${log.event_type}`)
@@ -100,7 +95,6 @@ export const buildAuditCsv = (
     const header = [
         t('log.auditId'),
         t('log.username'),
-        t('log.org.column'),
         t('log.operationTime'),
         t('log.systemModule'),
         t('log.operationAction'),
@@ -117,7 +111,6 @@ export const buildAuditCsv = (
         return [
             log.id,
             operator.secondary ? `${operator.primary} · ${operator.secondary}` : operator.primary,
-            renderOrg(log, t),
             (log.create_time || '').replace('T', ' '),
             renderSystemId(log, t),
             renderEventType(log, t, actionToKey),

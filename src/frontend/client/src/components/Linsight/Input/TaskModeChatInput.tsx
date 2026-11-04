@@ -25,7 +25,6 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import AiChatInput from '~/components/Chat/AiChatInput';
-import { useTaskInviteQuota } from '~/components/Chat/TaskInviteQuota';
 import { useLocalize } from '~/hooks';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
@@ -95,8 +94,6 @@ export function TaskModeChatInput({ conversationId = 'new' }: TaskModeChatInputP
     const selectedAgentTools = useRecoilValue(store.selectedAgentTools);
 
     const { setLinsightSubmission } = useLinsightSessionManager('new');
-    const inviteOn = !!(bsConfig as { linsight_invitation_code?: boolean } | undefined)?.linsight_invitation_code;
-    const { bar: inviteQuotaBar, dialog: inviteQuotaDialog, allowSend: allowInviteSend } = useTaskInviteQuota(inviteOn);
 
     // Seed the linsight tool list from admin config; preserve the user's
     // per-session checked state for tools that still exist (session memory).
@@ -124,7 +121,6 @@ export function TaskModeChatInput({ conversationId = 'new' }: TaskModeChatInputP
             const trimmed = text.trim();
             const fileList = files || [];
             if (!trimmed && !fileList.length) return;
-            if (!allowInviteSend()) return;
 
             // convertTools (useLinsightManager) maps the pseudo 'pro_knowledge'
             // entry → org_knowledge_enabled; concrete tools ride along via `data`.
@@ -188,13 +184,10 @@ export function TaskModeChatInput({ conversationId = 'new' }: TaskModeChatInputP
                 sessionId: undefined,
             });
         },
-        [context, model, skills, localize, setLinsightSubmission, selectedAgentTools, bsConfig, allowInviteSend],
+        [context, model, skills, localize, setLinsightSubmission, selectedAgentTools, bsConfig],
     );
 
     return (
-        <>
-        {inviteQuotaBar}
-        {inviteQuotaDialog}
         <AiChatInput
             disabled={!bsConfig?.models?.length}
             // Task mode uses its own input placeholder (daily falls back to
@@ -244,6 +237,5 @@ export function TaskModeChatInput({ conversationId = 'new' }: TaskModeChatInputP
             selectedOrgKbs={context.knowledge}
             onSelectedOrgKbsChange={(val) => setContext((prev) => ({ ...prev, knowledge: val as any }))}
         />
-        </>
     );
 }

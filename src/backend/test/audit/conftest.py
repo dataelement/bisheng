@@ -86,8 +86,6 @@ AUDITLOG_DDL = """
         target_id VARCHAR(64),
         reason TEXT,
         metadata JSON,
-        operator_dept_id INTEGER,
-        operator_dept_path VARCHAR(1024),
         create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
         update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
     )
@@ -115,36 +113,6 @@ def _tenant_context():
         yield
     finally:
         set_current_tenant_id(previous)
-
-
-@pytest.fixture(autouse=True)
-def audit_identity(monkeypatch):
-    """What the F003 audit gate learns about the caller, set per test.
-
-    ``AuditDeptScopeService`` otherwise asks the permission service, the user
-    table and the membership table — none of which exist here. Defaults: no
-    audit menu, no managed department, no primary department; a caller with
-    ``is_admin`` / ``is_global_super`` passes before any of these is read.
-    """
-    from bisheng.department.domain.services import audit_dept_scope
-
-    state = SimpleNamespace(menu=False, admin_departments=[], primary_dept_id=None)
-
-    async def _admin_departments(user_id):
-        return list(state.admin_departments)
-
-    async def _primary(user_id):
-        return SimpleNamespace(department_id=state.primary_dept_id) if state.primary_dept_id else None
-
-    async def _menu(cls, login_user, *, is_department_admin):
-        return state.menu
-
-    monkeypatch.setattr(
-        audit_dept_scope, "DepartmentDao", SimpleNamespace(aget_user_admin_departments=_admin_departments)
-    )
-    monkeypatch.setattr(audit_dept_scope, "UserDepartmentDao", SimpleNamespace(aget_user_primary_department=_primary))
-    monkeypatch.setattr(audit_dept_scope.AuditDeptScopeService, "_has_audit_menu", classmethod(_menu))
-    return state
 
 
 @pytest.fixture(scope="module")

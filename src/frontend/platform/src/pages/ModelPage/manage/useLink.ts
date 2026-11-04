@@ -8,8 +8,8 @@ interface ProviderInfo {
 // API数据映射
 const modelProviderInfo: Record<string, ProviderInfo> = {
     tencent: {
-        apiKeyUrl: 'https://cloud.tencent.com/document/product/1823/130078',
-        modelUrl: 'https://cloud.tencent.com/document/product/1823/130078',
+        apiKeyUrl: 'https://console.cloud.tencent.com/hunyuan/settings',
+        modelUrl: 'https://console.cloud.tencent.com/hunyuan/start',
     },
     qwen: {
         apiKeyUrl: 'https://bailian.console.aliyun.com/?tab=model#/api-key',

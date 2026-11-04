@@ -294,7 +294,7 @@ export function getModelProviders(): Record<string, ConfigField[]> {
         {
             label: "Base URL",
             type: "text",
-            default: "https://tokenhub.tencentmaas.com/v1",
+            default: "https://api.hunyuan.cloud.tencent.com/v1",
             required: true,
             key: "base_url",
         },

@@ -35,11 +35,3 @@ class WorkbenchEmbeddingError(BaseErrorCode):
 class WorkbenchChatDefaultModelError(BaseErrorCode):
     Code: int = 10811
     Msg: str = "The daily-chat default model must be one of the configured workbench chat models."
-
-
-class ModelDiscoveryError(BaseErrorCode):
-    Code = 10812
-    Msg = "Model discovery failed. Check the connection settings and retry."
-
-    def __init__(self, *, msg: str | None = None, reason: str = "failure"):
-        super().__init__(msg=msg or self.Msg, reason=reason)

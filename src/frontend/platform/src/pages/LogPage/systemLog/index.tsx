@@ -9,7 +9,6 @@ import { notification } from "@bisheng/ui";
 import {
     actionToI18nKey,
     AuditLogFilters,
-    EMPTY_ORG_SELECTION,
     exportSystemLogDataApi,
     getActionsApi,
     getActionsByModuleApi,
@@ -35,12 +34,9 @@ import {
     renderObjectName,
     renderObjectType,
     renderOperator,
-    renderOrg,
     renderSystemId,
     toAppOptions,
 } from "./auditRow";
-import { OrgFilter } from "../components/OrgFilter";
-import type { OrgSelection } from "@/types/api/audit";
 
 const useGroups = () => {
     const [groups, setGroups] = useState([])
@@ -103,7 +99,6 @@ type FilterKeys = {
     action: string
     targetAppId: string
     tenantId: string
-    org: OrgSelection
 }
 
 const init: FilterKeys = {
@@ -115,7 +110,6 @@ const init: FilterKeys = {
     action: '',
     targetAppId: '',
     tenantId: '',
-    org: EMPTY_ORG_SELECTION,
 }
 
 // What the backend receives for one set of controls — the list and the
@@ -129,7 +123,6 @@ const toFilters = (keys: FilterKeys): AuditLogFilters => ({
     action: keys.action,
     targetAppId: keys.targetAppId,
     tenantId: keys.tenantId ? Number(keys.tenantId) : undefined,
-    org: keys.org,
 })
 
 export default function SystemLog() {
@@ -189,7 +182,7 @@ export default function SystemLog() {
         loadUsers()
     }, [])
 
-    const columnCount = showTenant ? 12 : 11
+    const columnCount = showTenant ? 11 : 10
 
     return <div className="relative">
         {loading && (
@@ -260,8 +253,6 @@ export default function SystemLog() {
                     options={tenants.filter(tenant => tenant.id != null).map(tenant => ({ value: String(tenant.id), label: tenant.tenant_name }))}
                     value={keys.tenantId || null} onOpenChange={open => { if (open) loadTenants() }}
                     onChange={value => setKeys({ ...keys, tenantId: value == null ? '' : String(value) })} />}
-                <OrgFilter value={keys.org} tenantId={keys.tenantId ? Number(keys.tenantId) : null}
-                    onChange={org => setKeys({ ...keys, org })} />
                 <div className="flex items-center gap-2">
                     <Button size="medium" onClick={handleSearch}>
                         {t('log.searchButton')}
@@ -279,7 +270,6 @@ export default function SystemLog() {
                     <TableRow>
                         <TableHead className="w-[200px]">{t('log.auditId')}</TableHead>
                         <TableHead className="w-[200px] min-w-[100px]">{t('log.username')}</TableHead>
-                        <TableHead className="w-[200px] min-w-[120px]">{t('log.org.column')}</TableHead>
                         <TableHead className="w-[200px] min-w-[100px]">{t('log.operationTime')}</TableHead>
                         <TableHead className="w-[100px] min-w-[100px]">{t('log.systemModule')}</TableHead>
                         <TableHead className="w-[150px] min-w-[100px]">{t('log.operationAction')}</TableHead>
@@ -301,7 +291,6 @@ export default function SystemLog() {
                                     <div className="max-w-[200px] break-all truncate-multiline">{operator.primary}</div>
                                     {operator.secondary && <div className="max-w-[200px] break-all text-xs text-muted-foreground">{operator.secondary}</div>}
                                 </TableCell>
-                                <TableCell><div className="max-w-[200px] break-all truncate-multiline">{renderOrg(log, t)}</div></TableCell>
                                 <TableCell>{log.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{renderSystemId(log, t)}</TableCell>
                                 <TableCell>{renderEventType(log, t, actionToI18nKey)}</TableCell>

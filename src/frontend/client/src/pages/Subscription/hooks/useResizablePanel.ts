@@ -1,132 +1,146 @@
-import {
-  useState,
-  useEffect,
-  useLayoutEffect,
-  useCallback,
-  useRef,
-  type RefObject,
-  type MouseEvent as ReactMouseEvent,
-} from "react";
-import { useElementSize } from "~/hooks/useElementSize";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 
 interface UseResizablePanelOptions {
-  storageKey: string;
-  defaultRatio: number;
-  minLeftWidth: number;
-  minRightWidth: number;
-  containerRef: RefObject<HTMLDivElement>;
-  defaultLeftWidth?: (containerWidth: number) => number;
-  enabled?: boolean;
+    /** localStorage key to persist the split ratio (0–1) */
+    storageKey: string;
+    /** Default ratio for the left panel (0–1), e.g. 0.5 = 50% */
+    defaultRatio: number;
+    /** Minimum width for the left panel (px) */
+    minLeftWidth: number;
+    /** Minimum width for the right panel (px) */
+    minRightWidth: number;
+    /** Ref to the container element for calculating bounds */
+    containerRef: React.RefObject<HTMLDivElement>;
+    /**
+     * Optional: compute the default left width (px) from the container width,
+     * used only while the user hasn't dragged the splitter (no persisted ratio).
+     * Takes precedence over `defaultRatio`. Lets the default split match an
+     * external layout (e.g. the two-column browse grid) instead of a fixed ratio.
+     */
+    defaultLeftWidth?: (containerWidth: number) => number;
 }
 
-/** One pixel belongs to the splitter; the two columns must both fit before dragging. */
+/**
+ * Shared hook for draggable split-panel resize logic.
+ * Persists the split position as a **ratio** (0–1) so the layout
+ * stays proportional across different screen sizes.
+ */
 export function useResizablePanel({
-  storageKey,
-  defaultRatio,
-  minLeftWidth,
-  minRightWidth,
-  containerRef,
-  defaultLeftWidth,
-  enabled = true,
-}: UseResizablePanelOptions) {
-  const { width: containerWidth } = useElementSize(containerRef);
-  const canSplit = containerWidth >= minLeftWidth + 1 + minRightWidth;
-  const [ratio, setRatio] = useState<number | null>(() => {
-    try {
-      const parsed = Number(localStorage.getItem(storageKey));
-      return parsed > 0 && parsed < 1 ? parsed : null;
-    } catch {
-      return null;
-    }
-  });
-  const ratioRef = useRef(ratio);
-  ratioRef.current = ratio;
-  const [isResizing, setIsResizing] = useState(false);
-  const baseWidth =
-    ratio !== null
-      ? ratio * containerWidth
-      : (defaultLeftWidth?.(containerWidth) ?? defaultRatio * containerWidth);
-  const leftWidth = canSplit
-    ? Math.min(
-        Math.max(Math.round(baseWidth), minLeftWidth),
-        containerWidth - 1 - minRightWidth,
-      )
-    : containerWidth;
-  const active = enabled && canSplit;
-
-  useLayoutEffect(() => {
-    if (!active) setIsResizing(false);
-  }, [active]);
-
-  const startResizing = useCallback(
-    (event: ReactMouseEvent) => {
-      if (!active) return;
-      event.preventDefault();
-      setIsResizing(true);
-    },
-    [active],
-  );
-
-  useEffect(() => {
-    if (!isResizing || !active) return;
-    const previousCursor = document.body.style.cursor;
-    const previousSelection = document.body.style.userSelect;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    const blockSelect = (event: Event) => event.preventDefault();
-    const resize = (event: MouseEvent) => {
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect || rect.width < minLeftWidth + 1 + minRightWidth) return;
-      event.preventDefault();
-      const next = Math.min(
-        Math.max(event.clientX - rect.left, minLeftWidth),
-        rect.width - 1 - minRightWidth,
-      );
-      setRatio(next / rect.width);
-    };
-    const stop = () => {
-      setIsResizing(false);
-      try {
-        if (ratioRef.current !== null)
-          localStorage.setItem(storageKey, ratioRef.current.toFixed(4));
-      } catch {
-        /* Optional preference. */
-      }
-    };
-    document.addEventListener("selectstart", blockSelect);
-    window.addEventListener("mousemove", resize);
-    window.addEventListener("mouseup", stop);
-    return () => {
-      document.body.style.cursor = previousCursor;
-      document.body.style.userSelect = previousSelection;
-      document.removeEventListener("selectstart", blockSelect);
-      window.removeEventListener("mousemove", resize);
-      window.removeEventListener("mouseup", stop);
-    };
-  }, [
-    isResizing,
-    active,
-    containerRef,
+    storageKey,
+    defaultRatio,
     minLeftWidth,
     minRightWidth,
-    storageKey,
-  ]);
+    containerRef,
+    defaultLeftWidth,
+}: UseResizablePanelOptions) {
+    // Store ratio (0–1) internally; derive pixel width on render.
+    // `null` means the user hasn't dragged yet → fall back to the default
+    // width (defaultLeftWidth(containerWidth) or defaultRatio).
+    const [ratio, setRatio] = useState<number | null>(() => {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+            const parsed = parseFloat(saved);
+            if (!isNaN(parsed) && parsed > 0 && parsed < 1) return parsed;
+        }
+        return null;
+    });
+    const [isResizing, setIsResizing] = useState(false);
 
-  const resetToDefault = useCallback(() => {
-    setRatio(null);
-    try {
-      localStorage.removeItem(storageKey);
-    } catch {
-      /* Optional preference. */
-    }
-  }, [storageKey]);
+    // Force a re-render after mount so containerRef.current is available for width calculation
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => { setMounted(true); }, []);
 
-  return {
-    leftWidth,
-    containerWidth,
-    canSplit,
-    isResizing: isResizing && active,
-    startResizing,
-    resetToDefault,
-  };
+    // Convert ratio to pixel width, clamped by min constraints
+    const getLeftWidth = useCallback((): number => {
+        const containerWidth = containerRef.current?.getBoundingClientRect().width ?? 0;
+        if (containerWidth === 0) return minLeftWidth;
+
+        // No persisted ratio → use the computed default width, else the default ratio.
+        const basePx = ratio !== null
+            ? ratio * containerWidth
+            : defaultLeftWidth
+                ? defaultLeftWidth(containerWidth)
+                : defaultRatio * containerWidth;
+
+        let px = Math.round(basePx);
+        // Enforce minimum constraints
+        px = Math.max(px, minLeftWidth);
+        px = Math.min(px, containerWidth - minRightWidth);
+        return px;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ratio, containerRef, minLeftWidth, minRightWidth, mounted, defaultLeftWidth, defaultRatio]);
+
+    const leftWidth = getLeftWidth();
+
+    // Start drag — lock cursor & disable text selection globally
+    const startResizing = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        setIsResizing(true);
+        document.body.style.userSelect = "none";
+        document.body.style.cursor = "col-resize";
+    }, []);
+
+    // Stop drag — restore cursor & persist ratio
+    const stopResizing = useCallback(() => {
+        setIsResizing(false);
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+        setRatio((r) => {
+            // r stays null if the user clicked the splitter without dragging.
+            if (r !== null) localStorage.setItem(storageKey, r.toFixed(4));
+            return r;
+        });
+    }, [storageKey]);
+
+    // Handle drag movement — compute new ratio from mouse position
+    const resize = useCallback(
+        (e: MouseEvent) => {
+            if (!containerRef.current) return;
+            e.preventDefault();
+
+            const rect = containerRef.current.getBoundingClientRect();
+            const newLeftWidth = e.clientX - rect.left;
+
+            if (
+                newLeftWidth >= minLeftWidth &&
+                rect.width - newLeftWidth >= minRightWidth
+            ) {
+                setRatio(newLeftWidth / rect.width);
+            }
+        },
+        [containerRef, minLeftWidth, minRightWidth]
+    );
+
+    // Clear any persisted/custom ratio and fall back to the computed default
+    // width. Callers use this to re-assert the geometry-aligned default (e.g. on
+    // each fresh open), so the default state stays consistent regardless of a
+    // previously dragged value.
+    const resetToDefault = useCallback(() => {
+        setRatio(null);
+        localStorage.removeItem(storageKey);
+    }, [storageKey]);
+
+    // Attach / detach listeners whenever isResizing changes
+    useEffect(() => {
+        if (!isResizing) return;
+
+        // Block text selection events during drag
+        const blockSelect = (e: Event) => e.preventDefault();
+        document.addEventListener("selectstart", blockSelect);
+        window.addEventListener("mousemove", resize);
+        window.addEventListener("mouseup", stopResizing);
+
+        return () => {
+            document.removeEventListener("selectstart", blockSelect);
+            window.removeEventListener("mousemove", resize);
+            window.removeEventListener("mouseup", stopResizing);
+        };
+    }, [isResizing, resize, stopResizing]);
+
+    return {
+        leftWidth,
+        isResizing,
+        startResizing,
+        resetToDefault,
+    };
 }

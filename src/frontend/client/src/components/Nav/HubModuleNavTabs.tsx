@@ -1,20 +1,16 @@
-import { useClientEnvironment } from "~/hooks/useClientEnvironment";
-import type { ComponentType } from "react";
-import { useMemo } from "react";
-import { Outlined } from "bisheng-icons";
-import { matchPath, NavLink, useLocation } from "react-router-dom";
-import GlobeIcon from "~/components/ui/icon/Globe";
-import HomeIcon from "~/components/ui/icon/Home";
-import LinkIcon from "~/components/ui/icon/Link";
-import { useAuthContext, useWorkbenchMenuNames } from "~/hooks";
-import {
-  appsSectionLinkTarget,
-  lastSectionPaths,
-} from "~/layouts/appModuleNavPaths";
-import { cn } from "~/utils";
-import { canOpenWorkbench } from "~/utils/platformAccess";
+import type { ComponentType } from 'react';
+import { useMemo } from 'react';
+import { Outlined } from 'bisheng-icons';
+import { matchPath, NavLink, useLocation } from 'react-router-dom';
+import GlobeIcon from '~/components/ui/icon/Globe';
+import HomeIcon from '~/components/ui/icon/Home';
+import LinkIcon from '~/components/ui/icon/Link';
+import { useAuthContext, useWorkbenchMenuNames } from '~/hooks';
+import { appsSectionLinkTarget, lastSectionPaths } from '~/layouts/appModuleNavPaths';
+import { cn } from '~/utils';
+import { canOpenWorkbench } from '~/utils/platformAccess';
 
-export type HubModuleSection = "home" | "apps" | "channel" | "knowledge";
+export type HubModuleSection = 'home' | 'apps' | 'channel' | 'knowledge';
 
 export interface HubModuleLink {
   section: HubModuleSection;
@@ -34,24 +30,22 @@ const hubNavItemClassName = (
   squareItems: boolean,
 ) =>
   cn(
-    "flex cursor-pointer items-center justify-center rounded-lg p-3 transition-colors fine-pointer:hover:bg-blue-500/[0.07] coarse-pointer:hover:bg-transparent",
-    squareItems && "h-11 w-11 p-0 shrink-0",
-    equalWidth && !squareItems && "min-w-0 flex-1",
-    !equalWidth && "shrink-0",
-    (navActive || routeActive) && "bg-blue-500/[0.07]",
+    'flex cursor-pointer items-center justify-center rounded-lg p-3 transition-colors fine-pointer:hover:bg-blue-500/[0.07] coarse-pointer:hover:bg-transparent',
+    squareItems && 'h-11 w-11 p-0 shrink-0',
+    equalWidth && !squareItems && 'min-w-0 flex-1',
+    !equalWidth && 'shrink-0',
+    (navActive || routeActive) && 'bg-blue-500/[0.07]',
   );
 
 const hubIconClassName = (on: boolean) =>
-  cn("size-5 shrink-0", on ? "text-blue-500" : "text-text-3");
+  cn('size-5 shrink-0', on ? 'text-blue-500' : 'text-text-3');
 
 export function useHubModuleLinks(): HubModuleLink[] {
   const { pathname } = useLocation();
   // Admin-configured entry names; falls back to the localized defaults.
   const menuNames = useWorkbenchMenuNames();
   const { user } = useAuthContext();
-  const plugins: string[] | null = Array.isArray(
-    (user as { plugins?: unknown })?.plugins,
-  )
+  const plugins: string[] | null = Array.isArray((user as { plugins?: unknown })?.plugins)
     ? (user as { plugins: string[] }).plugins
     : null;
   const canOpenWorkbenchEntry =
@@ -59,100 +53,68 @@ export function useHubModuleLinks(): HubModuleLink[] {
     canOpenWorkbench({
       role: user?.role,
       plugins,
-      is_department_admin: (
-        user as { is_department_admin?: boolean } | undefined
-      )?.is_department_admin,
+      is_department_admin: (user as { is_department_admin?: boolean } | undefined)?.is_department_admin,
     });
   // Workbench nav tabs use the workbench approval scope (legacy flag as fallback).
   const menuApprovalMode = Boolean(
-    (
-      user as {
-        menu_approval_mode_workbench?: boolean;
-        menu_approval_mode?: boolean;
-      }
-    )?.menu_approval_mode_workbench ??
-    (user as { menu_approval_mode?: boolean })?.menu_approval_mode,
+    (user as { menu_approval_mode_workbench?: boolean; menu_approval_mode?: boolean })
+      ?.menu_approval_mode_workbench
+    ?? (user as { menu_approval_mode?: boolean })?.menu_approval_mode,
   );
   const hasPlugin = (id: string) => (plugins ? plugins.includes(id) : true);
   const showWorkbenchItem = (id: string) => hasPlugin(id) || menuApprovalMode;
-  const showSubscriptionTab = showWorkbenchItem("subscription");
-  const showKnowledgeSpaceTab = showWorkbenchItem("knowledge_space");
-  const showHomeTab = showWorkbenchItem("home");
-  const showAppsTab = showWorkbenchItem("apps");
+  const showSubscriptionTab = showWorkbenchItem('subscription');
+  const showKnowledgeSpaceTab = showWorkbenchItem('knowledge_space');
+  const showHomeTab = showWorkbenchItem('home');
+  const showAppsTab = showWorkbenchItem('apps');
 
-  return useMemo(
-    (): HubModuleLink[] => {
-      if (!canOpenWorkbenchEntry) return [];
-      return [
-        {
-          section: "home" as const,
-          to:
-            hasPlugin("home") || !menuApprovalMode
-              ? lastSectionPaths.home || "/c/new"
-              : "/menu-unavailable?plugin=home",
-          icon: HomeIcon,
-          label: menuNames.home,
-          isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
-          closeDrawerOnNavigate: true,
-        },
-        {
-          section: "channel" as const,
-          to:
-            hasPlugin("subscription") || !menuApprovalMode
-              ? lastSectionPaths.channel || "/channel"
-              : "/menu-unavailable?plugin=subscription",
-          icon: LinkIcon,
-          label: menuNames.channel,
-          isActive: pathname.startsWith("/channel"),
-          closeDrawerOnNavigate: true,
-        },
-        {
-          section: "knowledge" as const,
-          to:
-            hasPlugin("knowledge_space") || !menuApprovalMode
-              ? lastSectionPaths.knowledge || "/knowledge"
-              : "/menu-unavailable?plugin=knowledge_space",
-          icon: Outlined.Book,
-          label: menuNames.knowledge,
-          isActive: pathname.startsWith("/knowledge"),
-          closeDrawerOnNavigate: true,
-        },
-        {
-          section: "apps" as const,
-          to:
-            hasPlugin("apps") || !menuApprovalMode
-              ? appsSectionLinkTarget()
-              : "/menu-unavailable?plugin=apps",
-          icon: GlobeIcon,
-          label: menuNames.apps,
-          isActive:
-            matchPath("/app/:id/:fid/:type", pathname) !== null ||
-            pathname.startsWith("/apps"),
-          closeDrawerOnNavigate: true,
-        },
-      ].filter((link) => {
-        if (link.section === "home") return showHomeTab;
-        if (link.section === "apps") return showAppsTab;
-        if (link.section === "channel") return showSubscriptionTab;
-        if (link.section === "knowledge") return showKnowledgeSpaceTab;
-        return true;
-      });
-    },
+  return useMemo((): HubModuleLink[] => {
+    if (!canOpenWorkbenchEntry) return [];
+    return [
+      {
+        section: 'home' as const,
+        to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable?plugin=home',
+        icon: HomeIcon,
+        label: menuNames.home,
+        isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
+        closeDrawerOnNavigate: true,
+      },
+      {
+        section: 'channel' as const,
+        to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable?plugin=subscription',
+        icon: LinkIcon,
+        label: menuNames.channel,
+        isActive: pathname.startsWith('/channel'),
+        closeDrawerOnNavigate: true,
+      },
+      {
+        section: 'knowledge' as const,
+        to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable?plugin=knowledge_space',
+        icon: Outlined.Book,
+        label: menuNames.knowledge,
+        isActive: pathname.startsWith('/knowledge'),
+        closeDrawerOnNavigate: true,
+      },
+      {
+        section: 'apps' as const,
+        to: hasPlugin('apps') || !menuApprovalMode ? appsSectionLinkTarget() : '/menu-unavailable?plugin=apps',
+        icon: GlobeIcon,
+        label: menuNames.apps,
+        isActive:
+          matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
+        closeDrawerOnNavigate: true,
+      },
+    ].filter((link) => {
+      if (link.section === 'home') return showHomeTab;
+      if (link.section === 'apps') return showAppsTab;
+      if (link.section === 'channel') return showSubscriptionTab;
+      if (link.section === 'knowledge') return showKnowledgeSpaceTab;
+      return true;
+    });
+  },
     // Menu names are read field-by-field: the hook returns a fresh object each render.
-    [
-      canOpenWorkbenchEntry,
-      menuNames.home,
-      menuNames.channel,
-      menuNames.knowledge,
-      menuNames.apps,
-      pathname,
-      showKnowledgeSpaceTab,
-      showSubscriptionTab,
-      showHomeTab,
-      showAppsTab,
-      menuApprovalMode,
-      plugins,
-    ],
+    [canOpenWorkbenchEntry, menuNames.home, menuNames.channel, menuNames.knowledge, menuNames.apps,
+      pathname, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins],
   );
 }
 
@@ -171,20 +133,14 @@ export function HubModuleNavTabs({
   onLinkClick,
   className,
 }: HubModuleNavTabsProps) {
-  const { channel } = useClientEnvironment();
   const links = useHubModuleLinks();
-  if (channel === "desktop") return null;
 
   return (
     <div
       className={cn(
-        "flex shrink-0 gap-2 border-b border-border-base px-2 py-2 touch-mobile:border-b-0",
-        equalWidth && "w-full min-w-0",
-        squareItems
-          ? "items-center justify-between"
-          : equalWidth
-            ? "items-stretch"
-            : "items-center justify-center",
+        'flex shrink-0 gap-2 border-b border-border-base px-2 py-2 touch-mobile:border-b-0',
+        equalWidth && 'w-full min-w-0',
+        squareItems ? 'items-center justify-between' : equalWidth ? 'items-stretch' : 'items-center justify-center',
         className,
       )}
     >
@@ -198,12 +154,7 @@ export function HubModuleNavTabs({
             aria-label={link.label}
             onClick={() => onLinkClick?.(link)}
             className={({ isActive: navActive }) =>
-              hubNavItemClassName(
-                navActive,
-                link.isActive,
-                equalWidth,
-                squareItems,
-              )
+              hubNavItemClassName(navActive, link.isActive, equalWidth, squareItems)
             }
           >
             {({ isActive: navActive }) => {

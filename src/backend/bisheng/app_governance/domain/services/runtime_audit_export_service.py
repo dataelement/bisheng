@@ -23,7 +23,6 @@ from bisheng.common.errcode.app_governance import (
     RuntimeAuditExportUnavailableError,
 )
 from bisheng.core.context.tenant import tenant_execution_scope
-from bisheng.database.models.org_snapshot import dept_label_key
 
 
 def safe_csv_value(value):
@@ -38,20 +37,6 @@ def safe_csv_value(value):
     return "'" + value if visible.startswith(("=", "+", "-", "@")) else value
 
 
-DEPT_SENTINEL_TEXT = {
-    "log.org.unrecorded": "未记录",
-    "log.org.none": "无所属部门",
-    "log.org.notApplicable": "不适用",
-}
-
-
-def csv_cell(row, field):
-    value = row.get(field)
-    if field == "operator_dept_path" and not value:
-        return DEPT_SENTINEL_TEXT.get(dept_label_key(row.get("operator_dept_id")), value)
-    return value
-
-
 def csv_bytes(fields, rows, *, header=False):
     output = io.StringIO(newline="")
     writer = csv.writer(output)
@@ -59,7 +44,7 @@ def csv_bytes(fields, rows, *, header=False):
         output.write("\ufeff")
         writer.writerow(fields)
     for row in rows:
-        writer.writerow([safe_csv_value(csv_cell(row, field)) for field in fields])
+        writer.writerow([safe_csv_value(row.get(field)) for field in fields])
     return output.getvalue().encode("utf-8")
 
 

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import cn from '~/utils/cn';
+import { cn } from '~/utils';
 
 /**
  * Shared frame of the workbench module homes (知识空间 / 频道 / 应用 / 技能). A module home is
@@ -15,9 +15,9 @@ import cn from '~/utils/cn';
  * Mobile is out of scope: each module keeps its own mobile navigation (and its own square).
  */
 
-/** Desktop homes share 32px padding and a centered 1000px column. */
+/** Page padding + centered column every module home shares (see pages/apps). */
 export const MODULE_HOME_FRAME =
-  'flex h-full min-h-0 min-w-0 w-full flex-col items-center overflow-hidden bg-white px-3 py-5 min-[768px]:p-8';
+  'flex h-full min-h-0 w-full flex-col items-center overflow-hidden bg-white px-3 py-5';
 export const MODULE_HOME_COLUMN = 'w-full max-w-[1000px]';
 
 /** A pill-shaped Segmented: track and thumb fully rounded (the thumb has no class hook of
@@ -26,19 +26,20 @@ export const MODULE_HOME_PILL = 'rounded-full [&>span[aria-hidden]]:rounded-full
 
 interface ModuleHomeHeaderProps {
   title: string;
-  /** The narrow shell already displays the title; this row holds its tools only. */
-  mobileTitleInShell?: boolean;
   /** The page's tools, right-aligned: search and sort where the page has them, then the
    *  create button LAST. All medium (32px) controls, so they sit on this row's height. */
   children?: ReactNode;
 }
 
-/** A 32px header with a compact title (20/28, medium), aligned to the content. */
-export function ModuleHomeHeader({ title, children, mobileTitleInShell = false }: ModuleHomeHeaderProps) {
+/** Header row of a module home: 32px tall, 16px above the content. The title takes the
+ *  sidebar wordmark's voice — same semibold, same neutral text-1, one step up the
+ *  ladder (text-h2, 20/28) so the page still outranks the shell — and leaves the brand
+ *  color to what the user acts on: the create button on this same row. */
+export function ModuleHomeHeader({ title, children }: ModuleHomeHeaderProps) {
   return (
-    <header className={cn(MODULE_HOME_COLUMN, 'flex min-w-0 h-8 shrink-0 items-center gap-4', mobileTitleInShell && 'max-[767px]:h-auto')}>
-      <h1 className={cn('min-w-0 flex-1 truncate text-h2 font-medium text-text-1', mobileTitleInShell && 'max-[767px]:sr-only')}>{title}</h1>
-      {children ? <div className={cn('flex shrink-0 items-center gap-2', mobileTitleInShell && 'max-[767px]:min-w-0 max-[767px]:flex-1')}>{children}</div> : null}
+    <header className={cn(MODULE_HOME_COLUMN, 'flex h-8 shrink-0 items-center gap-4')}>
+      <h1 className="min-w-0 flex-1 truncate text-h2 font-semibold text-text-1">{title}</h1>
+      {children ? <div className="flex shrink-0 items-center gap-2">{children}</div> : null}
     </header>
   );
 }

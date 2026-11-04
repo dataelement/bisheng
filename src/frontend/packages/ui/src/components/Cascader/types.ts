@@ -63,7 +63,6 @@ interface CascaderBaseProps {
   loadingText?: React.ReactNode;
   loadErrorText?: React.ReactNode;
   backLabel?: string;
-  /** @deprecated Kept for compatibility; selections apply immediately without a Done button. */
   doneLabel?: string;
   clearLabel?: string;
   removeLabel?: string;

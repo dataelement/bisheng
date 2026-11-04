@@ -5,7 +5,7 @@ import { createMemoryRouter, Link, Outlet, RouterProvider, useLocation, useNavig
 import MainLayout from './MainLayout';
 import { parkChatAsk, useChatAskHandoff } from '~/components/Chat/chatAskHandoff';
 import { useConversationKnowledge } from '~/hooks/useConversationKnowledge';
-let mockMobile = false;
+const mockMobile = false;
 const mockEmbedded = true;
 const mockUser = { id: 'test-user', username: 'tester' };
 const mockSetRecoil = jest.fn();
@@ -73,8 +73,7 @@ function open(initial: string) {
   return render(<RouterProvider router={router} />);
 }
 beforeEach(() => localStorage.clear());
-it.each([false, true])('submits consecutive asks through the cached conversation route (mobile=%s)', async (mobile) => {
-  mockMobile = mobile;
+it('submits consecutive asks through the cached conversation route', async () => {
   open('/knowledge/space/11');
   fireEvent.click(await screen.findByRole('button', { name: 'Ask' }));
   await waitFor(() => expect(send).toHaveBeenCalledTimes(1));

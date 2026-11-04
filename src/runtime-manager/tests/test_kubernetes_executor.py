@@ -281,10 +281,7 @@ class Cluster:
             body["spec"]["nodeName"] = "worker-a"
             body["status"] = {
                 "phase": "Succeeded"
-                if (
-                    body["metadata"]["labels"]["runtime.bisheng.io/purpose"].startswith("prepare")
-                    or body["metadata"]["labels"]["runtime.bisheng.io/purpose"] == "image-check"
-                )
+                if body["metadata"]["labels"]["runtime.bisheng.io/purpose"].startswith("prepare")
                 else "Running",
                 "podIP": "10.233.0.10",
                 "conditions": [{"type": "Ready", "status": "True"}],
@@ -391,13 +388,6 @@ class Cluster:
         assert "since" not in kwargs
         pod = self.objects["pods", pod_name]
         purpose = pod["metadata"]["labels"]["runtime.bisheng.io/purpose"]
-        if purpose == "image-check":
-            document = json.loads(
-                next(e["value"] for e in pod["spec"]["containers"][0]["env"] if e["name"] == "IMAGE_CHECK_PLAN")
-            )
-            return "BISHENG_RUNTIME_RESULT " + json.dumps(
-                {"images": [{**t, "image_id": t["image_id"] or "sha256:" + "a" * 64} for t in document["targets"]]}
-            )
         if purpose == "prepare-install":
             return "fixture build log"
         if purpose.startswith("prepare"):
@@ -663,11 +653,7 @@ def prepared_cleanup_resource(runtime, resource):
     result = executor.prepare(operation)
     assert result["compiled_artifact_id"] == "compiled-result"
     assert set(operation["result"]["prepare_progress"]) == {"inputs", "resolve", "install", "upload"}
-    assert all(
-        row["stop_state"] == "confirmed"
-        for row in platform.rows.values()
-        if row["kind"] == "Pod" and row["purpose"] != "image-check"
-    )
+    assert all(row["stop_state"] == "confirmed" for row in platform.rows.values() if row["kind"] == "Pod")
     key = next(key for key in cluster.objects if key[0] == resource)
     cluster.deferred_deletions = {key}
     row = next(row for row in platform.rows.values() if row["name"] == key[1])
@@ -767,10 +753,10 @@ def test_prepare_consumes_resolved_profile_not_manifest_reference(runtime, bundl
     assert operation["payload"]["delivery"]["profile"] == reference
     assert result["profile"] == profile
     pods = [row for row in platform.rows.values() if row["kind"] == "Pod"]
-    assert len(pods) == 5
+    assert len(pods) == 4
     assert all(row["template"]["spec"]["securityContext"]["runAsUser"] == profile["uid"] for row in pods)
-    assert all(row["stop_state"] == "confirmed" for row in pods if row["purpose"] != "image-check")
-    assert len([event for event in events if event[:2] == ("create", "pods")]) == 5
+    assert all(row["stop_state"] == "confirmed" for row in pods)
+    assert len([event for event in events if event[:2] == ("create", "pods")]) == 4
 
 
 def test_runtime_plan_uses_frozen_delivery_profile_instead_of_prepare_input(runtime, bundle_delivery_contract):
@@ -852,14 +838,8 @@ def test_prepare_separates_download_install_upload_and_persists_phase_results(ru
     result = executor.prepare(op)
     assert result["compiled_artifact_id"] == "compiled-result"
     pods = [r for r in platform.rows.values() if r["kind"] == "Pod"]
-    assert [r["purpose"] for r in pods] == [
-        "image-check",
-        "prepare-download",
-        "prepare-download",
-        "prepare-install",
-        "prepare-upload",
-    ]
-    assert all(r["stop_state"] == "confirmed" for r in pods if r["purpose"] != "image-check")
+    assert [r["purpose"] for r in pods] == ["prepare-download", "prepare-download", "prepare-install", "prepare-upload"]
+    assert all(r["stop_state"] == "confirmed" for r in pods)
     assert all(
         stage in platform.operations[op["operation_id"]]["result"]["prepare_progress"]
         for stage in ("inputs", "resolve", "install", "upload")
@@ -870,7 +850,7 @@ def test_prepare_separates_download_install_upload_and_persists_phase_results(ru
     install = next(r["template"] for r in pods if r["purpose"] == "prepare-install")
     assert "material-auth" not in json.dumps(install) and "secretKeyRef" not in json.dumps(install)
     assert executor.prepare(op) == result
-    assert len([event for event in events if event[:2] == ("create", "pods")]) == 5
+    assert len([event for event in events if event[:2] == ("create", "pods")]) == 4
 
 
 @pytest.mark.parametrize(

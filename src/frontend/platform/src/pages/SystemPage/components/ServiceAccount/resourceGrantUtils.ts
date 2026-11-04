@@ -17,7 +17,6 @@ export const SERVICE_ACCOUNT_PERMISSION_TIERS = [
   "viewer",
   "editor",
   "manager",
-  "owner",
 ] as const
 
 export type ServiceAccountPermissionTier =

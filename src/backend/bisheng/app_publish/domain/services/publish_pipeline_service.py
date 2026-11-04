@@ -466,7 +466,7 @@ class PublishPipelineService:
             # AC-11's five-tuple, or None. The CLI branches on ``code`` and
             # prints ``message`` + ``hints``; a partially filled failure is what
             # turns an actionable error into "something went wrong".
-            "failure": await cls._public_failure(deployment, principal) if can_edit else None,
+            "failure": deployment.failure if can_edit else None,
             "approval": approval,
             "app_state": app_state,
             # F053 T034 write-back 3. Without it the CLI's ``deploy --wait``
@@ -734,12 +734,6 @@ class PublishPipelineService:
             f"stage={stage} status={STATUS_RUNNING}"
         )
 
-    @staticmethod
-    async def _public_failure(deployment, actor):
-        from bisheng.app_runtime.application.publish_diagnostics import publish_failure
-
-        return await publish_failure(deployment, actor=actor)
-
     @classmethod
     async def _fail(cls, deployment: AppDeployment, exc: Exception) -> None:
         """Latch the five-tuple. ``record_version`` already latched its own failures — this is idempotent."""
@@ -750,12 +744,9 @@ class PublishPipelineService:
                 "stage": deployment.stage,
                 "code": 0,
                 "message": "发布管线异常终止",
-                "details": {"reason": "unexpected_error"},
+                "details": {"reason": "unexpected_error", "error": str(exc)},
                 "hints": ["请重试发布; 若反复失败请联系管理员查看后端日志"],
             }
-        from bisheng.app_runtime.application.publish_diagnostics import stored_failure
-
-        failure = stored_failure(failure)
         async with get_async_db_session() as session:
             await AppDeploymentDao.aset_failed(session, deployment.id, failure=failure, stage=failure["stage"])
             await session.commit()

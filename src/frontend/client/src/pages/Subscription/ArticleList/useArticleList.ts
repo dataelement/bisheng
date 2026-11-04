@@ -96,7 +96,8 @@ export function useArticleList({ channel, onArticleSelect }: UseArticleListProps
     const [selectedSources, setSelectedSources] = useState<string[]>([]);
     const [isListScrolling, setIsListScrolling] = useState(false);
     const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    /** Mobile search input and menu-triggered source filter visibility. */
+    /** H5: title-bar channel dropdown + search input visibility; menu-triggered source filter */
+    const [mobileDropdownOpen, setMobileDropdownOpen] = useState(false);
     const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
     const [mobileSourceFilterOpen, setMobileSourceFilterOpen] = useState(false);
     const searchQuery = useDebounce(searchKey, 500);
@@ -319,7 +320,7 @@ export function useArticleList({ channel, onArticleSelect }: UseArticleListProps
         loading, loadError, loadMoreError,
         selectedSubChannelName, searchKey, setSearchQuery,
         onlyUnread, selectedSources, isListScrolling,
-        mobileSearchOpen,
+        mobileDropdownOpen, setMobileDropdownOpen, mobileSearchOpen,
         setMobileSearchOpen, mobileSourceFilterOpen, setMobileSourceFilterOpen,
         searchQuery, channelDetail, isChannelDetailLoading,
         canOpenChannelShare, sourceOptions, subChannels,

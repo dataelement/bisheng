@@ -9,7 +9,7 @@ export function getKnowledgeListTab(search: string): KnowledgeListTab {
 /** Carry only the list selection into a new knowledge route. */
 export function knowledgePathWithTab(pathname: string, search: string): string {
     const tab = new URLSearchParams(search).get("tab");
-    if (tab === "all" || tab === "department" || tab === "created" || tab === "joined") {
+    if (tab === "department" || tab === "created" || tab === "joined") {
         return `${pathname}?tab=${tab}`;
     }
     return pathname;

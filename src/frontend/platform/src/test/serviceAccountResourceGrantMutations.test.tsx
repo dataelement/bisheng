@@ -13,8 +13,7 @@ import {
 } from "@/controllers/API/permission"
 import { ResourceGrantDialog } from "@/pages/SystemPage/components/ServiceAccount/ResourceGrantDialog"
 import { ResourceGrantsTab } from "@/pages/SystemPage/components/ServiceAccount/ResourceGrantsTab"
-import { screen, waitFor, within } from "@/test/test-utils"
-import { renderWithServiceAccountScope as render, testServiceAccountScope } from "@/test/serviceAccountTestScope"
+import { render, screen, waitFor, within } from "@/test/test-utils"
 import type { ServiceAccountResourceGrant } from "@/types/api/openApi"
 
 vi.mock("@/controllers/API/serviceAccount", () => ({
@@ -143,7 +142,6 @@ describe("service-account grant mutations over HTTP", () => {
         expected_catalog_release_id: 9,
         changes: [{ op: "ADD", model_key: "editor", subject: { type: "service_account", id: "7" } }],
       },
-      testServiceAccountScope,
     )
     expect(onGranted).toHaveBeenCalledOnce()
     expect(onGranted.mock.invocationCallOrder[0]).toBeLessThan(onOpenChange.mock.invocationCallOrder[0])
@@ -158,7 +156,6 @@ describe("service-account grant mutations over HTTP", () => {
       7, "knowledge_library", "13", expect.objectContaining({
         changes: [{ op: "MOVE", assignee_id: "grant-13", expected_assignee_version: 3, target_model_key: "editor" }],
       }),
-      testServiceAccountScope,
     )
   })
 
@@ -186,7 +183,6 @@ describe("service-account grant mutations over HTTP", () => {
       7, "knowledge_library", "13", expect.objectContaining({
         changes: [{ op: "MOVE", assignee_id: "grant-13", expected_assignee_version: 3, target_model_key: "editor" }],
       }),
-      testServiceAccountScope,
     )
   })
 
@@ -205,7 +201,6 @@ describe("service-account grant mutations over HTTP", () => {
       7, "knowledge_library", "13", expect.objectContaining({
         changes: [{ op: "REMOVE", assignee_id: "grant-13", expected_assignee_version: 3 }],
       }),
-      testServiceAccountScope,
     )
     expect(listServiceAccountResourceGrantsApi).toHaveBeenCalledTimes(2)
   })

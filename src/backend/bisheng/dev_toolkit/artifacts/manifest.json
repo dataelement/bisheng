@@ -1,9 +1,9 @@
 {
   "cli": {
-    "version": "3.0.0.post2",
+    "version": "3.0.0.post1",
     "min_compatible": "3.0.0",
-    "filename": "bisheng_cli-3.0.0.post2-py3-none-any.whl",
-    "sha256": "86c75828bc21436fcb273975acedde3e49438755344a774dca8f23aca8b48871"
+    "filename": "bisheng_cli-3.0.0.post1-py3-none-any.whl",
+    "sha256": "6a128d56c2bdae6702f0239aa2995920539be121b717561f1e7f4914b8ca4b67"
   },
   "platform": {
     "version": "3.0.0"

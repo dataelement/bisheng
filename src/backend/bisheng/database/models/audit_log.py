@@ -14,7 +14,6 @@ from bisheng.core.database.dialect_helpers import (
     json_array_contains,
     json_object_field_equals,
 )
-from bisheng.database.models.org_snapshot import astamp_audit_logs, stamp_audit_logs
 from bisheng.utils import generate_uuid
 
 
@@ -175,17 +174,6 @@ class AuditLogBase(SQLModelSerializable):
             nullable=True,
             comment="v2.5.1: extended fields (from/to values, affected ids, etc.)",
         ),
-    )
-    # F003: operator's primary department at the time of the event. NULL means
-    # unrecorded, 0 no primary department, -1 not attributable to a person —
-    # see ``database/models/org_snapshot.py``. No FK and no default on purpose.
-    operator_dept_id: int | None = Field(
-        default=None,
-        sa_column=Column(Integer, nullable=True, index=True, comment="F003: operator primary department snapshot"),
-    )
-    operator_dept_path: str | None = Field(
-        default=None,
-        sa_column=Column(String(1024), nullable=True, comment="F003: department name path at the time"),
     )
     create_time: datetime | None = Field(
         sa_column=Column(DateTime, nullable=False, index=True, server_default=text("CURRENT_TIMESTAMP")),
@@ -392,7 +380,6 @@ class AuditLogDao(AuditLogBase):
         tenant_scope: int | None = None,
         target_app_id: str | None = None,
         group_member_ids: list[int] | None = None,
-        dept_predicate=None,
     ) -> (list[AuditLog], int):
         """
         Filter logs by user group.
@@ -408,10 +395,6 @@ class AuditLogDao(AuditLogBase):
         application, see ``_object_app_predicate``. Tenant boundary checks
         for the app itself are the service's job (AC-31); this layer only
         ANDs the predicate onto whatever scope it was given.
-
-        ``dept_predicate`` (F003): ``org_snapshot.build_dept_predicate`` on
-        ``operator_dept_id`` — the caller's department scope intersected with
-        the organisation filter; ``None`` adds nothing.
 
         ``group_member_ids`` (F056 design pit 15): legacy rows snapshot the
         operator's groups into ``group_ids``; structured v2 rows
@@ -486,9 +469,6 @@ class AuditLogDao(AuditLogBase):
             tenant_predicate = cls._visible_for_tenant(tenant_scope)
             statement = statement.where(tenant_predicate)
             count_statement = count_statement.where(tenant_predicate)
-        if dept_predicate is not None:
-            statement = statement.where(dept_predicate)
-            count_statement = count_statement.where(dept_predicate)
         # ``create_time`` is second-precision; the id tiebreaker keeps OFFSET
         # pages disjoint and the export deterministic (backend AGENTS.md).
         statement = statement.order_by(AuditLog.create_time.desc(), AuditLog.id.desc())
@@ -499,20 +479,18 @@ class AuditLogDao(AuditLogBase):
 
     @classmethod
     def insert_audit_logs(cls, audit_logs: list[AuditLog]):
-        stamp_audit_logs(audit_logs)
         with get_sync_db_session() as session:
             session.add_all(audit_logs)
             session.commit()
 
     @classmethod
     async def ainsert_audit_logs(cls, audit_logs: list[AuditLog]):
-        await astamp_audit_logs(audit_logs)
         async with get_async_db_session() as session:
             session.add_all(audit_logs)
             await session.commit()
 
     @classmethod
-    def get_all_operators(cls, group_ids: list[int], tenant_scope: int | None = None, dept_predicate=None):
+    def get_all_operators(cls, group_ids: list[int], tenant_scope: int | None = None):
         """List distinct operators across audit log rows.
 
         ``tenant_scope`` (v2.5.0 audit isolation):
@@ -538,8 +516,6 @@ class AuditLogDao(AuditLogBase):
             statement = statement.where(or_(*group_filters))
         if tenant_scope is not None:
             statement = statement.where(cls._visible_for_tenant(tenant_scope))
-        if dept_predicate is not None:
-            statement = statement.where(dept_predicate)
 
         with bypass_tenant_filter(), get_sync_db_session() as session:
             return session.exec(statement).all()
@@ -617,7 +593,6 @@ class AuditLogDao(AuditLogBase):
             ip_address=ip_address,
             object_name=object_name,
         )
-        await astamp_audit_logs([entry])
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
                 session.add(entry)

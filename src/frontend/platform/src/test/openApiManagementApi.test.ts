@@ -11,17 +11,10 @@ import {
   listPersonalTokensApi,
   updatePersonalTokenSettingApi,
 } from "@/controllers/API/personalToken"
-import { testServiceAccountScope } from "@/test/serviceAccountTestScope"
 
 vi.mock("@/controllers/request", () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }))
-
-// Every service-account request carries the admitted tenant and a cancellable signal.
-const scoped = expect.objectContaining({
-  headers: { "X-Service-Account-Tenant": "1" },
-  signal: expect.any(AbortSignal),
-})
 
 describe("open API management wrappers", () => {
   beforeEach(() => {
@@ -33,12 +26,12 @@ describe("open API management wrappers", () => {
       name: "integration",
       scopes: ["delegate"],
       delegate_scopes: [{ subject_type: "user", subject_id: 8 }],
-    }, testServiceAccountScope)
+    })
     await updateServiceAccountKeyApi(12, 5, {
       name: "renamed",
       scopes: ["knowledge:read"],
       delegate_scopes: [],
-    }, testServiceAccountScope)
+    })
     const payload = {
       idempotency_key: "mutation-1",
       expected_resource_version: 2,
@@ -49,22 +42,18 @@ describe("open API management wrappers", () => {
         subject: { type: "service_account" as const, id: "12" },
       }],
     }
-    await mutateServiceAccountResourceGrantsApi(12, "knowledge_space", "9", payload, testServiceAccountScope)
+    await mutateServiceAccountResourceGrantsApi(12, "knowledge_space", "9", payload)
 
-    expect(axios.post).toHaveBeenNthCalledWith(1, "/api/v1/service-accounts/12/keys", expect.any(Object), scoped)
+    expect(axios.post).toHaveBeenNthCalledWith(1, "/api/v1/service-accounts/12/keys", expect.any(Object))
     expect(axios.patch).toHaveBeenCalledWith(
       "/api/v1/service-accounts/12/keys/5",
       expect.objectContaining({ name: "renamed" }),
-      scoped,
     )
     expect(axios.post).toHaveBeenNthCalledWith(
       2,
       "/api/v1/service-accounts/12/resource-grants:mutate",
       payload,
-      expect.objectContaining({
-        headers: { "X-Service-Account-Tenant": "1" },
-        params: { resource_type: "knowledge_space", resource_id: "9" },
-      }),
+      { params: { resource_type: "knowledge_space", resource_id: "9" } },
     )
   })
 
@@ -80,20 +69,17 @@ describe("open API management wrappers", () => {
   })
 
   it("loads subject-side grants and selectable resources without manual resource ids", async () => {
-    await listServiceAccountResourceGrantsApi(12, testServiceAccountScope)
+    await listServiceAccountResourceGrantsApi(12)
     await listServiceAccountGrantableResourcesApi(12, {
       resource_type: "knowledge_space",
       keyword: "sales",
-    }, testServiceAccountScope)
+    })
 
-    expect(axios.get).toHaveBeenNthCalledWith(1, "/api/v1/service-accounts/12/resource-grants", scoped)
+    expect(axios.get).toHaveBeenNthCalledWith(1, "/api/v1/service-accounts/12/resource-grants")
     expect(axios.get).toHaveBeenNthCalledWith(
       2,
       "/api/v1/service-accounts/12/grantable-resources",
-      expect.objectContaining({
-        headers: { "X-Service-Account-Tenant": "1" },
-        params: { resource_type: "knowledge_space", keyword: "sales" },
-      }),
+      { params: { resource_type: "knowledge_space", keyword: "sales" } },
     )
   })
 })

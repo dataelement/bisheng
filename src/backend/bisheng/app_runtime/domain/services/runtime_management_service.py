@@ -146,22 +146,9 @@ class RuntimeManagementService:
             "stage": row.stage,
             "status": row.status,
             "cleanup_status": row.cleanup_status,
-            "failure": self._retained_failure(row) if "edit" in actions.get(app_id, ()) else None,
+            "failure": row.failure if "edit" in actions.get(app_id, ()) else None,
             "deadline": row.deadline,
         }
-
-    @staticmethod
-    def _retained_failure(row):
-        from datetime import datetime
-
-        from bisheng.app_runtime.domain.services.runtime_public_diagnostics import bounded_tail, stored_failure
-
-        failure = stored_failure(row.failure)
-        if row.diagnostics_until and row.diagnostics_until > datetime.utcnow():
-            tail = bounded_tail((row.failure or {}).get("diagnostic_tail", ""))
-            if tail:
-                failure["diagnostic_tail"] = "\n".join(tail)
-        return failure
 
     async def cancel(self, app_id, operation_id, actor):
         app = await self.application(app_id, actor, "management_read")

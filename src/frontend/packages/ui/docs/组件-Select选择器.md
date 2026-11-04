@@ -69,8 +69,6 @@
 
 **描边形态与输入框完全同壳**：三档 24 / 32 / 40，medium 默认，字号、圆角、内边距照 [组件-Input输入框.md](组件-Input输入框.md) §3，本文不另列。同一行的输入框和选择器用同一档，天然对齐。
 
-**按用途选字阶**：描边形态用字段字阶，无边框工具栏入口用紧凑控件字阶；允许在触发器内搜索时，收起的已选值、占位与搜索文字始终使用字段字阶。具体取值见 [基础-字体规范.mdx](基础-字体规范.mdx) §2.2。
-
 - 下箭头随档 14 / 16 / 18px，与图标规范、输入框后缀一套。
 - **面板不随触发器分档**：选项行固定 32px，small 触发器点开也是 32px 一行——24px 的行太难点准。
 - 宽度跟随布局，同一表单里与输入框等宽；不手写高度。
@@ -99,7 +97,7 @@
 | 项 | 值 |
 |---|---|
 | 高度 | 32px；带一行说明时随内容长高，上下内边距 5px |
-| 文字 | 使用紧凑控件字阶 `text-control`，主文字色 `text-1`；说明使用 `text-caption` 与 `text-3`，与标题间距 2px；字号见 [基础-字体规范.mdx](基础-字体规范.mdx) §2.2 |
+| 文字 | 14 / 22，主文字色 `text-1`；说明 12 / 20 `text-3`，与标题间距 2px |
 | 左右内边距 | 6px |
 | 圆角 | 6px（外壳 12 − 内边距 6，内外同心） |
 | 前缀图标 | 16px，与文字间距 8px；同一组要么都有、要么都没有 |
@@ -148,9 +146,7 @@
 
 ### 6.2 多选的已选项
 
-复用 Tag 的 default 灰底、圆角、内边距与关闭按钮，**文字和行高继承触发器字阶**，高度随行高容纳一行；「+N」使用相同字阶。它们展示字段答案，不套用独立标签的固定小字。宽度测量副本必须与可见项使用相同样式。
-
-- 已选项复用 [组件-Tag标签.md](组件-Tag标签.md) 的 **small 可关闭标签外观**，字号与高度按本节的字段规则，标签间距 4px，点 × 直接取消该项。
+- 已选项用 [组件-Tag标签.md](组件-Tag标签.md) 的 **small 档（20px）可关闭标签**，标签间距 4px，点 × 直接取消该项。
 - **触发器高度固定不长高**：一行放不下时，放得下的照常显示，其余折成一个「+N」标签（默认色 small 档），悬停「+N」列出被折叠的项。
 - 一个都没选时显示占位文字。
 
@@ -218,14 +214,14 @@
 
 ## 9. 移动端适配
 
-跨组件通则见 [基础-多端适配原则.md](基础-多端适配原则.md)，触发器热区照输入框 §6。下面只写面板：
+跨组件通则见 [基础-多端适配原则.md](基础-多端适配原则.md)。触发器的移动端规则（16px 字号防缩放、small 升 medium、热区 ≥ 44px）照输入框 §6，这里只写面板：
 
 | 项 | 手机档（< 576px） |
 |---|---|
-| 面板 | 沿用当前锚定浮层，紧邻触发器展开；下方空间不足时向上翻转，不改为底部抽屉，不加遮罩 |
-| 选项行 | 沿用 §5.2 的共享菜单行；触发器热区按 Input §6 处理 |
-| 搜索 | 保留在触发器中输入，面板显示匹配结果 |
-| 多选 | 每次勾选即时生效，点外部或 ESC 关闭 |
+| 面板 | 改为**从底部滑入的面板**，宽度铺满，顶部两角 12px、底部两角直角（贴边归零） |
+| 选项行 | 高度升到 44px，满足触屏点击下限 |
+| 搜索 | 搜索框移到面板顶部——底部面板盖住了触发器，没法在触发器里打字 |
+| 多选 | 面板底部放「完成」按钮关闭；每次勾选即时生效 |
 | 平板 / 桌面 | 与桌面一致，挨着触发器弹出 |
 
 ## 10. 深浅色
@@ -238,10 +234,10 @@
 
 1. **组件位置**：`packages/ui/src/components/Select/`，基座 `@radix-ui/react-select`（单选）。对外一个 `Select`，`multiple` / `showSearch` / `allowClear` / `size` / `status` / `loading` / `options`（含 `group`、`icon`、`description`、`disabled`）。**Content 用 `position="popper"`，不用默认的 `item-aligned`**——后者会把面板对齐到选中项、盖住触发器，违反 §8。多选与可搜索 Radix Select 不支持，建议用 Radix Popover + listbox（或 cmdk / ariakit Combobox）自组，读屏语义保持 `role="combobox"` + `role="listbox"` + `aria-multiselectable`；选型由实现窗口定，记入改动记录。
 2. **触发器**：直接复用 `Input/shared.ts` 的外壳 cva（三档、七态、`shadow-focus` 灰环、`borderless`），不另写一套。`data-state=open` 套聚焦样式；下箭头 `Outlined.Down` 随档 14/16/18，`group-data-[state=open]:rotate-180`。清除用 `Filled.CloseCircle` 14px（同输入框 §4.3 的固定尺寸与 `text-4` / 悬停 `text-3`）。
-3. **面板 token**：`bg-page shadow-popup rounded-xl p-1.5 dark:border dark:border-border-base`，`max-h-[296px] overflow-y-auto flex flex-col gap-1`（行间 4px），`z-popover`，`sideOffset=4`，宽 `min-w-[var(--radix-select-trigger-width)]`、触发器 < 160px 时 `max-w-[320px]` 按内容。选项 `h-8 rounded-md px-1.5 text-control text-text-1`，高亮 `data-[highlighted]:bg-fill-2`，选中 `font-medium` + `Outlined.Check` 16px `text-primary`（品牌色 token 以 `design-token.cjs` BRAND 为准）；禁用 `text-text-4`。分组标题 `text-caption text-text-3 px-1.5 py-1`，分隔 `h-px bg-border-base`（上下 4px 由行间距提供，自身不带外边距）。组件内无裸 hex、无 Tailwind 预设投影。
-4. **多选**：选项左侧复用 `@bisheng/ui` 的 `Checkbox`（medium 16px）；已选项复用 `<Tag size="small" closable>`，以 `h-auto text-[length:inherit] leading-[inherit]` 继承触发器字阶，`gap-1`；折叠按触发器实测宽度计算（ResizeObserver），「+N」和测量副本使用相同字阶与高度，外包 `Tooltip`。
+3. **面板 token**：`bg-page shadow-popup rounded-xl p-1.5 dark:border dark:border-border-base`，`max-h-[296px] overflow-y-auto flex flex-col gap-1`（行间 4px），`z-popover`，`sideOffset=4`，宽 `min-w-[var(--radix-select-trigger-width)]`、触发器 < 160px 时 `max-w-[320px]` 按内容。选项 `h-8 rounded-md px-1.5 text-body text-text-1`，高亮 `data-[highlighted]:bg-fill-2`，选中 `font-medium` + `Outlined.Check` 16px `text-primary`（品牌色 token 以 `design-token.cjs` BRAND 为准）；禁用 `text-text-4`。分组标题 `text-caption text-text-3 px-1.5 py-1`，分隔 `h-px bg-border-base`（上下 4px 由行间距提供，自身不带外边距）。组件内无裸 hex、无 Tailwind 预设投影。
+4. **多选**：选项左侧复用 `@bisheng/ui` 的 `Checkbox`（medium 16px）；已选项 `<Tag size="small" closable>`，`gap-1`；折叠按触发器实测宽度计算（ResizeObserver），「+N」为 `<Tag size="small">` 外包 `Tooltip`。
 5. **搜索**：`options.length > 10` 时默认开启，`showSearch` 可显式覆盖。服务端搜索给 `onSearch`（防抖 300ms）+ `loading`。
-6. **移动端**：保留与桌面同一条 Radix Popover 浮层路径，不另建底部面板；描边外壳继承字段字阶，无边框内联搜索由 `SelectionTrigger.hasSearchInput` 将整个文字区切到字段字阶；`.input-no-zoom` 只保留在真实输入元素上，字号重映射及输入下限默认关闭，统一开关见《多端适配原则》隐藏区。触发器热区继续复用 `.input-touch-hit`。Cascader 的手机单面板下钻与返回规则见其 §9。
+6. **移动端**：`< 576px` 面板改走底部面板形态（复用 Drawer 的底部滑入），选项 `h-11`；触发器挂 `.input-no-zoom` 与 `.input-touch-hit`（输入框落地区第 5 条）。
 7a. **圆角配置**（§5.4，2026-10-21 设计师要求）：类型直接取 `design-token.cjs` 的 RADIUS 名（`type RadiusToken = typeof RADIUS[number]["name"]`，不手抄联合类型）：Select 暴露 `radius?: RadiusToken`（缺省 = 随 `size` 取 sm / md / lg）与 `panelRadius?: Exclude<RadiusToken, "full">`（缺省 `xl`），映射到 `rounded-*` token 类，不接受任意字符串。选项行圆角由面板派生：`menuSurface.ts` 里写一张 `panelRadius → 选项行 rounded-* 类` 的映射（sm / md / lg → `rounded-sm`，xl → `rounded-md`，2xl → `rounded-lg`，3xl → `rounded-2xl`，4xl → `rounded-3xl`），经 context 下发给选项行——现有圆角 token 只有 Tailwind 类（sm / md / lg 由 `--radius` 派生、其余为 Tailwind 原生档），没有逐档 CSS 变量，所以走类名映射，不新造变量。业务侧对触发器 / 面板 `className` 里出现 `rounded-*` 视为违规，评审拦截（可加 eslint 规则，非必须）。Dropdown 共用 `panelRadius` 与同一派生变量（`menuSurface.ts`）。
 7. **触发器形态**：`variant: "outlined" | "ghost" | "icon"`，默认 `outlined`。`ghost` / `icon` 直接复用 `Button` 的 `default × text` 样式（hover / active / disabled / `focus-visible` 环），水平内边距随档 4 / 8 / 8，`status` 在这两档上忽略并在 dev 下 warn。`icon` 档触发器内只渲染选中项的 `icon`，外包 `Tooltip`（内容为选中项 label），`aria-label` 由调用方传。不提供 `chevron` 档；值在外部展示的「箭头入口」由调用方用 `Select` 的受控 `open` + 自定义 `trigger`（`asChild`）实现，且必须传 `aria-label`。现状归并：`AiModelSelect` / `Linsight/ModelSelector` → `ghost`（两套悬停底 `fill-1` / `black/5` 统一为文字按钮悬停 token、13px 字号回 14px 档）；`ChatFormTools` 两处图标 + 文字胶囊 → `ghost` + `radius="full"`（2026-10-21 设计师拍板）：删 `data-[state=open]:border-blue-500`，展开只保留悬停底色；`h-7`（28px，档外）收到 small / medium 档由迁移时目检定；联网搜索开启时的 `bg-blue-100` 是业务开关态，不属于 Select 状态，迁移时原样保留并请设计师过目。
 8. **动效**：复用 Tooltip 的 150ms 淡入 / 100ms 淡出 token，叠加 `data-[side=bottom]:slide-in-from-top-1` 系 4px 位移。
@@ -257,17 +253,12 @@
 - 选项命中搜索词是否高亮关键字：v1 不做，待真实场景（模型、知识库搜索）验收时再看。
 - 「虚拟滚动」阈值：v1 不规定，选项过千的场景出现时再定。
 - ~~对话输入区的工具胶囊是否单列「胶囊」形态~~ **2026-10-21 结案**：归入无边框形态 + 胶囊圆角，展开不出品牌色描边、只铺底色。
-- 手机与平板均保留锚定浮层；不再规划为此组件另建底部面板。
+- 平板档是否也用底部面板：v1 按桌面处理，待设计师在平板上验收。
 
 ## 改动记录
 
-2026-11-02：触发器按字段 / 紧凑用途取语义字号，内联搜索保持收起与输入字号一致；多选值、「+N」及测量副本继承触发器字阶，候选项使用独立控件字阶。字体调研与取舍见《基础-多端适配原则.md》的隐藏区。
-
-2026-11-02：移动端规范对齐当前 Select 的锚定浮层实现，取消尚未落地的底部抽屉方案；Cascader 同步使用该外壳并保留单面板下钻。Select 运行时代码未因本次调整而改变。
-
 | 日期 | 改了什么 | 提交 |
 |---|---|---|
-| 2026-11-02 | 暂停移动字号适配：各屏宽沿用基准字阶，公开说明移除自动放大规则；原方案与默认关闭入口保留在内部记录 | 待提交 |
 | 2026-10-30 | 用户拍板两项（模型服务提供商下拉验收时提出「一眼看不出分组」「第一项像已选中」）：① §5.3 非首个分组标题上方多留 8px，实现为 `GROUP_LABEL` 加 `[&:not(:first-child)]:mt-2`，Dropdown 共用同一常量同步生效；② §8 无选中值时鼠标点开不预先高亮，键盘打开仍高亮第一项，高亮为空时 ↑ 从末项开始 | 待 committer 窗口提交 |
 | 2026-10-21 | 面板选项行新增 4px 行间距（§5.1 加「行间距」一行，最大高度 268 → 296 = 8 × 32 + 7 × 4 + 上下 6，落地区第 3 条同步）；实现经 `menuSurface.ts` 新增 `MENU_STACK`（`flex flex-col gap-1`，子项 `shrink-0` 防溢出时先被压缩），分隔线去掉自带 `my-1`、上下 4px 改由行间距提供（视觉不变）；Select / Dropdown / Cascader 共用同一处，同步生效 | 待 committer 窗口提交 |
 | 2026-10-21 | 设计师要求分隔线与选项行同宽、不顶到面板两侧（§5.3 补一句）；`menuSurface.ts` 的 `SEPARATOR` 去掉 `-mx-1.5`，Select 与 Dropdown 同步生效 | 待 committer 窗口提交 |

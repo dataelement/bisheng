@@ -5,7 +5,7 @@ component: Cascader
 
 # 级联选择 Cascader
 
-沿着父子层级逐步缩小范围，最后把完整路径作为值交给业务。组件库 `@bisheng/ui` 导出 **`Cascader`**；触发器和浮层沿用 Select 的实现，桌面端展开多列，手机端在同一个浮层里逐级切换。
+沿着父子层级逐步缩小范围，最后把完整路径作为值交给业务。组件库 `@bisheng/ui` 导出 **`Cascader`**；触发器和 Select 共用同一份实现，桌面端展开多列，手机端自动改为底部下钻面板。
 
 ## 基础用法
 
@@ -50,7 +50,7 @@ export default () => {
       value={value}
       onChange={setValue}
       placeholder="请选择所属团队"
-      className="w-72 max-w-full"
+      className="w-72"
       aria-label="所属团队"
       emptyText="暂无数据"
       noMatchText="无匹配结果"
@@ -63,12 +63,6 @@ export default () => {
   );
 };
 ```
-
-## 手机端交互
-
-手机宽度小于 576px 时，面板仍紧邻选择框展开，不从底部弹出，也不加遮罩。始终只显示当前一级；点父项进入下一级，二级及以下的左上角显示返回按钮，旁边显示当前父级名称。返回会恢复上一层的滚动位置和高亮，已选值保留。
-
-面板宽度跟随选择框，紧凑触发器至少提供 160px 菜单宽度，并受视口限制；下方空间不够时自动向上展开，列表在剩余高度内滚动。选项与 Select 一样高 32px；返回使用 24px 的 small 图标按钮，导航行不加分割线。搜索位于同一浮层内。单选点叶子即关闭，多选勾选即时生效，不设「完成」按钮，点面板外、再次点选择框或按 ESC 收起。
 
 ## 多选
 
@@ -106,8 +100,9 @@ export default () => {
       value={value}
       onChange={setValue}
       placeholder="请选择知识库"
-      className="w-80 max-w-full"
+      className="w-80"
       aria-label="知识库"
+      doneLabel="完成"
       backLabel="返回"
       clearLabel="清除"
       removeLabel="移除"
@@ -115,34 +110,6 @@ export default () => {
     />
   );
 };
-```
-
-## 长列表与逐级返回
-
-长列表只滚动当前一级。手机上返回会保留上一层的位置，并高亮刚才进入的父项；再次打开则定位到已选项。此例关闭搜索，便于直接体验逐级浏览。
-
-```tsx
-import { Cascader } from '@bisheng/ui';
-
-const OPTIONS = Array.from({ length: 16 }, (_, department) => ({
-  value: `department-${department}`,
-  label: `业务部门 ${department + 1}`,
-  children: Array.from({ length: 12 }, (_, team) => ({
-    value: `team-${department}-${team}`,
-    label: `第 ${department + 1} 部门 · 工作团队 ${team + 1}`,
-  })),
-}));
-
-export default () => (
-  <Cascader
-    options={OPTIONS}
-    defaultValue={['department-10', 'team-10-8']}
-    showSearch={false}
-    className="w-72 max-w-full"
-    aria-label="团队浏览"
-    backLabel="返回"
-  />
-);
 ```
 
 ## 任意层级可选
@@ -169,7 +136,7 @@ export default () => (
     checkStrictly
     options={OPTIONS}
     defaultValue={['all', 'east']}
-    className="w-64 max-w-full"
+    className="w-64"
     aria-label="区域"
     backLabel="返回"
     clearLabel="清除"
@@ -202,7 +169,7 @@ export default () => (
       ];
     }}
     placeholder="请选择团队"
-    className="w-64 max-w-full"
+    className="w-64"
     aria-label="团队"
     emptyText="暂无数据"
     noMatchText="无匹配结果"
@@ -233,8 +200,6 @@ export default () => (
 | `allowClear` / `onClear` | 清除当前值 | `boolean` / `() => void` | `false` |
 | `open` / `defaultOpen` / `onOpenChange` | 受控展开 | — | — |
 | `placeholder` / `emptyText` / `noMatchText` / `loadingText` / `loadErrorText` | 展示文案 | `ReactNode` | 英文兜底 |
-| `backLabel` / `clearLabel` / `removeLabel` / `searchPlaceholder` | 手机和无障碍文案 | `string` | 英文兜底 |
-
-`doneLabel` 仅为兼容旧调用保留，已不再渲染完成按钮。
+| `backLabel` / `doneLabel` / `clearLabel` / `removeLabel` / `searchPlaceholder` | 手机和无障碍文案 | `string` | 英文兜底 |
 
 `CascaderOption`：`value`、`label`、`children`、`disabled`、`isLeaf`、`icon`。`isLeaf: false` 且没有 `children` 表示子项尚未加载。

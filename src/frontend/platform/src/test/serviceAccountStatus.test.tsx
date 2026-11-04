@@ -5,7 +5,6 @@ import {
   listServiceAccountsApi,
   setServiceAccountEnabledApi,
 } from "@/controllers/API/serviceAccount"
-import { userContext } from "@/contexts/userContext"
 import { ServiceAccount } from "@/pages/SystemPage/components/ServiceAccount"
 import { render, screen } from "@/test/test-utils"
 import type {
@@ -15,7 +14,6 @@ import type {
 
 vi.mock("@/controllers/API/serviceAccount", () => ({
   deleteServiceAccountApi: vi.fn(),
-  getServiceAccountManagementScopeApi: vi.fn(),
   getServiceAccountApi: vi.fn(),
   listServiceAccountsApi: vi.fn(),
   setServiceAccountEnabledApi: vi.fn(),
@@ -71,13 +69,7 @@ async function openAccountDetail(item: ServiceAccountItem) {
   vi.mocked(getServiceAccountApi).mockResolvedValue(item)
 
   const user = userEvent.setup()
-  // Single-tenant: the page admits tenant 1 without asking the scope API,
-  // but it only renders the view for a signed-in user.
-  render(
-    <userContext.Provider value={{ user: { user_id: 3, tenant_id: 1, role: "admin" } } as never}>
-      <ServiceAccount />
-    </userContext.Provider>,
-  )
+  render(<ServiceAccount />)
   await user.click(await screen.findByRole("button", { name: "integration" }))
   return user
 }
@@ -100,9 +92,7 @@ describe("service-account status", () => {
       screen.getByRole("button", { name: "openApiManagement.actions.disable" }),
     )
 
-    expect(setServiceAccountEnabledApi).toHaveBeenCalledWith(
-      2, false, expect.objectContaining({ tenantId: 1 }),
-    )
+    expect(setServiceAccountEnabledApi).toHaveBeenCalledWith(2, false)
     expect(
       await screen.findAllByText("openApiManagement.status.disabled"),
     ).toHaveLength(2)
@@ -124,9 +114,7 @@ describe("service-account status", () => {
       screen.getByRole("button", { name: "openApiManagement.actions.enable" }),
     )
 
-    expect(setServiceAccountEnabledApi).toHaveBeenCalledWith(
-      2, true, expect.objectContaining({ tenantId: 1 }),
-    )
+    expect(setServiceAccountEnabledApi).toHaveBeenCalledWith(2, true)
     expect(
       await screen.findAllByText("openApiManagement.status.enabled"),
     ).toHaveLength(2)

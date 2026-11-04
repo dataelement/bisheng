@@ -695,16 +695,7 @@ class RuntimeOperationService:
                     {
                         key: value
                         for key, value in body.detail.items()
-                        if key
-                        in {
-                            "reason",
-                            "failed_stage",
-                            "maintenance",
-                            "data_may_have_changed",
-                            "diagnostic_tail",
-                            "image_role",
-                            "image_ref",
-                        }
+                        if key in {"reason", "failed_stage", "maintenance", "data_may_have_changed", "diagnostic_tail"}
                     }
                     if body.phase != "completed"
                     else {}

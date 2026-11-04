@@ -1,55 +1,7 @@
 // @ts-strict-ignore
 import { paramsSerializer } from ".";
 import axios from "../request";
-import type { AuditAppOption, AuditDeptCandidates, AuditRow, OrgSelection } from "@/types/api/audit";
-
-export const EMPTY_ORG_SELECTION: OrgSelection = {
-    deptIds: [],
-    includeDescendants: true,
-    includeNone: false,
-    includeUnrecorded: false,
-}
-
-export const isOrgSelectionEmpty = (selection: OrgSelection): boolean =>
-    !selection.deptIds.length && !selection.includeNone && !selection.includeUnrecorded
-
-/**
- * Organisation params of the audit endpoints. An empty selection sends nothing,
- * so the request stays identical to the pre-F003 one. `/audit*` takes
- * `dept_ids` as a repeated key; runtime records take a comma string and
- * `"true"` / `"false"` flags (design §6.1).
- */
-export const toDeptParams = (selection: OrgSelection | undefined, style: 'repeat' | 'csv' = 'repeat') => {
-    if (!selection || isOrgSelectionEmpty(selection)) return {}
-    const flag = (value: boolean) => (style === 'csv' ? String(value) : value)
-    return {
-        ...(selection.deptIds.length
-            ? {
-                dept_ids: style === 'csv' ? selection.deptIds.join(',') : selection.deptIds,
-                include_descendants: flag(selection.includeDescendants),
-            }
-            : {}),
-        ...(selection.includeNone ? { include_none: flag(true) } : {}),
-        ...(selection.includeUnrecorded ? { include_unrecorded: flag(true) } : {}),
-    }
-}
-
-// F003: organisation candidates inside the caller's audit scope.
-export async function getAuditDepartmentsApi(params: {
-    parentId?: number
-    keyword?: string
-    tenantId?: number | null
-    limit?: number
-}): Promise<AuditDeptCandidates> {
-    return await axios.get('/api/v1/audit/departments', {
-        params: {
-            parent_id: params.parentId,
-            keyword: params.keyword || undefined,
-            tenant_id: params.tenantId ?? undefined,
-            limit: params.limit ?? 100,
-        },
-    })
-}
+import type { AuditAppOption, AuditRow } from "@/types/api/audit";
 
 // Fetch users who operated on resources in the selected group.
 export async function getOperatorsApi(): Promise<[]> {
@@ -72,8 +24,6 @@ export interface AuditLogFilters {
     targetAppId?: string
     /** F056 AC-30: global super narrowing to one tenant; anyone else may only name their own. */
     tenantId?: number | null
-    /** F003: organisation the operator belonged to when the row was written. */
-    org?: OrgSelection
 }
 
 // Empty strings / empty arrays are "no filter", not a filter for the empty
@@ -89,7 +39,6 @@ const buildAuditParams = (filters: AuditLogFilters): Record<string, unknown> => 
         event_type: filters.action,
         target_app_id: filters.targetAppId,
         tenant_id: filters.tenantId,
-        ...toDeptParams(filters.org),
     }
     return Object.fromEntries(
         Object.entries(raw).filter(([, value]) =>
@@ -230,45 +179,7 @@ const legacyActions = [
     { name: 'log.eventTypeEnum.delete_channel', value: 'delete_channel' },
     { name: 'log.eventTypeEnum.create_knowledge_space', value: 'create_knowledge_space' },
     { name: 'log.eventTypeEnum.delete_knowledge_space', value: 'delete_knowledge_space' },
-    { name: 'log.eventTypeEnum.update_sandbox_conf', value: 'update_sandbox_conf' },
-    { name: 'log.eventTypeEnum.link_file_version', value: 'link_file_version' },
-    { name: 'log.eventTypeEnum.set_primary_version', value: 'set_primary_version' },
-    { name: 'log.eventTypeEnum.delete_file_version', value: 'delete_file_version' },
-    { name: 'log.eventTypeEnum.dismiss_similar_file', value: 'dismiss_similar_file' },
 ];
-
-/**
- * Module → legacy actions, written out instead of matched by substring: a
- * substring rule put `knowledge_space` actions under 知识库 and left the tool
- * and sandbox actions out of 系统. Must agree with the `system_id` each
- * backend writer records (api/services/audit_log.py).
- */
-const LEGACY_MODULE_ACTIONS: Record<string, string[]> = {
-    chat: ['create_chat', 'delete_chat'],
-    build: ['create_build', 'update_build', 'delete_build'],
-    knowledge: [
-        'create_knowledge', 'delete_knowledge', 'upload_file', 'delete_file',
-        'link_file_version', 'set_primary_version', 'delete_file_version', 'dismiss_similar_file',
-    ],
-    system: [
-        'update_user', 'forbid_user', 'recover_user',
-        'create_user_group', 'delete_user_group', 'update_user_group',
-        'create_role', 'delete_role', 'update_role', 'user_login',
-        'add_tool', 'update_tool', 'delete_tool', 'update_sandbox_conf',
-    ],
-    dashboard: ['create_dashboard', 'update_dashboard', 'delete_dashboard'],
-    subscription: ['create_channel', 'delete_channel'],
-    knowledge_space: ['create_knowledge_space', 'delete_knowledge_space'],
-}
-
-// Synthetic v2 modules own every structured action under their prefix.
-const V2_MODULE_PREFIX: Record<string, string> = {
-    tenant: 'tenant.',
-    llm: 'llm.server.',
-    approval: 'approval.',
-    open_api: 'open_api.',
-    app: 'app.',
-}
 
 /**
  * Structured v2 actions, in dropdown order.
@@ -390,11 +301,21 @@ export async function getActionsApi({ multiTenantEnabled = true }: AuditFilterOp
 }
 
 // 系统模块下操作行为
-export async function getActionsByModuleApi(moduleId: string) {
-    const legacy = LEGACY_MODULE_ACTIONS[moduleId]
-    if (legacy) return actions.filter(a => legacy.includes(a.value))
-    const prefix = V2_MODULE_PREFIX[moduleId]
-    return prefix ? actions.filter(a => a.value.startsWith(prefix)) : []
+export async function getActionsByModuleApi(moduleId) {
+    switch (moduleId) {
+        case 'chat': return actions.filter(a => a.value.includes('chat'))
+        case 'build': return actions.filter(a => a.value.includes('build'))
+        case 'knowledge': return actions.filter(a => a.value.includes('knowledge') || a.value.includes('file'))
+        case 'system': return actions.filter(a => a.value.includes('user') || a.value.includes('role'))
+        case 'dashboard': return actions.filter(a => a.value.includes('dashboard'))
+        case 'subscription': return actions.filter(a => a.value.includes('channel'))
+        case 'knowledge_space': return actions.filter(a => a.value.includes('knowledge_space'))
+        case 'tenant': return actions.filter(a => a.value.startsWith('tenant.'))
+        case 'llm': return actions.filter(a => a.value.startsWith('llm.server.'))
+        case 'approval': return actions.filter(a => a.value.startsWith('approval.'))
+        case 'open_api': return actions.filter(a => a.value.startsWith('open_api.'))
+        case 'app': return actions.filter(a => a.value.startsWith('app.'))
+    }
 }
 
 // 应用数据标记列表
@@ -495,20 +416,6 @@ export async function getGroupsApi(
 }
 
 
-export type AuditUsageType = 'daily' | 'assistant' | 'workflow' | 'task'
-
-/** F003 additions shared by the app-usage list and its export. */
-type SessionAuditExtras = {
-    org?: OrgSelection
-    usage_type?: AuditUsageType
-}
-
-const withSessionExtras = <T extends SessionAuditExtras>({ org, usage_type, ...rest }: T) => ({
-    ...rest,
-    usage_type: usage_type || undefined,
-    ...toDeptParams(org),
-})
-
 // 获取审计应用列表
 export async function getAuditAppListApi(params: {
     flow_ids,
@@ -520,15 +427,10 @@ export async function getAuditAppListApi(params: {
     sensitive_status,
     page,
     page_size
-} & SessionAuditExtras) {
+}) {
     return await axios.get('/api/v1/audit/session', {
-        params: withSessionExtras(params), paramsSerializer
+        params, paramsSerializer
     })
-}
-
-// F003: user candidates of the app-usage tab, inside the caller's audit scope.
-export async function getAuditSessionUsersApi(keyword = '', limit = 50): Promise<{ user_id: number, user_name: string }[]> {
-    return await axios.get('/api/v1/audit/session/users', { params: { keyword: keyword || undefined, limit } })
 }
 
 // 导出csv
@@ -556,8 +458,8 @@ export async function exportCsvDataApi(params: {
     end_date,
     feedback,
     sensitive_status
-} & SessionAuditExtras) {
+}) {
     return await axios.get('/api/v1/audit/session/export/data', {
-        params: withSessionExtras(params), paramsSerializer
+        params, paramsSerializer
     })
 }

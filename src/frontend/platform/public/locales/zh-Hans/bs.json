@@ -479,71 +479,6 @@
     "viewPermission": "查看权限",
     "themeColor": "主题配色",
     "appearanceSettings": "外观设置",
-    "inviteCode": {
-      "tab": "邀请码",
-      "hint": "生成邀请码后发给用户，用户在任务模式中绑定。每新建一个任务消耗一次。",
-      "searchPlaceholder": "搜索邀请码或批次名称",
-      "create": "生成邀请码",
-      "empty": "还没有邀请码",
-      "loading": "加载中",
-      "unbound": "未绑定",
-      "columns": {
-        "code": "邀请码",
-        "batch": "批次",
-        "limit": "可用次数",
-        "used": "已用次数",
-        "remaining": "剩余次数",
-        "user": "绑定用户",
-        "created": "创建时间"
-      },
-      "actions": {
-        "edit": "编辑",
-        "delete": "删除",
-        "save": "保存",
-        "cancel": "取消",
-        "copy": "复制",
-        "done": "完成",
-        "increase": "增加",
-        "decrease": "减少"
-      },
-      "createDialog": {
-        "title": "生成邀请码",
-        "name": "批次名称",
-        "namePlaceholder": "例如：体验批次",
-        "num": "生成数量",
-        "limit": "每码可用次数",
-        "submit": "生成",
-        "result": "已生成 {{count}} 个邀请码",
-        "rangeHint": "数量为 1–100，可用次数为 1–100000"
-      },
-      "editDialog": {
-        "title": "编辑邀请码",
-        "name": "批次名称",
-        "limit": "可用次数",
-        "limitHint": "不能小于已用次数 {{used}}"
-      },
-      "deleteConfirm": {
-        "title": "删除邀请码",
-        "desc": "删除 {{code}} 后无法恢复。已绑定的用户会失去这条码上剩余的次数。"
-      },
-      "feedback": {
-        "created": "邀请码已生成",
-        "saved": "已保存",
-        "deleted": "已删除",
-        "copied": "已复制",
-        "invalid": "请填写批次名称。数量为 1–100，可用次数为 1–100000"
-      },
-      "pagination": {
-        "total": "共 {{total}} 条",
-        "pageSize": "{{size}} 条/页",
-        "jumpPrefix": "跳至",
-        "jumpSuffix": "页",
-        "jumpError": "请输入 1–{{totalPages}}",
-        "prev": "上一页",
-        "next": "下一页",
-        "nav": "分页"
-      }
-    },
     "toolAuthorization": "工具权限",
     "createUser": "创建用户",
     "usernamePlaceholder": "后续使用此用户名进行登录，用户名不可修改",
@@ -1562,12 +1497,7 @@
       "appReleaseRollback": "发布回滚",
       "appSecretSet": "保存应用环境变量",
       "appSecretDelete": "删除应用环境变量",
-      "appSecretRebuild": "确认重建应用实例",
-      "update_sandbox_conf": "修改沙箱配置",
-      "link_file_version": "关联文件版本",
-      "set_primary_version": "设置文件主版本",
-      "delete_file_version": "删除历史文件版本",
-      "dismiss_similar_file": "忽略相似文件建议"
+      "appSecretRebuild": "确认重建应用实例"
     },
     "objectTypeEnum": {
       "app": "应用",
@@ -1677,9 +1607,7 @@
       "like": "点赞",
       "dislike": "点踩",
       "copy": "复制",
-      "sensitiveStatus": "是否命中内容安全审查",
-      "org": "组织",
-      "usageType": "使用类型"
+      "sensitiveStatus": "是否命中内容安全审查"
     },
     "userRole": "用户",
     "aiRole": "AI",
@@ -1792,8 +1720,7 @@
         "http_status": "HTTP 状态",
         "ttft_ms": "首 Token 耗时（毫秒）",
         "request_id": "请求标识",
-        "version_id": "应用版本标识",
-        "operator_dept_path": "组织"
+        "version_id": "应用版本标识"
       },
       "values": {
         "service_account": "服务账号",
@@ -1812,34 +1739,6 @@
         "capability_undeclared": "未声明能力",
         "client_disconnected": "客户端断开"
       }
-    },
-    "org": {
-      "column": "组织",
-      "placeholder": "选择组织",
-      "search": "搜索部门名称或编号",
-      "includeDescendants": "包含下级部门",
-      "archivedSection": "已归档部门",
-      "archived": "已归档",
-      "none": "无所属部门",
-      "unrecorded": "未记录",
-      "notApplicable": "不适用",
-      "clear": "清除所选",
-      "confirm": "确定",
-      "empty": "没有可选的部门",
-      "selected": "已选 {{count}} 项",
-      "loading": "加载中…",
-      "loadFailed": "部门加载失败",
-      "retry": "重试",
-      "expand": "展开 {{name}}",
-      "collapse": "收起 {{name}}",
-      "tenantGroup": "租户 {{id}}"
-    },
-    "usageType": {
-      "label": "使用类型",
-      "daily": "日常对话",
-      "assistant": "助手会话",
-      "workflow": "工作流会话",
-      "task": "任务模式"
     }
   },
   "tag": {
@@ -2634,7 +2533,6 @@
       "title": "导入技能",
       "tabFile": "本地文件",
       "tabGithub": "GitHub 链接",
-      "tabGitee": "Gitee 链接",
       "dropHint": "拖拽或点击导入",
       "dropSub": "支持 .md 文件、.zip / .skill 压缩包（根目录须含 SKILL.md）",
       "selected": "已选择",
@@ -2647,9 +2545,6 @@
       "githubUrlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill",
       "githubHint": "粘贴指向技能目录的 GitHub 链接（目录须包含 SKILL.md）",
       "githubReqHost": "仅支持 github.com 公共仓库",
-      "giteeUrlPlaceholder": "https://gitee.com/owner/repo/tree/master/path/to/skill",
-      "giteeHint": "粘贴指向技能目录的 Gitee 链接（目录须包含 SKILL.md）",
-      "giteeReqHost": "仅支持 gitee.com 公共仓库",
       "githubReqDir": "链接须指向含 SKILL.md 的技能目录；分支名暂不支持包含斜杠",
       "unsupported": "不支持的文件类型，请导入 .md / .zip / .skill",
       "confirm": "确认导入",
@@ -2672,9 +2567,6 @@
       "githubUrlInvalid": "GitHub 链接格式不正确，应形如 https://github.com/{owner}/{repo}/tree/{分支}/{路径}",
       "githubFetch": "从 GitHub 拉取失败：仓库 / 分支 / 路径不存在或网络异常，请检查链接后重试",
       "githubRateLimit": "GitHub 访问已达速率限制，请稍后再试",
-      "giteeUrlInvalid": "Gitee 链接格式不正确，应形如 https://gitee.com/{owner}/{repo}/tree/{分支}/{路径}",
-      "giteeFetch": "从 Gitee 拉取失败：仓库 / 分支 / 路径不存在或网络异常，请检查链接后重试",
-      "giteeRateLimit": "Gitee 访问已达速率限制，请稍后再试",
       "unknown": "操作失败，请重试"
     },
     "catalogHint": "技能保存后按企业权限提供，用户在前台按任务选择。停用后停止提供。"
@@ -2928,7 +2820,6 @@
     "permissionTiers": {
       "editor": "编辑者",
       "manager": "管理者",
-      "owner": "所有者",
       "viewer": "查看者"
     },
     "resourceTypes": {

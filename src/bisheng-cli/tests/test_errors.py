@@ -322,30 +322,3 @@ def test_no_error_text_contains_key_material() -> None:
         assert FAKE_KEY not in render_human(err)
     unknown = _err(19999, f"leak {FAKE_KEY}")
     assert FAKE_KEY not in render_human(unknown)
-
-
-@pytest.mark.parametrize("code", [16124, 16227, 16228])
-def test_runtime_failure_preserves_original_reason_in_json_and_human_output(code):
-    """F119 覆盖 AC: AC-24, AC-26, AC-27."""
-    err = _err(code, "runtime failed", details={"reason": "image_missing", "operation_id": "op", "tail": ["safe log"]})
-    assert err.exit_code == EXIT_PRECHECK_FAILED
-    assert err.as_failure()["code"] == code
-    assert err.as_failure()["details"]["reason"] == "image_missing"
-    text = render_human(err)
-    assert str(code) in text and "image_missing" in text and "safe log" in text
-
-
-@pytest.mark.parametrize("code", [16124, 16227, 16228])
-def test_missing_diagnostics_do_not_claim_an_excerpt_exists(code):
-    """F119 覆盖 AC: AC-24, AC-26, AC-27."""
-    err = _err(code, "no logs", details={"reason": "startup_exited", "tail": [], "diagnostics_available": False})
-    text = render_human(err)
-    assert "下方" not in text and "下面" not in text
-    assert "暂无可用" in text
-
-
-def test_legacy_runtime_failure_offers_startup_troubleshooting_without_losing_original_code():
-    """F119 AC-26: old 16124 receives concrete startup advice."""
-    err = _err(16124, "failed")
-    assert "启动命令" in err.next_step and "监听地址" in err.next_step and "端口" in err.next_step
-    assert err.as_failure()["code"] == 16124
