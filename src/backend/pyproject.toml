@@ -242,6 +242,9 @@ convention = "google"
     "RUF013",
     "B905",
 ]
+# Points rank service: Chinese docstrings and comments for rank snapshot logic.
+"bisheng/points/domain/services/points_rank_service.py" = ["RUF001", "RUF002", "RUF003"]
+"src/backend/bisheng/points/domain/services/points_rank_service.py" = ["RUF001", "RUF002", "RUF003"]
 
 [tool.ruff.format]
 quote-style = "double"

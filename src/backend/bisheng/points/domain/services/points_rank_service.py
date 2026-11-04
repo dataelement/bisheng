@@ -214,11 +214,14 @@ class PointsRankService:
     def __init__(self, repository: PointsRepository | None = None):
         self.repository = repository
 
-    async def refresh_rank_snapshots(self, tenant_id: int) -> dict:
-        """刷新指定租户的 month/year/all × 公司 global / dept 快照。"""
+    async def refresh_rank_snapshots(self, tenant_id: int, now: datetime | None = None) -> dict:
+        """刷新指定租户的 month/year/all × 公司 global / dept 快照。
+
+        ``now`` 决定月榜和年榜的时间窗口。缺省为当前上海时间。
+        """
         async with get_async_db_session() as session:
             repo = self.repository or PointsRepository(session)
-            result = await self._refresh_with_repo(repo, int(tenant_id))
+            result = await self._refresh_with_repo(repo, int(tenant_id), now=now)
             await session.commit()
             return result
 
@@ -241,8 +244,13 @@ class PointsRankService:
                 logger.exception("points.rank.refresh_failed tenant_id=%s", tid)
         return totals
 
-    async def _refresh_with_repo(self, repo: PointsRepository, tenant_id: int) -> dict:
-        now = datetime.now(SHANGHAI)
+    async def _refresh_with_repo(
+        self,
+        repo: PointsRepository,
+        tenant_id: int,
+        now: datetime | None = None,
+    ) -> dict:
+        now = now or datetime.now(SHANGHAI)
         keys = period_keys(now)
         refreshed_at = now.replace(tzinfo=None)
         accounts = await repo.list_accounts(tenant_id)

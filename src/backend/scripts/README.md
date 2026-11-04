@@ -512,6 +512,18 @@ employee001,技术员
 以退出码 0 且 JSON 中 `status` 为 `已提交` 或 `无需清理` 判断写入命令成功。
 不要把备份提交到 Git。
 
+### `rebuild_admin_monthly_rewards.py`
+
+按当前知识空间管理员重发指定月份的管理员月奖。默认预览；`--apply` 才删除旧月奖流水并写入新流水。不修改 `point_rule`。M1、M4、M6 必须已是启用且 200、100、50，否则停止。9 月入账时间是 2026-10-01 00:05，10 月是 2026-11-01 00:05。不发站内信。
+
+```bash
+# 在 src/backend 目录执行
+PYTHONPATH=./ .venv/bin/python scripts/rebuild_admin_monthly_rewards.py
+PYTHONPATH=./ .venv/bin/python scripts/rebuild_admin_monthly_rewards.py --apply
+```
+
+执行前暂停积分发放、月奖任务和刷榜。备份写到 `./points-backups/`，不要提交到 Git。流水提交成功后若刷榜失败，退出码为 4，流水不会自动回滚。
+
 ### `execute_sql.py`
 
 连接 BiSheng 当前配置文件中的关系数据库并执行一条 SQL。脚本复用项目的
