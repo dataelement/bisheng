@@ -1,11 +1,17 @@
+# ruff: noqa: RUF002, RUF003
 """积分规则与说明文案服务。"""
 
 from __future__ import annotations
 
+import copy
+import logging
+
+from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.orm.attributes import flag_modified
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.points import PointsRuleConflictError, PointsRuleNotFoundError
+from bisheng.common.errcode.points import PointsRuleAuditError, PointsRuleConflictError, PointsRuleNotFoundError
+from bisheng.database.models.audit_log import AuditLog
 from bisheng.points.domain.constants.beneficiary import allowed_beneficiaries
 from bisheng.points.domain.constants.library_scope_score import (
     is_library_scope_rule,
@@ -14,10 +20,6 @@ from bisheng.points.domain.constants.library_scope_score import (
 from bisheng.points.domain.constants.optional_fixed_score_rules import validate_deferred_config_rule_can_enable
 from bisheng.points.domain.constants.rule_display_name import resolve_point_rule_display_name
 from bisheng.points.domain.constants.seed_rules import seed_default_name
-from bisheng.points.domain.constants.library_scope_score import (
-    is_library_scope_rule,
-    validate_library_scope_score_expr,
-)
 from bisheng.points.domain.constants.tier_rule_score_expr import validate_g3_tier_score_expr
 from bisheng.points.domain.models import PointRule
 from bisheng.points.domain.schemas.points_schema import (
@@ -27,6 +29,100 @@ from bisheng.points.domain.schemas.points_schema import (
     PointRuleResponse,
 )
 from bisheng.points.domain.services.points_auth import require_platform_admin
+
+logger = logging.getLogger(__name__)
+
+_AUDIT_ACTION = "points.rule.update"
+
+
+def _canon(value):
+    """Canonicalize JSON so key order alone is not a change."""
+    if isinstance(value, dict):
+        return {key: _canon(value[key]) for key in sorted(value)}
+    if isinstance(value, list):
+        return [_canon(item) for item in value]
+    return value
+
+
+def _norm_remark(value: str | None) -> str | None:
+    """Treat blank remarks as no remark."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _snapshot_rule(rule) -> dict:
+    """Fields that decide whether a rule save is a real change."""
+    return {
+        "display_name": str(getattr(rule, "display_name", "") or "").strip(),
+        "score_expr": _canon(getattr(rule, "score_expr", None) or {}),
+        "daily_cap": getattr(rule, "daily_cap", None),
+        "status": getattr(rule, "status", None),
+        "remark": _norm_remark(getattr(rule, "remark", None)),
+        "sort_order": int(getattr(rule, "sort_order", 0) or 0),
+        "beneficiary": getattr(rule, "beneficiary", None),
+    }
+
+
+def _raw_rule_fields(rule) -> dict:
+    """Original values restored when the save is a no-op or the audit commit fails."""
+    return {
+        "display_name": rule.display_name,
+        "score_expr": copy.deepcopy(rule.score_expr),
+        "daily_cap": rule.daily_cap,
+        "status": rule.status,
+        "remark": rule.remark,
+        "sort_order": rule.sort_order,
+        "beneficiary": rule.beneficiary,
+    }
+
+
+def _flag_score_expr(rule) -> None:
+    """Mark JSON dirty on a mapped rule. Test doubles have no SQLAlchemy state."""
+    if not hasattr(rule, "_sa_instance_state"):
+        return
+    try:
+        flag_modified(rule, "score_expr")
+    except NoInspectionAvailable:
+        return
+
+
+def _restore_rule_fields(rule, raw: dict) -> None:
+    """Put the in-memory rule back to the values loaded before this save."""
+    for key, value in raw.items():
+        setattr(rule, key, value)
+    _flag_score_expr(rule)
+
+
+def _score_change(before: dict, after: dict) -> dict | None:
+    """One score change. A fixed-mode integer change is field score; anything else is score_expr."""
+    if before == after:
+        return None
+    if before.get("mode") == "fixed" and after.get("mode") == "fixed":
+        before_rest = {key: value for key, value in before.items() if key != "score"}
+        after_rest = {key: value for key, value in after.items() if key != "score"}
+        if before_rest == after_rest:
+            return {
+                "field": "score",
+                "before": int(before.get("score") or 0),
+                "after": int(after.get("score") or 0),
+            }
+    return {"field": "score_expr", "before": before, "after": after}
+
+
+def _rule_changes(before: dict, after: dict) -> list[dict]:
+    """Changed fields only."""
+    changes: list[dict] = []
+    if before["display_name"] != after["display_name"]:
+        changes.append({"field": "display_name", "before": before["display_name"], "after": after["display_name"]})
+    score_change = _score_change(before["score_expr"], after["score_expr"])
+    if score_change is not None:
+        changes.append(score_change)
+    for field in ("remark", "status", "daily_cap", "beneficiary", "sort_order"):
+        if before[field] != after[field]:
+            changes.append({"field": field, "before": before[field], "after": after[field]})
+    return changes
 
 
 class PointsRuleService:
@@ -146,26 +242,35 @@ class PointsRuleService:
         rule = await self.repository.get_rule_by_id(rule_id)
         if rule is None or int(rule.tenant_id) != tenant_id:
             raise PointsRuleNotFoundError()
+        before_raw = _raw_rule_fields(rule)
+        before = _snapshot_rule(rule)
         fields = body.model_fields_set
         if "display_name" in fields and body.display_name is not None:
             display_name = body.display_name.strip()
             if not display_name:
+                _restore_rule_fields(rule, before_raw)
                 raise PointsRuleConflictError(msg="积分项展示名称不能为空")
             rule.display_name = display_name
         elif "name" in fields and body.name is not None:
             # 兼容旧客户端：name 字段视为展示名写入。
             display_name = body.name.strip()
             if not display_name:
+                _restore_rule_fields(rule, before_raw)
                 raise PointsRuleConflictError(msg="积分项展示名称不能为空")
             rule.display_name = display_name
         if "score_expr" in fields and body.score_expr is not None:
-            self.validate_score_expr(rule.rule_code, body.score_expr)
+            try:
+                self.validate_score_expr(rule.rule_code, body.score_expr)
+            except PointsRuleConflictError:
+                _restore_rule_fields(rule, before_raw)
+                raise
             rule.score_expr = body.score_expr
-            flag_modified(rule, "score_expr")
+            _flag_score_expr(rule)
         if "daily_cap" in fields:
             rule.daily_cap = body.daily_cap
         if "status" in fields and body.status is not None:
             if body.status not in ("enabled", "disabled"):
+                _restore_rule_fields(rule, before_raw)
                 raise PointsRuleConflictError(msg="规则状态仅允许 enabled/disabled")
             rule.status = body.status
         if "remark" in fields:
@@ -173,7 +278,11 @@ class PointsRuleService:
         if "sort_order" in fields and body.sort_order is not None:
             rule.sort_order = body.sort_order
         if "beneficiary" in fields:
-            self.validate_beneficiary(rule.rule_code, rule.rule_type, body.beneficiary)
+            try:
+                self.validate_beneficiary(rule.rule_code, rule.rule_type, body.beneficiary)
+            except PointsRuleConflictError:
+                _restore_rule_fields(rule, before_raw)
+                raise
             rule.beneficiary = body.beneficiary
         target_status = rule.status
         effective_expr = rule.score_expr or {}
@@ -185,10 +294,64 @@ class PointsRuleService:
             status=target_status,
         )
         if enable_err:
+            _restore_rule_fields(rule, before_raw)
             raise PointsRuleConflictError(msg=enable_err)
-        saved = await self.repository.save_rule(rule)
-        await self.session.commit()
+        changes = _rule_changes(before, _snapshot_rule(rule))
+        if not changes:
+            _restore_rule_fields(rule, before_raw)
+            return self._to_dto(rule)
+        try:
+            saved = await self.repository.save_rule(rule)
+            self.session.add(self._rule_audit(rule, user, changes))
+            await self.session.commit()
+        except Exception:
+            logger.exception(
+                "points.rule.update_failed operator_id=%s tenant_id=%s rule_id=%s rule_code=%s",
+                getattr(user, "user_id", None),
+                tenant_id,
+                rule_id,
+                rule.rule_code,
+            )
+            try:
+                await self.session.rollback()
+            except Exception:
+                logger.exception(
+                    "points.rule.update_rollback_failed operator_id=%s rule_id=%s",
+                    getattr(user, "user_id", None),
+                    rule_id,
+                )
+            _restore_rule_fields(rule, before_raw)
+            raise PointsRuleAuditError() from None
+        logger.info(
+            "points.rule.updated operator_id=%s tenant_id=%s rule_id=%s rule_code=%s rule_type=%s changes=%s",
+            getattr(user, "user_id", None),
+            tenant_id,
+            rule.id,
+            rule.rule_code,
+            rule.rule_type,
+            changes,
+        )
         return self._to_dto(saved)
+
+    @staticmethod
+    def _rule_audit(rule, user, changes: list[dict]) -> AuditLog:
+        """构造与本次规则保存同事务提交的操作日志。不使用会单独提交的 ainsert_v2。"""
+        name = getattr(user, "user_name", None)
+        return AuditLog(
+            operator_id=int(user.user_id),
+            operator_name=str(name) if name else None,
+            tenant_id=int(rule.tenant_id),
+            operator_tenant_id=int(rule.tenant_id),
+            action=_AUDIT_ACTION,
+            target_type="point_rule",
+            target_id=str(rule.id),
+            object_name=rule.rule_code,
+            audit_metadata={
+                "rule_code": rule.rule_code,
+                "rule_type": rule.rule_type,
+                "changes": changes,
+            },
+        )
 
     async def list_copies(self, tenant_id: int, user: UserPayload) -> list[PointCopyItem]:
         """管理端说明文案列表。"""

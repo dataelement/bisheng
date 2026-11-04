@@ -78,7 +78,44 @@ const renderObjectName = (log: any, t: (key: string, opts?: any) => string): str
     return log.object_name || log.target_id || t('log.objectTypeEnum.none')
 }
 
-const renderRemark = (log: any, t: (key: string, opts?: any) => string): string => {
+const formatPointsRuleValue = (field: string, value: unknown, t: (key: string, opts?: any) => string): string => {
+    if (value === null || value === undefined || value === '') {
+        return t('log.pointsRuleValue.empty', { defaultValue: '空' })
+    }
+    if (field === 'status' && (value === 'enabled' || value === 'disabled')) {
+        return t(`log.pointsRuleValue.${value}`, { defaultValue: String(value) })
+    }
+    if (typeof value === 'object') return JSON.stringify(value)
+    return String(value)
+}
+
+export const formatPointsRuleChangeDetail = (
+    metadata: Record<string, any>,
+    t: (key: string, opts?: any) => string,
+): string => {
+    const changes = Array.isArray(metadata.changes) ? metadata.changes : []
+    return changes
+        .filter((item) => item && typeof item === 'object' && item.field)
+        .map((item) => {
+            const field = String(item.field)
+            const label = t(`log.pointsRuleField.${field}`, { defaultValue: field })
+            const before = formatPointsRuleValue(field, item.before, t)
+            const after = formatPointsRuleValue(field, item.after, t)
+            return t('log.pointsRuleChangeLine', {
+                field: label,
+                before,
+                after,
+                defaultValue: '{{field}}：{{before}} → {{after}}',
+            })
+        })
+        .join('\n')
+}
+
+export const renderRemark = (log: any, t: (key: string, opts?: any) => string): string => {
+    if (log.action === 'points.rule.update') {
+        const detail = formatPointsRuleChangeDetail(getAuditMetadata(log), t)
+        if (detail) return detail
+    }
     const remark = log.note || log.reason
     if (!remark) return t('log.objectTypeEnum.none')
     return String(remark).replace('编辑后', `\n编辑后`)

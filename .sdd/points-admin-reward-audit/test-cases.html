@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>开发测试用例 · 积分规则修改留痕</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#202733;--sub:#515d6d;--line:#dce2eb;--accent:#245bb1;--ok:#17683b;--warn:#8a4b00}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  a{color:var(--accent)}
+  .wrap{max-width:1100px;margin:auto;padding:28px 20px 64px}
+  .hero{background:#164789;color:#fff;padding:24px;border-radius:16px;margin-bottom:16px}
+  h1{margin:0 0 8px;font-size:26px}
+  .meta{font-size:13px;margin:0 0 6px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:20px;margin:0 0 16px}
+  h2{font-size:20px;margin:0 0 8px} h3{font-size:16px;margin:18px 0 8px}
+  .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin:12px 0}
+  table{border-collapse:collapse;width:100%;min-width:960px;font-size:12px}
+  th,td{text-align:left;vertical-align:top;padding:8px;border-bottom:1px solid var(--line)}
+  th{background:#f0f3f8}
+  code{font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;background:#f0f3f8;padding:0 4px;border-radius:4px}
+  .callout{border-left:4px solid var(--warn);background:#fff8ef;padding:10px 14px;margin:10px 0}
+  ol.toc{columns:2}
+  @media print{body{background:#fff}.hero{background:#fff;color:#111;border:1px solid #777}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero">
+  <h1>积分规则修改留痕 · 开发测试用例</h1>
+  <p class="meta">版本 0.10 · 2026-11-04 · 用途：研发验证 · 状态：定义随需求 1.1 修订，未执行</p>
+  <p class="meta">需求：requirements.html 1.1（待确认）。契约：design.html 0.10（待确认）。</p>
+  <p class="meta">岗位：研发。工程：毕昇 <code>src/backend/test/points/</code>。独立验收用例不在本文，也不放进该目录。</p>
+</header>
+<nav class="card">
+  <h2>目录</h2>
+  <ol class="toc">
+    <li><a href="#overview">覆盖概览</a></li>
+    <li><a href="#cases">用例清单</a></li>
+    <li><a href="#special">异常与边界</a></li>
+    <li><a href="#auto">自动化可行性</a></li>
+  </ol>
+</nav>
+
+<section class="card" id="overview">
+  <h2>1. 用例覆盖概览</h2>
+  <p>优先级：P0 直接对应已确认验收，失败会导致留痕和配置不一致或越权；P1 是相邻拒绝和规范化；P2 是表达式键顺序。P0 不是执行顺序。</p>
+  <div class="callout">本文只定义用例。没有任何一条已经执行，不能写成通过。</div>
+  <div class="table-wrap"><table>
+    <caption>需求 × 场景</caption>
+    <thead><tr><th>验收</th><th>正常</th><th>异常</th><th>边界</th><th>权限</th></tr></thead>
+    <tbody>
+      <tr><td>AC-PAR-01</td><td>TC-PAR-01</td><td></td><td></td><td></td></tr>
+      <tr><td>AC-PAR-02</td><td>TC-PAR-02</td><td></td><td></td><td></td></tr>
+      <tr><td>AC-PAR-03</td><td></td><td></td><td>TC-PAR-03</td><td></td></tr>
+      <tr><td>AC-PAR-04</td><td></td><td></td><td></td><td>TC-PAR-04</td></tr>
+      <tr><td>AC-PAR-05</td><td></td><td>TC-PAR-05</td><td></td><td></td></tr>
+      <tr><td>AC-PAR-06</td><td>TC-PAR-06</td><td></td><td></td><td></td></tr>
+      <tr><td>AC-PAR-07</td><td>TC-PAR-07</td><td></td><td></td><td></td></tr>
+      <tr><td>AC-PAR-08</td><td>TC-PAR-08</td><td></td><td></td><td></td></tr>
+      <tr><td>REQ-PAR-01 校验失败、规则不存在</td><td></td><td>TC-PAR-09、TC-PAR-10</td><td></td><td></td></tr>
+      <tr><td>REQ-PAR-01 空白与键顺序</td><td></td><td></td><td>TC-PAR-11、TC-PAR-12</td><td></td></tr>
+      <tr><td>并发、调用方超时</td><td colspan="4">开发期不适用假会话证明。见专项清单，留给独立验收，本文不编造已执行结果</td></tr>
+      <tr><td>门户页面</td><td colspan="4">需求不改页面。不设开发 UI 用例</td></tr>
+    </tbody>
+  </table></div>
+  <h3 id="prep">公共准备 PREP-PAR-01</h3>
+  <p>构造真实的 <code>PointsRuleService</code>。仓储是假的：<code>get_rule_by_id</code> 返回本例数据里的规则对象；<code>save_rule</code> 把该对象记下来并原样返回。会话是假的：记录 <code>add</code> 的对象，<code>commit</code> 默认为成功，本例可改成抛错；<code>rollback</code> 记录被调用。操作者除权限用例外，使用 <code>user_id=17</code>、<code>user_name=平台管理员甲</code>，并且 <code>require_platform_admin</code> 会放行（与现有展示名测试一样，提供会通过的用户对象）。租户为 1。每例自己准备规则，不读取上一例改过的对象。</p>
+  <h3>数据</h3>
+  <div class="table-wrap"><table>
+    <caption>数据字典</caption>
+    <thead><tr><th>ID</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td>D-M1</td><td>规则 id=41，租户 1，编码 M1，类型 admin_reward，默认名与展示名都是「公共库所有者月奖」，<code>score_expr={"mode":"fixed","score":200}</code>，备注空，状态 enabled，日上限空，受益人 subject，排序 31</td></tr>
+      <tr><td>D-SCORE</td><td>请求只把分值改为 <code>{"mode":"fixed","score":180}</code>，其余沿用 D-M1</td></tr>
+      <tr><td>D-MULTI</td><td>展示名「公共库所有者」，备注「月奖调整」，状态 disabled，分值 180</td></tr>
+      <tr><td>D-SAME</td><td>与 D-M1 生效配置相同的请求，展示名两侧多一个空格，备注为三个空格</td></tr>
+      <tr><td>D-G1</td><td>id=11，编码 G1，类型 earn，展示名「公共库上传」，固定分 3，日上限 15，受益人 uploader，状态 enabled</td></tr>
+      <tr><td>D-G1-NEW</td><td>把 D-G1 展示名改为「上传文档」</td></tr>
+      <tr><td>D-BAD</td><td>管理员奖励状态写成 <code>paused</code></td></tr>
+      <tr><td>D-ORDER</td><td>分值表达式键顺序写成先 <code>score</code> 再 <code>mode</code>，数值仍是 200</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="card" id="cases">
+  <h2>2. 用例清单</h2>
+  <p>环境：开发期隔离。真实保留规则服务。替身是会话和仓储。清理：只丢弃本例假对象。执行阶段除另行注明外为开发期，结果目前都是未执行。</p>
+  <div class="table-wrap"><table>
+    <caption>九列用例</caption>
+    <thead><tr><th>ID</th><th>标题</th><th>优先级</th><th>类型</th><th>关联需求</th><th>前置条件</th><th>步骤</th><th>测试数据</th><th>预期结果</th></tr></thead>
+    <tbody>
+      <tr id="TC-PAR-01">
+        <td>TC-PAR-01</td>
+        <td>月奖励分从 200 改为 180 时留下一条成对记录</td>
+        <td>P0</td>
+        <td>功能</td>
+        <td>需求 1.1 AC-PAR-01；设计 0.10 INV-1、INV-4</td>
+        <td>PREP-PAR-01，规则为 D-M1</td>
+        <td>1. 调用 update_rule 保存</td>
+        <td>D-SCORE；操作者 17</td>
+        <td>返回展示用分值为 180。假会话 commit 恰好 1 次。add 的审计对象恰好 1 个：operator_id=17，operator_name=平台管理员甲，tenant_id=1，action=points.rule.update，target_type=point_rule，target_id=41，object_name=M1，metadata.rule_type=admin_reward，changes 只有 field=score、before=200、after=180。信息日志名含 points.rule.updated，且含 17、41、M1。没有 user_point_log 写入</td>
+      </tr>
+      <tr id="TC-PAR-02">
+        <td>TC-PAR-02</td>
+        <td>一次保存改分值、展示名、备注和启停时仍然只有一条审计</td>
+        <td>P0</td>
+        <td>功能</td>
+        <td>需求 1.1 AC-PAR-02</td>
+        <td>PREP-PAR-01，规则为 D-M1</td>
+        <td>1. 调用 update_rule</td>
+        <td>D-MULTI</td>
+        <td>审计对象 1 个。changes 含 score 200 到 180、display_name、remark 从空到「月奖调整」、status 从 enabled 到 disabled。不含 daily_cap、beneficiary、sort_order。commit 1 次</td>
+      </tr>
+      <tr id="TC-PAR-03">
+        <td>TC-PAR-03</td>
+        <td>去掉空白后配置没变时不留痕且仍成功</td>
+        <td>P0</td>
+        <td>边界</td>
+        <td>需求 1.1 AC-PAR-03；设计 INV-2</td>
+        <td>PREP-PAR-01，规则为 D-M1</td>
+        <td>1. 调用 update_rule</td>
+        <td>D-SAME</td>
+        <td>返回的展示名、分值、状态与 D-M1 相同。commit 0 次。审计对象 0 个。没有本需求的 updated 或 update_failed 日志</td>
+      </tr>
+      <tr id="TC-PAR-04">
+        <td>TC-PAR-04</td>
+        <td>没有运营写资格的用户不能保存也不留痕</td>
+        <td>P0</td>
+        <td>安全</td>
+        <td>需求 1.1 AC-PAR-04</td>
+        <td>PREP-PAR-01，但用户不能通过 require_platform_admin。规则 D-M1</td>
+        <td>1. 用该用户调用 update_rule</td>
+        <td>D-SCORE；用户 id=99，不具备平台运营资格</td>
+        <td>抛出积分权限错误，文案为「无积分管理权限」。规则仍是 200 分且 enabled。commit 0 次。审计对象 0 个</td>
+      </tr>
+      <tr id="TC-PAR-05">
+        <td>TC-PAR-05</td>
+        <td>提交失败时规则回到修改前并返回指定文案</td>
+        <td>P0</td>
+        <td>异常</td>
+        <td>需求 1.1 AC-PAR-05；设计 INV-1</td>
+        <td>PREP-PAR-01。commit 第一次调用抛出 RuntimeError。规则 D-M1</td>
+        <td>1. 调用 update_rule</td>
+        <td>D-SCORE</td>
+        <td>抛出 PointsRuleAuditError，code=18209，message=保存失败，积分规则未更改，请重试。rollback 至少 1 次。规则对象的分值仍是 200。审计没有被当作已提交成功。错误日志名含 points.rule.update_failed。没有 points.rule.updated 成功日志</td>
+      </tr>
+      <tr id="TC-PAR-06">
+        <td>TC-PAR-06</td>
+        <td>修改获取积分规则时同样留下一条审计</td>
+        <td>P0</td>
+        <td>功能</td>
+        <td>需求 1.1 AC-PAR-06；设计 0.10 INV-3</td>
+        <td>PREP-PAR-01，规则为 D-G1。另备一条扣减规则：id=21，编码 R1，类型 deduct，展示名「删除文档」，固定分 100，状态 enabled</td>
+        <td>1. 保存 D-G1 的展示名。2. 用独立的服务和规则副本，把 R1 的分值从 100 改为 80</td>
+        <td>D-G1-NEW；R1 分值 80</td>
+        <td>第一步展示名变为「上传文档」，审计 1 条，action=points.rule.update，rule_type=earn，rule_code=G1。第二步审计另 1 条，rule_type=deduct，changes 的 score 从 100 到 80。两步都不是账本流水。说明文案保存函数不被调用，也不产生本类审计</td>
+      </tr>
+      <tr id="TC-PAR-07">
+        <td>TC-PAR-07</td>
+        <td>停用后再启用各留一条启停记录</td>
+        <td>P0</td>
+        <td>功能</td>
+        <td>需求 1.1 AC-PAR-07</td>
+        <td>PREP-PAR-01。本例在同一次进程里使用两个先后独立的服务和规则副本，第二份的初始状态是第一份成功后的停用状态，不把第一份的可变对象直接交给第二份</td>
+        <td>1. 对启用中的副本只提交 status=disabled。2. 另建停用副本，只提交 status=enabled</td>
+        <td>D-M1，以及由它复制出的停用副本</td>
+        <td>第一步审计 1 条，changes 只有 status：enabled 到 disabled。第二步另有 1 条，disabled 到 enabled。两步都没有账本对象。两步 commit 各 1 次</td>
+      </tr>
+      <tr id="TC-PAR-08">
+        <td>TC-PAR-08</td>
+        <td>成功改成 180 分后再次提交 180 分不新增审计</td>
+        <td>P0</td>
+        <td>功能</td>
+        <td>需求 1.1 AC-PAR-08</td>
+        <td>独立准备一份已经是 180 分的 M1，其他字段同 D-M1。不依赖 TC-PAR-01 的内存结果</td>
+        <td>1. 再提交分值 180</td>
+        <td>D-SCORE 的目标值，初始分已是 180</td>
+        <td>commit 0 次。审计 0 条。分值保持 180</td>
+      </tr>
+      <tr id="TC-PAR-09">
+        <td>TC-PAR-09</td>
+        <td>状态不合法时不留痕</td>
+        <td>P1</td>
+        <td>异常</td>
+        <td>需求 1.1 异常表「失败」中的校验拒绝；沿用 18203</td>
+        <td>PREP-PAR-01，规则 D-M1</td>
+        <td>1. 调用 update_rule</td>
+        <td>D-BAD</td>
+        <td>现有规则冲突错误，文案不是 18209 那句。规则状态仍为 enabled。commit 0 次。审计 0 条</td>
+      </tr>
+      <tr id="TC-PAR-10">
+        <td>TC-PAR-10</td>
+        <td>规则不存在时不留痕</td>
+        <td>P1</td>
+        <td>异常</td>
+        <td>需求 1.1「规则不存在」</td>
+        <td>PREP-PAR-01，get_rule_by_id 返回空</td>
+        <td>1. 用规则 id 999 调用 update_rule</td>
+        <td>D-SCORE 的请求体，id=999</td>
+        <td>现有「积分规则不存在或未启用」。commit 0 次。审计 0 条</td>
+      </tr>
+      <tr id="TC-PAR-11">
+        <td>TC-PAR-11</td>
+        <td>展示名只多首尾空格不算修改</td>
+        <td>P1</td>
+        <td>边界</td>
+        <td>设计 0.10 比较规则；需求比较字段表</td>
+        <td>PREP-PAR-01，规则 D-M1</td>
+        <td>1. 展示名提交为「 公共库所有者月奖 」，分值仍为 200</td>
+        <td>由 D-M1 加上两侧空格</td>
+        <td>与 TC-PAR-03 相同：不提交、不审计。展示名存储值仍无两侧空格</td>
+      </tr>
+      <tr id="TC-PAR-12">
+        <td>TC-PAR-12</td>
+        <td>固定分表达式只调换键顺序不算修改</td>
+        <td>P2</td>
+        <td>边界</td>
+        <td>设计 0.10 分值表达式比较</td>
+        <td>PREP-PAR-01，规则 D-M1</td>
+        <td>1. 提交 D-ORDER</td>
+        <td>D-ORDER</td>
+        <td>commit 0 次。审计 0 条。分值仍为 200</td>
+      </tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="card" id="special">
+  <h2>3. 异常与边界专项清单</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>专项</th><th>适用性</th><th>数据或触发</th><th>用例</th><th>缺口</th></tr></thead>
+    <tbody>
+      <tr><td>空值</td><td>适用备注</td><td>空备注与空白备注视为相同，D-SAME</td><td>TC-PAR-03</td><td>无</td></tr>
+      <tr><td>超长</td><td>沿用现有校验，本次不新定上限</td><td>名称 2～20、备注 200 是门户现有校验。后端本需求不新增断言数字</td><td>不适用为新用例</td><td>不在本需求重测门户长度文案</td></tr>
+      <tr><td>特殊字符</td><td>适用空白</td><td>首尾空格、空白备注</td><td>TC-PAR-03、TC-PAR-11</td><td>不穷举 Unicode</td></tr>
+      <tr><td>重复提交</td><td>适用</td><td>已经是目标分后再保存</td><td>TC-PAR-08</td><td>无</td></tr>
+      <tr><td>并发</td><td>适用，但假会话不能证明</td><td>两个真实会话读到同一旧值后分别提交</td><td>无开发用例</td><td>独立验收：后写入覆盖；每个相对自己读到的旧值成功的提交各有一条审计。开发期未执行</td></tr>
+      <tr><td>超时</td><td>适用结果核实，不设秒数</td><td>需求没有超时阈值</td><td>无开发用例</td><td>独立验收按「新值配新审计」或「旧值且无新审计」两种终态检查。不测弱网丢包</td></tr>
+      <tr><td>弱网</td><td>不适用</td><td>需求没有丢包或延迟指标</td><td>无</td><td>无</td></tr>
+      <tr><td>权限</td><td>适用</td><td>无运营资格的用户 99</td><td>TC-PAR-04</td><td>不新增跨租户产品规则。规则租户不符今天已是不存在错误，若实现时改动该分支，要补用例；当前 TC-PAR-10 只覆盖找不到</td></tr>
+      <tr><td>数据不存在</td><td>适用</td><td>id 999</td><td>TC-PAR-10</td><td>无</td></tr>
+      <tr><td>非法状态</td><td>适用</td><td>status=paused</td><td>TC-PAR-09</td><td>无</td></tr>
+    </tbody>
+  </table></div>
+  <h3>副作用</h3>
+  <ul>
+    <li>数据库：开发用例只断言假会话上的 add、commit、rollback 和规则对象字段。不能称为真实落库。真实同时可见留给验收。</li>
+    <li>状态：启用与停用由 TC-PAR-07 覆盖。失败后字段回到 200，由 TC-PAR-05 覆盖。</li>
+    <li>消息、埋点、下游系统：需求明确没有。全部用例预期这些调用次数为 0。不适用单独用例。</li>
+    <li>日志：TC-PAR-01 要有 updated；TC-PAR-05 要有 update_failed 且没有 updated；无变化用例没有这两条。</li>
+  </ul>
+</section>
+
+<section class="card" id="auto">
+  <h2>4. 自动化可行性标注</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>用例</th><th>标注</th><th>层级与入口</th><th>执行阶段</th><th>当前结果</th></tr></thead>
+    <tbody>
+      <tr><td>TC-PAR-01 至 TC-PAR-12</td><td>可自动化</td><td>毕昇 pytest。建议文件 <code>src/backend/test/points/test_admin_reward_rule_audit.py</code>。命令在实现时按该文件执行，不在本定义阶段运行</td><td>开发期隔离</td><td>未执行</td></tr>
+      <tr><td>并发与超时终态</td><td>需独立验收环境，开发假会话不能自动化成真实证明</td><td>测试岗位的验收工程，路径未指定，本文不写脚本</td><td>验收</td><td>未执行，未开始</td></tr>
+      <tr><td>门户点击</td><td>不适用</td><td>需求不改页面</td><td>不设</td><td>不适用</td></tr>
+    </tbody>
+  </table></div>
+  <p>复核方式：作者按需求 1.1 的 AC 和设计 0.10 的契约逐条对照，没有第二人评审。需求和设计都未确认。定义修订不表示测试通过。</p>
+</section>
+</div>
+</body>
+</html>

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>需求稿 · 积分规则修改留痕</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#202733;--sub:#515d6d;--line:#dce2eb;--accent:#245bb1;--ok:#17683b;--warn:#8a4b00}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  a{color:var(--accent)}
+  .wrap{max-width:1060px;margin:auto;padding:28px 24px 72px}
+  .hero{background:#164789;color:#fff;padding:28px;border-radius:16px;margin-bottom:20px}
+  h1{margin:0 0 8px;font-size:26px;line-height:1.4}
+  .meta{font-size:13px;margin:0 0 6px}
+  .card,.toc{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:24px;margin:0 0 20px}
+  h2{font-size:21px;margin:0 0 8px} h3{font-size:16px;margin:22px 0 8px}
+  .lead{color:var(--sub);font-size:13px;margin:0 0 14px}
+  table{border-collapse:collapse;width:100%;min-width:720px;font-size:13px}
+  .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin:12px 0}
+  th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{background:#f0f3f8}
+  code{font:12px/1.6 ui-monospace,Menlo,Consolas,monospace;background:#f0f3f8;padding:1px 4px;border-radius:4px}
+  .callout{border-left:4px solid var(--accent);background:#f1f5fc;padding:12px 16px;margin:14px 0}
+  .callout.ok{border-color:var(--ok);background:#eff8f2}
+  .callout.warn{border-color:var(--warn);background:#fff8ef}
+  .tag{display:inline-block;border-radius:999px;padding:0 8px;font-size:12px;background:#edf3ff;color:var(--accent)}
+  .toc ol{columns:2;margin:0;padding-left:20px}
+  svg{max-width:100%;height:auto}
+  @media(max-width:680px){.toc ol{columns:1}.wrap{padding:16px 12px 48px}}
+  @media print{body{background:#fff}.hero{background:#fff;color:#111;border:1px solid #777}.card{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero">
+  <h1>积分规则修改留痕</h1>
+  <p class="meta">版本 1.1 · 2026-11-04 · 状态：需求已闭环 · 标识 PAR-LOG</p>
+  <p class="meta">适用项目：毕昇积分规则保存；门户积分管理是入口之一。来源：2026-11-04 对话。</p>
+  <p class="meta">确认依据：2026-11-04 用户对版本 1.1 回复「确认」。确认的是全部积分规则改动都进审计，以及当时的规则、范围和验收条件。版本 1.0 的窄范围确认已失效。</p>
+</header>
+<nav class="toc card" id="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#s1">背景与问题</a></li>
+    <li><a href="#s2">目标与指标</a></li>
+    <li><a href="#s3">范围</a></li>
+    <li><a href="#s4">用户场景与流程</a></li>
+    <li><a href="#s5">功能需求</a></li>
+    <li><a href="#s6">非功能与依赖</a></li>
+    <li><a href="#s7">数据与埋点</a></li>
+    <li><a href="#s8">验收标准</a></li>
+    <li><a href="#s9">风险与回滚</a></li>
+    <li><a href="#s10">变更记录</a></li>
+  </ol>
+</nav>
+
+<section class="card" id="s1">
+  <h2>1. 背景与问题</h2>
+  <div class="callout ok">
+    <strong>四维结论（0.9）。</strong>
+    合理：成立。闭环：成立。边界：成立。可验收：成立。未解决阻塞：无。版本 1.1 已由用户确认。版本 1.0 的窄范围确认不再有效。
+  </div>
+  <p>平台超管或平台管理员在门户积分管理里修改积分规则后，毕昇只更新规则当前值。规则包括获取积分、扣减积分和管理员奖励。2026-11-04 核对毕昇 <code>PointsRuleService.update_rule</code>：成功提交不写应用业务日志，不写 <code>audit_log</code>，也不写 <code>user_point_log</code>。<code>point_rule.update_time</code> 会变，但没有操作人和改前改后。</p>
+  <p>这是阅读当前源码的观察，不是线上页面复测。后果是事后不能回答谁改了哪条规则的分值、展示名、备注或启停。</p>
+  <p>用户要求两件事同时成立：业务代码记下这次修改；操作日志写入现有审计表 <code>audit_log</code>。2026-11-04 用户更正：不只是管理员奖励，积分管理中的积分规则只要改动都要进入审计。积分账本 <code>user_point_log</code> 不承担这件事，因为它的一行必须带被记分用户、变动分值和变动后余额，改配置没有这些事实。</p>
+</section>
+
+<section class="card" id="s2">
+  <h2>2. 目标与指标</h2>
+  <p>一次真正改动了积分规则的成功保存，留下一条能对上操作人、规则和改前改后的操作日志，并在应用日志里留下同一事实。获取、扣减、管理员奖励适用同一套规则。配置没变成新内容时不留这种记录。操作日志写不进去时，这次配置修改不生效。</p>
+  <div class="table-wrap"><table>
+    <caption>目标指标</caption>
+    <thead><tr><th>名称</th><th>口径</th><th>基线及来源</th><th>目标</th><th>观察周期</th><th>数据来源与负责方</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>留痕一致</td>
+        <td>成功且实际发生变化的积分规则保存次数，等于新增的本类操作日志条数。获取、扣减、管理员奖励都计入。无变化、失败、越权、说明文案保存不增加本类操作日志</td>
+        <td>当前为 0。依据是 2026-11-04 源码：<code>update_rule</code> 不写审计表。无线上统计</td>
+        <td>第 8 节验收条件全部可观察通过</td>
+        <td>开发验证一次；独立验收另计，不在本稿宣称已执行</td>
+        <td>应用日志与 <code>audit_log</code>。研发提供开发验证；测试岗位独立验收尚未开始</td>
+      </tr>
+    </tbody>
+  </table></div>
+  <p>没有点击率、时延或转化目标。不把「提升体验」当作验收依据。</p>
+</section>
+
+<section class="card" id="s3">
+  <h2>3. 范围</h2>
+  <h3>本次包含</h3>
+  <ul>
+    <li>对象：已经存在的积分规则。包括获取积分（<code>earn</code>）、扣减积分（<code>deduct</code>）和管理员奖励（<code>admin_reward</code>）。</li>
+    <li>角色：平台超管、平台管理员。两者今天都能保存积分规则。其他登录用户保持不能保存。</li>
+    <li>动作：对上述任一规则的一次保存，且保存后生效配置与保存前不同。包括门户编辑保存、禁用（门户称删除，实际是停用）、从「新增规则」再次启用并保存。</li>
+    <li>结果：一条应用业务日志，加一条 <code>audit_log</code> 操作日志。两者与配置保存同成败。三种规则用同一套留痕，审计内容里带上规则类型。</li>
+  </ul>
+  <h3>本次不做</h3>
+  <ul>
+    <li>说明文案的保存。它不是积分规则，门户走单独的文案保存。</li>
+    <li>新建一条此前不存在的积分规则。门户「新增规则」是打开已有规则再保存，不是新建编码。直接调用新建接口不在本次。</li>
+    <li>积分管理「操作记录」页面、平台「系统操作」页面。两页今天都不展示规则配置变更。本次不把新记录放进这两页，也不改它们的筛选。</li>
+    <li>补写历史修改。上线前已经发生的配置变更没有可还原的改前改后。</li>
+    <li>改分值、名称、备注、启停的合法范围。非法值仍按现有规则拒绝。</li>
+    <li>给用户加减积分。本需求不写 <code>user_point_log</code>。</li>
+    <li>新的审计保留或清理策略。</li>
+  </ul>
+  <p>优先级与交付期是两维。本需求全部为 P0、一次交付。没有二期承诺。页面展示若以后要做，另立需求。</p>
+</section>
+
+<section class="card" id="s4">
+  <h2>4. 用户场景与流程</h2>
+  <p>平台超管或平台管理员打开门户积分管理，在获取积分、扣减积分或管理员奖励里修改已有规则的分值、展示名、备注、启停或其他已允许保存的配置。前提是其具备现有积分运营写资格，且目标规则已存在。</p>
+  <svg viewBox="0 0 880 220" role="img" aria-labelledby="flowTitle flowDesc">
+    <title id="flowTitle">积分规则保存留痕</title>
+    <desc id="flowDesc">保存先比较是否变化。无变化则成功且不留痕。有变化则配置与操作日志一起成功；审计失败则配置保持原样并提示失败。获取、扣减、管理员奖励走同一条路径。</desc>
+    <rect x="16" y="78" width="120" height="52" rx="8" fill="#e8f0fb" stroke="#245bb1"/>
+        <text x="76" y="108" text-anchor="middle" font-size="13">保存积分规则</text>
+    <rect x="176" y="70" width="150" height="68" rx="8" fill="#fff8ef" stroke="#8a4b00"/>
+    <text x="251" y="100" text-anchor="middle" font-size="13">生效配置</text>
+    <text x="251" y="120" text-anchor="middle" font-size="13">与保存前相同？</text>
+    <rect x="376" y="16" width="160" height="64" rx="8" fill="#eff8f2" stroke="#17683b"/>
+    <text x="456" y="42" text-anchor="middle" font-size="13">仍提示保存成功</text>
+    <text x="456" y="62" text-anchor="middle" font-size="13">不写留痕</text>
+    <rect x="376" y="128" width="170" height="72" rx="8" fill="#e8f0fb" stroke="#245bb1"/>
+    <text x="461" y="158" text-anchor="middle" font-size="13">配置改为新值</text>
+    <text x="461" y="178" text-anchor="middle" font-size="13">并写入一条操作日志</text>
+    <rect x="600" y="128" width="250" height="72" rx="8" fill="#fff0f0" stroke="#9b2c2c"/>
+    <text x="725" y="158" text-anchor="middle" font-size="13">审计写失败</text>
+    <text x="725" y="178" text-anchor="middle" font-size="13">配置保持修改前，提示失败</text>
+    <path d="M136 104 H176" stroke="#245bb1" fill="none"/>
+    <path d="M326 92 H376" stroke="#17683b" fill="none"/>
+    <path d="M326 122 H376" stroke="#245bb1" fill="none"/>
+    <text x="348" y="84" font-size="12" fill="#17683b">是</text>
+    <text x="348" y="146" font-size="12" fill="#245bb1">否</text>
+  </svg>
+  <p>图中「留痕」指本需求的修改成功业务日志和 <code>audit_log</code> 新行。现有访问日志仍只记录 IP、方法和路径，不替代这两项。</p>
+  <p>结束状态分三种。实际改成了新配置：规则是新值，有一条对应操作日志，调用方得到成功。配置与保存前相同：规则不变，没有新的本类留痕，调用方仍得到现有的保存成功。审计写失败：规则与修改前一致，没有新的本类操作日志，调用方得到失败并可再次保存。</p>
+</section>
+
+<section class="card" id="s5">
+  <h2>5. 功能需求</h2>
+
+  <h3 id="REQ-PAR-01">REQ-PAR-01 积分规则的实际修改要留痕</h3>
+  <p><span class="tag">P0</span> <span class="tag">一次交付</span> 来源：2026-11-04 用户要求业务日志和操作日志同时存在，并指定审计表为 <code>audit_log</code>。同日更正范围：积分管理中的积分规则，所有改动都进审计。</p>
+  <p>主流程：具备积分运营写资格的平台超管或平台管理员，保存一条已存在的积分规则。获取、扣减、管理员奖励都走这里。系统用保存后将生效的配置与该规则当前配置比较。至少有一个比较字段不同，则在同一次成功结果里更新规则，写一条修改成功业务日志，并追加一条操作日志。调用方得到现有的保存成功。门户编辑仍提示「保存成功」；门户禁用仍提示现有的「已删除（禁用）」加规则编码。本次不改这两句成功文案。</p>
+
+  <h4>比较字段</h4>
+  <div class="table-wrap"><table>
+    <caption>怎样算「修改了」</caption>
+    <thead><tr><th>字段</th><th>业务含义</th><th>算修改的条件</th></tr></thead>
+    <tbody>
+      <tr><td>展示名</td><td>规则列表上的积分项名称</td><td>去掉首尾空白后与当前展示名不同</td></tr>
+      <tr><td>分值</td><td>该规则生效的分值。管理员奖励是月奖励分；获取和扣减是各自规则上的分值或分值表达式</td><td>生效结果不同。表达式只比较生效内容，不比较键的书写顺序</td></tr>
+      <tr><td>备注</td><td>规则备注</td><td>将保存的备注与当前备注不同。空白备注与空备注视为相同</td></tr>
+      <tr><td>启停</td><td>启用或停用</td><td>启用与停用发生切换</td></tr>
+      <tr><td>日上限、受益人、排序</td><td>接口今天已允许保存的其余规则配置</td><td>保存后的值与当前值不同。门户管理员奖励编辑今天不改日上限和受益人；若直接调用接口改了它们，同样算修改</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>业务规则</h4>
+  <div class="table-wrap"><table>
+    <caption>REQ-PAR-01 决策表</caption>
+    <thead><tr><th>条件</th><th>规则当前值</th><th>本类业务日志</th><th>audit_log 新行</th><th>调用方结果</th></tr></thead>
+    <tbody>
+      <tr><td>比较字段至少一个不同，且操作日志写入成功</td><td>变为新值</td><td>一条修改成功日志，含操作人、租户、规则、全部变化字段的前后值</td><td>恰好一条，内容与业务日志一致</td><td>保存成功</td></tr>
+      <tr><td>比较字段全部相同</td><td>保持不变</td><td>不写修改成功日志</td><td>不新增</td><td>仍为保存成功，不报「未修改」</td></tr>
+      <tr><td>操作日志写入失败</td><td>保持修改前</td><td>不写修改成功日志；写一条错误日志，说明本次保存未生效</td><td>不新增</td><td>保存失败。说明为「保存失败，积分规则未更改，请重试」。获取、扣减、管理员奖励用同一句</td></tr>
+      <tr><td>保存的是说明文案，不是积分规则</td><td>按今天的文案保存结果</td><td>不写本需求的修改成功日志</td><td>不新增本类操作日志</td><td>与今天的说明文案保存一致</td></tr>
+    </tbody>
+  </table></div>
+  <p>一次保存改了多个字段，仍然只产生一条业务日志和一条操作日志。日志列出每个实际变化字段的修改前和修改后，不列出未变化字段。</p>
+  <p>操作日志只追加。后来再改同一条规则时，旧的操作日志保持原内容，不改写、不删除。规则行本身只保留最新配置。</p>
+
+  <h4>操作日志要能看出的内容</h4>
+  <div class="table-wrap"><table>
+    <caption>操作日志业务字段</caption>
+    <thead><tr><th>名称</th><th>业务含义</th><th>类型</th><th>必填</th><th>长度或范围</th><th>默认值</th><th>校验</th><th>来源</th></tr></thead>
+    <tbody>
+      <tr><td>操作人</td><td>这次保存的登录用户</td><td>用户身份</td><td>必填</td><td>现有用户</td><td>无</td><td>必须是本次请求的登录用户，不能记成系统或空</td><td>登录态</td></tr>
+      <tr><td>操作时间</td><td>这次保存成功的时间</td><td>时间</td><td>必填</td><td>无新增上下限</td><td>无</td><td>由服务端写入</td><td>服务端时钟</td></tr>
+      <tr><td>规则</td><td>被修改的那条积分规则</td><td>规则标识、规则编码和规则类型</td><td>必填</td><td>已存在的获取、扣减或管理员奖励</td><td>无</td><td>与被保存的规则是同一条，类型与该规则一致</td><td>当前规则</td></tr>
+      <tr><td>动作</td><td>积分规则配置修改</td><td>固定含义</td><td>必填</td><td>仅此含义</td><td>无</td><td>不表示手动调分或月奖发放。扣减规则的配置修改也用这个动作，不写成一笔扣分流水</td><td>本需求</td></tr>
+      <tr><td>变更明细</td><td>实际变化字段的修改前、修改后</td><td>字段到前后值</td><td>必填</td><td>至少一项，至多覆盖上一张比较字段表</td><td>无</td><td>不含未变化字段；前后值必须不同</td><td>保存前规则与本次提交</td></tr>
+      <tr><td>租户</td><td>这条规则所属租户</td><td>租户身份</td><td>必填</td><td>该规则的租户</td><td>无</td><td>与规则租户一致</td><td>规则</td></tr>
+    </tbody>
+  </table></div>
+  <p>展示名今天的门户限制是去掉首尾空白后 2～20 个字符，备注最长 200 个字符。这是现有积分管理校验，本次不改。分值是否允许保存仍按该规则类型的现有校验。操作日志只记录已经通过这些校验并且实际发生变化的值。</p>
+
+  <h4>异常</h4>
+  <div class="table-wrap"><table>
+    <caption>REQ-PAR-01 异常适用</caption>
+    <thead><tr><th>类型</th><th>适用性</th><th>业务结果</th></tr></thead>
+    <tbody>
+      <tr><td>失败</td><td>适用</td><td>审计写失败时，调用方看到「保存失败，积分规则未更改，请重试」。规则保持修改前，没有新的本类操作日志，没有修改成功业务日志，有一条未生效的错误日志。可以再次保存。三种规则类型用同一句</td></tr>
+      <tr><td>超时</td><td>适用</td><td>调用方超时后，以再次读取的规则和操作日志为准。规则已是新值且存在对应的一条操作日志，则已生效。规则仍是旧值且没有新的本类操作日志，则未生效。不允许规则已是新值但没有对应操作日志，也不允许有操作日志但规则仍是旧值</td></tr>
+      <tr><td>并发</td><td>适用</td><td>沿用今天的后写入覆盖。每一笔相对它保存前实际发生变化、并且操作日志写成功的保存，各留一条。不新增「同时编辑冲突」提示</td></tr>
+      <tr><td>重复提交</td><td>适用</td><td>第一次已成功后，再用相同内容保存：比较结果为无变化，不新增第二条留痕，调用方仍得到保存成功</td></tr>
+      <tr><td>权限不足</td><td>适用</td><td>沿用今天的拒绝，提示「无积分管理权限」。规则不变，不写修改成功日志，不新增本类操作日志</td></tr>
+      <tr><td>空数据</td><td>不适用</td><td>没有可修改的积分规则时，不发生本需求的保存。不新增空态页面</td></tr>
+      <tr><td>边界值</td><td>不适用为新规则</td><td>名称、备注、分值的合法范围沿用现有校验。非法提交不更新规则、不留本类痕。本次不新定上下限</td></tr>
+    </tbody>
+  </table></div>
+  <p>规则不存在，或规则不属于当前操作者所保存的租户：沿用今天的「积分规则不存在或未启用」。规则不变，不写本类留痕。</p>
+  <p>关联验收：AC-PAR-01 至 AC-PAR-08。</p>
+</section>
+
+<section class="card" id="s6">
+  <h2>6. 非功能与依赖</h2>
+  <div class="table-wrap"><table>
+    <caption>非功能</caption>
+    <thead><tr><th>项</th><th>要求</th><th>验证方式</th></tr></thead>
+    <tbody>
+      <tr><td>性能</td><td>不设新的时延或吞吐指标。一次实际修改比今天多一次审计写入，结果仍在同一次保存响应里返回</td><td>开发验证看响应与规则、审计行一致。不在本需求做压测</td></tr>
+      <tr><td>权限</td><td>不新增角色，不放宽谁可以改规则。只有今天能保存积分规则的平台超管和平台管理员能触发成功留痕</td><td>AC-PAR-04</td></tr>
+      <tr><td>安全</td><td>日志和审计行包含操作人、规则编码、分值和备注。这些是积分配置，不是口令或令牌。禁止写入口令、令牌、Cookie</td><td>检查成功路径写入内容</td></tr>
+      <tr><td>合规</td><td>没有新的法规义务被确认。本次只解决内部追溯</td><td>不适用额外合规检查</td></tr>
+      <tr><td>可观测</td><td>修改成功有一条业务日志；审计失败有一条错误日志且配置未变。现有访问日志保持现状</td><td>AC-PAR-01、AC-PAR-05</td></tr>
+      <tr><td>发布</td><td>随毕昇本次发布生效。没有单独开关，也没有分批放量</td><td>发布说明注明该行为随版本启用</td></tr>
+    </tbody>
+  </table></div>
+  <h3>依赖</h3>
+  <ul>
+    <li>毕昇现有积分规则保存，以及现有审计表 <code>audit_log</code>。本次不新建表、不加列。若设计发现现有列无法放下第 5 节的业务字段，必须停下来重新确认，不能静默加列。</li>
+    <li>门户积分管理只是入口。保存失败时，门户继续展示接口返回的失败说明。本次不改门户页面结构。</li>
+    <li>没有外部待办或通知。管理员不会因为这次留痕收到新消息。</li>
+  </ul>
+</section>
+
+<section class="card" id="s7">
+  <h2>7. 数据与埋点</h2>
+  <p>配置数据仍在现有积分规则中，归属规则所在租户，只保留最新值。操作日志追加在现有 <code>audit_log</code>，归属同一租户。本次不定义删除期限，也不新增清理任务；现有审计数据怎样保留，本类新行就怎样保留。</p>
+  <p>不新增前端埋点或统计事件。第 2 节的「留痕一致」直接数应用日志和 <code>audit_log</code>，不另建事件名。</p>
+  <div class="table-wrap"><table>
+    <caption>留痕事件</caption>
+    <thead><tr><th>事件</th><th>触发</th><th>属性</th><th>去重口径</th><th>对应指标</th></tr></thead>
+    <tbody>
+      <tr><td>积分规则配置修改成功</td><td>比较后确有变化，且规则与操作日志一起提交成功。获取、扣减、管理员奖励都算</td><td>操作人、租户、规则标识、规则编码、规则类型、变更明细、操作时间</td><td>一次这样的保存对应一条，不把同一保存拆成多条</td><td>留痕一致</td></tr>
+      <tr><td>积分规则配置修改未生效</td><td>本来有变化，但操作日志未能写下，规则已保持修改前</td><td>操作人、租户、规则标识、失败事实。不含新配置已生效的说法</td><td>每次这样的失败尝试一条错误日志，不写操作日志行</td><td>留痕一致</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="card" id="s8">
+  <h2>8. 验收标准</h2>
+  <div class="table-wrap"><table>
+    <caption>验收条件</caption>
+    <thead><tr><th>标识</th><th>前提</th><th>动作</th><th>预期</th></tr></thead>
+    <tbody>
+      <tr id="AC-PAR-01"><td>AC-PAR-01</td><td>平台管理员，一条启用中的管理员奖励，月奖励分与即将保存的分不同</td><td>保存</td><td>规则变为新分值；应用日志有一条修改成功记录；<code>audit_log</code> 新增一条。两者都含该管理员、规则编码、规则类型、旧分值和新分值。调用方保存成功</td></tr>
+      <tr id="AC-PAR-02"><td>同上，展示名、备注、启停也同时改变</td><td>一次保存</td><td>仍然只有一条修改成功业务日志和一条操作日志，明细含这三个字段以及分值里实际变化的项，不含未变化字段</td></tr>
+      <tr id="AC-PAR-03"><td>打开编辑后不改任何比较字段就保存</td><td>保存</td><td>规则不变；没有修改成功业务日志；没有新的本类操作日志；调用方仍保存成功</td></tr>
+      <tr id="AC-PAR-04"><td>普通登录用户，没有积分运营写资格</td><td>调用同一保存</td><td>拒绝，提示「无积分管理权限」。规则不变，没有本类留痕</td></tr>
+      <tr id="AC-PAR-05"><td>平台管理员提交了确有变化的积分规则，操作日志写入失败</td><td>保存</td><td>规则与修改前一致；没有新的本类操作日志；没有修改成功业务日志；有未生效错误日志；调用方看到「保存失败，积分规则未更改，请重试」</td></tr>
+      <tr id="AC-PAR-06"><td>平台管理员保存一条获取积分规则和一条扣减积分规则，内容都确有变化</td><td>分别保存</td><td>两条各自成功，各有一条操作日志和一条修改成功业务日志。日志中的规则类型分别是获取和扣减。说明文案即使同时改了，也不产生本类操作日志</td></tr>
+      <tr id="AC-PAR-07"><td>一条启用中的管理员奖励</td><td>门户禁用；之后从新增规则将其再启用并保存为启用</td><td>禁用成功时有一条留痕，启停从启用到停用。再次启用且状态确有变化时另有一条留痕。两次都不是积分账本流水</td></tr>
+      <tr id="AC-PAR-08"><td>AC-PAR-01 已成功</td><td>立刻用相同内容再保存一次</td><td>不新增第二条操作日志。规则保持第一次保存后的值</td></tr>
+    </tbody>
+  </table></div>
+  <p>非功能的验证方式见第 6 节。页面是否展示这条操作日志不在验收内。验收看应用日志和 <code>audit_log</code>，不看积分管理「操作记录」或平台「系统操作」。</p>
+</section>
+
+<section class="card" id="s9">
+  <h2>9. 风险与回滚</h2>
+  <div class="table-wrap"><table>
+    <caption>风险</caption>
+    <thead><tr><th>风险</th><th>触发</th><th>影响</th><th>应对</th><th>负责</th></tr></thead>
+    <tbody>
+      <tr><td>审计不可用时管理员暂时不能改奖励配置</td><td>操作日志写失败</td><td>保存失败，配置保持原样。这是用户已选择的结果</td><td>错误说明告知未更改，管理员可重试。不改成「配置先保存、日志以后补」</td><td>研发实现；测试按 AC-PAR-05 验收</td></tr>
+      <tr><td>留痕写进账本或展示到错误页面</td><td>实现时复用积分「操作记录」或系统操作白名单</td><td>调分流水或系统操作列表混入配置变更</td><td>本需求明确排除。设计若要改页面，先回来改需求</td><td>设计确认时检查</td></tr>
+      <tr><td>现有审计列放不下变更明细</td><td>设计核对列能力时发现不够</td><td>无法在不加列的前提下满足第 5 节</td><td>停止实现并重新确认。本稿的约束是不加列</td><td>技术设计</td></tr>
+    </tbody>
+  </table></div>
+  <p>启用方式：随毕昇该版本一次启用，没有独立开关，也没有按租户放量。监测方式：抽查一条真实修改的应用日志和 <code>audit_log</code> 是否成对。暂停方式：回滚该版本。回滚后不再写新的本类留痕；已经写下的操作日志保留，不自动删除；规则配置不自动改回旧分值。</p>
+  <p>残留且不阻塞本稿：审计行保留多久沿用现状，本次不定义。新建积分规则、说明文案、两个现有日志页面的展示，都在第 3 节排除。</p>
+</section>
+
+<section class="card" id="s10">
+  <h2>10. 变更记录</h2>
+  <div class="table-wrap"><table>
+    <caption>版本</caption>
+    <thead><tr><th>版本</th><th>日期</th><th>变更与原因</th><th>受影响需求</th><th>决定依据</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>0.9</td>
+        <td>2026-11-04</td>
+        <td>首稿。把已拍板的落表、同成败、无变化不记写入规则，并标出排除项</td>
+        <td>REQ-PAR-01，AC-PAR-01 至 AC-PAR-08</td>
+        <td>见下表。当时整稿待确认</td>
+      </tr>
+      <tr>
+        <td>1.0</td>
+        <td>2026-11-04</td>
+        <td>用户确认 0.9。该确认只覆盖管理员奖励</td>
+        <td>REQ-PAR-01，AC-PAR-01 至 AC-PAR-08</td>
+        <td>2026-11-04 用户回复「确认」。已被 1.1 的范围更正取代</td>
+      </tr>
+      <tr>
+        <td>1.1</td>
+        <td>2026-11-04</td>
+        <td>用户更正：积分管理中的积分规则，所有改动都进审计。获取和扣减纳入。失败文案改为「积分规则未更改」。说明文案和新建规则仍排除</td>
+        <td>REQ-PAR-01，AC-PAR-01、AC-PAR-05、AC-PAR-06。设计 0.9 不再可用</td>
+        <td>2026-11-04 用户原话，并于同日回复「确认」闭环 1.1</td>
+      </tr>
+    </tbody>
+  </table></div>
+  <div class="table-wrap"><table>
+    <caption>已记录的决定</caption>
+    <thead><tr><th>事项</th><th>内容</th><th>性质</th><th>依据</th></tr></thead>
+    <tbody>
+      <tr><td>操作日志落表</td><td><code>audit_log</code></td><td>用户决定</td><td>2026-11-04 用户对「记在 audit_log」回复启动流程并表示同意</td></tr>
+      <tr><td>业务日志</td><td>修改成功和未生效都要在应用日志中可分辨</td><td>用户决定</td><td>用户要求业务代码必须记业务日志</td></tr>
+      <tr><td>范围</td><td>已存在的获取、扣减、管理员奖励规则，实际修改都留痕</td><td>用户更正，1.1 待整稿确认</td><td>2026-11-04：「范围不只是管理员奖励改动。积分管理中的积分规则，所有的改动都要进审计日志。」</td></tr>
+      <tr><td>审计失败</td><td>配置与操作日志同成败</td><td>用户决定</td><td>2026-11-04 选择「一起成功」</td></tr>
+      <tr><td>无变化</td><td>不写业务日志，也不写操作日志；保存仍成功</td><td>用户决定。成功响应是为了不把「不记」做成新的报错</td><td>2026-11-04 选择「不记」</td></tr>
+      <tr><td>不改两个现有日志页面</td><td>积分「操作记录」和平台「系统操作」本次不展示</td><td>随版本 1.0 一并确认</td><td>用户要求记到表和业务日志，没有要求改页面</td></tr>
+    </tbody>
+  </table></div>
+</section>
+</div>
+</body>
+</html>

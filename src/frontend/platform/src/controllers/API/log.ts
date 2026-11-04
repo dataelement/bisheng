@@ -81,6 +81,7 @@ export async function getModulesApi(): Promise<{ data: any[] }> {
             { name: 'log.systemIdEnum.llm', value: 'llm' },
             { name: 'log.systemIdEnum.approval', value: 'approval' },
             { name: 'log.systemIdEnum.filelib_sync', value: 'filelib_sync' },
+            { name: 'log.systemIdEnum.points', value: 'points' },
         ],
 
     }
@@ -145,6 +146,7 @@ const actions = [
     { name: 'log.eventTypeEnum.filelibSyncUploadFailed', value: 'filelib_sync.upload.failed' },
     { name: 'log.eventTypeEnum.filelibSyncInspectionStandardBatchSuccess', value: 'filelib_sync.inspection_standard.batch.success' },
     { name: 'log.eventTypeEnum.filelibSyncInspectionStandardBatchFailed', value: 'filelib_sync.inspection_standard.batch.failed' },
+    { name: 'log.eventTypeEnum.pointsRuleUpdate', value: 'points.rule.update' },
 ];
 
 // 全部操作行为
@@ -166,6 +168,7 @@ export async function getActionsByModuleApi(moduleId) {
         case 'llm': return actions.filter(a => a.value.startsWith('llm.server.'))
         case 'approval': return actions.filter(a => a.value.startsWith('approval.'))
         case 'filelib_sync': return actions.filter(a => a.value.startsWith('filelib_sync.'))
+        case 'points': return actions.filter(a => a.value.startsWith('points.'))
     }
 }
 

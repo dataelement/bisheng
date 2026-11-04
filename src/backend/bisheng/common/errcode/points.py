@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001, RUF002
 """积分模块业务错误码。"""
 
 from bisheng.common.errcode.base import BaseErrorCode
@@ -49,3 +50,9 @@ class PointsIdempotentReplayError(BaseErrorCode):
     """调用方显式要求报告的重复记账。"""
 
     Code, Msg = 18206, "积分操作已处理"
+
+
+class PointsRuleAuditError(BaseErrorCode):
+    """Rule change rolled back because the audit row could not be committed with it."""
+
+    Code, Msg = 18209, "保存失败，积分规则未更改，请重试"

@@ -341,3 +341,25 @@ class DocumentReader:
 async def document_reader(index: str):
     client = await get_es_connection()
     yield DocumentReader(client, index)
+
+
+async def count_portal_home_documents() -> int:
+    """Count distinct documents shown as the portal homepage file total.
+
+    Same identity as dashboard total_file_count. No tenant filter, so the
+    homepage sums every tenant. DocumentReader keeps record_type=file and
+    file_type=1, and fills a missing knowledge_identity from MySQL.
+    """
+    from bisheng.common.constants.telemetry import (
+        KNOWLEDGE_SPACE_CONTENT_STAT_INDEX,
+        KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS,
+    )
+
+    async with document_reader(KNOWLEDGE_SPACE_CONTENT_STAT_INDEX) as reader:
+        stats = await reader.load(
+            [{"terms": {"space_level": list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS)}}],
+            include_usage=False,
+            source_fields=["file_id", "knowledge_identity", "timestamp"],
+        )
+    rows = stats.aggregate([], "total_file_count")
+    return int(rows[0][-1]) if rows else 0
