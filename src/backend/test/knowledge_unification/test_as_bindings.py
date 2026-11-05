@@ -48,6 +48,9 @@ targets = Table(
 class SqlTargetOwner:
     """The verifier calls this Owner; test callers never mint capabilities."""
 
+    def lock_and_verify(self, session, target_keys, source_key, operation):
+        raise AssertionError("assistant async writes must not fall back to synchronous verification")
+
     async def alock_and_verify(self, session, target_keys, source_key, operation):
         receipts = []
         for key in target_keys:
