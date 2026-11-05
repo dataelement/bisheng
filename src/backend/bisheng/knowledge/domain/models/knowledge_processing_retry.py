@@ -41,3 +41,5 @@ class KnowledgeProcessingRetryReceipt(SQLModelSerializable, table=True):
     accepted_job_revision: int
     item_count: int
     accepted_at: datetime = Field(default_factory=retry_receipt_now)
+    create_time: datetime = Field(default_factory=retry_receipt_now)
+    update_time: datetime = Field(default_factory=retry_receipt_now)
