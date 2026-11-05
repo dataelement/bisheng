@@ -101,10 +101,15 @@ class WorkflowReferenceSourceRepository:
         return WorkflowVersionReadFact(*row[:6], json.dumps(row.data, ensure_ascii=False, allow_nan=False))
 
     @classmethod
-    async def aget_knowledge_resource_type(cls, session: AsyncSession, target_id: int) -> str:
+    async def aget_knowledge_resource_type(
+        cls, session: AsyncSession, target_id: int, *, for_update: bool = False
+    ) -> str:
         cls._context(session)
+        query = select(Knowledge.type).where(Knowledge.id == target_id)
+        if for_update:
+            query = query.with_for_update()
         with session.no_autoflush:
-            kind = await session.scalar(select(Knowledge.type).where(Knowledge.id == target_id))
+            kind = await session.scalar(query)
         if kind not in {0, 1, 3}:
             raise ResourceReferenceInvalidError(reason="preview_knowledge_unavailable")
         return "knowledge_space" if kind == 3 else "knowledge_library"

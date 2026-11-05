@@ -114,7 +114,9 @@ class WorkflowReferenceSourceOwner:
             {ref.target for ref in references if ref.target.target_type == TargetType.KNOWLEDGE_SPACE},
             key=lambda item: int(item.target_id),
         ):
-            kind = await self.repository.aget_knowledge_resource_type(session, int(target.target_id))
+            kind = await self.repository.aget_knowledge_resource_type(
+                session, int(target.target_id), for_update=for_update
+            )
             await require_business_action(identity, resource_type=kind, resource_id=target.target_id, action="visible")
         payload = {"graph": graph, "root": _fact_payload(root)}
         if "node_input" in supplied:
