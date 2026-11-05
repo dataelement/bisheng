@@ -5,8 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
+from weakref import WeakSet
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, false, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -28,7 +29,7 @@ from bisheng.resource_reference.domain.models.business_reference_set import Busi
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False, weakref_slot=True)
 class OwnerTargetScope:
     transaction: TransactionIdentity
     owner_tenant_id: int
@@ -45,6 +46,7 @@ class ReferenceRepository:
     def __init__(self, *, owners: Mapping[TargetType, object] | None = None):
         self.owners = MappingProxyType({TargetType(key): value for key, value in (owners or {}).items()})
         self._scope_authority = object()
+        self._issued_scopes: WeakSet[OwnerTargetScope] = WeakSet()
 
     @staticmethod
     def current_tenant_id() -> int:
@@ -99,17 +101,23 @@ class ReferenceRepository:
             )
             return result.scalar_one_or_none()
 
-    def list_source_references(self, session: Session, key: SourceKey) -> tuple[BusinessResourceReference, ...]:
-        self.assert_source_tenant(key)
-        with strict_tenant_filter():
-            return tuple(session.execute(self._source_query(BusinessResourceReference, key)).scalars().all())
-
-    async def alist_source_references(
-        self, session: AsyncSession, key: SourceKey
+    def list_source_references(
+        self, session: Session, key: SourceKey, *, for_update: bool = False
     ) -> tuple[BusinessResourceReference, ...]:
         self.assert_source_tenant(key)
         with strict_tenant_filter():
-            result = await session.execute(self._source_query(BusinessResourceReference, key))
+            return tuple(
+                session.execute(self._source_query(BusinessResourceReference, key, for_update=for_update))
+                .scalars()
+                .all()
+            )
+
+    async def alist_source_references(
+        self, session: AsyncSession, key: SourceKey, *, for_update: bool = False
+    ) -> tuple[BusinessResourceReference, ...]:
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            result = await session.execute(self._source_query(BusinessResourceReference, key, for_update=for_update))
             return tuple(result.scalars().all())
 
     def list_source_sets(self, session: Session, *, source_type: str) -> tuple[BusinessReferenceSet, ...]:
@@ -349,7 +357,7 @@ class ReferenceRepository:
                 conditions.append(BusinessResourceReference.target_space_id.in_(spaces))
         return (
             select(BusinessResourceReference)
-            .where(or_(*conditions))
+            .where(or_(*conditions) if conditions else false())
             .order_by(BusinessResourceReference.id)
             .execution_options(populate_existing=True)
         )
@@ -410,17 +418,27 @@ class ReferenceRepository:
         self, session: Session | AsyncSession, targets: tuple[VerifiedReferenceTarget, ...], *, issuer: object
     ) -> OwnerTargetScope:
         tenant_id = self.current_tenant_id()
-        if not targets or any(
-            target.target_tenant_id != tenant_id or self.owners.get(target.key.target_type) is not issuer
-            for target in targets
+        if (
+            issuer is None
+            or not targets
+            or any(
+                target.target_tenant_id != tenant_id or self.owners.get(target.key.target_type) is not issuer
+                for target in targets
+            )
         ):
             raise _invalid("target_owner_scope_invalid")
         keys = tuple(sorted({target.key for target in targets}, key=lambda key: key.lock_order_key))
-        return OwnerTargetScope(TransactionIdentity.capture(session), tenant_id, keys, (issuer,), self._scope_authority)
+        scope = OwnerTargetScope(
+            TransactionIdentity.capture(session), tenant_id, keys, (issuer,), self._scope_authority
+        )
+        self._issued_scopes.add(scope)
+        return scope
 
     def _check_scope(self, session, scope):
         if (
             not isinstance(scope, OwnerTargetScope)
+            or scope not in self._issued_scopes
+            or not scope.targets
             or scope._authority is not self._scope_authority
             or scope.owner_tenant_id != self.current_tenant_id()
             or any(

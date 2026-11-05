@@ -5,6 +5,7 @@ SQLite exercises SQL storage semantics only, not MySQL/DM8 lock behavior.
 """
 
 from contextlib import contextmanager
+from dataclasses import replace
 
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -187,6 +188,19 @@ def test_storage_failure_propagates_instead_of_reporting_no_references(engine, m
         )
         with pytest.raises(RuntimeError, match="storage unavailable"):
             repo.list_inbound_targets(session, (target(),))
+
+
+def test_target_owner_capability_cannot_be_forged_retargeted_or_emptied(engine):
+    owner = object()
+    repo = ReferenceRepository(owners={TargetType.MODEL: owner})
+    verified = VerifiedReferenceTarget(target(), 101, None, "1", ReferenceState.VALID, "r1")
+    with Session(engine) as session, session.begin():
+        with pytest.raises(ResourceReferenceInvalidError):
+            ReferenceRepository().target_owner_scope(session, (verified,), issuer=None)
+        scope = repo.target_owner_scope(session, (verified,), issuer=owner)
+        for forged in [replace(scope, targets=()), replace(scope, targets=(target("2"),))]:
+            with pytest.raises(ResourceReferenceInvalidError):
+                repo.list_inbound_for_owner(session, forged)
 
 
 async def test_async_equivalent_supports_empty_set_and_external_rollback():
