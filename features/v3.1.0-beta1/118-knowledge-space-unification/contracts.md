@@ -430,3 +430,8 @@ WF generic metadata_filter.document_id不是实际physical file选择器，不�
 `KnowledgeUnificationPhase`约定preparing、baseline_frozen、converting、backfilling、verifying、verified、completed、failed；可读取冻结证据的阶段排除preparing/failed。原run的baseline及plan均为`{object_key, sha256}`描述，hash是与存储列一致的小写64位SHA256，object_key须是持久对象键而非本机绝对路径。Reader只核同tenant原source/target/run/key及descriptor，不执行迁移、读外部blob或检测停服。MIG后续脚本必须在停服+一致备份后正式盘点并写这套冻结协议。
 
 实际运行/Info读取的后续接缝见[execution-entrypoints.md](./execution-entrypoints.md)。此波没有放宽REF source tenant约束，也未把临时未保存画布当作已保存版本；SourceExecution及可信SourceOwner只读scope须先补合同/任务再接线。
+
+
+## W3运行与共享来源只读合同V1
+
+[execution-read-contract.md](./execution-read-contract.md)已冻结实际SourceOwner、私有只读scope、临时预览、绑定WS Port、Agent外部事务/缓存、Info裁剪与评测身份合同。SourceOwnerTenant与原请求身份分开；不恢复业务Root默认共享、不以share-token授予运行、不放宽R2。原ONLINE及召回策略保持。下一波实现以该精确合同为依赖。
