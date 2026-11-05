@@ -13,6 +13,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.telemetry.event_data_schema import ToolInvocationEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.core.logger import trace_id_var
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
@@ -492,7 +493,11 @@ class ToolExecutor(BaseTool):
 
                 _logger.warning(f"linsight tool '{self.tool_name}' failed: {e}")
                 return json.dumps(
-                    {"状态": "失败", "错误信息": f"工具 {self.tool_name} 调用失败: {e}"},
+                    {
+                        "状态": "失败",
+                        "错误信息": FailureContextAdapter.safe_detail(e),
+                        **({"failure_info": info} if (info := FailureContextAdapter.from_error(e)) else {}),
+                    },
                     ensure_ascii=False,
                 )
         return await self.tool_instance._arun(*args, **kwargs)

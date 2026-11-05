@@ -60,6 +60,8 @@ export function ConversationRound({ round, versionId, onPreview }: ConversationR
                 read-only and the next round already moved on) */}
             {round.taskError && (
                 <ChatErrorCard
+                    errorCode={round?.taskErrorInfo?.error_code ?? round?.output_result?.error_code}
+                    failureInfo={round?.taskErrorInfo?.failure_info ?? round?.output_result?.failure_info}
                     errorType={round.taskErrorInfo?.error_type}
                     detail={round.taskErrorInfo?.detail}
                     fallbackMessage={round.taskError}

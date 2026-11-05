@@ -1,4 +1,6 @@
 // @ts-strict-ignore
+import { useLocalize } from '~/hooks';
+import { taskFailureMetadata } from '~/utils/failureInfo';
 // src/hooks/useLinsightManager.ts
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -20,6 +22,9 @@ import {
     toggleNav
 } from '~/utils';
 import { getContinueFailureUpdate } from './linsightContinueHelpers';
+import { convertTools, buildTaskTree, mapSessionVersionStatus } from './linsightSessionProjection';
+import { resolveLinsightSubmitFailure, type PendingSubmitFailure } from './linsightSubmitFailure';
+export { mapSessionVersionStatus } from './linsightSessionProjection';
 
 
 /**
@@ -41,7 +46,7 @@ export const useLinsightManager = () => {
     const setActiveSessionId = useSetRecoilState(activeSessionIdState);
 
     // 创建新会话信息
-    const createLinsight = useCallback((versionId: string, initialData: Omit<LinsightInfo, 'id'>) => {
+    const createLinsight = useCallback((versionId: string, initialData: Omit<LinsightInfo, 'id'>, activate = true) => {
         const newLinsight: LinsightInfo = {
             id: versionId,
             ...initialData
@@ -53,7 +58,7 @@ export const useLinsightManager = () => {
             return newMap;
         });
 
-        setActiveSessionId(versionId);
+        if (activate) setActiveSessionId(versionId);
         return versionId;
     }, [setLinsightMap, setActiveSessionId]);
 
@@ -116,6 +121,7 @@ export const useLinsightManager = () => {
     const reconcileLinsightFromServer = useRecoilCallback(({ snapshot }) => async (
         versionId: string,
         expectedCompletedOutput?: LinsightInfo['output_result'],
+        adoptActive = false,
     ) => {
         const map = await snapshot.getPromise(linsightMapState);
         const current = map.get(versionId);
@@ -124,7 +130,17 @@ export const useLinsightManager = () => {
 
         const versions = await getLinsightSessionVersionList(current.session_id, '');
         const item = (versions || []).find((v) => String(v.id) === String(versionId));
-        if (!item || !TERMINAL_SESSION_STATUSES.has(item.status)) return false;
+        if (!item) return false;
+        const terminal = TERMINAL_SESSION_STATUSES.has(item.status);
+        if (!terminal) {
+            if (!adoptActive || !['not_started', 'in_progress', 'waiting_for_user_input'].includes(item.status)) return false;
+            updateLinsight(versionId, (latest) => {
+                // A late active snapshot must never revive a terminal live event.
+                if ([SopStatus.completed, SopStatus.FeedbackCompleted, SopStatus.Stoped].includes(latest.status)) return {};
+                return { status: mapSessionVersionStatus(item.status, item.execute_feedback) };
+            });
+            return true;
+        }
 
         // Same shape the reload path builds (switchAndUpdateLinsight), so a
         // reconciled panel is indistinguishable from a freshly loaded one.
@@ -141,7 +157,8 @@ export const useLinsightManager = () => {
                 execute_feedback: item.execute_feedback,
                 tasks: buildTaskTree(tasks),
                 file_list: item.output_result?.final_files || [],
-                taskError: 'failed' === item.status ? item.output_result?.error_message : '',
+                taskError: 'failed' === item.status ? item.output_result?.error_message || ' ' : '',
+                taskErrorInfo: 'failed' === item.status ? taskFailureMetadata(item.output_result) : undefined,
                 // Carry the persisted task ChatMessage id + verdict, exactly as the
                 // live final_result handler does, so like/dislike targets the right
                 // row instead of a streaming placeholder.
@@ -220,20 +237,8 @@ export const useLinsightManager = () => {
             status: newStatus,
             files: files?.map(file => ({ ...file, file_name: decodeURIComponent(file.original_filename) })) || [],
             tasks: customTask ? tasks : buildTaskTree(tasks),
-            taskError: 'failed' === status ? output_result?.error_message : '',
-            taskErrorInfo: 'failed' === status && output_result?.error_type
-                ? {
-                    error_code: output_result.error_code,
-                    error_type: output_result.error_type,
-                    detail: output_result.detail,
-                    execution_id: output_result.execution_id,
-                    attempt_id: output_result.attempt_id,
-                    recovery_subject_id: output_result.recovery_subject_id,
-                    model_id: output_result.model_id,
-                    rate_limit_state: output_result.rate_limit_state,
-                    resume_mode: output_result.resume_mode,
-                }
-                : undefined,
+            taskError: 'failed' === status ? output_result?.error_message || ' ' : '',
+            taskErrorInfo: 'failed' === status ? taskFailureMetadata(output_result) : undefined,
             file_list: output_result?.final_files || [],
             sop: 'sop_generation_failed' === status ? '' : sop,
             sopError: 'sop_generation_failed' === status ? sop : '',
@@ -299,16 +304,20 @@ export const useLinsightSessionManager = (versionId: string) => {
  * sessionId规则说明: 新建会话 [new]
  */
 export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
+    const localize = useLocalize();
     const [loading, setLoading] = useState(false); // 多会话共用
     // F035: a new round always submits under the 'new' key (the next version has
     // no id yet). Watch 'new' fixed — NOT `versionId` — otherwise follow-up rounds
     // after the first one (versionId is a real id by then) never fire and
     // "continue conversation" looks dead.
     const { linsightSubmission, clearLinsightSubmission } = useLinsightSessionManager('new')
-    const { createLinsight, updateLinsight } = useLinsightManager()
+    const { createLinsight, updateLinsight, reconcileLinsightFromServer } = useLinsightManager()
     const queryClient = useQueryClient();
     const { showToast } = useToastContext();
     const [error, setError] = useState(false);
+    const [pendingSubmitFailure, setPendingSubmitFailure] = useState<PendingSubmitFailure>();
+    const pendingFailureOwnerRef = useRef<{ versionId: string; path: string }>();
+    const submitSequenceRef = useRef(0);
     const { setConversation } = store.useCreateConversationAtom(0);
     // 使用 ref 存储当前活跃版本 ID
     const activeVersionIdRef = useRef(versionId);
@@ -326,10 +335,16 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
 
     useEffect(() => {
         if (linsightSubmission) {
+            setPendingSubmitFailure(undefined);
+            pendingFailureOwnerRef.current = undefined;
+            setError(false);
             console.log('linsightSubmission :>> ', linsightSubmission);
 
             // 新建会话获取详情
             if (linsightSubmission.isNew) {
+                const submitSequence = ++submitSequenceRef.current;
+                const submitFromVersion = activeVersionIdRef.current;
+                let submitFromPath = window.location.pathname;
                 setLoading(true)
                 toggleNav(false)
 
@@ -359,19 +374,24 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
                 });
 
                 let versionId = ''
+                const isCurrentSubmission = () => submitSequence === submitSequenceRef.current
+                    && window.location.pathname === submitFromPath
+                    && (activeVersionIdRef.current === submitFromVersion || activeVersionIdRef.current === versionId);
                 sse.addEventListener('linsight_workbench_submit', (e: MessageEvent) => {
                     const data = JSON.parse(e.data);
                     const { linsight_session_version, message_session } = data;
 
+                    const showSubmission = isCurrentSubmission();
                     versionId = linsight_session_version.id
-                    setVersionId(versionId)
-                    setVersions((prevVersions) => [{
-                        id: versionId,
-                        name: formatTime(linsight_session_version.version, true)
-                    }, ...prevVersions])
-
-                    // replaceUrl
-                    window.history.replaceState({}, '', `${__APP_ENV__.BASE_URL}/linsight/${linsight_session_version.session_id}`);
+                    if (showSubmission) {
+                        setVersionId(versionId)
+                        setVersions((prevVersions) => [{
+                            id: versionId,
+                            name: formatTime(linsight_session_version.version, true)
+                        }, ...prevVersions])
+                        window.history.replaceState({}, '', `${__APP_ENV__.BASE_URL}/linsight/${linsight_session_version.session_id}`);
+                        submitFromPath = window.location.pathname;
+                    }
 
                     createLinsight(versionId, {
                         status: SopStatus.SopGenerating, //linsight_session_version.status,
@@ -398,7 +418,7 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
                         sopError: '',
                         taskError: '',
                         queueCount: 0
-                    })
+                    }, showSubmission)
                 })
 
                 sse.addEventListener('linsight_workbench_title_generate', (e: MessageEvent) => {
@@ -411,7 +431,7 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
                         updateLinsight(versionId, {
                             title: data.task_title
                         })
-                        setConversation((prevState: any) => {
+                        if (isCurrentSubmission()) setConversation((prevState: any) => {
                             return {
                                 ...prevState,
                                 conversationId: data.chat_id
@@ -433,16 +453,37 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
                     // execution right after the session is created; the WS stream
                     // (task-message-stream) takes over from here.
                     startLinsight(versionId).then(() => {
-                        updateLinsight(versionId, { status: SopStatus.Running })
-                        setLoading(false)
-                    }).catch((err) => {
+                        updateLinsight(versionId, (latest) =>
+                            [SopStatus.completed, SopStatus.FeedbackCompleted, SopStatus.Stoped].includes(latest.status)
+                                ? {} : { status: SopStatus.Running })
+                        if (isCurrentSubmission()) setLoading(false)
+                    }).catch(async (err) => {
                         console.error('start-execute failed :>> ', err);
-                        if (versionId === activeVersionIdRef.current) {
-                            showToast({ message: '任务启动失败，请联系管理员检查灵思任务执行模型状态', status: 'warning' });
+                        const { failure, metadata, businessMessage } = resolveLinsightSubmitFailure(err, localize, 'com_linsight.task_start_failed');
+                        if (!businessMessage) {
+                            try {
+                                if (await reconcileLinsightFromServer(versionId, undefined, true)) {
+                                    if (isCurrentSubmission()) setLoading(false);
+                                    return;
+                                }
+                            } catch (reconcileError) {
+                                console.error('Failed to reconcile task start:', reconcileError);
+                            }
+                        }
+                        if (isCurrentSubmission()) {
+                            showToast({ message: failure.message, status: 'warning' });
                             setError(true)
                             setLoading(false)
+                            toggleNav(true)
                         }
-                        updateLinsight(versionId, { taskError: String(err), status: SopStatus.Stoped })
+                        updateLinsight(versionId, (latest) => {
+                            if ([SopStatus.completed, SopStatus.FeedbackCompleted, SopStatus.Stoped].includes(latest.status)) return {};
+                            return {
+                                taskError: failure.message,
+                                taskErrorInfo: metadata,
+                                ...(businessMessage ? { status: SopStatus.Stoped } : {}),
+                            };
+                        })
                     })
                 })
 
@@ -452,17 +493,40 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
 
                 sse.addEventListener('error', async (e: MessageEvent) => {
                     console.error('object :>> ', e);
-                    if (versionId === activeVersionIdRef.current) { // 只有当前活跃会话才展示错误
+                    let payload: unknown;
+                    try { payload = JSON.parse(e.data); } catch { payload = {}; }
+                    const { failure, metadata, businessMessage } = resolveLinsightSubmitFailure(payload, localize, 'com_linsight.task_submit_failed');
+                    if (versionId && !businessMessage) {
+                        try {
+                            if (await reconcileLinsightFromServer(versionId, undefined, true)) {
+                                if (isCurrentSubmission()) setLoading(false);
+                                return;
+                            }
+                        } catch (reconcileError) {
+                            console.error('Failed to reconcile task submit:', reconcileError);
+                        }
+                    }
+                    if (!versionId && submitSequence === submitSequenceRef.current) {
+                        pendingFailureOwnerRef.current = { versionId: submitFromVersion, path: submitFromPath };
+                        setPendingSubmitFailure(failure);
+                    }
+                    if (isCurrentSubmission()) {
                         showToast({
-                            message: 'SOP 生成失败，请联系管理员检查灵思任务执行模型状态',
+                            message: failure.message,
                             status: 'warning',
                         });
                         setError(true)
                         setLoading(false)
+                        toggleNav(true)
                     }
-                    updateLinsight(versionId, {
-                        sopError: e.data,
-                        status: SopStatus.SopGenerated,
+                    if (versionId) updateLinsight(versionId, (latest) => {
+                        if ([SopStatus.completed, SopStatus.FeedbackCompleted, SopStatus.Stoped].includes(latest.status)) return {};
+                        return {
+                            taskError: failure.message,
+                            taskErrorInfo: metadata,
+                            sopError: '',
+                            ...(businessMessage ? { status: SopStatus.Stoped } : {}),
+                        };
                     })
                 })
                 sse.stream();
@@ -470,198 +534,21 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
             // F035 Track H (P5): the legacy non-isNew branch (re-execute via the
             // removed generate-sop SSE) is gone together with SOPEditor/TaskFlow.
 
-            updateLinsight(versionId, {
+            if (!linsightSubmission.isNew) updateLinsight(versionId, {
                 status: SopStatus.SopGenerating,
                 taskError: '',
                 sopError: '',
                 sop: ''
             })
             clearLinsightSubmission('new')
-            setError(false)
         }
     }, [linsightSubmission])
 
-    return [loading, error]
+    const visiblePendingFailure = pendingFailureOwnerRef.current?.versionId === versionId
+        && pendingFailureOwnerRef.current?.path === window.location.pathname ? pendingSubmitFailure : undefined;
+    return [loading, error, visiblePendingFailure] as const
 }
 
 
 
 // 工具转换数据结构  筛选 -> sop二级列表
-const convertTools = (tools) => {
-    let org_knowledge_enabled = false
-    let personal_knowledge_enabled = false
-
-    const sopTools: any = []
-    tools.forEach(tool => {
-        if (tool.checked && tool.id === 'pro_knowledge') {
-            org_knowledge_enabled = true
-        } else if (tool.checked && tool.id === 'knowledge') {
-            personal_knowledge_enabled = true
-        } else if (tool.checked) {
-            const { id, name, is_preset, description, children } = tool.data
-            sopTools.push({
-                id,
-                name,
-                is_preset,
-                description,
-                children: children.map(api => {
-                    return {
-                        id: api.id,
-                        name: api.name,
-                        tool_key: api.tool_key,
-                        desc: api.desc
-                    }
-                })
-            })
-        }
-    });
-
-    return {
-        org_knowledge_enabled,
-        personal_knowledge_enabled,
-        tools: sopTools
-    }
-}
-
-
-/**
- * Map a backend session-version status (SessionVersionStatusEnum) to the
- * frontend SopStatus used by the store. Centralised so the reload path
- * (switchAndUpdateLinsight) agrees with the live WS pump on what "running" means.
- *
- * `not_started` means the session has been submitted + enqueued but the Linsight
- * worker has not picked it up yet (it flips to `in_progress` only on dequeue, in
- * task_exec._execute_workflow) — i.e. it is QUEUED. The F035 client has no manual
- * "start" affordance, so `not_started` is never a resting SOP state here; it must
- * map to Running so the queue polling stays enabled and <QueueCard> survives a
- * refresh / session switch (otherwise `running` is false and the 排队中 badge is
- * lost). A genuinely non-queued not_started degrades gracefully: queue-status
- * returns index 0, so no phantom card shows.
- *
- * `waiting_for_user_input` is a dedicated backend state (park-and-release HITL):
- * the run is parked on an ask_user interrupt, not finished. The live flow never
- * leaves SopStatus.Running while parked (the WS `user_input` event only changes
- * the task's status, not the session's), so on reload it MUST also map to Running
- * — otherwise `running` is false, the ClarifyCard / waiting input is gated off,
- * and the user sees no input prompt after a refresh.
- */
-export function mapSessionVersionStatus(status: string, executeFeedback?: string | null): string {
-    switch (status) {
-        case 'sop_generation_failed':
-            return SopStatus.SopGenerated;
-        case 'not_started':
-        case 'in_progress':
-        case 'waiting_for_user_input':
-            return SopStatus.Running;
-        case 'completed':
-            return executeFeedback ? SopStatus.FeedbackCompleted : SopStatus.completed;
-        case 'terminated':
-        case 'failed':
-            return SopStatus.Stoped;
-        default:
-            return status; // unknown status passes through unchanged
-    }
-}
-
-/**
- * Project the server's task rows onto the shape the panels render.
- *
- * Status is passed through as-is. There used to be a sticky `hasTerminated` flag
- * here that rewrote EVERY row after the first `terminated`/`failed` one to
- * `not_started` (to hide them), back when `terminated` could only mean "the user
- * hit stop". It no longer can: `_diff_todos` now also marks a todo `terminated` when
- * the MODEL prunes it from its own plan, so one pruned todo silently buried every
- * task after it — a session with 8 successful tasks rendered "3/18" with grey
- * rings, and since `isTaskStarted('not_started')` is false, those tasks' steps
- * vanished from the timeline too.
- *
- * Nothing is lost by passing status through: a manually stopped run has its
- * unfinished rows swept to TERMINATED by the backend (`_terminate_unfinished_tasks`)
- * and its in-flight row rewritten by `getLinsightTaskList`, `TaskPanel` keys the
- * stopped-run rendering off its own `terminated` prop, and a pruned row with no
- * history is dropped by TaskStepRow's empty guard. The live WS path never called
- * this function at all — so this is the reload view converging on the live one.
- */
-function buildTaskTree(tasks) {
-    const newTasks = tasks.map(task => {
-        const taskTree = {
-            id: task.id,
-            // F035 deepagents tasks carry the title at task_data.name; tolerate a
-            // flat name / legacy display_target too. MUST match the live WS
-            // task_generate mapping (Websocket/index.tsx) or history-loaded turns
-            // render blank task rows (structure present, names empty).
-            name: task.name || task.task_data?.name || task.task_data?.display_target || '',
-            status: task.status === 'waiting_for_user_input' ? 'user_input' : task.status,
-            history: task.history || [],
-            event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
-            call_reason: task.input_prompt || '',
-            errorMsg: task.result?.answer || '',
-            // Preserve task_data so splitSessionPseudoTask / PinnedTaskPanel can
-            // recognize the session-global "执行准备" pseudo task (is_session_global)
-            // on reload and lift its steps out, instead of rendering it as a task row.
-            task_data: task.task_data,
-            children: task.children?.map(child => {
-                return {
-                    id: child.id,
-                    name: child.name || child.task_data?.name || child.task_data?.display_target || '',
-                    status: child.status === 'waiting_for_user_input' ? 'user_input' : child.status,
-                    history: child.history || [],
-                    event_type: child.status === 'waiting_for_user_input' ? 'user_input' : '',
-                    call_reason: '',
-                    task_data: child.task_data
-                }
-            }) || []
-        }
-
-        return taskTree
-    })
-    return newTasks
-
-    // 创建任务ID到任务的映射
-    // const taskMap = new Map();
-    // tasks.forEach(task => taskMap.set(task.id, task));
-
-    // // 存储根任务（一级任务）
-    // const rootTasks: any[] = [];
-    // // 存储二级任务（按parent_task_id分组）
-    // const childTasksMap = new Map();
-
-    // // 第一次遍历：分离一级和二级任务
-    // tasks.forEach(task => {
-    //     if (task.parent_task_id === null) {
-    //         // 一级任务
-    //         rootTasks.push({
-    //             id: task.id,
-    //             name: task.task_data?.target || '',
-    //             status: task.status,
-    //             history: task.history || [],
-    //             event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
-    //             call_reason: '',
-    //             children: []  // 初始化子任务数组
-    //         });
-    //     } else {
-    //         // 二级任务（按父ID分组）
-    //         const parentId = task.parent_task_id;
-    //         if (!childTasksMap.has(parentId)) {
-    //             childTasksMap.set(parentId, []);
-    //         }
-    //         childTasksMap.get(parentId).push({
-    //             id: task.id,
-    //             name: task.task_data?.target || '',
-    //             status: task.status,
-    //             history: task.history || [],
-    //             event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
-    //             call_reason: ''
-    //             // 二级任务没有children字段
-    //         });
-    //     }
-    // });
-
-    // // 第二次遍历：将二级任务挂载到一级任务
-    // rootTasks.forEach(rootTask => {
-    //     const children = childTasksMap.get(rootTask.id) || [];
-    //     rootTask.children = children;
-    // });
-
-    // return rootTasks;
-}

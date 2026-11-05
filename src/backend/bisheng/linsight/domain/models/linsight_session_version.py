@@ -165,6 +165,14 @@ class LinsightSessionVersion(LinsightSessionVersionBase, table=True):
         """
         data = self.model_dump()
         data.pop("pending_files", None)
+        from bisheng.common.services.failure_context import FailureContextAdapter
+
+        if isinstance(data.get("output_result"), dict):
+            data["output_result"] = FailureContextAdapter.public_payload(data["output_result"])
+        if isinstance(data.get("files"), list):
+            data["files"] = [
+                FailureContextAdapter.public_payload(item) if isinstance(item, dict) else item for item in data["files"]
+            ]
         return data
 
 

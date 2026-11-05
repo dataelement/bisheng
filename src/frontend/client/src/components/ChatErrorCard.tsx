@@ -14,14 +14,17 @@
  * a user sees.
  */
 import { Outlined } from 'bisheng-icons';
-import { useState } from 'react';
 import { useLocalize } from '~/hooks';
+import { FailureInfoDetails } from '~/components/FailureInfoDetails';
+import { localizedBusinessFailure, parseFailureInfo } from '~/utils/failureInfo';
 import { ServiceBusyNotice } from '~/components/ServiceBusyNotice';
 import type { WorkbenchModelOption } from '~/components/Chat/ModelAvailabilityOption';
 
 interface ChatErrorCardProps {
     /** stable classification from the backend (error_message event / SSE error `data.error_type`) */
     errorType?: string;
+    errorCode?: number;
+    failureInfo?: unknown;
     /** raw provider text for the "view details" disclosure */
     detail?: string;
     /** legacy/raw error string — fallback when `detail` is absent */
@@ -91,8 +94,8 @@ export function isTransientErrorType(errorType?: string): boolean {
 
 export function ChatErrorCard({
     errorType,
-    detail,
-    fallbackMessage,
+    errorCode,
+    failureInfo,
     onRetry,
     retrying,
     rateLimitState,
@@ -103,16 +106,16 @@ export function ChatErrorCard({
     hideHint,
 }: ChatErrorCardProps) {
     const localize = useLocalize();
-    const [showDetail, setShowDetail] = useState(false);
+    const failure = rateLimitState === 'recovering' || rateLimitState === 'normal' ? undefined : parseFailureInfo(failureInfo);
 
     // Recovery rejected = the model is STILL rate-limited after a retry, so it
     // reads as the same busy notice: standard title, the backend's own copy as
     // the body, and the full retry / switch-model affordances kept available.
-    if (errorType === 'recovery_rejected') {
+    if (!failure && errorType === 'recovery_rejected') {
         return (
             <ServiceBusyNotice
                 title={localize('com_message.rate_limit_title')}
-                desc={fallbackMessage || ''}
+                desc={localize('com_message.rate_limit_busy_desc')}
                 onRetry={onRetry}
                 retrying={retrying}
                 onSwitchModel={onSwitchModel}
@@ -123,10 +126,10 @@ export function ChatErrorCard({
     }
 
     const key = errorType && KNOWN_TYPES.has(errorType) ? errorType : 'unknown';
-    const title = localize(`com_linsight_error_title_${key}`);
-    const desc = description ?? localize(`com_linsight_error_desc_${key}`);
-    const hint = hideHint ? '' : localize(`com_linsight_error_hint_${key}`);
-    const rawDetail = detail || fallbackMessage || '';
+    const title = failure ? localize(`api_errors.failure_${failure.category}`) : localize(`com_linsight_error_title_${key}`);
+    const desc = failure ? '' : localizedBusinessFailure(errorCode, localize) ?? description ?? localize(`com_linsight_error_desc_${key}`);
+    const hint = failure || hideHint ? '' : localize(`com_linsight_error_hint_${key}`);
+
 
     // Transient → calm neutral notice (with retry where the surface wires it).
     if (TRANSIENT_TYPES.has(key)) {
@@ -135,11 +138,11 @@ export function ChatErrorCard({
             <ServiceBusyNotice
                 title={title}
                 desc={desc}
+                failureInfo={failure}
                 // The animated gauge is reserved for the rate-limit (service
                 // load) family; timeout / unavailable are outages, so they get
                 // the static gray attention mark.
                 icon={isRateLimit ? 'gauge' : 'attention'}
-                detail={isRateLimit ? undefined : rawDetail}
                 onRetry={onRetry}
                 retrying={retrying}
                 rateLimitState={isRateLimit ? (rateLimitState ?? 'busy') : undefined}
@@ -159,26 +162,11 @@ export function ChatErrorCard({
                 <Outlined.Attention size={16} className="mt-0.5 shrink-0 text-warning" />
                 <div className="min-w-0 flex-1">
                     <div className="font-medium text-text-2">{title}</div>
-                    <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed text-text-3">{desc}</p>
+                    {desc && <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed text-text-3">{desc}</p>}
+                    <FailureInfoDetails failureInfo={failure} />
                     {hint && <p className="mt-1.5 leading-relaxed text-text-3">{hint}</p>}
 
-                    {rawDetail && (
-                        <div className="mt-2.5">
-                            <button
-                                type="button"
-                                onClick={() => setShowDetail((v) => !v)}
-                                className="inline-flex items-center gap-1 text-body text-gray-400 transition-colors hover:text-gray-600"
-                            >
-                                {localize(showDetail ? 'com_linsight_error_hide_detail' : 'com_linsight_error_view_detail')}
-                                {showDetail ? <Outlined.Down size={14} /> : <Outlined.Right size={14} />}
-                            </button>
-                            {showDetail && (
-                                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-100 p-2.5 text-xs leading-relaxed text-gray-500">
-                                    {rawDetail}
-                                </pre>
-                            )}
-                        </div>
-                    )}
+
                 </div>
             </div>
         </div>

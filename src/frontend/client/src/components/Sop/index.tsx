@@ -9,6 +9,7 @@ import { formatTime } from '~/utils';
 import { TaskModeChatInput } from '~/components/Linsight/Input/TaskModeChatInput';
 import Landing from '~/components/Chat/Landing';
 import { ExecutionFlow } from '~/components/Linsight/Execution/ExecutionFlow';
+import { ChatErrorCard } from '~/components/ChatErrorCard';
 import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsPanel';
 import { LoadingIcon } from '../ui/icon/Loading';
 import { Header } from './Header';
@@ -22,7 +23,7 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
     const sopId = conversationId ? (conversationId.match(/case(\d+)/)?.[1] || '') : sid; // Compatible with historical cases 
 
     const { loading, versionId, setVersionId, switchVersion, versions, setVersions } = useLinsightData({ conversationId, sopId, vid, shareToken });
-    const [isLoading, error] = useLinsightSubmit(versionId, setVersionId, setVersions)
+    const [isLoading, error, pendingSubmitFailure] = useLinsightSubmit(versionId, setVersionId, setVersions)
     const { getLinsight } = useLinsightManager()
     const artifactsPanel = useArtifactsPanel(versionId);
 
@@ -53,6 +54,13 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
                             <Landing isNew />
                         </div>
                         <div className='w-full max-w-[800px] mx-auto px-3 touch-mobile:max-w-full shrink-0 py-3'>
+                            {pendingSubmitFailure && (
+                                <ChatErrorCard
+                                    failureInfo={pendingSubmitFailure.failureInfo}
+                                    description={pendingSubmitFailure.message}
+                                    hideHint
+                                />
+                            )}
                             <TaskModeChatInput conversationId={conversationId || 'new'} />
                         </div>
                     </div>
@@ -61,6 +69,13 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
                 /* F035 Track H (P3): new conversational execution view — replaced
                    the legacy SOPEditor/TaskFlow split panes (removed in P5). */
                 <div className='w-full h-[calc(var(--bs-vh,100vh)-68px)]'>
+                    {pendingSubmitFailure && (
+                        <ChatErrorCard
+                            failureInfo={pendingSubmitFailure.failureInfo}
+                            description={pendingSubmitFailure.message}
+                            hideHint
+                        />
+                    )}
                     <ExecutionFlow
                         versionId={versionId}
                         conversationId={conversationId}

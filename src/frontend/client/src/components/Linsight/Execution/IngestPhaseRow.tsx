@@ -22,6 +22,8 @@
  * whole surface dropped elapsed-time headers for that reason.
  */
 import { Outlined } from 'bisheng-icons';
+import { ChatErrorCard } from '~/components/ChatErrorCard';
+import { parseFailureInfo } from '~/utils/failureInfo';
 import type { FC } from 'react';
 import { useLocalize } from '~/hooks';
 import { ACCENT, MUTED } from './execTokens';
@@ -36,6 +38,7 @@ export interface IngestPhaseRowProps {
 export const IngestPhaseRow: FC<IngestPhaseRowProps> = ({ step }) => {
     const localize = useLocalize();
     const progress = readIngestProgress(step);
+    const failureInfo = parseFailureInfo(step.extraInfo?.failure_info);
     // Defensive: callers gate on the same predicate, but an older worker emits the
     // step name with no payload — falling through to nothing beats rendering a row
     // that says "undefined/undefined".
@@ -68,6 +71,7 @@ export const IngestPhaseRow: FC<IngestPhaseRowProps> = ({ step }) => {
                     rides `output` and takes the same slot, since a failed ingest
                     ends the run and the reason has to be readable inline. */}
                 <NarrationTicker text={running ? progress.fileName || '' : step.output || ''} />
+                {failureInfo && <ChatErrorCard failureInfo={failureInfo} />}
             </div>
         </div>
     );

@@ -22,6 +22,7 @@ from bisheng.common.errcode.server import EmbeddingModelStatusError
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.common.services.base import BaseService
 from bisheng.common.services.config_service import settings
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.core.context.tenant import (
     DEFAULT_TENANT_ID,
     bypass_tenant_filter,
@@ -1334,7 +1335,8 @@ class WorkStationService(BaseService):
                         {
                             "id": kb_id,
                             "name": "",
-                            "error": err_msg,
+                            "error": FailureContextAdapter.safe_detail(exc),
+                            **({"failure_info": info} if (info := FailureContextAdapter.from_error(exc)) else {}),
                         }
                     )
                     logger.warning(
@@ -1430,7 +1432,8 @@ class WorkStationService(BaseService):
                         {
                             "id": int(kb_id) if isinstance(kb_id, (int, str)) and str(kb_id).isdigit() else kb_id,
                             "name": kb_name,
-                            "error": err_msg,
+                            "error": FailureContextAdapter.safe_detail(exc),
+                            **({"failure_info": info} if (info := FailureContextAdapter.from_error(exc)) else {}),
                         }
                     )
                     logger.warning(f"[queryChunksFromDB] kb={kb_id} failed: {err_msg}")
@@ -1458,6 +1461,14 @@ class WorkStationService(BaseService):
             return formatted_results, finally_docs, failures
         except Exception as exc:
             logger.exception(f"queryChunksFromDB error: {exc}")
+            failures.append(
+                {
+                    "id": "",
+                    "name": "",
+                    "error": FailureContextAdapter.safe_detail(exc),
+                    **({"failure_info": info} if (info := FailureContextAdapter.from_error(exc)) else {}),
+                }
+            )
             return [], None, failures
 
     @staticmethod

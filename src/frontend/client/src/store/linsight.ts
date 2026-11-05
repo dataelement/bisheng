@@ -1,3 +1,4 @@
+import type { FailureInfo } from '~/utils/failureInfo';
 // src/state/linsightState.ts
 import { atom, atomFamily, selectorFamily } from 'recoil';
 import { ExtendedFile } from '~/common';
@@ -89,6 +90,7 @@ export type LinsightInfo = {
      * legacy/unclassified failures — the card falls back to a generic message.
      */
     taskErrorInfo?: {
+        failure_info?: FailureInfo;
         error_code?: number;
         error_type?: string;
         detail?: string;
@@ -142,6 +144,7 @@ export type LinsightRoundSnapshot = {
     status?: string;
     taskError?: string;
     taskErrorInfo?: {
+        failure_info?: FailureInfo;
         error_code?: number;
         error_type?: string;
         detail?: string;

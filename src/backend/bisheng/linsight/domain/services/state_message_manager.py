@@ -468,6 +468,11 @@ class LinsightStateMessageManager:
                 for i in range(len(task_model.history) - 1, -1, -1):
                     prev = task_model.history[i]
                     if isinstance(prev, dict) and prev.get("call_id") == call_id:
+                        old_extra = prev.get("extra_info") or {}
+                        new_extra = step_dump.get("extra_info") or {}
+                        step_dump["extra_info"] = {**old_extra, **new_extra}
+                        if old_extra.get("knowledge_target"):
+                            step_dump["extra_info"]["knowledge_target"] = old_extra["knowledge_target"]
                         if step_dump.get("step_type") == "thinking":
                             step_dump["output"] = (prev.get("output") or "") + (step_dump.get("output") or "")
                         task_model.history[i] = step_dump

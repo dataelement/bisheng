@@ -10,6 +10,9 @@
  * the existing input/output sections (no MergedStep→AgentToolCall adapter, so a
  * bare-string output never degrades into a single result chip).
  */
+import { ChatErrorCard } from '~/components/ChatErrorCard';
+import { parseFailureInfo } from '~/utils/failureInfo';
+import { knowledgeStepTitle } from './knowledgeStepTitle';
 import { Outlined } from 'bisheng-icons';
 import { memo, useState, type FC } from 'react';
 import { useLocalize } from '~/hooks';
@@ -50,7 +53,10 @@ const INK_GLYPH = '[&>svg]:text-text-1';
 
 /** Resolve the running / finished verb-phrase title for a tool step. */
 function resolveTitle(step: MergedStep, localize: ReturnType<typeof useLocalize>): string {
+    const knowledgeTitle = knowledgeStepTitle(step, localize);
+    if (knowledgeTitle) return knowledgeTitle;
     const key = (step.name || '').toLowerCase();
+    if (key === 'model_call') return localize('com_linsight.tool_model_call');
     const verb = TOOL_VERB_I18N[key];
     if (step.running) {
         // Mirror ToolCallDisplay inflight phrasing; verb maps are past-tense, so
@@ -73,7 +79,9 @@ const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step }) => {
     const [open, setOpen] = useState<boolean>(false);
 
     const paramsText = open ? formatStepParams(step.params) : '';
-    const hasDetails = !!(step.callReason || (step.params && Object.keys(step.params).length) || step.output);
+    const knowledgeTitle = knowledgeStepTitle(step, localize);
+    const failureInfo = parseFailureInfo(step.extraInfo?.failure_info);
+    const hasDetails = !!(knowledgeTitle || failureInfo || step.callReason || (step.params && Object.keys(step.params).length) || step.output);
 
     const title = resolveTitle(step, localize);
     // Unified icon system (§1.3): running → Accent Loading spinner; done →
@@ -87,13 +95,16 @@ const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step }) => {
     return (
         <CollapsibleTimelineItem
             icon={icon}
-            label={title}
+            label={<span className="line-clamp-2 whitespace-normal break-words text-body">{title}</span>}
             streaming={step.running}
             // Non-collapsible rows still render the rail/title; clicking is a
             // no-op when there is no detail to reveal.
             open={hasDetails && open}
             onToggle={(next) => hasDetails && setOpen(next)}
+            className="[&_button>span:first-child]:whitespace-normal"
         >
+            {knowledgeTitle && <p className="whitespace-pre-wrap break-words text-body text-text-2">{knowledgeTitle}</p>}
+            {failureInfo && <ChatErrorCard failureInfo={failureInfo} />}
             {step.callReason && <p className={DETAIL_TEXT} style={{ color: BODY }}>{step.callReason}</p>}
             {paramsText && (
                 <div className="mt-1">

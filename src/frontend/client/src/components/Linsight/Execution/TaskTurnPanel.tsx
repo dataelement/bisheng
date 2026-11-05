@@ -265,6 +265,8 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
             {/* error / terminated banners */}
             {linsight.taskError && (
                 <ChatErrorCard
+                    errorCode={linsight?.taskErrorInfo?.error_code ?? linsight?.output_result?.error_code}
+                    failureInfo={linsight?.taskErrorInfo?.failure_info ?? linsight?.output_result?.failure_info}
                     errorType={linsight.taskErrorInfo?.error_type}
                     detail={linsight.taskErrorInfo?.detail}
                     fallbackMessage={linsight.taskError}

@@ -53,8 +53,8 @@ from bisheng.linsight.domain.services.state_message_manager import (
     MessageEventType,
 )
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
-from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.share_link.domain.services.share_token_dependencies import header_share_token_parser
 from bisheng.utils import util
 
 router = APIRouter()
@@ -207,10 +207,14 @@ async def submit_linsight_workbench(
         except BaseErrorCode as e:
             # Typed business errors (folder-upload limits, …) keep their own code so
             # the client can show the right copy instead of a generic submit failure.
-            yield e.to_sse_event_instance()
+            from bisheng.common.services.failure_context import FailureContextAdapter
+
+            yield e.to_sse_event_instance(data=FailureContextAdapter.public_payload(e.kwargs, exc=e))
             return
         except Exception as e:
-            yield LinsightQuestionError(exception=e).to_sse_event_instance()
+            from bisheng.common.services.failure_context import FailureContextAdapter
+
+            yield LinsightQuestionError().to_sse_event_instance(data=FailureContextAdapter.public_payload({}, exc=e))
             return
 
         yield {"event": "linsight_workbench_submit", "data": json.dumps(response_data)}
@@ -581,7 +585,9 @@ async def get_execute_task_detail(
     """
 
     with bypass_tenant_filter_if(share_link is not None):
-        execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(session_version_id)
+        execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(
+            session_version_id, login_user=login_user
+        )
 
         if not execute_task_models:
             return resp_200([])
@@ -788,5 +794,7 @@ async def get_sop_showcase_result(
     # Outstanding sessions do not return execution results
     if not version_info or version_info.status != SessionVersionStatusEnum.COMPLETED:
         return resp_200(data={"version_info": None, "execute_tasks": []})
-    execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(linsight_version_id)
-    return resp_200(data={"version_info": version_info, "execute_tasks": execute_task_models})
+    execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(
+        linsight_version_id, login_user=login_user
+    )
+    return resp_200(data={"version_info": version_info.public_dump(), "execute_tasks": execute_task_models})

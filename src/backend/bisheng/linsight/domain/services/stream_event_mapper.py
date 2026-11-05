@@ -32,6 +32,7 @@ from uuid import uuid4
 
 from loguru import logger
 
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.common.utils.think_tags import strip_reasoning_tags
 from bisheng_langchain.linsight.event import (
     BaseEvent,
@@ -126,6 +127,7 @@ class _OpenCall:
     # B2: delegation goal of a main-graph ``task`` call, carried so the merged
     # end frame keeps the same extra_info["delegate_goal"] as its start frame.
     delegate_goal: str | None = None
+    knowledge_target: dict[str, Any] | None = None
 
 
 @dataclass
@@ -139,9 +141,9 @@ class StreamContext:
     # content/positional projection of the latest write_todos snapshot
     todos: list[_TodoProjection] = field(default_factory=list)
     # call_id -> open start frame, awaiting its end frame
-    open_calls: dict[str, _OpenCall] = field(default_factory=dict)
+    open_calls: dict[str | tuple[str, str], _OpenCall] = field(default_factory=dict)
     # call_id -> buffered orphan end payload (end arrived before start, §3.7)
-    orphan_ends: dict[str, dict[str, Any]] = field(default_factory=dict)
+    orphan_ends: dict[str | tuple[str, str], dict[str, Any]] = field(default_factory=dict)
     # call_id -> raw tool-call args JSON, REASSEMBLED from the token-delta
     # tool_call_chunks of the `messages` stream (§3.7 streamed tool-call
     # reassembly). A provider like DeepSeek streams a tool call's args across many
@@ -149,10 +151,10 @@ class StreamContext:
     # carry id='' arg-string deltas. Without this, a `task` delegation's goal
     # (args.description) is lost — the start frame is built from the first,
     # argless chunk. Keyed by call_id so a parallel multi-call burst stays split.
-    tool_arg_buffers: dict[str, str] = field(default_factory=dict)
+    tool_arg_buffers: dict[str | tuple[str, str], str] = field(default_factory=dict)
     # tool_call_chunks delta `index` -> call_id (the id is only present on the
     # FIRST delta of each call; later deltas carry only the index).
-    tool_arg_index_to_id: dict[int, str] = field(default_factory=dict)
+    tool_arg_index_to_id: dict[int | tuple[str, int], str] = field(default_factory=dict)
     # call_id of the OPEN thinking segment, keyed by namespace ("" == main graph,
     # ns None). A contiguous thinking stream within ONE namespace shares a call_id;
     # the segment is closed by any non-thinking chunk IN THAT namespace. Parallel
@@ -193,8 +195,32 @@ class StreamContext:
 class StreamEventMapper:
     """Translate ``(mode, chunk)`` tuples into ``BaseEvent`` instances."""
 
-    def __init__(self, svid: str):
+    def __init__(self, svid: str, knowledge_targets: dict[str, dict] | None = None):
         self.ctx = StreamContext(svid=svid)
+        self.knowledge_targets = knowledge_targets or {}
+
+    def _enrich_knowledge(self, call: _OpenCall) -> bool:
+        if call.step_type != "knowledge" or call.knowledge_target:
+            return False
+        args = call.params if isinstance(call.params, dict) else {}
+        buffered = self._parse_arg_buffer(call.raw_call_id, call.namespace)
+        if buffered:
+            args = buffered
+        kid = args.get("knowledge_id")
+        if isinstance(kid, bool) or not isinstance(kid, (str, int)):
+            return False
+        target = self.knowledge_targets.get(str(kid))
+        if not isinstance(target, dict) or target.get("version") != 1 or target.get("knowledge_id") != str(kid):
+            return False
+        if target.get("kind") not in ("space", "knowledge_base", "personal"):
+            return False
+        snapshot = {key: target[key] for key in ("version", "knowledge_id", "kind")}
+        name = target.get("name")
+        if target["kind"] != "personal" and isinstance(name, str) and 0 < len(name) <= 512:
+            snapshot["name"] = name
+        call.knowledge_target = snapshot
+        call.params = args
+        return True
 
     # -- public entry ------------------------------------------------------
 
@@ -453,13 +479,31 @@ class StreamEventMapper:
         # model streams a tool call's args across many chunks and only the FIRST
         # carries name+id; the start frame built from it therefore has empty args
         # (a `task` delegation lost its goal). Accumulate the deltas here.
-        self._accumulate_tool_args(message)
+        self._accumulate_tool_args(message, ns)
         # A delegation whose streamed args JUST completed gets a refreshed start
         # frame carrying the now-known goal/params. Persistence upserts by call_id
         # (state_message_manager.add_execution_task_step), so this REPLACES the
         # goal-less start emitted when the call first surfaced — fixing both the
         # live WS view and the persisted history with one frame and no duplicate.
         enriched = self._reconcile_open_delegations()
+        metadata = getattr(message, "additional_kwargs", None)
+        if info := FailureContextAdapter.from_payload(metadata):
+            extra_info = {"failure_info": info}
+            if ns:
+                extra_info["namespace"] = ns
+            enriched.append(
+                ExecStep(
+                    task_id=self.ctx.svid,
+                    call_id=f"model_failure:{info['failure_id']}",
+                    name="model_call",
+                    params={},
+                    call_reason="",
+                    output="Model call failed.",
+                    step_type="tool",
+                    status="end",
+                    extra_info=extra_info,
+                )
+            )
 
         # Thinking stream: reasoning_content (DeepSeek-R1) or thinking blocks.
         thinking = self._extract_thinking(message)
@@ -477,7 +521,8 @@ class StreamEventMapper:
         # Tool-call start frames live on AIMessage.tool_calls.
         tool_calls = getattr(message, "tool_calls", None)
         if tool_calls:
-            return [*enriched, *self._handle_tool_starts(tool_calls, ns)]
+            new_calls = [tc for tc in tool_calls if self._call_key(tc.get("id"), ns) not in self.ctx.open_calls]
+            return [*enriched, *self._handle_tool_starts(new_calls, ns)]
 
         # Tool result -> end frame, keyed by tool_call_id.
         tool_call_id = getattr(message, "tool_call_id", None)
@@ -486,7 +531,7 @@ class StreamEventMapper:
 
         return enriched
 
-    def _accumulate_tool_args(self, message: Any) -> None:
+    def _accumulate_tool_args(self, message: Any, ns: str | None = None) -> None:
         """Append this chunk's tool_call_chunks arg-string deltas to per-call
         buffers (see ``StreamContext.tool_arg_buffers``).
 
@@ -505,22 +550,23 @@ class StreamEventMapper:
             cid = tcc.get("id")
             if cid:
                 if index is not None:
-                    self.ctx.tool_arg_index_to_id[index] = cid
-                self.ctx.tool_arg_buffers.setdefault(cid, "")
+                    self.ctx.tool_arg_index_to_id[self._call_key(index, ns)] = cid
+                self.ctx.tool_arg_buffers.setdefault(self._call_key(cid, ns), "")
             elif index is not None:
-                cid = self.ctx.tool_arg_index_to_id.get(index)
+                cid = self.ctx.tool_arg_index_to_id.get(self._call_key(index, ns))
             if not cid:
                 continue
-            self.ctx.tool_arg_buffers[cid] = self.ctx.tool_arg_buffers.get(cid, "") + (tcc.get("args") or "")
+            key = self._call_key(cid, ns)
+            self.ctx.tool_arg_buffers[key] = self.ctx.tool_arg_buffers.get(key, "") + (tcc.get("args") or "")
 
-    def _parse_arg_buffer(self, raw_call_id: str) -> dict[str, Any] | None:
+    def _parse_arg_buffer(self, raw_call_id: str, ns: str | None = None) -> dict[str, Any] | None:
         """Parse a call's reassembled arg buffer once it is a complete JSON object.
 
         Returns ``None`` while the buffer is still partial (mid-stream JSON does
         not parse) — strict ``json.loads`` succeeds only when the object closes,
         so this fires exactly once per call, when its args finish streaming.
         """
-        raw = self.ctx.tool_arg_buffers.get(raw_call_id)
+        raw = self.ctx.tool_arg_buffers.get(self._call_key(raw_call_id, ns))
         if not raw:
             return None
         try:
@@ -541,7 +587,7 @@ class StreamEventMapper:
             return False
         # RAW id: ``tool_arg_buffers`` is filled by _accumulate_tool_args from the
         # provider's own chunk ids, so the minted call_id would never hit.
-        args = self._parse_arg_buffer(open_call.raw_call_id)
+        args = self._parse_arg_buffer(open_call.raw_call_id, open_call.namespace)
         if not args:
             return False
         goal = args.get("description") or args.get("instruction") or ""
@@ -557,9 +603,13 @@ class StreamEventMapper:
         """Emit a refreshed start frame for each delegation whose args just completed."""
         events: list[BaseEvent] = []
         for open_call in self.ctx.open_calls.values():
-            if not self._enrich_delegation_from_buffer(open_call):
+            enriched = self._enrich_delegation_from_buffer(open_call)
+            enriched = self._enrich_knowledge(open_call) or enriched
+            if not enriched:
                 continue
             extra_info: dict[str, Any] = {"truncated": False, "delegate_goal": open_call.delegate_goal}
+            if open_call.knowledge_target:
+                extra_info["knowledge_target"] = open_call.knowledge_target
             if open_call.namespace:
                 extra_info["namespace"] = open_call.namespace
             events.append(
@@ -644,11 +694,15 @@ class StreamEventMapper:
             # moment we can tell "stale" from "mid-stream", because a normally
             # finished call was popped by its end frame. Deltas that follow refill
             # the buffer from scratch.
-            if raw_call_id in self.ctx.open_calls:
-                self.ctx.tool_arg_buffers.pop(raw_call_id, None)
+            if self._call_key(raw_call_id, ns) in self.ctx.open_calls:
+                self.ctx.tool_arg_buffers.pop(self._call_key(raw_call_id, ns), None)
             # Keyed by the RAW id: the end frame arrives as ToolMessage.tool_call_id,
             # which carries the provider's value, not ours.
-            self.ctx.open_calls[raw_call_id] = open_call
+            self.ctx.open_calls[self._call_key(raw_call_id, ns)] = open_call
+
+            self._enrich_knowledge(open_call)
+            if open_call.knowledge_target:
+                extra_info["knowledge_target"] = open_call.knowledge_target
 
             if ns:
                 extra_info["namespace"] = ns
@@ -668,7 +722,7 @@ class StreamEventMapper:
             )
 
             # An orphan end may already be buffered for this call_id (§3.7).
-            buffered = self.ctx.orphan_ends.pop(raw_call_id, None)
+            buffered = self.ctx.orphan_ends.pop(self._call_key(raw_call_id, ns), None)
             if buffered is not None:
                 events.append(self._build_end_step(open_call, buffered))
         return events
@@ -683,17 +737,18 @@ class StreamEventMapper:
         output = self._message_text(message)
         payload = {"output": output}
 
-        open_call = self.ctx.open_calls.pop(raw_call_id, None)
+        open_call = self.ctx.open_calls.pop(self._call_key(raw_call_id, ns), None)
         if open_call is None:
             # End arrived before start — buffer it (§3.7 reordering).
-            self.ctx.orphan_ends[raw_call_id] = payload
+            self.ctx.orphan_ends[self._call_key(raw_call_id, ns)] = payload
             return []
         # Last-chance goal/params fill: if _reconcile_open_delegations never ran
         # for this call (e.g. the args finished streaming in the same chunk that
         # also carried the tool result), recover them from the buffer so the end
         # frame still carries the delegation goal. The buffer is then disposable.
         self._enrich_delegation_from_buffer(open_call)
-        self.ctx.tool_arg_buffers.pop(raw_call_id, None)
+        self._enrich_knowledge(open_call)
+        self.ctx.tool_arg_buffers.pop(self._call_key(raw_call_id, ns), None)
         return [self._build_end_step(open_call, payload)]
 
     def _build_end_step(self, open_call: _OpenCall, payload: dict[str, Any]) -> ExecStep:
@@ -703,6 +758,10 @@ class StreamEventMapper:
             extra_info["delegate_goal"] = open_call.delegate_goal
         if open_call.namespace:
             extra_info["namespace"] = open_call.namespace
+        if open_call.knowledge_target:
+            extra_info["knowledge_target"] = open_call.knowledge_target
+        if failure_info := FailureContextAdapter.from_payload(payload.get("output")):
+            extra_info["failure_info"] = failure_info
         return ExecStep(
             task_id=open_call.task_id,
             call_id=open_call.call_id,
@@ -760,6 +819,10 @@ class StreamEventMapper:
         return []
 
     # -- helpers -----------------------------------------------------------
+
+    @staticmethod
+    def _call_key(raw_id, ns):
+        return (ns, raw_id) if ns else raw_id
 
     @staticmethod
     def _namespace_str(namespace: tuple[str, ...] | None) -> str | None:

@@ -77,22 +77,70 @@ describe('ServiceBusyNotice', () => {
     expect(markup).not.toContain('view_detail');
   });
 
-  it('preserves existing detail behavior for a non-rate-limit transient error', () => {
+  it('keeps legacy non-rate-limit diagnostics private', () => {
     const markup = renderToStaticMarkup(
       <ChatErrorCard errorType="network_timeout" detail="diagnostic detail" />,
     );
-    expect(markup).toContain('com_linsight_error_view_detail');
+    expect(markup).not.toContain('com_linsight_error_view_detail');
+    expect(markup).not.toContain('diagnostic detail');
   });
 
-  it('uses the localized API error as the primary recovery-rejected message', () => {
+  it('uses safe recovery copy when an old rejection includes raw text', () => {
     const markup = renderToStaticMarkup(
       <ChatErrorCard
         errorType="recovery_rejected"
         fallbackMessage="This request can no longer be retried."
       />,
     );
-    expect(markup).toContain('This request can no longer be retried.');
+    expect(markup).toContain('You can retry or switch models.');
+    expect(markup).not.toContain('This request can no longer be retried.');
     expect(markup).not.toContain('com_linsight_error_title_unknown');
     expect(markup).not.toContain('com_linsight_error_desc_unknown');
+  });
+});
+
+describe('service failure classification', () => {
+  const failure = { version: 1, failure_id: 'failure-one', category: 'database', service_name: 'Search index', occurred_at: '2026-11-05T08:00:00+08:00' };
+
+  it('shows fixed service copy without exposing legacy detail or changing retry eligibility', () => {
+    const markup = renderToStaticMarkup(
+      <ChatErrorCard errorType="network_timeout" failureInfo={failure} detail="private diagnostic" onRetry={() => undefined} />,
+    );
+    expect(markup).toContain('api_errors.failure_database');
+    expect(markup).toContain('Search index');
+    expect(markup).toContain('2026-11-05T08:00:00+08:00');
+    expect(markup).toContain('Retry');
+    expect(markup).not.toContain('private diagnostic');
+  });
+
+  it('keeps recovery-in-progress copy while the existing model retry runs', () => {
+    const markup = renderToStaticMarkup(
+      <ChatErrorCard errorType="rate_limit" failureInfo={failure} rateLimitState="recovering" />,
+    );
+    expect(markup).toContain('The system is checking whether the model has recovered.');
+    expect(markup).not.toContain('api_errors.failure_database');
+  });
+
+  it('falls back to the existing generic card for an unknown metadata version', () => {
+    const markup = renderToStaticMarkup(<ChatErrorCard failureInfo={{ ...failure, version: 2 }} />);
+    expect(markup).toContain('com_linsight_error_title_unknown');
+    expect(markup).not.toContain('Search index');
+  });
+});
+
+
+describe('public failure details', () => {
+  it.each(['search', 'invoke_model', 'read_file', 'write_file', 'parse_file', 'transcribe', 'synthesize', 'authenticate', 'enqueue', 'upload', 'download', 'rerank', 'embed', 'tool_call'])('localizes the safe %s operation token', (operation) => {
+    const markup = renderToStaticMarkup(<ChatErrorCard failureInfo={{ version: 1, failure_id: 'safe-reference', category: 'model_service', service: 'embedding', operation, occurred_at: '2026-11-05T08:00:00Z' }} />);
+    expect(markup).toContain(`api_errors.failure_operation_${operation}`);
+    expect(markup).toContain('api_errors.failure_service_embedding');
+    expect(markup).toContain('safe-reference');
+  });
+  it('does not display unknown operation tokens or extension payloads', () => {
+    const markup = renderToStaticMarkup(<ChatErrorCard failureInfo={{ version: 1, failure_id: 'safe-reference', category: 'network', service: 'internal_component', operation: 'private_operation', private_detail: 'password=hidden', occurred_at: '2026-11-05T08:00:00Z' }} />);
+    expect(markup).toContain('api_errors.failure_service_network');
+    expect(markup).not.toContain('internal_component');
+    expect(markup).not.toContain('private_operation');
+    expect(markup).not.toContain('password=hidden');
   });
 });

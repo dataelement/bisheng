@@ -10,6 +10,8 @@
  *   - "web"         → 「已联网搜索 (N 个结果)」, site-style chips (title + source)
  *   - "tool" (any)  → 「已调用 {display_name} 工具」, brief chips / result preview
  */
+import { ChatErrorCard } from "~/components/ChatErrorCard";
+import { parseFailureInfo } from "~/utils/failureInfo";
 import { Outlined } from "bisheng-icons";
 import { AlertCircle } from "lucide-react";
 import { memo, useEffect, useState, type FC } from "react";
@@ -69,7 +71,7 @@ function parseResults(raw: any): any[] {
     return [{ text: String(raw) }];
 }
 
-function extractChipLabel(item: any, variant: string): string {
+function extractChipLabel(item: any, variant: string, localize: ReturnType<typeof useLocalize>): string {
     if (!item) return "";
     if (typeof item === "string") {
         return item.slice(0, 24);
@@ -79,7 +81,7 @@ function extractChipLabel(item: any, variant: string): string {
             item.title ||
             item.name ||
             item.source ||
-            (item.url ? safeHostname(item.url) : "网页")
+            (item.url ? safeHostname(item.url) : localize("com_tools.web_fallback"))
         )
             .toString()
             .slice(0, 24);
@@ -93,7 +95,7 @@ function extractChipLabel(item: any, variant: string): string {
         item.output ||
         item.result ||
         item.value ||
-        "结果";
+        localize("com_tools.result_fallback");
     return String(value).slice(0, 48);
 }
 
@@ -171,6 +173,7 @@ function normaliseWebResults(items: any[]): any[] {
  */
 function normaliseKnowledgeResults(
     items: any[],
+    localize: ReturnType<typeof useLocalize>,
 ): { id: string; name: string; error?: string }[] {
     const seen = new Map<string, { id: string; name: string; error?: string }>();
     const order: string[] = [];
@@ -204,7 +207,7 @@ function normaliseKnowledgeResults(
                 return "";
             })()
             : name;
-        const finalName = fallbackName || "知识库";
+        const finalName = fallbackName || localize("com_tools.knowledge_base_fallback");
         const key = id || finalName;
         const existing = seen.get(key);
         if (existing) {
@@ -238,13 +241,15 @@ const variantStyles = {
 const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnector = false }) => {
     const localize = useLocalize();
     const variant = classifyToolType(toolCall);
-    const rawResults = toolCall.error ? [] : parseResults(toolCall.results);
+    const failureInfo = parseFailureInfo(toolCall.failure_info);
+    const hasFailureInfo = !!failureInfo;
+    const rawResults = parseResults(toolCall.results).filter((item) => !item || typeof item !== 'object' || ((!('failure_info' in item) && !item.error) || item.chunk || item.text || item.content || item.knowledge_base_id));
     // Per v2.5 spec §3:
     //   knowledge → group/dedupe by KB (one chip per knowledge base)
     //   web       → dedupe by hostname, default expanded
     //   tool      → no result list; pill only conveys "已使用 {name}"
     const knowledgeChips =
-        variant === "knowledge" ? normaliseKnowledgeResults(rawResults) : [];
+        variant === "knowledge" ? normaliseKnowledgeResults(rawResults, localize) : [];
     const webResults = variant === "web" ? normaliseWebResults(rawResults) : [];
     const resultCount =
         variant === "knowledge"
@@ -255,25 +260,25 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
     const name = resolveToolName(toolCall, localize);
     const label = (() => {
         if (variant === "knowledge") {
-            if (toolCall.inflight) return "正在检索知识";
-            if (toolCall.error) return "检索知识失败";
-            return "已检索知识";
+            if (toolCall.inflight) return localize("com_tools.knowledge_running");
+            if (toolCall.error || failureInfo) return localize("com_tools.knowledge_failed");
+            return localize("com_linsight.tool_knowledge_done");
         }
         if (variant === "web") {
-            if (toolCall.inflight) return "正在联网搜索";
-            if (toolCall.error) return "联网搜索失败";
-            return "已联网搜索";
+            if (toolCall.inflight) return localize("com_tools.web_running");
+            if (toolCall.error || failureInfo) return localize("com_tools.web_failed");
+            return localize("com_linsight.tool_search_done");
         }
-        if (toolCall.inflight) return `正在调用 ${name}`;
-        if (toolCall.error) return `${name} 失败`;
-        return `已使用 ${name}`;
+        if (toolCall.inflight) return localize("com_linsight.tool_running", { 0: name });
+        if (toolCall.error || failureInfo) return localize("com_tools.tool_failed", { 0: name });
+        return localize("com_linsight.tool_used", { 0: name });
     })();
     const style = variantStyles[variant];
     // Panel only renders when there is actual content: errors, or finished
     // knowledge/web variants with results. Inflight no longer surfaces raw
     // args JSON, so the panel would otherwise be an empty gap.
     const hasDetails =
-        !!toolCall.error ||
+        !!failureInfo || !!toolCall.error ||
         (!toolCall.inflight && variant !== "tool" && resultCount > 0);
 
     // Web variant stays open by default after finish (spec §3.2.4); errors
@@ -282,12 +287,12 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
     const hasKnowledgeErrors =
         variant === "knowledge" && knowledgeChips.some((kb) => kb.error);
     const initialExpanded =
-        !!toolCall.error ||
+        !!failureInfo || !!toolCall.error ||
         hasKnowledgeErrors ||
         (variant === "web" && !toolCall.inflight);
     const [expanded, setExpanded] = useState<boolean>(initialExpanded);
     useEffect(() => {
-        if (toolCall.error) {
+        if (toolCall.error || hasFailureInfo) {
             setExpanded(true);
         } else if (hasKnowledgeErrors) {
             setExpanded(true);
@@ -296,11 +301,11 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
         } else {
             setExpanded(false);
         }
-    }, [toolCall.inflight, toolCall.error, variant, hasKnowledgeErrors]);
+    }, [toolCall.inflight, toolCall.error, variant, hasKnowledgeErrors, hasFailureInfo]);
 
     const railIcon = toolCall.inflight ? (
         <Outlined.Loading size={16} className="shrink-0 animate-spin text-primary" />
-    ) : toolCall.error ? (
+    ) : toolCall.error || failureInfo ? (
         <AlertCircle size={16} className="shrink-0 text-red-500" />
     ) : (
         style.icon
@@ -351,11 +356,12 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
                     style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
                 >
                     <div className="overflow-hidden min-h-0 text-xs text-text-secondary">
-                        {toolCall.error && (
-                            <div className="leading-[22px]">{toolCall.error}</div>
+                        {failureInfo && <ChatErrorCard failureInfo={failureInfo} />}
+                        {toolCall.error && !failureInfo && (
+                            <ChatErrorCard />
                         )}
 
-                        {!toolCall.inflight && !toolCall.error && variant === "knowledge" && knowledgeChips.length > 0 && (
+                        {!toolCall.inflight && variant === "knowledge" && knowledgeChips.length > 0 && (
                             <div className="flex flex-wrap gap-2">
                                 {knowledgeChips.map((kb, i) => (
                                     <span
@@ -366,7 +372,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
                                                 ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-300"
                                                 : "bg-[#F7F7F7] text-text-1",
                                         )}
-                                        title={kb.error ? `${kb.name} 检索失败：${kb.error}` : kb.name}
+                                        title={kb.error ? localize("com_tools.knowledge_failed") : kb.name}
                                     >
                                         {kb.error ? (
                                             <AlertCircle className="size-[14px] shrink-0 text-red-500" />
@@ -385,7 +391,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
                                     <WebResultChip
                                         key={i}
                                         item={item}
-                                        chip={extractChipLabel(item, variant)}
+                                        chip={extractChipLabel(item, variant, localize)}
                                     />
                                 ))}
                             </div>

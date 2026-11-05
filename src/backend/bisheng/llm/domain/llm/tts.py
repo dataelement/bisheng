@@ -1,15 +1,22 @@
+from typing import Self
+
 import httpx
 from pydantic import Field
-from typing_extensions import Self
 
-from bisheng.common.errcode.server import NoTtsModelConfigError, TtsModelConfigDeletedError, \
-    TtsModelTypeError, TtsProviderDeletedError, TtsModelOfflineError
-from bisheng.core.ai import BaseTTSClient, OpenAITTSClient, \
-    AliyunTTSClient, AzureOpenAITTSClient
+from bisheng.common.errcode.server import (
+    NoTtsModelConfigError,
+    TtsModelConfigDeletedError,
+    TtsModelOfflineError,
+    TtsModelTypeError,
+    TtsProviderDeletedError,
+)
+from bisheng.common.services.failure_context import failure_boundary
+from bisheng.core.ai import AliyunTTSClient, AzureOpenAITTSClient, BaseTTSClient, OpenAITTSClient
 from bisheng.llm.domain.const import LLMModelType, LLMServerType
-from bisheng.llm.domain.models import LLMServer, LLMModel
-from .base import BishengBase
+from bisheng.llm.domain.models import LLMModel, LLMServer
+
 from ..utils import wrapper_bisheng_model_limit_check_async
+from .base import BishengBase
 
 
 async def _get_openai_params(params: dict, server_info: LLMServer, model_info: LLMModel) -> dict:
@@ -50,18 +57,9 @@ async def _get_qwen_params(params: dict, server_info: LLMServer, model_info: LLM
 
 
 _tts_client_type = {
-    LLMServerType.OPENAI.value: {
-        "client": OpenAITTSClient,
-        "params_handler": _get_openai_params
-    },
-    LLMServerType.AZURE_OPENAI.value: {
-        "client": AzureOpenAITTSClient,
-        "params_handler": _get_azure_openai_params
-    },
-    LLMServerType.QWEN.value: {
-        "client": AliyunTTSClient,
-        "params_handler": _get_qwen_params
-    }
+    LLMServerType.OPENAI.value: {"client": OpenAITTSClient, "params_handler": _get_openai_params},
+    LLMServerType.AZURE_OPENAI.value: {"client": AzureOpenAITTSClient, "params_handler": _get_azure_openai_params},
+    LLMServerType.QWEN.value: {"client": AliyunTTSClient, "params_handler": _get_qwen_params},
 }
 
 
@@ -70,12 +68,12 @@ class BishengTTS(BishengBase):
 
     @classmethod
     async def get_bisheng_tts(cls, **kwargs) -> Self:
-        model_id = kwargs.pop('model_id', 0)
+        model_id = kwargs.pop("model_id", 0)
         if not model_id:
             raise NoTtsModelConfigError()
         model_info, server_info = await cls.get_model_server_info(model_id)
         # ignore_onlineParameters are used to skip model presence checks
-        ignore_online = kwargs.get('ignore_online', False)
+        ignore_online = kwargs.get("ignore_online", False)
 
         if not model_info:
             raise TtsModelConfigDeletedError()
@@ -100,12 +98,13 @@ class BishengTTS(BishengBase):
             if model_info.config:
                 params.update(model_info.config)
         if server_info.type not in _tts_client_type:
-            raise Exception(f'TtsModel not supported{server_info.type}Type of service provider')
-        params_handler = _tts_client_type[server_info.type]['params_handler']
+            raise Exception(f"TtsModel not supported{server_info.type}Type of service provider")
+        params_handler = _tts_client_type[server_info.type]["params_handler"]
         new_params = await params_handler(params, server_info, model_info)
-        client = _tts_client_type[server_info.type]['client'](**new_params)
+        client = _tts_client_type[server_info.type]["client"](**new_params)
         return client
 
     @wrapper_bisheng_model_limit_check_async
+    @failure_boundary("model_service", "tts", "synthesize")
     async def ainvoke(self, text: str, **kwargs) -> bytes:
         return await self.tts.synthesize(text, **kwargs)

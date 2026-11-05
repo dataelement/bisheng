@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { taskFailureMetadata } from '~/utils/failureInfo';
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { userInputLinsightEvent, userStopLinsightEvent } from "~/api/linsight";
@@ -353,26 +354,12 @@ export const useLinsightWebSocket = (versionId) => {
                         modelId: taskData.data.model_id,
                         rateLimitState: taskData.data.rate_limit_state,
                     });
-                    if (id === activeVersionIdRef.current) {
-                        updateLinsight(id, {
-                            taskError: taskData.data.error,
-                            // 灵思LLM容错: structured classification drives the friendly
-                            // error card; absent on older backends (card falls back).
-                            taskErrorInfo: {
-                                error_code: taskData.data.error_code,
-                                error_type: taskData.data.error_type,
-                                detail: taskData.data.detail,
-                                execution_id: taskData.data.execution_id,
-                                attempt_id: taskData.data.attempt_id,
-                                recovery_subject_id: taskData.data.recovery_subject_id,
-                                model_id: taskData.data.model_id,
-                                rate_limit_state: taskData.data.rate_limit_state,
-                                resume_mode: taskData.data.resume_mode,
-                            },
-                            status: SopStatus.Stoped
-                        })
-                        // showToast({ message: taskData.data.error, status: 'warning' });
-                    }
+                    updateLinsight(id, {
+                        taskError: taskData.data.error || ' ',
+                        // Persist the failure on its own version, including in background.
+                        taskErrorInfo: taskFailureMetadata(taskData.data),
+                        status: SopStatus.Stoped
+                    })
             }
         };
 

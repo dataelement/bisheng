@@ -276,6 +276,8 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                     {/* error / terminated banners */}
                     {linsight?.taskError && (
                         <ChatErrorCard
+                            errorCode={linsight?.taskErrorInfo?.error_code ?? linsight?.output_result?.error_code}
+                            failureInfo={linsight?.taskErrorInfo?.failure_info ?? linsight?.output_result?.failure_info}
                             errorType={rateLimitInfo?.error_type}
                             detail={rateLimitInfo?.detail}
                             fallbackMessage={linsight.taskError}

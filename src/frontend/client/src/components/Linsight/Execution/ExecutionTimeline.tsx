@@ -12,6 +12,7 @@
  * TimelineRail) and the Wave2 group components below.
  */
 import { memo, useMemo } from 'react';
+import { parseFailureInfo } from '~/utils/failureInfo';
 import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import { DeepStepGroup } from './DeepStepGroup';
 import { useExecutionLive } from './executionLive';
@@ -56,6 +57,14 @@ function MobileExecutionNotices({ history }: ExecutionTimelineProps) {
             {Array.from(notices, ([key, step]) => step.name === INGEST_STEP_NAME
                 ? <IngestPhaseRow key={key} step={step} />
                 : <SkillLoadFailureRow key={key} step={step} />)}
+            {mergeStepFrames(history).filter((step) =>
+                step.name !== INGEST_STEP_NAME && step.name !== SKILL_LOAD_FAILED_STEP_NAME && (
+                    step.stepType === 'knowledge'
+                    || ['search_knowledge_base', 'search_knowledge_bases'].includes(step.name.toLowerCase())
+                    || parseFailureInfo(step.extraInfo?.failure_info)),
+            ).map((step) => step.stepType === 'knowledge'
+                ? <KnowledgeRow key={step.callId} step={step} />
+                : <ToolRowLite key={step.callId} step={step} />)}
         </>
     );
 }

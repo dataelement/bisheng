@@ -38,6 +38,7 @@ from langchain.agents.middleware.types import AgentMiddleware, ModelRequest, Mod
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from loguru import logger
 
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.common.services.llm_error_classifier import Behavior, classify_behavior
 
 StatusVersionReader = Callable[[], Awaitable[int | None]]
@@ -699,7 +700,8 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
             "[linsight-resilience] subagent model call degraded "
             f"({self._degrade_count}/{self.max_degrade}): {type(exc).__name__}: {exc}"
         )
-        return AIMessage(content=_DEGRADE_MESSAGE)
+        info = FailureContextAdapter.from_error(exc)
+        return AIMessage(content=_DEGRADE_MESSAGE, additional_kwargs={"failure_info": info} if info else {})
 
     async def _read_status_version(self) -> int | None:
         try:
@@ -745,6 +747,7 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
             try:
                 response = await handler(current)
             except Exception as exc:
+                FailureContextAdapter.from_error(exc)
                 await self._observe_failure(exc)
                 behavior = classify_behavior(exc)
                 if behavior is Behavior.FAIL_FAST:
@@ -843,6 +846,7 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
             try:
                 response = handler(current)
             except Exception as exc:
+                FailureContextAdapter.from_error(exc)
                 behavior = classify_behavior(exc)
                 if behavior is Behavior.FAIL_FAST:
                     raise

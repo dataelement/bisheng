@@ -17,10 +17,10 @@
  * Legacy / older payload shapes (`event: on_*_delta` and plain `text`) are
  * still accepted so old chat flows keep working.
  */
+import { createBrowserNetworkFailure, dailyFailureMetadata, localizedBusinessFailure, parseFailureInfo, type DailyFailureMetadata, type FailureInfo } from "~/utils/failureInfo";
 import { SSE } from "sse.js";
 import type { AgentEvent, ChatMessage, ContentPart } from "~/api/chatApi";
 import { getSSEUrl } from "~/api/chatApi";
-import { translateApiErrorMessage } from "~/api/request";
 
 /**
  * Structured update emitted as agent SSE events stream in. Consumers merge
@@ -60,7 +60,7 @@ export interface SSESubmission {
     onError: (
         error: string,
         errorCode?: number,
-        meta?: { errorType?: string; errorDetail?: string },
+        meta?: DailyFailureMetadata,
     ) => void;
     onStart: () => void;
     onEnd: () => void;
@@ -153,6 +153,16 @@ export function openChatStream(
     // our explicit `final`/`error`/`cancel` paths, the send button would
     // stay stuck in "stop" state. Guarantee a single onEnd().
     let endCalled = false;
+    let expectedClose = false;
+    let failureReported = false;
+    let networkFailure: FailureInfo | undefined;
+    const reportNetworkFailure = () => {
+        if (endCalled || expectedClose) return;
+        expectedClose = true;
+        failureReported = true;
+        networkFailure ??= createBrowserNetworkFailure();
+        onError(localize("api_errors.failure_network"), undefined, { failureInfo: networkFailure });
+    };
     const safeEnd = () => {
         if (endCalled) return;
         endCalled = true;
@@ -163,7 +173,10 @@ export function openChatStream(
 
     sse.addEventListener("readystatechange", (e: any) => {
         // sse.js exposes readyState: 0=connecting, 1=open, 2=closed.
-        if (e?.readyState === 2) safeEnd();
+        if (e?.readyState === 2) {
+            reportNetworkFailure();
+            safeEnd();
+        }
     });
 
     sse.addEventListener("message", (e: MessageEvent) => {
@@ -176,6 +189,7 @@ export function openChatStream(
             // hand the SV/chat ids to the caller and let the readystatechange
             // watchdog fire onEnd when the stream drops.
             if (data.event === "linsight_task_handoff") {
+                expectedClose = true;
                 const handoff = data.data || {};
                 onTaskHandoff?.({
                     session_version_id: String(handoff.session_version_id ?? ""),
@@ -186,6 +200,7 @@ export function openChatStream(
 
             // --- final: stream complete ---
             if (data.final != null) {
+                expectedClose = true;
                 onFinal(data);
                 safeEnd();
                 return;
@@ -257,13 +272,13 @@ export function openChatStream(
                             display_name: message?.display_name,
                             tool_type: message?.tool_type,
                             args: message?.args,
+                            failure_info: parseFailureInfo(message?.failure_info),
                             inflight: true,
                             started_at: Date.now(),
                         };
                         events.push(entry);
                         toolCallIdx.set(tcId, events.length - 1);
-                        responseText += `\n\n> ⏳ 正在调用工具：${entry.display_name || entry.tool_name
-                            }\n\n`;
+                        responseText += `\n\n> ⏳ ${localize("com_tools.tool_running_detail", { 0: entry.display_name || entry.tool_name })}\n\n`;
                     } else if (type === "end") {
                         const idx = toolCallIdx.get(tcId);
                         if (idx != null) {
@@ -280,6 +295,7 @@ export function openChatStream(
                                 args: message?.args ?? prev.args,
                                 results: message?.results,
                                 error: message?.error ?? null,
+                                failure_info: parseFailureInfo(message?.failure_info) ?? prev.failure_info,
                                 inflight: false,
                                 ended_at: endedAt,
                                 duration_ms:
@@ -291,8 +307,8 @@ export function openChatStream(
                         const tn =
                             message?.display_name || message?.tool_name || "tool";
                         responseText += message?.error
-                            ? `> ⚠️ ${tn} 失败：${message.error}\n\n`
-                            : `> ✅ ${tn} 完成\n\n`;
+                            ? `> ⚠️ ${localize("com_tools.tool_failure_detail", { 0: tn, 1: message.error })}\n\n`
+                            : `> ✅ ${localize("com_tools.tool_done_detail", { 0: tn })}\n\n`;
                     }
                     emitLegacy();
                     emitAgent({ events: snapshot() });
@@ -312,6 +328,7 @@ export function openChatStream(
                             }
                         }
                     } else if (type === "end") {
+                        expectedClose = true;
                         if (message_id) currentMessageId = String(message_id);
                         // `message.msg` on the end event is the final full
                         // string; prefer it to accumulated deltas.
@@ -424,36 +441,41 @@ export function openChatStream(
     });
 
     sse.addEventListener("error", (e: MessageEvent) => {
+        if (endCalled || failureReported) return;
         try {
             const data = JSON.parse(e.data);
             // Resolve the SSE error envelope ({ status_code, status_message,
             // data }) through the shared api_errors.<code> i18n logic, falling
             // back to legacy plain-text shapes, then a generic message.
-            const resolved = translateApiErrorMessage(data);
+            const resolved = localizedBusinessFailure(data?.status_code, localize, data?.data);
             const code = typeof data?.status_code === "number" ? data.status_code : undefined;
             // `data.data` carries the backend's classification alongside the
             // localized copy: without it the bubble could only ever say
             // "服务器错误" and the upstream reason (which file, which service,
             // what it actually said) was dropped on the floor.
             const payload = data?.data ?? {};
-            onError(resolved || data?.text || data?.message || localize("workstation.chat.connection_lost"), code, {
-                errorType: typeof payload.error_type === "string" ? payload.error_type : undefined,
-                errorDetail:
-                    typeof payload.detail === "string"
-                        ? payload.detail
-                        : typeof payload.exception === "string"
-                            ? payload.exception
-                            : undefined,
-            });
+            expectedClose = true;
+            failureReported = true;
+            onError(resolved || localize("workstation.chat.answer_failed"), code, dailyFailureMetadata(payload));
         } catch {
             // Non-JSON payload — the stream dropped rather than the backend
             // reporting a typed failure (gateway/proxy timeout, worker restart).
-            onError(localize("workstation.chat.connection_lost"));
+            const status = (e as MessageEvent & { responseCode?: number }).responseCode;
+            if (status === 0 || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
+                reportNetworkFailure();
+            } else {
+                expectedClose = true;
+                failureReported = true;
+                onError(localize("workstation.chat.answer_failed"), status);
+            }
         }
         safeEnd();
     });
 
-    sse.addEventListener("cancel", () => safeEnd());
+    sse.addEventListener("cancel", () => {
+        expectedClose = true;
+        safeEnd();
+    });
 
     sse.stream();
 
@@ -464,6 +486,7 @@ export function openChatStream(
             // routes it through the same single-shot watchdog as a natural end,
             // so the caller's streaming flag can never get stuck on.
             const isCancelled = sse.readyState <= 1;
+            expectedClose = true;
             sse.close();
             if (isCancelled) sse.dispatchEvent(new Event("cancel"));
         },

@@ -26,6 +26,7 @@ from urllib3.util import Timeout
 from urllib3.util.retry import Retry
 
 from bisheng.common.services.config_service import settings as _bisheng_settings
+from bisheng.common.services.failure_context import FailureContextAdapter, failure_boundary
 from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.config.settings import MinioConf
 from bisheng.core.context.tenant import get_current_tenant_id
@@ -89,6 +90,7 @@ def _thaw_s3_error(exc: BaseException) -> BaseException:
         bucket_name=exc.bucket_name,
         object_name=exc.object_name,
     )
+    thawed.__dict__.update(exc.__dict__)
     return thawed.with_traceback(exc.__traceback__)
 
 
@@ -133,6 +135,12 @@ def _storage_metric(op: str):
         yield
     except Exception as exc:
         result, http_status, err_code = _classify_storage_exc(exc)
+        transport = type(exc).__module__.startswith(("urllib3", "aiohttp", "httpx", "requests"))
+        storage_error = isinstance(exc, S3Error) and getattr(exc, "code", None) not in ("NoSuchKey", "NoSuchObject")
+        if storage_error or transport or isinstance(exc, (TimeoutError, ConnectionError)):
+            FailureContextAdapter.capture(
+                exc, category="object_storage", service="minio", operation="upload" if op == "put" else "download"
+            )
         # Re-raise a thawed mirror: this CM adds a generator frame whose
         # gen.throw() would reassign __traceback__ on a frozen S3Error and mask
         # the real error with FrozenInstanceError (design §5 坑 6).
@@ -612,6 +620,7 @@ class MinioStorage(BaseStorage, ABC):
             dest_object=dest_object,
         )
 
+    @failure_boundary("object_storage", "minio", "write_file")
     def copy_object_sync(
         self, source_bucket: str = None, source_object: str = None, dest_bucket: str = None, dest_object: str = None
     ) -> None:

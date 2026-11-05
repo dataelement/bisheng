@@ -22,6 +22,7 @@
 
 | 领域对象 | Owner Feature | 说明 |
 |---------|--------------|------|
+| —（无新增领域对象） | F084-cofco-qa-failure-feedback / F085-cofco-knowledge-step-name | 日常/任务消息的既有 JSON 可选增加 failure_info、knowledge_target（version=1）；按真实依赖归并五类提示，检索名称按现有可见权限形成快照。无 DDL、回填、权限规则或全局 HTTP 拦截变更；代码与定向回归完成，场内联调待执行 |
 | —（无新增领域对象） | F083-cofco-folder-deleting | 中粮文件夹删除状态：复用既有 KnowledgeFile.status/user_metadata，跨刷新恢复与安全核对；既有变更记录及步骤作成功证据，权限/审批/后台清理保留。无 DDL/回填；状态功能已实现，真实双库及浏览器验收待执行；loading问题延期 |
 | —（无新增领域对象） | F079-cofco-space-info-read-optimization | 中粮 1028 `/info` 复用入口可见性并将 actions 收窄为入口提示；详情/广场可见优先；补充分段指标，保留角色、超管真实加入、下载与租户守卫，无数据库变更。用户已评审并授权实现 |
 | —（无新增领域对象；Spec/Design 已确认，实现完成，客户环境验收待执行） | F078-cofco-eplus-metrics-article-shards | 仅为 F073 正式机器人补充自包含请求终态及连接事件，人数与成功率按终态发生时间在监控侧去重统计，连接数由监控侧结合存活事件计算，不新增 Redis 聚合；频道文章主分片数量可配置且默认 3，提供停写维护窗口中的手动数据迁移。F073 业务对象、身份与权限语义不变；数据保护、接口兼容及迁移范围见 F078 Spec |

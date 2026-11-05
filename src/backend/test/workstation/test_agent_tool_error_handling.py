@@ -6,6 +6,7 @@ stream and crashing the whole chat. We assert the real code path:
 `create_react_agent` wired with a `ToolNode` that uses our error handler.
 """
 
+import json
 from typing import Any
 
 from langchain_core.callbacks import CallbackManagerForLLMRun
@@ -15,11 +16,12 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import tool
 from langgraph.prebuilt import ToolNode, create_react_agent
 
-from bisheng.workstation.domain.services.chat_service import (
-    _extract_tool_error,
-    _handle_agent_tool_error,
-    _is_nested_tool_event,
-)
+from test.workstation.test_daily_failure_feedback import _chat
+
+_helpers = _chat({"_extract_tool_error", "_handle_agent_tool_error", "_is_nested_tool_event"})
+_extract_tool_error = _helpers._extract_tool_error
+_handle_agent_tool_error = _helpers._handle_agent_tool_error
+_is_nested_tool_event = _helpers._is_nested_tool_event
 
 
 @tool
@@ -67,7 +69,8 @@ async def test_agent_survives_tool_error():
     tool_msgs = [m for m in msgs if isinstance(m, ToolMessage)]
     assert len(tool_msgs) == 1
     assert tool_msgs[0].status == "error"
-    assert "403" in tool_msgs[0].content
+    assert json.loads(tool_msgs[0].content)["error"] == "Tool execution failed."
+    assert "403" not in tool_msgs[0].content
 
     # The loop continued past the error to a final assistant answer.
     assert isinstance(msgs[-1], AIMessage)
@@ -77,12 +80,13 @@ async def test_agent_survives_tool_error():
 def test_handle_agent_tool_error_returns_string():
     msg = _handle_agent_tool_error(Exception("boom"))
     assert isinstance(msg, str)
-    assert "boom" in msg
+    assert json.loads(msg)["error"] == "Tool execution failed."
+    assert "boom" not in msg
 
 
 def test_extract_tool_error_from_error_message():
     tm = ToolMessage(content="工具执行失败: boom", tool_call_id="x", status="error")
-    assert _extract_tool_error(tm) == "工具执行失败: boom"
+    assert _extract_tool_error(tm) == "Tool execution failed."
 
 
 def test_extract_tool_error_none_on_success():

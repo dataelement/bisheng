@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.common.chat.utils import SourceType, process_source_document
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
@@ -318,6 +319,20 @@ def _format_new_message(msg: ChatMessage) -> dict:
             extra = {}
     except (json.JSONDecodeError, TypeError):
         extra = {}
+    extra = FailureContextAdapter.public_payload(extra)
+    if isinstance(message_content, dict):
+        for event in message_content.get("events") or []:
+            if not isinstance(event, dict) or event.get("type") != "tool_call":
+                continue
+            failed = bool(event.get("error"))
+            if failed:
+                event["error"] = "Tool execution failed."
+            event["results"] = FailureContextAdapter.public_tool_result(event.get("results"), failed=failed)
+            event.pop("detail", None)
+            event.pop("exception", None)
+            info = FailureContextAdapter.validate(event.pop("failure_info", None))
+            if info:
+                event["failure_info"] = info
     return {
         **_message_base_fields(msg),
         "message": message_content,

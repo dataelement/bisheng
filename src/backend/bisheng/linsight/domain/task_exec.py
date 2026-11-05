@@ -13,6 +13,7 @@ from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.common.services.config_service import settings
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.common.services.llm_error_classifier import classify_for_event
 from bisheng.core.cache.utils import CACHE_DIR, create_cache_folder_async
 from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id, set_current_tenant_id
@@ -512,7 +513,9 @@ class LinsightWorkflowTask:
         from langgraph.types import Command
 
         linsight_conf = settings.get_linsight_conf()
-        mapper = StreamEventMapper(svid=session_model.id)
+        mapper = StreamEventMapper(
+            svid=session_model.id, knowledge_targets=await self._resolve_knowledge_targets(session_model)
+        )
         config = {
             "configurable": {"thread_id": session_model.id},
             "recursion_limit": _resolve_recursion_limit(linsight_conf),
@@ -612,7 +615,9 @@ class LinsightWorkflowTask:
         history and the agent answers with full prior context.
         """
         linsight_conf = settings.get_linsight_conf()
-        mapper = StreamEventMapper(svid=session_model.id)
+        mapper = StreamEventMapper(
+            svid=session_model.id, knowledge_targets=await self._resolve_knowledge_targets(session_model)
+        )
         config = {
             "configurable": {"thread_id": session_model.id},
             "recursion_limit": _resolve_recursion_limit(linsight_conf),
@@ -765,6 +770,7 @@ class LinsightWorkflowTask:
         total: int,
         file_name: str = "",
         output: str = "",
+        failure_info: dict | None = None,
     ) -> None:
         """Publish one attachment-ingest progress frame on the session pseudo task.
 
@@ -788,7 +794,10 @@ class LinsightWorkflowTask:
                 step_type="tool",
                 status="end" if phase in _INGEST_TERMINAL_PHASES else "start",
                 output=output,
-                extra_info={"ingest_progress": {"phase": phase, "done": done, "total": total, "file_name": file_name}},
+                extra_info={
+                    "ingest_progress": {"phase": phase, "done": done, "total": total, "file_name": file_name},
+                    **({"failure_info": failure_info} if failure_info else {}),
+                },
             )
             await self._state_manager.add_execution_task_step(svid, step=step)
             await self._state_manager.push_message(
@@ -854,9 +863,16 @@ class LinsightWorkflowTask:
             await self._state_manager.set_session_version_info(session_model)
         except Exception as e:
             logger.exception(f"Pending attachment ingest failed: session_version_id={svid}: {e}")
-            # The raw exception text rides in `output` (a diagnostic detail the row
-            # shows verbatim), never in the label.
-            await self._push_ingest_step(svid, call_id, phase="failed", done=0, total=total, output=str(e)[:500])
+            # Keep provider diagnostics in logs and expose safe provenance only.
+            await self._push_ingest_step(
+                svid,
+                call_id,
+                phase="failed",
+                done=0,
+                total=total,
+                output=FailureContextAdapter.safe_detail(e),
+                failure_info=FailureContextAdapter.from_error(e),
+            )
             raise TaskExecutionError(f"Failed to ingest uploaded attachments: {e}") from e
 
         # The chips on the question row were persisted before anything was known
@@ -871,7 +887,15 @@ class LinsightWorkflowTask:
         done = len(session_model.files or [])
         phase = "aborted" if self._is_terminated else "done"
         logger.info(f"Deferred attachment ingest {phase} {done}/{total}: session_version_id={svid}")
-        await self._push_ingest_step(svid, call_id, phase=phase, done=done, total=total)
+        failure_info = next(
+            (
+                info
+                for item in (session_model.files or [])
+                if (info := FailureContextAdapter.validate(item.get("failure_info")))
+            ),
+            None,
+        )
+        await self._push_ingest_step(svid, call_id, phase=phase, done=done, total=total, failure_info=failure_info)
 
     @create_cache_folder_async
     async def _init_file_directory(self, session_model: LinsightSessionVersion) -> str:
@@ -1314,7 +1338,9 @@ class LinsightWorkflowTask:
         ``_handle_event`` (design §3.2 / §3.4).
         """
         linsight_conf = settings.get_linsight_conf()
-        mapper = StreamEventMapper(svid=session_model.id)
+        mapper = StreamEventMapper(
+            svid=session_model.id, knowledge_targets=await self._resolve_knowledge_targets(session_model)
+        )
 
         async def agent_execution():
             """Agent performs a task via astream + mapper."""
@@ -1474,6 +1500,22 @@ class LinsightWorkflowTask:
             )
         content = "\n".join(parts) if parts else (session_model.question or "")
         return {"messages": [{"role": "user", "content": content}]}
+
+    async def _resolve_knowledge_targets(self, session_model: LinsightSessionVersion) -> dict[str, dict]:
+        from bisheng.common.dependencies.user_deps import UserPayload
+        from bisheng.linsight.domain.services.knowledge_step_metadata import KnowledgeStepMetadataResolver
+
+        try:
+            candidates = await self._resolve_user_knowledge_bases(session_model)
+            if not candidates:
+                return {}
+            identity = await UserPayload.init_login_user(
+                user_id=session_model.user_id, user_name="", tenant_id=session_model.tenant_id
+            )
+            return await KnowledgeStepMetadataResolver().resolve(identity, candidates)
+        except Exception as exc:
+            logger.warning("Knowledge display context unavailable: {}", type(exc).__name__)
+            return {}
 
     async def _resolve_user_knowledge_bases(self, session_model: LinsightSessionVersion) -> list:
         """Resolve the EXACT knowledge bases the user picked in the daily picker.
@@ -2204,20 +2246,21 @@ class LinsightWorkflowTask:
         frontend can render a localized, user-friendly card instead of the raw
         provider message. ``exc`` (the original exception) is preferred for
         precise classification; without it the message string is classified
-        best-effort. The raw provider text is kept in ``detail`` for the
-        "view details" disclosure. Vendor-agnostic — see ``llm_error_classifier``.
+        best-effort. Raw provider diagnostics stay in server logs; public metadata keeps
+        only safe source and correlation information. Recovery classification is unchanged.
         """
         classified = classify_for_event(exc if exc is not None else error_msg)
         session_model.status = SessionVersionStatusEnum.FAILED
+        public_error = FailureContextAdapter.safe_detail(exc) if exc is not None else "Task execution failed."
         session_output: dict[str, object] = {
-            "error_message": error_msg,
+            **(session_model.output_result or {}),
+            "error_message": public_error,
             "error_code": classified.error_code,
             "error_type": classified.error_type,
-            "detail": classified.detail,
         }
         if extra_payload:
             session_output.update(extra_payload)
-        session_model.output_result = session_output
+        session_model.output_result = FailureContextAdapter.public_payload(session_output, exc=exc)
         await self._state_manager.set_session_version_info(session_model)
         # F035 Track J: still land a (failed) task turn in the unified stream so the
         # conversation isn't left with a dangling question; extra points to the SV
@@ -2230,17 +2273,16 @@ class LinsightWorkflowTask:
         # error_message event: keep ``error`` for backward compatibility (old
         # clients display it raw); new fields drive the classified friendly card.
         event_payload: dict[str, object] = {
-            "error": error_msg,
+            "error": public_error,
             "error_code": classified.error_code,
             "error_type": classified.error_type,
-            "detail": classified.detail,
         }
         if extra_payload:
             event_payload.update(extra_payload)
         await self._state_manager.push_message(
             MessageData(
                 event_type=MessageEventType.ERROR_MESSAGE,
-                data=event_payload,
+                data=FailureContextAdapter.public_payload(event_payload, exc=exc),
             )
         )
         system_config = await settings.aget_all_config()

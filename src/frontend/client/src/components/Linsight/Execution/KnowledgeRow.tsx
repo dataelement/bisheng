@@ -3,6 +3,10 @@
  * fig.11). Expanded: hit entries (icon + title) best-effort parsed from
  * extra_info.file_info / output; plain output text as fallback.
  */
+import { ChatErrorCard } from '~/components/ChatErrorCard';
+import { knowledgeStepTitle } from './knowledgeStepTitle';
+import { parseFailureInfo } from '~/utils/failureInfo';
+import { useLocalize } from '~/hooks';
 import { Outlined } from 'bisheng-icons';
 import { cn } from '~/utils';
 import { ACCENT, BODY, INK, MUTED } from './execTokens';
@@ -30,6 +34,8 @@ function knowledgeHits(step: MergedStep): { title: string }[] {
 
 export function KnowledgeRow({ step }: { step: MergedStep }) {
     const hits = knowledgeHits(step);
+    const localize = useLocalize();
+    const title = knowledgeStepTitle(step, localize) || step.name;
     // Unified icon system (§1.3): running → Accent Loading spinner; done → Ink
     // BookOpenText (matching the top-level node glyph). Hit-list glyph is the
     // Outlined.File equivalent (lucide FileText removed), 16px Muted as detail.
@@ -40,7 +46,9 @@ export function KnowledgeRow({ step }: { step: MergedStep }) {
             ? <Outlined.Loading size={16} className="animate-spin" style={{ color: ACCENT }} />
             : <Outlined.BookOpenText size={16} style={{ color: INK }} />;
     return (
-        <StepRow icon={icon} title={step.name} running={step.running}>
+        <StepRow icon={icon} title={title} titleClassName="line-clamp-2 whitespace-normal break-words text-body" running={step.running}>
+            <p className="whitespace-pre-wrap break-words text-body text-text-2">{title}</p>
+            {parseFailureInfo(step.extraInfo?.failure_info) && <ChatErrorCard failureInfo={step.extraInfo?.failure_info} />}
             {step.callReason && <p className={detailTextCls} style={{ color: BODY }}>{step.callReason}</p>}
             {step.params?.query != null && <p className={detailTextCls} style={{ color: BODY }}>{String(step.params.query)}</p>}
             {hits.length > 0 && (
