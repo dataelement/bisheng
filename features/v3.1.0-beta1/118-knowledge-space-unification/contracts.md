@@ -403,3 +403,30 @@ worker领取另有 job/item `lease_token`、`lease_until`、`claim_generation`�
 11. 六内部Knowledge字段同时从原始ORM的JSON序列化排除，旧/create的Any envelope也不外泄；DB列与Owner属性仍保留。高级接口使用显式DTO；未来副本显式复制processing_defaults并初始化自己的版本，不用Knowledge.model_dump恢复内部字段，不继承origin/model_transition/index generation。
 12. F118高级管理写路径的租户pin覆盖FastAPI接受的全部整数写法（含URL编码+7/空白7），原缺header400/不匹配409保持；普通/v2边界不扩。10995通用提示仅说调整引用，支持force的具体资源UI才能显示强删确认。
 13. CURRENT仅经受控正式发布/停服迁移变更，startup不得再调用旧helper静态补Skill scope。canonical完整性核验覆盖current_catalog及启动/heartbeat绑定，缺失不静态回退；不新增每个原始SQL loader/每次Check的全目录tamper实时探测，发布外SQL损坏由下次绑定校验检测。
+
+## W2业务接线合同（2026-11-05）
+
+`ReferenceBindingRuntime(repository, verifier)`位于application/write_runtime.py；async `get_reference_binding_runtime()`从application/access.py取得显式装配对象，未配置10994。prepare_source_bindings/aprepare_source_bindings接(session,source_key,references,*,extractor_version,lock_source_root,new_source=False,effective=True)，依目标锁→调用方真实root回调→root/source CAS返回PreparedSourceBindings(source_key,expected_revision,new_revision,verified,effective)。业务改动后apply/aapply，同一外部Session由Owner只commit一次。既有缺index拒绝，new_source仅真实新建；自增新leaf可先flush取ID，仍须锁现有root验证状态，不得提前commit。
+
+require_source_valid/arequire_source_valid接(session,source_key,*,references=None)，按当前业务摘要核ready/effective来源并重验目标；原失效槽允许保存不代表可执行。TargetOwner只核绑定生命周期/租户共享，offline不是已删除，执行/发布仍用原online/可用性门槛。
+
+真实Owner在knowledge/llm各自application模块，由显式composition注入同Verifier。模型共享只按真实Root→Child及当前允许server集合；async经permission application与同Session实际继承默认；未配置原生证据的sync跨租户10994，不套event loop，停服MIG后续注入可信冻结共享snapshot。LegacyReferenceEvidencePort.resolve/aresolve接精确source/target/run/key；同target多slot原证据一致，不猜阶段/descriptor、不取客户端证明。迁移阶段及baseline/plan artifact descriptor由T293冻结后MIG复用。
+
+WF generic metadata_filter.document_id不是实际physical file选择器，不按正整数equals猜KnowledgeFile ID；实际模型/知识节点槽按runtime字段提取。QA仍是Knowledge表资源，用knowledge_space目标类型辨实际type1，不扩为第四目标类型。助手model_name实际是模型ID，缺失明确指定ID不能偷偷改用default；合法空配置的业务默认解析保留。
+
+
+### W2批量来源、原槽修复及新知识准入
+
+`BatchReferenceBindings(repository, verifier)`提供同步/原生async prepare_source_batch/aprepare_source_batch、apply_source_batch/aapply_source_batch；`SourceBindingRequest(source_key,references,extractor_version,new_source=False,effective=True)`必须非空、同tenant/type/root，规范版本顺序。先按Owner对全部旧/新target union做**纯物理预锁**（含实际parent/server/继承默认依赖），随后对每个精确source/version重核当前资格并签收据，不跨source借legacy。真实root回调返回完整受影响source manifest；不一致10998。返回`PreparedSourceBatch(sources,source_keys,base_root_revision)`，同外部Session逐source CAS，由业务Owner唯一commit。预锁计划晚出现新parent/server/目标拒绝，不能追加破坏锁序。
+
+整根工作流删除必须核对三个独立集合：真实SQL全部版本、所有来源集合（含零引用/inactive）、全部raw引用行（不能只从已有set反推）。guard/root已锁后作当前读；每条raw行须对应真实版本和ready集合，revision及摘要一致，终态集合为空且不得残raw行。unknown source、缺set、有set但raw不一致等均10994投影前失败，禁止自动清理未知引用。旧已删版本既无set又无raw可合法保留；已有终态集合保留原记录，无需为根删除再造或增加修订。批量任一source或原FGA投影失败，业务root/versions/集合/明细整体回滚。
+
+实际旧业务配置提取出的digest必须与prepare返回的`verified.context.old_references_digest`相等，不一致10994 `source_configuration_drift`；这项由业务Owner负责，Runtime不读任意业务JSON。缺index的旧来源不得自动作为new_source初始化。已存在任意同root来源而root_guard丢失时，Runtime及Repository均拒绝重建计数。
+
+新选择的知识容器以精确`new_refs - old_refs`（slot/type/id）判定新增，持目标/root锁后以同Session真实Knowledge.type选择权限资源：0/1→`knowledge_library`，3→`knowledge_space`，统一调用原actor的`require_business_action(..., action='visible')`，保留credential收窄。旧同槽隐藏/失效可保持或移除，复制/新版本/新来源全部按新增校验。目标Owner核归属/生命周期不代替业务选择者的visible决策；不增加模型权限动作或文件edit。
+
+模型共享被明确撤销但原目标仍真实存在时，内部`VerifiedReferenceTarget.new_binding_allowed: bool=True`可由实际ModelOwner发为False；仅MODEL/VALID允许False，无新增状态、持久列或HTTP字段。必须有同source tenant/type/id/version、同target及真实owner的原非legacy行，且共享查询成功明确deny；原槽进一步由R2核slot/type/id完全相同才可保留。移除或改绑own可行，新槽/copy/version/batch借原记录拒绝，执行/发布的require_source_valid也拒绝。共享查询异常或畸形证明原样失败；不得当成可保留的撤销事实。deleting仍优先冻结全部R2写。该资格不参与配置digest，也不永久存为删除/legacy状态。
+
+`KnowledgeUnificationPhase`约定preparing、baseline_frozen、converting、backfilling、verifying、verified、completed、failed；可读取冻结证据的阶段排除preparing/failed。原run的baseline及plan均为`{object_key, sha256}`描述，hash是与存储列一致的小写64位SHA256，object_key须是持久对象键而非本机绝对路径。Reader只核同tenant原source/target/run/key及descriptor，不执行迁移、读外部blob或检测停服。MIG后续脚本必须在停服+一致备份后正式盘点并写这套冻结协议。
+
+实际运行/Info读取的后续接缝见[execution-entrypoints.md](./execution-entrypoints.md)。此波没有放宽REF source tenant约束，也未把临时未保存画布当作已保存版本；SourceExecution及可信SourceOwner只读scope须先补合同/任务再接线。

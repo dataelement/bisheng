@@ -1,6 +1,6 @@
 # 技术设计：文档知识库与知识空间统一
 
-**状态**：✅ 已评审；spec 和技术设计已确认，2026-11-05 用户授权按依赖多agent并行开发。实施入口见 [tasks.md](./tasks.md) 与 [parallel-development.md](./parallel-development.md)；W0/W1核心实施与集成中，当前状态见§15。本文明确区分源码事实与拟议变更。\
+**状态**：✅ 已评审；spec 和技术设计已确认，2026-11-05 用户授权按依赖多agent并行开发。实施入口见 [tasks.md](./tasks.md) 与 [parallel-development.md](./parallel-development.md)；W0/W1核心及W2保存/删除接线已实施，当前状态见§15。本文明确区分源码事实与拟议变更。\
 **目标版本 / 编号**：v3.1.0-beta1 / F118（暂定）\
 **日期**：2026-11-03\
 **需求**：[spec.md](./spec.md)（94 条 AC） · [版本契约草案](../release-contract.md)\
@@ -740,6 +740,24 @@ Knowledge的处理默认、处理配置版本、模型配置修订、索引gener
 
 ### 15.4 实施与证据边界
 
-W0基础定义及W1权限、引用、默认配置和任务存储已在独立lane开发、交叉复核后合流，86/273项完成、本地组合424项通过；完成项、固定提交和本地测试见[tasks.md](./tasks.md)及[implementation-review.md](./implementation-review.md)。任务分解原213项已由源码核对补充，当前总数以tasks为准。
+W0/W1阶段的历史交付为86/273项、本地组合424项通过；本次W2继续由独立lane开发、交叉复核后合流，当前任务数及组合验证以[W2集成记录](./wave2-implementation-review.md)为准。完成项、固定提交和本地测试见[tasks.md](./tasks.md)及[implementation-review.md](./implementation-review.md)。任务分解原213项已由源码核对补充，当前总数以tasks为准。
 
-完整业务入口、六类来源提取/同事务写入、真实Coverage adapter、删除协调、两端页面及正式迁移脚本仍按依赖待实施。SQLite事务/租约回归、MySQL DDL编译和静态检查只证明本地范围；真实MySQL/DM8/OpenFGA、ES/Milvus、E2E、停服迁移及部署均未运行。
+WF与AS的业务保存/删除已按§15.5接线，其余来源写端、完整执行/read scope、真实Coverage adapter、目标删除协调、两端页面及正式迁移脚本仍按依赖待实施。SQLite事务/租约回归、MySQL DDL编译和静态检查只证明本地范围；真实MySQL/DM8/OpenFGA、ES/Milvus、E2E、停服迁移及部署均未运行。
+
+
+### 15.5 W2：实际业务写入口与事务接线
+
+已实现WF每个保存版本的提取、外部事务Repository、首次v0创建、新版本/保存/恢复、current切换/发布、版本删除及根软删；复制和JSON导入实际复用create/newversion/save入口，无独立绕过写端。助手当前配置及三类links的增改删、prompt/flow/tool/描述/状态均通过统一事务helper。模型ID明确缺失不再默认回退；合法空配置仍按原业务默认解析。超管管理选定tenant来自可信ContextVar，JWT home与原actor身份不改。
+
+通用Runtime由composition装配实际knowledge/model Owner、共享策略和legacy Reader，API与worker各自注册；未装配10994，无生产fake。Owner锁目标→业务回调锁真实root并重读→guard/source CAS→核实际旧配置digest→新增知识visible；业务写入、绑定替换与既有FGA投影在同一用例内完成，投影成功后唯一commit。任何中途失败整体回滚；创建新自增leaf可flush取得真实ID，不能提前commit。新知识按精确new-old槽集及真实type0/1/3调用原actor sole visible，已有隐藏/失效槽保持和移除不额外加门槛。助手重复ONLINE也完整核目标、摘要及来源有效性，通过后保持noop，不更新修订或再次初始化Agent。
+
+整根删除复用批量R2：对所有来源完整target union先物理预锁（含parent/server/继承默认），再逐source验资格签收据，不能逐版本补锁或借其他版本的旧失效证据。持root/guard核真实版本manifest、所有来源集合和全部raw引用三方一致；缺集合、未知来源、终态残raw或摘要/revision漂移以10994拒绝，未执行投影、零最终业务修改；已删旧版本无set且无raw合法保留。第二source更新或原FGA投影失败时root、versions、set和raw全部回滚。终态已有记录保留，不能为删根重建索引掩盖缺口。
+
+共享撤销与资源删除分开处理：真实live模型上派生new_binding_allowed=False，只能基于明确deny+同source/version原非legacy引用出具，R2还核原slot/type/id。原槽保存/改绑own/清除/删除来源可行，新增槽/复制/新版本和执行仍拒绝；不增加持久状态/权限动作或改digest。共享查询异常不转成deny或许可，deleting继续优先冻结所有写。source root_guard缺失但已有任意集合也必须10994，不能从零重建修订。
+
+冻结ledger Reader仅验证原source/target/run/key与同tenant、冻结阶段及baseline/plan持久artifact descriptor；迁移脚本未来写相同协议，**停服及一致备份后**正式盘点再冻结。结构/Reader就绪不代表已回填或Coverage ready。
+
+当前未实施的运行入口见[交接清单](./execution-entrypoints.md)：WS任意画布payload、单节点未保存预览、开放invoke及评测须接正确版本或临时目标准入；Root共享来源需保持原actor/credential的事务绑定只读scope，不能修改ContextTenant或接受请求自报外tenant。完整T041/T042/T283/T294/T295保持待办，不以保存/发布测试代替。用户已排除的worker在途外部IO竞态及独立任务模型绑定范围保持。
+
+
+W2最终集成：166/342项完成（本波新增80项）；主agent在411d4f461473组合验证821项通过（35个pytest路径），架构检查56文件无违规，Ruff 56文件通过。固定交付、L1及剩余边界详见[W2集成复查](./wave2-implementation-review.md)。
