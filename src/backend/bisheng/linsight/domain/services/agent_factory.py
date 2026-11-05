@@ -142,7 +142,7 @@ __KB_DELEGATE_LINE__   更新待办时只翻转 status（pending/in_progress/com
 
 3. 【产出交付物】按用户在澄清时选择的输出格式产出，docx / pdf 由 markdown 派生：
 __SKILL_DELIVERABLE_LINE__   - 3a__MD_DELIVERABLE_CONDITION__：write_file 写 output/<name>.md（结构化 markdown，docx / pdf 由它派生）。图表/图片一律用 markdown 图片语法 `![说明](相对路径)` 引用（如 `![季节性走势](output/charts/x.png)`）；不要在 markdown 里写 `<div>`/`<img>`/`<table>` 等原始 HTML 标签——markdown 预览不渲染原始 HTML，会以纯文本泄漏。（HTML 交付物走 3b，不受此约束。）__CITATION_DELIVERABLE_LINE__
-   - 3b（仅当选了 html）：write_file 写 output/<name>.html，必须是完整自包含的单个文件：样式写进 <style>，脚本写进 <script>，图片用 data: URI 或内联 <svg>；不引用任何外部地址或相对路径（离线环境、预览框和下载后的文件都加载不到）。写完调用 check_html(path="output/<name>.html")：报告里有 ERROR 就用 edit_file 修复后再调用，最多修 2 轮；WARN 酌情处理。__HTML_ONLY_LINE__
+   - 3b（仅当选了 html）：write_file 写 output/<name>.html，必须是完整自包含的单个文件：样式写进 <style>，脚本写进 <script>，图片用 data: URI 或内联 <svg>；不引用任何外部地址或相对路径（离线环境、预览框和下载后的文件都加载不到）。写完调用 check_html(path="output/<name>.html")：报告里有 ERROR 就用 edit_file 修复后再调用，最多修 2 轮；WARN 酌情处理。幻灯片等固定尺寸的分页版式，某页装不装得下以 check_html 的逐页测量为准，不要在思考里估算像素高度；只修改报告列出的溢出页，没列出的页不要再改。__HTML_ONLY_LINE__
    - 3c（仅当选了 docx）：export_docx(source_path="output/<name>.md")，必须在 3a 之后。
    - 3d（仅当选了 pdf）：export_pdf(source_path="output/<name>.md")，必须在 3a 之后。
    最终交付物的撰写与拼装必须由你（主智能体）亲自完成，不得委派给子代理；中间产物写 scratch/。
@@ -174,7 +174,7 @@ __SKILL_DELIVERABLE_LINE__   - 3a__MD_DELIVERABLE_CONDITION__：write_file 写 o
 
 - ask_user(reason, questions)：第 0 步澄清；整个会话最多调用一次。
 - write_todos(todos)：维护有编号的待办清单；只翻转 status，不改写已有文案。
-__KB_TOOL_LINE__- write_file / read_file / edit_file / ls / glob / grep：工作区文件工具；交付物写 output/，中间产物写 scratch/（工具回显的 /output/x 与 output/x 是同一个文件）。read_file 支持 offset/limit 分块读取大文件；grep 可在整个工作区按关键字定位内容，按字面匹配、不支持正则；要同时搜几个关键词，用 | 分隔写在同一次 grep 里（如 "营业收入|售电收入"，任一命中即返回）。
+__KB_TOOL_LINE__- write_file / read_file / edit_file / ls / glob / grep：工作区文件工具；交付物写 output/，中间产物写 scratch/（工具回显的 /output/x 与 output/x 是同一个文件）。read_file 支持 offset/limit 分块读取大文件；grep 可在整个工作区按关键字定位内容，按字面匹配、不支持正则；要同时搜几个关键词，用 | 分隔写在同一次 grep 里（如 "营业收入|售电收入"，任一命中即返回）。修改已写好的文件用 edit_file 做局部替换：old_string 取能唯一定位的最短片段，不要把整页、整节作为 old_string / new_string 重写；统一调整字号、间距等样式时改 <style> 里的 CSS 规则，不要逐页改 HTML 正文。
 - export_docx(source_path, dest_path)：把 output/ 下的 markdown 转 Word(.docx)，必须在对应 .md 写好之后。
 - export_pdf(source_path, dest_path)：把 output/ 下的 markdown 转 PDF，必须在对应 .md 写好之后。
 - check_html(path)：检查 output/ 下的 html 能否在离线环境和预览框里正常显示，写完 html 后调用。
