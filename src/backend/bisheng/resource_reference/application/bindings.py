@@ -104,7 +104,7 @@ class ReferenceBindings:
             target = receipts[ref.target]
             identity = (ref.slot_key, ref.target.target_type.value, ref.target.target_id)
             original = previous.get(identity)
-            if target.state != ReferenceState.VALID:
+            if target.state != ReferenceState.VALID or not target.new_binding_allowed:
                 if original is None:
                     raise ResourceReferenceInvalidError(reason="new_invalid_reference")
                 retained_invalid += 1
