@@ -351,6 +351,46 @@ class CoveragePort(Protocol):
     ) -> CoverageStatus: ...
 
 
+def tenant_inventory_digest(tenant_ids: tuple[int, ...]) -> str:
+    """Canonical inventory: sorted unique positive JSON integers, UTF-8, no spaces."""
+    for tenant_id in tenant_ids:
+        _positive_integer(tenant_id, "inventory tenant")
+    if tenant_ids != tuple(sorted(set(tenant_ids))):
+        raise ValueError("verified tenant inventory must be unique and sorted")
+    return hashlib.sha256(json.dumps(tenant_ids, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class GlobalCoverageStatus:
+    """Internal complete tenant-inventory evidence, never an HTTP response DTO."""
+
+    ready: bool
+    writer_contract_version: str
+    source_types: tuple[SourceType, ...]
+    tenant_inventory_hash: str | None
+    coverage_epoch: int
+    verified_tenant_ids: tuple[int, ...] = ()
+    reason: str | None = None
+
+    def __post_init__(self) -> None:
+        _text(self.writer_contract_version, "writer contract version", 64)
+        _revision(self.coverage_epoch, "coverage epoch")
+        object.__setattr__(self, "source_types", tuple(SourceType(value) for value in self.source_types))
+        if self.ready:
+            if len(self.source_types) != len(SourceType) or set(self.source_types) != set(SourceType):
+                raise ValueError("global readiness requires every source type exactly once")
+            if self.coverage_epoch == 0 or not self.verified_tenant_ids:
+                raise ValueError("global readiness requires a verified nonempty tenant inventory and epoch")
+            if self.tenant_inventory_hash != tenant_inventory_digest(self.verified_tenant_ids):
+                raise ValueError("global tenant inventory hash does not match")
+
+
+class GlobalCoveragePort(Protocol):
+    def get_global_status(self, writer_contract_version: str) -> GlobalCoverageStatus: ...
+
+    async def aget_global_status(self, writer_contract_version: str) -> GlobalCoverageStatus: ...
+
+
 class ReferenceTargetOwnerPort(Protocol):
     """Business-owned target validation; implementations use their Repository."""
 
