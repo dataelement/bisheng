@@ -10,7 +10,7 @@ from bisheng.common.chat import client as client_module
 from bisheng.common.chat.client import ChatClient
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.assistant import AssistantNotOnlineError
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
 from bisheng.database.models.assistant import Assistant, AssistantStatus
 
 
@@ -96,3 +96,25 @@ async def test_stale_run_cache_is_cleared_and_next_message_can_initialize(client
     monkeypatch.setattr(client_module, "AssistantAgent", Agent)
     await client.init_gpts_agent()
     assert isinstance(client.gpts_agent, Agent)
+
+
+async def test_initial_admission_failure_never_caches_an_uninitialized_agent(client, monkeypatch):
+    created = []
+
+    class Agent:
+        def __init__(self, row, supplied_chat, invoke_user_id, *, login_user):
+            assert login_user is client.login_user
+            created.append(self)
+            self.initialized = False
+
+        async def init_assistant(self, callbacks):
+            if len(created) == 1:
+                raise ResourceReferenceInvalidError()
+            self.initialized = True
+
+    monkeypatch.setattr(client_module, "AssistantAgent", Agent)
+    with pytest.raises(ResourceReferenceInvalidError):
+        await client.init_gpts_agent()
+    assert client.gpts_agent is None
+    await client.init_gpts_agent()
+    assert len(created) == 2 and client.gpts_agent is created[1] and created[1].initialized
