@@ -84,10 +84,10 @@ _EXPECTED_SCOPE_WRITES = (
     (frozenset({"POST"}), r"/api/v1/knowledge/(?:create|copy|qa/copy|upload/[^/]+|tags|file/tags(?:/batch)?)"),
     # F118 advanced browser commands pin the selected tenant. Ordinary space
     # file writes and machine-credential v2 calls retain their existing gate.
-    (frozenset({"PUT"}), r"/api/v1/knowledge/space/[0-9]+/processing-settings"),
+    (frozenset({"PUT"}), r"/api/v1/knowledge/space/[^/]+/processing-settings"),
     (
         frozenset({"POST"}),
-        r"/api/v1/knowledge/space/[0-9]+/processing-jobs(?:/precheck|/[^/]+/retry)?",
+        r"/api/v1/knowledge/space/[^/]+/processing-jobs(?:/precheck|/[^/]+/retry)?",
     ),
 )
 
