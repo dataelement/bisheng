@@ -362,3 +362,14 @@ def test_render_long_report_without_pages_is_unchanged():
     html = GOOD.replace("</body>", _TALL + '<div class="page-header">页眉</div></body>')
     findings, _, _ = hc._render_findings(html)
     assert {"分页溢出", "分页测量"} & _topics(findings) == set()
+
+
+@chromium
+def test_render_measures_a_single_page_marked_data_slide():
+    """One explicit page is still a deck; a lone .page wrapper of a long report is not."""
+    html = _deck([_TALL], cls="slide").replace('<section class="slide">', '<section class="slide" data-slide>')
+    findings, _, _ = hc._render_findings(html)
+    assert [f.detail[:5] for f in _errors(findings) if f.topic == "分页溢出"] == ["第 1 页"]
+    lone = GOOD.replace("<body>", '<body><div class="page">').replace("</body>", "</div></body>")
+    findings, _, _ = hc._render_findings(lone)
+    assert {"分页溢出", "分页测量"} & _topics(findings) == set()

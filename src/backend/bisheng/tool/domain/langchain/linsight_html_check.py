@@ -260,8 +260,8 @@ _PROBE_JS = """
     const parent = t.parentElement;
     return parent && t.scrollWidth > parent.clientWidth + 2 && getComputedStyle(parent).overflowX === 'visible';
   }).length;
-  // Paged layout: >= 2 elements whose class ends in "slide"/"page" (or that carry
-  // data-slide), grouped by tag + kind across the document: a deck often wraps each
+  // Paged layout: >= 2 elements whose class ends in "slide"/"page", or any element
+  // carrying data-slide, grouped by tag + kind across the document: a deck often wraps each
   // slide in its own scaling frame, so the slides are not siblings. Only the
   // outermost match counts (a .slide's inner .slide-page is part of that slide).
   // The largest group is the deck. A fixed-size page whose content is taller or
@@ -284,7 +284,9 @@ _PROBE_JS = """
     groups.get(key).push(el);
   }
   let deck = [];
-  for (const list of groups.values()) if (list.length >= 2 && list.length > deck.length) deck = list;
+  // Two or more pages make a deck; an explicit data-slide marks one even when it has a single page.
+  for (const list of groups.values())
+    if ((list.length >= 2 || list[0].hasAttribute('data-slide')) && list.length > deck.length) deck = list;
   // Click-through decks show one slide at a time; the rest (or their frames) are
   // display:none. Reveal each hidden page and its hidden ancestors with inline
   // styles, measure, then restore the original style attributes.
