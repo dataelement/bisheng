@@ -141,7 +141,9 @@ async def prepare_initial(
     identity, workflow_id, graph, *, execution_mode=None, version_hint=None, allow_preview=True
 ) -> PreparedWorkflowExecution:
     """Resolve legacy messages by full current graph without executing the candidate."""
-    if execution_mode not in {None, "saved", "preview"}:
+    if execution_mode is not None and (
+        not isinstance(execution_mode, str) or execution_mode not in ("saved", "preview")
+    ):
         raise ResourceReferenceInvalidError(reason="workflow_execution_mode_invalid")
     version = _version(version_hint)
     if execution_mode == "preview":
