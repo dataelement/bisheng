@@ -14,6 +14,7 @@ MIGRATION = "bisheng.core.database.alembic.versions.f118_knowledge_unification"
 NEW_MODEL_MODULES = (
     "bisheng.knowledge.domain.models.knowledge_processing_job",
     "bisheng.knowledge.domain.models.knowledge_processing_item",
+    "bisheng.knowledge.domain.models.knowledge_processing_retry",
     "bisheng.knowledge.domain.models.knowledge_operation_plan",
     "bisheng.knowledge.domain.models.knowledge_unification_run",
     "bisheng.resource_reference.domain.models.business_resource_reference",
@@ -54,7 +55,7 @@ def test_existing_table_upgrade_is_repeatable_without_converting_rows(f118_engin
             ).one()
         ) == ("original-viewer", None, None)
         columns = {column["name"] for column in inspect(connection).get_columns("knowledge")}
-        assert {"processing_defaults", "index_generation", "migration_origin"} <= columns
+        assert {"processing_defaults", "model_transition", "index_generation", "migration_origin"} <= columns
 
 
 def test_downgrade_cannot_silently_drop_grant_or_migration_provenance():
@@ -64,7 +65,14 @@ def test_downgrade_cannot_silently_drop_grant_or_migration_provenance():
 
 @pytest.mark.parametrize(
     "name",
-    ["processing_defaults", "processing_config_version", "model_config_revision", "index_generation", "migration_origin"],
+    [
+        "processing_defaults",
+        "processing_config_version",
+        "model_config_revision",
+        "model_transition",
+        "index_generation",
+        "migration_origin",
+    ],
 )
 def test_internal_orm_metadata_does_not_expand_legacy_wire_models(name):
     from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeBase
