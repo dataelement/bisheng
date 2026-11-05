@@ -13,11 +13,13 @@ import sqlalchemy as sa
 from bisheng.api.services import flow as flow_service
 from bisheng.api.v1 import flows as endpoint
 from bisheng.api.v1.schemas import FlowVersionCreate
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
+from bisheng.core.context.tenant import current_tenant_id, management_tenant_scope, set_current_tenant_id
 from bisheng.database.models.flow_version import FlowVersion
 from bisheng.resource_reference.application.bindings import ReferenceBindings
 from bisheng.resource_reference.application.contracts import reference_set_digest
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
+from bisheng.workflow.domain.repositories.workflow_version_repository import WorkflowVersionRepository
 from test.knowledge_unification import test_wf_create as create_fixtures
 from test.knowledge_unification import test_wf_current as current_fixtures
 from test.knowledge_unification import test_wf_save as save_fixtures
@@ -178,4 +180,42 @@ async def test_deleted_business_version_must_have_an_existing_consistent_termina
     with pytest.raises(ReferenceCoverageNotReadyError):
         await delete(deleting)
     assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 0
+    deleting.delete_projection.assert_not_awaited()
+
+
+async def test_root_delete_keeps_pinned_management_tenant_separate_from_identity_home(deleting):
+    deleting.user.tenant_id = 1
+    token = set_current_tenant_id(1)
+    try:
+        with management_tenant_scope(101):
+            assert (await delete(deleting)).status_code == 200
+    finally:
+        current_tenant_id.reset(token)
+    assert deleting.user.tenant_id == 1
+    assert all(row["tenant_id"] == 101 for row in rows(deleting, "business_reference_set"))
+    assert not rows(deleting, "business_resource_reference")
+
+
+async def test_committed_new_version_changes_manifest_and_aborts_root_delete(deleting, monkeypatch):
+    original = WorkflowVersionRepository.alock_root
+    added = []
+
+    async def concurrent_create_before_root_lock(session, flow_id, tenant_id):
+        if not added:
+            added.append(None)
+            result = await flow_service.FlowService.create_new_version(
+                deleting.user, "wf", FlowVersionCreate(name="concurrent", data={})
+            )
+            added[0] = result.data.id
+        return await original(session, flow_id, tenant_id)
+
+    monkeypatch.setattr(WorkflowVersionRepository, "alock_root", concurrent_create_before_root_lock)
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        await delete(deleting)
+    assert added[0] is not None
+    assert next(row for row in rows(deleting, "flowversion") if row["id"] == added[0])["is_delete"] == 0
+    assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 0
+    assert any(
+        row["source_version"] == str(added[0]) and row["effective"] for row in rows(deleting, "business_reference_set")
+    )
     deleting.delete_projection.assert_not_awaited()
