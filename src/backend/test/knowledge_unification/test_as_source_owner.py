@@ -24,9 +24,17 @@ from bisheng.share_link.domain.models.share_link import ShareLink
 
 
 @pytest.fixture
-async def source_db(tmp_path, tenant_context, monkeypatch):
+def source_tenant(tenant_context):
     tenant_context(101)
     visible = set_visible_tenant_ids(frozenset({101, 1}))
+    yield
+    from bisheng.core.context.tenant import visible_tenant_ids
+
+    visible_tenant_ids.reset(visible)
+
+
+@pytest.fixture
+async def source_db(tmp_path, source_tenant, monkeypatch):
     register_tenant_filter_events()
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'source.db'}")
     async with engine.begin() as connection:
@@ -73,6 +81,8 @@ async def source_db(tmp_path, tenant_context, monkeypatch):
                     "share_mode": "READ_ONLY",
                     "status": "ACTIVE",
                     "create_user_id": "9",
+                    "meta_data": None,
+                    "expire_time": 0,
                 },
             ],
         )
@@ -83,9 +93,6 @@ async def source_db(tmp_path, tenant_context, monkeypatch):
     try:
         yield engine, owner, user, check
     finally:
-        from bisheng.core.context.tenant import visible_tenant_ids
-
-        visible_tenant_ids.reset(visible)
         await engine.dispose()
 
 
@@ -153,7 +160,7 @@ async def test_wrong_resource_and_untrusted_version_cannot_read_source(source_db
         with pytest.raises(ResourceReferenceInvalidError):
             await owner.aresolve_source(session, SourceReadRequest("assistant", "owned", "123"), user)
         with pytest.raises(ResourceReferenceInvalidError):
-            await owner.aresolve_source(session, SourceReadRequest("workflow", "owned"), user)
+            await owner.aresolve_source(session, SourceReadRequest("workflow_version", "owned"), user)
 
 
 async def test_current_read_reauthorizes_and_detects_nonreference_configuration_change(source_db):
