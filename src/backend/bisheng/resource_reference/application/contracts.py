@@ -12,7 +12,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Protocol
+from typing import Literal, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, SessionTransaction
@@ -252,9 +252,15 @@ class TransactionIdentity:
             raise ValueError("reference receipt belongs to a different SQL transaction")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False, weakref_slot=True)
 class TargetLockReceipt:
-    source_key: SourceKey
+    """An Owner result; authority exists only after the Verifier registers it.
+
+    Public fields, an issuer pointer or reconstructing this dataclass do not
+    prove that Owner verification ran. None source is reserved for owner_query.
+    """
+
+    source_key: SourceKey | None
     target: VerifiedReferenceTarget
     transaction: TransactionIdentity
     issuer: object = field(repr=False, compare=False)
@@ -351,21 +357,66 @@ class CoveragePort(Protocol):
     ) -> CoverageStatus: ...
 
 
+def tenant_inventory_digest(tenant_ids: tuple[int, ...]) -> str:
+    """Canonical inventory: sorted unique positive JSON integers, UTF-8, no spaces."""
+    for tenant_id in tenant_ids:
+        _positive_integer(tenant_id, "inventory tenant")
+    if tenant_ids != tuple(sorted(set(tenant_ids))):
+        raise ValueError("verified tenant inventory must be unique and sorted")
+    return hashlib.sha256(json.dumps(tenant_ids, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class GlobalCoverageStatus:
+    """Internal complete tenant-inventory evidence, never an HTTP response DTO."""
+
+    ready: bool
+    writer_contract_version: str
+    source_types: tuple[SourceType, ...]
+    tenant_inventory_hash: str | None
+    coverage_epoch: int
+    verified_tenant_ids: tuple[int, ...] = ()
+    reason: str | None = None
+
+    def __post_init__(self) -> None:
+        _text(self.writer_contract_version, "writer contract version", 64)
+        _revision(self.coverage_epoch, "coverage epoch")
+        object.__setattr__(self, "source_types", tuple(SourceType(value) for value in self.source_types))
+        if self.ready:
+            if len(self.source_types) != len(SourceType) or set(self.source_types) != set(SourceType):
+                raise ValueError("global readiness requires every source type exactly once")
+            if self.coverage_epoch == 0 or not self.verified_tenant_ids:
+                raise ValueError("global readiness requires a verified nonempty tenant inventory and epoch")
+            if self.tenant_inventory_hash != tenant_inventory_digest(self.verified_tenant_ids):
+                raise ValueError("global tenant inventory hash does not match")
+
+
+class GlobalCoveragePort(Protocol):
+    def get_global_status(self, writer_contract_version: str) -> GlobalCoverageStatus: ...
+
+    async def aget_global_status(self, writer_contract_version: str) -> GlobalCoverageStatus: ...
+
+
 class ReferenceTargetOwnerPort(Protocol):
-    """Business-owned target validation; implementations use their Repository."""
+    """Business-owned, Repository-backed facts and authorization.
+
+    bind receives a real source; owner_query receives None and must verify
+    actual target ownership. Both stay in the caller's active SQL transaction.
+    A shared Owner receives all its target kinds in one lock plan.
+    """
 
     def lock_and_verify(
         self,
         session: Session,
         target_keys: tuple[TargetKey, ...],
-        source_key: SourceKey,
-        operation: str,
+        source_key: SourceKey | None,
+        operation: Literal["bind", "owner_query"],
     ) -> tuple[TargetLockReceipt, ...]: ...
 
     async def alock_and_verify(
         self,
         session: AsyncSession,
         target_keys: tuple[TargetKey, ...],
-        source_key: SourceKey,
-        operation: str,
+        source_key: SourceKey | None,
+        operation: Literal["bind", "owner_query"],
     ) -> tuple[TargetLockReceipt, ...]: ...
