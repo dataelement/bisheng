@@ -322,10 +322,26 @@ class AssistantSimpleInfo(BaseModel):
     update_time: datetime
 
 
+class AssistantReferenceView(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    slot_key: str
+    target_type: Literal["model", "knowledge_space", "knowledge_file"]
+    target_id: str
+    state: Literal["valid", "deleting", "invalid_deleted", "invalid_legacy"]
+    is_valid: bool
+
+
 class AssistantInfo(AssistantBase):
     tool_list: list[GptsToolsRead] = Field(default_factory=list, description="Tools for assistantsIDVertical")
     flow_list: list[FlowRead] = Field(default_factory=list, description="Skills for assistantsIDVertical")
     knowledge_list: list[KnowledgeRead] = Field(default_factory=list, description="The knowledge base uponIDVertical")
+    knowledge_ids: list[int] = Field(
+        default_factory=list, description="Original configured knowledge IDs, including invalid selections"
+    )
+    reference_states: list[AssistantReferenceView] | None = Field(
+        default=None, description="Inspected reference facts; null when a write response has not read them"
+    )
     can_share: bool = Field(
         default=False,
         description="Current user may create an app share link",
