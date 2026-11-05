@@ -11,9 +11,9 @@ from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 from bisheng.permission.domain.services.permission_action_service import F048PermissionService, PermissionActor
 
 
-def target(tenant=101):
+def target(tenant=101, resource_type="tool"):
     return VerifiedPermissionTarget.from_business_service(
-        tenant_id=tenant, resource_type="tool", resource_id="t1", resource_version=1, context_version="test"
+        tenant_id=tenant, resource_type=resource_type, resource_id="t1", resource_version=1, context_version="test"
     )
 
 
@@ -41,7 +41,10 @@ async def test_legacy_use_checks_final_visible_not_a_concrete_action(old_action)
     assert "use" not in await service.effective_actions("tool")
 
 
-async def test_legacy_use_keeps_tenant_and_narrowed_token_denials():
+async def test_legacy_use_keeps_tenant_and_narrowed_token_denials(monkeypatch):
+    monkeypatch.setattr(
+        "bisheng.permission.domain.services.permission_action_service.get_data_scope_resolver", lambda: None
+    )
     service, fga = decision()
     assert not await service.check_action(PermissionActor(user_id=42, current_tenant_id=202), target(), "use")
     fga.check.assert_not_called()
