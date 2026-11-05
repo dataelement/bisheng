@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from sqlalchemy import Column, Integer, MetaData, String, Table, insert, select, update
+from sqlalchemy import Column, Integer, MetaData, String, Table, delete, insert, select, update
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -390,3 +390,103 @@ async def test_offline_retains_bindings_and_invalid_publish_keeps_original_error
     initialize.assert_not_awaited()
     assistant, _, references, source = await inspect_business(context)
     assert assistant.status == AssistantStatus.OFFLINE.value and source.effective and len(references) == 2
+
+
+async def mark_online(context):
+    async with context.sessions() as session:
+        await session.execute(
+            update(Assistant)
+            .where(Assistant.tenant_id == 101, Assistant.id == "assistant-a")
+            .values(status=AssistantStatus.ONLINE.value)
+        )
+        await session.commit()
+
+
+@pytest.mark.parametrize(
+    "case,error",
+    [
+        ("deleted_model", ResourceReferenceInvalidError),
+        ("missing_index", ReferenceCoverageNotReadyError),
+        ("configuration_drift", ReferenceCoverageNotReadyError),
+        ("deleting_model", KnowledgeProcessingConflictError),
+    ],
+)
+async def test_repeated_online_still_checks_current_source_and_targets(assistant_business, monkeypatch, case, error):
+    context = assistant_business
+    await seed(context)
+    await mark_online(context)
+    if case in {"deleted_model", "deleting_model"}:
+        await stage(context, "model", 1, "deleted" if case == "deleted_model" else "deleting")
+    else:
+        async with context.sessions() as session:
+            if case == "configuration_drift":
+                await session.execute(
+                    update(Assistant)
+                    .where(Assistant.tenant_id == 101, Assistant.id == "assistant-a")
+                    .values(model_name="2")
+                )
+            else:
+                for model in (BusinessResourceReference, BusinessReferenceSet):
+                    await session.execute(
+                        delete(model).where(
+                            model.tenant_id == 101, model.source_type == "assistant", model.source_id == "assistant-a"
+                        )
+                    )
+            await session.commit()
+    initialize = AsyncMock(side_effect=AssertionError("repeated ONLINE must not initialize the Agent"))
+    monkeypatch.setattr(
+        assistant_module, "AssistantAgent", MagicMock(return_value=SimpleNamespace(init_assistant=initialize))
+    )
+    with pytest.raises(error):
+        await AssistantService.update_status(context.request, context.user, "assistant-a", AssistantStatus.ONLINE.value)
+    initialize.assert_not_awaited()
+    assistant, _, references, source = await inspect_business(context)
+    assert assistant.status == AssistantStatus.ONLINE.value
+    if case == "missing_index":
+        assert source is None and not references
+    else:
+        assert source.source_revision == 1 and {row.target_id for row in references} == {"1", "10"}
+
+
+async def test_valid_repeated_online_revalidates_without_initialization_or_revision_changes(
+    assistant_business, monkeypatch
+):
+    context = assistant_business
+    await seed(context)
+    await mark_online(context)
+    initialize = AsyncMock(side_effect=AssertionError("repeated ONLINE must not initialize the Agent"))
+    monkeypatch.setattr(
+        assistant_module, "AssistantAgent", MagicMock(return_value=SimpleNamespace(init_assistant=initialize))
+    )
+    assert await AssistantService.update_status(
+        context.request, context.user, "assistant-a", AssistantStatus.ONLINE.value
+    )
+    initialize.assert_not_awaited()
+    assistant, _, references, source = await inspect_business(context)
+    assert assistant.status == AssistantStatus.ONLINE.value and source.source_revision == 1 and len(references) == 2
+    async with context.sessions() as session:
+        assert (await context.repository.aget_root_guard(session, source_key())).source_revision == 1
+    AssistantService.update_assistant_hook.assert_not_called()
+    assistant_module.telemetry_service.log_event.assert_not_awaited()
+
+
+@pytest.mark.parametrize("already_offline", [True, False])
+async def test_offline_does_not_require_deleted_targets_to_be_executable(
+    assistant_business, monkeypatch, already_offline
+):
+    context = assistant_business
+    await seed(context)
+    if not already_offline:
+        await mark_online(context)
+    await stage(context, "model", 1, "deleted")
+    initialize = AsyncMock(side_effect=AssertionError("OFFLINE must not initialize the Agent"))
+    monkeypatch.setattr(
+        assistant_module, "AssistantAgent", MagicMock(return_value=SimpleNamespace(init_assistant=initialize))
+    )
+    assert await AssistantService.update_status(
+        context.request, context.user, "assistant-a", AssistantStatus.OFFLINE.value
+    )
+    initialize.assert_not_awaited()
+    assistant, _, references, source = await inspect_business(context)
+    assert assistant.status == AssistantStatus.OFFLINE.value and source.effective and len(references) == 2
+    assert source.source_revision == (1 if already_offline else 2)
