@@ -26,6 +26,10 @@ def client(monkeypatch):
     value.chat_id = "chat"
     value.user_id = 7
     value.execution_snapshot = None
+    value.session_subject = None
+    value.latest_history = None
+    value.init_history = AsyncMock()
+    value.ensure_workflow_available = AsyncMock(return_value=False)
     value.websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
     value.send_response = AsyncMock()
     value.check_status = AsyncMock(return_value=(True, "run"))
@@ -105,6 +109,24 @@ async def test_missing_port_is_not_a_legacy_execution_fallback(client):
     factory.assert_not_called()
     queue.assert_not_called()
     assert value.websocket.send_json.await_args.args[0]["message"]["status_code"] == 10994
+
+
+async def test_status_action_cannot_pivot_the_endpoint_bound_root(client):
+    value, factory, _, queue = client
+    await value._handle_message({"action": "check_status", "flow_id": "another-workflow", "chat_id": "other-chat"})
+    value.check_status.assert_not_awaited()
+    factory.assert_not_called()
+    queue.assert_not_called()
+    assert value.chat_id == "chat" and value.workflow is None
+    assert value.websocket.send_json.await_args.args[0]["message"]["status_code"] == 10996
+
+
+async def test_direct_status_check_rejects_root_claim_before_mutating_client(client):
+    value, factory, _, _ = client
+    with pytest.raises(ResourceReferenceInvalidError):
+        await WorkflowClient.check_status(value, {"flow_id": "another-workflow", "chat_id": "other-chat"})
+    assert value.chat_id == "chat" and value.workflow is None
+    factory.assert_not_called()
 
 
 async def test_real_manager_forwards_exact_port_to_workflow_client(monkeypatch):
