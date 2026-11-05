@@ -85,14 +85,19 @@ class ReferenceBindingRuntime:
         )
 
     def _read(self, session, key, *, lock=False):
+        root = self.repository.get_root_guard(session, key, for_update=lock)
+        if root is None and self.repository.has_source_sets_for_root(session, key, for_update=lock):
+            raise ReferenceCoverageNotReadyError(reason="source_root_guard_missing")
         return self._snapshot(
-            self.repository.get_root_guard(session, key, for_update=lock),
+            root,
             self.repository.get_source_set(session, key, for_update=lock),
             self.repository.list_source_references(session, key, for_update=lock),
         )
 
     async def _aread(self, session, key, *, lock=False):
         root = await self.repository.aget_root_guard(session, key, for_update=lock)
+        if root is None and await self.repository.ahas_source_sets_for_root(session, key, for_update=lock):
+            raise ReferenceCoverageNotReadyError(reason="source_root_guard_missing")
         current = await self.repository.aget_source_set(session, key, for_update=lock)
         rows = await self.repository.alist_source_references(session, key, for_update=lock)
         return self._snapshot(root, current, rows)

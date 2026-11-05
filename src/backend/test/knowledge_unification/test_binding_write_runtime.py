@@ -4,6 +4,8 @@
 The target observer is a unit double; Owner SQL has separate production tests.
 """
 
+from dataclasses import replace
+
 import pytest
 from sqlalchemy import Column, Integer, MetaData, Table, insert, select, update
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -169,3 +171,67 @@ async def test_native_async_prepare_apply_and_rollback():
                 assert await rt.repository.aget_source_set(session, KEY) is None
     finally:
         await async_engine.dispose()
+
+
+@pytest.mark.parametrize("references", [(), (MODEL,)])
+@pytest.mark.parametrize("new_version", [False, True])
+def test_missing_root_cannot_reset_existing_or_sibling_source_history(engine, references, new_version):
+    rt, owner = runtime()
+    key = replace(KEY, source_version="new-version") if new_version else KEY
+    with Session(engine) as session, session.begin():
+        rt.apply_source_bindings(session, prepare(rt, owner, session, references=references))
+        session.delete(rt.repository.get_root_guard(session, KEY))
+        session.flush()
+        owner.events.clear()
+        with pytest.raises(ReferenceCoverageNotReadyError) as raised:
+            rt.prepare_source_bindings(
+                session,
+                key,
+                references,
+                extractor_version="source-v1",
+                lock_source_root=lambda _: owner.events.append("root"),
+                new_source=new_version,
+            )
+        assert raised.value.kwargs["reason"] == "source_root_guard_missing"
+        assert owner.events == []
+        assert rt.repository.get_root_guard(session, KEY) is None
+        assert rt.repository.get_source_set(session, KEY).source_revision == 1
+
+
+@pytest.mark.parametrize("references", [(), (MODEL,)])
+@pytest.mark.parametrize("new_version", [False, True])
+async def test_async_missing_root_cannot_reset_existing_or_sibling_source_history(references, new_version):
+    rt, owner = runtime()
+    key = replace(KEY, source_version="new-version") if new_version else KEY
+    database = create_async_engine("sqlite+aiosqlite://")
+    try:
+        async with database.begin() as connection:
+            await connection.run_sync(lambda c: SQLModel.metadata.create_all(c, tables=refs.TABLES))
+        with refs.tenant(101):
+            async with AsyncSession(database) as session, session.begin():
+
+                async def root(_session):
+                    owner.events.append("root")
+
+                initial = await rt.aprepare_source_bindings(
+                    session, KEY, references, extractor_version="source-v1", lock_source_root=root, new_source=True
+                )
+                await rt.aapply_source_bindings(session, initial)
+                await session.delete(await rt.repository.aget_root_guard(session, KEY))
+                await session.flush()
+                owner.events.clear()
+                with pytest.raises(ReferenceCoverageNotReadyError) as raised:
+                    await rt.aprepare_source_bindings(
+                        session,
+                        key,
+                        references,
+                        extractor_version="source-v1",
+                        lock_source_root=root,
+                        new_source=new_version,
+                    )
+                assert raised.value.kwargs["reason"] == "source_root_guard_missing"
+                assert owner.events == []
+                assert await rt.repository.aget_root_guard(session, KEY) is None
+                assert (await rt.repository.aget_source_set(session, KEY)).source_revision == 1
+    finally:
+        await database.dispose()

@@ -9,7 +9,7 @@ from sqlalchemy import and_, false, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
 from bisheng.core.context.tenant import bypass_tenant_filter, is_tenant_filter_bypassed, strict_tenant_filter
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.resource_reference.application.contracts import (
@@ -102,6 +102,33 @@ class ReferenceRepository:
             )
             return result.scalar_one_or_none()
 
+    @staticmethod
+    def _root_source_exists_query(key: SourceKey, *, for_update: bool):
+        statement = (
+            select(BusinessReferenceSet.id)
+            .where(
+                BusinessReferenceSet.source_type == key.source_type.value,
+                BusinessReferenceSet.source_id == key.source_id,
+                BusinessReferenceSet.record_kind == "source",
+            )
+            .limit(1)
+        )
+        return statement.with_for_update() if for_update else statement
+
+    def has_source_sets_for_root(self, session: Session, key: SourceKey, *, for_update: bool = False) -> bool:
+        """Bounded existence check for this exact tenant/type/business root."""
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            return session.execute(self._root_source_exists_query(key, for_update=for_update)).first() is not None
+
+    async def ahas_source_sets_for_root(
+        self, session: AsyncSession, key: SourceKey, *, for_update: bool = False
+    ) -> bool:
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            result = await session.execute(self._root_source_exists_query(key, for_update=for_update))
+            return result.first() is not None
+
     def list_source_references(
         self, session: Session, key: SourceKey, *, for_update: bool = False
     ) -> tuple[BusinessResourceReference, ...]:
@@ -190,6 +217,8 @@ class ReferenceRepository:
 
     def advance_root_guard(self, session: Session, key: SourceKey, *, expected_revision: int, new_revision: int) -> int:
         current = self.get_root_guard(session, key, for_update=True)
+        if current is None and self.has_source_sets_for_root(session, key, for_update=True):
+            raise ReferenceCoverageNotReadyError(reason="source_root_guard_missing")
         self._check_revision(current, expected_revision, new_revision, root=True)
         if current is None:
             session.add(self._new_guard(key, new_revision))
@@ -207,6 +236,8 @@ class ReferenceRepository:
         self, session: AsyncSession, key: SourceKey, *, expected_revision: int, new_revision: int
     ) -> int:
         current = await self.aget_root_guard(session, key, for_update=True)
+        if current is None and await self.ahas_source_sets_for_root(session, key, for_update=True):
+            raise ReferenceCoverageNotReadyError(reason="source_root_guard_missing")
         self._check_revision(current, expected_revision, new_revision, root=True)
         if current is None:
             session.add(self._new_guard(key, new_revision))
