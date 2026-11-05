@@ -219,7 +219,10 @@ class ReferenceBindingRuntime:
 
     @staticmethod
     def _require_valid(receipts):
-        if any(receipt.target.state != ReferenceState.VALID for receipt in receipts):
+        if any(
+            receipt.target.state != ReferenceState.VALID or not receipt.target.new_binding_allowed
+            for receipt in receipts
+        ):
             raise ResourceReferenceInvalidError(reason="reference_target_invalid")
 
     def require_source_valid(self, session: Session, source_key: SourceKey, *, references=None) -> None:

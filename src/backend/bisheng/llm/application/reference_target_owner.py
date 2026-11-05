@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING, Protocol
 
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
@@ -120,41 +121,88 @@ class ModelReferenceTargetOwner:
 
     @staticmethod
     def _check_sharing(requested, allowed):
-        if (
-            not isinstance(allowed, frozenset)
-            or any(type(value) is not int or value <= 0 for value in allowed)
-            or not set(requested) <= allowed
-        ):
+        if not isinstance(allowed, frozenset) or any(type(value) is not int or value <= 0 for value in allowed):
             raise ResourceReferenceInvalidError(reason="model_reference_target_unavailable")
+        return allowed & frozenset(requested)
+
+    @staticmethod
+    def _new_binding_allowed(observation, source_key, allowed):
+        if (
+            not observation.exists
+            or observation.deletion is not None
+            or observation.target_tenant_id == _resolve_tenant_id()
+            or int(observation.model_server_id) in allowed
+        ):
+            return True
+        # Sharing revocation does not delete a real model. The original
+        # source may retain or remove its slots, but cannot authorize any new
+        # identity. R2 checks each slot against that same source/version.
+        original = observation.original
+        if (
+            source_key is not None
+            and original is not None
+            and (
+                original.tenant_id,
+                original.source_type,
+                original.source_id,
+                original.source_version,
+                original.target_type,
+                original.target_id,
+            )
+            == (
+                source_key.tenant_id,
+                source_key.source_type.value,
+                source_key.source_id,
+                source_key.source_version,
+                observation.key.target_type.value,
+                observation.key.target_id,
+            )
+            and original.target_tenant_id == observation.target_tenant_id
+            and original.legacy_invalid_reason is None
+        ):
+            return False
+        raise ResourceReferenceInvalidError(reason="model_reference_target_unavailable")
 
     def lock_and_verify(self, session, target_keys, source_key, operation):
         TransactionIdentity.capture(session)
         observations = self.repository.lock_targets(session, target_keys, source_key, operation)
         shared = self._shared_servers(observations)
+        allowed = frozenset()
         if shared:
-            self._check_sharing(shared, self.sharing.get_shared_server_ids(session, _resolve_tenant_id(), shared))
+            allowed = self._check_sharing(
+                shared, self.sharing.get_shared_server_ids(session, _resolve_tenant_id(), shared)
+            )
         result = []
         for observation in observations:
+            eligible = self._new_binding_allowed(observation, source_key, allowed)
             request = self._legacy_request(observation)
             legacy = self.legacy_evidence.resolve(session, source_key, observation.key, **request) if request else None
-            result.append(self._receipt(session, source_key, observation, legacy, self))
+            receipt = self._receipt(session, source_key, observation, legacy, self)
+            if not eligible:
+                receipt = replace(receipt, target=replace(receipt.target, new_binding_allowed=False))
+            result.append(receipt)
         return tuple(result)
 
     async def alock_and_verify(self, session, target_keys, source_key, operation):
         TransactionIdentity.capture(session)
         observations = await self.repository.alock_targets(session, target_keys, source_key, operation)
         shared = self._shared_servers(observations)
+        allowed = frozenset()
         if shared:
-            self._check_sharing(
+            allowed = self._check_sharing(
                 shared, await self.sharing.aget_shared_server_ids(session, _resolve_tenant_id(), shared)
             )
         result = []
         for observation in observations:
+            eligible = self._new_binding_allowed(observation, source_key, allowed)
             request = self._legacy_request(observation)
             legacy = (
                 await self.legacy_evidence.aresolve(session, source_key, observation.key, **request)
                 if request
                 else None
             )
-            result.append(self._receipt(session, source_key, observation, legacy, self))
+            receipt = self._receipt(session, source_key, observation, legacy, self)
+            if not eligible:
+                receipt = replace(receipt, target=replace(receipt.target, new_binding_allowed=False))
+            result.append(receipt)
         return tuple(result)
