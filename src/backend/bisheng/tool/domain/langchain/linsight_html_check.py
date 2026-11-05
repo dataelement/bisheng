@@ -260,35 +260,58 @@ _PROBE_JS = """
     const parent = t.parentElement;
     return parent && t.scrollWidth > parent.clientWidth + 2 && getComputedStyle(parent).overflowX === 'visible';
   }).length;
-  // Paged layout: >= 2 sibling elements whose class ends in "slide"/"page" (or that
-  // carry data-slide). The largest such group is the deck. A fixed-size page whose
-  // content is taller or wider than the page has scrollHeight/scrollWidth beyond
-  // its client box, whatever its overflow mode clips or spills.
+  // Paged layout: >= 2 elements whose class ends in "slide"/"page" (or that carry
+  // data-slide), grouped by tag + kind across the document: a deck often wraps each
+  // slide in its own scaling frame, so the slides are not siblings. Only the
+  // outermost match counts (a .slide's inner .slide-page is part of that slide).
+  // The largest group is the deck. A fixed-size page whose content is taller or
+  // wider than the page has scrollHeight/scrollWidth beyond its client box,
+  // whatever its overflow mode clips or spills.
   const pageRe = /(?:^|-)(slide|page)$/i;
+  const kindOf = (el) => {
+    for (const c of el.classList) { const m = pageRe.exec(c); if (m) return m[1].toLowerCase(); }
+    return el.hasAttribute('data-slide') ? 'slide' : null;
+  };
+  const matches = [...(document.body || doc).querySelectorAll('*')].filter(el => !el.closest('svg') && kindOf(el));
+  const matchSet = new Set(matches);
   const groups = new Map();
-  for (const el of (document.body || doc).querySelectorAll('*')) {
-    if (!el.parentElement || el.closest('svg')) continue;
-    let kind = null;
-    for (const c of el.classList) { const m = pageRe.exec(c); if (m) { kind = m[1].toLowerCase(); break; } }
-    if (!kind && el.hasAttribute('data-slide')) kind = 'slide';
-    if (!kind) continue;
-    let byParent = groups.get(el.parentElement);
-    if (!byParent) { byParent = new Map(); groups.set(el.parentElement, byParent); }
-    const key = el.tagName + ':' + kind;
-    if (!byParent.has(key)) byParent.set(key, []);
-    byParent.get(key).push(el);
+  for (const el of matches) {
+    let up = el.parentElement, nested = false;
+    while (up) { if (matchSet.has(up)) { nested = true; break; } up = up.parentElement; }
+    if (nested) continue;
+    const key = el.tagName + ':' + kindOf(el);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(el);
   }
   let deck = [];
-  for (const byParent of groups.values())
-    for (const list of byParent.values()) if (list.length >= 2 && list.length > deck.length) deck = list;
+  for (const list of groups.values()) if (list.length >= 2 && list.length > deck.length) deck = list;
+  // Click-through decks show one slide at a time; the rest (or their frames) are
+  // display:none. Reveal each hidden page and its hidden ancestors with inline
+  // styles, measure, then restore the original style attributes.
+  const shown = deck.find(el => el.getClientRects().length > 0);
+  const showAs = shown ? getComputedStyle(shown).display : 'block';
+  const reveal = (el) => {
+    const saved = [];
+    for (let node = el; node && node !== document.body; node = node.parentElement) {
+      const cs = getComputedStyle(node);
+      if (cs.display === 'none' || cs.visibility === 'hidden') {
+        saved.push([node, node.getAttribute('style')]);
+        node.style.setProperty('display', node === el ? showAs : 'block', 'important');
+        node.style.setProperty('visibility', 'visible', 'important');
+      }
+    }
+    return () => { for (const [node, style] of saved) style === null ? node.removeAttribute('style') : node.setAttribute('style', style); };
+  };
   const pages = deck.map((el) => {
-    const cs = getComputedStyle(el);
-    if (cs.display === 'none' || cs.visibility === 'hidden' || el.getClientRects().length === 0
-        || el.clientHeight === 0) return {hidden: true};
-    if (/auto|scroll/.test(cs.overflowX + ' ' + cs.overflowY)) return {scrollable: true};
-    const h = el.querySelector('h1,h2,h3');
-    return {dy: el.scrollHeight - el.clientHeight, dx: el.scrollWidth - el.clientWidth,
-            title: h ? h.textContent.replace(/\\s+/g, ' ').trim().slice(0, 20) : ''};
+    const restore = reveal(el);
+    try {
+      if (el.getClientRects().length === 0 || el.clientHeight === 0) return {hidden: true};
+      const cs = getComputedStyle(el);
+      if (/auto|scroll/.test(cs.overflowX + ' ' + cs.overflowY)) return {scrollable: true};
+      const h = el.querySelector('h1,h2,h3');
+      return {dy: el.scrollHeight - el.clientHeight, dx: el.scrollWidth - el.clientWidth,
+              title: h ? h.textContent.replace(/\\s+/g, ' ').trim().slice(0, 20) : ''};
+    } finally { restore(); }
   });
   return {scrollWidth: doc.scrollWidth, clientWidth: doc.clientWidth, broken, small, wide,
           height: doc.scrollHeight, pages};
@@ -335,7 +358,7 @@ def page_findings(pages: list[dict]) -> list[Finding]:
     else:
         summary += "，均未溢出"
     if hidden:
-        summary += f"；另有 {hidden} 页处于隐藏状态（如翻页式只显示当前页），无法测量"
+        summary += f"；另有 {hidden} 页无法显示，没有测量"
     findings.append(Finding(INFO, "分页测量", summary + "。"))
     return findings
 
