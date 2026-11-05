@@ -336,3 +336,13 @@ def test_text_past_capacity_overflows_the_page_and_is_measured():
     d.fill(s, "conclusion.text", _words(90))
     findings, _, _ = hc._render_findings(d.render())
     assert [f.detail[:5] for f in findings if f.topic == "分页溢出"] == ["第 1 页"]
+
+
+@pytest.mark.parametrize("kind", ["column", "line", "stacked"])
+def test_value_labels_of_the_tallest_bar_stay_inside_the_chart(kind):
+    """114 run 96ce9c75: a 148 bar under a 150 axis put its label above the SVG edge."""
+    import re
+
+    svg = slides.chart_svg(kind, ["a", "b", "c", "d"], [("s", [148, 142, 138, 108])])
+    ys = [float(y) for y in re.findall(r'<text x="[\d.]+" y="([\d.-]+)" class="vl', svg)]
+    assert ys and min(ys) >= 18

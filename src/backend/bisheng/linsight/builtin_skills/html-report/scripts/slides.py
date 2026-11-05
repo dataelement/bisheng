@@ -430,7 +430,7 @@ def _legend(names: list[str], w: float) -> str:
 
 def _bars(kind, categories, series, number_format) -> str:
     w, h = _CHART_W, _CHART_H
-    top = 36 if len(series) > 1 else 12
+    top = 40 if len(series) > 1 else 30
     left, right, bottom = (150, 60, 16) if kind == "bar" else (16, 16, 40)
     pw, ph = w - left - right, h - top - bottom
     stacked = kind == "stacked"
@@ -498,7 +498,7 @@ def _bars(kind, categories, series, number_format) -> str:
 
 def _line(categories, series, number_format) -> str:
     w, h = _CHART_W, _CHART_H
-    top = 36 if len(series) > 1 else 16
+    top = 40 if len(series) > 1 else 30
     left, right, bottom = 24, 24, 40
     pw, ph = w - left - right, h - top - bottom
     vmax = _nice_max(max(max(s[1]) for s in series))
