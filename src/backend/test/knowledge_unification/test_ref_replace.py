@@ -15,6 +15,7 @@ from bisheng.resource_reference.application.bindings import ReferenceBindings
 from bisheng.resource_reference.application.contracts import (
     BindingWriteContext,
     DeletionEvidence,
+    LegacyEvidence,
     ReferenceSpec,
     ReferenceState,
     SourceKey,
@@ -51,9 +52,13 @@ def verified_set(session, owner, key, new, *, old=(), root_revision=0, states=No
     for target in targets:
         state = states.get(target.target_id, ReferenceState.VALID)
         evidence = None
-        if state != ReferenceState.VALID:
+        if state == ReferenceState.INVALID_LEGACY:
+            evidence = LegacyEvidence("run1", "a" * 64, "e1")
+        elif state != ReferenceState.VALID:
             evidence = DeletionEvidence("force-1", target, 101, TargetDeleteStage.DELETED)
-        verified = VerifiedReferenceTarget(target, 101, None, "1", state, "r1", evidence)
+        verified = VerifiedReferenceTarget(
+            target, None if state == ReferenceState.INVALID_LEGACY else 101, None, "1", state, "r1", evidence
+        )
         receipts.append(TargetLockReceipt(key, verified, identity, owner))
     context = BindingWriteContext(
         key, root_revision, root_revision, targets, reference_set_digest(old), tuple(receipts), identity
@@ -187,6 +192,19 @@ def test_deletion_evidence_cannot_be_reused_for_other_target_or_phase():
     ]:
         with pytest.raises(ValueError):
             VerifiedReferenceTarget(target, 101, None, None, "invalid_deleted", "r1", evidence)
+
+
+def test_removing_an_unregistered_missing_target_cannot_borrow_legacy_evidence(engine):
+    owner, _repo, bindings = components()
+    key = SourceKey(101, "assistant", "a1", "current")
+    with Session(engine) as session, session.begin():
+        bindings.replace_source_bindings(session, key, None, 1, verified_set(session, owner, key, (spec("1"),)), True)
+        refs = verified_set(
+            session, owner, key, (), old=(spec("1"),), root_revision=1, states={"1": ReferenceState.INVALID_LEGACY}
+        )
+        with pytest.raises(ResourceReferenceInvalidError) as raised:
+            bindings.replace_source_bindings(session, key, 1, 2, refs, True)
+        assert raised.value.kwargs["reason"] == "legacy_evidence_mismatch"
 
 
 async def test_async_replacement_is_in_the_business_transaction():
