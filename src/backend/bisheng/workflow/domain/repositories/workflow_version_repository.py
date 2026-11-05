@@ -12,11 +12,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.errcode.flow import CurVersionDelError
 from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
+from bisheng.core.context.tenant import strict_tenant_filter
 from bisheng.database.models.flow import Flow, FlowType
 from bisheng.database.models.flow_version import FlowVersion
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 
 
 class WorkflowVersionRepository:
+    @staticmethod
+    async def aget_knowledge_resource_type(session: AsyncSession, knowledge_id: int) -> str:
+        """Read the actual kind of an already target-locked new selection."""
+        with strict_tenant_filter():
+            kind = await session.scalar(select(Knowledge.type).where(Knowledge.id == knowledge_id).with_for_update())
+        if kind not in {0, 1, 3}:
+            raise ResourceReferenceInvalidError(reason="knowledge_reference_target_unavailable")
+        return "knowledge_space" if kind == 3 else "knowledge_library"
+
     @staticmethod
     async def aget_root_by_name(session: AsyncSession, tenant_id: int, user_id: int, name: str) -> Flow | None:
         return await session.scalar(

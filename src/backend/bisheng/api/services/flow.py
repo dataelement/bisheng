@@ -52,7 +52,13 @@ from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.public_endpoints.domain.services.guest_link import delete_app_guest_link
 from bisheng.resource_reference.application.access import get_reference_binding_runtime
 from bisheng.resource_reference.application.batch import BatchReferenceBindings, SourceBindingRequest
-from bisheng.resource_reference.application.contracts import ReferenceSpec, SourceKey, TargetKey, reference_set_digest
+from bisheng.resource_reference.application.contracts import (
+    ReferenceSpec,
+    SourceKey,
+    TargetKey,
+    TargetType,
+    reference_set_digest,
+)
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import get_request_ip
 from bisheng.workflow.domain.repositories.workflow_version_repository import WorkflowVersionRepository
@@ -90,6 +96,7 @@ class FlowService(BaseService):
                 lock_source_root=lambda sql: WorkflowVersionRepository.alock_root(sql, root.id, root.tenant_id),
                 new_source=True,
             )
+            await cls._require_new_workflow_knowledge_visible(session, user, prepared.verified.references)
             await runtime.aapply_source_bindings(session, prepared)
             # The adapter consumes the new root's explicit business record;
             # it does not reload an uncommitted Flow. Its durable projection
@@ -433,6 +440,7 @@ class FlowService(BaseService):
                 lock_source_root=lock_root,
                 new_source=True,
             )
+            await cls._require_new_workflow_knowledge_visible(session, user, prepared.verified.references)
             await runtime.aapply_source_bindings(session, prepared)
             await session.commit()
             await session.refresh(version)
@@ -502,12 +510,32 @@ class FlowService(BaseService):
                 session, root, version_id, include_deleted=True, for_update=True
             )
             cls._assert_workflow_source_configuration(current, prepared)
+            old_references = cls._extract_workflow_references(current.data) if current.is_delete == 0 else ()
+            await cls._require_new_workflow_knowledge_visible(
+                session, user, prepared.verified.references, old_references
+            )
             version = await WorkflowVersionRepository.aupdate_version(session, root, next_version)
             await runtime.aapply_source_bindings(session, prepared)
             await session.commit()
             await session.refresh(version)
         await cls.update_flow_hook(request, user, root)
         return resp_200(data=version)
+
+    @staticmethod
+    async def _require_new_workflow_knowledge_visible(session, user, references, old_references=()) -> None:
+        # Compare complete semantic slots, not just target IDs: reusing a
+        # hidden target in a different node is a new selection. Old slots may
+        # still be retained or removed while users repair hidden/invalid refs.
+        added = set(references) - set(old_references)
+        targets = sorted(
+            {reference.target for reference in added if reference.target.target_type == TargetType.KNOWLEDGE_SPACE},
+            key=lambda target: target.lock_order_key,
+        )
+        for target in targets:
+            resource_type = await WorkflowVersionRepository.aget_knowledge_resource_type(session, int(target.target_id))
+            await require_business_action(
+                user, resource_type=resource_type, resource_id=target.target_id, action="visible"
+            )
 
     @staticmethod
     def _extract_workflow_references(data):
