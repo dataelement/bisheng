@@ -18,6 +18,18 @@ from bisheng.database.models.flow_version import FlowVersion
 
 class WorkflowVersionRepository:
     @staticmethod
+    async def aget_root_by_name(session: AsyncSession, tenant_id: int, user_id: int, name: str) -> Flow | None:
+        return await session.scalar(
+            select(Flow).where(
+                Flow.tenant_id == tenant_id,
+                Flow.user_id == user_id,
+                Flow.name == name,
+                Flow.flow_type == FlowType.WORKFLOW.value,
+                Flow.is_delete == 0,
+            )
+        )
+
+    @staticmethod
     async def aget_root(session: AsyncSession, flow_id: str, tenant_id: int) -> Flow:
         root = await session.scalar(
             select(Flow)
@@ -90,6 +102,18 @@ class WorkflowVersionRepository:
             query = query.where(FlowVersion.is_delete == 0)
         result = await session.scalars(query.order_by(FlowVersion.id).execution_options(populate_existing=True))
         return tuple(result)
+
+    @classmethod
+    async def aget_version_by_name(cls, session: AsyncSession, root: Flow, name: str) -> FlowVersion | None:
+        cls._root(session, root)
+        return await session.scalar(
+            select(FlowVersion).where(
+                FlowVersion.flow_id == root.id,
+                FlowVersion.tenant_id == root.tenant_id,
+                FlowVersion.name == name,
+                FlowVersion.is_delete == 0,
+            )
+        )
 
     @classmethod
     async def acreate_workflow(cls, session: AsyncSession, root: Flow) -> tuple[Flow, FlowVersion]:
