@@ -1,10 +1,12 @@
 """把 admin 在部门库、科室库、团队库中的文件所属组织改成该库对应的组织。
 
-部门库使用 knowledge_space_scope.owner_id, 且必须是有效部门。
+部门库「首钢集团有限公司现行财务制度汇编」不处理。
+其他部门库取成员列表里的第一个库管理员, 使用该用户的唯一有效主组织。
+列表顺序与成员管理页一致: 创建者优先于管理员, 同角色按 user_name 升序。
 科室库使用 department_knowledge_space.department_id, 且必须是有效科室。
 团队库优先使用部门绑定或 owner 为部门的组织; 否则使用团队创建人的唯一有效主组织。
 只改 user_id 为 admin 的文件行, 不改目录、收藏引用和投影墓碑, 不改 update_time。
-已等于目标组织的不写。默认只预览。本脚本不更新 Elasticsearch。
+已等于目标组织的不写。默认只预览。--apply 写完 MySQL 后, 再跑内容统计对账, 刷新 Elasticsearch 里的所属组织。
 
 在 src/backend 执行:
   .venv/bin/python scripts/backfill_admin_space_belonging_organization.py --tenant-id 1 --output /tmp/admin-org-plan.jsonl
@@ -30,6 +32,20 @@ if _BACKEND_ROOT not in sys.path:
     sys.path.insert(0, _BACKEND_ROOT)
 
 SPACE_LEVELS = ("department", "team_ks", "team")
+EXCLUDED_DEPARTMENT_SPACE_NAME = "首钢集团有限公司现行财务制度汇编"
+
+
+def first_library_admin(members: list[tuple[int, str, str]]) -> int | None:
+    """Pick the first creator/admin the way the member list does.
+
+    members are (user_id, role, user_name). This mirrors the page order for tests.
+    The script itself asks the database to order by the same columns.
+    """
+    admins = [item for item in members if item[1] in {"creator", "admin"}]
+    if not admins:
+        return None
+    admins.sort(key=lambda item: (0 if item[1] == "creator" else 1, item[2] or "", item[0]))
+    return admins[0][0]
 
 
 def _value(item: Any) -> str:
@@ -92,18 +108,16 @@ def organization_for_space(
     department: Any,
     creator_organization_id: int | None,
     tenant_id: int,
+    excluded: bool = False,
+    admin_organization_id: int | None = None,
 ) -> tuple[int | None, str]:
     """Return the organization id to store, and a reason when it cannot be stored."""
     if level == "department":
-        if owner_type != "department":
-            return None, "department_owner_type_invalid"
-        if binding_department_id is not None and int(binding_department_id) != int(owner_id):
-            return None, "department_binding_conflict"
-        if not usable_department(department, tenant_id) or int(department.id) != int(owner_id):
-            return None, "department_org_invalid"
-        if department.org_level not in (None, "", "dept"):
-            return None, "department_org_level_mismatch"
-        return int(owner_id), "ok"
+        if excluded:
+            return None, "department_space_excluded"
+        if admin_organization_id is None:
+            return None, "department_admin_organization_missing"
+        return int(admin_organization_id), "ok"
     if level == "team_ks":
         if binding_department_id is None:
             return None, "clinic_binding_missing"
@@ -140,6 +154,52 @@ def _creator_user_id(owner_type: str, owner_id: int, created_by: int, knowledge_
         if knowledge_user_id:
             return int(knowledge_user_id)
     return None
+
+
+async def _load_first_department_admins(session, space_ids: set[int]) -> dict[int, int]:
+    """First creator/admin on the member-management list, one user per space."""
+    from sqlalchemy import case
+    from sqlmodel import select
+
+    from bisheng.common.models.space_channel_member import (
+        BusinessTypeEnum,
+        MembershipStatusEnum,
+        SpaceChannelMember,
+        UserRoleEnum,
+    )
+    from bisheng.user.domain.models.user import User
+
+    if not space_ids:
+        return {}
+    role_order = case(
+        (SpaceChannelMember.user_role == UserRoleEnum.CREATOR, 0),
+        (SpaceChannelMember.user_role == UserRoleEnum.ADMIN, 1),
+        else_=2,
+    )
+    rows = (
+        await session.exec(
+            select(SpaceChannelMember.business_id, SpaceChannelMember.user_id)
+            .join(User, SpaceChannelMember.user_id == User.user_id)
+            .where(
+                SpaceChannelMember.business_id.in_([str(space_id) for space_id in space_ids]),
+                SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
+                SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
+                SpaceChannelMember.user_role.in_([UserRoleEnum.CREATOR, UserRoleEnum.ADMIN]),
+            )
+            .order_by(
+                SpaceChannelMember.business_id,
+                role_order,
+                User.user_name.asc(),
+                SpaceChannelMember.user_id.asc(),
+            )
+        )
+    ).all()
+    first: dict[int, int] = {}
+    for row in rows:
+        space_id = int(row.business_id)
+        if space_id not in first:
+            first[space_id] = int(row.user_id)
+    return first
 
 
 async def _load_departments(session, department_ids: set[int]) -> dict[int, Any]:
@@ -223,6 +283,7 @@ async def _page(session, *, tenant_id: int, admin_user_id: int, after_id: int, b
                 KnowledgeSpaceScope.owner_id,
                 KnowledgeSpaceScope.created_by,
                 Knowledge.user_id,
+                Knowledge.name,
                 DepartmentKnowledgeSpace.department_id,
             )
             .join(Knowledge, Knowledge.id == KnowledgeFile.knowledge_id)
@@ -268,12 +329,12 @@ async def preview(session, journal: JsonlJournal, *, tenant_id: int, admin_user_
     journal.write(
         {
             "type": "header",
-            "version": 1,
+            "version": 2,
             "mode": "preview",
             "tenant_id": tenant_id,
             "admin_user_id": admin_user_id,
             "database_key": database_key(session),
-            "rule": "admin_file_space_organization",
+            "rule": "admin_file_space_organization_v2",
         }
     )
     while True:
@@ -283,18 +344,23 @@ async def preview(session, journal: JsonlJournal, *, tenant_id: int, admin_user_
         if not rows:
             break
         cursor = int(rows[-1].id)
+        department_space_ids = {
+            int(row.knowledge_id)
+            for row in rows
+            if _value(row.level) == "department" and row.name != EXCLUDED_DEPARTMENT_SPACE_NAME
+        }
+        first_admins = await _load_first_department_admins(session, department_space_ids)
         department_ids = set()
         group_ids = set()
+        creator_ids = set(first_admins.values())
         for row in rows:
-            if row.department_id:
+            if row.department_id and _value(row.level) != "department":
                 department_ids.add(int(row.department_id))
-            if _value(row.owner_type) == "department":
+            if _value(row.level) == "team" and _value(row.owner_type) == "department":
                 department_ids.add(int(row.owner_id))
             elif _value(row.level) == "team" and _value(row.owner_type) == "user_group":
                 group_ids.add(int(row.owner_id))
-        departments = await _load_departments(session, department_ids)
         groups = await _load_groups(session, group_ids)
-        creator_ids = set()
         for row in rows:
             if _value(row.level) != "team" or row.department_id or _value(row.owner_type) == "department":
                 continue
@@ -309,12 +375,21 @@ async def preview(session, journal: JsonlJournal, *, tenant_id: int, admin_user_
                 if creator:
                     creator_ids.add(creator)
         primaries = await _load_primary_organizations(session, creator_ids, tenant_id)
+        department_ids.update(org_id for org_id in primaries.values() if org_id)
+        departments = await _load_departments(session, department_ids)
         for row in rows:
             counts["scanned"] += 1
             binding_id = None if row.department_id is None else int(row.department_id)
             department = None
             creator_organization_id = None
-            if _value(row.level) == "department" or _value(row.owner_type) == "department":
+            admin_organization_id = None
+            excluded = _value(row.level) == "department" and row.name == EXCLUDED_DEPARTMENT_SPACE_NAME
+            if _value(row.level) == "department":
+                admin_user_id = first_admins.get(int(row.knowledge_id))
+                admin_organization_id = None if admin_user_id is None else primaries.get(admin_user_id)
+                if admin_organization_id is not None:
+                    department = departments.get(admin_organization_id)
+            elif _value(row.owner_type) == "department":
                 department = departments.get(int(row.owner_id))
             elif binding_id is not None:
                 department = departments.get(binding_id)
@@ -324,11 +399,15 @@ async def preview(session, journal: JsonlJournal, *, tenant_id: int, admin_user_
                     creator_organization_id = None
                 else:
                     creator_organization_id = primaries.get(int(group.create_user or 0))
+                    if creator_organization_id is not None:
+                        department = departments.get(creator_organization_id)
             elif _value(row.level) == "team":
                 creator = _creator_user_id(
                     _value(row.owner_type), int(row.owner_id), int(row.created_by or 0), row.user_id
                 )
                 creator_organization_id = None if creator is None else primaries.get(creator)
+                if creator_organization_id is not None:
+                    department = departments.get(creator_organization_id)
             organization_id, reason = organization_for_space(
                 level=_value(row.level),
                 owner_type=_value(row.owner_type),
@@ -337,6 +416,8 @@ async def preview(session, journal: JsonlJournal, *, tenant_id: int, admin_user_
                 department=department,
                 creator_organization_id=creator_organization_id,
                 tenant_id=tenant_id,
+                excluded=excluded,
+                admin_organization_id=admin_organization_id,
             )
             if organization_id is None:
                 counts["skipped"] += 1
@@ -371,7 +452,7 @@ async def apply_plan(session, path: Path, journal: JsonlJournal) -> dict:
 
     records = list(read_records(path))
     header = records[0] if records else {}
-    if header.get("type") != "header" or header.get("mode") != "preview" or header.get("version") != 1:
+    if header.get("type") != "header" or header.get("mode") != "preview" or header.get("version") != 2:
         raise ValueError("计划头无效")
     if header.get("database_key") != database_key(session):
         raise ValueError("计划与当前数据库不一致")
@@ -414,6 +495,18 @@ async def apply_plan(session, path: Path, journal: JsonlJournal) -> dict:
     return summary
 
 
+def sync_content_stat() -> dict:
+    """Refresh file snapshots so belonging organization names match MySQL."""
+    from bisheng.worker.telemetry.mid_table import sync_mid_knowledge_space_content_stat
+
+    result = sync_mid_knowledge_space_content_stat()
+    if not isinstance(result, dict):
+        raise RuntimeError("内容统计对账没有返回结果")
+    if result.get("degraded") or result.get("retry_state") in {"dead", "busy", "backoff"}:
+        raise RuntimeError(f"内容统计对账未执行: {json.dumps(result, ensure_ascii=False, default=str)}")
+    return result
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     result.add_argument("--tenant-id", type=int)
@@ -440,6 +533,7 @@ async def run(args: argparse.Namespace) -> int:
         async with get_async_db_session() as session:
             if args.plan:
                 summary = await apply_plan(session, args.plan, journal)
+                summary["elasticsearch"] = sync_content_stat()
             else:
                 with tenant_scope(args.tenant_id):
                     summary = await preview(
