@@ -13,7 +13,11 @@ from bisheng.api.services import flow as flow_service
 from bisheng.api.v1.schemas import FlowVersionCreate
 from bisheng.common.errcode.flow import WorkFlowOnlineEditError
 from bisheng.common.errcode.http_error import NotFoundError
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeOperationPlanConflictError,
+    ReferenceCoverageNotReadyError,
+    ResourceReferenceInvalidError,
+)
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.flow_version import FlowVersion
 from bisheng.resource_reference.application.contracts import SourceKey
@@ -272,3 +276,29 @@ async def test_business_reads_after_real_root_lock_use_current_sql_not_consisten
     else:
         await flow_service.FlowService.change_current_version(saved.request, saved.user, "wf", 2)
     assert current_reads
+
+
+@pytest.mark.parametrize("operation", ["create_root", "create_version", "save"])
+@pytest.mark.parametrize("malformed", ["target", "node_id"])
+async def test_http_business_boundary_maps_reference_shape_errors_without_committing(saved, operation, malformed):
+    data = (
+        graph(node("n", "llm", model_id="name"))
+        if malformed == "target"
+        else graph(node("same", "llm", model_id=7), node("same", "llm", model_id=7))
+    )
+    before = {
+        table: rows(saved, table)
+        for table in ("flow", "flowversion", "business_reference_set", "business_resource_reference")
+    }
+    with pytest.raises(ResourceReferenceInvalidError) as error:
+        if operation == "create_root":
+            await create_fixtures.create(saved, name="malformed-root", saved_data=data)
+        elif operation == "create_version":
+            await flow_service.FlowService.create_new_version(
+                saved.user, "wf", FlowVersionCreate(name="malformed", data=data)
+            )
+        else:
+            await save(saved, 2, data)
+    assert error.value.Code == 10996
+    for table, expected in before.items():
+        assert rows(saved, table) == expected
