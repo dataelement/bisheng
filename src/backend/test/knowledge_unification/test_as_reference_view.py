@@ -118,11 +118,11 @@ async def test_write_responses_preserve_known_ids_but_do_not_claim_to_inspect_st
     updated = await AssistantService.update_assistant(
         context.request,
         context.user,
-        AssistantUpdateReq(id="assistant-a", name="new", model_name="1", knowledge_list=[10]),
+        AssistantUpdateReq(id="assistant-a", name="new", model_name="1", knowledge_list=[10], temperature=1),
     )
     assert updated.knowledge_ids == [10] and updated.reference_states is None
     unchanged = await AssistantService.update_assistant(
-        context.request, context.user, AssistantUpdateReq(id="assistant-a", name="new", model_name="1")
+        context.request, context.user, AssistantUpdateReq(id="assistant-a", name="new", model_name="1", temperature=1)
     )
     assert unchanged.knowledge_ids == [10] and unchanged.reference_states is None
     inspect.assert_not_awaited()
