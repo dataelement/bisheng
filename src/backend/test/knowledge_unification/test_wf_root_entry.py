@@ -15,6 +15,7 @@ from bisheng.api.v1 import flows as endpoint
 from bisheng.api.v1.schemas import FlowVersionCreate
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
 from bisheng.database.models.flow_version import FlowVersion
+from bisheng.resource_reference.application.contracts import reference_set_digest
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
 from test.knowledge_unification import test_wf_create as create_fixtures
 from test.knowledge_unification import test_wf_current as current_fixtures
@@ -132,3 +133,26 @@ async def test_root_delete_can_release_original_invalid_references_with_real_tom
     await current_fixtures.force_delete_model(deleting)
     assert (await delete(deleting)).status_code == 200
     assert not rows(deleting, "business_resource_reference")
+
+
+@pytest.mark.parametrize("effective", [True, False])
+async def test_extra_indexed_source_without_business_version_rejects_root_delete(deleting, effective):
+    async with deleting.session_factory() as session, session.begin():
+        session.add(
+            BusinessReferenceSet(
+                tenant_id=101,
+                source_type="workflow_version",
+                source_id="wf",
+                source_version="999",
+                source_revision=1,
+                extractor_version="workflow-version-v1",
+                digest=reference_set_digest(()),
+                record_kind="source",
+                ready=True,
+                effective=effective,
+            )
+        )
+    with pytest.raises(ReferenceCoverageNotReadyError):
+        await delete(deleting)
+    assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 0
+    deleting.delete_projection.assert_not_awaited()
