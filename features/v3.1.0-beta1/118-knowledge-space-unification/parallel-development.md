@@ -130,3 +130,10 @@ REF逻辑快照ac5e8739a、PROC ff2672e983、PERM c970545d3均经其他agent独�
 W2从9cbb0141de创建WF/AS/TARGET三个独立worktree，延续已冻结基线，不在开发中途接入其他工作区变化的发版线。INT先交legacy端口与Runtime，两个业务lane仅在精确checkpoint合入后使用；TARGET交实际Owner后INT统一composition。WF root删除需求促成批量纯物理预锁协议，目标Owner及REF Repo由TARGET唯一写，业务Service仍WF唯一写；最终raw inventory卡T335单独将REF Repo短暂转交WF，TARGET此时不修改该文件。任何新增接缝先注册独立任务、红测与依赖，不以扩大旧卡掩盖遗漏。
 
 WF/AS/TARGET固定提交由其他agent只读archive复查；主agent只合入已复核SHA，检查共享代码合并差异、组合回归、arch guard、ruff及任务级范围/依赖。W2登记T274–T342，当前总342项；已完成数、受测SHA及限制见[W2集成记录](./wave2-implementation-review.md)。未完成运行/read scope不能靠写入Runtime接受任意source tenant绕过；下一波首先冻结该合同，再交业务入口。
+
+
+## 10. W3合同冻结与并行Owner
+
+冻结[execution-read-contract.md](./execution-read-contract.md)后从同一公共接口checkpoint建立W3独立WF/AS/REF lane。REF独占source scope/verifier/只读索引、KN/Model实际只读Owner和legacy；WF独占workflow SourceOwner/facade/两个WS/open/node及平台版本提示；AS独占SourceOwner/facade/Agent/Info/ChatClient。INT独占公共DTO/access/identity、common WorkflowClient/Manager Port接线、评测入口与SourceReadComposition及文档。每卡1–2叶子，必须合精确前驱SHA才接真实接口，纯fake只用于红测，不装生产。
+
+现有common ChatClient/WorkflowClient/Manager在冻结基线已含反向领域/API imports，本波不得新增这类依赖；新增common入口只依赖注入Port。主agent保留基线架构诊断逐项比对，不把脚本exit0误报为零诊断，整体架构债与本波新增违规分开记录。全特性审查尚未完成，不宣称既有架构债已清除。
