@@ -28,6 +28,7 @@ from bisheng.common.errcode.assistant import (
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge import (
     KnowledgeEmbeddingUnavailableError,
+    KnowledgeUnificationError,
     ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
@@ -226,7 +227,7 @@ class AssistantService(BaseService, AssistantUtils):
             if skip_unchanged_status is not None and locked.status == skip_unchanged_status:
                 return locked
             if before_save is not None:
-                await before_save(locked)
+                await before_save(session, locked)
             if "name" in changes and changes["name"] != locked.name:
                 if cls.judge_name_repeat(changes["name"], locked.user_id):
                     raise AssistantNameRepeatError()
@@ -604,7 +605,7 @@ class AssistantService(BaseService, AssistantUtils):
         login_user: UserPayload,
         assistant_id: str,
     ) -> bool:
-        async def project_delete(assistant):
+        async def project_delete(_session, assistant):
             adapter = await get_f048_resource_adapter("assistant")
             record = await adapter.load_permission_record(resource_type="assistant", resource_id=str(assistant.id))
             if record is None:
@@ -644,7 +645,7 @@ class AssistantService(BaseService, AssistantUtils):
         assistant.prompt = prompt
 
         # Inisialisasillm
-        auto_agent = AssistantAgent(assistant, "", login_user.user_id)
+        auto_agent = AssistantAgent(assistant, "", login_user.user_id, login_user=login_user)
         await auto_agent.init_auto_update_llm()
 
         # Streaming Generation Prompts
@@ -768,15 +769,17 @@ class AssistantService(BaseService, AssistantUtils):
         # Try to initializeagent, go online if initialization is successful, otherwise not go online
         initialized = False
 
-        async def initialize(row):
+        async def initialize(session, row):
             nonlocal initialized
-            tmp_agent = AssistantAgent(row, "", login_user.user_id)
+            tmp_agent = AssistantAgent(row, "", login_user.user_id, login_user=login_user, reference_session=session)
             try:
                 await tmp_agent.init_assistant()
                 initialized = True
             except KnowledgeEmbeddingUnavailableError as e:
                 logger.exception("online agent knowledge embedding init failed")
                 raise AssistantKnowledgeEmbeddingUnavailableError(**e.kwargs) from e
+            except KnowledgeUnificationError:
+                raise
             except Exception as e:
                 logger.exception("online agent init failed")
                 raise AssistantInitError(exception=e, msg=f"Assistant onboarding failed: {e}") from e
@@ -892,7 +895,7 @@ class AssistantService(BaseService, AssistantUtils):
         if assistant.desc or not assistant.prompt:
             return
 
-        auto_agent = AssistantAgent(assistant, "", login_user.user_id)
+        auto_agent = AssistantAgent(assistant, "", login_user.user_id, login_user=login_user)
         await auto_agent.init_auto_update_llm()
 
         desc = ""
