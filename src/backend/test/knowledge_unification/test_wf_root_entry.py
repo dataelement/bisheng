@@ -19,6 +19,7 @@ from bisheng.database.models.flow_version import FlowVersion
 from bisheng.resource_reference.application.bindings import ReferenceBindings
 from bisheng.resource_reference.application.contracts import reference_set_digest
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
+from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
 from bisheng.workflow.domain.repositories.workflow_version_repository import WorkflowVersionRepository
 from test.knowledge_unification import test_wf_create as create_fixtures
 from test.knowledge_unification import test_wf_current as current_fixtures
@@ -219,3 +220,88 @@ async def test_committed_new_version_changes_manifest_and_aborts_root_delete(del
         row["source_version"] == str(added[0]) and row["effective"] for row in rows(deleting, "business_reference_set")
     )
     deleting.delete_projection.assert_not_awaited()
+
+
+@pytest.mark.parametrize("corruption", ["deleted_without_set", "unknown_without_set", "terminal_with_raw_row"])
+async def test_raw_root_reference_without_a_valid_live_source_aborts_before_any_delete(deleting, corruption):
+    source_version = "999" if corruption == "unknown_without_set" else "3"
+    async with deleting.session_factory() as session, session.begin():
+        if corruption == "deleted_without_set":
+            await session.execute(
+                sa.delete(BusinessReferenceSet).where(
+                    BusinessReferenceSet.source_type == "workflow_version",
+                    BusinessReferenceSet.source_id == "wf",
+                    BusinessReferenceSet.source_version == "3",
+                )
+            )
+        session.add(
+            BusinessResourceReference(
+                tenant_id=101,
+                source_type="workflow_version",
+                source_id="wf",
+                source_version=source_version,
+                slot_key="node:orphan.model_id",
+                target_type="model",
+                target_id="7",
+                target_tenant_id=101,
+                source_revision=1,
+            )
+        )
+    before = {
+        table: rows(deleting, table)
+        for table in ("flow", "flowversion", "business_reference_set", "business_resource_reference")
+    }
+    with pytest.raises(ReferenceCoverageNotReadyError):
+        await delete(deleting)
+    for table, expected in before.items():
+        assert rows(deleting, table) == expected
+    deleting.delete_projection.assert_not_awaited()
+
+
+async def test_legacy_deleted_version_without_set_or_raw_references_does_not_get_new_index(deleting):
+    async with deleting.session_factory() as session, session.begin():
+        await session.execute(
+            sa.delete(BusinessReferenceSet).where(
+                BusinessReferenceSet.source_id == "wf", BusinessReferenceSet.source_version == "3"
+            )
+        )
+    assert (await delete(deleting)).status_code == 200
+    assert not any(row["source_version"] == "3" for row in rows(deleting, "business_reference_set"))
+    assert not rows(deleting, "business_resource_reference")
+
+
+async def test_root_reference_inventory_is_exact_tenant_type_root_and_stably_ordered(deleting):
+    from sqlmodel import Session
+
+    from test.knowledge_unification.test_wf_save import key
+
+    async with deleting.session_factory() as session, session.begin():
+        for tenant_id, source_type, source_id, version, slot in (
+            (101, "workflow_version", "wf", "10", "node:z.model_id"),
+            (101, "workflow_version", "wf", "10", "node:a.model_id"),
+            (101, "workflow_version", "other", "10", "node:a.model_id"),
+            (101, "assistant", "wf", "10", "node:a.model_id"),
+            (202, "workflow_version", "wf", "10", "node:a.model_id"),
+        ):
+            session.add(
+                BusinessResourceReference(
+                    tenant_id=tenant_id,
+                    source_type=source_type,
+                    source_id=source_id,
+                    source_version=version,
+                    slot_key=slot,
+                    target_type="model",
+                    target_id="7",
+                    target_tenant_id=101,
+                    source_revision=1,
+                )
+            )
+    async with deleting.session_factory() as session:
+        actual = await deleting.repository.alist_source_references_for_root(session, key(1), for_update=True)
+        identities = [(row.source_version, row.slot_key, row.target_type, row.target_id) for row in actual]
+        assert identities == sorted(identities)
+        assert len(actual) == 5
+        assert all((row.tenant_id, row.source_type, row.source_id) == (101, "workflow_version", "wf") for row in actual)
+    with Session(deleting.sync_engine) as session:
+        actual_sync = deleting.repository.list_source_references_for_root(session, key(1), for_update=True)
+        assert [(row.source_version, row.slot_key, row.target_type, row.target_id) for row in actual_sync] == identities
