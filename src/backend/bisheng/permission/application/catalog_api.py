@@ -894,6 +894,8 @@ class SqlCatalogState:
                 active=bool(row.active),
                 allow_same_level=bool(row.allow_same_level),
                 config_scope=row.config_scope,
+                visibility_only_resource_types=tuple(row.visibility_only_resource_types or ()),
+                visibility_level=row.visibility_level,
             )
             for row in rows
             if row.kind == "CUSTOM"
@@ -972,6 +974,8 @@ class SqlCatalogState:
                 derived_level=model.derived_level,
                 active=model.active,
                 allow_same_level=model.allow_same_level,
+                visibility_only_resource_types=list(model.visibility_only_resource_types),
+                visibility_level=model.visibility_level,
             )
             session.add(row)
             await session.flush()
@@ -1355,14 +1359,8 @@ class OpenFGACatalogProjector:
         for subject in TECHNICAL_MARKER_SUBJECTS[1:]:
             subject_active = active_by_subject[subject]
             if subject_active not in (frozenset(), frozenset({old_key})):
-                raise CatalogCommitUnknownError(
-                    f"Catalog active pointer for {subject} is {sorted(subject_active)}"
-                )
-        present_deletes = [
-            change
-            for change in deletes
-            if active_by_subject[change.user] == frozenset({old_key})
-        ]
+                raise CatalogCommitUnknownError(f"Catalog active pointer for {subject} is {sorted(subject_active)}")
+        present_deletes = [change for change in deletes if active_by_subject[change.user] == frozenset({old_key})]
         await self._client.write_tuples(
             writes=[
                 {
@@ -1401,11 +1399,7 @@ class OpenFGACatalogProjector:
         )
         prefix = "permission_catalog_release:"
         return {
-            subject: frozenset(
-                row["object"].removeprefix(prefix)
-                for row in rows
-                if row["object"].startswith(prefix)
-            )
+            subject: frozenset(row["object"].removeprefix(prefix) for row in rows if row["object"].startswith(prefix))
             for subject, rows in zip(TECHNICAL_MARKER_SUBJECTS, pages, strict=True)
         }
 
@@ -1529,7 +1523,6 @@ class F048CatalogApi:
             "name": "协作编辑",
             "action_codes": (
                 "download",
-                "use",
                 "rename",
                 "edit",
                 "create_folder",
@@ -1757,6 +1750,8 @@ class F048CatalogApi:
                     "allow_same_level": model.allow_same_level,
                     "action_codes": list(model.selected_action_codes),
                     "version": row.version,
+                    "visibility_only_resource_types": list(model.visibility_only_resource_types),
+                    "visibility_level": model.visibility_level,
                 }
                 for model in snapshot.model_release.models
             ],
@@ -1797,6 +1792,8 @@ class F048CatalogApi:
                 active=model.active,
                 allow_same_level=model.allow_same_level,
                 config_scope=model.config_scope,
+                visibility_only_resource_types=model.visibility_only_resource_types,
+                visibility_level=model.visibility_level,
             )
             for model in before.model_release.models
             if model.kind == "CUSTOM"

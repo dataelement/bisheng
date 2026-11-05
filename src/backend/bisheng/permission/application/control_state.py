@@ -23,6 +23,7 @@ from bisheng.permission.domain.models import (
     DECIDABLE_PROJECTION_STATES,
     AuthorizationModelRelease,
     PermissionAction,
+    PermissionActionResourceScope,
     PermissionCatalogRelease,
     PermissionGrant,
     PermissionGrantAssignee,
@@ -36,6 +37,7 @@ from bisheng.permission.domain.schemas import (
     VerifiedPermissionTarget,
     VisibleSourceProjectionDTO,
 )
+from bisheng.permission.domain.services.catalog_policy import ACTION_RESOURCE_SCOPES
 from bisheng.permission.domain.services.grant_service import (
     GrantMutationContext,
 )
@@ -44,6 +46,7 @@ from bisheng.permission.domain.services.grant_source_service import (
     GrantSnapshot,
     GrantSourceRecord,
     GrantSourceService,
+    model_snapshot_for_target,
 )
 from bisheng.permission.domain.services.mode_service import (
     ModeContext,
@@ -80,6 +83,17 @@ class RuntimeCatalogSnapshot:
     model_id: str
     model_checksum: str
     models: tuple[RuntimeModelSnapshot, ...]
+    action_resource_scopes: tuple[tuple[str, tuple[str, ...]], ...] = ()
+
+    def model_for_target(self, model: GrantModelSnapshot, *, resource_type: str) -> GrantModelSnapshot:
+        """Use trusted Catalog scopes for every Grant/roster target snapshot."""
+
+        scopes = dict(self.action_resource_scopes) if self.action_resource_scopes else ACTION_RESOURCE_SCOPES
+        return model_snapshot_for_target(
+            model,
+            resource_type=resource_type,
+            applicable_action_codes=tuple(code for code in model.action_codes if resource_type in scopes.get(code, ())),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,12 +163,29 @@ class SqlPermissionControlState:
                             .where(
                                 col(PermissionModelAction.model_id).in_(model_ids),
                                 PermissionAction.active == 1,
+                                PermissionAction.level.is_not(None),
                             )
                         )
                     ).all()
                 )
                 if model_ids
                 else []
+            )
+            scope_pairs = list(
+                (
+                    await session.execute(
+                        select(PermissionAction.code, PermissionActionResourceScope.resource_type)
+                        .join(
+                            PermissionActionResourceScope,
+                            PermissionActionResourceScope.action_id == PermissionAction.id,
+                        )
+                        .where(
+                            PermissionAction.catalog_release_id == release.id,
+                            PermissionAction.active == 1,
+                            PermissionAction.level.is_not(None),
+                        )
+                    )
+                ).all()
             )
         actions: dict[int, list[str]] = {}
         for model_id, action_code in action_pairs:
@@ -167,6 +198,8 @@ class SqlPermissionControlState:
                     action_codes=tuple(sorted(actions.get(int(row.id or 0), ()))),
                     derived_level=row.derived_level,
                     allow_same_level=bool(row.allow_same_level),
+                    visibility_only_resource_types=tuple(sorted(row.visibility_only_resource_types or ())),
+                    visibility_level=row.visibility_level,
                 ),
                 name=row.name,
                 kind=row.kind,
@@ -183,6 +216,10 @@ class SqlPermissionControlState:
             model_id=authorization_release.model_id,
             model_checksum=authorization_release.model_checksum,
             models=models,
+            action_resource_scopes=tuple(
+                (code, tuple(sorted({resource for action, resource in scope_pairs if action == code})))
+                for code in sorted({action for action, _ in scope_pairs})
+            ),
         )
 
     async def mode_for_target(
