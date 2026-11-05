@@ -159,6 +159,35 @@ class ReferenceRepository:
             return tuple((await session.execute(self._sets_query(source_type))).scalars().all())
 
     @staticmethod
+    def _root_source_sets_query(key: SourceKey, *, for_update: bool):
+        statement = (
+            select(BusinessReferenceSet)
+            .where(
+                BusinessReferenceSet.source_type == key.source_type.value,
+                BusinessReferenceSet.source_id == key.source_id,
+                BusinessReferenceSet.record_kind == "source",
+            )
+            .order_by(BusinessReferenceSet.source_version)
+            .execution_options(populate_existing=True)
+        )
+        return statement.with_for_update() if for_update else statement
+
+    def list_source_sets_for_root(
+        self, session: Session, key: SourceKey, *, for_update: bool = False
+    ) -> tuple[BusinessReferenceSet, ...]:
+        """All indexed versions, including inactive ones, of one trusted root."""
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            return tuple(session.execute(self._root_source_sets_query(key, for_update=for_update)).scalars())
+
+    async def alist_source_sets_for_root(
+        self, session: AsyncSession, key: SourceKey, *, for_update: bool = False
+    ) -> tuple[BusinessReferenceSet, ...]:
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            return tuple((await session.execute(self._root_source_sets_query(key, for_update=for_update))).scalars())
+
+    @staticmethod
     def _sets_query(source_type):
         return select(BusinessReferenceSet).where(
             BusinessReferenceSet.source_type == SourceType(source_type).value,
