@@ -175,6 +175,7 @@ CREATE TABLE IF NOT EXISTS knowledge (
     processing_defaults JSON,
     processing_config_version INTEGER NOT NULL DEFAULT 0,
     model_config_revision INTEGER NOT NULL DEFAULT 0,
+    model_transition JSON,
     index_generation VARCHAR(64),
     migration_origin VARCHAR(64),
     creation_request_id VARCHAR(64),
