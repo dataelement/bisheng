@@ -7,6 +7,7 @@ import pytest
 
 from bisheng.api.services import assistant as assistant_module
 from bisheng.api.services.assistant import AssistantService
+from bisheng.api.v1.schemas import AssistantUpdateReq
 from bisheng.assistant.application.execution_admission import AssistantExecutionAdmission
 from bisheng.assistant.domain.services.reference_extractor import extract_assistant_references
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -21,6 +22,10 @@ from bisheng.resource_reference.application.source_contracts import (
     canonical_payload_json,
     payload_digest,
 )
+from test.knowledge_unification import test_as_bindings as bindings_tests
+
+assistant_business = bindings_tests.assistant_business
+assistant_tenant = bindings_tests.assistant_tenant
 
 
 @pytest.fixture
@@ -45,11 +50,6 @@ def view(monkeypatch):
     prepare = AsyncMock(return_value=SourceReferenceReadResult(snapshot, states, 3, 4))
     monkeypatch.setattr(AssistantExecutionAdmission, "prepare", prepare)
     monkeypatch.setattr(assistant_module.AssistantDao, "aget_one_assistant", AsyncMock(return_value=row))
-    monkeypatch.setattr(
-        assistant_module.AssistantLinkDao,
-        "get_assistant_link",
-        AsyncMock(return_value=[SimpleNamespace(**link) for link in links]),
-    )
     rows = [Knowledge(id=target, name=f"actual-{target}", user_id=8, tenant_id=101, type=3) for target in (10, 20)]
     monkeypatch.setattr(assistant_module.KnowledgeDao, "get_list_by_ids", MagicMock(return_value=rows))
     decorate = MagicMock(side_effect=lambda tools, flows, ids: ([], [], [item for item in rows if item.id in ids]))
@@ -105,3 +105,24 @@ async def test_missing_reference_coverage_is_not_an_empty_successful_info(view):
     with pytest.raises(ReferenceCoverageNotReadyError):
         await AssistantService.get_assistant_info("assistant-a", user)
     decorate.assert_not_called()
+
+
+async def test_write_responses_preserve_known_ids_but_do_not_claim_to_inspect_states(assistant_business, monkeypatch):
+    context = assistant_business
+    inspect = AsyncMock(side_effect=AssertionError("write response must not perform post-commit inspection"))
+    monkeypatch.setattr(AssistantExecutionAdmission, "prepare", inspect)
+    created = await AssistantService.create_assistant(
+        context.request, context.user, Assistant(id="assistant-a", name="new", user_id=7)
+    )
+    assert created.knowledge_ids == [] and created.reference_states is None
+    updated = await AssistantService.update_assistant(
+        context.request,
+        context.user,
+        AssistantUpdateReq(id="assistant-a", name="new", model_name="1", knowledge_list=[10]),
+    )
+    assert updated.knowledge_ids == [10] and updated.reference_states is None
+    unchanged = await AssistantService.update_assistant(
+        context.request, context.user, AssistantUpdateReq(id="assistant-a", name="new", model_name="1")
+    )
+    assert unchanged.knowledge_ids == [10] and unchanged.reference_states is None
+    inspect.assert_not_awaited()
