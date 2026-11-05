@@ -118,7 +118,7 @@ class WorkflowReferenceSourceOwner:
                 session, int(target.target_id), for_update=for_update
             )
             await require_business_action(identity, resource_type=kind, resource_id=target.target_id, action="visible")
-        payload = {"graph": graph, "root": _fact_payload(root)}
+        payload = {"graph": graph}
         if "node_input" in supplied:
             payload["node_input"] = deepcopy(supplied["node_input"])
         encoded = canonical_payload_json(payload)
