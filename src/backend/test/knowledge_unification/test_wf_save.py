@@ -11,14 +11,18 @@ import sqlalchemy as sa
 
 from bisheng.api.services import flow as flow_service
 from bisheng.api.v1.schemas import FlowVersionCreate
+from bisheng.common.errcode.flow import WorkFlowOnlineEditError
 from bisheng.common.errcode.http_error import NotFoundError
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.flow_version import FlowVersion
 from bisheng.resource_reference.application.contracts import SourceKey
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
 from bisheng.workflow.domain.repositories.workflow_version_repository import WorkflowVersionRepository
-from bisheng.workflow.domain.services.reference_extractor import WORKFLOW_REFERENCE_EXTRACTOR_VERSION
+from bisheng.workflow.domain.services.reference_extractor import (
+    WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
+    extract_workflow_version_references,
+)
 from test.knowledge_unification import test_wf_create as create_fixtures
 from test.knowledge_unification.test_wf_extract import graph, node
 
@@ -45,6 +49,7 @@ async def saved(bindings, monkeypatch):
                 extractor_version=WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
                 lock_source_root=lambda sql: WorkflowVersionRepository.alock_root(sql, "wf", 101),
                 new_source=True,
+                effective=version_id != 3,
             )
             await bindings.runtime.aapply_source_bindings(session, prepared)
     return bindings
@@ -186,3 +191,44 @@ async def test_new_leaf_cannot_survive_root_becoming_deleted_at_locked_recheck(s
             saved.user, "wf", FlowVersionCreate(name="must rollback", data={})
         )
     assert {row["id"] for row in rows(saved, "flowversion")} == {1, 2, 3}
+
+
+async def test_empty_graph_update_cannot_bypass_online_current_version_edit_guard(saved):
+    async with saved.session_factory() as session, session.begin():
+        root = await session.get(Flow, "wf")
+        root.status = 2
+    before = rows(saved, "flowversion")
+    result = await save(saved, 1, {})
+    assert result.status_code == WorkFlowOnlineEditError.Code
+    assert rows(saved, "flowversion") == before
+
+
+async def test_partial_save_cannot_overwrite_a_newer_normal_save_before_runtime_candidate_read(saved, monkeypatch):
+    original = saved.runtime.aprepare_source_bindings
+    newer_data = graph(node("concurrent", "llm", model_id=7))
+
+    async def concurrent_save_then_prepare(session, source_key, references, **kwargs):
+        async with saved.session_factory() as concurrent, concurrent.begin():
+            root = await WorkflowVersionRepository.aget_root(concurrent, "wf", 101)
+            prepared = await original(
+                concurrent,
+                key(2),
+                extract_workflow_version_references(newer_data),
+                extractor_version=WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
+                lock_source_root=lambda sql: WorkflowVersionRepository.alock_root(sql, "wf", 101),
+            )
+            await WorkflowVersionRepository.aupdate_version(
+                concurrent, root, FlowVersion(id=2, flow_id="wf", name="concurrent", data=newer_data)
+            )
+            await saved.runtime.aapply_source_bindings(concurrent, prepared)
+        return await original(session, source_key, references, **kwargs)
+
+    monkeypatch.setattr(saved.runtime, "aprepare_source_bindings", concurrent_save_then_prepare)
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        await save(saved, 2, None, name="stale rename")
+    async with saved.session_factory() as session:
+        version = await session.get(FlowVersion, 2)
+        assert version.name == "concurrent" and version.data == newer_data
+    assert [(row["source_version"], row["slot_key"]) for row in rows(saved, "business_resource_reference")] == [
+        ("2", "node:concurrent.model_id")
+    ]
