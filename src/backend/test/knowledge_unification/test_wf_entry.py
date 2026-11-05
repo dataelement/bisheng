@@ -156,7 +156,7 @@ async def test_public_port_never_downgrades_to_preview(admission, mode, graph):
     assert not admission.transient
 
 
-@pytest.mark.parametrize("mode,version", [("unknown", None), ("saved", "bad"), ("saved", True)])
+@pytest.mark.parametrize("mode,version", [("unknown", None), ([], None), ({}, None), ("saved", "bad"), ("saved", True)])
 async def test_mode_and_version_are_validated_claims(admission, mode, version):
     with pytest.raises(ResourceReferenceInvalidError):
         await BoundWorkflowExecutionPort("wf", admission.identity).prepare_initial(
@@ -166,6 +166,10 @@ async def test_mode_and_version_are_validated_claims(admission, mode, version):
             execution_mode=mode,
             version_hint=version,
         )
+    module.get_reference_read_runtime.assert_not_awaited()
+    admission.runtime.verifier.aissue_scope.assert_not_awaited()
+    admission.runtime.verifier.aissue_transient_scope.assert_not_awaited()
+    admission.authorize.assert_not_awaited()
 
 
 @pytest.fixture
