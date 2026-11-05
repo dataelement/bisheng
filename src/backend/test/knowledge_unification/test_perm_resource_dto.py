@@ -57,7 +57,11 @@ async def test_grantable_model_serializes_pure_visibility_flag():
 async def test_roster_uses_target_scoped_metadata_and_original_tier():
     resource_api, _, _ = api()
     result = await resource_api.list_grants(
-        resource_type="tool", resource_id="t1", actor=PermissionActor(user_id=42, current_tenant_id=101)
+        cursor=None,
+        page_size=20,
+        resource_type="tool",
+        resource_id="t1",
+        actor=PermissionActor(user_id=42, current_tenant_id=101),
     )
     model = result["data"][0]["model"]
     assert model["visibility_only"] is True and model["level"] == 3
