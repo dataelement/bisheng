@@ -34,8 +34,11 @@ class ReferenceSourceReadRuntime:
             raise ReferenceCoverageNotReadyError(reason="source_root_guard_inconsistent")
         if source is None:
             raise ReferenceCoverageNotReadyError(reason="source_not_indexed")
-        references = tuple(ReferenceSpec(row.slot_key, TargetKey(row.target_type, row.target_id)) for row in rows)
-        digest = reference_set_digest(references)
+        try:
+            references = tuple(ReferenceSpec(row.slot_key, TargetKey(row.target_type, row.target_id)) for row in rows)
+            digest = reference_set_digest(references)
+        except (TypeError, ValueError) as exc:
+            raise ReferenceCoverageNotReadyError(reason="source_set_inconsistent") from exc
         if (
             not source.ready
             or source.record_kind != "source"
