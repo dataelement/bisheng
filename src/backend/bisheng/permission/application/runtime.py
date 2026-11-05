@@ -45,6 +45,7 @@ from bisheng.permission.domain.schemas import (
     VerifiedPermissionTarget,
     VisibleObjectEnumerationResult,
 )
+from bisheng.permission.domain.services.catalog_policy import ACTION_RESOURCE_SCOPES
 from bisheng.permission.domain.services.grant_service import (
     CanonicalGrantChange,
     GrantCapability,
@@ -55,6 +56,8 @@ from bisheng.permission.domain.services.grant_source_service import (
     GrantModelSnapshot,
     GrantSnapshot,
     GrantSourceService,
+    is_visibility_only_model,
+    model_snapshot_for_target,
 )
 from bisheng.permission.domain.services.mode_service import (
     ModeContext,
@@ -68,6 +71,7 @@ from bisheng.permission.domain.services.owner_service import (
 from bisheng.permission.domain.services.permission_action_service import (
     F048PermissionService,
     PermissionActor,
+    normalize_legacy_action,
 )
 from bisheng.permission.domain.services.permission_explain_service import (
     PermissionExplainContext,
@@ -264,8 +268,18 @@ class F048PermissionRuntime:
 
         catalog = await self._runtime_catalog()
         owner_model = require_owner_model(catalog)
+        prospective = tuple(
+            next(
+                model
+                for model in self._models_for_target(catalog, item.snapshot.visibility_only_resource_types[0])
+                if model.model_key == item.snapshot.model_key
+            )
+            if not item.snapshot.action_codes and item.snapshot.visibility_only_resource_types
+            else item.snapshot
+            for item in catalog.models
+        )
         grantable = self._grants.grantable_models_for_capabilities(
-            models=tuple(item.snapshot for item in catalog.models),
+            models=prospective,
             capabilities=(GrantCapability(model=owner_model, source_key="prospective-owner"),),
         )
         keys = {model.model_key for model in grantable}
@@ -346,18 +360,31 @@ class F048PermissionRuntime:
     ) -> dict[tuple[int, str, str], PermissionResourceSnapshot]:
         return await self._state.permission_snapshots(resources)
 
+    @staticmethod
+    def _models_for_target(catalog, resource_type: str) -> tuple[GrantModelSnapshot, ...]:
+        """Bind all permission models to the same verified target action scope."""
+
+        scopes = dict(getattr(catalog, "action_resource_scopes", ())) or ACTION_RESOURCE_SCOPES
+        return tuple(
+            model_snapshot_for_target(
+                item.snapshot,
+                resource_type=resource_type,
+                applicable_action_codes=tuple(
+                    code for code in item.snapshot.action_codes if resource_type in scopes.get(code, ())
+                ),
+            )
+            for item in catalog.models
+        )
+
     def tenant_use_grant(self, target, catalog):
         """Build a revocable grant for the current tenant's members."""
         candidates = [
-            row.snapshot
-            for row in catalog.models
-            if row.snapshot.active
-            and row.snapshot.derived_level is not None
-            and "use" in row.snapshot.action_codes
-            and set(row.snapshot.action_codes) <= {"use", "download"}
+            model
+            for model in self._models_for_target(catalog, target.resource_type)
+            if model.active and is_visibility_only_model(model, target.resource_type)
         ]
         if not candidates:
-            raise PermissionPublishNotReadyError(msg="A use-only permission model is required")
+            raise PermissionPublishNotReadyError(msg="A visibility-only permission model is required")
         model = min(candidates, key=lambda item: (item.derived_level or 0, item.model_key))
         grant = self._empty_grant(target=target, model=model)
         source = self._sources.canonicalize_source(
@@ -715,7 +742,7 @@ class F048PermissionRuntime:
         if source_mode.mode.upper() != copy_mode:
             raise PermissionVersionConflictError(msg="Source permission mode changed before copy")
         catalog = await self._runtime_catalog()
-        models = tuple(item.snapshot for item in catalog.models)
+        models = self._models_for_target(catalog, target.resource_type)
         copy_grants: tuple[GrantSnapshot, ...] = ()
         copy_deltas = ()
         owner_model = require_owner_model(catalog)
@@ -866,7 +893,7 @@ class F048PermissionRuntime:
     ) -> GrantMutationContext:
         catalog = await self._runtime_catalog()
         mode = await self._require_current_target(target)
-        models = tuple(item.snapshot for item in catalog.models)
+        models = self._models_for_target(catalog, target.resource_type)
         grants = await self._state.load_grants(
             target=target,
             models=models,
@@ -918,7 +945,7 @@ class F048PermissionRuntime:
         system_authorized = self._system_authorized(actor, target)
         capabilities = () if system_authorized else await self._grant_capabilities(actor, target)
         models = self._grants.manageable_models_for_capabilities(
-            models=tuple(item.snapshot for item in catalog.models),
+            models=self._models_for_target(catalog, target.resource_type),
             capabilities=capabilities,
             system_authorized=system_authorized,
         )
@@ -1291,7 +1318,7 @@ class F048PermissionRuntime:
     ) -> PermissionExplanation:
         catalog = await self._runtime_catalog()
         mode = await self._require_current_target(target)
-        models = tuple(item.snapshot for item in catalog.models)
+        models = self._models_for_target(catalog, target.resource_type)
         local = await self._state.load_grants(
             target=target,
             models=models,
@@ -1339,7 +1366,7 @@ class F048PermissionRuntime:
         rows, has_more = await self._state.load_source_page(
             target=target,
             mode=mode.mode,
-            models=tuple(item.snapshot for item in catalog.models),
+            models=self._models_for_target(catalog, target.resource_type),
             after_id=after_id,
             limit=limit,
         )
@@ -1355,10 +1382,16 @@ class F048PermissionRuntime:
         This does not change the manage_permission gate on ordinary rosters.
         """
         catalog = await self._runtime_catalog()
-        models = tuple(item.snapshot for item in catalog.models)
+        models = self._models_for_target(catalog, target.resource_type)
         before = await self._state.source_read_stamp(target=target, models=models)
         mode = await self._require_current_target(target)
-        eligible = tuple(model for model in models if action in model.action_codes)
+        action = normalize_legacy_action(action)
+        eligible = tuple(
+            model
+            for model in models
+            if action in model.action_codes
+            or (action == "visible" and (model.action_codes or is_visibility_only_model(model, target.resource_type)))
+        )
         rows, after_id = [], 0
         while eligible:
             page, more = await self._state.load_source_page(
@@ -1404,7 +1437,9 @@ class F048PermissionRuntime:
         catalog = await self._runtime_catalog()
         mode = await self._require_current_target(target)
         requested = set(normalized_keys)
-        models = tuple(item.snapshot for item in catalog.models if item.snapshot.model_key in requested)
+        models = tuple(
+            model for model in self._models_for_target(catalog, target.resource_type) if model.model_key in requested
+        )
         result: dict[str, list[str]] = {key: [] for key in normalized_keys}
         seen: dict[str, set[str]] = {key: set() for key in normalized_keys}
         if not models:
@@ -1447,7 +1482,7 @@ class F048PermissionRuntime:
     ) -> ModeContext:
         catalog = await self._runtime_catalog()
         mode = await self._require_current_target(target)
-        models = tuple(item.snapshot for item in catalog.models)
+        models = self._models_for_target(catalog, target.resource_type)
         local = await self._state.load_grants(
             target=target,
             models=models,
