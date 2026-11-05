@@ -46,7 +46,7 @@ async def test_equivalent_integer_paths_require_expected_tenant(monkeypatch, spa
     path = "/api/v1/knowledge/space/" + space_segment + "/" + suffix
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         missing = await client.request(method, path)
-        assert missing.status_code == 409
+        assert missing.status_code == 400
         mismatched = await client.request(method, path, headers={"X-Management-Tenant": "202"})
         assert mismatched.status_code == 409
         matching = await client.request(method, path, headers={"X-Management-Tenant": "101"})
