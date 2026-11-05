@@ -76,17 +76,15 @@ async def materialize_session_skills(
     Args:
         backend: the session ``WorkspaceBackend`` (write-throughs to MinIO+cache).
         tenant_id: owning tenant; scopes the bundle object keys.
-        selected: skill names picked for this run. Both ``None`` (field absent —
-            a legacy row, or any client/caller that never sent it) and ``[]`` (the
-            UI explicitly cleared the picker) mean "no skills this run": copy
-            nothing. Only an explicit non-empty list opts in, and each name is
-            still intersected with the tenant's governance-enabled set.
+        selected: skill names the user picked for this run. Not a copy filter any
+            more: every enabled skill is copied. Kept for the log line; the picked
+            names are highlighted in the prompt by SkillSelectionMiddleware.
         store: skill bundle store (injectable for tests).
 
     Returns:
         ``SkillProvisionResult(copied, failed)``. ``copied`` gates attaching the
-        skills middleware; a non-empty ``failed`` means the run is missing a
-        capability the user explicitly asked for and must be surfaced.
+        skills middleware. ``failed`` lists every skill that did not land; only the
+        ones the user picked are surfaced (``user_visible_failures``).
     """
     store = store or SkillStore()
     # Governance gate, scoped to the current tenant (LinsightSkillDao.list_enabled
@@ -95,16 +93,13 @@ async def materialize_session_skills(
     # so resolving one costs no extra query.
     enabled_skills = await LinsightSkillDao.list_enabled()
     enabled = {skill.name: skill for skill in enabled_skills}
-    # F047: frontend-hidden (and enabled) skills are internal capabilities — the
-    # server force-includes them in EVERY run, even when the user selected
-    # nothing. A disabled skill never dispatches, hidden or not (AC-09).
-    hidden_forced = {skill.name for skill in enabled_skills if getattr(skill, "frontend_hidden", False)}
-
-    # User-picked skills stay strictly opt-in: None ≡ [] ≡ "none picked this
-    # run". Treating a missing field as "copy every enabled skill" was a footgun
-    # (a stale/cached client or non-UI caller silently loaded everything). Only
-    # the F047 forced set is added on top of the explicit selection.
-    wanted = ({name for name in selected if name in enabled} if selected else set()) | hidden_forced
+    # cofco 2026-11-05 (user decision): every governance-enabled skill of the tenant
+    # is mounted on every run, as the release line does since F076 ("mount every
+    # candidate"). The picker no longer gates the copy: ``selected`` only marks the
+    # rows the model should prefer (SkillSelectionMiddleware) and decides which copy
+    # failures reach the user (user_visible_failures). Governance still gates:
+    # a disabled skill is never copied. F047 frontend-hidden skills are included as before.
+    wanted = sorted(enabled)
     if not wanted:
         return SkillProvisionResult([], [])
 
@@ -145,3 +140,13 @@ async def materialize_session_skills(
         failed,
     )
     return SkillProvisionResult(copied, failed)
+
+
+def user_visible_failures(result: SkillProvisionResult, selected: list[str] | None) -> list[str]:
+    """Copy failures worth a timeline row: only skills the user picked.
+
+    Every enabled skill is mounted now, so an unpicked one that fails to copy is
+    a log line, not a broken promise to the user.
+    """
+    picked = set(selected or [])
+    return [name for name in result.failed if name in picked]

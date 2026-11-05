@@ -130,39 +130,44 @@ def _copied_rel_paths(backend: _CacheBackend) -> set[str]:
 
 
 class TestGate:
-    async def test_selected_subset_copies_only_those(self, monkeypatch, store, backend):
+    """cofco 2026-11-05: every governance-enabled skill is mounted; the picker only highlights."""
+
+    async def test_every_enabled_skill_is_copied_whatever_is_selected(self, monkeypatch, store, backend):
         _patch_enabled(monkeypatch, ENABLED, store)
         result = await materialize_session_skills(backend, TENANT, ["biao-shu-zhuan-xie"], store=store)
-        assert result.copied == ["biao-shu-zhuan-xie"]
-        assert _copied_rel_paths(backend) == {"/skills/biao-shu-zhuan-xie/SKILL.md"}
+        assert result.copied == sorted(ENABLED)
+        assert _copied_rel_paths(backend) == {f"/skills/{n}/SKILL.md" for n in ENABLED}
 
-    async def test_empty_selection_copies_nothing(self, monkeypatch, store, backend):
+    @pytest.mark.parametrize("selected", [[], None])
+    async def test_no_selection_still_mounts_every_enabled_skill(self, monkeypatch, store, backend, selected):
         _patch_enabled(monkeypatch, ENABLED, store)
-        result = await materialize_session_skills(backend, TENANT, [], store=store)
-        assert result.copied == []
-        assert backend.uploaded == []
-
-    async def test_none_selection_copies_nothing(self, monkeypatch, store, backend):
-        # None (field absent) is treated identically to [] — no skills this run.
-        # Regression guard: None used to mean "copy every enabled skill", which
-        # silently loaded ALL skills for any request that omitted the field
-        # (stale/cached client, non-UI caller, legacy row), defeating the picker.
-        _patch_enabled(monkeypatch, ENABLED, store)
-        result = await materialize_session_skills(backend, TENANT, None, store=store)
-        assert result.copied == []
-        assert backend.uploaded == []
+        result = await materialize_session_skills(backend, TENANT, selected, store=store)
+        assert result.copied == sorted(ENABLED)
 
     async def test_db_disabled_skill_never_copied_even_if_selected(self, monkeypatch, store, backend):
         _patch_enabled(monkeypatch, ENABLED, store)
         result = await materialize_session_skills(
             backend, TENANT, ["ting-yong-ji-neng", "biao-shu-zhuan-xie"], store=store
         )
-        assert result.copied == ["biao-shu-zhuan-xie"]
+        assert "ting-yong-ji-neng" not in result.copied
+        assert result.failed == []
 
-    async def test_unknown_selected_name_ignored(self, monkeypatch, store, backend):
+    async def test_unknown_selected_name_is_neither_copied_nor_a_failure(self, monkeypatch, store, backend):
         _patch_enabled(monkeypatch, ENABLED, store)
         result = await materialize_session_skills(backend, TENANT, ["does-not-exist"], store=store)
-        assert result.copied == []
+        assert result.copied == sorted(ENABLED)
+        assert result.failed == []
+
+    async def test_no_enabled_skill_copies_nothing(self, monkeypatch, store, backend):
+        _patch_enabled(monkeypatch, set(), store)
+        result = await materialize_session_skills(backend, TENANT, ["biao-shu-zhuan-xie"], store=store)
+        assert result.copied == [] and backend.uploaded == []
+
+
+def test_only_picked_skills_failures_reach_the_user():
+    result = skill_provisioning.SkillProvisionResult(["a"], ["b", "c"])
+    assert skill_provisioning.user_visible_failures(result, ["c", "a"]) == ["c"]
+    assert skill_provisioning.user_visible_failures(result, None) == []
 
 
 class TestByteFidelity:
@@ -206,7 +211,7 @@ class TestAcrossNodes:
 
         result = await materialize_session_skills(backend, TENANT, ["biao-shu-zhuan-xie"], store=other_node)
 
-        assert result.copied == ["biao-shu-zhuan-xie"]
+        assert "biao-shu-zhuan-xie" in result.copied
         assert (backend.file_dir / "skills" / "biao-shu-zhuan-xie" / "SKILL.md").exists()
 
 
@@ -227,7 +232,7 @@ class TestFailureIsReported:
         result = await materialize_session_skills(backend, TENANT, ["biao-shu-zhuan-xie"], store=store)
 
         assert result.copied == []
-        assert result.failed == ["biao-shu-zhuan-xie"]
+        assert result.failed == sorted(ENABLED)
         assert backend.uploaded == []
 
     async def test_one_broken_skill_does_not_block_a_working_one(self, monkeypatch, store, backend):
@@ -251,7 +256,7 @@ class TestFailureIsReported:
 
         monkeypatch.setattr(backend, "aupload_files", _failing_upload)
         result = await materialize_session_skills(backend, TENANT, ["biao-shu-zhuan-xie"], store=store)
-        assert (result.copied, result.failed) == ([], ["biao-shu-zhuan-xie"])
+        assert (result.copied, result.failed) == ([], sorted(ENABLED))
 
 
 class TestEnumerationLoop:
@@ -306,4 +311,4 @@ class TestProvisioningLog:
         assert "%s" not in summary and "%r" not in summary
         assert "tenant=1" in summary
         assert "selected=['biao-shu-zhuan-xie']" in summary
-        assert "materialized ['biao-shu-zhuan-xie']" in summary
+        assert "materialized ['biao-shu-zhuan-xie', 'he-tong-shen-yue']" in summary

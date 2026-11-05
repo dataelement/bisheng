@@ -885,6 +885,11 @@ async def create_linsight_agent(
                 sources=[(f"/{WORKSPACE_SKILLS_DIR}/", "Skills")],
             )
         )
+        # Every enabled skill is mounted; mark the ones the user picked on their
+        # 可用技能 rows. Sits after SkillsMiddleware, which writes those rows.
+        from bisheng.linsight.domain.services.skill_selection_middleware import SkillSelectionMiddleware
+
+        middlewares.append(SkillSelectionMiddleware(getattr(session_model, "skills", None)))
 
     # Language directive LAST in the stack so it appends AFTER every framework
     # middleware prompt (write_todos / filesystem / task / skills) — the absolute
