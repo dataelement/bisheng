@@ -25,7 +25,10 @@ def fixture():
         visibility_level=1,
     )
     high = GrantModelSnapshot("high-custom", False, ("edit",), derived_level=3)
-    catalog = SimpleNamespace(models=tuple(SimpleNamespace(snapshot=m) for m in (model, high)))
+    catalog = SimpleNamespace(
+        models=tuple(SimpleNamespace(snapshot=m) for m in (model, high)),
+        action_resource_scopes=(("edit", ("knowledge_space",)), ("manage_permission", ("knowledge_space",))),
+    )
     row = PermissionSourceExplanation(
         source_id=11,
         source_version=2,
