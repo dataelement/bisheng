@@ -70,10 +70,10 @@ def model_snapshot_for_target(
         raise ValueError("unknown permission resource type")
     if not set(applicable_action_codes) <= set(model.action_codes):
         raise ValueError("applicable actions must belong to the current model")
-    visibility_only = resource_type in model.visibility_only_resource_types
-    if visibility_only and (
-        applicable_action_codes
-        or isinstance(model.visibility_level, bool)
+    marked = resource_type in model.visibility_only_resource_types
+    visibility_only = marked and not applicable_action_codes
+    if marked and (
+        isinstance(model.visibility_level, bool)
         or model.visibility_level not in {1, 2, 3, 4}
         or len(set(model.visibility_only_resource_types)) != len(model.visibility_only_resource_types)
         or not set(model.visibility_only_resource_types) <= MIGRATED_RESOURCE_TYPES

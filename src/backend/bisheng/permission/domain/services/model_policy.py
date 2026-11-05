@@ -188,14 +188,10 @@ def _visibility_metadata(
         or level not in {1, 2, 3, 4}
     ):
         raise ValueError("invalid visibility-only model metadata")
-    concrete_types = {
-        resource_type
-        for action in action_release.actions
-        if action.code in action_codes
-        for resource_type in action.resource_types
-    }
-    remaining = tuple(sorted(set(resource_types) - concrete_types))
-    return remaining, level if remaining else None
+    # These fields record controlled provenance. A temporary concrete action
+    # suspends pure visibility for that target; it must not erase its original
+    # tier, otherwise removing the action makes old Sources unmanageable.
+    return tuple(sorted(resource_types)), level
 
 
 def _standard_models(
@@ -214,9 +210,20 @@ def _standard_models(
             raise ValueError(f"standard model {key} same-level policy must be boolean")
         # Standard models are an internal bootstrap contract, never an HTTP
         # request for an arbitrary empty custom model.
+        standard_visibility_types = tuple(
+            sorted(
+                MIGRATED_RESOURCE_TYPES
+                - {
+                    resource_type
+                    for action in action_release.actions
+                    if action.code in action_codes
+                    for resource_type in action.resource_types
+                }
+            )
+        )
         visibility_types, visibility_level = _visibility_metadata(
-            tuple(sorted(MIGRATED_RESOURCE_TYPES)),
-            level,
+            standard_visibility_types,
+            level if standard_visibility_types else None,
             action_codes=action_codes,
             action_release=action_release,
         )
