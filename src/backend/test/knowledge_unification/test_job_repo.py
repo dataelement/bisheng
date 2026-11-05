@@ -18,6 +18,7 @@ from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
+from bisheng.knowledge.domain.models.knowledge_processing_retry import KnowledgeProcessingRetryReceipt
 from bisheng.knowledge.domain.repositories.processing_job_repository import (
     NewProcessingItem,
     ProcessingConfiguration,
@@ -38,7 +39,12 @@ async def job_session(job_tenant):
         await connection.run_sync(
             lambda conn: SQLModel.metadata.create_all(
                 conn,
-                tables=[Knowledge.__table__, KnowledgeProcessingJob.__table__, KnowledgeProcessingItem.__table__],
+                tables=[
+                    Knowledge.__table__,
+                    KnowledgeProcessingJob.__table__,
+                    KnowledgeProcessingItem.__table__,
+                    KnowledgeProcessingRetryReceipt.__table__,
+                ],
             )
         )
     async with AsyncSession(engine, expire_on_commit=False) as session:
@@ -189,6 +195,8 @@ async def test_retry_key_is_persistent_not_reapplied_after_another_failure(job_s
     again = await repository.aretry_failed(job_session, job.id, **params)
     assert again.reused is True and again.job.state == "partial_failed"
     assert failed.state == "failed" and failed.attempt == 2
+    receipts = (await job_session.exec(select(KnowledgeProcessingRetryReceipt))).all()
+    assert len(receipts) == 1 and receipts[0].item_count == 1
     with pytest.raises(KnowledgeIdempotencyConflictError):
         await repository.aretry_failed(job_session, job.id, **{**params, "expected_job_revision": job.revision})
 
