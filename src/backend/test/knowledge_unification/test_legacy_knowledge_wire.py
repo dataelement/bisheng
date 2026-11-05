@@ -44,7 +44,8 @@ async def test_actual_legacy_create_response_omits_internal_fields(monkeypatch):
     assert not PRIVATE_VALUES.keys() & data.keys()
 
 
-def test_internal_fields_remain_database_columns_and_owner_attributes():
+def test_internal_fields_remain_database_columns_and_owner_attributes(tenant_context):
+    tenant_context(101)
     engine = create_engine("sqlite://")
     try:
         SQLModel.metadata.create_all(engine, tables=[Knowledge.__table__])
