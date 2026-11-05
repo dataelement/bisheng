@@ -30,6 +30,9 @@ class KnowledgeProcessingJob(SQLModelSerializable, table=True):
     kind: str = Field(max_length=32)
     state: str = Field(default="accepted", max_length=24)
     actor_user_id: int
+    # Identifiers and original narrowing metadata only; not an authorization
+    # source. Execution revalidates the credential and retains its narrowing.
+    actor_reference: dict = Field(default_factory=dict, sa_column=Column(JsonType, nullable=False))
     idempotency_key: str = Field(max_length=64)
     request_hash: str = Field(max_length=64)
     parameters: dict = Field(default_factory=dict, sa_column=Column(JsonType, nullable=False))
