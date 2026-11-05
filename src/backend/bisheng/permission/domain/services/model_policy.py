@@ -34,6 +34,8 @@ class CustomModelSelection:
     active: bool = True
     allow_same_level: bool = False
     config_scope: str = "PLATFORM"
+    visibility_only_resource_types: tuple[str, ...] = ()
+    visibility_level: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +60,8 @@ class DerivedPermissionModel:
     allow_same_level: bool
     selected_action_codes: tuple[str, ...]
     action_codes: tuple[str, ...]
+    visibility_only_resource_types: tuple[str, ...] = ()
+    visibility_level: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
