@@ -256,19 +256,21 @@ class ChatClient:
             # raise IgnoreException(f'get assistant info error: {str(e)}')
 
             if self.chat_id and self.gpts_agent is None:
-                self.db_assistant = assistant
                 # Conversation businessagentFixed generation from database data,Don't change every time
-                self.gpts_agent = AssistantAgent(
+                candidate_agent = AssistantAgent(
                     assistant, self.chat_id, invoke_user_id=self.user_id, login_user=self.login_user
                 )
-                await self.gpts_agent.init_assistant(self.gpts_async_callback)
-            elif not self.chat_id:
+                await candidate_agent.init_assistant(self.gpts_async_callback)
+                self.gpts_agent = candidate_agent
                 self.db_assistant = assistant
+            elif not self.chat_id:
                 # The debugging interface is regenerated every time
-                self.gpts_agent = AssistantAgent(
+                candidate_agent = AssistantAgent(
                     assistant, self.chat_id, invoke_user_id=self.user_id, login_user=self.login_user
                 )
-                await self.gpts_agent.init_assistant(self.gpts_async_callback)
+                await candidate_agent.init_assistant(self.gpts_async_callback)
+                self.gpts_agent = candidate_agent
+                self.db_assistant = assistant
 
         except BaseErrorCode as e:
             logger.exception("get assistant info error")
