@@ -24,6 +24,7 @@ from bisheng.common.errcode.knowledge import (
     ResourceReferenceInvalidError,
 )
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantStatus
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.resource_reference.application.contracts import (
     DeletionEvidence,
     SourceKey,
@@ -104,6 +105,7 @@ async def assistant_business(tmp_path, assistant_tenant, monkeypatch):
                 tables=[
                     Assistant.__table__,
                     AssistantLink.__table__,
+                    Knowledge.__table__,
                     BusinessReferenceSet.__table__,
                     BusinessResourceReference.__table__,
                     ResourceReferenceTombstone.__table__,
@@ -118,6 +120,13 @@ async def assistant_business(tmp_path, assistant_tenant, monkeypatch):
                 for kind, ids in (("model", [1, 2]), ("knowledge_space", [10, 20]))
                 for target_id in ids
             ],
+        )
+    async with AsyncSession(engine) as session, session.begin():
+        session.add_all(
+            [
+                Knowledge(id=target_id, tenant_id=101, user_id=9, name=f"space-{target_id}", type=3)
+                for target_id in (10, 20)
+            ]
         )
 
     @asynccontextmanager
