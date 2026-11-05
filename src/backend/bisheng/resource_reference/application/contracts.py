@@ -165,6 +165,8 @@ class DeletionEvidence:
 
     def __post_init__(self) -> None:
         _text(self.operation_id, "delete operation ID", 64)
+        if not isinstance(self.target, TargetKey):
+            raise TypeError("deletion evidence must identify a TargetKey")
         _positive_integer(self.target_tenant_id, "deleted target tenant")
         object.__setattr__(self, "stage", TargetDeleteStage(self.stage))
 
@@ -197,6 +199,14 @@ class VerifiedReferenceTarget:
             raise ValueError("deleted targets require the original deletion evidence")
         if self.state == ReferenceState.VALID and self.evidence is not None:
             raise ValueError("live targets do not carry deletion or legacy evidence")
+        if isinstance(self.evidence, DeletionEvidence):
+            if self.evidence.target != self.key or self.evidence.target_tenant_id != self.target_tenant_id:
+                raise ValueError("deletion evidence belongs to a different target or owner")
+            expected_stage = (
+                TargetDeleteStage.DELETING if self.state == ReferenceState.DELETING else TargetDeleteStage.DELETED
+            )
+            if self.evidence.stage != expected_stage:
+                raise ValueError("deletion evidence does not match the verified target phase")
         if self.target_space_id is not None:
             object.__setattr__(self, "target_space_id", canonical_target_id(self.target_space_id))
         if self.model_server_id is not None:
