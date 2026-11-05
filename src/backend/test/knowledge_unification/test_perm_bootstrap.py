@@ -41,6 +41,8 @@ async def test_fresh_bootstrap_persists_viewer_pure_visibility(monkeypatch, sess
 
 async def test_bootstrap_never_republishes_existing_current_catalog(monkeypatch, session_factory):
     release_id, _, _ = await seed(session_factory)
+    async with session_factory() as session:
+        original_checksum = (await session.get(PermissionCatalogRelease, release_id)).checksum
     monkeypatch.setattr(bootstrap, "get_async_db_session", session_factory)
     client = SimpleNamespace(write_tuples=AsyncMock())
     assert not await bootstrap.seed_initial_permission_catalog(
@@ -57,4 +59,4 @@ async def test_bootstrap_never_republishes_existing_current_catalog(monkeypatch,
             .scalars()
             .all()
         )
-        assert len(current) == 1 and current[0].id == release_id and current[0].checksum == "a" * 64
+        assert len(current) == 1 and current[0].id == release_id and current[0].checksum == original_checksum

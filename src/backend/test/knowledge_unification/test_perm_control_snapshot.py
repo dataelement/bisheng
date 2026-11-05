@@ -1,6 +1,8 @@
 """F118 Catalog SQL snapshot round trips. 覆盖 AC: AC-78, AC-80, AC-81, AC-83."""
 
+import json
 from contextlib import asynccontextmanager
+from hashlib import sha256
 
 import pytest
 import sqlalchemy as sa
@@ -74,7 +76,14 @@ async def seed(factory):
             required_authorization_model_release_id=auth.id,
             draft_owner_id=1,
             idempotency_key="initial",
-            checksum="a" * 64,
+            checksum=sha256(
+                json.dumps(
+                    {"actions": actions.checksum, "models": models.checksum},
+                    ensure_ascii=True,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode()
+            ).hexdigest(),
         )
         session.add(release)
         await session.flush()
