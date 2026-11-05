@@ -188,6 +188,41 @@ class ReferenceRepository:
             return tuple((await session.execute(self._root_source_sets_query(key, for_update=for_update))).scalars())
 
     @staticmethod
+    def _root_source_references_query(key: SourceKey, *, for_update: bool):
+        statement = (
+            select(BusinessResourceReference)
+            .where(
+                BusinessResourceReference.source_type == key.source_type.value,
+                BusinessResourceReference.source_id == key.source_id,
+            )
+            .order_by(
+                BusinessResourceReference.source_version,
+                BusinessResourceReference.slot_key,
+                BusinessResourceReference.target_type,
+                BusinessResourceReference.target_id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        return statement.with_for_update() if for_update else statement
+
+    def list_source_references_for_root(
+        self, session: Session, key: SourceKey, *, for_update: bool = False
+    ) -> tuple[BusinessResourceReference, ...]:
+        """Raw root details, including rows whose source set is missing."""
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            return tuple(session.execute(self._root_source_references_query(key, for_update=for_update)).scalars())
+
+    async def alist_source_references_for_root(
+        self, session: AsyncSession, key: SourceKey, *, for_update: bool = False
+    ) -> tuple[BusinessResourceReference, ...]:
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            return tuple(
+                (await session.execute(self._root_source_references_query(key, for_update=for_update))).scalars()
+            )
+
+    @staticmethod
     def _sets_query(source_type):
         return select(BusinessReferenceSet).where(
             BusinessReferenceSet.source_type == SourceType(source_type).value,
