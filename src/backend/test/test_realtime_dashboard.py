@@ -48,7 +48,9 @@ def test_realtime_dashboard_seed_contains_three_target_datasets():
     # the merged user-engagement index (see user_engagement_shared.py / init_dataset.py) —
     # the dataset_code itself, and its role as a REALTIME_DATASETS entry, are unchanged.
     assert participation.es_index_name == USER_ENGAGEMENT_ES_INDEX
-    assert "department_source" in {dimension["field"] for dimension in participation.schema_config["dimensions"]}
+    user_dataset = datasets["mid_user_increment"]
+    for dataset in (user_dataset, participation):
+        assert "department_source" not in {dimension["field"] for dimension in dataset.schema_config["dimensions"]}
 
     qa_dataset = datasets["mid_realtime_qa_question_fact"]
     qa_metrics = {metric["field"]: metric for metric in qa_dataset.schema_config["metrics"]}
