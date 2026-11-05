@@ -4,8 +4,12 @@
 SQLite CAS/rollback tests do not prove production database lock scheduling.
 """
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+
 import pytest
-from sqlalchemy import Column, Integer, MetaData, String, Table, insert, select, update
+from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine, insert, select, text, update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import Session, SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -192,6 +196,47 @@ def test_deletion_evidence_cannot_be_reused_for_other_target_or_phase():
     ]:
         with pytest.raises(ValueError):
             VerifiedReferenceTarget(target, 101, None, None, "invalid_deleted", "r1", evidence)
+
+
+def test_concurrent_stale_writers_commit_only_one_complete_binding_set(tmp_path):
+    """Exercise competing SQL transactions; SQLite contention is also a conflict.
+
+    This proves local atomic CAS/rollback, not production FOR UPDATE scheduling.
+    """
+    owner, repo, bindings = components()
+    key = SourceKey(101, "assistant", "race", "current")
+    database = create_engine(f"sqlite:///{tmp_path / 'reference-race.db'}", connect_args={"timeout": 2})
+    SQLModel.metadata.create_all(database, tables=TABLES)
+    with database.begin() as connection:
+        connection.execute(text("PRAGMA journal_mode=WAL"))
+    with Session(database) as session, session.begin():
+        bindings.replace_source_bindings(session, key, None, 1, verified_set(session, owner, key, (spec("1"),)), True)
+    barrier = Barrier(2)
+
+    def save(target_id):
+        with ref_fixtures.tenant(101):
+            try:
+                with Session(database) as session, session.begin():
+                    assert repo.get_source_set(session, key).source_revision == 1
+                    assert repo.get_root_guard(session, key).source_revision == 1
+                    candidate = verified_set(session, owner, key, (spec(target_id),), old=(spec("1"),), root_revision=1)
+                    barrier.wait(timeout=5)
+                    bindings.replace_source_bindings(session, key, 1, 2, candidate, True)
+                return "committed"
+            except (ResourceReferenceInvalidError, OperationalError):
+                return "conflict"
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = [future.result(timeout=10) for future in [pool.submit(save, "2"), pool.submit(save, "3")]]
+        assert sorted(results) == ["committed", "conflict"]
+        with Session(database) as session:
+            actual = repo.list_source_references(session, key)
+            assert len(actual) == 1 and actual[0].target_id in ("2", "3")
+            assert repo.get_source_set(session, key).source_revision == 2
+            assert repo.get_root_guard(session, key).source_revision == 2
+    finally:
+        database.dispose()
 
 
 def test_removing_an_unregistered_missing_target_cannot_borrow_legacy_evidence(engine):
