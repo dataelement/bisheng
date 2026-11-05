@@ -12,7 +12,7 @@ from bisheng.common.chat.types import WorkType
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.chat import WorkflowOfflineError
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
+from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
 from bisheng.common.errcode.workstation import DepartmentDailyChatConcurrentLimitError
 from bisheng.common.interfaces.resource_execution import WorkflowExecutionPort
 from bisheng.database.models.flow import FlowDao, FlowStatus
@@ -73,6 +73,11 @@ class WorkflowClient(BaseClient):
 
     async def _handle_message(self, message: dict[any, any]):
         logger.debug("----------------------------- start handle message -----------------------")
+        if message.get("flow_id", self.client_id) != self.client_id:
+            await ResourceReferenceInvalidError(reason="workflow_connection_root_mismatch").websocket_close_message(
+                websocket=self.websocket, close_ws=False
+            )
+            return
         if message.get("action") == "init_data":
             # InisialisasiworkflowDATA
             await self.init_workflow(message)
@@ -99,7 +104,9 @@ class WorkflowClient(BaseClient):
         bool: Indicates if re-execution is requiredworkflow
         """
         # chat ws connection first handle
-        workflow_id = message.get("flow_id", self.client_id)
+        if message.get("flow_id", self.client_id) != self.client_id:
+            raise ResourceReferenceInvalidError(reason="workflow_connection_root_mismatch")
+        workflow_id = self.client_id
         self.chat_id = message.get("chat_id", "")
         if self.chat_id and self.session_subject is not None:
             session = await ChatSessionService.get_subject_session_if_exists(
