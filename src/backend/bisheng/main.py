@@ -114,6 +114,12 @@ def _register_app_publish_composition() -> None:
         logger.exception("app_publish composition root failed to register; continuing startup")
 
 
+def _register_resource_reference_composition() -> None:
+    from bisheng.resource_reference.composition import register
+
+    register()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with AsyncExitStack() as stack:
@@ -122,6 +128,7 @@ async def lifespan(app: FastAPI):
         await initialize_app_context(config=settings)
         _register_permission_runtime_contexts()
         _register_app_publish_composition()
+        _register_resource_reference_composition()
         from bisheng.app_runtime.domain.services.entry_authz_service import diagnose_obo_configuration
 
         diagnose_obo_configuration()
