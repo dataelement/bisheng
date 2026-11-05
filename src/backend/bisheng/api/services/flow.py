@@ -28,6 +28,7 @@ from bisheng.common.errcode.flow import (
     WorkFlowOnlineEditError,
 )
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
 from bisheng.common.schemas.telemetry.event_data_schema import NewApplicationEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
@@ -45,7 +46,7 @@ from bisheng.permission.application.business_authorization import (
 from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.public_endpoints.domain.services.guest_link import delete_app_guest_link
 from bisheng.resource_reference.application.access import get_reference_binding_runtime
-from bisheng.resource_reference.application.contracts import SourceKey
+from bisheng.resource_reference.application.contracts import SourceKey, reference_set_digest
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import get_request_ip
 from bisheng.workflow.domain.repositories.workflow_version_repository import WorkflowVersionRepository
@@ -229,25 +230,44 @@ class FlowService(BaseService):
             user_id=user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, trace_id=trace_id_var.get()
         )
         await cls.judge_flow_write_permission(user, flow_id)
+        runtime = await get_reference_binding_runtime()
+        async with get_async_db_session() as session:
+            root = await WorkflowVersionRepository.aget_root(session, flow_id, user.tenant_id)
+            if await WorkflowVersionRepository.aget_version_by_name(session, root, flow_version.name):
+                return VersionNameExistsError.return_resp()
+            version = await WorkflowVersionRepository.acreate_version(
+                session,
+                root,
+                FlowVersion(
+                    flow_id=flow_id,
+                    name=flow_version.name,
+                    description=flow_version.description,
+                    user_id=user.user_id,
+                    data=copy.deepcopy(flow_version.data),
+                    original_version_id=flow_version.original_version_id,
+                ),
+            )
 
-        exist_version = FlowVersionDao.get_version_by_name(flow_id, flow_version.name)
-        if exist_version:
-            return VersionNameExistsError.return_resp()
+            async def lock_root(sql):
+                locked = await WorkflowVersionRepository.alock_root(sql, flow_id, user.tenant_id)
+                if any(
+                    candidate.id != version.id and candidate.name == version.name
+                    for candidate in await WorkflowVersionRepository.alist_versions(sql, locked)
+                ):
+                    raise VersionNameExistsError()
 
-        flow_version = FlowVersion(
-            flow_id=flow_id,
-            name=flow_version.name,
-            description=flow_version.description,
-            user_id=user.user_id,
-            data=flow_version.data,
-            original_version_id=flow_version.original_version_id,
-            flow_type=flow_version.flow_type,
-        )
-
-        # Create New Version
-        flow_version = FlowVersionDao.create_version(flow_version)
-
-        return resp_200(data=flow_version)
+            prepared = await runtime.aprepare_source_bindings(
+                session,
+                SourceKey(root.tenant_id, "workflow_version", root.id, str(version.id)),
+                extract_workflow_version_references(version.data),
+                extractor_version=WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
+                lock_source_root=lock_root,
+                new_source=True,
+            )
+            await runtime.aapply_source_bindings(session, prepared)
+            await session.commit()
+            await session.refresh(version)
+        return resp_200(data=version)
 
     @classmethod
     async def update_version_info(
@@ -265,18 +285,70 @@ class FlowService(BaseService):
             return NotFoundVersionError.return_resp()
         flow_info = await cls.judge_flow_write_permission(user, version_info.flow_id)
 
-        if version_info.is_current == 1 and flow_info.status == FlowStatus.ONLINE.value and flow_version.data:
+        if (
+            version_info.is_current == 1
+            and flow_info.status == FlowStatus.ONLINE.value
+            and flow_version.data is not None
+        ):
             return WorkFlowOnlineEditError.return_resp()
 
-        version_info.name = flow_version.name if flow_version.name else version_info.name
-        version_info.description = flow_version.description if flow_version.description else version_info.description
-        version_info.data = flow_version.data if flow_version.data else version_info.data
-        version_info.is_delete = 0
+        runtime = await get_reference_binding_runtime()
+        async with get_async_db_session() as session:
+            root = await WorkflowVersionRepository.aget_root(session, flow_info.id, user.tenant_id)
+            current = await WorkflowVersionRepository.aget_version(session, root, version_id, include_deleted=True)
+            candidate = cls._workflow_version_snapshot(current)
+            next_version = FlowVersion(
+                id=current.id,
+                flow_id=root.id,
+                tenant_id=root.tenant_id,
+                name=flow_version.name or current.name,
+                description=flow_version.description or current.description,
+                data=copy.deepcopy(flow_version.data if flow_version.data is not None else current.data),
+                is_delete=0,
+            )
 
-        flow_version = await FlowVersionDao.aupdate_version(version_info)
+            async def lock_root(sql):
+                locked = await WorkflowVersionRepository.alock_root(sql, root.id, user.tenant_id)
+                locked_version = await WorkflowVersionRepository.aget_version(
+                    sql, locked, version_id, include_deleted=True
+                )
+                if cls._workflow_version_snapshot(locked_version) != candidate:
+                    raise KnowledgeOperationPlanConflictError(reason="workflow_version_changed")
+                if (
+                    locked_version.is_current == 1
+                    and locked.status == FlowStatus.ONLINE.value
+                    and flow_version.data is not None
+                ):
+                    raise WorkFlowOnlineEditError()
 
-        await cls.update_flow_hook(request, user, flow_info)
-        return resp_200(data=flow_version)
+            prepared = await runtime.aprepare_source_bindings(
+                session,
+                SourceKey(root.tenant_id, "workflow_version", root.id, str(version_id)),
+                extract_workflow_version_references(next_version.data),
+                extractor_version=WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
+                lock_source_root=lock_root,
+            )
+            current = await WorkflowVersionRepository.aget_version(session, root, version_id, include_deleted=True)
+            cls._assert_workflow_source_configuration(current, prepared)
+            version = await WorkflowVersionRepository.aupdate_version(session, root, next_version)
+            await runtime.aapply_source_bindings(session, prepared)
+            await session.commit()
+            await session.refresh(version)
+        await cls.update_flow_hook(request, user, root)
+        return resp_200(data=version)
+
+    @staticmethod
+    def _workflow_version_snapshot(version: FlowVersion) -> tuple:
+        return (copy.deepcopy(version.data), version.name, version.description, version.is_current, version.is_delete)
+
+    @staticmethod
+    def _assert_workflow_source_configuration(version: FlowVersion, prepared) -> None:
+        # A deleted version retains historical JSON but has no live binding
+        # slots until restored. A live source must match its indexed old set;
+        # ordinary saves cannot repair migration/index drift implicitly.
+        old = extract_workflow_version_references(version.data) if version.is_delete == 0 else ()
+        if reference_set_digest(old) != prepared.verified.context.old_references_digest:
+            raise ReferenceCoverageNotReadyError(reason="source_configuration_drift")
 
     @classmethod
     async def get_one_flow(
