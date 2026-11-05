@@ -5,6 +5,7 @@
 // with `t` returning the key so the assertions read as keys, not prose.
 
 import { describe, expect, it } from "vitest";
+import auditCopy from "./fixtures/auditCopy.json";
 
 import { actionToI18nKey, exportSystemLogDataApi, getAuditAppsApi, getLogsApi } from "@/controllers/API/log";
 import {
@@ -206,8 +207,8 @@ describe("audit API params", () => {
   });
 
   it("sends a trimmed remark and drops a blank one", async () => {
-    await getLogsApi({ page: 1, pageSize: 20, note: "  菜单权限  " });
-    expect(requestMocks.get.mock.calls[0][1].params).toEqual({ page: 1, limit: 20, note: "菜单权限" });
+    await getLogsApi({ page: 1, pageSize: 20, note: `  ${auditCopy.noteFilter}  ` });
+    expect(requestMocks.get.mock.calls[0][1].params).toEqual({ page: 1, limit: 20, note: auditCopy.noteFilter });
     await exportSystemLogDataApi({ note: "   " });
     expect(requestMocks.get.mock.calls[1][1].params).not.toHaveProperty("note");
   });

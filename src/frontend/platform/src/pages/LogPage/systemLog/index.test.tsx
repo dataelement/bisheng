@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, expect, it, vi } from 'vitest'
 import { EMPTY_ORG_SELECTION } from '@/controllers/API/log'
 import SystemLog from './index'
+import auditCopy from '@/test/fixtures/auditCopy.json'
 
 const mock = vi.hoisted(() => {
     const rows = [
@@ -97,10 +98,10 @@ it('shows the empty state when the query returns no rows', () => {
 it('applies the remark only when the query runs, and reset clears it', () => {
     renderPage()
     mock.filter.mockClear()
-    fireEvent.change(screen.getByRole('textbox', { name: 'log.remark' }), { target: { value: '  菜单权限  ' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'log.remark' }), { target: { value: `  ${auditCopy.noteFilter}  ` } })
     expect(mock.filter).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'log.searchButton' }))
-    expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ note: '菜单权限' }))
+    expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ note: auditCopy.noteFilter }))
     fireEvent.click(screen.getByRole('button', { name: 'log.resetButton' }))
     expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ note: '' }))
     expect(screen.getByRole('textbox', { name: 'log.remark' })).toHaveValue('')
