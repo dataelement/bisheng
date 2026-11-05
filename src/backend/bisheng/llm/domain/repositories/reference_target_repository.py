@@ -101,6 +101,48 @@ class ModelReferenceTargetRepository:
         # Private, transaction-bound proof stored on the caller's session. No
         # process-global registry or session-retaining cache is introduced.
         self._sharing_proof_key = object()
+        self._prelock_key = object()
+
+    @staticmethod
+    def _sources(source_keys):
+        if not isinstance(source_keys, tuple) or not source_keys:
+            raise ResourceReferenceInvalidError(reason="reference_batch_sources_required")
+        for key in source_keys:
+            _tenant(key, "bind")
+        if (
+            len(set(source_keys)) != len(source_keys)
+            or len({(key.tenant_id, key.source_type, key.source_id) for key in source_keys}) != 1
+        ):
+            raise ResourceReferenceInvalidError(reason="reference_batch_root_mismatch")
+        return tuple(sorted(source_keys, key=lambda key: key.source_version))
+
+    def _prelock_proof(self, session, source_key, operation):
+        proof = session.info.get(self._prelock_key)
+        if operation != "bind" or proof is None or proof[0] is not TransactionIdentity.capture(session).transaction:
+            return None
+        if (source_key.tenant_id, source_key.source_type, source_key.source_id) != (
+            proof[1][0].tenant_id,
+            proof[1][0].source_type,
+            proof[1][0].source_id,
+        ):
+            return None
+        if source_key not in proof[1]:
+            raise ResourceReferenceConflictError(reason="reference_lock_plan_changed")
+        return proof
+
+    @staticmethod
+    def _tombstone_statement(key, owner):
+        return (
+            select(ResourceReferenceTombstone)
+            .where(
+                ResourceReferenceTombstone.target_type == TargetType.MODEL.value,
+                ResourceReferenceTombstone.target_id == key.target_id,
+                ResourceReferenceTombstone.target_tenant_id == owner,
+                ResourceReferenceTombstone.tenant_id == owner,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
 
     @staticmethod
     def _business_statement(model, ids, owners, *, lock):
@@ -141,8 +183,6 @@ class ModelReferenceTargetRepository:
         return bool(
             root
             and child
-            and root.status == "active"
-            and child.status == "active"
             and child.id != ROOT_TENANT_ID
             and child.parent_tenant_id == ROOT_TENANT_ID
         )
@@ -205,16 +245,18 @@ class ModelReferenceTargetRepository:
             .execution_options(populate_existing=True)
         )
 
-    def _lock_plan(self, target_keys, source_key, operation):
+    def _lock_plan(self, target_keys, source_key, operation, *, session=None, prelock_sources=None):
         tenant_id = _tenant(source_key, operation)
         if not isinstance(target_keys, tuple) or any(
             not isinstance(key, TargetKey) or key.target_type != TargetType.MODEL for key in target_keys
         ):
             raise ResourceReferenceInvalidError(reason="model_reference_target_type_invalid")
         keys = tuple(sorted(set(target_keys), key=lambda key: key.lock_order_key))
-        originals = yield (self._original_statement(source_key, keys) if source_key and keys else None), False
-        # None statements are skipped by the sync/async drivers.
-        originals = originals if source_key and keys else []
+        originals = []
+        sources = prelock_sources if prelock_sources is not None else (source_key,) if source_key else ()
+        for source in sources:
+            if keys:
+                originals.extend((yield self._original_statement(source, keys), False))
         ids = {int(key.target_id) for key in keys}
         owners = (tenant_id, ROOT_TENANT_ID) if operation == "bind" else (tenant_id,)
         candidates = yield self._business_statement(LLMModel, ids, owners, lock=False), True
@@ -228,6 +270,9 @@ class ModelReferenceTargetRepository:
         all_candidates = yield self._business_statement(LLMModel, all_ids, owners, lock=False), True
         mapping = {row.id: row.server_id for row in all_candidates}
         server_ids = {value for value in mapping.values() if type(value) is int and value > 0}
+        proof = self._prelock_proof(session, source_key, operation) if prelock_sources is None else None
+        if proof is not None and (not set(keys) <= proof[2] or not all_ids <= proof[3] or not server_ids <= proof[4]):
+            raise ResourceReferenceConflictError(reason="reference_lock_plan_changed")
         servers = {
             row.id: row for row in (yield self._business_statement(LLMServer, server_ids, owners, lock=True), True)
         }
@@ -248,6 +293,23 @@ class ModelReferenceTargetRepository:
                 and row.tenant_id == ROOT_TENANT_ID
                 and row.server_id in servers
                 and servers[row.server_id].tenant_id == ROOT_TENANT_ID
+            )
+        if prelock_sources is not None:
+            # Union only physical target/owner locks. Never choose one source's
+            # legacy evidence for another source/version and never issue facts.
+            tombstones = {(key, models[int(key.target_id)].tenant_id) for key in keys if int(key.target_id) in models}
+            tombstones.update(
+                (TargetKey(row.target_type, row.target_id), row.target_tenant_id)
+                for row in originals
+                if row.target_tenant_id is not None
+            )
+            for key, owner in sorted(tombstones, key=lambda item: (*item[0].lock_order_key, item[1])):
+                yield self._tombstone_statement(key, owner), True
+            return (
+                (),
+                tenant_id,
+                inherited_servers,
+                (sources, frozenset(keys), frozenset(all_ids), frozenset(server_ids), frozenset(tombstones)),
             )
         result = []
         for key in keys:
@@ -271,16 +333,10 @@ class ModelReferenceTargetRepository:
             )
             tombstone = None
             if owner is not None:
+                if proof is not None and (key, owner) not in proof[5]:
+                    raise ResourceReferenceConflictError(reason="reference_lock_plan_changed")
                 tombstones = yield (
-                    select(ResourceReferenceTombstone)
-                    .where(
-                        ResourceReferenceTombstone.target_type == TargetType.MODEL.value,
-                        ResourceReferenceTombstone.target_id == key.target_id,
-                        ResourceReferenceTombstone.target_tenant_id == owner,
-                        ResourceReferenceTombstone.tenant_id == owner,
-                    )
-                    .with_for_update()
-                    .execution_options(populate_existing=True),
+                    self._tombstone_statement(key, owner),
                     True,
                 )
                 tombstone = tombstones[0] if tombstones else None
@@ -313,7 +369,9 @@ class ModelReferenceTargetRepository:
             return list((await session.execute(statement)).scalars())
 
     def _remember(self, session, result):
-        observations, tenant_id, inherited_servers = result
+        observations, tenant_id, inherited_servers = result[:3]
+        if len(result) == 4:
+            session.info[self._prelock_key] = (TransactionIdentity.capture(session).transaction, *result[3])
         session.info[self._sharing_proof_key] = (
             TransactionIdentity.capture(session).transaction,
             tenant_id,
@@ -321,8 +379,8 @@ class ModelReferenceTargetRepository:
         )
         return observations
 
-    def lock_targets(self, session, target_keys, source_key, operation):
-        plan, value = self._lock_plan(target_keys, source_key, operation), None
+    def _drive(self, session, plan):
+        value = None
         while True:
             try:
                 statement, cross_scope = plan.send(value)
@@ -330,14 +388,30 @@ class ModelReferenceTargetRepository:
                 return self._remember(session, done.value)
             value = self._read(session, statement, cross_scope)
 
-    async def alock_targets(self, session, target_keys, source_key, operation):
-        plan, value = self._lock_plan(target_keys, source_key, operation), None
+    async def _adrive(self, session, plan):
+        value = None
         while True:
             try:
                 statement, cross_scope = plan.send(value)
             except StopIteration as done:
                 return self._remember(session, done.value)
             value = await self._aread(session, statement, cross_scope)
+
+    def lock_targets(self, session, target_keys, source_key, operation):
+        return self._drive(session, self._lock_plan(target_keys, source_key, operation, session=session))
+
+    async def alock_targets(self, session, target_keys, source_key, operation):
+        return await self._adrive(session, self._lock_plan(target_keys, source_key, operation, session=session))
+
+    def prelock_targets(self, session, target_keys, source_keys):
+        sources = self._sources(source_keys)
+        self._drive(session, self._lock_plan(target_keys, sources[0], "bind", session=session, prelock_sources=sources))
+
+    async def aprelock_targets(self, session, target_keys, source_keys):
+        sources = self._sources(source_keys)
+        await self._adrive(
+            session, self._lock_plan(target_keys, sources[0], "bind", session=session, prelock_sources=sources)
+        )
 
     def get_inherited_default_server_ids(self, session, tenant_id):
         proof = session.info.get(self._sharing_proof_key)

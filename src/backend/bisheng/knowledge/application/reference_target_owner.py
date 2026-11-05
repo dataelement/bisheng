@@ -23,6 +23,14 @@ class KnowledgeReferenceTargetOwner:
         self.repository = repository if repository is not None else KnowledgeReferenceTargetRepository()
         self.legacy_evidence = legacy_evidence
 
+    def prelock_targets(self, session, target_keys, source_keys) -> None:
+        TransactionIdentity.capture(session)
+        self.repository.prelock_targets(session, target_keys, source_keys)
+
+    async def aprelock_targets(self, session, target_keys, source_keys) -> None:
+        TransactionIdentity.capture(session)
+        await self.repository.aprelock_targets(session, target_keys, source_keys)
+
     def _legacy_request(self, observation):
         original = observation.original
         if original is None or original.legacy_invalid_reason is None:

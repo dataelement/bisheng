@@ -405,6 +405,16 @@ class ReferenceTargetOwnerPort(Protocol):
     A shared Owner receives all its target kinds in one lock plan.
     """
 
+    def prelock_targets(
+        self, session: Session, target_keys: tuple[TargetKey, ...], source_keys: tuple[SourceKey, ...]
+    ) -> None:
+        """Physical union lock only: no binding, sharing or legacy authority."""
+        ...
+
+    async def aprelock_targets(
+        self, session: AsyncSession, target_keys: tuple[TargetKey, ...], source_keys: tuple[SourceKey, ...]
+    ) -> None: ...
+
     def lock_and_verify(
         self,
         session: Session,

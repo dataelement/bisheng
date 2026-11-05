@@ -234,6 +234,7 @@ async def test_native_async_owner_reads_sql_without_sync_fallback():
             session.add(KnowledgeFile(id=8, tenant_id=101, user_id=11, knowledge_id=1, file_name="file"))
             await session.flush()
             owner = KnowledgeReferenceTargetOwner(AsyncOnlyRepository())
+            await owner.aprelock_targets(session, (TargetKey("knowledge_file", "8"),), (SOURCE,))
             receipts = await verifier(owner).averify_targets(session, SOURCE, (TargetKey("knowledge_file", "8"),))
             assert receipts[0].target.target_space_id == "1" and receipts[0].target.state == "valid"
             await session.rollback()
@@ -241,3 +242,59 @@ async def test_native_async_owner_reads_sql_without_sync_fallback():
             assert not (await session.exec(select(Knowledge))).all()
     finally:
         await database.dispose()
+
+
+def test_physical_prelock_unions_missing_file_parents_without_merging_version_evidence(engine):
+    source_keys = (replace(SOURCE, source_version="v1"), replace(SOURCE, source_version="v2"))
+    key = TargetKey("knowledge_file", "80")
+    observed = []
+    with Session(engine) as session, session.begin():
+        setup(session)
+        for index, source in enumerate(source_keys):
+            row = original(session, key, slot=str(index), space_id=str(index + 1), legacy=True, target_tenant_id=None)
+            row.source_version, row.legacy_evidence_key = source.source_version, "evidence-" + source.source_version
+            session.flush()
+        session.add(KnowledgeUnificationRun(tenant_id=101, run_id="run-1", baseline_hash="a" * 64))
+        session.flush()
+
+        def lock_read(state):
+            if state.is_select and state.statement._for_update_arg is not None:
+                entities = {row.get("entity") for row in state.statement.column_descriptions}
+                if Knowledge in entities or KnowledgeFile in entities:
+                    observed.append(
+                        ("space" if Knowledge in entities else "file", state.statement.compile().params.get("id_1"))
+                    )
+
+        event.listen(session, "do_orm_execute", lock_read)
+        owner = KnowledgeReferenceTargetOwner(legacy_evidence=LedgerEvidence())
+        assert owner.prelock_targets(session, (key, TargetKey("knowledge_file", "8")), source_keys) is None
+        assert observed[:2] == [("space", [1, 2]), ("file", [8, 80])]
+        receipts = [verifier(owner).verify_targets(session, source, (key,))[0] for source in source_keys]
+        assert [row.target.evidence.evidence_key for row in receipts] == ["evidence-v1", "evidence-v2"]
+        assert [row.target.target_space_id for row in receipts] == ["1", "2"]
+
+
+def test_prelocked_owner_refuses_new_parent_before_taking_a_late_space_lock(engine):
+    with Session(engine) as session, session.begin():
+        setup(session)
+    late_space_locks = []
+    with pytest.raises(ResourceReferenceConflictError), Session(engine) as session, session.begin():
+        owner = KnowledgeReferenceTargetOwner()
+        key = TargetKey("knowledge_file", "8")
+        owner.prelock_targets(session, (key,), (SOURCE,))
+        session.get(KnowledgeFile, 8).knowledge_id = 2
+        session.flush()
+
+        def observe(state):
+            if (
+                state.is_select
+                and state.statement._for_update_arg is not None
+                and Knowledge in {row.get("entity") for row in state.statement.column_descriptions}
+            ):
+                late_space_locks.append(state.statement.compile().params.get("id_1"))
+
+        event.listen(session, "do_orm_execute", observe)
+        verifier(owner).verify_targets(session, SOURCE, (key,))
+    assert late_space_locks == []
+    with Session(engine) as session:
+        assert session.get(KnowledgeFile, 8).knowledge_id == 1

@@ -248,3 +248,62 @@ async def test_async_equivalent_supports_empty_set_and_external_rollback():
             assert await repo.aget_source_set(session, key) is None
     finally:
         await engine.dispose()
+
+
+def test_root_inventory_is_exact_tenant_type_id_includes_inactive_and_refreshes_current_rows(engine):
+    repo = ReferenceRepository()
+    first, second = source("v1"), source("v2")
+    with Session(engine) as session, session.begin():
+        repo.advance_root_guard(session, first, expected_revision=0, new_revision=1)
+        write(repo, session, second, (row(second),))
+        write(repo, session, first, ())
+        write(repo, session, source("v999"), ())
+        write(repo, session, source("v1", source_id="unrelated"), ())
+        write(repo, session, SourceKey(101, "knowledge", first.source_id, "v1"), ())
+        cached = repo.get_source_set(session, first)
+        from sqlalchemy import update
+
+        session.execute(
+            update(BusinessReferenceSet)
+            .where(BusinessReferenceSet.id == cached.id, BusinessReferenceSet.tenant_id == 101)
+            .values(effective=False)
+            .execution_options(synchronize_session=False)
+        )
+        actual = repo.list_source_sets_for_root(session, first, for_update=True)
+        assert [item.source_version for item in actual] == ["v1", "v2", "v999"]
+        assert [item.effective for item in actual] == [False, True, True]
+        assert all(item.record_kind == "source" for item in actual)
+    with tenant(202), Session(engine) as session, session.begin():
+        foreign = source("v3", tenant_id=202)
+        write(repo, session, foreign, ())
+        assert [item.source_version for item in repo.list_source_sets_for_root(session, foreign)] == ["v3"]
+        with pytest.raises(ResourceReferenceInvalidError):
+            repo.list_source_sets_for_root(session, first)
+    with Session(engine) as session:
+        assert [item.source_version for item in repo.list_source_sets_for_root(session, second)] == ["v1", "v2", "v999"]
+
+
+async def test_native_async_exact_root_inventory_keeps_inactive_and_external_rollback():
+    database = create_async_engine("sqlite+aiosqlite://")
+    try:
+        async with database.begin() as connection:
+            await connection.run_sync(lambda c: SQLModel.metadata.create_all(c, tables=TABLES))
+        repo = ReferenceRepository()
+        async with AsyncSession(database) as session:
+            for version, effective in [("v2", True), ("v1", False)]:
+                await repo.areplace_source_set(
+                    session,
+                    source(version),
+                    expected_revision=None,
+                    new_revision=1,
+                    references=(),
+                    extractor_version="test-v1",
+                    digest=reference_set_digest(()),
+                    effective=effective,
+                )
+            rows = await repo.alist_source_sets_for_root(session, source(), for_update=True)
+            assert [(row.source_version, row.effective) for row in rows] == [("v1", False), ("v2", True)]
+            await session.rollback()
+            assert await repo.alist_source_sets_for_root(session, source()) == ()
+    finally:
+        await database.dispose()

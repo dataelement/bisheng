@@ -118,6 +118,24 @@ def test_sync_root_share_requires_native_trusted_evidence_and_cannot_enable_owne
             verify(owner).verify_targets(session, SOURCE, (TargetKey("model", "33"),))
 
 
+def test_disabled_child_retained_configuration_accepts_only_real_topology_and_frozen_share(engine):
+    with Session(engine) as session, session.begin():
+        setup(session)
+        child = session.get(Tenant, 101)
+        child.status = "disabled"
+        session.flush()
+        key = TargetKey("model", "22")
+        receipt = verify(ModelReferenceTargetOwner(sharing=FrozenSharing())).verify_targets(session, SOURCE, (key,))[0]
+        assert receipt.target.state == "valid" and receipt.target.target_tenant_id == 1
+        assert receipt.target.evidence is None
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            verify(ModelReferenceTargetOwner()).verify_targets(session, SOURCE, (key,))
+        child.parent_tenant_id = 202
+        session.flush()
+        with pytest.raises(ResourceReferenceInvalidError):
+            verify(ModelReferenceTargetOwner(sharing=FrozenSharing())).verify_targets(session, SOURCE, (key,))
+
+
 def test_model_server_owner_mismatch_is_rejected(engine):
     with Session(engine) as session, session.begin():
         setup(session)
@@ -234,16 +252,104 @@ async def test_native_async_explicit_server_share_uses_permission_application(mo
     database = await async_database()
     try:
         async with AsyncSession(database) as session, session.begin():
-            receipt = (
-                await verify(ModelReferenceTargetOwner(AsyncOnlyRepository())).averify_targets(
-                    session, SOURCE, (TargetKey("model", "22"),)
-                )
-            )[0]
+            owner = ModelReferenceTargetOwner(AsyncOnlyRepository())
+            await owner.aprelock_targets(session, (TargetKey("model", "22"),), (SOURCE,))
+            receipt = (await verify(owner).averify_targets(session, SOURCE, (TargetKey("model", "22"),)))[0]
             assert receipt.target.target_tenant_id == 1 and receipt.target.state == "valid"
             assert api.list_resource_ids.await_args.kwargs["relation"] == "shared_with"
             assert api.list_resource_ids.await_args.kwargs["resource_type"] == "llm_server"
     finally:
         await database.dispose()
+
+
+def test_prelock_includes_default_auxiliary_models_but_grants_no_share_or_binding_receipt(engine):
+    class NoShareProof(FrozenSharing):
+        def get_shared_server_ids(self, *args):
+            raise AssertionError("pure prelock attempted sharing authorization")
+
+    locks = []
+    with Session(engine) as session, session.begin():
+        setup(session)
+        session.add(LLMModel(id=5, server_id=2, tenant_id=1, name="default", model_name="default", model_type="llm"))
+        session.add(
+            TenantSystemModelConfig(
+                tenant_id=1, key="knowledge_llm", value=json.dumps({"embedding_model_id": 5, "source_model_id": 999})
+            )
+        )
+        session.flush()
+
+        def observe(state):
+            if state.is_select and state.statement._for_update_arg is not None:
+                entities = {row.get("entity") for row in state.statement.column_descriptions}
+                if LLMServer in entities or LLMModel in entities:
+                    locks.append(
+                        ("server" if LLMServer in entities else "model", state.statement.compile().params.get("id_1"))
+                    )
+
+        event.listen(session, "do_orm_execute", observe)
+        owner = ModelReferenceTargetOwner(sharing=NoShareProof())
+        assert owner.prelock_targets(session, (TargetKey("model", "22"),), (SOURCE,)) is None
+        assert locks[:2] == [("server", [2]), ("model", [5, 22, 999])]
+        with pytest.raises(AssertionError, match="sharing authorization"):
+            verify(owner).verify_targets(session, SOURCE, (TargetKey("model", "22"),))
+
+
+def test_model_prelock_does_not_combine_legacy_evidence_from_different_versions(engine):
+    class Ledger:
+        def resolve(self, session, source_key, target, *, run_id, evidence_key):
+            return LegacyEvidence(run_id, "a" * 64, evidence_key)
+
+    source_keys = (SourceKey(101, "assistant", "a1", "v1"), SourceKey(101, "assistant", "a1", "v2"))
+    with Session(engine) as session, session.begin():
+        for source in source_keys:
+            session.add(
+                BusinessResourceReference(
+                    tenant_id=101,
+                    source_type="assistant",
+                    source_id="a1",
+                    source_version=source.source_version,
+                    slot_key="llm",
+                    target_type="model",
+                    target_id="80",
+                    target_tenant_id=None,
+                    source_revision=1,
+                    legacy_invalid_reason="target_missing",
+                    legacy_run_id="run-1",
+                    legacy_evidence_key="evidence-" + source.source_version,
+                )
+            )
+        session.flush()
+        owner = ModelReferenceTargetOwner(legacy_evidence=Ledger())
+        assert owner.prelock_targets(session, (TargetKey("model", "80"),), source_keys) is None
+        receipts = [
+            verify(owner).verify_targets(session, source, (TargetKey("model", "80"),))[0] for source in source_keys
+        ]
+        assert [row.target.evidence.evidence_key for row in receipts] == ["evidence-v1", "evidence-v2"]
+
+
+def test_prelocked_model_rejects_new_server_before_late_server_lock(engine):
+    with Session(engine) as session, session.begin():
+        setup(session)
+        session.add(LLMServer(id=4, tenant_id=101, name="other", type="openai"))
+    locks = []
+    with pytest.raises(ResourceReferenceConflictError), Session(engine) as session, session.begin():
+        owner = ModelReferenceTargetOwner()
+        key = TargetKey("model", "11")
+        owner.prelock_targets(session, (key,), (SOURCE,))
+        session.get(LLMModel, 11).server_id = 4
+        session.flush()
+
+        def observe(state):
+            if (
+                state.is_select
+                and state.statement._for_update_arg is not None
+                and LLMServer in {row.get("entity") for row in state.statement.column_descriptions}
+            ):
+                locks.append(state.statement.compile().params.get("id_1"))
+
+        event.listen(session, "do_orm_execute", observe)
+        verify(owner).verify_targets(session, SOURCE, (key,))
+    assert locks == []
 
 
 @pytest.mark.parametrize(
