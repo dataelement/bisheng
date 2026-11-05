@@ -10,11 +10,13 @@ from sqlmodel import Session
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
 from bisheng.resource_reference.application.contracts import (
     CoverageStatus,
+    GlobalCoverageStatus,
     DeletionEvidence,
     LegacyEvidence,
     SourceKey,
     SourceType,
     TargetKey,
+    tenant_inventory_digest,
 )
 from bisheng.resource_reference.application.target_state import resolve_target_state
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
@@ -172,6 +174,47 @@ async def test_async_coverage_does_not_turn_missing_or_error_into_ready():
     assert len(await CoverageRepository(LedgerPort()).arequire_ready()) == len(SourceType)
     with pytest.raises(ReferenceCoverageNotReadyError):
         await CoverageRepository(LedgerPort(missing=SourceType.ASSISTANT)).arequire_ready()
+
+
+class GlobalLedgerPort:
+    def get_global_status(self, writer_contract_version):
+        return GlobalCoverageStatus(
+            True, writer_contract_version, tuple(SourceType), tenant_inventory_digest((101, 202)), 3, (101, 202)
+        )
+
+    async def aget_global_status(self, writer_contract_version):
+        return GlobalCoverageStatus(
+            True, writer_contract_version, tuple(SourceType), tenant_inventory_digest((101, 202)), 3, (101, 202)
+        )
+
+
+def test_shared_target_requires_complete_global_inventory_and_stable_epoch():
+    with pytest.raises(ReferenceCoverageNotReadyError):
+        CoverageRepository(LedgerPort()).require_global_ready()
+    repository = CoverageRepository(LedgerPort(), global_port=GlobalLedgerPort())
+    before = repository.require_global_ready()
+    after = repository.require_global_ready(
+        observed_source_tenant_ids=(202,),
+        expected_epoch=before.coverage_epoch,
+        expected_inventory_hash=before.tenant_inventory_hash,
+    )
+    assert after.verified_tenant_ids == (101, 202)
+    for arguments in [
+        {"observed_source_tenant_ids": (303,)},
+        {"expected_epoch": 4},
+        {"expected_inventory_hash": "f" * 64},
+    ]:
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            repository.require_global_ready(**arguments)
+
+
+async def test_global_async_guard_uses_async_port_only():
+    class AsyncOnlyPort(GlobalLedgerPort):
+        def get_global_status(self, writer_contract_version):
+            raise AssertionError("async guards must not call synchronous SQL ports")
+
+    result = await CoverageRepository(LedgerPort(), global_port=AsyncOnlyPort()).arequire_global_ready()
+    assert result.coverage_epoch == 3
 
 
 def test_empty_tenant_initializer_must_be_injected_and_keep_same_transaction(engine):
