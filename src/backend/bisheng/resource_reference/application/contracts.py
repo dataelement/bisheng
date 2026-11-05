@@ -180,11 +180,18 @@ class VerifiedReferenceTarget:
     state: ReferenceState
     target_revision: str
     evidence: LegacyEvidence | DeletionEvidence | None = None
+    new_binding_allowed: bool = True
 
     def __post_init__(self) -> None:
         if not isinstance(self.key, TargetKey):
             raise TypeError("verified target must contain a TargetKey")
         object.__setattr__(self, "state", ReferenceState(self.state))
+        if type(self.new_binding_allowed) is not bool:
+            raise ValueError("new binding eligibility must be a boolean")
+        if not self.new_binding_allowed and (
+            self.key.target_type != TargetType.MODEL or self.state != ReferenceState.VALID
+        ):
+            raise ValueError("only a live model may be restricted to its existing bindings")
         _text(self.target_revision, "target revision", 64)
         if self.target_tenant_id is None:
             if self.state != ReferenceState.INVALID_LEGACY or not isinstance(self.evidence, LegacyEvidence):
