@@ -26,6 +26,7 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTe
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.assistant import AssistantDeletedError, AssistantNotOnlineError, AssistantOtherError
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.common.errcode.workstation import DepartmentDailyChatConcurrentLimitError
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationProcessEventData, NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
@@ -257,12 +258,16 @@ class ChatClient:
             if self.chat_id and self.gpts_agent is None:
                 self.db_assistant = assistant
                 # Conversation businessagentFixed generation from database data,Don't change every time
-                self.gpts_agent = AssistantAgent(assistant, self.chat_id, invoke_user_id=self.user_id)
+                self.gpts_agent = AssistantAgent(
+                    assistant, self.chat_id, invoke_user_id=self.user_id, login_user=self.login_user
+                )
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
             elif not self.chat_id:
                 self.db_assistant = assistant
                 # The debugging interface is regenerated every time
-                self.gpts_agent = AssistantAgent(assistant, self.chat_id, invoke_user_id=self.user_id)
+                self.gpts_agent = AssistantAgent(
+                    assistant, self.chat_id, invoke_user_id=self.user_id, login_user=self.login_user
+                )
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
 
         except BaseErrorCode as e:
@@ -491,6 +496,10 @@ class ChatClient:
             raise
         except BaseErrorCode as e:
             logger.exception("handle gpts message error: ")
+            if isinstance(e, KnowledgeOperationPlanConflictError):
+                self.gpts_agent = None
+                self.db_assistant = None
+                self.gpts_async_callback = None
             await self.send_response("system", "start", "")
             await e.websocket_close_message(websocket=self.websocket, close_ws=False)
         except Exception as e:
