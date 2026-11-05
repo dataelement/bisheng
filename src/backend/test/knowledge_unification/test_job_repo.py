@@ -285,3 +285,19 @@ async def test_foreign_job_and_space_are_not_available(job_session, repository, 
     finally:
         current_tenant_id.reset(token)
     assert created.job.state == "accepted"
+
+
+async def test_live_item_heartbeat_extends_only_with_live_job_lease(job_session, repository, configuration, clock):
+    created = await create(repository, job_session, configuration)
+    lease = await repository.aclaim(job_session, created.job.id, configuration=configuration, lease_seconds=10)
+    claimed = await repository.aclaim_next_item(job_session, lease, configuration=configuration)
+    clock[0] += timedelta(seconds=5)
+    renewed_job = await repository.arenew(job_session, lease, configuration=configuration, lease_seconds=30)
+    renewed_item = await repository.arenew_item(job_session, claimed.lease, configuration=configuration)
+    assert renewed_item.lease_until == renewed_job.lease_until
+    clock[0] += timedelta(seconds=7)
+    assert await repository.asave_checkpoint(
+        job_session, renewed_item, configuration=configuration, step="next-page", checkpoint={"page": 1}
+    )
+    clock[0] += timedelta(seconds=30)
+    assert await repository.arenew_item(job_session, renewed_item, configuration=configuration) is None
