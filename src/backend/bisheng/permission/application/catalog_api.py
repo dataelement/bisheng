@@ -1542,7 +1542,6 @@ class F048CatalogApi:
             "name": "权限管理",
             "action_codes": (
                 "download",
-                "use",
                 "rename",
                 "edit",
                 "create_folder",
