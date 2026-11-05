@@ -145,13 +145,7 @@ async def _write_catalog_tuples(
 async def _initial_release_exists() -> bool:
     with bypass_tenant_filter():
         async with get_async_db_session() as session:
-            existing = (
-                await session.execute(
-                    select(PermissionCatalogRelease.id)
-                    .where(PermissionCatalogRelease.release_key == INITIAL_CATALOG_RELEASE_KEY)
-                    .limit(1)
-                )
-            ).scalar_one_or_none()
+            existing = (await session.execute(select(PermissionCatalogRelease.id).limit(1))).scalar_one_or_none()
     return existing is not None
 
 
@@ -165,7 +159,7 @@ async def _seed_control_plane(
     relations_checksum: str,
     action_release,
     model_release: PermissionModelRelease,
-) -> None:
+) -> bool:
     now = datetime.now(UTC)
     with bypass_tenant_filter():
         async with get_async_db_session() as session:
@@ -173,13 +167,9 @@ async def _seed_control_plane(
                 # Re-check inside the transaction so the common concurrent case
                 # is a clean skip rather than an IntegrityError.
                 if (
-                    await session.execute(
-                        select(PermissionCatalogRelease.id)
-                        .where(PermissionCatalogRelease.release_key == INITIAL_CATALOG_RELEASE_KEY)
-                        .limit(1)
-                    )
+                    await session.execute(select(PermissionCatalogRelease.id).limit(1))
                 ).scalar_one_or_none() is not None:
-                    return
+                    return False
 
                 auth_release = (
                     (
@@ -265,6 +255,8 @@ async def _seed_control_plane(
                         kind=model.kind,
                         config_scope=model.config_scope,
                         derived_level=model.derived_level,
+                        visibility_only_resource_types=list(model.visibility_only_resource_types),
+                        visibility_level=model.visibility_level,
                         active=model.active,
                         allow_same_level=model.allow_same_level,
                         legacy_source_key=None,
@@ -283,6 +275,7 @@ async def _seed_control_plane(
                                 action_id=action_id,
                             )
                         )
+    return True
 
 
 def normalize_environment(value: object) -> str:
@@ -337,7 +330,7 @@ async def seed_initial_permission_catalog(
         # authorization tuples. Idempotent via ignore_duplicate_writes.
         await _write_catalog_tuples(client, INITIAL_CATALOG_RELEASE_KEY, model_release)
 
-        await _seed_control_plane(
+        created = await _seed_control_plane(
             store_id=store_id,
             model_id=model_id,
             model_checksum=model_checksum,
@@ -347,6 +340,8 @@ async def seed_initial_permission_catalog(
             action_release=action_release,
             model_release=model_release,
         )
+        if not created:
+            return False
     except IntegrityError:
         # Another starting process seeded concurrently; its rows win.
         logger.info("F048 initial permission Catalog already seeded by a concurrent process")
