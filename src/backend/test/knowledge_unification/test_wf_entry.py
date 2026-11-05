@@ -166,3 +166,94 @@ async def test_mode_and_version_are_validated_claims(admission, mode, version):
             execution_mode=mode,
             version_hint=version,
         )
+
+
+@pytest.fixture
+async def real_core(store, monkeypatch):
+    """Real WF Owner, issuance, scoped SQL index and identity; FGA is a Port double."""
+    from sqlmodel import SQLModel
+
+    from bisheng.core.database import tenant_filter
+    from bisheng.permission.application.identity import (
+        PermissionActor,
+        reset_current_permission_actor,
+        set_current_permission_actor,
+    )
+    from bisheng.resource_reference.application.contracts import reference_set_digest
+    from bisheng.resource_reference.application.read_identity import AuthenticatedSourceReadIdentity
+    from bisheng.resource_reference.application.source_read import ReferenceSourceReadRuntime
+    from bisheng.resource_reference.application.source_verification import SourceReadVerifier
+    from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
+    from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
+    from bisheng.resource_reference.domain.repositories.source_read_repository import SourceReadRepository
+
+    engine, _ = store
+    tables = [BusinessReferenceSet.__table__, BusinessResourceReference.__table__]
+    monkeypatch.setattr(
+        tenant_filter, "_tenant_aware_tables", tenant_filter._tenant_aware_tables | {table.name for table in tables}
+    )
+    async with engine.begin() as connection:
+        await connection.run_sync(lambda conn: SQLModel.metadata.create_all(conn, tables=tables))
+    async with AsyncSession(engine) as session, session.begin():
+        session.add_all(
+            [
+                BusinessReferenceSet(
+                    tenant_id=101,
+                    source_type="workflow_version",
+                    source_id="wf",
+                    source_version=version,
+                    record_kind="root_guard" if root else "source",
+                    source_revision=1,
+                    extractor_version="root-guard-v1" if root else "workflow-version-v1",
+                    digest=reference_set_digest(()),
+                    effective=not root,
+                    ready=not root,
+                )
+                for version, root in [("__root__", True), ("1", False)]
+            ]
+        )
+    identity = UserPayload(user_id=11, user_name="original", tenant_id=101, user_role=[])
+    actor_token = set_current_permission_actor(PermissionActor(subject_type="user", subject_id=11, tenant_id=101))
+    monkeypatch.setattr(owner_module, "require_business_action", AsyncMock())
+    owner = owner_module.WorkflowReferenceSourceOwner()
+    verifier = SourceReadVerifier({"workflow_version": owner}, AuthenticatedSourceReadIdentity())
+    runtime = ReferenceSourceReadRuntime(verifier, SourceReadRepository(verifier), {})
+    monkeypatch.setattr(module, "get_reference_read_runtime", AsyncMock(return_value=runtime))
+
+    @asynccontextmanager
+    async def session_factory():
+        async with AsyncSession(engine) as session:
+            yield session
+
+    monkeypatch.setattr(module, "get_async_db_session", session_factory)
+    try:
+        yield SimpleNamespace(identity=identity, engine=engine, owner=owner, runtime=runtime)
+    finally:
+        reset_current_permission_actor(actor_token)
+
+
+async def test_real_core_saved_source_uses_actual_owner_index_and_identity(real_core):
+    result = await module.prepare_saved(real_core.identity, "wf")
+    assert result.source_key.source_version == "1" and result.graph == {"nodes": [], "edges": []}
+
+
+async def test_real_core_transient_is_bound_to_original_request_and_never_writes_index(real_core):
+    import sqlalchemy as sa
+
+    from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
+
+    async with AsyncSession(real_core.engine) as session, session.begin():
+        before = await session.scalar(sa.select(sa.func.count()).select_from(BusinessReferenceSet))
+        result = await module.prepare_node_preview(
+            real_core.identity, "wf", {"data": {"id": "code", "type": "code"}}, {"x": 1}, reference_session=session
+        )
+        assert result.source_key is None and result.node_input == {"x": 1}
+        after = await session.scalar(sa.select(sa.func.count()).select_from(BusinessReferenceSet))
+        assert before == after and not session.new and not session.dirty and not session.identity_map
+
+
+async def test_real_core_missing_saved_index_does_not_bootstrap(real_core):
+    from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
+
+    with pytest.raises(ReferenceCoverageNotReadyError):
+        await module.prepare_saved(real_core.identity, "wf", version_id=2)
