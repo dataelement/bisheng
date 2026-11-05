@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, Protocol
 
 from bisheng.resource_reference.application.contracts import (
+    LegacyEvidence,
     ReferenceSpec,
     ReferenceState,
     SourceKey,
@@ -234,3 +235,16 @@ class ReferenceTargetReadOwnerPort(Protocol):
     async def ainspect_transient_targets(
         self, session: AsyncSession, scope: object, target_keys: tuple[TargetKey, ...], *, identity: object
     ) -> tuple[ReferenceTargetReadFact, ...]: ...
+
+
+class ReadLegacyReferenceEvidencePort(Protocol):
+    async def aresolve(
+        self,
+        session: AsyncSession,
+        scope: object,
+        target: TargetKey,
+        *,
+        run_id: str,
+        evidence_key: str,
+        identity: object,
+    ) -> LegacyEvidence: ...
