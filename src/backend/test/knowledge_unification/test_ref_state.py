@@ -10,8 +10,8 @@ from sqlmodel import Session
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
 from bisheng.resource_reference.application.contracts import (
     CoverageStatus,
-    GlobalCoverageStatus,
     DeletionEvidence,
+    GlobalCoverageStatus,
     LegacyEvidence,
     SourceKey,
     SourceType,
