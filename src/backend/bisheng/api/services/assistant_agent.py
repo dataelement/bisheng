@@ -244,7 +244,7 @@ class AssistantAgent(AssistantUtils):
             if str(one.model_id) == self.assistant.model_name:
                 default_llm = one
                 break
-            elif not default_llm and one.default:
+            elif not self.assistant.model_name and not default_llm and one.default:
                 default_llm = one
         if not default_llm:
             raise AssistantModelNotConfigError()
@@ -573,7 +573,7 @@ class AssistantAgent(AssistantUtils):
 
         return get_finally_message(messages)
 
-    async def run(self, query: str, chat_history: list = None, callback: Callbacks = None) -> list[BaseMessage]:
+    async def run(self, query: str, chat_history: list | None = None, callback: Callbacks = None) -> list[BaseMessage]:
         """
         Run Agent Conversation
         """
@@ -602,7 +602,7 @@ class AssistantAgent(AssistantUtils):
 
         return result
 
-    async def astream(self, query: str, chat_history: list = None, callback: Callbacks = None):
+    async def astream(self, query: str, chat_history: list | None = None, callback: Callbacks = None):
         """
         Run Agent Conversation - Streaming version
         """
@@ -640,7 +640,7 @@ class AssistantAgent(AssistantUtils):
                     # stream_mode="messages" Return (message, metadata) Meta Group
                     message = None
                     if isinstance(chunk, tuple) and len(chunk) >= 2:
-                        message, metadata = chunk[:2]
+                        message, _metadata = chunk[:2]
                     elif hasattr(chunk, "content"):
                         # Directly to the message object
                         message = chunk
@@ -675,7 +675,7 @@ class AssistantAgent(AssistantUtils):
         logger.debug(f"react_run result: {result}")
         output = result["agent_outcome"].return_values["output"]
         if isinstance(output, dict):
-            output = list(output.values())[0]
+            output = next(iter(output.values()))
         for one in result["intermediate_steps"]:
             inputs.append(one[0])
         inputs.append(AIMessage(content=output))
