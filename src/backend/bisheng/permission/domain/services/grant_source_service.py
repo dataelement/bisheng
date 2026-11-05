@@ -36,6 +36,9 @@ class GrantModelSnapshot:
     action_codes: tuple[str, ...]
     derived_level: int | None = None
     allow_same_level: bool = False
+    visibility_only_resource_types: tuple[str, ...] = ()
+    visibility_level: int | None = None
+    visibility_only: bool = False
 
 
 @dataclass(frozen=True, slots=True)
