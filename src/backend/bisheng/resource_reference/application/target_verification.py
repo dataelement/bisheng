@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Literal
-from weakref import WeakKeyDictionary
+from weakref import ReferenceType, WeakKeyDictionary, ref
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -51,7 +51,9 @@ class ReferenceTargetVerifier:
         ):
             raise TypeError("registered target Owners must provide sync and async verification")
         self._owners = MappingProxyType(registered)
-        self._issued: WeakKeyDictionary[TargetLockReceipt, _IssuedVerification] = WeakKeyDictionary()
+        self._issued: WeakKeyDictionary[TargetLockReceipt, tuple[ReferenceType, _IssuedVerification]] = (
+            WeakKeyDictionary()
+        )
 
     @staticmethod
     def _tenant_id() -> int:
@@ -112,7 +114,7 @@ class ReferenceTargetVerifier:
     def _register(self, source_key, operation, tenant_id, keys, identity, receipts):
         registration = _IssuedVerification(source_key, operation, tenant_id, keys, identity, object())
         for receipt in receipts:
-            self._issued[receipt] = registration
+            self._issued[receipt] = (ref(receipt), registration)
         return tuple(sorted(receipts, key=lambda receipt: receipt.target.key.lock_order_key))
 
     def _verify(self, session, source_key, target_keys, operation):
@@ -209,7 +211,10 @@ class ReferenceTargetVerifier:
             return ()
         if not keys or any(not isinstance(receipt, TargetLockReceipt) for receipt in receipts):
             raise _invalid("reference_receipt_not_issued")
-        registrations = [self._issued.get(receipt) for receipt in receipts]
+        issued = [self._issued.get(receipt) for receipt in receipts]
+        if any(item is None or item[0]() is not receipt for item, receipt in zip(issued, receipts, strict=True)):
+            raise _invalid("reference_receipt_not_issued")
+        registrations = [item[1] for item in issued]
         registration = registrations[0]
         if registration is None or any(item is not registration for item in registrations):
             raise _invalid("reference_receipt_not_issued")

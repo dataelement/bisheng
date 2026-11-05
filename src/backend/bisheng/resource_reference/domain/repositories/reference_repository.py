@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from weakref import WeakSet
+from weakref import ReferenceType, WeakKeyDictionary, ref
 
 from sqlalchemy import and_, false, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,7 +47,7 @@ class ReferenceRepository:
             raise TypeError("target query authority requires a ReferenceTargetVerifier")
         self.verifier = verifier
         self._scope_authority = object()
-        self._issued_scopes: WeakSet[OwnerTargetScope] = WeakSet()
+        self._issued_scopes: WeakKeyDictionary[OwnerTargetScope, ReferenceType] = WeakKeyDictionary()
 
     @staticmethod
     def current_tenant_id() -> int:
@@ -521,13 +521,15 @@ class ReferenceRepository:
             raise _invalid("target_owner_scope_invalid")
         keys = tuple(sorted({target.key for target in targets}, key=lambda key: key.lock_order_key))
         scope = OwnerTargetScope(TransactionIdentity.capture(session), tenant_id, keys, receipts, self._scope_authority)
-        self._issued_scopes.add(scope)
+        self._issued_scopes[scope] = ref(scope)
         return scope
 
     def _check_scope(self, session, scope):
+        issued = self._issued_scopes.get(scope) if isinstance(scope, OwnerTargetScope) else None
         if (
             not isinstance(scope, OwnerTargetScope)
-            or scope not in self._issued_scopes
+            or issued is None
+            or issued() is not scope
             or not scope.targets
             or scope._authority is not self._scope_authority
             or scope.owner_tenant_id != self.current_tenant_id()
