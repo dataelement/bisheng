@@ -15,6 +15,7 @@ from bisheng.api.v1 import flows as endpoint
 from bisheng.api.v1.schemas import FlowVersionCreate
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
 from bisheng.database.models.flow_version import FlowVersion
+from bisheng.resource_reference.application.bindings import ReferenceBindings
 from bisheng.resource_reference.application.contracts import reference_set_digest
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
 from test.knowledge_unification import test_wf_create as create_fixtures
@@ -66,18 +67,18 @@ async def test_second_version_binding_failure_rolls_back_entire_root_and_first_r
         table: rows(deleting, table)
         for table in ("flow", "flowversion", "business_reference_set", "business_resource_reference")
     }
-    original = deleting.runtime.bindings.areplace_source_bindings
+    original = ReferenceBindings.areplace_source_bindings
     calls = 0
 
-    async def fail_second(*args, **kwargs):
+    async def fail_second(binding_service, *args, **kwargs):
         nonlocal calls
-        result = await original(*args, **kwargs)
+        result = await original(binding_service, *args, **kwargs)
         calls += 1
         if calls == 2:
             raise RuntimeError("second source binding failed")
         return result
 
-    monkeypatch.setattr(deleting.runtime.bindings, "areplace_source_bindings", fail_second)
+    monkeypatch.setattr(ReferenceBindings, "areplace_source_bindings", fail_second)
     with pytest.raises(RuntimeError, match="second source binding failed"):
         await delete(deleting)
     assert calls == 2
