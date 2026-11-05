@@ -52,7 +52,15 @@ class EvaluationService:
             or is_tenant_filter_bypassed()
             or get_current_open_api_principal() is not None
             or get_current_public_api_principal() is not None
-            or login_user._runtime_credential_reference is not None
+        ):
+            raise UnAuthorizedError()
+        reference = login_user._runtime_credential_reference
+        if reference is not None and (
+            not isinstance(reference, dict)
+            or reference.get("kind") != "web_session"
+            or any(type(reference.get(key)) is not int for key in ("user_id", "tenant_id", "token_version"))
+            or (reference["user_id"], reference["tenant_id"], reference["token_version"])
+            != (login_user.user_id, login_user.tenant_id, login_user.token_version)
         ):
             raise UnAuthorizedError()
         return tenant_id
