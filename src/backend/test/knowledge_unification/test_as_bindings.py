@@ -23,7 +23,7 @@ from bisheng.common.errcode.knowledge import (
     ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
-from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantStatus
+from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao, AssistantStatus
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.resource_reference.application.contracts import (
     DeletionEvidence,
@@ -172,7 +172,7 @@ async def assistant_business(tmp_path, assistant_tenant, monkeypatch):
         )
     for name in ("update_assistant_knowledge", "update_assistant_tool", "update_assistant_flow"):
         monkeypatch.setattr(
-            assistant_module.AssistantLinkDao,
+            AssistantLinkDao,
             name,
             MagicMock(side_effect=AssertionError("legacy committing link DAO write")),
         )
