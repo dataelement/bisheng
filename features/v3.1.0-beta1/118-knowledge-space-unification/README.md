@@ -15,7 +15,9 @@
 - [任务拆分复审记录：原213项LGTM](./tasks-review.md)
 - [W0/W1集成与任务级评审](./implementation-review.md)
 - [W2业务写入口集成与复查记录](./wave2-implementation-review.md)
-- [下一波运行与共享读取入口盘点](./execution-entrypoints.md)
+- [W3运行准入、共享来源读取及集成复查](./wave3-implementation-review.md)
+- [运行与共享来源接口合同V1](./execution-read-contract.md)
+- [运行与共享读取实际入口接线](./execution-entrypoints.md)
 - [冻结接口合同：REF V1.1、W2 Runtime/batch与P1/J1/A1](./contracts.md)
 - [升级说明：停服、引用回填、恢复与核对](./upgrade-guide.md)
 - [HTML 技术评审：13 张流程图](../../../docs/architecture/review/2026-11-03-bisheng-knowledge-unification-technical-review.html)
@@ -28,7 +30,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 2026-11-05 确认完整 94 条 AC，作为设计评审的需求基线 |
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查闭合；2026-11-05 用户授权进入任务拆分 |
 | test-cases.md | 已生成，待执行 | 140 条，94 AC 全覆盖；QA 参考，不是任务或 Harness 输入 |
-| tasks.md / parallel-development.md | ✅ 已拆分、复审 LGTM | 原213项复审通过；W2源码接线与文档核对后342项；W0/W1与本波保存/删除已合流，整体仍在开发 |
+| tasks.md / parallel-development.md | ✅ 已拆分、复审 LGTM | 原213项复审通过；W3追加后421项、248项完成；运行准入已合流，完整特性仍在开发 |
 
 ## 迁移边界
 
@@ -59,4 +61,11 @@ W0/W1历史交付为86/273项、组合424项通过，见[历史记录](./impleme
 
 从9cbb0141de创建WF/AS/TARGET三个独立lane；INT先交Runtime、legacy Reader与生产composition，实际Owner和业务写入按依赖接线，其他agent固定快照复查，主agent集成验证。工作流保存版本及助手当前配置在同一事务维护引用，支持既定原槽修复；新增知识统一按真实type及原actor校验visible，整根删除核完整版本/集合/raw明细。模型共享明确撤销允许原槽保留或移除，新增及执行拒绝，不新增权限动作或持久状态。
 
-当前166/342项完成（本波新增80项）；主agent在411d4f461473组合验证821项通过（35个pytest路径），架构检查56文件无违规，Ruff 56文件通过。未推送、部署或执行迁移。WF完整运行、AS共用Agent/Info状态、Root共享来源读取scope、其他来源写端及全特性验收仍按任务推进。升级仍要求停服及一致备份后正式盘点并冻结基线；Reader/结构就绪不代表回填或Coverage就绪。
+W2结束时166/342项完成（本波新增80项）；主agent在411d4f461473组合验证821项通过（35个pytest路径），架构检查56文件无违规，Ruff 56文件通过。未推送、部署或执行迁移。这些在W2结束时未完成的WF运行、AS共用Agent/Info和来源读取scope已由下节W3接线；其他来源写端及全特性验收仍待推进。升级仍要求停服及一致备份后正式盘点并冻结基线；Reader/结构就绪不代表回填或Coverage就绪。
+
+
+## W3运行准入与共享来源读取
+
+先冻结可信原身份、来源只读scope、目标当前读与最终root重验合同，再由WF/AS/REF并行开发。普通/public WS、v2、单节点预览、共用Agent、Info和JWT评测已按依赖接线，API/worker装配实际Reader；common在执行副作用前调用端点绑定Port，不自行导入领域服务。
+
+当前248/421项完成，本波新增82项。主agent在0c2587dbe5ec组合验证1199 passed、6 subtests passed（46个pytest路径），Ruff/格式70文件通过，架构新增违规0，既有告警见[W3集成记录](./wave3-implementation-review.md)。全部记录保留94AC/140QA及13张原图；分享签发授权T404/T405、其余来源与页面、正式回填/Coverage和真实环境验收仍待实施。无push、部署或数据迁移。
