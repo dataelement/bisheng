@@ -164,6 +164,8 @@ class PermissionModelDTO(BaseModel):
     allow_same_level: bool
     action_codes: tuple[str, ...] = ()
     version: int
+    visibility_only_resource_types: tuple[str, ...] = ()
+    visibility_level: int | None = Field(default=None, ge=1, le=4, strict=True)
 
 
 class CatalogReleaseDTO(BaseModel):
@@ -308,6 +310,7 @@ class GrantModelDTO(BaseModel):
     name: str
     level: PermissionActionLevel | None
     active: bool
+    visibility_only: bool = False
 
 
 class GrantSourceDTO(BaseModel):

@@ -241,3 +241,76 @@ class KnowledgeSpaceListNotSupportedError(BaseErrorCode):
 class KnowledgeCreationScopeChangedError(BaseErrorCode):
     Code: int = 10993
     Msg: str = "Your tenant has changed; reopen the knowledge-base creation form"
+
+
+class KnowledgeUnificationError(BaseErrorCode):
+    """F118 errors keep v1 envelopes and declare an explicit v2 transport status."""
+
+    http_status: int = 409
+
+
+class ReferenceCoverageNotReadyError(KnowledgeUnificationError):
+    Code: int = 10994
+    Msg: str = "Reference coverage is not ready; the operation cannot be checked completely"
+    http_status: int = 503
+
+
+class ResourceReferenceConflictError(KnowledgeUnificationError):
+    Code: int = 10995
+    Msg: str = "The resource is referenced by saved business configuration"
+
+
+class ResourceReferenceInvalidError(KnowledgeUnificationError):
+    Code: int = 10996
+    Msg: str = "A saved resource reference is invalid or its revision has changed"
+
+
+class KnowledgeProcessingObsoleteError(KnowledgeUnificationError):
+    Code: int = 10997
+    Msg: str = "The task is obsolete because its business model or index configuration changed"
+
+
+class KnowledgeOperationPlanConflictError(KnowledgeUnificationError):
+    Code: int = 10998
+    Msg: str = "The operation no longer matches its frozen reference plan"
+
+
+class KnowledgeProcessingConflictError(KnowledgeUnificationError):
+    Code: int = 10999
+    Msg: str = "A conflicting operation is processing this resource"
+
+
+class KnowledgeProcessingSettingsConflictError(KnowledgeUnificationError):
+    Code: int = 18082
+    Msg: str = "Processing defaults have changed; reload before saving"
+
+
+class KnowledgeProcessingJobNotFoundError(KnowledgeUnificationError):
+    Code: int = 18083
+    Msg: str = "The processing task does not exist or is not accessible"
+    http_status: int = 404
+
+
+class KnowledgeProcessingJobNotRetryableError(KnowledgeUnificationError):
+    Code: int = 18084
+    Msg: str = "The processing task cannot be retried in its current state"
+
+
+class KnowledgeIdempotencyConflictError(KnowledgeUnificationError):
+    Code: int = 18085
+    Msg: str = "The idempotency key was already used for a different request"
+
+
+class KnowledgeOperationConfirmationRequiredError(KnowledgeUnificationError):
+    Code: int = 18086
+    Msg: str = "Review and confirm the operation before executing it"
+
+
+class KnowledgeOperationPlanChangedError(KnowledgeUnificationError):
+    Code: int = 18087
+    Msg: str = "The operation impact has changed; review and confirm it again"
+
+
+class KnowledgeOperationPlanExpiredError(KnowledgeUnificationError):
+    Code: int = 18088
+    Msg: str = "The operation confirmation has expired; review it again"
