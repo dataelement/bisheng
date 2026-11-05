@@ -154,11 +154,11 @@ class FlowService(BaseService):
         telemetry_service.log_event_sync(
             user_id=user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, trace_id=trace_id_var.get()
         )
-        version_info = FlowVersionDao.get_version_by_id(version_id)
+        version_info = await FlowVersionDao.aget_version_by_id(version_id)
         if not version_info:
             return NotFoundVersionError.return_resp()
 
-        flow_info = FlowDao.get_flow_by_id(version_info.flow_id)
+        flow_info = await FlowDao.aget_flow_by_id(version_info.flow_id)
         if not flow_info or flow_info.flow_type != FlowType.WORKFLOW.value:
             return NotFoundError.return_resp()
 
@@ -172,7 +172,33 @@ class FlowService(BaseService):
         if version_info.is_current == 1:
             return CurVersionDelError.return_resp()
 
-        FlowVersionDao.delete_flow_version(version_id)
+        runtime = await get_reference_binding_runtime()
+        async with get_async_db_session() as session:
+            root = await WorkflowVersionRepository.aget_root(session, flow_info.id, user.tenant_id)
+            current = await WorkflowVersionRepository.aget_version(session, root, version_id)
+            candidate = cls._workflow_version_snapshot(current)
+
+            async def lock_root(sql):
+                locked = await WorkflowVersionRepository.alock_root(sql, root.id, user.tenant_id)
+                version = await WorkflowVersionRepository.aget_version(sql, locked, version_id)
+                if cls._workflow_version_snapshot(version) != candidate:
+                    raise KnowledgeOperationPlanConflictError(reason="workflow_version_changed")
+                if version.is_current == 1:
+                    raise CurVersionDelError()
+
+            prepared = await runtime.aprepare_source_bindings(
+                session,
+                SourceKey(root.tenant_id, "workflow_version", root.id, str(version_id)),
+                (),
+                extractor_version=WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
+                lock_source_root=lock_root,
+                effective=False,
+            )
+            current = await WorkflowVersionRepository.aget_version(session, root, version_id)
+            cls._assert_workflow_source_configuration(current, prepared)
+            await WorkflowVersionRepository.asoft_delete_version(session, root, version_id)
+            await runtime.aapply_source_bindings(session, prepared)
+            await session.commit()
         return resp_200()
 
     @classmethod
