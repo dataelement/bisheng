@@ -47,6 +47,7 @@ async def test_actual_root_delete_preserves_all_definitions_and_releases_all_liv
         deleting.user, "wf", FlowVersionCreate(name="blank", data={})
     )
     before_ids = {row["id"] for row in rows(deleting, "flowversion")}
+    terminal = next(row for row in rows(deleting, "business_reference_set") if row["source_version"] == "3")
     assert blank.data.id in before_ids
     result = await delete(deleting)
     assert result.status_code == 200
@@ -56,6 +57,7 @@ async def test_actual_root_delete_preserves_all_definitions_and_releases_all_liv
     assert not rows(deleting, "business_resource_reference")
     sources = [row for row in rows(deleting, "business_reference_set") if row["record_kind"] == "source"]
     assert len(sources) == 4 and all(row["effective"] == 0 and row["ready"] == 1 for row in sources)
+    assert next(row for row in sources if row["source_version"] == "3") == terminal
     deleting.delete_projection.assert_awaited_once()
 
 
@@ -152,6 +154,26 @@ async def test_extra_indexed_source_without_business_version_rejects_root_delete
                 effective=effective,
             )
         )
+    with pytest.raises(ReferenceCoverageNotReadyError):
+        await delete(deleting)
+    assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 0
+    deleting.delete_projection.assert_not_awaited()
+
+
+@pytest.mark.parametrize("corruption", ["active", "unready", "nonempty_digest"])
+async def test_deleted_business_version_must_have_an_existing_consistent_terminal_set(deleting, corruption):
+    async with deleting.session_factory() as session, session.begin():
+        source = await session.scalar(
+            sa.select(BusinessReferenceSet).where(
+                BusinessReferenceSet.source_id == "wf", BusinessReferenceSet.source_version == "3"
+            )
+        )
+        if corruption == "active":
+            source.effective = True
+        elif corruption == "unready":
+            source.ready = False
+        else:
+            source.digest = "f" * 64
     with pytest.raises(ReferenceCoverageNotReadyError):
         await delete(deleting)
     assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 0
