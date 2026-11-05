@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanConflictError,
+    KnowledgeProcessingConflictError,
     ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
@@ -47,7 +48,12 @@ class ReferenceBindings:
             context.transaction.assert_current(session)
         except (TypeError, ValueError) as exc:
             raise ResourceReferenceInvalidError(reason="reference_receipt_invalid") from exc
-        self.verifier.validate_binding_receipts(session, source_key, context.receipts, context.locked_targets)
+        targets = self.verifier.validate_binding_receipts(session, source_key, context.receipts, context.locked_targets)
+        # A durable delete plan has frozen these inbound references. Even
+        # retaining or removing an old slot changes its source/root revision;
+        # wait until deletion completes before permitting manual repair.
+        if any(target.state == ReferenceState.DELETING for target in targets):
+            raise KnowledgeProcessingConflictError(reason="reference_target_deleting")
 
     def _prepare(self, key, expected_revision, new_revision, verified, effective, root, current, old):
         context = verified.context
