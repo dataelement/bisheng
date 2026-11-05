@@ -128,3 +128,11 @@ def test_http_marker_fields_remain_server_owned():
             visibility_only_resource_types=["tool"],
             visibility_level=4,
         )
+
+
+def test_all_current_presets_use_registered_actions_only():
+    from bisheng.permission.application.catalog_api import F048CatalogApi
+    from bisheng.permission.domain.services.catalog_policy import REGISTERED_ACTION_CODES
+
+    for preset in F048CatalogApi.PRESETS:
+        assert set(preset["action_codes"]) <= set(REGISTERED_ACTION_CODES)

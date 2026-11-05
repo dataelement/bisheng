@@ -8,7 +8,8 @@ from sqlmodel import select
 from bisheng.permission.application import catalog_bootstrap as bootstrap
 from bisheng.permission.domain.models import PermissionCatalogRelease, PermissionModel
 from bisheng.permission.domain.services.model_policy import derive_permission_models
-from test.knowledge_unification.test_perm_control_snapshot import seed, session_factory  # noqa: F401
+from test.knowledge_unification.test_perm_control_snapshot import seed
+from test.knowledge_unification.test_perm_control_snapshot import session_factory as session_factory
 from test.knowledge_unification.test_perm_policy import action_release
 
 
