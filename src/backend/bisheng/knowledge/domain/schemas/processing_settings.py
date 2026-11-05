@@ -44,8 +44,6 @@ class DocumentProcessingRule(ProcessingSchema):
             raise ValueError("chunk_overlap must not exceed chunk_size")
         if len(self.separator) != len(self.separator_rule):
             raise ValueError("separator and separator_rule must have the same length")
-        if any(not value for value in self.separator):
-            raise ValueError("separator entries must not be empty")
         return self
 
 
@@ -85,8 +83,6 @@ class PartialDocumentRule(ProcessingSchema):
         if self.chunk_size is not None and self.chunk_overlap is not None and self.chunk_overlap > self.chunk_size:
             raise ValueError("chunk_overlap must not exceed chunk_size")
         if self.separator is not None:
-            if any(not value for value in self.separator):
-                raise ValueError("separator entries must not be empty")
             if self.separator_rule is not None and len(self.separator) != len(self.separator_rule):
                 raise ValueError("separator and separator_rule must have the same length")
         return self
