@@ -256,6 +256,50 @@ connection/protocol failure, and `4` for an allowlist or tool-call failure.
 
 ## Permission Scripts
 
+### `set_admin.py` / `set_admin.sh`
+
+Inspect, grant or revoke a user's **global Super Admin** identity, preserving
+all other roles and tenant memberships. Run from `src/backend/` using the same
+`config` and environment variables as the live backend:
+
+```bash
+export config=config.yaml
+bash scripts/set_admin.sh 7 --action status
+bash scripts/set_admin.sh 7 --dry-run                 # preview grant
+bash scripts/set_admin.sh 7                           # grant (legacy usage)
+bash scripts/set_admin.sh 7 --action revoke           # preview revoke
+bash scripts/set_admin.sh 7 --action revoke --apply   # execute revoke
+```
+
+The number is the **internal user ID**, not the personnel ID. Before changing
+anything, the script prints the name, personnel ID, disabled state and both DB
+and OpenFGA identities. User `1` (the first administrator) can never be revoked;
+revoking the last enabled DB administrator is also refused. Disabled users
+cannot be promoted, but their existing administrator identity can be revoked.
+
+The script initializes the service context and identity-only permission runtime
+and closes them in `finally`, including on failure. It requires an existing,
+matching OpenFGA Store/model and a ready F048 runtime. It never creates a Store
+or publishes an authorization model; `openfga.force_write_model` must be false.
+Normal first-install Catalog seeding may still occur as part of runtime setup.
+Status/preview do not mutate user roles, user identity tuples or user caches.
+
+Writes update the DB, synchronize OpenFGA through the existing permission service
+with strict failure propagation and caller-owned recovery,
+clear the user's permission caches across tenants and the global-super cache,
+then read OpenFGA with higher consistency to verify the requested state.
+DB and OpenFGA are separate systems: failure after DB commit is reported as
+incomplete rather than rolled back. Inspect status, restore connectivity, then
+retry the **same action**. This script does not enqueue background compensation.
+Run maintenance
+serially; the role-row lock protects DB prechecks, not a distributed transaction
+or concurrent account deletion/disable operations. Requests already running
+with a resolved identity can finish with that identity.
+
+Exit codes: `0` success/preview (status: identities agree), `1` target or safety
+precondition rejected, `2` runtime failure, identity mismatch or partial update
+(also argparse parameter errors). No live-account changes are part of local tests.
+
 For an existing F048 installation, run the model publisher below in the release
 maintenance window even when its dry-run says the model is already current.
 Model equality does not establish that historical service-account resource

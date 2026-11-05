@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Set a user as the platform's Super Admin.
+# Inspect, grant or revoke a platform Super Admin.
 #
 # Usage:
 #   bash scripts/set_admin.sh <user_id>
@@ -8,11 +8,14 @@
 #
 # Example:
 #   bash scripts/set_admin.sh 1   # promote user_id=1 to Super Admin
+#   bash scripts/set_admin.sh 7 --action status
+#   bash scripts/set_admin.sh 7 --action revoke          # preview only
+#   bash scripts/set_admin.sh 7 --action revoke --apply
 
 set -e
 
 if [ -z "$1" ]; then
-    echo "Usage: $0 <user_id>" >&2
+    echo "Usage: $0 <user_id> [--action status|grant|revoke] [--dry-run|--apply]" >&2
     exit 1
 fi
 
