@@ -94,6 +94,12 @@ def _register_app_publish_composition() -> None:
         logger.exception("app_publish composition root failed to register on worker; continuing startup")
 
 
+def _register_resource_reference_composition() -> None:
+    from bisheng.resource_reference.composition import register
+
+    register()
+
+
 @celeryd_after_setup.connect
 def on_worker_init(*args, **kwargs):
     global _WORKER_START
@@ -104,6 +110,7 @@ def on_worker_init(*args, **kwargs):
     run_async_task(lambda: initialize_app_context(settings, instance_role="celery"))
     _register_worker_permission_contexts()
     _register_app_publish_composition()
+    _register_resource_reference_composition()
     queues = bisheng_celery.amqp.queues
     all_queues = []
     for queue_name, _ in queues.items():
