@@ -85,7 +85,7 @@ class FlowService(BaseService):
             prepared = await runtime.aprepare_source_bindings(
                 session,
                 source,
-                extract_workflow_version_references(version.data),
+                cls._extract_workflow_references(version.data),
                 extractor_version=WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
                 lock_source_root=lambda sql: WorkflowVersionRepository.alock_root(sql, root.id, root.tenant_id),
                 new_source=True,
@@ -336,7 +336,7 @@ class FlowService(BaseService):
                 root.status = status
             else:
                 candidate = cls._workflow_version_snapshot(version)
-                references = extract_workflow_version_references(version.data)
+                references = cls._extract_workflow_references(version.data)
                 source = SourceKey(root.tenant_id, "workflow_version", root.id, str(version_id))
 
                 async def lock_root(sql):
@@ -408,7 +408,7 @@ class FlowService(BaseService):
             prepared = await runtime.aprepare_source_bindings(
                 session,
                 SourceKey(root.tenant_id, "workflow_version", root.id, str(version.id)),
-                extract_workflow_version_references(version.data),
+                cls._extract_workflow_references(version.data),
                 extractor_version=WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
                 lock_source_root=lock_root,
                 new_source=True,
@@ -474,7 +474,7 @@ class FlowService(BaseService):
             prepared = await runtime.aprepare_source_bindings(
                 session,
                 SourceKey(root.tenant_id, "workflow_version", root.id, str(version_id)),
-                extract_workflow_version_references(next_version.data),
+                cls._extract_workflow_references(next_version.data),
                 extractor_version=WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
                 lock_source_root=lock_root,
             )
@@ -490,6 +490,13 @@ class FlowService(BaseService):
         return resp_200(data=version)
 
     @staticmethod
+    def _extract_workflow_references(data):
+        try:
+            return extract_workflow_version_references(data)
+        except (TypeError, ValueError) as exc:
+            raise ResourceReferenceInvalidError(reason="workflow_reference_invalid") from exc
+
+    @staticmethod
     def _workflow_management_tenant() -> int:
         tenant_id = get_current_tenant_id()
         if type(tenant_id) is not int or tenant_id <= 0:
@@ -500,12 +507,12 @@ class FlowService(BaseService):
     def _workflow_version_snapshot(version: FlowVersion) -> tuple:
         return (copy.deepcopy(version.data), version.name, version.description, version.is_current, version.is_delete)
 
-    @staticmethod
-    def _assert_workflow_source_configuration(version: FlowVersion, prepared) -> None:
+    @classmethod
+    def _assert_workflow_source_configuration(cls, version: FlowVersion, prepared) -> None:
         # A deleted version retains historical JSON but has no live binding
         # slots until restored. A live source must match its indexed old set;
         # ordinary saves cannot repair migration/index drift implicitly.
-        old = extract_workflow_version_references(version.data) if version.is_delete == 0 else ()
+        old = cls._extract_workflow_references(version.data) if version.is_delete == 0 else ()
         if reference_set_digest(old) != prepared.verified.context.old_references_digest:
             raise ReferenceCoverageNotReadyError(reason="source_configuration_drift")
 
