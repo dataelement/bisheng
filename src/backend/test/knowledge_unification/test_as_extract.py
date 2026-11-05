@@ -9,6 +9,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.assistant.domain.repositories.assistant_repository import AssistantRepository
 from bisheng.assistant.domain.services.reference_extractor import extract_assistant_references
 from bisheng.common.errcode.assistant import AssistantNotExistsError
+from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantStatus
 from bisheng.resource_reference.application.contracts import TargetType, reference_set_digest
 
@@ -56,8 +57,12 @@ def test_extractor_rejects_invalid_knowledge_identifiers(knowledge_ids):
 
 
 @pytest.fixture
-async def assistant_session(tenant_context):
+def assistant_tenant(tenant_context):
     tenant_context(101)
+
+
+@pytest.fixture
+async def assistant_session(assistant_tenant):
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
     async with engine.begin() as connection:
         await connection.run_sync(
@@ -145,16 +150,18 @@ async def test_locking_read_refreshes_identity_map(assistant_session):
     assert current.model_name == "32"
 
 
-async def test_cross_tenant_create_and_link_writes_are_refused(assistant_session, tenant_context):
+async def test_cross_tenant_create_and_link_writes_are_refused(assistant_session):
     repository, assistant = await seed_assistant(assistant_session)
     with pytest.raises(AssistantNotExistsError):
         await repository.ainsert(assistant_session, Assistant(id="forged", tenant_id=202, user_id=7))
-    tenant_context(202)
-    with pytest.raises(AssistantNotExistsError):
-        await repository.areplace_links(assistant_session, assistant.id, knowledge_ids=[])
-    with pytest.raises(AssistantNotExistsError):
-        await repository.asave(assistant_session, assistant)
-    tenant_context(101)
+    token = set_current_tenant_id(202)
+    try:
+        with pytest.raises(AssistantNotExistsError):
+            await repository.areplace_links(assistant_session, assistant.id, knowledge_ids=[])
+        with pytest.raises(AssistantNotExistsError):
+            await repository.asave(assistant_session, assistant)
+    finally:
+        current_tenant_id.reset(token)
     assert await link_values(assistant_session) == {(1, "", 0), (0, "flow-a", 0), (0, "", 10), (0, "", 20)}
 
 
