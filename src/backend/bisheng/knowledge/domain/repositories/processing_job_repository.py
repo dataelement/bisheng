@@ -1,0 +1,617 @@
+"""Durable processing requests, leased items, and explicit retry receipts.
+
+The business owner supplies freshly verified configuration while holding its
+resource locks. This repository never resolves a model from task parameters,
+restores a credential, performs external I/O, or commits the owner's session.
+Obsolescence is returned as durable state: the owner must commit it before
+rendering the corresponding error, rather than roll it back by raising early.
+"""
+
+import hashlib
+import json
+from collections.abc import Callable, Mapping, Sequence
+from copy import deepcopy
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from typing import Any
+from uuid import uuid4
+
+from sqlalchemy import func
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from bisheng.common.errcode.knowledge import (
+    KnowledgeIdempotencyConflictError,
+    KnowledgeProcessingConflictError,
+    KnowledgeProcessingJobNotFoundError,
+    KnowledgeProcessingJobNotRetryableError,
+    KnowledgeProcessingObsoleteError,
+)
+from bisheng.common.errcode.knowledge_space import SpaceNotFoundError
+from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
+from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
+from bisheng.knowledge.domain.models.knowledge_processing_retry import KnowledgeProcessingRetryReceipt
+from bisheng.knowledge.domain.schemas.processing_job import ProcessingKind, ResourceVersionTarget
+
+
+@dataclass(frozen=True)
+class ProcessingConfiguration:
+    model_config_revision: int
+    index_generation: str | None
+
+    def __post_init__(self):
+        if type(self.model_config_revision) is not int or self.model_config_revision < 0:
+            raise ValueError("model_config_revision must be a non-negative integer")
+        if self.index_generation is not None and (
+            not isinstance(self.index_generation, str) or not self.index_generation or len(self.index_generation) > 64
+        ):
+            raise ValueError("index_generation must be a nonempty stable identifier")
+
+
+@dataclass(frozen=True)
+class NewProcessingItem:
+    target: ResourceVersionTarget
+    expected_space_id: int
+    expected_parent_id: int | None = None
+    processing_snapshot: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class JobRequestResult:
+    job: KnowledgeProcessingJob
+    reused: bool
+
+
+@dataclass(frozen=True)
+class JobLease:
+    job_id: str
+    lease_token: str
+    claim_generation: int
+    lease_until: datetime
+
+
+@dataclass(frozen=True)
+class ItemLease:
+    job: JobLease
+    item_id: str
+    lease_token: str
+    claim_generation: int
+    lease_until: datetime
+
+
+@dataclass(frozen=True)
+class ClaimedItem:
+    item: KnowledgeProcessingItem
+    lease: ItemLease
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _digest(value: Any) -> str:
+    canonical = json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+class ProcessingJobRepository:
+    def __init__(self, *, clock: Callable[[], datetime] = _utc_now):
+        self.clock = clock
+
+    def _now(self) -> datetime:
+        value = self.clock()
+        return value.astimezone(UTC).replace(tzinfo=None) if value.tzinfo is not None else value
+
+    @staticmethod
+    def _tenant_id() -> int:
+        value = get_current_tenant_id()
+        if type(value) is not int or value <= 0:
+            raise RuntimeError("processing tasks require a concrete tenant context")
+        return value
+
+    @staticmethod
+    def _key(value: str) -> str:
+        if not isinstance(value, str) or not value or len(value) > 64:
+            raise ValueError("idempotency_key must contain 1..64 characters")
+        return value
+
+    @staticmethod
+    def _actor(actor_user_id: int, actor_reference: Mapping[str, Any]) -> dict:
+        if type(actor_user_id) is not int or actor_user_id <= 0 or not actor_reference:
+            raise ValueError("a trusted actor and its narrowing reference are required")
+        copied = deepcopy(dict(actor_reference))
+        _digest(copied)  # Reject non-JSON references before any write.
+        return copied
+
+    async def _space(self, session: AsyncSession, space_id: int) -> None:
+        tenant_id = self._tenant_id()
+        with strict_tenant_filter():
+            row = (
+                await session.exec(
+                    select(Knowledge)
+                    .where(Knowledge.id == space_id, Knowledge.type == KnowledgeTypeEnum.SPACE.value)
+                    .with_for_update()
+                )
+            ).one_or_none()
+        if row is None or row.tenant_id != tenant_id:
+            raise SpaceNotFoundError()
+
+    async def _job(self, session: AsyncSession, job_id: str, *, lock: bool) -> KnowledgeProcessingJob:
+        tenant_id = self._tenant_id()
+        statement = select(KnowledgeProcessingJob).where(KnowledgeProcessingJob.id == job_id)
+        if lock:
+            statement = statement.with_for_update().execution_options(populate_existing=True)
+        with strict_tenant_filter():
+            row = (await session.exec(statement)).one_or_none()
+        if row is None or row.tenant_id != tenant_id:
+            raise KnowledgeProcessingJobNotFoundError()
+        return row
+
+    async def aget(self, session: AsyncSession, job_id: str) -> KnowledgeProcessingJob:
+        return await self._job(session, job_id, lock=False)
+
+    async def _item(self, session: AsyncSession, job: KnowledgeProcessingJob, item_id: str) -> KnowledgeProcessingItem:
+        with strict_tenant_filter():
+            row = (
+                await session.exec(
+                    select(KnowledgeProcessingItem)
+                    .where(KnowledgeProcessingItem.id == item_id, KnowledgeProcessingItem.job_id == job.id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).one_or_none()
+        if row is None or row.tenant_id != job.tenant_id:
+            raise KnowledgeProcessingJobNotFoundError()
+        return row
+
+    async def acreate(
+        self,
+        session: AsyncSession,
+        *,
+        space_id: int,
+        kind: str,
+        idempotency_key: str,
+        actor_user_id: int,
+        actor_reference: Mapping[str, Any],
+        parameters: Mapping[str, Any],
+        configuration: ProcessingConfiguration,
+        items: Sequence[NewProcessingItem],
+        space_config_version: int = 0,
+    ) -> JobRequestResult:
+        tenant_id = self._tenant_id()
+        kind = ProcessingKind(kind).value
+        idempotency_key = self._key(idempotency_key)
+        actor = self._actor(actor_user_id, actor_reference)
+        if type(space_config_version) is not int or space_config_version < 0 or not items:
+            raise ValueError("a nonempty frozen scope and non-negative settings version are required")
+        manifest = []
+        for value in items:
+            target = ResourceVersionTarget.model_validate(value.target.model_dump(mode="json"))
+            if value.expected_space_id != space_id:
+                raise ValueError("item scope does not match the owning space")
+            manifest.append(
+                {
+                    **target.model_dump(mode="json"),
+                    "expected_space_id": value.expected_space_id,
+                    "expected_parent_id": value.expected_parent_id,
+                    "processing_snapshot": deepcopy(dict(value.processing_snapshot)),
+                }
+            )
+        manifest.sort(key=lambda value: (value["file_id"], value["version_id"], value["document_id"]))
+        if len({(value["file_id"], value["version_id"]) for value in manifest}) != len(manifest):
+            raise ValueError("duplicate file/version scope")
+        payload = deepcopy(dict(parameters))
+        request_hash = _digest(
+            {
+                "tenant_id": tenant_id,
+                "space_id": space_id,
+                "kind": kind,
+                "actor_user_id": actor_user_id,
+                "actor_reference": actor,
+                "parameters": payload,
+                "scope_manifest": manifest,
+                "model_config_revision": configuration.model_config_revision,
+                "index_generation": configuration.index_generation,
+                "space_config_version": space_config_version,
+            }
+        )
+        # The verified owning resource lock serializes same-space creation;
+        # the database unique key is the final cross-space collision guard.
+        await self._space(session, space_id)
+        with strict_tenant_filter():
+            existing = (
+                await session.exec(
+                    select(KnowledgeProcessingJob)
+                    .where(
+                        KnowledgeProcessingJob.kind == kind, KnowledgeProcessingJob.idempotency_key == idempotency_key
+                    )
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).one_or_none()
+        if existing is not None:
+            if existing.tenant_id != tenant_id or existing.request_hash != request_hash:
+                raise KnowledgeIdempotencyConflictError()
+            return JobRequestResult(existing, True)
+        now = self._now()
+        job = KnowledgeProcessingJob(
+            tenant_id=tenant_id,
+            space_id=space_id,
+            kind=kind,
+            actor_user_id=actor_user_id,
+            actor_reference=actor,
+            idempotency_key=idempotency_key,
+            request_hash=request_hash,
+            parameters=payload,
+            scope_manifest=manifest,
+            expected_model_config_revision=configuration.model_config_revision,
+            expected_index_generation=configuration.index_generation,
+            space_config_version=space_config_version,
+            total_count=len(manifest),
+            pending_count=len(manifest),
+            accepted_at=now,
+            next_dispatch_at=now,
+            create_time=now,
+            update_time=now,
+        )
+        session.add(job)
+        for value in manifest:
+            session.add(KnowledgeProcessingItem(tenant_id=tenant_id, job_id=job.id, **value))
+        await session.flush()
+        return JobRequestResult(job, False)
+
+    @staticmethod
+    def _same_job_lease(job: KnowledgeProcessingJob, lease: JobLease) -> bool:
+        return (
+            job.id == lease.job_id
+            and job.lease_token == lease.lease_token
+            and job.claim_generation == lease.claim_generation
+        )
+
+    def _active_job_lease(self, job: KnowledgeProcessingJob, lease: JobLease) -> bool:
+        return (
+            self._same_job_lease(job, lease)
+            and job.state == "running"
+            and job.lease_until is not None
+            and job.lease_until > self._now()
+        )
+
+    def _check_configuration(self, job: KnowledgeProcessingJob, configuration: ProcessingConfiguration) -> bool:
+        reason = None
+        if job.expected_model_config_revision != configuration.model_config_revision:
+            reason = "model_config_revision_changed"
+        elif job.expected_index_generation != configuration.index_generation:
+            reason = "index_generation_changed"
+        if reason is None:
+            return True
+        job.state = "obsolete"
+        job.obsolete_reason = reason
+        job.error_code = KnowledgeProcessingObsoleteError.Code
+        job.pending_dispatch = False
+        job.lease_until = None
+        job.finished_at = job.update_time = self._now()
+        job.revision += 1
+        return False
+
+    async def aclaim(
+        self,
+        session: AsyncSession,
+        job_id: str,
+        *,
+        configuration: ProcessingConfiguration,
+        lease_seconds: int = 900,
+    ) -> JobLease | None:
+        if type(lease_seconds) is not int or lease_seconds <= 0:
+            raise ValueError("lease_seconds must be positive")
+        job = await self._job(session, job_id, lock=True)
+        now = self._now()
+        if job.state not in {"accepted", "running"}:
+            return None
+        if job.state == "running" and job.lease_until is not None and job.lease_until > now:
+            return None
+        if not self._check_configuration(job, configuration):
+            await session.flush()
+            return None
+        job.claim_generation += 1
+        job.lease_token = str(uuid4())
+        job.lease_until = now + timedelta(seconds=lease_seconds)
+        job.state = "running"
+        job.pending_dispatch = False
+        job.started_at = job.started_at or now
+        job.finished_at = None
+        job.update_time = now
+        job.revision += 1
+        await session.flush()
+        return JobLease(job.id, job.lease_token, job.claim_generation, job.lease_until)
+
+    async def arenew(
+        self,
+        session: AsyncSession,
+        lease: JobLease,
+        *,
+        configuration: ProcessingConfiguration,
+        lease_seconds: int = 900,
+    ) -> JobLease | None:
+        if type(lease_seconds) is not int or lease_seconds <= 0:
+            raise ValueError("lease_seconds must be positive")
+        job = await self._job(session, lease.job_id, lock=True)
+        if not self._active_job_lease(job, lease):
+            return None
+        if not self._check_configuration(job, configuration):
+            await session.flush()
+            return None
+        job.lease_until = self._now() + timedelta(seconds=lease_seconds)
+        job.update_time = self._now()
+        await session.flush()
+        return JobLease(job.id, job.lease_token, job.claim_generation, job.lease_until)
+
+    async def aclaim_next_item(
+        self, session: AsyncSession, lease: JobLease, *, configuration: ProcessingConfiguration
+    ) -> ClaimedItem | None:
+        job = await self._job(session, lease.job_id, lock=True)
+        if not self._active_job_lease(job, lease):
+            return None
+        if not self._check_configuration(job, configuration):
+            await session.flush()
+            return None
+        now = self._now()
+        # Job-row locking serializes item leasing; no dialect-specific SKIP LOCKED.
+        with strict_tenant_filter():
+            candidates = (
+                await session.exec(
+                    select(KnowledgeProcessingItem)
+                    .where(
+                        KnowledgeProcessingItem.job_id == job.id,
+                        KnowledgeProcessingItem.state.in_(["pending", "running"]),
+                    )
+                    .order_by(KnowledgeProcessingItem.file_id, KnowledgeProcessingItem.version_id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).all()
+        for row in candidates:
+            if row.tenant_id != job.tenant_id:
+                raise KnowledgeProcessingJobNotFoundError()
+            if row.state == "running" and row.lease_until is not None and row.lease_until > now:
+                continue
+            row.state = "running"
+            row.attempt += 1
+            row.claim_generation += 1
+            row.lease_token = str(uuid4())
+            row.lease_until = job.lease_until
+            row.started_at = row.started_at or now
+            row.finished_at = None
+            row.error_code = None
+            row.update_time = now
+            await session.flush()
+            return ClaimedItem(row, ItemLease(lease, row.id, row.lease_token, row.claim_generation, row.lease_until))
+        return None
+
+    def _active_item_lease(self, row: KnowledgeProcessingItem, lease: ItemLease) -> bool:
+        return (
+            row.id == lease.item_id
+            and row.lease_token == lease.lease_token
+            and row.claim_generation == lease.claim_generation
+            and row.state == "running"
+            and row.lease_until is not None
+            and row.lease_until > self._now()
+        )
+
+    async def _guard_item(
+        self, session: AsyncSession, lease: ItemLease, configuration: ProcessingConfiguration
+    ) -> tuple[KnowledgeProcessingJob, KnowledgeProcessingItem] | None:
+        job = await self._job(session, lease.job.job_id, lock=True)
+        if not self._active_job_lease(job, lease.job):
+            return None
+        row = await self._item(session, job, lease.item_id)
+        if not self._active_item_lease(row, lease):
+            return None
+        if not self._check_configuration(job, configuration):
+            await session.flush()
+            return None
+        return job, row
+
+    async def asave_checkpoint(
+        self,
+        session: AsyncSession,
+        lease: ItemLease,
+        *,
+        configuration: ProcessingConfiguration,
+        step: str,
+        checkpoint: Mapping[str, Any],
+    ) -> bool:
+        if not isinstance(step, str) or not step or len(step) > 64:
+            raise ValueError("step must contain 1..64 characters")
+        value = deepcopy(dict(checkpoint))
+        _digest(value)
+        guarded = await self._guard_item(session, lease, configuration)
+        if guarded is None:
+            return False
+        _, row = guarded
+        row.step, row.checkpoint, row.update_time = step, value, self._now()
+        await session.flush()
+        return True
+
+    async def arenew_item(
+        self,
+        session: AsyncSession,
+        lease: ItemLease,
+        *,
+        configuration: ProcessingConfiguration,
+        lease_seconds: int = 900,
+    ) -> ItemLease | None:
+        if type(lease_seconds) is not int or lease_seconds <= 0:
+            raise ValueError("lease_seconds must be positive")
+        guarded = await self._guard_item(session, lease, configuration)
+        if guarded is None:
+            return None
+        job, row = guarded
+        row.lease_until = min(job.lease_until, self._now() + timedelta(seconds=lease_seconds))
+        row.update_time = self._now()
+        await session.flush()
+        current_job_lease = JobLease(job.id, job.lease_token, job.claim_generation, job.lease_until)
+        return ItemLease(current_job_lease, row.id, row.lease_token, row.claim_generation, row.lease_until)
+
+    async def _refresh_counts(self, session: AsyncSession, job: KnowledgeProcessingJob) -> None:
+        with strict_tenant_filter():
+            rows = (
+                await session.exec(
+                    select(KnowledgeProcessingItem.state, func.count())
+                    .where(KnowledgeProcessingItem.job_id == job.id)
+                    .group_by(KnowledgeProcessingItem.state)
+                )
+            ).all()
+        counts = dict(rows)
+        total = sum(counts.values())
+        if total != len(job.scope_manifest):
+            raise KnowledgeProcessingConflictError(reason="processing_scope_incomplete")
+        job.total_count = total
+        job.succeeded_count = counts.get("succeeded", 0)
+        job.failed_count = counts.get("failed", 0)
+        job.pending_count = total - job.succeeded_count - job.failed_count
+
+    async def acomplete_item(
+        self,
+        session: AsyncSession,
+        lease: ItemLease,
+        *,
+        configuration: ProcessingConfiguration,
+        succeeded: bool,
+        result: Mapping[str, Any] | None = None,
+        error_code: int | None = None,
+    ) -> bool:
+        outcome = deepcopy(dict(result or {}))
+        _digest(outcome)
+        guarded = await self._guard_item(session, lease, configuration)
+        if guarded is None:
+            return False
+        job, row = guarded
+        row.state = "succeeded" if succeeded else "failed"
+        row.result = outcome
+        row.error_code = None if succeeded else error_code
+        row.finished_at = row.update_time = self._now()
+        row.lease_until = None
+        await session.flush()
+        await self._refresh_counts(session, job)
+        job.update_time = self._now()
+        job.revision += 1
+        await session.flush()
+        # Actual business/index cutover precedes the explicit afinalize call.
+        return True
+
+    async def afinalize(
+        self, session: AsyncSession, lease: JobLease, *, configuration: ProcessingConfiguration
+    ) -> KnowledgeProcessingJob | None:
+        job = await self._job(session, lease.job_id, lock=True)
+        if not self._active_job_lease(job, lease):
+            return None
+        if not self._check_configuration(job, configuration):
+            await session.flush()
+            return job
+        await self._refresh_counts(session, job)
+        if job.pending_count:
+            return None
+        job.state = "succeeded" if not job.failed_count else ("partial_failed" if job.succeeded_count else "failed")
+        job.finished_at = job.update_time = self._now()
+        job.lease_until = None
+        job.pending_dispatch = False
+        job.revision += 1
+        await session.flush()
+        return job
+
+    async def aretry_failed(
+        self,
+        session: AsyncSession,
+        job_id: str,
+        *,
+        idempotency_key: str,
+        expected_job_revision: int,
+        actor_user_id: int,
+        actor_reference: Mapping[str, Any],
+        configuration: ProcessingConfiguration,
+    ) -> JobRequestResult:
+        job = await self._job(session, job_id, lock=True)
+        key = self._key(idempotency_key)
+        actor = self._actor(actor_user_id, actor_reference)
+        if type(expected_job_revision) is not int or expected_job_revision < 0:
+            raise ValueError("expected_job_revision must be a non-negative integer")
+        request_hash = _digest(
+            {
+                "tenant_id": self._tenant_id(),
+                "job_id": job.id,
+                "expected_job_revision": expected_job_revision,
+                "actor_user_id": actor_user_id,
+                "actor_reference": actor,
+            }
+        )
+        with strict_tenant_filter():
+            receipt = (
+                await session.exec(
+                    select(KnowledgeProcessingRetryReceipt)
+                    .where(
+                        KnowledgeProcessingRetryReceipt.job_id == job.id,
+                        KnowledgeProcessingRetryReceipt.idempotency_key == key,
+                    )
+                    .with_for_update()
+                )
+            ).one_or_none()
+        if receipt is not None:
+            if receipt.tenant_id != job.tenant_id or receipt.request_hash != request_hash:
+                raise KnowledgeIdempotencyConflictError()
+            return JobRequestResult(job, True)
+        if job.state == "obsolete":
+            return JobRequestResult(job, False)
+        if job.revision != expected_job_revision or job.state not in {"failed", "partial_failed"}:
+            raise KnowledgeProcessingJobNotRetryableError()
+        if not self._check_configuration(job, configuration):
+            await session.flush()
+            return JobRequestResult(job, False)
+        with strict_tenant_filter():
+            rows = (
+                await session.exec(
+                    select(KnowledgeProcessingItem)
+                    .where(
+                        KnowledgeProcessingItem.job_id == job.id,
+                        KnowledgeProcessingItem.state.in_(["failed", "pending"]),
+                    )
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).all()
+        if not rows:
+            raise KnowledgeProcessingJobNotRetryableError()
+        for row in rows:
+            if row.tenant_id != job.tenant_id:
+                raise KnowledgeProcessingJobNotFoundError()
+            row.state = "pending"
+            row.finished_at = row.lease_until = None
+            row.lease_token = None
+            row.update_time = self._now()
+        job.state = "accepted"
+        job.finished_at = job.lease_until = None
+        job.lease_token = None
+        job.pending_dispatch = True
+        job.next_dispatch_at = job.update_time = self._now()
+        job.error_code = None
+        job.error_message = None
+        job.revision += 1
+        await session.flush()
+        await self._refresh_counts(session, job)
+        session.add(
+            KnowledgeProcessingRetryReceipt(
+                tenant_id=job.tenant_id,
+                job_id=job.id,
+                idempotency_key=key,
+                request_hash=request_hash,
+                actor_user_id=actor_user_id,
+                actor_reference=actor,
+                expected_job_revision=expected_job_revision,
+                accepted_job_revision=job.revision,
+                item_count=len(rows),
+                accepted_at=self._now(),
+            )
+        )
+        await session.flush()
+        return JobRequestResult(job, False)
