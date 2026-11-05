@@ -82,7 +82,7 @@ def test_global_download_can_remain_pure_visible_for_tool_only():
     assert effective_model_action_codes(model, action_release(), "knowledge_file") == ("download",)
 
 
-def test_server_preserves_markers_only_for_types_without_concrete_actions():
+def test_server_preserves_provenance_for_temporarily_concrete_types():
     model = custom(
         CustomModelSelection(
             "mixed",
@@ -92,7 +92,7 @@ def test_server_preserves_markers_only_for_types_without_concrete_actions():
             visibility_level=3,
         )
     )
-    assert model.visibility_only_resource_types == ("tool",)
+    assert model.visibility_only_resource_types == ("knowledge_file", "tool")
 
 
 @pytest.mark.parametrize(
