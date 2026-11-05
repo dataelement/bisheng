@@ -118,6 +118,24 @@ def test_sync_root_share_requires_native_trusted_evidence_and_cannot_enable_owne
             verify(owner).verify_targets(session, SOURCE, (TargetKey("model", "33"),))
 
 
+def test_disabled_child_retained_configuration_accepts_only_real_topology_and_frozen_share(engine):
+    with Session(engine) as session, session.begin():
+        setup(session)
+        child = session.get(Tenant, 101)
+        child.status = "disabled"
+        session.flush()
+        key = TargetKey("model", "22")
+        receipt = verify(ModelReferenceTargetOwner(sharing=FrozenSharing())).verify_targets(session, SOURCE, (key,))[0]
+        assert receipt.target.state == "valid" and receipt.target.target_tenant_id == 1
+        assert receipt.target.evidence is None
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            verify(ModelReferenceTargetOwner()).verify_targets(session, SOURCE, (key,))
+        child.parent_tenant_id = 202
+        session.flush()
+        with pytest.raises(ResourceReferenceInvalidError):
+            verify(ModelReferenceTargetOwner(sharing=FrozenSharing())).verify_targets(session, SOURCE, (key,))
+
+
 def test_model_server_owner_mismatch_is_rejected(engine):
     with Session(engine) as session, session.begin():
         setup(session)
