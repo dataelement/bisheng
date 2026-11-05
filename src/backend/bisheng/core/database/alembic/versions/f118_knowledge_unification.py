@@ -18,6 +18,7 @@ def upgrade():
             sa.Column("processing_defaults", JsonType, nullable=True),
             sa.Column("processing_config_version", sa.Integer(), nullable=False, server_default=sa.text("0")),
             sa.Column("model_config_revision", sa.Integer(), nullable=False, server_default=sa.text("0")),
+            sa.Column("model_transition", JsonType, nullable=True),
             sa.Column("index_generation", sa.String(64), nullable=True),
             sa.Column("migration_origin", sa.String(64), nullable=True),
         ),
