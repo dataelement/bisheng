@@ -38,7 +38,11 @@ export type ClientEnvironment = Readonly<{
     deviceType: IdentitySource;
     os: IdentitySource;
   }>;
-  capabilities: Readonly<{ hasNativePresentation: boolean }>;
+  capabilities: Readonly<{
+    hasNativePresentation: boolean;
+    /** embed=mobile-app opts into a native host owning the entire chat header. */
+    hasHostChatHeader: boolean;
+  }>;
 }>;
 
 declare global {

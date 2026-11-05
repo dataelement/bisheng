@@ -12,6 +12,7 @@ let mockCompact = true;
 let mockNarrow = false;
 let mockSidebarVisible = true;
 let mockMerged = true;
+let mockHostChatHeader = false;
 let mockReturnTo = "/square?type=apps";
 const mockHeader = {
   title: "New conversation",
@@ -24,6 +25,7 @@ const mockHeader = {
 jest.mock("~/hooks/useClientEnvironment", () => ({
   useClientEnvironment: () => ({
     channel: mockMobile ? "web" : "desktop",
+    capabilities: { hasHostChatHeader: mockHostChatHeader },
     layout: { isNarrowViewport: mockNarrow, isCompactViewport: mockCompact },
   }),
 }));
@@ -154,6 +156,7 @@ beforeEach(() => {
   mockNarrow = false;
   mockSidebarVisible = true;
   mockMerged = true;
+  mockHostChatHeader = false;
   localStorage.clear();
   sessionStorage.clear();
   mockReturnTo = "/square?type=apps";
@@ -395,4 +398,22 @@ it("closes compact history when maximized into the wide layout", () => {
     "aria-expanded",
     "false",
   );
+});
+
+it("removes the entire chat bar and open history when a mobile App takes over the header", () => {
+  mockMobile = true;
+  mockNarrow = true;
+  const view = render(<AppRoot />);
+  expect(view.container.querySelector(".dsh-mobile-chat-header")).not.toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
+  expect(screen.getByRole("region")).toBeVisible();
+  mockHostChatHeader = true;
+  view.rerender(<AppRoot />);
+  expect(view.container.querySelector(".dsh-mobile-chat-header")).toBeNull();
+  expect(screen.queryByRole("region")).toBeNull();
+  expect(screen.getByText("Conversation content")).toBeVisible();
+  mockHostChatHeader = false;
+  view.rerender(<AppRoot />);
+  expect(view.container.querySelector(".dsh-mobile-chat-header")).not.toBeNull();
+  expect(screen.queryByRole("region")).toBeNull();
 });

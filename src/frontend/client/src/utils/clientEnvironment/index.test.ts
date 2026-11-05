@@ -123,3 +123,54 @@ it("uses generic web when every durable signal was lost", () => {
   });
   expect(load()).toMatchObject({ channel: "web" });
 });
+
+it("opts into the mobile App header without enabling desktop behavior and restores it after reload", () => {
+  expect(load("?embed=mobile-app")).toMatchObject({
+    channel: "web",
+    capabilities: { hasNativePresentation: false, hasHostChatHeader: true },
+  });
+  window.history.replaceState({}, "", "/c/123");
+  expect(env.refreshClientEnvironment().capabilities.hasHostChatHeader).toBe(true);
+  expect(load().capabilities.hasHostChatHeader).toBe(true);
+  window.sessionStorage.clear();
+  expect(load().capabilities.hasHostChatHeader).toBe(false);
+});
+
+it.each(["getter", "read", "write"])(
+  "retains the mobile App header choice across routes with blocked storage %s",
+  (failure) => {
+    const fail = () => {
+      throw new Error("blocked");
+    };
+    if (failure === "getter")
+      Object.defineProperty(window, "sessionStorage", {
+        configurable: true,
+        get: fail,
+      });
+    else
+      jest
+        .spyOn(Storage.prototype, failure === "read" ? "getItem" : "setItem")
+        .mockImplementation(fail);
+    load("?embed=mobile-app");
+    window.history.replaceState({}, "", "/knowledge");
+    expect(env.refreshClientEnvironment()).toMatchObject({
+      channel: "web",
+      capabilities: { hasHostChatHeader: true },
+    });
+  },
+);
+
+it("does not infer the App header from a phone UA or apply it to desktop embedding", () => {
+  jest
+    .spyOn(window.navigator, "userAgent", "get")
+    .mockReturnValue("Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Mobile/15E148");
+  expect(load()).toMatchObject({
+    deviceType: "phone",
+    capabilities: { hasHostChatHeader: false },
+  });
+  load("?embed=mobile-app");
+  expect(load("?embed=dsh")).toMatchObject({
+    channel: "desktop",
+    capabilities: { hasHostChatHeader: false },
+  });
+});
