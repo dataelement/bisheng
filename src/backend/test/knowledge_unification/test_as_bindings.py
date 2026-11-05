@@ -148,6 +148,11 @@ async def assistant_business(tmp_path, assistant_tenant, monkeypatch):
         load_permission_record=AsyncMock(return_value=object()), project_delete=AsyncMock()
     )
     monkeypatch.setattr(assistant_module, "get_f048_resource_adapter", AsyncMock(return_value=permission_adapter))
+    monkeypatch.setattr(
+        assistant_module.AssistantDao,
+        "get_one_assistant",
+        MagicMock(side_effect=AssertionError("legacy independent-session read")),
+    )
     for name in ("create_assistant", "update_assistant", "delete_assistant"):
         monkeypatch.setattr(
             assistant_module.AssistantDao, name, MagicMock(side_effect=AssertionError("legacy committing DAO write"))
