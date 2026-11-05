@@ -565,6 +565,7 @@ class AuditLogDao(AuditLogBase):
         ip_address: str | None = None,
         operator_name: str | None = None,
         object_name: str | None = None,
+        note: str | None = None,
     ) -> AuditLog:
         """Structured audit_log insert (v2.5.1 schema).
 
@@ -573,6 +574,9 @@ class AuditLogDao(AuditLogBase):
           - global super (no F019 scope)   → ROOT_TENANT_ID (=1)
           - global super (F019 scope=X)    → X (current management view)
           - system trigger (operator_id=0) → ROOT_TENANT_ID
+
+        ``note`` is the remark shown in the audit page's 备注 column. Approval
+        writers put the scenario display name there. Other callers leave it empty.
 
         ``operator_name`` is auto-resolved when not supplied: ``'system'``
         for ``operator_id == 0`` (system trigger), otherwise looked up via
@@ -616,6 +620,7 @@ class AuditLogDao(AuditLogBase):
             audit_metadata=metadata,
             ip_address=ip_address,
             object_name=object_name,
+            note=note,
         )
         await astamp_audit_logs([entry])
         with bypass_tenant_filter():
