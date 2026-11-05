@@ -45,7 +45,6 @@ from bisheng.permission.domain.schemas import (
     VerifiedPermissionTarget,
     VisibleObjectEnumerationResult,
 )
-from bisheng.permission.domain.services.catalog_policy import ACTION_RESOURCE_SCOPES
 from bisheng.permission.domain.services.grant_service import (
     CanonicalGrantChange,
     GrantCapability,
@@ -375,7 +374,7 @@ class F048PermissionRuntime:
     def _models_for_target(catalog, resource_type: str) -> tuple[GrantModelSnapshot, ...]:
         """Bind all permission models to the same verified target action scope."""
 
-        scopes = dict(getattr(catalog, "action_resource_scopes", ())) or ACTION_RESOURCE_SCOPES
+        scopes = dict(catalog.action_resource_scopes)
         return tuple(
             model_snapshot_for_target(
                 item.snapshot,
