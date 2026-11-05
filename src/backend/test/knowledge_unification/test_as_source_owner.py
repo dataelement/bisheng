@@ -4,7 +4,7 @@ import json
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy import insert, update
+from sqlalchemy import delete, insert, update
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -19,6 +19,7 @@ from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.core.context.tenant import set_visible_tenant_ids
 from bisheng.core.database.tenant_filter import register_tenant_filter_events
 from bisheng.database.models.assistant import Assistant, AssistantLink
+from bisheng.database.models.session import MessageSession
 from bisheng.resource_reference.application.source_contracts import SourceReadRequest, payload_digest
 from bisheng.share_link.domain.models.share_link import ShareLink
 
@@ -40,7 +41,8 @@ async def source_db(tmp_path, source_tenant, monkeypatch):
     async with engine.begin() as connection:
         await connection.run_sync(
             lambda conn: SQLModel.metadata.create_all(
-                conn, tables=[Assistant.__table__, AssistantLink.__table__, ShareLink.__table__]
+                conn,
+                tables=[Assistant.__table__, AssistantLink.__table__, ShareLink.__table__, MessageSession.__table__],
             )
         )
         await connection.execute(
@@ -62,7 +64,7 @@ async def source_db(tmp_path, source_tenant, monkeypatch):
             [
                 {
                     "id": "share-1",
-                    "tenant_id": 202,
+                    "tenant_id": 101,
                     "share_token": "real-token",
                     "resource_id": "conversation",
                     "resource_type": "WORKBENCH_CHAT",
@@ -83,6 +85,31 @@ async def source_db(tmp_path, source_tenant, monkeypatch):
                     "create_user_id": "9",
                     "meta_data": None,
                     "expire_time": 0,
+                },
+                {
+                    "id": "share-3",
+                    "tenant_id": 202,
+                    "share_token": "foreign-token",
+                    "resource_id": "foreign-conversation",
+                    "resource_type": "WORKBENCH_CHAT",
+                    "share_mode": "READ_ONLY",
+                    "status": "ACTIVE",
+                    "create_user_id": "9",
+                    "meta_data": {"flowId": "foreign"},
+                    "expire_time": 0,
+                },
+            ],
+        )
+        await connection.execute(
+            insert(MessageSession),
+            [
+                {"chat_id": "conversation", "tenant_id": 101, "flow_id": "root", "flow_type": 5, "user_id": 9},
+                {
+                    "chat_id": "foreign-conversation",
+                    "tenant_id": 202,
+                    "flow_id": "foreign",
+                    "flow_type": 5,
+                    "user_id": 9,
                 },
             ],
         )
@@ -122,32 +149,84 @@ async def test_original_principal_denial_is_not_replaced_by_root_shared_flag(sou
         check.assert_awaited_once_with(user, resource_type="assistant", resource_id="root", action="visible")
 
 
-async def test_foreign_source_needs_exact_active_token_inspect(source_db):
+async def test_real_chat_token_binds_visible_source_without_trusting_metadata_or_tenant_equality(source_db):
     engine, owner, user, check = source_db
     async with AsyncSession(engine) as session, session.begin():
         with pytest.raises(AssistantNotExistsError):
             await owner.aresolve_source(session, SourceReadRequest("assistant", "foreign"), user)
         snapshot = await owner.aresolve_source(
-            session, SourceReadRequest("assistant", "foreign", purpose="inspect", inspect_token="real-token"), user
+            session, SourceReadRequest("assistant", "root", purpose="inspect", inspect_token="real-token"), user
         )
-        assert snapshot.source_key.tenant_id == 202
+        assert snapshot.source_key.tenant_id == 1
         assert not session.identity_map
         check.assert_not_awaited()
 
 
 async def test_token_is_rechecked_after_target_locks_and_revoke_rolls_back(source_db):
     engine, owner, user, _check = source_db
-    request = SourceReadRequest("assistant", "foreign", purpose="inspect", inspect_token="real-token")
+    request = SourceReadRequest("assistant", "root", purpose="inspect", inspect_token="real-token")
     async with AsyncSession(engine) as session, session.begin():
         snapshot = await owner.aresolve_source(session, request, user)
         await session.execute(
-            update(ShareLink).where(ShareLink.id == "share-1", ShareLink.tenant_id == 202).values(status="INACTIVE")
+            update(ShareLink).where(ShareLink.id == "share-1", ShareLink.tenant_id == 101).values(status="INACTIVE")
         )
         with pytest.raises(UnAuthorizedError):
             await owner.arevalidate_source(session, request, user, snapshot)
         await session.rollback()
     async with AsyncSession(engine) as session, session.begin():
-        assert (await owner.aresolve_source(session, request, user)).source_key.tenant_id == 202
+        assert (await owner.aresolve_source(session, request, user)).source_key.tenant_id == 1
+
+
+@pytest.mark.parametrize(
+    "case", ["missing", "wrong_flow", "wrong_type", "deleted", "wrong_creator", "wrong_tenant", "metadata_only"]
+)
+async def test_chat_token_requires_real_current_session_binding(source_db, case):
+    engine, owner, user, _check = source_db
+    async with AsyncSession(engine) as session, session.begin():
+        if case == "missing":
+            await session.execute(
+                delete(MessageSession).where(MessageSession.chat_id == "conversation", MessageSession.tenant_id == 101)
+            )
+        elif case != "metadata_only":
+            values = {
+                "wrong_flow": {"flow_id": "foreign"},
+                "wrong_type": {"flow_type": 10},
+                "deleted": {"is_delete": True},
+                "wrong_creator": {"user_id": 8},
+                "wrong_tenant": {"tenant_id": 202},
+            }
+            await session.execute(
+                update(MessageSession)
+                .where(MessageSession.chat_id == "conversation", MessageSession.tenant_id == 101)
+                .values(**values[case])
+            )
+        request = SourceReadRequest(
+            "assistant", "foreign" if case == "metadata_only" else "root", purpose="inspect", inspect_token="real-token"
+        )
+        with pytest.raises(UnAuthorizedError):
+            await owner.aresolve_source(session, request, user)
+        assert not session.identity_map
+
+
+async def test_real_token_never_bypasses_original_source_candidate_visibility(source_db):
+    engine, owner, user, _check = source_db
+    async with AsyncSession(engine) as session, session.begin():
+        with pytest.raises(AssistantNotExistsError):
+            await owner.aresolve_source(
+                session,
+                SourceReadRequest("assistant", "foreign", purpose="inspect", inspect_token="foreign-token"),
+                user,
+            )
+
+
+async def test_direct_assistant_token_keeps_exact_active_mapping(source_db):
+    engine, owner, user, check = source_db
+    async with AsyncSession(engine) as session, session.begin():
+        snapshot = await owner.aresolve_source(
+            session, SourceReadRequest("assistant", "root", purpose="inspect", inspect_token="wrong-token"), user
+        )
+        assert snapshot.source_key.source_id == "root" and snapshot.source_key.tenant_id == 1
+        check.assert_not_awaited()
 
 
 async def test_wrong_resource_and_untrusted_version_cannot_read_source(source_db):
