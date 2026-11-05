@@ -52,7 +52,7 @@ from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.public_endpoints.domain.services.guest_link import delete_app_guest_link
 from bisheng.resource_reference.application.access import get_reference_binding_runtime
 from bisheng.resource_reference.application.batch import BatchReferenceBindings, SourceBindingRequest
-from bisheng.resource_reference.application.contracts import SourceKey, reference_set_digest
+from bisheng.resource_reference.application.contracts import ReferenceSpec, SourceKey, TargetKey, reference_set_digest
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import get_request_ip
 from bisheng.workflow.domain.repositories.workflow_version_repository import WorkflowVersionRepository
@@ -154,16 +154,36 @@ class FlowService(BaseService):
             indexed = await runtime.repository.alist_source_sets_for_root(
                 session, prepared.source_keys[0], for_update=True
             )
+            source_sets = {source.source_version: source for source in indexed}
+            raw_references = await runtime.repository.alist_source_references_for_root(
+                session, prepared.source_keys[0], for_update=True
+            )
+            by_version = {}
+            for reference in raw_references:
+                source = source_sets.get(reference.source_version)
+                version = versions.get(reference.source_version)
+                if (
+                    source is None
+                    or version is None
+                    or version.is_delete != 0
+                    or not source.ready
+                    or reference.source_revision != source.source_revision
+                ):
+                    raise ReferenceCoverageNotReadyError(reason="workflow_source_inventory_inconsistent")
+                by_version.setdefault(reference.source_version, []).append(reference)
             for source in indexed:
                 version = versions.get(source.source_version)
                 if version is None or not source.ready or bool(source.effective) != (version.is_delete == 0):
                     raise ReferenceCoverageNotReadyError(reason="workflow_source_inventory_inconsistent")
-                if version.is_delete != 0:
-                    key = SourceKey(root.tenant_id, "workflow_version", root.id, source.source_version)
-                    if source.digest != reference_set_digest(()) or await runtime.repository.alist_source_references(
-                        session, key, for_update=True
-                    ):
-                        raise ReferenceCoverageNotReadyError(reason="workflow_deleted_source_not_empty")
+                try:
+                    references = tuple(
+                        ReferenceSpec(row.slot_key, TargetKey(row.target_type, row.target_id))
+                        for row in by_version.get(source.source_version, ())
+                    )
+                except (TypeError, ValueError) as exc:
+                    raise ReferenceCoverageNotReadyError(reason="workflow_source_inventory_inconsistent") from exc
+                if source.digest != reference_set_digest(references):
+                    raise ReferenceCoverageNotReadyError(reason="workflow_source_inventory_inconsistent")
             for item in prepared.sources:
                 cls._assert_workflow_source_configuration(versions[item.source_key.source_version], item)
             # Definitions, including drafts and historical versions, stay in
