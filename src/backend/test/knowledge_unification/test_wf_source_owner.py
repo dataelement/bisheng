@@ -257,3 +257,34 @@ async def test_preview_knowledge_kind_candidate_unlocked_final_current_read(
         {"resource_type": "knowledge_library", "resource_id": "7", "action": "visible"},
         {"resource_type": "knowledge_space", "resource_id": "7", "action": "visible"},
     ]
+
+
+@pytest.mark.parametrize("case", ["saved_root", "saved_version", "transient_root"])
+async def test_final_disappeared_business_source_is_conflict_not_candidate_notfound(
+    store, identity, authorization, case
+):
+    from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+
+    engine, _ = store
+    owner = WorkflowReferenceSourceOwner()
+    async with AsyncSession(engine) as session, session.begin():
+        if case == "transient_root":
+            req = TransientTargetRequest(
+                "workflow", "wf", canonical_payload_json({"graph": {"nodes": [], "edges": []}})
+            )
+            expected = await owner.aresolve_transient(session, req, identity)
+        else:
+            req = request()
+            expected = await owner.aresolve_source(session, req, identity)
+        mutation = (
+            sa.update(FlowVersion).where(FlowVersion.id == 1, FlowVersion.tenant_id == 101)
+            if case == "saved_version"
+            else sa.update(Flow).where(Flow.id == "wf", Flow.tenant_id == 101)
+        )
+        await session.execute(mutation.values(is_delete=1))
+        revalidate = owner.arevalidate_transient if case == "transient_root" else owner.arevalidate_source
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await revalidate(session, req, identity, expected)
+        resolve = owner.aresolve_transient if case == "transient_root" else owner.aresolve_source
+        with pytest.raises(NotFoundError):
+            await resolve(session, req, identity)
