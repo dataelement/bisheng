@@ -1,6 +1,6 @@
 # F118 多 agent 开发边界与接入合同
 
-**阶段**：2026-11-05，spec 和技术设计已确认，按依赖实施中，W0/W1核心开发、交叉复核与主agent集成已开始。任务入口见 [tasks.md](./tasks.md)。本文件规定交接规则，不另立需求或新增通用平台。
+**阶段**：2026-11-05，spec 和技术设计已确认，按依赖实施中，W0/W1核心及W2保存/删除接线已推进。任务入口见 [tasks.md](./tasks.md)。本文件规定交接规则，不另立需求或新增通用平台。
 
 ## 1. 开发方式
 
@@ -116,10 +116,17 @@ INT 检查任务内路径及范围、无同文件并发、测试先于实现、�
 
 ## 7. W1实施补充
 
-当前任务共273项，source核对补充详见tasks实施记录与contracts澄清。INT另外独占open_api/domain/http_status.py错误装配；MIG负责Knowledge.model_transition、retry receipt登记及测试DDL。原scope/model/action字段来源与受控provenance不可由HTTP伪造。独立复查三项PERM接缝及正常启动接缝已修复、复核并合流；当前三线组合424项通过。后续Owner以主集成快照与REF V1.1为入口，不从各lane旧头自行拼装。
+W1结束时任务共273项，source核对补充详见tasks实施记录与contracts澄清。INT另外独占open_api/domain/http_status.py错误装配；MIG负责Knowledge.model_transition、retry receipt登记及测试DDL。原scope/model/action字段来源与受控provenance不可由HTTP伪造。独立复查三项PERM接缝及正常启动接缝已修复、复核并合流；当前三线组合424项通过。后续Owner以主集成快照与REF V1.1为入口，不从各lane旧头自行拼装。
 
 ## 8. W0/W1交付与下一波
 
-REF逻辑快照ac5e8739a、PROC ff2672e983、PERM c970545d3均经其他agent独立复核后主agent合流。组合受测4932d120de，随后只有T270文件尾格式修正9300b557c及文档状态更新；合同和业务语义不变。完成86/273，后续保持最多协调1+开发3、每热点唯一写者，不把本地通过视为真实双库/中间件或E2E完成。当前各lane均已交付，无未说明的后台开发任务。
+REF逻辑快照ac5e8739a、PROC ff2672e983、PERM c970545d3均经其他agent独立复核后主agent合流。组合受测4932d120de，随后只有T270文件尾格式修正9300b557c及文档状态更新；合同和业务语义不变。完成86/273，后续保持最多协调1+开发3、每热点唯一写者，不把本地通过视为真实双库/中间件或E2E完成。上述为W1结束状态；W2安排与交付见下一节。
 
 下一Owner启动前先同步主集成分支，核对自身任务依赖与V1.1构造器；业务Owner及覆盖持久adapter尚未提供时不得用测试fake在生产装配，也不得跳过回填ready门槛。
+
+
+## 9. W2按依赖合流
+
+W2从9cbb0141de创建WF/AS/TARGET三个独立worktree，延续已冻结基线，不在开发中途接入其他工作区变化的发版线。INT先交legacy端口与Runtime，两个业务lane仅在精确checkpoint合入后使用；TARGET交实际Owner后INT统一composition。WF root删除需求促成批量纯物理预锁协议，目标Owner及REF Repo由TARGET唯一写，业务Service仍WF唯一写；最终raw inventory卡T335单独将REF Repo短暂转交WF，TARGET此时不修改该文件。任何新增接缝先注册独立任务、红测与依赖，不以扩大旧卡掩盖遗漏。
+
+WF/AS/TARGET固定提交由其他agent只读archive复查；主agent只合入已复核SHA，检查共享代码合并差异、组合回归、arch guard、ruff及任务级范围/依赖。W2登记T274–T342，当前总342项；已完成数、受测SHA及限制见[W2集成记录](./wave2-implementation-review.md)。未完成运行/read scope不能靠写入Runtime接受任意source tenant绕过；下一波首先冻结该合同，再交业务入口。
