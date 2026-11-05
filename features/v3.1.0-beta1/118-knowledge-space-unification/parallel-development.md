@@ -109,3 +109,7 @@ Wave 是排程建议，任务卡的依赖才是启动条件；不能因进入 W3
 INT 检查任务内路径及范围、无同文件并发、测试先于实现、完整 AC 自动化映射。每次合流运行相关范围检查；中间件/MySQL/DM8、投影中断恢复、迁移演练与真实 E2E 记录各自证据。最终执行 `/e2e-test` 和 `/sdd-code-review --base feat/3.1.0-beta1`；没有执行的项目保持待执行，不以静态审查、构建或 HTTP 200 代替业务验证。
 
 数据库新增整表沿 SQLModel 自动发现；已有表结构由 MIG 编排 Alembic，升级/降级及 MySQL/DM8 一起验证。数据转换不进 Alembic；转换后回退依靠维护期完整一致备份，不能只将 type 改回 0。迁移脚本不探测/控制停服，正式盘点和权限基线都在运维停服并备份后冻结。
+
+## 6. 实施基线与合同冻结记录
+
+2026-11-05：已完成文档checkpoint `0b80802ae`、fetch远端发版线 `9eef0016de` 并合并至功能提交 `a1b1a2387`。接口见 [contracts.md](./contracts.md) V1；从冻结合同提交创建lane独立worktree。T006落点修正为DTO/GrantModelSnapshot；T214补PermissionModel结构，MIG统一DDL；T215–T218补Source/control-state/Catalog持久链；T219补预检确认计划表，T220–T221限定高级管理写scope。现计划227项，已完成T001/T002。原前文“尚未提交/实施”是拆分时快照，以本节与任务实施记录为当前状态。
