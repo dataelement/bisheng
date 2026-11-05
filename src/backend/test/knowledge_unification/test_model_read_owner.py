@@ -139,7 +139,7 @@ async def test_server_candidate_change_requires_whole_read_restart(model_read_co
                 state.is_select
                 and state.statement._for_update_arg is not None
                 and not changed
-                and "llm_model" in str(state.statement)
+                and LLMModel.__tablename__ in str(state.statement)
             ):
                 changed.append(True)
                 state.session.execute(

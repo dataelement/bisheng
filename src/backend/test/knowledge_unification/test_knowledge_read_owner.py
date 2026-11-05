@@ -283,7 +283,7 @@ async def test_file_parent_plan_change_refuses_without_late_parent_lock(knowledg
                 state.is_select
                 and state.statement._for_update_arg is not None
                 and not changed
-                and "knowledge_file" in str(state.statement)
+                and KnowledgeFile.__tablename__ in str(state.statement)
             ):
                 changed.append(True)
                 state.session.execute(
