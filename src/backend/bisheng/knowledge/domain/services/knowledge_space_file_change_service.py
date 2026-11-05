@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from loguru import logger
+from sqlalchemy.exc import DBAPIError
 
 from bisheng.approval.domain.ports.scenario_policy import (
     ApprovalApplicant,
@@ -19,9 +20,16 @@ from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.knowledge_space import (
     SpaceFileChangeConflictError,
     SpaceFileChangeInvalidStateError,
+    SpaceFolderNotFoundError,
     SpaceNotFoundError,
 )
 from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.knowledge.domain.models.folder_deletion import (
+    FolderStatus,
+    ensure_owner,
+    ensure_source_unchanged,
+    marker_for,
+)
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
 from bisheng.knowledge.domain.models.knowledge_space_file_change_request import (
     KNOWLEDGE_SPACE_FILE_CHANGE_REQUEST_TYPE,
@@ -31,9 +39,14 @@ from bisheng.knowledge.domain.models.knowledge_space_file_change_request import 
     KnowledgeSpaceFileChangeResourceType,
 )
 from bisheng.knowledge.domain.models.knowledge_space_upload_stage import KnowledgeSpaceUploadStageState
+from bisheng.knowledge.domain.repositories.knowledge_folder_deletion_repository import KnowledgeFolderDeletionRepository
 from bisheng.knowledge.domain.repositories.knowledge_space_file_change_footprint_repository import FootprintEntry
 from bisheng.knowledge.domain.repositories.knowledge_space_file_change_repository import (
     KnowledgeSpaceFileChangeRepository,
+)
+from bisheng.knowledge.domain.services.knowledge_folder_deletion_service import (
+    FolderCommitUncertain,
+    KnowledgeFolderDeletionService,
 )
 from bisheng.knowledge.domain.services.knowledge_space_file_change_approver_resolver import (
     KnowledgeSpaceFileChangeApproverResolver,
@@ -69,6 +82,7 @@ class FileChangeRequestCommand:
     action_snapshot: dict[str, Any] = field(default_factory=dict)
     login_user: Any | None = field(default=None, compare=False, repr=False)
     ip_address: str | None = None
+    folder_operation_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +94,8 @@ class FileChangeMutationResult:
     resource: Any | None = None
     error_code: int | None = None
     error_message: str | None = None
+    operation_id: str | None = None
+    outcome_unknown: bool = False
 
 
 class FootprintResolver(Protocol):
@@ -144,11 +160,13 @@ class KnowledgeSpaceFileChangeService:
         stage_retainer: StageRetainer,
         owner_manager_checker: OwnerManagerChecker | None = None,
         policy_service: KnowledgeSpaceFileChangePolicyService | None = None,
+        folder_root_authorizer: MutationAuthorizer | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.submission_port = submission_port
         self.approver_resolver = approver_resolver or KnowledgeSpaceFileChangeApproverResolver.resolve_approver_user_ids
         self.mutation_authorizer = mutation_authorizer
+        self.folder_root_authorizer = folder_root_authorizer
         self.owner_manager_checker = owner_manager_checker or self._is_current_owner_or_manager
         self.footprint_resolver = footprint_resolver
         self.direct_executor = direct_executor
@@ -164,32 +182,42 @@ class KnowledgeSpaceFileChangeService:
         return int(tenant_id)
 
     async def request_change(self, command: FileChangeRequestCommand) -> FileChangeMutationResult:
-        tenant_id = self._tenant_id()
+        tracked_folder = (
+            self.folder_root_authorizer is not None and command.action == "delete" and command.resource_type == "folder"
+        )
+        if tracked_folder:
+            await self.folder_root_authorizer(command)
+            if not await self._needs_approval(command):
+                tracker = KnowledgeFolderDeletionService(command.space_id, self.session_factory)
+                async with tracker.track(command.resource_id, command.applicant_user_id) as token:
+                    return await self._request_change(replace(command, folder_operation_id=token), tracked_folder)
+        return await self._request_change(command, tracked_folder)
 
-        # This must be the first externally observable operation. It delegates
-        # exact action permissions to the Knowledge owner service, whose public
-        # authorization API is backed by PermissionService.
+    async def _needs_approval(self, command):
+        space = await self._get_space(tenant_id=self._tenant_id(), space_id=command.space_id)
+        if space.auth_type == AuthTypeEnum.PRIVATE or await self.owner_manager_checker(command):
+            return False
+        return await self.policy_service.is_approval_required(space_id=command.space_id)
+
+    async def _request_change(self, command, tracked_folder):
         await self.mutation_authorizer(command)
         self._validate_command(command)
-
-        space = await self._get_space(tenant_id=tenant_id, space_id=command.space_id)
-        if space.auth_type == AuthTypeEnum.PRIVATE:
-            return await self._execute_direct(command)
-
-        if await self.owner_manager_checker(command):
-            return await self._execute_direct(command)
-
-        approval_required = await self.policy_service.is_approval_required(space_id=command.space_id)
-        if not approval_required:
+        if not await self._needs_approval(command):
+            if tracked_folder and command.folder_operation_id is None:
+                # The policy changed during full authorization. Claim before direct execution.
+                tracker = KnowledgeFolderDeletionService(command.space_id, self.session_factory)
+                async with tracker.track(command.resource_id, command.applicant_user_id) as token:
+                    return await self._execute_direct(replace(command, folder_operation_id=token))
             return await self._execute_direct(command)
 
         uow_result = await self.uow.execute(
             lambda context, effects: self._create_pending_bundle(
                 context=context,
                 effects=effects,
-                tenant_id=tenant_id,
+                tenant_id=self._tenant_id(),
                 command=command,
-            )
+            ),
+            tracked=bool(command.folder_operation_id),
         )
         await self.uow.run_post_commit_effects(uow_result.post_commit_effects)
         bundle = uow_result.value
@@ -212,11 +240,29 @@ class KnowledgeSpaceFileChangeService:
                         decision="invalid",
                         error_code=exc.code,
                         error_message=exc.message,
+                        operation_id=exc.kwargs.get("operation_id"),
                     )
                 )
             except (LookupError, TypeError, ValueError) as exc:
                 results.append(FileChangeMutationResult(decision="invalid", error_message=str(exc)))
-            except Exception:
+            except Exception as exc:
+                if (
+                    command.action == "delete"
+                    and command.resource_type == "folder"
+                    and (
+                        isinstance(exc, (FolderCommitUncertain, ConnectionError, TimeoutError))
+                        or (isinstance(exc, DBAPIError) and exc.connection_invalidated)
+                    )
+                ):
+                    results.append(
+                        FileChangeMutationResult(
+                            decision="invalid",
+                            outcome_unknown=True,
+                            operation_id=getattr(exc, "operation_id", None),
+                            error_message="Folder deletion result is unknown",
+                        )
+                    )
+                    continue
                 logger.exception(
                     "file change batch item failed: tenant_id={}, space_id={}, action={}, resource_id={}",
                     self._tenant_id(),
@@ -276,6 +322,25 @@ class KnowledgeSpaceFileChangeService:
         )
         if [int(space.id) for space in locked_spaces] != lock_space_ids:
             raise SpaceNotFoundError()
+
+        folder = None
+        folder_repo = None
+        if self.folder_root_authorizer and command.action == "delete" and command.resource_type == "folder":
+            folder_repo = KnowledgeFolderDeletionRepository(context.session, tenant_id, command.space_id)
+            folder = await folder_repo.locked(command.resource_id)
+            if command.folder_operation_id:
+                ensure_owner(folder, command.folder_operation_id)
+                ensure_source_unchanged(folder, command.action_snapshot)
+            else:
+                if not folder:
+                    raise SpaceFolderNotFoundError()
+                if folder.status == FolderStatus.DELETING:
+                    raise SpaceFileChangeConflictError(operation_id=(marker_for(folder) or {}).get("operation_id"))
+                await folder_repo.require_previous_approval_ended(folder)
+                # The new ordinary approval has its own projection. Clear the
+                # ended attempt only inside this same approval transaction.
+                if marker_for(folder):
+                    folder_repo.clear_marker(folder)
 
         stage = None
         if command.action == KnowledgeSpaceFileChangeAction.UPLOAD:
@@ -394,6 +459,8 @@ class KnowledgeSpaceFileChangeService:
             request_id=int(request.id),
             approval_instance_id=int(submission_result.instance_id),
         )
+        if command.folder_operation_id:
+            await folder_repo.attach_approval(folder, command.folder_operation_id, int(request.id))
         effects.extend(submission_result.post_commit_effects)
         return _PendingBundle(
             request_id=int(request.id),
@@ -535,6 +602,8 @@ class KnowledgeSpaceFileChangeService:
 
     @classmethod
     def _business_key(cls, *, tenant_id: int, command: FileChangeRequestCommand) -> str:
+        if command.folder_operation_id:
+            return f"folder-delete-approval:{command.folder_operation_id}"
         identity = {
             "action": command.action,
             "resource_id": command.resource_id,

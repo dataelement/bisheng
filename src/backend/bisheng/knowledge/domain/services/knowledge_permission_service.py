@@ -14,6 +14,7 @@ from bisheng.common.services.metric_log import emit_metric
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.tenant import UserTenantDao
 from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
+from bisheng.knowledge.domain.models.folder_deletion import FolderStatus
 from bisheng.knowledge.domain.models.knowledge import (
     Knowledge,
     KnowledgeDao,
@@ -908,6 +909,13 @@ class KnowledgeFileDaoPermissionLoader:
         return "folder" if row.file_type == FileType.DIR.value else "knowledge_file"
 
     @staticmethod
+    def _permission_status(row, resource_type):
+        if resource_type == "folder" and row.status == FolderStatus.DELETING:
+            return "ACTIVE"
+        parsed = KnowledgeFileStatus(row.status)
+        return "ACTIVE" if resource_type == "folder" else parsed.name
+
+    @staticmethod
     def _parent_scope(
         row: KnowledgeFile,
         knowledge: Knowledge,
@@ -966,11 +974,9 @@ class KnowledgeFileDaoPermissionLoader:
             if snapshot is None:
                 continue
             try:
-                status = KnowledgeFileStatus(row.status).name
+                status = self._permission_status(row, resource_type)
             except ValueError:
                 continue
-            if resource_type == "folder":
-                status = "ACTIVE"
             parent_type, parent_id, ancestors = self._parent_scope(row, knowledge)
             context_version = sha256(
                 (f"{snapshot.context_version}|{row.update_time.isoformat() if row.update_time else '0'}").encode()
@@ -1052,11 +1058,9 @@ class KnowledgeFileDaoPermissionLoader:
             )
         )
         try:
-            status = KnowledgeFileStatus(row.status).name
+            status = self._permission_status(row, resource_type)
         except ValueError:
             return None
-        if resource_type == "folder":
-            status = "ACTIVE"
         context_version = sha256(
             (f"{permission_context}|{row.update_time.isoformat() if row.update_time else '0'}").encode()
         ).hexdigest()[:64]

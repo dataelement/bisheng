@@ -1,3 +1,4 @@
+import { type FolderDeletionGuard } from "./useFolderDeletion";
 import { useCallback, useState } from "react";
 
 import { FileStatus, type KnowledgeFile, type KnowledgeSpace } from "~/api/knowledge";
@@ -22,6 +23,7 @@ type Localize = (key: string, options?: Record<string, unknown>) => string;
 type ShowToast = (toast: { message: string; severity: NotificationSeverity }) => void;
 
 interface UseFileStageUploadOptions {
+    guardFolder?: FolderDeletionGuard;
     activeSpace: KnowledgeSpace | null;
     currentFolderId?: string;
     files: KnowledgeFile[];
@@ -38,7 +40,7 @@ interface UseFileStageUploadOptions {
 export function useFileStageUpload(options: UseFileStageUploadOptions) {
     const {
         activeSpace, currentFolderId, files, setFiles, setTotal, loadFiles,
-        localize, showToast, setDuplicateFiles, isStorageBlocked, refreshQuota,
+        localize, showToast, setDuplicateFiles, isStorageBlocked, refreshQuota, guardFolder,
     } = options;
     const [uploadingFiles, setUploadingFiles] = useState<KnowledgeFile[]>([]);
 
@@ -47,6 +49,7 @@ export function useFileStageUpload(options: UseFileStageUploadOptions) {
             showToast({ message: localize("com_knowledge.upload_feature_dev"), severity: NotificationSeverity.INFO });
             return;
         }
+        if (await guardFolder?.(activeSpace.id, currentFolderId)) return;
         const fileArray = Array.from(fileList);
         // Upfront capacity check on the whole batch; the server rejection stays
         // authoritative, this only avoids a pointless upload round-trip.
@@ -88,6 +91,7 @@ export function useFileStageUpload(options: UseFileStageUploadOptions) {
         }
 
         try {
+            if (await guardFolder?.(activeSpace.id, currentFolderId)) return;
             const mutationResults = partitionUploadMutationResults(await registerUploadedStagesWithRetry({
                 spaceId: activeSpace.id,
                 uploadIds,
@@ -118,7 +122,7 @@ export function useFileStageUpload(options: UseFileStageUploadOptions) {
                 (file) => !placeholders.some((placeholder) => placeholder.id === file.id),
             ));
         }
-    }, [activeSpace, currentFolderId, files, isStorageBlocked, loadFiles, localize, refreshQuota, setDuplicateFiles, setFiles, setTotal, showToast]);
+    }, [activeSpace, currentFolderId, guardFolder, files, isStorageBlocked, loadFiles, localize, refreshQuota, setDuplicateFiles, setFiles, setTotal, showToast]);
 
     return { uploadingFiles, handleUploadFile };
 }

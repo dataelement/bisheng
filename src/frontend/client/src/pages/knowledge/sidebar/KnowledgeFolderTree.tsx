@@ -1,3 +1,6 @@
+import { FolderDeletingStatus } from "../SpaceDetail/FolderDeletingStatus";
+import { useLocation } from "react-router-dom";
+import { type FolderDeletionGuard, type FolderDeletionStateReader } from "../hooks/useFolderDeletion";
 import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KnowledgeFolderNode, listKnowledgeFolders, getFolderParentPathApi } from "~/api/knowledge";
@@ -18,6 +21,7 @@ interface TreeNode {
     /** Children array, undefined = not yet fetched; [] = fetched but empty. */
     children?: TreeNode[];
     loading?: boolean;
+    deletionState?: "running" | "unknown";
 }
 
 export interface FolderSelectPayload {
@@ -26,6 +30,8 @@ export interface FolderSelectPayload {
 }
 
 interface KnowledgeFolderTreeProps {
+    guardFolder?: FolderDeletionGuard;
+    getDeletionState?: FolderDeletionStateReader;
     knowledgeId: string | number;
     currentFolderId?: string;
     /**
@@ -46,6 +52,7 @@ function mapToTree(nodes: KnowledgeFolderNode[]): TreeNode[] {
     return nodes.map((n) => ({
         id: n.id,
         name: n.file_name,
+        deletionState: n.deletionStatus?.state,
         expanded: false,
         children: undefined,
     }));
@@ -77,6 +84,7 @@ function findNode(nodes: TreeNode[], id: number): TreeNode | undefined {
 
 interface TreeNodeRowProps {
     node: TreeNode;
+    getNodeDeletionState: (id: number) => "running" | "unknown" | undefined;
     depth: number;
     currentFolderId?: string;
     onExpand: (node: TreeNode) => void;
@@ -84,7 +92,8 @@ interface TreeNodeRowProps {
     compact?: boolean;
 }
 
-function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect, compact = false }: TreeNodeRowProps) {
+function TreeNodeRow({ node, getNodeDeletionState, depth, currentFolderId, onExpand, onSelect, compact = false }: TreeNodeRowProps) {
+    const deletionState = getNodeDeletionState(node.id) ?? node.deletionState;
     const isSelected = currentFolderId === String(node.id);
     const hasExpandedChildren = node.expanded && Array.isArray(node.children);
 
@@ -143,6 +152,7 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect, compact
                     widest and the container can scroll), while the visible overlay
                     truncates with a scroll-following ellipsis (see useDynamicEllipsis). */}
                 <DynamicEllipsisName name={node.name} />
+                {deletionState && <FolderDeletingStatus state={deletionState} />}
             </div>
 
             {/* Recursively render children when expanded.
@@ -155,6 +165,7 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect, compact
                         <TreeNodeRow
                             key={child.id}
                             node={child}
+                            getNodeDeletionState={getNodeDeletionState}
                             depth={depth + 1}
                             currentFolderId={currentFolderId}
                             onExpand={onExpand}
@@ -171,12 +182,17 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect, compact
 // ─── Root component ──────────────────────────────────────────────────────────
 
 export function KnowledgeFolderTree({
+    guardFolder,
+    getDeletionState,
     knowledgeId,
     currentFolderId,
     fileStatus,
     onSelectFolder,
     compact = false,
 }: KnowledgeFolderTreeProps) {
+    const { pathname } = useLocation();
+    const scopeRef = useRef({ pathname, epoch: 0 });
+    if (scopeRef.current.pathname !== pathname) scopeRef.current = { pathname, epoch: scopeRef.current.epoch + 1 };
     const [roots, setRoots] = useState<TreeNode[]>([]);
     const [rootLoading, setRootLoading] = useState(false);
     // True once the root list for the current (knowledgeId, fileStatus) has
@@ -274,22 +290,26 @@ export function KnowledgeFolderTree({
             });
     }, [knowledgeId, fileStatus, updateNode]);
 
-    const handleExpand = useCallback((node: TreeNode) => {
+    const handleExpand = useCallback(async (node: TreeNode) => {
+        const epoch = ++scopeRef.current.epoch;
+        if (await guardFolder?.(knowledgeId, String(node.id)) || epoch !== scopeRef.current.epoch) return;
         // Arrow keeps toggle semantics: collapse if already expanded.
         if (node.expanded) {
             setRoots((prev) => updateNode(prev, node.id, (n) => ({ ...n, expanded: false })));
             return;
         }
         ensureExpanded(node);
-    }, [ensureExpanded, updateNode]);
+    }, [ensureExpanded, updateNode, guardFolder, knowledgeId]);
 
     // Clicking a folder row only selects it (route + highlight) — it never
     // expands/collapses children; that is exclusively the arrow's job. No tree
     // reload either: the row is already rendered, so its data is already local,
     // and the highlight follows the currentFolderId prop on re-render.
-    const handleSelect = useCallback((node: TreeNode) => {
+    const handleSelect = useCallback(async (node: TreeNode) => {
+        const epoch = ++scopeRef.current.epoch;
+        if (await guardFolder?.(knowledgeId, String(node.id)) || epoch !== scopeRef.current.epoch) return;
         onSelectFolder({ id: String(node.id), name: node.name });
-    }, [onSelectFolder]);
+    }, [onSelectFolder, guardFolder, knowledgeId]);
 
     // Deep-link catch-up: when currentFolderId points at a folder that is NOT in
     // the local tree (direct URL visit, breadcrumb jump into a never-expanded
@@ -419,6 +439,7 @@ export function KnowledgeFolderTree({
                 <TreeNodeRow
                     key={node.id}
                     node={node}
+                    getNodeDeletionState={(id) => getDeletionState?.(knowledgeId, String(id))}
                     depth={0}
                     currentFolderId={currentFolderId}
                     onExpand={handleExpand}

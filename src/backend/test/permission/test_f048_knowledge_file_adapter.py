@@ -373,3 +373,26 @@ async def test_missing_cross_tenant_and_cycles_fail_closed(
             action="visible",
         )
     assert permission.calls == []
+
+
+@pytest.mark.parametrize("file_type, expected", [(FileType.DIR.value, "ACTIVE"), (FileType.FILE.value, None)])
+async def test_deleting_code_is_valid_only_for_folder_facts(monkeypatch, file_type, expected):
+    resource_type = "folder" if file_type == 0 else "knowledge_file"
+    row = SimpleNamespace(
+        id=10,
+        file_type=file_type,
+        knowledge_id=11,
+        file_level_path="",
+        tenant_id=5,
+        status=8,
+        update_time=None,
+        user_id=7,
+    )
+    knowledge = SimpleNamespace(id=11, tenant_id=5, type=KnowledgeTypeEnum.SPACE.value)
+    loader = KnowledgeFileDaoPermissionLoader(_VersionPort())
+    monkeypatch.setattr(permission_module.KnowledgeFileDao, "query_by_id", AsyncMock(return_value=row))
+    monkeypatch.setattr(permission_module.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=knowledge))
+    one = await loader.load_permission_record(resource_type, "10")
+    many = await loader.load_permission_records_from_rows([row], knowledge=knowledge)
+    assert (one.status if one else None) == expected
+    assert [item.status for item in many] == ([expected] if expected else [])

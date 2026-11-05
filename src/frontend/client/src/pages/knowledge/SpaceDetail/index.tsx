@@ -1,3 +1,5 @@
+import { FolderDeletingStatus } from "./FolderDeletingStatus";
+import { type FolderDeletionController } from "../hooks/useFolderDeletion";
 import { Fragment, useState, useRef, useEffect, useLayoutEffect, useCallback, type MouseEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useRecoilValue, useRecoilState } from "recoil";
@@ -98,6 +100,7 @@ import {
 } from "../hooks/useFileChangeApproval";
 
 interface KnowledgeSpaceContentProps {
+    folderDeletion?: FolderDeletionController;
     space: KnowledgeSpace;
     files: KnowledgeFile[];
     total: number;
@@ -185,6 +188,7 @@ export function KnowledgeSpaceContent({
     onFilterStatus,
     onSort,
     onNavigateFolder,
+    folderDeletion,
     onUploadFile,
     onUploadFolder,
     onCreateFolder,
@@ -673,6 +677,7 @@ export function KnowledgeSpaceContent({
             return;
         }
 
+        if (await folderDeletion?.guardFolder(space.id, currentFolderId)) return;
         setWebLinkSubmitting(true);
         try {
             await importWebLinkApi(space.id, {
@@ -900,6 +905,7 @@ export function KnowledgeSpaceContent({
     // plus drag-to-folder move (dropMoveToFolder wired into the table/card drag sources).
     const { moveDialogOpen, setMoveDialogOpen, openMove, requestBatchMove, handleMoveConfirm, dropMoveToFolder } = useKnowledgeMove({
         spaceId: space.id,
+        folderDeletion,
         onMoved: () => {
             setSelectedFiles(new Set());
             queryClient.invalidateQueries({ queryKey: ["file-versions"] });
@@ -1206,8 +1212,10 @@ export function KnowledgeSpaceContent({
         window.open(url, '_blank');
     };
 
-    const handlePreviewFile = (fileId: string, explicitFileName?: string) => {
+    const handlePreviewFile = async (fileId: string, explicitFileName?: string) => {
         const file = displayFiles.find(f => f.id === fileId);
+        const source = file || versionHistoryFile || versionMgmtFile;
+        if (source && await folderDeletion?.guardItems(space.id, [source])) return;
         // Version files aren't in displayFiles, so accept an explicit name for them.
         const fileName = explicitFileName || file?.name || localize("com_knowledge.unknown_file");
         // H5 has no room for a drawer — keep the full-page preview route there.
@@ -1250,6 +1258,7 @@ export function KnowledgeSpaceContent({
     };
 
     const handleBatchDelete = async () => {
+        if (await folderDeletion?.guardItems(space.id, getReviewedSelection())) return;
         const confirmed = await confirm({
             description: `${localize("com_knowledge.confirm_delete_files_count", { 0: selectedFiles.size })}${localize("com_knowledge.delete_irreversible_warning")}`,
             variant: "destructive",
@@ -1262,22 +1271,20 @@ export function KnowledgeSpaceContent({
             return;
         }
 
-        // Optimistic batch delete (handled by the parent): rows are dropped from
-        // the list in place — keeps the scroll position and works regardless of
-        // which page they were loaded from. The parent rolls back on API failure.
+        // Folder rows remain visible until the request has a definite result.
         const ids = getReviewedSelection().map(f => f.id);
         setSelectedFiles(new Set());
         const ok = await onBatchDeleteFiles(ids);
         if (ok) {
             showToast({ message: localize("com_knowledge.batch_delete_success"), status: "success" });
-        } else {
+        } else if (!getReviewedSelection().some(file => file.type === FileType.FOLDER)) {
             showToast({ message: localize("com_knowledge.batch_delete_failed"), status: "warning" });
         }
     };
 
     const handleDelete = async (fileId: string) => {
         const file = displayFiles.find(f => f.id === fileId);
-        if (!file) return;
+        if (!file || await folderDeletion?.guardItems(space.id, [file])) return;
 
         const isFolder = file.type === FileType.FOLDER;
         if (!deleteEntryIds.has(fileId)) {
@@ -1298,6 +1305,7 @@ export function KnowledgeSpaceContent({
     };
 
     const handleBatchRetry = async () => {
+        if (await folderDeletion?.guardItems(space.id, displayFiles.filter(file => selectedFiles.has(file.id)))) return;
         // Find selected files/folders that have an abnormal status or descendant.
         const retryIds = displayFiles
             .filter(f => selectedFiles.has(f.id) && isKnowledgeItemRetryable(f))
@@ -1657,6 +1665,9 @@ export function KnowledgeSpaceContent({
                     </div>
                 </div>
             )}
+            {folderDeletion?.scopeDeletionState && (
+                <div className="shrink-0 px-4 py-2"><FolderDeletingStatus state={folderDeletion.scopeDeletionState} /></div>
+            )}
             {/* Header (desktop only; on mobile these actions live in the top-bar menu) */}
             {!isH5 && (
             <div className="shrink-0">
@@ -1818,6 +1829,7 @@ export function KnowledgeSpaceContent({
                                 {displayFiles.map((file) => (
                                     <div key={file.id} data-knowledge-file-item>
                                         <FileCard
+                                            onBeforeAction={async (file) => Boolean(await folderDeletion?.guardItems(space.id, [file]))}
                                             file={file}
                                             userRole={space.role}
                                             onEnsureFilePermissions={ensureFilePermissions}
@@ -1837,8 +1849,8 @@ export function KnowledgeSpaceContent({
                                             onCancelCreate={onCancelCreateFolder}
                                             onManagePermission={permissionEntryIds.has(file.id) ? () => handleManagePermission(file.id) : undefined}
                                             versionManagementEnabled={versionManagementEnabled}
-                                            onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
-                                            onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
+                                            onOpenVersionManagement={async (f) => { if (!await folderDeletion?.guardItems(space.id, [f])) setVersionMgmtFile(f); }}
+                                            onOpenVersionHistory={async (f) => { if (!await folderDeletion?.guardItems(space.id, [f])) setVersionHistoryFile(f); }}
                                             canManageMembers={canManageMembers}
                                             canRename={renameEntryIds.has(file.id)}
                                             canDelete={deleteEntryIds.has(file.id)}
@@ -1866,7 +1878,7 @@ export function KnowledgeSpaceContent({
                         </div>
                     ) : (
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                            <FileListView files={displayFiles}
+                            <FileListView onBeforeAction={async (file) => Boolean(await folderDeletion?.guardItems(space.id, [file]))} files={displayFiles}
                                     onEnsureFilePermissions={ensureFilePermissions}
                                     onScroll={handleListScroll}
                                     /* Reserve 112px under the last row so the bottom AI dock leaves
@@ -1895,8 +1907,8 @@ export function KnowledgeSpaceContent({
                                     deleteEntryIds={deleteEntryIds}
                                     onManagePermission={handleManagePermission}
                                     versionManagementEnabled={versionManagementEnabled}
-                                    onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
-                                    onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
+                                    onOpenVersionManagement={async (f) => { if (!await folderDeletion?.guardItems(space.id, [f])) setVersionMgmtFile(f); }}
+                                    onOpenVersionHistory={async (f) => { if (!await folderDeletion?.guardItems(space.id, [f])) setVersionHistoryFile(f); }}
                                     canManageMembers={canManageMembers}
                                     highlightedTagIds={searchTagIds}
                                     highlightKeyword={searchQuery}
@@ -2076,6 +2088,8 @@ export function KnowledgeSpaceContent({
                 onOpenChange={setMoveDialogOpen}
                 currentSpaceId={space.id}
                 currentSpaceName={space.name}
+                guardFolder={folderDeletion?.guardFolder}
+                getDeletionState={folderDeletion?.getDeletionState}
                 onConfirm={handleMoveConfirm}
             />
 

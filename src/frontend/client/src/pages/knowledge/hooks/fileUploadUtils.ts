@@ -155,6 +155,8 @@ export function buildUploadFailureMessage(
 }
 
 export interface DuplicateFileEntry {
+    spaceId?: string;
+    parentId?: string;
     fileId: string;
     fileName: string;
     oldFileLevelPath: string;
@@ -234,6 +236,8 @@ export function extractDuplicateFileEntries(registeredFiles: KnowledgeFile[]): D
             && typeof file.oldFileLevelPath === "string"
             && Boolean((file as KnowledgeFile & { _raw?: unknown })._raw))
         .map((file) => ({
+            spaceId: file.spaceId,
+            parentId: file.parentId,
             fileId: file.id,
             fileName: file.name,
             oldFileLevelPath: file.oldFileLevelPath || "",

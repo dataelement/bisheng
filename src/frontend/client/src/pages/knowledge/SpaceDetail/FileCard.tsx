@@ -1,3 +1,4 @@
+import { FolderDeletingStatus, useDeletingItemEvents } from "./FolderDeletingStatus";
 import { Download, MoreVertical, GitBranch, History, FileSearch } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useState, type MouseEvent } from "react";
@@ -40,6 +41,7 @@ const renderHighlightedName = (text: string, keyword?: string) => {
 };
 
 interface FileCardProps {
+    onBeforeAction?: (file: KnowledgeFile) => Promise<boolean>;
     file: KnowledgeFile;
     userRole: SpaceRole;
     /** F040: lazily resolve this file's action permissions when its menu opens. */
@@ -103,6 +105,7 @@ interface FileCardProps {
 
 export function FileCard({
     file,
+    onBeforeAction,
     userRole,
     onEnsureFilePermissions,
     permissionsLoading = false,
@@ -147,6 +150,7 @@ export function FileCard({
     currentUserId,
 }: FileCardProps) {
     const localize = useLocalize();
+    const deletingEvents = useDeletingItemEvents(file.isDeleting);
     /** True when primary input is mouse + hover: actions reveal on card hover. Touch / coarse pointer: keep actions visible (viewport width does not matter). */
     const revealCardActionsOnHoverOnly = useMediaQuery(
         "(hover: hover) and (pointer: fine)",
@@ -161,7 +165,8 @@ export function FileCard({
     const [hovered, setHovered] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     // F040: resolve this file's action permissions lazily, only when the menu opens.
-    const handleMoreMenuOpenChange = (open: boolean) => {
+    const handleMoreMenuOpenChange = async (open: boolean) => {
+        if (open && await onBeforeAction?.(file)) return;
         setMoreMenuOpen(open);
         if (open) onEnsureFilePermissions?.(file);
     };
@@ -191,9 +196,9 @@ export function FileCard({
     // semantics, so it keeps a disabled checkbox. The frontend-only folder upload
     // placeholder (no backend identity) also stays unselectable. Unselectable rows
     // keep a disabled checkbox instead of dropping it, so the column stays put.
-    const isSelectable = pendingUpload
+    const isSelectable = !file.isDeleting && (pendingUpload
         ? isPendingUploadSelectable(pendingUpload)
-        : !isUploadingFolderPlaceholder;
+        : !isUploadingFolderPlaceholder);
     /** Files that haven't finished parsing get the neutral grey skin (Figma 11671:34497). */
     const isNotParsed = !isFolder && !!file.status && file.status !== FileStatus.SUCCESS;
     /** Subset of isNotParsed that should show the "In progress" overlay tag. */
@@ -236,6 +241,7 @@ export function FileCard({
      * one renders nothing, the row falls back to the queueing label).
      */
     const renderStatusOverlayTag = (inline = false) => {
+        if (file.isDeleting) return <FolderDeletingStatus state={file.deletionState} />;
         if (pendingUpload) {
             const failed = pendingUpload.status === "failed";
             // Still awaiting a decision → neutral pill; the business execution
@@ -445,7 +451,8 @@ export function FileCard({
         );
     };
 
-    const handleCardClick = () => {
+    const handleCardClick = async () => {
+        if (await onBeforeAction?.(file)) return;
         if (isCreating || isRenaming || isUploadingFolderPlaceholder) return;
         // Folder click is treated as "enter folder"/"navigate directory"
         // (depending on the parent component's onNavigateFolder implementation).
@@ -499,7 +506,7 @@ export function FileCard({
                 <ActionMenuItem
                     className="text-success data-[highlighted]:text-success focus:text-success"
                     disabled={pendingUploadDeciding}
-                    onClick={(e) => { e.stopPropagation(); onDecidePendingUpload(pendingUpload.requestId, "approve"); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onDecidePendingUpload(pendingUpload.requestId, "approve"); }}
                     icon={<Outlined.Check className="text-success" />}
                     // 同意 (not 审批中心's 通过) per the pending-upload design (Figma 13198:78124).
                     label={localize("com_approval.action_approve")}
@@ -509,7 +516,7 @@ export function FileCard({
                 <ActionMenuItem
                     danger
                     disabled={pendingUploadDeciding}
-                    onClick={(e) => { e.stopPropagation(); onDecidePendingUpload(pendingUpload.requestId, "reject"); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onDecidePendingUpload(pendingUpload.requestId, "reject"); }}
                     icon={<Outlined.Close />}
                     label={localize("com_approval.action_reject")}
                 />
@@ -518,7 +525,7 @@ export function FileCard({
                 <ActionMenuItem
                     danger
                     disabled={pendingUploadDeciding}
-                    onClick={(e) => { e.stopPropagation(); onWithdrawPendingUpload(pendingUpload.requestId); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onWithdrawPendingUpload(pendingUpload.requestId); }}
                     icon={<Outlined.Delete />}
                     label={localize("com_knowledge.delete")}
                 />
@@ -532,21 +539,21 @@ export function FileCard({
         <>
             {showMenuDownloadItem && (
                 <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onDownload(); }}
                     icon={<Outlined.Download />}
                     label={localize("com_knowledge.download")}
                 />
             )}
             {onManagePermission && (
                 <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onManagePermission(); }}
                     icon={<Outlined.PeopleSafe />}
                     label={localize("com_permission.manage_permission")}
                 />
             )}
             {isAdmin && !isFolder && (
                 <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onEditTags(); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onEditTags(); }}
                     icon={<Outlined.Tag />}
                     label={localize("com_knowledge.edit_tags")}
                 />
@@ -554,7 +561,7 @@ export function FileCard({
             {canRename && (
                 <ActionMenuItem
                     disabled={fileChangeLock.locked}
-                    onClick={(e) => { e.stopPropagation(); if (!fileChangeLock.locked) startRenaming(); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; if (!fileChangeLock.locked) startRenaming(); }}
                     icon={<Outlined.Edit />}
                     label={localize("com_knowledge.rename")}
                 />
@@ -562,28 +569,28 @@ export function FileCard({
             {showMoveItem && (
                 <ActionMenuItem
                     disabled={!canMove || isUploading || fileChangeLock.locked}
-                    onClick={(e) => { e.stopPropagation(); onMove?.(); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onMove?.(); }}
                     icon={<Outlined.MoveToFolder />}
                     label={localize("com_knowledge.move")}
                 />
             )}
             {isAdmin && hasRetryOption && (
                 <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onRetry?.(); }}
                     icon={<Outlined.Refresh />}
                     label={localize("com_knowledge.retry")}
                 />
             )}
             {showVersionManagement && (
                 <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onOpenVersionManagement?.(file); }}
                     icon={<GitBranch />}
                     label={localize("com_knowledge.version.menu_version_management")}
                 />
             )}
             {showVersionHistory && (
                 <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onOpenVersionHistory?.(file); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onOpenVersionHistory?.(file); }}
                     icon={<History />}
                     label={localize("com_knowledge.version.menu_version_history")}
                 />
@@ -592,7 +599,7 @@ export function FileCard({
                 <ActionMenuItem
                     danger
                     disabled={fileChangeLock.locked}
-                    onClick={(e) => { e.stopPropagation(); if (!fileChangeLock.locked) onDelete(); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; if (!fileChangeLock.locked) onDelete(); }}
                     icon={<Outlined.Delete />}
                     label={localize("com_knowledge.delete")}
                 />
@@ -611,9 +618,10 @@ export function FileCard({
         reviewedMenuItems
     );
 
-    const handleCardContextMenu = (e: MouseEvent<HTMLDivElement>) => {
+    const handleCardContextMenu = async (e: MouseEvent<HTMLDivElement>) => {
         if (!showMoreMenu) return;
         e.preventDefault();
+        if (await onBeforeAction?.(file)) return;
         // Same lazy permission resolution as the "..." trigger, otherwise the
         // right-click menu renders with unresolved (reduced) permissions.
         onEnsureFilePermissions?.(file);
@@ -641,6 +649,8 @@ export function FileCard({
                         ? { background: "linear-gradient(0deg, rgb(var(--brand-500)/0.07) 0%, rgb(var(--brand-500)/0.07) 100%), #FFF" }
                         : undefined
                 }
+                {...deletingEvents}
+                aria-busy={file.isDeleting}
                 onClick={handleCardClick}
             >
                 {/* File icon 48x48 — colored icons render without backdrop on H5 */}
@@ -721,6 +731,8 @@ export function FileCard({
 
     return (
         <Card
+            {...deletingEvents}
+            aria-busy={file.isDeleting}
             draggable={!pendingUpload && cardDraggable && !isCreating && !isUploading}
             onDragStart={cardDraggable ? onCardDragStart : undefined}
             onDragOver={isFolder && !isUploadingFolderPlaceholder ? onFolderDragOver : undefined}
@@ -921,7 +933,7 @@ export function FileCard({
                             variant="outline"
                             size="icon"
                             className="h-5 w-5 shrink-0 rounded-md hover:bg-gray-100"
-                            onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                            onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onDownload(); }}
                             title={localize("com_knowledge.download")}
                         >
                             <Download className="size-3.5 text-text-2" />

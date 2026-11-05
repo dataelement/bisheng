@@ -12,7 +12,7 @@ export {
 } from "~/events/fileChangeApprovalEvents";
 
 export function isFileChangeMutationLocked(file: KnowledgeFile): boolean {
-    return Boolean(file.fileChangeApproval);
+    return Boolean(file.isDeleting || file.fileChangeApproval);
 }
 
 export function applyRenameDecision(

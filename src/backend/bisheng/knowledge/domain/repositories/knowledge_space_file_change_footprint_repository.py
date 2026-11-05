@@ -14,6 +14,7 @@ from bisheng.knowledge.domain.models.knowledge_space_file_change_request import 
     KnowledgeSpaceFileChangeLockScope,
     KnowledgeSpaceFileChangeRequest,
 )
+from bisheng.knowledge.domain.read_diagnostics import KnowledgeReadTrace
 
 _DELETE_GUARD_REQUEST_BATCH_SIZE = 500
 
@@ -399,63 +400,78 @@ class KnowledgeSpaceFileChangeFootprintRepository:
         purge transaction retires those rows after every external step is
         authoritatively acknowledged.
         """
-
-        normalized_space_ids = sorted({int(space_id) for space_id in space_ids})
-        normalized_resource_types = sorted({str(resource_type) for resource_type in resource_types})
-        if not normalized_space_ids or not normalized_resource_types:
-            return set()
-        statement = (
-            select(
-                KnowledgeSpaceFileChangeFootprint.resource_id,
-                KnowledgeSpaceFileChangeFootprint.request_id,
+        with KnowledgeReadTrace(
+            "delete_visibility",
+            tenant_id=tenant_id,
+            space_id=space_ids[0] if len(space_ids) == 1 else None,
+            space_count=len(space_ids),
+        ) as trace:
+            normalized_space_ids = sorted({int(space_id) for space_id in space_ids})
+            normalized_resource_types = sorted({str(resource_type) for resource_type in resource_types})
+            if not normalized_space_ids or not normalized_resource_types:
+                return set()
+            statement = (
+                select(
+                    KnowledgeSpaceFileChangeFootprint.resource_id,
+                    KnowledgeSpaceFileChangeFootprint.request_id,
+                )
+                .join(
+                    KnowledgeSpaceFileChangeRequest,
+                    KnowledgeSpaceFileChangeRequest.id == KnowledgeSpaceFileChangeFootprint.request_id,
+                )
+                .where(
+                    KnowledgeSpaceFileChangeFootprint.tenant_id == int(tenant_id),
+                    KnowledgeSpaceFileChangeFootprint.space_id.in_(normalized_space_ids),
+                    KnowledgeSpaceFileChangeFootprint.resource_type.in_(normalized_resource_types),
+                    KnowledgeSpaceFileChangeFootprint.resource_id.is_not(None),
+                    KnowledgeSpaceFileChangeRequest.tenant_id == int(tenant_id),
+                    KnowledgeSpaceFileChangeRequest.action == KnowledgeSpaceFileChangeAction.DELETE,
+                    KnowledgeSpaceFileChangeRequest.execution_state.in_(
+                        (
+                            KnowledgeSpaceFileChangeExecutionState.APPLYING,
+                            KnowledgeSpaceFileChangeExecutionState.FAILED,
+                            # Backward-compatible recovery for requests committed
+                            # by the pre-AC-24 state machine.
+                            KnowledgeSpaceFileChangeExecutionState.APPLIED,
+                        )
+                    ),
+                )
+                .order_by(
+                    KnowledgeSpaceFileChangeFootprint.resource_id.asc(),
+                    KnowledgeSpaceFileChangeRequest.id.asc(),
+                )
             )
-            .join(
-                KnowledgeSpaceFileChangeRequest,
-                KnowledgeSpaceFileChangeRequest.id == KnowledgeSpaceFileChangeFootprint.request_id,
-            )
-            .where(
-                KnowledgeSpaceFileChangeFootprint.tenant_id == int(tenant_id),
-                KnowledgeSpaceFileChangeFootprint.space_id.in_(normalized_space_ids),
-                KnowledgeSpaceFileChangeFootprint.resource_type.in_(normalized_resource_types),
-                KnowledgeSpaceFileChangeFootprint.resource_id.is_not(None),
-                KnowledgeSpaceFileChangeRequest.tenant_id == int(tenant_id),
-                KnowledgeSpaceFileChangeRequest.action == KnowledgeSpaceFileChangeAction.DELETE,
-                KnowledgeSpaceFileChangeRequest.execution_state.in_(
-                    (
-                        KnowledgeSpaceFileChangeExecutionState.APPLYING,
-                        KnowledgeSpaceFileChangeExecutionState.FAILED,
-                        # Backward-compatible recovery for requests committed
-                        # by the pre-AC-24 state machine.
-                        KnowledgeSpaceFileChangeExecutionState.APPLIED,
-                    )
-                ),
-            )
-            .order_by(
-                KnowledgeSpaceFileChangeFootprint.resource_id.asc(),
-                KnowledgeSpaceFileChangeRequest.id.asc(),
-            )
-        )
-        # A request may own thousands of footprints. Keep the per-footprint
-        # result scalar-only; joining the checkpoint here repeats its CLOB and
-        # JSON decoding for every resource in the same deletion manifest.
-        resources = list((await self.session.exec(statement)).all())
-        request_ids = sorted({int(request_id) for _, request_id in resources})
-        active_request_ids: set[int] = set()
-        for offset in range(0, len(request_ids), _DELETE_GUARD_REQUEST_BATCH_SIZE):
-            checkpoints = select(
-                KnowledgeSpaceFileChangeRequest.id,
-                KnowledgeSpaceFileChangeRequest.execution_checkpoint,
-            ).where(
-                KnowledgeSpaceFileChangeRequest.tenant_id == int(tenant_id),
-                KnowledgeSpaceFileChangeRequest.id.in_(request_ids[offset : offset + _DELETE_GUARD_REQUEST_BATCH_SIZE]),
-            )
-            # Execution-state filtering belongs to the candidate read above.
-            # A concurrent retry can change FAILED to QUEUED while the active
-            # cutover marker must still hide the same resources.
-            for request_id, checkpoint in (await self.session.exec(checkpoints)).all():
-                if isinstance(checkpoint, dict) and checkpoint.get(str(cutover_checkpoint_key)) is True:
-                    active_request_ids.add(int(request_id))
-        return {int(resource_id) for resource_id, request_id in resources if int(request_id) in active_request_ids}
+            # A request may own thousands of footprints. Keep the per-footprint
+            # result scalar-only; joining the checkpoint here repeats its CLOB and
+            # JSON decoding for every resource in the same deletion manifest.
+            trace.stage("footprint_query")
+            resources = list((await self.session.exec(statement)).all())
+            request_ids = sorted({int(request_id) for _, request_id in resources})
+            trace.update(footprint_count=len(resources), request_count=len(request_ids))
+            trace.stage("checkpoint_query")
+            active_request_ids: set[int] = set()
+            for offset in range(0, len(request_ids), _DELETE_GUARD_REQUEST_BATCH_SIZE):
+                checkpoints = select(
+                    KnowledgeSpaceFileChangeRequest.id,
+                    KnowledgeSpaceFileChangeRequest.execution_checkpoint,
+                ).where(
+                    KnowledgeSpaceFileChangeRequest.tenant_id == int(tenant_id),
+                    KnowledgeSpaceFileChangeRequest.id.in_(
+                        request_ids[offset : offset + _DELETE_GUARD_REQUEST_BATCH_SIZE]
+                    ),
+                )
+                # Execution-state filtering belongs to the candidate read above.
+                # A concurrent retry can change FAILED to QUEUED while the active
+                # cutover marker must still hide the same resources.
+                for request_id, checkpoint in (await self.session.exec(checkpoints)).all():
+                    if isinstance(checkpoint, dict) and checkpoint.get(str(cutover_checkpoint_key)) is True:
+                        active_request_ids.add(int(request_id))
+            trace.stage("collect_hidden_ids")
+            result = {
+                int(resource_id) for resource_id, request_id in resources if int(request_id) in active_request_ids
+            }
+            trace.update(active_request_count=len(active_request_ids), returned_count=len(result))
+            return result
 
     async def list_active_mutation_projections(
         self,

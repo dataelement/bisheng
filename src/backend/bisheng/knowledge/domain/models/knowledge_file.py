@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Literal
 
 # if TYPE_CHECKING:
-from pydantic import field_validator
+from pydantic import field_serializer, field_validator
 from sqlalchemy import Column, DateTime, Integer, String, Text, or_, text
 from sqlmodel import Field, col, delete, func, select, update
 
@@ -12,6 +12,7 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 from bisheng.database.base import async_get_count, get_count
+from bisheng.knowledge.domain.models.folder_deletion import FolderStatus
 
 KNOWLEDGE_FILE_NAME_MAX_LENGTH = 500
 KNOWLEDGE_REMARK_MAX_LENGTH = 4096
@@ -206,6 +207,12 @@ class QAKnowledge(QAKnowledgeBase, table=True):
 class KnowledgeFileRead(KnowledgeFileBase):
     id: int
 
+    @field_serializer("user_metadata")
+    def serialize_public_metadata(self, metadata):
+        from bisheng.knowledge.domain.models.folder_deletion import public_metadata
+
+        return public_metadata(metadata) if metadata is not None else None
+
 
 class KnowledgeFileCreate(KnowledgeFileBase):
     pass
@@ -219,6 +226,13 @@ class QAKnowledgeUpsert(QAKnowledgeBase):
 
 
 class KnowledgeFileDao(KnowledgeFileBase):
+    @staticmethod
+    def _file_status_filter(status):
+        return or_(
+            KnowledgeFile.status.in_(status),
+            (KnowledgeFile.file_type == FileType.DIR.value) & (KnowledgeFile.status == FolderStatus.DELETING),
+        )
+
     @classmethod
     async def query_by_id(cls, file_id: int) -> KnowledgeFile | None:
         async with get_async_db_session() as session:
@@ -432,7 +446,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
         """Batch update file status"""
         statement = (
             update(KnowledgeFile)
-            .where(KnowledgeFile.id.in_(file_ids))
+            .where(KnowledgeFile.id.in_(file_ids), KnowledgeFile.file_type == FileType.FILE.value)
             .values(status=status.value, remark=_limit_remark(reason))
         )
         with get_sync_db_session() as session:
@@ -444,7 +458,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
         """Batch update file status"""
         statement = (
             update(KnowledgeFile)
-            .where(KnowledgeFile.id.in_(file_ids))
+            .where(KnowledgeFile.id.in_(file_ids), KnowledgeFile.file_type == FileType.FILE.value)
             .values(status=status.value, remark=_limit_remark(reason))
         )
         async with get_async_db_session() as session:
@@ -533,19 +547,19 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def _build_file_filters_statement(
         cls,
         statement,
-        file_name: str = None,
-        status: list[int] = None,
-        file_ids: list[int] = None,
-        file_level_path: str = None,
-        extra_file_ids: list[int] = None,
+        file_name: str | None = None,
+        status: list[int] | None = None,
+        file_ids: list[int] | None = None,
+        file_level_path: str | None = None,
+        extra_file_ids: list[int] | None = None,
         *,
-        order_by: str = None,
-        order_field: str = None,
+        order_by: str | None = None,
+        order_field: str | None = None,
         order_sort: str = "desc",
     ):
         and_statement = []
         if status:
-            and_statement.append(KnowledgeFile.status.in_(status))
+            and_statement.append(cls._file_status_filter(status))
         if file_ids:
             and_statement.append(KnowledgeFile.id.in_(file_ids))
         if file_level_path:
@@ -581,11 +595,11 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def get_file_by_filters(
         cls,
         knowledge_id: int,
-        file_name: str = None,
-        status: list[int] = None,
+        file_name: str | None = None,
+        status: list[int] | None = None,
         page: int = 0,
         page_size: int = 0,
-        file_ids: list[int] = None,
+        file_ids: list[int] | None = None,
     ) -> list[KnowledgeFile]:
         statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
         statement = cls._build_file_filters_statement(statement, file_name, status, file_ids, order_by="update_time")
@@ -598,13 +612,13 @@ class KnowledgeFileDao(KnowledgeFileBase):
     async def aget_file_by_filters(
         cls,
         knowledge_id: int,
-        file_name: str = None,
-        status: list[int] = None,
-        file_ids: list[int] = None,
-        extra_file_ids: list[int] = None,
-        file_level_path: str = None,
-        order_by: str = None,
-        order_field: str = None,
+        file_name: str | None = None,
+        status: list[int] | None = None,
+        file_ids: list[int] | None = None,
+        extra_file_ids: list[int] | None = None,
+        file_level_path: str | None = None,
+        order_by: str | None = None,
+        order_field: str | None = None,
         order_sort: str = "desc",
         *,
         page: int = 0,
@@ -646,11 +660,11 @@ class KnowledgeFileDao(KnowledgeFileBase):
     async def acount_file_by_filters(
         cls,
         knowledge_id: int,
-        file_name: str = None,
-        status: list[int] = None,
-        file_ids: list[int] = None,
-        extra_file_ids: list[int] = None,
-        file_level_path: str = None,
+        file_name: str | None = None,
+        status: list[int] | None = None,
+        file_ids: list[int] | None = None,
+        extra_file_ids: list[int] | None = None,
+        file_level_path: str | None = None,
     ) -> int:
         statement = select(func.count()).where(KnowledgeFile.knowledge_id == knowledge_id)
         statement = cls._build_file_filters_statement(
@@ -680,13 +694,17 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     def count_file_by_filters(
-        cls, knowledge_id: int, file_name: str = None, status: list[int] = None, file_ids: list[int] = None
+        cls,
+        knowledge_id: int,
+        file_name: str | None = None,
+        status: list[int] | None = None,
+        file_ids: list[int] | None = None,
     ) -> int:
         statement = select(func.count(KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id)
         if file_name:
             statement = statement.where(KnowledgeFile.file_name.like(f"%{file_name}%"))
         if status:
-            statement = statement.where(KnowledgeFile.status.in_(status))
+            statement = statement.where(cls._file_status_filter(status))
         if file_ids:
             statement = statement.where(KnowledgeFile.id.in_(file_ids))
         with get_sync_db_session() as session:
@@ -694,13 +712,17 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     async def async_count_file_by_filters(
-        cls, knowledge_id: int, file_name: str = None, status: list[int] = None, file_ids: list[int] = None
+        cls,
+        knowledge_id: int,
+        file_name: str | None = None,
+        status: list[int] | None = None,
+        file_ids: list[int] | None = None,
     ) -> int:
         statement = select(func.count(KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id)
         if file_name:
             statement = statement.where(KnowledgeFile.file_name.like(f"%{file_name}%"))
         if status:
-            statement = statement.where(KnowledgeFile.status.in_(status))
+            statement = statement.where(cls._file_status_filter(status))
         if file_ids:
             statement = statement.where(KnowledgeFile.id.in_(file_ids))
         async with get_async_db_session() as session:
@@ -732,7 +754,9 @@ class KnowledgeFileDao(KnowledgeFileBase):
         if not file_ids:
             return
 
-        statement = update(KnowledgeFile).where(col(KnowledgeFile.id).in_(file_ids))
+        statement = update(KnowledgeFile).where(
+            col(KnowledgeFile.id).in_(file_ids), KnowledgeFile.file_type == FileType.FILE.value
+        )
 
         statement = statement.values(status=status.value)
 
@@ -943,7 +967,9 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             return session.exec(select(QAKnowledge).where(QAKnowledge.id == qa_id)).first()
 
     @classmethod
-    def get_qa_knowledge_by_name(cls, question: list[str], knowledge_id: int, exclude_id: int = None) -> QAKnowledge:
+    def get_qa_knowledge_by_name(
+        cls, question: list[str], knowledge_id: int, exclude_id: int | None = None
+    ) -> QAKnowledge:
         from bisheng.core.database.dialect_helpers import json_array_contains
 
         with get_sync_db_session() as session:

@@ -174,3 +174,29 @@ async def test_retry_or_finalization_between_reads_keeps_guard_semantics(guard_d
 
     with patch.object(AsyncSession, "exec", interleave):
         assert await guard_db.read() == (set() if retired else {101, 102})
+
+
+async def test_diagnostics_report_actual_guard_work_without_manifest_content(guard_db, monkeypatch):
+    from bisheng.core.logger import trace_id_var
+    from bisheng.knowledge.domain import read_diagnostics
+
+    await guard_db.seed([11, 12], checkpoint={"deletion_cutover_active": True, "manifest": "PRIVATE-MANIFEST"})
+    messages = []
+    monkeypatch.setattr(read_diagnostics, "emit_metric", lambda domain, **fields: messages.append(fields))
+    token = trace_id_var.set("guard-read-trace")
+    try:
+        assert await guard_db.read() == {11, 12}
+    finally:
+        trace_id_var.reset(token)
+    assert messages[0]["event"] == "start"
+    summary = messages[-1]
+    assert summary["event"] == "end"
+    assert summary["trace_id"] == "guard-read-trace"
+    assert summary["tenant_id"] == 42
+    assert summary["space_id"] == 8
+    assert summary["footprint_count"] == 2
+    assert summary["request_count"] == 1
+    assert summary["active_request_count"] == 1
+    assert summary["returned_count"] == 2
+    assert summary["checkpoint_query_elapsed_ms"] >= 0
+    assert "PRIVATE-MANIFEST" not in repr(messages)

@@ -5,7 +5,10 @@ from sqlalchemy import case, func, or_
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.common.errcode.knowledge_space import SpaceFileChangeConflictError, SpaceFolderNotFoundError
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
+from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.knowledge.domain.models.folder_deletion import RESERVED_KEY, FolderStatus, public_metadata
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import (
     FolderDescendantStatusFlags,
@@ -21,6 +24,36 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
 
     def __init__(self, session: AsyncSession):
         super().__init__(session, KnowledgeFile)
+
+    async def update(self, entity: KnowledgeFile) -> KnowledgeFile:
+        """Generic detached edits must not overwrite server-owned directory state."""
+        if entity.file_type == FileType.DIR.value and entity.id is not None:
+            tenant_id = get_current_tenant_id()
+            if tenant_id is None or entity.tenant_id != tenant_id:
+                raise SpaceFolderNotFoundError()
+            # Read scalar columns without flushing the caller's stale identity first.
+            with self.session.no_autoflush:
+                statement = (
+                    select(KnowledgeFile.status, KnowledgeFile.user_metadata)
+                    .where(
+                        KnowledgeFile.id == entity.id,
+                        KnowledgeFile.tenant_id == tenant_id,
+                        KnowledgeFile.knowledge_id == entity.knowledge_id,
+                        KnowledgeFile.file_type == FileType.DIR.value,
+                    )
+                    .with_for_update()
+                )
+                current = (await self.session.execute(statement)).first()
+            if current is None:
+                raise SpaceFolderNotFoundError()
+            if current.status == FolderStatus.DELETING:
+                raise SpaceFileChangeConflictError()
+            metadata = public_metadata(entity.user_metadata)
+            if RESERVED_KEY in (current.user_metadata or {}):
+                metadata[RESERVED_KEY] = current.user_metadata[RESERVED_KEY]
+            entity.user_metadata = metadata
+            entity.status = current.status
+        return await super().update(entity)
 
     async def find_by_ids(self, entity_ids: list[int]) -> Sequence[KnowledgeFile]:
         """Fetch multiple KnowledgeFile rows by id list.
@@ -164,7 +197,7 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
                 # Sort by newness
                 sorted_user_metadata = dict(
                     sorted(
-                        knowledge_file.user_metadata.items(),
+                        public_metadata(knowledge_file.user_metadata).items(),
                         key=lambda item: item[1].get("updated_at", 0),
                         reverse=False,
                     )

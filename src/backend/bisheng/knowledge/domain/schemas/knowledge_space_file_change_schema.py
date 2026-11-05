@@ -179,6 +179,8 @@ class ResourceMutationItemResult(_FileChangeOutput):
     resource: dict[str, Any] | None = None
     error_code: int | None = None
     error_message: str | None = None
+    operation_id: str | None = None
+    outcome_unknown: bool = False
 
 
 class FileMoveMutationResp(_FileChangeOutput):

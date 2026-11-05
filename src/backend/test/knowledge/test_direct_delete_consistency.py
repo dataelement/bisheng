@@ -384,3 +384,218 @@ async def test_pending_approval_conflict_blocks_direct_delete(direct_delete_db):
     async with db.sessions() as session:
         assert await session.get(KnowledgeFile, db.root.id)
         assert await session.get(KnowledgeFile, db.child.id)
+
+
+async def test_folder_operation_commits_marker_before_cutover_and_resolves_only_matching_history(direct_delete_db):
+    from bisheng.knowledge.domain.models.folder_deletion import marker_for
+    from bisheng.knowledge.domain.services.knowledge_folder_deletion_service import KnowledgeFolderDeletionService
+
+    db = direct_delete_db
+    svc = KnowledgeFolderDeletionService(db.space.id, db.sessions)
+    owner = SimpleNamespace(
+        login_user=SimpleNamespace(user_id=5),
+        _load_space_listing_scope=AsyncMock(return_value=(db.space, None)),
+        _filter_visible_child_items=AsyncMock(side_effect=lambda rows, **kwargs: rows),
+        _batch_actions=AsyncMock(return_value={str(db.space.id): {"visible"}}),
+    )
+    async with svc.track(db.root.id, 5) as token:
+        async with db.sessions() as session:
+            row = await session.get(KnowledgeFile, db.root.id)
+            assert row.status == 8 and marker_for(row)["operation_id"] == token
+            assert (await session.exec(select(KnowledgeSpaceFileChangeRequest))).all() == []
+        with pytest.raises(SpaceFileChangeConflictError) as conflict:
+            async with svc.track(db.root.id, 6):
+                pytest.fail("duplicate claim succeeded")
+        assert conflict.value.kwargs["operation_id"] == token
+        await _service(db, dispatch_purge=AsyncMock()).delete(resource=db.root, applicant_user_id=5, operation_id=token)
+    known = {db.root.id: token}
+    (item,) = await svc.query(owner, [db.root.id], known)
+    assert item.state == "succeeded" and item.operation_id == token
+    owner.login_user.user_id = 6
+    (item,) = await svc.query(owner, [db.root.id], known)
+    assert item.state == "unavailable" and item.operation_id is None
+    owner._batch_actions.return_value = {str(db.space.id): {"visible", "manage_permission"}}
+    (item,) = await svc.query(owner, [db.root.id], {db.root.id: "wrong-token"})
+    assert item.state == "untracked"
+    async with db.sessions() as session, session.begin():
+        from sqlalchemy import delete
+
+        await session.exec(
+            delete(KnowledgeSpaceFileChangeExecutionStep).where(
+                KnowledgeSpaceFileChangeExecutionStep.step_code == DeleteExecutionStepCode.DB_CUTOVER
+            )
+        )
+    (item,) = await svc.query(owner, [db.root.id], known)
+    assert item.state == "untracked"
+
+
+async def test_reconciled_root_fences_old_manifest_and_delayed_callbacks(direct_delete_db):
+    from datetime import timedelta
+
+    from bisheng.knowledge.domain.models.folder_deletion import RESERVED_KEY, marker_for
+    from bisheng.knowledge.domain.services.knowledge_folder_deletion_service import KnowledgeFolderDeletionService
+
+    db = direct_delete_db
+    svc = KnowledgeFolderDeletionService(db.space.id, db.sessions)
+    async with svc.track(db.root.id, 5) as token:
+        async with db.sessions() as session, session.begin():
+            row = await session.get(KnowledgeFile, db.root.id)
+            marker = marker_for(row)
+            row.user_metadata = {
+                "preserved": "yes",
+                RESERVED_KEY: {**marker, "heartbeat_at": (datetime.now(UTC) - timedelta(seconds=90)).isoformat()},
+            }
+        owner = SimpleNamespace(
+            login_user=SimpleNamespace(user_id=6),
+            _load_space_listing_scope=AsyncMock(return_value=(db.space, None)),
+            _filter_visible_child_items=AsyncMock(side_effect=lambda rows, **kwargs: rows),
+            _batch_actions=AsyncMock(return_value={str(db.space.id): {"visible"}}),
+        )
+        observed = await svc.reconcile(owner, db.root.id, token)
+        assert observed.state == "unknown" and not observed.can_reconcile
+        owner.login_user.user_id = 5
+        observed = await svc.reconcile(owner, db.root.id, token)
+        assert (observed.state, observed.failure_reason) == ("failed", "interrupted")
+        async with svc.track(db.root.id, 5) as newer:
+            assert newer != token
+            with pytest.raises(SpaceFileChangeConflictError):
+                await _service(db, dispatch_purge=AsyncMock()).delete(
+                    resource=db.root, applicant_user_id=5, operation_id=token
+                )
+            assert not await svc._update(db.root.id, token, reason="delete_failed")
+            async with db.sessions() as session:
+                row = await session.get(KnowledgeFile, db.root.id)
+                assert row.status == 8 and marker_for(row)["operation_id"] == newer
+                assert row.user_metadata["preserved"] == "yes"
+                assert await session.get(KnowledgeFile, db.child.id)
+    assert await _requests(db) == []
+
+
+async def test_folder_explicit_failure_clears_only_its_marker_and_commit_uncertainty_preserves_it(direct_delete_db):
+    from bisheng.knowledge.domain.models.folder_deletion import marker_for
+    from bisheng.knowledge.domain.services.knowledge_folder_deletion_service import (
+        FolderCommitUncertain,
+        KnowledgeFolderDeletionService,
+        delete_transaction,
+    )
+
+    db = direct_delete_db
+    svc = KnowledgeFolderDeletionService(db.space.id, db.sessions)
+    with pytest.raises(PermissionError):
+        async with svc.track(db.root.id, 5):
+            raise PermissionError("subtree denied")
+    async with db.sessions() as session:
+        row = await session.get(KnowledgeFile, db.root.id)
+        assert row.status == 2 and marker_for(row)["phase"] == "failed"
+
+    @asynccontextmanager
+    async def fail_commit():
+        yield
+        raise RuntimeError("commit was not acknowledged")
+
+    with pytest.raises(FolderCommitUncertain):
+        async with svc.track(db.root.id, 5) as token:
+            async with delete_transaction(SimpleNamespace(begin=fail_commit), True):
+                ...
+    async with db.sessions() as session:
+        row = await session.get(KnowledgeFile, db.root.id)
+        assert row.status == 8 and marker_for(row)["operation_id"] == token
+
+
+async def test_reconcile_busy_root_keeps_unknown_and_current_holder_can_commit(direct_delete_db, monkeypatch):
+    from datetime import timedelta
+
+    from bisheng.knowledge.domain.models.folder_deletion import RESERVED_KEY, marker_for
+    from bisheng.knowledge.domain.repositories.knowledge_folder_deletion_repository import (
+        FolderLockBusy,
+        KnowledgeFolderDeletionRepository,
+    )
+    from bisheng.knowledge.domain.services.knowledge_folder_deletion_service import KnowledgeFolderDeletionService
+
+    db = direct_delete_db
+    svc = KnowledgeFolderDeletionService(db.space.id, db.sessions)
+    async with svc.track(db.root.id, 5) as token:
+        async with db.sessions() as session, session.begin():
+            row = await session.get(KnowledgeFile, db.root.id)
+            row.user_metadata = {
+                RESERVED_KEY: {
+                    **marker_for(row),
+                    "heartbeat_at": (datetime.now(UTC) - timedelta(seconds=90)).isoformat(),
+                }
+            }
+        owner = SimpleNamespace(
+            login_user=SimpleNamespace(user_id=5),
+            _load_space_listing_scope=AsyncMock(return_value=(db.space, None)),
+            _filter_visible_child_items=AsyncMock(side_effect=lambda rows, **kwargs: rows),
+            _batch_actions=AsyncMock(return_value={str(db.space.id): {"visible"}}),
+        )
+        with monkeypatch.context() as m:
+            m.setattr(KnowledgeFolderDeletionRepository, "locked", AsyncMock(side_effect=FolderLockBusy()))
+            assert not await svc._update(db.root.id, token)
+            result = await svc.reconcile(owner, db.root.id, token)
+            assert result.state == "unknown" and result.can_reconcile
+        await _service(db, dispatch_purge=AsyncMock()).delete(resource=db.root, applicant_user_id=5, operation_id=token)
+    (item,) = await svc.query(owner, [db.root.id], {db.root.id: token})
+    assert item.state == "succeeded"
+
+
+@pytest.mark.parametrize("grant_file_only", [False, True])
+async def test_hidden_deleting_ancestor_is_observed_only_through_visible_anchor(direct_delete_db, grant_file_only):
+    from bisheng.knowledge.domain.services.knowledge_folder_deletion_service import KnowledgeFolderDeletionService
+
+    db = direct_delete_db
+    leased = False
+
+    @asynccontextmanager
+    async def sessions():
+        nonlocal leased
+        async with db.sessions() as session:
+            assert not leased
+            leased = True
+            try:
+                yield session
+            finally:
+                leased = False
+
+    svc = KnowledgeFolderDeletionService(db.space.id, sessions)
+    allowed = {db.child.id} if grant_file_only else {db.root.id, db.child.id}
+
+    async def visible(rows, **kwargs):
+        assert not leased, "permission reads must not nest inside the business connection"
+        return [row for row in rows if row.id in allowed]
+
+    owner = SimpleNamespace(
+        login_user=SimpleNamespace(user_id=6),
+        _load_space_listing_scope=AsyncMock(return_value=(db.space, None)),
+        _batch_actions=AsyncMock(return_value={}),
+        _filter_visible_child_items=visible,
+    )
+    async with svc.track(db.parent.id, 5):
+        result = [{}]
+        await svc.project_page([db.child], result, None, owner=owner, space=db.space)
+        alias = result[0]["deletion_status"]
+        assert alias["root_folder_id"] == (db.child.id if grant_file_only else db.root.id)
+        assert alias["operation_id"] is None and alias["state"] == "running"
+        observed = await svc.query(owner, [alias["root_folder_id"], db.parent.id], {})
+        assert observed[0].state == "running" and observed[0].operation_id is None and not observed[0].can_reconcile
+        assert observed[1].state == "unavailable" and observed[1].operation_id is None
+
+
+async def test_visible_folder_failure_details_are_private_to_initiator_and_manager(direct_delete_db):
+    from bisheng.knowledge.domain.services.knowledge_folder_deletion_service import KnowledgeFolderDeletionService
+
+    db = direct_delete_db
+    svc = KnowledgeFolderDeletionService(db.space.id, db.sessions)
+    owner = SimpleNamespace(
+        login_user=SimpleNamespace(user_id=6),
+        _load_space_listing_scope=AsyncMock(return_value=(db.space, None)),
+        _batch_actions=AsyncMock(return_value={str(db.space.id): {"visible"}}),
+        _filter_visible_child_items=AsyncMock(side_effect=lambda rows, **kwargs: rows),
+    )
+    with pytest.raises(PermissionError):
+        async with svc.track(db.root.id, 5) as token:
+            raise PermissionError("denied")
+    (item,) = await svc.query(owner, [db.root.id], {})
+    assert item.state == "idle" and not item.operation_id and not item.failure_reason
+    (item,) = await svc.query(owner, [db.root.id], {db.root.id: token})
+    assert item.state == "unavailable" and not item.operation_id and not item.failure_reason

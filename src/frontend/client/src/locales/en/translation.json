@@ -1264,6 +1264,11 @@
     "refresh": "Refresh to retry"
   },
   "com_knowledge": {
+        "folder_delete_failed": "Deletion failed. Please refresh and try again.",
+        "folder_delete_request_error": "The deletion request encountered an error. Refresh the list to check the result.",
+        "folder_deletion_unknown": "Status pending confirmation",
+        "folder_deleting": "Deleting",
+        "folder_deleting_blocked": "This folder is being deleted. Please try again later.",
     "add_new": "Add",
     "web_link": "Web link",
     "web_link_import_title": "Import web link",

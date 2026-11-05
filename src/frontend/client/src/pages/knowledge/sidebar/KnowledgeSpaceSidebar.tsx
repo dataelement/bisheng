@@ -1,3 +1,4 @@
+import { type FolderDeletionGuard, type FolderDeletionStateReader } from "../hooks/useFolderDeletion";
 import {
     ChevronDown,
     Plus,
@@ -29,6 +30,8 @@ import {
 import { useDynamicEllipsis } from "../hooks/useDynamicEllipsis";
 
 interface KnowledgeSpaceSidebarProps {
+    guardFolder?: FolderDeletionGuard;
+    getDeletionState?: FolderDeletionStateReader;
     activeSpaceId?: string;
     onSpaceSelect: (space: KnowledgeSpace | null) => void;
     /** Pin / rename of the active space: update it in place, never re-select it
@@ -59,6 +62,8 @@ interface KnowledgeSpaceSidebarProps {
 }
 
 export function KnowledgeSpaceSidebar({
+    guardFolder,
+    getDeletionState,
     activeSpaceId,
     onSpaceSelect,
     onActiveSpaceUpdate,
@@ -330,6 +335,8 @@ export function KnowledgeSpaceSidebar({
             />
         ) : (
             <KnowledgeSpaceItem
+                guardFolder={guardFolder}
+                getDeletionState={getDeletionState}
                 key={s.id}
                 space={s}
                 type={sectionType}
@@ -359,6 +366,8 @@ export function KnowledgeSpaceSidebar({
     // hidden because the dropdown is a navigation surface, not a manager.
     const renderCompactItem = (s: KnowledgeSpace, sectionType: "created" | "joined" | "department") => (
         <KnowledgeSpaceItem
+            guardFolder={guardFolder}
+            getDeletionState={getDeletionState}
             key={s.id}
             space={s}
             type={sectionType}

@@ -42,6 +42,7 @@ import {
 import { KnowledgeAiBottomDock } from "./SpaceDetail/AiChat/KnowledgeAiBottomDock";
 import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
 import KnowledgeSquare from "./KnowledgeSquare";
+import { useFolderDeletion } from "./hooks/useFolderDeletion";
 import { useFileManager } from "./hooks/useFileManager";
 import { useFileUpload } from "./hooks/useFileUpload";
 import { FROSTED_GLASS_CLASS, FROSTED_GLASS_ENABLED } from "~/utils/frostedGlass";
@@ -75,6 +76,7 @@ export default function Knowledge() {
     const previewNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
     const [showKnowledgeSquare, setShowKnowledgeSquare] = useState(false);
+    const [deletionObservationActive, setDeletionObservationActive] = useState(true);
     const [isDragging, setIsDragging] = useState(false);
     const [dragError, setDragError] = useState<string | null>(null);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -227,6 +229,7 @@ export default function Knowledge() {
 
     // KeepAlive: when leaving /knowledge, reset square view so switching back lands on default page.
     useUnactivate(() => {
+        setDeletionObservationActive(false);
         setShowKnowledgeSquare(false);
         setSquarePreviewDrawerOpen(false);
         setSquarePreviewSpaceId(undefined);
@@ -237,14 +240,33 @@ export default function Knowledge() {
     });
 
     // ─── File management (list, pagination, search, sort, navigation) ────
+    const deletionIdentity = `${user?.id ?? ""}:${user?.tenant_id ?? ""}`;
+    const folderDeletion = useFolderDeletion({
+        serverEnabled: bishengConfig == null ? undefined : (bishengConfig as { capabilities?: { folder_delete_status?: boolean } }).capabilities?.folder_delete_status === true,
+        identityKey: deletionIdentity,
+        spaceId: activeSpace?.id,
+        folderId: urlFolderId,
+        enabled: deletionObservationActive && !showKnowledgeSquare && knowledgePluginEnabled && !isUserLoading,
+    });
+    const folderNavigationRef = useRef({ spaceId: activeSpace?.id, epoch: 0 });
+    if (folderNavigationRef.current.spaceId !== activeSpace?.id) folderNavigationRef.current = { spaceId: activeSpace?.id, epoch: folderNavigationRef.current.epoch + 1 };
     const fileManager = useFileManager({
         activeSpace,
         initialFolderId: urlFolderId,
+        onFilesLoaded: folderDeletion.reconcile,
+        onDeletionSnapshot: folderDeletion.observe,
+        onDeletionReadStarted: folderDeletion.captureObservation,
+        identityKey: deletionIdentity,
         enabled: !showKnowledgeSquare,
     });
 
+    const visibleFiles = useMemo(() => activeSpace
+        ? folderDeletion.mergeFiles(activeSpace.id, fileManager.currentFolderId, fileManager.files, fileManager.currentPath)
+        : [], [activeSpace?.id, fileManager.currentFolderId, fileManager.files, fileManager.currentPath, folderDeletion.mergeFiles, folderDeletion.revision]);
+
     // KeepAlive: refresh the file list every time the user navigates back to /knowledge.
     useActivate(() => {
+        setDeletionObservationActive(true);
         fileManager.loadFiles(fileManager.currentPage);
         setKnowledgeTabActivateEpoch((e) => e + 1);
         // This tab is cached (react-activation) — re-syncing with the live URL is required,
@@ -267,6 +289,7 @@ export default function Knowledge() {
         currentPage: fileManager.currentPage,
         markPendingDeletion: fileManager.markPendingDeletion,
         clearPendingDeletion: fileManager.clearPendingDeletion,
+        folderDeletion,
     });
 
     // Share route: close drawer when leaving /knowledge/share/:spaceId
@@ -759,6 +782,8 @@ export default function Knowledge() {
             {!isH5 && (
                 <div className="h-full shrink-0">
                     <KnowledgeSpaceSidebar
+                        guardFolder={folderDeletion.guardFolder}
+                        getDeletionState={folderDeletion.getDeletionState}
                         activeSpaceId={activeSpace?.id}
                         onSpaceSelect={handleSpaceSelect}
                         onActiveSpaceUpdate={handleActiveSpaceUpdate}
@@ -794,6 +819,8 @@ export default function Knowledge() {
                     >
                         <div className="min-h-0 flex-1 overflow-hidden">
                             <KnowledgeSpaceSidebar
+                                guardFolder={folderDeletion.guardFolder}
+                                getDeletionState={folderDeletion.getDeletionState}
                                 mobileDrawerMode
                                 compactMode
                                 onDrawerClose={() => setSpaceListDrawerOpen(false)}
@@ -863,7 +890,8 @@ export default function Knowledge() {
                     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white shadow-[0px_4px_20px_0px_rgba(0,17,147,0.05)]">
                         <KnowledgeSpaceContent
                             space={activeSpace}
-                            files={fileManager.files}
+                            folderDeletion={folderDeletion}
+                            files={visibleFiles}
                             total={fileManager.total}
                             onLoadMore={fileManager.loadMore}
                             hasMore={fileManager.hasMore}
@@ -876,7 +904,9 @@ export default function Knowledge() {
                                 if (!sortBy || !direction) return;
                                 fileManager.handleSort(sortBy, direction);
                             }}
-                            onNavigateFolder={(folderId?: string) => {
+                            onNavigateFolder={async (folderId?: string) => {
+                                const epoch = ++folderNavigationRef.current.epoch;
+                                if (await folderDeletion.guardFolder(activeSpace.id, folderId) || epoch !== folderNavigationRef.current.epoch) return;
                                 // Drive folder navigation through the URL (like the sidebar tree
                                 // does) so the URL stays the single source of truth: useFileManager's
                                 // initialFolderId watcher syncs the content pane, and the sidebar
@@ -979,6 +1009,8 @@ export default function Knowledge() {
                         <>
                             <div className="min-h-0 flex-1 overflow-hidden">
                                 <KnowledgeSpaceSidebar
+                                    guardFolder={folderDeletion.guardFolder}
+                                    getDeletionState={folderDeletion.getDeletionState}
                                     mobilePageMode
                                     onSpaceSelect={handleSpaceSelect}
                                     onActiveSpaceUpdate={handleActiveSpaceUpdate}

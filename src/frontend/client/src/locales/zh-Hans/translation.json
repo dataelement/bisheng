@@ -1192,6 +1192,11 @@
     "refresh": "刷新重试"
   },
   "com_knowledge": {
+        "folder_delete_failed": "删除失败，请刷新后重试。",
+        "folder_delete_request_error": "删除请求异常，请刷新列表查看结果。",
+        "folder_deletion_unknown": "状态待确认",
+        "folder_deleting": "删除中",
+        "folder_deleting_blocked": "文件夹正在删除中，请稍后操作。",
     "add_new": "新增",
     "web_link": "网页链接",
     "web_link_import_title": "导入网页链接",

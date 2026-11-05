@@ -1,3 +1,4 @@
+import { FolderDeletingStatus, useDeletingItemEvents } from "./FolderDeletingStatus";
 import { Button, Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { FileSearch, GitBranch, History } from "lucide-react";
@@ -62,6 +63,7 @@ const StatusBadge = ({ file, onOpenApprovalDetail }: {
     onOpenApprovalDetail?: (requestId: number) => void;
 }) => {
     const localize = useLocalize();
+    if (file.isDeleting) return <FolderDeletingStatus state={file.deletionState} />;
     const status = file.status ?? FileStatus.SUCCESS;
     const fileChangeLock = getFileChangeLockState(file);
     const approvalStatusLabel = getKnowledgeApprovalStatusLabel(file);
@@ -190,6 +192,7 @@ const StatusBadge = ({ file, onOpenApprovalDetail }: {
 };
 
 export interface FileListRowProps {
+    onBeforeAction?: (file: KnowledgeFile) => Promise<boolean>;
     file: KnowledgeFile;
     /** Row position, for the zebra stripe (Figma 13198:75866). */
     index: number;
@@ -250,6 +253,7 @@ export interface FileListRowProps {
 
 export function FileListRow({
     file,
+    onBeforeAction,
     index,
     isAdmin,
     onEnsureFilePermissions,
@@ -294,6 +298,7 @@ export function FileListRow({
     currentUserId,
 }: FileListRowProps) {
     const localize = useLocalize();
+    const deletingEvents = useDeletingItemEvents(file.isDeleting);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     const [contextMenuOpen, setContextMenuOpen] = useState(false);
     const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
@@ -313,9 +318,9 @@ export function FileListRow({
     // decided it moves into an execution state (处理中/执行失败/…) with no batch
     // semantics, so it keeps a disabled checkbox. The frontend-only folder upload
     // placeholder (no backend identity) also stays unselectable.
-    const isSelectable = pendingUpload
+    const isSelectable = !file.isDeleting && (pendingUpload
         ? isPendingUploadSelectable(pendingUpload)
-        : !isUploadingFolderPlaceholder;
+        : !isUploadingFolderPlaceholder);
     // Shared look for every button in the row-action strip. rounded-lg (8px)
     // overrides the size variant's rounded-md (6px). The hover fill flips on a
     // selected row: the default neutral step reads as a faint smudge over the
@@ -332,7 +337,8 @@ export function FileListRow({
     );
 
     // F040: resolve this file's action permissions lazily, only when the menu opens.
-    const handleMoreMenuOpenChange = (open: boolean) => {
+    const handleMoreMenuOpenChange = async (open: boolean) => {
+        if (open && await onBeforeAction?.(file)) return;
         setMoreMenuOpen(open);
         if (open) onEnsureFilePermissions?.(file);
     };
@@ -370,7 +376,7 @@ export function FileListRow({
         <>
             {isAdmin && !isFolder && (
                 <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onEditTags(); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onEditTags(); }}
                     icon={<Outlined.Tag />}
                     label={localize("com_knowledge.edit_tags")}
                 />
@@ -378,7 +384,7 @@ export function FileListRow({
             {canRename && (
                 <ActionMenuItem
                     disabled={fileChangeLock.locked}
-                    onClick={(e) => { e.stopPropagation(); if (!fileChangeLock.locked) startRenaming(); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; if (!fileChangeLock.locked) startRenaming(); }}
                     icon={<Outlined.Edit />}
                     label={localize("com_knowledge.rename")}
                 />
@@ -386,35 +392,35 @@ export function FileListRow({
             {showMoveItem && (
                 <ActionMenuItem
                     disabled={!canMove || isUploading || fileChangeLock.locked}
-                    onClick={(e) => { e.stopPropagation(); onMove?.(); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onMove?.(); }}
                     icon={<Outlined.MoveToFolder />}
                     label={localize("com_knowledge.move")}
                 />
             )}
             {isAdmin && hasRetryOption && (
                 <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onRetry?.(); }}
                     icon={<Outlined.Refresh />}
                     label={localize("com_knowledge.retry")}
                 />
             )}
             {onManagePermission && (
                 <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onManagePermission(); }}
                     icon={<Outlined.PeopleSafe />}
                     label={localize("com_permission.manage_permission")}
                 />
             )}
             {showVersionManagement && (
                 <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onOpenVersionManagement?.(file); }}
                     icon={<GitBranch />}
                     label={localize("com_knowledge.version.menu_version_management")}
                 />
             )}
             {showVersionHistory && (
                 <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onOpenVersionHistory?.(file); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onOpenVersionHistory?.(file); }}
                     icon={<History />}
                     label={localize("com_knowledge.version.menu_version_history")}
                 />
@@ -423,7 +429,7 @@ export function FileListRow({
                 <ActionMenuItem
                     danger
                     disabled={fileChangeLock.locked}
-                    onClick={(e) => { e.stopPropagation(); if (!fileChangeLock.locked) onDelete(); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; if (!fileChangeLock.locked) onDelete(); }}
                     icon={<Outlined.Delete />}
                     label={localize("com_knowledge.delete")}
                 />
@@ -431,9 +437,10 @@ export function FileListRow({
         </>
     );
 
-    const handleRowContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    const handleRowContextMenu = async (e: React.MouseEvent<HTMLDivElement>) => {
         if (!showMoreMenu) return;
         e.preventDefault();
+        if (await onBeforeAction?.(file)) return;
         // Same lazy permission resolution as the "..." trigger, otherwise the
         // right-click menu renders with unresolved (reduced) permissions.
         onEnsureFilePermissions?.(file);
@@ -441,7 +448,8 @@ export function FileListRow({
         setContextMenuOpen(true);
     };
 
-    const handleOpen = () => {
+    const handleOpen = async () => {
+        if (await onBeforeAction?.(file)) return;
         if (isCreating || isRenaming || isUploadingFolderPlaceholder) return;
         if (pendingUpload) {
             onPreviewPendingUpload?.(pendingUpload.requestId);
@@ -457,7 +465,8 @@ export function FileListRow({
 
     // The whole row is a selection target; only the name (and rename input /
     // action buttons, which stop propagation) opts out and opens the detail.
-    const handleRowClick = () => {
+    const handleRowClick = async () => {
+        if (await onBeforeAction?.(file)) return;
         if (!isSelectable || isCreating || isRenaming) return;
         onSelect(!isSelected);
     };
@@ -466,6 +475,8 @@ export function FileListRow({
 
     return (
         <div
+            {...deletingEvents}
+            aria-busy={file.isDeleting}
             data-knowledge-file-item
             draggable={!pendingUpload && rowDraggable && !isCreating && !isRenaming && !isUploading}
             onDragStart={rowDraggable ? onRowDragStart : undefined}
@@ -551,7 +562,7 @@ export function FileListRow({
                             {versionManagementEnabled && canManageMembers && file.has_similar && !file.is_multi_version && file.status === FileStatus.SUCCESS && (
                                 <button
                                     type="button"
-                                    onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
+                                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onOpenVersionManagement?.(file); }}
                                     className="flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44] hover:bg-[#FFE6D2]"
                                 >
                                     <FileSearch className="size-3" />
@@ -577,7 +588,7 @@ export function FileListRow({
                                                 <button
                                                     type="button"
                                                     title={localize("com_knowledge.edit_tags")}
-                                                    onClick={(e) => { e.stopPropagation(); onEditTags(); }}
+                                                    onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onEditTags(); }}
                                                     className="hidden cursor-pointer items-center justify-center text-text-2 transition-colors hover:text-blue-500 group-hover:flex"
                                                 >
                                                     <Outlined.Edit className="size-3" />
@@ -603,7 +614,7 @@ export function FileListRow({
                                         <button
                                             type="button"
                                             title={localize("com_knowledge.file_encoding_edit_title")}
-                                            onClick={(e) => { e.stopPropagation(); onEditEncoding?.(file); }}
+                                            onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onEditEncoding?.(file); }}
                                             className="hidden shrink-0 cursor-pointer items-center justify-center text-text-2 transition-colors hover:text-blue-500 group-hover:flex"
                                         >
                                             <Outlined.Edit className="size-3" />
@@ -645,7 +656,7 @@ export function FileListRow({
                                 iconOnly
                                 className={rowActionClass}
                                 aria-label={localize("com_knowledge.download")}
-                                onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                                onClick={async (e) => { e.stopPropagation(); if (await onBeforeAction?.(file)) return; onDownload(); }}
                             >
                                 <Outlined.Download />
                             </Button>

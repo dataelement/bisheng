@@ -18,6 +18,7 @@ import { FileListRow } from "./FileListRow";
  * lives in `FileListRow`.
  */
 interface FileListViewProps {
+    onBeforeAction?: (file: KnowledgeFile) => Promise<boolean>;
     files: KnowledgeFile[];
     onEnsureFilePermissions?: (file: KnowledgeFile) => void;
     selectedFiles: Set<string>;
@@ -69,6 +70,7 @@ interface FileListViewProps {
 }
 
 export function FileListView({
+    onBeforeAction,
     files,
     onEnsureFilePermissions,
     selectedFiles,
@@ -167,6 +169,7 @@ export function FileListView({
             >
                 {files.map((file, index) => (
                     <FileListRow
+                        onBeforeAction={onBeforeAction}
                         key={file.id}
                         file={file}
                         index={index}

@@ -109,6 +109,8 @@ export type TBackupCode = {
 
 export type TUser = {
   id: string;
+  /** Current authenticated tenant; invalidates tenant-scoped observations. */
+  tenant_id?: string | number;
   external_id?: string | null;
   username: string;
   email: string;

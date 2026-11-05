@@ -129,6 +129,8 @@ export function getUser(): Promise<t.TUser> {
   return request.get(endpoints.user()).then(res => {
     const {
       user_id,
+      tenant_id,
+      leaf_tenant_id,
       external_id,
       user_name,
       create_time,
@@ -164,6 +166,7 @@ export function getUser(): Promise<t.TUser> {
     // Keep the authenticated user so WorkbenchAccessGuard can render the final state.
     return {
       "_id": user_id,
+      tenant_id: tenant_id ?? leaf_tenant_id,
       external_id,
       "name": user_name,
       "username": user_name,

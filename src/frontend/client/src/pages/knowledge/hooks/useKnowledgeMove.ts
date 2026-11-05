@@ -1,3 +1,4 @@
+import { type FolderDeletionController } from "./useFolderDeletion";
 import { useCallback, useState } from "react";
 
 import {
@@ -52,6 +53,7 @@ function describeInvalid(invalid: InvalidEntry[], localize: Localize): string {
 }
 
 interface UseKnowledgeMoveArgs {
+    folderDeletion?: FolderDeletionController;
     /** Source space the selected items currently live in. */
     spaceId: string;
     /** Called after a successful move so the caller can refresh its file list. */
@@ -68,7 +70,7 @@ interface UseKnowledgeMoveArgs {
  * Same-space undo (AC-16/17) is intentionally not wired here — the toast channel
  * has no action button; tracked as a follow-up (see tasks deviation note).
  */
-export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
+export function useKnowledgeMove({ spaceId, onMoved, folderDeletion }: UseKnowledgeMoveArgs) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const confirm = useConfirm();
@@ -76,12 +78,13 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
     const [moveDialogOpen, setMoveDialogOpen] = useState(false);
     const [pendingItems, setPendingItems] = useState<KnowledgeFile[]>([]);
 
-    const openMove = useCallback((items: KnowledgeFile[]) => {
+    const openMove = useCallback(async (items: KnowledgeFile[]) => {
+        if (await folderDeletion?.guardItems(spaceId, items)) return;
         const mutableItems = items.filter((item) => !isFileChangeMutationLocked(item));
         if (!mutableItems.length) return;
         setPendingItems(mutableItems);
         setMoveDialogOpen(true);
-    }, []);
+    }, [folderDeletion, spaceId]);
 
     /**
      * Batch-move entry from the toolbar. `denied` = selected items the user lacks
@@ -139,13 +142,14 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
     );
 
     const runMove = useCallback(
-        (
+        async (
             items: KnowledgeFile[],
             targetSpaceId: string,
             targetFolderId: string | null,
             skipInvalid: boolean,
-        ): Promise<MoveResult> =>
-            moveFilesApi(spaceId, {
+        ): Promise<MoveResult> => {
+            if (await folderDeletion?.guardItems(spaceId, items) || await folderDeletion?.guardFolder(targetSpaceId, targetFolderId)) throw new Error("move:deleting");
+            return moveFilesApi(spaceId, {
                 items: items.map((f) => ({
                     id: f.id,
                     type: f.type === FileType.FOLDER ? "folder" : "file",
@@ -153,8 +157,9 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
                 target_space_id: targetSpaceId,
                 target_folder_id: targetFolderId,
                 skip_invalid: skipInvalid,
-            }),
-        [spaceId],
+            });
+        },
+        [spaceId, folderDeletion],
     );
 
     /**
@@ -173,6 +178,10 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
             }
             try {
                 for (const [parentId, items] of groups) {
+                    if (await folderDeletion?.guardFolder(spaceId, parentId == null ? null : String(parentId))) return;
+                    for (const item of items) {
+                        if (await folderDeletion?.guardMovedItem(spaceId, String(item.id), item.type)) return;
+                    }
                     await moveFilesApi(spaceId, {
                         items: items.map((m) => ({ id: String(m.id), type: m.type })),
                         target_space_id: spaceId,
@@ -186,7 +195,7 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
             }
             onMoved();
         },
-        [spaceId, showToast, localize, resolveErrorMessage, onMoved],
+        [spaceId, folderDeletion, showToast, localize, resolveErrorMessage, onMoved],
     );
 
     /**
@@ -202,6 +211,7 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
             crossSpace: boolean,
             targetFolderName?: string,
         ) => {
+            if (await folderDeletion?.guardItems(spaceId, items) || await folderDeletion?.guardFolder(targetSpaceId, targetFolderId)) throw new Error("move:deleting");
             const mutableItems = items.filter((item) => !isFileChangeMutationLocked(item));
             if (!mutableItems.length) return;
             if (crossSpace) {
@@ -277,7 +287,7 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
                 });
             }
         },
-        [confirm, localize, runMove, showToast, resolveErrorMessage, onMoved, spaceId, undoMove],
+        [confirm, folderDeletion, localize, runMove, showToast, resolveErrorMessage, onMoved, spaceId, undoMove],
     );
 
     /** Dialog `onConfirm` — moves the items the picker was opened for. */

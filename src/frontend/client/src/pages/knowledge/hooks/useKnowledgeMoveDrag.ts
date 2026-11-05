@@ -32,7 +32,7 @@ export function useKnowledgeMoveDrag({ files, selectedFiles, onMoveToFolder }: U
                 : [file];
         // Uploading placeholders have no stable backend identity yet — if any
         // is in the payload (single or expanded selection), cancel the drag.
-        if (payload.some(isKnowledgeItemUploading)) {
+        if (payload.some(file => file.isDeleting || isKnowledgeItemUploading(file))) {
             e.preventDefault();
             return;
         }
@@ -46,7 +46,7 @@ export function useKnowledgeMoveDrag({ files, selectedFiles, onMoveToFolder }: U
     };
 
     const isDroppableFolder = (folder: KnowledgeFile) =>
-        dragItemsRef.current.length > 0 && !dragItemsRef.current.some((f) => f.id === folder.id);
+        !folder.isDeleting && dragItemsRef.current.length > 0 && !dragItemsRef.current.some((f) => f.id === folder.id);
 
     const handleFolderDragOver = (folder: KnowledgeFile) => (e: React.DragEvent) => {
         if (!isDroppableFolder(folder)) return;

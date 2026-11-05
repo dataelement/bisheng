@@ -218,6 +218,7 @@ async def get_knowledge_space_file_change_service(
         session_factory=get_async_db_session,
         submission_port=submission_port,
         mutation_authorizer=owner_service.authorize_file_change,
+        folder_root_authorizer=owner_service.authorize_folder_delete_root,
         footprint_resolver=owner_service.resolve_file_change_footprints,
         direct_executor=execute_direct,
         stage_retainer=stage_service.retain_bound_stage,

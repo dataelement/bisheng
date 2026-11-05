@@ -316,6 +316,7 @@ class KnowledgeSpaceMutationRepository:
         source_name: str | None,
         source_path: str | None,
         source_level: int | None,
+        folder_operation_id: str | None = None,
     ) -> dict:
         """Lock and snapshot every DB/external resource affected by delete.
 
@@ -334,6 +335,10 @@ class KnowledgeSpaceMutationRepository:
         )
         if root is None or not self._resource_type_matches(root, resource_type):
             raise LookupError(f"F046 delete resource not found: {resource_id}")
+        if folder_operation_id:
+            from bisheng.knowledge.domain.models.folder_deletion import ensure_owner
+
+            ensure_owner(root, folder_operation_id)
         if source_name is not None and str(root.file_name) != str(source_name):
             raise ValueError("F046 delete source name changed after approval")
         if source_path is not None and self._path(root.file_level_path) != self._path(source_path):

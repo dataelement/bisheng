@@ -679,3 +679,56 @@ async def test_batch_items_commit_independently_and_keep_direct_pending_invalid_
     assert results[2].error_message == "Internal file change operation failed"
     assert results[3].resource == {"id": 503}
     assert await _count_rows(request_engine, KnowledgeSpaceFileChangeRequest) == 1
+
+
+@pytest.mark.parametrize("handoff", [False, True])
+async def test_folder_permission_first_marker_and_atomic_approval_association(request_engine, handoff):
+    from unittest.mock import AsyncMock
+
+    from bisheng.knowledge.domain.models.folder_deletion import marker_for
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+    from bisheng.knowledge.domain.models.knowledge_space_file_change_execution_step import (
+        KnowledgeSpaceFileChangeExecutionStep,
+    )
+    from bisheng.knowledge.domain.services.knowledge_folder_deletion_service import KnowledgeFolderDeletionService
+
+    set_current_tenant_id(17)
+    async with request_engine.begin() as con:
+        await con.run_sync(
+            lambda conn: SQLModel.metadata.create_all(
+                conn, tables=[KnowledgeFile.__table__, KnowledgeSpaceFileChangeExecutionStep.__table__]
+            )
+        )
+    await _seed_space(request_engine, tenant_id=17, space_id=101)
+    sessions = _session_factory(request_engine)
+    async with sessions() as session, session.begin():
+        session.add(KnowledgeFile(id=501, tenant_id=17, knowledge_id=101, file_type=0, status=2, file_name="folder"))
+    events = []
+    service = _service(request_engine, events=events)
+    service.folder_root_authorizer = AsyncMock(side_effect=lambda _: events.append("root"))
+    service._needs_approval = AsyncMock(side_effect=[not handoff, True])
+
+    async def full_check(command):
+        events.append("full")
+        async with sessions() as session:
+            root = await session.get(KnowledgeFile, 501)
+            assert root.status == (8 if handoff else 2)
+            assert (await session.exec(select(KnowledgeSpaceFileChangeRequest))).all() == []
+
+    service.mutation_authorizer = full_check
+    result = await service.request_change(_command(resource_type="folder", action_snapshot={"old_name": "folder"}))
+    assert result.decision == "pending" and events[:2] == ["root", "full"]
+    async with sessions() as session:
+        root = await session.get(KnowledgeFile, 501)
+        request = await session.get(KnowledgeSpaceFileChangeRequest, result.change_request_id)
+        assert root.status == 2
+        if handoff:
+            marker = marker_for(root)
+            assert marker["approval_request_id"] == result.change_request_id
+            assert marker["phase"] == "approval_pending"
+            assert request.business_key == f"folder-delete-approval:{marker['operation_id']}"
+        else:
+            assert marker_for(root) is None
+    with pytest.raises(SpaceFileChangeConflictError):
+        async with KnowledgeFolderDeletionService(101, sessions).track(501, 9):
+            pytest.fail("active approval association was overwritten")

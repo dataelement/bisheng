@@ -1,3 +1,4 @@
+import { type FolderDeletionGuard, type FolderDeletionStateReader } from "../hooks/useFolderDeletion";
 // @ts-strict-ignore
 import { Outlined } from "bisheng-icons";
 import { useEffect, useState, type MouseEvent } from "react";
@@ -26,6 +27,8 @@ import { KnowledgeFolderTree, type FolderSelectPayload } from "./KnowledgeFolder
 import { DynamicEllipsisName } from "./DynamicEllipsisName";
 
 interface KnowledgeSpaceItemProps {
+    guardFolder?: FolderDeletionGuard;
+    getDeletionState?: FolderDeletionStateReader;
     space: KnowledgeSpace;
     isActive: boolean;
     type: "created" | "joined" | "department";
@@ -52,6 +55,8 @@ interface KnowledgeSpaceItemProps {
 }
 
 export default function KnowledgeSpaceItem({
+    guardFolder,
+    getDeletionState,
     space,
     isActive,
     type,
@@ -327,6 +332,8 @@ export default function KnowledgeSpaceItem({
             {expanded && treeEnabled && !compact && (
                 <div>
                     <KnowledgeFolderTree
+                        guardFolder={guardFolder}
+                        getDeletionState={getDeletionState}
                         compact={compact}
                         knowledgeId={space.id}
                         currentFolderId={urlFolderId && spaceId === space.id ? urlFolderId : undefined}

@@ -72,6 +72,7 @@ from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
 )
+from bisheng.knowledge.domain.models.folder_deletion import ensure_source_unchanged, public_metadata
 from bisheng.knowledge.domain.models.knowledge import (
     AuthTypeEnum,
     Knowledge,
@@ -96,7 +97,9 @@ from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
     KnowledgeSpaceTagLibraryDao,
 )
 from bisheng.knowledge.domain.models.knowledge_space_user_pin import KnowledgeSpaceUserPinDao
+from bisheng.knowledge.domain.read_diagnostics import KnowledgeReadTrace, knowledge_list_source
 from bisheng.knowledge.domain.repositories.knowledge_space_listing_repository import KnowledgeSpaceListingRepository
+from bisheng.knowledge.domain.schemas.folder_deletion import FolderDeletionPage
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FolderUploadItem,
     InitialPermissionApplyResult,
@@ -110,6 +113,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
     KnowledgeAuditTelemetryService,
 )
+from bisheng.knowledge.domain.services.knowledge_folder_deletion_service import KnowledgeFolderDeletionService
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgeContainerPermissionRecord,
     KnowledgeFilePermissionRecord,
@@ -2473,7 +2477,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         """
         from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
         from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
-        from bisheng.common.schemas.api import PageInfiniteCursorData
 
         context = "filelib_space|search"
         try:
@@ -2495,7 +2498,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         rows = result.get("data", [])
         has_more = bool(result.get("has_more"))
         next_cursor = encode_cursor((page_num + 1,), context=context) if has_more else None
-        return PageInfiniteCursorData(
+        return FolderDeletionPage(
+            scope_deletion_status=result.get("scope_deletion_status"),
             data=rows,
             page_size=page_size,
             has_more=has_more,
@@ -2805,6 +2809,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         result = []
         for one in res:
             item = one.model_dump()
+            if item.get("user_metadata"):
+                item["user_metadata"] = public_metadata(item["user_metadata"])
             if one.file_type == FileType.DIR:
                 state = folder_states.get(one.id)
                 has_abnormal = state.has_abnormal_files if state is not None else False
@@ -3191,136 +3197,162 @@ class KnowledgeSpaceService(KnowledgeUtils):
         next_cursor}``. Legacy ``total`` / ``page`` fields removed (AC-03);
         clients drive infinite-scroll via ``has_more`` + ``next_cursor``.
         """
-        from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
-        from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
-        from bisheng.common.schemas.api import PageInfiniteCursorData
+        with KnowledgeReadTrace(
+            "children",
+            space_id=space_id,
+            parent_id=parent_id,
+            file_type=file_type,
+            page_size=page_size,
+            has_cursor=bool(cursor),
+            source=knowledge_list_source(getattr(self, "request", None), operation="children", file_type=file_type),
+        ) as trace:
+            from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
+            from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
 
-        system_scope = bool(self.login_user.is_global_super) and not _f066_data_scope_narrowed()
-        request_started_at = perf_counter()
-        stage = "authorize"
-        stage_elapsed_ms = {
-            "auth_elapsed_ms": 0.0,
-            "cursor_elapsed_ms": 0.0,
-            "version_filter_elapsed_ms": 0.0,
-            "scan_elapsed_ms": 0.0,
-            "version_enrich_elapsed_ms": 0.0,
-            "extra_info_elapsed_ms": 0.0,
-        }
+            system_scope = bool(self.login_user.is_global_super) and not _f066_data_scope_narrowed()
+            request_started_at = perf_counter()
+            stage = "authorize"
+            trace.stage("authorize")
+            stage_elapsed_ms = {
+                "auth_elapsed_ms": 0.0,
+                "cursor_elapsed_ms": 0.0,
+                "version_filter_elapsed_ms": 0.0,
+                "scan_elapsed_ms": 0.0,
+                "version_enrich_elapsed_ms": 0.0,
+                "extra_info_elapsed_ms": 0.0,
+                "deletion_status_elapsed_ms": 0.0,
+            }
 
-        def emit_children_metric(
-            *,
-            status: str,
-            returned_count: int | None = None,
-            has_more: bool | None = None,
-            failed_stage: str | None = None,
-            error_type: str | None = None,
-        ) -> None:
-            emit_metric(
-                "knowledge_space_children",
-                status=status,
-                failed_stage=failed_stage,
-                error_type=error_type,
-                space_id=space_id,
-                parent_scope="folder" if parent_id else "root",
-                page_size=page_size,
-                system_scope=system_scope,
-                returned_count=returned_count,
-                has_more=has_more,
-                actor_resolve_count=self._permission_actor_resolve_count,
-                actor_cache_hits=self._permission_actor_cache_hits,
-                actor_resolve_elapsed_ms=self._permission_actor_resolve_elapsed_ms,
-                total_elapsed_ms=(perf_counter() - request_started_at) * 1000,
-                **stage_elapsed_ms,
-            )
+            def emit_children_metric(
+                *,
+                status: str,
+                returned_count: int | None = None,
+                has_more: bool | None = None,
+                failed_stage: str | None = None,
+                error_type: str | None = None,
+            ) -> None:
+                emit_metric(
+                    "knowledge_space_children",
+                    status=status,
+                    failed_stage=failed_stage,
+                    error_type=error_type,
+                    space_id=space_id,
+                    parent_id=parent_id,
+                    file_type=file_type,
+                    parent_scope="folder" if parent_id else "root",
+                    page_size=page_size,
+                    system_scope=system_scope,
+                    returned_count=returned_count,
+                    has_more=has_more,
+                    actor_resolve_count=self._permission_actor_resolve_count,
+                    actor_cache_hits=self._permission_actor_cache_hits,
+                    actor_resolve_elapsed_ms=self._permission_actor_resolve_elapsed_ms,
+                    total_elapsed_ms=(perf_counter() - request_started_at) * 1000,
+                    **stage_elapsed_ms,
+                )
 
-        try:
-            stage_started_at = perf_counter()
-            if system_scope:
-                verified_space, _ = await self._load_space_listing_scope(space_id, parent_id)
-            else:
-                verified_space, _ = await self._require_container_read_permission(space_id, parent_id)
-            stage_elapsed_ms["auth_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
-
-            stage = "decode_cursor"
-            stage_started_at = perf_counter()
-            context = f"space_children|order={order_field}_{(order_sort or 'asc').lower()}"
             try:
-                decoded = decode_cursor(
-                    cursor,
-                    expected_key_len=4,
-                    expected_context=context,
+                stage_started_at = perf_counter()
+                if system_scope:
+                    verified_space, parent_folder = await self._load_space_listing_scope(space_id, parent_id)
+                else:
+                    verified_space, parent_folder = await self._require_container_read_permission(space_id, parent_id)
+                stage_elapsed_ms["auth_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
+
+                stage = "decode_cursor"
+                trace.stage("decode_cursor")
+                stage_started_at = perf_counter()
+                context = f"space_children|order={order_field}_{(order_sort or 'asc').lower()}"
+                try:
+                    decoded = decode_cursor(
+                        cursor,
+                        expected_key_len=4,
+                        expected_context=context,
+                    )
+                except CursorDecodeError as exc:
+                    raise KnowledgeSpaceInvalidCursorError(exception=exc) from exc
+                stage_elapsed_ms["cursor_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
+
+                # Exclude only this space's non-primary revisions. The previous
+                # unscoped query scanned version rows for every knowledge space.
+                stage = "version_filter"
+                trace.stage("version_filter")
+                stage_started_at = perf_counter()
+                exclude_file_ids: list[int] | None = None
+                if self.version_repo is not None:
+                    exclude_file_ids = (
+                        await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([space_id]) or None
+                    )
+                stage_elapsed_ms["version_filter_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
+
+                stage = "scan_visible"
+                trace.stage("scan_visible")
+                stage_started_at = perf_counter()
+                visible_page_items, has_more, scan_cursor = await self._scan_visible_child_items(
+                    space_id=space_id,
+                    parent_id=parent_id,
+                    file_ids=file_ids,
+                    order_field=order_field,
+                    order_sort=order_sort,
+                    file_status=file_status,
+                    file_type=file_type,
+                    page_size=page_size,
+                    cursor=decoded,
+                    exclude_file_ids=exclude_file_ids,
+                    system_scope=system_scope,
+                    verified_space=verified_space,
                 )
-            except CursorDecodeError as exc:
-                raise KnowledgeSpaceInvalidCursorError(exception=exc) from exc
-            stage_elapsed_ms["cursor_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
+                stage_elapsed_ms["scan_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
-            # Exclude only this space's non-primary revisions. The previous
-            # unscoped query scanned version rows for every knowledge space.
-            stage = "version_filter"
-            stage_started_at = perf_counter()
-            exclude_file_ids: list[int] | None = None
-            if self.version_repo is not None:
-                exclude_file_ids = (
-                    await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([space_id]) or None
+                stage = "version_enrich"
+                trace.stage("version_enrich")
+                stage_started_at = perf_counter()
+                await self._enrich_with_version_info(visible_page_items)
+                stage_elapsed_ms["version_enrich_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
+
+                stage = "extra_info"
+                trace.stage("extra_info")
+                stage_started_at = perf_counter()
+                space_creator_user_id = getattr(verified_space, "user_id", None)
+                data = await self._handle_file_folder_extra_info(
+                    visible_page_items,
+                    space_creator_user_id=space_creator_user_id,
+                    file_change_excluded_ids=await self._get_file_change_excluded_ids(space_id=space_id),
                 )
-            stage_elapsed_ms["version_filter_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
+                stage_elapsed_ms["extra_info_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
-            stage = "scan_visible"
-            stage_started_at = perf_counter()
-            visible_page_items, has_more, scan_cursor = await self._scan_visible_child_items(
-                space_id=space_id,
-                parent_id=parent_id,
-                file_ids=file_ids,
-                order_field=order_field,
-                order_sort=order_sort,
-                file_status=file_status,
-                file_type=file_type,
-                page_size=page_size,
-                cursor=decoded,
-                exclude_file_ids=exclude_file_ids,
-                system_scope=system_scope,
-                verified_space=verified_space,
-            )
-            stage_elapsed_ms["scan_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
+                next_cursor: str | None = None
+                if has_more and scan_cursor:
+                    next_cursor = encode_cursor(scan_cursor, context=context)
 
-            stage = "version_enrich"
-            stage_started_at = perf_counter()
-            await self._enrich_with_version_info(visible_page_items)
-            stage_elapsed_ms["version_enrich_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
-
-            stage = "extra_info"
-            stage_started_at = perf_counter()
-            space_creator_user_id = getattr(verified_space, "user_id", None)
-            data = await self._handle_file_folder_extra_info(
-                visible_page_items,
-                space_creator_user_id=space_creator_user_id,
-                file_change_excluded_ids=await self._get_file_change_excluded_ids(space_id=space_id),
-            )
-            stage_elapsed_ms["extra_info_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
-
-            next_cursor: str | None = None
-            if has_more and scan_cursor:
-                next_cursor = encode_cursor(scan_cursor, context=context)
-
-            result = PageInfiniteCursorData(
-                data=data,
-                page_size=page_size,
-                has_more=has_more,
-                next_cursor=next_cursor,
-            )
-            emit_children_metric(
-                status="success",
-                returned_count=len(data),
-                has_more=has_more,
-            )
-            return result
-        except Exception as exc:
-            emit_children_metric(
-                status="error",
-                failed_stage=stage,
-                error_type=type(exc).__name__,
-            )
-            raise
+                stage = "deletion_status"
+                trace.stage(stage)
+                stage_started_at = perf_counter()
+                scope = await KnowledgeFolderDeletionService(space_id).project_page(
+                    visible_page_items, data, parent_folder, owner=self, space=verified_space
+                )
+                stage_elapsed_ms["deletion_status_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
+                result = FolderDeletionPage(
+                    scope_deletion_status=scope,
+                    data=data,
+                    page_size=page_size,
+                    has_more=has_more,
+                    next_cursor=next_cursor,
+                )
+                emit_children_metric(
+                    status="success",
+                    returned_count=len(data),
+                    has_more=has_more,
+                )
+                trace.update(returned_count=len(data), has_more=has_more)
+                return result
+            except Exception as exc:
+                emit_children_metric(
+                    status="error",
+                    failed_stage=stage,
+                    error_type=type(exc).__name__,
+                )
+                raise
 
     async def search_space_children(
         self,
@@ -3334,124 +3366,163 @@ class KnowledgeSpaceService(KnowledgeUtils):
         order_field: str = "file_type",
         order_sort: str = "asc",
     ) -> dict:
-        system_scope = bool(self.login_user.is_global_super) and not _f066_data_scope_narrowed()
-        parent_folder = None
-        if system_scope:
-            space, parent_folder = await self._load_space_listing_scope(space_id, parent_id)
-        else:
-            space, parent_folder = await self._require_container_read_permission(space_id, parent_id)
-
-        file_level_path = None
-        filter_files = []
-
-        if parent_id:
-            if parent_folder is None:
-                raise SpaceFolderNotFoundError()
-            file_level_path = f"{parent_folder.file_level_path}/{parent_folder.id}"
-            children_ids = await SpaceFileDao.get_children_by_prefix(space_id, file_level_path)
-            if not children_ids:
-                return {"page": page, "page_size": page_size, "data": [], "has_more": False}
-            filter_files = [one.id for one in children_ids]
-
-        if tag_ids:
-            resources = await TagDao.aget_resources_by_tags(tag_ids, ResourceTypeEnum.SPACE_FILE)
-            if not resources:
-                return {"page": page, "page_size": page_size, "data": [], "has_more": False}
-            if filter_files:
-                filter_files = list(set(filter_files) & {int(one.resource_id) for one in resources})
-            else:
-                filter_files = [int(one.resource_id) for one in resources]
-            if not filter_files:
-                return {"page": page, "page_size": page_size, "data": [], "has_more": False}
-
-        extra_file_ids = []
-        if keyword:
-            query = {"match_phrase": {"text": keyword}}
-            if filter_files:
-                query = {
-                    "bool": {
-                        "must": [
-                            query,
-                            {"terms": {"metadata.document_id": filter_files}},
-                        ]
-                    }
-                }
-            es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-            # Bound the terms aggregation by the space's file count. Without an
-            # explicit size the ES terms agg defaults to 10 buckets, so a keyword
-            # matching the BODY of more than 10 files would silently surface only
-            # the top 10 (file-name matches are unaffected — they go through
-            # file_name=keyword below). Ceil defensively so a huge space cannot
-            # trigger a pathological aggregation; sum_other_doc_count flags the
-            # rare truncation past the ceiling.
-            file_count = await KnowledgeFileDao.async_count_file_by_knowledge_id(space_id) or 0
-            terms_size = min(max(file_count, 1), 10000)
-            es_result = await es_vector.client.search(
-                index=space.index_name,
-                body={
-                    "query": query,
-                    "aggs": {
-                        "document_ids": {
-                            "terms": {
-                                "field": "metadata.document_id",
-                                "size": terms_size,
-                            }
-                        }
-                    },
-                    "size": 0,
-                },
-            )
-            document_ids_agg = (es_result.get("aggregations") or {}).get("document_ids", {})
-            for one in document_ids_agg.get("buckets", []):
-                extra_file_ids.append(one["key"])
-            other_doc_count = document_ids_agg.get("sum_other_doc_count", 0)
-            if other_doc_count:
-                logger.warning(
-                    "keyword search in space {} truncated content matches: {} docs beyond terms size {}",
-                    space_id,
-                    other_doc_count,
-                    terms_size,
-                )
-            if filter_files:
-                extra_file_ids = list(set(filter_files) & set(extra_file_ids))
-
-        # Exclude non-primary version files so only the current primary revision is visible.
-        exclude_file_ids: list[int] | None = None
-        if self.version_repo is not None:
-            exclude_file_ids = await self.version_repo.find_non_primary_file_ids() or None
-
-        # F040: batch-scan the candidate set with early stop instead of fetching
-        # every keyword match, filtering all, then Python-slicing. A broad keyword
-        # (filename LIKE) or large ES hit set could otherwise materialise thousands
-        # of rows + run ReBAC over all of them just to show one page.
-        page_items, has_more = await self._scan_visible_search_items(
+        with KnowledgeReadTrace(
+            "search",
             space_id=space_id,
-            file_name=keyword,
-            filter_files=filter_files,
-            extra_file_ids=extra_file_ids,
-            file_status=file_status,
-            file_level_path=file_level_path,
-            order_field=order_field,
-            order_sort=order_sort,
-            exclude_file_ids=exclude_file_ids,
-            page=page,
+            parent_id=parent_id,
             page_size=page_size,
-            system_scope=system_scope,
-        )
+            page=page,
+            source=knowledge_list_source(getattr(self, "request", None), operation="search"),
+        ) as trace:
+            trace.stage("authorize")
+            system_scope = bool(self.login_user.is_global_super) and not _f066_data_scope_narrowed()
+            parent_folder = None
+            if system_scope:
+                space, parent_folder = await self._load_space_listing_scope(space_id, parent_id)
+            else:
+                space, parent_folder = await self._require_container_read_permission(space_id, parent_id)
 
-        # Enrich page items with version fields (version_no, is_multi_version, has_similar).
-        await self._enrich_with_version_info(page_items)
+            tracker = KnowledgeFolderDeletionService(space_id)
 
-        data = await self._handle_file_folder_extra_info(
-            page_items,
-            space_creator_user_id=space.user_id,
-            file_change_excluded_ids=await self._get_file_change_excluded_ids(space_id=space_id),
-        )
-        # `total` is intentionally dropped (INV-6): an accurate post-ReBAC-filter
-        # count requires materialising every match, which is exactly what the
-        # batch-scan avoids. Both consumers (client useFileManager, F030
-        # asearch_space_children_cursor) drive next-page off `has_more`.
-        return {"page": page, "page_size": page_size, "data": data, "has_more": has_more}
+            async def empty_page():
+                trace.stage("deletion_status")
+                trace.update(returned_count=0, has_more=False)
+                return {
+                    "page": page,
+                    "page_size": page_size,
+                    "data": [],
+                    "has_more": False,
+                    "scope_deletion_status": await tracker.project_page([], [], parent_folder, owner=self, space=space),
+                }
+
+            file_level_path = None
+            filter_files = []
+
+            if parent_id:
+                if parent_folder is None:
+                    raise SpaceFolderNotFoundError()
+                file_level_path = f"{parent_folder.file_level_path}/{parent_folder.id}"
+                trace.stage("scope_filter")
+                children_ids = await SpaceFileDao.get_children_by_prefix(space_id, file_level_path)
+                if not children_ids:
+                    return await empty_page()
+                filter_files = [one.id for one in children_ids]
+
+            if tag_ids:
+                trace.stage("tag_filter")
+                resources = await TagDao.aget_resources_by_tags(tag_ids, ResourceTypeEnum.SPACE_FILE)
+                if not resources:
+                    return await empty_page()
+                if filter_files:
+                    filter_files = list(set(filter_files) & {int(one.resource_id) for one in resources})
+                else:
+                    filter_files = [int(one.resource_id) for one in resources]
+                if not filter_files:
+                    return await empty_page()
+
+            extra_file_ids = []
+            if keyword:
+                query = {"match_phrase": {"text": keyword}}
+                if filter_files:
+                    query = {
+                        "bool": {
+                            "must": [
+                                query,
+                                {"terms": {"metadata.document_id": filter_files}},
+                            ]
+                        }
+                    }
+                trace.stage("keyword_search")
+                es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
+                # Bound the terms aggregation by the space's file count. Without an
+                # explicit size the ES terms agg defaults to 10 buckets, so a keyword
+                # matching the BODY of more than 10 files would silently surface only
+                # the top 10 (file-name matches are unaffected — they go through
+                # file_name=keyword below). Ceil defensively so a huge space cannot
+                # trigger a pathological aggregation; sum_other_doc_count flags the
+                # rare truncation past the ceiling.
+                file_count = await KnowledgeFileDao.async_count_file_by_knowledge_id(space_id) or 0
+                terms_size = min(max(file_count, 1), 10000)
+                es_result = await es_vector.client.search(
+                    index=space.index_name,
+                    body={
+                        "query": query,
+                        "aggs": {
+                            "document_ids": {
+                                "terms": {
+                                    "field": "metadata.document_id",
+                                    "size": terms_size,
+                                }
+                            }
+                        },
+                        "size": 0,
+                    },
+                )
+                document_ids_agg = (es_result.get("aggregations") or {}).get("document_ids", {})
+                for one in document_ids_agg.get("buckets", []):
+                    extra_file_ids.append(one["key"])
+                other_doc_count = document_ids_agg.get("sum_other_doc_count", 0)
+                if other_doc_count:
+                    logger.warning(
+                        "keyword search in space {} truncated content matches: {} docs beyond terms size {}",
+                        space_id,
+                        other_doc_count,
+                        terms_size,
+                    )
+                if filter_files:
+                    extra_file_ids = list(set(filter_files) & set(extra_file_ids))
+
+            # Exclude non-primary version files so only the current primary revision is visible.
+            trace.stage("version_filter")
+            exclude_file_ids: list[int] | None = None
+            if self.version_repo is not None:
+                exclude_file_ids = await self.version_repo.find_non_primary_file_ids() or None
+
+            # F040: batch-scan the candidate set with early stop instead of fetching
+            # every keyword match, filtering all, then Python-slicing. A broad keyword
+            # (filename LIKE) or large ES hit set could otherwise materialise thousands
+            # of rows + run ReBAC over all of them just to show one page.
+            trace.stage("scan_visible")
+            page_items, has_more = await self._scan_visible_search_items(
+                space_id=space_id,
+                file_name=keyword,
+                filter_files=filter_files,
+                extra_file_ids=extra_file_ids,
+                file_status=file_status,
+                file_level_path=file_level_path,
+                order_field=order_field,
+                order_sort=order_sort,
+                exclude_file_ids=exclude_file_ids,
+                page=page,
+                page_size=page_size,
+                system_scope=system_scope,
+            )
+
+            # Enrich page items with version fields (version_no, is_multi_version, has_similar).
+            trace.stage("version_enrich")
+            await self._enrich_with_version_info(page_items)
+
+            trace.stage("extra_info")
+            data = await self._handle_file_folder_extra_info(
+                page_items,
+                space_creator_user_id=space.user_id,
+                file_change_excluded_ids=await self._get_file_change_excluded_ids(space_id=space_id),
+            )
+            # `total` is intentionally dropped (INV-6): an accurate post-ReBAC-filter
+            # count requires materialising every match, which is exactly what the
+            # batch-scan avoids. Both consumers (client useFileManager, F030
+            # asearch_space_children_cursor) drive next-page off `has_more`.
+            trace.stage("deletion_status")
+            trace.update(returned_count=len(data), has_more=has_more)
+            return {
+                "page": page,
+                "page_size": page_size,
+                "data": data,
+                "has_more": has_more,
+                "scope_deletion_status": await tracker.project_page(
+                    page_items, data, parent_folder, owner=self, space=space
+                ),
+            }
 
     # ──────────────────────────── Folders ─────────────────────────────────────
 
@@ -3536,7 +3607,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
         return updated_folder
 
-    async def _delete_formal_resource(self, resource) -> dict:
+    async def _delete_formal_resource(self, resource, *, operation_id=None) -> dict:
         from bisheng.knowledge.domain.services.knowledge_space_direct_delete_service import (
             KnowledgeSpaceDirectDeleteService,
         )
@@ -3544,30 +3615,50 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return await KnowledgeSpaceDirectDeleteService(
             authorize=self._require_action,
             load_permission_records=self._load_resource_permission_records,
-        ).delete(resource=resource, applicant_user_id=self.login_user.user_id)
+        ).delete(resource=resource, applicant_user_id=self.login_user.user_id, operation_id=operation_id)
 
-    async def delete_folder(self, space_id: int, folder_id: int):
+    async def delete_folder(self, space_id: int, folder_id: int, *, operation_id=None, source_snapshot=None):
+        if operation_id is None:
+            from bisheng.knowledge.domain.services.knowledge_folder_deletion_service import (
+                KnowledgeFolderDeletionService,
+            )
+
+            folder = await self._get_folder_for_action(space_id, folder_id)
+            await self._require_action("folder", folder.id, "delete")
+            async with KnowledgeFolderDeletionService(space_id).track(folder_id, self.login_user.user_id) as token:
+                return await self.delete_folder(
+                    space_id, folder_id, operation_id=token, source_snapshot=source_snapshot
+                )
         folder = await self._get_folder_for_action(space_id, folder_id)
+        ensure_source_unchanged(folder, source_snapshot or {})
         await self._require_folder_delete_permissions(folder)
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space:
             raise SpaceNotFoundError()
         self._ensure_space_async_task_tenant_consistency(space, "delete_folder")
 
-        manifest = await self._delete_formal_resource(folder)
-        self._dispatch_knowledge_chat_rehome(
-            source_space_id=space_id,
-            resources=[(item["resource_type"], item["resource_id"]) for item in manifest["fga_resources"]],
-            reason="delete_folder",
-        )
+        manifest = await self._delete_formal_resource(folder, operation_id=operation_id)
+        try:
+            self._dispatch_knowledge_chat_rehome(
+                source_space_id=space_id,
+                resources=[(item["resource_type"], item["resource_id"]) for item in manifest["fga_resources"]],
+                reason="delete_folder",
+            )
+        except Exception:
+            # The cutover committed; a notification failure cannot undo deletion.
+            logger.exception("Failed to dispatch chat rehome after deleting folder {}", folder_id)
         from bisheng.channel.domain.models.channel_knowledge_sync import ChannelKnowledgeSyncDao
 
         try:
             await ChannelKnowledgeSyncDao.adelete_by_folder_ids(manifest["folder_ids"])
         except Exception:
             logger.exception("Failed to cleanup channel sync bindings after deleting folder {}", folder_id)
-        await self.update_folder_update_time(folder.file_level_path)
-        await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+        try:
+            await self.update_folder_update_time(folder.file_level_path)
+            await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+        except Exception:
+            # Post-commit timestamp refresh is independent of the deletion ledger.
+            logger.exception("Failed to refresh timestamps after deleting folder {}", folder_id)
 
     async def get_folder_file_parent(self, space_id: int, file_id: int) -> list[dict]:
         file_record = await self._require_file_or_folder_action(
@@ -5574,6 +5665,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if visible_ids != unique_ids:
             raise SpaceFileChangeRequestNotFoundError()
 
+    async def authorize_folder_delete_root(self, command):
+        folder = await self._get_folder_for_action(command.space_id, command.resource_id)
+        await self._require_action("folder", folder.id, "delete")
+
     async def authorize_file_change(self, command) -> None:
         """Permission-first owner check used before policy or approval state is read."""
         if command.action == "upload":
@@ -5877,7 +5972,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return result["moved"][0]
         if command.action == "delete":
             if command.resource_type == "folder":
-                await self.delete_folder(command.space_id, command.resource_id)
+                await self.delete_folder(
+                    command.space_id,
+                    command.resource_id,
+                    operation_id=command.folder_operation_id,
+                    source_snapshot=command.action_snapshot,
+                )
             else:
                 await self.delete_file(command.resource_id)
             return None

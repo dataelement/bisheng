@@ -173,7 +173,7 @@ customAxios.interceptors.response.use(
     // Return early — the overlay covers the screen, no toast needed underneath.
     if (response.data?.status_code === 500) {
       if ((response.config as ErrorOptions).skipServiceMaintenance) {
-        return Promise.reject(new Error(response.data.status_message || 'Service exception'));
+        return Promise.reject(Object.assign(new Error(response.data.status_message || 'Service exception'), { status_code: 500, response }));
       }
       window.dispatchEvent(new CustomEvent('bs:service-maintenance'));
       return response;

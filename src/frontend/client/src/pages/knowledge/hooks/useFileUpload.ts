@@ -18,7 +18,10 @@ import { dispatchKnowledgeSpaceFilesRefresh } from "./useFileManager";
 import { useKnowledgeStageUpload } from "./useKnowledgeStageUpload";
 import { useKnowledgeFileMutations } from "./useKnowledgeFileMutations";
 
+import { type FolderDeletionController } from "./useFolderDeletion";
+
 interface UseFileUploadOptions {
+    folderDeletion: FolderDeletionController;
     activeSpace: KnowledgeSpace | null;
     currentFolderId: string | undefined;
     currentPath: Array<{ id?: string; name: string }>;
@@ -43,6 +46,7 @@ export function useFileUpload({
     setFiles,
     setTotal,
     loadFiles,
+    folderDeletion,
 }: UseFileUploadOptions) {
     const localize = useLocalize();
     const [creatingFolder, setCreatingFolder] = useState<KnowledgeFile | null>(null);
@@ -50,6 +54,7 @@ export function useFileUpload({
     const isStorageBlocked = useStorageQuotaGuard();
     const refreshQuota = useRefreshEffectiveQuota();
     const stageUpload = useKnowledgeStageUpload({
+        guardFolder: folderDeletion.guardFolder,
         activeSpace,
         currentFolderId,
         files,
@@ -63,6 +68,8 @@ export function useFileUpload({
     });
     const fileMutations = useKnowledgeFileMutations({
         activeSpace,
+        currentFolderId,
+        folderDeletion,
         files,
         setFiles,
         setTotal,
@@ -73,7 +80,8 @@ export function useFileUpload({
     });
 
     // ─── Folder creation ─────────────────────────────────────────────────
-    const handleCreateFolder = useCallback(() => {
+    const handleCreateFolder = useCallback(async () => {
+        if (activeSpace && await folderDeletion.guardFolder(activeSpace.id, currentFolderId)) return;
         if (currentPath.length >= MAX_FOLDER_DEPTH) {
             showToast({ message: localize("com_knowledge.max_folder_depth_reached", { 0: MAX_FOLDER_DEPTH }), severity: NotificationSeverity.WARNING } as any);
             return;
@@ -99,7 +107,7 @@ export function useFileUpload({
         };
 
         setCreatingFolder(newFolder);
-    }, [currentPath.length, currentFolderId, activeSpace?.id, showToast]);
+    }, [currentPath.length, currentFolderId, activeSpace?.id, showToast, folderDeletion]);
 
     const handleCancelCreateFolder = useCallback(() => {
         setCreatingFolder(null);
@@ -109,7 +117,7 @@ export function useFileUpload({
     /** Called when the inline-rename input is confirmed (new name submitted) */
     const handleRenameFile = useCallback(
         async (fileId: string, newName: string) => {
-            if (!activeSpace) return;
+            if (!activeSpace || await folderDeletion.guardFolder(activeSpace.id, currentFolderId)) return;
 
             // ── Confirm in-progress folder creation ──
             if (creatingFolder && fileId === creatingFolder.id) {
@@ -139,7 +147,7 @@ export function useFileUpload({
 
             await fileMutations.handleRenameExisting(fileId, newName);
         },
-        [activeSpace, creatingFolder, currentFolderId, fileMutations, setFiles, showToast]
+        [activeSpace, creatingFolder, currentFolderId, fileMutations, folderDeletion, setFiles, showToast]
     );
 
     const handleEditTags = useCallback(
@@ -154,8 +162,12 @@ export function useFileUpload({
         creatingFolder,
         uploadingFolder: stageUpload.uploadingFolder,
         duplicateFiles: stageUpload.duplicateFiles,
-        handleUploadFile: stageUpload.handleUploadFile,
-        handleUploadFolder: stageUpload.handleUploadFolder,
+        handleUploadFile: async (...args: Parameters<typeof stageUpload.handleUploadFile>) => {
+            if (activeSpace && !await folderDeletion.guardFolder(activeSpace.id, currentFolderId)) return stageUpload.handleUploadFile(...args);
+        },
+        handleUploadFolder: async (...args: Parameters<typeof stageUpload.handleUploadFolder>) => {
+            if (activeSpace && !await folderDeletion.guardFolder(activeSpace.id, currentFolderId)) return stageUpload.handleUploadFolder(...args);
+        },
         handleCreateFolder,
         handleCancelCreateFolder,
         handleRenameFile,

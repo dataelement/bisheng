@@ -4,6 +4,7 @@ from sqlalchemy import case, func, or_, text, update
 from sqlmodel import col, select
 
 from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.knowledge.domain.models.folder_deletion import FolderStatus
 from bisheng.knowledge.domain.models.knowledge_file import (
     PORTAL_USER_UPLOAD_FILE_SOURCES,
     FileSource,
@@ -169,7 +170,7 @@ class SpaceFileDao(KnowledgeFileDao):
         file_ids: list[int] | None = None,
         order_field: str = "file_type",
         order_sort: str = "desc",
-        file_status: list[int] = None,
+        file_status: list[int] | None = None,
         page: int = 1,
         page_size: int = 20,
         file_type: int | None = None,
@@ -222,7 +223,11 @@ class SpaceFileDao(KnowledgeFileDao):
                 and_(KnowledgeFile.file_type == 1, KnowledgeFile.status.in_(file_status)),
                 and_(
                     KnowledgeFile.file_type == 0,
-                    or_(KnowledgeFile.status.in_(file_status), descendant_exists),
+                    or_(
+                        KnowledgeFile.status == FolderStatus.DELETING,
+                        KnowledgeFile.status.in_(file_status),
+                        descendant_exists,
+                    ),
                 ),
             )
             filters.append(status_filter)
@@ -314,7 +319,7 @@ class SpaceFileDao(KnowledgeFileDao):
         knowledge_id: int,
         parent_id: int | None,
         file_ids: list[int] | None = None,
-        file_status: list[int] = None,
+        file_status: list[int] | None = None,
     ) -> int:
         """
         Async: Count direct children under a given parent.
@@ -353,7 +358,11 @@ class SpaceFileDao(KnowledgeFileDao):
                 and_(KnowledgeFile.file_type == FileType.FILE.value, KnowledgeFile.status.in_(file_status)),
                 and_(
                     KnowledgeFile.file_type == FileType.DIR.value,
-                    or_(KnowledgeFile.status.in_(file_status), descendant_exists),
+                    or_(
+                        KnowledgeFile.status == FolderStatus.DELETING,
+                        KnowledgeFile.status.in_(file_status),
+                        descendant_exists,
+                    ),
                 ),
             )
             filters.append(status_filter)

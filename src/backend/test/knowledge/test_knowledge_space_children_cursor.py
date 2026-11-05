@@ -14,6 +14,7 @@ Key F027 AD-14 invariants covered:
 - ``list_space_children`` raises ``KnowledgeSpaceInvalidCursorError`` on
   decode failure (AC-08, code 18070).
 """
+
 from __future__ import annotations
 
 import ast
@@ -33,9 +34,7 @@ from bisheng.knowledge.domain.models.knowledge_space_file import (
 
 
 def _read(rel: str) -> str:
-    return (
-        Path(__file__).resolve().parents[2] / "bisheng" / rel
-    ).read_text(encoding="utf-8")
+    return (Path(__file__).resolve().parents[2] / "bisheng" / rel).read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +113,8 @@ def test_async_list_children_accepts_cursor_param():
     tree = ast.parse(src)
     cls = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "SpaceFileDao")
     func = next(
-        n for n in cls.body
+        n
+        for n in cls.body
         if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "async_list_children"
     )
     all_arg_names = {a.arg for a in func.args.args} | {a.arg for a in func.args.kwonlyargs}
@@ -128,7 +128,8 @@ def test_scan_visible_child_items_uses_cursor_fetch_until_enough():
     tree = ast.parse(src)
     cls = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "KnowledgeSpaceService")
     func = next(
-        n for n in cls.body
+        n
+        for n in cls.body
         if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "_scan_visible_child_items"
     )
     func_src = ast.get_source_segment(src, func)
@@ -150,7 +151,8 @@ def test_scan_visible_child_items_returns_data_and_has_more():
     tree = ast.parse(src)
     cls = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "KnowledgeSpaceService")
     func = next(
-        n for n in cls.body
+        n
+        for n in cls.body
         if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "_scan_visible_child_items"
     )
     func_src = ast.get_source_segment(src, func)
@@ -170,7 +172,8 @@ def test_list_space_children_raises_invalid_cursor_error_on_decode_failure():
     tree = ast.parse(src)
     cls = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "KnowledgeSpaceService")
     func = next(
-        n for n in cls.body
+        n
+        for n in cls.body
         if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "list_space_children"
     )
     func_src = ast.get_source_segment(src, func)
@@ -184,11 +187,16 @@ def test_list_space_children_returns_page_infinite_cursor_data():
     tree = ast.parse(src)
     cls = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "KnowledgeSpaceService")
     func = next(
-        n for n in cls.body
+        n
+        for n in cls.body
         if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "list_space_children"
     )
     func_src = ast.get_source_segment(src, func)
-    assert "PageInfiniteCursorData(" in func_src
+    from bisheng.common.schemas.api import PageInfiniteCursorData
+    from bisheng.knowledge.domain.schemas.folder_deletion import FolderDeletionPage
+
+    assert issubclass(FolderDeletionPage, PageInfiniteCursorData)
+    assert "FolderDeletionPage(" in func_src
     assert "encode_cursor(" in func_src
     # Cursor key is the 4-element last-scanned candidate boundary returned by the scanner.
     assert "scan_cursor" in func_src
@@ -204,7 +212,8 @@ def test_endpoint_accepts_cursor_drops_page():
     src = _read("knowledge/api/endpoints/knowledge_space.py")
     tree = ast.parse(src)
     func = next(
-        n for n in ast.walk(tree)
+        n
+        for n in ast.walk(tree)
         if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "list_space_children"
     )
     arg_names = {a.arg for a in func.args.args} | {a.arg for a in func.args.kwonlyargs}

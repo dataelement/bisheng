@@ -11,6 +11,10 @@ import type {
 
 export type { InitialPermissionResult } from "./permission";
 
+const folderDeleteRequestOptions: NonNullable<Parameters<typeof request.get>[1]> = {
+    skipServiceMaintenance: true,
+};
+
 // Standard backend response wrapper
 interface ApiResponse<T> {
     status_code: number;
@@ -190,9 +194,29 @@ export interface KnowledgeFileSensitiveCheck {
     hits: SensitiveWordHit[];
 }
 
+export type FolderDeletionStatus = {
+    state: "running" | "unknown";
+    operation_id: string | null;
+    root_folder_id: number;
+    retry_after_ms?: number;
+};
+
+export type FolderDeletionStateItem = {
+    folder_id: number;
+    operation_id: string | null;
+    state: "idle" | "running" | "unknown" | "succeeded" | "failed" | "approval_pending" | "untracked" | "unavailable";
+    retry_after_ms?: number;
+    failure_reason?: string | null;
+    can_reconcile: boolean;
+};
+
 export interface KnowledgeFile {
     id: string;
     name: string;
+    /** Local request state; never sent to the server. */
+    isDeleting?: boolean;
+    deletionStatus?: FolderDeletionStatus | null;
+    deletionState?: "running" | "unknown";
     type: FileType;
     size?: number;
     status?: FileStatus;
@@ -302,6 +326,7 @@ export interface KnowledgeSpaceTagLibraryPage {
 }
 
 export interface RawSpaceChild {
+    deletion_status?: FolderDeletionStatus | null;
     id: number;
     name: string;
     /** "folder" | "file" */
@@ -329,6 +354,7 @@ export interface RawSpaceChild {
 
 /** Raw file record returned by addFiles / knowledge file APIs */
 interface RawKnowledgeFile {
+    deletion_status?: FolderDeletionStatus | null;
     id: number;
     knowledge_id: number;
     file_name: string;
@@ -405,6 +431,8 @@ export interface FileMutationResult {
 }
 
 export interface ResourceMutationItemResult {
+    outcomeUnknown?: boolean;
+    operationId?: string | null;
     id: number;
     type: "file" | "folder";
     resource?: KnowledgeFile;
@@ -520,6 +548,8 @@ interface RawFileChangeApprovalView {
 }
 
 interface RawResourceMutationItemResult {
+    outcome_unknown?: boolean;
+    operation_id?: string | null;
     id: number;
     type: "file" | "folder";
     resource?: RawSpaceChild | null;
@@ -890,7 +920,7 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
 
     const statusVal = raw?.status;
     const status: FileStatus | undefined =
-        typeof statusVal === "number"
+        deriveFileType(raw) === FileType.FOLDER ? undefined : typeof statusVal === "number"
             ? mapFileStatus(statusVal)
             : typeof statusVal === "string" && statusVal
                 // Backend may return uppercase string like "FAILED" — normalize to lowercase enum value
@@ -913,6 +943,7 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
     return {
         id: idVal !== undefined && idVal !== null ? String(idVal) : "",
         name: String(nameVal),
+        deletionStatus: raw?.deletion_status ?? null,
         type: deriveFileType(raw),
         size: raw?.size ?? raw?.file_size,
         status,
@@ -1015,6 +1046,7 @@ function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
     return {
         id: String(raw.id),
         name: raw.file_name,
+        deletionStatus: raw.deletion_status ?? null,
         type: isFolder ? FileType.FOLDER : deriveFileTypeFromName(raw.file_name),
         size: raw.file_size,
         status: isFolder ? undefined : mapFileStatus(raw.status),
@@ -1488,12 +1520,16 @@ export async function deleteSpaceApi(space_id: string): Promise<void> {
  */
 export async function getFolderParentPathApi(
     spaceId: string,
-    folderId: string
-
+    folderId: string,
+    options?: { skipServiceMaintenance?: boolean; signal?: AbortSignal },
 ): Promise<Array<{ id: string; name: string }>> {
     const res = await request.get<ApiResponse<any>>(
-        `/api/v1/knowledge/space/${spaceId}/folders/${folderId}/parent`
+        `/api/v1/knowledge/space/${spaceId}/folders/${folderId}/parent`,
+        options,
     );
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw Object.assign(new Error(res.status_message || "folder lookup failed"), { status_code: res.status_code });
+    }
     const data = res?.data;
     // Normalize: backend may return an array of objects with id/name or file_name
     return extractList(data).map((item: any) => ({
@@ -1522,6 +1558,7 @@ export interface KnowledgeFolderNode {
     /** 0 = directory, 1 = file */
     file_type: 0 | 1;
     file_size: number | null;
+    deletionStatus?: FolderDeletionStatus | null;
     created_at?: string;
     updated_at?: string;
 }
@@ -1539,11 +1576,12 @@ export async function listKnowledgeFolders(params: {
      * hiding other people's parse failures is the server's job, not a query param.
      */
     file_status?: number[];
-}): Promise<{ items: KnowledgeFolderNode[]; total: number }> {
+}): Promise<{ items: KnowledgeFolderNode[]; total: number; scopeDeletionStatus?: FolderDeletionStatus | null }> {
     if (!params.space_id) return { items: [], total: 0 };
     const res = await request.get<any>(
         `/api/v1/knowledge/space/${params.space_id}/children`,
         {
+            headers: { "X-Knowledge-List-Source": "folder_tree" },
             params: {
                 parent_id: params.parent_id != null && params.parent_id !== "" ? params.parent_id : undefined,
                 file_type: 0,
@@ -1568,12 +1606,13 @@ export async function listKnowledgeFolders(params: {
     const items: KnowledgeFolderNode[] = list.map((raw: any) => ({
         id: Number(raw?.id ?? 0),
         file_name: String(raw?.name ?? raw?.file_name ?? ""),
+        deletionStatus: raw?.deletion_status ?? null,
         file_type: (raw?.file_type === 0 || raw?.type === "folder") ? 0 : 1,
         file_size: raw?.file_size ?? raw?.size ?? null,
         created_at: raw?.create_time,
         updated_at: raw?.update_time,
     }));
-    return { items, total };
+    return { items, total, scopeDeletionStatus: payload?.scope_deletion_status ?? null };
 }
 
 /**
@@ -1592,7 +1631,7 @@ export async function getSpaceChildrenApi(params: {
     order_field?: string;
     order_sort?: string;
     file_status?: number[];
-}): Promise<{ data: KnowledgeFile[]; page_size: number; has_more: boolean; next_cursor: string | null }> {
+}): Promise<{ data: KnowledgeFile[]; page_size: number; has_more: boolean; next_cursor: string | null; scopeDeletionStatus?: FolderDeletionStatus | null }> {
     const { space_id, ...queryParams } = params;
     if (!space_id) {
         return {
@@ -1605,6 +1644,7 @@ export async function getSpaceChildrenApi(params: {
     const res = await request.get<ApiResponse<any>>(
         `/api/v1/knowledge/space/${space_id}/children`,
         {
+            headers: { "X-Knowledge-List-Source": "file_list" },
             params: {
                 parent_id: queryParams.parent_id,
                 cursor: queryParams.cursor || undefined,
@@ -1620,6 +1660,7 @@ export async function getSpaceChildrenApi(params: {
     const list = extractList<RawSpaceChild>(payload);
     return {
         data: list.map(raw => mapChild(raw, space_id)),
+        scopeDeletionStatus: payload?.scope_deletion_status ?? null,
         page_size: Number(payload?.page_size ?? queryParams.page_size ?? SPACE_CHILDREN_DEFAULT_PAGE_SIZE),
         has_more: !!payload?.has_more,
         next_cursor: payload?.next_cursor ?? null,
@@ -1640,7 +1681,7 @@ export async function searchSpaceChildrenApi(params: {
     order_field?: string;
     order_sort?: string;
     file_status?: number[];
-}): Promise<{ data: KnowledgeFile[]; has_more: boolean }> {
+}): Promise<{ data: KnowledgeFile[]; has_more: boolean; scopeDeletionStatus?: FolderDeletionStatus | null }> {
     const { space_id, ...queryParams } = params;
     if (!space_id) return { data: [], has_more: false };
 
@@ -1650,6 +1691,7 @@ export async function searchSpaceChildrenApi(params: {
     const res = await request.get<ApiResponse<{ data: RawSpaceChild[]; has_more: boolean }>>(
         `/api/v1/knowledge/space/${space_id}/search`,
         {
+            headers: { "X-Knowledge-List-Source": "search" },
             params: {
                 parent_id: queryParams.parent_id,
                 page: queryParams.page,
@@ -1668,6 +1710,7 @@ export async function searchSpaceChildrenApi(params: {
     const list = extractList<RawSpaceChild>(payload);
     return {
         data: list.map(raw => mapChild(raw, space_id)),
+        scopeDeletionStatus: payload?.scope_deletion_status ?? null,
         has_more: Boolean(payload?.has_more),
     };
 }
@@ -1726,10 +1769,11 @@ export async function renameFolderApi(
  */
 export async function deleteFolderApi(space_id: string, folder_id: string): Promise<FileMutationResult> {
     const res = await request.delete(
-        `/api/v1/knowledge/space/${space_id}/folders/${folder_id}`
+        `/api/v1/knowledge/space/${space_id}/folders/${folder_id}`,
+        folderDeleteRequestOptions,
     ) as ApiResponse<RawFileMutationResult> & { message?: string; msg?: string };
     if (res?.status_code !== undefined && res.status_code !== 200) {
-        throw new Error(res.status_message || res.message || res.msg || "delete folder failed");
+        throw Object.assign(new Error(res.status_message || res.message || res.msg || "delete folder failed"), { status_code: res.status_code, operation_id: (res.data as { operation_id?: string } | undefined)?.operation_id });
     }
     return mapFileMutation(res.data, space_id);
 }
@@ -1803,6 +1847,8 @@ function mapResourceMutationItem(
     return {
         id: raw.id,
         type: raw.type,
+        outcomeUnknown: raw.outcome_unknown,
+        operationId: raw.operation_id,
         resource: raw.resource ? mapChild(raw.resource, spaceId) : undefined,
         approvalInstanceId: raw.approval_instance_id ?? undefined,
         changeRequestId: raw.change_request_id ?? undefined,
@@ -2192,14 +2238,15 @@ export async function batchDeleteApi(
 ): Promise<FileBatchMutationResult> {
     const res = await request.post(
         `/api/v1/knowledge/space/${space_id}/files/batch-delete`,
-        data
+        data,
+        folderDeleteRequestOptions,
     ) as ApiResponse<{
         deleted: RawResourceMutationItemResult[];
         pending: RawResourceMutationItemResult[];
         invalid: RawResourceMutationItemResult[];
     }> & { message?: string; msg?: string };
     if (res?.status_code !== undefined && res.status_code !== 200) {
-        throw new Error(res.status_message || res.message || res.msg || "batch delete failed");
+        throw Object.assign(new Error(res.status_message || res.message || res.msg || "batch delete failed"), { status_code: res.status_code });
     }
     return {
         completed: (res.data?.deleted ?? []).map((item) => mapResourceMutationItem(item, space_id)),
@@ -2585,4 +2632,26 @@ export async function dismissSimilarApi(file_id: number): Promise<void> {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         { skip403Redirect: true } as any,
     );
+}
+
+/** Read current attempts in bounded batches; this never submits a deletion. */
+export async function getFolderDeletionStatusesApi(
+    spaceId: string,
+    folderIds: string[],
+    knownOperations: Array<{ folder_id: number; operation_id: string }> = [],
+    signal?: AbortSignal,
+): Promise<FolderDeletionStateItem[]> {
+    const response = await request.post(`/api/v1/knowledge/space/${spaceId}/folder-deletions/status`, {
+        folder_ids: folderIds.map(Number), known_operations: knownOperations,
+    }, { ...folderDeleteRequestOptions, signal }) as ApiResponse<{ items: FolderDeletionStateItem[] }>;
+    return unwrapFileChangeResponse(response).items;
+}
+
+export async function reconcileFolderDeletionApi(
+    spaceId: string, folderId: string, operationId: string, signal?: AbortSignal,
+): Promise<FolderDeletionStateItem> {
+    const response = await request.post(`/api/v1/knowledge/space/${spaceId}/folder-deletions/${operationId}/reconcile`, {
+        folder_id: Number(folderId),
+    }, { ...folderDeleteRequestOptions, signal }) as ApiResponse<FolderDeletionStateItem>;
+    return unwrapFileChangeResponse(response);
 }

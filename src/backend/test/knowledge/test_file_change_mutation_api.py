@@ -715,3 +715,14 @@ async def test_failed_upload_cleanup_is_request_bound_permissionless_and_retry_i
         headers={"tenant_id": 42},
     )
     assert owner._cleanup_resource_tuples.await_count == 2
+
+
+def test_uncertain_folder_delete_response_preserves_operation_for_history_lookup():
+    from bisheng.knowledge.domain.services.knowledge_folder_deletion_service import FolderCommitUncertain
+
+    token = "d8217b2e-e8e3-4232-a967-d3a19f77bb47"
+    service = SimpleNamespace(request_change=AsyncMock(side_effect=FolderCommitUncertain("commit lost", token)))
+    owner = SimpleNamespace(build_file_change_command=AsyncMock(return_value=object()))
+    with TestClient(_mount_app(mutation_service=service, owner_service=owner)) as client:
+        result = client.delete("/api/v1/knowledge/space/101/folders/14").json()
+    assert result["status_code"] == 500 and result["data"] == {"outcome_unknown": True, "operation_id": token}

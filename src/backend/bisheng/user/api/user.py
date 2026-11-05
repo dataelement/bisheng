@@ -29,6 +29,9 @@ from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
 from bisheng.database.models.tenant import UserTenantDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
+from bisheng.user.api.current_tenant import (
+    get_current_tenant_handler as _get_current_tenant_handler,
+)
 from bisheng.utils import generate_uuid, get_request_ip
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_CURRENT_SESSION, USER_PASSWORD_ERROR
 
@@ -242,6 +245,7 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
     return resp_200(
         await UserService.build_user_read(
             db_user,
+            tenant_id=login_user.tenant_id,
             role=str(role),
             web_menu=web_menu,
             menu_approval_mode=menu_approval_mode,
@@ -279,7 +283,7 @@ async def logout(auth_jwt: AuthJwt = Depends()):
 
 
 async def _department_admin_scoped_user_ids(user_id: int) -> list[int] | None:
-    """部门管理员：返回其管辖部门子树内出现过的 user_id；非部门管理员返回 None。"""
+    """部门管理员:返回其管辖部门子树内出现过的 user_id;非部门管理员返回 None。"""
     admin_depts = await DepartmentDao.aget_user_admin_departments(user_id)
     if not admin_depts:
         return None
@@ -305,9 +309,9 @@ async def _department_admin_scoped_user_ids(user_id: int) -> list[int] | None:
 async def _tenant_admin_scoped_user_ids(
     login_user: LoginUser,
 ) -> list[int] | None:
-    """子租户管理员：返回其挂载子树（含下挂子子租户）内全部 user_id；非子租户管理员返回 None。
+    """子租户管理员:返回其挂载子树(含下挂子子租户)内全部 user_id;非子租户管理员返回 None。
 
-    Root 租户由 super_admin 负责（``is_admin()`` 已短路），此 helper 直接返回 None。
+    Root 租户由 super_admin 负责(``is_admin()`` 已短路),此 helper 直接返回 None。
     """
     from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
     from bisheng.permission.application import is_tenant_admin
@@ -354,9 +358,9 @@ async def _tenant_admin_scoped_user_ids(
 
 
 def _primary_department_id_map_for_user_ids(user_ids: list[int]) -> dict[int, int | None]:
-    """user_id -> ``department.id``（主部门），供前端组织树挂载。
+    """user_id -> ``department.id``(主部门),供前端组织树挂载。
 
-    ``user.dept_id`` 字段为历史/业务侧字符串，与 ``department.id`` 不一定一致；
+    ``user.dept_id`` 字段为历史/业务侧字符串,与 ``department.id`` 不一定一致;
     选人组件应按 ``user_department`` 关系挂载到树节点。
     """
     ids = [int(x) for x in user_ids if x is not None]
@@ -421,8 +425,8 @@ async def list_user(
     name: str | None = None,
     page_size: int | None = 10,
     page_num: int | None = 1,
-    group_id: Annotated[list[int], Query()] = None,
-    role_id: Annotated[list[int], Query()] = None,
+    group_id: Annotated[list[int] | None, Query()] = None,
+    role_id: Annotated[list[int] | None, Query()] = None,
     simple: bool = False,
     with_department_path: bool = False,
     login_user: LoginUser = Depends(LoginUser.get_login_user),
@@ -433,18 +437,18 @@ async def list_user(
     user_ids: list[int] = []
 
     if not login_user.is_admin():
-        # 用户组管理员：可管理哪些用户组
+        # 用户组管理员:可管理哪些用户组
         user_admin_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
         user_admin_groups = [one.group_id for one in user_admin_groups]
         managed_groups = user_admin_groups
-        # 部门管理员：管辖部门子树内用户（与是否同时为用户组管理员无关，均需纳入可选列表）
+        # 部门管理员:管辖部门子树内用户(与是否同时为用户组管理员无关,均需纳入可选列表)
         dept_scoped_ids = await _department_admin_scoped_user_ids(login_user.user_id)
-        # 子租户管理员：挂载子树内全部用户（PRD §4.5）。tenant#admin 不会派生
-        # department#admin 元组，必须独立合并，否则筛选/选人/资源授权弹窗皆 500。
+        # 子租户管理员:挂载子树内全部用户(PRD §4.5)。tenant#admin 不会派生
+        # department#admin 元组,必须独立合并,否则筛选/选人/资源授权弹窗皆 500。
         tenant_scoped_ids = await _tenant_admin_scoped_user_ids(login_user)
 
-        # 「组织管辖范围」= 部门子树 ∪ 子租户挂载子树。两个 helper 均返回 None
-        # 才视为「无组织管辖范围」（既非部门管理员也非子租户管理员）。
+        # 「组织管辖范围」= 部门子树 U 子租户挂载子树。两个 helper 均返回 None
+        # 才视为「无组织管辖范围」(既非部门管理员也非子租户管理员)。
         org_scoped_ids: set[int] | None = None
         if dept_scoped_ids is not None or tenant_scoped_ids is not None:
             org_scoped_ids = set()
@@ -454,16 +458,16 @@ async def list_user(
                 org_scoped_ids.update(tenant_scoped_ids)
 
         if not managed_groups:
-            # 仅部门 / 子租户管理员：仅能看其管辖范围内用户。
+            # 仅部门 / 子租户管理员:仅能看其管辖范围内用户。
             # 「没有组织管辖范围」和「管辖范围为空」对调用方是同一件事——通过这个
-            # 接口你看不到任何人——所以同样返回空页，而不是 500。原先前者报错，
+            # 接口你看不到任何人——所以同样返回空页,而不是 500。原先前者报错,
             # 让持有资源 manage_permission 但不属于任何组织管理员角色的用户
-            # （例如知识空间管理员）在授权选人时直接拿到 500，对话框整个用不了。
+            # (例如知识空间管理员)在授权选人时直接拿到 500,对话框整个用不了。
             if not org_scoped_ids:
                 return resp_200({"data": [], "total": 0})
             user_ids = list(org_scoped_ids)
         else:
-            # 同时为用户组管理员时：「组成员 ∪ 部门子树用户 ∪ 租户子树用户」
+            # 同时为用户组管理员时:「组成员 U 部门子树用户 U 租户子树用户」
             groups = managed_groups
             if group_id:
                 groups = list(set(groups) & set(group_id))
@@ -471,7 +475,7 @@ async def list_user(
                     raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
             group_roles = RoleDao.get_role_by_groups(groups, None, 0, 0)
             if role_id:
-                roles = list(set(role_id) & set([one.id for one in group_roles]))
+                roles = list(set(role_id) & {one.id for one in group_roles})
 
             groups_user_ids = UserGroupDao.get_groups_user(groups)
             gids = {one.user_id for one in groups_user_ids} if groups_user_ids else set()
@@ -522,7 +526,7 @@ async def list_user(
     res = []
     role_dict = {}
     group_dict = {}
-    for one, avatar_url in zip(users, avatar_urls):
+    for one, avatar_url in zip(users, avatar_urls, strict=False):
         one_data = one.model_dump()
         # Never expose sensitive/internal User columns in the list response — the
         # ORM dump carries the full row; the frontend uses none of these fields.
@@ -590,7 +594,7 @@ async def _dept_admin_can_manage_member_account_status(
     login_user: LoginUser,
     target_user_id: int,
 ) -> bool:
-    """部门管理员（FGA）是否管辖目标用户所在任一部门；用于启禁用等账号状态操作。"""
+    """部门管理员(FGA)是否管辖目标用户所在任一部门;用于启禁用等账号状态操作。"""
     admin_depts = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
     if not admin_depts:
         return False
@@ -608,8 +612,8 @@ async def _tenant_admin_can_manage_member_account_status(
     login_user: LoginUser,
     target_user_id: int,
 ) -> bool:
-    """子租户管理员是否管辖目标用户：操作者持有 tenant#admin，且目标用户的任一部门
-    位于操作者租户挂载子树内。Root 租户由 super_admin 走 ``is_admin()`` 快速通过，
+    """子租户管理员是否管辖目标用户:操作者持有 tenant#admin,且目标用户的任一部门
+    位于操作者租户挂载子树内。Root 租户由 super_admin 走 ``is_admin()`` 快速通过,
     不进入此路径。
     """
     from bisheng.database.models.department import Department
@@ -653,7 +657,7 @@ async def _can_manage_member_account_status(
     login_user: LoginUser,
     target_user_id: int,
 ) -> bool:
-    """启/禁用账号状态的统一权限闸门：部门管理员或子租户管理员任一通过即放行。"""
+    """启/禁用账号状态的统一权限闸门:部门管理员或子租户管理员任一通过即放行。"""
     if await _dept_admin_can_manage_member_account_status(login_user, target_user_id):
         return True
     if await _tenant_admin_can_manage_member_account_status(login_user, target_user_id):
@@ -672,7 +676,7 @@ async def update(*, request: Request, user: UserUpdate, login_user: LoginUser = 
         user_group = UserGroupDao.get_user_group(db_user.user_id)
         user_group = [one.group_id for one in user_group]
         if not login_user.check_groups_admin(user_group):
-            # 组织与成员：部门/子租户管理员对用户组无管理权，但应对其管辖范围内成员可启/禁用账号
+            # 组织与成员:部门/子租户管理员对用户组无管理权,但应对其管辖范围内成员可启/禁用账号
             allow_org_admin = (
                 user.delete is not None
                 and not user.avatar
@@ -826,7 +830,11 @@ def update_role_hook(request: Request, login_user: LoginUser, db_role: Role) -> 
 
 @router.get("/role/list", status_code=200)
 async def get_role(
-    *, role_name: str = None, page: int = 0, limit: int = 0, login_user: LoginUser = Depends(LoginUser.get_login_user)
+    *,
+    role_name: str | None = None,
+    page: int = 0,
+    limit: int = 0,
+    login_user: LoginUser = Depends(LoginUser.get_login_user),
 ):
     """Legacy role list endpoint (AC-25). Delegates to RoleService."""
     if role_name:
@@ -981,7 +989,7 @@ def update_user_role_hook(
     logger.info(f"update_user_role_hook, user_id: {user_id}, old_roles: {old_roles}, new_roles: {new_roles}")
     # Write Audit Log
     role_info = RoleDao.get_role_by_ids(old_roles + new_roles)
-    group_ids = list(set([role.group_id for role in role_info]))
+    group_ids = list({role.group_id for role in role_info})
     role_dict = {one.id: one.role_name for one in role_info}
     note = "Pre-edit role:"
     for one in old_roles:
@@ -1006,14 +1014,14 @@ async def get_captcha():
 
     capthca_b64 = b64encode(buffered.getvalue()).decode()
     logger.info("get_captcha captcha_char={}", chr_4)
-    # generate key, Generate Simple Uniqueid，
+    # generate key, Generate Simple Uniqueid,
     key = CAPTCHA_PREFIX + generate_uuid()[:8]
     redis_client = await get_redis_client()
     await redis_client.aset(key, chr_4, expiration=300)
 
-    # 与 ``UserService.user_login`` 中 ``if await settings.aget_from_db('use_captcha'):`` 同源同判：
-    # 曾用同步 ``get_from_db`` 时，在部分环境/事件循环下与异步登录读取不一致，导致前端 ``user_capthca=false``
-    # 不渲染验证码，但登录仍走验证码校验并报「验证码错误」。
+    # 与 ``UserService.user_login`` 中 ``if await settings.aget_from_db('use_captcha'):`` 同源同判:
+    # 曾用同步 ``get_from_db`` 时,在部分环境/事件循环下与异步登录读取不一致,导致前端 ``user_capthca=false``
+    # 不渲染验证码,但登录仍走验证码校验并报「验证码错误」。
     use_raw = await settings.aget_from_db("use_captcha")
     user_captcha_required = True if use_raw else False
     return resp_200(
@@ -1027,7 +1035,7 @@ async def get_captcha():
 
 @router.get("/user/public_key", status_code=200)
 def get_rsa_publish_key():
-    """同步 Redis：避免 Windows 上 redis.asyncio 连接池与当前请求事件循环不一致（different event loop）。"""
+    """同步 Redis:避免 Windows 上 redis.asyncio 连接池与当前请求事件循环不一致(different event loop)。"""
     key = RSA_KEY
     redis_client = get_redis_client_sync()
     if redis_client.setNx(key, 1):
@@ -1191,10 +1199,6 @@ def md5_hash(string):
 # Handler lives in a sibling module so it's importable from unit tests that
 # cannot pull in the full ``user/api/user.py`` dependency chain.
 # ---------------------------------------------------------------------------
-
-from bisheng.user.api.current_tenant import (
-    get_current_tenant_handler as _get_current_tenant_handler,
-)
 
 
 @router.get("/user/current-tenant")

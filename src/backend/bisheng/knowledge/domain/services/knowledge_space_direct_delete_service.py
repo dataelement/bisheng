@@ -12,6 +12,7 @@ from loguru import logger
 from bisheng.common.errcode.knowledge_space import SpaceFileChangeConflictError
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
+from bisheng.knowledge.domain.models.folder_deletion import ensure_owner
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_space_file_change_request import (
     KnowledgeSpaceFileChangeAction,
@@ -30,6 +31,7 @@ from bisheng.knowledge.domain.repositories.knowledge_space_file_change_request_r
     KnowledgeSpaceFileChangeRequestRepository,
 )
 from bisheng.knowledge.domain.repositories.knowledge_space_mutation_repository import KnowledgeSpaceMutationRepository
+from bisheng.knowledge.domain.services.knowledge_folder_deletion_service import delete_transaction
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgeFilePermissionRecord
 from bisheng.knowledge.domain.services.knowledge_space_mutation_executor import DeleteExecutionStepCode
 
@@ -61,14 +63,14 @@ class KnowledgeSpaceDirectDeleteService:
         self.repository_factory = repository_factory
         self.dispatch_purge = dispatch_purge
 
-    async def delete(self, *, resource: KnowledgeFile, applicant_user_id: int) -> dict:
+    async def delete(self, *, resource: KnowledgeFile, applicant_user_id: int, operation_id: str | None = None) -> dict:
         tenant_id = get_current_tenant_id()
         if tenant_id is None or int(resource.tenant_id) != int(tenant_id):
             raise RuntimeError("direct deletion requires the resource tenant context")
         tenant_id = int(tenant_id)
         resource_type = "folder" if int(resource.file_type) == 0 else "knowledge_file"
-        token = str(uuid4())
-        async with self.session_factory() as session, session.begin():
+        token = operation_id or str(uuid4())
+        async with self.session_factory() as session, delete_transaction(session, bool(operation_id)):
             repository = self.repository_factory(session)
             manifest = await repository.build_delete_manifest(
                 tenant_id=tenant_id,
@@ -78,6 +80,7 @@ class KnowledgeSpaceDirectDeleteService:
                 source_name=str(resource.file_name),
                 source_path=str(resource.file_level_path or ""),
                 source_level=int(resource.level or 0),
+                folder_operation_id=operation_id,
             )
             resources = [(str(item["resource_type"]), int(item["resource_id"])) for item in manifest["fga_resources"]]
             # Check expanded version siblings too, while the manifest is locked.
@@ -138,6 +141,11 @@ class KnowledgeSpaceDirectDeleteService:
                 attempt_token=token,
                 step_codes=DeleteExecutionStepCode.ALL,
             )
+            if operation_id:
+                root = await repository.get_formal_file(
+                    tenant_id=tenant_id, space_id=int(resource.knowledge_id), file_id=int(resource.id), for_update=True
+                )
+                ensure_owner(root, operation_id)
             await repository.apply_delete_cutover(tenant_id=tenant_id, manifest=manifest)
             for code in (DeleteExecutionStepCode.PREPARE, DeleteExecutionStepCode.DB_CUTOVER):
                 if not await steps.mark_succeeded(

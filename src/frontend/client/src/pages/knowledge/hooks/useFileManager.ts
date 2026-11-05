@@ -15,9 +15,14 @@ import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { SearchParams } from "../SpaceDetail/CompoundSearchInput";
 import { useLocalize } from "~/hooks";
+import type { FolderDeletionObservation, FolderDeletionSnapshot } from "./useFolderDeletion";
 import { isKnowledgeItemPending, isKnowledgeItemUnderReview } from "../knowledgeUtils";
 
 interface UseFileManagerOptions {
+    onFilesLoaded?: (spaceId: string) => void;
+    onDeletionReadStarted?: () => FolderDeletionObservation;
+    onDeletionSnapshot?: (snapshot: FolderDeletionSnapshot) => void;
+    identityKey?: string;
     activeSpace: KnowledgeSpace | null;
     /** Optional folder ID from URL deep link — navigate here on initial load */
     initialFolderId?: string;
@@ -58,8 +63,10 @@ export function dispatchKnowledgeSpaceFilesRefresh(spaceId?: number | string): v
  * Manages file list state: loading, pagination, search, sorting, folder navigation.
  * Extracted from the root Knowledge component.
  */
-export function useFileManager({ activeSpace, initialFolderId, enabled = true }: UseFileManagerOptions) {
+export function useFileManager({ activeSpace, initialFolderId, enabled = true, onFilesLoaded, onDeletionSnapshot, onDeletionReadStarted, identityKey }: UseFileManagerOptions) {
     const localize = useLocalize();
+    const locationRef = useRef("");
+    locationRef.current = `${identityKey}:${activeSpace?.id}:${initialFolderId ?? ""}`;
     const [files, setFiles] = useState<KnowledgeFile[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize] = useState(SPACE_CHILDREN_DEFAULT_PAGE_SIZE);
@@ -85,7 +92,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
     const [sortBy, setSortBy] = useState<SortType | undefined>(undefined);
     const [sortDirection, setSortDirection] = useState<SortDirection | undefined>(undefined);
-    const [currentFolderId, setCurrentFolderId] = useState<string | undefined>();
+    const [currentFolderId, setCurrentFolderId] = useState<string | undefined>(initialFolderId);
     const [currentPath, setCurrentPath] = useState<Array<{ id?: string; name: string }>>([]);
 
     // Optimistic-deletion ignore set. Held in a ref so loadFiles can read the
@@ -123,6 +130,9 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             // from issuing a duplicate children request with incomplete policy.
             if (!enabled || !activeSpace?.id || !activeSpace.role) return [];
 
+            const requestLocation = `${identityKey}:${activeSpace.id}:${currentFolderId ?? ""}`;
+            if (requestLocation !== locationRef.current) return [];
+            const observation = onDeletionReadStarted?.();
             const reqId = ++loadRequestIdRef.current;
             const isAppending = page > 1;
             setLoading(true);
@@ -179,7 +189,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                 // Stale-response guard: a newer loadFiles started while this
                 // one was in flight (e.g. user clicked a different status
                 // filter). Drop this result entirely — don't touch any state.
-                if (reqId !== loadRequestIdRef.current) return [];
+                if (reqId !== loadRequestIdRef.current || requestLocation !== locationRef.current) return [];
 
                 const incomingData = res.data;
 
@@ -191,6 +201,8 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                     : incomingData;
                 const previous = isAppending ? filesRef.current : [];
                 const nextFiles = isAppending ? mergeFilesById(previous, filteredData) : filteredData;
+                onDeletionSnapshot?.({ observation, spaceId: activeSpace.id, folderId: currentFolderId, files: nextFiles, projectedFiles: res.data, scopeDeletionStatus: res.scopeDeletionStatus });
+                onFilesLoaded?.(activeSpace.id);
                 const uniqueAddedCount = nextFiles.length - previous.length;
                 const responseHasMore = Boolean((res as any).has_more);
                 const responseNextCursor = (res as any).next_cursor ?? null;
@@ -224,7 +236,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                 return nextFiles;
             } catch (error) {
                 console.error("Failed to load knowledge space files:", error);
-                if (reqId === loadRequestIdRef.current) {
+                if (reqId === loadRequestIdRef.current && requestLocation === locationRef.current) {
                     if (isAppending) {
                         setLoadMoreError(true);
                     } else {
@@ -241,7 +253,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                 if (reqId === loadRequestIdRef.current) setLoading(false);
             }
         },
-        [enabled, activeSpace?.id, activeSpace?.role, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, pageSize, nextCursor, nextSearchPage, showToast, localize]
+        [onDeletionReadStarted, onDeletionSnapshot, identityKey, onFilesLoaded, enabled, activeSpace?.id, activeSpace?.role, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, pageSize, nextCursor, nextSearchPage, showToast, localize]
     );
 
     // Derive total from accumulated files + has_more for UI progress badges.
@@ -281,11 +293,14 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                 // includes the folder itself as the leaf (with its real name),
                 // so we use it directly — no extra children lookup, and no
                 // intermittent fall-back to the raw id.
+                const requestLocation = locationRef.current;
                 getFolderParentPathApi(activeSpace.id, initialFolderId)
                     .then((parentPath) => {
+                        if (locationRef.current !== requestLocation) return;
                         setCurrentPath(parentPath);
                     })
                     .catch(() => {
+                        if (locationRef.current !== requestLocation) return;
                         setCurrentPath([{ id: initialFolderId, name: initialFolderId }]);
                     });
                 // Don't call loadFiles here — the currentFolderId change watcher effect will trigger it
@@ -300,7 +315,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             setReloadToken(t => t + 1);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps -- role availability is represented by readiness; role enrichment must not reset files
-    }, [isActiveSpaceReady, activeSpace?.id, initialFolderId]);
+    }, [isActiveSpaceReady, activeSpace?.id, initialFolderId, identityKey]);
 
     // Reload files when folder navigation, filters, or space (via reloadToken) change.
     // All state updates from the space effect are batched by React, so when this effect
@@ -329,6 +344,9 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         if (isSearching) return;
         const currentFiles = filesRef.current;
         if (currentFiles.length === 0) return;
+        const requestLocation = locationRef.current;
+        const requestId = loadRequestIdRef.current;
+        const observation = onDeletionReadStarted?.();
 
         try {
             const fileStatusNums = statusFilter.length > 0
@@ -347,8 +365,11 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                 file_status: fileStatusNums,
             });
 
+            if (requestLocation !== locationRef.current || requestId !== loadRequestIdRef.current) return;
             const updatesById = new Map<string, KnowledgeFile>();
             res.data.forEach(f => updatesById.set(String(f.id), f));
+            const observedFiles = mergeFilesById(res.data, filesRef.current).map(file => updatesById.get(String(file.id)) ?? file);
+            onDeletionSnapshot?.({ observation, spaceId: activeSpace.id, folderId: currentFolderId, files: observedFiles, projectedFiles: res.data, scopeDeletionStatus: res.scopeDeletionStatus });
 
             setFiles(prev => {
                 const knownIds = new Set(prev.map(f => String(f.id)));
@@ -366,7 +387,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         } catch {
             // Silent — polling failure must not toast.
         }
-    }, [enabled, activeSpace?.id, searchQuery, searchTagIds, statusFilter, sortBy, sortDirection, currentFolderId]);
+    }, [onDeletionReadStarted, onDeletionSnapshot, enabled, activeSpace?.id, searchQuery, searchTagIds, statusFilter, sortBy, sortDirection, currentFolderId]);
 
     const refreshLoadedStatusesRef = useRef(refreshLoadedStatuses);
     refreshLoadedStatusesRef.current = refreshLoadedStatuses;

@@ -1,3 +1,4 @@
+import { type FolderDeletionGuard } from "./useFolderDeletion";
 import { useCallback, useRef, useState } from "react";
 
 import {
@@ -34,6 +35,7 @@ type Localize = (key: string, options?: Record<string, unknown>) => string;
 type ShowToast = (toast: { message: string; severity: NotificationSeverity }) => void;
 
 interface UseFolderStageUploadOptions {
+    guardFolder?: FolderDeletionGuard;
     activeSpace: KnowledgeSpace | null;
     currentFolderId?: string;
     loadFiles: (page?: number) => Promise<void>;
@@ -47,7 +49,7 @@ interface UseFolderStageUploadOptions {
 export function useFolderStageUpload(options: UseFolderStageUploadOptions) {
     const {
         activeSpace, currentFolderId, loadFiles, localize, showToast,
-        setDuplicateFiles, isStorageBlocked, refreshQuota,
+        setDuplicateFiles, isStorageBlocked, refreshQuota, guardFolder,
     } = options;
     const [uploadingFolder, setUploadingFolder] = useState<KnowledgeFile | null>(null);
     const folderUploadInFlightRef = useRef(false);
@@ -57,7 +59,8 @@ export function useFolderStageUpload(options: UseFolderStageUploadOptions) {
         uploadOptions: { allowedExtensions: readonly string[]; maxSizeMB: number; limits?: UploadSizeLimits },
     ) => {
         if (!activeSpace || !fileList || fileList.length === 0 || folderUploadInFlightRef.current) return;
-        if (isStorageBlocked()) return;
+        if (await guardFolder?.(activeSpace.id, currentFolderId) || isStorageBlocked()) return;
+        if (folderUploadInFlightRef.current) return;
         folderUploadInFlightRef.current = true;
         let placeholderShown = false;
         try {
@@ -141,6 +144,7 @@ export function useFolderStageUpload(options: UseFolderStageUploadOptions) {
                 return;
             }
 
+            if (await guardFolder?.(activeSpace.id, currentFolderId)) return;
             const mutationResults = partitionUploadMutationResults(await registerFolderStagesWithRetry({
                 spaceId: activeSpace.id,
                 parentId: currentFolderId ? Number(currentFolderId) : null,
@@ -160,7 +164,7 @@ export function useFolderStageUpload(options: UseFolderStageUploadOptions) {
             folderUploadInFlightRef.current = false;
             if (placeholderShown) setUploadingFolder(null);
         }
-    }, [activeSpace, currentFolderId, isStorageBlocked, loadFiles, localize, refreshQuota, setDuplicateFiles, showToast]);
+    }, [activeSpace, currentFolderId, guardFolder, isStorageBlocked, loadFiles, localize, refreshQuota, setDuplicateFiles, showToast]);
 
     return { uploadingFolder, handleUploadFolder };
 }

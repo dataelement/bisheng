@@ -18,7 +18,7 @@ def _detail(resource_type: str) -> KnowledgeSpaceFileChangeDetailResp:
         resource_id=3,
         resource_name="quarterly.pdf",
         applicant_user_id=4,
-        status="pending",
+        status="queued",
     )
 
 

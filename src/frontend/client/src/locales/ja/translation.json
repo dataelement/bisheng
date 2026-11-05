@@ -1189,6 +1189,11 @@
     "refresh": "再読み込み"
   },
   "com_knowledge": {
+        "folder_delete_failed": "削除に失敗しました。更新してから再試行してください。",
+        "folder_delete_request_error": "削除リクエストで異常が発生しました。一覧を更新して結果を確認してください。",
+        "folder_deletion_unknown": "状態確認待ち",
+        "folder_deleting": "削除中",
+        "folder_deleting_blocked": "フォルダーを削除中です。しばらくしてから操作してください。",
     "add_new": "新規追加",
     "web_link": "Webリンク",
     "web_link_import_title": "Webリンクをインポート",

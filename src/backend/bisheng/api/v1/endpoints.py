@@ -89,6 +89,7 @@ def get_env():
     env.update(bisheng_settings.get_from_db("env") or {})
     env["pro"] = bisheng_settings.get_system_login_method().bisheng_pro
     env["dashboard_pro"] = bisheng_settings.get_system_login_method().dashboard_pro
+    env["capabilities"] = {**(env.get("capabilities") or {}), "folder_delete_status": True}
     env["version"] = __version__
     env["enable_etl4lm"] = image_parser_enabled
     env["multi_tenant_enabled"] = bisheng_settings.multi_tenant.enabled
@@ -116,10 +117,10 @@ def get_env():
 
 @router.get("/all")
 def get_all_langchain_types_legacy():
-    """兼容旧版平台：启动时请求 GET /api/v1/all（LangChain 节点类型注册表）。
+    """Serve the legacy startup registry endpoint for older platform clients.
 
-    v2.5+ 后端不再在单体中动态构建该字典；返回空对象以避免 SPA 404。
-    若画布/组件列表异常，请使用与当前后端版本一致的前端构建，或在此补全数据。
+    Since v2.5, the monolith no longer builds the LangChain node registry.
+    Return an empty object to keep the legacy client startup request working.
     """
     return resp_200({})
 
@@ -182,7 +183,7 @@ async def update_web_config(
 
 
 async def _upload_file(
-    file: UploadFile, object_name_prefix: str, file_supports: list[str] = None, bucket_name: str = None
+    file: UploadFile, object_name_prefix: str, file_supports: list[str] | None = None, bucket_name: str | None = None
 ) -> UploadFileResponse:
     if file.size == 0:
         raise UploadFileEmptyError()

@@ -1,3 +1,4 @@
+import { type FolderDeletionGuard, type FolderDeletionStateReader } from "../hooks/useFolderDeletion";
 import { useQuery } from "@tanstack/react-query";
 import { Outlined } from "bisheng-icons";
 import { Loader2 } from "lucide-react";
@@ -30,6 +31,8 @@ import { DynamicEllipsisName } from "../sidebar/DynamicEllipsisName";
 import { MoveToFolderTree, type FolderSelectPayload } from "./MoveToFolderTree";
 
 interface MoveToDialogProps {
+    guardFolder?: FolderDeletionGuard;
+    getDeletionState?: FolderDeletionStateReader;
     open: boolean;
     onOpenChange: (open: boolean) => void;
     /** Source space — selected by default and labelled "current". */
@@ -85,6 +88,8 @@ function findSpaceInCategories(categories: CategoryGroup[], spaceId: string | nu
 // ─── Space row (left tree, 1st level) ─────────────────────────────────────────
 
 interface SpaceRowProps {
+    guardFolder?: FolderDeletionGuard;
+    getDeletionState?: FolderDeletionStateReader;
     space: KnowledgeSpace;
     category: CategoryKey;
     isCurrent: boolean;
@@ -96,6 +101,8 @@ interface SpaceRowProps {
 }
 
 function SpaceRow({
+    guardFolder,
+    getDeletionState,
     space,
     category,
     isCurrent,
@@ -160,6 +167,8 @@ function SpaceRow({
             {/* Folder subtree — indent past the space row's chevron + icon (40px). */}
             {expanded && (
                 <MoveToFolderTree
+                    guardFolder={guardFolder}
+                    getDeletionState={getDeletionState}
                     knowledgeId={space.id}
                     selectedFolderId={selection.spaceId === space.id ? selection.folderId : null}
                     fileStatus={fileStatus}
@@ -174,6 +183,8 @@ function SpaceRow({
 // ─── Dialog ───────────────────────────────────────────────────────────────────
 
 export function MoveToDialog({
+    guardFolder,
+    getDeletionState,
     open,
     onOpenChange,
     currentSpaceId,
@@ -182,6 +193,9 @@ export function MoveToDialog({
     const localize = useLocalize();
     const [search, setSearch] = useState("");
     const [selection, setSelection] = useState<Selection>({ spaceId: null, folderId: null });
+    const selectionScopeRef = useRef(selection);
+    selectionScopeRef.current = selection;
+    const selectionRequestRef = useRef(0);
     const [expandedSpaces, setExpandedSpaces] = useState<Set<string>>(() => new Set());
     const [collapsedCategories, setCollapsedCategories] = useState<Set<CategoryKey>>(() => new Set());
 
@@ -303,20 +317,28 @@ export function MoveToDialog({
         setSelection({ spaceId: space.id, folderId: null });
     };
 
-    const handleSelectFolder = (space: KnowledgeSpace, folder: FolderSelectPayload) => {
+    const handleSelectFolder = async (space: KnowledgeSpace, folder: FolderSelectPayload) => {
+        const scope = selectionScopeRef.current;
+        const request = ++selectionRequestRef.current;
+        if (await guardFolder?.(space.id, folder.id) || selectionScopeRef.current !== scope || request !== selectionRequestRef.current) return;
         setSelection({ spaceId: space.id, folderId: folder.id, folderName: folder.name });
     };
 
     // Right-panel folder click drills into that folder (same space).
-    const handleEnterFolder = (folder: KnowledgeFile) => {
+    const handleEnterFolder = async (folder: KnowledgeFile) => {
+        const scope = selectionScopeRef.current;
+        const request = ++selectionRequestRef.current;
+        if (selection.spaceId && await guardFolder?.(selection.spaceId, folder.id)) return;
+        if (selectionScopeRef.current !== scope || request !== selectionRequestRef.current) return;
         setSelection((prev) => {
             if (!prev.spaceId) return prev;
             return { spaceId: prev.spaceId, folderId: folder.id, folderName: folder.name };
         });
     };
 
-    const handleConfirm = () => {
-        if (!selection.spaceId) return;
+    const handleConfirm = async () => {
+        const scope = selectionScopeRef.current;
+        if (!selection.spaceId || await guardFolder?.(selection.spaceId, selection.folderId) || selectionScopeRef.current !== scope) return;
         // Close the picker BEFORE running the move. executeMove shows its own
         // feedback (cross-space confirm, partial "move the rest" dialog, toasts);
         // if this Radix Dialog were still open it would aria-hide / disable those
@@ -393,6 +415,8 @@ export function MoveToDialog({
                                                     <div className="flex flex-col gap-0.5">
                                                         {cat.spaces.map((space) => (
                                                             <SpaceRow
+                                                                guardFolder={guardFolder}
+                                                                getDeletionState={getDeletionState}
                                                                 key={space.id}
                                                                 space={space}
                                                                 category={cat.key}

@@ -53,10 +53,14 @@ class FileChangeRequestUnitOfWork:
             [FileChangeRequestUowContext, list[ApprovalPostCommitCallback]],
             Awaitable[T],
         ],
+        *,
+        tracked: bool = False,
     ) -> FileChangeRequestUowResult[T]:
         effects: list[ApprovalPostCommitCallback] = []
         async with self.session_factory() as session:
-            async with session.begin():
+            from bisheng.knowledge.domain.services.knowledge_folder_deletion_service import delete_transaction
+
+            async with delete_transaction(session, tracked):
                 context = FileChangeRequestUowContext(
                     session=session,
                     requests=KnowledgeSpaceFileChangeRequestRepository(session),

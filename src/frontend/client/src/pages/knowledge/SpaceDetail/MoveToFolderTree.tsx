@@ -1,5 +1,7 @@
+import { FolderDeletingStatus } from "./FolderDeletingStatus";
+import { type FolderDeletionGuard, type FolderDeletionStateReader } from "../hooks/useFolderDeletion";
 import { Outlined } from "bisheng-icons";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { listKnowledgeFolders } from "~/api/knowledge";
 import { cn } from "~/utils";
@@ -15,6 +17,7 @@ interface TreeNode {
     /** undefined = not yet fetched; [] = fetched but empty. */
     children?: TreeNode[];
     loading?: boolean;
+    deletionState?: "running" | "unknown";
 }
 
 export interface FolderSelectPayload {
@@ -23,6 +26,8 @@ export interface FolderSelectPayload {
 }
 
 interface MoveToFolderTreeProps {
+    guardFolder?: FolderDeletionGuard;
+    getDeletionState?: FolderDeletionStateReader;
     knowledgeId: string | number;
     /** Highlight-only selection — never triggers a refetch (unlike the sidebar tree). */
     selectedFolderId?: string | null;
@@ -35,8 +40,8 @@ interface MoveToFolderTreeProps {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function mapToTree(nodes: { id: number; file_name: string }[]): TreeNode[] {
-    return nodes.map((n) => ({ id: n.id, name: n.file_name, expanded: false, children: undefined }));
+function mapToTree(nodes: { id: number; file_name: string; deletionStatus?: { state: "running" | "unknown" } | null }[]): TreeNode[] {
+    return nodes.map((n) => ({ id: n.id, name: n.file_name, deletionState: n.deletionStatus?.state, expanded: false, children: undefined }));
 }
 
 /** Immutably update a node anywhere in the tree by id. */
@@ -54,6 +59,7 @@ function updateNode(nodes: TreeNode[], targetId: number, updater: (n: TreeNode) 
 
 interface TreeNodeRowProps {
     node: TreeNode;
+    getNodeDeletionState: (id: number) => "running" | "unknown" | undefined;
     depth: number;
     baseIndent: number;
     selectedFolderId?: string | null;
@@ -61,7 +67,8 @@ interface TreeNodeRowProps {
     onSelect: (node: TreeNode) => void;
 }
 
-function TreeNodeRow({ node, depth, baseIndent, selectedFolderId, onExpand, onSelect }: TreeNodeRowProps) {
+function TreeNodeRow({ node, getNodeDeletionState, depth, baseIndent, selectedFolderId, onExpand, onSelect }: TreeNodeRowProps) {
+    const deletionState = getNodeDeletionState(node.id) ?? node.deletionState;
     const isSelected = selectedFolderId != null && selectedFolderId === String(node.id);
     const hasExpandedChildren = node.expanded && Array.isArray(node.children);
 
@@ -110,6 +117,7 @@ function TreeNodeRow({ node, depth, baseIndent, selectedFolderId, onExpand, onSe
                     name={node.name}
                     textClassName={cn("text-[12px] leading-5 text-text-1", isSelected && "font-semibold")}
                 />
+                {deletionState && <FolderDeletingStatus state={deletionState} />}
             </div>
 
             {node.expanded && Array.isArray(node.children) && node.children.length > 0 && (
@@ -118,6 +126,7 @@ function TreeNodeRow({ node, depth, baseIndent, selectedFolderId, onExpand, onSe
                         <TreeNodeRow
                             key={child.id}
                             node={child}
+                            getNodeDeletionState={getNodeDeletionState}
                             depth={depth + 1}
                             baseIndent={baseIndent}
                             selectedFolderId={selectedFolderId}
@@ -139,12 +148,16 @@ function TreeNodeRow({ node, depth, baseIndent, selectedFolderId, onExpand, onSe
  * the dialog navigates by clicking, so a reload-on-select spinner would flicker.
  */
 export function MoveToFolderTree({
+    guardFolder,
+    getDeletionState,
     knowledgeId,
     selectedFolderId,
     fileStatus,
     onSelectFolder,
     baseIndent,
 }: MoveToFolderTreeProps) {
+    const scopeRef = useRef({ id: knowledgeId, currentFolderId: selectedFolderId, epoch: 0 });
+    if (scopeRef.current.id !== knowledgeId || scopeRef.current.currentFolderId !== selectedFolderId) scopeRef.current = { id: knowledgeId, currentFolderId: selectedFolderId, epoch: scopeRef.current.epoch + 1 };
     const [roots, setRoots] = useState<TreeNode[]>([]);
     const [rootLoading, setRootLoading] = useState(false);
 
@@ -169,7 +182,9 @@ export function MoveToFolderTree({
     }, [knowledgeId, fileStatus]);
 
     const handleExpand = useCallback(
-        (node: TreeNode) => {
+        async (node: TreeNode) => {
+            const epoch = ++scopeRef.current.epoch;
+            if (await guardFolder?.(knowledgeId, String(node.id)) || epoch !== scopeRef.current.epoch) return;
             if (node.expanded) {
                 setRoots((prev) => updateNode(prev, node.id, (n) => ({ ...n, expanded: false })));
                 return;
@@ -196,12 +211,16 @@ export function MoveToFolderTree({
                     );
                 });
         },
-        [knowledgeId, fileStatus],
+        [knowledgeId, fileStatus, guardFolder],
     );
 
     const handleSelect = useCallback(
-        (node: TreeNode) => onSelectFolder({ id: String(node.id), name: node.name }),
-        [onSelectFolder],
+        async (node: TreeNode) => {
+            const epoch = ++scopeRef.current.epoch;
+            if (await guardFolder?.(knowledgeId, String(node.id)) || epoch !== scopeRef.current.epoch) return;
+            onSelectFolder({ id: String(node.id), name: node.name });
+        },
+        [onSelectFolder, guardFolder, knowledgeId],
     );
 
     if (rootLoading) {
@@ -220,6 +239,7 @@ export function MoveToFolderTree({
                 <TreeNodeRow
                     key={node.id}
                     node={node}
+                    getNodeDeletionState={(id) => getDeletionState?.(knowledgeId, String(id))}
                     depth={0}
                     baseIndent={baseIndent}
                     selectedFolderId={selectedFolderId}

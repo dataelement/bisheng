@@ -1,7 +1,7 @@
 import json
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, Query, Request
+from fastapi import APIRouter, Body, Depends, Path, Query, Request
 from loguru import logger
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
@@ -16,6 +16,8 @@ from bisheng.knowledge.api.dependencies import (
     get_knowledge_space_file_change_service,
     get_knowledge_space_service,
 )
+from bisheng.knowledge.domain.models.folder_deletion import public_metadata
+from bisheng.knowledge.domain.schemas.folder_deletion import FolderDeletionQuery, FolderReconcileRequest
 from bisheng.knowledge.domain.schemas.knowledge_space_file_change_schema import (
     FileBatchDeleteMutationResp,
     FileBatchRenameMutationResp,
@@ -47,6 +49,10 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
 )
 from bisheng.knowledge.domain.services.department_knowledge_space_service import (
     DepartmentKnowledgeSpaceService,
+)
+from bisheng.knowledge.domain.services.knowledge_folder_deletion_service import (
+    FolderCommitUncertain,
+    KnowledgeFolderDeletionService,
 )
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
     KnowledgeSpaceChatService,
@@ -134,6 +140,8 @@ def _resource_payload(resource: Any) -> dict | None:
         payload = resource.model_dump()
     else:
         raise TypeError("mutation resource must be a mapping or pydantic model")
+    if payload.get("user_metadata"):
+        payload["user_metadata"] = public_metadata(payload["user_metadata"])
     for forbidden_key in ("object_name", "storage_object_name", "tenant_id"):
         payload.pop(forbidden_key, None)
     return payload
@@ -170,6 +178,8 @@ def _resource_item_payload(item: dict, result) -> ResourceMutationItemResult:
         change_request_id=result.change_request_id,
         error_code=result.error_code,
         error_message=result.error_message,
+        operation_id=result.operation_id,
+        outcome_unknown=result.outcome_unknown,
     )
 
 
@@ -677,6 +687,26 @@ async def rename_folder(
     return resp_200(_single_mutation_payload(await change_service.request_change(command)))
 
 
+@router.post("/{space_id}/folder-deletions/status")
+async def folder_deletion_status(
+    space_id: int, req: FolderDeletionQuery, svc: KnowledgeSpaceService = Depends(get_knowledge_space_service)
+):
+    items = await KnowledgeFolderDeletionService(space_id).query(
+        svc, req.folder_ids, {item.folder_id: item.operation_id for item in req.known_operations}
+    )
+    return resp_200({"items": items})
+
+
+@router.post("/{space_id}/folder-deletions/{operation_id}/reconcile")
+async def reconcile_folder_deletion(
+    space_id: int,
+    operation_id: Annotated[str, Path(min_length=1, max_length=64)],
+    req: FolderReconcileRequest,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+):
+    return resp_200(await KnowledgeFolderDeletionService(space_id).reconcile(svc, req.folder_id, operation_id))
+
+
 @router.delete("/{space_id}/folders/{folder_id}")
 async def delete_folder(
     space_id: int,
@@ -690,7 +720,16 @@ async def delete_folder(
         resource_id=folder_id,
         resource_type="folder",
     )
-    return resp_200(_single_mutation_payload(await change_service.request_change(command)))
+    try:
+        result = await change_service.request_change(command)
+    except FolderCommitUncertain as exc:
+        logger.warning(
+            "Folder deletion outcome unknown space={} folder={} operation={}", space_id, folder_id, exc.operation_id
+        )
+        return ServerError.return_resp(
+            msg="Folder deletion result is unknown", data={"outcome_unknown": True, "operation_id": exc.operation_id}
+        )
+    return resp_200(_single_mutation_payload(result))
 
 
 @router.get("/{space_id}/folders/{folder_id}/parent")
