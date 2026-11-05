@@ -1,13 +1,29 @@
 // @ts-strict-ignore
 import { MessageStoreProvider as WorkflowMessageStoreProvider } from './messageStore';
 import type { ComponentProps } from 'react';
+import { TabsContext } from "@/contexts/tabsContext";
+import type { FlowVersionItem } from "@/types/flow";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
-import { useEffect,useMemo } from "react";
+import { useContext,useEffect,useMemo } from "react";
 import Chat from "./Chat";
 import { useMessageStore } from "./messageStore";
 
-function ChatPaneContent({ debug = false, autoRun = false, chatId, flow, wsUrl = '',version }: { debug?: boolean, autoRun?: boolean, chatId: string, flow: any, wsUrl?: string }) {
+interface ChatPaneProps {
+    debug?: boolean;
+    autoRun?: boolean;
+    chatId: string;
+    flow: any;
+    wsUrl?: string;
+    version?: FlowVersionItem;
+}
+
+function ChatPaneContent({ debug = false, autoRun = false, chatId, flow, wsUrl = '',version }: ChatPaneProps) {
     const { changeChatId } = useMessageStore()
+    const { version: selectedVersion } = useContext(TabsContext)
+    const executionHints = {
+        execution_mode: chatId.startsWith('test') ? 'preview' : 'saved',
+        version_id: (version ?? selectedVersion)?.id,
+    }
 
     useEffect(() => {
         changeChatId(chatId)
@@ -20,6 +36,7 @@ function ChatPaneContent({ debug = false, autoRun = false, chatId, flow, wsUrl =
             const { edges, nodes, viewport } = other
             return {
                 action: 'init_data',
+                ...executionHints,
                 chat_id: chatId.startsWith('test') ? undefined : chatId,
                 flow_id: flow.id,
                 data: {
@@ -85,6 +102,7 @@ function ChatPaneContent({ debug = false, autoRun = false, chatId, flow, wsUrl =
 
         return {
             action,
+            ...(action === 'init_data' ? executionHints : {}),
             chat_id: chatId.startsWith('test') ? undefined : chatId,
             flow_id: flow.id,
             data: flow
