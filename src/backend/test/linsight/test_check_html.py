@@ -226,3 +226,99 @@ def test_small_text_check_ignores_scaled_svg_labels():
     assert "字号过小" not in _topics(findings)
     # The xmlns URL is a namespace, not a fetch.
     assert hc.static_findings(html) == []
+
+
+# ---------------------------------------------------------------------------
+# paged layout: per-page overflow (F005)
+# ---------------------------------------------------------------------------
+
+
+def _deck(bodies: list[str], css: str = "", cls: str = "slide") -> str:
+    slides = "".join(f'<section class="{cls}"><h2>第{i}页标题</h2>{b}</section>' for i, b in enumerate(bodies, 1))
+    return GOOD.replace(
+        "</style>",
+        f".{cls.split()[0]}{{width:1280px;height:720px;overflow:hidden;box-sizing:border-box;padding:40px}}"
+        f"p{{font-size:24px;margin:0}}{css}</style>",
+    ).replace("<body>", f"<body>{slides}")
+
+
+_TALL = "<p>" + "一行内容<br>" * 40 + "</p>"
+
+
+def test_page_findings_lists_every_overflowing_page_and_says_the_rest_fit():
+    pages = [
+        {"dy": 0, "dx": 0, "title": "封面"},
+        {"dy": 96, "dx": 0, "title": "产能"},
+        {"dy": 1, "dx": 40, "title": ""},
+    ]
+    findings = hc.page_findings(pages)
+    errors = _errors(findings)
+    assert [f.detail for f in errors] == ["第 2 页「产能」内容纵向超出 96px。", "第 3 页内容横向超出 40px。"]
+    info = [f.detail for f in findings if f.level == hc.INFO]
+    assert info == [
+        "共 3 页，逐页测量 3 页，其中 2 页溢出（见上方 ERROR）。只修改这些页；未列出的页已经装得下，不要再改。"
+    ]
+
+
+def test_page_findings_skips_hidden_and_scrollable_pages():
+    findings = hc.page_findings([{"hidden": True}, {"scrollable": True}, {"dy": 0, "dx": 0, "title": "a"}])
+    assert _errors(findings) == []
+    (info,) = [f.detail for f in findings if f.level == hc.INFO]
+    assert "均未溢出" in info and "1 页处于隐藏状态" in info
+
+
+def test_page_findings_nothing_for_an_unpaged_document():
+    assert hc.page_findings([]) == []
+
+
+def test_info_lines_never_change_the_verdict():
+    report = hc.format_report("output/a.html", 10, [hc.Finding(hc.INFO, "分页测量", "共 3 页，均未溢出。")], None, None)
+    assert "说明：" in report and hc.PASS_VERDICT in report
+
+
+@chromium
+def test_render_flags_only_the_overflowing_slides():
+    html = _deck(["<p>短</p>", _TALL, "<p>短</p>", _TALL])
+    findings, _, unavailable = hc._render_findings(html)
+    assert unavailable is None
+    paged = [f.detail for f in _errors(findings) if f.topic == "分页溢出"]
+    assert len(paged) == 2
+    assert paged[0].startswith("第 2 页「第2页标题」内容纵向超出") and paged[1].startswith("第 4 页")
+
+
+@chromium
+def test_render_fitting_deck_reports_the_page_count_and_passes():
+    html = _deck(["<p>短</p>"] * 5)
+    findings, _, _ = hc._render_findings(html)
+    assert [f for f in _errors(findings) if f.topic == "分页溢出"] == []
+    assert any(f.level == hc.INFO and f.detail.startswith("共 5 页，逐页测量 5 页，均未溢出") for f in findings)
+
+
+@chromium
+def test_render_ignores_scrollable_and_hidden_pages():
+    html = _deck(
+        [_TALL, _TALL, "<p>短</p>"], css=".slide:nth-of-type(1){overflow:auto}.slide:nth-of-type(2){display:none}"
+    )
+    findings, _, _ = hc._render_findings(html)
+    assert [f for f in _errors(findings) if f.topic == "分页溢出"] == []
+    assert any(f.level == hc.INFO and "1 页处于隐藏状态" in f.detail for f in findings)
+
+
+@chromium
+def test_render_groups_variant_classes_and_data_slide():
+    html = (
+        _deck(["<p>短</p>", _TALL, "<p>短</p>"], cls="slide cover")
+        .replace('<section class="slide cover"><h2>第2页', '<section class="title-slide"><h2>第2页')
+        .replace('<section class="slide cover"><h2>第3页', "<section data-slide><h2>第3页")
+    )
+    html = html.replace("</style>", ".title-slide,[data-slide]{width:1280px;height:720px;overflow:hidden}</style>")
+    findings, _, _ = hc._render_findings(html)
+    assert [f.detail[:5] for f in _errors(findings) if f.topic == "分页溢出"] == ["第 2 页"]
+    assert any(f.level == hc.INFO and f.detail.startswith("共 3 页") for f in findings)
+
+
+@chromium
+def test_render_long_report_without_pages_is_unchanged():
+    html = GOOD.replace("</body>", _TALL + '<div class="page-header">页眉</div></body>')
+    findings, _, _ = hc._render_findings(html)
+    assert {"分页溢出", "分页测量"} & _topics(findings) == set()
