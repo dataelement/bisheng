@@ -207,3 +207,39 @@ async def test_old_self_committing_dao_caller_remains_compatible(store):
         assert session.get(Flow, "legacy").is_delete == 0
         versions = session.exec(sa.select(FlowVersion).where(FlowVersion.flow_id == "legacy")).all()
         assert len(versions) == 1 and versions[0][0].is_current == 1
+
+
+async def test_workflow_name_lookup_keeps_user_tenant_type_and_live_scope(store):
+    async_engine, _ = store
+    async with AsyncSession(async_engine) as session, session.begin():
+        session.add_all(
+            [
+                Flow(id="assistant", name="assistant-only", user_id=11, tenant_id=101, flow_type=5),
+                Flow(id="gone", name="deleted-only", user_id=11, tenant_id=101, is_delete=1),
+                Flow(id="other-user", name="other-user-only", user_id=12, tenant_id=101),
+            ]
+        )
+        await session.flush()
+        lookup = WorkflowVersionRepository.aget_root_by_name
+        assert (await lookup(session, 101, 11, "workflow")).id == "wf"
+        for tenant_id, user_id, name in (
+            (101, 11, "assistant-only"),
+            (101, 11, "deleted-only"),
+            (101, 11, "other-user-only"),
+            (101, 21, "other tenant"),
+            (202, 11, "workflow"),
+        ):
+            assert await lookup(session, tenant_id, user_id, name) is None
+
+
+async def test_version_name_lookup_keeps_root_tenant_and_live_scope(store):
+    async_engine, _ = store
+    async with AsyncSession(async_engine) as session, session.begin():
+        root = await WorkflowVersionRepository.alock_root(session, "wf", 101)
+        lookup = WorkflowVersionRepository.aget_version_by_name
+        assert (await lookup(session, root, "draft")).id == 2
+        assert await lookup(session, root, "deleted") is None
+        assert await lookup(session, root, "missing") is None
+        session.add(FlowVersion(flow_id="wf", name="foreign-tenant", tenant_id=202))
+        await session.flush()
+        assert await lookup(session, root, "foreign-tenant") is None
