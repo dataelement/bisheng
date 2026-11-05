@@ -100,7 +100,7 @@ async def test_legacy_evidence_cannot_be_borrowed_or_rebound(legacy_context, cas
             await session.execute(
                 update(BusinessResourceReference)
                 .where(BusinessResourceReference.tenant_id == 1)
-                .values(legacy_invalid_reason=None)
+                .values(target_tenant_id=1, legacy_invalid_reason=None, legacy_run_id=None, legacy_evidence_key=None)
             )
     async with AsyncSession(ctx.engine) as session:
         scope = await ctx.verifier.aissue_scope(session, scopes.REQUEST, ctx.identity)
