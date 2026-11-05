@@ -356,4 +356,3 @@ async def seed_initial_permission_catalog(
         model_id,
     )
     return True
-
