@@ -46,6 +46,7 @@ beforeEach(() => {
 
 it('hands the draft back on confirm with sub-departments included by default', async () => {
   const onChange = renderFilter()
+  expect(screen.getByRole('button', { name: 'log.org.placeholder' })).toHaveClass('h-8')
   await openPanel()
   fireEvent.click(screen.getByRole('checkbox', { name: /Sales/ }))
   expect(onChange).not.toHaveBeenCalled()

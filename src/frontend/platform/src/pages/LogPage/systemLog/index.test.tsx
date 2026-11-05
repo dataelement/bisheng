@@ -35,6 +35,7 @@ const renderPage = () => render(
 
 it('preserves structured audit fields, valid filter options, date bounds and reset', async () => {
     renderPage()
+    expect(screen.getAllByRole('button')[0]).toHaveAccessibleName('log.org.placeholder')
     expect(screen.getByText('tenant-1')).toBeVisible()
     expect(screen.getByText('log.eventTypeEnum.tenantMount')).toBeVisible()
     fireEvent.keyDown(screen.getByRole('combobox', { name: 'log.selectUserGroup' }), { key: 'ArrowDown' })

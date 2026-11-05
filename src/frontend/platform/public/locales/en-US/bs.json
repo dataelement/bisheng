@@ -1617,6 +1617,8 @@
     "systemOperations": "System Operations",
     "auditManagement": "Audit Management",
     "searchButton": "Search",
+    "emptyTitle": "No matching records",
+    "emptyHint": "Adjust the filters and search again",
     "resetButton": "Reset",
     "auditId": "Audit ID",
     "username": "Username",

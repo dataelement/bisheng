@@ -1600,6 +1600,8 @@
     "systemOperations": "系统操作",
     "auditManagement": "审计管理",
     "searchButton": "查询",
+    "emptyTitle": "没有符合条件的记录",
+    "emptyHint": "调整筛选条件后再查询",
     "resetButton": "重置",
     "auditId": "审计ID",
     "username": "用户名",

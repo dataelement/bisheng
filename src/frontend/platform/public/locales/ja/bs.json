@@ -1600,6 +1600,8 @@
     "systemOperations": "システム操作",
     "auditManagement": "監査管理",
     "searchButton": "検索",
+    "emptyTitle": "条件に一致する記録はありません",
+    "emptyHint": "絞り込み条件を変えて、もう一度検索してください",
     "resetButton": "リセット",
     "auditId": "監査ID",
     "username": "ユーザー名",
