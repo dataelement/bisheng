@@ -180,7 +180,7 @@ class FlowService(BaseService):
 
             async def lock_root(sql):
                 locked = await WorkflowVersionRepository.alock_root(sql, root.id, user.tenant_id)
-                version = await WorkflowVersionRepository.aget_version(sql, locked, version_id)
+                version = await WorkflowVersionRepository.aget_version(sql, locked, version_id, for_update=True)
                 if cls._workflow_version_snapshot(version) != candidate:
                     raise KnowledgeOperationPlanConflictError(reason="workflow_version_changed")
                 if version.is_current == 1:
@@ -194,7 +194,7 @@ class FlowService(BaseService):
                 lock_source_root=lock_root,
                 effective=False,
             )
-            current = await WorkflowVersionRepository.aget_version(session, root, version_id)
+            current = await WorkflowVersionRepository.aget_version(session, root, version_id, for_update=True)
             cls._assert_workflow_source_configuration(current, prepared)
             await WorkflowVersionRepository.asoft_delete_version(session, root, version_id)
             await runtime.aapply_source_bindings(session, prepared)
@@ -253,7 +253,7 @@ class FlowService(BaseService):
                 # Stopping a business does not change its saved slots and must
                 # remain possible when targets are deleted or being deleted.
                 root = await WorkflowVersionRepository.alock_root(session, flow_id, user.tenant_id)
-                await WorkflowVersionRepository.aget_version(session, root, version_id)
+                await WorkflowVersionRepository.aget_version(session, root, version_id, for_update=True)
                 root.status = status
             else:
                 candidate = cls._workflow_version_snapshot(version)
@@ -262,7 +262,7 @@ class FlowService(BaseService):
 
                 async def lock_root(sql):
                     locked = await WorkflowVersionRepository.alock_root(sql, flow_id, user.tenant_id)
-                    current = await WorkflowVersionRepository.aget_version(sql, locked, version_id)
+                    current = await WorkflowVersionRepository.aget_version(sql, locked, version_id, for_update=True)
                     if cls._workflow_version_snapshot(current) != candidate:
                         raise KnowledgeOperationPlanConflictError(reason="workflow_version_changed")
                     if status is None and locked.status == FlowStatus.ONLINE.value:
@@ -275,7 +275,7 @@ class FlowService(BaseService):
                     extractor_version=WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
                     lock_source_root=lock_root,
                 )
-                version = await WorkflowVersionRepository.aget_version(session, root, version_id)
+                version = await WorkflowVersionRepository.aget_version(session, root, version_id, for_update=True)
                 cls._assert_workflow_source_configuration(version, prepared)
                 await runtime.arequire_source_valid(session, source, references=references)
                 if validate_version is not None:
@@ -321,7 +321,7 @@ class FlowService(BaseService):
                 locked = await WorkflowVersionRepository.alock_root(sql, flow_id, user.tenant_id)
                 if any(
                     candidate.id != version.id and candidate.name == version.name
-                    for candidate in await WorkflowVersionRepository.alist_versions(sql, locked)
+                    for candidate in await WorkflowVersionRepository.alist_versions(sql, locked, for_update=True)
                 ):
                     raise VersionNameExistsError()
 
@@ -379,7 +379,7 @@ class FlowService(BaseService):
             async def lock_root(sql):
                 locked = await WorkflowVersionRepository.alock_root(sql, root.id, user.tenant_id)
                 locked_version = await WorkflowVersionRepository.aget_version(
-                    sql, locked, version_id, include_deleted=True
+                    sql, locked, version_id, include_deleted=True, for_update=True
                 )
                 if cls._workflow_version_snapshot(locked_version) != candidate:
                     raise KnowledgeOperationPlanConflictError(reason="workflow_version_changed")
@@ -397,7 +397,9 @@ class FlowService(BaseService):
                 extractor_version=WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
                 lock_source_root=lock_root,
             )
-            current = await WorkflowVersionRepository.aget_version(session, root, version_id, include_deleted=True)
+            current = await WorkflowVersionRepository.aget_version(
+                session, root, version_id, include_deleted=True, for_update=True
+            )
             cls._assert_workflow_source_configuration(current, prepared)
             version = await WorkflowVersionRepository.aupdate_version(session, root, next_version)
             await runtime.aapply_source_bindings(session, prepared)

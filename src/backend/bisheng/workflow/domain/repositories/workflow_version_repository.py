@@ -77,7 +77,13 @@ class WorkflowVersionRepository:
 
     @classmethod
     async def aget_version(
-        cls, session: AsyncSession, root: Flow, version_id: int, *, include_deleted: bool = False
+        cls,
+        session: AsyncSession,
+        root: Flow,
+        version_id: int,
+        *,
+        include_deleted: bool = False,
+        for_update: bool = False,
     ) -> FlowVersion:
         cls._root(session, root)
         query = select(FlowVersion).where(
@@ -87,6 +93,8 @@ class WorkflowVersionRepository:
         )
         if not include_deleted:
             query = query.where(FlowVersion.is_delete == 0)
+        if for_update:
+            query = query.with_for_update()
         version = await session.scalar(query.execution_options(populate_existing=True))
         if version is None:
             raise NotFoundError()
@@ -94,12 +102,14 @@ class WorkflowVersionRepository:
 
     @classmethod
     async def alist_versions(
-        cls, session: AsyncSession, root: Flow, *, include_deleted: bool = False
+        cls, session: AsyncSession, root: Flow, *, include_deleted: bool = False, for_update: bool = False
     ) -> tuple[FlowVersion, ...]:
         cls._root(session, root)
         query = select(FlowVersion).where(FlowVersion.flow_id == root.id, FlowVersion.tenant_id == root.tenant_id)
         if not include_deleted:
             query = query.where(FlowVersion.is_delete == 0)
+        if for_update:
+            query = query.with_for_update()
         result = await session.scalars(query.order_by(FlowVersion.id).execution_options(populate_existing=True))
         return tuple(result)
 
@@ -159,7 +169,7 @@ class WorkflowVersionRepository:
         # Snapshot detached/request changes before populate_existing reloads
         # the tracked SQL row. Only the established mutable fields are copied.
         changes = {key: deepcopy(getattr(version, key)) for key in ("name", "description", "data", "is_delete")}
-        current = await cls.aget_version(session, root, version.id, include_deleted=True)
+        current = await cls.aget_version(session, root, version.id, include_deleted=True, for_update=True)
         for key, value in changes.items():
             setattr(current, key, value)
         if current.is_current == 1:
@@ -169,8 +179,8 @@ class WorkflowVersionRepository:
 
     @classmethod
     async def aswitch_current(cls, session: AsyncSession, root: Flow, version_id: int) -> FlowVersion:
-        selected = await cls.aget_version(session, root, version_id)
-        for version in await cls.alist_versions(session, root, include_deleted=True):
+        selected = await cls.aget_version(session, root, version_id, for_update=True)
+        for version in await cls.alist_versions(session, root, include_deleted=True, for_update=True):
             version.is_current = int(version.id == selected.id)
         root.data = deepcopy(selected.data)
         await session.flush()
@@ -178,7 +188,7 @@ class WorkflowVersionRepository:
 
     @classmethod
     async def asoft_delete_version(cls, session: AsyncSession, root: Flow, version_id: int) -> FlowVersion:
-        version = await cls.aget_version(session, root, version_id)
+        version = await cls.aget_version(session, root, version_id, for_update=True)
         if version.is_current == 1:
             raise CurVersionDelError()
         version.is_delete = 1
@@ -187,7 +197,7 @@ class WorkflowVersionRepository:
 
     @classmethod
     async def asoft_delete_workflow(cls, session: AsyncSession, root: Flow) -> tuple[FlowVersion, ...]:
-        versions = await cls.alist_versions(session, root, include_deleted=True)
+        versions = await cls.alist_versions(session, root, include_deleted=True, for_update=True)
         for version in versions:
             version.is_delete = 1
         root.is_delete = 1
