@@ -217,6 +217,34 @@ async def test_global_async_guard_uses_async_port_only():
     assert result.coverage_epoch == 3
 
 
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"source_types": tuple(SourceType)[:-1]},
+        {"verified_tenant_ids": ()},
+        {"tenant_inventory_hash": "f" * 64},
+        {"coverage_epoch": 0},
+        {"ready": False},
+        {"ready": 1},
+    ],
+)
+def test_global_port_cannot_claim_readiness_without_complete_evidence(changes):
+    class BrokenPort:
+        def get_global_status(self, writer_contract_version):
+            values = {
+                "ready": True,
+                "writer_contract_version": writer_contract_version,
+                "source_types": tuple(SourceType),
+                "verified_tenant_ids": (101, 202),
+                "tenant_inventory_hash": tenant_inventory_digest((101, 202)),
+                "coverage_epoch": 3,
+            }
+            return GlobalCoverageStatus(**(values | changes))
+
+    with pytest.raises(ReferenceCoverageNotReadyError):
+        CoverageRepository(LedgerPort(), global_port=BrokenPort()).require_global_ready()
+
+
 def test_empty_tenant_initializer_must_be_injected_and_keep_same_transaction(engine):
     class EmptyTenantInitializer:
         def initialize_empty_tenant_coverage(self, session, tenant_id, writer_contract_version):
