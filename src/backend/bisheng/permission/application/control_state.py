@@ -15,6 +15,7 @@ from bisheng.common.errcode.permission import (
 )
 from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
 from bisheng.core.database import get_async_db_session
+from bisheng.permission.application.catalog_api import SqlCatalogState
 from bisheng.permission.application.sql_runtime import (
     stable_assignee_id,
     stable_grant_key,
@@ -36,6 +37,8 @@ from bisheng.permission.domain.schemas import (
     VerifiedPermissionTarget,
     VisibleSourceProjectionDTO,
 )
+from bisheng.permission.domain.services.catalog_policy import derive_action_release
+from bisheng.permission.domain.services.catalog_service import _checksum as canonical_catalog_checksum
 from bisheng.permission.domain.services.grant_service import (
     GrantMutationContext,
 )
@@ -44,6 +47,7 @@ from bisheng.permission.domain.services.grant_source_service import (
     GrantSnapshot,
     GrantSourceRecord,
     GrantSourceService,
+    model_snapshot_for_target,
 )
 from bisheng.permission.domain.services.mode_service import (
     ModeContext,
@@ -80,6 +84,17 @@ class RuntimeCatalogSnapshot:
     model_id: str
     model_checksum: str
     models: tuple[RuntimeModelSnapshot, ...]
+    action_resource_scopes: tuple[tuple[str, tuple[str, ...]], ...] = ()
+
+    def model_for_target(self, model: GrantModelSnapshot, *, resource_type: str) -> GrantModelSnapshot:
+        """Use trusted Catalog scopes for every Grant/roster target snapshot."""
+
+        scopes = dict(self.action_resource_scopes)
+        return model_snapshot_for_target(
+            model,
+            resource_type=resource_type,
+            applicable_action_codes=tuple(code for code in model.action_codes if resource_type in scopes.get(code, ())),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,57 +137,89 @@ class SqlPermissionControlState:
             )
             if authorization_release is None or authorization_release.status != "ACTIVE":
                 raise PermissionPublishNotReadyError(msg="CURRENT Catalog authorization model is not active")
-            model_rows = list(
-                (
-                    await session.execute(
-                        select(PermissionModel)
-                        .where(PermissionModel.catalog_release_id == release.id)
-                        .order_by(PermissionModel.model_key)
-                    )
-                )
-                .scalars()
-                .all()
-            )
-            model_ids = [int(row.id) for row in model_rows if row.id is not None]
-            action_pairs = (
-                list(
+            try:
+                action_release = derive_action_release(await SqlCatalogState._load_actions(session, int(release.id)))
+                model_release = await SqlCatalogState._load_models(session, int(release.id), action_release)
+                payload = {"actions": action_release.checksum, "models": model_release.checksum}
+                if release.predecessor_id is not None:
+                    payload.update(predecessor_release_id=release.predecessor_id, release_key=release.release_key)
+                if model_release.blockers or canonical_catalog_checksum(payload) != release.checksum:
+                    raise ValueError("CURRENT Catalog payload does not match its publication checksum")
+                model_rows = list(
                     (
                         await session.execute(
-                            select(
-                                PermissionModelAction.model_id,
-                                PermissionAction.code,
-                            )
-                            .join(
-                                PermissionAction,
-                                PermissionAction.id == PermissionModelAction.action_id,
-                            )
-                            .where(
-                                col(PermissionModelAction.model_id).in_(model_ids),
-                                PermissionAction.active == 1,
-                            )
+                            select(PermissionModel).where(PermissionModel.catalog_release_id == release.id)
                         )
-                    ).all()
+                    )
+                    .scalars()
+                    .all()
                 )
-                if model_ids
-                else []
-            )
-        actions: dict[int, list[str]] = {}
-        for model_id, action_code in action_pairs:
-            actions.setdefault(int(model_id), []).append(str(action_code))
+                canonical = {model.model_key: model for model in model_release.models}
+                if len(model_rows) != len(canonical) or {row.model_key for row in model_rows} != set(canonical):
+                    raise ValueError("CURRENT Catalog model rows are incomplete")
+                model_ids = [int(row.id) for row in model_rows]
+                selected_rows = (
+                    list(
+                        (
+                            await session.execute(
+                                select(
+                                    PermissionModelAction.model_id,
+                                    PermissionAction.code,
+                                    PermissionAction.catalog_release_id,
+                                )
+                                .select_from(PermissionModelAction)
+                                .outerjoin(PermissionAction, PermissionAction.id == PermissionModelAction.action_id)
+                                .where(col(PermissionModelAction.model_id).in_(model_ids))
+                            )
+                        ).all()
+                    )
+                    if model_ids
+                    else []
+                )
+                selected: dict[int, list[str]] = {}
+                for model_id, code, action_release_id in selected_rows:
+                    if code is None or action_release_id != release.id:
+                        raise ValueError("CURRENT model references an action outside its release")
+                    selected.setdefault(int(model_id), []).append(code)
+                fields = (
+                    "name",
+                    "kind",
+                    "config_scope",
+                    "derived_level",
+                    "active",
+                    "allow_same_level",
+                    "visibility_level",
+                )
+                for row in model_rows:
+                    expected = canonical[row.model_key]
+                    if (
+                        any(getattr(row, field) != getattr(expected, field) for field in fields)
+                        or row.normalized_name != expected.name.casefold()
+                        or tuple(sorted(row.visibility_only_resource_types or ()))
+                        != expected.visibility_only_resource_types
+                        or tuple(sorted(selected.get(int(row.id), ()))) != tuple(sorted(expected.selected_action_codes))
+                    ):
+                        raise ValueError("CURRENT stored model differs from the canonical derivation")
+            except (ValueError, TypeError) as exc:
+                raise PermissionPublishNotReadyError(
+                    msg="CURRENT Catalog SQL contents are incomplete or inconsistent", exception=exc
+                ) from exc
         models = tuple(
             RuntimeModelSnapshot(
                 snapshot=GrantModelSnapshot(
-                    model_key=row.model_key,
-                    active=bool(row.active),
-                    action_codes=tuple(sorted(actions.get(int(row.id or 0), ()))),
-                    derived_level=row.derived_level,
-                    allow_same_level=bool(row.allow_same_level),
+                    model_key=model.model_key,
+                    active=model.active,
+                    action_codes=model.action_codes,
+                    derived_level=model.derived_level,
+                    allow_same_level=model.allow_same_level,
+                    visibility_only_resource_types=model.visibility_only_resource_types,
+                    visibility_level=model.visibility_level,
                 ),
-                name=row.name,
-                kind=row.kind,
+                name=model.name,
+                kind=model.kind,
                 version=release.version,
             )
-            for row in model_rows
+            for model in model_release.models
         )
         return RuntimeCatalogSnapshot(
             release_id=int(release.id),
@@ -183,6 +230,11 @@ class SqlPermissionControlState:
             model_id=authorization_release.model_id,
             model_checksum=authorization_release.model_checksum,
             models=models,
+            action_resource_scopes=tuple(
+                (action.code, tuple(sorted(action.resource_types)))
+                for action in action_release.actions
+                if action.active and action.level is not None
+            ),
         )
 
     async def mode_for_target(

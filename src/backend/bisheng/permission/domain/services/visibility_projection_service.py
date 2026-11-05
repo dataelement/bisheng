@@ -13,6 +13,7 @@ from bisheng.permission.domain.schemas import VisibleSourceProjectionDTO
 from bisheng.permission.domain.services.grant_source_service import (
     GrantSnapshot,
     GrantSourceRecord,
+    is_visibility_only_model,
 )
 from bisheng.permission.domain.services.projection_plan import ProjectionTupleDelta
 
@@ -99,6 +100,14 @@ class VisibilityProjectionCompiler:
             raise ValueError("visibility projection cannot mix tenants")
         if any(source.tenant_id != tenant_id for source in existing_sources):
             raise ValueError("visibility projection cannot mix existing tenants")
+        if any(
+            grant.active
+            and any(source.active for source in grant.sources)
+            and not grant.model.action_codes
+            and not is_visibility_only_model(grant.model, grant.resource_type)
+            for grant in grants
+        ):
+            raise ValueError("visibility projection requires a valid permission model")
 
         desired = tuple(
             sorted(
