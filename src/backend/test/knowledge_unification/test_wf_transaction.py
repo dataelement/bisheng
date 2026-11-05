@@ -4,6 +4,7 @@
 MySQL/DM8 locking; lock statements are also inspected using MySQL compilation.
 """
 
+import re
 from contextlib import contextmanager
 
 import pytest
@@ -14,7 +15,15 @@ from sqlmodel import Session
 
 from bisheng.common.errcode.flow import CurVersionDelError
 from bisheng.common.errcode.http_error import NotFoundError
-from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
+from bisheng.core.context.tenant import (
+    bypass_tenant_filter,
+    current_tenant_id,
+    set_current_tenant_id,
+    set_visible_tenant_ids,
+    visible_tenant_ids,
+)
+from bisheng.core.database import tenant_filter
 from bisheng.database.models import flow as flow_module
 from bisheng.database.models.flow import Flow, FlowDao, FlowType
 from bisheng.database.models.flow_version import FlowVersion
@@ -36,6 +45,11 @@ def tenant():
 
 @pytest.fixture
 async def store(tmp_path, monkeypatch):
+    names = tenant_filter._tenant_aware_tables | {Flow.__tablename__, FlowVersion.__tablename__}
+    monkeypatch.setattr(tenant_filter, "_force_import_all_models", lambda: None)
+    monkeypatch.setattr(tenant_filter, "_discover_tenant_aware_tables", lambda: names)
+    monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", names)
+    tenant_filter.register_tenant_filter_events()
     path = tmp_path / "workflow.db"
     sync_engine = sa.create_engine(f"sqlite:///{path}")
     metadata = sa.MetaData()
@@ -164,6 +178,13 @@ async def test_switch_current_keeps_previous_and_draft_rows_and_configuration(st
 
 async def test_all_version_mutations_use_the_same_real_root_lock(store, monkeypatch):
     async_engine, _ = store
+    injected = []
+
+    def actual_sql(connection, cursor, statement, parameters, context, executemany):
+        if re.search(r"\bFROM flow\b", statement):
+            injected.append((statement, parameters))
+
+    sa.event.listen(async_engine.sync_engine, "before_cursor_execute", actual_sql)
     async with AsyncSession(async_engine, expire_on_commit=False) as session, session.begin():
         statements = []
         execute = session.execute
@@ -180,8 +201,14 @@ async def test_all_version_mutations_use_the_same_real_root_lock(store, monkeypa
             root = await WorkflowVersionRepository.alock_root(session, "wf", 101)
             await WorkflowVersionRepository.aget_version(session, root, version_id)
         assert len(statements) == 2
-        assert all("flow.id = 'wf'" in statement and "flow.tenant_id = 101" in statement for statement in statements)
+        assert all("flow.id = 'wf'" in statement for statement in statements)
+        # C3 adds the tenant predicate at execution, not in this Repository's
+        # authored SELECT. Lock identity and final SQL isolation are both kept.
+        assert all("flow.tenant_id =" not in statement for statement in statements)
         assert all("FOR UPDATE" in statement for statement in statements)
+    sa.event.remove(async_engine.sync_engine, "before_cursor_execute", actual_sql)
+    assert len(injected) == 2
+    assert all("flow.tenant_id = ?" in statement and 101 in parameters for statement, parameters in injected)
 
 
 async def test_root_and_version_reads_reject_cross_tenant_or_deleted_identity(store):
@@ -273,3 +300,96 @@ async def test_version_and_version_list_support_explicit_current_locking_reads(s
             True,
         ]
         assert all("FOR UPDATE" in str(statement.compile(dialect=mysql.dialect())) for statement in statements[-2:])
+
+
+async def test_all_repository_selects_delegate_tenant_isolation_to_real_listener(store, monkeypatch):
+    async_engine, _ = store
+    authored, executed = [], []
+    token = set_visible_tenant_ids(frozenset({101, 202}))
+
+    def actual_sql(connection, cursor, statement, parameters, context, executemany):
+        if re.search(r"\bFROM (flow|flowversion)\b", statement):
+            executed.append((statement, parameters))
+
+    sa.event.listen(async_engine.sync_engine, "before_cursor_execute", actual_sql)
+    try:
+        async with AsyncSession(async_engine) as session:
+            scalar, scalars, execute = session.scalar, session.scalars, session.execute
+
+            async def capture_scalar(statement, *args, **kwargs):
+                authored.append(str(statement.whereclause))
+                return await scalar(statement, *args, **kwargs)
+
+            async def capture_scalars(statement, *args, **kwargs):
+                authored.append(str(statement.whereclause))
+                return await scalars(statement, *args, **kwargs)
+
+            async def capture_execute(statement, *args, **kwargs):
+                authored.append(str(statement.whereclause))
+                return await execute(statement, *args, **kwargs)
+
+            monkeypatch.setattr(session, "scalar", capture_scalar)
+            monkeypatch.setattr(session, "scalars", capture_scalars)
+            monkeypatch.setattr(session, "execute", capture_execute)
+            root = await WorkflowVersionRepository.aget_root(session, "wf", 101)
+            assert await WorkflowVersionRepository.aget_root_by_name(session, 101, 11, "workflow") is root
+            assert await WorkflowVersionRepository.alock_root(session, "wf", 101) is root
+            assert (await WorkflowVersionRepository.aget_version(session, root, 1)).id == 1
+            assert [row.id for row in await WorkflowVersionRepository.alist_versions(session, root)] == [1, 2]
+            assert (await WorkflowVersionRepository.aget_version_by_name(session, root, "draft")).id == 2
+            with pytest.raises(NotFoundError):
+                await WorkflowVersionRepository.aget_root(session, "other", 101)
+            assert authored and all("tenant_id" not in clause for clause in authored)
+        assert executed and all(re.search(r"\b(?:flow|flowversion)\.tenant_id = \?", sql) for sql, _ in executed)
+        assert all(101 in parameters and 202 not in parameters for _, parameters in executed)
+    finally:
+        sa.event.remove(async_engine.sync_engine, "before_cursor_execute", actual_sql)
+        visible_tenant_ids.reset(token)
+
+
+@pytest.mark.parametrize("operation", ["root", "lock", "name", "version", "versions", "version_name", "create"])
+async def test_repository_does_not_accept_a_tenant_bypass_for_workflow_operations(store, operation):
+    async_engine, sync_engine = store
+    before = snapshot(sync_engine)
+    async with AsyncSession(async_engine) as session:
+        root = await WorkflowVersionRepository.aget_root(session, "wf", 101)
+        with bypass_tenant_filter(), pytest.raises(ResourceReferenceInvalidError):
+            if operation == "root":
+                await WorkflowVersionRepository.aget_root(session, "wf", 101)
+            elif operation == "lock":
+                await WorkflowVersionRepository.alock_root(session, "wf", 101)
+            elif operation == "name":
+                await WorkflowVersionRepository.aget_root_by_name(session, 101, 11, "workflow")
+            elif operation == "version":
+                await WorkflowVersionRepository.aget_version(session, root, 1)
+            elif operation == "versions":
+                await WorkflowVersionRepository.alist_versions(session, root)
+            elif operation == "version_name":
+                await WorkflowVersionRepository.aget_version_by_name(session, root, "draft")
+            else:
+                await WorkflowVersionRepository.acreate_workflow(
+                    session, Flow(id="bypass-new", name="bypass", user_id=11, tenant_id=101)
+                )
+    assert snapshot(sync_engine) == before
+
+
+@pytest.mark.parametrize("supplied_tenant", [101, 202])
+async def test_repository_requires_context_and_refuses_a_different_explicit_pin(store, supplied_tenant):
+    async_engine, _ = store
+    token = current_tenant_id.set(None if supplied_tenant == 101 else 101)
+    try:
+        async with AsyncSession(async_engine) as session:
+            with pytest.raises(ResourceReferenceInvalidError):
+                await WorkflowVersionRepository.aget_root(session, "wf", supplied_tenant)
+    finally:
+        current_tenant_id.reset(token)
+
+
+async def test_tracked_root_from_a_different_owner_cannot_drive_version_queries(store):
+    async_engine, _ = store
+    async with AsyncSession(async_engine) as session:
+        with bypass_tenant_filter():
+            foreign = await session.get(Flow, "other")
+        assert foreign.tenant_id == 202
+        with pytest.raises(ResourceReferenceInvalidError):
+            await WorkflowVersionRepository.alist_versions(session, foreign)
