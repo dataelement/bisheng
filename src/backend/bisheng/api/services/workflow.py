@@ -45,6 +45,7 @@ from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.permission.domain.services.catalog_policy import ACTION_RESOURCE_SCOPES
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
+from bisheng.workflow.application.execution_admission import prepare_node_preview
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.common.node import BaseNodeData, NodeType
 from bisheng.workflow.graph.graph_state import GraphState
@@ -1154,7 +1155,9 @@ class WorkFlowService(BaseService):
             action="edit",
         )
 
-        node_data = BaseNodeData(**node_data.get("data", {}))
+        prepared = await prepare_node_preview(login_user, workflow_id, node_data, node_input)
+        node_input = prepared.node_input
+        node_data = BaseNodeData(**prepared.node_data.get("data", {}))
 
         def _run_node():
             # Nodes are sync and some reach async services through run_async_safe
