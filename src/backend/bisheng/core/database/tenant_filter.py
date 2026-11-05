@@ -89,6 +89,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.knowledge.domain.models.knowledge_space_delete_job",
     "bisheng.knowledge.domain.models.knowledge_processing_job",
     "bisheng.knowledge.domain.models.knowledge_processing_item",
+    "bisheng.knowledge.domain.models.knowledge_processing_retry",
     "bisheng.knowledge.domain.models.knowledge_operation_plan",
     "bisheng.knowledge.domain.models.knowledge_unification_run",
     "bisheng.resource_reference.domain.models.business_resource_reference",
