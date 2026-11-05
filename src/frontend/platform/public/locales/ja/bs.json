@@ -2640,6 +2640,7 @@
     "emptyUsers": "一致するユーザーが見つかりません。名前または ID を確認してください",
     "emptySubjects": "権限を付与できる対象が見つかりません。名前または ID を確認してください",
     "userId": "従業員 ID",
+    "organization": "所属組織",
     "departmentId": "部署 ID",
     "user_groupId": "ユーザーグループ ID",
     "loadMore": "さらに読み込む",

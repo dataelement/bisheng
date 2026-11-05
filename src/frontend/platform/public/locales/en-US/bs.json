@@ -2695,6 +2695,7 @@
     "emptyUsers": "No matching users. Check the name or ID.",
     "emptySubjects": "No grantable subjects found. Check the name or ID.",
     "userId": "Personnel ID",
+    "organization": "Organization",
     "departmentId": "Department ID",
     "user_groupId": "User group ID",
     "loadMore": "Load more",

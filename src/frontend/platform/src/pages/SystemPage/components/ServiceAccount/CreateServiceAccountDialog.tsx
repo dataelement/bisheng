@@ -113,6 +113,7 @@ export function CreateServiceAccountDialog({
               value={owners}
               onChange={setOwners}
               multiple={false}
+              showIdentityDetails
               placeholder={t(
                 "openApiManagement.serviceAccount.ownerPlaceholder",
               )}

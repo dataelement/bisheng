@@ -2640,6 +2640,7 @@
     "emptyUsers": "未找到匹配的用户，请核对名称或 ID",
     "emptySubjects": "未找到可授权对象，请核对名称或 ID",
     "userId": "人员 ID",
+    "organization": "所属组织",
     "departmentId": "部门 ID",
     "user_groupId": "用户组 ID",
     "loadMore": "加载更多",
