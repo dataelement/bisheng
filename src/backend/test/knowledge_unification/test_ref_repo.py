@@ -20,16 +20,36 @@ from bisheng.resource_reference.application.contracts import (
     ReferenceState,
     SourceKey,
     TargetKey,
+    TargetLockReceipt,
     TargetType,
+    TransactionIdentity,
     VerifiedReferenceTarget,
     reference_set_digest,
 )
+from bisheng.resource_reference.application.target_verification import ReferenceTargetVerifier
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
 from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
 
 TABLES = [BusinessReferenceSet.__table__, BusinessResourceReference.__table__, ResourceReferenceTombstone.__table__]
+
+
+class ModelOwner:
+    """Pure observation double; SQL-backed verification is covered separately."""
+
+    def observation(self, target):
+        return VerifiedReferenceTarget(target, 101, None, "1", ReferenceState.VALID, "r1")
+
+    def lock_and_verify(self, session, target_keys, source_key, operation):
+        return tuple(
+            TargetLockReceipt(source_key, self.observation(target), TransactionIdentity.capture(session), self)
+            for target in target_keys
+        )
+
+    async def alock_and_verify(self, session, target_keys, source_key, operation):
+        # No SQL in this fixture. Native async Owner I/O has its own regression.
+        return self.lock_and_verify(session, target_keys, source_key, operation)
 
 
 @contextmanager
@@ -157,8 +177,9 @@ def test_root_guard_is_shared_across_versions_and_not_a_source(engine):
 
 
 def test_normal_reads_are_source_tenant_scoped_and_owner_reads_need_exact_capability(engine):
-    owner = object()
-    repo = ReferenceRepository(owners={TargetType.MODEL: owner})
+    owner = ModelOwner()
+    verifier = ReferenceTargetVerifier({TargetType.MODEL: owner})
+    repo = ReferenceRepository(verifier=verifier)
     with Session(engine) as session, session.begin():
         write(repo, session, source(), (row(source()),))
     with tenant(202), Session(engine) as session, session.begin():
@@ -169,12 +190,12 @@ def test_normal_reads_are_source_tenant_scoped_and_owner_reads_need_exact_capabi
             repo.get_source_set(session, source())
     with Session(engine) as session, session.begin():
         assert len(repo.list_inbound_targets(session, (target(),))) == 1
-        verified = VerifiedReferenceTarget(target(), 101, None, "1", ReferenceState.VALID, "r1")
-        scope = repo.target_owner_scope(session, (verified,), issuer=owner)
+        receipts = verifier.verify_owner_targets(session, (target(),))
+        scope = repo.target_owner_scope(session, receipts)
         assert {r.tenant_id for r in repo.list_inbound_for_owner(session, scope)} == {101, 202}
         assert repo.list_inbound_targets(session, (target("2"),)) == ()
         with pytest.raises(ResourceReferenceInvalidError):
-            repo.target_owner_scope(session, (verified,), issuer=object())
+            repo.target_owner_scope(session, (replace(receipts[0], issuer=object()),))
     with Session(engine) as session, session.begin():
         with pytest.raises(ResourceReferenceInvalidError):
             repo.list_inbound_for_owner(session, scope)
@@ -191,13 +212,13 @@ def test_storage_failure_propagates_instead_of_reporting_no_references(engine, m
 
 
 def test_target_owner_capability_cannot_be_forged_retargeted_or_emptied(engine):
-    owner = object()
-    repo = ReferenceRepository(owners={TargetType.MODEL: owner})
-    verified = VerifiedReferenceTarget(target(), 101, None, "1", ReferenceState.VALID, "r1")
+    owner = ModelOwner()
+    verifier = ReferenceTargetVerifier({TargetType.MODEL: owner})
+    repo = ReferenceRepository(verifier=verifier)
     with Session(engine) as session, session.begin():
         with pytest.raises(ResourceReferenceInvalidError):
-            ReferenceRepository().target_owner_scope(session, (verified,), issuer=None)
-        scope = repo.target_owner_scope(session, (verified,), issuer=owner)
+            ReferenceRepository().target_owner_scope(session, ())
+        scope = repo.target_owner_scope(session, verifier.verify_owner_targets(session, (target(),)))
         for forged in [replace(scope, targets=()), replace(scope, targets=(target("2"),))]:
             with pytest.raises(ResourceReferenceInvalidError):
                 repo.list_inbound_for_owner(session, forged)

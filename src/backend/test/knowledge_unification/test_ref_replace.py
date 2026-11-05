@@ -32,6 +32,7 @@ from bisheng.resource_reference.application.contracts import (
     VerifiedReferenceTarget,
     reference_set_digest,
 )
+from bisheng.resource_reference.application.target_verification import ReferenceTargetVerifier
 from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
 from test.knowledge_unification import test_ref_repo as ref_fixtures
 
@@ -47,33 +48,46 @@ def spec(target_id, slot="model"):
     return ReferenceSpec(slot, TargetKey("model", target_id))
 
 
-def verified_set(session, owner, key, new, *, old=(), root_revision=0, states=None, locked=None):
-    states = states or {}
-    identity = TransactionIdentity.capture(session)
-    targets = locked if locked is not None else {reference.target for reference in old + new}
-    targets = tuple(sorted(targets, key=lambda key: key.lock_order_key))
-    receipts = []
-    for target in targets:
-        state = states.get(target.target_id, ReferenceState.VALID)
+class BindingOwner(ref_fixtures.ModelOwner):
+    states = None
+
+    def observation(self, target):
+        state = (self.states or {}).get(target.target_id, ReferenceState.VALID)
         evidence = None
         if state == ReferenceState.INVALID_LEGACY:
             evidence = LegacyEvidence("run1", "a" * 64, "e1")
         elif state != ReferenceState.VALID:
             evidence = DeletionEvidence("force-1", target, 101, TargetDeleteStage.DELETED)
-        verified = VerifiedReferenceTarget(
+        return VerifiedReferenceTarget(
             target, None if state == ReferenceState.INVALID_LEGACY else 101, None, "1", state, "r1", evidence
         )
-        receipts.append(TargetLockReceipt(key, verified, identity, owner))
+
+
+def verified_set(session, owner, key, new, *, old=(), root_revision=0, states=None, locked=None):
+    states = states or {}
+    identity = TransactionIdentity.capture(session)
+    targets = locked if locked is not None else {reference.target for reference in old + new}
+    targets = tuple(sorted(targets, key=lambda key: key.lock_order_key))
+    if isinstance(owner, BindingOwner):
+        owner.states = states
+        receipts = owner.verifier.verify_targets(session, key, targets)
+    else:
+        # Deliberate forgery in the negative issuer test, not a fixture shortcut.
+        receipts = tuple(
+            TargetLockReceipt(key, VerifiedReferenceTarget(target, 101, None, "1", "valid", "r1"), identity, owner)
+            for target in targets
+        )
     context = BindingWriteContext(
         key, root_revision, root_revision, targets, reference_set_digest(old), tuple(receipts), identity
     )
     return VerifiedReferenceSet(new, "test-v1", context)
 
 
-def components(repo=None):
-    owner = object()
-    repo = repo or ReferenceRepository()
-    return owner, repo, ReferenceBindings(repo, {TargetType.MODEL: owner})
+def components():
+    owner = BindingOwner()
+    owner.verifier = ReferenceTargetVerifier({TargetType.MODEL: owner})
+    repo = ReferenceRepository(verifier=owner.verifier)
+    return owner, repo, ReferenceBindings(repo, owner.verifier)
 
 
 def test_reference_failure_rolls_back_business_and_root_guard(engine, monkeypatch):
@@ -261,7 +275,17 @@ async def test_async_replacement_is_in_the_business_transaction():
     try:
         async with AsyncSession(engine) as session:
             async with session.begin():
-                refs = verified_set(session, owner, key, (spec("1"),))
+                issued = await owner.verifier.averify_targets(session, key, (TargetKey("model", "1"),))
+                context = BindingWriteContext(
+                    key,
+                    0,
+                    0,
+                    (TargetKey("model", "1"),),
+                    reference_set_digest(()),
+                    issued,
+                    TransactionIdentity.capture(session),
+                )
+                refs = VerifiedReferenceSet((spec("1"),), "test-v1", context)
                 result = await bindings.areplace_source_bindings(session, key, None, 1, refs, True)
                 assert result.root_revision == 1
                 await session.rollback()
