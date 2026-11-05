@@ -1,0 +1,134 @@
+"""F004 root deletion releases every live version in one SQL unit.
+
+覆盖 AC: AC-87, AC-88, AC-89. The actual DELETE endpoint is invoked. SQL
+targets, binding sets and definitions remain real; permission projection is an
+observed transport boundary, never an alternate reference Owner.
+"""
+
+from unittest.mock import AsyncMock, Mock
+
+import pytest
+import sqlalchemy as sa
+
+from bisheng.api.services import flow as flow_service
+from bisheng.api.v1 import flows as endpoint
+from bisheng.api.v1.schemas import FlowVersionCreate
+from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
+from bisheng.database.models.flow_version import FlowVersion
+from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
+from test.knowledge_unification import test_wf_create as create_fixtures
+from test.knowledge_unification import test_wf_current as current_fixtures
+from test.knowledge_unification import test_wf_save as save_fixtures
+from test.knowledge_unification.test_wf_extract import graph, node
+
+store = create_fixtures.store
+tenant = create_fixtures.tenant
+bindings = create_fixtures.bindings
+saved = save_fixtures.saved
+configured = current_fixtures.configured
+rows = create_fixtures.rows
+
+
+@pytest.fixture
+async def deleting(configured, monkeypatch):
+    configured.delete_projection = AsyncMock()
+    monkeypatch.setattr(flow_service.FlowService, "project_flow_delete", configured.delete_projection)
+    monkeypatch.setattr(flow_service.FlowService, "delete_flow_hook", Mock())
+    return configured
+
+
+async def delete(context):
+    return await endpoint.delete_flow(request=context.request, flow_id="wf", login_user=context.user)
+
+
+async def test_actual_root_delete_preserves_all_definitions_and_releases_all_live_versions(deleting):
+    blank = await flow_service.FlowService.create_new_version(
+        deleting.user, "wf", FlowVersionCreate(name="blank", data={})
+    )
+    before_ids = {row["id"] for row in rows(deleting, "flowversion")}
+    assert blank.data.id in before_ids
+    result = await delete(deleting)
+    assert result.status_code == 200
+    assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 1
+    assert {row["id"] for row in rows(deleting, "flowversion")} == before_ids
+    assert all(row["is_delete"] == 1 for row in rows(deleting, "flowversion"))
+    assert not rows(deleting, "business_resource_reference")
+    sources = [row for row in rows(deleting, "business_reference_set") if row["record_kind"] == "source"]
+    assert len(sources) == 4 and all(row["effective"] == 0 and row["ready"] == 1 for row in sources)
+    deleting.delete_projection.assert_awaited_once()
+
+
+async def test_second_version_binding_failure_rolls_back_entire_root_and_first_release(deleting, monkeypatch):
+    before = {
+        table: rows(deleting, table)
+        for table in ("flow", "flowversion", "business_reference_set", "business_resource_reference")
+    }
+    original = deleting.runtime.bindings.areplace_source_bindings
+    calls = 0
+
+    async def fail_second(*args, **kwargs):
+        nonlocal calls
+        result = await original(*args, **kwargs)
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("second source binding failed")
+        return result
+
+    monkeypatch.setattr(deleting.runtime.bindings, "areplace_source_bindings", fail_second)
+    with pytest.raises(RuntimeError, match="second source binding failed"):
+        await delete(deleting)
+    assert calls == 2
+    for table, expected in before.items():
+        assert rows(deleting, table) == expected
+    deleting.delete_projection.assert_not_awaited()
+
+
+async def test_root_with_a_missing_live_version_index_fails_before_permission_projection(deleting):
+    async with deleting.session_factory() as session, session.begin():
+        await session.execute(
+            sa.delete(BusinessReferenceSet).where(
+                BusinessReferenceSet.source_id == "wf", BusinessReferenceSet.source_version == "2"
+            )
+        )
+    with pytest.raises(ReferenceCoverageNotReadyError):
+        await delete(deleting)
+    assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 0
+    deleting.delete_projection.assert_not_awaited()
+
+
+async def test_root_with_configuration_index_drift_fails_before_permission_projection(deleting):
+    async with deleting.session_factory() as session, session.begin():
+        version = await session.get(FlowVersion, 2)
+        version.data = graph(node("drift", "llm", model_id=7))
+    with pytest.raises(ReferenceCoverageNotReadyError):
+        await delete(deleting)
+    assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 0
+    deleting.delete_projection.assert_not_awaited()
+
+
+async def test_permission_projection_sees_existing_committed_root_before_final_sql_delete(deleting):
+    async def before_commit(user, root):
+        assert any(row["id"] == root.id and row["is_delete"] == 0 for row in rows(deleting, "flow"))
+        assert len(rows(deleting, "business_resource_reference")) == 3
+
+    deleting.delete_projection.side_effect = before_commit
+    await delete(deleting)
+    assert not rows(deleting, "business_resource_reference")
+
+
+async def test_projection_failure_rolls_back_all_root_and_source_changes(deleting):
+    before = {
+        table: rows(deleting, table)
+        for table in ("flow", "flowversion", "business_reference_set", "business_resource_reference")
+    }
+    deleting.delete_projection.side_effect = RuntimeError("projection failed")
+    with pytest.raises(RuntimeError, match="projection failed"):
+        await delete(deleting)
+    for table, expected in before.items():
+        assert rows(deleting, table) == expected
+
+
+async def test_root_delete_can_release_original_invalid_references_with_real_tombstone(deleting):
+    await current_fixtures.force_delete_model(deleting)
+    assert (await delete(deleting)).status_code == 200
+    assert not rows(deleting, "business_resource_reference")
