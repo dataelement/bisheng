@@ -111,6 +111,16 @@ class KnowledgeBase(SQLModelSerializable):
         sa_column=Column(JsonType, nullable=True),
         description="Metadata Field Configuration for Knowledge Base",
     )
+    # Defaults affect future processing only; model/index revisions govern
+    # whether already accepted jobs can still take another processing step.
+    processing_defaults: dict | None = Field(default=None, sa_column=Column(JsonType, nullable=True))
+    processing_config_version: int = Field(
+        default=0, sa_column=Column(Integer, nullable=False, server_default=text("0"))
+    )
+    model_config_revision: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=text("0")))
+    index_generation: str | None = Field(default=None, max_length=64)
+    # A durable maintenance-run origin drives both quota checks and display.
+    migration_origin: str | None = Field(default=None, max_length=64)
     create_time: datetime | None = Field(
         default=None, sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
     )
