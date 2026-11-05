@@ -823,3 +823,48 @@ def test_warnings_alone_do_not_block_xlsx_delivery(tmp_path):
     assert total.group(1) == "0", out
     assert int(total.group(2)) >= 1, f"sample was meant to trip a WARN:\n{out}"
     assert PASS in out, out
+
+
+# ---------------------------------------------------------------------------
+# html-report: svg_chart.py writes the chart into the page itself
+# ---------------------------------------------------------------------------
+
+_CHART_SPEC = (
+    '{"type": "bar", "title": "各类要素一致率", "unit": "%", "labels": ["项目要素", "风险与合规"],'
+    ' "series": [{"name": "一致率", "values": [100, 75]}]}'
+)
+
+
+def test_svg_chart_inserts_the_figure_at_the_marker(tmp_path):
+    (tmp_path / "spec.json").write_text(_CHART_SPEC, encoding="utf-8")
+    page = tmp_path / "report.html"
+    page.write_text("<html><body><p>前</p><!-- chart:c1 --><p>后</p></body></html>", encoding="utf-8")
+
+    out = run_script("html-report", "svg_chart.py", "spec.json", "--into", "report.html", "--slot", "c1", cwd=tmp_path)
+
+    assert out.stdout.startswith("OK:")
+    html = page.read_text(encoding="utf-8")
+    assert "<!-- chart:c1 -->" not in html
+    assert html.count("<svg") == 1
+    assert '<figure class="chart"' in html and "<figcaption>各类要素一致率</figcaption>" in html
+    # Labels stay text, so the page's own fonts draw them.
+    assert "项目要素" in html
+
+
+def test_svg_chart_reports_a_missing_marker_without_touching_the_page(tmp_path):
+    (tmp_path / "spec.json").write_text(_CHART_SPEC, encoding="utf-8")
+    page = tmp_path / "report.html"
+    page.write_text("<html><body>no marker</body></html>", encoding="utf-8")
+
+    out = run_script("html-report", "svg_chart.py", "spec.json", "--into", "report.html", "--slot", "c1", cwd=tmp_path)
+
+    assert out.stdout.startswith("FAILED:") and "chart:c1" in out.stdout
+    assert page.read_text(encoding="utf-8") == "<html><body>no marker</body></html>"
+
+
+def test_svg_chart_rejects_a_bad_spec_with_the_reason(tmp_path):
+    (tmp_path / "bad.json").write_text(
+        '{"type": "pie", "labels": ["a"], "series": [{"name": "x", "values": [1]}]}', encoding="utf-8"
+    )
+    out = run_script("html-report", "svg_chart.py", "bad.json", cwd=tmp_path)
+    assert "FAILED" in out.stdout and "pie" in out.stdout

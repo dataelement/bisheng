@@ -64,6 +64,7 @@ _SUBAGENT_TOOL_DENY = frozenset(
         "replace_file_lines",  # write side-effect
         "export_docx",  # write side-effect — deliverable export stays in the main graph
         "export_pdf",  # write side-effect — deliverable export stays in the main graph
+        "check_html",  # writes its screenshot to scratch/; deliverable QA stays in the main graph
     }
 )
 # Runtime double safety: even if someone forgets to register a HITL tool in
@@ -130,9 +131,9 @@ __SKILL_EXEC_LINE____KB_EXEC_LINE__
      · 汇总时先根据各子代理交回的摘要撰写交付物；需要细节时用 read_file 读对应笔记，不要回头重读原始资料。
 __KB_DELEGATE_LINE__   更新待办时只翻转 status（pending/in_progress/completed），不改写已有文案，以保证任务标识稳定。
 
-3. 【产出交付物】按用户在澄清时选择的输出格式产出，markdown 是唯一规范源：
-__SKILL_DELIVERABLE_LINE__   - 3a（始终）：write_file 写 output/<name>.md（结构化 markdown，其它格式由它派生）。图表/图片一律用 markdown 图片语法 `![说明](相对路径)` 引用（如 `![季节性走势](output/charts/x.png)`）；不要在 markdown 里写 `<div>`/`<img>`/`<table>` 等原始 HTML 标签——markdown 预览不渲染原始 HTML，会以纯文本泄漏。（HTML 交付物走 3b，不受此约束。）
-   - 3b（仅当选了 html）：write_file 写 output/<name>.html（完整自包含 HTML，内联样式，无外部脚本/CDN）。
+3. 【产出交付物】按用户在澄清时选择的输出格式产出，docx / pdf 由 markdown 派生：
+__SKILL_DELIVERABLE_LINE__   - 3a__MD_DELIVERABLE_CONDITION__：write_file 写 output/<name>.md（结构化 markdown，docx / pdf 由它派生）。图表/图片一律用 markdown 图片语法 `![说明](相对路径)` 引用（如 `![季节性走势](output/charts/x.png)`）；不要在 markdown 里写 `<div>`/`<img>`/`<table>` 等原始 HTML 标签——markdown 预览不渲染原始 HTML，会以纯文本泄漏。（HTML 交付物走 3b，不受此约束。）
+   - 3b（仅当选了 html）：write_file 写 output/<name>.html，必须是完整自包含的单个文件：样式写进 <style>，脚本写进 <script>，图片用 data: URI 或内联 <svg>；不引用任何外部地址或相对路径（离线环境、预览框和下载后的文件都加载不到）。写完调用 check_html(path="output/<name>.html")：报告里有 ERROR 就用 edit_file 修复后再调用，最多修 2 轮；WARN 酌情处理。幻灯片等固定尺寸的分页版式，某页装不装得下以 check_html 的逐页测量为准，不要在思考里估算像素高度；只修改报告列出的溢出页，没列出的页不要再改。__HTML_ONLY_LINE__
    - 3c（仅当选了 docx）：export_docx(source_path="output/<name>.md")，必须在 3a 之后。
    - 3d（仅当选了 pdf）：export_pdf(source_path="output/<name>.md")，必须在 3a 之后。
    最终交付物的撰写与拼装必须由你（主智能体）亲自完成，不得委派给子代理；中间产物写 scratch/。
@@ -167,9 +168,10 @@ __SKILL_DELIVERABLE_LINE__   - 3a（始终）：write_file 写 output/<name>.md�
 
 - ask_user(reason, questions)：第 0 步澄清；整个会话最多调用一次。
 - write_todos(todos)：维护有编号的待办清单；只翻转 status，不改写已有文案。
-__KB_TOOL_LINE__- write_file / read_file / edit_file / ls / glob / grep：工作区文件工具；交付物写 output/，中间产物写 scratch/（工具回显的 /output/x 与 output/x 是同一个文件）。read_file 支持 offset/limit 分块读取大文件；grep 可在整个工作区按关键字定位内容，按字面匹配、不支持正则；要同时搜几个关键词，用 | 分隔写在同一次 grep 里（如 "营业收入|售电收入"，任一命中即返回）。
+__KB_TOOL_LINE__- write_file / read_file / edit_file / ls / glob / grep：工作区文件工具；交付物写 output/，中间产物写 scratch/（工具回显的 /output/x 与 output/x 是同一个文件）。read_file 支持 offset/limit 分块读取大文件；grep 可在整个工作区按关键字定位内容，按字面匹配、不支持正则；要同时搜几个关键词，用 | 分隔写在同一次 grep 里（如 "营业收入|售电收入"，任一命中即返回）。修改已写好的文件用 edit_file 做局部替换：old_string 取能唯一定位的最短片段，不要把整页、整节作为 old_string / new_string 重写；统一调整字号、间距等样式时改 <style> 里的 CSS 规则，不要逐页改 HTML 正文。
 - export_docx(source_path, dest_path)：把 output/ 下的 markdown 转 Word(.docx)，必须在对应 .md 写好之后。
 - export_pdf(source_path, dest_path)：把 output/ 下的 markdown 转 PDF，必须在对应 .md 写好之后。
+- check_html(path)：检查 output/ 下的 html 能否在离线环境和预览框里正常显示，写完 html 后调用。
 - task(description, subagent_type="general-purpose")：把独立、可隔离、较重的调研子任务委派给子代理。description 必须自包含——子代理看不到你的对话历史与上下文，只能读到 description，因此完成该子任务所需的全部背景、目标、约束与必要标识都要写进去；按份委派时还要指定该子代理在 scratch/ 下的笔记目录；不得委派最终交付物撰写，也不得委派“问用户/澄清”。
 
 # 超大工具结果
@@ -333,22 +335,22 @@ def _build_linsight_system_prompt(
             # (a code executor is bound, i.e. the skill's route IS runnable).
             skill_deliverable_line = (
                 "   - 3z（优先级最高，覆盖下面的 3b-3d）：若上一步命中了与交付格式相关的技能"
-                "（如 docx / xlsx / pptx），交付物本体**必须**按该技能 SKILL.md 指定的做法生成——"
-                "用 bisheng_code_interpreter 执行技能给出的脚本/库（技能正文若用的语言本环境跑不了，"
+                "（如 docx / xlsx / pptx / html），交付物本体**必须**按该技能 SKILL.md 指定的做法生成——"
+                "技能要求执行脚本/库时，用 bisheng_code_interpreter 执行（技能正文若用的语言本环境跑不了，"
                 "就用 Python 等价库实现同样的排版要求），把成品直接写进 output/。"
                 "此时**禁止**调用 export_docx / export_pdf 从 markdown 派生同一份交付物——"
                 "那条路径丢掉技能规定的全部排版细节，等于没用技能；"
                 "只有代码执行连续失败、确实产不出成品时，才允许退回 export_docx / export_pdf 兜底，"
-                "并在收尾里说明退化。3a 的 markdown 规范源仍然要写（界面预览依赖它）。\n"
+                "并在收尾里说明退化。3a 的 markdown 按 3a 的条件写。\n"
             )
         else:
             # No executor bound: the skill's route cannot run, so banning the
             # exports would leave no way to produce the file at all.
             skill_deliverable_line = (
-                "   - 3z（优先级最高）：若上一步命中了与交付格式相关的技能（如 docx / xlsx / pptx），"
+                "   - 3z（优先级最高）：若上一步命中了与交付格式相关的技能（如 docx / xlsx / pptx / html），"
                 "交付物内容与排版尽量遵循该技能 SKILL.md 的要求。"
                 "本次没有可用的代码执行工具，技能里需要执行脚本的做法无法落地，"
-                "因此交付物仍按下面的 3b-3d 生成。3a 的 markdown 规范源仍然要写。\n"
+                "因此交付物仍按下面的 3b-3d 生成。3a 的 markdown 按 3a 的条件写。\n"
             )
     else:
         skill_exec_line = ""
@@ -384,6 +386,13 @@ def _build_linsight_system_prompt(
             "scratch/ 下的文件，再用 read_file 分块读取。\n\n"
         )
 
+    # The markdown file is the source of docx / pdf. When html is the sole format,
+    # writing it doubles the generation for a file nobody asked for (cofco session
+    # a4b4a014: 143 s of a 563 s run). cofco has no citation audit reading the .md,
+    # so the condition does not depend on retrieval (the release line's does).
+    md_condition = "（选了 markdown、docx 或 pdf 之一时；只选了 html 时跳过，不写 md）"
+    html_only_line = "只选了 html 时，html 就是唯一交付物。"
+
     return (
         _LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH.replace("__KB_EXEC_LINE__", exec_line)
         .replace("__KB_TOOL_LINE__", tool_line)
@@ -391,6 +400,8 @@ def _build_linsight_system_prompt(
         .replace("__SKILL_EXEC_LINE__", skill_exec_line)
         .replace("__SKILL_DELIVERABLE_LINE__", skill_deliverable_line)
         .replace("__PATH_NAMESPACE_LINE__", path_namespace_line)
+        .replace("__MD_DELIVERABLE_CONDITION__", md_condition)
+        .replace("__HTML_ONLY_LINE__", html_only_line)
     )
 
 
@@ -885,6 +896,11 @@ async def create_linsight_agent(
                 sources=[(f"/{WORKSPACE_SKILLS_DIR}/", "Skills")],
             )
         )
+        # Every enabled skill is mounted; mark the ones the user picked on their
+        # 可用技能 rows. Sits after SkillsMiddleware, which writes those rows.
+        from bisheng.linsight.domain.services.skill_selection_middleware import SkillSelectionMiddleware
+
+        middlewares.append(SkillSelectionMiddleware(getattr(session_model, "skills", None)))
 
     # Language directive LAST in the stack so it appends AFTER every framework
     # middleware prompt (write_todos / filesystem / task / skills) — the absolute
@@ -905,7 +921,7 @@ async def create_linsight_agent(
     # ask_user is appended ONLY to the MAIN graph tools below; the subagent
     # receives _subagent_tools(tools), which never includes ask_user.
     #
-    # Export tools (export_docx / export_pdf): closure-injected with the session
+    # Deliverable tools (export_docx / export_pdf / check_html): closure-injected with the session
     # WorkspaceBackend, appended to the MAIN graph only. They are NOT in `tools`
     # (so the researcher never inherits them) and are also listed in
     # _SUBAGENT_TOOL_DENY as belt-and-suspenders — deliverable export stays in the

@@ -103,6 +103,6 @@ def test_no_template_placeholder_survives(has_kb, skills_present):
 def test_skill_priority_line_precedes_the_default_export_path():
     """Ordering matters: the model reads top-down, so 3z must come before 3a-3d."""
     prompt = _build_linsight_system_prompt(True, skills_present=True)
-    assert prompt.index("3z") < prompt.index("3a（始终）")
+    assert prompt.index("3z") < prompt.index("   - 3a")
     # And the skill-reading rule sits in step 2, before the deliverable step.
     assert prompt.index("技能优先") < prompt.index("3. 【产出交付物】")

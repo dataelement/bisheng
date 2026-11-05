@@ -312,7 +312,7 @@ async def test_tenant_context_is_restored_after_seeding(env):
 
 # Deliberately a membership list, not a count: adding a fourth bundle later must
 # not turn this guard red.
-SHIPPED_BUNDLES = ("bisheng-pptx", "bisheng-xlsx", "bisheng-docx")
+SHIPPED_BUNDLES = ("bisheng-pptx", "bisheng-xlsx", "bisheng-docx", "html-report")
 
 
 @pytest.mark.parametrize("name", SHIPPED_BUNDLES)
@@ -340,6 +340,23 @@ def test_the_shipped_bundle_is_valid(name):
 
     assert "SKILL.md" in files
     assert any(p.startswith("scripts/") for p in files)
+
+
+# Customer-readable surface of a pack (builtin_skills/AGENTS.md, Packaging): an OEM
+# deployment ships these as its own. html-report goes further than the older packs
+# by user decision: no brand in the slug or the tool names it mentions either.
+_BRAND_WORDS = ("bisheng", "毕昇", "灵思", "linsight")
+
+
+def test_html_report_shows_no_platform_brand():
+    meta, files = seeder.discover_builtin_bundles()["html-report"]
+    for rel, data in files.items():
+        if rel == "LICENSE.txt" or not rel.endswith((".md", ".html", ".py")):
+            continue
+        text = data.decode("utf-8").lower()
+        for word in _BRAND_WORDS:
+            assert word not in text, f"{rel} mentions {word!r}"
+    assert meta["metadata"]["default-checked"] is True
 
 
 def test_no_shipped_bundle_is_silently_dropped():

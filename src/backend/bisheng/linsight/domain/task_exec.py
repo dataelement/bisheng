@@ -1030,11 +1030,14 @@ class LinsightWorkflowTask:
         # /skills/ subtree (governance-enabled ∩ user-selected — the copy IS the
         # whitelist gate). Re-runs harmlessly on resume/continue since this builds a
         # fresh agent each time. skills_present gates attaching the skills middleware.
+        from bisheng.linsight.domain.services.skill_provisioning import user_visible_failures
+
         skills = await materialize_session_skills(
             backend, session_model.tenant_id, getattr(session_model, "skills", None)
         )
-        if skills.failed:
-            await self._push_skill_load_failure(session_model.id, skills.failed)
+        failed = user_visible_failures(skills, getattr(session_model, "skills", None))
+        if failed:
+            await self._push_skill_load_failure(session_model.id, failed)
         return await create_linsight_agent(
             session_model=session_model,
             tools=tools,
