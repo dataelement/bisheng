@@ -12,7 +12,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Protocol
+from typing import Literal, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, SessionTransaction
@@ -252,9 +252,15 @@ class TransactionIdentity:
             raise ValueError("reference receipt belongs to a different SQL transaction")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False, weakref_slot=True)
 class TargetLockReceipt:
-    source_key: SourceKey
+    """An Owner result; authority exists only after the Verifier registers it.
+
+    Public fields, an issuer pointer or reconstructing this dataclass do not
+    prove that Owner verification ran. None source is reserved for owner_query.
+    """
+
+    source_key: SourceKey | None
     target: VerifiedReferenceTarget
     transaction: TransactionIdentity
     issuer: object = field(repr=False, compare=False)
@@ -392,20 +398,25 @@ class GlobalCoveragePort(Protocol):
 
 
 class ReferenceTargetOwnerPort(Protocol):
-    """Business-owned target validation; implementations use their Repository."""
+    """Business-owned, Repository-backed facts and authorization.
+
+    bind receives a real source; owner_query receives None and must verify
+    actual target ownership. Both stay in the caller's active SQL transaction.
+    A shared Owner receives all its target kinds in one lock plan.
+    """
 
     def lock_and_verify(
         self,
         session: Session,
         target_keys: tuple[TargetKey, ...],
-        source_key: SourceKey,
-        operation: str,
+        source_key: SourceKey | None,
+        operation: Literal["bind", "owner_query"],
     ) -> tuple[TargetLockReceipt, ...]: ...
 
     async def alock_and_verify(
         self,
         session: AsyncSession,
         target_keys: tuple[TargetKey, ...],
-        source_key: SourceKey,
-        operation: str,
+        source_key: SourceKey | None,
+        operation: Literal["bind", "owner_query"],
     ) -> tuple[TargetLockReceipt, ...]: ...
