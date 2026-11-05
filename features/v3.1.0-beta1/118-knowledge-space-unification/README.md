@@ -14,7 +14,9 @@
 - [QA 参考：140 条八列用例](./test-cases.md)
 - [任务拆分复审记录：原213项LGTM](./tasks-review.md)
 - [W0/W1集成与任务级评审](./implementation-review.md)
-- [冻结接口合同：REF V1.1与P1/J1/A1](./contracts.md)
+- [W2业务写入口集成与复查记录](./wave2-implementation-review.md)
+- [下一波运行与共享读取入口盘点](./execution-entrypoints.md)
+- [冻结接口合同：REF V1.1、W2 Runtime/batch与P1/J1/A1](./contracts.md)
 - [升级说明：停服、引用回填、恢复与核对](./upgrade-guide.md)
 - [HTML 技术评审：13 张流程图](../../../docs/architecture/review/2026-11-03-bisheng-knowledge-unification-technical-review.html)
 - [版本契约：保留其他特性登记并加入 F118 增量](../release-contract.md)
@@ -26,7 +28,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 2026-11-05 确认完整 94 条 AC，作为设计评审的需求基线 |
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查闭合；2026-11-05 用户授权进入任务拆分 |
 | test-cases.md | 已生成，待执行 | 140 条，94 AC 全覆盖；QA 参考，不是任务或 Harness 输入 |
-| tasks.md / parallel-development.md | ✅ 已拆分、复审 LGTM | 原213项复审通过；源码核对补充后273项，W0/W1核心已合流；整体仍在开发 |
+| tasks.md / parallel-development.md | ✅ 已拆分、复审 LGTM | 原213项复审通过；W2源码接线与文档核对后342项；W0/W1与本波保存/删除已合流，整体仍在开发 |
 
 ## 迁移边界
 
@@ -50,4 +52,11 @@
 
 T001基线已对齐至远端 `9eef0016de`，合并提交 `a1b1a2387`。T002 [接口合同V1](./contracts.md) 已冻结；按源码核对追加T214–T227，冻结当时计划227项。已从同一冻结提交创建独立lane worktree，并行开发权限、引用和处理核心；主agent统一结构迁移、注册、合流和测试。未推送或部署。
 
-当前W0/W1核心已合流，本轮完成86/273项，主agent组合424项测试通过；各卡与限制见[集成评审](./implementation-review.md)。完整特性、数据库真实回归、E2E及停服迁移尚未完成。
+W0/W1历史交付为86/273项、组合424项通过，见[历史记录](./implementation-review.md)。本次W2的实际固定提交、完成卡与组合验证见[W2集成复查](./wave2-implementation-review.md)。完整特性、数据库真实回归、E2E及停服迁移尚未完成。
+
+
+## W2业务入口接线
+
+从9cbb0141de创建WF/AS/TARGET三个独立lane；INT先交Runtime、legacy Reader与生产composition，实际Owner和业务写入按依赖接线，其他agent固定快照复查，主agent集成验证。工作流保存版本及助手当前配置在同一事务维护引用，支持既定原槽修复；新增知识统一按真实type及原actor校验visible，整根删除核完整版本/集合/raw明细。模型共享明确撤销允许原槽保留或移除，新增及执行拒绝，不新增权限动作或持久状态。
+
+当前166/342项完成（本波新增80项）；主agent在411d4f461473组合验证821项通过（35个pytest路径），架构检查56文件无违规，Ruff 56文件通过。未推送、部署或执行迁移。WF完整运行、AS共用Agent/Info状态、Root共享来源读取scope、其他来源写端及全特性验收仍按任务推进。升级仍要求停服及一致备份后正式盘点并冻结基线；Reader/结构就绪不代表回填或Coverage就绪。
