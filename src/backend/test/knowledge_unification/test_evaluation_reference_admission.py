@@ -11,6 +11,7 @@ import sqlalchemy as sa
 from fastapi import BackgroundTasks, UploadFile
 from sqlmodel import Session
 
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id, set_current_tenant_id
 from bisheng.core.database import tenant_filter
@@ -356,3 +357,97 @@ async def test_assistant_original_jwt_identity_enters_agent_and_every_run(evalua
     monkeypatch.setattr(service, "AssistantAgent", Agent)
     await service.add_evaluation_task(42, login_user=ctx.identity)
     assert seen == ["init", "first", "second"] and row(ctx).status == EvaluationTaskStatus.success.value
+
+
+@pytest.fixture
+async def web_session_user(evaluation_context, monkeypatch):
+    """Use the actual HTTP JWT dependency's credential-reference construction."""
+    import jwt
+
+    user = evaluation_context.identity
+    secret = "test-only-evaluation-signing-key-32-bytes"
+    claims = {
+        "user_id": user.user_id,
+        "user_name": user.user_name,
+        "tenant_id": user.tenant_id,
+        "token_version": user.token_version,
+        "exp": 4070908800,
+        "iss": "evaluation-test",
+    }
+    token = jwt.encode(claims, secret, algorithm="HS256")
+    auth = SimpleNamespace(
+        get_subject=lambda: claims,
+        req=SimpleNamespace(cookies={"access": token}),
+        _access_cookie_key="access",
+        jwt_secret=secret,
+        cookie_conf=SimpleNamespace(jwt_iss="evaluation-test"),
+        _decode_algorithms=["HS256"],
+    )
+    monkeypatch.setattr(UserPayload, "init_login_user", AsyncMock(return_value=user))
+    original = await UserPayload.get_login_user(auth)
+    assert original is user and original._runtime_credential_reference["kind"] == "web_session"
+    return original
+
+
+def test_real_http_jwt_reference_is_accepted_before_scheduling_and_preserved(evaluation_context, web_session_user):
+    ctx = evaluation_context
+    reference = web_session_user._runtime_credential_reference
+    tasks = BackgroundTasks()
+    endpoint.process_evaluation(evaluation_id=42, background_tasks=tasks, login_user=web_session_user)
+    assert tasks.tasks[0].kwargs["login_user"] is web_session_user
+    assert web_session_user._runtime_credential_reference is reference
+    create = BackgroundTasks()
+    upload = UploadFile(file=BytesIO(b"question,ground_truth\nfirst,one\n"), filename="dataset.csv")
+    result = endpoint.create_evaluation(
+        file=upload,
+        prompt="",
+        exec_type="workflow",
+        unique_id="wf",
+        version=2,
+        background_tasks=create,
+        login_user=web_session_user,
+    )
+    assert create.tasks[0].kwargs["login_user"] is web_session_user
+    assert service.EvaluationService.require_evaluation_owner(result.data.id, web_session_user).tenant_id == 101
+    assert not ctx.get_redis.called
+
+
+async def test_real_http_jwt_reference_reaches_background_and_actual_source_scope(
+    evaluation_context, web_session_user, monkeypatch
+):
+    runtime = workflow_runtime(evaluation_context, monkeypatch)
+    await service.add_evaluation_task(42, login_user=web_session_user)
+    assert row(evaluation_context).status == EvaluationTaskStatus.success.value
+    assert runtime.execute.apply_async.call_count == 2
+
+
+def test_web_session_home_tenant_differs_from_trusted_management_pin(evaluation_context, web_session_user):
+    home = web_session_user.tenant_id
+    reference = web_session_user._runtime_credential_reference
+    web_session_user.tenant_id = 1
+    reference["tenant_id"] = 1
+    try:
+        owned = service.EvaluationService.require_evaluation_owner(42, web_session_user)
+        assert owned.tenant_id == 101 and web_session_user.tenant_id == 1
+        assert reference["tenant_id"] == 1
+    finally:
+        web_session_user.tenant_id = home
+        reference["tenant_id"] = home
+
+
+@pytest.mark.parametrize(
+    "reference",
+    [
+        {"kind": "service_account", "user_id": 11, "tenant_id": 101, "token_version": 0},
+        {"kind": "open_api", "user_id": 11, "tenant_id": 101, "token_version": 0},
+        {"kind": "web_session", "user_id": 22, "tenant_id": 101, "token_version": 0},
+        {"kind": "web_session", "user_id": 11, "tenant_id": 202, "token_version": 0},
+        {"kind": "web_session", "user_id": 11, "tenant_id": 101, "token_version": 99},
+        {"kind": "web_session"},
+    ],
+)
+def test_nonweb_or_mismatched_credential_reference_cannot_become_jwt(evaluation_context, reference):
+    user = evaluation_context.identity
+    user._runtime_credential_reference = reference
+    with pytest.raises(UnAuthorizedError):
+        service.EvaluationService.require_evaluation_owner(42, user)
