@@ -150,7 +150,7 @@ async def test_unconfigured_runtime_fails_closed(admission_db):
     runtime.verifier.aissue_scope.assert_not_awaited()
 
 
-async def _actual_owner_runtime(source_db, monkeypatch):
+async def _actual_owner_runtime(source_db, monkeypatch, *, actual_targets=False):
     """Real SourceOwner/Core/identity, with a test-only target boundary.
 
     Production model/knowledge Owners are integrated after their checkpoint;
@@ -231,9 +231,30 @@ async def _actual_owner_runtime(source_db, monkeypatch):
             raise AssertionError("assistant has no preview admission")
 
     target = TargetBoundary()
-    runtime = ReferenceSourceReadRuntime(
-        verifier, SourceReadRepository(verifier), {"model": target, "knowledge_space": target}
-    )
+    owners = {"model": target, "knowledge_space": target}
+    if actual_targets:
+        from bisheng.knowledge.application.source_read_target_owner import KnowledgeSourceReadTargetOwner
+        from bisheng.knowledge.domain.models.knowledge import Knowledge
+        from bisheng.llm.application.source_read_target_owner import ModelSourceReadTargetOwner
+        from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
+        from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
+
+        tables = [Knowledge.__table__, LLMServer.__table__, LLMModel.__table__, ResourceReferenceTombstone.__table__]
+        async with engine.begin() as connection:
+            await connection.run_sync(lambda conn: SQLModel.metadata.create_all(conn, tables=tables))
+        async with AsyncSession(engine) as session, session.begin():
+            session.add_all(
+                [
+                    Knowledge(id=10, tenant_id=101, user_id=9, name="space", type=3),
+                    LLMServer(id=5, tenant_id=101, name="provider", type="openai"),
+                    LLMModel(id=7, server_id=5, tenant_id=101, name="model", model_name="model", model_type="llm"),
+                ]
+            )
+        owners = {
+            "model": ModelSourceReadTargetOwner(verifier),
+            "knowledge_space": KnowledgeSourceReadTargetOwner(verifier),
+        }
+    runtime = ReferenceSourceReadRuntime(verifier, SourceReadRepository(verifier), owners)
     monkeypatch.setattr(admission_module, "get_reference_read_runtime", AsyncMock(return_value=runtime))
     token = set_current_permission_actor(PermissionActor(user_id=user.user_id, current_tenant_id=101))
     return engine, user, token
@@ -266,6 +287,58 @@ async def test_actual_core_refuses_unindexed_business_drift_instead_of_repairing
                 update(Assistant).where(Assistant.id == "owned", Assistant.tenant_id == 101).values(model_name="8")
             )
             with pytest.raises(ReferenceCoverageNotReadyError):
+                await AssistantExecutionAdmission.prepare(user, "owned", session=session)
+            assert not session.identity_map
+    finally:
+        reset_current_permission_actor(token)
+
+
+async def test_real_model_and_knowledge_owners_admit_exact_sql_targets(source_db, monkeypatch):
+    from bisheng.permission.application.identity import reset_current_permission_actor
+
+    engine, user, token = await _actual_owner_runtime(source_db, monkeypatch, actual_targets=True)
+    try:
+        async with AsyncSession(engine) as session, session.begin():
+            result = await AssistantExecutionAdmission.prepare(user, "owned", session=session)
+            assert {(fact.key.target_type.value, fact.key.target_id) for fact in result.target_states} == {
+                ("model", "7"),
+                ("knowledge_space", "10"),
+            }
+            assert all(fact.is_valid for fact in result.target_states)
+            assert not session.identity_map
+    finally:
+        reset_current_permission_actor(token)
+
+
+@pytest.mark.parametrize("kind,target_id", [("model", "7"), ("knowledge_space", "10")])
+async def test_real_deleted_target_is_inspectable_but_never_executable(source_db, monkeypatch, kind, target_id):
+    from sqlalchemy import delete
+
+    from bisheng.knowledge.domain.models.knowledge import Knowledge
+    from bisheng.llm.domain.models.llm_server import LLMModel
+    from bisheng.permission.application.identity import reset_current_permission_actor
+    from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
+
+    engine, user, token = await _actual_owner_runtime(source_db, monkeypatch, actual_targets=True)
+    try:
+        async with AsyncSession(engine) as session, session.begin():
+            model = LLMModel if kind == "model" else Knowledge
+            await session.execute(delete(model).where(model.tenant_id == 101, model.id == int(target_id)))
+            session.add(
+                ResourceReferenceTombstone(
+                    tenant_id=101,
+                    target_tenant_id=101,
+                    target_type=kind,
+                    target_id=target_id,
+                    operation_id="delete-target",
+                    stage="deleted",
+                )
+            )
+        async with AsyncSession(engine) as session, session.begin():
+            result = await AssistantExecutionAdmission.prepare(user, "owned", session=session, purpose="inspect")
+            deleted = next(fact for fact in result.target_states if fact.key.target_type == kind)
+            assert deleted.state == "invalid_deleted" and not deleted.is_valid
+            with pytest.raises(ResourceReferenceInvalidError):
                 await AssistantExecutionAdmission.prepare(user, "owned", session=session)
             assert not session.identity_map
     finally:
