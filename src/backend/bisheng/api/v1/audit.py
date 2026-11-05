@@ -28,6 +28,7 @@ async def get_audit_logs(
     include_descendants: bool = Query(default=True, description="F003: expand selected departments to sub-departments"),
     include_none: bool = Query(default=False, description="F003: rows whose operator had no department"),
     include_unrecorded: bool = Query(default=False, description="F003: rows written before the snapshot existed"),
+    note: str | None = Query(default=None, max_length=200, description="Substring of the remark"),
     page: int | None = Query(default=0, description="Page"),
     limit: int | None = Query(default=0, description="Listings Per Page"),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -47,6 +48,7 @@ async def get_audit_logs(
         target_app_id=target_app_id or None,
         tenant_id=tenant_id,
         dept_selection=DeptSelection.of(dept_ids, include_descendants, include_none, include_unrecorded),
+        note=note,
     )
 
 
@@ -79,6 +81,7 @@ async def export_audit_logs(
     include_descendants: bool = Query(default=True, description="F003: expand selected departments to sub-departments"),
     include_none: bool = Query(default=False, description="F003: rows whose operator had no department"),
     include_unrecorded: bool = Query(default=False, description="F003: rows written before the snapshot existed"),
+    note: str | None = Query(default=None, max_length=200, description="Substring of the remark"),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Rows for the system-audit export (F056 AC-32) — same filters, same
@@ -98,6 +101,7 @@ async def export_audit_logs(
         target_app_id=target_app_id or None,
         tenant_id=tenant_id,
         dept_selection=DeptSelection.of(dept_ids, include_descendants, include_none, include_unrecorded),
+        note=note,
     )
     return resp_200(data={"data": rows, "total": total})
 

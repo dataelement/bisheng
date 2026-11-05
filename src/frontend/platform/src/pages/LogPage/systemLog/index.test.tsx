@@ -61,7 +61,7 @@ it('preserves structured audit fields, valid filter options, date bounds and res
     fireEvent.click(screen.getByRole('button', { name: 'log.searchButton' }))
     await waitFor(() => expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ groupId: 'g1', moduleId: 'tenant', action: 'tenant.mount', start: '2026-10-20 00:00:00', end: '2026-10-20 23:59:59' })))
     fireEvent.click(screen.getByRole('button', { name: 'log.resetButton' }))
-    expect(mock.filter).toHaveBeenLastCalledWith({ userIds: [], groupId: '', start: undefined, end: undefined, moduleId: '', action: '', targetAppId: '', tenantId: undefined, org: EMPTY_ORG_SELECTION })
+    expect(mock.filter).toHaveBeenLastCalledWith({ userIds: [], groupId: '', start: undefined, end: undefined, moduleId: '', action: '', targetAppId: '', tenantId: undefined, org: EMPTY_ORG_SELECTION, note: '' })
 })
 
 it('shows the organisation column with its three captions', () => {
@@ -92,6 +92,18 @@ it('shows the empty state when the query returns no rows', () => {
     expect(screen.getByRole('status')).toHaveTextContent('log.emptyTitle')
     expect(screen.getByText('log.emptyHint')).toBeVisible()
     expect(screen.getByRole('columnheader', { name: 'log.auditId' })).toBeVisible()
+})
+
+it('applies the remark only when the query runs, and reset clears it', () => {
+    renderPage()
+    mock.filter.mockClear()
+    fireEvent.change(screen.getByRole('textbox', { name: 'log.remark' }), { target: { value: '  菜单权限  ' } })
+    expect(mock.filter).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'log.searchButton' }))
+    expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ note: '菜单权限' }))
+    fireEvent.click(screen.getByRole('button', { name: 'log.resetButton' }))
+    expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ note: '' }))
+    expect(screen.getByRole('textbox', { name: 'log.remark' })).toHaveValue('')
 })
 
 it('applies the organisation only when the query runs, and reset clears it', async () => {

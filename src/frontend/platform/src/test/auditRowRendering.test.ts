@@ -205,6 +205,13 @@ describe("audit API params", () => {
     expect(config.params).not.toHaveProperty("page");
   });
 
+  it("sends a trimmed remark and drops a blank one", async () => {
+    await getLogsApi({ page: 1, pageSize: 20, note: "  菜单权限  " });
+    expect(requestMocks.get.mock.calls[0][1].params).toEqual({ page: 1, limit: 20, note: "菜单权限" });
+    await exportSystemLogDataApi({ note: "   " });
+    expect(requestMocks.get.mock.calls[1][1].params).not.toHaveProperty("note");
+  });
+
   it("app selector searches by keyword", async () => {
     requestMocks.get.mockResolvedValue([]);
     await getAuditAppsApi("sal");

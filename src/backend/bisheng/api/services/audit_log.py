@@ -294,6 +294,7 @@ class AuditLogService:
         target_app_id: str | None = None,
         tenant_id: int | None = None,
         dept_selection: DeptSelection | None = None,
+        note: str | None = None,
     ) -> Any:
         try:
             groups, member_ids, tenant_scope, dept_predicate = await cls._prepare_audit_query(
@@ -314,6 +315,7 @@ class AuditLogService:
             target_app_id=target_app_id,
             group_member_ids=member_ids,
             dept_predicate=dept_predicate,
+            note=note,
         )
         return resp_200(data={"data": await cls._enrich_audit_rows(data), "total": total})
 
@@ -330,6 +332,7 @@ class AuditLogService:
         target_app_id: str | None = None,
         tenant_id: int | None = None,
         dept_selection: DeptSelection | None = None,
+        note: str | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """Every row the same query would list, in list order (F056 AC-32).
 
@@ -359,6 +362,7 @@ class AuditLogService:
                 target_app_id=target_app_id,
                 group_member_ids=member_ids,
                 dept_predicate=dept_predicate,
+                note=note,
             )
             if not chunk:
                 break

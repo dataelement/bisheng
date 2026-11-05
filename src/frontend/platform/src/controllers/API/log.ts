@@ -74,6 +74,8 @@ export interface AuditLogFilters {
     tenantId?: number | null
     /** F003: organisation the operator belonged to when the row was written. */
     org?: OrgSelection
+    /** Substring of the stored remark. Empty means no filter. */
+    note?: string
 }
 
 // Empty strings / empty arrays are "no filter", not a filter for the empty
@@ -89,6 +91,7 @@ const buildAuditParams = (filters: AuditLogFilters): Record<string, unknown> => 
         event_type: filters.action,
         target_app_id: filters.targetAppId,
         tenant_id: filters.tenantId,
+        note: filters.note?.trim(),
         ...toDeptParams(filters.org),
     }
     return Object.fromEntries(
