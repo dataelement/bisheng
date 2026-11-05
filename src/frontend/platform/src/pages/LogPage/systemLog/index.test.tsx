@@ -4,13 +4,22 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { EMPTY_ORG_SELECTION } from '@/controllers/API/log'
 import SystemLog from './index'
 
-const mock = vi.hoisted(() => ({ filter: vi.fn() }))
+const mock = vi.hoisted(() => {
+    const rows = [
+        { id: 'audit-1', operator_name: 'Admin', create_time: '2026-10-20T10:00:00', action: 'tenant.mount', target_type: 'tenant', target_id: 'tenant-1', note: 'Audit note', operator_dept_id: 3, operator_dept_path: 'Root/Sales/East' },
+        { id: 'audit-2', operator_name: 'system', operator_id: 0, create_time: '2026-10-20T10:00:00', event_type: 'update_sandbox_conf', operator_dept_id: -1 },
+        { id: 'audit-3', operator_name: 'Old', create_time: '2026-10-20T10:00:00', event_type: 'user_login', operator_dept_id: null },
+    ]
+    return { filter: vi.fn(), rows, logs: rows, loaded: true, loading: false }
+})
 vi.mock('@/controllers/API/log', async (importOriginal) => ({
     ...(await importOriginal<typeof import('@/controllers/API/log')>()),
     getLogsApi: vi.fn(), getOperatorsApi: vi.fn().mockResolvedValue([]),
-    getModulesApi: vi.fn().mockResolvedValue({ data: [{ value: '', name: 'Invalid module' }, { value: 'tenant', name: 'Tenant module' }] }),
+    getModulesApi: vi.fn().mockResolvedValue({ data: [{ value: '', name: 'Invalid module' }, { value: 'tenant', name: 'Tenant module' }, { value: 'llm', name: 'Model module' }] }),
     getActionsApi: vi.fn().mockResolvedValue([{ value: '', name: 'Invalid action' }, { value: 'tenant.mount', name: 'Mount tenant' }]),
-    getActionsByModuleApi: vi.fn().mockResolvedValue([{ value: null, name: 'Invalid action' }, { value: 'tenant.mount', name: 'Mount tenant' }]),
+    getActionsByModuleApi: vi.fn(async (moduleId: string) => moduleId === 'llm'
+        ? [{ value: 'llm.server.create', name: 'Create model' }]
+        : [{ value: null, name: 'Invalid action' }, { value: 'tenant.mount', name: 'Mount tenant' }]),
     getAuditDepartmentsApi: vi.fn().mockResolvedValue({
         active: [{ id: 2, dept_id: 'BS@2', external_id: null, name: 'Sales', path_name: 'Root/Sales', parent_id: 1, tenant_id: 1, has_children: false }],
         archived: [], show_none: true, show_unrecorded: true,
@@ -20,14 +29,17 @@ vi.mock('@/controllers/API/user', () => ({ getUserGroupsApi: vi.fn().mockResolve
 vi.mock('@/components/bs-ui/calendar/datePicker', () => ({ DatePicker: ({ placeholder, onChange }: { placeholder: string; onChange: (d: Date) => void }) => <button onClick={() => onChange(new Date('2026-10-20T00:00:00'))}>{placeholder}</button> }))
 vi.mock('@/util/hook', () => ({
     useTable: () => ({
-        page: 1, pageSize: 20, total: 3, loading: false, setPage: vi.fn(), filterData: mock.filter, data: [
-            { id: 'audit-1', operator_name: 'Admin', create_time: '2026-10-20T10:00:00', action: 'tenant.mount', target_type: 'tenant', target_id: 'tenant-1', note: 'Audit note', operator_dept_id: 3, operator_dept_path: 'Root/Sales/East' },
-            { id: 'audit-2', operator_name: 'system', operator_id: 0, create_time: '2026-10-20T10:00:00', event_type: 'update_sandbox_conf', operator_dept_id: -1 },
-            { id: 'audit-3', operator_name: 'Old', create_time: '2026-10-20T10:00:00', event_type: 'user_login', operator_dept_id: null },
-        ],
+        page: 1, pageSize: 20, total: mock.logs.length, loading: mock.loading, loaded: mock.loaded,
+        setPage: vi.fn(), filterData: mock.filter, data: mock.logs,
     }),
 }))
-afterEach(cleanup)
+afterEach(() => {
+    cleanup()
+    mock.logs = mock.rows
+    mock.loaded = true
+    mock.loading = false
+    mock.filter.mockClear()
+})
 
 const renderPage = () => render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, cacheTime: 0 } } })}><SystemLog /></QueryClientProvider>,
@@ -58,6 +70,28 @@ it('shows the organisation column with its three captions', () => {
     expect(screen.getByText('log.org.notApplicable')).toBeVisible()
     expect(screen.getByText('log.org.unrecorded')).toBeVisible()
     expect(screen.getByText('log.eventTypeEnum.update_sandbox_conf')).toBeVisible()
+})
+
+it('clears the selected action when the system module changes', async () => {
+    renderPage()
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'log.systemModule' }), { key: 'ArrowDown' })
+    fireEvent.click(await screen.findByRole('option', { name: 'Tenant module' }))
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'log.actionBehavior' }), { key: 'ArrowDown' })
+    fireEvent.click(await screen.findByRole('option', { name: 'Mount tenant' }))
+    expect(screen.getByRole('combobox', { name: 'log.actionBehavior' })).toHaveTextContent('Mount tenant')
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'log.systemModule' }), { key: 'ArrowDown' })
+    fireEvent.click(await screen.findByRole('option', { name: 'Model module' }))
+    expect(screen.getByRole('combobox', { name: 'log.actionBehavior' })).not.toHaveTextContent('Mount tenant')
+    fireEvent.click(screen.getByRole('button', { name: 'log.searchButton' }))
+    expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ moduleId: 'llm', action: '' }))
+})
+
+it('shows the empty state when the query returns no rows', () => {
+    mock.logs = []
+    renderPage()
+    expect(screen.getByRole('status')).toHaveTextContent('log.emptyTitle')
+    expect(screen.getByText('log.emptyHint')).toBeVisible()
+    expect(screen.getByRole('columnheader', { name: 'log.auditId' })).toBeVisible()
 })
 
 it('applies the organisation only when the query runs, and reset clears it', async () => {
