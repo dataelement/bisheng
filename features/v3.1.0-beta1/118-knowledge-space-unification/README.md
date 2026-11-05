@@ -1,20 +1,45 @@
 # 知识库与知识空间统一：功能工作区
 
-**迁移日期**：2026-11-04  
-**功能分支**：`codex/3.1.0-beta1/118-knowledge-space-unification`  
-**工作区**：`/Users/zhangguoqing/works/bisheng/.worktrees/118-knowledge-space-unification`  
+**迁移日期**：2026-11-04\
+**功能分支**：`codex/3.1.0-beta1/118-knowledge-space-unification`\
+**工作区**：`/Users/zhangguoqing/works/bisheng/.worktrees/118-knowledge-space-unification`\
 **代码基线**：`d99eb7e430929323a9bf19e2242df9f54d63d908`，在本功能分支合并主工作区本地 `61971a13d8129a12a4522e31ff23d6dbd595bac2` 和最新远端 `origin/feat/3.1.0-beta1` 的 `22d46549f9a1f09fb7b63f3f7235c882b1576646`，两边提交均保留。
 
 ## 文档入口
 
-- [Spec：92 条验收标准](./spec.md)
+- [Spec：94 条验收标准](./spec.md)
 - [技术设计：迁移、策略统一、业务绑定维护和强制删除](./design.md)
+- [实施任务：接口、依赖、文件 Owner 与验证](./tasks.md)
+- [多 agent 并行开发：边界、耦合与合流协议](./parallel-development.md)
+- [QA 参考：140 条八列用例](./test-cases.md)
+- [任务复审记录：LGTM](./tasks-review.md)
 - [升级说明：停服、引用回填、恢复与核对](./upgrade-guide.md)
-- [HTML 技术评审：12 张流程图](../../../docs/architecture/review/2026-11-03-bisheng-knowledge-unification-technical-review.html)
+- [HTML 技术评审：13 张流程图](../../../docs/architecture/review/2026-11-03-bisheng-knowledge-unification-technical-review.html)
 - [版本契约：保留其他特性登记并加入 F118 增量](../release-contract.md)
+
+## 评审状态
+
+| 文档 / 阶段 | 状态 | 记录 |
+| --- | --- | --- |
+| spec.md | ✅ 已评审、用户已确认 | 2026-11-05 确认完整 94 条 AC，作为设计评审的需求基线 |
+| design.md | ✅ 已评审、用户已确认 | 四项口径独立复查闭合；2026-11-05 用户授权进入任务拆分 |
+| test-cases.md | 已生成，待执行 | 140 条，94 AC 全覆盖；QA 参考，不是任务或 Harness 输入 |
+| tasks.md / parallel-development.md | ✅ 已拆分、复审 LGTM | 213 个叶子任务，接口先行、热点单写、协调 1 + 开发 3；未开始实现 |
 
 ## 迁移边界
 
 本次迁入已有规格、设计、升级说明和 HTML，保留已确认的 Q-01–Q-05、业务同事务维护绑定、旧数据回填及强删后保留失效关系的规则。原文中的 `feat/3.0.0` / `25e50eceeeb71989257e5ff38e35f5e011e59bae` 是历史源码调研证据，并非新功能工作区的当前代码基线。
 
-尚未重新对最新基线完成全部源码接线审查，尚未实现功能代码或迁移脚本；完整 spec/design 仍待整体技术评审。F118 编号保持现有文档约定。主工作区其他配置、登录流程及验证文档不迁移。
+尚未重新对最新基线完成全部源码接线审查，尚未实现功能代码或迁移脚本；完整 spec 与技术设计已获确认，2026-11-05 进入任务拆分。F118 编号保持现有文档约定。主工作区其他配置、登录流程及验证文档不迁移。
+
+## 2026-11-04 Spec 评审修订
+
+本轮已按用户四项反馈同步 Spec、design、HTML、升级说明和版本契约：文件动作统一判定、旧任务过期、具体业务引用保留/解除，以及逐项修复失效引用。design §6.4.1 补充 577d8bd14 基线的定向源码证据；不是全仓行为审查，功能与回填脚本仍未实现。修订文档当前未提交。
+
+## 本轮补充确认
+
+已新增 AC-93（存量失效保留标记、对账完整可升级）与 AC-94（文件/文件夹精确直接引用保护），合计 94 条。design §6.11–§6.12 和 HTML 第 13 图细化实现边界；升级说明同步。此前四项评审修订保持，主工作区未改动，本功能工作区文档仍待提交。
+
+## 2026-11-05 技术设计评审后修订
+
+不扩展文件 edit，保留现有用例动作映射；纯可见授权按 design §7.3.2 保留原 model_key、Source 和管理等级，并支持原入口撤销；文件删除复用空间 F048 投影在先、SQL finalize 在后的顺序；Worker 在途异步写入与用户后续修改的竞态暂不处理。spec、design、升级说明、HTML 和版本契约已对齐，仍为 94 条 AC、13 张图；本轮仅文档修订。

@@ -1,0 +1,1797 @@
+# Tasks：知识空间统一与全平台 use 退役
+
+**版本**：v3.1.0-beta1 / F118 · **拆分日期**：2026-11-05
+
+**依据**：[spec.md](./spec.md)（94 条 AC） · [design.md](./design.md) · [并行边界与合同](./parallel-development.md) · [版本契约](../release-contract.md)
+
+## 状态
+
+| 阶段 | 状态 | 记录 |
+| --- | --- | --- |
+| spec.md | ✅ 已评审、用户已确认 | 2026-11-05，94 条 AC |
+| design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
+| test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
+| tasks.md | ✅ 已拆解、复审 LGTM | 2026-11-05，见 [任务复审记录](./tasks-review.md) |
+| 实现 | 未开始 | 0 / 213 项；本轮未写业务代码、未运行测试或迁移 |
+
+## 领取与执行规则
+
+每卡最多 2 个写入文件，目标约 30 分钟；已有文件增量过大先拆卡。文件显示“拟新增”表示实现计划，未声称已有行为。任务直接追溯 spec AC，不依赖 QA 用例表；设计论证见 design，接口论证见 parallel-development。基础定义排在业务之前；后端配对测试先红后绿，最终集成测试按真实环境执行。
+
+任务编号的排列是一种合法拓扑顺序，不表示必须全局串行。`依赖`满足即可启动，但同文件由唯一 Owner 串行；生成时已加入同文件的前一写入任务作为依赖。建议保持 INT 协调 + 3 开发槽，按并行文档 W0–W6 调度。所有实施任务先完成 T001 基线对齐与 T002 合同 V1；尚未批准变更公共接口时不得各自猜测字段。
+
+测试文件均位于 `src/backend/test/knowledge_unification/`，新模块整表由 SQLModel 发现；既有表结构由 MIG 唯一编排 Alembic，数据转换仅停服脚本。Worker 卡统一遵守 Celery headers 中 tenant_id → ContextVar；相关配置/索引过期检查保留，不实施已排除的在途 I/O 竞态围栏。
+
+每次交付提交任务 ID、base SHA、只写路径、配对测试的实际命令/结果、接口版本及未运行项。未经用户授权不推送、合并 PR、部署；不得 repo-wide Git 写操作。实际发现入口变化须先补叶子任务并更新覆盖/Owner，不能将清单未闭合标成完成。
+
+## 任务清单
+
+- [ ] **T001 · 开发基线、文件 Owner 与入口清单**
+  **类型 / Owner**：基础设施 / INT\
+  **写入文件**：`features/v3.1.0-beta1/118-knowledge-space-unification/parallel-development.md`；`features/v3.1.0-beta1/118-knowledge-space-unification/contracts.md`（拟新增）\
+  **逻辑 / 测试上下文**：实施前按路径保留脏文档；核对/合入实际最新发版线，记录 SHA，再创建同一基线子工作区。contracts.md 登记全平台 use 消费者、旧知识调用面、MCP/SDK 实际路径及唯一 Owner；任何额外叶子文件先拆卡。禁止覆盖未提交内容。\
+  **依赖**：无\
+  **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
+
+- [ ] **T002 · 冻结 R1/R2/R3/J1/A1/P1 合同 V1**
+  **类型 / Owner**：基础设施 / INT\
+  **写入文件**：`features/v3.1.0-beta1/118-knowledge-space-unification/contracts.md`（拟新增）\
+  **逻辑 / 测试上下文**：按 parallel-development §3 冻结函数签名、错误/分页、确认摘要、幂等键、锁序、管理员具体租户、纯可见快照和任务状态；核对实际 OpenAPI 后登记路径，不使用 config 路径段。历史 envelope 保持，文件 edit 不扩展。\
+  **依赖**：T001\
+  **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
+
+- [ ] **T003 · 来源/目标与替换 DTO**
+  **类型 / Owner**：基础设施 / REF\
+  **写入文件**：`src/backend/bisheng/resource_reference/application/contracts.py`（拟新增）\
+  **逻辑 / 测试上下文**：定义 SourceKey/ReferenceTarget/VerifiedTargetContext、稳定 slot、revision、extractor_version、来源集合摘要和已登记失效证据；仅模型/空间/直接文件，外部 Session 不 commit。\
+  **依赖**：T002\
+  **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
+
+- [ ] **T004 · 引用明细与零引用集合 SQLModel**
+  **类型 / Owner**：基础设施 / REF\
+  **写入文件**：`src/backend/bisheng/resource_reference/domain/models/business_resource_reference.py`（拟新增）；`src/backend/bisheng/resource_reference/domain/models/business_reference_set.py`（拟新增）\
+  **逻辑 / 测试上下文**：落实 design §6.2 唯一键、来源/目标/target_space_id 索引、真实目标租户与未知旧目标、基线证据；使用双库 helpers，不用专有 upsert。新整表自动发现；回退新表前备份/确认无已启用业务写入，不丢现有表。\
+  **依赖**：T003\
+  **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
+
+- [ ] **T005 · 目标删除标记 SQLModel**
+  **类型 / Owner**：基础设施 / REF\
+  **写入文件**：`src/backend/bisheng/resource_reference/domain/models/resource_reference_tombstone.py`（拟新增）\
+  **逻辑 / 测试上下文**：定义目标 deleting/deleted、操作/操作者/时间与幂等信息，不复制业务配置/凭据。存量失效不伪造 tombstone；新增整表同上回退限制。\
+  **依赖**：T004\
+  **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
+
+- [ ] **T006 · 纯可见快照字段和兼容序列化**
+  **类型 / Owner**：基础设施 / PERM\
+  **写入文件**：`src/backend/bisheng/permission/domain/schemas/f048.py`；`src/backend/bisheng/permission/domain/models/grant.py`\
+  **逻辑 / 测试上下文**：定义 visibility_only_resource_types/visibility_level，保留原 model_key、Source、范围和管理等级；旧字段兼容读取，checksum 规范化规则落 P1；结构回退先备份纯可见标记，不能无损降级时使用一致备份。\
+  **依赖**：T002\
+  **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
+
+- [ ] **T007 · 分类型默认与任务公开 DTO**
+  **类型 / Owner**：基础设施 / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/schemas/processing_settings.py`（拟新增）；`src/backend/bisheng/knowledge/domain/schemas/processing_job.py`（拟新增）\
+  **逻辑 / 测试上下文**：定义普通文档/表格独立草稿与保存版本、相关模型/索引修订、accepted 与 job/item 枚举、失败明细及裁剪字段；网页/音视频专用参数不混入。\
+  **依赖**：T002\
+  **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
+
+- [ ] **T008 · 任务/子项 SQLModel**
+  **类型 / Owner**：基础设施 / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge_processing_job.py`（拟新增）；`src/backend/bisheng/knowledge/domain/models/knowledge_processing_item.py`（拟新增）\
+  **逻辑 / 测试上下文**：记录空间/文件/逻辑文档/版本映射、实际处理快照、generation/lease、幂等键和检查点；模型只从业务读，不加任务模型引用。双库索引、无本机文件状态；新表未启用前可删除，启用后回退用一致备份。\
+  **依赖**：T007\
+  **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
+
+- [ ] **T009 · 既有表字段与 Alembic 唯一编排**
+  **类型 / Owner**：基础设施 / MIG\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge.py`；`src/backend/bisheng/core/database/alembic/versions/f118_knowledge_unification.py`（拟新增）\
+  **逻辑 / 测试上下文**：按冻结 schema 增加 durable migration origin/分类型默认及相关配置版本；只迁既有结构，不跑数据转换。revision 文件名/父链由 MIG 实施时核对唯一值；测试 upgrade/downgrade(MySQL/DM8)，降级不得静默丢已生效配置。\
+  **依赖**：T008, T005, T006\
+  **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
+
+- [ ] **T010 · 迁移账本 SQLModel**
+  **类型 / Owner**：基础设施 / MIG\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge_unification_run.py`（拟新增）\
+  **逻辑 / 测试上下文**：定义 run/原基线/plan hash/阶段/租户来源覆盖持久结构，双库 helpers，不写本机共享状态。新表启用前可撤，转换后回退完整一致备份。\
+  **依赖**：T009\
+  **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
+
+- [ ] **T011 · 新模块租户注册**
+  **类型 / Owner**：基础设施 / MIG\
+  **写入文件**：`src/backend/bisheng/core/database/tenant_filter.py`\
+  **逻辑 / 测试上下文**：登记 resource_reference 及 knowledge 新表的自动租户注入；共享模型跨租户反查通过可信专用 Repository，普通调用不得传任意 tenant 绕过；不改变 SQLModel 自动发现方式。\
+  **依赖**：T010\
+  **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
+
+- [ ] **T012 · 错误码与测试基础**
+  **类型 / Owner**：基础设施 / INT\
+  **写入文件**：`src/backend/bisheng/common/errcode/knowledge.py`；`src/backend/test/knowledge_unification/conftest.py`（拟新增）\
+  **逻辑 / 测试上下文**：核对现有知识错误码子段，新增覆盖未就绪/引用变化/失效/任务过期等已冻结错误；准备两个租户、超管/租管/普通/独立子项授权、事务故障注入 fixture。其他模块错误如需增加，另拆注册卡交 INT。\
+  **依赖**：T011\
+  **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
+
+- [ ] **T013 · 来源集合与目标反查 Repository：先写测试**
+  **类型 / Owner**：测试 / REF\
+  **写入文件**：`src/backend/test/knowledge_unification/test_ref_repo.py`（拟新增）\
+  **逻辑 / 测试上下文**：同来源重复保存无重复、空集有记录、不同版本独立；普通租户不串数据；共享目标能查两租户，异常不当空集。\
+  **依赖**：T012, T004, T005\
+  **覆盖 AC**: AC-72, AC-87, AC-88, AC-89\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T014 · 来源集合与目标反查 Repository**
+  **类型 / Owner**：后端 Domain / REF\
+  **写入文件**：`src/backend/bisheng/resource_reference/domain/repositories/reference_repository.py`（拟新增）\
+  **逻辑 / 测试上下文**：实现按 SourceKey 加载/差分/替换及目标/空间范围反查，零引用集合持久；普通按租户，受信共享模型反查汇总全部实际来源租户。只收外部 Session、不 commit。\
+  **依赖**：T013\
+  **配对测试**：T013\
+  **验证 / 完成条件**：运行配对测试 T013；验证本卡预期，相关范围检查通过。
+
+- [ ] **T015 · 同 Session 原子替换与来源 CAS：先写测试**
+  **类型 / Owner**：测试 / REF\
+  **写入文件**：`src/backend/test/knowledge_unification/test_ref_replace.py`（拟新增）\
+  **逻辑 / 测试上下文**：事务中绑定失败配置不提交；两保存 CAS 冲突；保存/普通删并发无漏引用；部分修复保留另一失效槽，新建复制导入拒绝已删目标。\
+  **依赖**：T014, T003\
+  **覆盖 AC**: AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T016 · 同 Session 原子替换与来源 CAS**
+  **类型 / Owner**：后端 Domain / REF\
+  **写入文件**：`src/backend/bisheng/resource_reference/application/bindings.py`（拟新增）\
+  **逻辑 / 测试上下文**：实现 R2 replace_source_bindings；来源根修订门闩、候选目标锁后当前读重验，集合变化回滚重算；配置、明细、集合只由业务统一 commit。新非法目标拒绝，原未改动已登记失效允许保留。\
+  **依赖**：T015\
+  **配对测试**：T015\
+  **验证 / 完成条件**：运行配对测试 T015；验证本卡预期，相关范围检查通过。
+
+- [ ] **T017 · 目标失效判定与覆盖就绪：先写测试**
+  **类型 / Owner**：测试 / REF\
+  **写入文件**：`src/backend/test/knowledge_unification/test_ref_state.py`（拟新增）\
+  **逻辑 / 测试上下文**：未完成来源/零引用集合缺失都阻断；登记存量失效不算缺口；迁移自身漏行不得降格存量失效；状态不可泄露其他租户细节。\
+  **依赖**：T016\
+  **覆盖 AC**: AC-89, AC-90, AC-91, AC-93\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T018 · 目标失效判定与覆盖就绪**
+  **类型 / Owner**：后端 Domain / REF\
+  **写入文件**：`src/backend/bisheng/resource_reference/application/target_state.py`（拟新增）；`src/backend/bisheng/resource_reference/domain/repositories/coverage_repository.py`（拟新增）\
+  **逻辑 / 测试上下文**：统一 live/deleting/deleted、强删与基线已登记存量失效；按租户/来源类型 coverage_ready 查询，未登记异常 fail closed；提供 initialize_empty_tenant_coverage(session, tenant_id, writer_contract_version)，仅可信新租户/全新安装空数据证据且全部写端已启用可初始化，既有租户不得以缺账本冒充空租户。无独立改绑定 HTTP 接口。\
+  **依赖**：T017\
+  **配对测试**：T017\
+  **验证 / 完成条件**：运行配对测试 T017；验证本卡预期，相关范围检查通过。
+
+- [ ] **T019 · 移除活动 use 与合法纯可见模型：先写测试**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_perm_policy.py`（拟新增）\
+  **逻辑 / 测试上下文**：use-only 与跨资源全局 download 模型分别退化；原可见集合等价，rename 不变，非法空模型拒绝；历史快照 use 原文保留。\
+  **依赖**：T006, T012\
+  **覆盖 AC**: AC-78, AC-80, AC-81, AC-82\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T020 · 移除活动 use 与合法纯可见模型**
+  **类型 / Owner**：后端 Domain / PERM\
+  **写入文件**：`src/backend/bisheng/permission/domain/services/model_policy.py`；`src/backend/bisheng/permission/domain/services/catalog_policy.py`\
+  **逻辑 / 测试上下文**：从标准/自定义/预设/系统活动动作删 use；原资源类型退化纯可见时保留 model_key/等级/主体/Source，不补 edit/download，不创建 visible 具体动作；未标记任意空模型仍拒绝。\
+  **依赖**：T019\
+  **配对测试**：T019\
+  **验证 / 完成条件**：运行配对测试 T019；验证本卡预期，相关范围检查通过。
+
+- [ ] **T021 · 纯可见授权可授予、列表与撤销：先写测试**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_perm_grant.py`（拟新增）\
+  **逻辑 / 测试上下文**：有管理权限可经原入口找到并撤销 use-only 迁移授权；重复来源撤销一个仍可见；低等级操作者不得越权/撤受保护来源。\
+  **依赖**：T020\
+  **覆盖 AC**: AC-78, AC-81, AC-83\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T022 · 纯可见授权可授予、列表与撤销**
+  **类型 / Owner**：后端 Domain / PERM\
+  **写入文件**：`src/backend/bisheng/permission/domain/services/grant_service.py`；`src/backend/bisheng/permission/application/catalog_api.py`\
+  **逻辑 / 测试上下文**：grantable/manage-existing 识别合法纯可见快照与原管理等级；保留受保护来源限制，撤销仅当前 Source，其他来源并集保留；返回可管理可撤销能力。\
+  **依赖**：T021\
+  **配对测试**：T021\
+  **验证 / 完成条件**：运行配对测试 T021；验证本卡预期，相关范围检查通过。
+
+- [ ] **T023 · 可见性编译与 F048 模型发布：先写测试**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_perm_projection.py`（拟新增）\
+  **逻辑 / 测试上下文**：目录独立子项授权仍隔离；可见不等于下载/rename/edit；全员/系统/普通 Source 投影可逆、非 use 检查差异为零。\
+  **依赖**：T022\
+  **覆盖 AC**: AC-30, AC-31, AC-59, AC-79, AC-80, AC-81, AC-83\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T024 · 可见性编译与 F048 模型发布**
+  **类型 / Owner**：后端 Domain / PERM\
+  **写入文件**：`src/backend/bisheng/permission/domain/services/visibility_projection_service.py`；`src/backend/bisheng/core/openfga/authorization_model_f048.py`\
+  **逻辑 / 测试上下文**：编译纯可见快照、租户全员/系统可见来源，更新 F048 模型；只变原使用准入，保留子项、tenant、scope 与其他动作。版本/Catalog/checksum 按 P1 发布。\
+  **依赖**：T023\
+  **配对测试**：T023\
+  **验证 / 完成条件**：运行配对测试 T023；验证本卡预期，相关范围检查通过。
+
+- [ ] **T025 · 运行协议与旧 use 表达兼容：先写测试**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_perm_runtime.py`（拟新增）\
+  **逻辑 / 测试上下文**：旧协议表达可按 visible 调用，当前保存 use 不形成独立来源；失效凭证/跨租户/子项无权仍拒绝。\
+  **依赖**：T024\
+  **覆盖 AC**: AC-35, AC-78, AC-79, AC-82, AC-83\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T026 · 运行协议与旧 use 表达兼容**
+  **类型 / Owner**：后端 Domain / PERM\
+  **写入文件**：`src/backend/bisheng/permission/application/business_authorization.py`；`src/backend/bisheng/permission/domain/services/permission_action_service.py`\
+  **逻辑 / 测试上下文**：统一当前 use/use_kb 受支持适配为 visible，活动动作接口不保存返回 use；保留主体、凭证 scope、tenant 和业务状态；历史审计不重写。\
+  **依赖**：T025\
+  **配对测试**：T025\
+  **验证 / 完成条件**：运行配对测试 T025；验证本卡预期，相关范围检查通过。
+
+- [ ] **T027 · 投影运行时快照与 checksum：先写测试**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_perm_runtime_snapshot.py`（拟新增）\
+  **逻辑 / 测试上下文**：纯可见序列化往返checksum一致、Catalog发布/撤销可恢复，空动作合法模型不丢Source；非法空模型仍拒绝。\
+  **依赖**：T026\
+  **覆盖 AC**: AC-78, AC-80, AC-81, AC-83\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T028 · 投影运行时快照与 checksum**
+  **类型 / Owner**：后端 Domain / PERM\
+  **写入文件**：`src/backend/bisheng/permission/domain/services/projection_service.py`；`src/backend/bisheng/permission/application/runtime.py`\
+  **逻辑 / 测试上下文**：F048 snapshot编译/持久校验和、target资源解析、Catalog变更impact支持合法纯可见标记/等级和Grant Source；仍复用原prepare/project/finalize及撤销路径，不为use另建规则。\
+  **依赖**：T027\
+  **配对测试**：T027\
+  **验证 / 完成条件**：运行配对测试 T027；验证本卡预期，相关范围检查通过。
+
+- [ ] **T029 · 应用声明名称到真实目标合同：先写测试**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_resolve.py`（拟新增）\
+  **逻辑 / 测试上下文**：同名歧义拒绝，唯一名称解析与运行一致；历史 manifest 不修改；无法解析旧目标不得猜 ID 标为存量失效；冻结后名称重新指向另一ID时运行/预览失败，不调用未绑定目标。\
+  **依赖**：T016, T026\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-87, AC-89\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T030 · 应用声明名称到真实目标合同**
+  **类型 / Owner**：后端 Domain / APP\
+  **写入文件**：`src/backend/bisheng/app_publish/domain/services/capability_bus_service.py`；`src/backend/bisheng/app_publish/domain/services/reference_extractor.py`（拟新增）\
+  **逻辑 / 测试上下文**：复用运行 name/id 解析，CapabilityModelRef name 与 knowledge name/id 均解析真实稳定 ID；歧义失败，冻结版本绑定依真实 ID，保留 manifest 原文；输出 B2；该版本解析真实ID随引用集合冻结，运行/预览必须逐槽匹配已登记ID，名字后续改名/重名不得漂移，解析不一致明确失败。\
+  **依赖**：T029\
+  **配对测试**：T029\
+  **验证 / 完成条件**：运行配对测试 T029；验证本卡预期，相关范围检查通过。
+
+- [ ] **T031 · 工作流按版本提取器：先写测试**
+  **类型 / Owner**：测试 / WF\
+  **写入文件**：`src/backend/test/knowledge_unification/test_wf_extract.py`（拟新增）\
+  **逻辑 / 测试上下文**：同一目标多槽独立；草稿/离线/非当前保留；删槽移除对应关系，聊天/评测/任务不计。\
+  **依赖**：T016\
+  **覆盖 AC**: AC-71, AC-87, AC-88\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T032 · 工作流按版本提取器**
+  **类型 / Owner**：后端 Domain / WF\
+  **写入文件**：`src/backend/bisheng/workflow/domain/services/reference_extractor.py`（拟新增）\
+  **逻辑 / 测试上下文**：由 Owner 解析实际节点/模型/空间/直接文件槽位，稳定 node/slot_key，不扫数组下标；所有未删除版本含草稿/非当前，不计 Flow.data 镜像。\
+  **依赖**：T031\
+  **配对测试**：T031\
+  **验证 / 完成条件**：运行配对测试 T031；验证本卡预期，相关范围检查通过。
+
+- [ ] **T033 · 工作流 Repository 外部事务：先写测试**
+  **类型 / Owner**：测试 / WF\
+  **写入文件**：`src/backend/test/knowledge_unification/test_wf_transaction.py`（拟新增）\
+  **逻辑 / 测试上下文**：create/update/delete 参与外部事务，失败回滚；旧 DAO 调用兼容。多版本新增与删除共根 revision 门闩。\
+  **依赖**：T032\
+  **覆盖 AC**: AC-87, AC-88, AC-89\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T034 · 工作流 Repository 外部事务**
+  **类型 / Owner**：后端 Domain / WF\
+  **写入文件**：`src/backend/bisheng/database/models/flow.py`；`src/backend/bisheng/database/models/flow_version.py`\
+  **逻辑 / 测试上下文**：既有兼容 DAO 增加可加入外部 Session 的原子写路径，逐个去除本用例内部提前 commit；后续 Service 一次提交，旧其他消费者不改变返回行为。\
+  **依赖**：T033\
+  **配对测试**：T033\
+  **验证 / 完成条件**：运行配对测试 T033；验证本卡预期，相关范围检查通过。
+
+- [ ] **T035 · 工作流新增版本与保存：先写测试**
+  **类型 / Owner**：测试 / WF\
+  **写入文件**：`src/backend/test/knowledge_unification/test_wf_save.py`（拟新增）\
+  **逻辑 / 测试上下文**：新增和保存不同版本独立绑定；绑定失败版本不提交；暂不能运行草稿也保留。\
+  **依赖**：T034, T018\
+  **覆盖 AC**: AC-71, AC-87, AC-88\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T036 · 工作流新增版本与保存**
+  **类型 / Owner**：后端 Domain / WF\
+  **写入文件**：`src/backend/bisheng/api/services/flow.py`\
+  **逻辑 / 测试上下文**：仅接create_new_version/update_version_info：提取对应版本完整集合，业务+R2同事务、revision门闩；所有草稿/非当前版本保护，Flow.data镜像不重复。\
+  **依赖**：T035\
+  **配对测试**：T035\
+  **验证 / 完成条件**：运行配对测试 T035；验证本卡预期，相关范围检查通过。
+
+- [ ] **T037 · 工作流当前版本与运行校验：先写测试**
+  **类型 / Owner**：测试 / WF\
+  **写入文件**：`src/backend/test/knowledge_unification/test_wf_current.py`（拟新增）\
+  **逻辑 / 测试上下文**：切current不解除旧版本；失效版本运行发布失败，先修一个槽保存保另一个；恢复旧current不猜模型。\
+  **依赖**：T036\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-88, AC-91, AC-92\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T038 · 工作流当前版本与运行校验**
+  **类型 / Owner**：后端 Domain / WF\
+  **写入文件**：`src/backend/bisheng/api/services/flow.py`\
+  **逻辑 / 测试上下文**：change_current_version/发布回滚沿既有操作，不清非当前绑定；运行发布校验剩余失效，原可编辑来源允许逐项保存修复。\
+  **依赖**：T037, T036\
+  **配对测试**：T037\
+  **验证 / 完成条件**：运行配对测试 T037；验证本卡预期，相关范围检查通过。
+
+- [ ] **T039 · 工作流删除/复制/导入绑定接线：先写测试**
+  **类型 / Owner**：测试 / WF\
+  **写入文件**：`src/backend/test/knowledge_unification/test_wf_bindings.py`（拟新增）\
+  **逻辑 / 测试上下文**：删除一版本其他保持，删整flow全释放；复制导入非法目标零落盘，绑定故障全回滚。\
+  **依赖**：T038\
+  **覆盖 AC**: AC-68, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T040 · 工作流删除/复制/导入绑定接线**
+  **类型 / Owner**：后端 Domain / WF\
+  **写入文件**：`src/backend/bisheng/api/services/flow.py`\
+  **逻辑 / 测试上下文**：delete_version仅解除被删版本，整工作流删除解除全部；复制/导入调用同提取事务并拒绝新增已删目标，原不同版本互不误清。\
+  **依赖**：T039, T038\
+  **配对测试**：T039\
+  **验证 / 完成条件**：运行配对测试 T039；验证本卡预期，相关范围检查通过。
+
+- [ ] **T041 · 工作流执行可见准入：先写测试**
+  **类型 / Owner**：测试 / WF\
+  **写入文件**：`src/backend/test/knowledge_unification/test_wf_entry.py`（拟新增）\
+  **逻辑 / 测试上下文**：仅可见可执行，缺少文件可见不得召回；历史绑定有效，无凭证/跨租户/失效不能运行。\
+  **依赖**：T040, T026\
+  **覆盖 AC**: AC-37, AC-68, AC-79, AC-82, AC-83, AC-91\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T042 · 工作流执行可见准入**
+  **类型 / Owner**：后端 Domain / WF\
+  **写入文件**：`src/backend/bisheng/api/services/workflow.py`；`src/backend/bisheng/api/v1/workflow.py`\
+  **逻辑 / 测试上下文**：替换本 Owner 执行/版本入口独立 use 检查，委托统一身份/visible；历史知识类型运行解析，未删除版本失效明确报错，scope/租户/执行条件保持。\
+  **依赖**：T041\
+  **配对测试**：T041\
+  **验证 / 完成条件**：运行配对测试 T041；验证本卡预期，相关范围检查通过。
+
+- [ ] **T043 · 助手引用提取及事务 DAO：先写测试**
+  **类型 / Owner**：测试 / AS\
+  **写入文件**：`src/backend/test/knowledge_unification/test_as_extract.py`（拟新增）\
+  **逻辑 / 测试上下文**：创建/替换模型、知识添加/解除形成真实 ID；DAO 故障回滚，不误把 model_name 当显示名。\
+  **依赖**：T016\
+  **覆盖 AC**: AC-71, AC-87, AC-88\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T044 · 助手引用提取及事务 DAO**
+  **类型 / Owner**：后端 Domain / AS\
+  **写入文件**：`src/backend/bisheng/api/services/assistant_reference_extractor.py`（拟新增）；`src/backend/bisheng/database/models/assistant.py`\
+  **逻辑 / 测试上下文**：解析实际 model_name 标识及 AssistantLink.knowledge_id，稳定槽；update_assistant_knowledge 可参加外部 Session，无内部提前 commit。\
+  **依赖**：T043\
+  **配对测试**：T043\
+  **验证 / 完成条件**：运行配对测试 T043；验证本卡预期，相关范围检查通过。
+
+- [ ] **T045 · 助手创建修改删除与运行接线：先写测试**
+  **类型 / Owner**：测试 / AS\
+  **写入文件**：`src/backend/test/knowledge_unification/test_as_bindings.py`（拟新增）\
+  **逻辑 / 测试上下文**：创建不漏绑定，删除不残留；离线保持；双失效槽只修一个可保存仍不能运行；已有知识权限/scopes 不扩大。\
+  **依赖**：T044, T018, T026\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-91, AC-92\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T046 · 助手创建修改删除与运行接线**
+  **类型 / Owner**：后端 Domain / AS\
+  **写入文件**：`src/backend/bisheng/api/services/assistant.py`\
+  **逻辑 / 测试上下文**：create/update/delete 同事务维护当前来源；复制导入拒绝新增已删目标；下线保留关系，执行/发布失效报错，修改允许部分修复；原 use 准入改 visible。\
+  **依赖**：T045\
+  **配对测试**：T045\
+  **验证 / 完成条件**：运行配对测试 T045；验证本卡预期，相关范围检查通过。
+
+- [ ] **T047 · 不可变应用版本插入同事务：先写测试**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_snapshot.py`（拟新增）\
+  **逻辑 / 测试上下文**：绑定错误版本行不落盘；历史管理预览版本保护；新版本只修新配置，旧绑定继续存在。\
+  **依赖**：T030, T018\
+  **覆盖 AC**: AC-68, AC-71, AC-87, AC-88, AC-89\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T048 · 不可变应用版本插入同事务**
+  **类型 / Owner**：后端 Domain / APP\
+  **写入文件**：`src/backend/bisheng/app_publish/domain/services/version_service.py`\
+  **逻辑 / 测试上下文**：_insert_version 建立 app/version 引用集合并同事务提交；新版本/复制/导入应用新配置拒绝非法目标；历史保存版本均计引用，不按 terminal/current 过滤，不改写 AppVersion 内容。\
+  **依赖**：T047\
+  **配对测试**：T047\
+  **验证 / 完成条件**：运行配对测试 T047；验证本卡预期，相关范围检查通过。
+
+- [ ] **T049 · 应用删除解除与历史预览失效：先写测试**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_lifecycle.py`（拟新增）\
+  **逻辑 / 测试上下文**：停止不解除，真正删除才解除；旧历史引用失效可见，预览失败不fallback，不因评测结果拦删除。\
+  **依赖**：T048\
+  **覆盖 AC**: AC-71, AC-75, AC-88, AC-91, AC-92\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T050 · 应用删除解除与历史预览失效**
+  **类型 / Owner**：后端 Domain / APP\
+  **写入文件**：`src/backend/bisheng/app_runtime/domain/services/app_state_service.py`；`src/backend/bisheng/app_publish/domain/services/preview_instance_service.py`\
+  **逻辑 / 测试上下文**：沿现有应用删除生命周期解除被真正删除来源；停止应用不解除。预览/重新启用保留不可变历史并检测失效；不新增历史编辑/退役。\
+  **依赖**：T049\
+  **配对测试**：T049\
+  **验证 / 完成条件**：运行配对测试 T049；验证本卡预期，相关范围检查通过。
+
+- [ ] **T051 · 应用能力执行可见准入：先写测试**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_entry.py`（拟新增）\
+  **逻辑 / 测试上下文**：仅可见主体可调用但超 capability/scope 拒绝；旧 manifest 不要求重新发布。\
+  **依赖**：T050, T026\
+  **覆盖 AC**: AC-35, AC-68, AC-79, AC-82, AC-83\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T052 · 应用能力执行可见准入**
+  **类型 / Owner**：后端 Domain / APP\
+  **写入文件**：`src/backend/bisheng/app_runtime/domain/services/entry_authz_service.py`\
+  **逻辑 / 测试上下文**：应用入口原 use 改 visible，能力执行仍保持 OBO/SAK/PAT、声明范围、子项权限；历史旧知识类型运行兼容。\
+  **依赖**：T051\
+  **配对测试**：T051\
+  **验证 / 完成条件**：运行配对测试 T051；验证本卡预期，相关范围检查通过。
+
+- [ ] **T053 · 频道配置来源维护：先写测试**
+  **类型 / Owner**：测试 / CH\
+  **写入文件**：`src/backend/test/knowledge_unification/test_ch_bindings.py`（拟新增）\
+  **逻辑 / 测试上下文**：暂停依然有引用；删除同步目标/解散才解除；原调用自动清目标不得破坏失效槽，部分修复可保存。\
+  **依赖**：T018, T026\
+  **覆盖 AC**: AC-71, AC-87, AC-88, AC-91, AC-92\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T054 · 频道配置来源维护**
+  **类型 / Owner**：后端 Domain / CH\
+  **写入文件**：`src/backend/bisheng/channel/domain/services/channel_service.py`；`src/backend/bisheng/channel/domain/models/channel_knowledge_sync.py`\
+  **逻辑 / 测试上下文**：_save/_load_knowledge_sync/dismiss_channel 同事务绑定，使用稳定频道配置来源键不依赖重建 sync 行 ID；关闭保留，解除/解散移除；强删不自动清配置。\
+  **依赖**：T053\
+  **配对测试**：T053\
+  **验证 / 完成条件**：运行配对测试 T053；验证本卡预期，相关范围检查通过。
+
+- [ ] **T055 · 租户/Root 默认槽位绑定：先写测试**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_llm_defaults.py`（拟新增）\
+  **逻辑 / 测试上下文**：五类业务默认全部覆盖；共享模型跨租户有真实原始来源，替换只改本槽；绑定失败不保存默认。\
+  **依赖**：T018\
+  **覆盖 AC**: AC-71, AC-74, AC-87, AC-88, AC-89\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T056 · 租户/Root 默认槽位绑定**
+  **类型 / Owner**：后端 Domain / LLM\
+  **写入文件**：`src/backend/bisheng/llm/domain/services/default_reference_extractor.py`（拟新增）；`src/backend/bisheng/llm/domain/services/llm.py`\
+  **逻辑 / 测试上下文**：覆盖 knowledge/assistant/workflow/evaluation/workbench 默认保存，原始 Root 槽位及租户 override 同事务；继承消费者不复制绑定，不把评测任务当来源。暂不接删除服务逻辑。\
+  **依赖**：T055\
+  **配对测试**：T055\
+  **验证 / 完成条件**：运行配对测试 T055；验证本卡预期，相关范围检查通过。
+
+- [ ] **T057 · 恢复默认继承入口：先写测试**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_llm_inherit.py`（拟新增）\
+  **逻辑 / 测试上下文**：恢复继承不删 Root/其他租户默认；默认与绑定故障同回滚。\
+  **依赖**：T056\
+  **覆盖 AC**: AC-71, AC-87, AC-88\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T058 · 恢复默认继承入口**
+  **类型 / Owner**：后端 Domain / LLM\
+  **写入文件**：`src/backend/bisheng/llm/api/router.py`\
+  **逻辑 / 测试上下文**：恢复继承经 LLM 应用服务只解除该租户 override，恢复有效默认解析；Endpoint 不查 ORM/不单独写引用，事务由服务持有。\
+  **依赖**：T057\
+  **配对测试**：T057\
+  **验证 / 完成条件**：运行配对测试 T057；验证本卡预期，相关范围检查通过。
+
+- [ ] **T059 · 默认配置 Repository 与优先级：先写测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_settings_repo.py`（拟新增）\
+  **逻辑 / 测试上下文**：文档与表格范围校验，overlap>size/headerstart>end 拒绝；旧空间无默认按系统回退；实际处理快照不被改默认覆盖。\
+  **依赖**：T007, T009, T012\
+  **覆盖 AC**: AC-38, AC-39, AC-40, AC-42, AC-43, AC-44\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T060 · 默认配置 Repository 与优先级**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/processing_settings_repository.py`（拟新增）；`src/backend/bisheng/knowledge/domain/services/processing_settings_service.py`（拟新增）\
+  **逻辑 / 测试上下文**：普通文档和表格分别保存 schema/version；batch/file 显式 > space > system，专用网页/音视频既有规则优先；不将上传临时值反存空间；改默认不重处理历史。\
+  **依赖**：T059\
+  **配对测试**：T059\
+  **验证 / 完成条件**：运行配对测试 T059；验证本卡预期，相关范围检查通过。
+
+- [ ] **T061 · 任务与子项存储：先写测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_job_repo.py`（拟新增）\
+  **逻辑 / 测试上下文**：重复提交同任务不重建文件/版本，部分失败只领取失败项；相关配置变更新步骤拒绝，恢复旧模型也需新重建。\
+  **依赖**：T008, T060\
+  **覆盖 AC**: AC-49, AC-50, AC-53, AC-54, AC-86\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T062 · 任务与子项存储**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/processing_job_repository.py`（拟新增）\
+  **逻辑 / 测试上下文**：按幂等键创建/查询/领取/失败项恢复及 checkpoints，相关业务/索引 revision 决定 obsolete，name/description 不影响；区分 partial/failed/completed，进度源于真实 items。\
+  **依赖**：T061\
+  **配对测试**：T061\
+  **验证 / 完成条件**：运行配对测试 T061；验证本卡预期，相关范围检查通过。
+
+- [ ] **T063 · 任务接收与恢复应用用例：先写测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_job_service.py`（拟新增）\
+  **逻辑 / 测试上下文**：提交不报完成；故障可恢复且不重复；无合法配置/已删模型明确失败，不回退历史参数。\
+  **依赖**：T062, T026\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T064 · 任务接收与恢复应用用例**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/processing_job_service.py`（拟新增）\
+  **逻辑 / 测试上下文**：accepted 后通过既有投递模式可恢复派发，不创建任务模型引用；任务详情按最新文件可见性裁剪，隐藏内容只数状态；模型从所属当前业务读，校验相关 revision/generation。\
+  **依赖**：T063\
+  **配对测试**：T063\
+  **验证 / 完成条件**：运行配对测试 T063；验证本卡预期，相关范围检查通过。
+
+- [ ] **T065 · 重建全量分页保留源分段：先写测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_rebuild_page.py`（拟新增）\
+  **逻辑 / 测试上下文**：10001+ Chunk 数量及内容一致，失败源仍在；另一空间不阻塞；tenant headers 缺失拒绝，重试只失败项且配置过期拒绝。\
+  **依赖**：T064\
+  **覆盖 AC**: AC-48, AC-49, AC-52, AC-53, AC-54, AC-86\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T066 · 重建全量分页保留源分段**
+  **类型 / Owner**：Worker / PROC\
+  **写入文件**：`src/backend/bisheng/worker/knowledge/rebuild_knowledge_worker.py`\
+  **逻辑 / 测试上下文**：复用现有 Chunk/metadata，分页超过 10000；失败保留 ES 重试源、只切成功文件检索，不重切分/丢人工修改。tenant_id 从 Celery headers 注入 ContextVar，使用业务模型配置。\
+  **依赖**：T065\
+  **配对测试**：T065\
+  **验证 / 完成条件**：运行配对测试 T065；验证本卡预期，相关范围检查通过。
+
+- [ ] **T067 · 文件处理实际快照与恢复：先写测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_file_worker.py`（拟新增）\
+  **逻辑 / 测试上下文**：指定版本重处理只改其内容；异常结果真实，重投不重复版本；陈旧任务新步骤拒绝，无配置不能用历史模型。\
+  **依赖**：T066\
+  **覆盖 AC**: AC-10, AC-43, AC-44, AC-45, AC-49, AC-53, AC-54, AC-86\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T068 · 文件处理实际快照与恢复**
+  **类型 / Owner**：Worker / PROC\
+  **写入文件**：`src/backend/bisheng/worker/knowledge/file_worker.py`；`src/backend/bisheng/knowledge/rag/knowledge_file_pipeline.py`\
+  **逻辑 / 测试上下文**：接入 J1 分类型实际配置/文件版本快照与任务项结果；领取及可控步骤重验相关模型/索引，SQL finalize 核 generation/lease；不加外部在途 I/O 围栏。tenant_id headers→ContextVar，不存 bearer。\
+  **依赖**：T067\
+  **配对测试**：T067\
+  **验证 / 完成条件**：运行配对测试 T067；验证本卡预期，相关范围检查通过。
+
+- [ ] **T069 · 旧 FileProcessBase 与专用规则适配：先写测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_file_process_adapter.py`（拟新增）\
+  **逻辑 / 测试上下文**：旧文档/表格/网页/音视频请求回归，优先级与类型参数不串用。\
+  **依赖**：T068\
+  **覆盖 AC**: AC-39, AC-40, AC-43, AC-44, AC-66\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T070 · 旧 FileProcessBase 与专用规则适配**
+  **类型 / Owner**：后端 API / PROC\
+  **写入文件**：`src/backend/bisheng/api/v1/schemas.py`\
+  **逻辑 / 测试上下文**：保持旧上传请求与 FileProcessBase 字段兼容，将实际显式值传 J1 解析，不新增不支持参数；不把单次配置污染默认，提交语义不报 completed。\
+  **依赖**：T069\
+  **配对测试**：T069\
+  **验证 / 完成条件**：运行配对测试 T069；验证本卡预期，相关范围检查通过。
+
+- [ ] **T071 · 元数据结构任务：先写测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_metadata_job.py`（拟新增）\
+  **逻辑 / 测试上下文**：新增空值、取消零改动；rename/drop 错误不报成功，指定 version 值更新结果正确且不可见详情裁剪。\
+  **依赖**：T064\
+  **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T072 · 元数据结构任务**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/metadata_processing_service.py`（拟新增）\
+  **逻辑 / 测试上下文**：新增字段历史为空，rename/drop 冻结前后 schema 与范围且二次确认，SQL/索引实际结果计 item，不用 accepted 冒充完成；仍原容器 edit，失败可恢复。\
+  **依赖**：T071\
+  **配对测试**：T071\
+  **验证 / 完成条件**：运行配对测试 T071；验证本卡预期，相关范围检查通过。
+
+- [ ] **T073 · 移动索引迁移步骤幂等：先写测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_move_worker.py`（拟新增）\
+  **逻辑 / 测试上下文**：重投不重复 Chunk/版本；跨对象引用路径可用、源空间删除不破坏目标；失败项恢复和过期拒绝。\
+  **依赖**：T064\
+  **覆盖 AC**: AC-19, AC-20, AC-23, AC-24, AC-49, AC-54, AC-86\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T074 · 移动索引迁移步骤幂等**
+  **类型 / Owner**：Worker / PROC\
+  **写入文件**：`src/backend/bisheng/worker/knowledge/move_worker.py`\
+  **逻辑 / 测试上下文**：接收 KN 已确认归属/整版本计划，按 item/checkpoint 目标幂等写及源清理；旧空间残留检索不返回，失败保留资源与已确认归属。tenant_id headers→ContextVar。\
+  **依赖**：T073\
+  **配对测试**：T073\
+  **验证 / 完成条件**：运行配对测试 T073；验证本卡预期，相关范围检查通过。
+
+- [ ] **T075 · 投递恢复与任务派发：先写测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_worker_dispatch.py`（拟新增）\
+  **逻辑 / 测试上下文**：停派发保留队列、恢复校验后启动；重复调度只领一次，tenant不串任务，已删业务不得执行。\
+  **依赖**：T070, T072, T074\
+  **覆盖 AC**: AC-49, AC-54, AC-85, AC-86\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T076 · 投递恢复与任务派发**
+  **类型 / Owner**：Worker / PROC\
+  **写入文件**：`src/backend/bisheng/worker/knowledge/scheduler.py`\
+  **逻辑 / 测试上下文**：复用现有 Celery/Beat 机制投递/恢复 job/items，带 tenant_id headers、actor 标识和幂等键，不传 bearer、不把排队参数作为模型绑定；无合法业务配置则失败。\
+  **依赖**：T075\
+  **配对测试**：T075\
+  **验证 / 完成条件**：运行配对测试 T075；验证本卡预期，相关范围检查通过。
+
+- [ ] **T077 · 资源访问生命周期与动作映射：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_auth.py`（拟新增）\
+  **逻辑 / 测试上下文**：继承/自定义同有效动作；only rename 能重命名而不能容器 edit；重建可下载目录，写入和检索暂停；未发布可合法处理。\
+  **依赖**：T026, T064\
+  **覆盖 AC**: AC-08, AC-30, AC-31, AC-32, AC-33, AC-51, AC-60\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T078 · 资源访问生命周期与动作映射**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_permission_service.py`\
+  **逻辑 / 测试上下文**：将处理态与可访问生命周期分离；重建仍目录/预览/下载，写入冲突单独控制；有效权限统一解析继承/自定义，rename 原动作，Chunk/metadata原容器 edit，原文件 retry 原rename，不加文件 edit/额外可见 gate。\
+  **依赖**：T077\
+  **配对测试**：T077\
+  **验证 / 完成条件**：运行配对测试 T077；验证本卡预期，相关范围检查通过。
+
+- [ ] **T079 · 统一空间创建：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_creation.py`（拟新增）\
+  **逻辑 / 测试上下文**：两端默认相同，后台显式配置生效；无权模型及绑定失败不创建残留空间。\
+  **依赖**：T078, T018, T060\
+  **覆盖 AC**: AC-06, AC-07, AC-14, AC-15, AC-87\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T080 · 统一空间创建**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`\
+  **逻辑 / 测试上下文**：前台只简化业务项沿当前默认，后台可信入口可选模型和分类型默认；同R2保存模型槽，审批/安全/格式/配额沿已有用例。\
+  **依赖**：T079\
+  **配对测试**：T079\
+  **验证 / 完成条件**：运行配对测试 T079；验证本卡预期，相关范围检查通过。
+
+- [ ] **T081 · 管理员具体租户清单与操作上下文：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_create.py`（拟新增）\
+  **逻辑 / 测试上下文**：菜单不等于资源权限；空tenant/汇总拒绝，直接请求普通/admin矩阵；管理业务校验不跳。\
+  **依赖**：T080\
+  **覆盖 AC**: AC-03, AC-04, AC-05, AC-25, AC-84\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T082 · 管理员具体租户清单与操作上下文**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`\
+  **逻辑 / 测试上下文**：admin仅超管/相应租管、一次具体tenant，超管默认所属可切，租管仅所属；普通列表不借admin扩大，owner/dept不准入。copy保创建者限制。\
+  **依赖**：T081, T080\
+  **配对测试**：T081\
+  **验证 / 完成条件**：运行配对测试 T081；验证本卡预期，相关范围检查通过。
+
+- [ ] **T083 · 后台文件上传与整版本注册：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_upload.py`（拟新增）\
+  **逻辑 / 测试上下文**：同文件前后端版本路径一致，保留历史；格式/审批/配额失败无残留版本；相似文档按现有开关选择保留/新版本。\
+  **依赖**：T082, T070\
+  **覆盖 AC**: AC-02, AC-09, AC-10, AC-11, AC-14, AC-43\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T084 · 后台文件上传与整版本注册**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`\
+  **逻辑 / 测试上下文**：后台调用同目录/文件夹/网页/新版本用例，沿既有审批、内容安全、格式/大小/深度/重名/配额与开关；统一 document/version 关系，只有成功主版本检索；J1 实际配置委托。\
+  **依赖**：T083, T082\
+  **配对测试**：T083\
+  **验证 / 完成条件**：运行配对测试 T083；验证本卡预期，相关范围检查通过。
+
+- [ ] **T085 · 批量预检确认与逐项结果：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_batch.py`（拟新增）\
+  **逻辑 / 测试上下文**：混合无权/处理中/unsupported/引用受阻全部列明；取消零修改，确认仅有效项；新引用变化重新确认。\
+  **依赖**：T084\
+  **覆盖 AC**: AC-12, AC-13, AC-31, AC-94\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T086 · 批量预检确认与逐项结果**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`\
+  **逻辑 / 测试上下文**：删除/下载/标签/retry 逐项权限和状态预检，服务端计划绑定范围/修订，确认才跳过失败项执行；取消零写；最终再次重验。沿原 retry/tags/encoding 动作，不扩文件edit。\
+  **依赖**：T085, T084\
+  **配对测试**：T085\
+  **验证 / 完成条件**：运行配对测试 T085；验证本卡预期，相关范围检查通过。
+
+- [ ] **T087 · 移动预检与确认计划：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_move_preflight.py`（拟新增）\
+  **逻辑 / 测试上下文**：违规目标拒绝；取消无资源变化；版本/字段/权限影响摘要变更重新确认。\
+  **依赖**：T086, T074, T016\
+  **覆盖 AC**: AC-17, AC-18, AC-21, AC-22\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T088 · 移动预检与确认计划**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`\
+  **逻辑 / 测试上下文**：仅构建服务端不可变plan：源move/目标upload、同租户/自身子目录/深度/重名，整版本范围与metadata同名同类型保留/清除字段明细、标签不带入、继承变更/自定义保留；取消零写。\
+  **依赖**：T087, T086\
+  **配对测试**：T087\
+  **验证 / 完成条件**：运行配对测试 T087；验证本卡预期，相关范围检查通过。
+
+- [ ] **T089 · 移动归属与权限阶段提交：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_move_finalize.py`（拟新增）\
+  **逻辑 / 测试上下文**：投影失败归属不先提交；成功后SQL失败同plan恢复；自定义不被父级覆盖，确认变化拒绝。\
+  **依赖**：T088\
+  **覆盖 AC**: AC-17, AC-18, AC-22, AC-24\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T090 · 移动归属与权限阶段提交**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`\
+  **逻辑 / 测试上下文**：按已确认durable plan锁后重验，完成F048父级/继承投影后SQL归属finalize，自定义及各子项模式保留；phase失败原plan恢复，不重复移动。\
+  **依赖**：T089, T088\
+  **配对测试**：T089\
+  **验证 / 完成条件**：运行配对测试 T089；验证本卡预期，相关范围检查通过。
+
+- [ ] **T091 · 整版本对象引用与检索任务接线：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_move.py`（拟新增）\
+  **逻辑 / 测试上下文**：全部历史版本/metadata映射一致，源删后图片附件仍可访问；归属绑定不漂移，旧空间残留结果不返回，重试无重复版本。\
+  **依赖**：T090\
+  **覆盖 AC**: AC-19, AC-20, AC-21, AC-23, AC-24, AC-87, AC-88\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T092 · 整版本对象引用与检索任务接线**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`\
+  **逻辑 / 测试上下文**：基于finalize已确认归属计划迁整版本，原始/附件路径不依赖源存活；直接文件target_space_id同事务更新，委托PROC索引迁移。失败保文件版本与归属，重试原job。\
+  **依赖**：T091, T090\
+  **配对测试**：T091\
+  **验证 / 完成条件**：运行配对测试 T091；验证本卡预期，相关范围检查通过。
+
+- [ ] **T093 · QA 创建删除清空的模型槽位：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_qa_bindings.py`（拟新增）\
+  **逻辑 / 测试上下文**：同步/异步创建QA都有零集或真实模型绑定，失败整事务回滚；clear不解除模型、delete才解除；不把QA转换SPACE。\
+  **依赖**：T092, T018\
+  **覆盖 AC**: AC-55, AC-65, AC-70, AC-71, AC-74, AC-87, AC-88, AC-89\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T094 · QA 创建删除清空的模型槽位**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_service.py`\
+  **逻辑 / 测试上下文**：QA type1保持独立入口与原业务；create_knowledge/create_knowledge_base/acreate_knowledge_base和delete_knowledge使用R2维护当前模型槽，删除QA解除出向模型绑定，clear保留；模型修改接既有processing切换规则。\
+  **依赖**：T093\
+  **配对测试**：T093\
+  **验证 / 完成条件**：运行配对测试 T093；验证本卡预期，相关范围检查通过。
+
+- [ ] **T095 · 整空间独立复制：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_copy.py`（拟新增）\
+  **逻辑 / 测试上下文**：管理员非创建者拒绝；源/副本ID索引状态独立；副本owner正确，授权范围提示，损坏副本不影响源。\
+  **依赖**：T092, T018\
+  **覆盖 AC**: AC-25, AC-26, AC-27, AC-84, AC-87\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T096 · 整空间独立复制**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_service.py`\
+  **逻辑 / 测试上下文**：仅源创建者，目录/全部版本/标签/metadata/解析配置生成独立资源/索引/任务，copy本身模型槽同事务绑定；按现行规范新owner/普通授权，不照搬受保护创建者。默认不发布、不复制订阅/置顶/聊天。\
+  **依赖**：T095, T094\
+  **配对测试**：T095\
+  **验证 / 完成条件**：运行配对测试 T095；验证本卡预期，相关范围检查通过。
+
+- [ ] **T097 · 统一模型重建与高级处理委托：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_processing_wire.py`（拟新增）\
+  **逻辑 / 测试上下文**：SPACE 不走仅 NORMAL/QA 旧分支；重建保人工分段，old model有效引用切换前阻普通删除；目录可读、冲突写拒绝，过期任务不可恢复。\
+  **依赖**：T096, T076, T072\
+  **覆盖 AC**: AC-33, AC-34, AC-44, AC-45, AC-48, AC-49, AC-51, AC-52, AC-53, AC-54, AC-74, AC-86, AC-87\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T098 · 统一模型重建与高级处理委托**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`；`src/backend/bisheng/knowledge/domain/services/knowledge_service.py`\
+  **逻辑 / 测试上下文**：旧 update_knowledge 与新空间命令委托 PROC；模型变更先可用/确认，当前及 staged 模型槽同事务绑定；清空保留模型槽，切换完成才释放旧槽。冲突矩阵阻同空间上传/新版本/Chunk/metadata/移入出，不阻其他空间。\
+  **依赖**：T097, T092, T096\
+  **配对测试**：T097\
+  **验证 / 完成条件**：运行配对测试 T097；验证本卡预期，相关范围检查通过。
+
+- [ ] **T099 · Chunk/文件元数据原权限与指定版本：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_chunk.py`（拟新增）\
+  **逻辑 / 测试上下文**：有文件 rename无容器edit不能Chunk修改；原容器edit有效无需额外文件edit；历史版本定位正确、原对象不变、索引失败可见。\
+  **依赖**：T098\
+  **覆盖 AC**: AC-31, AC-33, AC-45, AC-46, AC-47\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T100 · Chunk/文件元数据原权限与指定版本**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_service.py`；`src/backend/bisheng/knowledge/domain/services/knowledge_file_service.py`\
+  **逻辑 / 测试上下文**：Chunk edit/delete 与 modify_file_user_metadata 仍所属容器 edit；只改指定版本索引内容不改原文件，重切分覆盖人工调整先确认；返回实际索引成功/失败。\
+  **依赖**：T099, T098\
+  **配对测试**：T099\
+  **验证 / 完成条件**：运行配对测试 T099；验证本卡预期，相关范围检查通过。
+
+- [ ] **T101 · 统一检索可见性与成功主版本：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_retrieval.py`（拟新增）\
+  **逻辑 / 测试上下文**：仅可见无use可选可检索；独立子项不扩可见面；旧ID同授权，sameidentity/config/question 对账，use预期增量单列。\
+  **依赖**：T100, T026\
+  **覆盖 AC**: AC-08, AC-30, AC-35, AC-36, AC-37, AC-60, AC-67, AC-79, AC-83\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T102 · 统一检索可见性与成功主版本**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/retrieval_facade_service.py`\
+  **逻辑 / 测试上下文**：空间/library/QA 原 use gate改visible，旧类型映射到真实资源；保原actor、token、capability白名单、tenant及文件过滤；只成功主版本，无旧归属/失败项/重建空间结果。\
+  **依赖**：T101\
+  **配对测试**：T101\
+  **验证 / 完成条件**：运行配对测试 T101；验证本卡预期，相关范围检查通过。
+
+- [ ] **T103 · 知识目标检查与引用展示：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_refs.py`（拟新增）\
+  **逻辑 / 测试上下文**：绑定整个空间不阻普通文件删除；无权来源只类型数量；coverage未就绪/查失败一律拒绝，不全库扫描业务JSON。\
+  **依赖**：T102, T042, T046, T052, T054, T058\
+  **覆盖 AC**: AC-28, AC-29, AC-72, AC-89, AC-90, AC-91, AC-94\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T104 · 知识目标检查与引用展示**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_reference_service.py`（拟新增）\
+  **逻辑 / 测试上下文**：知识 Owner 校验空间/真实文件版本与归属；按绑定索引查依赖并经来源应用接口批量补名称入口、按权限裁剪；whole-space/delete/clear覆盖空间及直接内容，文件删除仅实际直接范围。\
+  **依赖**：T103\
+  **配对测试**：T103\
+  **验证 / 完成条件**：运行配对测试 T103；验证本卡预期，相关范围检查通过。
+
+- [ ] **T105 · 文件夹精确 manifest 与持久删除计划：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_delete_plan.py`（拟新增）\
+  **逻辑 / 测试上下文**：无关版本不误拦；夹内一项引用整夹零修改；force参数拒绝，最终新引用阻断/重新确认，操作幂等。\
+  **依赖**：T104, T086\
+  **覆盖 AC**: AC-12, AC-13, AC-28, AC-29, AC-94\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T106 · 文件夹精确 manifest 与持久删除计划**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/knowledge_space_delete_repository.py`；`src/backend/bisheng/knowledge/domain/services/knowledge_space_direct_delete_service.py`\
+  **逻辑 / 测试上下文**：复用空间 durable删除框架冻结实际文件/夹及版本范围、锁后引用复查；整夹任一直接引用则整项拒绝；混合批确认跳过，文件/夹拒绝force。先写计划/围栏，不业务删除。\
+  **依赖**：T105\
+  **配对测试**：T105\
+  **验证 / 完成条件**：运行配对测试 T105；验证本卡预期，相关范围检查通过。
+
+- [ ] **T107 · 文件投影在先、SQL finalize 在后：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_delete_order.py`（拟新增）\
+  **逻辑 / 测试上下文**：投影失败业务行仍在且围栏阻新写；FGA成功SQL失败原计划恢复；SQL成功清理失败只重试清理，不误报完全成功。\
+  **依赖**：T106\
+  **覆盖 AC**: AC-29, AC-94\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T108 · 文件投影在先、SQL finalize 在后**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_direct_delete_service.py`\
+  **逻辑 / 测试上下文**：按计划完成所有 F048 projection 后才业务SQL finalize及相关出向绑定清理，随后 MinIO/ES/Milvus purge；投影不放到 purge。断点记录 phase，重试同计划，不重复版本/删除。\
+  **依赖**：T107, T106\
+  **配对测试**：T107\
+  **验证 / 完成条件**：运行配对测试 T107；验证本卡预期，相关范围检查通过。
+
+- [ ] **T109 · 空间普通/强删/清空与 tombstone：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_space_delete.py`（拟新增）\
+  **逻辑 / 测试上下文**：取消零改动；强删影响变化重确认、隐藏来源不泄露；空间直接文件随之失效；清空保模型关系、删除才解除；异常覆盖未就绪禁止force。\
+  **依赖**：T108\
+  **覆盖 AC**: AC-28, AC-29, AC-74, AC-84, AC-87, AC-88, AC-90, AC-91, AC-92\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T110 · 空间普通/强删/清空与 tombstone**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`\
+  **逻辑 / 测试上下文**：普通删/清空阻空间+内容有效引用；clear无force保空间模型槽；spaceforce二次确认当前影响、保来源原ID/绑定与tombstone，真实删除释放自身出向模型绑定。遵现有FGA→SQL→purge、权限/状态冲突不跳。\
+  **依赖**：T109, T098\
+  **配对测试**：T109\
+  **验证 / 完成条件**：运行配对测试 T109；验证本卡预期，相关范围检查通过。
+
+- [ ] **T111 · 模型目标锁与跨租户影响：先写测试**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_llm_refs.py`（拟新增）\
+  **逻辑 / 测试上下文**：五类模型及共享两租户依赖均计数；仅历史聊天审计不阻；检查失败与未ready不能当无引用，不能泄露名称。\
+  **依赖**：T058, T104\
+  **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-75, AC-76, AC-89\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T112 · 模型目标锁与跨租户影响**
+  **类型 / Owner**：后端 Domain / LLM\
+  **写入文件**：`src/backend/bisheng/llm/domain/services/model_reference_service.py`（拟新增）\
+  **逻辑 / 测试上下文**：按 R3 查单模型/删除清单/整服务所有模型，受信共享目标跨租户反查；现有管理员/tenant/共享只读保持，按权限展示；锁序与 R2相同，异常fail closed。\
+  **依赖**：T111\
+  **配对测试**：T111\
+  **验证 / 完成条件**：运行配对测试 T111；验证本卡预期，相关范围检查通过。
+
+- [ ] **T113 · 模型删除/清单差集计划：先写测试**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_llm_delete_plan.py`（拟新增）\
+  **逻辑 / 测试上下文**：三入口目标全集正确；未ready/检查异常失败无业务写，受限来源只摘要；plan绑定当前操作者/目标/revision。\
+  **依赖**：T112, T110\
+  **覆盖 AC**: AC-70, AC-72, AC-73, AC-76, AC-77\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T114 · 模型删除/清单差集计划**
+  **类型 / Owner**：后端 Domain / LLM\
+  **写入文件**：`src/backend/bisheng/llm/domain/services/llm.py`\
+  **逻辑 / 测试上下文**：单删/编辑清单/服务整删统一算removed目标全集及影响摘要；服务其它共享/清单字段暂不保存，检查准入/tenant/shared readonly和覆盖，生成R3确认plan。\
+  **依赖**：T113, T056\
+  **配对测试**：T113\
+  **验证 / 完成条件**：运行配对测试 T113；验证本卡预期，相关范围检查通过。
+
+- [ ] **T115 · 模型普通删除原子事务：先写测试**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_llm_delete_normal.py`（拟新增）\
+  **逻辑 / 测试上下文**：整服务任一模型受阻零修改；并发新引用与删除同锁序不漏，历史任务不阻，默认/空间旧模型槽仍生效则阻。\
+  **依赖**：T114\
+  **覆盖 AC**: AC-70, AC-73, AC-74, AC-76, AC-77\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T116 · 模型普通删除原子事务**
+  **类型 / Owner**：后端 Domain / LLM\
+  **写入文件**：`src/backend/bisheng/llm/domain/services/llm.py`\
+  **逻辑 / 测试上下文**：持计划锁后重验引用，普通存在有效关系整次拒绝；无引用才一次提交服务/模型差集，不能先保存共享字段。任务无独立绑定不阻断，幂等重复稳定。\
+  **依赖**：T115, T114\
+  **配对测试**：T115\
+  **验证 / 完成条件**：运行配对测试 T115；验证本卡预期，相关范围检查通过。
+
+- [ ] **T117 · 模型强删确认与 tombstone：先写测试**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_llm_delete.py`（拟新增）\
+  **逻辑 / 测试上下文**：确认影响变化重新确认，检查异常/readonly拒绝force，重复force不误报；下游保失效槽并允许原来源逐项修复。\
+  **依赖**：T116\
+  **覆盖 AC**: AC-72, AC-73, AC-76, AC-77, AC-90, AC-91, AC-92\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T118 · 模型强删确认与 tombstone**
+  **类型 / Owner**：后端 Domain / LLM\
+  **写入文件**：`src/backend/bisheng/llm/domain/services/llm.py`\
+  **逻辑 / 测试上下文**：显式force重验目标/操作者/影响plan及最新引用；仅越过已知引用阻断，保持所有其它业务限制，持久tombstone保来源原ID/绑定，不自动清槽或切模型。\
+  **依赖**：T117, T116\
+  **配对测试**：T117\
+  **验证 / 完成条件**：运行配对测试 T117；验证本卡预期，相关范围检查通过。
+
+- [ ] **T119 · 模型影响预检与删除入口：先写测试**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_llm_api.py`（拟新增）\
+  **逻辑 / 测试上下文**：旧调用不携force仍普通；伪plan/他人plan/变化plan拒绝，重复请求结果稳定，scope/shared readonly保留。\
+  **依赖**：T118\
+  **覆盖 AC**: AC-70, AC-72, AC-73, AC-76, AC-77, AC-90\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T120 · 模型影响预检与删除入口**
+  **类型 / Owner**：后端 API / LLM\
+  **写入文件**：`src/backend/bisheng/llm/api/router.py`\
+  **逻辑 / 测试上下文**：Endpoint 只委托service，默认普通delete，显式force+服务端plan/digest；新旧批量入口同规则，错误不报成功；DTO保留失效及受限摘要。\
+  **依赖**：T119, T058\
+  **配对测试**：T119\
+  **验证 / 完成条件**：运行配对测试 T119；验证本卡预期，相关范围检查通过。
+
+- [ ] **T121 · 空间列表/管理/创建与详情 API：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_api_space.py`（拟新增）\
+  **逻辑 / 测试上下文**：路由动态冲突检查；普通参数不能切admin；role/tenant矩阵及直链越权；前后台同ID/内容/授权。\
+  **依赖**：T110, T120\
+  **覆盖 AC**: AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-08, AC-14, AC-15, AC-32, AC-84\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T122 · 空间列表/管理/创建与详情 API**
+  **类型 / Owner**：后端 API / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/api/endpoints/knowledge_space.py`\
+  **逻辑 / 测试上下文**：按 A1接普通与admin独立清单、具体租户详情/操作上下文，后台模型/默认配置入口委托已有usecase；管理员copy不豁免，DTO含真实能力/处理态、无权不泄名称。\
+  **依赖**：T121\
+  **配对测试**：T121\
+  **验证 / 完成条件**：运行配对测试 T121；验证本卡预期，相关范围检查通过。
+
+- [ ] **T123 · 处理设置及任务查询/重试 API：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_api_jobs.py`（拟新增）\
+  **逻辑 / 测试上下文**：settings参数错误不保存；菜单/凭证/资源组合矩阵；不同身份缓存不复用明细；retry原任务/obsolete状态正确。\
+  **依赖**：T122, T064\
+  **覆盖 AC**: AC-33, AC-34, AC-35, AC-38, AC-42, AC-45, AC-48, AC-49, AC-50, AC-54\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T124 · 处理设置及任务查询/重试 API**
+  **类型 / Owner**：后端 API / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/api/endpoints/knowledge_processing.py`（拟新增）\
+  **逻辑 / 测试上下文**：按冻结 A1/J1 新增 settings、rebuild/reprocess、jobs/detail/retry端点；网页高级保原菜单资格和容器edit，开放不要求网页菜单；任务详情当前身份裁剪，accepted不报完成。\
+  **依赖**：T123\
+  **配对测试**：T123\
+  **验证 / 完成条件**：运行配对测试 T123；验证本卡预期，相关范围检查通过。
+
+- [ ] **T125 · 旧文档合同兼容适配：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_api_legacy.py`（拟新增）\
+  **逻辑 / 测试上下文**：旧消费者请求快照与返回结构对照，新旧ID同实体/授权；删除不能绕过引用/force/状态，QA行为保留。\
+  **依赖**：T124\
+  **覆盖 AC**: AC-10, AC-55, AC-65, AC-66, AC-67, AC-68, AC-69\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T126 · 旧文档合同兼容适配**
+  **类型 / Owner**：后端 API / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/api/endpoints/knowledge.py`；`src/backend/bisheng/knowledge/api/endpoints/knowledge_version.py`\
+  **逻辑 / 测试上下文**：type0请求实建SPACE，旧列表/详情/创建/上传/复制/删除按旧返回type/envelope/分页，内部同授权删除和任务；QA1保留，type2不复活。新API type3，3.x不提前退出。\
+  **依赖**：T125\
+  **配对测试**：T125\
+  **验证 / 完成条件**：运行配对测试 T125；验证本卡预期，相关范围检查通过。
+
+- [ ] **T127 · 工具/Skill 使用准入切换：先写测试**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/backend/test/knowledge_unification/test_edge_tool.py`（拟新增）\
+  **逻辑 / 测试上下文**：每类工具/Skill可见无use可调用，无可见/无scope/停用仍拒绝；活动动作响应无use。\
+  **依赖**：T026\
+  **覆盖 AC**: AC-78, AC-79, AC-82, AC-83\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T128 · 工具/Skill 使用准入切换**
+  **类型 / Owner**：后端 Domain / EDGE\
+  **写入文件**：`src/backend/bisheng/tool/domain/services/f048_tool_permission.py`；`src/backend/bisheng/linsight/domain/services/f048_skill_permission.py`\
+  **逻辑 / 测试上下文**：各资源system/custom原独立use检查改visible，保tenant/身份/scope/可执行状态，不给额外动作；调用现有统一 PermissionService，历史保存协议只兼容解释。\
+  **依赖**：T127\
+  **配对测试**：T127\
+  **验证 / 完成条件**：运行配对测试 T127；验证本卡预期，相关范围检查通过。
+
+- [ ] **T129 · 工作台/工作流知识节点兼容：先写测试**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/backend/test/knowledge_unification/test_edge_workstation.py`（拟新增）\
+  **逻辑 / 测试上下文**：历史节点无需重新发布；sameactor检索只成功可见主版本；失效不忽略不fallback。\
+  **依赖**：T102, T042, T128\
+  **覆盖 AC**: AC-35, AC-37, AC-68, AC-79, AC-82, AC-83, AC-91\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T130 · 工作台/工作流知识节点兼容**
+  **类型 / Owner**：后端 Domain / EDGE\
+  **写入文件**：`src/backend/bisheng/workstation/domain/services/workstation_service.py`；`src/backend/bisheng/workflow/nodes/knowledge_retriever/knowledge_retriever.py`\
+  **逻辑 / 测试上下文**：旧knowledge type/ID和原use表达委托统一解析/检索，不重写历史节点；保workbench/tenant凭证与文件可见性，失效明确报错。\
+  **依赖**：T129\
+  **配对测试**：T129\
+  **验证 / 完成条件**：运行配对测试 T129；验证本卡预期，相关范围检查通过。
+
+- [ ] **T131 · 开放 v2 filelib/knowledge API 合同：先写测试**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/backend/test/knowledge_unification/test_edge_rpc.py`（拟新增）\
+  **逻辑 / 测试上下文**：SAK/PAT/OBO有效/缺scope/跨tenant矩阵；旧filelib数据形状、QA独立和错误映射，引用保护两端一致。\
+  **依赖**：T126, T130\
+  **覆盖 AC**: AC-35, AC-66, AC-67, AC-68, AC-79, AC-82, AC-83\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T132 · 开放 v2 filelib/knowledge API 合同**
+  **类型 / Owner**：后端 API / EDGE\
+  **写入文件**：`src/backend/bisheng/open_endpoints/api/endpoints/filelib.py`；`src/backend/bisheng/open_endpoints/api/endpoints/knowledge.py`\
+  **逻辑 / 测试上下文**：开放接口保原请求/返回及身份范围，经统一业务服务；不要求后台菜单，不旁路删除保护/文件动作；旧type解释兼容。\
+  **依赖**：T131\
+  **配对测试**：T131\
+  **验证 / 完成条件**：运行配对测试 T131；验证本卡预期，相关范围检查通过。
+
+- [ ] **T133 · SDK/MCP 协议端回归：先写测试**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/backend/test/knowledge_unification/test_edge_sdk.py`（拟新增）\
+  **逻辑 / 测试上下文**：真实协议入口旧ID/type/pagination/schema兼容；凭证白名单、子项权限和失效错误不被适配吞掉；整个3.x不下线。\
+  **依赖**：T132\
+  **覆盖 AC**: AC-35, AC-66, AC-68, AC-69, AC-79, AC-82, AC-83\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T134 · SDK/MCP 协议端回归**
+  **类型 / Owner**：后端 Domain / EDGE\
+  **写入文件**：`src/backend/bisheng/dev_toolkit/sdk_compat.py`；`src/backend/bisheng/open_mcp/compatibility.py`\
+  **逻辑 / 测试上下文**：适配 SDK/MCP 旧 type/ID/固定 use 字段为统一空间/可见性语义，保持原请求响应与错误，旧发布不重写；调用统一业务服务，保身份白名单。T001清单逐入口核对，剩余叶子先拆补充任务，未闭合不能完成。\
+  **依赖**：T133\
+  **配对测试**：T133\
+  **验证 / 完成条件**：运行配对测试 T133；验证本卡预期，相关范围检查通过。
+
+- [ ] **T135 · 应用可见资格与能力 DTO：先写测试**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_visibility.py`（拟新增）\
+  **逻辑 / 测试上下文**：可见无use可发布/调用但缺其他动作不越权；Source变化复查，旧协议只解释不保存。\
+  **依赖**：T052, T026\
+  **覆盖 AC**: AC-78, AC-79, AC-81, AC-82, AC-83\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T136 · 应用可见资格与能力 DTO**
+  **类型 / Owner**：后端 Domain / APP\
+  **写入文件**：`src/backend/bisheng/app_publish/domain/services/app_publish_current_visibility_service.py`；`src/backend/bisheng/app_runtime/domain/schemas/app_authorization.py`\
+  **逻辑 / 测试上下文**：应用当前发布资格/owner与来源复查改visible，活动能力DTO不形成独立use；保生命周期、capability范围和Source一致性。\
+  **依赖**：T135\
+  **配对测试**：T135\
+  **验证 / 完成条件**：运行配对测试 T135；验证本卡预期，相关范围检查通过。
+
+- [ ] **T137 · 助手 HTTP 动作默认与选择器：先写测试**
+  **类型 / Owner**：测试 / AS\
+  **写入文件**：`src/backend/test/knowledge_unification/test_as_http.py`（拟新增）\
+  **逻辑 / 测试上下文**：旧query默认/显式use按visible；失效助手失败，隐藏知识不暴露；无菜单机器凭证按原scope。\
+  **依赖**：T046\
+  **覆盖 AC**: AC-37, AC-68, AC-79, AC-82, AC-83\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T138 · 助手 HTTP 动作默认与选择器**
+  **类型 / Owner**：后端 API / AS\
+  **写入文件**：`src/backend/bisheng/api/v1/assistant.py`\
+  **逻辑 / 测试上下文**：列表/运行旧默认use解释visible，当前输出action不含use；委托AS统一服务，保scope/tenant/执行状态，不重写历史配置。\
+  **依赖**：T137\
+  **配对测试**：T137\
+  **验证 / 完成条件**：运行配对测试 T137；验证本卡预期，相关范围检查通过。
+
+- [ ] **T139 · 应用模型执行逐槽核对冻结ID：先写测试**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_model_binding.py`（拟新增）\
+  **逻辑 / 测试上下文**：版本绑定模型M1，之后同名解析为M2不能调用；模型删除失效明确失败，允许声明名不等于允许任意同名ID。\
+  **依赖**：T136, T134\
+  **覆盖 AC**: AC-68, AC-71, AC-87, AC-91\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T140 · 应用模型执行逐槽核对冻结ID**
+  **类型 / Owner**：后端 Domain / EDGE\
+  **写入文件**：`src/backend/bisheng/open_api/domain/services/model_range_policy.py`；`src/backend/bisheng/open_api/domain/services/model_gateway_service.py`\
+  **逻辑 / 测试上下文**：消费 APP 版本SourceKey及冻结slot目标映射，保原名称协议但最终实际ID必须匹配该版本绑定；改名/同名解析漂移明确失败，不转用新模型。预览/运行共检查，历史manifest原文不改。\
+  **依赖**：T139\
+  **配对测试**：T139\
+  **验证 / 完成条件**：运行配对测试 T139；验证本卡预期，相关范围检查通过。
+
+- [ ] **T141 · 聊天准入与管理器：先写测试**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/backend/test/knowledge_unification/test_edge_chat.py`（拟新增）\
+  **逻辑 / 测试上下文**：可见无use可进入，缺scope/已删来源仍拒绝；历史会话快照不改写，不以对话记录建立引用。\
+  **依赖**：T134\
+  **覆盖 AC**: AC-35, AC-79, AC-82, AC-83, AC-91\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T142 · 聊天准入与管理器**
+  **类型 / Owner**：后端 API / EDGE\
+  **写入文件**：`src/backend/bisheng/api/v1/chat.py`；`src/backend/bisheng/common/chat/manager.py`\
+  **逻辑 / 测试上下文**：原使用准入显式改visible并保持原actor/tenant/凭证、资源业务状态；失效配置明确错误，不能以兼容为由静默fallback。\
+  **依赖**：T141\
+  **配对测试**：T141\
+  **验证 / 完成条件**：运行配对测试 T141；验证本卡预期，相关范围检查通过。
+
+- [ ] **T143 · 工具枚举与实际执行：先写测试**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/backend/test/knowledge_unification/test_edge_tool_call.py`（拟新增）\
+  **逻辑 / 测试上下文**：列出与执行相同准入；可见无use可执行，disabled和无scope拒绝；剩余use调用方清单闭合。\
+  **依赖**：T128\
+  **覆盖 AC**: AC-79, AC-82, AC-83\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T144 · 工具枚举与实际执行**
+  **类型 / Owner**：后端 Domain / EDGE\
+  **写入文件**：`src/backend/bisheng/tool/domain/services/tool.py`；`src/backend/bisheng/tool/domain/services/executor.py`\
+  **逻辑 / 测试上下文**：get_tool_list默认和executor执行统一visible，保preset/owner/tool enabled与既有运行条件，不因仅删use分支丢禁用校验。\
+  **依赖**：T143\
+  **配对测试**：T143\
+  **验证 / 完成条件**：运行配对测试 T143；验证本卡预期，相关范围检查通过。
+
+- [ ] **T145 · Skill 枚举与启用校验：先写测试**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/backend/test/knowledge_unification/test_edge_skill.py`（拟新增）\
+  **逻辑 / 测试上下文**：批量结果不漏仅可见，停用仍不可运行、无scope拒绝，tenant隔离。\
+  **依赖**：T144\
+  **覆盖 AC**: AC-79, AC-82, AC-83\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T146 · Skill 枚举与启用校验**
+  **类型 / Owner**：后端 Domain / EDGE\
+  **写入文件**：`src/backend/bisheng/linsight/domain/services/user_skills.py`；`src/backend/bisheng/linsight/domain/services/skill_permission.py`\
+  **逻辑 / 测试上下文**：user_skills批量过滤及skill_permission原use分支转visible，同时独立保enabled等业务校验；不要因动作改名使disabled可执行。\
+  **依赖**：T145\
+  **配对测试**：T145\
+  **验证 / 完成条件**：运行配对测试 T145；验证本卡预期，相关范围检查通过。
+
+- [ ] **T147 · DSH 工具能力目录：先写测试**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/backend/test/knowledge_unification/test_edge_dsh.py`（拟新增）\
+  **逻辑 / 测试上下文**：能力枚举/工作执行一致，仅可见可用但缺scope/停用仍拒绝。\
+  **依赖**：T146\
+  **覆盖 AC**: AC-35, AC-68, AC-79, AC-82, AC-83\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T148 · DSH 工具能力目录**
+  **类型 / Owner**：后端 Domain / EDGE\
+  **写入文件**：`src/backend/bisheng/dsh/domain/services/capability_catalog.py`；`src/backend/bisheng/dsh/domain/services/work_capabilities.py`\
+  **逻辑 / 测试上下文**：明确tool list准入visible，保原DSH身份上下文、声明范围、内容安全/配额/状态；旧工具绑定不改写。\
+  **依赖**：T147\
+  **配对测试**：T147\
+  **验证 / 完成条件**：运行配对测试 T147；验证本卡预期，相关范围检查通过。
+
+- [ ] **T149 · 开放 task mode 领取与提交准入：先写测试**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/backend/test/knowledge_unification/test_edge_taskmode.py`（拟新增）\
+  **逻辑 / 测试上下文**：提交与执行两阶段同可见语义；missing模型配置明确失败，队列参数不复活旧模型；scope/跨tenant拒绝。\
+  **依赖**：T148\
+  **覆盖 AC**: AC-35, AC-68, AC-79, AC-82, AC-83, AC-86\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T150 · 开放 task mode 领取与提交准入**
+  **类型 / Owner**：后端 Domain / EDGE\
+  **写入文件**：`src/backend/bisheng/open_api/domain/services/task_mode_service.py`\
+  **逻辑 / 测试上下文**：提交知识来源批量action和任务执行阶段均按visible，仍读业务资源模型/索引配置和旧ID；保凭证、业务状态，任务不绑定模型。\
+  **依赖**：T149\
+  **配对测试**：T149\
+  **验证 / 完成条件**：运行配对测试 T149；验证本卡预期，相关范围检查通过。
+
+- [ ] **T151 · 工作台及开放工作流入口：先写测试**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/backend/test/knowledge_unification/test_edge_apps_rpc.py`（拟新增）\
+  **逻辑 / 测试上下文**：实际旧调用default/explicit use都兼容；无scope/业务停止等原限制保持。\
+  **依赖**：T150, T042\
+  **覆盖 AC**: AC-35, AC-66, AC-68, AC-79, AC-82, AC-83\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T152 · 工作台及开放工作流入口**
+  **类型 / Owner**：后端 API / EDGE\
+  **写入文件**：`src/backend/bisheng/workstation/api/endpoints/apps.py`；`src/backend/bisheng/open_endpoints/api/endpoints/workflow.py`\
+  **逻辑 / 测试上下文**：HTTP委托统一visible使用准入，保原路由及请求/错误格式；历史应用/工作流发布与knowledge类型照常解释，无权内容不返回。\
+  **依赖**：T151\
+  **配对测试**：T151\
+  **验证 / 完成条件**：运行配对测试 T151；验证本卡预期，相关范围检查通过。
+
+- [ ] **T153 · 系统应用与租户分享纯可见：先写测试**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_perm_shared.py`（拟新增）\
+  **逻辑 / 测试上下文**：工作流/助手/tool/library系统分享无use，原范围不扩；撤来源不删他源，QA与文档映射正确。\
+  **依赖**：T026\
+  **覆盖 AC**: AC-78, AC-79, AC-80, AC-81, AC-83\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T154 · 系统应用与租户分享纯可见**
+  **类型 / Owner**：后端 Domain / PERM\
+  **写入文件**：`src/backend/bisheng/api/services/f048_application_permission.py`；`src/backend/bisheng/tenant/domain/services/resource_share_service.py`\
+  **逻辑 / 测试上下文**：系统应用动作集和tenant share标准集合移除use，保visible、原主体/Source及分享管理资格；合法纯可见仍可撤销，不改租户原共享边界。\
+  **依赖**：T153\
+  **配对测试**：T153\
+  **验证 / 完成条件**：运行配对测试 T153；验证本卡预期，相关范围检查通过。
+
+- [ ] **T155 · 频道只读准入集合：先写测试**
+  **类型 / Owner**：测试 / CH\
+  **写入文件**：`src/backend/test/knowledge_unification/test_ch_permission.py`（拟新增）\
+  **逻辑 / 测试上下文**：普通只读频道可见可用、无编辑能力，tenant和停用状态按原业务执行。\
+  **依赖**：T054, T026\
+  **覆盖 AC**: AC-78, AC-79, AC-82, AC-83\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T156 · 频道只读准入集合**
+  **类型 / Owner**：后端 Domain / CH\
+  **写入文件**：`src/backend/bisheng/channel/domain/services/f048_channel_permission.py`\
+  **逻辑 / 测试上下文**：READ_ONLY_CHANNEL_ACTIONS只保visible并经统一权限服务；保频道状态/归属及配置权限，不用新独立use动作。\
+  **依赖**：T155\
+  **配对测试**：T155\
+  **验证 / 完成条件**：运行配对测试 T155；验证本卡预期，相关范围检查通过。
+
+- [ ] **T157 · 全平台权限停服子计划与校验：先写测试**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_perm_migration.py`（拟新增）\
+  **逻辑 / 测试上下文**：run/plan/checksum不符拒绝；use-only授权保留可撤销，global download/纯vis拆分正确；非use尤其rename不变，脚本不查停服。\
+  **依赖**：T028, T120\
+  **覆盖 AC**: AC-31, AC-56, AC-59, AC-63, AC-78, AC-80, AC-81, AC-83, AC-85\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T158 · 全平台权限停服子计划与校验**
+  **类型 / Owner**：后端 Domain / PERM\
+  **写入文件**：`src/backend/bisheng/permission/migration/f118_plan.py`（拟新增）；`src/backend/bisheng/permission/migration/f118_verify.py`（拟新增）\
+  **逻辑 / 测试上下文**：仅停服后正式盘点原model/Grant/Source/visibility/non-use(含rename)/Catalog/checksum并并入同run/plan/hash；转换纯可见合同与投影，不用维护前快照；按冻结原基线列use预期差异及其他零差异。\
+  **依赖**：T157\
+  **配对测试**：T157\
+  **验证 / 完成条件**：运行配对测试 T157；验证本卡预期，相关范围检查通过。
+
+- [ ] **T159 · 停服 run/计划/检查点持久账本：先写测试**
+  **类型 / Owner**：测试 / MIG\
+  **写入文件**：`src/backend/test/knowledge_unification/test_migration_ledger.py`（拟新增）\
+  **逻辑 / 测试上下文**：重复run同计划幂等；hash变化拒绝，M2前不能M3，转换中断沿原checkpoint，无停服检测参数。\
+  **依赖**：T158, T011\
+  **覆盖 AC**: AC-56, AC-63, AC-64, AC-85, AC-89, AC-93\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T160 · 停服 run/计划/检查点持久账本**
+  **类型 / Owner**：后端 Domain / MIG\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/unification_run_repository.py`（拟新增）\
+  **逻辑 / 测试上下文**：持久run/原基线/plan hash/阶段及租户来源覆盖，不写本机文件共享状态；新表自动发现/tenant登记按MIG已有卡串行补充。resume载同基线，冻结后不能对转换后数据重冻。\
+  **依赖**：T159\
+  **配对测试**：T159\
+  **验证 / 完成条件**：运行配对测试 T159；验证本卡预期，相关范围检查通过。
+
+- [ ] **T161 · 正式盘点、预检与存量失效证据：先写测试**
+  **类型 / Owner**：测试 / MIG\
+  **写入文件**：`src/backend/test/knowledge_unification/test_migration_inventory.py`（拟新增）\
+  **逻辑 / 测试上下文**：合法旧缺失可登记，旧type误判/名称歧义/creator缺失/跨tenant均失败；permission子计划纳同run，未冻结零转换。\
+  **依赖**：T160, T030, T126\
+  **覆盖 AC**: AC-55, AC-56, AC-63, AC-64, AC-80, AC-85, AC-93\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T162 · 正式盘点、预检与存量失效证据**
+  **类型 / Owner**：后端 Domain / MIG\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/unification_inventory_service.py`（拟新增）\
+  **逻辑 / 测试上下文**：运维停服备份后全租户正式盘点资源/creator、版本、标签metadata、模型索引、权限、业务引用、任务、配额；转换前冻结。原ID明确且已缺失保留证据；歧义/非法跨租户/其他异常拒绝，不把旧类型误查当缺失。\
+  **依赖**：T161\
+  **配对测试**：T161\
+  **验证 / 完成条件**：运行配对测试 T161；验证本卡预期，相关范围检查通过。
+
+- [ ] **T163 · type/版本/标签转换与来源配额：先写测试**
+  **类型 / Owner**：测试 / MIG\
+  **写入文件**：`src/backend/test/knowledge_unification/test_migration_convert.py`（拟新增）\
+  **逻辑 / 测试上下文**：重复转换无重复版本标签；前后ID/模型/索引/授权相等，未发布可访问，超额保留存量但限新建。转换失败只原计划修复/一致备份回退。\
+  **依赖**：T162\
+  **覆盖 AC**: AC-55, AC-57, AC-58, AC-59, AC-60, AC-61, AC-62, AC-63\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T164 · type/版本/标签转换与来源配额**
+  **类型 / Owner**：后端 Domain / MIG\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/unification_conversion_service.py`（拟新增）\
+  **逻辑 / 测试上下文**：按冻结计划 type0→3、type1保留/type2退休；保ID原对象/模型/索引，不解析重嵌；补首版本/标签去重，durable origin不额外文件用量，存量private迁移不清授权、不默认广场发布。\
+  **依赖**：T163\
+  **配对测试**：T163\
+  **验证 / 完成条件**：运行配对测试 T163；验证本卡预期，相关范围检查通过。
+
+- [ ] **T165 · 迁移空间配额显示与创建统一：先写测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_quota.py`（拟新增）\
+  **逻辑 / 测试上下文**：换用户/重启后豁免仍在；tenant超限新增拒绝，文件存储不因转换翻倍，部门原限额有效。\
+  **依赖**：T164\
+  **覆盖 AC**: AC-14, AC-61, AC-62\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T166 · 迁移空间配额显示与创建统一**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/role/domain/services/quota_service.py`\
+  **逻辑 / 测试上下文**：以durable migration origin持续豁免个人新建空间数量，tenant总量超额保存量限新增；部门/存储原规则保持，校验与展示同计数，不按一次标记跳检查。\
+  **依赖**：T165\
+  **配对测试**：T165\
+  **验证 / 完成条件**：运行配对测试 T165；验证本卡预期，相关范围检查通过。
+
+- [ ] **T167 · 存量来源绑定回填：先写测试**
+  **类型 / Owner**：测试 / MIG\
+  **写入文件**：`src/backend/test/knowledge_unification/test_migration_backfill.py`（拟新增）\
+  **逻辑 / 测试上下文**：所有来源类型+版本+空集覆盖；中断重跑无重复，known legacy允许但新漂移/歧义/未解释missing失败；不改业务原文、不伪造tombstone。\
+  **依赖**：T164, T094, T040, T046, T048, T054, T058, T098, T018\
+  **覆盖 AC**: AC-71, AC-87, AC-88, AC-89, AC-91, AC-93\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T168 · 存量来源绑定回填**
+  **类型 / Owner**：后端 Domain / MIG\
+  **写入文件**：`src/backend/bisheng/resource_reference/application/backfill.py`（拟新增）\
+  **逻辑 / 测试上下文**：调用各业务同版本提取协议覆盖spec来源表全部已保存版本/默认含Root/paused，零引用集合也写；known forced-invalid/legacy-invalid原关系保留，任务不回填；按source revision摘要和checkpoint幂等。\
+  **依赖**：T167\
+  **配对测试**：T167\
+  **验证 / 完成条件**：运行配对测试 T167；验证本卡预期，相关范围检查通过。
+
+- [ ] **T169 · 覆盖对账与启用保护：先写测试**
+  **类型 / Owner**：测试 / MIG\
+  **写入文件**：`src/backend/test/knowledge_unification/test_migration_reconcile.py`（拟新增）\
+  **逻辑 / 测试上下文**：漏一来源或零引用集合失败；known legacy仍有原配置标记且受影响执行失败，正常业务继续；错误重跑不能重分类原基线。\
+  **依赖**：T168, T166, T104\
+  **覆盖 AC**: AC-37, AC-59, AC-64, AC-80, AC-89, AC-93\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T170 · 覆盖对账与启用保护**
+  **类型 / Owner**：后端 Domain / MIG\
+  **写入文件**：`src/backend/bisheng/resource_reference/application/reconcile.py`（拟新增）；`src/backend/bisheng/knowledge/domain/services/unification_verification_service.py`（拟新增）\
+  **逻辑 / 测试上下文**：以同停服冻结基线全量核资源/文件/版本/标签metadata/授权配额/来源集合摘要及检索抽样；known legacy清单保留不阻正常业务。全租户覆盖就绪与差异解释完成才登记ready，不未ready启删除保护。\
+  **依赖**：T169\
+  **配对测试**：T169\
+  **验证 / 完成条件**：运行配对测试 T169；验证本卡预期，相关范围检查通过。
+
+- [ ] **T171 · 新租户/空安装覆盖就绪初始化：先写测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_tenant_coverage.py`（拟新增）\
+  **逻辑 / 测试上下文**：新租户零业务可正常删除空资源；创建/初始化故障回滚，既有未回填租户仍拒绝删除；初始化不能外部伪造或跨tenant调用。\
+  **依赖**：T170, T018\
+  **覆盖 AC**: AC-89, AC-90\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T172 · 新租户/空安装覆盖就绪初始化**
+  **类型 / Owner**：后端 Domain / INT\
+  **写入文件**：`src/backend/bisheng/tenant/domain/services/tenant_service.py`；`src/backend/bisheng/resource_reference/application/bootstrap.py`（拟新增）\
+  **逻辑 / 测试上下文**：新租户创建用例同事务调用REF初始化协议；空新安装通过同一内部bootstrap能力在全部同步写端可用后初始化，来源为空证据与writer_contract版本持久记录。既有存量tenant没有账本必须回填对账，不能按无行自动ready。初始化错误租户创建整体回滚。\
+  **依赖**：T171\
+  **配对测试**：T171\
+  **验证 / 完成条件**：运行配对测试 T171；验证本卡预期，相关范围检查通过。
+
+- [ ] **T173 · 停服升级入口/报告/恢复命令：先写测试**
+  **类型 / Owner**：测试 / MIG\
+  **写入文件**：`src/backend/test/knowledge_unification/test_migration_cli.py`（拟新增）\
+  **逻辑 / 测试上下文**：M2→M3→M4先后，dryrun/正式用途清楚；模拟中断resume同run，异常退出不执行恢复；命令实际存在后才更新升级说明。\
+  **依赖**：T170\
+  **覆盖 AC**: AC-56, AC-63, AC-64, AC-80, AC-85, AC-89, AC-93\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T174 · 停服升级入口/报告/恢复命令**
+  **类型 / Owner**：后端 API / MIG\
+  **写入文件**：`src/backend/scripts/unify_knowledge_spaces.py`（拟新增）\
+  **逻辑 / 测试上下文**：只调盘点/预检/冻结/convert/backfill/verify及checkpoint resume，输出run/hash/范围/失效清单/差异；不探测端口/进程/Worker/停服标记，不启停/等待服务；失败不自动恢复业务。\
+  **依赖**：T173\
+  **配对测试**：T173\
+  **验证 / 完成条件**：运行配对测试 T173；验证本卡预期，相关范围检查通过。
+
+- [ ] **T175 · 平台 API 与合同 Mock**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/controllers/API/knowledgeSpace.ts`；`src/frontend/platform/src/controllers/hooks/knowledge.ts`\
+  **逻辑 / 测试上下文**：按A1/J1/R3冻结 DTO封装普通/admin、settings、jobs、预检确认；react-query key带身份/租户/范围，Mock与真接口可替换；HTTP只在API层。\
+  **依赖**：T002, T007, T003, T006\
+  **验证 / 完成条件**：Mock序列化与合同一致；切租户/身份不复用缓存，平台类型检查；关联规格：AC-02, AC-03, AC-04, AC-05, AC-49, AC-50。
+
+- [ ] **T176 · 平台入口/三页签与创建**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/index.tsx`；`src/frontend/platform/src/pages/KnowledgePage/detail.tsx`\
+  **逻辑 / 测试上下文**：统一命名、QA独立；普通可见列表/admin仅超管租管具体租户；后台创建预选同默认可选模型/默认策略，前台跳转入口可解析ID。\
+  **依赖**：T175\
+  **验证 / 完成条件**：菜单与角色/租户切换、无权直链、QA入口；Zustand不直接HTTP；关联规格：AC-01, AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-16, AC-84。
+
+- [ ] **T177 · 平台目录/上传/版本**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/KnowledgeFile.tsx`；`src/frontend/platform/src/pages/KnowledgePage/components/Files.tsx`\
+  **逻辑 / 测试上下文**：复用空间树/文件夹上传/网页/预览下载rename版本，按相同开关相似文档/标签，按钮来自现有效动作，不新增fileedit。\
+  **依赖**：T176\
+  **验证 / 完成条件**：多层目录、新版本历史与主版本选择、rename-only行为；两端同数据人工验证；关联规格：AC-09, AC-10, AC-11, AC-14, AC-15, AC-30, AC-31。
+
+- [ ] **T178 · 平台分类型策略草稿**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/components/RuleFile.tsx`；`src/frontend/platform/src/pages/KnowledgePage/components/RuleTable.tsx`\
+  **逻辑 / 测试上下文**：类型切换保各草稿，save/create成功才生效，取消/校验/服务器失败不改已保存默认；支持已有选项和范围，表格不套文档。\
+  **依赖**：T177\
+  **验证 / 完成条件**：切文档/表格保未保存值、overlap/header范围及错误、取消/失败零保存；关联规格：AC-38, AC-39, AC-40, AC-41, AC-42, AC-43, AC-44。
+
+- [ ] **T179 · 平台上传与默认设置接线**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/filesUpload.tsx`；`src/frontend/platform/src/pages/KnowledgePage/components/FileUploadSplitStrategy.tsx`\
+  **逻辑 / 测试上下文**：打开已保存空间默认，显式上传参数不反存默认；网页/音视频保既有专用规则，不展示不支持选项。\
+  **依赖**：T178\
+  **验证 / 完成条件**：两文件类型优先级、历史文件无重处理、上传失败无默认变化；关联规格：AC-07, AC-09, AC-10, AC-39, AC-40, AC-43, AC-44。
+
+- [ ] **T180 · 平台批量确认/逐项结果**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/components/BatchOperationDialog.tsx`（拟新增）；`src/frontend/platform/src/pages/KnowledgePage/components/Files.tsx`\
+  **逻辑 / 测试上下文**：预检列无权/状态/不支持/直接引用失败，确认后跳过执行、取消零改；最终变化重新确认；普通file/夹永不展示force。\
+  **依赖**：T179, T177\
+  **验证 / 完成条件**：混合批确认/取消、整夹受阻、文件force参数无入口；结果不把accepted当completed；关联规格：AC-12, AC-13, AC-28, AC-29, AC-94。
+
+- [ ] **T181 · 平台跨空间移动风险**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/components/MoveDialog.tsx`（拟新增）；`src/frontend/platform/src/pages/KnowledgePage/components/Files.tsx`\
+  **逻辑 / 测试上下文**：展示目标/全历史版本、metadata字段保留和清除明细、标签、继承与自定义影响，二次确认携plan，任务进度/失败同任务重试。\
+  **依赖**：T180\
+  **验证 / 完成条件**：取消不请求执行；metadata异类型丢失明细、继承变化提示，失败归属不反复移动；关联规格：AC-17, AC-18, AC-19, AC-20, AC-21, AC-22, AC-23, AC-24。
+
+- [ ] **T182 · 平台高级处理与任务面板**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/components/ProcessingJobPanel.tsx`（拟新增）；`src/frontend/platform/src/pages/KnowledgePage/detail.tsx`\
+  **逻辑 / 测试上下文**：重建/重处理/切分独立确认，模型重建保Chunk；显示真实item进度/失败/obsolete和原任务retry，受限内容只计数；重建原文件可读、冲突写按钮禁用。\
+  **依赖**：T181, T176\
+  **验证 / 完成条件**：accepted仅接收；部分失败/过期/无权详情、跨租户缓存清理；无新增文件edit；关联规格：AC-33, AC-34, AC-45, AC-48, AC-49, AC-50, AC-51, AC-52, AC-53, AC-54。
+
+- [ ] **T183 · 平台 Chunk/元数据反馈**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/components/Paragraphs.tsx`；`src/frontend/platform/src/pages/KnowledgePage/components/MetadataManagementDialog.tsx`\
+  **逻辑 / 测试上下文**：Chunk指定版本保原文件；新增metadata历史空，rename/drop二次确认，展示实际索引任务结果，容器edit原能力不变。\
+  **依赖**：T182\
+  **验证 / 完成条件**：取消零改、version定位、失败不报成功及当前能力判断；关联规格：AC-33, AC-45, AC-46, AC-47, AC-49。
+
+- [ ] **T184 · 平台空间/模型引用影响确认**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/components/ResourceDeleteDialog.tsx`（拟新增）；`src/frontend/platform/src/pages/BuildPage/bench/ModelManagement.tsx`\
+  **逻辑 / 测试上下文**：普通阻断依赖/入口、受限摘要；空间/模型force显式二次确认plan，clear无force；模型清单编辑整次阻断不假保存。保留失效配置ID供手动修复。\
+  **依赖**：T183\
+  **验证 / 完成条件**：单模型/服务/清单移除、受限来源、摘要变化重新确认；copy创建者规则不因admin放宽；关联规格：AC-28, AC-29, AC-70, AC-72, AC-73, AC-76, AC-77, AC-90, AC-91, AC-92。
+
+- [ ] **T185 · 平台选择器失效槽与历史兼容**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/pages/BuildPage/bench/KnowledgeSpace.tsx`；`src/frontend/platform/src/pages/BuildPage/assistant/editAssistant/ModelSelect.tsx`\
+  **逻辑 / 测试上下文**：仅可见即可选空间，QA独立；原配置已删ID显示失效不自动清掉/替换，允许业务部分修复但提示运行发布仍禁止；旧绑定无需重发。\
+  **依赖**：T184\
+  **验证 / 完成条件**：新建不可选deleted，编辑原多失效只改一项保其余；历史ID原文保留；关联规格：AC-36, AC-37, AC-68, AC-79, AC-91, AC-92, AC-93。
+
+- [ ] **T186 · 平台纯可见授权可撤销**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/controllers/API/permission.ts`；`src/frontend/platform/src/pages/KnowledgePage/components/PermissionModelAdapter.tsx`（拟新增）\
+  **逻辑 / 测试上下文**：A1/P1活动action不显示use，合法纯可见模型仍展示来源和撤销入口；委托已有授权组件，未授动作不显示为拥有；不改旧审计快照。\
+  **依赖**：T185, T022\
+  **验证 / 完成条件**：use-only授权可找到/撤销一个Source，其他来源可见仍在；file rename独立展示；关联规格：AC-30, AC-31, AC-78, AC-81, AC-83。
+
+- [ ] **T187 · 客户端 API 与 Mock**
+  **类型 / Owner**：前端 Client / CLIENT\
+  **写入文件**：`src/frontend/client/src/api/knowledge.ts`；`src/frontend/client/src/pages/knowledge/SpaceDetail/knowledgeSpaceTypes.ts`\
+  **逻辑 / 测试上下文**：A1/J1/R3前台简化状态/预检/任务DTO，React-query/Recoil保持，身份/租户key隔离；无后台高级配置。\
+  **依赖**：T002, T007, T003, T006\
+  **验证 / 完成条件**：Mock合同及客户端类型检查；不从platform导入页面/hooks/store；关联规格：AC-02, AC-12, AC-13, AC-49, AC-50。
+
+- [ ] **T188 · 客户端入口/选择/失效来源**
+  **类型 / Owner**：前端 Client / CLIENT\
+  **写入文件**：`src/frontend/client/src/pages/knowledge/KnowledgeHomePage.tsx`；`src/frontend/client/src/pages/knowledge/KnowledgePageContent.tsx`\
+  **逻辑 / 测试上下文**：统一知识空间与独立QA命名；真实ID旧链接/可见性，失效槽显示原选择并指引原业务修复，不自动解除或fallback。\
+  **依赖**：T187\
+  **验证 / 完成条件**：可见无use可选，无权不泄露名称；有效/失效旧ID、QA、管理员缓存不复用；关联规格：AC-01, AC-02, AC-06, AC-08, AC-36, AC-37, AC-68, AC-79, AC-91, AC-92, AC-93。
+
+- [ ] **T189 · 客户端批量与文件删除**
+  **类型 / Owner**：前端 Client / CLIENT\
+  **写入文件**：`src/frontend/client/src/pages/knowledge/SpaceDetail/useKnowledgeSelectionActions.ts`；`src/frontend/client/src/pages/knowledge/SpaceDetail/useKnowledgeFileActions.ts`\
+  **逻辑 / 测试上下文**：按逐项预检弹确认，取消零执行；直接引用文件/夹受阻，空间绑定不阻普通文件；不新增fileforce/高级editgate。\
+  **依赖**：T188\
+  **验证 / 完成条件**：混合批/整夹引用/确认后变化、rename独立能力、错误逐项反馈；关联规格：AC-12, AC-13, AC-28, AC-29, AC-31, AC-94。
+
+- [ ] **T190 · 客户端移动简化风险**
+  **类型 / Owner**：前端 Client / CLIENT\
+  **写入文件**：`src/frontend/client/src/pages/knowledge/SpaceDetail/MoveToDialog.tsx`；`src/frontend/client/src/pages/knowledge/SpaceDetail/KnowledgeSpaceOverlays.tsx`\
+  **逻辑 / 测试上下文**：展示目标、整版本、metadata丢失、继承变化/自定义保留，简化确认同plan；失败重试原任务保归属。\
+  **依赖**：T189\
+  **验证 / 完成条件**：取消零变化，跨租户/自身子目录错误，成功与失败进度不会重复移动；关联规格：AC-17, AC-18, AC-19, AC-20, AC-21, AC-22, AC-23, AC-24。
+
+- [ ] **T191 · 客户端任务/删除影响展示**
+  **类型 / Owner**：前端 Client / CLIENT\
+  **写入文件**：`src/frontend/client/src/pages/knowledge/SpaceDetail/index.tsx`；`src/frontend/client/src/pages/knowledge/SpaceDetail/ProcessingState.tsx`（拟新增）\
+  **逻辑 / 测试上下文**：只显示处理/完成/失败/过期，重建保目录预览下载暂停检索冲突写；空间删除显式force影响确认，clear无force，隐藏来源只数量；不加后台选模型/Chunk设置。\
+  **依赖**：T190\
+  **验证 / 完成条件**：重建/部分失败/obsolete/同空间冲突/其他空间正常，force摘要变化重确认；关联规格：AC-28, AC-29, AC-49, AC-50, AC-51, AC-52, AC-53, AC-54, AC-90, AC-91, AC-94。
+
+- [ ] **T192 · 平台通用授权纯可见模型**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/components/bs-comp/permission/PermissionGrantTab.tsx`；`src/frontend/platform/src/components/bs-comp/permission/PermissionListTab.tsx`\
+  **逻辑 / 测试上下文**：当前动作不显示use；纯可见模型虽动作数组为空仍展示有效主体、原Source与可撤销能力，等级按服务端；普通非法空模型不允许授予。\
+  **依赖**：T186, T022\
+  **验证 / 完成条件**：所有资源权限弹窗use-only迁移授权可授予/列出/撤销，其他Source仍生效，file rename不被edit替代；关联规格：AC-78, AC-81, AC-83。
+
+- [ ] **T193 · 平台全员与托管应用动作**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/components/bs-comp/permission/AllMembersPermission.tsx`；`src/frontend/platform/src/pages/BuildPage/hostedApp/appActions.ts`\
+  **逻辑 / 测试上下文**：全员纯可见和app操作能力按服务端visible解释，不再独立use；保护原管理等级和可撤销性，不凭可见显示edit/delete。\
+  **依赖**：T192, T136\
+  **验证 / 完成条件**：全员Source撤销/其他来源并集，app可见但无编辑动作按钮矩阵；历史审计文字不改写；关联规格：AC-78, AC-79, AC-81, AC-83。
+
+- [ ] **T194 · 客户端通用授权展示**
+  **类型 / Owner**：前端 Client / CLIENT\
+  **写入文件**：`src/frontend/client/src/components/permission/PermissionListTab.tsx`；`src/frontend/client/src/components/permission/UnifiedPermissionControls.tsx`\
+  **逻辑 / 测试上下文**：当前模型动作去use，合法纯可见主体及Source继续显示、管理和撤销；保既有管理能力/等级，继承模式统一解析。\
+  **依赖**：T191, T022\
+  **验证 / 完成条件**：仅use迁移后列表不消失、可撤单来源，其他来源仍有效；view不能edit/download/rename；关联规格：AC-30, AC-31, AC-78, AC-81, AC-83。
+
+- [ ] **T195 · 客户端纯可见授予选择**
+  **类型 / Owner**：前端 Client / CLIENT\
+  **写入文件**：`src/frontend/client/src/components/permission/PermissionGrantTab.tsx`；`src/frontend/client/src/api/permission.ts`\
+  **逻辑 / 测试上下文**：空action不等于无效：识别服务端合法纯可见模型与管理能力，支持原授予/撤销协议，不创建新visible动作或use来源。\
+  **依赖**：T194\
+  **验证 / 完成条件**：合法pure-visible可选、任意空模型拒绝；现行use字段无返回/保存，旧协议兼容测试；关联规格：AC-78, AC-81, AC-83。
+
+- [ ] **T196 · 模块路由与导出装配：先写测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_wire_router.py`（拟新增）\
+  **逻辑 / 测试上下文**：用真实FastAPI路由表与OpenAPI断言所有合同端点唯一；普通admin隔离、旧请求稳定、新任务accepted正确。\
+  **依赖**：T126, T152, T140, T154, T156, T138, T136, T172, T174\
+  **覆盖 AC**: AC-02, AC-04, AC-05, AC-35, AC-49, AC-65, AC-66, AC-83\
+  **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
+
+- [ ] **T197 · 模块路由与导出装配**
+  **类型 / Owner**：后端 API / INT\
+  **写入文件**：`src/backend/bisheng/knowledge/api/router.py`；`src/backend/bisheng/api/router.py`\
+  **逻辑 / 测试上下文**：顺序接线冻结候选接口并消除动态路径遮蔽；新模块自动发现、租户登记与job worker路由逐项核对，额外叶子接线先拆补充卡；不在Endpoint直接ORM/跨模块API互导。\
+  **依赖**：T196\
+  **配对测试**：T196\
+  **验证 / 完成条件**：运行配对测试 T196；验证本卡预期，相关范围检查通过。
+
+- [ ] **T198 · 共享三语词条唯一集成**
+  **类型 / Owner**：文案集成 / INT\
+  **写入文件**：`src/frontend/packages/locales/src/shared/zh-Hans.json`；`features/v3.1.0-beta1/118-knowledge-space-unification/contracts.md`（拟新增）\
+  **逻辑 / 测试上下文**：汇总两端键/三语词条及归属，不手改生成api_errors；本卡只落中文源与合同清单，后续英/日源独立两文件任务。\
+  **依赖**：T186, T191, T002\
+  **验证 / 完成条件**：JSON可解析，无重复/缺失key，键清单审阅；不是业务实现基础设施前置，属于最终文案集成。
+
+- [ ] **T199 · 英日源词条与现有生成链**
+  **类型 / Owner**：文案集成 / INT\
+  **写入文件**：`src/frontend/packages/locales/src/shared/en.json`；`src/frontend/packages/locales/src/shared/ja.json`\
+  **逻辑 / 测试上下文**：补齐同一键的英/日译文，执行现有生成/同步链，两端实际消费路径以T001清单为准；若遗留app locale需直接改，先拆两文件补充卡，不把产物当手改源。\
+  **依赖**：T198\
+  **验证 / 完成条件**：三语key完全一致、现有生成链无残留；两端切语言检查文字和错误文案。
+
+- [ ] **T200 · 平台真实接口验收**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/controllers/API/knowledgeSpace.ts`；`src/frontend/platform/src/pages/KnowledgePage/detail.tsx`\
+  **逻辑 / 测试上下文**：撤去已冻结Mock接真实服务，核列表/管理/文件/策略/任务/强删；统一query失效跨端刷新，权限以服务端为准，不留TODO式临时旁路。\
+  **依赖**：T197, T193, T199, T175, T182\
+  **验证 / 完成条件**：平台lint/类型检查及构建；按合同真实接口验证前后台同数据、重建/失败/管理员/普通矩阵，记录环境和未执行项。
+
+- [ ] **T201 · 客户端真实接口验收**
+  **类型 / Owner**：前端 Client / CLIENT\
+  **写入文件**：`src/frontend/client/src/api/knowledge.ts`；`src/frontend/client/src/pages/knowledge/SpaceDetail/index.tsx`\
+  **逻辑 / 测试上下文**：替换Mock并核目录/移动/状态/批量/删除失效展示，跨端刷新同资源，同一用户子项可见范围不扩；无高级界面复制。\
+  **依赖**：T197, T195, T199, T187, T191\
+  **验证 / 完成条件**：客户端lint/类型检查及构建；真实接口管理员/普通/独立文件授权、处理状态和强删矩阵，记录环境。
+
+- [ ] **T202 · 双库事务/投影/并发回归执行**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_cross_domain_integration.py`（拟新增）\
+  **逻辑 / 测试上下文**：按固定锁序覆盖保存vs普通/强删、服务清单原子性、同来源多版本CAS、FGA失败/SQL失败/清理失败分阶段恢复；执行MySQL及项目集中DM8回归，真实中间件证据分别记录。\
+  **依赖**：T200, T201, T174\
+  **覆盖 AC**: AC-28, AC-29, AC-30, AC-31, AC-32, AC-33, AC-34, AC-35, AC-36, AC-37, AC-70, AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-77, AC-78, AC-79, AC-80, AC-81, AC-82, AC-83, AC-84, AC-85, AC-86, AC-87, AC-88, AC-89, AC-90, AC-91, AC-92, AC-93, AC-94\
+  **验证 / 完成条件**：不得以mock通过声称双库集成通过；未配置环境明确待执行，失败修复先补独立叶子任务。
+
+- [ ] **T203 · 升级说明与迁移演练**
+  **类型 / Owner**：测试 / MIG\
+  **写入文件**：`features/v3.1.0-beta1/118-knowledge-space-unification/upgrade-guide.md`；`src/backend/test/knowledge_unification/test_upgrade_rehearsal.py`（拟新增）\
+  **逻辑 / 测试上下文**：脚本实现后补真实命令与参数，演练停服备份→正式全平台权限/资源盘点冻结→转换/回填→同基线核对→运维恢复；合法存量失效保留清单，中断resume和完整备份回退。脚本不探测/控制停服。\
+  **依赖**：T202\
+  **覆盖 AC**: AC-37, AC-55, AC-56, AC-57, AC-58, AC-59, AC-60, AC-61, AC-62, AC-63, AC-64, AC-80, AC-81, AC-85, AC-89, AC-93\
+  **验证 / 完成条件**：记录数据规模、耗时、run/plan hash、差异和恢复证据；无真实环境不得标完成。QA参考文档不是演练输入或门禁。
+
+- [ ] **T204 · 权限/管理员真实矩阵：端到端测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_e2e_access.py`（拟新增）\
+  **逻辑 / 测试上下文**：两租户/超管/租管/owner/普通/独立file授权；仅可见可用、rename独立；撤Source保他源；原scope/菜单边界；重建不扩大文件edit。\
+  **依赖**：T203\
+  **覆盖 AC**: AC-03, AC-04, AC-05, AC-08, AC-30, AC-31, AC-32, AC-33, AC-34, AC-35, AC-36, AC-37, AC-78, AC-79, AC-80, AC-81, AC-82, AC-83, AC-84\
+  **验证 / 完成条件**：先写可执行断言，再在真实服务/凭证/数据中运行；两端UI步骤进入报告。每卡仅本组用例，若超约30min继续按场景拆分，不以一个大函数占位。
+
+- [ ] **T205 · 两端普通目录/上传/版本：端到端测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_e2e_files.py`（拟新增）\
+  **逻辑 / 测试上下文**：前后台同资源刷新；QA独立；目录、web、新版本/主版本、同开关、审批配额、混合批取消零变更与确认逐项结果。\
+  **依赖**：T203\
+  **覆盖 AC**: AC-01, AC-02, AC-06, AC-07, AC-09, AC-10, AC-11, AC-12, AC-13, AC-14, AC-15, AC-16\
+  **验证 / 完成条件**：先写可执行断言，再在真实服务/凭证/数据中运行；两端UI步骤进入报告。每卡仅本组用例，若超约30min继续按场景拆分，不以一个大函数占位。
+
+- [ ] **T206 · 移动/复制/内容删除：端到端测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_e2e_move_copy.py`（拟新增）\
+  **逻辑 / 测试上下文**：源move/目标upload与整版本、附件、metadata、权限、失败同任务；copy仅创建者独立索引；直接引用夹整项拦截、无fileforce、FGA失败先保业务。\
+  **依赖**：T203\
+  **覆盖 AC**: AC-17, AC-18, AC-19, AC-20, AC-21, AC-22, AC-23, AC-24, AC-25, AC-26, AC-27, AC-28, AC-29, AC-94\
+  **验证 / 完成条件**：先写可执行断言，再在真实服务/凭证/数据中运行；两端UI步骤进入报告。每卡仅本组用例，若超约30min继续按场景拆分，不以一个大函数占位。
+
+- [ ] **T207 · 默认/高级处理：端到端测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_e2e_processing.py`（拟新增）\
+  **逻辑 / 测试上下文**：两类型草稿切换、取消/错误不保存、三层优先级及专用规则；指定版本Chunk/metadata原容器edit；重建保人工Chunk不重切分。\
+  **依赖**：T203\
+  **覆盖 AC**: AC-38, AC-39, AC-40, AC-41, AC-42, AC-43, AC-44, AC-45, AC-46, AC-47, AC-48\
+  **验证 / 完成条件**：先写可执行断言，再在真实服务/凭证/数据中运行；两端UI步骤进入报告。每卡仅本组用例，若超约30min继续按场景拆分，不以一个大函数占位。
+
+- [ ] **T208 · 任务状态/过期/恢复：端到端测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_e2e_jobs.py`（拟新增）\
+  **逻辑 / 测试上下文**：accepted不报完成；重建保目录下载、暂停冲突与检索；部分失败/原任务retry、相关配置替换obsolete，无关name不影响；headers tenant及无配置失败。\
+  **依赖**：T203\
+  **覆盖 AC**: AC-49, AC-50, AC-51, AC-52, AC-53, AC-54, AC-86\
+  **验证 / 完成条件**：先写可执行断言，再在真实服务/凭证/数据中运行；两端UI步骤进入报告。每卡仅本组用例，若超约30min继续按场景拆分，不以一个大函数占位。
+
+- [ ] **T209 · 引用/强删/手工修复：端到端测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_e2e_refs.py`（拟新增）\
+  **逻辑 / 测试上下文**：业务来源矩阵/零集合、共享两tenant、服务差集整事务；强删确认变化和失效保留/部分修复；存量失效无伪tombstone；不可变历史不强改。\
+  **依赖**：T203\
+  **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-77, AC-87, AC-88, AC-89, AC-90, AC-91, AC-92, AC-93, AC-94\
+  **验证 / 完成条件**：先写可执行断言，再在真实服务/凭证/数据中运行；两端UI步骤进入报告。每卡仅本组用例，若超约30min继续按场景拆分，不以一个大函数占位。
+
+- [ ] **T210 · 旧协议/SDK/MCP：端到端测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_e2e_compat.py`（拟新增）\
+  **逻辑 / 测试上下文**：旧文档API请求返回type0而真实SPACE、QA1独立；历史知识绑定不重发；SDK/MCP真实协议及scope，整个3.x保兼容。\
+  **依赖**：T203\
+  **覆盖 AC**: AC-35, AC-65, AC-66, AC-67, AC-68, AC-69, AC-79, AC-82, AC-83\
+  **验证 / 完成条件**：先写可执行断言，再在真实服务/凭证/数据中运行；两端UI步骤进入报告。每卡仅本组用例，若超约30min继续按场景拆分，不以一个大函数占位。
+
+- [ ] **T211 · 升级后全量验收：端到端测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_e2e_upgrade.py`（拟新增）\
+  **逻辑 / 测试上下文**：停服备份后同run正式盘点冻结转换核对；保ID模型索引授权、配额豁免、版本标签幂等、legacy清单；排队保留后业务配置校验，异常维持维护。\
+  **依赖**：T203\
+  **覆盖 AC**: AC-55, AC-56, AC-57, AC-58, AC-59, AC-60, AC-61, AC-62, AC-63, AC-64, AC-80, AC-81, AC-85, AC-89, AC-93\
+  **验证 / 完成条件**：先写可执行断言，再在真实服务/凭证/数据中运行；两端UI步骤进入报告。每卡仅本组用例，若超约30min继续按场景拆分，不以一个大函数占位。
+
+- [ ] **T212 · E2E 汇总执行与报告**
+  **类型 / Owner**：验证汇总 / INT\
+  **写入文件**：`features/v3.1.0-beta1/118-knowledge-space-unification/e2e-report.md`（拟新增）\
+  **逻辑 / 测试上下文**：调用 /e2e-test，以spec AC核对上述8组实际覆盖；记录两端页面手动清单、SDK/MCP和API真实结果、环境、运行命令及未执行项。QA参考用例不作为Harness输入。\
+  **依赖**：T204, T205, T206, T207, T208, T209, T210, T211\
+  **验证 / 完成条件**：静态/单元/CI/部署/E2E分别报告；若缺环境保持待执行，不把mock和构建替代真实结果。
+
+- [ ] **T213 · 特性代码评审及文档收口**
+  **类型 / Owner**：评审收口 / INT\
+  **写入文件**：`features/v3.1.0-beta1/118-knowledge-space-unification/tasks.md`；`features/v3.1.0-beta1/118-knowledge-space-unification/README.md`\
+  **逻辑 / 测试上下文**：执行 /sdd-code-review --base feat/3.1.0-beta1；确认发布契约C1–C8、活动use全调用面、来源覆盖、保护启用就绪。偏差先回写design/任务并复核；仅实际完成任务打勾，不自动merge/push。额外文档回写每次按1–2文件另拆。\
+  **依赖**：T212\
+  **验证 / 完成条件**：评审无未闭合问题，所有必要验证有证据；否则实现状态保持未完成。
+
+## 自动化覆盖索引
+
+以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。全部测试均待实施/执行。
+
+| AC | 测试任务 |
+| --- | --- |
+| AC-01 | T205 |
+| AC-02 | T083, T121, T196, T205 |
+| AC-03 | T081, T121, T204 |
+| AC-04 | T081, T121, T196, T204 |
+| AC-05 | T081, T121, T196, T204 |
+| AC-06 | T079, T121, T205 |
+| AC-07 | T079, T121, T205 |
+| AC-08 | T077, T101, T121, T204 |
+| AC-09 | T083, T205 |
+| AC-10 | T067, T083, T125, T205 |
+| AC-11 | T083, T205 |
+| AC-12 | T085, T105, T205 |
+| AC-13 | T085, T105, T205 |
+| AC-14 | T079, T083, T121, T165, T205 |
+| AC-15 | T079, T121, T205 |
+| AC-16 | T205 |
+| AC-17 | T087, T089, T206 |
+| AC-18 | T087, T089, T206 |
+| AC-19 | T073, T091, T206 |
+| AC-20 | T073, T091, T206 |
+| AC-21 | T087, T091, T206 |
+| AC-22 | T087, T089, T206 |
+| AC-23 | T073, T091, T206 |
+| AC-24 | T073, T089, T091, T206 |
+| AC-25 | T081, T095, T206 |
+| AC-26 | T095, T206 |
+| AC-27 | T095, T206 |
+| AC-28 | T103, T105, T109, T202, T206 |
+| AC-29 | T103, T105, T107, T109, T202, T206 |
+| AC-30 | T023, T077, T101, T202, T204 |
+| AC-31 | T023, T077, T085, T099, T157, T202, T204 |
+| AC-32 | T077, T121, T202, T204 |
+| AC-33 | T071, T077, T097, T099, T123, T202, T204 |
+| AC-34 | T063, T071, T097, T123, T202, T204 |
+| AC-35 | T025, T051, T101, T123, T129, T131, T133, T141, T147, T149, T151, T196, T202, T204, T210 |
+| AC-36 | T101, T202, T204 |
+| AC-37 | T029, T037, T041, T045, T101, T129, T137, T169, T202, T203, T204 |
+| AC-38 | T059, T123, T207 |
+| AC-39 | T059, T069, T207 |
+| AC-40 | T059, T069, T207 |
+| AC-41 | T207 |
+| AC-42 | T059, T123, T207 |
+| AC-43 | T059, T067, T069, T083, T207 |
+| AC-44 | T059, T067, T069, T097, T207 |
+| AC-45 | T067, T097, T099, T123, T207 |
+| AC-46 | T099, T207 |
+| AC-47 | T071, T099, T207 |
+| AC-48 | T065, T097, T123, T207 |
+| AC-49 | T061, T063, T065, T067, T071, T073, T075, T097, T123, T196, T208 |
+| AC-50 | T061, T063, T071, T123, T208 |
+| AC-51 | T077, T097, T208 |
+| AC-52 | T065, T097, T208 |
+| AC-53 | T061, T065, T067, T071, T097, T208 |
+| AC-54 | T061, T063, T065, T067, T071, T073, T075, T097, T123, T208 |
+| AC-55 | T093, T125, T161, T163, T203, T211 |
+| AC-56 | T157, T159, T161, T173, T203, T211 |
+| AC-57 | T163, T203, T211 |
+| AC-58 | T163, T203, T211 |
+| AC-59 | T023, T157, T163, T169, T203, T211 |
+| AC-60 | T077, T101, T163, T203, T211 |
+| AC-61 | T163, T165, T203, T211 |
+| AC-62 | T163, T165, T203, T211 |
+| AC-63 | T157, T159, T161, T163, T173, T203, T211 |
+| AC-64 | T159, T161, T169, T173, T203, T211 |
+| AC-65 | T093, T125, T196, T210 |
+| AC-66 | T069, T125, T131, T133, T151, T196, T210 |
+| AC-67 | T101, T125, T131, T210 |
+| AC-68 | T029, T037, T039, T041, T045, T047, T051, T125, T129, T131, T133, T137, T139, T147, T149, T151, T210 |
+| AC-69 | T125, T133, T210 |
+| AC-70 | T093, T111, T113, T115, T119, T202, T209 |
+| AC-71 | T029, T031, T035, T037, T043, T045, T047, T049, T053, T055, T057, T093, T111, T139, T167, T202, T209 |
+| AC-72 | T013, T103, T111, T113, T117, T119, T202, T209 |
+| AC-73 | T111, T113, T115, T117, T119, T202, T209 |
+| AC-74 | T055, T093, T097, T109, T115, T202, T209 |
+| AC-75 | T049, T111, T202, T209 |
+| AC-76 | T111, T113, T115, T117, T119, T202, T209 |
+| AC-77 | T113, T115, T117, T119, T202, T209 |
+| AC-78 | T019, T021, T025, T027, T127, T135, T153, T155, T157, T202, T204 |
+| AC-79 | T023, T025, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T202, T204, T210 |
+| AC-80 | T019, T023, T027, T153, T157, T161, T169, T173, T202, T203, T204, T211 |
+| AC-81 | T019, T021, T023, T027, T135, T153, T157, T202, T203, T204, T211 |
+| AC-82 | T019, T025, T041, T051, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T155, T202, T204, T210 |
+| AC-83 | T021, T023, T025, T027, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T157, T196, T202, T204, T210 |
+| AC-84 | T081, T095, T109, T121, T202, T204 |
+| AC-85 | T075, T157, T159, T161, T173, T202, T203, T211 |
+| AC-86 | T061, T063, T065, T067, T073, T075, T097, T149, T202, T208 |
+| AC-87 | T013, T015, T029, T031, T033, T035, T039, T043, T045, T047, T053, T055, T057, T079, T091, T093, T095, T097, T109, T139, T167, T202, T209 |
+| AC-88 | T013, T015, T031, T033, T035, T037, T039, T043, T045, T047, T049, T053, T055, T057, T091, T093, T109, T167, T202, T209 |
+| AC-89 | T013, T015, T017, T029, T033, T039, T047, T055, T093, T103, T111, T159, T167, T169, T171, T173, T202, T203, T209, T211 |
+| AC-90 | T017, T103, T109, T117, T119, T171, T202, T209 |
+| AC-91 | T015, T017, T037, T039, T041, T045, T049, T053, T103, T109, T117, T129, T139, T141, T167, T202, T209 |
+| AC-92 | T015, T037, T039, T045, T049, T053, T109, T117, T202, T209 |
+| AC-93 | T017, T159, T161, T167, T169, T173, T202, T203, T209, T211 |
+| AC-94 | T085, T103, T105, T107, T202, T206, T209 |
+
+## 追加与偏差记录
+
+任务编号保持稳定，新增入口以末尾追加任务并登记依赖/Owner/测试；禁止通过扩大旧卡写入范围掩盖遗漏。当前所有任务未执行，无实现偏差。
