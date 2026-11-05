@@ -243,3 +243,33 @@ async def test_version_name_lookup_keeps_root_tenant_and_live_scope(store):
         session.add(FlowVersion(flow_id="wf", name="foreign-tenant", tenant_id=202))
         await session.flush()
         assert await lookup(session, root, "foreign-tenant") is None
+
+
+async def test_version_and_version_list_support_explicit_current_locking_reads(store, monkeypatch):
+    async_engine, _ = store
+    async with AsyncSession(async_engine) as session, session.begin():
+        root = await WorkflowVersionRepository.alock_root(session, "wf", 101)
+        statements = []
+        scalar, scalars = session.scalar, session.scalars
+
+        async def capture_scalar(statement, *args, **kwargs):
+            statements.append(statement)
+            return await scalar(statement, *args, **kwargs)
+
+        async def capture_scalars(statement, *args, **kwargs):
+            statements.append(statement)
+            return await scalars(statement, *args, **kwargs)
+
+        monkeypatch.setattr(session, "scalar", capture_scalar)
+        monkeypatch.setattr(session, "scalars", capture_scalars)
+        await WorkflowVersionRepository.aget_version(session, root, 1)
+        await WorkflowVersionRepository.alist_versions(session, root)
+        await WorkflowVersionRepository.aget_version(session, root, 1, for_update=True)
+        await WorkflowVersionRepository.alist_versions(session, root, for_update=True)
+        assert [getattr(statement, "_for_update_arg", None) is not None for statement in statements] == [
+            False,
+            False,
+            True,
+            True,
+        ]
+        assert all("FOR UPDATE" in str(statement.compile(dialect=mysql.dialect())) for statement in statements[-2:])

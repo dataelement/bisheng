@@ -232,3 +232,43 @@ async def test_partial_save_cannot_overwrite_a_newer_normal_save_before_runtime_
     assert [(row["source_version"], row["slot_key"]) for row in rows(saved, "business_resource_reference")] == [
         ("2", "node:concurrent.model_id")
     ]
+
+
+@pytest.mark.parametrize("operation", ["save", "create", "delete", "current"])
+async def test_business_reads_after_real_root_lock_use_current_sql_not_consistent_snapshot(
+    saved, monkeypatch, operation
+):
+    lock = WorkflowVersionRepository.alock_root
+    read = WorkflowVersionRepository.aget_version
+    read_all = WorkflowVersionRepository.alist_versions
+    current_reads = []
+
+    async def lock_root(session, *args, **kwargs):
+        result = await lock(session, *args, **kwargs)
+        session.sync_session.info["wf_root_locked"] = True
+        return result
+
+    async def current_read(session, *args, **kwargs):
+        if session.sync_session.info.get("wf_root_locked"):
+            assert kwargs.get("for_update") is True
+            current_reads.append("version")
+        return await read(session, *args, **kwargs)
+
+    async def current_read_all(session, *args, **kwargs):
+        if session.sync_session.info.get("wf_root_locked"):
+            assert kwargs.get("for_update") is True
+            current_reads.append("versions")
+        return await read_all(session, *args, **kwargs)
+
+    monkeypatch.setattr(WorkflowVersionRepository, "alock_root", lock_root)
+    monkeypatch.setattr(WorkflowVersionRepository, "aget_version", current_read)
+    monkeypatch.setattr(WorkflowVersionRepository, "alist_versions", current_read_all)
+    if operation == "save":
+        await save(saved, 2, graph(node("new", "llm", model_id=7)))
+    elif operation == "create":
+        await flow_service.FlowService.create_new_version(saved.user, "wf", FlowVersionCreate(name="new", data={}))
+    elif operation == "delete":
+        await flow_service.FlowService.delete_version(saved.user, 2)
+    else:
+        await flow_service.FlowService.change_current_version(saved.request, saved.user, "wf", 2)
+    assert current_reads
