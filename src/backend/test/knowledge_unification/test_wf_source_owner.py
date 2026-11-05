@@ -201,3 +201,59 @@ async def test_missing_or_malformed_version_is_not_current_fallback(store, ident
     async with AsyncSession(engine) as session, session.begin():
         with pytest.raises((NotFoundError, ResourceReferenceInvalidError)):
             await WorkflowReferenceSourceOwner().aresolve_source(session, request(version), identity)
+
+
+async def test_preview_knowledge_kind_candidate_unlocked_final_current_read(
+    store, identity, authorization, monkeypatch
+):
+    """The final authorization must use the locked target's actual current kind."""
+    engine, sync = store
+    metadata = sa.MetaData()
+    knowledge = sa.Table(
+        "knowledge",
+        metadata,
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("tenant_id", sa.Integer),
+        sa.Column("type", sa.Integer),
+    )
+    metadata.create_all(sync)
+    with sync.begin() as connection:
+        connection.execute(knowledge.insert().values(id=7, tenant_id=101, type=0))
+    graph = {
+        "nodes": [
+            {
+                "data": {
+                    "id": "retrieve",
+                    "type": "knowledge_retriever",
+                    "group_params": [
+                        {"params": [{"key": "knowledge", "value": {"type": "space", "value": [{"key": 7}]}}]}
+                    ],
+                }
+            }
+        ],
+        "edges": [],
+    }
+    req = TransientTargetRequest("workflow", "wf", canonical_payload_json({"graph": graph}))
+    locks = []
+    async with AsyncSession(engine) as session, session.begin():
+        scalar = session.scalar
+
+        async def record(query, *args, **kwargs):
+            if "knowledge.type" in str(query):
+                locks.append(query._for_update_arg is not None)
+            return await scalar(query, *args, **kwargs)
+
+        monkeypatch.setattr(session, "scalar", record)
+        owner = WorkflowReferenceSourceOwner()
+        before = await owner.aresolve_transient(session, req, identity)
+        with sync.begin() as connection:
+            connection.execute(knowledge.update().where(knowledge.c.id == 7).values(type=3))
+        await owner.arevalidate_transient(session, req, identity, before)
+    assert locks == [False, True]
+    knowledge_auth = [
+        call.kwargs for call in authorization.await_args_list if call.kwargs["resource_type"].startswith("knowledge_")
+    ]
+    assert knowledge_auth == [
+        {"resource_type": "knowledge_library", "resource_id": "7", "action": "visible"},
+        {"resource_type": "knowledge_space", "resource_id": "7", "action": "visible"},
+    ]
