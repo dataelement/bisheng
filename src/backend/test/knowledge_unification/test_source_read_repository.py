@@ -32,7 +32,7 @@ def source_set(tenant_id, *, version="current", root=False, empty=False):
         extractor_version="root-guard-v1" if root else "assistant-v1",
         digest=reference_set_digest(()) if root or empty else reference_set_digest(scopes.REFS),
         effective=not root,
-        ready=True,
+        ready=not root,
     )
 
 
