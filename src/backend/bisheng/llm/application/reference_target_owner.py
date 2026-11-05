@@ -62,6 +62,14 @@ class ModelReferenceTargetOwner:
         self.legacy_evidence = legacy_evidence
         self.sharing = sharing if sharing is not None else DefaultModelReferenceSharing(self.repository)
 
+    def prelock_targets(self, session, target_keys, source_keys) -> None:
+        TransactionIdentity.capture(session)
+        self.repository.prelock_targets(session, target_keys, source_keys)
+
+    async def aprelock_targets(self, session, target_keys, source_keys) -> None:
+        TransactionIdentity.capture(session)
+        await self.repository.aprelock_targets(session, target_keys, source_keys)
+
     @staticmethod
     def _shared_servers(observations):
         tenant_id = _resolve_tenant_id()
