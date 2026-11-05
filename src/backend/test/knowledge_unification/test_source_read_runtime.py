@@ -97,7 +97,17 @@ async def test_inspection_and_execution_authority_cannot_be_interchanged(runtime
 
 @pytest.mark.parametrize(
     "case",
-    ["missing_set", "missing_guard", "raw_digest", "revision", "unready", "extractor", "business_drift", "inactive"],
+    [
+        "missing_set",
+        "missing_guard",
+        "raw_digest",
+        "malformed_raw",
+        "revision",
+        "unready",
+        "extractor",
+        "business_drift",
+        "inactive",
+    ],
 )
 async def test_index_defects_are_never_treated_as_an_empty_or_new_source(runtime_context, case):
     ctx = runtime_context
@@ -111,13 +121,21 @@ async def test_index_defects_are_never_treated_as_an_empty_or_new_source(runtime
                     BusinessReferenceSet.tenant_id == 101, BusinessReferenceSet.record_kind == "root_guard"
                 )
             )
-        elif case in {"raw_digest", "revision"}:
+        elif case in {"raw_digest", "malformed_raw", "revision"}:
             await session.execute(
                 update(BusinessResourceReference)
                 .where(
                     BusinessResourceReference.tenant_id == 101, BusinessResourceReference.source_version == "current"
                 )
-                .values(**({"target_id": "22"} if case == "raw_digest" else {"source_revision": 8}))
+                .values(
+                    **(
+                        {"target_id": "22"}
+                        if case == "raw_digest"
+                        else {"target_id": "not-a-target-id"}
+                        if case == "malformed_raw"
+                        else {"source_revision": 8}
+                    )
+                )
             )
         elif case == "business_drift":
             await session.execute(

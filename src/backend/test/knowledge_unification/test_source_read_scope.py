@@ -154,7 +154,9 @@ async def test_private_issuance_calls_actual_owner_and_root_requires_actual_targ
         assert ctx.owner.calls == ["candidate", "targets", "root"]
 
 
-@pytest.mark.parametrize("case", ["copy", "purpose", "identity", "credential", "tenant", "bypass", "verifier"])
+@pytest.mark.parametrize(
+    "case", ["copy", "equality_copy", "purpose", "identity", "credential", "tenant", "bypass", "verifier"]
+)
 async def test_scope_cannot_be_copied_or_rebound(source_context, case):
     from bisheng.resource_reference.application.source_verification import SourceReadVerifier
 
@@ -164,6 +166,17 @@ async def test_scope_cannot_be_copied_or_rebound(source_context, case):
         identity, verifier = ctx.identity, ctx.verifier
         if case == "copy":
             scope = replace(scope)
+        elif case == "equality_copy":
+            original = scope
+
+            class EqualScope(type(original)):
+                def __hash__(self):
+                    return hash(original)
+
+                def __eq__(self, other):
+                    return other is original or other is self
+
+            scope = EqualScope(original.snapshot, original.purpose, original._nonce)
         elif case == "purpose":
             scope = replace(scope, purpose="inspect")
         elif case == "identity":
