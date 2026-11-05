@@ -18,19 +18,22 @@ from bisheng.api.v1.schemas import (
     resp_500,
 )
 from bisheng.common.chat.utils import process_node_data
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import (
     CurVersionDelError,
     NotFoundVersionError,
     VersionNameExistsError,
+    WorkflowNameExistsError,
     WorkFlowOnlineEditError,
 )
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
+from bisheng.common.schemas.telemetry.event_data_schema import NewApplicationEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
+from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
-from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
+from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowStatus, FlowType
 from bisheng.database.models.flow_version import FlowVersion, FlowVersionDao, FlowVersionRead
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.session import MessageSessionDao
@@ -41,13 +44,63 @@ from bisheng.permission.application.business_authorization import (
 )
 from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.public_endpoints.domain.services.guest_link import delete_app_guest_link
+from bisheng.resource_reference.application.access import get_reference_binding_runtime
+from bisheng.resource_reference.application.contracts import SourceKey
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import get_request_ip
+from bisheng.workflow.domain.repositories.workflow_version_repository import WorkflowVersionRepository
+from bisheng.workflow.domain.services.reference_extractor import (
+    WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
+    extract_workflow_version_references,
+)
 
 from .f048_application_permission import ApplicationPermissionRecord
 
 
 class FlowService(BaseService):
+    @classmethod
+    async def create_workflow(
+        cls, request: Request, user: UserPayload, flow: FlowCreate
+    ) -> UnifiedResponseModel[FlowRead]:
+        runtime = await get_reference_binding_runtime()
+        async with get_async_db_session() as session:
+            if await WorkflowVersionRepository.aget_root_by_name(session, user.tenant_id, user.user_id, flow.name):
+                raise WorkflowNameExistsError.http_exception()
+            root = Flow.model_validate(flow)
+            root.user_id = user.user_id
+            root.tenant_id = user.tenant_id
+            root.flow_type = FlowType.WORKFLOW.value
+            root.create_time = None
+            root.update_time = None
+            root, version = await WorkflowVersionRepository.acreate_workflow(session, root)
+            source = SourceKey(root.tenant_id, "workflow_version", root.id, str(version.id))
+            prepared = await runtime.aprepare_source_bindings(
+                session,
+                source,
+                extract_workflow_version_references(version.data),
+                extractor_version=WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
+                lock_source_root=lambda sql: WorkflowVersionRepository.alock_root(sql, root.id, root.tenant_id),
+                new_source=True,
+            )
+            await runtime.aapply_source_bindings(session, prepared)
+            # The adapter consumes the new root's explicit business record;
+            # it does not reload an uncommitted Flow. Its durable projection
+            # completes before this one SQL unit is finalized.
+            await cls.create_flow_hook(request, user, root)
+            await session.commit()
+            await session.refresh(root)
+            result = FlowRead.model_validate(root)
+            result.version_id = version.id
+        await telemetry_service.log_event(
+            user_id=user.user_id,
+            event_type=BaseTelemetryTypeEnum.NEW_APPLICATION,
+            trace_id=trace_id_var.get(),
+            event_data=NewApplicationEventData(
+                app_id=root.id, app_name=root.name, app_type=ApplicationTypeEnum.WORKFLOW
+            ),
+        )
+        return resp_200(data=result)
+
     @classmethod
     async def get_version_list_by_flow(
         cls,
