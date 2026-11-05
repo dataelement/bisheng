@@ -264,7 +264,7 @@ def test_page_findings_skips_hidden_and_scrollable_pages():
     findings = hc.page_findings([{"hidden": True}, {"scrollable": True}, {"dy": 0, "dx": 0, "title": "a"}])
     assert _errors(findings) == []
     (info,) = [f.detail for f in findings if f.level == hc.INFO]
-    assert "均未溢出" in info and "1 页处于隐藏状态" in info
+    assert "均未溢出" in info and "1 页无法显示，没有测量" in info
 
 
 def test_page_findings_nothing_for_an_unpaged_document():
@@ -295,13 +295,53 @@ def test_render_fitting_deck_reports_the_page_count_and_passes():
 
 
 @chromium
-def test_render_ignores_scrollable_and_hidden_pages():
-    html = _deck(
-        [_TALL, _TALL, "<p>短</p>"], css=".slide:nth-of-type(1){overflow:auto}.slide:nth-of-type(2){display:none}"
-    )
+def test_render_skips_scrollable_pages():
+    html = _deck([_TALL, "<p>短</p>"], css=".slide:nth-of-type(1){overflow:auto}")
     findings, _, _ = hc._render_findings(html)
     assert [f for f in _errors(findings) if f.topic == "分页溢出"] == []
-    assert any(f.level == hc.INFO and "1 页处于隐藏状态" in f.detail for f in findings)
+
+
+@chromium
+def test_render_measures_the_hidden_slides_of_a_click_through_deck():
+    """Only the current slide is displayed; the overflowing one is display:none."""
+    html = _deck(["<p>短</p>", "<p>短</p>", _TALL], css=".slide{display:none}.slide.on{display:flex}").replace(
+        '<section class="slide"><h2>第1页', '<section class="slide on"><h2>第1页'
+    )
+    findings, _, _ = hc._render_findings(html)
+    assert [f.detail[:5] for f in _errors(findings) if f.topic == "分页溢出"] == ["第 3 页"]
+    assert any(f.level == hc.INFO and f.detail.startswith("共 3 页，逐页测量 3 页") for f in findings)
+
+
+@chromium
+def test_render_finds_slides_wrapped_in_their_own_frames():
+    """A scaling wrapper per slide (div.frame > section.slide), the frames themselves hidden."""
+    hidden = ' style="display:none"'
+    frames = "".join(
+        f'<div class="frame"{hidden if i else ""}><section class="slide"><h2>第{i + 1}页</h2>{b}</section></div>'
+        for i, b in enumerate(["<p>短</p>", _TALL, "<p>短</p>"])
+    )
+    html = GOOD.replace(
+        "</style>", ".slide{width:1280px;height:720px;overflow:hidden;box-sizing:border-box}p{font-size:24px}</style>"
+    ).replace("<body>", f"<body>{frames}")
+    findings, _, _ = hc._render_findings(html)
+    assert [f.detail[:5] for f in _errors(findings) if f.topic == "分页溢出"] == ["第 2 页"]
+
+
+@chromium
+def test_probe_restores_the_page_after_measuring_hidden_slides():
+    from playwright.sync_api import sync_playwright
+
+    html = _deck(["<p>短</p>", _TALL], css=".slide:nth-of-type(2){display:none}").replace(
+        '<section class="slide"><h2>第2页', '<section class="slide" style="color:red"><h2>第2页'
+    )
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.set_content(html)
+        page.evaluate(hc._PROBE_JS)
+        styles = page.evaluate("() => [...document.querySelectorAll('.slide')].map(e => e.getAttribute('style'))")
+        browser.close()
+    assert styles == [None, "color:red"]
 
 
 @chromium
