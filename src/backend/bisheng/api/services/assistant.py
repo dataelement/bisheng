@@ -520,6 +520,9 @@ class AssistantService(BaseService, AssistantUtils):
                 new_source=True,
             )
             await runtime.aapply_source_bindings(session, prepared)
+            # The permission hook consumes the already verified new-root record;
+            # its durable projection must succeed before SQL is finalized.
+            await cls.create_assistant_hook_async(request, assistant, login_user)
             await session.commit()
 
         # RecordTelemetryJournal
@@ -531,8 +534,6 @@ class AssistantService(BaseService, AssistantUtils):
                 app_id=assistant.id, app_name=assistant.name, app_type=ApplicationTypeEnum.ASSISTANT
             ),
         )
-
-        await cls.create_assistant_hook_async(request, assistant, login_user)
 
         can_share = await check_business_action(
             login_user,
