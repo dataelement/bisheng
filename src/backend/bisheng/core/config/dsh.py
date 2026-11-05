@@ -38,6 +38,16 @@ class DshSettings(BaseModel):
     session_ttl_seconds: int = Field(
         default=2592000, ge=600, le=2592000, description="Absolute lifetime in seconds of a native desktop session."
     )
+    refresh_reuse_grace_seconds: int = Field(
+        default=86400,
+        ge=0,
+        le=604800,
+        description=(
+            "Seconds a consumed refresh token may be presented again while its successor "
+            "is still unused. Covers a lost response and a laptop sleeping overnight. "
+            "Zero keeps strict replay revocation."
+        ),
+    )
 
     enabled: bool = Field(
         default=False,

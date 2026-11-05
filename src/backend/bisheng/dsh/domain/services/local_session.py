@@ -20,13 +20,24 @@ from bisheng.common.errcode.dsh import (
     DshUserDisabledError,
 )
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
-from bisheng.dsh.infrastructure.token_keys import ISSUER, KEY_ID
+from bisheng.dsh.infrastructure.token_keys import ISSUER, KEY_ID, successor_refresh_token
 
 
 class DshLocalSessionService:
-    def __init__(self, repository_scope, identities, keys, *, access_seconds=300, session_seconds=2592000, now=None):
+    def __init__(
+        self,
+        repository_scope,
+        identities,
+        keys,
+        *,
+        access_seconds=300,
+        session_seconds=2592000,
+        refresh_grace_seconds=0,
+        now=None,
+    ):
         self.repository_scope, self.identities, self.keys = repository_scope, identities, keys
         self.access_seconds, self.session_seconds = access_seconds, session_seconds
+        self.refresh_grace_seconds = refresh_grace_seconds
         self.now = now or (lambda: datetime.now(UTC).replace(tzinfo=None))
 
     async def run(self, action):
@@ -76,7 +87,9 @@ class DshLocalSessionService:
         principal = DshPrincipal(
             tenant_id=str(located["tenant_id"]), user_id=str(located["user_id"]), session_id=located["session_id"]
         )
-        next_refresh = secrets.token_urlsafe(32)
+        # The successor is a pure function of the presented token, so a lost response
+        # can be retried and still receives exactly the token the first attempt issued.
+        next_refresh = successor_refresh_token(await self.keys.resolve_refresh_successor_key(), refresh)
         with principal_scope(principal):
             identity = await self.identities.check(principal.tenant_id, principal.user_id)
             if not identity.active:
@@ -87,6 +100,7 @@ class DshLocalSessionService:
                     digest,
                     self.digest(next_refresh),
                     self.now(),
+                    self.refresh_grace_seconds,
                 )
             )
         # Replay revocation must commit before raising the public error.

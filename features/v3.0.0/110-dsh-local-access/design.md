@@ -1,6 +1,6 @@
 # Design: DSH 本地登录与部门额度
 
-关联：[spec.md](./spec.md) · [tasks.md](./tasks.md) · [已确认评估](../../../docs/dsh-seat-removal-impact.md)。版本 v3.0.0，更新于 2026-10-20。
+关联：[spec.md](./spec.md) · [tasks.md](./tasks.md) · [已确认评估](../../../docs/dsh-seat-removal-impact.md)。版本 v3.0.0，更新于 2026-11-05。
 
 ## 1. 目标与边界
 
@@ -14,7 +14,7 @@ DSH 直接使用 Python BiSheng 完成登录、会话和模型调用，退出商
 
 ### 决策 1：认证状态本地化
 
-备选是保留远程验席或将全部认证状态置于 Redis；选定 Redis 保存五分钟授权绑定和一次性 ticket，SQL 保存设备会话与 refresh 摘要。这样沿用现有基础设施，refresh 通过会话行锁串行轮换，重放提交整族撤销后返回错误。若会话 QPS 使 SQL 验证成为瓶颈，再评估有撤销一致性保证的缓存。
+备选是保留远程验席或将全部认证状态置于 Redis；选定 Redis 保存五分钟授权绑定和一次性 ticket，SQL 保存设备会话与 refresh 摘要。这样沿用现有基础设施，refresh 通过会话行锁串行轮换。后继 refresh 使用独立用途密钥和旧 refresh 经 HMAC-SHA256 确定性派生：已消费旧 token 在恢复窗口内、直接后继仍为 ACTIVE 时返回相同后继和新的 access，数据库不再轮换；其他旧 token 重放仍提交整族撤销后返回错误。恢复窗口默认 86400 秒，可配置 0–604800 秒，0 表示严格重放规则。拒绝“撤销后继后重新随机签发”，因为乱序重复请求会让客户端刚收到的 token 失效。若需要容忍跨多代的合法延迟请求，须重新评估重放识别策略，不能直接放宽为任意祖先都可领取当前 token。若会话 QPS 使 SQL 验证成为瓶颈，再评估有撤销一致性保证的缓存。
 
 ### 决策 2：独立用途签名
 
@@ -34,7 +34,7 @@ DSH 直接使用 Python BiSheng 完成登录、会话和模型调用，退出商
 
 `Desktop → /api/v1/dsh/authorizations → /desktop-login 浏览器确认 → ticket → /api/v1/dsh/token → 本地 SQL 会话 → /models、/chat/completions、/usage、/profile`。
 
-刷新先用随机 refresh 的 SHA256 摘要定位最小租户/人员信息，再进入对应租户校验身份和锁定会话。退出与本人设备撤销只操作所属会话。浏览器管理接口继续使用平台 JWT 及原管理权限检查。
+首次登录仍随机生成 refresh；刷新先用提交 refresh 的 SHA256 摘要定位最小租户/人员信息，再进入对应租户校验身份和锁定会话。首次消费记录 used_at 并插入确定性后继；符合恢复条件的重复消费只返回原后继，不修改 token 行。退出与本人设备撤销只操作所属会话。浏览器管理接口继续使用平台 JWT 及原管理权限检查。
 
 ### 4.2 字段与 API
 
@@ -46,7 +46,7 @@ DSH 直接使用 Python BiSheng 完成登录、会话和模型调用，退出商
 | 标准 / 旧路径 | 上述三接口分别位于 /api/v1/dsh 和 /api/dsh；旧别名由应用根路由注册 |
 | 响应 | token_type、access_token、expires_in、refresh_token、refresh_expires_in、session_id、session_expires_at、user、tenant；无席位 |
 | access JWT | iss/aud/sub/tenant_id/session_id/session_version/iat/exp/jti；默认 300 秒，最大 600 秒 |
-| 设备会话 | dsh_session；默认绝对 30 天；dsh_refresh_token 仅保存摘要、代际、状态及过期时间 |
+| 设备会话 | dsh_session；默认绝对 30 天，刷新不延期；dsh_refresh_token 仅保存摘要、代际、状态、过期时间及 nullable used_at；恢复窗口不是登录有效期 |
 | UsageEvent / dsh_model_call | 席位和 grant_version 可空；历史正版本保持可读；其他用量、版本、epoch 字段维持原契约 |
 | 个人策略 | enabled=true + monthly_token_limit=0 为显式拒绝；enabled=false 为恢复继承 |
 
@@ -79,6 +79,8 @@ DSH 直接使用 Python BiSheng 完成登录、会话和模型调用，退出商
 | 旧别名挂到 v1 router 会叠加前缀 | 老客户端换证 404 | 应用层 compatibility_router |
 | max(personal, role) 会抬高低个人额度 | 迁移改变业务授权 | role_migration 保留已配置个人值，含零额度 |
 | 新事件没有商业身份 | 旧 worker 校验失败 | 全组件同批切换，保留可空历史列，禁止直接混跑或盲回滚 |
+| 已消费的历史 refresh 没有 used_at，或后继由旧算法随机生成 | 无法满足恢复条件，仍可能重放撤销 | 不伪造时间、不回填猜测；升级前未消费的 token 可正常进入新轮换链 |
+| 修复分支仅合并到旧 f111 迁移 head | 与当前 f114_app_authorization 形成双 head，启动升级失败 | 新增 merge_f114_dsh_refresh 空合并迁移，保留已发布 revision 历史；单 head 测试验证 |
 
 ## 6. 对外契约与依赖
 
@@ -101,3 +103,4 @@ DSH 直接使用 Python BiSheng 完成登录、会话和模型调用，退出商
 ## 修订历史
 
 - 2026-10-20：按用户确认的方案实施本地认证、去席位、个人优先及部门独立额度；记录序列化和精确租户范围两个实际发现，保持模型审计协议。
+- 2026-11-05：合入确定性后继与 24 小时恢复窗口，补齐当前 130 分支的迁移 head 合并；客户端稳定性后续方案单列，不代表已实施或部署。
