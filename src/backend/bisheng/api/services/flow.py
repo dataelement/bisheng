@@ -208,16 +208,59 @@ class FlowService(BaseService):
         version_info = await FlowVersionDao.aget_version_by_id(version_id)
         if not version_info or version_info.flow_id != flow_id:
             return NotFoundVersionError.return_resp()
-        if version_info.is_current == 1:
-            return resp_200()
-
-        # Modify the version selected by the user for the current version
-        changed = await FlowVersionDao.change_current_version(flow_id, version_info)
-        if not changed:
-            return NotFoundVersionError.return_resp()
-
-        await cls.update_flow_hook(request, login_user, flow_info)
+        root = await cls.transition_current_version(login_user, flow_id, version_id)
+        await cls.update_flow_hook(request, login_user, root)
         return resp_200()
+
+    @classmethod
+    async def transition_current_version(cls, user, flow_id, version_id, *, status=None, validate_version=None) -> Flow:
+        """Persist current/publish changes through one target-first SQL unit.
+
+        The caller retains its existing edit or publish/unpublish authorization.
+        Other saved versions remain effective reference sources throughout.
+        """
+        runtime = await get_reference_binding_runtime()
+        async with get_async_db_session() as session:
+            root = await WorkflowVersionRepository.aget_root(session, flow_id, user.tenant_id)
+            version = await WorkflowVersionRepository.aget_version(session, root, version_id)
+            if status is not None and status != FlowStatus.ONLINE.value:
+                # Stopping a business does not change its saved slots and must
+                # remain possible when targets are deleted or being deleted.
+                root = await WorkflowVersionRepository.alock_root(session, flow_id, user.tenant_id)
+                await WorkflowVersionRepository.aget_version(session, root, version_id)
+                root.status = status
+            else:
+                candidate = cls._workflow_version_snapshot(version)
+                references = extract_workflow_version_references(version.data)
+                source = SourceKey(root.tenant_id, "workflow_version", root.id, str(version_id))
+
+                async def lock_root(sql):
+                    locked = await WorkflowVersionRepository.alock_root(sql, flow_id, user.tenant_id)
+                    current = await WorkflowVersionRepository.aget_version(sql, locked, version_id)
+                    if cls._workflow_version_snapshot(current) != candidate:
+                        raise KnowledgeOperationPlanConflictError(reason="workflow_version_changed")
+                    if status is None and locked.status == FlowStatus.ONLINE.value:
+                        raise WorkFlowOnlineEditError()
+
+                prepared = await runtime.aprepare_source_bindings(
+                    session,
+                    source,
+                    references,
+                    extractor_version=WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
+                    lock_source_root=lock_root,
+                )
+                version = await WorkflowVersionRepository.aget_version(session, root, version_id)
+                cls._assert_workflow_source_configuration(version, prepared)
+                await runtime.arequire_source_valid(session, source, references=references)
+                if validate_version is not None:
+                    validate_version(root, version)
+                await WorkflowVersionRepository.aswitch_current(session, root, version_id)
+                if status is not None:
+                    root.status = status
+                await runtime.aapply_source_bindings(session, prepared)
+            await session.commit()
+            await session.refresh(root)
+        return root
 
     @classmethod
     async def create_new_version(

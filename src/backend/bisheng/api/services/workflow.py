@@ -1234,16 +1234,32 @@ class WorkFlowService(BaseService):
         version_info = await FlowVersionDao.aget_version_by_id(version_id)
         if not version_info or version_info.flow_id != flow_id:
             raise NotFoundError()
-        if status == FlowStatus.ONLINE.value:
-            # workflowInitialization check for
-            try:
-                _ = Workflow(flow_id, db_flow.name, login_user.user_id, version_info.data, False, 10, 10, None)
-            except Exception as e:
-                raise WorkFlowInitError(msg=str(e))
+        from bisheng.api.services.flow import FlowService
 
-            await FlowVersionDao.change_current_version(flow_id, version_info)
-        db_flow.status = status
-        await FlowDao.aupdate_flow(db_flow)
+        def validate_version(root, version):
+            try:
+                Workflow(
+                    flow_id,
+                    root.name,
+                    login_user.user_id,
+                    version.data,
+                    False,
+                    10,
+                    10,
+                    None,
+                    tenant_id=root.tenant_id,
+                    flow_user_id=root.user_id,
+                )
+            except Exception as exc:
+                raise WorkFlowInitError(msg=str(exc)) from exc
+
+        await FlowService.transition_current_version(
+            login_user,
+            flow_id,
+            version_id,
+            status=status,
+            validate_version=validate_version if status == FlowStatus.ONLINE.value else None,
+        )
         await telemetry_service.log_event(
             user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, trace_id=trace_id_var.get()
         )
