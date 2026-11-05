@@ -60,14 +60,14 @@ def test_source_add_and_remove_preserve_other_contribution_for_same_subject():
         source_id=2, subject_type="user", subject_id="42", source_type="OTHER", source_ref="retained-business"
     )
     created = service.add_source(grant(scoped()), first)
-    assert {delta.relation for delta in created.deltas} == {"model", "grant", "assignee"}
+    assert {delta.relation for delta in created.deltas} == {"model", "grant", "ordinary_assignee"}
     added = service.add_source(created.grant, second)
     assert added.deltas == ()
     removed = service.remove_source(added.grant, source_id=1)
     assert removed.deltas == () and removed.grant.active
     assert removed.grant.sources == (second,) and second.source_fingerprint == added.grant.sources[1].source_fingerprint
     last = service.remove_source(removed.grant, source_id=2)
-    assert not last.grant.active and {delta.relation for delta in last.deltas} == {"model", "grant", "assignee"}
+    assert not last.grant.active and {delta.relation for delta in last.deltas} == {"model", "grant", "ordinary_assignee"}
 
 
 def test_inactive_existing_source_can_be_removed_but_not_added():
