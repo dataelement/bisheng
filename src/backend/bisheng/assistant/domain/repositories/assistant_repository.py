@@ -7,9 +7,11 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.assistant import AssistantNotExistsError
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.core.context.tenant import is_tenant_filter_bypassed, strict_tenant_filter
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.database.models.assistant import Assistant, AssistantLink
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 
 
 class AssistantRepository:
@@ -39,6 +41,33 @@ class AssistantRepository:
                 select(AssistantLink).where(AssistantLink.assistant_id == assistant_id).order_by(AssistantLink.id)
             )
         return tuple(row for row in rows if row.tenant_id == self._tenant_id())
+
+    async def alock_knowledge_kinds(self, session: AsyncSession, knowledge_ids: Iterable[int]) -> dict[int, int]:
+        """Read types of new IDs whose target locks the reference runtime holds.
+
+        A container reference uses a common target type for documents, QA and
+        spaces. Permission resource types must instead follow the real row.
+        Column projections avoid identity-map values from an earlier snapshot.
+        """
+        tenant_id = self._tenant_id()
+        ids = self._numeric_ids(knowledge_ids) or ()
+        if not ids:
+            return {}
+        with strict_tenant_filter():
+            result = await session.exec(
+                select(Knowledge.id, Knowledge.type, Knowledge.tenant_id)
+                .where(Knowledge.id.in_(ids))
+                .order_by(Knowledge.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        rows = result.all()
+        supported = {KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.QA.value, KnowledgeTypeEnum.SPACE.value}
+        if {row.id for row in rows} != set(ids) or any(
+            row.tenant_id != tenant_id or row.type not in supported for row in rows
+        ):
+            raise ResourceReferenceInvalidError(reason="reference_target_invalid")
+        return {row.id: row.type for row in rows}
 
     async def ainsert(self, session: AsyncSession, assistant: Assistant) -> Assistant:
         tenant_id = self._tenant_id()

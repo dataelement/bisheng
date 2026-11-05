@@ -42,7 +42,7 @@ from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.llm.domain.services import LLMService
 from bisheng.permission.application.access import get_f048_resource_adapter
 from bisheng.permission.application.business_authorization import (
@@ -53,7 +53,7 @@ from bisheng.permission.application.business_authorization import (
 from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.public_endpoints.domain.services.guest_link import delete_app_guest_link
 from bisheng.resource_reference.application.access import get_reference_binding_runtime
-from bisheng.resource_reference.application.contracts import SourceKey, reference_set_digest
+from bisheng.resource_reference.application.contracts import SourceKey, TargetType, reference_set_digest
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao
 from bisheng.user.domain.models.user import UserDao
@@ -191,6 +191,26 @@ class AssistantService(BaseService, AssistantUtils):
                 raise ReferenceCoverageNotReadyError(reason="source_configuration_drift")
             if condition is not None and not condition(locked):
                 return locked
+            # Target Owners verify physical existence/tenant/shared facts. A
+            # newly selected resource also needs the configuring actor's own
+            # visible decision, including any credential narrowing. Existing
+            # unchanged slots remain repairable even if now hidden or deleted.
+            added_knowledge_ids = tuple(
+                sorted(
+                    int(reference.target.target_id)
+                    for reference in set(new_references) - set(old_references)
+                    if reference.slot_key == "knowledge_list"
+                    and reference.target.target_type == TargetType.KNOWLEDGE_SPACE
+                )
+            )
+            kinds = await repository.alock_knowledge_kinds(session, added_knowledge_ids)
+            for knowledge_id, kind in kinds.items():
+                await require_business_action(
+                    user_payload,
+                    resource_type="knowledge_space" if kind == KnowledgeTypeEnum.SPACE.value else "knowledge_library",
+                    resource_id=knowledge_id,
+                    action="visible",
+                )
             if require_valid:
                 await runtime.arequire_source_valid(session, source, references=old_references)
             if before_save is not None:
