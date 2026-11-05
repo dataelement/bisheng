@@ -22,6 +22,10 @@ from bisheng.resource_reference.application.source_contracts import (
     canonical_payload_json,
     payload_digest,
 )
+from test.knowledge_unification import test_as_source_owner as owner_tests
+
+source_db = owner_tests.source_db
+source_tenant = owner_tests.source_tenant
 
 
 @pytest.fixture
@@ -144,3 +148,125 @@ async def test_unconfigured_runtime_fails_closed(admission_db):
     with pytest.raises(ReferenceCoverageNotReadyError):
         await AssistantExecutionAdmission.prepare(user, "as-a")
     runtime.verifier.aissue_scope.assert_not_awaited()
+
+
+async def _actual_owner_runtime(source_db, monkeypatch):
+    """Real SourceOwner/Core/identity, with a test-only target boundary.
+
+    Production model/knowledge Owners are integrated after their checkpoint;
+    this boundary is never installed in the application's composition.
+    """
+    from sqlmodel import SQLModel
+
+    from bisheng.permission.application.identity import PermissionActor, set_current_permission_actor
+    from bisheng.resource_reference.application.contracts import reference_set_digest
+    from bisheng.resource_reference.application.read_identity import AuthenticatedSourceReadIdentity
+    from bisheng.resource_reference.application.source_contracts import ReferenceTargetReadFact, SourceReadRequest
+    from bisheng.resource_reference.application.source_read import ReferenceSourceReadRuntime
+    from bisheng.resource_reference.application.source_verification import SourceReadVerifier
+    from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
+    from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
+    from bisheng.resource_reference.domain.repositories.source_read_repository import SourceReadRepository
+
+    engine, owner, user, _permission = source_db
+    async with engine.begin() as connection:
+        await connection.run_sync(
+            lambda conn: SQLModel.metadata.create_all(
+                conn, tables=[BusinessReferenceSet.__table__, BusinessResourceReference.__table__]
+            )
+        )
+    async with AsyncSession(engine) as session, session.begin():
+        snapshot = await owner.aresolve_source(session, SourceReadRequest("assistant", "owned"), user)
+        session.add(
+            BusinessReferenceSet(
+                tenant_id=101,
+                source_type="assistant",
+                source_id="owned",
+                source_version="__root__",
+                record_kind="root_guard",
+                source_revision=4,
+                extractor_version="root-guard-v1",
+                digest=reference_set_digest(()),
+                effective=False,
+                ready=False,
+            )
+        )
+        session.add(
+            BusinessReferenceSet(
+                tenant_id=101,
+                source_type="assistant",
+                source_id="owned",
+                source_version="current",
+                source_revision=3,
+                extractor_version=snapshot.extractor_version,
+                digest=reference_set_digest(snapshot.references),
+                effective=True,
+                ready=True,
+            )
+        )
+        for ref in snapshot.references:
+            session.add(
+                BusinessResourceReference(
+                    tenant_id=101,
+                    source_type="assistant",
+                    source_id="owned",
+                    source_version="current",
+                    slot_key=ref.slot_key,
+                    target_type=ref.target.target_type.value,
+                    target_id=ref.target.target_id,
+                    target_tenant_id=101,
+                    source_revision=3,
+                )
+            )
+    verifier = SourceReadVerifier({"assistant": owner}, AuthenticatedSourceReadIdentity())
+
+    class TargetBoundary:
+        async def ainspect_source_targets(self, session, scope, keys, *, identity):
+            await verifier.aassert_target_keys(
+                session, scope, identity, keys, allowed_types={"model", "knowledge_space"}
+            )
+            return tuple(ReferenceTargetReadFact(key, "valid", True, 101) for key in keys)
+
+        async def ainspect_transient_targets(self, *args, **kwargs):
+            raise AssertionError("assistant has no preview admission")
+
+    target = TargetBoundary()
+    runtime = ReferenceSourceReadRuntime(
+        verifier, SourceReadRepository(verifier), {"model": target, "knowledge_space": target}
+    )
+    monkeypatch.setattr(admission_module, "get_reference_read_runtime", AsyncMock(return_value=runtime))
+    token = set_current_permission_actor(PermissionActor(user_id=user.user_id, current_tenant_id=101))
+    return engine, user, token
+
+
+async def test_actual_core_and_source_owner_share_business_configuration_and_transaction(source_db, monkeypatch):
+    from bisheng.permission.application.identity import reset_current_permission_actor
+
+    engine, user, token = await _actual_owner_runtime(source_db, monkeypatch)
+    try:
+        async with AsyncSession(engine) as session, session.begin():
+            result = await AssistantExecutionAdmission.prepare(user, "owned", session=session)
+            assert result.source_revision == 3 and result.root_revision == 4
+            assert {ref.target.target_id for ref in result.snapshot.references} == {"7", "10"}
+            assert not session.identity_map and session.in_transaction()
+    finally:
+        reset_current_permission_actor(token)
+
+
+async def test_actual_core_refuses_unindexed_business_drift_instead_of_repairing_it(source_db, monkeypatch):
+    from sqlalchemy import update
+
+    from bisheng.database.models.assistant import Assistant
+    from bisheng.permission.application.identity import reset_current_permission_actor
+
+    engine, user, token = await _actual_owner_runtime(source_db, monkeypatch)
+    try:
+        async with AsyncSession(engine) as session, session.begin():
+            await session.execute(
+                update(Assistant).where(Assistant.id == "owned", Assistant.tenant_id == 101).values(model_name="8")
+            )
+            with pytest.raises(ReferenceCoverageNotReadyError):
+                await AssistantExecutionAdmission.prepare(user, "owned", session=session)
+            assert not session.identity_map
+    finally:
+        reset_current_permission_actor(token)
