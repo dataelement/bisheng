@@ -191,13 +191,13 @@ def root_lock(events, *, add_version=False):
         rows = (
             session.execute(
                 select(versions.c.id)
-                .where(versions.c.root_id == "root-1", versions.c.is_delete == False)
+                .where(versions.c.root_id == "root-1", versions.c.is_delete == 0)
                 .order_by(versions.c.id)
                 .with_for_update()
             )
             .scalars()
             .all()
-        )  # noqa: E712
+        )
         return tuple(replace(KEYS[0], source_version=value) for value in rows)
 
     return lock
@@ -276,6 +276,35 @@ def test_deleting_any_old_target_fences_entire_batch_before_root_callback(engine
         with pytest.raises(KnowledgeProcessingConflictError):
             batch.prepare_source_batch(session, requests(delete_source=True), lock_source_root=root_lock(owner.events))
         assert not any(event[0] == "root" for event in owner.events)
+        assert repository.get_root_guard(session, KEYS[0]).source_revision == 2
+
+
+@pytest.mark.parametrize("orphan_effective", [False, True])
+def test_batch_root_inventory_keeps_extra_indexed_versions_visible_to_the_business_owner(engine, orphan_effective):
+    owner, repository, runtime, batch = components()
+    orphan = replace(KEYS[0], source_version="v999")
+    with Session(engine) as session, session.begin():
+        seed(session, runtime)
+        repository.replace_source_set(
+            session,
+            orphan,
+            expected_revision=None,
+            new_revision=1,
+            references=(),
+            extractor_version="wf-v1",
+            digest=refs.reference_set_digest(()),
+            effective=orphan_effective,
+        )
+        prepared = batch.prepare_source_batch(
+            session, requests(delete_source=True), lock_source_root=root_lock(owner.events)
+        )
+        assert prepared.source_keys == KEYS
+        inventory = repository.list_source_sets_for_root(session, KEYS[0], for_update=True)
+        indexed = {row.source_version: row for row in inventory}
+        assert tuple(indexed) == ("v1", "v2", "v999") and indexed["v999"].effective is orphan_effective
+        business_versions = set(session.execute(select(versions.c.id)).scalars())
+        assert set(indexed) - business_versions == {"v999"}
+        # The WF Owner can now reject orphan evidence before applying soft delete.
         assert repository.get_root_guard(session, KEYS[0]).source_revision == 2
 
 
