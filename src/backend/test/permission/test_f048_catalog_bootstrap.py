@@ -35,6 +35,7 @@ from bisheng.permission.domain.models import (
     PermissionModel,
     PermissionModelAction,
 )
+from bisheng.permission.domain.services.catalog_policy import REGISTERED_ACTION_CODES
 from bisheng.permission.migration.f048_coordinator import (
     INITIAL_CATALOG_RELEASE_KEY,
 )
@@ -145,7 +146,7 @@ async def test_seed_creates_single_current_catalog_on_fresh_install(session_fact
     assert release.required_authorization_model_release_id == auth[0].id
 
     # 12 registered actions, 4 standard models, and the catalog graph in FGA.
-    assert await _count(session_factory, PermissionAction) == 12
+    assert await _count(session_factory, PermissionAction) == len(REGISTERED_ACTION_CODES)
     assert await _count(session_factory, PermissionModel) == 4
     assert await _count(session_factory, PermissionModelAction) > 0
     assert ("user:*", "active", f"permission_catalog_release:{INITIAL_CATALOG_RELEASE_KEY}") in fga.tuples
@@ -241,7 +242,7 @@ async def test_seed_is_idempotent(session_factory):
     # No duplicate control-plane rows after the second run.
     assert await _count(session_factory, PermissionCatalogRelease) == 1
     assert await _count(session_factory, AuthorizationModelRelease) == 1
-    assert await _count(session_factory, PermissionAction) == 12
+    assert await _count(session_factory, PermissionAction) == len(REGISTERED_ACTION_CODES)
     assert await _count(session_factory, PermissionModel) == 4
 
 
