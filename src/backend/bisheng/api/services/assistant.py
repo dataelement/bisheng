@@ -125,6 +125,7 @@ class AssistantService(BaseService, AssistantUtils):
         action: str = "edit",
         deleting: bool = False,
         require_valid: bool = False,
+        skip_unchanged_status: int | None = None,
         before_save=None,
         condition=None,
     ) -> Assistant:
@@ -137,6 +138,15 @@ class AssistantService(BaseService, AssistantUtils):
         repository = AssistantRepository()
         runtime = await get_reference_binding_runtime()
         changes = changes or {}
+        if skip_unchanged_status is not None and (
+            skip_unchanged_status != AssistantStatus.ONLINE.value
+            or action != "publish"
+            or not require_valid
+            or deleting
+            or changes != {"status": skip_unchanged_status}
+            or any(value is not None for value in (tool_ids, flow_ids, knowledge_ids))
+        ):
+            raise ValueError("only an unchanged ONLINE transition may skip persistence")
         async with get_async_db_session() as session:
             candidate = await repository.aget(session, assistant_id)
             if candidate is None or candidate.is_delete:
@@ -213,6 +223,8 @@ class AssistantService(BaseService, AssistantUtils):
                 )
             if require_valid:
                 await runtime.arequire_source_valid(session, source, references=old_references)
+            if skip_unchanged_status is not None and locked.status == skip_unchanged_status:
+                return locked
             if before_save is not None:
                 await before_save(locked)
             if "name" in changes and changes["name"] != locked.name:
@@ -747,15 +759,21 @@ class AssistantService(BaseService, AssistantUtils):
             resource_id=assistant.id,
             action=required_action,
         )
-        # Equal status without modification
-        if assistant.status == status:
+        online = status == AssistantStatus.ONLINE.value
+        # A repeated stop changes no configuration and does not require its
+        # deleted targets to become executable again. ONLINE must revalidate.
+        if assistant.status == status and not online:
             return True
 
         # Try to initializeagent, go online if initialization is successful, otherwise not go online
+        initialized = False
+
         async def initialize(row):
+            nonlocal initialized
             tmp_agent = AssistantAgent(row, "", login_user.user_id)
             try:
                 await tmp_agent.init_assistant()
+                initialized = True
             except KnowledgeEmbeddingUnavailableError as e:
                 logger.exception("online agent knowledge embedding init failed")
                 raise AssistantKnowledgeEmbeddingUnavailableError(**e.kwargs) from e
@@ -763,15 +781,17 @@ class AssistantService(BaseService, AssistantUtils):
                 logger.exception("online agent init failed")
                 raise AssistantInitError(exception=e, msg=f"Assistant onboarding failed: {e}") from e
 
-        online = status == AssistantStatus.ONLINE.value
         assistant = await cls._persist_assistant_changes(
             assistant_id,
             login_user,
             changes={"status": status},
             action=required_action,
             require_valid=online,
+            skip_unchanged_status=status if online else None,
             before_save=initialize if online else None,
         )
+        if online and not initialized:
+            return True
         await telemetry_service.log_event(
             user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, trace_id=trace_id_var.get()
         )
