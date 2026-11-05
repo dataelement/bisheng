@@ -39,7 +39,9 @@ result = await runtime.arequire_transient_valid(session, scope, identity)
 
 `ReferenceSourceReadRuntime(verifier, repository, target_owners)`对外返回不可变`SourceReferenceReadResult(snapshot,target_states,source_revision,root_revision)`或`TransientReferenceReadResult(snapshot,target_states)`。`ReferenceTargetReadFact(key,state,is_valid,target_tenant_id=None,target_space_id=None)`内部保事实归属，不是R2 receipt；`is_valid`是state==VALID且当前绑定共享资格有效。不能用于R2/入向owner_scope，不能使调用者取得目标grant。
 
-顺序固定：Owner候选及原授权（不先锁root）→scope限定精确来源索引→按完整target union既定顺序取得当前目标锁/状态→原Owner真实root/version/links current-read并重授权→guard/source/raw refs current-read，比revision/digest/extractor及完整业务configuration_digest→结果。变化10998；缺index/未ready/配置索引漂移10994；scope无效10996。execute/preview拒deleting、deleted、legacy失效及共享撤销；inspect返回状态供业务裁剪。
+已保存来源读取顺序固定：Owner候选及原授权（不先锁root）→scope限定精确来源索引→按完整target union既定顺序取得当前目标锁/状态→原Owner真实root/version/links current-read并重授权→guard/source/raw refs current-read，比revision/digest/extractor及完整业务configuration_digest→结果。变化10998；缺index/未ready/配置索引漂移10994；scope无效10996。execute/preview拒deleting、deleted、legacy失效及共享撤销；inspect返回状态供业务裁剪。
+
+临时预览另走独立链：原root/edit候选授权 → 从canonical输入提取完整临时targets → 目标当前读及可见/资格准入 → 真实root/edit/current及canonical输入重验 → TransientReferenceReadResult。该链不读取或要求source/index/coverage/legacy，不创建来源或借保存版证据。
 
 来源/目标Repository只读、`no_autoflush`、不add/flush/begin/commit/rollback。跨tenant仅在已发行scope精确tenant/type/id/version和其完整targets条件下短范围bypass，列投影返回不可变facts，避免外tenant实体污染Session identity map。旧R2和owner_query仍严格当前tenant。
 
@@ -76,3 +78,23 @@ Info保原model_name及真实有效`knowledge_list`，增`knowledge_ids`保全�
 REF唯一拥有scope/verifier/scoped索引与实际target读取/legacy适配；WF拥有workflow SourceOwner/facade/WS/open/node接线；AS拥有assistant SourceOwner/facade/Agent/Info/ChatClient接线；INT拥有公共DTO/access、身份/公共Port/总装配、评测耦合与文档验证。REF不得写WF/AS文件，WF/AS不得修改REF内部发行或其他lane，INT不与Owner并写热点。共同基线提交后独立W3worktree，每卡最多两叶子、红测与实现分提交，依赖精确checkpoint合入。
 
 验证须有真实SQLModel AsyncSession/C3 listener、同源/合法跨源inspect/非授权Root拒、scope伪造/复制/换身份/换事务/换用途、全targets状态与共享撤销、原槽legacy、预览无来源、body换root、reference override拒、缓存失效及发布同事务回滚。跨源facts不能写入identity map或供R2写使用。主agent最终合流组合验证；本地SQLite/SQL形状不等价真实MySQL/DM8/FGA/队列/E2E或迁移。
+
+
+## 7. 实际接线澄清（2026-11-05）
+
+临时快照payload_json保canonical执行输入原文（graph及可选node_input），不混入客户端无从提供的root字段；实际resource_id/owner_tenant_id及target后的真实root edit/current重授权仍验证。saved快照保graph/root/version完整执行事实。
+
+助手token只授权既有Info查看，来源root候选仍遵原C3可见/pin；真token不新开Root/任意Child源业务bypass。WORKBENCH_CHAT必须读真实MessageSession而非meta.flowId，核chat_id/flow_id/type/未删、tokenTenant=sessionTenant、issuer=sessionUser；用户叶会话tenant不等资源ownerTenant是合法事实。Direct ASSISTANT维持原ACTIVE+实际resource_id映射及原C3范围。已确认旧生成接口未校验资源share动作，这是独立发行前安全待办T404/T405，不以本波查看绑定核验声称签发授权已修，也不私自给旧token新增撤销联动或expiry规则。
+
+GET Info填完整knowledge_ids/reference_states；create/update写响应填已知原IDs，reference_states=None表示未执行状态查询；禁止SQL已commit后再inspect失败而向调用者伪称保存失败。
+
+WeakKey/WeakSet的eq=False不足以约束可重载相等性的子类copy；私有登记同时保存weakref并用is确认原发行对象，不改公开授权模型。旧R2相同边界经真实probe复现后同样补核。
+
+
+## 8. 最终集成接口补充
+
+所有WorkflowClient消息中的flow_id只可缺省为端点绑定ID或等于该ID；check_status直接调用也先核同根再改chat_id/读取会话及Redis。执行Port仍只由业务端点装配，common仅依赖Protocol，不新增domain/API反向依赖。
+
+评测原JWT会话的_runtime_credential_reference为web_session；若存在，kind及整数user_id/home tenant_id/token_version须与原UserPayload一致。管理pin由可信ContextTenant独立决定，不强等JWT homeTenant；拒绝OpenAPI/Public/bypass/非web引用。创建调度与后台入口都核当前具体tenant及真实evaluation owner，每题重新准入真实存储版本再入队，不以首题或预检快照替后续题授权。
+
+ReadLegacyReferenceEvidencePort.aresolve与实际Reader签名一致，显式接session/scope/target/run_id/evidence_key/identity。未装配10994、非法scope/身份10996、实际读取变化10998；这些业务错误在WS中保留原code，不改写500。

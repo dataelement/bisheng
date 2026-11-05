@@ -542,7 +542,7 @@ flowchart TD
 6. 兼容入口只做 use 别名→可见性语义适配，不保留独立 use Catalog/Grant/投影分支。历史 release/发布/审计快照保留以便追溯；活动旧 use 标记按冻结清理计划核对并退出。
 7. 错误的可见范围变化、其他动作漂移、只用模型授权丢失、发布版本/校验和不一致或旧调用残留均阻断开放；已确认的 use 语义变化本身不阻断。失败沿同一发布/迁移账本恢复。
 
-这是 F048 与各业务 Owner 的跨模块合同增量，不只是文档库 type=0→3 的数据修复。当前仅更新设计，尚未修改动作注册、FGA、Grant 或任何调用代码。
+这是 F048 与各业务 Owner 的跨模块合同增量，不只是文档库 type=0→3 的数据修复。本节规定全平台最终合同，已落地核心与待接入消费者/迁移范围以 §15 和 tasks.md 为准；正式 FGA 发布及存量迁移尚未执行。
 
 ### 7.3.2 纯可见授权的控制面与撤销协议（本轮选定）
 
@@ -757,7 +757,22 @@ WF与AS的业务保存/删除已按§15.5接线，其余来源写端、完整执
 
 冻结ledger Reader仅验证原source/target/run/key与同tenant、冻结阶段及baseline/plan持久artifact descriptor；迁移脚本未来写相同协议，**停服及一致备份后**正式盘点再冻结。结构/Reader就绪不代表已回填或Coverage ready。
 
-当前未实施的运行入口见[交接清单](./execution-entrypoints.md)：WS任意画布payload、单节点未保存预览、开放invoke及评测须接正确版本或临时目标准入；Root共享来源需保持原actor/credential的事务绑定只读scope，不能修改ContextTenant或接受请求自报外tenant。完整T041/T042/T283/T294/T295保持待办，不以保存/发布测试代替。用户已排除的worker在途外部IO竞态及独立任务模型绑定范围保持。
+W2结束时运行入口尚未实施；该历史待办已由下节W3接线替代，具体实际入口见[运行入口记录](./execution-entrypoints.md)。worker在途外部IO竞态及独立任务模型绑定仍按用户确认范围排除。
 
 
 W2最终集成：166/342项完成（本波新增80项）；主agent在411d4f461473组合验证821项通过（35个pytest路径），架构检查56文件无违规，Ruff 56文件通过。固定交付、L1及剩余边界详见[W2集成复查](./wave2-implementation-review.md)。
+
+
+## 15.6 W3运行准入与共享来源读取落地
+
+接口先在[运行/共享来源合同V1](./execution-read-contract.md)冻结，公共checkpoint为53dd9962b。WF、AS、REF独立worktree并行，精确前驱合入后开发；INT统一common Port、原身份、真实API/worker装配及评测，固定SHA交叉复查再合流。实现不改变94条spec AC。
+
+已保存来源的执行顺序为原UserPayload及ambient actor/principal → 真实业务Owner授权来源 → 精确索引候选 → 全部目标按统一顺序当前读/加锁 → 同一业务root/版本/links重新授权及当前读 → guard/source/raw及完整配置摘要重验 → 返回不可变来源快照 → 会话、Redis及入队/模型调用。SourceOwnerTenant来自实际资源，原ContextTenant/actor/credential不切换；内部目标事实不污染外租户ORM identity map，也不作为R2写收据。Root模型共享仅查真实共享关系/继承默认，不从is_shared、Root身份或模型共享推导WF/AS共享执行权。
+
+WF保存版本运行使用真实指定或业务解析版本；客户端图必须匹配完整nodes/edges。未保存全图/单节点仅原edit授权后走临时目标准入；全部目标后重验真实root/edit/current及canonical输入，不读取或要求来源index/coverage/legacy，也不建来源。public禁止preview，v2保原channel门槛；运行override仅允许不改变引用槽的深拷贝参数。所有WS动作保可信连接根，实际执行Port先于会话/Redis/WAITING/queue；10994/10996/10998原码保留。
+
+AS共用Agent init/run/stream及缓存复用都读取实际snapshot配置/links；首次init成功才缓存，配置变化10998清旧缓存供下次重建，publish共用调用者原SQL事务。GET Info保完整knowledge_ids和裁剪reference_states，knowledge_list仅真实可展示目标；写响应reference_states=None表示未查询，不在已commit后补inspect导致伪保存失败。ACTIVE分享token只inspect，WORKBENCH_CHAT核真实MessageSession，不信meta且不扩大来源C3视图；签发授权T404/T405是独立发行前待办。
+
+评测传原JWT对象，homeTenant与管理pin分开核，原owner/tenant在调度和任务入口各检查；每题重新准入真实保存version再入队，AS复用同一每次guard链。不建立任务模型绑定或治理已排除的worker在途外部IO竞态。WeakKey/WeakSet相关scope/旧R2 proof另加私有weakref原对象is核验，防重载相等性的子类clone借用登记。
+
+主agent受测源码0c2587dbe5ec93135e06a45ed7615253a6a46ef1，1199 passed、6 subtests passed（46个pytest路径）；70个改动Python文件Ruff检查/格式通过，架构新增违规0；三个legacy common文件的6条既有RULE-1及2条既有RULE-3告警单列，未新增反向import。完整记录见[W3集成复查](./wave3-implementation-review.md)。当前248/421项完成；不是全特性验收、CI或真实双库/中间件/E2E证明。
