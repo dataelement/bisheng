@@ -17,6 +17,8 @@ import { Outlined } from "bisheng-icons";
 import { useNavigate } from "react-router-dom";
 import { cn } from "~/utils";
 import { TruncatedTabLabel } from "./TruncatedTabLabel";
+import { MODULE_PAGE_DESKTOP_COLUMN, MODULE_PAGE_DESKTOP_FRAME } from "~/components/ModuleHome";
+import desktopLayout from "./ArticleListLayout.module.css";
 
 
 
@@ -81,7 +83,11 @@ export function ArticleList({
     handleSubChannelChange,
   } = useArticleList({ channel, onArticleSelect });
   return (
-    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-hidden">
+    <div className={cn(
+      "flex h-full min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-hidden",
+      isGridMode && MODULE_PAGE_DESKTOP_FRAME,
+      isGridMode && desktopLayout.frame,
+    )}>
       {isH5 ? (
         /* === H5 header === */
         <>
@@ -206,6 +212,8 @@ export function ArticleList({
         /* === PC header === */
         <div
           className={cn(
+            MODULE_PAGE_DESKTOP_COLUMN,
+            desktopLayout.header,
             "mx-auto w-full shrink-0 pt-5 pb-4 space-y-4",
             isGridMode ? "max-w-none" : "max-w-[1000px]",
             // PC uses 24px gutters (header and list share them); H5 keeps 16px.
@@ -371,12 +379,13 @@ export function ArticleList({
 
       {/* Article list area */}
       <div
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scroll-on-scroll"
+        className={cn(MODULE_PAGE_DESKTOP_COLUMN, desktopLayout.scroller, "min-h-0 flex-1 overflow-y-auto overflow-x-hidden scroll-on-scroll")}
         onScroll={handleListScroll}
         data-scrolling={isListScrolling ? "true" : "false"}
       >
         <div
           className={cn(
+            desktopLayout.listContent,
             "mx-auto flex min-h-full w-full min-w-0 flex-col overflow-x-hidden",
             isGridMode ? "max-w-none" : "max-w-[1000px]",
             // PC uses 24px gutters (header and list share them); H5 keeps 16px.

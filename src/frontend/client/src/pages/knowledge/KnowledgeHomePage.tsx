@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { Button as ProductButton, Tabs } from '@bisheng/ui';
-import { MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader } from '~/components/ModuleHome';
+import { MODULE_HOME_BODY, MODULE_HOME_COLUMN, MODULE_HOME_FRAME, MODULE_HOME_TOOLBAR, ModuleHomeHeader } from '~/components/ModuleHome';
 import cn from '~/utils/cn';
 import { USE_PRODUCT_COMPONENTS } from './home/vnext/componentMode';
 import { Filled, Outlined } from 'bisheng-icons';
@@ -115,9 +115,9 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
           <Outlined.Plus aria-hidden />{localize('com_knowledge.create_knowledge_space')}
         </button>}
       </ModuleHomeHeader>
-      <div className={cn(MODULE_HOME_COLUMN, styles.toolbar)}>
+      <div className={cn(MODULE_HOME_COLUMN, MODULE_HOME_TOOLBAR, styles.toolbar)}>
         <div ref={tabsRef} className={styles.productTabs}>
-          <Tabs aria-label={menuNames.knowledge} size="medium" activeKey={category}
+          <Tabs className="dsh-home-tabs" aria-label={menuNames.knowledge} size="medium" activeKey={category}
             onChange={(value) => {
               const next = categories.find((key) => key === value);
               if (next) setCategory(next);
@@ -134,7 +134,7 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
         </div>
         <KnowledgeHomeSort value={sort} onValueChange={setSort} />
       </div>
-      <div className="scroll-on-scroll flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto">
+      <div className={cn(MODULE_HOME_BODY, 'scroll-on-scroll flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto')}>
         <div ref={panelRef} role="tabpanel" tabIndex={0}
           aria-busy={loading || refreshing} className={cn(MODULE_HOME_COLUMN, styles.panel)}>
           {lists.error ? (

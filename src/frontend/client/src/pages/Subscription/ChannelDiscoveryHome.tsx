@@ -10,7 +10,7 @@ import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { getRecommendedChannelsApi, subscribeManagerChannelApi } from "~/api/channels";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
-import { MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader } from "~/components/ModuleHome";
+import { MODULE_HOME_BODY, MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader } from "~/components/ModuleHome";
 import { cn } from "~/utils";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { ChannelSquareCard } from "../ChannelSquareCard";
@@ -340,7 +340,7 @@ export function ChannelDiscoveryHome({
             <div
                 className={cn(
                     "flex min-h-0 flex-1 flex-col items-center justify-center pb-16",
-                    isH5 ? "px-4" : MODULE_HOME_COLUMN,
+                    isH5 ? "px-4" : cn(MODULE_HOME_COLUMN, MODULE_HOME_BODY),
                     // Carousel supplies its own spacing via the viewport's py-8; only the
                     // empty illustration / loading states need the gap to the actions.
                     !showCarousel && "gap-9",
