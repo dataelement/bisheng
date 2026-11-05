@@ -270,11 +270,19 @@ async def test_legacy_deleted_version_without_set_or_raw_references_does_not_get
     assert not rows(deleting, "business_resource_reference")
 
 
-async def test_root_reference_inventory_is_exact_tenant_type_root_and_stably_ordered(deleting):
+async def test_root_reference_inventory_is_exact_tenant_type_root_and_stably_ordered(deleting, monkeypatch):
     from sqlmodel import Session
 
+    from bisheng.core.database import tenant_filter
     from test.knowledge_unification.test_wf_save import key
 
+    # The isolated workflow fixture creates only its tables; activate the real
+    # C3 listener for this explicit cross-tenant query regression.
+    names = tenant_filter._tenant_aware_tables | {BusinessResourceReference.__tablename__}
+    monkeypatch.setattr(tenant_filter, "_force_import_all_models", lambda: None)
+    monkeypatch.setattr(tenant_filter, "_discover_tenant_aware_tables", lambda: names)
+    monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", names)
+    tenant_filter.register_tenant_filter_events()
     async with deleting.session_factory() as session, session.begin():
         for tenant_id, source_type, source_id, version, slot in (
             (101, "workflow_version", "wf", "10", "node:z.model_id"),
