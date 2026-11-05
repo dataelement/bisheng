@@ -108,7 +108,7 @@ async def bindings(store, monkeypatch):
     monkeypatch.setattr(flow_model, "get_async_db_session", session_factory)
     monkeypatch.setattr(version_model, "get_async_db_session", session_factory)
     monkeypatch.setattr(version_model, "get_sync_db_session", flow_model.get_sync_db_session)
-    monkeypatch.setattr(workflow_endpoint, "get_sync_db_session", flow_model.get_sync_db_session)
+    monkeypatch.setattr(workflow_endpoint, "get_sync_db_session", flow_model.get_sync_db_session, raising=False)
     monkeypatch.setattr(flow_service, "get_reference_binding_runtime", AsyncMock(return_value=runtime), raising=False)
     monkeypatch.setattr(flow_service.telemetry_service, "log_event", AsyncMock())
     monkeypatch.setattr(flow_service.telemetry_service, "log_event_sync", Mock())
