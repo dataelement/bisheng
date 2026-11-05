@@ -51,6 +51,7 @@ from bisheng.permission.application.business_authorization import (
 from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.public_endpoints.domain.services.guest_link import delete_app_guest_link
 from bisheng.resource_reference.application.access import get_reference_binding_runtime
+from bisheng.resource_reference.application.batch import BatchReferenceBindings, SourceBindingRequest
 from bisheng.resource_reference.application.contracts import SourceKey, reference_set_digest
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import get_request_ip
@@ -107,6 +108,76 @@ class FlowService(BaseService):
             ),
         )
         return resp_200(data=result)
+
+    @classmethod
+    async def delete_workflow(cls, request: Request, user: UserPayload, flow_id: str) -> UnifiedResponseModel[None]:
+        tenant_id = cls._workflow_management_tenant()
+        runtime = await get_reference_binding_runtime()
+        batch = BatchReferenceBindings(runtime.repository, runtime.verifier)
+        async with get_async_db_session() as session:
+            root = await WorkflowVersionRepository.aget_root(session, flow_id, tenant_id)
+            await require_business_action(user, resource_type="workflow", resource_id=root.id, action="delete")
+            candidates = await WorkflowVersionRepository.alist_versions(session, root, include_deleted=True)
+            snapshots = {str(version.id): cls._workflow_version_snapshot(version) for version in candidates}
+            live = tuple(version for version in candidates if version.is_delete == 0)
+            if not live:
+                raise ReferenceCoverageNotReadyError(reason="workflow_live_version_missing")
+            requests = tuple(
+                SourceBindingRequest(
+                    SourceKey(root.tenant_id, "workflow_version", root.id, str(version.id)),
+                    (),
+                    WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
+                    effective=False,
+                )
+                for version in live
+            )
+            locked_versions = ()
+
+            async def lock_root(sql, source_keys):
+                nonlocal root, locked_versions
+                root = await WorkflowVersionRepository.alock_root(sql, flow_id, tenant_id)
+                locked_versions = await WorkflowVersionRepository.alist_versions(
+                    sql, root, include_deleted=True, for_update=True
+                )
+                if {
+                    str(version.id): cls._workflow_version_snapshot(version) for version in locked_versions
+                } != snapshots:
+                    raise KnowledgeOperationPlanConflictError(reason="workflow_version_manifest_changed")
+                return tuple(
+                    SourceKey(root.tenant_id, "workflow_version", root.id, str(version.id))
+                    for version in locked_versions
+                    if version.is_delete == 0
+                )
+
+            prepared = await batch.aprepare_source_batch(session, requests, lock_source_root=lock_root)
+            versions = {str(version.id): version for version in locked_versions}
+            indexed = await runtime.repository.alist_source_sets_for_root(
+                session, prepared.source_keys[0], for_update=True
+            )
+            for source in indexed:
+                version = versions.get(source.source_version)
+                if version is None or not source.ready or bool(source.effective) != (version.is_delete == 0):
+                    raise ReferenceCoverageNotReadyError(reason="workflow_source_inventory_inconsistent")
+                if version.is_delete != 0:
+                    key = SourceKey(root.tenant_id, "workflow_version", root.id, source.source_version)
+                    if source.digest != reference_set_digest(()) or await runtime.repository.alist_source_references(
+                        session, key, for_update=True
+                    ):
+                        raise ReferenceCoverageNotReadyError(reason="workflow_deleted_source_not_empty")
+            for item in prepared.sources:
+                cls._assert_workflow_source_configuration(versions[item.source_key.source_version], item)
+            # Definitions, including drafts and historical versions, stay in
+            # SQL under F004. Only the live sources in this verified manifest
+            # transition to empty terminal sets; older terminal sets stay put.
+            await WorkflowVersionRepository.asoft_delete_workflow(session, root)
+            await batch.aapply_source_batch(session, prepared)
+            await cls.project_flow_delete(user, root)
+            await session.commit()
+        await telemetry_service.log_event(
+            user_id=user.user_id, event_type=BaseTelemetryTypeEnum.DELETE_APPLICATION, trace_id=trace_id_var.get()
+        )
+        cls.delete_flow_hook(request, user, root)
+        return resp_200()
 
     @classmethod
     async def get_version_list_by_flow(
