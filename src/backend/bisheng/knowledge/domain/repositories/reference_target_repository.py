@@ -16,7 +16,13 @@ from bisheng.core.context.tenant import bypass_tenant_filter, is_tenant_filter_b
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
-from bisheng.resource_reference.application.contracts import DeletionEvidence, SourceKey, TargetKey, TargetType
+from bisheng.resource_reference.application.contracts import (
+    DeletionEvidence,
+    SourceKey,
+    TargetKey,
+    TargetType,
+    TransactionIdentity,
+)
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
 from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 
@@ -96,6 +102,49 @@ class KnowledgeTargetObservation:
 
 
 class KnowledgeReferenceTargetRepository:
+    def __init__(self):
+        self._prelock_key = object()
+
+    @staticmethod
+    def _sources(source_keys):
+        if not isinstance(source_keys, tuple) or not source_keys:
+            raise ResourceReferenceInvalidError(reason="reference_batch_sources_required")
+        for key in source_keys:
+            current_tenant(key, "bind")
+        if (
+            len(set(source_keys)) != len(source_keys)
+            or len({(key.tenant_id, key.source_type, key.source_id) for key in source_keys}) != 1
+        ):
+            raise ResourceReferenceInvalidError(reason="reference_batch_root_mismatch")
+        return tuple(sorted(source_keys, key=lambda key: key.source_version))
+
+    def _prelock_proof(self, session, source_key, operation):
+        proof = session.info.get(self._prelock_key)
+        if operation != "bind" or proof is None or proof[0] is not TransactionIdentity.capture(session).transaction:
+            return None
+        if (source_key.tenant_id, source_key.source_type, source_key.source_id) != (
+            proof[1][0].tenant_id,
+            proof[1][0].source_type,
+            proof[1][0].source_id,
+        ):
+            return None
+        if source_key not in proof[1]:
+            raise ResourceReferenceConflictError(reason="reference_lock_plan_changed")
+        return proof
+
+    def _check_prelock(self, session, source_key, operation, keys, space_ids, file_ids):
+        proof = self._prelock_proof(session, source_key, operation)
+        if proof is not None and (not set(keys) <= proof[2] or not space_ids <= proof[3] or not file_ids <= proof[4]):
+            raise ResourceReferenceConflictError(reason="reference_lock_plan_changed")
+
+    def _check_tombstone_prelock(self, session, source_key, operation, key, space_id, owner):
+        proof = self._prelock_proof(session, source_key, operation)
+        requested = {(key, owner)} if owner else set()
+        if owner and space_id and key.target_type == TargetType.KNOWLEDGE_FILE:
+            requested.add((TargetKey("knowledge_space", space_id), owner))
+        if proof is not None and not requested <= proof[5]:
+            raise ResourceReferenceConflictError(reason="reference_lock_plan_changed")
+
     @staticmethod
     def _keys(target_keys):
         if not isinstance(target_keys, tuple) or any(
@@ -125,6 +174,7 @@ class KnowledgeReferenceTargetRepository:
                 ResourceReferenceTombstone.target_tenant_id == owner,
                 ResourceReferenceTombstone.tenant_id == owner,
             )
+            .with_for_update()
             .execution_options(populate_existing=True)
         )
 
@@ -189,6 +239,7 @@ class KnowledgeReferenceTargetRepository:
                 else []
             )
             candidate_owners, space_ids = self._plan(keys, candidates, originals)
+            self._check_prelock(session, source_key, operation, keys, space_ids, file_ids)
             spaces = (
                 {
                     row.id: row
@@ -210,6 +261,7 @@ class KnowledgeReferenceTargetRepository:
             original, row, parent, space_id, owner = self._facts(
                 key, tenant_id, operation, spaces, files, candidate_owners, originals
             )
+            self._check_tombstone_prelock(session, source_key, operation, key, space_id, owner)
             with bypass_tenant_filter():
                 direct = session.execute(self._tombstone_statement(key, owner)).scalar_one_or_none() if owner else None
                 ancestor = (
@@ -248,6 +300,7 @@ class KnowledgeReferenceTargetRepository:
                 else []
             )
             candidate_owners, space_ids = self._plan(keys, candidates, originals)
+            self._check_prelock(session, source_key, operation, keys, space_ids, file_ids)
             spaces = (
                 {
                     row.id: row
@@ -273,6 +326,7 @@ class KnowledgeReferenceTargetRepository:
             original, row, parent, space_id, owner = self._facts(
                 key, tenant_id, operation, spaces, files, candidate_owners, originals
             )
+            self._check_tombstone_prelock(session, source_key, operation, key, space_id, owner)
             with bypass_tenant_filter():
                 direct = (
                     (await session.execute(self._tombstone_statement(key, owner))).scalar_one_or_none()
@@ -299,3 +353,51 @@ class KnowledgeReferenceTargetRepository:
                 )
             )
         return tuple(result)
+
+    def _physical_plan(self, target_keys, source_keys):
+        keys, sources = self._keys(target_keys), self._sources(source_keys)
+        originals = []
+        for source in sources:
+            if keys:
+                originals.extend((yield original_statement(source, keys), False))
+        file_ids = {int(key.target_id) for key in keys if key.target_type == TargetType.KNOWLEDGE_FILE}
+        candidates = (yield self._business_statement(KnowledgeFile, file_ids, lock=False), False) if file_ids else []
+        candidate_owners, space_ids = self._plan(keys, candidates, originals)
+        spaces = (yield self._business_statement(Knowledge, space_ids, lock=True), False) if space_ids else []
+        files = (yield self._business_statement(KnowledgeFile, file_ids, lock=True), False) if file_ids else []
+        if {row.id: row.knowledge_id for row in files} != candidate_owners:
+            raise ResourceReferenceConflictError(reason="reference_lock_plan_changed")
+        tombstones = {(TargetKey("knowledge_space", str(row.id)), row.tenant_id) for row in spaces}
+        for row in files:
+            tombstones.add((TargetKey("knowledge_file", str(row.id)), row.tenant_id))
+            tombstones.add((TargetKey("knowledge_space", str(row.knowledge_id)), row.tenant_id))
+        for original in originals:
+            if original.target_tenant_id is not None:
+                tombstones.add((TargetKey(original.target_type, original.target_id), original.target_tenant_id))
+                if original.target_type == TargetType.KNOWLEDGE_FILE.value and original.target_space_id is not None:
+                    tombstones.add((TargetKey("knowledge_space", original.target_space_id), original.target_tenant_id))
+        for key, owner in sorted(tombstones, key=lambda item: (*item[0].lock_order_key, item[1])):
+            yield self._tombstone_statement(key, owner), True
+        return sources, frozenset(keys), frozenset(space_ids), frozenset(file_ids), frozenset(tombstones)
+
+    def prelock_targets(self, session, target_keys, source_keys):
+        plan, value = self._physical_plan(target_keys, source_keys), None
+        while True:
+            try:
+                statement, cross_scope = plan.send(value)
+            except StopIteration as done:
+                session.info[self._prelock_key] = (TransactionIdentity.capture(session).transaction, *done.value)
+                return
+            with bypass_tenant_filter() if cross_scope else strict_tenant_filter():
+                value = list(session.execute(statement).scalars())
+
+    async def aprelock_targets(self, session, target_keys, source_keys):
+        plan, value = self._physical_plan(target_keys, source_keys), None
+        while True:
+            try:
+                statement, cross_scope = plan.send(value)
+            except StopIteration as done:
+                session.info[self._prelock_key] = (TransactionIdentity.capture(session).transaction, *done.value)
+                return
+            with bypass_tenant_filter() if cross_scope else strict_tenant_filter():
+                value = list((await session.execute(statement)).scalars())
