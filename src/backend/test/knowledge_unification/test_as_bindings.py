@@ -249,6 +249,19 @@ async def test_binding_failure_rolls_back_new_assistant(assistant_business, monk
     assert assistant is None and links == () and references == [] and source is None
 
 
+async def test_creation_projection_failure_does_not_commit_business_or_references(assistant_business, monkeypatch):
+    context = assistant_business
+    monkeypatch.setattr(
+        AssistantService, "create_assistant_hook_async", AsyncMock(side_effect=RuntimeError("projection failed"))
+    )
+    with pytest.raises(RuntimeError, match="projection failed"):
+        await AssistantService.create_assistant(
+            context.request, context.user, Assistant(id="assistant-a", name="new", user_id=7)
+        )
+    assistant, links, references, source = await inspect_business(context)
+    assert assistant is None and links == () and references == [] and source is None
+
+
 async def test_update_failure_rolls_back_model_and_knowledge_selection(assistant_business, monkeypatch):
     context = assistant_business
     await seed(context)
