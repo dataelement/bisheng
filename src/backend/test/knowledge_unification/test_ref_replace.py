@@ -125,7 +125,7 @@ def test_partial_repair_preserves_other_original_invalid_slot(engine):
 
 
 def test_copy_or_new_slot_cannot_borrow_an_original_invalid_reference(engine):
-    owner, repo, bindings = components()
+    owner, _repo, bindings = components()
     key = SourceKey(101, "assistant", "a1", "current")
     with Session(engine) as session, session.begin():
         bindings.replace_source_bindings(session, key, None, 1, verified_set(session, owner, key, (spec("1"),)), True)
@@ -148,7 +148,7 @@ def test_copy_or_new_slot_cannot_borrow_an_original_invalid_reference(engine):
 
 
 def test_wrong_issuer_incomplete_lock_set_and_foreign_source_are_rejected(engine):
-    owner, repo, bindings = components()
+    owner, _repo, bindings = components()
     key = SourceKey(101, "assistant", "a1", "current")
     with Session(engine) as session, session.begin():
         bad = verified_set(session, object(), key, (spec("1"),))
@@ -169,7 +169,7 @@ def test_wrong_issuer_incomplete_lock_set_and_foreign_source_are_rejected(engine
 
 
 def test_receipt_cannot_be_replayed_after_transaction_completion(engine):
-    owner, repo, bindings = components()
+    owner, _repo, bindings = components()
     key = SourceKey(101, "assistant", "a1", "current")
     with Session(engine) as session:
         with session.begin():
