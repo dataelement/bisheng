@@ -1,6 +1,6 @@
 # F118 多 agent 开发边界与接入合同
 
-**阶段**：2026-11-05，spec 和技术设计已确认，进入任务拆分；尚未实现。任务入口见 [tasks.md](./tasks.md)。本文件规定交接规则，不另立需求或新增通用平台。
+**阶段**：2026-11-05，spec 和技术设计已确认，按依赖实施中，W0/W1核心开发、交叉复核与主agent集成已开始。任务入口见 [tasks.md](./tasks.md)。本文件规定交接规则，不另立需求或新增通用平台。
 
 ## 1. 开发方式
 
@@ -112,4 +112,14 @@ INT 检查任务内路径及范围、无同文件并发、测试先于实现、�
 
 ## 6. 实施基线与合同冻结记录
 
-2026-11-05：已完成文档checkpoint `0b80802ae`、fetch远端发版线 `9eef0016de` 并合并至功能提交 `a1b1a2387`。接口见 [contracts.md](./contracts.md) V1；从冻结合同提交创建lane独立worktree。T006落点修正为DTO/GrantModelSnapshot；T214补PermissionModel结构，MIG统一DDL；T215–T218补Source/control-state/Catalog持久链；T219补预检确认计划表，T220–T221限定高级管理写scope。现计划227项，已完成T001/T002。原前文“尚未提交/实施”是拆分时快照，以本节与任务实施记录为当前状态。
+2026-11-05：已完成文档checkpoint `0b80802ae`、fetch远端发版线 `9eef0016de` 并合并至功能提交 `a1b1a2387`。接口见 [contracts.md](./contracts.md) V1；从冻结合同提交创建lane独立worktree。T006落点修正为DTO/GrantModelSnapshot；T214补PermissionModel结构，MIG统一DDL；T215–T218补Source/control-state/Catalog持久链；T219补预检确认计划表，T220–T221限定高级管理写scope。该冻结时计划227项，完成T001/T002。原前文“尚未提交/实施”是拆分时快照，以本节与任务实施记录为当前状态。
+
+## 7. W1实施补充
+
+当前任务共273项，source核对补充详见tasks实施记录与contracts澄清。INT另外独占open_api/domain/http_status.py错误装配；MIG负责Knowledge.model_transition、retry receipt登记及测试DDL。原scope/model/action字段来源与受控provenance不可由HTTP伪造。独立复查三项PERM接缝及正常启动接缝已修复、复核并合流；当前三线组合424项通过。后续Owner以主集成快照与REF V1.1为入口，不从各lane旧头自行拼装。
+
+## 8. W0/W1交付与下一波
+
+REF逻辑快照ac5e8739a、PROC ff2672e983、PERM c970545d3均经其他agent独立复核后主agent合流。组合受测4932d120de，随后只有T270文件尾格式修正9300b557c及文档状态更新；合同和业务语义不变。完成86/273，后续保持最多协调1+开发3、每热点唯一写者，不把本地通过视为真实双库/中间件或E2E完成。当前各lane均已交付，无未说明的后台开发任务。
+
+下一Owner启动前先同步主集成分支，核对自身任务依赖与V1.1构造器；业务Owner及覆盖持久adapter尚未提供时不得用测试fake在生产装配，也不得跳过回填ready门槛。

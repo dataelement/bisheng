@@ -11,14 +11,14 @@
 | spec.md | ✅ 已评审、用户已确认 | 2026-11-05，94 条 AC |
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
-| tasks.md | ✅ 已拆解、复审 LGTM | 2026-11-05，见 [任务复审记录](./tasks-review.md) |
-| 实现 | 已开始 | 2 / 227 项；T001基线、T002合同已完成；其余代码任务待推进，未运行迁移 |
+| tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
+| 实现 | W0/W1核心已合流，整体仍在开发 | 86 / 273 项；已按卡完成基础/核心及修正；其余187项按依赖推进，未运行迁移 |
 
 ## 领取与执行规则
 
 每卡最多 2 个写入文件，目标约 30 分钟；已有文件增量过大先拆卡。文件显示“拟新增”表示实现计划，未声称已有行为。任务直接追溯 spec AC，不依赖 QA 用例表；设计论证见 design，接口论证见 parallel-development。基础定义排在业务之前；后端配对测试先红后绿，最终集成测试按真实环境执行。
 
-任务编号的排列是一种合法拓扑顺序，不表示必须全局串行。`依赖`满足即可启动，但同文件由唯一 Owner 串行；生成时已加入同文件的前一写入任务作为依赖。建议保持 INT 协调 + 3 开发槽，按并行文档 W0–W6 调度。所有实施任务先完成 T001 基线对齐与 T002 合同 V1；尚未批准变更公共接口时不得各自猜测字段。
+初始任务按拓扑排列；源码核对追加任务保留原编号，因此依赖图而非编号大小决定顺序。`依赖`满足即可启动，但同文件由唯一 Owner 串行；生成时已加入同文件的前一写入任务作为依赖。建议保持 INT 协调 + 3 开发槽，按并行文档 W0–W6 调度。所有实施任务先完成 T001 基线对齐与 T002 合同 V1；尚未批准变更公共接口时不得各自猜测字段。
 
 测试文件均位于 `src/backend/test/knowledge_unification/`，新模块整表由 SQLModel 发现；既有表结构由 MIG 唯一编排 Alembic，数据转换仅停服脚本。Worker 卡统一遵守 Celery headers 中 tenant_id → ContextVar；相关配置/索引过期检查保留，不实施已排除的在途 I/O 竞态围栏。
 
@@ -40,77 +40,77 @@
   **依赖**：T001\
   **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
 
-- [ ] **T003 · 来源/目标与替换 DTO**
+- [x] **T003 · 来源/目标与替换 DTO**
   **类型 / Owner**：基础设施 / REF\
   **写入文件**：`src/backend/bisheng/resource_reference/application/contracts.py`（拟新增）\
   **逻辑 / 测试上下文**：定义 SourceKey/ReferenceTarget/VerifiedTargetContext、稳定 slot、revision、extractor_version、来源集合摘要和已登记失效证据；仅模型/空间/直接文件，外部 Session 不 commit。\
   **依赖**：T002\
   **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
 
-- [ ] **T004 · 引用明细与零引用集合 SQLModel**
+- [x] **T004 · 引用明细与零引用集合 SQLModel**
   **类型 / Owner**：基础设施 / REF\
   **写入文件**：`src/backend/bisheng/resource_reference/domain/models/business_resource_reference.py`（拟新增）；`src/backend/bisheng/resource_reference/domain/models/business_reference_set.py`（拟新增）\
   **逻辑 / 测试上下文**：落实 design §6.2 唯一键、来源/目标/target_space_id 索引、真实目标租户与未知旧目标、基线证据；使用双库 helpers，不用专有 upsert。新整表自动发现；回退新表前备份/确认无已启用业务写入，不丢现有表。\
   **依赖**：T003\
   **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
 
-- [ ] **T005 · 目标删除标记 SQLModel**
+- [x] **T005 · 目标删除标记 SQLModel**
   **类型 / Owner**：基础设施 / REF\
   **写入文件**：`src/backend/bisheng/resource_reference/domain/models/resource_reference_tombstone.py`（拟新增）\
   **逻辑 / 测试上下文**：定义目标 deleting/deleted、操作/操作者/时间与幂等信息，不复制业务配置/凭据。存量失效不伪造 tombstone；新增整表同上回退限制。\
   **依赖**：T004\
   **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
 
-- [ ] **T006 · 纯可见快照字段和兼容序列化**
+- [x] **T006 · 纯可见快照字段和兼容序列化**
   **类型 / Owner**：基础设施 / PERM\
   **写入文件**：`src/backend/bisheng/permission/domain/schemas/f048.py`；`src/backend/bisheng/permission/domain/services/grant_source_service.py`\
   **逻辑 / 测试上下文**：定义 visibility_only_resource_types/visibility_level，保留原 model_key、Source、范围和管理等级；旧字段兼容读取，checksum 规范化规则落 P1；快照字段在GrantModelSnapshot定义处扩展，不修改原Grant/Source表；持久元数据由T214加入PermissionModel，T009编排DDL。\
   **依赖**：T002\
   **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
 
-- [ ] **T007 · 分类型默认与任务公开 DTO**
+- [x] **T007 · 分类型默认与任务公开 DTO**
   **类型 / Owner**：基础设施 / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/schemas/processing_settings.py`（拟新增）；`src/backend/bisheng/knowledge/domain/schemas/processing_job.py`（拟新增）\
   **逻辑 / 测试上下文**：定义普通文档/表格独立草稿与保存版本、相关模型/索引修订、accepted 与 job/item 枚举、失败明细及裁剪字段；网页/音视频专用参数不混入。\
   **依赖**：T002\
   **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
 
-- [ ] **T008 · 任务/子项 SQLModel**
+- [x] **T008 · 任务/子项 SQLModel**
   **类型 / Owner**：基础设施 / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge_processing_job.py`（拟新增）；`src/backend/bisheng/knowledge/domain/models/knowledge_processing_item.py`（拟新增）\
   **逻辑 / 测试上下文**：记录空间/文件/逻辑文档/版本映射、实际处理快照、generation/lease、幂等键和检查点；模型只从业务读，不加任务模型引用。双库索引、无本机文件状态；新表未启用前可删除，启用后回退用一致备份。\
   **依赖**：T007\
   **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
 
-- [ ] **T009 · 既有表字段与 Alembic 唯一编排**
+- [x] **T009 · 既有表字段与 Alembic 唯一编排**
   **类型 / Owner**：基础设施 / MIG\
   **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge.py`；`src/backend/bisheng/core/database/alembic/versions/f118_knowledge_unification.py`（拟新增）\
   **逻辑 / 测试上下文**：按冻结 schema 增加 durable migration origin/分类型默认及相关配置版本；只迁既有结构，不跑数据转换。revision 文件名/父链由 MIG 实施时核对唯一值；测试 upgrade/downgrade(MySQL/DM8)，降级不得静默丢已生效配置。\
   **依赖**：T008, T005, T006, T214, T219\
   **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
 
-- [ ] **T010 · 迁移账本 SQLModel**
+- [x] **T010 · 迁移账本 SQLModel**
   **类型 / Owner**：基础设施 / MIG\
   **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge_unification_run.py`（拟新增）\
   **逻辑 / 测试上下文**：定义 run/原基线/plan hash/阶段/租户来源覆盖持久结构，双库 helpers，不写本机共享状态。新表启用前可撤，转换后回退完整一致备份。\
   **依赖**：T009\
   **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
 
-- [ ] **T011 · 新模块租户注册**
+- [x] **T011 · 新模块租户注册**
   **类型 / Owner**：基础设施 / MIG\
-  **写入文件**：`src/backend/bisheng/core/database/tenant_filter.py`\
+  **写入文件**：`src/backend/bisheng/core/database/tenant_filter.py`；`src/backend/test/fixtures/table_definitions.py`\
   **逻辑 / 测试上下文**：登记 resource_reference 及 knowledge job/item/run/operation_plan 新表的自动租户注入；共享模型跨租户反查通过可信专用 Repository，普通调用不得传任意 tenant 绕过；不改变 SQLModel 自动发现方式。\
   **依赖**：T010\
   **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
 
-- [ ] **T012 · 错误码与测试基础**
+- [x] **T012 · 错误码与测试基础**
   **类型 / Owner**：基础设施 / INT\
   **写入文件**：`src/backend/bisheng/common/errcode/knowledge.py`；`src/backend/test/knowledge_unification/conftest.py`（拟新增）\
   **逻辑 / 测试上下文**：核对现有知识错误码子段，新增覆盖未就绪/引用变化/失效/任务过期等已冻结错误；准备两个租户、超管/租管/普通/独立子项授权、事务故障注入 fixture。其他模块错误如需增加，另拆注册卡交 INT。\
   **依赖**：T011\
   **验证 / 完成条件**：仅定义合同/结构，不交付业务行为；对照调用方编译/序列化或双库 DDL 验证，记录实际结果。
 
-- [ ] **T013 · 来源集合与目标反查 Repository：先写测试**
+- [x] **T013 · 来源集合与目标反查 Repository：先写测试**
   **类型 / Owner**：测试 / REF\
   **写入文件**：`src/backend/test/knowledge_unification/test_ref_repo.py`（拟新增）\
   **逻辑 / 测试上下文**：同来源重复保存无重复、空集有记录、不同版本独立；普通租户不串数据；共享目标能查两租户，异常不当空集。\
@@ -118,7 +118,7 @@
   **覆盖 AC**: AC-72, AC-87, AC-88, AC-89\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T014 · 来源集合与目标反查 Repository**
+- [x] **T014 · 来源集合与目标反查 Repository**
   **类型 / Owner**：后端 Domain / REF\
   **写入文件**：`src/backend/bisheng/resource_reference/domain/repositories/reference_repository.py`（拟新增）\
   **逻辑 / 测试上下文**：实现按 SourceKey 加载/差分/替换及目标/空间范围反查，零引用集合持久；普通按租户，受信共享模型反查汇总全部实际来源租户。只收外部 Session、不 commit。\
@@ -126,7 +126,7 @@
   **配对测试**：T013\
   **验证 / 完成条件**：运行配对测试 T013；验证本卡预期，相关范围检查通过。
 
-- [ ] **T015 · 同 Session 原子替换与来源 CAS：先写测试**
+- [x] **T015 · 同 Session 原子替换与来源 CAS：先写测试**
   **类型 / Owner**：测试 / REF\
   **写入文件**：`src/backend/test/knowledge_unification/test_ref_replace.py`（拟新增）\
   **逻辑 / 测试上下文**：事务中绑定失败配置不提交；两保存 CAS 冲突；保存/普通删并发无漏引用；部分修复保留另一失效槽，新建复制导入拒绝已删目标。\
@@ -134,15 +134,15 @@
   **覆盖 AC**: AC-87, AC-88, AC-89, AC-91, AC-92\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T016 · 同 Session 原子替换与来源 CAS**
+- [x] **T016 · 同 Session 原子替换与来源 CAS**
   **类型 / Owner**：后端 Domain / REF\
-  **写入文件**：`src/backend/bisheng/resource_reference/application/bindings.py`（拟新增）\
+  **写入文件**：`src/backend/bisheng/resource_reference/application/bindings.py`；`src/backend/bisheng/resource_reference/domain/repositories/reference_repository.py`\
   **逻辑 / 测试上下文**：实现 R2 replace_source_bindings；来源根修订门闩、候选目标锁后当前读重验，集合变化回滚重算；配置、明细、集合只由业务统一 commit。新非法目标拒绝，原未改动已登记失效允许保留。\
   **依赖**：T015\
   **配对测试**：T015\
   **验证 / 完成条件**：运行配对测试 T015；验证本卡预期，相关范围检查通过。
 
-- [ ] **T017 · 目标失效判定与覆盖就绪：先写测试**
+- [x] **T017 · 目标失效判定与覆盖就绪：先写测试**
   **类型 / Owner**：测试 / REF\
   **写入文件**：`src/backend/test/knowledge_unification/test_ref_state.py`（拟新增）\
   **逻辑 / 测试上下文**：未完成来源/零引用集合缺失都阻断；登记存量失效不算缺口；迁移自身漏行不得降格存量失效；状态不可泄露其他租户细节。\
@@ -150,7 +150,7 @@
   **覆盖 AC**: AC-89, AC-90, AC-91, AC-93\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T018 · 目标失效判定与覆盖就绪**
+- [x] **T018 · 目标失效判定与覆盖就绪**
   **类型 / Owner**：后端 Domain / REF\
   **写入文件**：`src/backend/bisheng/resource_reference/application/target_state.py`（拟新增）；`src/backend/bisheng/resource_reference/domain/repositories/coverage_repository.py`（拟新增）\
   **逻辑 / 测试上下文**：统一 live/deleting/deleted、强删与基线已登记存量失效；按租户/来源类型 coverage_ready 查询，未登记异常 fail closed；提供 initialize_empty_tenant_coverage(session, tenant_id, writer_contract_version)，仅可信新租户/全新安装空数据证据且全部写端已启用可初始化，既有租户不得以缺账本冒充空租户。无独立改绑定 HTTP 接口。\
@@ -158,7 +158,7 @@
   **配对测试**：T017\
   **验证 / 完成条件**：运行配对测试 T017；验证本卡预期，相关范围检查通过。
 
-- [ ] **T019 · 移除活动 use 与合法纯可见模型：先写测试**
+- [x] **T019 · 移除活动 use 与合法纯可见模型：先写测试**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_perm_policy.py`（拟新增）\
   **逻辑 / 测试上下文**：use-only 与跨资源全局 download 模型分别退化；原可见集合等价，rename 不变，非法空模型拒绝；历史快照 use 原文保留。\
@@ -166,7 +166,7 @@
   **覆盖 AC**: AC-78, AC-80, AC-81, AC-82\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T020 · 移除活动 use 与合法纯可见模型**
+- [x] **T020 · 移除活动 use 与合法纯可见模型**
   **类型 / Owner**：后端 Domain / PERM\
   **写入文件**：`src/backend/bisheng/permission/domain/services/model_policy.py`；`src/backend/bisheng/permission/domain/services/catalog_policy.py`\
   **逻辑 / 测试上下文**：从标准/自定义/预设/系统活动动作删 use；原资源类型退化纯可见时保留 model_key/等级/主体/Source，不补 edit/download，不创建 visible 具体动作；未标记任意空模型仍拒绝。\
@@ -174,7 +174,7 @@
   **配对测试**：T019\
   **验证 / 完成条件**：运行配对测试 T019；验证本卡预期，相关范围检查通过。
 
-- [ ] **T021 · 纯可见授权可授予、列表与撤销：先写测试**
+- [x] **T021 · 纯可见授权可授予、列表与撤销：先写测试**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_perm_grant.py`（拟新增）\
   **逻辑 / 测试上下文**：有管理权限可经原入口找到并撤销 use-only 迁移授权；重复来源撤销一个仍可见；低等级操作者不得越权/撤受保护来源。\
@@ -182,7 +182,7 @@
   **覆盖 AC**: AC-78, AC-81, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T022 · 纯可见授权可授予、列表与撤销**
+- [x] **T022 · 纯可见授权可授予、列表与撤销**
   **类型 / Owner**：后端 Domain / PERM\
   **写入文件**：`src/backend/bisheng/permission/domain/services/grant_service.py`；`src/backend/bisheng/permission/application/catalog_api.py`\
   **逻辑 / 测试上下文**：grantable/manage-existing 识别合法纯可见快照与原管理等级；保留受保护来源限制，撤销仅当前 Source，其他来源并集保留；返回可管理可撤销能力。\
@@ -190,7 +190,7 @@
   **配对测试**：T021\
   **验证 / 完成条件**：运行配对测试 T021；验证本卡预期，相关范围检查通过。
 
-- [ ] **T023 · 可见性编译与 F048 模型发布：先写测试**
+- [x] **T023 · 可见性编译与 F048 模型发布：先写测试**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_perm_projection.py`（拟新增）\
   **逻辑 / 测试上下文**：目录独立子项授权仍隔离；可见不等于下载/rename/edit；全员/系统/普通 Source 投影可逆、非 use 检查差异为零。\
@@ -198,7 +198,7 @@
   **覆盖 AC**: AC-30, AC-31, AC-59, AC-79, AC-80, AC-81, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T024 · 可见性编译与 F048 模型发布**
+- [x] **T024 · 可见性编译与 F048 模型发布**
   **类型 / Owner**：后端 Domain / PERM\
   **写入文件**：`src/backend/bisheng/permission/domain/services/visibility_projection_service.py`；`src/backend/bisheng/core/openfga/authorization_model_f048.py`\
   **逻辑 / 测试上下文**：编译纯可见快照、租户全员/系统可见来源，更新 F048 模型；只变原使用准入，保留子项、tenant、scope 与其他动作。版本/Catalog/checksum 按 P1 发布。\
@@ -206,7 +206,7 @@
   **配对测试**：T023\
   **验证 / 完成条件**：运行配对测试 T023；验证本卡预期，相关范围检查通过。
 
-- [ ] **T025 · 运行协议与旧 use 表达兼容：先写测试**
+- [x] **T025 · 运行协议与旧 use 表达兼容：先写测试**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_perm_runtime.py`（拟新增）\
   **逻辑 / 测试上下文**：旧协议表达可按 visible 调用，当前保存 use 不形成独立来源；失效凭证/跨租户/子项无权仍拒绝。\
@@ -214,7 +214,7 @@
   **覆盖 AC**: AC-35, AC-78, AC-79, AC-82, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T026 · 运行协议与旧 use 表达兼容**
+- [x] **T026 · 运行协议与旧 use 表达兼容**
   **类型 / Owner**：后端 Domain / PERM\
   **写入文件**：`src/backend/bisheng/permission/application/business_authorization.py`；`src/backend/bisheng/permission/domain/services/permission_action_service.py`\
   **逻辑 / 测试上下文**：统一当前 use/use_kb 受支持适配为 visible，活动动作接口不保存返回 use；保留主体、凭证 scope、tenant 和业务状态；历史审计不重写。\
@@ -222,7 +222,7 @@
   **配对测试**：T025\
   **验证 / 完成条件**：运行配对测试 T025；验证本卡预期，相关范围检查通过。
 
-- [ ] **T027 · 投影运行时快照与 checksum：先写测试**
+- [x] **T027 · 投影运行时快照与 checksum：先写测试**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_perm_runtime_snapshot.py`（拟新增）\
   **逻辑 / 测试上下文**：纯可见序列化往返checksum一致、Catalog发布/撤销可恢复，空动作合法模型不丢Source；非法空模型仍拒绝。\
@@ -230,7 +230,7 @@
   **覆盖 AC**: AC-78, AC-80, AC-81, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T028 · 投影运行时快照与 checksum**
+- [x] **T028 · 投影运行时快照与 checksum**
   **类型 / Owner**：后端 Domain / PERM\
   **写入文件**：`src/backend/bisheng/permission/domain/services/projection_service.py`；`src/backend/bisheng/permission/application/runtime.py`\
   **逻辑 / 测试上下文**：F048 snapshot编译/持久校验和、target资源解析、Catalog变更impact支持合法纯可见标记/等级和Grant Source；仍复用原prepare/project/finalize及撤销路径，不为use另建规则。\
@@ -242,7 +242,7 @@
   **类型 / Owner**：测试 / APP\
   **写入文件**：`src/backend/test/knowledge_unification/test_app_resolve.py`（拟新增）\
   **逻辑 / 测试上下文**：同名歧义拒绝，唯一名称解析与运行一致；历史 manifest 不修改；无法解析旧目标不得猜 ID 标为存量失效；冻结后名称重新指向另一ID时运行/预览失败，不调用未绑定目标。\
-  **依赖**：T016, T026\
+  **依赖**：T016, T026, T258\
   **覆盖 AC**: AC-37, AC-68, AC-71, AC-87, AC-89\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -258,7 +258,7 @@
   **类型 / Owner**：测试 / WF\
   **写入文件**：`src/backend/test/knowledge_unification/test_wf_extract.py`（拟新增）\
   **逻辑 / 测试上下文**：同一目标多槽独立；草稿/离线/非当前保留；删槽移除对应关系，聊天/评测/任务不计。\
-  **依赖**：T016\
+  **依赖**：T016, T258\
   **覆盖 AC**: AC-71, AC-87, AC-88\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -354,7 +354,7 @@
   **类型 / Owner**：测试 / AS\
   **写入文件**：`src/backend/test/knowledge_unification/test_as_extract.py`（拟新增）\
   **逻辑 / 测试上下文**：创建/替换模型、知识添加/解除形成真实 ID；DAO 故障回滚，不误把 model_name 当显示名。\
-  **依赖**：T016\
+  **依赖**：T016, T258\
   **覆盖 AC**: AC-71, AC-87, AC-88\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -386,7 +386,7 @@
   **类型 / Owner**：测试 / APP\
   **写入文件**：`src/backend/test/knowledge_unification/test_app_snapshot.py`（拟新增）\
   **逻辑 / 测试上下文**：绑定错误版本行不落盘；历史管理预览版本保护；新版本只修新配置，旧绑定继续存在。\
-  **依赖**：T030, T018\
+  **依赖**：T030, T018, T258\
   **覆盖 AC**: AC-68, AC-71, AC-87, AC-88, AC-89\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -402,7 +402,7 @@
   **类型 / Owner**：测试 / APP\
   **写入文件**：`src/backend/test/knowledge_unification/test_app_lifecycle.py`（拟新增）\
   **逻辑 / 测试上下文**：停止不解除，真正删除才解除；旧历史引用失效可见，预览失败不fallback，不因评测结果拦删除。\
-  **依赖**：T048\
+  **依赖**：T048, T258\
   **覆盖 AC**: AC-71, AC-75, AC-88, AC-91, AC-92\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -434,7 +434,7 @@
   **类型 / Owner**：测试 / CH\
   **写入文件**：`src/backend/test/knowledge_unification/test_ch_bindings.py`（拟新增）\
   **逻辑 / 测试上下文**：暂停依然有引用；删除同步目标/解散才解除；原调用自动清目标不得破坏失效槽，部分修复可保存。\
-  **依赖**：T018, T026\
+  **依赖**：T018, T026, T258\
   **覆盖 AC**: AC-71, AC-87, AC-88, AC-91, AC-92\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -450,7 +450,7 @@
   **类型 / Owner**：测试 / LLM\
   **写入文件**：`src/backend/test/knowledge_unification/test_llm_defaults.py`（拟新增）\
   **逻辑 / 测试上下文**：五类业务默认全部覆盖；共享模型跨租户有真实原始来源，替换只改本槽；绑定失败不保存默认。\
-  **依赖**：T018\
+  **依赖**：T018, T258\
   **覆盖 AC**: AC-71, AC-74, AC-87, AC-88, AC-89\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -478,7 +478,7 @@
   **配对测试**：T057\
   **验证 / 完成条件**：运行配对测试 T057；验证本卡预期，相关范围检查通过。
 
-- [ ] **T059 · 默认配置 Repository 与优先级：先写测试**
+- [x] **T059 · 默认配置 Repository 与优先级：先写测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_settings_repo.py`（拟新增）\
   **逻辑 / 测试上下文**：文档与表格范围校验，overlap>size/headerstart>end 拒绝；旧空间无默认按系统回退；实际处理快照不被改默认覆盖。\
@@ -486,7 +486,7 @@
   **覆盖 AC**: AC-38, AC-39, AC-40, AC-42, AC-43, AC-44\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T060 · 默认配置 Repository 与优先级**
+- [x] **T060 · 默认配置 Repository 与优先级**
   **类型 / Owner**：后端 Domain / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/processing_settings_repository.py`（拟新增）；`src/backend/bisheng/knowledge/domain/services/processing_settings_service.py`（拟新增）\
   **逻辑 / 测试上下文**：普通文档和表格分别保存 schema/version；batch/file 显式 > space > system，专用网页/音视频既有规则优先；不将上传临时值反存空间；改默认不重处理历史。\
@@ -494,15 +494,15 @@
   **配对测试**：T059\
   **验证 / 完成条件**：运行配对测试 T059；验证本卡预期，相关范围检查通过。
 
-- [ ] **T061 · 任务与子项存储：先写测试**
+- [x] **T061 · 任务与子项存储：先写测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_job_repo.py`（拟新增）\
   **逻辑 / 测试上下文**：重复提交同任务不重建文件/版本，部分失败只领取失败项；相关配置变更新步骤拒绝，恢复旧模型也需新重建。\
-  **依赖**：T008, T060\
+  **依赖**：T008, T060, T245, T246\
   **覆盖 AC**: AC-49, AC-50, AC-53, AC-54, AC-86\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T062 · 任务与子项存储**
+- [x] **T062 · 任务与子项存储**
   **类型 / Owner**：后端 Domain / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/processing_job_repository.py`（拟新增）\
   **逻辑 / 测试上下文**：按幂等键创建/查询/领取/失败项恢复及 checkpoints，相关业务/索引 revision 决定 obsolete，name/description 不影响；区分 partial/failed/completed，进度源于真实 items。\
@@ -514,7 +514,7 @@
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_job_service.py`（拟新增）\
   **逻辑 / 测试上下文**：提交不报完成；故障可恢复且不重复；无合法配置/已删模型明确失败，不回退历史参数。\
-  **依赖**：T062, T026\
+  **依赖**：T062, T026, T243, T244\
   **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -642,7 +642,7 @@
   **类型 / Owner**：测试 / KN\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_creation.py`（拟新增）\
   **逻辑 / 测试上下文**：两端默认相同，后台显式配置生效；无权模型及绑定失败不创建残留空间。\
-  **依赖**：T078, T018, T060\
+  **依赖**：T078, T018, T060, T258\
   **覆盖 AC**: AC-06, AC-07, AC-14, AC-15, AC-87\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -754,7 +754,7 @@
   **类型 / Owner**：测试 / KN\
   **写入文件**：`src/backend/test/knowledge_unification/test_qa_bindings.py`（拟新增）\
   **逻辑 / 测试上下文**：同步/异步创建QA都有零集或真实模型绑定，失败整事务回滚；clear不解除模型、delete才解除；不把QA转换SPACE。\
-  **依赖**：T092, T018\
+  **依赖**：T092, T018, T258\
   **覆盖 AC**: AC-55, AC-65, AC-70, AC-71, AC-74, AC-87, AC-88, AC-89\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -834,7 +834,7 @@
   **类型 / Owner**：测试 / KN\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_refs.py`（拟新增）\
   **逻辑 / 测试上下文**：绑定整个空间不阻普通文件删除；无权来源只类型数量；coverage未就绪/查失败一律拒绝，不全库扫描业务JSON。\
-  **依赖**：T102, T042, T046, T052, T054, T058\
+  **依赖**：T102, T042, T046, T052, T054, T058, T258\
   **覆盖 AC**: AC-28, AC-29, AC-72, AC-89, AC-90, AC-91, AC-94\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -1557,7 +1557,7 @@
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_wire_router.py`（拟新增）\
   **逻辑 / 测试上下文**：用真实FastAPI路由表与OpenAPI断言所有合同端点唯一；普通admin隔离、旧请求稳定、新任务accepted正确。\
-  **依赖**：T126, T152, T140, T154, T156, T138, T136, T172, T174, T218, T219, T221, T223, T225, T227\
+  **依赖**：T126, T152, T140, T154, T156, T138, T136, T172, T174, T218, T219, T221, T223, T225, T227, T230, T232, T234, T238, T242, T246, T248, T250, T252, T255, T258, T259, T264, T266, T268, T270, T271, T272, T273\
   **覆盖 AC**: AC-02, AC-04, AC-05, AC-35, AC-49, AC-65, AC-66, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -1695,14 +1695,14 @@
 
 新增T214–T221由源码核对发现；排程以DAG为准，编号不代表拓扑次序。T009/T021/T023/T027已补前置。
 
-- [ ] **T214 · PermissionModel持久字段与内部派生结构**
+- [x] **T214 · PermissionModel持久字段与内部派生结构**
   **类型 / Owner**：基础设施 / PERM\
   **写入文件**：`src/backend/bisheng/permission/domain/models/catalog.py`；`src/backend/bisheng/permission/domain/services/model_policy.py`\
   **逻辑 / 测试上下文**：按P1新增types(JsonType)/level(int nullable)及内部派生类型默认值；原Grant/Source表不变。canonical/策略行为在T020实现，既有表DDL统一交MIG。\
   **依赖**：T002, T006\
   **验证 / 完成条件**：仅定义结构合同；双库DDL编译/导入检查，结构回退先确认未启用写端，转换后使用一致备份。
 
-- [ ] **T215 · GrantSource合法纯可见与目标化快照：先写测试**
+- [x] **T215 · GrantSource合法纯可见与目标化快照：先写测试**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_perm_source_snapshot.py`\
   **逻辑 / 测试上下文**：混合全局download但tool纯可见、合法空actions授予/撤销、inactive原Source清理、原等级和其他Source贡献均保留；未标记空模型仍拒绝。\
@@ -1710,7 +1710,7 @@
   **覆盖 AC**: AC-78, AC-80, AC-81, AC-83\
   **验证 / 完成条件**：先记录可观察红阶段，不修改实现。
 
-- [ ] **T216 · GrantSource目标化快照与合法空动作guard**
+- [x] **T216 · GrantSource目标化快照与合法空动作guard**
   **类型 / Owner**：后端 Domain / PERM\
   **写入文件**：`src/backend/bisheng/permission/domain/services/grant_source_service.py`\
   **逻辑 / 测试上下文**：实现P1 model_snapshot_for_target和_ensure_target_model，action scopes由可信Catalog计算；空模型例外仅server-owned标记目标，不授额外具体动作。与T006同Owner串行。\
@@ -1718,7 +1718,7 @@
   **配对测试**：T215\
   **验证 / 完成条件**：运行配对测试 T215，lint/类型/序列化往返通过。
 
-- [ ] **T217 · Catalog持久/当前快照往返：先写测试**
+- [x] **T217 · Catalog持久/当前快照往返：先写测试**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_perm_control_snapshot.py`\
   **逻辑 / 测试上下文**：SQL模型→loader→canonical checksum→目标化快照往返types/level不丢；旧None归一化，HTTP不能伪造marker，全新安装标准viewer可用。\
@@ -1726,7 +1726,7 @@
   **覆盖 AC**: AC-78, AC-80, AC-81, AC-83\
   **验证 / 完成条件**：先记录可观察红阶段，不修改实现。
 
-- [ ] **T218 · Catalog与运行控制层快照接线**
+- [x] **T218 · Catalog与运行控制层快照接线**
   **类型 / Owner**：后端 Domain / PERM\
   **写入文件**：`src/backend/bisheng/permission/application/control_state.py`；`src/backend/bisheng/permission/application/catalog_api.py`\
   **逻辑 / 测试上下文**：_load_models/_replace_children/current_catalog统一保types/level与checksum；新增/编辑HTTP不信任marker，全新安装bootstrap用内置合法viewer元数据，受控迁移保原model_key。\
@@ -1734,14 +1734,14 @@
   **配对测试**：T217\
   **验证 / 完成条件**：运行配对测试 T217，lint/类型/序列化往返通过。
 
-- [ ] **T219 · 持久确认计划SQLModel**
+- [x] **T219 · 持久确认计划SQLModel**
   **类型 / Owner**：基础设施 / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge_operation_plan.py`\
   **逻辑 / 测试上下文**：OperationPrecheck持久opaque计划，tenant/actor/operation/目标及来源修订/规范payloadhash/impact摘要/expire/消耗operation_id。预检不创建job、不改业务资源；不能复用deletejob造成围栏提前生效。无凭据/全文。新整表自动发现，MIG统一租户注册。\
   **依赖**：T002, T007\
   **验证 / 完成条件**：仅定义结构合同；双库DDL编译/导入检查，结构回退先确认未启用写端，转换后使用一致备份。
 
-- [ ] **T220 · 高级管理写可信租户防竞态：先写测试**
+- [x] **T220 · 高级管理写可信租户防竞态：先写测试**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_processing_management_scope.py`\
   **逻辑 / 测试上下文**：新后台processing-settings/job提交重试按可信scope对照X-Management-Tenant；普通space文件写不额外强加网页头，v2机器凭证仍按原scope/actor准入。\
@@ -1749,7 +1749,7 @@
   **覆盖 AC**: AC-04, AC-05, AC-33, AC-35, AC-84\
   **验证 / 完成条件**：先记录可观察红阶段，不修改实现。
 
-- [ ] **T221 · 高级管理写scope接线**
+- [x] **T221 · 高级管理写scope接线**
   **类型 / Owner**：后端 API / INT\
   **写入文件**：`src/backend/bisheng/common/middleware/admin_scope.py`\
   **逻辑 / 测试上下文**：只添加冻结高级写端点/使用既有require_expected_management_tenant协议；不信任query tenant、不扩管理角色、不改变普通客户端文件写。Endpoint门禁另由KN消费合同。\
@@ -1803,17 +1803,379 @@
   **配对测试**：T226\
   **验证 / 完成条件**：配对测试转绿、相关既有回归及架构检查通过。
 
+## W0/W1源码核对与集成补充任务
+
+以下编号追加，排序以DAG为准；每项由原Owner唯一写入，不改变94条AC。
+
+- [x] **T228 · 跨lane结构与DDL集成验证**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_contract_infrastructure.py`\
+  **逻辑 / 测试上下文**：验证全部新表可发现/tenant注册，老表重复upgrade仅加结构、保原type/model/Grant key，降级不静默丢provenance；内部修订/迁移/切换字段不扩旧Base DTO。\
+  **依赖**：T009, T010, T011, T012\
+  **覆盖 AC**: AC-02, AC-55, AC-57, AC-59, AC-63, AC-65, AC-66, AC-67, AC-80, AC-81, AC-89\
+  **验证 / 完成条件**：记录真实红阶段；不得在测试任务修改实现。
+
+- [x] **T229 · F118错误HTTP状态：先写测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_error_http_status.py`\
+  **逻辑 / 测试上下文**：13种错误实例和包装HTTPException的v2映射503/409/404正确，原权限及旧错误映射不变。\
+  **依赖**：T012\
+  **覆盖 AC**: AC-35, AC-66, AC-76, AC-89, AC-90\
+  **验证 / 完成条件**：记录真实红阶段；不得在测试任务修改实现。
+
+- [x] **T230 · F118错误v2状态接线**
+  **类型 / Owner**：后端 Domain / INT\
+  **写入文件**：`src/backend/bisheng/open_api/domain/http_status.py`\
+  **逻辑 / 测试上下文**：只对KnowledgeUnificationError使用明确http_status，v1 envelope/原错误逻辑保持；不是把所有任意异常http属性当新状态来源。\
+  **依赖**：T229\
+  **配对测试**：T229\
+  **验证 / 完成条件**：配对测试T229转绿，ruff/架构检查与相关回归通过。
+
+- [x] **T231 · 错误三语源：中文与英文**
+  **类型 / Owner**：文案集成 / INT\
+  **写入文件**：`src/frontend/packages/locales/src/api_errors/zh-Hans.json`；`src/frontend/packages/locales/src/api_errors/en.json`\
+  **逻辑 / 测试上下文**：补13个新错误键，不覆盖已占用键，不手改生成产物。\
+  **依赖**：T012\
+  **验证 / 完成条件**：结构/序列化/对应DDL检查及相关集成验证；真实双库结果独立记录，不以SQLite替代。
+
+- [x] **T232 · 错误三语源：日文**
+  **类型 / Owner**：文案集成 / INT\
+  **写入文件**：`src/frontend/packages/locales/src/api_errors/ja.json`\
+  **逻辑 / 测试上下文**：补同13个日文键，运行现有check-i18n验证三语与backend Code对齐。\
+  **依赖**：T231\
+  **验证 / 完成条件**：结构/序列化/对应DDL检查及相关集成验证；真实双库结果独立记录，不以SQLite替代。
+
+- [x] **T233 · 合法字符切分兜底：先写测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_processing_schema_compatibility.py`\
+  **逻辑 / 测试上下文**：当前ElemCharacterTextSplitter支持空字符串字符fallback。完整和partial规则均允许[空串]或含空串列表，仍拒空列表/错长度/非字符串，不新增算法。\
+  **依赖**：T007\
+  **覆盖 AC**: AC-39, AC-42, AC-43, AC-66\
+  **验证 / 完成条件**：记录真实红阶段；不得在测试任务修改实现。
+
+- [x] **T234 · 保留空分隔符合法能力**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/schemas/processing_settings.py`\
+  **逻辑 / 测试上下文**：仅去除对separator空字符串元素的错误禁令，保类型/列表长度/规则对齐与最终参数校验。\
+  **依赖**：T233\
+  **配对测试**：T233\
+  **验证 / 完成条件**：配对测试T233转绿，ruff/架构检查与相关回归通过。
+
+- [x] **T235 · 全新安装viewer：先写测试**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_perm_bootstrap.py`\
+  **逻辑 / 测试上下文**：全新库内置标准viewer纯可见标记/等级持久，任何已有Catalog(含非CURRENT草稿)不经bootstrap静默改写。\
+  **依赖**：T218\
+  **覆盖 AC**: AC-78, AC-80, AC-81, AC-83\
+  **验证 / 完成条件**：记录真实红阶段；不得在测试任务修改实现。
+
+- [x] **T236 · 新安装标准可见模型初始化**
+  **类型 / Owner**：后端 Domain / PERM\
+  **写入文件**：`src/backend/bisheng/permission/application/catalog_bootstrap.py`\
+  **逻辑 / 测试上下文**：_seed_control_plane保存P1元数据；旧安装由停服迁移/显式发布处理，不用bootstrap改CURRENT。\
+  **依赖**：T235\
+  **配对测试**：T235\
+  **验证 / 完成条件**：配对测试T235转绿，ruff/架构检查与相关回归通过。
+
+- [x] **T237 · 资源实际权限DTO：先写测试**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_perm_resource_dto.py`\
+  **逻辑 / 测试上下文**：真实grantable/roster/模式上下文dict返回目标level与visibility_only，不只依赖未使用的DTO默认。\
+  **依赖**：T028, T236\
+  **覆盖 AC**: AC-78, AC-81, AC-83\
+  **验证 / 完成条件**：记录真实红阶段；不得在测试任务修改实现。
+
+- [x] **T238 · 资源API目标化模型输出**
+  **类型 / Owner**：后端 Domain / PERM\
+  **写入文件**：`src/backend/bisheng/permission/application/resource_api.py`\
+  **逻辑 / 测试上下文**：直接拼dict的get_grantable_models/list_grant_sources等使用同目标快照、level和flag；模式草稿仅摘要不造列表。\
+  **依赖**：T237\
+  **配对测试**：T237\
+  **验证 / 完成条件**：配对测试T237转绿，ruff/架构检查与相关回归通过。
+
+- [x] **T239 · 当前动作/新安装既有回归适配**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/permission/test_f048_action_catalog_policy.py`；`src/backend/test/permission/test_f048_catalog_bootstrap.py`\
+  **逻辑 / 测试上下文**：只将当前活动use断言/fixture换新合同，保原未分级、非法空、继承并集、来源撤销与edit/download限制测试目的；历史审计/迁移快照use原文不改。每卡单独提交。\
+  **依赖**：T238\
+  **覆盖 AC**: AC-30, AC-31, AC-78, AC-79, AC-80, AC-81, AC-82, AC-83\
+  **验证 / 完成条件**：记录真实红阶段；不得在测试任务修改实现。
+
+- [x] **T240 · 当前inactive来源/可见并集回归适配**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/permission/test_inactive_model_existing_roster.py`；`src/backend/test/permission/test_f048_visibility_projection.py`\
+  **逻辑 / 测试上下文**：只将当前活动use断言/fixture换新合同，保原未分级、非法空、继承并集、来源撤销与edit/download限制测试目的；历史审计/迁移快照use原文不改。每卡单独提交。\
+  **依赖**：T238\
+  **覆盖 AC**: AC-30, AC-31, AC-78, AC-79, AC-80, AC-81, AC-82, AC-83\
+  **验证 / 完成条件**：记录真实红阶段；不得在测试任务修改实现。
+
+- [x] **T241 · 当前FGA模型回归适配**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/permission/test_f048_authorization_model.py`\
+  **逻辑 / 测试上下文**：只将当前活动use断言/fixture换新合同，保原未分级、非法空、继承并集、来源撤销与edit/download限制测试目的；历史审计/迁移快照use原文不改。每卡单独提交。\
+  **依赖**：T238\
+  **覆盖 AC**: AC-30, AC-31, AC-78, AC-79, AC-80, AC-81, AC-82, AC-83\
+  **验证 / 完成条件**：记录真实红阶段；不得在测试任务修改实现。
+
+- [x] **T242 · 当前累积模型/预设回归适配**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/permission/test_f048_model_policy.py`；`src/backend/test/permission/test_catalog_model_presets.py`\
+  **逻辑 / 测试上下文**：只将当前活动use断言/fixture换新合同，保原未分级、非法空、继承并集、来源撤销与edit/download限制测试目的；历史审计/迁移快照use原文不改。每卡单独提交。\
+  **依赖**：T238\
+  **覆盖 AC**: AC-30, AC-31, AC-78, AC-79, AC-80, AC-81, AC-82, AC-83\
+  **验证 / 完成条件**：记录真实红阶段；不得在测试任务修改实现。
+
+- [x] **T243 · 模型切换业务配置结构**
+  **类型 / Owner**：基础设施 / MIG\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge.py`；`src/backend/bisheng/core/database/alembic/versions/f118_knowledge_unification.py`\
+  **逻辑 / 测试上下文**：新增私有nullable JsonType model_transition：生效/目标模型与原/目标索引、阶段/operation_id存业务资源；任务只读取其有效执行槽，不用job.parameters当权威。未发布DDL只加结构，升级不改老配置。\
+  **依赖**：T009\
+  **验证 / 完成条件**：结构/序列化/对应DDL检查及相关集成验证；真实双库结果独立记录，不以SQLite替代。
+
+- [x] **T244 · 模型切换fixture结构对齐**
+  **类型 / Owner**：基础设施 / MIG\
+  **写入文件**：`src/backend/test/fixtures/table_definitions.py`\
+  **逻辑 / 测试上下文**：中央SQLite知识表补model_transition，旧记录NULL；T228同时验证新字段仍不在公共Base DTO。\
+  **依赖**：T243\
+  **验证 / 完成条件**：结构/序列化/对应DDL检查及相关集成验证；真实双库结果独立记录，不以SQLite替代。
+
+- [x] **T245 · 独立重试幂等收据SQLModel**
+  **类型 / Owner**：基础设施 / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge_processing_retry.py`\
+  **逻辑 / 测试上下文**：KnowledgeProcessingRetryReceipt唯一tenant/job/key，保存规范hash/可信请求actor_ref/expected与accepted revision/item_count/time；不把receipt塞入冻结params/snapshot或无限JSON map。原子接收重试与失败项reset同事务。\
+  **依赖**：T008\
+  **验证 / 完成条件**：结构/序列化/对应DDL检查及相关集成验证；真实双库结果独立记录，不以SQLite替代。
+
+- [x] **T246 · 重试收据租户注册**
+  **类型 / Owner**：基础设施 / MIG\
+  **写入文件**：`src/backend/bisheng/core/database/tenant_filter.py`\
+  **逻辑 / 测试上下文**：新独立表自动发现并登记tenant hook；普通查询不跨tenant，worker处理按可信上下文。\
+  **依赖**：T245, T011\
+  **验证 / 完成条件**：结构/序列化/对应DDL检查及相关集成验证；真实双库结果独立记录，不以SQLite替代。
+
+- [x] **T247 · 创建前目标化授权DTO：先写测试**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_perm_prospective_dto.py`\
+  **逻辑 / 测试上下文**：混合download(L1)+tool纯可见(L3)创建前后上下文同为tool level3/flagTrue，不能只资格检查scoped后仍返回raw全局level。\
+  **依赖**：T238\
+  **覆盖 AC**: AC-78, AC-81, AC-83\
+  **验证 / 完成条件**：记录真实红阶段；不得在测试任务修改实现。
+
+- [x] **T248 · 创建前授权目标快照接线**
+  **类型 / Owner**：后端 Domain / PERM\
+  **写入文件**：`src/backend/bisheng/permission/application/prospective_grant.py`；`src/backend/bisheng/permission/application/runtime.py`\
+  **逻辑 / 测试上下文**：prospective port显式传resource_type并返回目标化snapshots，context输出flag，原scope/管理边界保留。\
+  **依赖**：T247\
+  **配对测试**：T247\
+  **验证 / 完成条件**：配对测试T247转绿，ruff/架构检查与相关回归通过。
+
+- [x] **T249 · 受控可见标记动作往返：先写测试**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_perm_visibility_provenance.py`\
+  **逻辑 / 测试上下文**：真实Catalog保原marker与level：先加edit暂非纯可见，再删edit返回tool纯可见；原Source仍可REMOVE，HTTP不能新造marker。\
+  **依赖**：T248, T259\
+  **覆盖 AC**: AC-78, AC-80, AC-81, AC-83\
+  **验证 / 完成条件**：记录真实红阶段；不得在测试任务修改实现。
+
+- [x] **T250 · 保留纯可见provenance**
+  **类型 / Owner**：后端 Domain / PERM\
+  **写入文件**：`src/backend/bisheng/permission/domain/services/model_policy.py`；`src/backend/bisheng/permission/domain/services/grant_source_service.py`\
+  **逻辑 / 测试上下文**：受控原types/visibility_level持续保存，只有目标当前适用动作空才启用pure flag/原level；具体动作存在时用非pure规则，不永久删原provenance。\
+  **依赖**：T249\
+  **配对测试**：T249\
+  **验证 / 完成条件**：配对测试T249转绿，ruff/架构检查与相关回归通过。
+
+- [x] **T251 · CURRENT Scope完整性：先写测试**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_perm_catalog_integrity.py`\
+  **逻辑 / 测试上下文**：删全部/部分SQL Scope但保CURRENT/auth/checksum须fail closed，合法窄scope保留，全部effective动作关闭的已验空scope合法，readiness不得接受未验快照。\
+  **依赖**：T250\
+  **覆盖 AC**: AC-30, AC-31, AC-78, AC-80, AC-81, AC-83\
+  **验证 / 完成条件**：记录真实红阶段；不得在测试任务修改实现。
+
+- [x] **T252 · CURRENT canonical完整性校验**
+  **类型 / Owner**：后端 Domain / PERM\
+  **写入文件**：`src/backend/bisheng/permission/application/control_state.py`；`src/backend/bisheng/permission/application/runtime.py`\
+  **逻辑 / 测试上下文**：按发布同一canonical规则重算SQL动作/模型/元数据及派生一致性，与存储release checksum核对；缺Scope不可静态扩回。不得强等静态全集；保持已验证空与未验缺数据之别。\
+  **依赖**：T251\
+  **配对测试**：T251\
+  **验证 / 完成条件**：配对测试T251转绿，ruff/架构检查与相关回归通过。
+
+- [x] **T253 · Owner核验收据来源：先写测试**
+  **类型 / Owner**：测试 / REF\
+  **写入文件**：`src/backend/test/knowledge_unification/test_ref_verification.py`\
+  **逻辑 / 测试上下文**：伪造VerifiedTarget/receipt、dataclasses.replace、跨Verifier、旧事务重放均拒；真实Owner必须被调用；跨租户共享反查只能使用实际Owner核验的拥有租户。\
+  **依赖**：T018\
+  **覆盖 AC**: AC-87, AC-88, AC-89, AC-91\
+  **验证 / 完成条件**：记录真实红阶段并独立提交；测试任务不修改实现。
+
+- [x] **T254 · 受信Verifier签发同事务收据**
+  **类型 / Owner**：后端 Application / REF\
+  **写入文件**：`src/backend/bisheng/resource_reference/application/target_verification.py`；`src/backend/bisheng/resource_reference/application/contracts.py`\
+  **逻辑 / 测试上下文**：由ReferenceTargetVerifier调用注册Owner，按完整目标组/来源/事务验证，并登记原receipt对象；不允许调用方仅声明已核验目标。\
+  **依赖**：T253\
+  **配对测试**：T253\
+  **验证 / 完成条件**：配对回归、ruff、架构检查和diff-check通过；记录实际环境限制。
+
+- [x] **T255 · 绑定与共享反查消费受信收据**
+  **类型 / Owner**：后端 Application / REF\
+  **写入文件**：`src/backend/bisheng/resource_reference/application/bindings.py`；`src/backend/bisheng/resource_reference/domain/repositories/reference_repository.py`\
+  **逻辑 / 测试上下文**：Bindings与Repository注入同一个Verifier，拒绝非其本事务发行对象；共享反查不得由调用方自报目标租户或issuer。\
+  **依赖**：T254\
+  **配对测试**：T253\
+  **验证 / 完成条件**：配对回归、ruff、架构检查和diff-check通过；记录实际环境限制。
+
+- [x] **T256 · 引用测试接入真实核验链**
+  **类型 / Owner**：测试 / REF\
+  **写入文件**：`src/backend/test/knowledge_unification/test_ref_repo.py`；`src/backend/test/knowledge_unification/test_ref_replace.py`\
+  **逻辑 / 测试上下文**：将fixture接入实际Owner调用/Verifier发行，保留原租户、失效、部分修复和原生async断言。\
+  **依赖**：T255\
+  **覆盖 AC**: AC-87, AC-88, AC-89, AC-91\
+  **验证 / 完成条件**：配对回归、ruff、架构检查和diff-check通过；记录实际环境限制。
+
+- [x] **T257 · 删除中目标的同步写围栏：先写测试**
+  **类型 / Owner**：测试 / REF\
+  **写入文件**：`src/backend/test/knowledge_unification/test_ref_deleting_fence.py`\
+  **逻辑 / 测试上下文**：旧/新集合任一DELETING时保持槽、移除槽、effective=False均拒；业务row/引用/root revision整笔回滚；INVALID_DELETED后仍可修复，读取DELETING正常。\
+  **依赖**：T256\
+  **覆盖 AC**: AC-88, AC-89, AC-90, AC-91, AC-92\
+  **验证 / 完成条件**：记录真实红阶段并独立提交；测试任务不修改实现。
+
+- [x] **T258 · 冻结删除计划期间引用写入**
+  **类型 / Owner**：后端 Application / REF\
+  **写入文件**：`src/backend/bisheng/resource_reference/application/bindings.py`\
+  **逻辑 / 测试上下文**：真实Verifier检查后、source/root写入前，DELETING一律10999/reference_target_deleting。已删除或冻结legacy的原槽部分修复规则不变；不扩worker外部IO竞态范围。\
+  **依赖**：T257\
+  **配对测试**：T257\
+  **验证 / 完成条件**：配对回归、ruff、架构检查和diff-check通过；记录实际环境限制。
+
+- [x] **T259 · 创建前授权Runtime Port签名对齐**
+  **类型 / Owner**：基础设施 / PERM\
+  **写入文件**：`src/backend/bisheng/permission/application/ports.py`\
+  **逻辑 / 测试上下文**：get_prospective_context增加与Runtime一致的可选resource_type关键字，旧零参兼容；具体目标DTO由T248负责，不在Port定义业务行为。\
+  **依赖**：T248\
+  **验证 / 完成条件**：配对回归、ruff、架构检查和diff-check通过；记录实际环境限制。
+
+- [x] **T260 · 重试收据通用审计字段**
+  **类型 / Owner**：基础设施 / MIG\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge_processing_retry.py`\
+  **逻辑 / 测试上下文**：不可变收据保留accepted_at语义，补齐新表约定create_time/update_time；不替代accepted_job_revision排序，也不建立任务模型绑定。\
+  **依赖**：T245, T246\
+  **验证 / 完成条件**：本地基础结构9项、ruff及arch-guard通过，提交d89532c6f；真实双库待集成环境。
+
+- [x] **T261 · 通用引用阻断中英文提示**
+  **类型 / Owner**：前端 / INT\
+  **写入文件**：`src/frontend/packages/locales/src/api_errors/en.json`；`src/frontend/packages/locales/src/api_errors/zh-Hans.json`\
+  **逻辑 / 测试上下文**：10995被文件/目录/clear共同使用，移除通用强删建议，改为先到相关业务调整引用；强删说明仅由支持force的具体确认UI展示。\
+  **依赖**：T231\
+  **验证 / 完成条件**：相关定向回归、三语漂移或静态检查通过，单卡独立提交，不降低原有效/无效边界。
+
+- [x] **T262 · 通用引用阻断日语提示**
+  **类型 / Owner**：前端 / INT\
+  **写入文件**：`src/frontend/packages/locales/src/api_errors/ja.json`\
+  **逻辑 / 测试上下文**：同步T261中性提示，三语键/语义一致；未改变错误码或HTTP状态。\
+  **依赖**：T261, T232\
+  **验证 / 完成条件**：相关定向回归、三语漂移或静态检查通过，单卡独立提交，不降低原有效/无效边界。
+
+- [x] **T263 · CURRENT真实发布hash回归适配**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_perm_control_snapshot.py`；`src/backend/test/knowledge_unification/test_perm_bootstrap.py`\
+  **逻辑 / 测试上下文**：CURRENT fixture使用真实发布canonical pair hash；既有CURRENT未被bootstrap改写比较真实初始值，不能以假hash绕过新校验，不改历史审计/迁移fixture。\
+  **依赖**：T252\
+  **覆盖 AC**: AC-78, AC-80, AC-81, AC-83\
+  **验证 / 完成条件**：相关定向回归、三语漂移或静态检查通过，单卡独立提交，不降低原有效/无效边界。
+
+- [x] **T264 · provenance与prospective回归适配**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_perm_policy.py`；`src/backend/test/permission/test_prospective_grant_application.py`\
+  **逻辑 / 测试上下文**：受控marker新增动作后仍保留provenance；原prospective mock接可选resource_type及只读visibility_only字段，保留原目标scope断言目的。\
+  **依赖**：T263, T259\
+  **覆盖 AC**: AC-78, AC-80, AC-81, AC-83\
+  **验证 / 完成条件**：相关定向回归、三语漂移或静态检查通过，单卡独立提交，不降低原有效/无效边界。
+
+- [x] **T265 · 等价整数URL管理租户pin：先写测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_processing_management_paths.py`\
+  **逻辑 / 测试上下文**：真实ASGI请求覆盖4个新高级写端点，编码+7/空白7仍要求预期租户header，缺header400/不匹配409/匹配200；资源权限由后续Owner校验。\
+  **依赖**：T221\
+  **覆盖 AC**: AC-04, AC-05, AC-35, AC-66, AC-84\
+  **验证 / 完成条件**：记录真实红绿、固定快照复核与相关组合回归；源实现不超过两文件，未执行环境如实列明。
+
+- [x] **T266 · 高级管理路径范围完整匹配**
+  **类型 / Owner**：后端 Middleware / INT\
+  **写入文件**：`src/backend/bisheng/common/middleware/admin_scope.py`\
+  **逻辑 / 测试上下文**：仅两条F118高级路径space段改为非斜杠段，由路由校验int；普通文件写、读取、v2保持原header合同。\
+  **依赖**：T265\
+  **配对测试**：T265\
+  **验证 / 完成条件**：记录真实红绿、固定快照复核与相关组合回归；源实现不超过两文件，未执行环境如实列明。
+
+- [x] **T267 · 旧create原始ORM出站隔离：先写测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_legacy_knowledge_wire.py`\
+  **逻辑 / 测试上下文**：实际旧create函数经mock Owner返回Knowledge→Any envelope序列化，六内部字段不得出站；SQLite commit/SELECT属性仍完整保留。\
+  **依赖**：T243, T244\
+  **覆盖 AC**: AC-65, AC-66, AC-68\
+  **验证 / 完成条件**：记录真实红绿、固定快照复核与相关组合回归；源实现不超过两文件，未执行环境如实列明。
+
+- [x] **T268 · Knowledge内部列统一排除wire输出**
+  **类型 / Owner**：基础设施 / MIG\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge.py`\
+  **逻辑 / 测试上下文**：六内部列Field exclude JSON，仍是ORM列/属性，不只靠从Base移字段保护；公开高级DTO由Owner显式构造，副本default后续按专用DTO复制。\
+  **依赖**：T267\
+  **配对测试**：T267\
+  **验证 / 完成条件**：记录真实红绿、固定快照复核与相关组合回归；源实现不超过两文件，未执行环境如实列明。
+
+- [x] **T269 · 正常启动不改已发布CURRENT：先写测试**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_perm_startup_integrity.py`\
+  **逻辑 / 测试上下文**：合法窄scope、合法全disabled空effective scope及fresh bootstrap经过真实initialize不在线补范围、不破canonical校验；禁止以静态范围恢复fallback。\
+  **依赖**：T264\
+  **覆盖 AC**: AC-78, AC-80, AC-81, AC-83\
+  **验证 / 完成条件**：记录真实红绿、固定快照复核与相关组合回归；源实现不超过两文件，未执行环境如实列明。
+
+- [x] **T270 · 停用启动时在线补CURRENT范围**
+  **类型 / Owner**：后端 Application / PERM\
+  **写入文件**：`src/backend/bisheng/permission/application/process_runtime.py`；`src/backend/bisheng/permission/application/catalog_bootstrap.py`\
+  **逻辑 / 测试上下文**：停止旧ensure_linsight_skill_action_scopes改写已发布CURRENT；范围变更走正式发布/停服迁移，fresh初始化已完整；确认无真实caller后删除死helper。\
+  **依赖**：T269\
+  **配对测试**：T269\
+  **验证 / 完成条件**：记录真实红绿、固定快照复核与相关组合回归；源实现不超过两文件，未执行环境如实列明。
+
+- [x] **T271 · 既有授权roster显式scope回归适配**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/permission/test_inactive_model_existing_roster.py`\
+  **逻辑 / 测试上下文**：合法CURRENT mock显式声明edit/manage_permission对knowledge_space范围；不恢复生产静态fallback，不更改原inactive来源可撤销断言。\
+  **依赖**：T264\
+  **覆盖 AC**: AC-78, AC-79, AC-80, AC-81\
+  **验证 / 完成条件**：记录真实红绿、固定快照复核与相关组合回归；源实现不超过两文件，未执行环境如实列明。
+
+- [x] **T272 · 新安装Skill范围与退役helper回归适配**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/permission/test_f048_catalog_bootstrap.py`\
+  **逻辑 / 测试上下文**：删除仅断言已退役在线补CURRENT helper的旧用例，保留并加强fresh完整Skill scope；T269覆盖真实startup合法窄/空scope不改且ready。\
+  **依赖**：T270, T239\
+  **覆盖 AC**: AC-78, AC-80, AC-81, AC-83\
+  **验证 / 完成条件**：新旧初始化相关回归和新startup测试通过，不复活在线改CURRENT逻辑；独立提交。
+
+- [x] **T273 · 既有API Runtime注入断言适配**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/permission/test_f048_api_process_runtime.py`\
+  **逻辑 / 测试上下文**：基线3ede归档已复现旧SkillAdapter无_loader导致该例失败，相关Skill/API装配源0diff；仅Skill分支强断言adapter.runtime为facade且非state，其余9类继续逐项校验原loader注入身份，不删或放宽断言。\
+  **依赖**：T270, T272\
+  **覆盖 AC**: AC-78, AC-83\
+  **验证 / 完成条件**：独立提交当前接口fixture适配，重跑与process_runtime改动直接相关API/Worker组合；保留基线归因日志，不改Skill业务源。
+
 ## 自动化覆盖索引
 
-以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。全部测试均待实施/执行。
+以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
 
 | AC | 测试任务 |
 | --- | --- |
 | AC-01 | T205 |
-| AC-02 | T083, T121, T196, T205 |
+| AC-02 | T083, T121, T196, T205, T228 |
 | AC-03 | T081, T121, T204 |
-| AC-04 | T081, T121, T196, T204 |
-| AC-05 | T081, T121, T196, T204 |
+| AC-04 | T081, T121, T196, T204, T220, T265 |
+| AC-05 | T081, T121, T196, T204, T220, T265 |
 | AC-06 | T079, T121, T205 |
 | AC-07 | T079, T121, T205 |
 | AC-08 | T077, T101, T121, T204 |
@@ -1838,20 +2200,20 @@
 | AC-27 | T095, T206 |
 | AC-28 | T103, T105, T109, T202, T206 |
 | AC-29 | T103, T105, T107, T109, T202, T206 |
-| AC-30 | T023, T077, T101, T202, T204 |
-| AC-31 | T023, T077, T085, T099, T157, T202, T204 |
+| AC-30 | T023, T077, T101, T202, T204, T239, T240, T241, T242, T251 |
+| AC-31 | T023, T077, T085, T099, T157, T202, T204, T239, T240, T241, T242, T251 |
 | AC-32 | T077, T121, T202, T204 |
-| AC-33 | T071, T077, T097, T099, T123, T202, T204 |
+| AC-33 | T071, T077, T097, T099, T123, T202, T204, T220 |
 | AC-34 | T063, T071, T097, T123, T202, T204 |
-| AC-35 | T025, T051, T101, T123, T129, T131, T133, T141, T147, T149, T151, T196, T202, T204, T210 |
-| AC-36 | T101, T202, T204 |
-| AC-37 | T029, T037, T041, T045, T101, T129, T137, T169, T202, T203, T204 |
+| AC-35 | T025, T051, T101, T123, T129, T131, T133, T141, T147, T149, T151, T196, T202, T204, T210, T220, T222, T226, T229, T265 |
+| AC-36 | T101, T202, T204, T222 |
+| AC-37 | T029, T037, T041, T045, T101, T129, T137, T169, T202, T203, T204, T222 |
 | AC-38 | T059, T123, T207 |
-| AC-39 | T059, T069, T207 |
+| AC-39 | T059, T069, T207, T233 |
 | AC-40 | T059, T069, T207 |
 | AC-41 | T207 |
-| AC-42 | T059, T123, T207 |
-| AC-43 | T059, T067, T069, T083, T207 |
+| AC-42 | T059, T123, T207, T233 |
+| AC-43 | T059, T067, T069, T083, T207, T233 |
 | AC-44 | T059, T067, T069, T097, T207 |
 | AC-45 | T067, T097, T099, T123, T207 |
 | AC-46 | T099, T207 |
@@ -1863,20 +2225,20 @@
 | AC-52 | T065, T097, T208 |
 | AC-53 | T061, T065, T067, T071, T097, T208 |
 | AC-54 | T061, T063, T065, T067, T071, T073, T075, T097, T123, T208 |
-| AC-55 | T093, T125, T161, T163, T203, T211 |
+| AC-55 | T093, T125, T161, T163, T203, T211, T228 |
 | AC-56 | T157, T159, T161, T173, T203, T211 |
-| AC-57 | T163, T203, T211 |
+| AC-57 | T163, T203, T211, T228 |
 | AC-58 | T163, T203, T211 |
-| AC-59 | T023, T157, T163, T169, T203, T211 |
+| AC-59 | T023, T157, T163, T169, T203, T211, T228 |
 | AC-60 | T077, T101, T163, T203, T211 |
 | AC-61 | T163, T165, T203, T211 |
 | AC-62 | T163, T165, T203, T211 |
-| AC-63 | T157, T159, T161, T163, T173, T203, T211 |
+| AC-63 | T157, T159, T161, T163, T173, T203, T211, T228 |
 | AC-64 | T159, T161, T169, T173, T203, T211 |
-| AC-65 | T093, T125, T196, T210 |
-| AC-66 | T069, T125, T131, T133, T151, T196, T210 |
-| AC-67 | T101, T125, T131, T210 |
-| AC-68 | T029, T037, T039, T041, T045, T047, T051, T125, T129, T131, T133, T137, T139, T147, T149, T151, T210 |
+| AC-65 | T093, T125, T196, T210, T228, T267 |
+| AC-66 | T069, T125, T131, T133, T151, T196, T210, T222, T226, T228, T229, T233, T265, T267 |
+| AC-67 | T101, T125, T131, T210, T228 |
+| AC-68 | T029, T037, T039, T041, T045, T047, T051, T125, T129, T131, T133, T137, T139, T147, T149, T151, T210, T222, T267 |
 | AC-69 | T125, T133, T210 |
 | AC-70 | T093, T111, T113, T115, T119, T202, T209 |
 | AC-71 | T029, T031, T035, T037, T043, T045, T047, T049, T053, T055, T057, T093, T111, T139, T167, T202, T209 |
@@ -1884,29 +2246,29 @@
 | AC-73 | T111, T113, T115, T117, T119, T202, T209 |
 | AC-74 | T055, T093, T097, T109, T115, T202, T209 |
 | AC-75 | T049, T111, T202, T209 |
-| AC-76 | T111, T113, T115, T117, T119, T202, T209 |
+| AC-76 | T111, T113, T115, T117, T119, T202, T209, T229 |
 | AC-77 | T113, T115, T117, T119, T202, T209 |
-| AC-78 | T019, T021, T025, T027, T127, T135, T153, T155, T157, T202, T204 |
-| AC-79 | T023, T025, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T202, T204, T210 |
-| AC-80 | T019, T023, T027, T153, T157, T161, T169, T173, T202, T203, T204, T211 |
-| AC-81 | T019, T021, T023, T027, T135, T153, T157, T202, T203, T204, T211 |
-| AC-82 | T019, T025, T041, T051, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T155, T202, T204, T210 |
-| AC-83 | T021, T023, T025, T027, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T157, T196, T202, T204, T210 |
-| AC-84 | T081, T095, T109, T121, T202, T204 |
+| AC-78 | T019, T021, T025, T027, T127, T135, T153, T155, T157, T202, T204, T215, T217, T224, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T271, T272, T273 |
+| AC-79 | T023, T025, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T202, T204, T210, T222, T224, T226, T239, T240, T241, T242, T271 |
+| AC-80 | T019, T023, T027, T153, T157, T161, T169, T173, T202, T203, T204, T211, T215, T217, T228, T235, T239, T240, T241, T242, T249, T251, T263, T264, T269, T271, T272 |
+| AC-81 | T019, T021, T023, T027, T135, T153, T157, T202, T203, T204, T211, T215, T217, T224, T228, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T271, T272 |
+| AC-82 | T019, T025, T041, T051, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T155, T202, T204, T210, T222, T226, T239, T240, T241, T242 |
+| AC-83 | T021, T023, T025, T027, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T157, T196, T202, T204, T210, T215, T217, T222, T224, T226, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T272, T273 |
+| AC-84 | T081, T095, T109, T121, T202, T204, T220, T265 |
 | AC-85 | T075, T157, T159, T161, T173, T202, T203, T211 |
 | AC-86 | T061, T063, T065, T067, T073, T075, T097, T149, T202, T208 |
-| AC-87 | T013, T015, T029, T031, T033, T035, T039, T043, T045, T047, T053, T055, T057, T079, T091, T093, T095, T097, T109, T139, T167, T202, T209 |
-| AC-88 | T013, T015, T031, T033, T035, T037, T039, T043, T045, T047, T049, T053, T055, T057, T091, T093, T109, T167, T202, T209 |
-| AC-89 | T013, T015, T017, T029, T033, T039, T047, T055, T093, T103, T111, T159, T167, T169, T171, T173, T202, T203, T209, T211 |
-| AC-90 | T017, T103, T109, T117, T119, T171, T202, T209 |
-| AC-91 | T015, T017, T037, T039, T041, T045, T049, T053, T103, T109, T117, T129, T139, T141, T167, T202, T209 |
-| AC-92 | T015, T037, T039, T045, T049, T053, T109, T117, T202, T209 |
+| AC-87 | T013, T015, T029, T031, T033, T035, T039, T043, T045, T047, T053, T055, T057, T079, T091, T093, T095, T097, T109, T139, T167, T202, T209, T253, T256 |
+| AC-88 | T013, T015, T031, T033, T035, T037, T039, T043, T045, T047, T049, T053, T055, T057, T091, T093, T109, T167, T202, T209, T253, T256, T257 |
+| AC-89 | T013, T015, T017, T029, T033, T039, T047, T055, T093, T103, T111, T159, T167, T169, T171, T173, T202, T203, T209, T211, T228, T229, T253, T256, T257 |
+| AC-90 | T017, T103, T109, T117, T119, T171, T202, T209, T229, T257 |
+| AC-91 | T015, T017, T037, T039, T041, T045, T049, T053, T103, T109, T117, T129, T139, T141, T167, T202, T209, T253, T256, T257 |
+| AC-92 | T015, T037, T039, T045, T049, T053, T109, T117, T202, T209, T257 |
 | AC-93 | T017, T159, T161, T167, T169, T173, T202, T203, T209, T211 |
 | AC-94 | T085, T103, T105, T107, T202, T206, T209 |
 
 ## 追加与偏差记录
 
-任务编号保持稳定，新增入口以末尾追加任务并登记依赖/Owner/测试；禁止通过扩大旧卡写入范围掩盖遗漏。当前所有任务未执行，无实现偏差。
+任务编号保持稳定，新增入口以末尾追加任务并登记依赖/Owner/测试；禁止通过扩大旧卡写入范围掩盖遗漏。实现状态以本轮实施记录为准。
 
 ## 2026-11-05 实施记录
 
@@ -1914,3 +2276,20 @@
 - T002：P1/R1/R2/R3/B1/B2/J1/A1已在 [contracts.md](./contracts.md) 冻结；三个独立源码审阅产物由INT合并。T006持久位置修正与T214–T221补充先于对应消费者。
 - 基线验证：Python3.11.13、`test/permission/test_f048_action_catalog_policy.py` 5 passed；Alembic唯一head `v310b1_f004_workflow_soft_delete`。测试复用主工作区已存在venv与只读配置路径，PYTHONPATH指向功能源码；未修改配置或锁文件。
 - 测试结果按任务交付追加；单元/双库/中间件/E2E/迁移/部署分别记录，不以本地静态或mock替代后者。
+
+### W0/W1集成进度（2026-11-05）
+
+- W0主agent已合流REF/PERM/PROC基础结构，T009–T012含DDL/账本/tenant注册/错误基础。T228结构验证、T229→T230 HTTP状态已红绿闭合；三语13错误键检查通过。
+- T220→T221管理写scope已红绿闭合：4失败8通过→12通过；普通space文件写/v2凭证边界保持。
+- T233→T234合法空分隔符回归已合流；T059→T060默认优先级与事务CAS已合流；默认设置18项通过；合流引用核心后108项、再合流job存储后126项通过，属于各时点同一套测试的规模，不累计重复次数。
+- T013–T018与T253–T258 REF已由PROC固定快照独立复核并主agent合流（64490b9bb），包括Owner真实调用、receipt来源与deleting同步写围栏；真实Coverage账本适配仍由INT/MIG做，未提供adapter不能假ready。
+- PERM原三项接缝T247–T252、Port T259及正常startup T269/T270已由REF/PROC分阶段独立复核；T263/T264/T271/T272适配真实当前fixture，T273修正基线已坏的Skill注入断言。逻辑交付c970545d3已合流4932d120de；根T270格式跟进9300b557c无语义变化。
+- T061/T062 job_repo已由REF固定ff2672e983独立复核，主agent合流e93ecfb6a；T064须等PERM依赖通过。收据通用审计字段T260已补齐。
+- 根模型/错误文件既有ruff告警24/2条已与冻结基线逐项比对，无新增；其余本轮新文件ruff通过。真实MySQL/DM8/OpenFGA、中间件/E2E/迁移及部署未执行，不标作通过。
+
+### 本轮集成出口
+
+- 主agent在合流4932d120de运行三线组合：24个pytest路径，含完整F118目录与权限/API/Worker定向回归，**424 passed**，无skip/fail；日志`/private/tmp/f118-integrated-tests.log`，路径与受测SHA见同名json。不是CI、中间件或端到端证明。
+- 80个改动Python文件arch-guard无违规；78文件ruff通过，2个旧文件与基线逐项比对新增诊断0。全提交`git diff --check ed03fd07de..HEAD`与工作区diff-check通过；三语检查通过，Alembic单头f118_knowledge_unification。
+- 新增代码与修正均在功能分支本地提交；未推送、未部署、未执行迁移。完成86/273为任务级状态，不等于94条产品AC完成。
+- 下一波从六类来源提取/Owner事务适配、PROC应用用例与KN删除协调的已满足依赖卡进入。具体路由、真实Owner/覆盖adapter、两端页面和正式迁移脚本仍待实施；覆盖未ready不得放行删除保护。

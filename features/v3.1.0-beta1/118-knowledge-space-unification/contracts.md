@@ -62,7 +62,7 @@ visibility_only: bool = False  # 由具体目标上下文派生；不从 HTTP �
 ```
 
 - `PermissionModel`（`domain/models/catalog.py`）持久化前两字段：types 用 dialect `JsonType`（只保存/加载完整列表，不 JSON 查询），level 用 nullable Integer；旧行 null 归一化为 `()/None`。既有表 DDL 归 MIG，PERM 不动 Grant/Source 表。
-- types 为已注册资源类型、唯一、排序后的 tuple；每个被标记类型，移除 use 后的**该类型有效具体动作集合**必须为空。不存在 marker 或 level、类型非法、level 不在 1..4、普通任意空模型均拒绝作为合法纯可见模型。
+- types 为已注册资源类型、唯一、排序后的 tuple；types保存原受控provenance，不因后续临时加入具体动作而永久删除。仅当该目标当前有效具体动作集合为空时，启用visibility_only及原visibility_level；当前有动作时仍用非pure规则。不存在 marker 或 level、类型非法、level 不在 1..4、普通任意空模型均拒绝作为合法纯可见模型。
 - level 冻结原有效管理等级，不默认为 1。标准模型固定等级维持；普通非纯可见 custom 继续按有效动作最高等级派生。
 - `model_key`、Grant ID、Source ID/fingerprint/locator/type、scope、主体、protected 标记不变；不扁平化部门/用户组、不复制为逐用户授权。
 - `GrantModelDTO` 补只读 `visibility_only: bool = False`；`level` 给出**此目标的管理等级**，当前 active 标识保留。`PermissionModelDTO` 给出发布元数据（types/level），不以空 action_codes 隐藏合法模型。
@@ -119,9 +119,9 @@ def model_snapshot_for_target(
 测试优先复用 `test/permission/test_f048_model_policy.py`（旧空模型仍无效断言需保留并新增长标记合法空模型）、`test_inactive_model_existing_roster.py`、`test_f048_grant_api.py`、`test_f048_grant_subjects.py`、`test_f048_visibility_projection.py`、`test_f048_catalog_api.py`、`test_f048_catalog_runtime.py`、`test_f048_authorization_model.py`；新增 F118 配对测试按任务文件落 `test/knowledge_unification/`。必须有：use-only / 全局 download+本类型空 / inactive 原来源撤销 / 双来源撤一个 / tenant全员+全新安装 / catalog持久化往返和 checksum / 未标记空拒绝 / rename 不变 / 当前动作与FGA无use。
 
 
-## REF V1：R1/R2/R3/B1/B2
+## REF V1.1：R1/R2/R3/B1/B2
 
-核对基线：`a1b1a2387`，合入发版线 `9eef0016de`。以下是拟实现的内部应用协议；不是当前已存在代码，不新增通用依赖图、任务绑定或对外引用 CRUD API。
+核对基线：`a1b1a2387`，合入发版线 `9eef0016de`。W0/W1已实现核心类型与Repository，后续业务Owner/覆盖账本适配仍待实现。V1.1冻结Verifier发行与消费约束，不新增通用依赖图、任务绑定或对外引用CRUD API。
 
 ### R1 类型、键与集合
 
@@ -143,7 +143,7 @@ TargetDeleteStage = Literal['deleting', 'deleted']
 - `ReferenceSpec(slot_key:str, target:TargetKey)`：完整集合元素。slot 稳定按业务语义构造，节点 ID/字段路径，而不是数组下标。多选用 `(slot_key,target)` 集合；相同元素去重，不同槽同目标保留。
 - `VerifiedReferenceTarget(key, target_tenant_id:int|None, target_space_id:str|None, model_server_id:str|None, state, target_revision, evidence)`：由目标 Owner 在当前事务按真实关系查询/加锁并验证。只有合法 legacy 证据路径允许 target_tenant_id=None；不能猜来源租户为目标租户。model 的 target_space_id=None；space 自身可为自己；file/folder 由真实归属派生。共享可用性仍由模型 Owner 检查。
 - `LegacyEvidence(run_id, baseline_hash, evidence_key)`：仅内部迁移入口可注入，关联停服后、转换前冻结的正式基线；不接受 HTTP 提交，不伪造 tombstone。
-- 规范化来源集合摘要：仅对配置身份元组 `(slot_key,target_type,target_id)` 按稳定字典序排序，以 UTF-8、JSON sort_keys=True、紧凑 separators 编码后 SHA256；digest算法版本固定 `sha256-reference-set-v1`。target_tenant_id/target_space_id、tombstone状态、legacy证据均为派生/核验元数据，单独对账，不混入配置摘要。文件移动只更新实际target_space_id，不改变来源配置/revision/digest；删除标记变更也不重写来源摘要。强删确认影响摘要另含目标归属/删除manifest与修订，不能复用配置digest忽略影响变化。
+- 规范化来源集合摘要：仅对配置身份元组 `(slot_key,target_type,target_id)` 按稳定字典序排序，以 UTF-8、JSON ensure_ascii=False、sort_keys=True、紧凑 separators 编码后 SHA256；digest算法版本固定 `sha256-reference-set-v1`。target_tenant_id/target_space_id、tombstone状态、legacy证据均为派生/核验元数据，单独对账，不混入配置摘要。文件移动只更新实际target_space_id，不改变来源配置/revision/digest；删除标记变更也不重写来源摘要。强删确认影响摘要另含目标归属/删除manifest与修订，不能复用配置digest忽略影响变化。
 
 持久结构限已规划三表：`business_resource_reference`、`business_reference_set`、`resource_reference_tombstone`；MySQL/DM8 使用现有 dialect_helpers，显式列/关系/索引，不 JSON 函数或专有 upsert。候选长度 source_type32/source_id64/source_version64/slot_key192/target_type24/target_id64/hash64；channel 任意长子频道名和 APP name 通过业务稳定 hash 槽位，原显示标签从业务配置读，不撑大联合索引。最终 SQLModel 索引须两库验证。
 
@@ -184,6 +184,18 @@ async def areplace_source_bindings(
 5. 每次版本创建/修改/删除都锁真实业务 root 和同 root_guard、递增 root revision；多版本删除计划核对该 revision。原 source row 的 CAS 与 root guard CAS 都必须成功。
 6. 业务配置保存、R_old-R_new 删除、R_new-R_old 插入、交集 revision 更新、source set/digest/root_guard 同一 Session 一次提交。REF Repository 不自行 begin/commit/rollback，不发 Celery；异常由业务用例整笔 rollback。
 7. 原 source/version/slot/target 未变且有合法 tombstone 或冻结 legacy 证据时允许保留失效项并逐项修复；新增来源/复制导入/新增槽位不能复用此许可。移除失效项不要求旧 live 目标存在；通过旧绑定+证据检查即可。新目标必须 live 且租户/共享/业务条件合法。
+
+V1.1装配签名：
+
+```python
+verifier = ReferenceTargetVerifier(owners)
+repository = ReferenceRepository(verifier=verifier)
+bindings = ReferenceBindings(repository, verifier)
+```
+
+`ReferenceTargetOwnerPort.lock_and_verify(session, group_keys, source_key, operation)`及原生async方法由Verifier实际调用；同一Owner的space/file按完整组核验。Verifier私有登记同一事务中发行的原receipt对象及完整批次；调用方自建、复制替换字段、跨Verifier或跨事务的receipt均不成立。入向共享反查先`verifier.verify_owner_targets(session, target_keys)`（source=None），再`repository.target_owner_scope(session, issued_receipts)`，只信Owner查出的拥有租户，禁止调用方自报target_tenant或issuer。
+
+写入时任一旧/新锁集合目标处于`DELETING`即10999 / `reference_target_deleting`；包括保持、清除旧槽和`effective=False`。业务用例整体回滚，不改变已确认删除计划的来源集合。目标正式`INVALID_DELETED`或有冻结legacy证据后，原槽保留、移除和部分修复许可继续成立。此为同步删除围栏，读取仍可展示删除中状态，不涉及暂缓的worker在途IO竞态。
 
 `BindingReplaceResult(source_key,source_revision,root_revision,digest,added,removed,retained_invalid)`；无 display name/凭据。计数为操作证据，不能作为独立删除依据。
 
@@ -373,3 +385,21 @@ worker领取另有 job/item `lease_token`、`lease_until`、`claim_generation`�
 | `workstation/domain/services/workstation_service.py` | EDGE |
 
 旧知识读写消费面同时核对平台 `controllers/API/knowledgeSpace.ts` / `controllers/hooks/knowledge.ts`、客户端 `api/{knowledge,knowledgeUpload,permission}.ts`、助手/工作流/工作台、APP能力声明/运行/预览、频道同步、v2 filelib/knowledge和SDK/MCP。两端当前动作模型由服务端返回，通用授权组件不得用空action数组隐藏合法纯可见来源。
+
+## 实施澄清（保持V1语义，2026-11-05）
+
+1. R2以 `ReferenceBindings(repository, verifier)` 实例注入业务用例，提供同签名sync/async方法；无module global registry。OwnerTargetScope按注册issuer、对象身份及当前SQL事务校验，不能通过新建/replace scope扩大目标；root/来源写强校验可信tenant。
+2. CoveragePort提供get_status/aget_status。GlobalCoveragePort提供get_global_status/aget_global_status，GlobalCoverageStatus带完整verified_tenant_ids、六类source、writer版本、epoch及清单hash（只内部使用）。共享目标跨来源tenant检查先global guard、查精确引用后带observed tenant ids及expected epoch/hash再验；不从出现过引用的tenant反推全集。INT/MIG adapter需在同一外部Session进行current read，包含停用但仍保存配置tenant、新tenant同事务ready；无adapter/缺口/变化一律fail closed。
+3. HTTP precheck使用ProcessingTargetInput(file_id,version_id,document_id可选)，Owner核实并补齐ResourceVersionTarget三元组，错传document_id拒绝。
+4. job/确认计划actor_reference只存可信主体/credential引用与收窄摘要，不存token；恢复当前有效credential与原范围交集，不从user_id降格为普通person。人工retry重新鉴权并记录当前请求者，不能扩大冻结目标；旧已撤credential不通过隐式fallback复活。
+5. retry幂等用独立KnowledgeProcessingRetryReceipt（tenant/job/key唯一），同事务记录原请求hash/actor/revision及失败项reset。迟到已接受key只返回原receipt，不再启动下一轮；同key不同上下文冲突。
+6. Knowledge私有nullable JsonType `model_transition` 是业务切换配置（schema_version、operation_id、phase、source_model_id/target_model_id、source/target索引地址与generation）。building时原current与target槽均有效，任务读取target业务槽；业务切换到target后，旧model字段仅追溯而不作为历史任务绑定。旧配置缺失不从job.parameters恢复。job自身完成切换不当作用户后续变更令自己obsolete；新的模型意图/索引替换仍递增model_config_revision/目标generation。该字段及处理修订/origin只在ORM Knowledge，不扩旧公共Base DTO。业务阶段转换与出向模型引用R2同事务，由KN负责。
+7. separator空字符串是既有字符切分fallback，完整/partial规则允许该元素；归一化列表非空和rule长度校验保留，不新增算法。
+8. CURRENT完整性按发布canonical规则验证SQL动作/模型/Scope及派生数据，不能用静态Scope掩盖缺数据；合法窄Scope和全部停用时的已验证空状态保留。原marker的编辑往返provenance与prospective目标DTO一致性由T247–T252回归闭合。
+9. 移动/复制后数据源必须独立于源空间存活：跨空间移动先确保目标ES保存完整可重试的原Chunk/metadata（全版本），再允许源空间清理；仅更新SQL归属不能算源数据已安全。可在文本复制完成前用正常操作围栏拦源删除，向量失败保留目标文本供原任务/新重建恢复。沿现有ES文本与Milvus分工，不新增在途IO围栏/attempt staging。副本不继承migration_origin，索引/任务状态独立。
+
+10. 人工retry凭据来自本次接受的retry receipt，job初次actor作为审计事实保留；PROC Service/派发恢复必须按最新已接受收据的有效actor_reference重新恢复并收窄，不能继续使用旧job.actor隐式复活已撤凭据。
+
+11. 六内部Knowledge字段同时从原始ORM的JSON序列化排除，旧/create的Any envelope也不外泄；DB列与Owner属性仍保留。高级接口使用显式DTO；未来副本显式复制processing_defaults并初始化自己的版本，不用Knowledge.model_dump恢复内部字段，不继承origin/model_transition/index generation。
+12. F118高级管理写路径的租户pin覆盖FastAPI接受的全部整数写法（含URL编码+7/空白7），原缺header400/不匹配409保持；普通/v2边界不扩。10995通用提示仅说调整引用，支持force的具体资源UI才能显示强删确认。
+13. CURRENT仅经受控正式发布/停服迁移变更，startup不得再调用旧helper静态补Skill scope。canonical完整性核验覆盖current_catalog及启动/heartbeat绑定，缺失不静态回退；不新增每个原始SQL loader/每次Check的全目录tamper实时探测，发布外SQL损坏由下次绑定校验检测。
