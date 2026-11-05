@@ -69,8 +69,13 @@ def prepare(rt, owner, session, *, new_source=True, references=(MODEL,), effecti
             lock(_session)
 
     return rt.prepare_source_bindings(
-        session, KEY, references, extractor_version="source-v1", lock_source_root=lock_root,
-        new_source=new_source, effective=effective,
+        session,
+        KEY,
+        references,
+        extractor_version="source-v1",
+        lock_source_root=lock_root,
+        new_source=new_source,
+        effective=effective,
     )
 
 
@@ -109,8 +114,10 @@ def test_root_revision_change_between_candidate_and_lock_requires_retry(engine):
     rt, owner = runtime()
     with Session(engine) as session, session.begin():
         rt.apply_source_bindings(session, prepare(rt, owner, session))
+
         def change_root(s):
             rt.repository.advance_root_guard(s, KEY, expected_revision=1, new_revision=2)
+
         with pytest.raises(KnowledgeOperationPlanConflictError):
             prepare(rt, owner, session, new_source=False, lock=change_root)
 
@@ -144,10 +151,17 @@ async def test_native_async_prepare_apply_and_rollback():
             await conn.run_sync(lambda c: SQLModel.metadata.create_all(c, tables=refs.TABLES))
         with refs.tenant(101):
             async with AsyncSession(async_engine) as session:
+
                 async def lock_root(_session):
                     owner.events.append("async-root")
+
                 prepared = await rt.aprepare_source_bindings(
-                    session, KEY, (MODEL,), extractor_version="source-v1", lock_source_root=lock_root, new_source=True,
+                    session,
+                    KEY,
+                    (MODEL,),
+                    extractor_version="source-v1",
+                    lock_source_root=lock_root,
+                    new_source=True,
                 )
                 await rt.aapply_source_bindings(session, prepared)
                 assert owner.events == ["targets", "async-root"]
