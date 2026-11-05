@@ -1,6 +1,6 @@
 # F118 多 agent 开发边界与接入合同
 
-**阶段**：2026-11-05，spec 和技术设计已确认，按依赖实施中，W0/W1核心及W2保存/删除接线已推进。任务入口见 [tasks.md](./tasks.md)。本文件规定交接规则，不另立需求或新增通用平台。
+**阶段**：2026-11-05，spec 和技术设计已确认，按依赖实施中，W0/W1核心、W2保存/删除及W3运行准入已推进。任务入口见 [tasks.md](./tasks.md)。本文件规定交接规则，不另立需求或新增通用平台。
 
 ## 1. 开发方式
 
@@ -137,3 +137,12 @@ WF/AS/TARGET固定提交由其他agent只读archive复查；主agent只合入已
 冻结[execution-read-contract.md](./execution-read-contract.md)后从同一公共接口checkpoint建立W3独立WF/AS/REF lane。REF独占source scope/verifier/只读索引、KN/Model实际只读Owner和legacy；WF独占workflow SourceOwner/facade/两个WS/open/node及平台版本提示；AS独占SourceOwner/facade/Agent/Info/ChatClient。INT独占公共DTO/access/identity、common WorkflowClient/Manager Port接线、评测入口与SourceReadComposition及文档。每卡1–2叶子，必须合精确前驱SHA才接真实接口，纯fake只用于红测，不装生产。
 
 现有common ChatClient/WorkflowClient/Manager在冻结基线已含反向领域/API imports，本波不得新增这类依赖；新增common入口只依赖注入Port。主agent保留基线架构诊断逐项比对，不把脚本exit0误报为零诊断，整体架构债与本波新增违规分开记录。全特性审查尚未完成，不宣称既有架构债已清除。
+
+
+### W3合流与复核出口
+
+公共接口checkpoint53dd9962b后，REF先交实际只读scope/Runtime，再交KN/Model/legacy实际适配；WF/AS分别合精确前驱，最后INT串接common及两个启动hook。评测耦合在WF/AS稳定后短暂委托INT-EVAL独立lane；旧R2 clone修复短暂委托INT-PROOF，二者独占各自叶子，未与业务Owner并写。同一责任组可由空闲agent接手，但必须先显式转交文件；每卡仍1–2叶子。
+
+WF57c1b17ef、AS03ec42355（真实Target测试补98a23538e）、REF9dccf1ef7、PROOF871804492、EVAL6de5acd2e均经其他agent固定SHA独立复核；INT公共装配/common也经REF复核，状态切root补449ee813d。主agent按依赖正常merge，主工作区ac65c2fc5及其其他worktree保持不变；不宣称发版线远端最新。
+
+本波完成248/421项（较W2新增82项）；实际受测源码0c2587dbe5ec93135e06a45ed7615253a6a46ef1，1199 passed、6 subtests passed（46个pytest路径）。新增接缝保留红绿提交及等价fixture解释，T404/T405分享签发授权保未完成。最终独立复核、架构delta和真实环境限制见[W3集成记录](./wave3-implementation-review.md)；W1/W2统计保持历史语境，不累计测试次数。未推送、部署或运行数据迁移。

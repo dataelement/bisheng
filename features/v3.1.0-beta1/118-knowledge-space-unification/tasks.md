@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | W0/W1及W2保存/删除已合流，整体仍在开发 | 174 / 391 项；W3合同/公共DTO和显式访问已冻结，业务/只读实现待合流；未运行迁移 |
+| 实现 | W0/W1、W2及W3运行准入已合流，完整特性仍在开发 | 248 / 421 项；独立复查/组合测试见[W3记录](./wave3-implementation-review.md)，未运行迁移 |
 
 ## 领取与执行规则
 
@@ -334,19 +334,19 @@
   **配对测试**：T039\
   **验证 / 完成条件**：运行配对测试 T039；验证本卡预期，相关范围检查通过。
 
-- [ ] **T041 · 工作流执行可见准入：先写测试**
+- [x] **T041 · 工作流执行可见准入：先写测试**
   **类型 / Owner**：测试 / WF\
   **写入文件**：`src/backend/test/knowledge_unification/test_wf_entry.py`（拟新增）\
   **逻辑 / 测试上下文**：保存/preview/node facade对真实版本/完整graph与目标、原身份授权；saved召回保持原过滤，temporary须edit+实际知识visible，不造source。\
-  **依赖**：T354, T381, T347, T345\
+  **依赖**：T354, T344, T345\
   **覆盖 AC**: AC-37, AC-68, AC-79, AC-82, AC-83, AC-91\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T042 · 工作流执行可见准入**
+- [x] **T042 · 工作流执行可见准入**
   **类型 / Owner**：后端 Domain / WF\
   **写入文件**：`src/backend/bisheng/workflow/application/execution_admission.py`；`src/backend/bisheng/workflow/application/execution_port.py`\
   **逻辑 / 测试上下文**：集中saved/preview/node三个用例及bound Port，旧API/WS/open接线另T356/T358/T360，scope/原身份/渠道执行条件保持。\
-  **依赖**：T041, T351\
+  **依赖**：T041, T351, T381\
   **配对测试**：T041\
   **验证 / 完成条件**：运行配对测试 T041；验证本卡预期，相关范围检查通过。
 
@@ -2236,7 +2236,7 @@
   **覆盖 AC**: AC-37, AC-68, AC-79, AC-83, AC-91\
   **验证 / 完成条件**：记录实际红绿与独立复核，相关回归/ruff/架构/全提交diff-check通过；不把SQLite证明当真实双库或中间件验收。
 
-- [ ] **T283 · 助手Agent初始化失效准入**
+- [x] **T283 · 助手Agent初始化失效准入**
   **类型 / Owner**：后端 Domain / AS\
   **写入文件**：`src/backend/bisheng/api/services/assistant_agent.py`\
   **逻辑 / 测试上下文**：init/run/stream以原login_user与可选外部Session核当前配置引用，使用同快照links，不从invoke_user_id重建person；缓存配置不匹配明确10998。\
@@ -2323,7 +2323,7 @@
   **依赖**：T010\
   **验证 / 完成条件**：记录实际红绿与独立复核，相关回归/ruff/架构/全提交diff-check通过；不把SQLite证明当真实双库或中间件验收。
 
-- [ ] **T294 · 助手失效关联原ID出站：先写测试**
+- [x] **T294 · 助手失效关联原ID出站：先写测试**
   **类型 / Owner**：测试 / AS\
   **写入文件**：`src/backend/test/knowledge_unification/test_as_reference_view.py`\
   **逻辑 / 测试上下文**：实际Info读取不因目标行缺失而丢原关联ID，提供引用状态；不合成假的KnowledgeRead/owner/name，不泄露无权目标详情。\
@@ -2331,7 +2331,7 @@
   **覆盖 AC**: AC-68, AC-89, AC-91, AC-92\
   **验证 / 完成条件**：记录实际红绿与独立复核，相关回归/ruff/架构/全提交diff-check通过；不把SQLite证明当真实双库或中间件验收。
 
-- [ ] **T295 · 助手关联状态兼容DTO**
+- [x] **T295 · 助手关联状态兼容DTO**
   **类型 / Owner**：后端 Domain / AS\
   **写入文件**：`src/backend/bisheng/api/v1/schemas.py`；`src/backend/bisheng/api/services/assistant.py`\
   **逻辑 / 测试上下文**：在原Info协议显式给原knowledge IDs和状态，旧有效知识列表保留，新增knowledge_ids/reference_states的state与is_valid展示字段，缺失引用可见但不伪造资源元数据或公开内部authority字段。\
@@ -2741,7 +2741,7 @@
   **覆盖 AC**: AC-87, AC-89, AC-91\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T347 · 原身份与凭证范围指纹适配**
+- [x] **T347 · 原身份与凭证范围指纹适配**
   **类型 / Owner**：后端 Application / INT\
   **写入文件**：`src/backend/bisheng/resource_reference/application/read_identity.py`\
   **逻辑 / 测试上下文**：原user对象、真实PermissionActor/OpenAPI/public principal/trace及当前tenant，拒bypass，不存原token或降格身份。\
@@ -2764,7 +2764,7 @@
   **依赖**：T343\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T350 · 身份切换与凭证收窄红测**
+- [x] **T350 · 身份切换与凭证收窄红测**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_source_read_identity.py`\
   **逻辑 / 测试上下文**：JWT home与pin分开、SCA/PAT data scope/public资源上下文变化改变指纹，原对象不由ID重建。\
@@ -2786,7 +2786,7 @@
   **依赖**：T343\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T353 · 工作流真实SourceOwner红测**
+- [x] **T353 · 工作流真实SourceOwner红测**
   **类型 / Owner**：测试 / WF\
   **写入文件**：`src/backend/test/knowledge_unification/test_wf_source_owner.py`\
   **逻辑 / 测试上下文**：真实root/version/current/完整graph、原visible/edit、current重验、非current与public限制，精确scope不自报tenant。\
@@ -2794,7 +2794,7 @@
   **覆盖 AC**: AC-68, AC-79, AC-83, AC-87, AC-89, AC-91\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T354 · 工作流来源Owner和快照Repository**
+- [x] **T354 · 工作流来源Owner和快照Repository**
   **类型 / Owner**：后端 Application / WF\
   **写入文件**：`src/backend/bisheng/workflow/application/reference_source_owner.py`；`src/backend/bisheng/workflow/domain/repositories/reference_source_repository.py`\
   **逻辑 / 测试上下文**：真实列投影不污染外tenant identity map，source与normalize nodes/edges，targets后root/version锁并重授权。\
@@ -2802,7 +2802,7 @@
   **配对测试**：T353\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T355 · 单节点预览准入红测**
+- [x] **T355 · 单节点预览准入红测**
   **类型 / Owner**：测试 / WF\
   **写入文件**：`src/backend/test/knowledge_unification/test_wf_node_admission.py`\
   **逻辑 / 测试上下文**：临时节点edit、真实KN visible/模型共享、失效零运行，不造source或owner_query。\
@@ -2810,7 +2810,7 @@
   **覆盖 AC**: AC-37, AC-79, AC-83, AC-91\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T356 · run_once临时节点接线**
+- [x] **T356 · run_once临时节点接线**
   **类型 / Owner**：后端 Domain / WF\
   **写入文件**：`src/backend/bisheng/api/services/workflow.py`\
   **逻辑 / 测试上下文**：NodeFactory执行前调用workflow facade，保原节点输入/线程规则与BaseErrorCode。\
@@ -2818,7 +2818,7 @@
   **配对测试**：T355\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T357 · WS绑定执行Port端点红测**
+- [x] **T357 · WS绑定执行Port端点红测**
   **类型 / Owner**：测试 / WF\
   **写入文件**：`src/backend/test/knowledge_unification/test_wf_ws_admission.py`\
   **逻辑 / 测试上下文**：普通/public真实绑定trusted ID与原身份，public不可preview，optional version是提示非权限。\
@@ -2826,7 +2826,7 @@
   **覆盖 AC**: AC-68, AC-79, AC-83, AC-91\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T358 · 两WS端点注入绑定Port**
+- [x] **T358 · 两WS端点注入绑定Port**
   **类型 / Owner**：后端 API / WF\
   **写入文件**：`src/backend/bisheng/api/v1/workflow.py`；`src/backend/bisheng/public_endpoints/api/endpoints/workflow.py`\
   **逻辑 / 测试上下文**：保guest/session/snapshot和原online，按冻结common参数传Port，不从message信tenant/root。\
@@ -2834,7 +2834,7 @@
   **配对测试**：T357\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T359 · v2保存图及override红测**
+- [x] **T359 · v2保存图及override红测**
   **类型 / Owner**：测试 / WF\
   **写入文件**：`src/backend/test/knowledge_unification/test_wf_published_admission.py`\
   **逻辑 / 测试上下文**：真实saved source准入、原operator对象，深拷贝非ref override可行，ref-changing拒且零队列副作用。\
@@ -2842,7 +2842,7 @@
   **覆盖 AC**: AC-37, AC-68, AC-87, AC-91\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T360 · Published与开放入口准入接线**
+- [x] **T360 · Published与开放入口准入接线**
   **类型 / Owner**：后端 Domain / WF\
   **写入文件**：`src/backend/bisheng/workflow/domain/services/published_workflow_service.py`；`src/backend/bisheng/open_endpoints/api/endpoints/workflow.py`\
   **逻辑 / 测试上下文**：保原v2 scopes、session及online语义，真实准入图写Redis，operator ID不降格凭证。\
@@ -2850,14 +2850,14 @@
   **配对测试**：T359\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T361 · 平台预览携真实版本提示**
+- [x] **T361 · 平台预览携真实版本提示**
   **类型 / Owner**：前端 / WF\
   **写入文件**：`src/frontend/platform/src/pages/BuildPage/flow/FlowChat/ChatPane.tsx`\
   **逻辑 / 测试上下文**：仅原初始化消息增optional execution_mode/version_id，保原UI行为；根/版本仍由服务端验证。\
   **依赖**：T358\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T362 · 助手SourceOwner与token inspect红测**
+- [x] **T362 · 助手SourceOwner与token inspect红测**
   **类型 / Owner**：测试 / AS\
   **写入文件**：`src/backend/test/knowledge_unification/test_as_source_owner.py`\
   **逻辑 / 测试上下文**：同Session真实root/links/ACTIVE token及资源绑定；原actor、非授权Root拒、token不能run、锁后重新授权。\
@@ -2865,7 +2865,7 @@
   **覆盖 AC**: AC-68, AC-79, AC-83, AC-89\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T363 · 助手来源Owner与只读Repository**
+- [x] **T363 · 助手来源Owner与只读Repository**
   **类型 / Owner**：后端 Application / AS\
   **写入文件**：`src/backend/bisheng/assistant/application/reference_source_owner.py`；`src/backend/bisheng/assistant/domain/repositories/reference_source_repository.py`\
   **逻辑 / 测试上下文**：精确列投影真实snapshot，token重验同一外部Session；不setCurrentTenant、无内层commit。\
@@ -2873,23 +2873,23 @@
   **配对测试**：T362\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T364 · 助手准入facade红测**
+- [x] **T364 · 助手准入facade红测**
   **类型 / Owner**：测试 / AS\
   **写入文件**：`src/backend/test/knowledge_unification/test_as_execution_admission.py`\
   **逻辑 / 测试上下文**：owned/borrowed事务、原identity，完整refs、配置links快照一致，源缺index/失效拒，运行override分离。\
-  **依赖**：T363, T381, T347, T345\
+  **依赖**：T363, T344, T345\
   **覆盖 AC**: AC-37, AC-68, AC-89, AC-91, AC-92\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T365 · 助手执行与inspect facade**
+- [x] **T365 · 助手执行与inspect facade**
   **类型 / Owner**：后端 Application / AS\
   **写入文件**：`src/backend/bisheng/assistant/application/execution_admission.py`\
   **逻辑 / 测试上下文**：内部SourceReadRuntime只读，外部Session不begin/commit，普通入口自持读事务，未装配failclosed。\
-  **依赖**：T364\
+  **依赖**：T364, T381\
   **配对测试**：T364\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T366 · Agent每次执行及原凭证红测**
+- [x] **T366 · Agent每次执行及原凭证红测**
   **类型 / Owner**：测试 / AS\
   **写入文件**：`src/backend/test/knowledge_unification/test_as_runtime_admission.py`\
   **逻辑 / 测试上下文**：init/run/stream及cached source变更拒、原user与SCA/PAT收窄、无userID fallback、不扩大knowledge_auth。\
@@ -2897,7 +2897,7 @@
   **覆盖 AC**: AC-37, AC-68, AC-79, AC-83, AC-91\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T367 · 助手发布外部事务准入红测**
+- [x] **T367 · 助手发布外部事务准入红测**
   **类型 / Owner**：测试 / AS\
   **写入文件**：`src/backend/test/knowledge_unification/test_as_publish_admission.py`\
   **逻辑 / 测试上下文**：before_save传外部Session避免反锁；RPC runtime temperature不污染持久digest；失效零Agent执行/回滚。\
@@ -2905,7 +2905,7 @@
   **覆盖 AC**: AC-37, AC-68, AC-88, AC-91\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T368 · 发布及RPC传原身份和Session**
+- [x] **T368 · 发布及RPC传原身份和Session**
   **类型 / Owner**：后端 Domain / AS\
   **写入文件**：`src/backend/bisheng/api/services/assistant.py`；`src/backend/bisheng/assistant/domain/services/published_assistant_service.py`\
   **逻辑 / 测试上下文**：before_save(session,row)、Agent原user/reference_session；不用布尔skip，自动模型修复工具不误加完整source gate。\
@@ -2913,7 +2913,7 @@
   **配对测试**：T367\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T369 · 缓存ChatClient失配可恢复红测**
+- [x] **T369 · 缓存ChatClient失配可恢复红测**
   **类型 / Owner**：测试 / AS\
   **写入文件**：`src/backend/test/knowledge_unification/test_as_chat_admission.py`\
   **逻辑 / 测试上下文**：原login_user传给Agent、每消息原凭证与目标重验、10998清缓存后能重建，保流与会话行为。\
@@ -2921,7 +2921,7 @@
   **覆盖 AC**: AC-37, AC-68, AC-79, AC-83, AC-91\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T370 · ChatClient身份传递和缓存失效**
+- [x] **T370 · ChatClient身份传递和缓存失效**
   **类型 / Owner**：后端 Domain / AS\
   **写入文件**：`src/backend/bisheng/common/chat/client.py`\
   **逻辑 / 测试上下文**：只通过原有Agent入口传身份，无新增common反向领域import；失配清缓存，不重建普通person。\
@@ -2929,7 +2929,7 @@
   **配对测试**：T369\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T371 · 私有只读scope发行与隔离红测**
+- [x] **T371 · 私有只读scope发行与隔离红测**
   **类型 / Owner**：测试 / REF\
   **写入文件**：`src/backend/test/knowledge_unification/test_source_read_scope.py`\
   **逻辑 / 测试上下文**：actual Owner调用、原对象私有登记，换tx/身份/租户/purpose/复制拒、target-plan未发行不能先root重验。\
@@ -2937,7 +2937,7 @@
   **覆盖 AC**: AC-79, AC-83, AC-87, AC-89\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T372 · SourceReadVerifier及私有scope**
+- [x] **T372 · SourceReadVerifier及私有scope**
   **类型 / Owner**：后端 Application / REF\
   **写入文件**：`src/backend/bisheng/resource_reference/application/source_verification.py`\
   **逻辑 / 测试上下文**：独立R2外的只读authority；source/transient精准scope及target-plan前置，原身份FP校验。\
@@ -2945,7 +2945,7 @@
   **配对测试**：T371\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T373 · scope限定索引只读红测**
+- [x] **T373 · scope限定索引只读红测**
   **类型 / Owner**：测试 / REF\
   **写入文件**：`src/backend/test/knowledge_unification/test_source_read_repository.py`\
   **逻辑 / 测试上下文**：真实SQLModel listener、合法跨源精确列投影、零引用/root guard/原raw refs完整，拒forge/bypass/身份切换。\
@@ -2953,7 +2953,7 @@
   **覆盖 AC**: AC-87, AC-89\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T374 · Scoped索引Repository**
+- [x] **T374 · Scoped索引Repository**
   **类型 / Owner**：后端 Repository / REF\
   **写入文件**：`src/backend/bisheng/resource_reference/domain/repositories/source_read_repository.py`\
   **逻辑 / 测试上下文**：exact tenant/type/id/version short bypass，no_autoflush，无ORM污染/写入；R2旧Repo不扩权限。\
@@ -2961,7 +2961,7 @@
   **配对测试**：T373\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T375 · 实际只读TargetOwner红测**
+- [x] **T375 · 实际只读TargetOwner红测**
   **类型 / Owner**：测试 / REF\
   **写入文件**：`src/backend/test/knowledge_unification/test_knowledge_read_owner.py`；`src/backend/test/knowledge_unification/test_model_read_owner.py`\
   **逻辑 / 测试上下文**：source owner tenant事实+请求actor分离，全target有序锁，deleted/deleting/legacy/sharing revoked/nativeasync，不借root默认共享。\
@@ -2969,7 +2969,7 @@
   **覆盖 AC**: AC-37, AC-68, AC-89, AC-91, AC-92\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T376 · 知识只读TargetOwner与Repository**
+- [x] **T376 · 知识只读TargetOwner与Repository**
   **类型 / Owner**：后端 Application / REF\
   **写入文件**：`src/backend/bisheng/knowledge/application/source_read_target_owner.py`；`src/backend/bisheng/knowledge/domain/repositories/source_read_target_repository.py`\
   **逻辑 / 测试上下文**：实际space→file current锁、归属/tombstone与原legacy证明；每入口显式identity+同authority验scope。\
@@ -2977,7 +2977,7 @@
   **配对测试**：T375\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T377 · 模型只读TargetOwner与Repository**
+- [x] **T377 · 模型只读TargetOwner与Repository**
   **类型 / Owner**：后端 Application / REF\
   **写入文件**：`src/backend/bisheng/llm/application/source_read_target_owner.py`；`src/backend/bisheng/llm/domain/repositories/source_read_target_repository.py`\
   **逻辑 / 测试上下文**：实际server→models含共享默认依赖，按SourceOwnerTenant共享资格；原request actor不拿Root grant，不动现R2。\
@@ -2985,7 +2985,7 @@
   **配对测试**：T375\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T378 · Scoped冻结legacy证明红测**
+- [x] **T378 · Scoped冻结legacy证明红测**
   **类型 / Owner**：测试 / REF\
   **写入文件**：`src/backend/test/knowledge_unification/test_source_read_legacy.py`\
   **逻辑 / 测试上下文**：原source/target/run/key同scope，冻结descriptor及阶段；跨来源/换凭证/失败phase拒，不自造legacy/tombstone。\
@@ -2993,7 +2993,7 @@
   **覆盖 AC**: AC-89, AC-91, AC-93\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T379 · 只读legacy账本适配**
+- [x] **T379 · 只读legacy账本适配**
   **类型 / Owner**：后端 Application / REF\
   **写入文件**：`src/backend/bisheng/knowledge/application/reference_read_legacy_evidence.py`；`src/backend/bisheng/knowledge/domain/repositories/reference_read_legacy_evidence_repository.py`\
   **逻辑 / 测试上下文**：scope显式identity、同Session精确列投影，复用冻结语义，无Context切换/内Session/commit。\
@@ -3001,15 +3001,15 @@
   **配对测试**：T378\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T380 · 完整运行/inspect/preview只读Runtime红测**
+- [x] **T380 · 完整运行/inspect/preview只读Runtime红测**
   **类型 / Owner**：测试 / REF\
   **写入文件**：`src/backend/test/knowledge_unification/test_source_read_runtime.py`\
   **逻辑 / 测试上下文**：完整target→root→索引重读、revision/digest/extractor/配置变化拒、inspect/execute隔离，preview无source/index。\
-  **依赖**：T374, T376, T377\
+  **依赖**：T374, T344\
   **覆盖 AC**: AC-37, AC-68, AC-87, AC-89, AC-91, AC-92\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T381 · SourceReadRuntime协调**
+- [x] **T381 · SourceReadRuntime协调**
   **类型 / Owner**：后端 Application / REF\
   **写入文件**：`src/backend/bisheng/resource_reference/application/source_read.py`\
   **逻辑 / 测试上下文**：真实Owner组读取精确targets，private target-plan后重验root/index，失效执行拒、inspect不可借run，无内部事务写。\
@@ -3017,7 +3017,7 @@
   **配对测试**：T380\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T382 · common入队前准入与副作用红测**
+- [x] **T382 · common入队前准入与副作用红测**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_wf_client_admission.py`\
   **逻辑 / 测试上下文**：Port在check_status/建会话/Redis前、body换root/业务错误不变500，拒绝无副作用，原guest/snapshot不丢。\
@@ -3025,7 +3025,7 @@
   **覆盖 AC**: AC-37, AC-68, AC-79, AC-83, AC-91\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T383 · common工作流Client注入接线**
+- [x] **T383 · common工作流Client注入接线**
   **类型 / Owner**：后端 Domain / INT\
   **写入文件**：`src/backend/bisheng/common/chat/clients/workflow_client.py`；`src/backend/bisheng/common/chat/manager.py`\
   **逻辑 / 测试上下文**：显式转交Port到client，仅common接口，不新增domain/API反向依赖。\
@@ -3033,7 +3033,7 @@
   **配对测试**：T382\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T384 · 评测可信身份及来源准入红测**
+- [x] **T384 · 评测可信身份及来源准入红测**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_evaluation_reference_admission.py`\
   **逻辑 / 测试上下文**：JWT原identity、owner/tenant调度前核、真实指定version/AS当前source、拒绝在CSV/Redis/模型前，无任务模型绑定。\
@@ -3041,7 +3041,7 @@
   **覆盖 AC**: AC-68, AC-79, AC-83, AC-91\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T385 · 评测入口及执行身份接线**
+- [x] **T385 · 评测入口及执行身份接线**
   **类型 / Owner**：后端 Domain / INT\
   **写入文件**：`src/backend/bisheng/evaluation/api/endpoints/evaluation.py`；`src/backend/bisheng/evaluation/domain/services/evaluation_service.py`\
   **逻辑 / 测试上下文**：原login_user进BackgroundTasks，核真实evaluation owner/currenttenant，不凭任意ID冒充creator；各业务facade先于执行。\
@@ -3049,15 +3049,15 @@
   **配对测试**：T384\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T386 · 生产只读装配红测**
+- [x] **T386 · 生产只读装配红测**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_source_read_composition.py`\
   **逻辑 / 测试上下文**：实际SourceOwner/TargetOwner/identity/legacy同authority，API与worker既有register都安装，缺装配无fallback。\
-  **依赖**：T354, T363, T381, T347\
+  **依赖**：T354, T363, T381, T376, T377, T379, T347\
   **覆盖 AC**: AC-87, AC-89\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T387 · 生产只读Composition**
+- [x] **T387 · 生产只读Composition**
   **类型 / Owner**：后端 Composition / INT\
   **写入文件**：`src/backend/bisheng/resource_reference/read_composition.py`；`src/backend/bisheng/resource_reference/composition.py`\
   **逻辑 / 测试上下文**：在既有API/worker register同入口装配实际只读链，不加迁移健康gate、不恢复Root业务默认共享。\
@@ -3065,33 +3065,271 @@
   **配对测试**：T386\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T388 · W3合同与技术设计落地同步**
+- [x] **T388 · W3合同与技术设计落地同步**
   **类型 / Owner**：文档 / INT\
   **写入文件**：`features/v3.1.0-beta1/118-knowledge-space-unification/execution-read-contract.md`；`features/v3.1.0-beta1/118-knowledge-space-unification/design.md`\
   **逻辑 / 测试上下文**：同步真实接口/锁序/边界与未运行环境，94AC不改。\
   **依赖**：T383, T385, T387, T295, T360\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T389 · W3任务进度与并行交付同步**
+- [x] **T389 · W3任务进度与并行交付同步**
   **类型 / Owner**：文档 / INT\
   **写入文件**：`features/v3.1.0-beta1/118-knowledge-space-unification/tasks.md`；`features/v3.1.0-beta1/118-knowledge-space-unification/parallel-development.md`\
   **逻辑 / 测试上下文**：逐卡paths/依赖/配对测试与Owner准确，已完成数不代替AC验收。\
   **依赖**：T388\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T390 · W3升级与文档导航同步**
+- [x] **T390 · W3升级与文档导航同步**
   **类型 / Owner**：文档 / INT\
   **写入文件**：`features/v3.1.0-beta1/118-knowledge-space-unification/upgrade-guide.md`；`features/v3.1.0-beta1/118-knowledge-space-unification/README.md`\
   **逻辑 / 测试上下文**：Reader/执行就绪不替代停服基线冻结/回填/Coverage，记录本地验证限制。\
   **依赖**：T389\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
 
-- [ ] **T391 · W3 HTML与集成证据**
+- [x] **T391 · W3 HTML与集成证据**
   **类型 / Owner**：文档 / INT\
   **写入文件**：`docs/architecture/review/2026-11-03-bisheng-knowledge-unification-technical-review.html`；`features/v3.1.0-beta1/118-knowledge-space-unification/wave3-implementation-review.md`\
   **逻辑 / 测试上下文**：固定SHA复核、组合测试/架构delta及13SVG/锚点完整性，真实环境/E2E/迁移分开。\
   **依赖**：T390\
   **验证 / 完成条件**：实际红绿或接口结构验证、固定提交独立复核及主agent集成；不得用本地SQLite/SQL形状替代双库/真实服务/E2E。
+
+- [x] **T392 · 临时知识类型锁后当前读红测**
+  **类型 / Owner**：测试 / WF\
+  **写入文件**：`src/backend/test/knowledge_unification/test_wf_source_owner.py`\
+  **逻辑 / 测试上下文**：实际type0→3交错，候选无锁、final当前锁与library→space原授权，不以RR旧snapshot批准。\
+  **依赖**：T354\
+  **覆盖 AC**: AC-68, AC-79, AC-83, AC-87, AC-89, AC-91\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T393 · 临时知识授权重验当前类型**
+  **类型 / Owner**：后端 Application / WF\
+  **写入文件**：`src/backend/bisheng/workflow/application/reference_source_owner.py`；`src/backend/bisheng/workflow/domain/repositories/reference_source_repository.py`\
+  **逻辑 / 测试上下文**：候选不提前锁KN，targets后final用for_update/current type，不破坏Model→KN→root顺序。\
+  **依赖**：T392\
+  **配对测试**：T392\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T394 · 既有run_once线程回归适配**
+  **类型 / Owner**：测试 / WF\
+  **写入文件**：`src/backend/test/workflow/test_run_once_off_event_loop.py`\
+  **逻辑 / 测试上下文**：mock新准入Port返回原node/input，保offloop/tenant/工具IO全部断言并核原identity。\
+  **依赖**：T356\
+  **覆盖 AC**: AC-68, AC-79, AC-83, AC-87, AC-89, AC-91\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T395 · 分享token真实会话绑定红测**
+  **类型 / Owner**：测试 / AS\
+  **写入文件**：`src/backend/test/knowledge_unification/test_as_source_owner.py`\
+  **逻辑 / 测试上下文**：真实MessageSession绑定，metadata伪造/错root/type/deleted/issuer/tenant拒，Root源与用户叶租户分开。\
+  **依赖**：T363\
+  **覆盖 AC**: AC-68, AC-79, AC-83, AC-87, AC-89, AC-91\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T396 · 助手分享查看核真实会话**
+  **类型 / Owner**：后端 Application / AS\
+  **写入文件**：`src/backend/bisheng/assistant/application/reference_source_owner.py`；`src/backend/bisheng/assistant/domain/repositories/reference_source_repository.py`\
+  **逻辑 / 测试上下文**：ACTIVE token精确会话/原C3候选，不因token新增Source业务bypass，不把现有发行ACL说成已修。\
+  **依赖**：T395\
+  **配对测试**：T395\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T397 · 实际Core临时payload原文集成红测**
+  **类型 / Owner**：测试 / WF\
+  **写入文件**：`src/backend/test/knowledge_unification/test_wf_entry.py`\
+  **逻辑 / 测试上下文**：真实SourceOwner/Core/Identity/SQL索引，saved对照绿、preview额外root字段违反canonical原文红。\
+  **依赖**：T381, T354\
+  **覆盖 AC**: AC-68, AC-79, AC-83, AC-87, AC-89, AC-91\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T398 · 临时快照保持实际准入输入原文**
+  **类型 / Owner**：后端 Application / WF\
+  **写入文件**：`src/backend/bisheng/workflow/application/reference_source_owner.py`\
+  **逻辑 / 测试上下文**：临时payload仅graph/node_input，RootID/ownerTenant在专用事实字段及最终真实授权，不把Root事实硬塞客户端请求。\
+  **依赖**：T397\
+  **配对测试**：T397\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T399 · 工作流候选后软删错误归类红测**
+  **类型 / Owner**：测试 / WF\
+  **写入文件**：`src/backend/test/knowledge_unification/test_wf_source_owner.py`\
+  **逻辑 / 测试上下文**：root/version/临时root在候选后消失应10998，初查仍404，原auth与coverage错误不吞。\
+  **依赖**：T398\
+  **覆盖 AC**: AC-68, AC-79, AC-83, AC-87, AC-89, AC-91\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T400 · 最终重验丢失按配置变化报错**
+  **类型 / Owner**：后端 Application / WF\
+  **写入文件**：`src/backend/bisheng/workflow/application/reference_source_owner.py`\
+  **逻辑 / 测试上下文**：仅final捕NotFound→10998，候选与其他异常原样失败。\
+  **依赖**：T399\
+  **配对测试**：T399\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T401 · 助手首次初始化失败缓存红测**
+  **类型 / Owner**：测试 / AS\
+  **写入文件**：`src/backend/test/knowledge_unification/test_as_chat_admission.py`\
+  **逻辑 / 测试上下文**：首次10996后手修再发消息，必须重新创建并初始化，不复用未完成Agent。\
+  **依赖**：T370\
+  **覆盖 AC**: AC-68, AC-79, AC-83, AC-87, AC-89, AC-91\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T402 · Agent成功初始化后才缓存**
+  **类型 / Owner**：后端 Domain / AS\
+  **写入文件**：`src/backend/bisheng/common/chat/client.py`\
+  **逻辑 / 测试上下文**：局部candidate成功后赋cache，保持原identity/调用流程，不加无权限fallback。\
+  **依赖**：T401\
+  **配对测试**：T401\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T403 · 旧knowledge_auth回归等价适配**
+  **类型 / Owner**：测试 / AS\
+  **写入文件**：`src/backend/test/api/test_assistant_knowledge_auth_gate.py`\
+  **逻辑 / 测试上下文**：真实UserPayload+已准入links替退休DAO mock，保ON/OFF原断言，禁止独立DAO重读并核对象is。\
+  **依赖**：T283\
+  **覆盖 AC**: AC-68, AC-79, AC-83, AC-87, AC-89, AC-91\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [ ] **T404 · 分享链接签发资源授权红测（独立待办）**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/backend/test/share_link/test_source_link_issuance.py`\
+  **逻辑 / 测试上下文**：已确认旧generate接口仅JWT并直接持久resource/meta，需独立验证share动作/真实会话归属与来源，不与本波ACTIVE查看兼容混称闭合。\
+  **依赖**：T396\
+  **覆盖 AC**: AC-68, AC-79, AC-83, AC-87, AC-89, AC-91\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [ ] **T405 · 分享链接签发授权加固（发行前待办）**
+  **类型 / Owner**：后端 Domain / EDGE\
+  **写入文件**：`src/backend/bisheng/share_link/domain/services/share_link_service.py`；`src/backend/bisheng/share_link/domain/repositories/source_link_repository.py`\
+  **逻辑 / 测试上下文**：待单独明确旧token信任/撤销兼容后落实，不能把生成端缺ACL转成新Root/任意Child源读取。本波不改变既有ACTIVE/expiry语义。\
+  **依赖**：T404\
+  **配对测试**：T404\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T406 · WS非法mode容器形状红测**
+  **类型 / Owner**：测试 / WF\
+  **写入文件**：`src/backend/test/knowledge_unification/test_wf_entry.py`\
+  **逻辑 / 测试上下文**：list/dict mode稳定10996且零getter/授权/数据副作用，不能TypeError500。\
+  **依赖**：T042\
+  **覆盖 AC**: AC-68, AC-79, AC-83, AC-87, AC-89, AC-91\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T407 · 执行mode按类型校验**
+  **类型 / Owner**：后端 Application / WF\
+  **写入文件**：`src/backend/bisheng/workflow/application/execution_admission.py`\
+  **逻辑 / 测试上下文**：str/None显式校验，不hash任意WS claim；正常saved/preview不变。\
+  **依赖**：T406\
+  **配对测试**：T406\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T408 · 助手既有绑定fixture真实类适配**
+  **类型 / Owner**：测试 / AS\
+  **写入文件**：`src/backend/test/knowledge_unification/test_as_bindings.py`\
+  **逻辑 / 测试上下文**：从真实模型类patch原三DAO方法，保全部SQL/业务断言，不为旧module alias重新引无用生产依赖。\
+  **依赖**：T295\
+  **覆盖 AC**: AC-68, AC-79, AC-83, AC-87, AC-89, AC-91\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T409 · Scope equality/hash子类克隆红测**
+  **类型 / Owner**：测试 / REF\
+  **写入文件**：`src/backend/test/knowledge_unification/test_source_read_scope.py`\
+  **逻辑 / 测试上下文**：模拟等价hash子类copy命中WeakKey，正常原scope控制继续可读；不是自造Root授权。\
+  **依赖**：T372\
+  **覆盖 AC**: AC-68, AC-79, AC-83, AC-87, AC-89, AC-91\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T410 · Scope私有发行原对象身份校验**
+  **类型 / Owner**：后端 Application / REF\
+  **写入文件**：`src/backend/bisheng/resource_reference/application/source_verification.py`\
+  **逻辑 / 测试上下文**：私有registration weakref() is scope，不能只依赖eq=False或WeakKey membership。\
+  **依赖**：T409\
+  **配对测试**：T409\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T411 · 旧R2收据及反查scope子类克隆红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_ref_verification.py`；`src/backend/test/knowledge_unification/test_ref_repo.py`\
+  **逻辑 / 测试上下文**：实际SQL deleted/legacy新槽正常拒，eq/hash clone篡改VALID不得过；OwnerTargetScope clone同步/async同拒。\
+  **依赖**：T410\
+  **覆盖 AC**: AC-68, AC-79, AC-83, AC-87, AC-89, AC-91\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T412 · R2私有收据及反查scope原对象核验**
+  **类型 / Owner**：后端 Application / INT\
+  **写入文件**：`src/backend/bisheng/resource_reference/application/target_verification.py`；`src/backend/bisheng/resource_reference/domain/repositories/reference_repository.py`\
+  **逻辑 / 测试上下文**：仅复现后加private weakref原对象门槛，不变公开DTO/签名/目标锁序或新W3读取实现。\
+  **依赖**：T411\
+  **配对测试**：T411\
+  **验证 / 完成条件**：保存实际红绿/固定SHA独立复核及主集成结果，真实环境验证单列，未完成发行前待办不得勾选。
+
+- [x] **T413 · 既有评测进度回归等价适配**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/evaluation/test_evaluation_progress.py`\
+  **逻辑 / 测试上下文**：真实原UserPayload和新facade替旧DAO假设，保原CSV/进度/失败处理断言。\
+  **依赖**：T385\
+  **覆盖 AC**: AC-68, AC-79, AC-83, AC-87, AC-89, AC-91\
+  **验证 / 完成条件**：固定SHA独立复核、实际回归及主集成；本地验证不替代双库/真实服务/E2E。
+
+- [x] **T414 · 读取legacy证据Port类型冻结**
+  **类型 / Owner**：基础设施 / INT\
+  **写入文件**：`src/backend/bisheng/resource_reference/application/source_contracts.py`\
+  **逻辑 / 测试上下文**：显式aresolve同scope/source/target/run/key/identity协议，无生产IO或授权变化。\
+  **依赖**：T379\
+  **验证 / 完成条件**：固定SHA独立复核、实际回归及主集成；本地验证不替代双库/真实服务/E2E。
+
+- [x] **T415 · 真实JWT web_session身份红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_evaluation_reference_admission.py`\
+  **逻辑 / 测试上下文**：实际get_login_user签发web_session；正常JWT及homeTenant不同管理pin应可用，非web/伪字段和OpenAPI/Public拒。\
+  **依赖**：T385\
+  **覆盖 AC**: AC-68, AC-79, AC-83, AC-87, AC-89, AC-91\
+  **验证 / 完成条件**：固定SHA独立复核、实际回归及主集成；本地验证不替代双库/真实服务/E2E。
+
+- [x] **T416 · 评测准入接受原JWT会话凭据**
+  **类型 / Owner**：后端 Domain / INT\
+  **写入文件**：`src/backend/bisheng/evaluation/domain/services/evaluation_service.py`\
+  **逻辑 / 测试上下文**：核web_session原user/homeTenant/tokenVersion一致，管理pin独立；不重建身份或放宽eval owner/tenant。\
+  **依赖**：T415\
+  **配对测试**：T415\
+  **验证 / 完成条件**：固定SHA独立复核、实际回归及主集成；本地验证不替代双库/真实服务/E2E。
+
+- [x] **T417 · 状态查询不可切换连接根红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_wf_client_admission.py`\
+  **逻辑 / 测试上下文**：action check_status和直接调用均在会话/Redis前拒body切root，保持原client状态且10996。\
+  **依赖**：T383\
+  **覆盖 AC**: AC-68, AC-79, AC-83, AC-87, AC-89, AC-91\
+  **验证 / 完成条件**：固定SHA独立复核、实际回归及主集成；本地验证不替代双库/真实服务/E2E。
+
+- [x] **T418 · 所有WF消息保持可信连接根**
+  **类型 / Owner**：后端 Application / INT\
+  **写入文件**：`src/backend/bisheng/common/chat/clients/workflow_client.py`\
+  **逻辑 / 测试上下文**：只补endpoint绑定root校验，状态查询不再用未经核对的body选源，不扩大worker在途/旧session治理。\
+  **依赖**：T417\
+  **配对测试**：T417\
+  **验证 / 完成条件**：固定SHA独立复核、实际回归及主集成；本地验证不替代双库/真实服务/E2E。
+
+- [x] **T419 · 存储字段回归补显式租户fixture**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_legacy_knowledge_wire.py`\
+  **逻辑 / 测试上下文**：固定旧4d49组合也复现C3缺Context，注入tenant_context(101)并保所有列/Owner/JSON隐去断言，不绕过生产C3。\
+  **依赖**：T267\
+  **覆盖 AC**: AC-68, AC-79, AC-83, AC-87, AC-89, AC-91\
+  **验证 / 完成条件**：固定SHA独立复核、实际回归及主集成；本地验证不替代双库/真实服务/E2E。
+
+- [x] **T420 · W3实际入口盘点更新**
+  **类型 / Owner**：文档 / INT\
+  **写入文件**：`features/v3.1.0-beta1/118-knowledge-space-unification/execution-entrypoints.md`\
+  **逻辑 / 测试上下文**：原W2盘点保历史语境，补W3实际入口及仍未完成范围，不把其他来源或真实环境声称完成。\
+  **依赖**：T388\
+  **验证 / 完成条件**：固定SHA独立复核、实际回归及主集成；本地验证不替代双库/真实服务/E2E。
+
+- [x] **T421 · 既有自动重跑配置回归等价适配**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/common/test_workflow_auto_rerun_config.py`\
+  **逻辑 / 测试上下文**：原4d49同文件2fail/12pass；补既有OpenApiConf及原wire code_node_enabled=False，保strict字典及自动重跑/异常failclosed断言，不改生产或隐藏字段。\
+  **依赖**：T418\
+  **覆盖 AC**: AC-68, AC-79, AC-83, AC-91\
+  **验证 / 完成条件**：固定基线归因、14项绿、主agent复核单叶diff与最终组合，真实服务/E2E单列。
 
 ## 自动化覆盖索引
 
@@ -3166,7 +3404,7 @@
 | AC-65 | T093, T125, T196, T210, T228, T267 |
 | AC-66 | T069, T125, T131, T133, T151, T196, T210, T222, T226, T228, T229, T233, T265, T267 |
 | AC-67 | T101, T125, T131, T210, T228 |
-| AC-68 | T029, T037, T039, T041, T045, T047, T051, T125, T129, T131, T133, T137, T139, T147, T149, T151, T210, T222, T267, T281, T282, T284, T286, T294, T296, T297, T298, T305, T307, T309, T317, T321, T325, T331, T334, T353, T357, T359, T362, T364, T366, T367, T369, T375, T380, T382, T384 |
+| AC-68 | T029, T037, T039, T041, T045, T047, T051, T125, T129, T131, T133, T137, T139, T147, T149, T151, T210, T222, T267, T281, T282, T284, T286, T294, T296, T297, T298, T305, T307, T309, T317, T321, T325, T331, T334, T353, T357, T359, T362, T364, T366, T367, T369, T375, T380, T382, T384, T392, T394, T395, T397, T399, T401, T403, T404, T406, T408, T409, T411, T413, T415, T417, T419, T421 |
 | AC-69 | T125, T133, T210 |
 | AC-70 | T093, T111, T113, T115, T119, T202, T209 |
 | AC-71 | T029, T031, T035, T037, T043, T045, T047, T049, T053, T055, T057, T093, T111, T139, T167, T202, T209, T276, T286, T319 |
@@ -3177,19 +3415,19 @@
 | AC-76 | T111, T113, T115, T117, T119, T202, T209, T229 |
 | AC-77 | T113, T115, T117, T119, T202, T209 |
 | AC-78 | T019, T021, T025, T027, T127, T135, T153, T155, T157, T202, T204, T215, T217, T224, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T271, T272, T273, T323 |
-| AC-79 | T023, T025, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T202, T204, T210, T222, T224, T226, T239, T240, T241, T242, T271, T282, T305, T307, T315, T323, T329, T337, T350, T353, T355, T357, T362, T366, T369, T371, T382, T384 |
+| AC-79 | T023, T025, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T202, T204, T210, T222, T224, T226, T239, T240, T241, T242, T271, T282, T305, T307, T315, T323, T329, T337, T350, T353, T355, T357, T362, T366, T369, T371, T382, T384, T392, T394, T395, T397, T399, T401, T403, T404, T406, T408, T409, T411, T413, T415, T417, T419, T421 |
 | AC-80 | T019, T023, T027, T153, T157, T161, T169, T173, T202, T203, T204, T211, T215, T217, T228, T235, T239, T240, T241, T242, T249, T251, T263, T264, T269, T271, T272, T323 |
 | AC-81 | T019, T021, T023, T027, T135, T153, T157, T202, T203, T204, T211, T215, T217, T224, T228, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T271, T272, T323 |
 | AC-82 | T019, T025, T041, T051, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T155, T202, T204, T210, T222, T226, T239, T240, T241, T242 |
-| AC-83 | T021, T023, T025, T027, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T157, T196, T202, T204, T210, T215, T217, T222, T224, T226, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T272, T273, T282, T315, T323, T329, T350, T353, T355, T357, T362, T366, T369, T371, T382, T384 |
+| AC-83 | T021, T023, T025, T027, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T157, T196, T202, T204, T210, T215, T217, T222, T224, T226, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T272, T273, T282, T315, T323, T329, T350, T353, T355, T357, T362, T366, T369, T371, T382, T384, T392, T394, T395, T397, T399, T401, T403, T404, T406, T408, T409, T411, T413, T415, T417, T419, T421 |
 | AC-84 | T081, T095, T109, T121, T202, T204, T220, T265 |
 | AC-85 | T075, T157, T159, T161, T173, T202, T203, T211 |
 | AC-86 | T061, T063, T065, T067, T073, T075, T097, T149, T202, T208 |
-| AC-87 | T013, T015, T029, T031, T033, T035, T039, T043, T045, T047, T053, T055, T057, T079, T091, T093, T095, T097, T109, T139, T167, T202, T209, T253, T256, T274, T276, T279, T284, T286, T290, T298, T300, T303, T305, T307, T309, T311, T315, T317, T325, T326, T329, T331, T334, T337, T346, T350, T353, T359, T371, T373, T380, T386 |
+| AC-87 | T013, T015, T029, T031, T033, T035, T039, T043, T045, T047, T053, T055, T057, T079, T091, T093, T095, T097, T109, T139, T167, T202, T209, T253, T256, T274, T276, T279, T284, T286, T290, T298, T300, T303, T305, T307, T309, T311, T315, T317, T325, T326, T329, T331, T334, T337, T346, T350, T353, T359, T371, T373, T380, T386, T392, T394, T395, T397, T399, T401, T403, T404, T406, T408, T409, T411, T413, T415, T417, T419 |
 | AC-88 | T013, T015, T031, T033, T035, T037, T039, T043, T045, T047, T049, T053, T055, T057, T091, T093, T109, T167, T202, T209, T253, T256, T257, T274, T279, T284, T286, T290, T296, T298, T300, T303, T305, T307, T309, T311, T317, T325, T326, T331, T334, T337, T367 |
-| AC-89 | T013, T015, T017, T029, T033, T039, T047, T055, T093, T103, T111, T159, T167, T169, T171, T173, T202, T203, T209, T211, T228, T229, T253, T256, T257, T274, T276, T279, T281, T284, T286, T288, T290, T294, T300, T303, T309, T311, T317, T319, T321, T334, T337, T346, T348, T353, T362, T364, T371, T373, T375, T378, T380, T386 |
+| AC-89 | T013, T015, T017, T029, T033, T039, T047, T055, T093, T103, T111, T159, T167, T169, T171, T173, T202, T203, T209, T211, T228, T229, T253, T256, T257, T274, T276, T279, T281, T284, T286, T288, T290, T294, T300, T303, T309, T311, T317, T319, T321, T334, T337, T346, T348, T353, T362, T364, T371, T373, T375, T378, T380, T386, T392, T394, T395, T397, T399, T401, T403, T404, T406, T408, T409, T411, T413, T415, T417, T419 |
 | AC-90 | T017, T103, T109, T117, T119, T171, T202, T209, T229, T257, T279 |
-| AC-91 | T015, T017, T037, T039, T041, T045, T049, T053, T103, T109, T117, T129, T139, T141, T167, T202, T209, T253, T256, T257, T274, T279, T281, T282, T288, T294, T297, T309, T315, T321, T326, T329, T331, T346, T353, T355, T357, T359, T364, T366, T367, T369, T375, T378, T380, T382, T384 |
+| AC-91 | T015, T017, T037, T039, T041, T045, T049, T053, T103, T109, T117, T129, T139, T141, T167, T202, T209, T253, T256, T257, T274, T279, T281, T282, T288, T294, T297, T309, T315, T321, T326, T329, T331, T346, T353, T355, T357, T359, T364, T366, T367, T369, T375, T378, T380, T382, T384, T392, T394, T395, T397, T399, T401, T403, T404, T406, T408, T409, T411, T413, T415, T417, T419, T421 |
 | AC-92 | T015, T037, T039, T045, T049, T053, T109, T117, T202, T209, T257, T279, T281, T294, T315, T329, T331, T364, T375, T380 |
 | AC-93 | T017, T159, T161, T167, T169, T173, T202, T203, T209, T211, T288, T378 |
 | AC-94 | T085, T103, T105, T107, T202, T206, T209 |
@@ -3241,3 +3479,10 @@ T034/T044新Repository/提取器路径按C1纠正，既有DAO不新增入口。�
 从d52825f9e延续功能基线；主工作区ac65c2fc5干净，未合入其并发变化。三agent先只读审计并交叉复核[运行/共享来源合同V1](./execution-read-contract.md)，root修正目标/legacy各入口identity、targets后root重验及canonical JSON/完整graph投影。新增T343–T391，原T041/T042/T283/T294/T295补真实依赖与叶子；不是需求AC变更。
 
 W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFound红→T345访问口2绿，组合10通过。T343/352合同、唯一Owner/DAG和343–391叶子登记完成；T349/351为无业务IO的身份getter/Protocol接口，经结构/架构核验。实际Reader、身份fingerprint和SourceOwner尚未装配，不宣称运行准入已上线。
+
+
+## W3集成出口（2026-11-05）
+
+先冻结[执行/读取合同](./execution-read-contract.md)，WF/AS/REF独立lane并行，INT统一common、原身份与实际API/worker装配；后续评测与原R2 clone加固按显式交接独占叶子。固定SHA交叉复核后主agent合流。T041/T042/T283/T294/T295及T343–T421除T404/T405外完成，当前248/421项，本波较W2新增82项完成；签发ACL与其他未完成业务不勾选。
+
+受测源码0c2587dbe5ec93135e06a45ed7615253a6a46ef1，1199 passed、6 subtests passed（46个pytest路径），无fail/skip；Ruff/格式70文件通过，架构新增违规0且既有6条RULE-1/2条RULE-3已单列。红绿、等价fixture、任务级L1及限制见[W3集成记录](./wave3-implementation-review.md)。W1/W2验证为历史快照，不累计。主工作区保持原ac65c2fc5；无push/部署/迁移，真实双库/FGA/队列/检索/模型/浏览器E2E和CI均未运行。
