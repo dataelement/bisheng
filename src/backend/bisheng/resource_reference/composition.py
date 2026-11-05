@@ -17,6 +17,8 @@ _runtime: ReferenceBindingRuntime | None = None
 
 
 def register() -> None:
+    from bisheng.resource_reference.read_composition import register as register_source_reads
+
     global _runtime
     if _runtime is None:
         evidence = KnowledgeLegacyReferenceEvidence()
@@ -27,3 +29,4 @@ def register() -> None:
         )
         _runtime = ReferenceBindingRuntime(ReferenceRepository(verifier=verifier), verifier)
     configure_reference_binding_runtime(_runtime)
+    register_source_reads()
