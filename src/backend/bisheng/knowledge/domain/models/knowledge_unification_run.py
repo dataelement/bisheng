@@ -6,6 +6,7 @@ Empty-tenant initialization is explicitly distinct from a migration baseline.
 """
 
 from datetime import UTC, datetime
+from enum import Enum
 from uuid import uuid4
 
 from sqlalchemy import CheckConstraint, Column, Index, Integer, UniqueConstraint, text
@@ -17,6 +18,26 @@ from bisheng.core.database.dialect_helpers import JsonType
 
 def unification_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+class KnowledgeUnificationPhase(str, Enum):
+    PREPARING = "preparing"
+    BASELINE_FROZEN = "baseline_frozen"
+    CONVERTING = "converting"
+    BACKFILLING = "backfilling"
+    VERIFYING = "verifying"
+    VERIFIED = "verified"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+# Once frozen, provenance survives the remaining successful migration phases.
+# A failed run cannot serve online proof until its explicit recovery succeeds.
+FROZEN_BASELINE_PHASES = frozenset(
+    phase.value
+    for phase in KnowledgeUnificationPhase
+    if phase not in (KnowledgeUnificationPhase.PREPARING, KnowledgeUnificationPhase.FAILED)
+)
 
 
 class KnowledgeUnificationRun(SQLModelSerializable, table=True):
