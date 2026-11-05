@@ -18,7 +18,11 @@ from bisheng.assistant.domain.services.reference_extractor import (
     ASSISTANT_REFERENCE_EXTRACTOR_VERSION,
     extract_assistant_references,
 )
-from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeProcessingConflictError,
+    ReferenceCoverageNotReadyError,
+    ResourceReferenceInvalidError,
+)
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantStatus
 from bisheng.resource_reference.application.contracts import (
     DeletionEvidence,
@@ -261,6 +265,21 @@ async def test_update_failure_rolls_back_model_and_knowledge_selection(assistant
     assert (assistant.name, assistant.model_name) == ("original", "1")
     assert [link.knowledge_id for link in links] == [10]
     assert {(ref.slot_key, ref.target_id) for ref in references} == {("model_name", "1"), ("knowledge_list", "10")}
+
+
+async def test_configuration_drift_requires_explicit_reconciliation(assistant_business):
+    context = assistant_business
+    await seed(context)
+    async with context.sessions() as session:
+        await session.execute(
+            update(Assistant).where(Assistant.tenant_id == 101, Assistant.id == "assistant-a").values(model_name="2")
+        )
+        await session.commit()
+    with pytest.raises(ReferenceCoverageNotReadyError):
+        await AssistantService.update_prompt("assistant-a", "changed", context.user)
+    assistant, _, references, _ = await inspect_business(context)
+    assert assistant.model_name == "2" and assistant.prompt == ""
+    assert {ref.target_id for ref in references} == {"1", "10"}
 
 
 async def test_partial_invalid_repair_saves_but_still_cannot_execute(assistant_business):
