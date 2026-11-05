@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工作流逻辑删除设计摘要</title>
+<style>
+:root{--ink:#203148;--muted:#53657a;--blue:#245cad;--line:#dce4ef;--bg:#f2f5f9;--tint:#eef4fd;--green:#21644f;--amber:#84540f}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.7 "PingFang SC","Microsoft YaHei",sans-serif}main{max-width:1080px;margin:36px auto;background:#fff;padding:44px 56px;border-top:5px solid var(--blue)}
+.meta{display:flex;gap:10px 24px;flex-wrap:wrap;font-size:13px;color:var(--muted)}.meta strong{color:var(--amber);font-weight:500}h1{font-size:34px;line-height:1.3;margin:20px 0 14px;letter-spacing:-.7px}h2{font-size:22px;margin:0 0 16px;line-height:1.4}h3{font-size:16px;margin:0 0 8px}p{margin:0 0 12px}.lead{font-size:19px;max-width:760px}.muted,.caption{color:var(--muted);font-size:14px}.caption{margin:12px 0 0}.section{border-top:1px solid var(--line);padding:28px 0}header{padding-bottom:22px}
+.effect{display:grid;grid-template-columns:1fr 44px 1fr;gap:14px;align-items:center}.sheet{border:1px solid var(--line);border-radius:6px;padding:18px 22px;min-width:0}.sheet.after{border-color:#b7cbe8;background:var(--tint)}.sheet-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:16px}.sheet-head h3{margin:0}.badge{font-size:12px;border:1px solid #a9bfdf;padding:1px 7px;border-radius:4px;white-space:nowrap}.sheet.after .badge{background:#fff;color:var(--blue)}.asset{display:flex;justify-content:space-between;gap:15px;padding:9px 0;border-top:1px solid var(--line);font-size:15px}.asset span:last-child{color:var(--muted)}.asset .retained{color:var(--green)!important;font-weight:600}.asset .blocked{color:var(--blue)!important;font-weight:600}.arrow{color:var(--blue);text-align:center;font-size:25px}
+.journey{display:flex;gap:9px;align-items:stretch;margin:6px 0 18px}.step{flex:1;min-width:0;background:var(--bg);padding:16px 15px;border-radius:4px;border-top:3px solid #b1c6e2}.step.primary{border-top-color:var(--blue);background:var(--tint)}.step small{color:var(--blue);font-size:12px}.step strong{display:block;font-size:16px;margin:5px 0}.step p{color:var(--muted);font-size:14px;margin:0}.connector{align-self:center;color:var(--muted)}
+.guards{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}.guard{padding-left:15px;border-left:3px solid var(--blue)}.guard p{font-size:14px;color:var(--muted);margin:0}.tradeoffs{display:grid;grid-template-columns:1fr 1fr;gap:28px}.tradeoffs p{font-size:15px}.tradeoffs h3{color:var(--amber)}.boundary{font-size:14px;color:var(--muted);margin:16px 0 0}.decision{padding:22px 24px;background:var(--tint);border-radius:5px}.decision h2{font-size:21px;margin-bottom:10px}.decision p{margin:0}.decision .muted{margin-top:10px}
+details{border-top:1px solid var(--line);margin-top:28px;padding:18px 0}summary{cursor:pointer;font-weight:600}summary:hover{color:var(--blue)}summary:focus-visible,a:focus-visible{outline:3px solid var(--blue);outline-offset:5px}.appendix{font-size:14px;color:var(--muted);padding-top:16px}.appendix h3{color:var(--ink);margin-top:20px}.appendix ul{padding-left:22px}table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;vertical-align:top;padding:10px 12px 10px 0;border-bottom:1px solid var(--line)}th{font-weight:600;color:var(--ink)}td:first-child{width:23%;color:var(--ink)}code{font:12px/1.6 ui-monospace,monospace;background:var(--bg);padding:2px 4px;border-radius:3px}a{color:var(--blue);text-underline-offset:3px}footer{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;display:flex;justify-content:space-between;gap:16px}
+@media(max-width:760px){main{margin:0;padding:28px 22px}h1{font-size:28px}.lead{font-size:17px}.effect{grid-template-columns:1fr;gap:7px}.effect>.arrow{transform:rotate(90deg);line-height:1.2}.journey{flex-direction:column}.connector{transform:rotate(90deg)}.step{padding:12px 16px}.guards,.tradeoffs{grid-template-columns:1fr;gap:18px}.section{padding:24px 0}.sheet{padding:16px 18px}.meta{gap:5px 16px}footer{flex-direction:column;gap:5px}td:first-child{width:30%}}
+@media print{body{background:#fff;font-size:10pt}main{margin:0;padding:16px 0;max-width:none}h1{font-size:25pt}h2{font-size:16pt}.lead{font-size:12pt}.section{padding:18px 0}.sheet,.journey,.guards,.tradeoffs,.decision{break-inside:avoid}.step p,.caption,.guard p,.boundary{font-size:9pt}details{display:none}footer{font-size:8pt}}
+</style>
+</head>
+<body><main>
+<header>
+<div class="meta"><span>BiSheng v3.1.0-beta1</span><span>2026 年 11 月 4 日</span><strong>设计已确认 · 已实现 · 待环境验收</strong></div>
+<h1>工作流删除后，数据保留，入口关闭</h1>
+<p class="lead">主记录只增加一个删除标记。用户不能再找到或新使用这个工作流，原来的定义、版本和历史仍保留。</p>
+<p class="muted">设计摘要：先看效果，再看流程与取舍；研发定位信息收在页尾。</p>
+</header>
+
+<section class="section" aria-labelledby="effect-title">
+<h2 id="effect-title">改完是什么效果</h2>
+<div class="effect" aria-label="未删除与删除后的行为对照">
+<div class="sheet"><div class="sheet-head"><h3>删除前</h3><span class="badge">未删除</span></div>
+<div class="asset"><span>应用列表 / 搜索</span><span>可见</span></div>
+<div class="asset"><span>编辑 / 发布 / 新调用</span><span>按原有权限使用</span></div>
+<div class="asset"><span>定义 / 版本 / 历史</span><span>正常保留</span></div></div>
+<div class="arrow" aria-hidden="true">→</div>
+<div class="sheet after"><div class="sheet-head"><h3>删除后</h3><span class="badge">已删除</span></div>
+<div class="asset"><span>应用列表 / 搜索</span><span class="blocked">不再显示</span></div>
+<div class="asset"><span>编辑 / 发布 / 新调用</span><span class="blocked">拒绝操作</span></div>
+<div class="asset"><span>定义 / 版本 / 历史</span><span class="retained">数据仍在</span></div></div>
+</div>
+<p class="caption">旧链接、构建预览和管理员也遵守删除状态。历史会话与文件按原有权限查看；保留定义不等于开放定义下载。</p>
+</section>
+
+<section class="section" aria-labelledby="flow-title">
+<h2 id="flow-title">点击删除后，系统做四步</h2>
+<div class="journey" role="list" aria-label="删除处理流程">
+<div class="step" role="listitem"><small>第 1 步</small><strong>检查权限</strong><p>确认操作者有权删除。</p></div><span class="connector" aria-hidden="true">→</span>
+<div class="step" role="listitem"><small>第 2 步</small><strong>撤销授权</strong><p>沿用原有权限处理。</p></div><span class="connector" aria-hidden="true">→</span>
+<div class="step primary" role="listitem"><small>第 3 步</small><strong>改删除标记</strong><p>主记录和所有版本一起标记，内容不清空。</p></div><span class="connector" aria-hidden="true">→</span>
+<div class="step" role="listitem"><small>第 4 步</small><strong>清理使用入口</strong><p>清用户组入口与分享链接，保留会话展示信息并记审计。</p></div>
+</div>
+<p class="caption">这次主要替换第 3 步的物理删除。上线 / 下线仍是原来的含义，不增加“删除中”状态或进度表。</p>
+</section>
+
+<section class="section" aria-labelledby="guards-title">
+<h2 id="guards-title">为让标记生效，配套补齐三处</h2>
+<div class="guards">
+<div class="guard"><h3>查的时候过滤</h3><p>列表、数量、推荐、模板来源等排除已删除记录。历史读取单独保留，避免历史也消失。</p></div>
+<div class="guard"><h3>新操作先检查</h3><p>网页、接口、分享和调试入口都检查标记，旧页面不能继续发起新操作。</p></div>
+<div class="guard"><h3>保存不能恢复删除</h3><p>只更新未删除的工作流，版本保存与删除互相排队，防止旧页面把数据重新写活。</p></div>
+</div>
+<p class="caption">删除后释放工作流业务配额，允许同名新建并生成新 ID；已有模板和复制件作为独立数据保留。</p>
+</section>
+
+<section class="section" aria-labelledby="tradeoff-title">
+<h2 id="tradeoff-title">低复杂度方案，接受两个边界</h2>
+<div class="tradeoffs">
+<div><h3>运行中任务不额外协调</h3><p>不因删除主动停止。已经提交或运行中的任务可能继续，也可能因再次读取工作流而失败；正常聊天入口再次输入时会拒绝续跑。</p><p class="muted">不承诺立即终止，也不保证最终跑完。</p></div>
+<div><h3>跨系统失败沿用现有处理</h3><p>如果授权已经撤销、数据库标记却更新失败，可能出现“记录还在，但不能使用”；清理失败也可能需要排查日志。</p><p class="muted">不增加自动补偿系统，也不保证再次点击就能修复。</p></div>
+</div>
+<p class="boundary">本期不做回收站、恢复和定时清空。以前物理删除的数据不能自动补回；保留数据会持续占用存储。</p>
+</section>
+
+<aside class="decision" aria-labelledby="decision-title">
+<h2 id="decision-title">需要你决定什么</h2>
+<p><strong>没有新增业务取舍。</strong>这份设计落实此前确认的“单标记、低复杂度、在途不强要求”。评审只需核对上面的效果和两项边界是否符合预期。</p>
+<p class="muted">这份摘要已获设计确认；研发实现与本地验证已完成，部署环境验收另列。</p>
+</aside>
+
+<details><summary>研发附录：改动范围、技术取舍和怎么验收</summary>
+<div class="appendix">
+<h3>一个字段，保留原接口</h3>
+<p>工作流表新增 <code>is_delete</code>：非空整数，默认 0；删除后为 1。主记录与关联版本在同一数据库事务更新；现有 <code>status</code> 上下线状态不变。仅工作流启用新的删除语义，其他应用类型不变。普通编辑请求不可提交删除标记。</p>
+<p>沿用 <code>DELETE /api/v1/flows/{flow_id}</code>、原成功响应和错误反馈；重复删除按现有资源不存在反馈。不新增删除时间和操作者列，沿用原审计。</p>
+<h3>改动范围</h3>
+<table><thead><tr><th scope="col">范围</th><th scope="col">处理方式</th></tr></thead><tbody>
+<tr><td>数据与迁移</td><td>主模型增加标记；Alembic 为存量增加默认 0 的列，兼容 MySQL 与 DM8。父迁移取真实单一 head，不猜文件顺序。</td></tr>
+<tr><td>普通资源读取</td><td>同步、异步、批量、简单信息、列表和计数显式过滤；联合应用列表在工作流内层查询过滤，避免分页与总数失真。</td></tr>
+<tr><td>绕过普通查询的路径</td><td>补模板来源、推荐、权限迁移、资源归属及资产计数等直接 ORM / SQL 查询；配额计数沿调用链核查。</td></tr>
+<tr><td>并发保存</td><td>主记录按可写字段、带未删除条件更新，不回写删除字段、不把旧对象重新插入。版本写入与删除使用同一父记录短锁，检查与写入合并事务。</td></tr>
+<tr><td>历史读取</td><td>优先用已有会话信息；必要时通过内部 Repository 读取有限元数据，保持历史权限和租户隔离，不向普通接口开放绕过过滤参数。</td></tr>
+<tr><td>调用入口</td><td>网页、预览、API v2/v3 和分享的新操作检查父记录；不改 Worker 调度及运行状态机。</td></tr>
+</tbody></table>
+<h3>为什么这样选</h3>
+<ul><li>单标记与现有版本表语义一致；三态、操作表和额外业务版本号会扩大本期复杂度。</li><li>查询显式过滤，历史专用读取；全局隐藏钩子难以兼顾联合查询、列投影与历史用途。</li><li>已有保存入口有整对象保存和分段提交，需补条件写入与父锁；不把锁持有到任务执行结束。</li></ul>
+<h3>怎么证明做对</h3>
+<p>验证删除后主记录、定义和版本仍在；普通列表、数量、新操作不可访问；历史、文件仍按原权限可读；同名新建和配额释放正确；并发保存不能复活。覆盖普通用户、管理员和不同租户，验证权限失败与数据库异常不被当成成功。</p>
+<p>完成后端测试、API E2E、迁移单 head、Ruff 与架构检查；MySQL / DM8 行为需按环境验证，未运行的检查如实记录。当前针对性本地检查 72 项通过；真实部署 API E2E 与 MySQL / DM8 验收待完成，完整记录见 verification-report.md。</p>
+<h3>上线和后续边界</h3>
+<p>先迁移数据库、更新相关进程并清退旧代码后开放删除。回滚必须保留过滤与禁止物理删除的兼容处理，或暂停相关入口。沿用现有授权、审计、分享清理和日志，不新增外部依赖、配置或后台监控体系。</p>
+<p>只有未来新增恢复、删除进度、跨系统自动修复或严格在途保证时，才重新评估协调机制。</p>
+<p>完整定位：<a href="design.md">研发设计</a>　<a href="spec.md">已确认验收规格</a></p>
+</div></details>
+<footer><span>工作流逻辑删除 · 人类评审摘要</span><span>单文件 HTML，可离线打开</span></footer>
+</main></body></html>

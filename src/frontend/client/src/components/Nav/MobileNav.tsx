@@ -57,7 +57,7 @@ export default function MobileNav({
 }: MobileNavProps) {
   const mobileHeadIconBtnClassName =
     "inline-flex size-5 shrink-0 items-center justify-center text-text-1";
-  const { channel } = useClientEnvironment();
+  const { channel, capabilities } = useClientEnvironment();
   const canOpenMenu = Boolean(onMenuClick) || channel === "web";
   const localize = useLocalize();
   const navigate = useNavigate();
@@ -126,6 +126,8 @@ export default function MobileNav({
 
   const appBackBtnClassName =
     "inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-border-base bg-white text-text-1 shadow-sm transition-colors hover:bg-fill-1";
+
+  if (capabilities?.hasHostChatHeader) return null;
 
   return (
     <div

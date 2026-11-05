@@ -12,6 +12,7 @@ export type {
   DesktopHostInfo,
 } from "./types";
 export const DESKTOP_SESSION_KEY = "dsh:embedded-chat";
+const MOBILE_APP_SESSION_KEY = "bisheng:mobile-app";
 
 const fallback: ClientEnvironment = Object.freeze({
   channel: "web",
@@ -22,14 +23,17 @@ const fallback: ClientEnvironment = Object.freeze({
     deviceType: "unknown",
     os: "unknown",
   }),
-  capabilities: Object.freeze({ hasNativePresentation: false }),
+  capabilities: Object.freeze({
+    hasNativePresentation: false,
+    hasHostChatHeader: false,
+  }),
 });
 let snapshot = fallback;
 const listeners = new Set<() => void>();
 
-function readSession(): boolean {
+function readSession(key = DESKTOP_SESSION_KEY): boolean {
   try {
-    return window.sessionStorage.getItem(DESKTOP_SESSION_KEY) === "true";
+    return window.sessionStorage.getItem(key) === "true";
   } catch {
     return false;
   }
@@ -53,8 +57,8 @@ export function refreshClientEnvironment(): ClientEnvironment {
   }
   hasNativePresentation =
     typeof readDesktopPresentation().reportLanding === "function";
-  const requested =
-    new URLSearchParams(window.location.search).get("embed") === "dsh";
+  const embed = new URLSearchParams(window.location.search).get("embed");
+  const requested = embed === "dsh";
   const remembered = readSession();
   const channelSource: IdentitySource = host
     ? "host"
@@ -73,6 +77,20 @@ export function refreshClientEnvironment(): ClientEnvironment {
       window.sessionStorage.setItem(DESKTOP_SESSION_KEY, "true");
     } catch {
       /* Memory survives SPA navigation. */
+    }
+  }
+  // Mobile WebViews opt into host-owned chat chrome without enabling desktop bridges.
+  const mobileAppRemembered = readSession(MOBILE_APP_SESSION_KEY);
+  const hasHostChatHeader =
+    channel === "web" &&
+    (embed === "mobile-app" ||
+      mobileAppRemembered ||
+      snapshot.capabilities.hasHostChatHeader);
+  if (hasHostChatHeader && !mobileAppRemembered) {
+    try {
+      window.sessionStorage.setItem(MOBILE_APP_SESSION_KEY, "true");
+    } catch {
+      /* The snapshot retains this presentation choice across SPA routes. */
     }
   }
   let signals = {};
@@ -98,7 +116,7 @@ export function refreshClientEnvironment(): ClientEnvironment {
       deviceType: host ? "host" : browser.deviceSource,
       os: host ? "host" : channel === "desktop" ? "unknown" : browser.osSource,
     }),
-    capabilities: Object.freeze({ hasNativePresentation }),
+    capabilities: Object.freeze({ hasNativePresentation, hasHostChatHeader }),
   });
   if (typeof document !== "undefined")
     document.documentElement.dataset.bishengSurface = channel;

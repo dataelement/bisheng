@@ -47,13 +47,21 @@ export function asrHintKey(provider: string, modelType: string): string | undefi
     return undefined;
 }
 
+/** Tencent catalog signing uses the same pair as realtime speech. */
+export function tencentConnectionFields(): ConfigField[] {
+    const field = (key: string, label: string, type = 'text'): ConfigField =>
+        ({ key, label, type, required: true, default: '' });
+    return [field('speech_secret_id', 'SecretId'), field('speech_secret_key', 'SecretKey', 'password')];
+}
+
 export function getSpeechFields(provider: string, config: ProviderConfig, t: TFunction): ConfigField[] {
     const field = (key: string, label: string, type = 'text', defaultValue = ''): ConfigField =>
         ({ key, label, type, required: true, default: defaultValue });
     const app = field('speech_app_id', 'AppID');
     const api = field('speech_api_key', 'API Key', 'password');
     if (provider === 'qianfan') return [app, api];
-    if (provider === 'tencent') return [app, field('speech_secret_id', 'SecretId'), field('speech_secret_key', 'SecretKey', 'password')];
+    // SecretId and SecretKey sit with the API Key. Only AppID stays in the speech box.
+    if (provider === 'tencent') return [app];
     if (provider !== 'volcengine') return [];
     const mode = config.speech_auth_mode || 'api_key';
     const resourceIds = [
