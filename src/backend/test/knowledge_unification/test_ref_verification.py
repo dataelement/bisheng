@@ -16,6 +16,8 @@ from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.resource_reference.application.bindings import ReferenceBindings
 from bisheng.resource_reference.application.contracts import (
     BindingWriteContext,
+    DeletionEvidence,
+    LegacyEvidence,
     ReferenceSpec,
     SourceKey,
     TargetKey,
@@ -38,6 +40,7 @@ targets = Table(
     Column("id", Integer, primary_key=True),
     Column("tenant_id", Integer),
     Column("space_id", Integer),
+    Column("lifecycle", String, nullable=False, server_default="valid"),
 )
 
 
@@ -220,14 +223,107 @@ async def test_async_verification_uses_async_owner_and_same_transaction():
         async with AsyncSession(database) as session, session.begin():
             issued = await verifier.averify_targets(session, source, (TargetKey("model", "1"),))
             candidate = binding_set(session, source, issued)
-            result = await bindings.areplace_source_bindings(
-                session, source, None, 1, candidate, True
-            )
+            result = await bindings.areplace_source_bindings(session, source, None, 1, candidate, True)
             assert result.added == 1 and len(owner.calls) == 1
         async with AsyncSession(database) as session, session.begin():
             with pytest.raises(ResourceReferenceInvalidError):
-                await bindings.areplace_source_bindings(
-                    session, source, 1, 2, candidate, True
+                await bindings.areplace_source_bindings(session, source, 1, 2, candidate, True)
+    finally:
+        await database.dispose()
+
+
+class SqlLifecycleOwner(SqlOwner):
+    """Trusted Owner double: the observed lifecycle comes from current SQL."""
+
+    def _observed(self, session, target_keys, source_key, operation, rows):
+        issued = super()._observed(session, target_keys, source_key, operation, rows)
+        result = []
+        for receipt, row in zip(issued, rows, strict=True):
+            if row.lifecycle == "deleted":
+                target = replace(
+                    receipt.target,
+                    state="invalid_deleted",
+                    evidence=DeletionEvidence("original-delete", receipt.target.key, row.tenant_id, "deleted"),
                 )
+            elif row.lifecycle == "legacy":
+                target = replace(
+                    receipt.target,
+                    state="invalid_legacy",
+                    evidence=LegacyEvidence("original-run", "a" * 64, "original-model-slot"),
+                )
+            else:
+                target = receipt.target
+            result.append(TargetLockReceipt(source_key, target, receipt.transaction, self))
+        return tuple(result)
+
+
+def equality_receipt_copy(original):
+    class EqualReceipt(type(original)):
+        def __hash__(self):
+            return hash(original)
+
+        def __eq__(self, other):
+            return other is original or other is self
+
+    return EqualReceipt(
+        original.source_key,
+        replace(original.target, state="valid", evidence=None),
+        original.transaction,
+        original.issuer,
+        original.schema_version,
+    )
+
+
+@pytest.mark.parametrize("lifecycle", ["deleted", "legacy"])
+def test_equality_clone_cannot_change_an_issued_invalid_receipt_into_a_new_live_binding(engine, lifecycle):
+    owner = SqlLifecycleOwner()
+    verifier = ReferenceTargetVerifier({"model": owner})
+    repo = ReferenceRepository(verifier=verifier)
+    bindings = ReferenceBindings(repo, verifier)
+    key = SourceKey(101, "assistant", "new-source", "current")
+    with engine.begin() as connection:
+        connection.execute(insert(targets).values(kind="model", id=1, tenant_id=101, lifecycle=lifecycle))
+    with Session(engine) as session, session.begin():
+        issued = verifier.verify_targets(session, key, (TargetKey("model", "1"),))
+        # A genuine invalid receipt is registered and readable, but cannot
+        # authorize this new slot. The existing valid-control test stays green.
+        assert (
+            verifier.validate_binding_receipts(session, key, issued, (TargetKey("model", "1"),))[0] is issued[0].target
+        )
+        with pytest.raises(ResourceReferenceInvalidError):
+            bindings.replace_source_bindings(session, key, None, 1, binding_set(session, key, issued), True)
+        forged = equality_receipt_copy(issued[0])
+        assert forged is not issued[0] and forged.target.state == "valid"
+        with pytest.raises(ResourceReferenceInvalidError):
+            bindings.replace_source_bindings(session, key, None, 1, binding_set(session, key, (forged,)), True)
+        assert repo.get_source_set(session, key) is None and not repo.list_source_references(session, key)
+
+
+@pytest.mark.parametrize("lifecycle", ["deleted", "legacy"])
+async def test_async_equality_clone_cannot_replace_the_real_receipt_state(lifecycle):
+    owner = SqlLifecycleOwner()
+    verifier = ReferenceTargetVerifier({"model": owner})
+    repo = ReferenceRepository(verifier=verifier)
+    bindings = ReferenceBindings(repo, verifier)
+    database = create_async_engine("sqlite+aiosqlite://")
+    try:
+        async with database.begin() as connection:
+            await connection.run_sync(lambda conn: SQLModel.metadata.create_all(conn, tables=ref_fixtures.TABLES))
+            await connection.run_sync(metadata.create_all)
+            await connection.execute(insert(targets).values(kind="model", id=1, tenant_id=101, lifecycle=lifecycle))
+        async with AsyncSession(database) as session, session.begin():
+            key = SourceKey(101, "assistant", "new-source", "current")
+            issued = await verifier.averify_targets(session, key, (TargetKey("model", "1"),))
+            assert (
+                verifier.validate_binding_receipts(session, key, issued, (TargetKey("model", "1"),))[0]
+                is issued[0].target
+            )
+            with pytest.raises(ResourceReferenceInvalidError):
+                await bindings.areplace_source_bindings(session, key, None, 1, binding_set(session, key, issued), True)
+            with pytest.raises(ResourceReferenceInvalidError):
+                await bindings.areplace_source_bindings(
+                    session, key, None, 1, binding_set(session, key, (equality_receipt_copy(issued[0]),)), True
+                )
+            assert await repo.aget_source_set(session, key) is None
     finally:
         await database.dispose()

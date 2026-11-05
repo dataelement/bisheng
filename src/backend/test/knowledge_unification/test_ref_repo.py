@@ -307,3 +307,60 @@ async def test_native_async_exact_root_inventory_keeps_inactive_and_external_rol
             assert await repo.alist_source_sets_for_root(session, source()) == ()
     finally:
         await database.dispose()
+
+
+def equality_owner_scope_copy(original):
+    class EqualScope(type(original)):
+        def __hash__(self):
+            return hash(original)
+
+        def __eq__(self, other):
+            return other is original or other is self
+
+    return EqualScope(
+        original.transaction, original.owner_tenant_id, original.targets, original._receipts, original._authority
+    )
+
+
+def test_owner_scope_requires_the_original_object_even_when_a_clone_compares_equal(engine):
+    owner = ModelOwner()
+    verifier = ReferenceTargetVerifier({"model": owner})
+    repo = ReferenceRepository(verifier=verifier)
+    with Session(engine) as session, session.begin():
+        write(repo, session, source(), (row(source()),))
+        issued = verifier.verify_owner_targets(session, (target(),))
+        scope = repo.target_owner_scope(session, issued)
+        assert len(repo.list_inbound_for_owner(session, scope)) == 1
+        forged = equality_owner_scope_copy(scope)
+        assert forged is not scope
+        with pytest.raises(ResourceReferenceInvalidError):
+            repo.list_inbound_for_owner(session, forged)
+
+
+async def test_async_owner_query_rejects_an_equality_clone_but_accepts_the_original():
+    database = create_async_engine("sqlite+aiosqlite://")
+    try:
+        async with database.begin() as connection:
+            await connection.run_sync(lambda conn: SQLModel.metadata.create_all(conn, tables=TABLES))
+        owner = ModelOwner()
+        verifier = ReferenceTargetVerifier({"model": owner})
+        repo = ReferenceRepository(verifier=verifier)
+        async with AsyncSession(database) as session, session.begin():
+            key = source()
+            await repo.areplace_source_set(
+                session,
+                key,
+                expected_revision=None,
+                new_revision=1,
+                references=(row(key),),
+                extractor_version="test-v1",
+                digest=reference_set_digest((ReferenceSpec("model", target()),)),
+                effective=True,
+            )
+            receipts = await verifier.averify_owner_targets(session, (target(),))
+            scope = repo.target_owner_scope(session, receipts)
+            assert len(await repo.alist_inbound_for_owner(session, scope)) == 1
+            with pytest.raises(ResourceReferenceInvalidError):
+                await repo.alist_inbound_for_owner(session, equality_owner_scope_copy(scope))
+    finally:
+        await database.dispose()
