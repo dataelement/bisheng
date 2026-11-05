@@ -6,7 +6,7 @@ Empty-tenant initialization is explicitly distinct from a migration baseline.
 """
 
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from uuid import uuid4
 
 from sqlalchemy import CheckConstraint, Column, Index, Integer, UniqueConstraint, text
@@ -20,7 +20,7 @@ def unification_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-class KnowledgeUnificationPhase(str, Enum):
+class KnowledgeUnificationPhase(StrEnum):
     PREPARING = "preparing"
     BASELINE_FROZEN = "baseline_frozen"
     CONVERTING = "converting"
