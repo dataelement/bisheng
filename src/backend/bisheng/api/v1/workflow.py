@@ -31,6 +31,7 @@ from bisheng.role.domain.services.quota_service import QuotaResourceType, requir
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import generate_uuid
+from bisheng.workflow.application.execution_port import BoundWorkflowExecutionPort
 from bisheng_langchain.utils.requests import Requests
 
 router = APIRouter(prefix="/workflow", tags=["Workflow"])
@@ -401,6 +402,7 @@ async def workflow_ws(
             WorkType.WORKFLOW,
             websocket,
             flow_lease_id=flow_lease_id,
+            workflow_execution_port=BoundWorkflowExecutionPort(workflow_id, login_user),
         )
     except UnAuthorizedError:
         await websocket.close(
