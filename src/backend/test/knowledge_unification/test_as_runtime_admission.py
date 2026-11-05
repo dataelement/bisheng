@@ -90,7 +90,7 @@ async def test_id_only_constructor_never_recovers_an_ordinary_person(monkeypatch
 
 async def test_run_revalidates_each_cached_execution_and_keeps_principal(runtime_agent):
     agent, user, prepare, _llm, _tools, _init = runtime_agent
-    actor = PermissionActor(subject_type="service_account", subject_id="svc", tenant_id=101)
+    actor = PermissionActor(subject_type="service_account", subject_id=77, tenant_id=101)
     token = set_current_permission_actor(actor)
 
     async def current(identity, assistant_id, *, session):
