@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 from hashlib import sha256
 
 from bisheng.permission.domain.services.catalog_policy import (
+    MIGRATED_RESOURCE_TYPES,
     CatalogActionRelease,
 )
 
@@ -163,7 +164,38 @@ def _model_payload(model: DerivedPermissionModel) -> dict[str, object]:
         "model_key": model.model_key,
         "name": model.name,
         "selected_action_codes": model.selected_action_codes,
+        "visibility_only_resource_types": model.visibility_only_resource_types,
+        "visibility_level": model.visibility_level,
     }
+
+
+def _visibility_metadata(
+    resource_types: tuple[str, ...],
+    level: int | None,
+    *,
+    action_codes: tuple[str, ...],
+    action_release: CatalogActionRelease,
+) -> tuple[tuple[str, ...], int | None]:
+    """Normalize server-owned provenance without making arbitrary empty models valid."""
+
+    if not resource_types and level is None:
+        return (), None
+    if (
+        not resource_types
+        or len(set(resource_types)) != len(resource_types)
+        or not set(resource_types) <= MIGRATED_RESOURCE_TYPES
+        or isinstance(level, bool)
+        or level not in {1, 2, 3, 4}
+    ):
+        raise ValueError("invalid visibility-only model metadata")
+    concrete_types = {
+        resource_type
+        for action in action_release.actions
+        if action.code in action_codes
+        for resource_type in action.resource_types
+    }
+    remaining = tuple(sorted(set(resource_types) - concrete_types))
+    return remaining, level if remaining else None
 
 
 def _standard_models(
@@ -180,6 +212,14 @@ def _standard_models(
         allow_same_level = standard_allow_same_level.get(key, default_allow_same)
         if not isinstance(allow_same_level, bool):
             raise ValueError(f"standard model {key} same-level policy must be boolean")
+        # Standard models are an internal bootstrap contract, never an HTTP
+        # request for an arbitrary empty custom model.
+        visibility_types, visibility_level = _visibility_metadata(
+            tuple(sorted(MIGRATED_RESOURCE_TYPES)),
+            level,
+            action_codes=action_codes,
+            action_release=action_release,
+        )
         model = DerivedPermissionModel(
             model_key=key,
             name=name,
@@ -190,6 +230,8 @@ def _standard_models(
             allow_same_level=allow_same_level,
             selected_action_codes=action_codes,
             action_codes=action_codes,
+            visibility_only_resource_types=visibility_types,
+            visibility_level=visibility_level,
         )
         if key in standard_allow_same_level and allow_same_level:
             model = with_allow_same_level(model, True)
@@ -237,6 +279,14 @@ def _custom_model(
         (action.level for action in effective_actions if action.level is not None),
         default=None,
     )
+    visibility_types, visibility_level = _visibility_metadata(
+        selection.visibility_only_resource_types,
+        selection.visibility_level,
+        action_codes=effective_codes,
+        action_release=action_release,
+    )
+    if derived_level is None and visibility_types:
+        derived_level = visibility_level
     model = DerivedPermissionModel(
         model_key=model_key,
         name=name,
@@ -247,6 +297,8 @@ def _custom_model(
         allow_same_level=selection.allow_same_level,
         selected_action_codes=selected,
         action_codes=effective_codes,
+        visibility_only_resource_types=visibility_types,
+        visibility_level=visibility_level,
     )
     if model.allow_same_level and "manage_permission" not in model.action_codes:
         raise ValueError(f"custom model {model_key} cannot allow same level without manage_permission")
@@ -357,6 +409,8 @@ def validate_standard_model_update(
         "active",
         "selected_action_codes",
         "action_codes",
+        "visibility_only_resource_types",
+        "visibility_level",
     )
     if any(getattr(current, field) != getattr(candidate, field) for field in immutable_fields):
         raise ValueError("standard model fields are immutable")
