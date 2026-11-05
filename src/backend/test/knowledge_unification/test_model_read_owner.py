@@ -26,9 +26,10 @@ knowledge_read_context = knowledge.knowledge_read_context
 class Sharing:
     allowed = frozenset({2})
     error = None
+    expected_tenant = 101
 
     async def aget_shared_server_ids(self, session, tenant_id, server_ids):
-        assert tenant_id == 101 and server_ids == (2,)
+        assert tenant_id == self.expected_tenant and server_ids == (2,)
         if self.error:
             raise self.error
         return self.allowed
@@ -43,7 +44,7 @@ async def model_read_context(knowledge_read_context, monkeypatch):
     monkeypatch.setattr(
         knowledge.tenant_filter,
         "_tenant_aware_tables",
-        knowledge.tenant_filter._tenant_aware_tables | {table.name for table in tables},
+        knowledge.tenant_filter._tenant_aware_tables | {table.name for table in tables if "tenant_id" in table.columns},
     )
     async with ctx.engine.begin() as connection:
         for table in tables:
@@ -55,21 +56,21 @@ async def model_read_context(knowledge_read_context, monkeypatch):
     return ctx
 
 
-@pytest.mark.parametrize("source_tenant,target", [(101, 11), (101, 22), (1, 22)])
+@pytest.mark.parametrize("source_tenant,target", [(101, 11), (101, 22), (1, 22), (202, 33), (202, 22)])
 async def test_own_and_root_source_models_use_real_owner_facts_not_request_tenant(
     model_read_context, source_tenant, target
 ):
     ctx = model_read_context
     ref = knowledge.spec("model", target)
-    await knowledge.configure(
-        ctx, (ref,), tenant_id=source_tenant, cached_owners={ref.target: 1 if target == 22 else 101}
-    )
+    owner = {11: 101, 22: 1, 33: 202}[target]
+    await knowledge.configure(ctx, (ref,), tenant_id=source_tenant, cached_owners={ref.target: owner})
+    ctx.sharing.expected_tenant = source_tenant
     if source_tenant == 1:
         ctx.sharing.error = AssertionError("Root's own model is not Child sharing")
     async with AsyncSession(ctx.engine) as session:
         scope = await ctx.verifier.aissue_scope(session, knowledge.REQUEST, ctx.identity)
         fact = (await ctx.model.ainspect_source_targets(session, scope, (ref.target,), identity=ctx.identity))[0]
-        assert fact.is_valid and fact.target_tenant_id == (1 if target == 22 else 101)
+        assert fact.is_valid and fact.target_tenant_id == owner
         assert not session.sync_session.identity_map and knowledge.scopes._resolve_tenant_id() == 101
 
 
@@ -180,3 +181,43 @@ async def test_default_async_sharing_reads_real_five_type_config_in_source_tenan
         scope = await ctx.verifier.aissue_scope(session, knowledge.REQUEST, ctx.identity)
         fact = (await ctx.model.ainspect_source_targets(session, scope, (ref.target,), identity=ctx.identity))[0]
         assert fact.is_valid and not session.sync_session.identity_map
+
+
+async def test_missing_unrelated_root_default_does_not_cancel_explicit_server_sharing(model_read_context):
+    ctx = model_read_context
+    ref = knowledge.spec("model", 22)
+    await knowledge.configure(ctx, (ref,), cached_owners={ref.target: 1})
+    async with AsyncSession(ctx.engine) as session, session.begin():
+        session.add(
+            TenantSystemModelConfig(
+                tenant_id=1, key="assistant_llm", value=json.dumps({"llm_list": [{"model_id": 999, "default": True}]})
+            )
+        )
+    async with AsyncSession(ctx.engine) as session:
+        scope = await ctx.verifier.aissue_scope(session, knowledge.REQUEST, ctx.identity)
+        fact = (await ctx.model.ainspect_source_targets(session, scope, (ref.target,), identity=ctx.identity))[0]
+        assert fact.is_valid
+
+
+async def test_missing_model_uses_frozen_original_proof_without_guessing_its_tenant(model_read_context):
+    ctx = model_read_context
+    ref = knowledge.spec("model", 90)
+    await knowledge.configure(
+        ctx, (ref,), cached_owners={ref.target: None}, legacy={ref.target: ("run-original", "target-proof")}
+    )
+    async with AsyncSession(ctx.engine) as session, session.begin():
+        session.add(
+            knowledge.KnowledgeUnificationRun(
+                tenant_id=101,
+                run_id="run-original",
+                phase="verified",
+                baseline_hash="a" * 64,
+                plan_hash="b" * 64,
+                baseline_ref={"object_key": "101/baseline", "sha256": "a" * 64},
+                plan_ref={"object_key": "101/plan", "sha256": "b" * 64},
+            )
+        )
+    async with AsyncSession(ctx.engine) as session:
+        scope = await ctx.verifier.aissue_scope(session, knowledge.REQUEST, ctx.identity)
+        fact = (await ctx.model.ainspect_source_targets(session, scope, (ref.target,), identity=ctx.identity))[0]
+        assert fact.state == "invalid_legacy" and fact.target_tenant_id is None and not fact.is_valid
