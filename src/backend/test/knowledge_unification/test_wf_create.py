@@ -29,6 +29,7 @@ from bisheng.resource_reference.application.contracts import (
 )
 from bisheng.resource_reference.application.target_verification import ReferenceTargetVerifier
 from bisheng.resource_reference.application.write_runtime import ReferenceBindingRuntime
+from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
 from test.knowledge_unification import test_wf_transaction as wf_fixtures
 from test.knowledge_unification.test_ref_repo import TABLES
@@ -43,6 +44,27 @@ class SqlTargetOwner:
 
     def __init__(self, table):
         self.table = table
+
+    async def aprelock_targets(self, session, target_keys, source_keys):
+        # Pure physical union locks. Source-specific validation/evidence and
+        # receipt issuance remain in alock_and_verify, called separately.
+        for key in target_keys:
+            await session.execute(
+                sa.select(self.table)
+                .where(self.table.c.target_id == key.target_id, self.table.c.target_type == key.target_type.value)
+                .with_for_update()
+            )
+            await session.execute(
+                sa.select(ResourceReferenceTombstone)
+                .where(
+                    ResourceReferenceTombstone.target_type == key.target_type.value,
+                    ResourceReferenceTombstone.target_id == key.target_id,
+                )
+                .with_for_update()
+            )
+
+    def prelock_targets(self, session, target_keys, source_keys):
+        raise AssertionError("async workflow must use native async prelocks")
 
     async def alock_and_verify(self, session, target_keys, source_key, operation):
         receipts = []
