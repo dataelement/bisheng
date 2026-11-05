@@ -263,27 +263,38 @@ class F048PermissionRuntime:
 
     async def prospective_owner_grantable_models(
         self,
+        *,
+        resource_type: str | None = None,
     ) -> tuple[RuntimeCatalogSnapshot, tuple[RuntimeModelSnapshot, ...]]:
         """Read the owner Grant policy without constructing a resource target."""
 
         catalog = await self._runtime_catalog()
         owner_model = require_owner_model(catalog)
-        prospective = tuple(
-            next(
-                model
-                for model in self._models_for_target(catalog, item.snapshot.visibility_only_resource_types[0])
-                if model.model_key == item.snapshot.model_key
+        prospective = (
+            self._models_for_target(catalog, resource_type)
+            if resource_type is not None
+            else tuple(
+                next(
+                    model
+                    for model in self._models_for_target(catalog, item.snapshot.visibility_only_resource_types[0])
+                    if model.model_key == item.snapshot.model_key
+                )
+                if not item.snapshot.action_codes and item.snapshot.visibility_only_resource_types
+                else item.snapshot
+                for item in catalog.models
             )
-            if not item.snapshot.action_codes and item.snapshot.visibility_only_resource_types
-            else item.snapshot
-            for item in catalog.models
         )
         grantable = self._grants.grantable_models_for_capabilities(
             models=prospective,
             capabilities=(GrantCapability(model=owner_model, source_key="prospective-owner"),),
         )
         keys = {model.model_key for model in grantable}
-        return catalog, tuple(item for item in catalog.models if item.snapshot.model_key in keys)
+        by_key = {model.model_key: model for model in prospective}
+        return catalog, tuple(
+            replace(item, snapshot=by_key[item.snapshot.model_key])
+            for item in catalog.models
+            if item.snapshot.model_key in keys
+        )
 
     async def allocate_source_ids(self, count: int) -> tuple[int, ...]:
         return await self._state.allocate_source_ids(count)
