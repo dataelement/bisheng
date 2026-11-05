@@ -141,16 +141,20 @@ class Knowledge(KnowledgeBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
     # Server-owned metadata lives only on the ORM model. KnowledgeBase is
     # inherited by legacy response DTOs, whose shape must remain unchanged.
-    processing_defaults: dict | None = Field(default=None, sa_column=Column(JsonType, nullable=True))
+    # Some legacy endpoints return this ORM directly inside an Any envelope;
+    # exclude private columns there too. Owners use attributes and explicit DTOs.
+    processing_defaults: dict | None = Field(default=None, exclude=True, sa_column=Column(JsonType, nullable=True))
     processing_config_version: int = Field(
-        default=0, sa_column=Column(Integer, nullable=False, server_default=text("0"))
+        default=0, exclude=True, sa_column=Column(Integer, nullable=False, server_default=text("0"))
     )
-    model_config_revision: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=text("0")))
+    model_config_revision: int = Field(
+        default=0, exclude=True, sa_column=Column(Integer, nullable=False, server_default=text("0"))
+    )
     # Effective switch settings belong to the business resource, never a job's
     # historical parameters. The owning use case validates the phase contract.
-    model_transition: dict | None = Field(default=None, sa_column=Column(JsonType, nullable=True))
-    index_generation: str | None = Field(default=None, max_length=64)
-    migration_origin: str | None = Field(default=None, max_length=64)
+    model_transition: dict | None = Field(default=None, exclude=True, sa_column=Column(JsonType, nullable=True))
+    index_generation: str | None = Field(default=None, exclude=True, max_length=64)
+    migration_origin: str | None = Field(default=None, exclude=True, max_length=64)
     creation_request_id: str | None = Field(
         default=None,
         sa_column=Column(String(64), nullable=True),
