@@ -28,10 +28,15 @@ from bisheng.common.errcode.flow import (
     WorkFlowOnlineEditError,
 )
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeOperationPlanConflictError,
+    ReferenceCoverageNotReadyError,
+    ResourceReferenceInvalidError,
+)
 from bisheng.common.schemas.telemetry.event_data_schema import NewApplicationEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowStatus, FlowType
@@ -64,12 +69,13 @@ class FlowService(BaseService):
         cls, request: Request, user: UserPayload, flow: FlowCreate
     ) -> UnifiedResponseModel[FlowRead]:
         runtime = await get_reference_binding_runtime()
+        tenant_id = cls._workflow_management_tenant()
         async with get_async_db_session() as session:
-            if await WorkflowVersionRepository.aget_root_by_name(session, user.tenant_id, user.user_id, flow.name):
+            if await WorkflowVersionRepository.aget_root_by_name(session, tenant_id, user.user_id, flow.name):
                 raise WorkflowNameExistsError.http_exception()
             root = Flow.model_validate(flow)
             root.user_id = user.user_id
-            root.tenant_id = user.tenant_id
+            root.tenant_id = tenant_id
             root.flow_type = FlowType.WORKFLOW.value
             root.create_time = None
             root.update_time = None
@@ -173,13 +179,14 @@ class FlowService(BaseService):
             return CurVersionDelError.return_resp()
 
         runtime = await get_reference_binding_runtime()
+        tenant_id = cls._workflow_management_tenant()
         async with get_async_db_session() as session:
-            root = await WorkflowVersionRepository.aget_root(session, flow_info.id, user.tenant_id)
+            root = await WorkflowVersionRepository.aget_root(session, flow_info.id, tenant_id)
             current = await WorkflowVersionRepository.aget_version(session, root, version_id)
             candidate = cls._workflow_version_snapshot(current)
 
             async def lock_root(sql):
-                locked = await WorkflowVersionRepository.alock_root(sql, root.id, user.tenant_id)
+                locked = await WorkflowVersionRepository.alock_root(sql, root.id, tenant_id)
                 version = await WorkflowVersionRepository.aget_version(sql, locked, version_id, for_update=True)
                 if cls._workflow_version_snapshot(version) != candidate:
                     raise KnowledgeOperationPlanConflictError(reason="workflow_version_changed")
@@ -246,13 +253,14 @@ class FlowService(BaseService):
         Other saved versions remain effective reference sources throughout.
         """
         runtime = await get_reference_binding_runtime()
+        tenant_id = cls._workflow_management_tenant()
         async with get_async_db_session() as session:
-            root = await WorkflowVersionRepository.aget_root(session, flow_id, user.tenant_id)
+            root = await WorkflowVersionRepository.aget_root(session, flow_id, tenant_id)
             version = await WorkflowVersionRepository.aget_version(session, root, version_id)
             if status is not None and status != FlowStatus.ONLINE.value:
                 # Stopping a business does not change its saved slots and must
                 # remain possible when targets are deleted or being deleted.
-                root = await WorkflowVersionRepository.alock_root(session, flow_id, user.tenant_id)
+                root = await WorkflowVersionRepository.alock_root(session, flow_id, tenant_id)
                 await WorkflowVersionRepository.aget_version(session, root, version_id, for_update=True)
                 root.status = status
             else:
@@ -261,7 +269,7 @@ class FlowService(BaseService):
                 source = SourceKey(root.tenant_id, "workflow_version", root.id, str(version_id))
 
                 async def lock_root(sql):
-                    locked = await WorkflowVersionRepository.alock_root(sql, flow_id, user.tenant_id)
+                    locked = await WorkflowVersionRepository.alock_root(sql, flow_id, tenant_id)
                     current = await WorkflowVersionRepository.aget_version(sql, locked, version_id, for_update=True)
                     if cls._workflow_version_snapshot(current) != candidate:
                         raise KnowledgeOperationPlanConflictError(reason="workflow_version_changed")
@@ -300,8 +308,9 @@ class FlowService(BaseService):
         )
         await cls.judge_flow_write_permission(user, flow_id)
         runtime = await get_reference_binding_runtime()
+        tenant_id = cls._workflow_management_tenant()
         async with get_async_db_session() as session:
-            root = await WorkflowVersionRepository.aget_root(session, flow_id, user.tenant_id)
+            root = await WorkflowVersionRepository.aget_root(session, flow_id, tenant_id)
             if await WorkflowVersionRepository.aget_version_by_name(session, root, flow_version.name):
                 return VersionNameExistsError.return_resp()
             version = await WorkflowVersionRepository.acreate_version(
@@ -318,7 +327,7 @@ class FlowService(BaseService):
             )
 
             async def lock_root(sql):
-                locked = await WorkflowVersionRepository.alock_root(sql, flow_id, user.tenant_id)
+                locked = await WorkflowVersionRepository.alock_root(sql, flow_id, tenant_id)
                 if any(
                     candidate.id != version.id and candidate.name == version.name
                     for candidate in await WorkflowVersionRepository.alist_versions(sql, locked, for_update=True)
@@ -362,8 +371,9 @@ class FlowService(BaseService):
             return WorkFlowOnlineEditError.return_resp()
 
         runtime = await get_reference_binding_runtime()
+        tenant_id = cls._workflow_management_tenant()
         async with get_async_db_session() as session:
-            root = await WorkflowVersionRepository.aget_root(session, flow_info.id, user.tenant_id)
+            root = await WorkflowVersionRepository.aget_root(session, flow_info.id, tenant_id)
             current = await WorkflowVersionRepository.aget_version(session, root, version_id, include_deleted=True)
             candidate = cls._workflow_version_snapshot(current)
             next_version = FlowVersion(
@@ -377,7 +387,7 @@ class FlowService(BaseService):
             )
 
             async def lock_root(sql):
-                locked = await WorkflowVersionRepository.alock_root(sql, root.id, user.tenant_id)
+                locked = await WorkflowVersionRepository.alock_root(sql, root.id, tenant_id)
                 locked_version = await WorkflowVersionRepository.aget_version(
                     sql, locked, version_id, include_deleted=True, for_update=True
                 )
@@ -407,6 +417,13 @@ class FlowService(BaseService):
             await session.refresh(version)
         await cls.update_flow_hook(request, user, root)
         return resp_200(data=version)
+
+    @staticmethod
+    def _workflow_management_tenant() -> int:
+        tenant_id = get_current_tenant_id()
+        if type(tenant_id) is not int or tenant_id <= 0:
+            raise ResourceReferenceInvalidError(reason="source_tenant_context_missing")
+        return tenant_id
 
     @staticmethod
     def _workflow_version_snapshot(version: FlowVersion) -> tuple:
