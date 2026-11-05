@@ -711,7 +711,7 @@
   "19704": "The tenant view changed. Refresh the page before continuing.",
   "19705": "No valid tenant view is available. Contact an administrator.",
   "10994": "Reference coverage is not ready; this operation cannot be checked completely",
-  "10995": "The resource is referenced by saved configuration. Remove the references or explicitly confirm force deletion.",
+  "10995": "The resource is referenced by saved configuration. Update the references in the related business configuration first.",
   "10996": "A saved resource reference is invalid or its revision changed. Review and repair it.",
   "10997": "The business model or index configuration changed. This task is obsolete; start a new task.",
   "10998": "The operation no longer matches its frozen reference plan. Check it again.",
