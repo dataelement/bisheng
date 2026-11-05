@@ -20,6 +20,7 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTe
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.public_endpoints import PublicGuestAccessDisabledError
+from bisheng.common.interfaces.resource_execution import WorkflowExecutionPort
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.flow import InMemoryCache
@@ -245,6 +246,7 @@ class ChatManager:
         execution_snapshot: dict | None = None,
         flow_lease_id: str | None = None,
         message_admission: Callable[[], AbstractAsyncContextManager[ChatMessageExecution]] | None = None,
+        workflow_execution_port: WorkflowExecutionPort | None = None,
     ):
         start_time = time.time()
         client_key = generate_uuid()
@@ -276,6 +278,7 @@ class ChatManager:
                 session_subject=session_subject,
                 execution_snapshot=execution_snapshot,
                 flow_lease_id=flow_lease_id,
+                workflow_execution_port=workflow_execution_port,
             )
         await self.accept_client(client_key, chat_client, websocket)
         logger.debug(f"act=accept_client client_key={client_key} client_id={client_id} chat_id={chat_id}")
