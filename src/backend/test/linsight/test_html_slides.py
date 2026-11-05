@@ -338,9 +338,11 @@ def test_text_past_capacity_overflows_the_page_and_is_measured():
     assert [f.detail[:5] for f in findings if f.topic == "分页溢出"] == ["第 1 页"]
 
 
-@pytest.mark.parametrize("kind", ["column", "line", "stacked"])
+@pytest.mark.parametrize("kind", ["column", "bar", "line"])
 def test_value_labels_of_the_tallest_bar_stay_inside_the_chart(kind):
-    """114 run 96ce9c75: a 148 bar under a 150 axis put its label above the SVG edge."""
+    """114 run 96ce9c75: a 148 bar under a 150 axis put its label above the SVG edge.
+
+    Stacked columns carry no value labels, so they are not part of this check."""
     import re
 
     svg = slides.chart_svg(kind, ["a", "b", "c", "d"], [("s", [148, 142, 138, 108])])
