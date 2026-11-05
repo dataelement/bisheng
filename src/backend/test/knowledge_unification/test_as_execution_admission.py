@@ -331,6 +331,9 @@ async def test_real_deleted_target_is_inspectable_but_never_executable(source_db
                     target_type=kind,
                     target_id=target_id,
                     operation_id="delete-target",
+                    operation_type="force_delete",
+                    actor_type="user",
+                    actor_id="9",
                     stage="deleted",
                 )
             )
