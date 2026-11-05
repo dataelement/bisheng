@@ -13,7 +13,7 @@ from weakref import WeakKeyDictionary
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
 from bisheng.core.context.tenant import is_tenant_filter_bypassed
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.resource_reference.application.contracts import (
@@ -140,6 +140,59 @@ class ReferenceTargetVerifier:
 
     async def averify_targets(self, session: AsyncSession, source_key: SourceKey, target_keys: tuple[TargetKey, ...]):
         return await self._averify(session, source_key, target_keys, "bind")
+
+    def _batch_plan(self, session, requests):
+        if not isinstance(requests, tuple) or not requests:
+            raise _invalid("reference_batch_sources_required")
+        tenant_id = self._tenant_id()
+        planned = []
+        for item in requests:
+            if not isinstance(item, tuple) or len(item) != 2 or not isinstance(item[0], SourceKey):
+                raise _invalid("reference_batch_sources_required")
+            source, targets = item
+            if source.tenant_id != tenant_id:
+                raise _invalid("source_tenant_mismatch")
+            planned.append((source, self._keys(targets)))
+        sources = tuple(source for source, _ in planned)
+        if (
+            len(set(sources)) != len(sources)
+            or len({(key.tenant_id, key.source_type, key.source_id) for key in sources}) != 1
+        ):
+            raise _invalid("reference_batch_root_mismatch")
+        planned.sort(key=lambda item: item[0].source_version)
+        sources = tuple(source for source, _ in planned)
+        union = self._keys(tuple(target for _, targets in planned for target in targets))
+        _, _, identity, groups = self._plan(session, sources[0], union, "bind")
+        return tuple(planned), sources, identity, groups
+
+    def verify_batch_targets(self, session: Session, requests):
+        """Lock each Owner's physical union once, then verify each real source."""
+        planned, sources, identity, groups = self._batch_plan(session, requests)
+        for owner, targets in groups:
+            prelock = getattr(owner, "prelock_targets", None)
+            if not callable(prelock):
+                raise ReferenceCoverageNotReadyError(reason="reference_batch_prelock_unavailable")
+            if prelock(session, targets, sources) is not None:
+                raise _invalid("reference_prelock_must_not_issue_receipts")
+            identity.assert_current(session)
+        issued = {source: self._verify(session, source, targets, "bind") for source, targets in planned}
+        identity.assert_current(session)
+        return MappingProxyType(issued)
+
+    async def averify_batch_targets(self, session: AsyncSession, requests):
+        planned, sources, identity, groups = self._batch_plan(session, requests)
+        for owner, targets in groups:
+            prelock = getattr(owner, "aprelock_targets", None)
+            if not callable(prelock):
+                raise ReferenceCoverageNotReadyError(reason="reference_batch_prelock_unavailable")
+            if await prelock(session, targets, sources) is not None:
+                raise _invalid("reference_prelock_must_not_issue_receipts")
+            identity.assert_current(session)
+        issued = {}
+        for source, targets in planned:
+            issued[source] = await self._averify(session, source, targets, "bind")
+        identity.assert_current(session)
+        return MappingProxyType(issued)
 
     def verify_owner_targets(self, session: Session, target_keys: tuple[TargetKey, ...]):
         return self._verify(session, None, target_keys, "owner_query")
