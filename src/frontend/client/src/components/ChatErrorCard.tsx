@@ -56,6 +56,9 @@ const KNOWN_TYPES = new Set([
     'service_unavailable',
     'network_timeout',
     'auth_error',
+    // Task mode only: the model spent its whole output budget (usually on
+    // reasoning) without a tool call or an answer, even after one retry.
+    'output_truncated',
     // Attachment parsing (OCR / ETL) — daily-mode chat only.
     'file_parse_busy',
     'file_parse_failed',

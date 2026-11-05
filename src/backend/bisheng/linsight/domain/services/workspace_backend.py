@@ -278,6 +278,25 @@ def normalize_workspace_path(path: str, file_dir: str | None = None) -> str:
     return "/".join(parts)
 
 
+def _grep_terms(pattern: str) -> tuple[str, ...]:
+    """Literal terms a grep ``pattern`` matches; a line matching any one is a hit.
+
+    The framework's grep is literal, but models keep writing ``A|B|C`` to search
+    several keywords at once (10-29 on 106: 5 of 7 greps in one session, every one
+    "No matches" although each keyword was in the file). Splitting on ``|`` makes
+    that one call work instead of costing a failed round plus a retry. Nothing else
+    is treated as regex — ``.``, ``(``, ``[`` stay literal.
+
+    The whole pattern is always kept as a term, so every line the literal match
+    found is still found. If any segment is blank (``| col |`` table rows,
+    ``a || b``), the ``|`` is clearly literal and the pattern is not split.
+    """
+    parts = [p.strip() for p in pattern.split("|")]
+    if len(parts) < 2 or not all(parts):
+        return (pattern,)
+    return (pattern, *dict.fromkeys(parts))
+
+
 def _decode_workspace_text(data: bytes, rel_path: str = "") -> str | None:
     """Decode workspace bytes as text, or return ``None`` when they are binary.
 
@@ -514,14 +533,40 @@ class WorkspaceBackend(FilesystemBackend):
     def _cache_path(self, rel_path: str) -> Path:
         return Path(self.file_dir) / rel_path
 
-    def _not_found_error(self, file_path: str) -> str:
+    def _skill_matches(self, rel_path: str) -> list[str]:
+        """Workspace paths ``/skills/<name>/<rel_path>`` that exist, for the not-found hint.
+
+        A SKILL.md lists its supporting files relative to its own folder
+        (``references/rules.md``); the model kept reading them from the workspace
+        root. Listing goes through MinIO, the authoritative store, so a task
+        resumed on another node gets the same answer. Only runs after a miss.
+        """
+        if not rel_path or rel_path.startswith(f"{SKILLS_DIR}/"):
+            return []
+        listed = self.ls(f"/{SKILLS_DIR}")
+        matches = []
+        for entry in listed.entries or []:
+            parts = entry["path"].lstrip("/").split("/", 2)
+            if len(parts) == 3 and parts[0] == SKILLS_DIR and parts[2] == rel_path:
+                matches.append(entry["path"])
+        return sorted(matches)
+
+    def _not_found_error(self, file_path: str, skill_matches: list[str] | None = None) -> str:
         """ "File not found" plus, when warranted, WHY the path could not resolve.
 
         A bare "File 'X' not found" was actively unhelpful for the most common
         failure: handing back a code-interpreter host path. Naming the two
         namespaces is what lets the model fix it in one step instead of retrying
-        the same path.
+        the same path. ``skill_matches`` names the skill folders that do hold the
+        file; it is only a hint — the read never switches to another path.
         """
+        if skill_matches:
+            candidates = ", ".join(f"'{path}'" for path in skill_matches)
+            return (
+                f"File '{file_path}' not found. Relative paths inside a skill's SKILL.md are "
+                f"rooted at that skill's own folder, not the workspace root — the file exists at "
+                f"{candidates}. Retry with that path."
+            )
         _, stripped = strip_executor_host_prefix((file_path or "").strip(), self.file_dir)
         if stripped:
             rel = normalize_workspace_path(file_path, file_dir=self.file_dir)
@@ -616,7 +661,7 @@ class WorkspaceBackend(FilesystemBackend):
         rel = self._ws_rel(file_path)
         data = self._materialize(rel)
         if data is None:
-            return ReadResult(error=self._not_found_error(file_path))
+            return ReadResult(error=self._not_found_error(file_path, self._skill_matches(rel)))
         text = _decode_workspace_text(data, rel)
         if text is None:
             # Binary: offset/limit are meaningless here (slicing bytes by "lines"
@@ -763,6 +808,7 @@ class WorkspaceBackend(FilesystemBackend):
         prefix = f"/{WORKSPACE_PREFIX}/{self.svid}/"
         matches: list = []
 
+        terms = _grep_terms(pattern)
         skipped_large = 0
         skipped_binary = 0
         for entry in ls_res.entries or []:
@@ -786,7 +832,7 @@ class WorkspaceBackend(FilesystemBackend):
                 skipped_binary += 1
                 continue
             for lineno, line in enumerate(text.splitlines(), start=1):
-                if pattern in line:
+                if any(term in line for term in terms):
                     matches.append(GrepMatch(path=full, line=lineno, text=line))
         if skipped_large or skipped_binary:
             # Never let a bounded scan look like a complete one.
@@ -866,7 +912,8 @@ class WorkspaceBackend(FilesystemBackend):
             if data is not None:
                 await asyncio.to_thread(self._cache_write, rel, data)
         if data is None:
-            return ReadResult(error=self._not_found_error(file_path))
+            matches = await asyncio.to_thread(self._skill_matches, rel)
+            return ReadResult(error=self._not_found_error(file_path, matches))
         text = _decode_workspace_text(data, rel)
         if text is None:
             # Same contract as the sync path: binary is decided whole, never sliced.
