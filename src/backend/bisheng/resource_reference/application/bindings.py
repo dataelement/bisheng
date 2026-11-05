@@ -4,9 +4,6 @@ The business Owner holds the real business root lock before handing over its
 transaction-bound context. This module never opens or commits a transaction.
 """
 
-from collections.abc import Mapping
-from types import MappingProxyType
-
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -22,20 +19,20 @@ from bisheng.resource_reference.application.contracts import (
     ReferenceState,
     SourceKey,
     TargetKey,
-    TargetType,
     VerifiedReferenceSet,
     reference_set_digest,
 )
+from bisheng.resource_reference.application.target_verification import ReferenceTargetVerifier
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
 from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
 
 
 class ReferenceBindings:
-    def __init__(self, repository: ReferenceRepository, owners: Mapping[TargetType, object]):
+    def __init__(self, repository: ReferenceRepository, verifier: ReferenceTargetVerifier):
+        if not isinstance(verifier, ReferenceTargetVerifier) or repository.verifier is not verifier:
+            raise ValueError("binding and storage must use the same explicit target Verifier")
         self.repository = repository
-        self.owners = MappingProxyType({TargetType(key): value for key, value in owners.items()})
-        if any(self.owners.get(key) is not owner for key, owner in repository.owners.items()):
-            raise ValueError("binding and storage target Owner registrations must match")
+        self.verifier = verifier
 
     def _check_context(self, session, source_key, references, effective):
         self.repository.assert_source_tenant(source_key)
@@ -48,15 +45,9 @@ class ReferenceBindings:
             raise ResourceReferenceInvalidError(reason="reference_source_mismatch")
         try:
             context.transaction.assert_current(session)
-            for receipt in context.receipts:
-                receipt.transaction.assert_current(session)
-                if (
-                    receipt.source_key != source_key
-                    or self.owners.get(receipt.target.key.target_type) is not receipt.issuer
-                ):
-                    raise ValueError("reference receipt issuer or source does not match")
         except (TypeError, ValueError) as exc:
             raise ResourceReferenceInvalidError(reason="reference_receipt_invalid") from exc
+        self.verifier.validate_binding_receipts(session, source_key, context.receipts, context.locked_targets)
 
     def _prepare(self, key, expected_revision, new_revision, verified, effective, root, current, old):
         context = verified.context

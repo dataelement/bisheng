@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
-from types import MappingProxyType
 from weakref import WeakSet
 
 from sqlalchemy import and_, false, or_, select, update
@@ -20,11 +18,12 @@ from bisheng.resource_reference.application.contracts import (
     SourceKey,
     SourceType,
     TargetKey,
+    TargetLockReceipt,
     TargetType,
     TransactionIdentity,
-    VerifiedReferenceTarget,
     reference_set_digest,
 )
+from bisheng.resource_reference.application.target_verification import ReferenceTargetVerifier
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
 
@@ -34,7 +33,7 @@ class OwnerTargetScope:
     transaction: TransactionIdentity
     owner_tenant_id: int
     targets: tuple[TargetKey, ...]
-    issuers: tuple[object, ...] = field(repr=False)
+    _receipts: tuple[TargetLockReceipt, ...] = field(repr=False)
     _authority: object = field(repr=False)
 
 
@@ -43,8 +42,10 @@ def _invalid(reason: str) -> ResourceReferenceInvalidError:
 
 
 class ReferenceRepository:
-    def __init__(self, *, owners: Mapping[TargetType, object] | None = None):
-        self.owners = MappingProxyType({TargetType(key): value for key, value in (owners or {}).items()})
+    def __init__(self, *, verifier: ReferenceTargetVerifier | None = None):
+        if verifier is not None and not isinstance(verifier, ReferenceTargetVerifier):
+            raise TypeError("target query authority requires a ReferenceTargetVerifier")
+        self.verifier = verifier
         self._scope_authority = object()
         self._issued_scopes: WeakSet[OwnerTargetScope] = WeakSet()
 
@@ -415,22 +416,16 @@ class ReferenceRepository:
         )
 
     def target_owner_scope(
-        self, session: Session | AsyncSession, targets: tuple[VerifiedReferenceTarget, ...], *, issuer: object
+        self, session: Session | AsyncSession, receipts: tuple[TargetLockReceipt, ...]
     ) -> OwnerTargetScope:
         tenant_id = self.current_tenant_id()
-        if (
-            issuer is None
-            or not targets
-            or any(
-                target.target_tenant_id != tenant_id or self.owners.get(target.key.target_type) is not issuer
-                for target in targets
-            )
-        ):
+        if self.verifier is None:
+            raise _invalid("reference_target_verifier_missing")
+        targets = self.verifier.validate_owner_receipts(session, receipts)
+        if any(target.target_tenant_id != tenant_id for target in targets):
             raise _invalid("target_owner_scope_invalid")
         keys = tuple(sorted({target.key for target in targets}, key=lambda key: key.lock_order_key))
-        scope = OwnerTargetScope(
-            TransactionIdentity.capture(session), tenant_id, keys, (issuer,), self._scope_authority
-        )
+        scope = OwnerTargetScope(TransactionIdentity.capture(session), tenant_id, keys, receipts, self._scope_authority)
         self._issued_scopes.add(scope)
         return scope
 
@@ -441,15 +436,17 @@ class ReferenceRepository:
             or not scope.targets
             or scope._authority is not self._scope_authority
             or scope.owner_tenant_id != self.current_tenant_id()
-            or any(
-                not any(self.owners.get(key.target_type) is issuer for issuer in scope.issuers) for key in scope.targets
-            )
         ):
             raise _invalid("target_owner_scope_invalid")
         try:
             scope.transaction.assert_current(session)
         except (TypeError, ValueError) as exc:
             raise _invalid("target_owner_scope_expired") from exc
+        if self.verifier is None:
+            raise _invalid("reference_target_verifier_missing")
+        verified = self.verifier.validate_owner_receipts(session, scope._receipts)
+        if {target.key for target in verified} != set(scope.targets):
+            raise _invalid("target_owner_scope_invalid")
 
     def list_inbound_for_owner(
         self, session: Session, scope: OwnerTargetScope, *, include_space_contents: bool = False
