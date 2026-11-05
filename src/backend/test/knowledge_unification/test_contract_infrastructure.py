@@ -60,3 +60,14 @@ def test_existing_table_upgrade_is_repeatable_without_converting_rows(f118_engin
 def test_downgrade_cannot_silently_drop_grant_or_migration_provenance():
     with pytest.raises(RuntimeError, match="complete maintenance backup"):
         import_module(MIGRATION).downgrade()
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["processing_defaults", "processing_config_version", "model_config_revision", "index_generation", "migration_origin"],
+)
+def test_internal_orm_metadata_does_not_expand_legacy_wire_models(name):
+    from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeBase
+
+    assert name in Knowledge.model_fields
+    assert name not in KnowledgeBase.model_fields
