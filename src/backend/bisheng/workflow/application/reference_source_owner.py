@@ -5,7 +5,12 @@ from copy import deepcopy
 from dataclasses import fields
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeOperationPlanConflictError,
+    ReferenceCoverageNotReadyError,
+    ResourceReferenceInvalidError,
+)
 from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.public_endpoints.domain.context import get_current_public_api_principal
 from bisheng.resource_reference.application.contracts import SourceKey, SourceType, TargetType
@@ -97,7 +102,10 @@ class WorkflowReferenceSourceOwner:
     async def arevalidate_source(self, session, request, identity, expected) -> AuthorizedSourceSnapshot:
         if expected.source_key.source_type != request.source_type or expected.source_key.source_id != request.source_id:
             raise ResourceReferenceInvalidError(reason="workflow_source_snapshot_mismatch")
-        return await self._saved(session, request, identity, for_update=True)
+        try:
+            return await self._saved(session, request, identity, for_update=True)
+        except NotFoundError as exc:
+            raise KnowledgeOperationPlanConflictError(reason="workflow_source_changed") from exc
 
     async def _transient(self, session, request, identity, *, for_update=False):
         self._identity(identity)
@@ -140,4 +148,7 @@ class WorkflowReferenceSourceOwner:
     async def arevalidate_transient(self, session, request, identity, expected) -> AuthorizedTransientSnapshot:
         if expected.resource_id != request.resource_id:
             raise ResourceReferenceInvalidError(reason="workflow_preview_snapshot_mismatch")
-        return await self._transient(session, request, identity, for_update=True)
+        try:
+            return await self._transient(session, request, identity, for_update=True)
+        except NotFoundError as exc:
+            raise KnowledgeOperationPlanConflictError(reason="workflow_preview_root_changed") from exc
