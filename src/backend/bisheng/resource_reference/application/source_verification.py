@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from weakref import WeakKeyDictionary
+from weakref import ReferenceType, WeakKeyDictionary, ref
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -53,6 +53,7 @@ class _Registration:
     facts: ReadIdentityFacts
     transaction: TransactionIdentity
     nonce: object
+    scope_ref: ReferenceType
     target_plan: tuple[ReferenceTargetReadFact, ...] | None = None
 
 
@@ -133,7 +134,9 @@ class SourceReadVerifier:
         if await self._identity(identity) != facts:
             raise _invalid()
         scope = TransientTargetReadScope(snapshot) if transient else SourceOwnerReadScope(snapshot, request.purpose)
-        self._issued[scope] = _Registration(owner, request, snapshot, identity, facts, transaction, scope._nonce)
+        self._issued[scope] = _Registration(
+            owner, request, snapshot, identity, facts, transaction, scope._nonce, ref(scope)
+        )
         return scope
 
     async def aissue_scope(self, session, request, identity):
@@ -152,6 +155,7 @@ class SourceReadVerifier:
         registration = self._issued.get(scope)
         if (
             registration is None
+            or registration.scope_ref() is not scope
             or registration.identity is not identity
             or scope.snapshot is not registration.snapshot
             or scope._nonce is not registration.nonce
