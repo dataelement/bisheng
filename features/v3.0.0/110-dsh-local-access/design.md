@@ -96,6 +96,8 @@ DSH 直接使用 Python BiSheng 完成登录、会话和模型调用，退出商
 
 实际结果和未完成的真实环境验收见 [validation.md](./validation.md)。发布步骤见 [deployment.md](./deployment.md)。单测、HTTP 进程内测试、客户端 mock 服务、真实数据库并发和实际 Electron 登录分别记录证据，不相互替代。
 
+2026-11-05 刷新恢复合入后的完整边界、客户端后续改造和发布验收见 [频繁掉线治理方案](./refresh-reliability-plan.md)；其中明确区分本地已合入能力和待实施方案。
+
 ## 8. 后续边界
 
 不删除历史审计和旧操作记录，不迁移 Gateway SSO，不重置已用量。过期本地会话和 refresh 摘要的运营清理应在绝对过期后执行；USED 摘要不能在有效期内提前清理，否则失去重放检测证据。
