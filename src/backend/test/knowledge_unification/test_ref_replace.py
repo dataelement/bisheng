@@ -14,7 +14,11 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import Session, SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeOperationPlanConflictError,
+    ReferenceCoverageNotReadyError,
+    ResourceReferenceInvalidError,
+)
 from bisheng.resource_reference.application.bindings import ReferenceBindings
 from bisheng.resource_reference.application.contracts import (
     BindingWriteContext,
@@ -127,6 +131,55 @@ def test_versions_update_independently_and_stale_root_cas_cannot_commit(engine):
         assert raised.value.kwargs["reason"] == "root_revision_conflict"
         assert [row.target_id for row in repo.list_source_references(session, first)] == ["1"]
         assert [row.target_id for row in repo.list_source_references(session, second)] == ["2"]
+
+
+@pytest.mark.parametrize("references", [(), (spec("1"),)])
+@pytest.mark.parametrize("new_version", [False, True])
+def test_r2_cannot_recreate_missing_guard_with_any_existing_source(engine, references, new_version):
+    owner, repo, bindings = components()
+    first = SourceKey(101, "workflow_version", "guard-loss", "v1")
+    target = SourceKey(101, "workflow_version", "guard-loss", "v2") if new_version else first
+    with Session(engine) as session, session.begin():
+        bindings.replace_source_bindings(session, first, None, 1, verified_set(session, owner, first, references), True)
+        session.delete(repo.get_root_guard(session, first))
+        session.flush()
+        candidate = verified_set(session, owner, target, references, old=() if new_version else references)
+        with pytest.raises(ReferenceCoverageNotReadyError) as raised:
+            bindings.replace_source_bindings(
+                session, target, None if new_version else 1, 1 if new_version else 2, candidate, True
+            )
+        assert raised.value.kwargs["reason"] == "source_root_guard_missing"
+        assert repo.get_root_guard(session, first) is None
+        assert repo.get_source_set(session, first).source_revision == 1
+
+
+@pytest.mark.parametrize("references", [(), (spec("1"),)])
+@pytest.mark.parametrize("new_version", [False, True])
+async def test_async_r2_cannot_recreate_missing_guard_with_any_existing_source(references, new_version):
+    owner, repo, bindings = components()
+    first = SourceKey(101, "workflow_version", "guard-loss", "v1")
+    target = SourceKey(101, "workflow_version", "guard-loss", "v2") if new_version else first
+    database = create_async_engine("sqlite+aiosqlite://")
+    try:
+        async with database.begin() as connection:
+            await connection.run_sync(lambda c: SQLModel.metadata.create_all(c, tables=TABLES))
+        with ref_fixtures.tenant(101):
+            async with AsyncSession(database) as session, session.begin():
+                await bindings.areplace_source_bindings(
+                    session, first, None, 1, verified_set(session, owner, first, references), True
+                )
+                await session.delete(await repo.aget_root_guard(session, first))
+                await session.flush()
+                candidate = verified_set(session, owner, target, references, old=() if new_version else references)
+                with pytest.raises(ReferenceCoverageNotReadyError) as raised:
+                    await bindings.areplace_source_bindings(
+                        session, target, None if new_version else 1, 1 if new_version else 2, candidate, True
+                    )
+                assert raised.value.kwargs["reason"] == "source_root_guard_missing"
+                assert await repo.aget_root_guard(session, first) is None
+                assert (await repo.aget_source_set(session, first)).source_revision == 1
+    finally:
+        await database.dispose()
 
 
 def test_partial_repair_preserves_other_original_invalid_slot(engine):
