@@ -6,19 +6,23 @@ import pytest
 from bisheng.api.services import assistant as assistant_module
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.knowledge.domain import knowledge_rag as rag_module
+from test.knowledge_unification import test_as_bindings as binding_fixtures
+
+assistant_tenant = binding_fixtures.assistant_tenant
+assistant_business = binding_fixtures.assistant_business
 
 
 @pytest.mark.parametrize("failure", [AttributeError("missing model"), RuntimeError("provider unavailable")])
-async def test_publish_reports_the_knowledge_base_with_unavailable_embedding(failure):
+async def test_publish_reports_the_knowledge_base_with_unavailable_embedding(failure, assistant_business):
+    context = assistant_business
+    await binding_fixtures.seed(context)
     knowledge = SimpleNamespace(id=4188, name="Audio library", model="889", collection_name="test")
 
     async def initialize():
         await rag_module.KnowledgeRag.init_knowledge_milvus_vectorstore(7, knowledge)
 
-    assistant = SimpleNamespace(id="assistant-test", status=1)
     agent = SimpleNamespace(init_assistant=initialize)
     with (
-        patch.object(assistant_module.AssistantDao, "get_one_assistant", return_value=assistant),
         patch.object(assistant_module.AssistantDao, "update_assistant") as save,
         patch.object(assistant_module, "require_business_action", new=AsyncMock()),
         patch.object(assistant_module, "AssistantAgent", return_value=agent),
@@ -26,16 +30,15 @@ async def test_publish_reports_the_knowledge_base_with_unavailable_embedding(fai
         patch.object(rag_module.LLMService, "get_bisheng_knowledge_embedding", new=AsyncMock(side_effect=failure)),
     ):
         with pytest.raises(BaseErrorCode) as caught:
-            await assistant_module.AssistantService.update_status(
-                MagicMock(), SimpleNamespace(user_id=7), assistant.id, 2
-            )
+            await assistant_module.AssistantService.update_status(context.request, context.user, "assistant-a", 2)
 
     response = caught.value.return_resp_instance()
     assert response.status_code == 10425
     assert response.data["knowledge_name"] == "Audio library"
     assert "Audio library" in response.status_message
     assert caught.value.__cause__.__cause__ is failure
-    assert assistant.status == 1
+    assistant, _, references, source = await binding_fixtures.inspect_business(context)
+    assert assistant.status == 1 and source.effective and len(references) == 2
     save.assert_not_called()
 
 
