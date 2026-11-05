@@ -183,8 +183,6 @@ class ModelReferenceTargetRepository:
         return bool(
             root
             and child
-            and root.status == "active"
-            and child.status == "active"
             and child.id != ROOT_TENANT_ID
             and child.parent_tenant_id == ROOT_TENANT_ID
         )
