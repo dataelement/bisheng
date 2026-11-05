@@ -10,8 +10,9 @@ from contextlib import contextmanager
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.dialects import mysql
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import Session
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.flow import CurVersionDelError
 from bisheng.common.errcode.http_error import NotFoundError
@@ -254,9 +255,10 @@ async def test_workflow_name_lookup_keeps_user_tenant_type_and_live_scope(store)
             (101, 11, "deleted-only"),
             (101, 11, "other-user-only"),
             (101, 21, "other tenant"),
-            (202, 11, "workflow"),
         ):
             assert await lookup(session, tenant_id, user_id, name) is None
+        with pytest.raises(ResourceReferenceInvalidError):
+            await lookup(session, 202, 11, "workflow")
 
 
 async def test_version_name_lookup_keeps_root_tenant_and_live_scope(store):
