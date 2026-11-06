@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史792编号：663已完成/历史交付、127当前待办、2外移；原137队列已完成28项、剩109项，另18张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史794编号：663已完成/历史交付、129当前待办、2外移；原137队列已完成28项、剩109项，另20张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -6427,6 +6427,20 @@
   **依赖**：T791\
   **配对测试**：T791\
   **验证 / 完成条件**：配对真实红绿、实际入口组合及固定独立复核；严格类型无新增诊断/抑制，不将普通上传计作完整版本/高级验收。
+
+- [ ] **T793 · 普通上传真实状态中英文词条**
+  **类型 / Owner**：文案集成 / INT\
+  **写入文件**：`src/frontend/platform/public/locales/zh-Hans/knowledge.json`、`src/frontend/platform/public/locales/en-US/knowledge.json`\
+  **逻辑 / 测试上下文**：W6§36五个真实状态与跟踪提示键，只区分暂存/已提交/取消/状态不可取，不把提交当解析完成。\
+  **依赖**：T789\
+  **验证 / 完成条件**：保所有旧键值，三语key对齐及check-i18n通过，实际consumer随后T790验证。
+
+- [ ] **T794 · 普通上传真实状态日文词条**
+  **类型 / Owner**：文案集成 / INT\
+  **写入文件**：`src/frontend/platform/public/locales/ja/knowledge.json`\
+  **逻辑 / 测试上下文**：与T793同五键，沿原三语生成链，不输出未翻译key。\
+  **依赖**：T793\
+  **验证 / 完成条件**：保所有旧键值，三语key对齐及check-i18n通过，实际consumer随后T790验证。
 
 ## 自动化覆盖索引
 
