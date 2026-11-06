@@ -53,8 +53,12 @@ def chain(ident=1, count=1, *, space_id=10, tenant=101):
 
 
 @pytest.fixture
-async def catalog(tenant_context, monkeypatch):
+def concrete_tenant(tenant_context):
     tenant_context(101)
+
+
+@pytest.fixture
+async def catalog(concrete_tenant, monkeypatch):
     register_tenant_filter_events()
     monkeypatch.setattr(
         tenant_filter, "_tenant_aware_tables", tenant_filter._tenant_aware_tables | {"knowledge", "knowledgefile"}
@@ -261,3 +265,10 @@ async def test_external_native_session_queries_do_not_flush_or_commit_unrelated_
 def test_cursor_page_is_explicit_and_does_not_invent_a_total():
     result = VersionCandidatePage(data=[], page_size=40, has_more=True, next_cursor="opaque")
     assert result.model_dump() == {"data": [], "page_size": 40, "has_more": True, "next_cursor": "opaque"}
+
+
+@pytest.mark.parametrize("root", [None, space(tenant=202), space(kind=1)])
+async def test_candidates_require_a_real_current_tenant_space_even_with_local_file_facts(catalog, root):
+    await catalog.seed(([root] if root is not None else []) + chain())
+    with pytest.raises(SpaceFileNotFoundError):
+        await catalog.repository.alist_candidates(tenant_id=101, space_id=10)
