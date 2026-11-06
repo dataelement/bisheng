@@ -371,8 +371,9 @@ async def test_schema_precheck_fails_without_repairing_incomplete_existing_stora
         await connection.run_sync(lambda conn: KnowledgeUnificationRun.__table__.drop(conn))
         if structure == "missing_column":
             await connection.execute(text("CREATE TABLE knowledge_unification_run (id VARCHAR(36) PRIMARY KEY)"))
-    async with AsyncSession(ledger) as session, pytest.raises(ReferenceCoverageNotReadyError):
-        await repo.aschema_precheck(session)
+    async with AsyncSession(ledger) as session:
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            await repo.aschema_precheck(session)
     async with ledger.connect() as connection:
         columns = await connection.run_sync(
             lambda conn: (
