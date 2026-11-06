@@ -10,7 +10,7 @@
 - [Spec：94 条验收标准](./spec.md)
 - [技术设计：迁移、策略统一、业务绑定维护和强制删除](./design.md)
 - [实施任务：接口、依赖、文件 Owner 与验证](./tasks.md)
-- [剩余137项：需求分组、逐项编号和依赖](./pending-tasks.md)
+- [剩余125项：需求分组、逐项编号和依赖](./pending-tasks.md)
 - [剩余任务范围复核：AC依据、授权边界与外移记录](./scope-review.md)
 - [独立待办：分享链接签发授权（已移出F118）](../../../docs/backlog/share-link-issuance-authorization.md)
 - [多 agent 并行开发：边界、耦合与合流协议](./parallel-development.md)
@@ -91,3 +91,9 @@ W3结束时248/421项完成，本波新增82项。主agent在0c2587dbe5ec组合�
 APP真实保存版本、频道完整当前配置、Knowledge自身模型和五类默认配置已接实际维护与严格读取。模型默认覆盖与多空间同事务更新，commit后派发7字段业务命令；RAG/worker从当前业务配置取模型。APP维持原0/3检索能力，历史QA/删除目标保ID与失效状态。查询不再暗中产生退休重建消息；旧无stage/期望任务明确失败待升级受控处置。
 
 先冻结[业务来源合同](./business-sources-contract.md)，再按APP/CH/LLM/KN及最后WORKER独占交接并行；主agent固定提交复查、正常合流和组合验证。设计、升级说明与HTML已同步，原94AC、140QA及13张SVG保持。主组合2390项及6子测试通过（81路径），438/597任务完成。确切受测源码、静态结果及其余范围见[W4集成记录](./wave4-implementation-review.md)。未推送、迁移或部署，主工作区保持原状。
+
+## W6持续实施（2026-11-06）
+
+W6持续实施；历史672编号：545已完成/历史交付、125当前待办、2外移；原137队列已完成18项、剩119项，另6张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
+
+109:3005由用户撤回后保持不动；109新独立项目已启动标准旧版本API/worker和真实中间件，真实注册/登录并准备隔离租户和mock模型，尚未执行F118迁移。用户选mock模型/ETL并免除本轮DM8实测；不免C2静态，也不以此代替MySQL事务、索引、投影和升级恢复演练。
