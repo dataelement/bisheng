@@ -12,7 +12,10 @@
 <p align="center">
   <a href="./README.md">简体中文</a> |
   <a href="./README_EN.md">English</a> |
-  <a href="./README_JPN.md">日本語</a>
+  <a href="./README_JPN.md">日本語</a> |
+  <a href="./README_ES.md">Español</a> |
+  <a href="./README_PT.md">Português</a> |
+  <a href="./README_RU.md">Русский</a>
 </p>
 
 <p align="center">
@@ -143,13 +146,6 @@ After the startup is complete, access http://IP:3001 in the browser. The login p
 By default, the first registered user will become the system admin. 
 
 For more installation and deployment issues, refer to:：[Self-hosting](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
-
-## Resources
-
-- [📄 Application examples and use cases](https://dataelem.feishu.cn/wiki/ZfkmwLPfeiAhQSkK2WvcX87unxc)
-- [📄 Tips and best practices](https://dataelem.feishu.cn/wiki/OWFRwknFaiIMajke4m5cFeLrnie)
-- [📄 Feature guides](https://dataelem.feishu.cn/wiki/WxH6wubbAiBkRIkSEyecmpDMnjF)
-- [📄 BISHENG Blog](https://dataelem.feishu.cn/wiki/BiNowcaYWilewdksXQ5cZl3tnzy)
 
 ## Acknowledgement 
 This repo benefits from [langchain](https://github.com/langchain-ai/langchain) [langflow](https://github.com/logspace-ai/langflow) [unstructured](https://github.com/Unstructured-IO/unstructured) and [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) . Thanks for their wonderful works.

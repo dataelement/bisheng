@@ -12,7 +12,10 @@
 <p align="center">
   <a href="./README.md">简体中文</a> |
   <a href="./README_EN.md">English</a> |
-  <a href="./README_JPN.md">日本語</a>
+  <a href="./README_JPN.md">日本語</a> |
+  <a href="./README_ES.md">Español</a> |
+  <a href="./README_PT.md">Português</a> |
+  <a href="./README_RU.md">Русский</a>
 </p>
 
 <p align="center">
@@ -142,13 +145,6 @@ docker compose -f docker-compose.yml -p bisheng up -d
 启动后，在浏览器中访问 http://IP:3001 ，出现登录页，进行用户注册。默认第一个注册的用户会成为系统admin。
 
 其他安装部署问题参考：[私有化部署](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
-
-
-## 资源
-- [📄应用案例/场景库](https://dataelem.feishu.cn/wiki/ZfkmwLPfeiAhQSkK2WvcX87unxc)
-- [📄经验技巧](https://dataelem.feishu.cn/wiki/OWFRwknFaiIMajke4m5cFeLrnie)
-- [📄功能使用说明](https://dataelem.feishu.cn/wiki/WxH6wubbAiBkRIkSEyecmpDMnjF)
-- [📄BISHENG Blog](https://dataelem.feishu.cn/wiki/BiNowcaYWilewdksXQ5cZl3tnzy)
 
 
 ## 感谢 
