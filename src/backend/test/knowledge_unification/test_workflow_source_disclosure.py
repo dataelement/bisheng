@@ -11,6 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.api.services.f048_application_permission import F048ApplicationPermissionAdapter
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
+from bisheng.common.errcode.public_endpoints import PublicGuestAccessDisabledError
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.flow_version import FlowVersion
@@ -222,6 +223,47 @@ async def test_public_principal_cannot_disclose_noncurrent_version(auth, monkeyp
         guest.assert_awaited_once_with("workflow", "wf")
     finally:
         reset_current_public_api_principal(token)
+
+
+@pytest.mark.parametrize("failure", [PublicGuestAccessDisabledError(), OSError("guest policy unavailable")])
+async def test_public_guest_denial_is_distinct_from_policy_io_failure(auth, monkeypatch, failure):
+    from bisheng.public_endpoints.domain.services import guest_policy
+
+    monkeypatch.setattr(guest_policy, "ensure_guest_link_enabled", AsyncMock(side_effect=failure))
+    token = set_current_public_api_principal(
+        PublicApiPrincipal(
+            tenant_id=101, operator_user_id=11, operator_name="guest", resource_type="workflow", resource_id="wf"
+        )
+    )
+    try:
+        if isinstance(failure, PublicGuestAccessDisabledError):
+            assert await read(auth, (source(),)) == (None,)
+        else:
+            with pytest.raises(ReferenceCoverageNotReadyError) as error:
+                await read(auth, (source(),))
+            assert error.value.__cause__ is failure
+    finally:
+        reset_current_public_api_principal(token)
+
+
+async def test_original_full_scope_super_path_does_not_grant_foreign_metadata(auth):
+    actor = PermissionActor(user_id=11, tenant_id=1, super_admin=True)
+    token = set_current_permission_actor(actor)
+    auth.identity = UserPayload(user_id=11, tenant_id=1, user_role=[])
+    try:
+        result = await read(auth, (source(), source("2"), source("999", "outside", 202)))
+        assert [item.version_label if item else None for item in result] == ["v0", "draft", None]
+        assert not auth.decisions.calls
+    finally:
+        reset_current_permission_actor(token)
+
+
+async def test_missing_permission_snapshot_is_not_a_normal_hidden_source(auth):
+    with auth.sync.begin() as connection:
+        connection.execute(sa.delete(ResourcePermissionMode))
+    with pytest.raises(ReferenceCoverageNotReadyError):
+        await read(auth, (source(),))
+    assert not auth.decisions.calls
 
 
 async def test_pending_changes_remain_unflushed_and_no_graph_or_write_is_selected(auth):
