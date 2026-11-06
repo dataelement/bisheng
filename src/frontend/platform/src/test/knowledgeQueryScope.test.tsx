@@ -277,6 +277,19 @@ describe("knowledge query scope", () => {
 });
 
 describe("processing actions retain their issuing scope", () => {
+  it("keeps a confirmed plan across ordinary rerenders with equal scope values", async () => {
+    const api = apiPort();
+    const { result, rerender } = renderHook(
+      ({ value }) => useKnowledgeProcessingActions(value, 7, api),
+      { ...queryHost(), initialProps: { value: scope } },
+    );
+    await result.current.precheck({ kind: "embedding_rebuild", parameters: {} });
+    rerender({ value: { ...scope } });
+    await expect(result.current.createJob({
+      idempotency_key: "create-1", confirmation_id: plan.confirmation_id, plan_digest: plan.plan_digest,
+    })).resolves.toMatchObject({ job_id: "job-1", state: "running" });
+  });
+
   it("passes only frozen plan/retry data and preserves the server's job state", async () => {
     const api = apiPort();
     const { result } = renderHook(
