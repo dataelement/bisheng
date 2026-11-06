@@ -150,13 +150,11 @@ async def test_complete_classification_counts_distinct_sources_once_but_only_ret
 
 
 async def test_actual_default_owner_sql_metadata_is_used_and_missing_own_row_fails_closed(impact):
-    from bisheng.llm.application.model_default_read_identity import ModelDefaultReadIdentityPort
-    from bisheng.llm.application.model_default_source_owner import ModelDefaultSourceOwner
     from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfig
 
     session, service, _ = impact
-    owner = ModelDefaultSourceOwner(identity_port=ModelDefaultReadIdentityPort())
-    service.disclosure_runtime = SourceDisclosureRuntime({SourceType.MODEL_DEFAULT: owner})
+    # Exercise the production pure composition, not an alternate impact core.
+    service.disclosure_runtime = None
     seed(session, ident="assistant_llm", kind="model_default")
     row = TenantSystemModelConfig(tenant_id=101, key="assistant_llm", value="not-read-secret")
     session.add(row)
@@ -206,6 +204,64 @@ async def test_continuation_fresh_permissions_and_trace_change_but_no_stale_cred
             trace_id_var.reset(trace)
     with original.actor(admin=False) as denied, pytest.raises(original.LLMModelSharedReadonlyError):
         await following(impact, denied, cursor)
+
+
+async def test_still_admin_narrowed_scope_and_model_revision_cannot_reuse_a_source_cursor(impact):
+    from bisheng.llm.domain.models.llm_server import LLMModel
+    from bisheng.permission.application.data_scope import DATA_SCOPE_PERSONAL
+    from bisheng.permission.application.identity import (
+        PermissionActor,
+        reset_current_permission_actor,
+        set_current_permission_actor,
+    )
+
+    session, service, _ = impact
+    metadata(service)
+    for i in range(3):
+        seed(session, ident=str(i))
+    await session.flush()
+    with original.actor() as user:
+        result = await first(impact, user)
+        cursor = result.source_page.next_cursor
+        token = set_current_permission_actor(
+            PermissionActor(
+                user_id=7,
+                tenant_id=101,
+                tenant_admin_tenant_ids=frozenset({101}),
+                data_scope=DATA_SCOPE_PERSONAL,
+            )
+        )
+        try:
+            with pytest.raises(ResourceReferenceInvalidError):
+                await following(impact, user, cursor)
+        finally:
+            reset_current_permission_actor(token)
+        retained_row = await session.get(LLMModel, 15)
+        retained_row.model_name = "actual-revision-changed"
+        await session.flush()
+        with pytest.raises(ResourceReferenceInvalidError):
+            await following(impact, user, cursor)
+
+
+async def test_all_six_types_and_versions_keep_qualified_counts_and_last_page_binding_changes(impact):
+    session, service, _ = impact
+    metadata(service)
+    for kind in SourceType:
+        seed(session, ident="same", kind=kind.value)
+    seed(session, ident="same", kind="workflow_version", version="history")
+    last_rows = seed(session, ident="z", slots=201)
+    await session.flush()
+    with original.actor() as user:
+        before = await first(impact, user)
+        assert sum(dict(before.source_counts).values()) == 8
+        assert before.qualified_counts == before.source_counts
+        assert sum(dict(before.restricted_counts).values()) == 0
+        last_rows[-1].slot_key = "last-page-changed"
+        await session.flush()
+        with pytest.raises(ResourceReferenceInvalidError):
+            await following(impact, user, before.source_page.next_cursor)
+        after = await first(impact, user)
+        assert after.inbound_digest != before.inbound_digest and after.source_counts == before.source_counts
 
 
 async def test_new_session_can_continue_but_last_binding_id_reinsertion_requires_confirmation(impact):
@@ -300,6 +356,7 @@ async def test_100001_slots_stream_complete_digest_without_hash_list_peak(impact
     assert result.inbound_digest == expected.hexdigest()
     assert dict(result.slot_counts)["assistant"] == count
     assert result.source_page.data[0].matched_slot_count == count
+    print(f"model-source aggregate: slots={count}, peak_bytes={peak}")
     assert peak < 1024 * 1024
 
 
