@@ -16,6 +16,7 @@ from bisheng.core.context.tenant import (
     bypass_tenant_filter,
     current_tenant_id,
     set_current_tenant_id,
+    tenant_execution_scope,
     visible_tenant_ids,
 )
 from bisheng.core.database import tenant_filter
@@ -268,7 +269,7 @@ async def test_original_20_digest_is_complete_and_neutral_seven_are_separate(rep
     await native.insert(Knowledge, [original])
     async with AsyncSession(native.engine) as session, session.begin():
         before = (await repo.alist_resources(session)).items[0]
-        assert set(OLD_RESOURCE) <= {field.name for field in fields(before)}
+        assert {field.name for field in fields(before)} == {*OLD_RESOURCE, "neutral", "old_business_digest"}
         expected = {key: value.isoformat() if isinstance(value, datetime) else value for key, value in original.items()}
         digest = hashlib.sha256(
             json.dumps(expected, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
@@ -327,6 +328,41 @@ async def test_raw_original_content_is_private_and_json_nonfinite_values_fail_cl
         with pytest.raises(KnowledgeOperationPlanConflictError) as error:
             await getattr(repo, f"alist_{kind}")(session)
         assert "private-" not in str(error.value)
+
+
+async def test_all_raw_row_columns_are_explicit_closed_original_shapes(repo, native):
+    await native.insert(Knowledge, [resource(9000)])
+    for kind, model in MODELS.items():
+        await native.insert(model, [data(kind, 1)])
+    extra = {
+        "resources": {"neutral", "old_business_digest"},
+        "documents": {"parent_tenant_id", "parent_knowledge_type"},
+        "versions": {
+            "knowledge_id",
+            "parent_tenant_id",
+            "file_knowledge_id",
+            "file_tenant_id",
+            "file_type",
+            "file_space_tenant_id",
+        },
+    }
+    async with AsyncSession(native.engine) as session, session.begin():
+        for kind, model in MODELS.items():
+            row = (await getattr(repo, f"alist_{kind}")(session)).items[0]
+            original = set(OLD_RESOURCE) if kind == "resources" else set(model.__table__.columns.keys())
+            assert {field.name for field in fields(row)} == original | extra.get(kind, set())
+
+
+async def test_malformed_stored_json_fails_without_returning_original_content(repo, native):
+    await native.insert(Knowledge, [resource(1)])
+    async with native.engine.begin() as connection:
+        await connection.execute(
+            sa.text("UPDATE knowledge SET metadata_fields=:value WHERE id=1"), {"value": "private-broken{"}
+        )
+    async with AsyncSession(native.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError) as error:
+            await repo.alist_resources(session)
+    assert "private-broken" not in str(error.value) and "private-broken" not in repr(error.value)
 
 
 @pytest.mark.parametrize("kind", [key for key, model in MODELS.items() if "tenant_id" in model.__table__.c])
@@ -424,6 +460,62 @@ async def test_existing_partial_and_multiple_version_links_stay_visible_as_raw_f
         versions = (await repo.alist_versions(session)).items
     assert docs[0].primary_version_id is None
     assert [(row.id, row.document_id, row.knowledge_file_id) for row in versions] == [(1, 1, 1), (2, 1, 1)]
+
+
+async def test_owned_version_page_keeps_foreign_file_facts_instead_of_inner_join_hiding_it(repo, native):
+    await native.insert(Knowledge, [resource(9000), resource(8000, 202)])
+    await native.insert(KnowledgeFile, [file(1, 202, knowledge_id=8000)])
+    await native.insert(KnowledgeDocument, [data("documents", 1)])
+    await native.insert(KnowledgeDocumentVersion, [data("versions", 1)])
+    async with AsyncSession(native.engine) as session, session.begin():
+        versions = (await repo.alist_versions(session)).items
+        assert len(versions) == 1
+        assert versions[0].knowledge_id == 9000 and versions[0].parent_tenant_id == 101
+        assert versions[0].file_knowledge_id == 8000 and versions[0].file_tenant_id == 202
+        assert versions[0].file_space_tenant_id == 202 and versions[0].file_type == 1
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await repo.avalidate_global_integrity(session)
+
+
+async def test_many_roots_and_historical_versions_are_linear_pages_with_one_global_probe(repo, native):
+    await native.insert(Knowledge, [resource(ident) for ident in range(1, 42)] + [resource(8000, 202)])
+    await native.insert(
+        KnowledgeDocument,
+        [{**data("documents", ident), "knowledge_id": ident, "primary_version_id": ident} for ident in range(1, 42)]
+        + [{**data("documents", 8000, 202), "primary_version_id": 8000}],
+    )
+    await native.insert(
+        KnowledgeFile,
+        [file(ident, knowledge_id=(ident - 1) % 41 + 1) for ident in range(1, 402)]
+        + [file(8000, 202, knowledge_id=8000)],
+    )
+    await native.insert(
+        KnowledgeDocumentVersion,
+        [
+            {
+                **data("versions", ident),
+                "document_id": (ident - 1) % 41 + 1,
+                "version_no": (ident - 1) // 41 + 1,
+                "is_primary": ident <= 41,
+            }
+            for ident in range(1, 402)
+        ]
+        + [data("versions", 8000, 202)],
+    )
+    async with AsyncSession(native.engine) as session, session.begin():
+        await repo.avalidate_global_integrity(session)
+        assert len(native.queries) == 11  # run-wide seven tenant probes and four parent/pointer probes
+        native.queries.clear()
+        roots = await collect(repo, "resources", session)
+        docs = await collect(repo, "documents", session)
+        files = await collect(repo, "files", session)
+        versions = await collect(repo, "versions", session)
+        assert (len(roots), len(docs), len(files), len(versions)) == (41, 41, 401, 401)
+        assert len(native.queries) == 8  # 1+1+3+3, not roots multiplied by each child table
+        with tenant_execution_scope(202):
+            for kind in ("resources", "documents", "files", "versions"):
+                assert [row.id for row in await collect(repo, kind, session)] == [8000]
+        assert len(native.queries) == 12  # no repeated global probe when the coordinator advances tenant
 
 
 async def test_ancestor_500_unique_keys_use_three_queries_and_keep_foreign_and_missing_distinct(repo, native):
@@ -525,6 +617,11 @@ async def test_reads_never_flush_or_commit_unrelated_pending_state_and_widened_s
         session.add(pending)
         flushes = []
         sa.event.listen(session.sync_session, "before_flush", lambda *_args: flushes.append(True))
+
+        @sa.event.listens_for(session.sync_session, "do_orm_execute")
+        def selects_only(state):
+            assert state.is_select
+
         token = visible_tenant_ids.set(frozenset({101, 202}))
         try:
             for kind in MODELS:
