@@ -147,6 +147,10 @@ export interface KnowledgeSpaceChild {
   version_no?: number | null;
   is_multi_version?: boolean;
   has_similar?: boolean;
+  tags?: { id: number; name: string }[];
+  has_failed_files?: boolean;
+  has_abnormal_files?: boolean;
+  has_processing_files?: boolean;
 }
 
 export interface KnowledgeChildrenQuery {
