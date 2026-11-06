@@ -95,6 +95,9 @@ def _spec(text):
 
 # These are wire allowlists, deliberately independent of dataclass introspection.
 _SCHEMAS = {
+    "permission_plan": _spec(
+        "tenant_id:positive resource_type:str resource_id:str target_resource_type:str plan_checksum:hash before_digest:hash after_grants_digest:hash visibility_deltas_digest:hash expected_use_changes_digest:hash"
+    ),
     "resource": _spec(
         "tenant_id:positive id:positive type:int user_id:int? state:int? model:str? index_name:str? collection_name:str? creation_request_id:str? creation_payload_hash:str? old_business_digest:hash neutral_digest:hash"
     ),
