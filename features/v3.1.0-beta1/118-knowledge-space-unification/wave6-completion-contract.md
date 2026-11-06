@@ -327,3 +327,14 @@ Dialog打开/关闭/换scope/卸载/ABA epoch及初次GET退休沿92e策略；�
 普通“知识空间”、独立QA及仅super或相应tenant admin的“知识空间管理”三tab；其他身份不因owner/manager/部门admin或旧role='admin'进入管理。普通创建仍super/tenantadmin或原create_knowledge菜单，不限制仅管理员。KnowledgeFile(scope,toolbarTarget?)按view分ordinary useKnowledgeVisibleSpaces opaque cursor与admin useKnowledgeAdminSpaces DB page/total；普通空页有has_more继续推进，不能客户端分页/过滤补管理数据，不造has_abnormal或详情统计。列表资源lazy actions与PermissionDialog仅该SPACE列表改knowledge_space，QA仍library；actions=null需真实懒读，不由admin身份补业务动作。scope/view变化重挂列表并退役对话框，不复用旧row确认状态。
 
 verify edit后挂现ProcessingDefaultsDialog和基本信息Dialog，copy/delete/force等未装配能力不挪旧library调用或资格；后续T180–T183实际R3/操作再接。管理清单只扩列举范围，不扩具体资源动作。原file/qa tab key和已有路由可保，新admin key只对合资格身份接受；旧普通标签到新f118.spaces只限当前入口，不全局改仍未统一的selector。新翻译由INT在三语实际locale同批提交，标题严格“知识空间管理”；sidebar统一名后续词条接线由INT登记，不改MainLayout架构。
+
+
+## 23. 统一列表保留既有异常文件标记与筛选子合同 V1：已冻结
+
+本节补齐§14/§22的兼容遗漏，取代其中“不造has_abnormal”的临时字段限制；不扩展详情统计或文件权限。原F064已上线的文件异常布尔标记、异常筛选继续用于统一空间列表，普通与管理视图一致；QA独立且不受影响。只对已通过空间列表准入的最终返回页提供布尔值，不返回失败文件ID、名称或内容，不按逐文件ACL循环判断。此口径沿F064“库级可见即可知道异常布尔”，不是授予任何文件操作。异常仅有效FILE且status为3/6/7，文件夹及1/4/5不算；foreign tenant文件即使错误指向本空间也不能计入。点击行保持当前已发布行为`/filelib/:id`，不恢复旧预筛；依据原修复提交b1635e9d34及现F064断言，避免把已退休的AC05旧导航重新引入。
+
+两个既有静态列表接口及对应service新增可选`has_abnormal:bool|None=None`，只有True筛异常；False与None同普通全集，cursor context绑定归一后的筛选值，不能复用另一筛选的游标。Repository在SQL名称匹配/seek/limit/count之前加原F064索引支持的相关EXISTS；不得先分页再客户端过滤、扫描全部文件或slot×file连接。仅最终response页≤200 IDs执行一次严格tenant约束的批量异常EXISTS查询，空页不查，列表轻DTO新增`has_abnormal_files:bool=False`。不修改Knowledge表、不造缓存列/新索引、不调用旧DAO新增业务入口；通过既有Repository承接，DB连接在FGA检查前释放。
+
+前端KnowledgeVisibleQuery/KnowledgeAdminQuery与Info仅补真实布尔类型，沿原query key/参数透传，不引入假的前端统计。现KnowledgeFile恢复原FileAbnormalStatusCell与TableHeadEnumFilter，筛选重置各自普通cursor或管理page，在scope/view变更时退休；原文件夹/详情/QA不改。F064测试仅改新必需scope及实际查询hook夹具，保原五个能力断言，并验证普通/管理真实参数及分页重置。T176依赖本节后端+API及新测试，不能因为原DTO暂缺字段删断言来标绿。
+
+T725先两叶repo/service测试→T726 repo/schema；T727一叶API测试→T728 service/endpoint，固定独立审后交T729旧前端测试夹具→T730 API；KnowledgeFile依然原T176两生产叶范围内，T729可同时补现Page测试。T731只执行官方lint:prune生成目标suppression收缩，禁止手改或增加冻结项；若生成无diff则记录验证不制造提交。保C2原生SQLModel，真实MySQL查询预算后续E2E，不将SQLite/native形状测试冒称实库证明。

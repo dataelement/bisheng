@@ -1438,7 +1438,7 @@
   **类型 / Owner**：前端 Platform / PLATFORM\
   **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/index.tsx`；`src/frontend/platform/src/pages/KnowledgePage/KnowledgeFile.tsx`\
   **逻辑 / 测试上下文**：按W6§22三tab/scope/ordinary Cursor/admin DB分页与SPACE懒授权、真实创建/基本设置/默认Dialog挂载；QA独立，copy/delete与完整详情/目录/上传后续接线不冒充完成。\
-  **依赖**：T722, T721, T719, T698, T707\
+  **依赖**：T722, T721, T719, T698, T707, T728, T729, T730\
   **验证 / 完成条件**：菜单与角色/租户切换、无权直链、QA入口；Zustand不直接HTTP；关联规格：AC-01, AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-16, AC-84。
 
 - [ ] **T177 · 平台目录/上传/版本**
@@ -5832,6 +5832,68 @@
   **逻辑 / 测试上下文**：同menu.knowledge日文统一，保持既有namespace与路由/resource key，不修改MainLayout架构或QA名称。\
   **依赖**：T723\
   **验证 / 完成条件**：对应中英同键值语义及原键保留，JSON/插值与现i18n校验通过，不计完整UI验收。
+
+## W6统一列表既有异常能力兼容收口
+
+- [ ] **T725 · 统一列表异常标记与SQL筛选测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_space_abnormal_listing_repository.py`；`src/backend/test/knowledge_unification/test_space_abnormal_listing_service.py`\
+  **逻辑 / 测试上下文**：真实repo/SQL与service组合，tenant隔离、FILE状态、SQL先筛后分页、游标筛选绑定及最终页一次批量，保普通/管理准入。\
+  **依赖**：T717, T698\
+  **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-87\
+  **验证 / 完成条件**：配对及原F064回归、SQL/分页预算、target lint/strict无新增；固定独立复查与主树组合通过，真实环境另验。
+
+- [ ] **T726 · 统一列表异常EXISTS与轻DTO**
+  **类型 / Owner**：后端 Repository / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/knowledge_space_listing_repository.py`；`src/backend/bisheng/knowledge/domain/schemas/knowledge_space_schema.py`\
+  **逻辑 / 测试上下文**：W6§23复用原复合索引相关EXISTS，严格tenant，末页≤200一次bool读取，不增加业务表字段或逐文件ACL。\
+  **依赖**：T725\
+  **配对测试**：T725\
+  **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-87\
+  **验证 / 完成条件**：配对及原F064回归、SQL/分页预算、target lint/strict无新增；固定独立复查与主树组合通过，真实环境另验。
+
+- [ ] **T727 · 统一列表异常筛选静态接口测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_space_abnormal_listing_api.py`\
+  **逻辑 / 测试上下文**：两个真实静态list endpoint解析/转发true、false和None，原page/cursor/envelope及角色边界不变。\
+  **依赖**：T726\
+  **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-87\
+  **验证 / 完成条件**：配对及原F064回归、SQL/分页预算、target lint/strict无新增；固定独立复查与主树组合通过，真实环境另验。
+
+- [ ] **T728 · 统一列表异常筛选应用与API接线**
+  **类型 / Owner**：后端 Service/API / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`；`src/backend/bisheng/knowledge/api/endpoints/knowledge_space.py`\
+  **逻辑 / 测试上下文**：W6§23普通游标和管理SQL分页共同接真实filter/最终页marker；cursor归一上下文，原原身份与权限检查保持。\
+  **依赖**：T727\
+  **配对测试**：T725, T727\
+  **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-87\
+  **验证 / 完成条件**：配对及原F064回归、SQL/分页预算、target lint/strict无新增；固定独立复查与主树组合通过，真实环境另验。
+
+- [ ] **T729 · 既有异常列表测试适配统一scope**
+  **类型 / Owner**：测试 / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/test/f064KbListFileAbnormal.test.tsx`；`src/frontend/platform/src/test/f118KnowledgePage.test.tsx`\
+  **逻辑 / 测试上下文**：仅更新原F064实际query hook/scope夹具，保五项既有行为并验证两view参数与分页重置；不得弱化断言。\
+  **依赖**：T728, T722\
+  **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-87\
+  **验证 / 完成条件**：配对及原F064回归、SQL/分页预算、target lint/strict无新增；固定独立复查与主树组合通过，真实环境另验。
+
+- [ ] **T730 · 平台列表真实异常字段与查询参数**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/controllers/API/knowledgeSpace.ts`\
+  **逻辑 / 测试上下文**：W6§23新增真实bool类型/透传；列表恢复仍原T176生产叶，不改请求层、QA或详情。\
+  **依赖**：T729\
+  **配对测试**：T729, T697\
+  **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-87\
+  **验证 / 完成条件**：配对及原F064回归、SQL/分页预算、target lint/strict无新增；固定独立复查与主树组合通过，真实环境另验。
+
+- [ ] **T731 · 平台目标旧suppression官方收缩**
+  **类型 / Owner**：静态验证 / INT\
+  **写入文件**：`src/frontend/platform/eslint-suppressions.json`\
+  **逻辑 / 测试上下文**：统一入口接线后执行现pnpm lint:prune，自动生成仅已修复项移除；不手改或加规则，不顺带修旧债。\
+  **依赖**：T176\
+  **配对测试**：T722, T729\
+  **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-87\
+  **验证 / 完成条件**：配对及原F064回归、SQL/分页预算、target lint/strict无新增；固定独立复查与主树组合通过，真实环境另验。
 
 ## 自动化覆盖索引
 
