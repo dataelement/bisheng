@@ -599,7 +599,7 @@
   **类型 / Owner**：后端 Domain / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/services/metadata_processing_service.py`（拟新增）\
   **逻辑 / 测试上下文**：新增字段历史为空，rename/drop 冻结前后 schema 与范围且二次确认，SQL/索引实际结果计 item，不用 accepted 冒充完成；仍原容器 edit，失败可恢复。\
-  **依赖**：T071, T740, T742\
+  **依赖**：T071, T740, T742, T748\
   **配对测试**：T071\
   **验证 / 完成条件**：运行配对测试 T071；验证本卡预期，相关范围检查通过。
 
@@ -6037,6 +6037,17 @@
   **配对测试**：T149\
   **覆盖 AC**: AC-35, AC-66, AC-68, AC-79, AC-82, AC-83, AC-86, AC-87\
   **验证 / 完成条件**：精确旧失败/真实红或首绿、实际SQL与真实consumer相关组合，原协议边界、逐叶静态和固定独立审；真实E2E另验。
+
+## W6元数据双协议原DI实际装配
+
+- [ ] **T748 · 原metadata依赖工厂装配真实SPACE writer**
+  **类型 / Owner**：后端 API组合 / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/api/dependencies.py`\
+  **逻辑 / 测试上下文**：W6§24.3在原唯一DI工厂注入application writer，Domain只依赖窄port，v1/v2皆经原facade；保v2原principal及data=True，不走无账本BackgroundTask。\
+  **依赖**：T742\
+  **配对测试**：T741, T071\
+  **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-66, AC-82, AC-83, AC-86, AC-87\
+  **验证 / 完成条件**：真实DI/两protocol及原身份用例通过，架构无Domain反向import application，原QA和其他kind回归不变，独立固定审后原T072才闭合。
 
 ## 自动化覆盖索引
 
