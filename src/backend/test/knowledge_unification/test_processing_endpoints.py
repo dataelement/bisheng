@@ -198,6 +198,14 @@ async def test_obsolete_retry_commits_before_http_business_error(http, applicati
 
 
 async def test_unassembled_kind_and_bad_pagination_remain_explicit_errors(http):
+    def limited_assembly():
+        service = api.get_processing_service()
+        service.available_kinds -= {"metadata_schema_change"}
+        return service
+
+    # Preserve the real assembly gate after all four public DTO kinds acquire
+    # handlers. Only this case narrows the actual production factory result.
+    http.app.dependency_overrides[api.get_processing_service] = limited_assembly
     result = await call(
         http,
         "POST",
