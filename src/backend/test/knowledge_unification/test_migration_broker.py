@@ -345,3 +345,75 @@ async def test_unacked_body_is_hashed_once_before_lightweight_packet_batching(mo
         packets = [packet async for packet in reader._packets()]
     assert len(packets) == 1 and len(calls) == 1
     assert packets[0][0].target_ids == (1,) and not hasattr(packets[0][0], "body")
+
+
+@pytest.mark.parametrize("case", ["wrong_type", "cursor", "malformed", "foreign_chain"])
+async def test_bad_native_facts_cannot_be_converted_to_empty_broker_evidence(module, original, case):
+    if case == "wrong_type":
+        original.redis.strings[P + "unacked"] = b"bad-type"
+        original.redis.hashes = {}
+    elif case == "cursor":
+        original.redis.repeat_cursor = True
+    elif case == "malformed":
+        original.redis.malformed = True
+    else:
+        async with original.sql.engine.begin() as connection:
+            await connection.execute(
+                sql.resources.KnowledgeFile.__table__.update()
+                .where(sql.resources.KnowledgeFile.id == 1)
+                .values(knowledge_id=8000)
+            )
+    with pytest.raises(KnowledgeOperationPlanConflictError) as failure:
+        await read(module, original)
+    assert failure.value.kwargs["reason"] != "migration_inventory_codec_invalid"
+
+
+async def test_one_large_message_uses_bounded_target_sql_without_rehashing_or_fake_file_slot(module, original):
+    await original.sql.insert(sql.resources.KnowledgeFile, [sql.resources.file(i) for i in range(3, 10002)])
+    # File 2 belongs to another tenant and is deliberately outside this one-scope task.
+    targets = [i for i in range(1, 10002) if i != 2]
+    original.redis.lists = {
+        P + "knowledge_celery": [
+            raw_message(task=messages.PREFIX + "file_worker.delete_knowledge_file_celery", args=[targets, 9000])
+        ]
+    }
+    original.redis.hashes, original.redis.zsets = {}, {}
+    original.sql.queries.clear()
+    rows = await read(module, original)
+    assert len(rows) == 1 and rows[0].data["tenant_id"] == 101 and rows[0].data["file_id"] is None
+    assert len(original.sql.queries) <= 155
+
+
+async def test_original_native_scope_and_transaction_are_required_and_pending_business_is_not_flushed(module, original):
+    from bisheng.core.context.tenant import get_current_tenant_id, set_current_tenant_id
+
+    original.redis.lists, original.redis.hashes, original.redis.zsets = {}, {}, {}
+    async with AsyncSession(original.sql.engine) as session:
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            _ = [
+                row
+                async for row in module.RedisBrokerInventoryReader(
+                    session, configuration=original.config, redis_connection=original.redis
+                ).aiter_facts(tenant_ids=(1, 101, 202))
+            ]
+        async with session.begin():
+            reader = module.RedisBrokerInventoryReader(
+                session, configuration=original.config, redis_connection=original.redis
+            )
+            pending = sql.resources.KnowledgeFile(**sql.resources.file(999))
+            session.add(pending)
+            assert [row async for row in reader.aiter_facts(tenant_ids=(1, 101, 202))] == []
+            assert pending in session.new
+            with pytest.raises(KnowledgeOperationPlanConflictError):
+                _ = [row async for row in reader.aiter_facts(tenant_ids=(1, 101, 202))]
+            prior = get_current_tenant_id()
+            try:
+                set_current_tenant_id(202 if prior != 202 else 101)
+                with pytest.raises(KnowledgeOperationPlanConflictError):
+                    reader._current()
+            finally:
+                set_current_tenant_id(prior)
+            session.expunge(pending)
+        async with session.begin():
+            with pytest.raises(KnowledgeOperationPlanConflictError):
+                reader._current()
