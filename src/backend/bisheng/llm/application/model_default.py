@@ -12,6 +12,7 @@ from bisheng.common.errcode.knowledge import (
 )
 from bisheng.common.errcode.llm import WorkbenchChatDefaultModelError, WorkbenchEmbeddingError
 from bisheng.common.errcode.llm_tenant import LLMSystemConfigForbiddenError
+from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.core.context.tenant import is_tenant_filter_bypassed
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.database.models.tenant import ROOT_TENANT_ID
@@ -37,7 +38,10 @@ from bisheng.resource_reference.application.source_contracts import canonical_pa
 
 
 def current_model_default_tenant(expected=None):
-    tenant = _resolve_tenant_id()
+    try:
+        tenant = _resolve_tenant_id()
+    except NoTenantContextError as error:
+        raise ResourceReferenceInvalidError(reason="model_default_tenant_required") from error
     if (
         type(tenant) is not int
         or tenant <= 0
