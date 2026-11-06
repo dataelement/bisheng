@@ -2143,8 +2143,8 @@ class ChannelService:
                 raise ResourceReferenceInvalidError(reason="new_invalid_reference")
             selected = [row.model_dump() for row in final_rows if added.intersection(self._sync_references((row,)))]
             await repository.acheck_new_selections(session, locked, user_id=login_user.user_id, rows=selected)
-            adapter = await get_f048_resource_adapter("channel")
             if is_new:
+                adapter = await get_f048_resource_adapter("channel")
                 await adapter.authorize_created(
                     record=ChannelPermissionRecord(
                         tenant_id=locked.tenant_id,
@@ -2158,6 +2158,7 @@ class ChannelService:
                 )
             members = await repository.alist_members(session, channel_id)
             if deleting:
+                adapter = await get_f048_resource_adapter("channel")
                 record = await adapter.load_permission_record(channel_id)
                 if record is None:
                     raise ChannelNotFoundError()
@@ -2187,9 +2188,6 @@ class ChannelService:
                             ChannelRelationEnum.OWNER,
                         ),
                     )
-                if locked.visibility != old_visibility:
-                    visibility_transition = (old_visibility, locked.visibility)
-                    await self._transition_channel_members(session, repository, locked, old_visibility, login_user)
                 if locked.source_list and (is_new or "source_list" in changes):
                     try:
                         locked.latest_article_update_time = await self._get_channel_latest_article_create_time(locked)
@@ -2200,6 +2198,9 @@ class ChannelService:
                 if sync_cfg is not None:
                     await repository.areplace_sync_rows(session, locked, final_rows)
                 await repository.asave(session, locked)
+                if locked.visibility != old_visibility:
+                    visibility_transition = (old_visibility, locked.visibility)
+                    await self._transition_channel_members(session, repository, locked, old_visibility, login_user)
             if not resume:
                 await runtime.aapply_source_bindings(session, prepared)
             await session.commit()
