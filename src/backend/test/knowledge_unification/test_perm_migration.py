@@ -120,7 +120,7 @@ def source(module, ident, grant_id, *, state="ACTIVE", protected=False):
         source_id=ident,
         subject_type="user",
         subject_id="7",
-        source_type="CREATOR" if protected else "DIRECT",
+        source_type="CREATOR" if protected else "DIRECT" if state == "ACTIVE" else "OTHER",
         source_ref="original",
         protected=protected,
     )
