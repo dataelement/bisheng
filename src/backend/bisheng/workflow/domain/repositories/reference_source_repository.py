@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
 from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed
-from bisheng.database.models.flow import Flow, FlowType
+from bisheng.database.models.flow import Flow, FlowStatus, FlowType
 from bisheng.database.models.flow_version import FlowVersion
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 
@@ -40,6 +40,19 @@ class WorkflowVersionReadFact:
     data_json: str = field(repr=False)
 
 
+@dataclass(frozen=True, slots=True)
+class WorkflowDisclosureFact:
+    id: str
+    tenant_id: int
+    owner_user_id: int
+    name: str
+    status: str
+    update_time: object
+    version_id: int
+    version_name: str
+    is_current: bool
+
+
 class WorkflowReferenceSourceRepository:
     @staticmethod
     def _context(session: AsyncSession) -> None:
@@ -48,6 +61,76 @@ class WorkflowReferenceSourceRepository:
             raise ResourceReferenceInvalidError(reason="source_tenant_context_missing")
         if not session.in_transaction():
             raise ResourceReferenceInvalidError(reason="source_read_transaction_required")
+
+    @classmethod
+    async def aload_disclosure(cls, session: AsyncSession, source_keys) -> tuple[WorkflowDisclosureFact, ...]:
+        """One exact version→Root projection; never read a graph or attach ORM entities."""
+        if not source_keys:
+            return ()
+        cls._context(session)
+        version_ids = tuple(dict.fromkeys(int(key.source_version) for key in source_keys))
+        if len(source_keys) > 200:
+            raise ReferenceCoverageNotReadyError(reason="workflow_disclosure_invalid_batch")
+        query = (
+            select(
+                FlowVersion.id.label("version_id"),
+                FlowVersion.flow_id,
+                FlowVersion.tenant_id,
+                FlowVersion.name.label("version_name"),
+                FlowVersion.is_current,
+                FlowVersion.is_delete.label("version_deleted"),
+                Flow.id.label("root_id"),
+                Flow.tenant_id.label("root_tenant"),
+                Flow.name,
+                Flow.user_id,
+                Flow.status,
+                Flow.flow_type,
+                Flow.is_delete,
+                Flow.update_time,
+            )
+            .select_from(FlowVersion)
+            .outerjoin(Flow, Flow.id == FlowVersion.flow_id)
+            .where(FlowVersion.id.in_(version_ids))
+        )
+        with session.no_autoflush:
+            rows = {row.version_id: row for row in (await session.execute(query)).all()}
+        result = []
+        for key in source_keys:
+            row = rows.get(int(key.source_version))
+            if (
+                row is None
+                or row.root_id != key.source_id
+                or row.flow_id != key.source_id
+                or row.tenant_id != key.tenant_id
+                or row.root_tenant != key.tenant_id
+                or row.flow_type != FlowType.WORKFLOW.value
+                or row.is_delete != 0
+                or row.version_deleted != 0
+                or row.is_current not in (0, 1)
+                or type(row.name) is not str
+                or type(row.version_name) is not str
+                or type(row.user_id) is not int
+                or row.user_id <= 0
+            ):
+                raise ReferenceCoverageNotReadyError(reason="workflow_disclosure_metadata_incomplete")
+            try:
+                status = FlowStatus(row.status).name
+            except ValueError as error:
+                raise ReferenceCoverageNotReadyError(reason="workflow_disclosure_status_invalid") from error
+            result.append(
+                WorkflowDisclosureFact(
+                    row.root_id,
+                    row.root_tenant,
+                    row.user_id,
+                    row.name,
+                    status,
+                    row.update_time,
+                    row.version_id,
+                    row.version_name,
+                    row.is_current == 1,
+                )
+            )
+        return tuple(result)
 
     @classmethod
     async def aget_root(cls, session: AsyncSession, root_id: str, *, for_update: bool = False) -> WorkflowRootReadFact:
