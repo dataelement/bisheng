@@ -321,3 +321,27 @@ async def test_failure_closes_all_owned_clients_and_preserves_the_original_cause
             _ = [record async for record in reader.aiter_facts(tenant_ids=(1, 101, 202))]
         assert failure.value.__cause__ is original.redis.error
     assert original.redis.closed and other.closed
+
+
+async def test_unacked_body_is_hashed_once_before_lightweight_packet_batching(module, original, monkeypatch):
+    from bisheng.core.context.tenant import get_current_tenant_id
+    from bisheng.resource_reference.application.contracts import TransactionIdentity
+
+    original.redis.lists = {}
+    raw = next(iter(original.redis.hashes[P + "unacked"].values()))
+    sha256, calls = module.hashlib.sha256, []
+
+    def counted(value=b"", *args, **kwargs):
+        if value == raw:
+            calls.append(True)
+        return sha256(value, *args, **kwargs)
+
+    monkeypatch.setattr(module.hashlib, "sha256", counted)
+    async with AsyncSession(original.sql.engine) as session, session.begin():
+        reader = module.RedisBrokerInventoryReader(
+            session, configuration=original.config, redis_connection=original.redis
+        )
+        reader._tenant, reader._transaction = get_current_tenant_id(), TransactionIdentity.capture(session)
+        packets = [packet async for packet in reader._packets()]
+    assert len(packets) == 1 and len(calls) == 1
+    assert packets[0][0].target_ids == (1,) and not hasattr(packets[0][0], "body")
