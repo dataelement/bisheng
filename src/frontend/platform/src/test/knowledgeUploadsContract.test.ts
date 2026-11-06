@@ -68,7 +68,7 @@ it.each([
   {},
   {
     document: { chunk_overlap: 0, append_title: false, separator: ["", "\\n"] },
-    table: { append_header: 0 },
+    table: { append_header: 0 as const },
   },
 ])(
   "preserves the real typed optional batch overrides %j",

@@ -438,3 +438,102 @@ it("never exposes cancellation as deletion after registration has completed", as
   ).not.toBeInTheDocument();
   expect(screen.getByText("f118.upload_may_continue")).toBeInTheDocument();
 });
+
+it("bounds exact status IDs to batches of 100 rather than scanning the whole directory", async () => {
+  const registered = Array.from({ length: 101 }, (_, index) => row(index + 1));
+  mocks.post.mockImplementation(async (url: string) =>
+    url.endsWith("/files") ? registered : { file_path: "tmp/a", repeat: false },
+  );
+  mocks.children.mockImplementation(async (query: { file_ids: number[] }) =>
+    page(query.file_ids.map((id) => row(id, 2))),
+  );
+  mount();
+  await select();
+  await waitFor(() =>
+    expect(screen.getAllByText("completed")).toHaveLength(101),
+  );
+  expect(
+    mocks.children.mock.calls.map(([query]) => query.file_ids.length),
+  ).toEqual([100, 1]);
+  expect(
+    mocks.children.mock.calls.flatMap(([query]) => query.file_ids),
+  ).toEqual(registered.map(({ id }) => id));
+});
+it("fails a nonprogressing status cursor instead of inventing completion or looping", async () => {
+  mocks.children.mockResolvedValue(page([], "same-cursor"));
+  mount();
+  await select();
+  await screen.findByText("f118.upload_status_unavailable");
+  expect(mocks.children).toHaveBeenCalledTimes(2);
+  expect(screen.queryByText("completed")).not.toBeInTheDocument();
+});
+it("keeps an old cancelled attempt retired after the same item is retried", async () => {
+  const old = deferred<{ file_path: string; repeat: boolean }>();
+  const fresh = deferred<{ file_path: string; repeat: boolean }>();
+  let stages = 0;
+  mocks.post.mockImplementation(async (url: string) =>
+    url.endsWith("/files")
+      ? [row()]
+      : ++stages === 1
+        ? old.promise
+        : fresh.promise,
+  );
+  mount();
+  await select();
+  await waitFor(() => expect(stageCalls()).toHaveLength(1));
+  fireEvent.click(screen.getByRole("button", { name: "cancel" }));
+  fireEvent.click(screen.getByRole("button", { name: "retry" }));
+  await waitFor(() => expect(stageCalls()).toHaveLength(2));
+  await act(async () => old.resolve({ file_path: "tmp/old", repeat: false }));
+  expect(registerCalls()).toHaveLength(0);
+  await act(async () =>
+    fresh.resolve({ file_path: "tmp/fresh", repeat: false }),
+  );
+  await screen.findByText("completed");
+  expect(registerCalls()[0][1].file_path).toEqual(["tmp/fresh"]);
+});
+it("retires late permission results through scope A-B-A without mounting an old uploader", async () => {
+  const old = deferred<ReturnType<typeof permission>>();
+  mocks.permission
+    .mockReturnValueOnce(old.promise)
+    .mockResolvedValue(permission([]));
+  const view = mount();
+  await waitFor(() => expect(mocks.permission).toHaveBeenCalledTimes(1));
+  user = { ...user, leaf_tenant_id: 202 };
+  view.refresh();
+  await screen.findByText("noOperationPermission");
+  user = { ...user, leaf_tenant_id: 101 };
+  view.refresh();
+  await screen.findByText("noOperationPermission");
+  await act(async () => old.resolve(permission()));
+  expect(document.querySelector('input[type="file"]')).toBeNull();
+  expect(mocks.post).not.toHaveBeenCalled();
+});
+it("retires late polling results through scope A-B-A", async () => {
+  const pending = deferred<ReturnType<typeof page>>();
+  mocks.children.mockReturnValue(pending.promise);
+  const view = mount();
+  await select();
+  await waitFor(() => expect(mocks.children).toHaveBeenCalledTimes(1));
+  user = { ...user, leaf_tenant_id: 202 };
+  view.refresh();
+  await waitFor(() =>
+    expect(screen.queryByText("report.md")).not.toBeInTheDocument(),
+  );
+  user = { ...user, leaf_tenant_id: 101 };
+  view.refresh();
+  await act(async () => pending.resolve(page()));
+  expect(screen.queryByText("completed")).not.toBeInTheDocument();
+  expect(screen.queryByText("report.md")).not.toBeInTheDocument();
+});
+it("limits active staging to six and releases cancelled slots even when the old transport ignores abort", async () => {
+  const pending = deferred<{ file_path: string; repeat: boolean }>();
+  mocks.post.mockReturnValue(pending.promise);
+  mount();
+  await select(Array.from({ length: 7 }, (_, index) => file(`${index}.md`)));
+  await waitFor(() => expect(stageCalls()).toHaveLength(6));
+  fireEvent.click(screen.getAllByRole("button", { name: "cancel" })[0]);
+  await waitFor(() => expect(stageCalls()).toHaveLength(7));
+  expect(stageCalls()[0][2].signal.aborted).toBe(true);
+  expect(registerCalls()).toHaveLength(0);
+});
