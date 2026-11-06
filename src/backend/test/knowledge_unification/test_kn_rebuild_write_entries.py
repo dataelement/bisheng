@@ -15,6 +15,7 @@ from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError, VersionManagementDisabledError
 from bisheng.core.database import tenant_filter
 from bisheng.knowledge.domain.models import knowledge as knowledge_model
+from bisheng.knowledge.domain.models import knowledge_file as knowledge_file_model
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
@@ -139,11 +140,14 @@ async def writes(concrete_tenant, monkeypatch):
             yield session
 
         monkeypatch.setattr(knowledge_model, "get_async_db_session", sessions)
+        monkeypatch.setattr(knowledge_file_model, "get_async_db_session", sessions)
         monkeypatch.setattr(spaces, "get_async_db_session", sessions)
+        monkeypatch.setattr(spaces.KnowledgeDao, "async_update_knowledge_update_time_by_id", AsyncMock())
         user = UserPayload(user_id=7, tenant_id=101, user_name="owner", user_role=[])
         service = KnowledgeSpaceService(None, user)
         service._require_action = AsyncMock()
         service._require_read_permission = AsyncMock()
+        service._initialize_child_resource_permissions = AsyncMock()
 
         async def actions(kind, ident, **kwargs):
             return ["move"] if kind == "knowledge_file" else ["upload_file"]
@@ -299,3 +303,33 @@ async def test_idle_space_still_preserves_history_when_linking_a_real_version(wr
     chain = await writes.version.version_repo.find_by_document_id(600)
     assert {row.knowledge_file_id for row in chain} == {201, 202, 203}
     assert [row.knowledge_file_id for row in chain if row.is_primary] == [202]
+
+
+async def test_empty_folder_creation_does_not_gain_a_processing_block(writes):
+    folder = await writes.service.add_folder(19, "new-empty-folder")
+    assert folder.file_type == 0 and folder.knowledge_id == 19
+    assert (await writes.session.get(Knowledge, 19)).state == 3
+    writes.service._require_action.assert_awaited_once_with("knowledge_space", 19, "create_folder")
+
+
+async def test_folder_rename_keeps_its_original_action_on_a_rebuilding_space(writes):
+    folder = await writes.service.rename_folder(150, "renamed")
+    assert folder.file_name == "renamed"
+    writes.service._require_action.assert_awaited_once_with("folder", 150, "rename")
+
+
+async def test_file_rename_keeps_its_original_action_on_a_rebuilding_space(writes, monkeypatch):
+    from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_file_chunk
+
+    dispatch = MagicMock()
+    monkeypatch.setattr(rebuild_knowledge_file_chunk, "delay", dispatch)
+    monkeypatch.setattr(spaces.SpaceFileDao, "count_file_by_name", AsyncMock(return_value=0))
+
+    async def load_file(ident):
+        return await writes.session.get(KnowledgeFile, ident)
+
+    writes.service._get_file_for_action = AsyncMock(side_effect=load_file)
+    file = await writes.service.rename_file(101, "renamed.txt")
+    assert file.file_name == "renamed.txt"
+    writes.service._require_action.assert_awaited_once_with("knowledge_file", 101, "rename")
+    dispatch.assert_called_once_with(file_id=101)
