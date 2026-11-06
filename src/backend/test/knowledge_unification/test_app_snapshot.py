@@ -125,10 +125,10 @@ def deployment():
 
 async def snapshot(engine):
     async with engine.connect() as connection:
-        return tuple(
-            tuple((await connection.execute(sa.select(model.__table__).order_by(model.id))).all())
-            for model in (App, AppVersion, BusinessReferenceSet, BusinessResourceReference)
-        )
+        result = []
+        for model in (App, AppVersion, BusinessReferenceSet, BusinessResourceReference):
+            result.append(tuple((await connection.execute(sa.select(model.__table__).order_by(model.id))).all()))
+        return tuple(result)
 
 
 async def test_actual_uuid_insert_retains_manifest_and_historical_source_sets(writing):
