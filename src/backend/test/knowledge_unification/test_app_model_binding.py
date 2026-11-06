@@ -159,3 +159,38 @@ async def test_broken_whitelist_never_silently_drops_a_saved_reference():
     )
     with pytest.raises(ResourceReferenceInvalidError):
         _ = declaration.knowledge_whitelist
+
+
+@pytest.mark.parametrize("knowledge_type", [0, 1, 3])
+async def test_actual_retrieval_keeps_access_user_narrowing_and_legacy_kinds(
+    capability_bus, monkeypatch, knowledge_type
+):
+    from bisheng.knowledge.domain.schemas.retrieval_facade import RetrievalIdentity
+    from bisheng.knowledge.domain.services.retrieval_facade_service import RetrievalFacadeService
+
+    async with AsyncSession(capability_bus.engine) as session, session.begin():
+        await session.execute(sa.update(Knowledge).where(Knowledge.id == 7).values(type=knowledge_type))
+    access_identity = object()
+    from_user = AsyncMock(return_value=access_identity)
+    retrieval = AsyncMock(return_value=object())
+    record = AsyncMock()
+    monkeypatch.setattr(RetrievalIdentity, "from_user", from_user)
+    monkeypatch.setattr(RetrievalFacadeService, "retrieve", retrieval)
+    monkeypatch.setattr(bus.CapabilityBusService, "_record", record)
+    result = await bus.CapabilityBusService.retrieve(
+        app_id="actual-app", principal=capability_bus.identity, access_user_id=44, query="question", knowledge_ids=[7]
+    )
+    assert result is retrieval.return_value
+    from_user.assert_awaited_once_with(44, 101)
+    assert retrieval.await_args.args[0] is access_identity
+    assert retrieval.await_args.args[1].whitelist == [7]
+    assert retrieval.await_args.args[1].knowledge_ids == [7]
+    with pytest.raises(BaseErrorCode):
+        await bus.CapabilityBusService.retrieve(
+            app_id="actual-app",
+            principal=capability_bus.identity,
+            access_user_id=44,
+            query="question",
+            knowledge_ids=[8],
+        )
+    assert retrieval.await_count == 1
