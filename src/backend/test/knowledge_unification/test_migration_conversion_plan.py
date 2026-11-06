@@ -268,3 +268,13 @@ def test_builder_rejects_out_of_order_duplicate_oversized_or_unknown_batches(mod
         module.ConversionPlanBuilder(**IDENTITY, planned_at="not-time")
     with pytest.raises(KnowledgeOperationPlanConflictError):
         module.ConversionPlanBuilder(**(IDENTITY | {"run_id": "../bad"}), planned_at=NOW)
+
+
+def test_finish_seals_inputs_before_lazy_iterator_is_consumed(module):
+    builder = module.ConversionPlanBuilder(**IDENTITY, planned_at=NOW)
+    commands = builder.finish()
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        builder.add_resources(())
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        builder.finish()
+    assert tuple(commands) == ()
