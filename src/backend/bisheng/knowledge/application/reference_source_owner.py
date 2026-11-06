@@ -46,7 +46,7 @@ class KnowledgeReferenceSourceOwner:
         knowledge_id = self._request(request)
         if isinstance(identity, UserPayload):
             return knowledge_id, None
-        if self.identity_port is None:
+        if self.identity_port is None or request.purpose != "execute":
             raise ResourceReferenceInvalidError(reason="knowledge_model_original_identity_required")
         return knowledge_id, self.identity_port.assert_source(session, identity, knowledge_id)
 
@@ -61,10 +61,9 @@ class KnowledgeReferenceSourceOwner:
         }
         if isinstance(identity, UserPayload):
             await require_business_action(identity, **arguments)
-        elif actor is not None:
-            await require_business_action(None, actor=actor, **arguments)
-        # An actor-less identity is only issued under original trusted Celery
-        # provenance for its actual owned source. It is not a person fallback.
+        # A private identity admits only owned model configuration. It is not a
+        # KN data/visible grant: original AS/WF and retrieval authorization stays
+        # in the upstream consumer, including knowledge_auth=False semantics.
 
     @staticmethod
     def _snapshot(row):
@@ -88,7 +87,10 @@ class KnowledgeReferenceSourceOwner:
         row = self.repository.load_source(session, knowledge_id)
         if row is None:
             raise KnowledgeNotExistError()
-        run_async_safe(self._authorize(identity, row, actor))
+        if isinstance(identity, UserPayload):
+            run_async_safe(self._authorize(identity, row, actor))
+        elif row["tenant_id"] != identity.tenant_id:
+            raise ResourceReferenceInvalidError(reason="knowledge_model_internal_source_not_owned")
         return self._snapshot(row)
 
     async def aresolve_source(self, session, request, identity):
@@ -107,7 +109,10 @@ class KnowledgeReferenceSourceOwner:
     def _revalidate(self, identity, row, actor, expected):
         if row is None:
             raise KnowledgeOperationPlanConflictError(reason="knowledge_model_source_changed")
-        run_async_safe(self._authorize(identity, row, actor))
+        if isinstance(identity, UserPayload):
+            run_async_safe(self._authorize(identity, row, actor))
+        elif row["tenant_id"] != identity.tenant_id:
+            raise ResourceReferenceInvalidError(reason="knowledge_model_internal_source_not_owned")
         current = self._snapshot(row)
         if not isinstance(expected, AuthorizedSourceSnapshot) or current != expected:
             raise KnowledgeOperationPlanConflictError(reason="knowledge_model_source_changed")
