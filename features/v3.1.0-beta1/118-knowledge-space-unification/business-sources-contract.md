@@ -218,3 +218,7 @@ T500 的 Repository 第二叶专供清理 index 身份核验。清理可读取�
 ### 实际文件/QA清理消费者（T584–T585）
 
 `api/services/knowledge_imp.py` 的 `delete_vector_files`（含 file_worker/原文件删除）和 `delete_vector_data`（QA 删除）也必须消费命名 cleanup 构造，不能沿 FakeEmbeddings 调标准模型准入导致模型失效阻断文件清理。INT 单独拥有此旧叶，仅改这两处构造，保 document_id/file_id 删除过滤、原上游动作/引用保护及投影顺序；copy 等其他执行路径仍 whole-source strict。该补漏不把完整入向 R3 标完成。
+
+### 单租户 C3 有效上下文（T586–T587）
+
+KN 私有模型身份和命名清理统一沿既有 `_resolve_tenant_id`：单租户模式无显式 Context 的合法默认 tenant=1 保留；多租户缺 Context 明确 10996 并保 typed cause，绝不从客户端 ID/参数补租户或跨租户降级。不能以裸 get_current_tenant_id 是否非空额外拒绝单租户内部执行；原对象、业务 own、Session、全源与后台 proof 均保持。

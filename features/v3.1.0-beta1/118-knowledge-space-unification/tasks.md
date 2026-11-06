@@ -4637,6 +4637,22 @@
   **配对测试**：T584\
   **验证 / 完成条件**：配对红绿、固定提交独立复查及主组合通过；不称完整R3已完成。
 
+- [ ] **T586 · 知识配置读取和清理的单租户C3回归**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_model_source.py`；`src/backend/test/knowledge_unification/test_kn_cleanup_model_independence.py`\
+  **逻辑 / 测试上下文**：真实Root1资源在multi_tenant.enabled=False且无显式tenant Context时沿C3合法默认1；多租户缺context仍10996且无外部IO，不从显式参数/用户ID补tenant或放宽其他租户。\
+  **依赖**：T498, T500\
+  **覆盖 AC**: AC-68, AC-71, AC-79, AC-83, AC-89, AC-92\
+  **验证 / 完成条件**：真实单租户红→窄修绿及多租户拒绝，固定提交独立复查与主组合通过。
+
+- [ ] **T587 · 知识内部读取和清理统一C3有效tenant**
+  **类型 / Owner**：实现 / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/application/reference_read_identity.py`；`src/backend/bisheng/knowledge/domain/knowledge_rag.py`\
+  **逻辑 / 测试上下文**：移除与既有_resolve_tenant_id冲突的裸get_current存在性门槛；single合法默认1，multi无context捕typedNoTenantContextError→10996保cause。不改W3用户授权、原actor/原事务或后台proof。\
+  **依赖**：T586\
+  **配对测试**：T586\
+  **验证 / 完成条件**：配对红绿、固定提交独立复查及主组合通过，不声称改变多租户fallback规则。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
