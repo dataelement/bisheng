@@ -118,6 +118,13 @@ class RetryEligibility:
     finalize_only: bool
 
 
+@dataclass(frozen=True)
+class TargetResetState:
+    anchor_item_id: str
+    prepared: bool
+    configuration: ProcessingConfiguration
+
+
 def _utc_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
@@ -730,6 +737,75 @@ class ProcessingJobRepository:
         job.update_time = self._now()
         await session.flush()
         return job
+
+    @staticmethod
+    def _reset_marker(job):
+        if (
+            type(job.accepted_model_config_revision) is not int
+            or job.accepted_model_config_revision < 0
+            or not job.expected_index_generation
+            or not isinstance(job.parameters.get("operation_id"), str)
+            or not job.parameters["operation_id"]
+        ):
+            raise ResourceReferenceInvalidError(reason="processing_reset_original_evidence_required")
+        return {
+            "schema_version": 1,
+            "job_id": job.id,
+            "operation_id": job.parameters["operation_id"],
+            "accepted_model_config_revision": job.accepted_model_config_revision,
+            "index_generation": job.expected_index_generation,
+        }
+
+    async def areset_target_state(self, session: AsyncSession, lease: JobLease) -> TargetResetState | None:
+        candidate = await self._job(session, lease.job_id, lock=False)
+        root = await KnowledgeModelReferenceRepository().aget(session, candidate.space_id, for_update=True)
+        job = await self._job(session, lease.job_id, lock=True)
+        if not self._active_job_lease(job, lease):
+            return None
+        if root is None:
+            raise KnowledgeProcessingConflictError(reason="processing_reset_owner_missing")
+        current = ProcessingConfiguration(root.model_config_revision, root.index_generation)
+        if not self._check_configuration(job, current):
+            await session.flush()
+            return None
+        marker = self._reset_marker(job)
+        with strict_tenant_filter():
+            anchor = (
+                await session.exec(
+                    select(KnowledgeProcessingItem)
+                    .where(KnowledgeProcessingItem.job_id == job.id)
+                    .order_by(
+                        KnowledgeProcessingItem.file_id, KnowledgeProcessingItem.version_id, KnowledgeProcessingItem.id
+                    )
+                    .limit(1)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).one_or_none()
+        if anchor is None or anchor.tenant_id != job.tenant_id:
+            raise KnowledgeProcessingConflictError(reason="processing_scope_incomplete")
+        stored = anchor.checkpoint.get("target_reset")
+        prepared = isinstance(stored, dict) and _digest(stored) == _digest(marker)
+        counts = await self._item_counts(session, job)
+        if counts.get("succeeded", 0) and not prepared:
+            raise KnowledgeProcessingConflictError(reason="processing_reset_evidence_missing")
+        return TargetResetState(anchor.id, prepared, current)
+
+    async def amark_target_reset(self, session: AsyncSession, lease: ItemLease) -> bool:
+        state = await self.areset_target_state(session, lease.job)
+        if state is None:
+            return False
+        guarded = await self._guard_item(session, lease, state.configuration)
+        if guarded is None:
+            return False
+        job, item = guarded
+        if item.id != state.anchor_item_id:
+            raise KnowledgeProcessingConflictError(reason="processing_reset_anchor_changed")
+        checkpoint = deepcopy(item.checkpoint)
+        checkpoint["target_reset"] = self._reset_marker(job)
+        return await self.asave_checkpoint(
+            session, lease, configuration=state.configuration, step="target_prepared", checkpoint=checkpoint
+        )
 
     async def afail_attempt(
         self,
