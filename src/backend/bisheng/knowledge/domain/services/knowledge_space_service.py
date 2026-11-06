@@ -2107,7 +2107,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
     async def list_admin_spaces(
-        self, *, keyword: str | None = None, page: int = 1, page_size: int = 20
+        self, *, keyword: str | None = None, page: int = 1, page_size: int = 20, has_abnormal: bool | None = None
     ) -> "PageData[KnowledgeSpaceListItemResp]":
         """List one trusted management tenant without ordinary visibility filters."""
         from bisheng.common.schemas.api import PageData
@@ -2126,15 +2126,29 @@ class KnowledgeSpaceService(KnowledgeUtils):
             or not (actor.super_admin or tenant_id in actor.tenant_admin_tenant_ids)
         ):
             raise PermissionDeniedError()
-        rows, total = await self.space_listing_repository.alist_admin(keyword=keyword, page=page, page_size=page_size)
+        rows, total = await self.space_listing_repository.alist_admin(
+            keyword=keyword, page=page, page_size=page_size, has_abnormal=has_abnormal is True
+        )
         if any(row.tenant_id != tenant_id or row.type != KnowledgeTypeEnum.SPACE.value for row in rows):
             raise SpaceNotFoundError()
+        abnormal = await self.space_listing_repository.aexists_abnormal_files(space_ids=[row.id for row in rows])
         return PageData[KnowledgeSpaceListItemResp](
-            data=[KnowledgeSpaceListItemResp.model_validate(row) for row in rows], total=total
+            data=[
+                KnowledgeSpaceListItemResp.model_validate(row).model_copy(
+                    update={"has_abnormal_files": row.id in abnormal}
+                )
+                for row in rows
+            ],
+            total=total,
         )
 
     async def list_visible_spaces(
-        self, *, keyword: str | None = None, page_size: int = 20, cursor: str | None = None
+        self,
+        *,
+        keyword: str | None = None,
+        page_size: int = 20,
+        cursor: str | None = None,
+        has_abnormal: bool | None = None,
     ) -> "PageInfiniteCursorData[KnowledgeSpaceListItemResp]":
         """Consume at most 1000 SQL candidates, independently of visible density."""
         from bisheng.common.cursor import decode_cursor, encode_cursor
@@ -2152,10 +2166,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         ):
             raise PermissionDeniedError()
         keyword = keyword.strip() if keyword is not None else None
+        has_abnormal = True if has_abnormal is True else None
         context = (
             "knowledge-space-visible|"
             + sha256(
-                json.dumps([tenant_id, actor.fga_subject, actor.data_scope, keyword or "", page_size]).encode()
+                json.dumps(
+                    [tenant_id, actor.fga_subject, actor.data_scope, keyword or "", page_size, has_abnormal]
+                ).encode()
             ).hexdigest()
         )
         try:
@@ -2177,9 +2194,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         last_key = after
         adapter = self.f048_permission_adapter or await self._resource_adapter("knowledge_space")
 
-        def result(has_more):
+        async def result(has_more):
+            abnormal = await self.space_listing_repository.aexists_abnormal_files(space_ids=[item.id for item in items])
             return PageInfiniteCursorData[KnowledgeSpaceListItemResp](
-                data=items,
+                data=[item.model_copy(update={"has_abnormal_files": item.id in abnormal}) for item in items],
                 page_size=page_size,
                 has_more=has_more,
                 next_cursor=encode_cursor(last_key, context=context) if has_more else None,
@@ -2187,9 +2205,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         while consumed < 1000:
             limit = min(100, 1000 - consumed)
-            batch = await self.space_listing_repository.alist_candidates(keyword=keyword, after=after, limit=limit)
+            batch = await self.space_listing_repository.alist_candidates(
+                keyword=keyword, after=after, limit=limit, has_abnormal=has_abnormal
+            )
             if not batch:
-                return result(False)
+                return await result(False)
             if any(row.tenant_id != tenant_id or row.type != KnowledgeTypeEnum.SPACE.value for row in batch):
                 raise SpaceNotFoundError()
             # The repository released its data connection before permission I/O.
@@ -2208,7 +2228,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             for row in batch:
                 if len(items) == page_size:
                     # This row has not been consumed and must remain on the next page.
-                    return result(True)
+                    return await result(True)
                 consumed += 1
                 last_key = (row.update_time, row.id)
                 if visible.get(("knowledge_space", str(row.id)), False):
@@ -2217,13 +2237,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     )
             after = last_key
             if len(batch) < limit:
-                return result(False)
+                return await result(False)
             if len(items) == page_size or consumed == 1000:
                 # A one-row, unconsumed SQL probe distinguishes EOF. It neither
                 # checks permission nor advances the consumption cursor/budget.
-                pending = await self.space_listing_repository.alist_candidates(keyword=keyword, after=after, limit=1)
-                return result(bool(pending))
-        return result(False)
+                pending = await self.space_listing_repository.alist_candidates(
+                    keyword=keyword, after=after, limit=1, has_abnormal=has_abnormal
+                )
+                return await result(bool(pending))
+        return await result(False)
 
     @staticmethod
     async def _complete_visible_space_ids(actor: PermissionActor, runtime) -> list[int]:

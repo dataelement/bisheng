@@ -131,9 +131,12 @@ async def list_visible_spaces(
     keyword: str | None = None,
     page_size: int = Query(default=20, ge=1, le=200),
     cursor: str | None = None,
+    has_abnormal: bool | None = None,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    return resp_200(await svc.list_visible_spaces(keyword=keyword, page_size=page_size, cursor=cursor))
+    return resp_200(
+        await svc.list_visible_spaces(keyword=keyword, page_size=page_size, cursor=cursor, has_abnormal=has_abnormal)
+    )
 
 
 @router.get("/admin/list")
@@ -141,9 +144,12 @@ async def list_admin_spaces(
     keyword: str | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=200),
+    has_abnormal: bool | None = None,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    return resp_200(await svc.list_admin_spaces(keyword=keyword, page=page, page_size=page_size))
+    return resp_200(
+        await svc.list_admin_spaces(keyword=keyword, page=page, page_size=page_size, has_abnormal=has_abnormal)
+    )
 
 
 @router.get("/auto-tag-visibility")
