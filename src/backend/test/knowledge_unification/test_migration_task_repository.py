@@ -80,6 +80,7 @@ def deletion(ident="delete-0000", **changes):
         "space_id": 9000,
         "applicant_user_id": 7,
         "manifest": {"objects": ["private-object"], "callback": "https://private-callback/"},
+        "completed_steps": [],
         "state": "PENDING",
         "create_time": NOW,
         "update_time": NOW,
@@ -243,3 +244,21 @@ async def test_readonly_original_transaction_does_not_flush_caller_pending_work(
             with bypass_tenant_filter(), pytest.raises(KnowledgeOperationPlanConflictError):
                 await repo.alist_jobs(session)
             await session.rollback()
+
+
+async def test_registered_primary_and_history_are_exact_bounded_native_facts(repo, native):
+    await native.insert(resources.Knowledge, [resources.resource(9000)])
+    await native.insert(resources.KnowledgeFile, [resources.file(1), resources.file(2)])
+    await native.insert(resources.KnowledgeDocument, [{"id": 10, "knowledge_id": 9000, "primary_version_id": 20}])
+    await native.insert(
+        resources.KnowledgeDocumentVersion,
+        [
+            {"id": 20, "document_id": 10, "knowledge_file_id": 1, "version_no": 1, "is_primary": True},
+            {"id": 21, "document_id": 10, "knowledge_file_id": 2, "version_no": 2, "is_primary": False},
+        ],
+    )
+    native.queries.clear()
+    async with AsyncSession(native.engine) as session, session.begin():
+        facts = await repo.aget_file_facts(session, file_ids=(2, 1))
+    assert [(row.file_id, row.document_id, row.version_id) for row in facts] == [(2, 10, 21), (1, 10, 20)]
+    assert len(native.queries) == 3
