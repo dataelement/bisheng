@@ -259,6 +259,6 @@ it("unmount cancels only this opening, preserving a concurrent reader", async ()
 it("notifies the controlled parent only for an explicit close", async () => {
   const view = mount();
   await screen.findByText("Visible history");
-  fireEvent.click(screen.getByRole("button", { name: "close", exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: "close" }));
   expect(view.props.onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
 });
