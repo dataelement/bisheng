@@ -541,7 +541,7 @@
 
 - [ ] **T065 · 重建全量分页保留源分段：先写测试**
   **类型 / Owner**：测试 / PROC\
-  **写入文件**：`src/backend/test/knowledge_unification/test_rebuild_page.py`（拟新增）\
+  **写入文件**：`src/backend/test/knowledge_unification/test_rebuild_page.py`（拟新增）；`src/backend/test/knowledge_unification/test_kn_worker_model_source.py`\
   **逻辑 / 测试上下文**：10001+ Chunk 数量及内容一致，失败源仍在；另一空间不阻塞；tenant headers 缺失拒绝，重试只失败项且配置过期拒绝。\
   **依赖**：T064\
   **覆盖 AC**: AC-48, AC-49, AC-52, AC-53, AC-54, AC-86\
