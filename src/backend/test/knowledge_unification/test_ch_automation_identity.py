@@ -16,8 +16,13 @@ from bisheng.channel.application.automation_identity import resolve_channel_auto
 from bisheng.common.errcode.permission import PermissionDeniedError
 from bisheng.core.context.tenant import current_tenant_id, get_current_tenant_id, set_current_tenant_id
 from bisheng.database.models.tenant import Tenant, UserTenant
-from bisheng.permission.application.identity import reset_current_permission_actor, set_current_permission_actor
+from bisheng.permission.application.identity import (
+    get_current_permission_actor,
+    reset_current_permission_actor,
+    set_current_permission_actor,
+)
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
+from bisheng.resource_reference.application import read_identity
 from bisheng.user.domain.models import user_role as role_module
 from bisheng.user.domain.models.user import User
 from bisheng.user.domain.models.user_role import UserRole
@@ -66,7 +71,39 @@ async def people(store, monkeypatch):
     monkeypatch.setattr(person_repository, "get_async_db_session", sessions)
     monkeypatch.setattr(role_module, "get_async_db_session", sessions)
     monkeypatch.setattr(http_middleware, "_check_is_global_super", AsyncMock(return_value=False))
+    monkeypatch.setattr(
+        read_identity,
+        "resolve_permission_actor",
+        AsyncMock(
+            side_effect=lambda user: (
+                get_current_permission_actor() or PermissionActor(tenant_id=101, user_id=user.user_id)
+            )
+        ),
+    )
     return sessions
+
+
+async def test_automation_proof_requires_original_restored_object_source_and_full_environment(people):
+    async with people() as session:
+        identity = await resolve_channel_automation_identity(session, "own", "own", tenant_id=101)
+        await identity_module.assert_channel_automation_identity(identity, "own", "own", tenant_id=101)
+        with pytest.raises(PermissionDeniedError):
+            await identity_module.assert_channel_automation_identity(identity.model_copy(), "own", "own", tenant_id=101)
+        with pytest.raises(PermissionDeniedError):
+            await identity_module.assert_channel_automation_identity(identity, "own", "foreign", tenant_id=101)
+        identity.user_role.append(999)
+        with pytest.raises(PermissionDeniedError):
+            await identity_module.assert_channel_automation_identity(identity, "own", "own", tenant_id=101)
+
+
+async def test_ambient_actor_cannot_inflate_restored_person_privileges(people):
+    token = set_current_permission_actor(PermissionActor(tenant_id=101, user_id=7, super_admin=True))
+    try:
+        async with people() as session:
+            with pytest.raises(PermissionDeniedError):
+                await resolve_channel_automation_identity(session, "own", "own", tenant_id=101)
+    finally:
+        reset_current_permission_actor(token)
 
 
 async def test_actual_identity_restores_full_roles_without_fabricating_web_credential(people):
