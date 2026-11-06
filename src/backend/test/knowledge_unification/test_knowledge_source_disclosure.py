@@ -192,9 +192,7 @@ async def test_401_actual_sources_use_three_sql_batches_and_five_permission_batc
 async def test_preloaded_clean_orm_metadata_is_refreshed_from_actual_sql(metadata):
     async with AsyncSession(metadata.engine) as session, session.begin():
         cached = await session.get(Knowledge, 10)
-        await session.execute(
-            sa.update(Knowledge.__table__).where(Knowledge.id == 10).values(name="current SQL name")
-        )
+        await session.execute(sa.update(Knowledge.__table__).where(Knowledge.id == 10).values(name="current SQL name"))
         assert cached.name == "10" and not session.dirty
         result = await metadata.owner.adisclose_sources(session, identity=metadata.user, source_keys=(key(10),))
         assert result[0].name == "current SQL name"
