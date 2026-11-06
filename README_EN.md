@@ -58,13 +58,9 @@ BISHENG is an **open-source, all-in-one enterprise Agent platform** focused on o
    - **Central model and credit management**: Administrators manage model access, monthly credits and call records. Enterprise model calls in Chat and Work share the current user's credit ledger; users can check their balance and usage.
    - **Central distribution of enterprise extensions**: Administrators import plugins and workbenches centrally. Employees receive them according to enterprise configuration and authorization.
 
-   Capabilities, deployment requirements, and open-source and enterprise edition availability depend on the relevant release documentation.
-
    ![BISHENG web, desktop and mobile interfaces](docs/images/readme/bisheng-platform-overview.png)
 
    > The mobile app is coming soon. Features and release plans are subject to the relevant release documentation.
-
-   **Enterprise management**
 
    ![BISHENG enterprise administration: desktop client credits and usage](docs/images/readme/bisheng-enterprise-management.png)
 

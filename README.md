@@ -58,13 +58,9 @@ GitHub 已获 **17k Star**。
    - **模型与积分集中管理**：管理员统一配置模型授权、月度积分和调用记录；Chat 与 Work 的企业模型调用共用当前用户的积分账本，用户可查看余额与用量。
    - **企业扩展统一分发**：管理员集中导入插件和工作台，员工按企业配置与授权获取使用。
 
-   具体能力、部署要求及开源与企业版范围，以对应版本说明为准。
-
    ![BISHENG 网页端、桌面端与手机端展示](docs/images/readme/bisheng-platform-overview.png)
 
    > 手机 App 即将推出，具体功能与上线安排以版本说明为准。
-
-   **企业管理**
 
    ![BISHENG 企业管理后台的客户端积分与用量页面](docs/images/readme/bisheng-enterprise-management.png)
 
