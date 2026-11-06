@@ -33,9 +33,10 @@ router = APIRouter(tags=["knowledge_processing"])
 
 def get_processing_service():
     # These kinds have native handlers and same-transaction SQL Owners.
-    # Metadata/move kinds stay unavailable until their real assembly joins.
+    # Move/copy kinds stay unavailable until their real assembly joins.
     return ProcessingJobService(
-        owner=KnowledgeProcessingOwner(), available_kinds={"embedding_rebuild", "file_reprocess", "file_resplit"}
+        owner=KnowledgeProcessingOwner(),
+        available_kinds={"embedding_rebuild", "file_reprocess", "file_resplit", "metadata_schema_change"},
     )
 
 

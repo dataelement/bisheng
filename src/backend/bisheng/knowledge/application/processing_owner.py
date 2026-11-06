@@ -19,6 +19,7 @@ from bisheng.knowledge.application.file_processing_adapter import (
     resolve_file_processing_snapshot,
     system_processing_defaults,
 )
+from bisheng.knowledge.application.metadata_owner import MetadataProcessingOwner
 from bisheng.knowledge.application.model_reference import (
     KnowledgeModelReferenceApplication,
     PreparedKnowledgeModelChange,
@@ -73,6 +74,7 @@ class KnowledgeProcessingOwner:
     def __init__(self, *, jobs=None):
         self.jobs = jobs if jobs is not None else ProcessingJobRepository()
         self.scope = ProcessingOwnerRepository()
+        self.metadata = MetadataProcessingOwner(jobs=self.jobs)
         self._cutovers = _ProcessingCutoverAuthority(self)
 
     async def apreview_file_processing(self, session, space_id, *, identity, kind, targets, overrides):
@@ -259,10 +261,31 @@ class KnowledgeProcessingOwner:
         self, session, job_id, *, identity, idempotency_key, expected_job_revision, actor_user_id, actor_reference
     ):
         await self._operator(identity)
-        job = await self.jobs.aget(session, job_id)
+        job = await self.jobs.aget_execution(session, job_id)
         await require_business_action(
             identity, resource_type="knowledge_space", resource_id=job.space_id, action="edit"
         )
+        if job.kind == "metadata_schema_change":
+            actual = await self.metadata.execution.aread_configuration(session, job.space_id)
+            result = await self.jobs.aretry_failed(
+                session,
+                job_id,
+                idempotency_key=idempotency_key,
+                expected_job_revision=expected_job_revision,
+                actor_user_id=actor_user_id,
+                actor_reference=actor_reference,
+                configuration=ProcessingConfiguration(
+                    actual.model_config_revision,
+                    actual.index_generation,
+                    metadata_schema_revision=actual.metadata_schema_revision,
+                    metadata_schema_digest=actual.metadata_schema_digest,
+                ),
+            )
+            if result.job.state != "obsolete":
+                # Admission is still from the actual business slot. Failure
+                # rolls back the retry receipt; no model/rebuild fence is made.
+                await self.metadata._amodel_configuration(session, job.space_id, identity=identity)
+            return result
         # Keep the established business-resource -> job locking order. The
         # SourceOwner revalidates the real current binding in this transaction.
         _, job = await self.scope._attempt(session, job_id, self.jobs)
