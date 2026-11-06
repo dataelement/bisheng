@@ -21,10 +21,12 @@ from bisheng.knowledge.domain.repositories.metadata_execution_repository import 
 from bisheng.knowledge.domain.repositories.metadata_processing_repository import metadata_digest
 from bisheng.knowledge.domain.repositories.processing_job_repository import ItemLease, JobLease
 from bisheng.knowledge.domain.services.metadata_processing_service import MetadataProcessingService
+from test.knowledge_unification import test_metadata_job_repository as job_fixtures
 from test.knowledge_unification import test_metadata_processing_preparation as fixtures
 
 store, tenant, business, admission = fixtures.store, fixtures.tenant, fixtures.business, fixtures.admission
 processing, application, metadata = fixtures.processing, fixtures.application, fixtures.metadata
+json_meter = job_fixtures.json_meter
 
 
 def snapshot(item, changes):
@@ -373,3 +375,38 @@ async def test_guard_queries_are_exact_pk_and_constant_for_401_versions(metadata
         )
     finally:
         event.remove(metadata.context.engine.sync_engine, "before_cursor_execute", capture)
+
+
+async def test_actual_401_version_value_completion_has_bounded_json_transfer(metadata, json_meter):
+    values = {"note": {"field_value": "frozen-" + "x" * 1024, "field_type": "string", "updated_at": 10}}
+    async with metadata.context.sessions() as session:
+        for number in range(399):
+            ident = 1000 + number
+            session.add(
+                KnowledgeFile(
+                    id=ident,
+                    tenant_id=101,
+                    knowledge_id=40,
+                    file_name=f"history-{ident}",
+                    status=3,
+                    user_metadata=deepcopy(values),
+                )
+            )
+            session.add(
+                KnowledgeDocumentVersion(id=ident, document_id=80, knowledge_file_id=ident, version_no=number + 3)
+            )
+        (await session.get(KnowledgeFile, 81)).user_metadata = deepcopy(values)
+        await session.commit()
+    execution = await seed_execution(metadata.context)
+    async with execution.context.sessions() as session:
+        job, _ = await loaded(session, execution)
+        json_meter.update(dict.fromkeys(json_meter, 0))
+        for file_id in [81, 82, *range(1000, 1008)]:
+            item = await session.get(KnowledgeProcessingItem, f"item-{file_id}")
+            assert await MetadataExecutionRepository().awrite_values(session, job, item, lease=lease(job, item))
+        assert job.succeeded_count == 10
+        assert json_meter["manifest_bytes"] == 0, json_meter
+        assert json_meter["snapshot_reads"] <= 10 * 5, json_meter
+        assert json_meter["snapshot_bytes"] <= 10 * 5 * 10000, json_meter
+        print({"actual_scope_versions": 401, "completed": 10, **json_meter})
+        await session.rollback()

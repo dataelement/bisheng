@@ -212,6 +212,7 @@ async def test_metadata_manifest_retains_ids_and_snapshot_digest_without_duplica
         await job_session.exec(select(KnowledgeProcessingJob.scope_manifest).where(KnowledgeProcessingJob.id == job.id))
     ).one()
     assert len(manifest) == 401
+    assert [value["file_id"] for value in manifest] == list(range(1, 402))
     assert all(
         set(value)
         == {
