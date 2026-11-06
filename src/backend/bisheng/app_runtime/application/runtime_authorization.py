@@ -16,3 +16,8 @@ async def validate_user_authorization(context, app_id, *, version_id):
 
         raise AppNotFoundError()
     await RuntimeAuthorizationService.validate_user(context, app, version_id=version_id)
+
+
+def user_authorization_context(context, app, *, version_id):
+    """Keep the existing credential restoration active around its caller's work."""
+    return RuntimeAuthorizationService.user_context(context, app, version_id=version_id)
