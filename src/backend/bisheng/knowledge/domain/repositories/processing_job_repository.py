@@ -413,6 +413,7 @@ class ProcessingJobRepository:
             parameters=payload,
             scope_manifest=manifest,
             expected_model_config_revision=configuration.model_config_revision,
+            accepted_model_config_revision=configuration.model_config_revision,
             expected_index_generation=configuration.index_generation,
             space_config_version=space_config_version,
             total_count=len(manifest),
