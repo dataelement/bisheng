@@ -2149,6 +2149,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         page_size: int = 20,
         cursor: str | None = None,
         has_abnormal: bool | None = None,
+        name_only: bool = False,
     ) -> "PageInfiniteCursorData[KnowledgeSpaceListItemResp]":
         """Consume at most 1000 SQL candidates, independently of visible density."""
         from bisheng.common.cursor import decode_cursor, encode_cursor
@@ -2167,14 +2168,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise PermissionDeniedError()
         keyword = keyword.strip() if keyword is not None else None
         has_abnormal = True if has_abnormal is True else None
-        context = (
-            "knowledge-space-visible|"
-            + sha256(
-                json.dumps(
-                    [tenant_id, actor.fga_subject, actor.data_scope, keyword or "", page_size, has_abnormal]
-                ).encode()
-            ).hexdigest()
-        )
+        context_values = [tenant_id, actor.fga_subject, actor.data_scope, keyword or "", page_size, has_abnormal]
+        if name_only:
+            context_values.append("name_only")
+        context = "knowledge-space-visible|" + sha256(json.dumps(context_values).encode()).hexdigest()
         try:
             decoded = decode_cursor(cursor, expected_key_len=2, expected_context=context)
             after = None
@@ -2193,6 +2190,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         consumed = 0
         last_key = after
         adapter = self.f048_permission_adapter or await self._resource_adapter("knowledge_space")
+        name_options = {"name_only": True} if name_only else {}
 
         async def result(has_more):
             abnormal = await self.space_listing_repository.aexists_abnormal_files(space_ids=[item.id for item in items])
@@ -2206,7 +2204,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         while consumed < 1000:
             limit = min(100, 1000 - consumed)
             batch = await self.space_listing_repository.alist_candidates(
-                keyword=keyword, after=after, limit=limit, has_abnormal=has_abnormal
+                keyword=keyword, after=after, limit=limit, has_abnormal=has_abnormal, **name_options
             )
             if not batch:
                 return await result(False)
@@ -2242,7 +2240,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 # A one-row, unconsumed SQL probe distinguishes EOF. It neither
                 # checks permission nor advances the consumption cursor/budget.
                 pending = await self.space_listing_repository.alist_candidates(
-                    keyword=keyword, after=after, limit=1, has_abnormal=has_abnormal
+                    keyword=keyword, after=after, limit=1, has_abnormal=has_abnormal, **name_options
                 )
                 return await result(bool(pending))
         return await result(False)
