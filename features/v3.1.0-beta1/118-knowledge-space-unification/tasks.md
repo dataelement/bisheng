@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史766编号：635已完成/历史交付、129当前待办、2外移；原137队列已完成26项、剩111项，另18张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史766编号：639已完成/历史交付、125当前待办、2外移；原137队列已完成26项、剩111项，另14张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -6044,8 +6044,8 @@
 
 - [ ] **T748 · 原metadata依赖工厂装配真实SPACE writer**
   **类型 / Owner**：后端 API组合 / PROC\
-  **写入文件**：`src/backend/bisheng/knowledge/api/dependencies.py`\
-  **逻辑 / 测试上下文**：W6§24.3在原唯一DI工厂注入application writer，Domain只依赖窄port，v1/v2皆经原facade；保v2原principal及data=True，不走无账本BackgroundTask。\
+  **写入文件**：`src/backend/bisheng/knowledge/api/dependencies.py`；`src/backend/bisheng/open_endpoints/api/dependencies.py`\
+  **逻辑 / 测试上下文**：W6§24.3两个真实API DI调用唯一application组合工厂注入writer，Domain只依赖窄port，v1/v2皆经原facade；保v2原principal及data=True，不走无账本BackgroundTask。\
   **依赖**：T742\
   **配对测试**：T741, T071\
   **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-66, AC-82, AC-83, AC-86, AC-87\
@@ -6097,7 +6097,7 @@
   **覆盖 AC**: AC-02, AC-06, AC-08, AC-09, AC-11, AC-16, AC-30, AC-31, AC-32, AC-34, AC-51, AC-87\
   **验证 / 完成条件**：先真实红/首绿、实际consumer/旧回归组合，目标lint/strict新增0、每叶≤600、i18n与固定独立审；浏览器/E2E另验证。
 
-- [ ] **T754 · 实际目录与逐项授权测试**
+- [x] **T754 · 实际目录与逐项授权测试**
   **类型 / Owner**：测试 / PLATFORM\
   **写入文件**：`src/frontend/platform/src/test/f118SpaceDirectory.test.tsx`\
   **逻辑 / 测试上下文**：opaque空页/独立search分页、scope-parent-filter ABA、visible preview无download、rename独立及真实行type动作，不借root edit。\
@@ -6105,7 +6105,7 @@
   **覆盖 AC**: AC-02, AC-06, AC-08, AC-09, AC-11, AC-16, AC-30, AC-31, AC-32, AC-34, AC-51, AC-87\
   **验证 / 完成条件**：先真实红/首绿、实际consumer/旧回归组合，目标lint/strict新增0、每叶≤600、i18n与固定独立审；浏览器/E2E另验证。
 
-- [ ] **T755 · 实际目录与基础文件行消费**
+- [x] **T755 · 实际目录与基础文件行消费**
   **类型 / Owner**：前端 Platform / PLATFORM\
   **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/components/Files.tsx`；`src/frontend/platform/src/pages/KnowledgePage/components/SpaceDirectoryRow.tsx`\
   **逻辑 / 测试上下文**：W6§27目录/搜索/逐项动作/原文预览/独立download，未接删除移动版本等不借旧接口；重建可读。\
@@ -6187,7 +6187,7 @@
 
 ## W6目录旧静态抑制同步
 
-- [ ] **T764 · 新目录实际类型恢复后官方抑制裁剪**
+- [x] **T764 · 新目录实际类型恢复后官方抑制裁剪**
   **类型 / Owner**：静态产物 / INT\
   **写入文件**：`src/frontend/platform/eslint-suppressions.json`\
   **逻辑 / 测试上下文**：T755移除旧Files整体strict ignore后，只运行仓库官方lint:prune清理该叶已失效抑制，不手改、不加新抑制、不扩其他页面。\
@@ -6196,7 +6196,7 @@
 
 ## W6上传实际规则旧假结果兼容
 
-- [ ] **T765 · 上传旧假结果补已保存split_rule**
+- [x] **T765 · 上传旧假结果补已保存split_rule**
   **类型 / Owner**：测试夹具 / INT\
   **写入文件**：`src/backend/test/knowledge/test_upload_permission_rollback.py`；`src/backend/test/knowledge/test_department_knowledge_space_upload_permission.py`\
   **逻辑 / 测试上下文**：W6§30真实上传开始按已保存规则生成preview key，两个旧process_one_file假结果split_rule=None造成三例在原权限/审批断言前失败。仅为假创建行补原FileProcessBase已保存JSON并保留所有原业务断言；两个测试叶同一调用约定兼容，不改公共fixture/版本错误口径。\
