@@ -48,7 +48,7 @@ from bisheng.common.schemas.api import PageInfiniteCursorData
 from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.database.models.role_access import WebMenuResource
 from bisheng.database.models.session import MessageSessionDao
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.services.temp_upload_service import TempUploadService
 from bisheng.linsight.domain.models.linsight_execute_task import ExecuteTaskStatusEnum, LinsightExecuteTaskDao
 from bisheng.linsight.domain.models.linsight_session_version import (
@@ -234,8 +234,6 @@ class OpenTaskModeService:
 
     @staticmethod
     async def check_knowledge_libraries(login_user: UserPayload, ids: list[int] | None) -> None:
-        from bisheng.permission.application.business_authorization import batch_check_business_actions
-
         if not ids:
             return
         ids = list(dict.fromkeys(ids))
@@ -250,24 +248,18 @@ class OpenTaskModeService:
                 raise KnowledgeNotExistError(knowledge_id=knowledge_id)
             if row.type not in {KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.SPACE.value}:
                 raise KnowledgeTypeNotSupportedError(knowledge_id=knowledge_id)
-        for kind, namespace in (
-            (KnowledgeTypeEnum.NORMAL.value, "knowledge_library"),
-            (KnowledgeTypeEnum.SPACE.value, "knowledge_space"),
-        ):
-            grouped = [knowledge_id for knowledge_id in ids if rows[knowledge_id].type == kind]
-            if not grouped:
-                continue
-            allowed = await batch_check_business_actions(
-                login_user, resource_type=namespace, resource_ids=grouped, actions=("visible",)
+        visible = await OpenTaskModeService._visible_loaded_knowledge(
+            login_user, list(rows.values()), library_slot=True
+        )
+        for knowledge_id in ids:
+            namespace = (
+                "knowledge_library" if rows[knowledge_id].type == KnowledgeTypeEnum.NORMAL.value else "knowledge_space"
             )
-            for knowledge_id in grouped:
-                if "visible" not in allowed.get(str(knowledge_id), frozenset()):
-                    raise PermissionDeniedError(knowledge_id=knowledge_id)
+            if not visible.get((namespace, str(knowledge_id)), False):
+                raise PermissionDeniedError(knowledge_id=knowledge_id)
 
     @staticmethod
     async def check_knowledge_spaces(login_user: UserPayload, ids: list[int] | None) -> None:
-        from bisheng.permission.application.business_authorization import batch_check_business_visible
-
         if not ids:
             return
         ids = list(dict.fromkeys(ids))
@@ -280,10 +272,49 @@ class OpenTaskModeService:
             row = rows.get(space_id)
             if row is None or row.tenant_id != tenant_id or row.type != KnowledgeTypeEnum.SPACE.value:
                 raise SpaceNotFoundError(knowledge_space_id=space_id)
-        visible = await batch_check_business_visible(login_user, resource_type="knowledge_space", resource_ids=ids)
+        visible = await OpenTaskModeService._visible_loaded_knowledge(login_user, list(rows.values()))
         for space_id in ids:
-            if not visible.get(str(space_id)):
+            if not visible.get(("knowledge_space", str(space_id)), False):
                 raise SpacePermissionDeniedError(knowledge_space_id=space_id)
+
+    @staticmethod
+    async def _visible_loaded_knowledge(
+        login_user: UserPayload, rows: list[Knowledge], *, library_slot: bool = False
+    ) -> dict[tuple[str, str], bool]:
+        from bisheng.permission.application.access import get_f048_resource_adapter
+        from bisheng.permission.application.business_authorization import (
+            batch_check_business_actions,
+            batch_check_verified_business_visible,
+        )
+        from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
+        from bisheng.permission.application.identity import resolve_permission_actor
+
+        actor = await resolve_permission_actor(login_user)
+        visible = {}
+        for kind, namespace in (
+            (KnowledgeTypeEnum.NORMAL.value, "knowledge_library"),
+            (KnowledgeTypeEnum.SPACE.value, "knowledge_space"),
+        ):
+            grouped = [row for row in rows if row.type == kind]
+            if not grouped:
+                continue
+            adapter = await get_f048_resource_adapter(namespace)
+            targets = await adapter.resolve_permission_targets_from_rows(
+                rows=grouped, resource_type=namespace, actor=actor
+            )
+            if library_slot and actor.super_admin and actor.data_scope == DATA_SCOPE_ALL:
+                # Preserve only the original library-slot system shortcut, after
+                # validating real rows and their current permission snapshots.
+                allowed = await batch_check_business_actions(
+                    login_user,
+                    resource_type=namespace,
+                    resource_ids=[target.resource_id for target in targets],
+                    actions=("visible",),
+                )
+                visible.update({(namespace, ident): "visible" in actions for ident, actions in allowed.items()})
+            else:
+                visible.update(await batch_check_verified_business_visible(actor=actor, targets=targets))
+        return visible
 
     @staticmethod
     def check_content(login_user: UserPayload, *texts: str | None) -> None:
