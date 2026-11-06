@@ -127,7 +127,7 @@ def source(module, ident, grant_id, *, state="ACTIVE", protected=False):
     values = asdict(original)
     del values["active"]
     values["id"] = values.pop("source_id")
-    return module.PermissionAssigneeBaseline(grant_id=grant_id, state=state, **values)
+    return module.PermissionAssigneeBaseline(tenant_id=101, grant_id=grant_id, state=state, **values)
 
 
 def resource(module, before_catalog=None, *, resource_type="knowledge_space", model_key="only-use"):
@@ -346,3 +346,11 @@ def test_actual_source_and_visibility_drift_or_incomplete_projection_blocks(migr
         )
     with pytest.raises(PermissionMigrationBlockedError):
         verifier.verify_resource_retirement(plan=plan, actual=actual)
+
+
+@pytest.mark.parametrize("field,value", [("tenant_id", 202), ("subject_id", "8"), ("projected_subject", "user:8")])
+def test_original_assignee_tenant_and_canonical_subject_must_be_consistent(migration, field, value):
+    original = resource(migration)
+    broken = replace(original, assignees=(replace(original.assignees[0], **{field: value}), *original.assignees[1:]))
+    with pytest.raises(PermissionMigrationBlockedError):
+        migration.build_resource_retirement_plan(catalog_plan=catalog_plan(migration), before=broken)
