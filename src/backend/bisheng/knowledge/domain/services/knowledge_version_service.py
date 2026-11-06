@@ -18,7 +18,7 @@ from fastapi import HTTPException, Request
 from loguru import logger
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.knowledge_space import SpaceNotFoundError
+from bisheng.common.errcode.knowledge_space import SpaceFileNotFoundError, SpaceNotFoundError
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
@@ -45,12 +45,34 @@ class KnowledgeVersionService:
         doc_repo: KnowledgeDocumentRepository,
         version_repo: KnowledgeDocumentVersionRepository,
         knowledge_file_repo: KnowledgeFileRepository,
+        *,
+        version_read_service=None,
     ):
         self.request = request
         self.login_user = login_user
         self.doc_repo = doc_repo
         self.version_repo = version_repo
         self.knowledge_file_repo = knowledge_file_repo
+        self._version_read_service = version_read_service
+
+    def _reads(self):
+        if self._version_read_service is None:
+            from bisheng.knowledge.domain.services.knowledge_version_read_service import KnowledgeVersionReadService
+
+            self._version_read_service = KnowledgeVersionReadService(self.request, self.login_user)
+        return self._version_read_service
+
+    async def search_candidates_page(
+        self, *, knowledge_id, keyword, current_file_id, page_size=40, cursor=None, source_only=False
+    ):
+        return await self._reads().search_candidates_page(
+            knowledge_id=knowledge_id,
+            keyword=keyword,
+            current_file_id=current_file_id,
+            page_size=page_size,
+            cursor=cursor,
+            source_only=source_only,
+        )
 
     async def _require_version_management_enabled(self) -> None:
         """Raise the business-code error if the feature switch is off so the
@@ -71,110 +93,13 @@ class KnowledgeVersionService:
             require_space_processing_idle(space, operation=operation)
 
     async def list_versions_for_file(self, knowledge_file_id: int):
-        """Return the entire version chain that contains the given physical file."""
-        from bisheng.knowledge.domain.schemas.knowledge_version_schema import (
-            VersionEntry,
-            VersionListResponse,
-        )
+        try:
+            return await self._reads().list_versions_for_file(knowledge_file_id)
+        except SpaceFileNotFoundError as error:
+            raise HTTPException(status_code=404, detail="version chain not found for this file") from error
 
-        v = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
-        if v is None:
-            raise HTTPException(status_code=404, detail="version chain not found for this file")
-        doc = await self.doc_repo.find_by_id(v.document_id)
-        versions = await self.version_repo.find_by_document_id(v.document_id)
-
-        kf_ids = [vv.knowledge_file_id for vv in versions]
-        kfs = await self.knowledge_file_repo.find_by_ids(kf_ids)
-        kf_by_id = {kf.id: kf for kf in kfs}
-
-        primary = next((vv for vv in versions if vv.is_primary), None)
-        primary_kf = kf_by_id.get(primary.knowledge_file_id) if primary else None
-        title = (
-            primary_kf.file_name
-            if primary_kf
-            else (kf_by_id[versions[0].knowledge_file_id].file_name if versions else "")
-        )
-        doc_code = getattr(primary_kf, "file_encoding", None) if primary_kf else None
-
-        entries: list[VersionEntry] = []
-        for vv in versions:
-            kf = kf_by_id.get(vv.knowledge_file_id)
-            entries.append(
-                VersionEntry(
-                    version_id=vv.id,
-                    version_no=vv.version_no,
-                    is_primary=vv.is_primary,
-                    knowledge_file_id=vv.knowledge_file_id,
-                    original_file_name=kf.file_name if kf else "",
-                    file_code=getattr(kf, "file_encoding", None) if kf else None,
-                    uploader_name=kf.user_name if kf else None,
-                    uploader_id=kf.user_id if kf else None,
-                    upload_time=kf.create_time if kf else None,
-                    status=kf.status if kf else None,
-                )
-            )
-        return VersionListResponse(
-            document_id=doc.id,
-            knowledge_id=doc.knowledge_id,
-            title=title,
-            doc_code=doc_code,
-            current_primary_version_no=primary.version_no if primary else None,
-            versions=entries,
-        )
-
-    async def search_associable_documents(
-        self,
-        knowledge_id: int,
-        keyword: str,
-        current_file_id: int,
-    ):
-        """Search documents in a space that the current file could be associated into.
-
-        Returns documents matching the keyword on either the primary file's name or its
-        file_encoding (used as 文件编码). Excludes the document that current_file_id belongs to.
-        """
-        from bisheng.knowledge.domain.schemas.knowledge_version_schema import AssociableDocumentEntry
-
-        docs = await self.doc_repo.find_by_knowledge_id(knowledge_id)
-
-        current_v = await self.version_repo.find_by_knowledge_file_id(current_file_id)
-        self_doc_id = current_v.document_id if current_v else None
-
-        keyword_lower = (keyword or "").strip().lower()
-        out: list[AssociableDocumentEntry] = []
-        for doc in docs:
-            if doc.id == self_doc_id:
-                continue
-            if doc.primary_version_id is None:
-                continue
-            primary_v = await self.version_repo.find_by_id(doc.primary_version_id)
-            if primary_v is None:
-                continue
-            kf = await self.knowledge_file_repo.find_by_id(primary_v.knowledge_file_id)
-            # Hide documents whose primary file is gone or has not parsed
-            # successfully — they're effectively unusable as a link target
-            # and would just trip the link-time guard.
-            if kf is None or kf.status != KnowledgeFileStatus.SUCCESS.value:
-                continue
-            haystack = " ".join(
-                [
-                    kf.file_name or "",
-                    getattr(kf, "file_encoding", "") or "",
-                ]
-            ).lower()
-            if keyword_lower and keyword_lower not in haystack:
-                continue
-            out.append(
-                AssociableDocumentEntry(
-                    document_id=doc.id,
-                    title=kf.file_name,
-                    doc_code=getattr(kf, "file_encoding", None),
-                    current_primary_version_no=primary_v.version_no,
-                    primary_uploader_name=kf.user_name,
-                    primary_upload_time=kf.create_time,
-                )
-            )
-        return out
+    async def search_associable_documents(self, knowledge_id: int, keyword: str, current_file_id: int):
+        return await self._reads().search_associable_documents(knowledge_id, keyword, current_file_id)
 
     async def link_file_to_document(self, knowledge_file_id: int, target_document_id: int):
         """Associate a parsed file into a target document's chain.
@@ -588,59 +513,8 @@ class KnowledgeVersionService:
             )
         return out
 
-    async def search_version_sources(
-        self,
-        knowledge_id: int,
-        keyword: str,
-        current_file_id: int,
-    ):
-        """Keyword-search single-version documents in a space — for the version
-        management merge selection. Identical to search_associable_documents but
-        additionally excludes multi-version documents.
-        """
-        from bisheng.knowledge.domain.schemas.knowledge_version_schema import AssociableDocumentEntry
-
-        docs = await self.doc_repo.find_by_knowledge_id(knowledge_id)
-
-        current_v = await self.version_repo.find_by_knowledge_file_id(current_file_id)
-        self_doc_id = current_v.document_id if current_v else None
-
-        keyword_lower = (keyword or "").strip().lower()
-        out: list[AssociableDocumentEntry] = []
-        for doc in docs:
-            if doc.id == self_doc_id:
-                continue
-            if doc.primary_version_id is None:
-                continue
-            chain = await self.version_repo.find_by_document_id(doc.id)
-            if len(chain) != 1:
-                continue
-            primary_v = chain[0]
-            kf = await self.knowledge_file_repo.find_by_id(primary_v.knowledge_file_id)
-            # Hide documents whose primary file is gone or has not parsed
-            # successfully — they're effectively unusable as a link target
-            # and would just trip the link-time guard.
-            if kf is None or kf.status != KnowledgeFileStatus.SUCCESS.value:
-                continue
-            haystack = " ".join(
-                [
-                    kf.file_name or "",
-                    getattr(kf, "file_encoding", "") or "",
-                ]
-            ).lower()
-            if keyword_lower and keyword_lower not in haystack:
-                continue
-            out.append(
-                AssociableDocumentEntry(
-                    document_id=doc.id,
-                    title=kf.file_name,
-                    doc_code=getattr(kf, "file_encoding", None),
-                    current_primary_version_no=primary_v.version_no,
-                    primary_uploader_name=kf.user_name,
-                    primary_upload_time=kf.create_time,
-                )
-            )
-        return out
+    async def search_version_sources(self, knowledge_id: int, keyword: str, current_file_id: int):
+        return await self._reads().search_version_sources(knowledge_id, keyword, current_file_id)
 
     async def merge_source_document_into_current(
         self,
