@@ -10,6 +10,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userContext } from "@/contexts/userContext";
 import KnowledgePage from "@/pages/KnowledgePage";
+import type {
+  KnowledgeAdminQuery,
+  KnowledgeVisibleQuery,
+} from "@/controllers/API/knowledgeSpace";
 const pageWindow = window as Window & { LibPage?: { type: string } };
 
 const mocks = vi.hoisted(() => ({
@@ -275,6 +279,74 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
+
+it.each(["ordinary", "admin"])(
+  "retires %s pagination when abnormal filtering changes, including filter ABA",
+  async (view) => {
+    const old = deferred<unknown>();
+    if (view === "ordinary")
+      mocks.visible
+        .mockResolvedValueOnce({
+          data: [],
+          page_size: 20,
+          has_more: true,
+          next_cursor: "old-cursor",
+        })
+        .mockReturnValueOnce(old.promise)
+        .mockResolvedValue(page([row("Fresh row")]));
+    else
+      mocks.admin
+        .mockResolvedValueOnce({ data: [row("Admin first")], total: 41 })
+        .mockReturnValueOnce(old.promise)
+        .mockResolvedValue({ data: [row("Fresh row")], total: 41 });
+    const f = setup({ is_child_admin: true });
+    render(f.draw());
+    if (view === "ordinary")
+      fireEvent.click(
+        await screen.findByRole("button", { name: "next-visible-page" }),
+      );
+    else {
+      await screen.findByText("Space");
+      tab("f118.manage_spaces");
+      await screen.findByText("Admin first");
+      fireEvent.click(screen.getByRole("button", { name: "pagination.next" }));
+    }
+    const api = view === "ordinary" ? mocks.visible : mocks.admin;
+    await waitFor(() => expect(api).toHaveBeenCalledTimes(2));
+    const filter = (label: string) => {
+      fireEvent.click(
+        screen.getByRole("combobox", { name: "fileStatusFilterLabel" }),
+      );
+      fireEvent.click(screen.getByRole("option", { name: label }));
+    };
+    filter("fileStatusAbnormal");
+    const first =
+      view === "ordinary" ? { page_size: 20 } : { page: 1, page_size: 20 };
+    const filtered: KnowledgeVisibleQuery | KnowledgeAdminQuery =
+      view === "ordinary"
+        ? { page_size: 20, has_abnormal: true }
+        : { page: 1, page_size: 20, has_abnormal: true };
+    await waitFor(() => expect(api).toHaveBeenLastCalledWith(filtered));
+    await act(async () =>
+      old.resolve(
+        view === "ordinary"
+          ? page([row("Retired row")])
+          : { data: [row("Retired row")], total: 41 },
+      ),
+    );
+    expect(screen.queryByText("Retired row")).toBeNull();
+    filter("fileStatusFilterAll");
+    await waitFor(() => expect(api).toHaveBeenLastCalledWith(first));
+    expect(screen.queryByText("Retired row")).toBeNull();
+    filter("fileStatusAbnormal");
+    await waitFor(() =>
+      expect(api).toHaveBeenLastCalledWith({ ...first, has_abnormal: true }),
+    );
+    tab("lib.qaData");
+    tab(view === "ordinary" ? "f118.spaces" : "f118.manage_spaces");
+    await waitFor(() => expect(api).toHaveBeenLastCalledWith(first));
+  },
+);
 
 it("uses ordinary SPACE listing, preserves the create menu and keeps QA as its own tab", async () => {
   const f = setup();

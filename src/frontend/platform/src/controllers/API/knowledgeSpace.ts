@@ -91,6 +91,7 @@ export interface KnowledgeSpaceInfo extends KnowledgeSpaceSummary {
   create_time?: string | null;
   update_time?: string | null;
   user_name?: string;
+  has_abnormal_files?: boolean;
   actions?: string[] | null;
   is_pinned?: boolean;
   is_followed?: boolean;
@@ -166,8 +167,10 @@ export interface KnowledgePageQuery {
 }
 export interface KnowledgeAdminQuery extends KnowledgePageQuery {
   keyword?: string;
+  has_abnormal?: boolean;
 }
 export interface KnowledgeVisibleQuery {
+  has_abnormal?: boolean;
   keyword?: string;
   page_size?: number;
   cursor?: string | null;
