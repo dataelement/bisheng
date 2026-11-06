@@ -27,6 +27,7 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.repositories.processing_job_repository import NewProcessingItem, ProcessingConfiguration
+from bisheng.knowledge.domain.repositories.processing_owner_repository import ProcessingOwnerRepository
 from bisheng.knowledge.domain.schemas.processing_job import ResourceVersionTarget
 from test.knowledge_unification import test_job_service as fixtures
 from test.knowledge_unification.test_kn_model_bindings import state
@@ -294,10 +295,11 @@ async def test_same_model_with_revoked_share_is_invalid_rather_than_repaired_noo
 
 
 @pytest.mark.parametrize("values", [{"model_config_revision": 1}, {"index_generation": "changed-generation"}])
-async def test_apply_preserves_real_configuration_cas_even_with_stale_identity_map(empty, values):
+@pytest.mark.parametrize("model", [11, 12])
+async def test_apply_preserves_real_configuration_cas_even_with_stale_identity_map(empty, values, model):
     before = state(empty.context)
     async with empty.context.sessions() as session:
-        change = await prepare(empty, session)
+        change = await prepare(empty, session, model)
         await session.execute(
             update(Knowledge)
             .where(Knowledge.id == 40, Knowledge.tenant_id == 101)
@@ -306,6 +308,30 @@ async def test_apply_preserves_real_configuration_cas_even_with_stale_identity_m
         )
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await Models.aapply_model_change(session, change)
+        await session.rollback()
+    assert state(empty.context) == before
+
+
+@pytest.mark.parametrize("values", [{"model_config_revision": 1}, {"index_generation": "changed-generation"}])
+async def test_prepare_rechecks_original_issued_plan_after_real_scope_refresh(empty, monkeypatch, values):
+    actual_scope = ProcessingOwnerRepository.aassert_empty_model_change
+
+    async def change_before_scope(self, session, space_id):
+        # Inject a real SQL change between the two preparations. The complete
+        # scope method still runs, including its native populate_existing read.
+        await session.execute(
+            update(Knowledge)
+            .where(Knowledge.id == space_id, Knowledge.tenant_id == 101)
+            .values(**values)
+            .execution_options(synchronize_session=False)
+        )
+        return await actual_scope(self, session, space_id)
+
+    monkeypatch.setattr(ProcessingOwnerRepository, "aassert_empty_model_change", change_before_scope)
+    before = state(empty.context)
+    async with empty.context.sessions() as session:
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await prepare(empty, session, 11)
         await session.rollback()
     assert state(empty.context) == before
 
