@@ -28,6 +28,12 @@ export interface TableProcessingRule {
   append_header: BinaryFlag;
 }
 
+/** Actual legacy file snapshot only; new defaults and commands keep positive row counts. */
+export interface LegacyTableProcessingRule extends Omit<TableProcessingRule, "slice_length"> {
+  slice_length: 0;
+  legacy_unbounded: true;
+}
+
 export type PartialDocumentRule = { [K in keyof DocumentProcessingRule]?: DocumentProcessingRule[K] | null };
 export type PartialTableRule = { [K in keyof TableProcessingRule]?: TableProcessingRule[K] | null };
 
@@ -57,7 +63,7 @@ export interface ProcessingSettingsWrite {
 export interface EffectiveProcessingSnapshot {
   schema_version: 1;
   file_kind: string;
-  effective_rule: DocumentProcessingRule | TableProcessingRule;
+  effective_rule: DocumentProcessingRule | TableProcessingRule | LegacyTableProcessingRule;
   space_config_version: number;
   supplied_fields_by_layer: Partial<Record<"system" | "space" | "batch" | "file" | "specialized", string[]>>;
 }
