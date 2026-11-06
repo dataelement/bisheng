@@ -112,8 +112,10 @@ def command(operation, protocol):
     )
 
 
-async def call(legacy, operation="add", protocol="web", *, scope="knowledge:write"):
+async def call(legacy, operation="add", protocol="web", *, scope="knowledge:write", empty=False):
     method, url, body = command(operation, protocol)
+    if empty:
+        body["field_names" if operation == "delete" else "metadata_fields"] = []
     original = principal(delegated=protocol == "D", scopes={scope}) if protocol != "web" else None
     actor = (
         PermissionActor(
@@ -242,4 +244,53 @@ async def test_qa_original_metadata_update_and_background_contract_are_preserved
         )
         assert result.metadata_fields[0]["field_name"] == "alias" and len(tasks.tasks) == 1
         assert result.metadata_schema_revision == 0
+        assert not (await session.exec(select(KnowledgeProcessingJob))).all()
+
+
+@pytest.mark.parametrize("protocol", ["web", "S", "D"])
+@pytest.mark.parametrize("operation", ["add", "rename", "delete"])
+@pytest.mark.parametrize("missing_schema", [False, True])
+async def test_empty_original_lists_are_authorized_noops_with_zero_writes_and_no_fake_job(
+    legacy, protocol, operation, missing_schema
+):
+    async with legacy.flow.context.sessions() as session:
+        root = await session.get(Knowledge, 40)
+        if missing_schema:
+            root.metadata_fields = None
+            await session.commit()
+        before = root.model_dump(mode="json")
+    legacy.commits.clear()
+    writes = []
+    engine = legacy.flow.context.engine.sync_engine
+
+    def capture(connection, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE")):
+            writes.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        result = await call(legacy, operation, protocol, empty=True)
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+    assert result["status_code"] == 200 and not writes and not legacy.commits
+    if protocol == "web":
+        assert result["data"]["metadata_fields"] == before["metadata_fields"]
+        assert "processing_job" not in result["data"]
+    else:
+        assert result["data"] is True
+    async with legacy.flow.context.sessions() as session:
+        assert (await session.get(Knowledge, 40)).model_dump(mode="json") == before
+        assert not (await session.exec(select(KnowledgeProcessingJob))).all()
+        assert not (await session.exec(select(KnowledgeProcessingItem))).all()
+    legacy.retired.assert_not_awaited()
+
+
+@pytest.mark.parametrize("operation", ["add", "rename", "delete"])
+async def test_empty_legacy_lists_recheck_original_container_edit_before_returning_schema(legacy, owner, operation):
+    owner.auth.side_effect = PermissionDeniedError()
+    result = await call(legacy, operation, empty=True)
+    assert result["status_code"] == PermissionDeniedError.Code
+    assert not legacy.commits
+    async with legacy.flow.context.sessions() as session:
+        assert (await session.get(Knowledge, 40)).metadata_schema_revision == 0
         assert not (await session.exec(select(KnowledgeProcessingJob))).all()
