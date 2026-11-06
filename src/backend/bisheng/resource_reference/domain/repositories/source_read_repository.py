@@ -97,3 +97,30 @@ class SourceReadRepository:
         )
         await self.verifier.aget_source_snapshot(session, scope, identity)
         return SourceIndexReadSnapshot(root[0] if root else None, source[0] if source else None, rows)
+
+    @staticmethod
+    def _rows_sync(session, statement, fact_type):
+        with session.no_autoflush, bypass_tenant_filter():
+            result = session.execute(statement)
+            return tuple(fact_type(**row._mapping) for row in result)
+
+    def read_source(self, session, scope, identity, *, for_update=False):
+        snapshot = self.verifier.get_source_snapshot(session, scope, identity)
+        key = snapshot.source_key
+        root = self._rows_sync(
+            session,
+            self._statement(BusinessReferenceSet, SourceSetReadFact, key, ROOT_GUARD_VERSION, for_update),
+            SourceSetReadFact,
+        )
+        source = self._rows_sync(
+            session,
+            self._statement(BusinessReferenceSet, SourceSetReadFact, key, key.source_version, for_update),
+            SourceSetReadFact,
+        )
+        rows = self._rows_sync(
+            session,
+            self._statement(BusinessResourceReference, ReferenceReadRow, key, key.source_version, for_update),
+            ReferenceReadRow,
+        )
+        self.verifier.get_source_snapshot(session, scope, identity)
+        return SourceIndexReadSnapshot(root[0] if root else None, source[0] if source else None, rows)

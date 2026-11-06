@@ -85,3 +85,25 @@ class ReferenceSourceReadRuntime:
         await self.verifier.arevalidate_transient_scope(session, scope, identity)
         self._require_valid(facts)
         return TransientReferenceReadResult(snapshot, facts)
+
+    def _source_sync(self, session, scope, identity, *, purpose):
+        snapshot = self.verifier.get_source_snapshot(session, scope, identity)
+        if scope.purpose != purpose:
+            raise ResourceReferenceInvalidError(reason="reference_read_purpose_mismatch")
+        candidate = self.repository.read_source(session, scope, identity)
+        self._index(candidate, snapshot, execute=purpose == "execute")
+        facts = self.verifier._inspect_targets(session, scope, identity)
+        self.verifier.revalidate_scope(session, scope, identity)
+        current = self.repository.read_source(session, scope, identity, for_update=True)
+        self._index(current, snapshot, execute=purpose == "execute")
+        if candidate != current:
+            raise KnowledgeOperationPlanConflictError(reason="reference_read_index_changed")
+        if purpose == "execute":
+            self._require_valid(facts)
+        return SourceReferenceReadResult(snapshot, facts, current.source.source_revision, current.root.source_revision)
+
+    def inspect_source(self, session, scope, identity):
+        return self._source_sync(session, scope, identity, purpose="inspect")
+
+    def require_source_valid(self, session, scope, identity):
+        return self._source_sync(session, scope, identity, purpose="execute")
