@@ -105,8 +105,9 @@ async def test_current_persisted_job_can_clean_its_old_index_after_resource_disa
 @pytest.mark.parametrize("invalid", ["fake_job", "lease", "target", "index", "tenant", "expired"])
 async def test_untrusted_job_or_changed_target_never_redirects_cleanup(cleanup, invalid):
     context, actual, historical, original = cleanup
-    job = original.model_copy(deep=True)
-    knowledge = historical.model_copy(deep=True)
+    # Reconstruct ORM values instead of copying SQLAlchemy InstanceState.
+    job = KnowledgeSpaceDeleteJob(**original.model_dump())
+    knowledge = Knowledge(**historical.model_dump())
     if invalid == "fake_job":
         job.id = "not-a-persisted-job"
     elif invalid == "lease":
