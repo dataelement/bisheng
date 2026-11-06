@@ -679,7 +679,7 @@ async def test_projected_creation_collision_uses_native_unique_key_semantics(rep
     async with AsyncSession(native.engine) as session, session.begin():
         with pytest.raises(KnowledgeOperationPlanConflictError) as error:
             await repo.avalidate_global_integrity(session)
-    assert "projected_creation_conflict" in str(error.value)
+    assert error.value.kwargs == {"reason": "unification_resource_projected_creation_conflict", "id": 40}
     grouped = [sql for sql, _ in native.queries if "GROUP BY" in sql.upper()]
     assert len(grouped) == 1 and "HAVING count(" in grouped[0] and "LIMIT" in grouped[0].upper()
     assert "Upgrade-A" not in str(error.value) and "upgrade-a" not in str(error.value)
