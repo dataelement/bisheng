@@ -22,6 +22,7 @@ from bisheng.common.errcode.knowledge import (
 from bisheng.core.context.background_execution import get_current_background_task
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeState, KnowledgeTypeEnum
 from bisheng.knowledge.domain.repositories.model_reference_repository import KnowledgeModelReferenceRepository
+from bisheng.knowledge.domain.repositories.processing_owner_repository import ProcessingOwnerRepository
 from bisheng.knowledge.domain.services.model_reference_extractor import (
     KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
     extract_knowledge_model_references,
@@ -65,6 +66,7 @@ class PreparedKnowledgeModelChange:
 
 _issued: WeakKeyDictionary = WeakKeyDictionary()
 _removals: WeakKeyDictionary = WeakKeyDictionary()
+_empty_scopes: WeakKeyDictionary = WeakKeyDictionary()
 
 
 @dataclass(frozen=True, slots=True, eq=False, weakref_slot=True)
@@ -458,6 +460,43 @@ class KnowledgeModelReferenceApplication:
         )
 
     @classmethod
+    async def aprepare_empty_model_change(
+        cls,
+        session,
+        knowledge_id,
+        new_model_id,
+        *,
+        login_user,
+        expected_model_config_revision=None,
+        expected_index_generation=None,
+        operation_id=None,
+    ):
+        prepared = await cls.aprepare_model_change(
+            session,
+            knowledge_id,
+            new_model_id,
+            login_user=login_user,
+            expected_model_config_revision=expected_model_config_revision,
+            expected_index_generation=expected_index_generation,
+            operation_id=operation_id,
+        )
+        scope = await ProcessingOwnerRepository().aassert_empty_model_change(session, knowledge_id)
+        selected = canonical_target_id(new_model_id)
+        references = extract_knowledge_model_references(model=selected, model_transition=None)
+        bindings = replace(prepared.bindings, verified=replace(prepared.bindings.verified, references=references))
+        plan = replace(
+            prepared,
+            model=selected,
+            transition=None,
+            operation_id=None,
+            bindings=bindings,
+            next_state=KnowledgeState.PUBLISHED.value,
+            purpose="empty_change",
+        )
+        _empty_scopes[plan] = scope
+        return cls._register_model_plan(session, plan)
+
+    @classmethod
     def apply_model_change(cls, session, prepared):
         cls._check_plan(session, prepared)
         if prepared.changed:
@@ -478,6 +517,10 @@ class KnowledgeModelReferenceApplication:
     @classmethod
     async def aapply_model_change(cls, session, prepared):
         cls._check_plan(session, prepared)
+        if prepared.purpose == "empty_change":
+            scope = await ProcessingOwnerRepository().aassert_empty_model_change(session, prepared.knowledge_id)
+            if scope != _empty_scopes.get(prepared):
+                raise KnowledgeOperationPlanConflictError(reason="knowledge_model_empty_scope_changed")
         if prepared.changed:
             await cls.repository.aapply_model_configuration(
                 session,
