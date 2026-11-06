@@ -115,6 +115,21 @@ async def test_upload_without_space_defaults_captures_actual_system_defaults(upl
     assert actual["_effective_processing"]["supplied_fields_by_layer"]["batch"] == []
 
 
+@pytest.mark.parametrize("suffix,kind", [("mp3", "audio"), ("mp4", "video")])
+async def test_media_uses_actual_dedicated_kind_and_retains_saved_snapshot(upload, monkeypatch, suffix, kind):
+    monkeypatch.setitem(
+        upload.legacy.cls.process_one_file.__func__.__globals__,
+        "file_download",
+        lambda _: (str(upload.legacy.files.source), f"clip.{suffix}"),
+    )
+    accepted = (await upload.service.add_file(40, ["opaque-media"]))[0]
+    actual = json.loads(accepted.split_rule)
+    assert actual["_effective_processing"]["file_kind"] == kind
+    assert "specialized" in actual["_effective_processing"]["supplied_fields_by_layer"]
+    assert accepted.file_source == f"{kind}_transcript"
+    assert upload.preview_rules == [(40, "opaque-media", actual)]
+
+
 async def test_duplicate_does_not_register_another_version_or_dispatch(upload):
     first = (await upload.service.add_file(40, ["opaque-document"]))[0]
     upload.publish.reset_mock()
