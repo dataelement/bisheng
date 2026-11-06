@@ -22,6 +22,7 @@ def upload(monkeypatch):
         row.tenant_id = 1
         row.user_id = 7
         row.file_size = 1
+        row.split_rule = module.FileProcessBase(knowledge_id=348).model_dump_json()
         row.object_name = f"original/{row.id}.txt"
     business = {row.id: row for row in files}
     permissions = {}

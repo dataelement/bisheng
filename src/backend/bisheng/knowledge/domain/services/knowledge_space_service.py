@@ -18,7 +18,7 @@ from loguru import logger
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
-from bisheng.api.v1.schemas import ExcelRule, FileProcessBase, KnowledgeFileOne
+from bisheng.api.v1.schemas import FileProcessBase, KnowledgeFileOne
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
 from bisheng.approval.domain.services.approval_gate import ApprovalGate
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
@@ -4087,7 +4087,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 db_file = KnowledgeService.process_one_file(
                     self.login_user,
                     knowledge=db_knowledge,
-                    file_info=KnowledgeFileOne(file_path=one, excel_rule=ExcelRule()),
+                    file_info=KnowledgeFileOne(file_path=one),
                     split_rule=file_split_rule.model_dump(),
                     file_kwargs={
                         "level": level,
@@ -4095,6 +4095,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         "file_source": file_source.value,
                     },
                     skip_dedup=skip_dedup,
+                    processing_rule_request=file_split_rule,
                 )
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
                     if getattr(db_file, "id", None):
@@ -4104,33 +4105,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         db_file.file_source = resolved_file_source
                         db_file = KnowledgeFileDao.update(db_file)
                     if getattr(db_file, "id", None):
-                        # Plan 2 Task 9: also create a logical document + V1 (primary) for the uploaded file.
-                        # This is independent of the version-management switch (D3): the rows always
-                        # exist so the file list can be document-driven even when the switch is off.
-                        async with get_async_db_session() as v_session:
-                            v_doc = KnowledgeDocument(
-                                knowledge_id=db_file.knowledge_id,
-                                file_level_path=db_file.file_level_path,
-                                level=db_file.level or 0,
-                            )
-                            v_session.add(v_doc)
-                            await v_session.flush()
-                            v_version = KnowledgeDocumentVersion(
-                                document_id=v_doc.id,
-                                knowledge_file_id=db_file.id,
-                                version_no=1,
-                                is_primary=True,
-                            )
-                            v_session.add(v_version)
-                            await v_session.flush()
-                            v_doc.primary_version_id = v_version.id
-                            v_session.add(v_doc)
-                            await v_session.commit()
+                        await self._create_primary_document_for_file(db_file)
                     # Get a preview cache of this filekey
                     cache_key = self.preview_cache_key_for_split_rule(
                         knowledge_id,
                         one,
-                        {**file_split_rule.model_dump(), "excel_rule": ExcelRule().model_dump()},
+                        json.loads(db_file.split_rule),
                     )
                     preview_cache_keys.append(cache_key)
                     process_files.append(db_file)

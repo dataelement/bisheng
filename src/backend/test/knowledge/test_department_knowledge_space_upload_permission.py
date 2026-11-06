@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
 from test.knowledge.test_knowledge_space_service import (
     _load_service_class,
@@ -32,6 +33,7 @@ async def test_department_space_upload_does_not_create_approval_request(service)
     space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
     added_file = _make_file(file_id=101, knowledge_id=1, file_name="doc.txt")
     added_file.file_size = 1
+    added_file.split_rule = FileProcessBase(knowledge_id=1).model_dump_json()
 
     with (
         patch.object(
