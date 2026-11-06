@@ -4,6 +4,7 @@ import {
   DropdownItem,
   Pagination,
   SearchInput,
+  Select,
   notification,
 } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
@@ -16,6 +17,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import LoadMore from "@/components/bs-comp/loadMore";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { useLazyResourceActions } from "@/components/bs-comp/permission/useResourceActions";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import {
   Table,
   TableBody,
@@ -38,6 +40,7 @@ import type { User } from "@/types/api/user";
 import { KnowledgeLibraryDialog } from "./components/KnowledgeLibraryDialog";
 import { KnowledgeTooltip } from "./components/KnowledgeTooltip";
 import { ProcessingDefaultsDialog } from "./components/ProcessingDefaultsDialog";
+import { FileAbnormalStatusCell } from "./components/FileAbnormalStatusCell";
 
 const ROW_ACTIONS = ["visible", "edit", "manage_permission"];
 interface KnowledgeFileProps {
@@ -58,8 +61,17 @@ export default function KnowledgeFile({
   const [keyword, setKeyword] = useState(""),
     [page, setPage] = useState(1),
     [pageSize, setPageSize] = useState(20);
+  const [onlyAbnormal, setOnlyAbnormal] = useState(false);
+  const selectLabels = useSelectLabels();
   const isAdmin = scope.view === "admin";
-  const query = { page_size: pageSize, ...(keyword ? { keyword } : {}) };
+  const query = useMemo(
+    () => ({
+      page_size: pageSize,
+      ...(keyword ? { keyword } : {}),
+      ...(onlyAbnormal ? { has_abnormal: true } : {}),
+    }),
+    [pageSize, keyword, onlyAbnormal],
+  );
   const ordinary = useKnowledgeVisibleSpaces(scope, query);
   const admin = useKnowledgeAdminSpaces(scope, { ...query, page });
   const active = isAdmin ? admin : ordinary;
@@ -68,30 +80,42 @@ export default function KnowledgeFile({
     : (ordinary.data?.pages.flatMap((result) => result.data) ?? []);
   const paginationLocale = usePaginationLocale();
   const { identityKey, tenantId, managementTenantId, view } = scope;
-  const scopeKey = useMemo(
-    () =>
-      knowledgeQueryKeys.scope({
-        identityKey,
-        tenantId,
-        managementTenantId,
-        view,
-      }),
+  const stableScope = useMemo(
+    () => ({
+      identityKey,
+      tenantId,
+      managementTenantId,
+      view,
+    }),
     [identityKey, tenantId, managementTenantId, view],
   );
-  const live = useRef(false);
+  const activeKey = useMemo(
+    () =>
+      isAdmin
+        ? knowledgeQueryKeys.admin(stableScope, { ...query, page })
+        : knowledgeQueryKeys.visible(stableScope, query),
+    [isAdmin, stableScope, query, page],
+  );
+  const epoch = useMemo(() => ({ activeKey }), [activeKey]);
+  const live = useRef<typeof epoch | null>(epoch);
+  live.current = epoch;
   const refetch = active.refetch;
   useEffect(() => {
-    live.current = true;
+    live.current = epoch;
     if (identityKey && Number.isSafeInteger(tenantId) && tenantId > 0) {
       void refetch({ cancelRefetch: false }).catch((error) => {
-        if (live.current) showApiError(error);
+        if (live.current === epoch) showApiError(error);
       });
     }
     return () => {
-      live.current = false;
-      void client.cancelQueries({ queryKey: scopeKey, type: "inactive" });
+      if (live.current === epoch) live.current = null;
+      void client.cancelQueries({
+        queryKey: activeKey,
+        exact: true,
+        type: "inactive",
+      });
     };
-  }, [client, identityKey, tenantId, scopeKey, refetch]);
+  }, [client, identityKey, tenantId, activeKey, epoch, refetch]);
   const canCreate =
     user?.is_global_super === true ||
     user?.is_child_admin === true ||
@@ -103,6 +127,30 @@ export default function KnowledgeFile({
   const [permissionTarget, setPermissionTarget] =
     useState<KnowledgeSpaceInfo | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const handleFilter = (value: string | number | null | undefined) => {
+    const next = value === "abnormal";
+    if (next === onlyAbnormal) return;
+    const nextQuery = {
+      page_size: pageSize,
+      ...(keyword ? { keyword } : {}),
+      ...(next ? { has_abnormal: true } : {}),
+    };
+    const incoming = isAdmin
+      ? knowledgeQueryKeys.admin(stableScope, { ...nextQuery, page: 1 })
+      : knowledgeQueryKeys.visible(stableScope, nextQuery);
+    // A previous visit to this filter must not restore its consumed cursor.
+    client.removeQueries({ queryKey: incoming, exact: true, type: "inactive" });
+    setOpenId(null);
+    setEditTarget(null);
+    setDefaultsTarget(null);
+    setPermissionTarget(null);
+    setOnlyAbnormal(next);
+    setPage(1);
+  };
+  const filterOptions = [
+    { label: t("fileStatusFilterAll"), value: "all" },
+    { label: t("fileStatusAbnormal"), value: "abnormal" },
+  ];
   const {
     actions,
     loading: actionLoading,
@@ -123,7 +171,7 @@ export default function KnowledgeFile({
     }
     setOpenId(id);
     const result = await loadActions(id);
-    if (!live.current) return;
+    if (live.current !== epoch) return;
     if (result.hasError) {
       setOpenId((current) => (current === id ? null : current));
       handleLookupError();
@@ -133,14 +181,14 @@ export default function KnowledgeFile({
     let allowed = row.actions?.includes("visible") || hasAction(row, "visible");
     if (!allowed) {
       const result = await loadActions(String(row.id));
-      if (!live.current) return;
+      if (live.current !== epoch) return;
       if (result.hasError) {
         handleLookupError();
         return;
       }
       allowed = result.actions.includes("visible");
     }
-    if (!allowed || !live.current) return;
+    if (!allowed || live.current !== epoch) return;
     pageWindow.LibPage = { type: isAdmin ? "admin" : "file" };
     navigate(`/filelib/${row.id}`);
   };
@@ -148,7 +196,7 @@ export default function KnowledgeFile({
     try {
       await refetch();
     } catch (error) {
-      if (live.current) showApiError(error);
+      if (live.current === epoch) showApiError(error);
     }
   };
   const renderMenu = (row: KnowledgeSpaceInfo) => {
@@ -246,6 +294,38 @@ export default function KnowledgeFile({
               <TableHead>{t("f118.space_name")}</TableHead>
               <TableHead>{t("updateTime")}</TableHead>
               <TableHead>{t("lib.createUser", { ns: "bs" })}</TableHead>
+              <TableHead>
+                <div className="flex items-center">
+                  {t("fileStatus")}
+                  <Select
+                    {...selectLabels}
+                    options={filterOptions}
+                    value={onlyAbnormal ? "abnormal" : "all"}
+                    onChange={handleFilter}
+                    trigger={
+                      <button
+                        type="button"
+                        className="ml-3 inline-flex outline-none"
+                        aria-label={t("fileStatusFilterLabel", {
+                          value: t(
+                            onlyAbnormal
+                              ? "fileStatusAbnormal"
+                              : "fileStatusFilterAll",
+                          ),
+                        })}
+                      >
+                        <Outlined.Filter
+                          size={16}
+                          aria-hidden
+                          className={
+                            onlyAbnormal ? "text-primary" : "text-gray-400"
+                          }
+                        />
+                      </button>
+                    }
+                  />
+                </div>
+              </TableHead>
               <TableHead className="text-right">{t("operations")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -283,6 +363,11 @@ export default function KnowledgeFile({
                 <TableCell className="max-w-[300px] break-all text-text-2">
                   {row.user_name || "--"}
                 </TableCell>
+                <TableCell>
+                  <FileAbnormalStatusCell
+                    hasAbnormalFiles={row.has_abnormal_files}
+                  />
+                </TableCell>
                 <TableCell className="text-right">
                   <span
                     className="contents"
@@ -317,7 +402,7 @@ export default function KnowledgeFile({
             onScrollLoad={() => {
               if (!ordinary.isFetchingNextPage)
                 void ordinary.fetchNextPage().catch((error) => {
-                  if (live.current) showApiError(error);
+                  if (live.current === epoch) showApiError(error);
                 });
             }}
           />
