@@ -98,26 +98,31 @@ def _space(space_id, name, ts):
 
 @pytest.fixture
 def visible_spaces(monkeypatch, task_mode_seams):
-    task_mode_seams.knowledge = {
-        1: _space(1, "合同库", 1),
-        2: _space(2, "Policy", 3),
-        3: _space(3, "合同模板", 2),
-        4: SimpleNamespace(id=4, name="a library", type=0, description=None, update_time=None, create_time=None),
-    }
-    visible = SimpleNamespace(object_ids=["1", "2", "3", "4"], error=None)
-    runtime = SimpleNamespace(list_visible_objects=AsyncMock(return_value=visible))
-    monkeypatch.setattr("bisheng.permission.application.access.get_f048_runtime", AsyncMock(return_value=runtime))
-    monkeypatch.setattr(
-        "bisheng.permission.application.identity.resolve_permission_actor", AsyncMock(return_value=SimpleNamespace())
+    pages = AsyncMock(
+        side_effect=[
+            PageInfiniteCursorData(
+                data=[_space(2, "Policy", 3), _space(3, "合同模板", 2)],
+                page_size=2,
+                has_more=True,
+                next_cursor="native-next",
+            ),
+            PageInfiniteCursorData(data=[_space(1, "合同库", 1)], page_size=2, has_more=False),
+            PageInfiniteCursorData(
+                data=[_space(3, "合同模板", 2), _space(1, "合同库", 1)], page_size=10, has_more=False
+            ),
+        ]
     )
-    return runtime
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.list_visible_spaces", pages
+    )
+    return pages
 
 
 async def test_spaces_are_the_visible_ones_paged_and_searchable(visible_spaces):
     page = await OpenTaskModeService.list_knowledge(
         None, sa_principal(), LOGIN_USER, knowledge_type="space", name=None, cursor=None, page_size=2
     )
-    assert [item["id"] for item in page.data] == [2, 3]  # newest first; library 4 excluded
+    assert [item["id"] for item in page.data] == [2, 3]
     assert page.has_more is True
     second = await OpenTaskModeService.list_knowledge(
         None, sa_principal(), LOGIN_USER, knowledge_type="space", name=None, cursor=page.next_cursor, page_size=2
@@ -129,37 +134,39 @@ async def test_spaces_are_the_visible_ones_paged_and_searchable(visible_spaces):
         None, sa_principal(), LOGIN_USER, knowledge_type="space", name="合同", cursor=None, page_size=10
     )
     assert [item["id"] for item in searched.data] == [3, 1]
+    assert [call.kwargs for call in visible_spaces.await_args_list] == [
+        {"keyword": None, "name_only": True, "cursor": None, "page_size": 2},
+        {"keyword": None, "name_only": True, "cursor": "native-next", "page_size": 2},
+        {"keyword": "合同", "name_only": True, "cursor": None, "page_size": 10},
+    ]
 
 
-async def test_space_enumeration_failure_is_not_an_empty_list(task_mode_seams, monkeypatch):
-    runtime = SimpleNamespace(list_visible_objects=AsyncMock(side_effect=PermissionServiceUnavailableError()))
-    monkeypatch.setattr("bisheng.permission.application.access.get_f048_runtime", AsyncMock(return_value=runtime))
+async def test_space_query_failure_is_not_an_empty_list(task_mode_seams, monkeypatch):
+    visible = AsyncMock(side_effect=PermissionServiceUnavailableError())
     monkeypatch.setattr(
-        "bisheng.permission.application.identity.resolve_permission_actor", AsyncMock(return_value=SimpleNamespace())
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.list_visible_spaces",
+        visible,
     )
     with pytest.raises(PermissionServiceUnavailableError):
         await OpenTaskModeService.list_knowledge(
             None, sa_principal(), LOGIN_USER, knowledge_type="space", name=None, cursor=None, page_size=10
         )
+    visible.assert_awaited_once_with(keyword=None, name_only=True, cursor=None, page_size=10)
 
 
-async def test_libraries_use_the_use_action(task_mode_seams, monkeypatch):
-    captured = {}
-
-    async def _get_knowledge(request, login_user, knowledge_type, **kwargs):
-        captured.update(kwargs, knowledge_type=knowledge_type)
-        row = SimpleNamespace(id=5, name="docs", description="d", update_time=None)
-        return PageInfiniteCursorData(data=[row], page_size=10, has_more=False, next_cursor=None)
-
+async def test_libraries_consume_the_name_only_visible_space_page(task_mode_seams, monkeypatch):
+    row = SimpleNamespace(id=5, name="docs", description="d", update_time=None)
+    visible = AsyncMock(
+        return_value=PageInfiniteCursorData(data=[row], page_size=100, has_more=False, next_cursor=None)
+    )
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_service.KnowledgeService.get_knowledge", _get_knowledge
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.list_visible_spaces", visible
     )
     page = await OpenTaskModeService.list_knowledge(
         None, sa_principal(), LOGIN_USER, knowledge_type="library", name="d", cursor=None, page_size=500
     )
-    assert captured["action"] == "use"
-    assert captured["knowledge_type"].value == 0
-    assert captured["page_size"] == 100  # capped
+    visible.assert_awaited_once_with(keyword="d", name_only=True, cursor=None, page_size=100)
+    assert page.page_size == 100
     assert page.data == [{"id": 5, "name": "docs", "description": "d", "update_time": None}]
 
 

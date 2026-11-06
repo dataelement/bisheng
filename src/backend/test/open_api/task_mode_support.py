@@ -65,7 +65,7 @@ def _req(**overrides) -> OpenTaskSubmitReq:
 
 
 def _knowledge(knowledge_id: int, knowledge_type: int):
-    return SimpleNamespace(id=knowledge_id, type=knowledge_type)
+    return SimpleNamespace(id=knowledge_id, type=knowledge_type, tenant_id=9)
 
 
 def install_task_mode_seams(monkeypatch):
@@ -79,6 +79,7 @@ def install_task_mode_seams(monkeypatch):
         visible=set(),
         blocked=None,
         permission_error=None,
+        permission_calls=[],
     )
 
     async def _menu(_user_id, _key):
@@ -95,11 +96,20 @@ def install_task_mode_seams(monkeypatch):
         return [state.knowledge[i] for i in ids if i in state.knowledge]
 
     async def _batch_actions(_login_user, *, resource_type, resource_ids, actions):
+        assert actions == ("visible",)
+        state.permission_calls.append((resource_type, tuple(resource_ids), actions))
         if state.permission_error:
             raise state.permission_error
-        return {str(i): frozenset({"use"}) for i in resource_ids if int(i) in state.use_allowed}
+        # The historical fixture name denotes the original library's admission;
+        # migrated IDs use the space namespace rather than borrowing that set.
+        allowed = state.use_allowed if resource_type == "knowledge_library" else state.visible
+        assert resource_type in {"knowledge_library", "knowledge_space"}
+        return {str(i): frozenset({"visible"}) for i in resource_ids if int(i) in allowed}
 
     async def _batch_visible(_login_user, *, resource_type, resource_ids):
+        assert resource_type == "knowledge_space"
+        if state.permission_error:
+            raise state.permission_error
         return {str(i): int(i) in state.visible for i in resource_ids}
 
     async def _submit(data, login_user, **kwargs):
@@ -110,6 +120,7 @@ def install_task_mode_seams(monkeypatch):
     monkeypatch.setattr("bisheng.llm.domain.llm.base.BishengBase.get_model_server_info", _model_info)
     monkeypatch.setattr(OpenTaskModeService, "enabled_skill_rows", staticmethod(_enabled))
     monkeypatch.setattr(task_mode_service.KnowledgeDao, "aget_list_by_ids", _by_ids)
+    monkeypatch.setattr(task_mode_service, "get_current_tenant_id", lambda: 9, raising=False)
     monkeypatch.setattr(
         "bisheng.permission.application.business_authorization.batch_check_business_actions", _batch_actions
     )
