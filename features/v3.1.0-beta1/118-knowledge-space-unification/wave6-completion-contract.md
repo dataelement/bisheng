@@ -576,3 +576,15 @@ T795先测试→T796只扩现`permission/application/migration_read.py`，新增
 §34全局freeze续跑澄清：原子性要求不能存在preparing/未冻与已冻混合；不要求M3/M4各tenant后继阶段锁步。全部tenant已冻结、tenant集合/writer/原baseline及plan完全一致、无failed时，合法baseline_frozen/converting/backfilling/verifying/verified/completed阶段差异仍返回同一原global proof并零flush，不重盘点/重冻/倒退阶段。任一failed沿原显式恢复协议，不借getter恢复；未解释的证据/集合差异继续拒绝。
 
 §36测试叶澄清：原f118SpaceDirectory.test.tsx已达600行，T791采用新f118SpaceDirectoryUpload.test.tsx单叶，复用实际Files/FilesUpload与wrapped API验证入口全链；原22目录断言保持并列入必跑回归，不压缩或移除原断言以腾行。生产Owner与5叶范围不变。
+
+## 38. 正式M2真实物理只读端口与受限artifact存储：已冻结
+
+T799/T800由INT独占新`knowledge/application/unification_physical.py`与`unification_minio.py`，及对应两个native边界测试叶。`PhysicalInventoryReader.aiter_facts(*,resource_requests:tuple[InventoryRecord,...]=(),object_requests:tuple[InventoryRecord,...]=())`每种≤199，原resource(仅本轮0/3)/file闭集记录；object直接接file，不传未完成的physical_object事实。实际当前具体tenant、非bypass、全部输入先校identity与重复再IO，每yield复核原scope；文件归属仍由完整M2已核真实SQL决定，不接HTTP任意索引/路径。输出真实codec InventoryRecord physical_index或physical_object，同请求身份，漏/重复/foreign由app完整核对。QA/type2保原SQL facts/摘要，不在这个新端口治理/重建其物理内容。
+
+Index只读真实原ES index和Milvus collection：存在/schema摘要/原native报告count/identifier_compatible。名称缺失和物理不存在作为原事实，不自动建索引/collection、不load或flush、不调用模型在线/共享准入或embedding。已有schema按实际document_id/knowledge_id及正文契约核标识；合法未建空空间与空dynamic ES mapping不能按“必须有分段”拒绝。两库count仅记录，不因相等声称内容一致，不强迫两库count相等。所有schema原文只参与有界摘要，不导出客户端/provider配置。
+
+对象从file的nonempty object_name/preview_file_object_name/bbox_object_name/thumbnails/html_snapshot_object_name逐个展开，thumbnails按已核原transformer的单key，不猜JSON或复制原文。只stat原精确permanent bucket/key，不换Root前缀或fallback其他tenant；NoSuchKey仅记exists=False，NoSuchBucket/AccessDenied/网络/非法统计明确失败。输出原size和ETag（ETag不是SHA）。同批共享key去重，有限并发，所有已启动IO收尾并检查；不下载文件正文或构造全File×Object比较。
+
+`UnificationMinio`使用raw miniopy_async和专属aiohttp session，不能实例化会建桶/改policy/lifecycle的通用MinioStorage。显式aopen/close管理自有客户端；只提供stat及UnificationArtifactStore所需bucket/tmp_bucket、object_exists/get_object/put_object。artifact读写仅既有永久桶的`f118/unification/`内容寻址JSON、≤16MiB，流式读严格预算并finally释放响应；不自动建桶/改策略/签发公开URL/写tmp。原配置只在内存且不repr/错误回显。ES/原Milvus客户端沿当前实际vectors配置，生命周期关闭全owned clients，即使前一close失败仍关闭后续，保持原异常cause。此为§34required真实port，不以本地native transport替代真实M2与升级演练。
+
+§36静态收口T797沿官方lint:prune只收缩已替换filesUpload失效条目，保其他原抑制；T798仅共享SQLite fixture补与已发布候选Model/DDL一致的metadata_schema_revision列（INTEGER NOT NULL DEFAULT0），不改生产或削减原断言。旧15个move fixture缺列反例用于核修复，后续行为失败仍如实报告。
