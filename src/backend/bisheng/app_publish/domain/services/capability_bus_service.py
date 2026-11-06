@@ -56,6 +56,7 @@ from bisheng.app_publish.application.reference_access import (
     get_hosted_app_reference_runtime,
     get_hosted_app_user_reference_runtime,
 )
+from bisheng.app_publish.domain.repositories.reference_source_repository import HostedAppReferenceSourceRepository
 from bisheng.app_publish.domain.schemas.app_manifest import CapabilityDeclaration
 from bisheng.app_publish.domain.services.app_credential_service import (
     HOSTED_APP_TOKEN_ENV,
@@ -211,13 +212,22 @@ async def _read_effective_source(session, app_id, principal, *, purpose):
     return runtime, result, principal
 
 
-def _effective_from_source(result):
+async def _effective_from_source(session, result):
     snapshot = result.snapshot
     payload = json.loads(snapshot.payload_json)
     declaration = CapabilityDeclaration.model_validate(payload["capabilities"])
     frozen = {one.slot_key: one.target for one in snapshot.references}
     facts = {one.key: one for one in result.target_states}
     labels = _declaration_labels(declaration)
+    # Names decorate already-admitted exact IDs; this observation adds no locks
+    # or authority and never participates in the frozen configuration digest.
+    knowledge_ids = tuple(
+        int(one.target.target_id) for one in snapshot.references if one.target.target_type == TargetType.KNOWLEDGE_SPACE
+    )
+    named = {
+        str(row["id"]): row["name"]
+        for row in await HostedAppReferenceSourceRepository().aget_knowledge_candidates(session, ids=knowledge_ids)
+    }
     knowledge = []
     for request in extract_app_reference_requests(declaration):
         if request.target_type != TargetType.KNOWLEDGE_SPACE:
@@ -228,7 +238,7 @@ def _effective_from_source(result):
             DeclaredKnowledge(
                 label=labels[request.slot_key],
                 knowledge_id=int(target.target_id),
-                knowledge_name=request.requested_name or "",
+                knowledge_name=named.get(target.target_id) or request.requested_name or "",
                 reason=REASON_OK if fact.is_valid else REASON_REVOKED,
             )
         )
@@ -250,10 +260,10 @@ async def load_effective_declaration(app_id: str, *, principal=None, purpose="ex
     """
     if session is not None:
         _, result, _ = await _read_effective_source(session, app_id, principal, purpose=purpose)
-        return _effective_from_source(result)
+        return await _effective_from_source(session, result)
     async with get_async_db_session() as owned, owned.begin():
         _, result, _ = await _read_effective_source(owned, app_id, principal, purpose=purpose)
-        return _effective_from_source(result)
+        return await _effective_from_source(owned, result)
 
 
 def _declaration_labels(declaration):
