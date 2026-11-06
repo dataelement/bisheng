@@ -82,6 +82,8 @@ def resolve_file_processing_snapshot(
             file_kind=kind,
             system_defaults=resolved,
             space_config_version=space_config_version,
+            batch_overrides=batch_overrides,
+            file_overrides=file_overrides,
             specialized_overrides={} if kind in {"web", "audio", "video"} else None,
         )
     else:
