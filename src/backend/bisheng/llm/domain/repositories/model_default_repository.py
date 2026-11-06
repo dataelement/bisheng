@@ -5,7 +5,11 @@ from dataclasses import dataclass
 
 from sqlalchemy import delete, select, update
 
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeOperationPlanConflictError,
+    ReferenceCoverageNotReadyError,
+    ResourceReferenceInvalidError,
+)
 from bisheng.core.context.tenant import bypass_tenant_filter, is_tenant_filter_bypassed, strict_tenant_filter
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant
@@ -13,6 +17,13 @@ from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemMod
 from bisheng.llm.domain.services.default_reference_extractor import MODEL_DEFAULT_SCHEMAS
 from bisheng.resource_reference.application.contracts import SourceKey, SourceType
 from bisheng.resource_reference.application.source_contracts import canonical_payload_json
+
+
+@dataclass(frozen=True, slots=True)
+class ModelDefaultDisclosureRecord:
+    id: int
+    tenant_id: int
+    key: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +60,30 @@ class ResolvedModelDefault:
 
 
 class ModelDefaultRepository:
+    async def alist_disclosure_rows(self, session, *, keys: tuple[str, ...]):
+        tenant = _resolve_tenant_id()
+        if (
+            type(keys) is not tuple
+            or len(keys) > 200
+            or any(type(key) is not str or key not in MODEL_DEFAULT_SCHEMAS for key in keys)
+            or type(tenant) is not int
+            or tenant <= 0
+            or is_tenant_filter_bypassed()
+            or not session.in_transaction()
+        ):
+            raise ReferenceCoverageNotReadyError(reason="default_disclosure_scope_invalid")
+        if not keys:
+            return ()
+        model = TenantSystemModelConfig
+        statement = select(model.id, model.tenant_id, model.key).where(
+            model.tenant_id == tenant, model.key.in_(tuple(dict.fromkeys(keys)))
+        )
+        with session.no_autoflush, strict_tenant_filter():
+            rows = tuple(ModelDefaultDisclosureRecord(*row) for row in (await session.execute(statement)))
+        if len({row.key for row in rows}) != len(rows):
+            raise ReferenceCoverageNotReadyError(reason="default_disclosure_duplicate_source")
+        return rows
+
     @staticmethod
     def _context(key):
         tenant_id = _resolve_tenant_id()
