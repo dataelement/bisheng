@@ -12,7 +12,10 @@
 <p align="center">
   <a href="./README.md">简体中文</a> |
   <a href="./README_EN.md">English</a> |
-  <a href="./README_JPN.md">日本語</a>
+  <a href="./README_JPN.md">日本語</a> |
+  <a href="./README_ES.md">Español</a> |
+  <a href="./README_PT.md">Português</a> |
+  <a href="./README_RU.md">Русский</a>
 </p>
 
 <p align="center">
