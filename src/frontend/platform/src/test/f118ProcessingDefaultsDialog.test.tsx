@@ -15,6 +15,7 @@ import {
 } from "@/controllers/API/knowledgeSpace";
 import {
   knowledgeQueryKeys,
+  useKnowledgeProcessingSettings,
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
@@ -124,6 +125,92 @@ function deferred<T>() {
   return { promise, resolve };
 }
 const ready = () => screen.findByRole("spinbutton", { name: "splitLength" });
+
+it("retires an unfinished opening read before reopening with a new settings version", async () => {
+  const f = setup(),
+    old = deferred<ProcessingSettingsRead>();
+  f.api.getProcessingSettings
+    .mockReturnValueOnce(old.promise)
+    .mockResolvedValueOnce({
+      ...settings,
+      config_version: 9,
+      effective_defaults: {
+        ...settings.effective_defaults,
+        document: { ...settings.effective_defaults.document, chunk_size: 700 },
+      },
+    });
+  const view = render(f.draw());
+  await waitFor(() =>
+    expect(f.api.getProcessingSettings).toHaveBeenCalledTimes(1),
+  );
+  view.rerender(f.draw(scope, false));
+  view.rerender(f.draw());
+  await act(async () => old.resolve(settings));
+  await ready();
+  expect(screen.getByRole("spinbutton", { name: "splitLength" })).toHaveValue(
+    "700",
+  );
+  expect(f.api.getProcessingSettings).toHaveBeenCalledTimes(2);
+  fireEvent.click(screen.getByRole("button", { name: "save" }));
+  await waitFor(() =>
+    expect(f.api.updateProcessingSettings).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ expected_config_version: 9 }),
+    ),
+  );
+});
+
+it("does not let an unmounted opening read populate an otherwise unobserved cache", async () => {
+  const f = setup(),
+    old = deferred<ProcessingSettingsRead>();
+  f.api.getProcessingSettings.mockReturnValueOnce(old.promise);
+  const view = render(f.draw());
+  await waitFor(() =>
+    expect(f.api.getProcessingSettings).toHaveBeenCalledTimes(1),
+  );
+  view.unmount();
+  await act(async () => old.resolve(settings));
+  expect(
+    f.client.getQueryData(knowledgeQueryKeys.settings(scope, 7)),
+  ).toBeUndefined();
+});
+
+it("keeps another active settings reader's shared request alive when the dialog closes", async () => {
+  const f = setup(),
+    response = deferred<ProcessingSettingsRead>();
+  f.api.getProcessingSettings.mockReturnValueOnce(response.promise);
+  function OtherReader() {
+    const query = useKnowledgeProcessingSettings(scope, 7, f.api);
+    return (
+      <output data-testid="other-reader">{query.data?.config_version}</output>
+    );
+  }
+  const draw = (open: boolean) => (
+    <QueryClientProvider client={f.client}>
+      <OtherReader />
+      <ProcessingDefaultsDialog
+        scope={scope}
+        spaceId={7}
+        open={open}
+        onOpenChange={f.changed}
+        api={f.api}
+      />
+    </QueryClientProvider>
+  );
+  const view = render(draw(true));
+  await waitFor(() =>
+    expect(f.api.getProcessingSettings).toHaveBeenCalledTimes(1),
+  );
+  view.rerender(draw(false));
+  await act(async () => response.resolve(settings));
+  await waitFor(() =>
+    expect(screen.getByTestId("other-reader")).toHaveTextContent("4"),
+  );
+  expect(f.client.getQueryData(knowledgeQueryKeys.settings(scope, 7))).toEqual(
+    settings,
+  );
+  expect(f.api.getProcessingSettings).toHaveBeenCalledTimes(1);
+});
 
 it.each([
   { value: { ...scope, identityKey: "" }, spaceId: 7 },
