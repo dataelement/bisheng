@@ -348,3 +348,62 @@ async def test_frozen_identity_resolution_never_guesses_deleted_or_foreign_provi
     async with AsyncSession(ctx[0]) as session:
         with pytest.raises(ResourceReferenceInvalidError):
             await ctx[2].aresolve_frozen_model_identities(session, 101, ids, identity=ctx[1])
+
+
+@pytest.mark.parametrize(
+    "declared,alias,expected",
+    [
+        (("alpha",), "own/alpha", 11),
+        (("own/alpha",), "alpha", 11),
+        (("root/slash",), "own/root/slash", 13),
+        (("root/same",), "root/same", 21),
+    ],
+)
+async def test_alias_consumes_only_same_planned_current_model(ctx, monkeypatch, declared, alias, expected):
+    async with AsyncSession(ctx[0]) as session:
+        plan = await prepare(ctx, session, declared)
+        monkeypatch.setattr(ctx[2].repository, "aprepare_catalog", AsyncMock(side_effect=AssertionError("new plan")))
+        value = await ctx[2].resolve_model_alias_current(session, 101, alias, identity=ctx[1], plan=plan)
+        assert value.model_id == expected
+        assert plan.requested_names == tuple(sorted(declared))
+
+
+@pytest.mark.parametrize("declared,alias", [((), "alpha"), (("alpha",), "offline"), (("alpha",), "root/slash")])
+async def test_alias_cannot_widen_empty_or_unrelated_plan(ctx, declared, alias):
+    async with AsyncSession(ctx[0]) as session:
+        plan = await prepare(ctx, session, declared)
+        with pytest.raises(ResourceReferenceInvalidError):
+            await ctx[2].resolve_model_alias_current(session, 101, alias, identity=ctx[1], plan=plan)
+
+
+async def test_alias_retains_bare_ambiguity_and_original_object_proof(ctx):
+    async with AsyncSession(ctx[0]) as session:
+        plan = await prepare(ctx, session, ("root/same",))
+        with pytest.raises(ModelFaceModelAmbiguousError):
+            await ctx[2].resolve_model_alias_current(session, 101, "same", identity=ctx[1], plan=plan)
+        with pytest.raises(ResourceReferenceInvalidError):
+            await ctx[2].resolve_model_alias_current(session, 101, "root/same", identity=ctx[1], plan=replace(plan))
+
+
+async def test_alias_catalog_rename_cannot_accept_different_planned_model(ctx):
+    async with AsyncSession(ctx[0]) as session:
+        plan = await prepare(ctx, session, ("alpha", "root/same"))
+        await session.execute(
+            update(LLMModel).where(LLMModel.tenant_id == 101, LLMModel.id == 11).values(model_name="changed")
+        )
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await ctx[2].resolve_model_alias_current(session, 101, "root/same", identity=ctx[1], plan=plan)
+        await session.rollback()
+
+
+async def test_alias_rejects_changed_transaction_and_range(ctx):
+    allowed = ModelRange("declared", frozenset({"own/alpha"}))
+    async with AsyncSession(ctx[0]) as session:
+        plan = await prepare(ctx, session, ("alpha",), range=allowed)
+        with pytest.raises(ResourceReferenceInvalidError):
+            await ctx[2].resolve_model_alias_current(session, 101, "own/alpha", identity=ctx[1], plan=plan)
+        await session.rollback()
+        with pytest.raises(ResourceReferenceInvalidError):
+            await ctx[2].resolve_model_alias_current(
+                session, 101, "own/alpha", identity=ctx[1], plan=plan, range=allowed
+            )
