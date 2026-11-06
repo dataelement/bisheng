@@ -351,3 +351,15 @@ async def test_cancel_during_close_finishes_both_owned_clients_before_propagatin
     await reader.aclose()
     native.es.close.assert_awaited_once()
     native.mv.close.assert_called_once()
+
+
+async def test_cancelled_native_close_is_not_wrapped_as_a_business_error(module, native):
+    import asyncio
+
+    native.es.close.side_effect = asyncio.CancelledError("native close cancelled")
+    reader = module.PhysicalInventoryReader(
+        es_client=native.es, milvus_client=native.mv, storage=native.storage, owns_clients=True
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await reader.aclose()
+    native.mv.close.assert_called_once()
