@@ -79,9 +79,14 @@ async def application(processing, monkeypatch):
         session.add_all(
             [
                 KnowledgeFile(
-                    id=81, tenant_id=101, knowledge_id=40, file_name="visible", split_rule='{"original":"kept"}'
+                    id=81,
+                    tenant_id=101,
+                    knowledge_id=40,
+                    file_name="visible",
+                    split_rule='{"original":"kept"}',
+                    status=2,
                 ),
-                KnowledgeFile(id=82, tenant_id=101, knowledge_id=40, file_name="hidden secret"),
+                KnowledgeFile(id=82, tenant_id=101, knowledge_id=40, file_name="hidden secret", status=2),
                 KnowledgeDocument(id=80, knowledge_id=40, primary_version_id=181),
                 KnowledgeDocumentVersion(id=181, document_id=80, knowledge_file_id=81, version_no=1, is_primary=True),
                 KnowledgeDocumentVersion(id=182, document_id=80, knowledge_file_id=82, version_no=2, is_primary=False),
@@ -251,3 +256,27 @@ async def test_unassembled_kind_is_never_accepted_and_invalid_model_has_no_fallb
         with pytest.raises(ResourceReferenceInvalidError):
             await precheck(app, session, request(999))
         assert not (await session.exec(select(KnowledgeProcessingJob))).all()
+
+
+@pytest.mark.parametrize("status", [1, 4, 5, 7])
+async def test_rebuild_never_silently_excludes_inflight_or_unsafe_versions(application, status):
+    app = application
+    async with app.context.sessions() as session:
+        file = await session.get(KnowledgeFile, 82)
+        file.status = status
+        await session.flush()
+        with pytest.raises(KnowledgeProcessingConflictError):
+            await precheck(app, session)
+        await session.rollback()
+
+
+async def test_execute_rechecks_inflight_file_state_after_confirmation(application):
+    app = application
+    async with app.context.sessions() as session:
+        plan = await precheck(app, session)
+        file = await session.get(KnowledgeFile, 82)
+        file.status = 1
+        await session.flush()
+        with pytest.raises(KnowledgeProcessingConflictError):
+            await create(app, session, plan)
+        await session.rollback()
