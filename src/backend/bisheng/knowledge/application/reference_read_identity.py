@@ -5,10 +5,10 @@ from weakref import WeakKeyDictionary, ref
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
+from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.core.context.background_execution import get_current_background_task
 from bisheng.core.context.tenant import (
     get_admin_scope_tenant_id,
-    get_current_tenant_id,
     get_is_management_api,
     get_visible_tenant_ids,
     is_management_all_tenants,
@@ -45,7 +45,10 @@ class KnowledgeModelReadIdentityPort:
 
     @staticmethod
     def _ambient(login_user=None):
-        tenant = get_current_tenant_id()
+        try:
+            tenant = _resolve_tenant_id()
+        except NoTenantContextError as error:
+            raise ResourceReferenceInvalidError(reason="knowledge_model_read_context") from error
         actor = get_current_permission_actor()
         principal = get_current_open_api_principal()
         public = get_current_public_api_principal()
@@ -56,7 +59,6 @@ class KnowledgeModelReadIdentityPort:
             or (principal is not None and public is not None)
             or (login_user is not None and not isinstance(login_user, UserPayload))
             or (actor is not None and not isinstance(actor, PermissionActor))
-            or tenant != _resolve_tenant_id()
         ):
             raise ResourceReferenceInvalidError(reason="knowledge_model_read_context")
         background = get_current_background_task()
