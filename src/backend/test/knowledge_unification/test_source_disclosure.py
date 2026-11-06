@@ -58,7 +58,7 @@ def test_immutable_closed_metadata_has_no_payload():
 
 @pytest.mark.parametrize("field,value", [("source", {}), ("name", None), ("version_label", 1), ("entry", {})])
 def test_metadata_rejects_untyped_values(field, value):
-    values = dict(source=key(), name="original", version_label=None, entry=None)
+    values = {"source": key(), "name": "original", "version_label": None, "entry": None}
     values[field] = value
     with pytest.raises((TypeError, ValueError)):
         SourceDisclosure(**values)
