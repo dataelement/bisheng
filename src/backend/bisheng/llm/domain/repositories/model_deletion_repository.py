@@ -103,12 +103,16 @@ class ModelDeletionRepository:
         retained_set = frozenset(retained)
         if not retained_set <= set(model_ids):
             raise ResourceReferenceInvalidError(reason="model_retained_identity_invalid")
+        revisions = tuple((str(row.id), _revision(row)) for row in models)
+        provider_revision = hashlib.sha256(
+            json.dumps((_revision(server), revisions), separators=(",", ":")).encode()
+        ).hexdigest()
         return ModelRemovalSnapshot(
             server.id,
             tenant,
             model_ids,
             tuple(sorted(retained)),
             tuple(TargetKey("model", str(value)) for value in model_ids if value not in retained_set),
-            _revision(server),
-            tuple((str(row.id), _revision(row)) for row in models),
+            provider_revision,
+            revisions,
         )
