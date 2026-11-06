@@ -4,6 +4,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import (
     KnowledgeNotExistError,
     KnowledgeOperationPlanConflictError,
+    ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
@@ -12,14 +13,27 @@ from bisheng.knowledge.domain.services.model_reference_extractor import (
     KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
     extract_knowledge_model_references,
 )
-from bisheng.permission.application.business_authorization import require_business_action
-from bisheng.resource_reference.application.contracts import SourceKey, SourceType, canonical_target_id
+from bisheng.permission.application.access import get_f048_resource_adapter
+from bisheng.permission.application.business_authorization import (
+    batch_check_verified_business_visible,
+    require_business_action,
+)
+from bisheng.permission.application.identity import resolve_permission_actor
+from bisheng.permission.domain.services.data_scope import DATA_SCOPE_ALL
+from bisheng.resource_reference.application.contracts import (
+    SourceKey,
+    SourceType,
+    TransactionIdentity,
+    canonical_target_id,
+)
+from bisheng.resource_reference.application.read_identity import AuthenticatedSourceReadIdentity
 from bisheng.resource_reference.application.source_contracts import (
     AuthorizedSourceSnapshot,
     SourceReadRequest,
     canonical_payload_json,
     payload_digest,
 )
+from bisheng.resource_reference.application.source_disclosure import SourceDisclosure
 from bisheng.utils.async_utils import run_async_safe
 
 
@@ -27,6 +41,73 @@ class KnowledgeReferenceSourceOwner:
     def __init__(self, repository=None, identity_port=None):
         self.repository = repository if repository is not None else KnowledgeModelReferenceRepository()
         self.identity_port = identity_port
+
+    async def adisclose_sources(self, session, *, identity, source_keys: tuple[SourceKey, ...]):
+        if (
+            type(source_keys) is not tuple
+            or len(source_keys) > 200
+            or any(
+                not isinstance(key, SourceKey)
+                or key.source_type != SourceType.KNOWLEDGE
+                or key.source_version != "current"
+                for key in source_keys
+            )
+        ):
+            raise ReferenceCoverageNotReadyError(reason="knowledge_disclosure_invalid_batch")
+        if not source_keys:
+            return ()
+        try:
+            tenant = self.repository._tenant_id()
+            own = tuple(key for key in source_keys if key.tenant_id == tenant)
+            if not isinstance(identity, UserPayload):
+                raise ReferenceCoverageNotReadyError(reason="knowledge_disclosure_original_identity_required")
+            if not own:
+                return (None,) * len(source_keys)
+            identity_port = AuthenticatedSourceReadIdentity()
+            before = await identity_port.acapture(identity)
+            transaction = TransactionIdentity.capture(session)
+            rows = await self.repository.aload_disclosure_sources(
+                session, knowledge_ids=tuple(sorted({int(key.source_id) for key in own}))
+            )
+            by_id = {str(row.id): row for row in rows}
+            if set(by_id) != {key.source_id for key in own} or any(row.tenant_id != tenant for row in rows):
+                raise ReferenceCoverageNotReadyError(reason="knowledge_disclosure_source_missing")
+            actor = await resolve_permission_actor(identity)
+            visible = {}
+            if actor.super_admin and actor.data_scope == DATA_SCOPE_ALL:
+                # The same full-scope shortcut used by check_business_action.
+                visible = {str(row.id): True for row in rows}
+            else:
+                for kind, resource_type in ((3, "knowledge_space"), (0, "knowledge_library")):
+                    selected = [row for row in rows if (row.type == 3) == (kind == 3)]
+                    if not selected:
+                        continue
+                    adapter = await get_f048_resource_adapter(resource_type)
+                    targets = await adapter.resolve_permission_targets_from_rows(
+                        rows=selected, resource_type=resource_type, actor=actor
+                    )
+                    decisions = await batch_check_verified_business_visible(actor=actor, targets=targets)
+                    visible.update({ident: allowed for (_, ident), allowed in decisions.items()})
+            if await identity_port.acapture(identity) != before:
+                raise ReferenceCoverageNotReadyError(reason="knowledge_disclosure_identity_changed")
+            transaction.assert_current(session)
+            return tuple(
+                SourceDisclosure(
+                    key,
+                    by_id[key.source_id].name,
+                    None,
+                    f"/filelib/qalib/{key.source_id}"
+                    if by_id[key.source_id].type == 1
+                    else f"/filelib/{key.source_id}",
+                )
+                if key.tenant_id == tenant and visible.get(key.source_id, False)
+                else None
+                for key in source_keys
+            )
+        except ReferenceCoverageNotReadyError:
+            raise
+        except Exception as error:
+            raise ReferenceCoverageNotReadyError(reason="knowledge_disclosure_failed") from error
 
     @staticmethod
     def _request(request):

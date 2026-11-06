@@ -90,7 +90,14 @@ class WorkflowReferenceSourceOwner:
         records = []
         for row in rows.values():
             snapshot = snapshots.get((row.tenant_id, "workflow", row.id))
-            if snapshot is None:
+            if (
+                snapshot is None
+                or snapshot.mode != "CUSTOM"
+                or snapshot.parent_type is not None
+                or snapshot.parent_id is not None
+                or type(snapshot.version) is not int
+                or snapshot.version <= 0
+            ):
                 raise ReferenceCoverageNotReadyError(reason="workflow_disclosure_permission_incomplete")
             context = sha256(
                 f"{snapshot.context_version}|{row.update_time.isoformat() if row.update_time else '0'}".encode()

@@ -8,20 +8,25 @@ import pytest
 import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.api.services.f048_application_permission import F048ApplicationPermissionAdapter
+from bisheng.api.services.f048_application_permission import (
+    ApplicationPermissionRecord,
+    F048ApplicationPermissionAdapter,
+)
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
+from bisheng.common.errcode.permission import PermissionPublishNotReadyError
 from bisheng.common.errcode.public_endpoints import PublicGuestAccessDisabledError
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.flow_version import FlowVersion
-from bisheng.permission.application import control_state
+from bisheng.permission.application import control_state, sql_runtime
 from bisheng.permission.application.identity import (
     PermissionActor,
     reset_current_permission_actor,
     set_current_permission_actor,
 )
 from bisheng.permission.domain.models import ResourcePermissionMode
+from bisheng.permission.domain.services.permission_action_service import F048PermissionService
 from bisheng.public_endpoints.domain.context import (
     PublicApiPrincipal,
     reset_current_public_api_principal,
@@ -264,6 +269,58 @@ async def test_missing_permission_snapshot_is_not_a_normal_hidden_source(auth):
     with pytest.raises(ReferenceCoverageNotReadyError):
         await read(auth, (source(),))
     assert not auth.decisions.calls
+
+
+@pytest.mark.parametrize("change", ["parent", "mode", "version", "valid"])
+async def test_current_permission_shape_with_actual_sql_fence(auth, monkeypatch, change):
+    @asynccontextmanager
+    async def sessions():
+        async with AsyncSession(auth.engine) as session:
+            yield session
+
+    class Marker:
+        async def consistency_for(self, **kwargs):
+            return None
+
+        async def consistency_for_batch(self, targets):
+            return None
+
+    async def fga(checks, **kwargs):
+        return [True for _ in checks]
+
+    monkeypatch.setattr(sql_runtime, "get_async_db_session", sessions)
+    decision = F048PermissionService(
+        catalog=SimpleNamespace(ensure_runtime_ready=AsyncMock()),
+        scope_fence=sql_runtime.SqlPermissionScopeFence(),
+        marker=Marker(),
+        fga=SimpleNamespace(batch_check=fga),
+        list_policy=SimpleNamespace(),
+    )
+    adapter = await module.get_f048_resource_adapter("workflow")
+    adapter._permission = SimpleNamespace(batch_check_actions=decision.batch_check_actions)
+    changes = {
+        "parent": {"parent_type": "workflow", "parent_id": "missing"},
+        "mode": {"mode": "INHERIT"},
+        "version": {"version": 0},
+        "valid": {},
+    }
+    if changes[change]:
+        with auth.sync.begin() as connection:
+            connection.execute(sa.update(ResourcePermissionMode).values(**changes[change]))
+    if change == "parent":
+        target = adapter._record_target(
+            ApplicationPermissionRecord(101, "workflow", "wf", "OFFLINE", 11, 4, "same-current"),
+            auth.actor,
+            action="visible",
+        )
+        with pytest.raises(PermissionPublishNotReadyError):
+            await sql_runtime.SqlPermissionScopeFence().ensure_readable(target)
+        assert await decision.batch_check_visible(auth.actor, (target,)) == (False,)
+    if change == "valid":
+        assert (await read(auth, (source(),)))[0].name == "workflow"
+    else:
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            await read(auth, (source(),))
 
 
 async def test_pending_changes_remain_unflushed_and_no_graph_or_write_is_selected(auth):

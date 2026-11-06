@@ -721,7 +721,7 @@ ASGI真实默认/use/visible及两sort分支、非法action422，Manager两WorkT
 
 Runtime使用现AuthenticatedSourceReadIdentity捕获原身份并在批次后核对，保当前具体tenant/context/scope/凭据；foreign source不切ContextVar、不冒充来源tenant、该部分业务SQL/FGA为0，仍由影响核心完整计数阻删除。按SourceType分派，每Owner用真实批量轻投影（不读graph/config/manifest/provider设置）及原loaded-target F048 batch能力，空页不查、不得逐ID调用aresolve_source。资格正常拒绝回None，FGA/SQL/解析异常传递明确失败，不能降格成可删除。禁止新permission层、newadminshortcut、写锁/commit及跨租户新读取权。
 
-协议生产仅新resource_reference/application/source_disclosure.py、新resource_reference/disclosure_composition.py；后者纯构造六Owner和singleton get_runtime，不改现bootstrap，不进行IO。每业务只原Owner与Repo两叶，数据轻DTO放对应Repo；WF visible且非当前另edit；AS原assistant.visible；APP原management_read（不能用根visible替代版本管理资格）；CH原channel.visible、停同步仍展示/计数；KN按实际type对应space/library.visible；defaults沿现own/Root五原key的管理员读取条件，保原存储来源、不复制继承来源。均保持原PublicApiPrincipal/管理边界，不接分享token。
+协议生产仅新resource_reference/application/source_disclosure.py、新resource_reference/disclosure_composition.py；后者纯构造六Owner和singleton get_runtime，不改现bootstrap，不进行IO。每业务只原Owner与Repo两叶，数据轻DTO放对应Repo；WF visible且非当前另edit；AS原assistant.visible；APP原management_read（不能用根visible替代版本管理资格）；CH原channel.visible、停同步仍展示/计数；KN按实际type对应space/library.visible；defaults按下列§53已核实际读取入口资格，保原own/Root存储来源、不复制继承来源。均保持原PublicApiPrincipal/管理边界，不接分享token。
 
 | 卡 | Owner | 实际生产叶（src/backend/bisheng/） | 单测试叶（src/backend/test/knowledge_unification/） |
 | --- | --- | --- | --- |
@@ -731,6 +731,60 @@ Runtime使用现AuthenticatedSourceReadIdentity捕获原身份并在批次后核
 | T849/850 | PERM | app_publish/application/reference_source_owner.py、app_publish/domain/repositories/reference_source_repository.py | test_app_source_disclosure.py |
 | T851/852 | EDGE后继 | channel/application/reference_source_owner.py、channel/domain/repositories/reference_source_repository.py | test_channel_source_disclosure.py |
 | T853/854 | root后继 | knowledge/application/reference_source_owner.py、knowledge/domain/repositories/model_reference_repository.py | test_knowledge_source_disclosure.py |
-| T855/856 | PROC后继 | llm/application/model_default_source_owner.py、llm/domain/repositories/model_default_repository.py | test_defaults_source_disclosure.py |
+| T855/856 | INT | llm/application/model_default_source_owner.py、llm/domain/repositories/model_default_repository.py | test_defaults_source_disclosure.py |
 
 同组先真实红后实现；所有新叶≤600、每实现≤2生产叶。用原数据库和原资格拼装，至少含401源/重复slot预算、foreign无读、非当前WF/APP历史、原资格变化/IO失败、无完整配置列和无写证明。无真实Coverage adapter时影响核心仍拒绝，本波端口不创建ready状态。
+
+
+## 50. M2新建V1可表示时间 V1：已冻结
+
+现Doc/Version为通用DateTime无MySQL fsp，不能冻结带微秒新建时间再由数据库舍入。INT独占T857单新测试叶test_migration_plan_time.py、T858原unification_inventory.py单生产叶；正式M2仅全run一次unification_now()后去microsecond再交所有tenant builder（UTC整秒）。原业务时间从SQL读出后保持，Domain模板/字段/codec/canonical/digest不改，不变更Model/DDL，也不在M3临时归一已冻结材料；旧微秒计划不满足可写前置时应明确失败/重新正式规划，不能同run静默替换。实际微秒clock+跨tenant新V1命令、模板hash及整秒clock均须回归。
+
+M3时间保留另有C2静态前置：DM当前managed updater会无条件覆盖update_time，故停服且中性DDL完成后，在业务事务之外独立运维连接仅对白名单涉及表updater保存原定义摘要与启用状态、临时禁用；原disabled/absent不更改，不触FK/其他trigger；阶段结束恢复原状态并核验，失败保持维护，不再执行bootstrap/Alembic重建触发器。DM DDL前隐式commit，绝不能在M3业务Session里ALTER。M3本体显式写原time并flush后真实重读摘要校验；未做好前置就回滚，不能放宽hash或假设DDL回滚。此处是运维要求，不扩展自动触发器管理协议/代码；DM实测继续免除。
+
+
+## 51. 迁移纯指纹SSOT的Domain前置 V1：已冻结
+
+PROC独占T859860：原unification_inventory_codec.py的canonical/digest与其私有_invalid错误构造原样迁新knowledge/domain/services/unification_fingerprints.py，原codec显式同对象re-export（仍可供原lazy闭集读取），保所有成功字节与拒绝语义；仅两生产叶。不迁整record_from_row/权限映射，不再实现第二套json/hash，不改变MAX_BYTES或协议白名单。新单测试叶test_migration_fingerprints.py锁真实旧字节/异常、同对象、无App/Core/SQLAlchemy反向依赖，配原codec/plan与native M2选集。M3 Repo/Service后继只import Domain SSOT与现Domain Repository唯一列集，不反向导入App。此卡非M3转换。
+
+§49 KN实现载体补充：可用实际Knowledge ORM的SQLAlchemy load_only安全标量投影且raiseload其余字段，保持原loaded-target Loader接口，不复制其permission snapshot/context hash算法。该局部投影不加载model/config/description，不写入或创建假业务事实；原Session在当前批次使用，字段不可隐式重读。
+
+
+## 52. M3原生SQL转换组件 V1：已冻结
+
+PROC独占T861/862新domain/repositories/unification_conversion_repository.py及其新test_migration_conversion_repository.py；T863/864新domain/services/unification_conversion.py及其新test_migration_conversion_service.py。每实现单生产叶、新叶≤600；依赖§43精确M2命令、§48纯DTO/模板、§50可表示时间与§51 Domain canonical/digest。只实现可组合Domain，正式manifest消费App/全局Catalog-namespace/FGA/CLI另冻，不提前闭合原T163164、R2/Coverage或开放执行命令，不绕过待用户答复的AC-80选择。
+
+接口：Repo.alock_scope(session,*,run_id,writer_contract_version,baseline_hash,plan_hash,commands:tuple[ConversionCommand,...])->LockedConversionScope；aapply_and_read_after(session,*,scope)->tuple[ConversionOutcome,...]；aread_after(session,*,scope)为恢复复用同一写后核验。Service.aapply_batch(session,*,batch:VerifiedConversionBatch)->SQLConversionBatchResult；aget_progress(session,*,run_id,writer_contract_version,baseline_hash,plan_hash)->SQLConversionProgress纯读；averify_committed_page(session,*,batch)只读回算前缀。batch只由后继真实App校验冻结manifest membership/全页hash/当前cursor后经Domain私有issuer签发原对象，绑定同native Session、原TransactionIdentity、Run/hash/具体tenant、expected checkpoint/命令ordinal/EOF，registry一次消费，拒bare dict/伪造DTO/跨TX及篡改。单元fixture使用私有issuer不代表正式App已接线，不提供verified=True之类外部布尔绕过。
+
+每批最多200个现有五类命令（ResourceConversion/InitializeV1/TagConversion/TagLinkConversion/DefaultConversion），不跳过未知kind计完成。原current具体tenant、no_autoflush；锁Run converting及精确checkpoint→Knowledge PK→File PK→Doc→Version→Tag→TagLink→own default实际rowID，全部升序/去重且每SQL IDs≤200。坏version链先COUNT聚合查重，Root JSON仅本批ResourceCommand所需Root一次，不在每file重复；survivor联合IDs超200分批，不做File×Version/Source×slot笛卡尔积。现RunRepo只flush，调用方唯一commit/rollback；组件无Session工厂、DDL、FGA/存储/provider IO。出错传播，外层整个批次必须回滚；若错误被外层捕获，也不得将部分业务与游标当成功提交。
+
+唯一原行列集复用Domain原unification_resource_repository的RESOURCE_COLUMNS/NEUTRAL_COLUMNS/FILE_COLUMNS/DOCUMENT_COLUMNS/VERSION_COLUMNS/TAG_COLUMNS/LINK_COLUMNS及_values，不复制字段表；所有canonical/digest只§51 Domain SSOT，模板只§48同函数。Resource仅原type0→3、is_released=False、migration_origin=run，旧其余业务20/neutral7按冻结允许差异；File全列零UPDATE（包括time/state/source/chunk/metadata），QA1/type2及无命令原Space不改；仅实际无Version FILE补新Doc/V1及互指真实ID。Tag/Link仅§43已冻type9→8/精确重复删除，保其余列。Default仅own真实row/key，复用原llm Domain两个纯transform，保持其他四key/Root来源不变。所有UPDATE显式旧update_time，新V1两时间显式planned_at，flush后真正SQL标量重读，不信ORM旧缓存；任何trigger/时间或完整planned-after摘要不符失败。M3不对已冻微秒模板临时截断。
+
+after业务/neutral核全部实际SQL事实；新Doc/Version实际互指ID归一回已冻natural_key再核唯一模板hash，并将真实分配ID纳入瞬时Outcome摘要（仅command_key/operation/actual_after_digest/docID/versionID）。两个Source派生digest和Default REF digests/provenance保留命令、由后继App/M4真实SourceOwner/提取器复核，SQL不反向import App、不伪造AuthorizedSnapshot/引用完成。
+
+原Run converting.checkpoints键sql_conversion仅四字段；cursor为sql-v1:<已处理命令ordinal>:<末command_key>、processed_count为该tenant实际命令数、digest=前digest与本批命令/实际after/分配ID的闭集滚动hash，complete只已验frozen EOF。初值/编码/空EOF固定在单一service，不放Outcome全量JSON、不新表。锁内核原expected checkpoint，业务写后核验成功才同TX写新checkpoint；旧bare批重投拒，getter零写。恢复只启动时按≤200分页线性重核已提交prefix并累计同digest，后续新批不每次重扫prefix（禁N²）；实际ID漂移、半链/unknown commit须凭真实checkpoint与完整prefix证明，不猜已执行。SQL complete仅子步，不推进Run backfilling/ready。
+
+最小真实测试含0→3及其他type不变、真实自增与互指、半链/多版本/foreign拒、Tag survivor精确处理、File逐列快照、Default五key与继承、SQL触发器覆盖旧time后真实读回失败且外TX rollback；签发/跨TX/phase/hash/cursor/取消/外rollback、401/10001恢复线性预算、每查询ID上限。DM实库免测，使用SQLite触发器反例和MySQL/DM编译检查静态边界，真实MySQL/升级事务仍需后继环境证明。
+
+
+## 53. M3批次原子性及默认来源原读取资格补充：已冻结
+
+§52原子性精确补充：Service在拒任何caller new/dirty/deleted pending后开启本批begin_nested SAVEPOINT（避免其隐式auto-flush caller），将业务和checkpoint同包；Repo单独aapply_and_read_after亦以自有savepoint保护写后核验失败。失败/取消仅rollback各自savepoint，成功仅release，均不commit/rollback caller原事务、不丢caller pending；外层catch再commit也不能留下半批业务或游标。原生savepoint项目已有使用，DM官方确认SAVEPOINT/ROLLBACK TO/RELEASE；macOS当前未安装被marker排除的DM dialect，不伪报其实际编译/执行通过，不安装。SQLite测试显式真正parent BEGIN规避legacy driver的savepoint释放即提交行为，产品无SQLite特判。原MySQL事务验证仍保留。
+
+INT接手T855856两已登记默认来源叶，以让PROC专注M3，生产边界不变。实际原router GET /llm/knowledge、assistant、evaluation、workflow均get_login_user；原GET /llm/workbench为用户可选投影，原始metadata GET /llm/workbench/settings另需get_tenant_admin_user及_assert_can_write_system_config。故本port五key的名称元数据均沿已认证UserPayload/原actor与scope可读；不读取linsight_llm原始配置内容或候选模型。管理entry仅现设置管理资格（super或当前非Root tenantadmin）用户给出，其他entry=None，不凭链接授予管理权。源name使用实际原key字符串，无虚构数据库显示名或新hardcoded翻译。入口tabs沿现SystemModelConfig的knowledge/assis/evaluation/workflow/workbench；不修改/workbench投影或公开API/认证。
+
+仅本current tenant的实际TenantSystemModelConfig五key轻投影id/tenant/key，单批≤200且unique最多5，空/foreign不查；不读value、不解析模型、不走resolve Root fallback、不复制继承来源。自身无原行即bad metadata fail10994，foreign Root来源在当前Child只记restricted，需原Root concrete view才可展示。原ModelReferenceService全平台删除影响入口的管理员准入不变，这不是新增默认配置访问权。Owner用现ModelDefaultReadIdentityPort绑定原UserPayload/actor/current scope前后，不接伪造private身份；Default新port不影响原私有执行读取五key。
+
+
+§52依赖精确说明：允许复用现Domain已统一使用的跨模块公共纯合同resource_reference.application.contracts.TransactionIdentity；禁止反向依赖knowledge.application的计划/codec/SourceOwner编排实现，不为路径名重造原事务身份协议。
+
+
+## 54. APP来源展示的原SA创建者删除例外批读 V1：已冻结
+
+PERM审实际原F048Runtime单条fallback发现新批量展示会继承SQL N+1：50根全拒508 SELECT、50根仅CREATOR_GRANT允许delete556 SELECT；Catalog/Mode/Grant分别逐target读取，原语义正确、预算失败。只优化此既有例外所需批量读取，不新建授权政策、SQL跨业务自验或移除例外。T865新test/permission/test_creator_delete_batch.py、T866仅原permission/application/runtime.py与control_state.py两生产叶，APP Owner/Repo不在此卡并写；APP交固定后再做本组。
+
+SqlPermissionControlState新增load_grants_batch(*,targets:tuple[VerifiedPermissionTarget,...],models:tuple[GrantModelSnapshot,...])->dict[(tenant_id,resource_type,resource_id),tuple[GrantSnapshot,...]]。empty零SQL，targets≤200去重，当前caller只传active manager模型；查询按精确三元目标分组AND/OR，不能tenant/type/id独立IN乘积扩围；实际Grant/Assignee IDs每SQL≤200。复用现_source_snapshot/stable_grant_key/GrantSnapshot，同tuple键完整映射（无grant也空tuple），active/source及version完全同单条load_grants，不读其他模型/其他tenant、不为批量做bypass。
+
+Runtime.batch_check_actions只在既有SA+delete且决策剩余拒绝项触发；一次_runtime_catalog核原process pin，从现permission_snapshots按批取Mode。CUSTOM仅同actor.tenant且原version/parent/projection_state=CURRENT精确匹配才调用上述batch；manager/Grant.active/model.active、CREATOR_GRANT active、同service_account subject_id、userset_relation=None逐项原条件不变；原log保留。INHERIT保原nearest CUSTOM ancestor单条fallback，不新改文件继承策略；非SA/非delete/原决策已允许/foreign不多读、原单条check_action不变。不能误将主路径DECIDABLE的PROJECTING许可套在本例外严格CURRENT上；任何原读失败按原方式拒例外，不将异常变ALLOW。
+
+同测试锁原50/50两例语义及实际SQL预算，再覆盖重复目标、空/foreign、撤销source/换model/非creator/非SA/版本或parent漂移/PROJECTING、Catalog pin或IO异常、INHERIT原路径对照。规模须50→200查询不逐项增长，401分批线性，禁止target×model×source关联乘积；不把原产品策略首绿伪称行为红。APP T849850待此预算接缝联装后才能闭合；既有权限其他全库性能不在本卡扩改。

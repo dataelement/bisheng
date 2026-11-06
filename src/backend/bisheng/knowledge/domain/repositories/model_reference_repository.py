@@ -3,6 +3,7 @@
 from copy import deepcopy
 
 from sqlalchemy import delete, inspect, update
+from sqlalchemy.orm import load_only
 from sqlmodel import select
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
@@ -25,6 +26,45 @@ class KnowledgeModelReferenceRepository:
     """No Session factory, begin, commit or rollback; both modes are native."""
 
     _protected = ("model", "model_transition", "model_config_revision", "index_generation")
+
+    async def aload_disclosure_sources(self, session, *, knowledge_ids: tuple[int, ...]):
+        """Only real metadata needed by the existing loaded-target adapter."""
+        self._tenant_id()
+        if (
+            type(knowledge_ids) is not tuple
+            or len(knowledge_ids) > 200
+            or any(type(value) is not int or value <= 0 for value in knowledge_ids)
+        ):
+            raise ResourceReferenceInvalidError(reason="knowledge_disclosure_invalid_batch")
+        if not knowledge_ids:
+            return ()
+        ids = frozenset(knowledge_ids)
+        for row in (*session.dirty, *session.deleted, *session.new):
+            if not isinstance(row, Knowledge):
+                continue
+            original = inspect(row).identity
+            # The current PK can already have been edited. Checking the real
+            # persistent identity also avoids lazy loading an expired PK.
+            if (original is not None and original[0] in ids) or row.__dict__.get("id") in ids:
+                raise ResourceReferenceInvalidError(reason="knowledge_disclosure_unflushed_source_changes")
+        fields = (
+            Knowledge.id,
+            Knowledge.tenant_id,
+            Knowledge.name,
+            Knowledge.type,
+            Knowledge.state,
+            Knowledge.user_id,
+            Knowledge.update_time,
+        )
+        statement = (
+            select(Knowledge)
+            .options(load_only(*fields, raiseload=True))
+            .execution_options(populate_existing=True)
+            .where(Knowledge.id.in_(sorted(set(knowledge_ids))), Knowledge.type.in_((0, 1, 3)))
+            .order_by(Knowledge.id)
+        )
+        with session.no_autoflush, strict_tenant_filter():
+            return tuple((await session.execute(statement)).scalars())
 
     def _source_statement(self, knowledge_id, *, for_update):
         self._tenant_id()

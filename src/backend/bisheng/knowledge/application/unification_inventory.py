@@ -489,7 +489,7 @@ class UnificationInventoryApplication:
                         record_from_values("fga_tuple", user=fact.user, relation=fact.relation, object=fact.object),
                     )
                 source_inventory = UnificationSourceInventory(repository=self.raw, sharing_reader=reader)
-                planned_at = unification_now()
+                planned_at = unification_now().replace(microsecond=0)
                 for tenant in tenant_ids:
                     with tenant_execution_scope(tenant):
                         await self._tenant(session, pages, source_inventory, catalog_plan, tenant, identity, planned_at)
