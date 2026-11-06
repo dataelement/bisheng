@@ -1,185 +1,178 @@
-"""update_workbench_llm merge-guard tests.
+"""Real-session regression for partial workbench POSTs preserving model lists.
 
-Regression for the prod incident where a stale/partial admin POST to
-``/api/v1/llm/workbench`` — a ``WorkbenchModelConfig`` body that omitted
-``models`` (so Pydantic defaulted it to ``None``) — wiped the entire Root
-dialogue-model list, because the setter persists ``config_obj`` wholesale
-with no field-level merge.
-
-Contract:
-  * ``models is None`` (field absent)  -> keep the previously stored list
-  * ``models == []`` (explicit)         -> clears, as intended
-  * ``models == [..]``                  -> replaces normally
+覆盖 AC: AC-71, AC-87, AC-88, AC-89, AC-92
+None keeps the saved list; [] clears; an explicit list replaces. Typed business
+errors remain 10810/10811. Provider/rebuild IO is never reached by these cases.
 """
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from contextlib import asynccontextmanager
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import BackgroundTasks
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.llm import WorkbenchChatDefaultModelError, WorkbenchEmbeddingError
+from bisheng.llm.domain.models.llm_server import LLMModel
+from bisheng.llm.domain.repositories.model_default_repository import ModelDefaultRepository
 from bisheng.llm.domain.schemas import WorkbenchModelConfig, WSModel
-from bisheng.llm.domain.services.llm import LLMService
+from bisheng.llm.domain.services import llm as module
+from bisheng.llm.domain.services.default_reference_extractor import (
+    MODEL_DEFAULT_REFERENCE_EXTRACTOR_VERSION,
+    extract_model_default_references,
+)
+from bisheng.resource_reference.application.contracts import SourceKey
+from bisheng.resource_reference.application.source_contracts import canonical_payload_json
+from test.knowledge_unification import test_llm_defaults as writing
 
+business = writing.business
+model_owner_tenant = writing.model_owner_tenant
 _OLD = WorkbenchModelConfig(
     models=[WSModel(id="727", name="deepseek"), WSModel(id="774", name="qwen")],
     embedding_model=WSModel(id="729", name="embed"),
 )
 
 
-async def _run_and_capture(config_obj: WorkbenchModelConfig) -> dict:
-    """Drive update_workbench_llm with DB/validation mocked; return the JSON
-    payload handed to aupsert."""
-    with (
-        patch(
-            "bisheng.llm.domain.services.llm.avalidate_system_model_refs",
-            new=AsyncMock(),
-        ),
-        patch(
-            "bisheng.llm.domain.services.llm.TenantSystemModelConfigDao.aresolve",
-            new=AsyncMock(return_value=(json.dumps(_OLD.model_dump()), False, False)),
-        ),
-        patch(
-            "bisheng.llm.domain.services.llm.TenantSystemModelConfigDao.aupsert",
-            new=AsyncMock(),
-        ) as mock_upsert,
-    ):
-        await LLMService.update_workbench_llm(1, config_obj, MagicMock(), tenant_id=1)
+@pytest.fixture
+async def merge_store(business, monkeypatch):
+    repo = ModelDefaultRepository()
+    key = SourceKey(101, "model_default", "linsight_llm", "current")
+    async with AsyncSession(business.engine) as session, session.begin():
+        session.add_all(
+            LLMModel(id=ident, tenant_id=101, server_id=1, model_name=str(ident), model_type=kind)
+            for ident, kind in ((727, "llm"), (774, "llm"), (729, "embedding"), (840, "llm"), (841, "llm"))
+        )
+        await session.flush()
 
-    mock_upsert.assert_awaited_once()
-    return json.loads(mock_upsert.await_args.kwargs["value"])
+        async def lock_root(active):
+            await repo.alock_root(active, "linsight_llm")
+
+        prepared = await business.runtime.aprepare_source_bindings(
+            session,
+            key,
+            extract_model_default_references("linsight_llm", _OLD),
+            extractor_version=MODEL_DEFAULT_REFERENCE_EXTRACTOR_VERSION,
+            lock_source_root=lock_root,
+            new_source=True,
+        )
+        await repo.aput(session, "linsight_llm", canonical_payload_json(_OLD.model_dump(mode="json")))
+        await business.runtime.aapply_source_bindings(session, prepared)
+
+    @asynccontextmanager
+    async def sessions():
+        async with AsyncSession(business.engine) as session:
+            yield session
+
+    monkeypatch.setattr(module, "get_async_db_session", sessions)
+    provider = AsyncMock(side_effect=AssertionError("cleared/invalid embedding must not initialize a provider"))
+    monkeypatch.setattr(module.LLMService, "get_bisheng_embedding", provider)
+    return SimpleNamespace(**vars(business), repository=repo, provider=provider)
 
 
-@pytest.mark.asyncio
-async def test_omitted_models_preserves_existing():
-    """The bug: a body without ``models`` must NOT null the stored list."""
-    # embedding_model=None keeps the knowledge-rebuild branch out of the test.
-    incoming = WorkbenchModelConfig(embedding_model=None)  # models defaults to None
+async def _run_and_capture(context, config_obj):
+    result = await module.LLMService.update_workbench_llm(
+        7, config_obj, BackgroundTasks(), tenant_id=101, login_user=context.user
+    )
+    assert isinstance(result, WorkbenchModelConfig)
+    context.provider.assert_not_awaited()
+    async with AsyncSession(context.engine) as session:
+        saved = await context.repository.aget_own(session, "linsight_llm")
+        assert saved.tenant_id == 101
+        return json.loads(saved.value)
+
+
+async def test_omitted_models_preserves_existing(merge_store):
+    incoming = WorkbenchModelConfig(embedding_model=None)
     assert incoming.models is None
-
-    persisted = await _run_and_capture(incoming)
-
-    assert [m["id"] for m in persisted["models"]] == ["727", "774"]
+    persisted = await _run_and_capture(merge_store, incoming)
+    assert [model["id"] for model in persisted["models"]] == ["727", "774"]
 
 
-@pytest.mark.asyncio
-async def test_explicit_empty_models_clears():
-    """An explicit empty array is a real intent and must still clear."""
-    persisted = await _run_and_capture(WorkbenchModelConfig(models=[], embedding_model=None))
+async def test_explicit_empty_models_clears(merge_store):
+    persisted = await _run_and_capture(merge_store, WorkbenchModelConfig(models=[], embedding_model=None))
     assert persisted["models"] == []
 
 
-@pytest.mark.asyncio
-async def test_provided_models_replace_normally():
+async def test_provided_models_replace_normally(merge_store):
     incoming = WorkbenchModelConfig(models=[WSModel(id="840", name="qwen3.7-max")], embedding_model=None)
-    persisted = await _run_and_capture(incoming)
-    assert [m["id"] for m in persisted["models"]] == ["840"]
+    persisted = await _run_and_capture(merge_store, incoming)
+    assert [model["id"] for model in persisted["models"]] == ["840"]
 
 
 @pytest.mark.parametrize("invalid_model_id", ["", "null", "undefined", "0", "-1"])
-@pytest.mark.asyncio
-async def test_invalid_embedding_model_id_returns_business_error(invalid_model_id: str):
-    config = WorkbenchModelConfig(
-        models=[WSModel(id="840", name="qwen3.7-max")],
-        embedding_model=WSModel(id=invalid_model_id),
+async def test_invalid_embedding_model_id_returns_business_error(merge_store, invalid_model_id):
+    incoming = WorkbenchModelConfig(
+        models=[WSModel(id="840", name="new")], embedding_model=WSModel(id=invalid_model_id)
     )
-
-    with patch(
-        "bisheng.llm.domain.services.llm.avalidate_system_model_refs",
-        new=AsyncMock(),
-    ) as mock_validate:
-        with pytest.raises(WorkbenchEmbeddingError) as exc_info:
-            await LLMService.update_workbench_llm(1, config, MagicMock(), tenant_id=1)
-
-    assert exc_info.value.code == 10810
-    mock_validate.assert_not_awaited()
+    with pytest.raises(WorkbenchEmbeddingError) as raised:
+        await _run_and_capture(merge_store, incoming)
+    assert raised.value.code == 10810
+    merge_store.provider.assert_not_awaited()
 
 
-@pytest.mark.asyncio
-async def test_chat_default_model_id_persists_alongside_linsight_default():
-    """chat_default_model_id is a sibling of linsight_default_model_id — both
-    land in the same stored JSON without overwriting each other."""
+async def test_chat_default_model_id_persists_alongside_linsight_default(merge_store):
     incoming = WorkbenchModelConfig(
         models=[WSModel(id="840", name="qwen3.7-max"), WSModel(id="841", name="deepseek-v4")],
         linsight_default_model_id="840",
         chat_default_model_id="841",
         embedding_model=None,
     )
-    persisted = await _run_and_capture(incoming)
-    assert persisted["linsight_default_model_id"] == "840"
-    assert persisted["chat_default_model_id"] == "841"
+    persisted = await _run_and_capture(merge_store, incoming)
+    assert persisted["linsight_default_model_id"] == "840" and persisted["chat_default_model_id"] == "841"
 
 
-@pytest.mark.asyncio
-async def test_chat_default_model_id_none_is_allowed():
-    """No daily-chat default configured is a valid state."""
+async def test_chat_default_model_id_none_is_allowed(merge_store):
     incoming = WorkbenchModelConfig(
-        models=[WSModel(id="840", name="qwen3.7-max")],
-        chat_default_model_id=None,
-        embedding_model=None,
+        models=[WSModel(id="840", name="new")], chat_default_model_id=None, embedding_model=None
     )
-    persisted = await _run_and_capture(incoming)
+    persisted = await _run_and_capture(merge_store, incoming)
     assert persisted["chat_default_model_id"] is None
 
 
-@pytest.mark.asyncio
-async def test_chat_default_model_id_must_come_from_models_list():
-    """A default outside the configured workbench chat model list is rejected."""
+async def test_chat_default_model_id_must_come_from_models_list(merge_store):
     incoming = WorkbenchModelConfig(
-        models=[WSModel(id="840", name="qwen3.7-max")],
-        chat_default_model_id="999",
-        embedding_model=None,
+        models=[WSModel(id="840", name="new")], chat_default_model_id="999", embedding_model=None
     )
-    with patch(
-        "bisheng.llm.domain.services.llm.avalidate_system_model_refs",
-        new=AsyncMock(),
-    ), patch(
-        "bisheng.llm.domain.services.llm.TenantSystemModelConfigDao.aresolve",
-        new=AsyncMock(return_value=(json.dumps(_OLD.model_dump()), False, False)),
-    ):
-        with pytest.raises(WorkbenchChatDefaultModelError) as exc_info:
-            await LLMService.update_workbench_llm(1, incoming, MagicMock(), tenant_id=1)
-
-    assert exc_info.value.code == 10811
+    with pytest.raises(WorkbenchChatDefaultModelError) as raised:
+        await _run_and_capture(merge_store, incoming)
+    assert raised.value.code == 10811
+    merge_store.provider.assert_not_awaited()
 
 
 @pytest.mark.parametrize("invalid_model_id", ["", "null", "undefined", "0", "-1", "abc"])
-@pytest.mark.asyncio
-async def test_chat_default_model_id_rejects_non_model_values(invalid_model_id: str):
+async def test_chat_default_model_id_rejects_non_model_values(merge_store, invalid_model_id):
     incoming = WorkbenchModelConfig(
-        models=[WSModel(id="840", name="qwen3.7-max")],
-        chat_default_model_id=invalid_model_id,
+        models=[WSModel(id="840", name="new")], chat_default_model_id=invalid_model_id, embedding_model=None
+    )
+    with pytest.raises(WorkbenchChatDefaultModelError) as raised:
+        await _run_and_capture(merge_store, incoming)
+    assert raised.value.code == 10811
+    assert isinstance(raised.value.__cause__, ValueError)
+    merge_store.provider.assert_not_awaited()
+
+
+async def test_chat_default_model_id_validated_against_merged_old_models(merge_store):
+    persisted = await _run_and_capture(
+        merge_store, WorkbenchModelConfig(chat_default_model_id="727", embedding_model=None)
+    )
+    assert persisted["chat_default_model_id"] == "727"
+    assert [model["id"] for model in persisted["models"]] == ["727", "774"]
+    with pytest.raises(WorkbenchChatDefaultModelError):
+        await _run_and_capture(merge_store, WorkbenchModelConfig(chat_default_model_id="840", embedding_model=None))
+
+
+@pytest.mark.parametrize("chat_default", [None, "840"])
+async def test_invalid_other_model_slot_is_rejected_without_filtering(merge_store, chat_default):
+    from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
+
+    incoming = WorkbenchModelConfig(
+        models=[WSModel(id="840", name="valid"), WSModel(id="abc", name="invalid")],
+        chat_default_model_id=chat_default,
         embedding_model=None,
     )
-    with patch(
-        "bisheng.llm.domain.services.llm.avalidate_system_model_refs",
-        new=AsyncMock(),
-    ), patch(
-        "bisheng.llm.domain.services.llm.TenantSystemModelConfigDao.aresolve",
-        new=AsyncMock(return_value=(json.dumps(_OLD.model_dump()), False, False)),
-    ):
-        with pytest.raises(WorkbenchChatDefaultModelError):
-            await LLMService.update_workbench_llm(1, incoming, MagicMock(), tenant_id=1)
-
-
-@pytest.mark.asyncio
-async def test_chat_default_model_id_validated_against_merged_old_models():
-    """When the body omits ``models`` (merge-guard keeps the stored list), the
-    default is checked against that effective list — old id passes, new id not
-    in the stored list fails."""
-    # "727" exists only in the stored (_OLD) list.
-    incoming = WorkbenchModelConfig(chat_default_model_id="727", embedding_model=None)
-    persisted = await _run_and_capture(incoming)
-    assert persisted["chat_default_model_id"] == "727"
-    assert [m["id"] for m in persisted["models"]] == ["727", "774"]
-
-    incoming_bad = WorkbenchModelConfig(chat_default_model_id="840", embedding_model=None)
-    with patch(
-        "bisheng.llm.domain.services.llm.avalidate_system_model_refs",
-        new=AsyncMock(),
-    ), patch(
-        "bisheng.llm.domain.services.llm.TenantSystemModelConfigDao.aresolve",
-        new=AsyncMock(return_value=(json.dumps(_OLD.model_dump()), False, False)),
-    ):
-        with pytest.raises(WorkbenchChatDefaultModelError):
-            await LLMService.update_workbench_llm(1, incoming_bad, MagicMock(), tenant_id=1)
+    with pytest.raises(ResourceReferenceInvalidError) as raised:
+        await _run_and_capture(merge_store, incoming)
+    assert raised.value.code == 10996
+    merge_store.provider.assert_not_awaited()
