@@ -4,7 +4,9 @@ import json
 import time
 from dataclasses import dataclass
 from datetime import date, datetime
+from hashlib import sha256
 from types import SimpleNamespace
+from urllib.parse import quote
 
 from pydantic import ValidationError
 
@@ -22,6 +24,8 @@ from bisheng.app_publish.domain.services.reference_extractor import (
     extract_app_references,
 )
 from bisheng.app_runtime.application.authorization import authorize_loaded_app, resolve_app_actor
+from bisheng.app_runtime.domain.schemas.app_authorization import APP_ACTIONS, MANAGEMENT_ACTIONS
+from bisheng.app_runtime.domain.services.f048_app_permission import AppPermissionRecord
 from bisheng.approval.application.app_review import pending_app_reviews
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.app_factory import AppNotFoundError
@@ -31,9 +35,13 @@ from bisheng.common.errcode.knowledge import (
     ResourceReferenceInvalidError,
 )
 from bisheng.common.errcode.open_api import OpenApiCredentialInvalidError
+from bisheng.common.errcode.permission import InvalidCatalogActionError
 from bisheng.common.services.config_service import settings
+from bisheng.core.context.tenant import is_tenant_filter_bypassed
+from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.llm.application.model_name_resolution import get_model_name_resolution_port
 from bisheng.open_api.domain.context import OpenApiPrincipal
+from bisheng.permission.application.access import get_f048_resource_adapter, get_f048_runtime
 from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.resource_reference.application.contracts import (
     SourceKey,
@@ -43,12 +51,14 @@ from bisheng.resource_reference.application.contracts import (
     TransactionIdentity,
     reference_set_digest,
 )
+from bisheng.resource_reference.application.read_identity import AuthenticatedSourceReadIdentity
 from bisheng.resource_reference.application.source_contracts import (
     AuthorizedSourceSnapshot,
     SourceReadRequest,
     canonical_payload_json,
     payload_digest,
 )
+from bisheng.resource_reference.application.source_disclosure import SourceDisclosure
 from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
 
 
@@ -83,6 +93,122 @@ class HostedAppReferenceSourceOwner:
         self.references = ReferenceRepository()
         self._plans = object()
         self._admission_authority = None
+
+    async def adisclose_sources(
+        self, session, *, identity, source_keys: tuple[SourceKey, ...]
+    ) -> tuple[SourceDisclosure | None, ...]:
+        if (
+            type(source_keys) is not tuple
+            or len(source_keys) > 200
+            or any(
+                not isinstance(key, SourceKey) or key.source_type != SourceType.HOSTED_APP_VERSION
+                for key in source_keys
+            )
+        ):
+            raise ReferenceCoverageNotReadyError(reason="app_disclosure_batch")
+        if not source_keys:
+            return ()
+        try:
+            tenant = _resolve_tenant_id()
+            if (
+                not isinstance(identity, UserPayload)
+                or type(tenant) is not int
+                or tenant <= 0
+                or is_tenant_filter_bypassed()
+            ):
+                raise ReferenceCoverageNotReadyError(reason="app_disclosure_identity")
+            transaction = TransactionIdentity.capture(session)
+            pairs = tuple(
+                dict.fromkeys((key.source_id, key.source_version) for key in source_keys if key.tenant_id == tenant)
+            )
+            if not pairs:
+                return (None,) * len(source_keys)
+            capture = AuthenticatedSourceReadIdentity()
+            original = await capture.acapture(identity)
+            if original.request_tenant_id != tenant:
+                raise ReferenceCoverageNotReadyError(reason="app_disclosure_identity_changed")
+            actor = await resolve_app_actor(identity)
+            roots, versions = await self.repository.alist_disclosure_rows(session, sources=pairs)
+            by_id = {row.id: row for row in roots}
+            by_version = {(row.app_id, row.id): row for row in versions}
+            if (
+                len(by_id) != len(roots)
+                or len(by_version) != len(versions)
+                or set(by_id) != {ident for ident, _ in pairs}
+                or set(by_version) != set(pairs)
+            ):
+                raise ReferenceCoverageNotReadyError(reason="app_disclosure_missing_metadata")
+            if any(type(row.version_no) is not int or row.version_no <= 0 for row in versions):
+                raise ReferenceCoverageNotReadyError(reason="app_disclosure_version_invalid")
+            runtime = await get_f048_runtime()
+            snapshots = await runtime.get_permission_snapshots(tuple((tenant, "app", ident) for ident in by_id))
+            records = []
+            for row in roots:
+                snapshot = snapshots.get((tenant, "app", row.id))
+                if (
+                    row.tenant_id != tenant
+                    or type(row.name) is not str
+                    or snapshot is None
+                    or type(snapshot.version) is not int
+                    or snapshot.version <= 0
+                    or snapshot.mode != "CUSTOM"
+                    or snapshot.parent_type is not None
+                    or snapshot.parent_id is not None
+                ):
+                    raise ReferenceCoverageNotReadyError(reason="app_disclosure_invalid_metadata")
+                context = sha256(
+                    f"{snapshot.context_version}|{row.update_time.isoformat() if row.update_time else '0'}".encode()
+                ).hexdigest()
+                records.append(
+                    AppPermissionRecord(tenant, row.id, row.state, row.owner_user_id, snapshot.version, context)
+                )
+            adapter = await get_f048_resource_adapter("app")
+            for record in records:
+                adapter._record_target(record, actor)
+            # Preserve management_read's original OR order. Only unresolved
+            # roots advance; visibility alone never exposes immutable versions.
+            allowed, pending = set(), records
+            for action in APP_ACTIONS:
+                if action not in MANAGEMENT_ACTIONS or not pending:
+                    continue
+                remaining = []
+                for offset in range(0, len(pending), 100):
+                    batch = tuple(pending[offset : offset + 100])
+                    try:
+                        decisions = await adapter.batch_check_loaded(records=batch, actor=actor, action=action)
+                    except InvalidCatalogActionError:
+                        remaining.extend(batch)
+                        continue
+                    if (
+                        type(decisions) is not tuple
+                        or len(decisions) != len(batch)
+                        or any(type(value) is not bool for value in decisions)
+                    ):
+                        raise ReferenceCoverageNotReadyError(reason="app_disclosure_incomplete_permissions")
+                    for record, decision in zip(batch, decisions, strict=True):
+                        if decision:
+                            allowed.add(record.resource_id)
+                        else:
+                            remaining.append(record)
+                pending = remaining
+            transaction.assert_current(session)
+            if await capture.acapture(identity) != original:
+                raise ReferenceCoverageNotReadyError(reason="app_disclosure_identity_changed")
+            return tuple(
+                SourceDisclosure(
+                    key,
+                    by_id[key.source_id].name,
+                    f"v{by_version[(key.source_id, key.source_version)].version_no}",
+                    f"/build/apps/{quote(key.source_id, safe='')}",
+                )
+                if key.tenant_id == tenant and key.source_id in allowed
+                else None
+                for key in source_keys
+            )
+        except ReferenceCoverageNotReadyError:
+            raise
+        except Exception as error:
+            raise ReferenceCoverageNotReadyError(reason="app_disclosure_failed") from error
 
     def _install_admission_authority(self, authority):
         if self._admission_authority is not None:

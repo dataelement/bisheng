@@ -1,22 +1,85 @@
 """APP source facts in one caller-owned transaction; no ORM read side effects."""
 
 from copy import deepcopy
+from dataclasses import dataclass
+from datetime import datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.app_publish.domain.models.app_preview_session import AppPreviewSession
 from bisheng.app_publish.domain.models.hosted_app_subject import HostedAppSubject
 from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeCredentialBinding, RuntimeOperation, RuntimeRoute
 from bisheng.common.errcode.app_factory import AppNotFoundError
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeOperationPlanConflictError,
+    ReferenceCoverageNotReadyError,
+    ResourceReferenceInvalidError,
+)
 from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed, strict_tenant_filter
+from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.database.models.app import App
 from bisheng.database.models.app_version import AppVersion
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.open_api.domain.models.api_credential import ApiCredential
 
 
+@dataclass(frozen=True, slots=True)
+class AppSourceDisclosureRow:
+    id: str
+    tenant_id: int
+    name: str
+    state: str
+    owner_user_id: int
+    update_time: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class AppVersionDisclosureRow:
+    id: str
+    app_id: str
+    version_no: int
+
+
 class HostedAppReferenceSourceRepository:
+    @staticmethod
+    async def alist_disclosure_rows(
+        session, *, sources: tuple[tuple[str, str], ...]
+    ) -> tuple[tuple[AppSourceDisclosureRow, ...], tuple[AppVersionDisclosureRow, ...]]:
+        tenant = _resolve_tenant_id()
+        if (
+            not isinstance(session, AsyncSession)
+            or not session.in_transaction()
+            or is_tenant_filter_bypassed()
+            or type(tenant) is not int
+            or tenant <= 0
+            or type(sources) is not tuple
+            or len(sources) > 200
+            or any(
+                type(pair) is not tuple or len(pair) != 2 or any(type(value) is not str or not value for value in pair)
+                for pair in sources
+            )
+        ):
+            raise ReferenceCoverageNotReadyError(reason="app_disclosure_scope")
+        if not sources:
+            return (), ()
+        root_ids = tuple(dict.fromkeys(ident for ident, _ in sources))
+        columns = ("id", "tenant_id", "name", "state", "owner_user_id", "update_time")
+        query = select(*(getattr(App, name) for name in columns)).where(App.tenant_id == tenant, App.id.in_(root_ids))
+        with session.no_autoflush, strict_tenant_filter():
+            roots = tuple(AppSourceDisclosureRow(**row) for row in (await session.execute(query)).mappings())
+            present = {row.id for row in roots}
+            predicates = tuple(
+                and_(AppVersion.app_id == ident, AppVersion.id == version)
+                for ident, version in dict.fromkeys(sources)
+                if ident in present
+            )
+            if not predicates:
+                return roots, ()
+            query = select(AppVersion.id, AppVersion.app_id, AppVersion.version_no).where(or_(*predicates))
+            versions = tuple(AppVersionDisclosureRow(**row) for row in (await session.execute(query)).mappings())
+        return roots, versions
+
     @staticmethod
     def _context(session, root=None):
         tenant_id = get_current_tenant_id()
