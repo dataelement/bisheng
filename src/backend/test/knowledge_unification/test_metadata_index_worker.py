@@ -370,6 +370,16 @@ async def test_real_awaitable_guard_is_mandatory_before_native_io(native, guard)
     native.vector_init.assert_not_awaited()
 
 
+@pytest.mark.parametrize("verdict", [False, True])
+async def test_guard_cannot_silently_return_a_boolean_permission_decision(native, verdict):
+    async def guard():
+        return verdict
+
+    with pytest.raises(ResourceReferenceInvalidError):
+        await apply(native, guard=guard)
+    native.vector_init.assert_not_awaited()
+
+
 async def test_real_zero_record_counts_are_allowed_but_missing_index_is_not(native):
     native.collection.records, native.es_rows = {}, []
     outcome = await apply(native)
