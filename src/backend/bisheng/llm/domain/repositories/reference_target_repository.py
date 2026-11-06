@@ -343,6 +343,11 @@ class ModelReferenceTargetRepository:
                 and row.server_id in servers
                 and servers[row.server_id].tenant_id == ROOT_TENANT_ID
             )
+        elif mixed:
+            # Default roots also need this actual policy topology. Lock it in
+            # the target phase before any Knowledge root, even for own models;
+            # an unrelated default JSON never becomes a sharing dependency.
+            yield self._topology_statement(tenant_id, lock=True), True
         if prelock_sources is not None:
             # Union only physical target/owner locks. Never choose one source's
             # legacy evidence for another source/version and never issue facts.

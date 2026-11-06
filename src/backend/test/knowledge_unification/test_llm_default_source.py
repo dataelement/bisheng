@@ -139,3 +139,24 @@ def test_source_owner_rejects_identity_from_another_default_authority(store):
     _, other_owner, _ = graph()
     with Session(store) as session, pytest.raises(ResourceReferenceInvalidError):
         other_owner.resolve_source(session, REQUEST, one.issue_identity())
+
+
+def test_multitenant_missing_context_maps_to_reference_invalid_and_preserves_cause(monkeypatch):
+    from bisheng.common.errcode.tenant import NoTenantContextError
+    from bisheng.common.services.config_service import settings
+
+    monkeypatch.setattr(settings.multi_tenant, "enabled", True)
+    with tenant(None), pytest.raises(ResourceReferenceInvalidError) as raised:
+        ModelDefaultReadIdentityPort().issue_identity()
+    assert isinstance(raised.value.__cause__, NoTenantContextError)
+
+
+def test_single_tenant_ambient_identity_keeps_core_default_without_changing_context(monkeypatch):
+    from bisheng.common.services.config_service import settings
+
+    monkeypatch.setattr(settings.multi_tenant, "enabled", False)
+    with tenant(None):
+        port = ModelDefaultReadIdentityPort()
+        identity = port.issue_identity()
+        assert port.capture(identity).request_tenant_id == 1
+        assert get_current_tenant_id() is None

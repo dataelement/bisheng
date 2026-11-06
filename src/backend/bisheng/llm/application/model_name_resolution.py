@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from dataclasses import dataclass, field
+from typing import Literal
 from weakref import WeakKeyDictionary, ref
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +16,7 @@ from bisheng.common.errcode.model_face import (
     ModelFaceModelNotFoundError,
     ModelFaceModelOfflineError,
 )
+from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.core.context.tenant import get_visible_tenant_ids, is_management_all_tenants, is_tenant_filter_bypassed
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.core.logger import trace_id_var
@@ -44,6 +46,24 @@ class FrozenModelIdentity:
 class NameResolution:
     requested: str
     resolved: ResolvedModel
+
+
+@dataclass(frozen=True, slots=True)
+class ModelNameInspection:
+    requested: str
+    resolved: ResolvedModel | None
+    status: Literal["valid", "unresolvable", "ambiguous", "offline"]
+
+    def __post_init__(self):
+        if (
+            not isinstance(self.requested, str)
+            or not self.requested
+            or "\x00" in self.requested
+            or self.status not in {"valid", "unresolvable", "ambiguous", "offline"}
+            or (self.status == "valid") != isinstance(self.resolved, ResolvedModel)
+            or (self.status != "valid" and self.resolved is not None)
+        ):
+            raise ValueError("model-name inspection must preserve its requested name and precise finding")
 
 
 @dataclass(frozen=True, slots=True, eq=False, weakref_slot=True)
@@ -81,12 +101,11 @@ class ModelNameResolutionPort:
 
     @staticmethod
     async def _identity(identity, tenant_id):
-        if (
-            type(tenant_id) is not int
-            or tenant_id <= 0
-            or _resolve_tenant_id() != tenant_id
-            or is_tenant_filter_bypassed()
-        ):
+        try:
+            actual_tenant = _resolve_tenant_id()
+        except NoTenantContextError as error:
+            raise _invalid() from error
+        if type(tenant_id) is not int or tenant_id <= 0 or actual_tenant != tenant_id or is_tenant_filter_bypassed():
             raise _invalid()
         if isinstance(identity, UserPayload):
             return (await AuthenticatedSourceReadIdentity().acapture(identity)).fingerprint
@@ -291,6 +310,40 @@ class ModelNameResolutionPort:
         if resolutions != plan.resolutions:
             raise KnowledgeOperationPlanConflictError(reason="model_name_catalog_changed")
         return resolutions
+
+    async def ainspect_model_names_current(self, session, tenant_id, requested, *, identity):
+        if (
+            not isinstance(session, AsyncSession)
+            or not isinstance(requested, tuple)
+            or any(not isinstance(name, str) or not name or "\x00" in name for name in requested)
+        ):
+            raise _invalid()
+        fingerprint = await self._identity(identity, tenant_id)
+        prior = TransactionIdentity.capture(session) if session.in_transaction() else None
+        shared_ids = await self._shared(session, tenant_id)
+        try:
+            catalog = await self.repository.ainspect_catalog(session, tenant_id, shared_ids)
+        except ResourceReferenceInvalidError:
+            raise
+        except Exception as error:
+            raise ModelFaceCatalogUnavailableError(exception=error) from error
+        if prior is not None:
+            self._assert_transaction(prior, session)
+        if await self._identity(identity, tenant_id) != fingerprint:
+            raise _invalid()
+        findings = []
+        for name in requested:
+            try:
+                resolved = self._resolve(catalog, name, TENANT_RANGE)
+            except ModelFaceModelNotFoundError:
+                findings.append(ModelNameInspection(name, None, "unresolvable"))
+            except ModelFaceModelAmbiguousError:
+                findings.append(ModelNameInspection(name, None, "ambiguous"))
+            except ModelFaceModelOfflineError:
+                findings.append(ModelNameInspection(name, None, "offline"))
+            else:
+                findings.append(ModelNameInspection(name, resolved, "valid"))
+        return tuple(findings)
 
     async def aresolve_frozen_model_identities(self, session, tenant_id, model_ids, *, identity):
         if not isinstance(session, AsyncSession) or not isinstance(model_ids, tuple):

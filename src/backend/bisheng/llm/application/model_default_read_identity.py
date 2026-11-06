@@ -5,6 +5,7 @@ from weakref import WeakKeyDictionary, ref
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
+from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.core.context.tenant import (
     get_admin_scope_tenant_id,
     get_is_management_api,
@@ -50,7 +51,10 @@ class ModelDefaultReadIdentityPort:
 
     @staticmethod
     def _facts(login_user):
-        tenant = _resolve_tenant_id()
+        try:
+            tenant = _resolve_tenant_id()
+        except NoTenantContextError as error:
+            raise _invalid() from error
         if (
             type(tenant) is not int
             or tenant <= 0
