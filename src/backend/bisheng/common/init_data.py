@@ -1,4 +1,3 @@
-import hashlib
 import json
 import os
 
@@ -16,7 +15,6 @@ from bisheng.database.models.template import Template
 from bisheng.telemetry_search.domain.init_dataset import init_dashboard_datasets
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsType
 from bisheng.user.domain.models.user import User
-from bisheng.user.domain.models.user_role import UserRoleDao
 
 
 async def init_default_data():
@@ -99,29 +97,6 @@ async def init_default_data():
                 await _init_default_tenant(session)
                 # Initialize default root department (F002)
                 await _init_default_root_department(session)
-
-                user = await session.exec(select(User).limit(1))
-                user = user.all()
-                if not user and settings.admin:
-                    md5 = hashlib.md5()
-                    md5.update(settings.admin.get("password").encode("utf-8"))
-                    user = User(
-                        user_id=1,
-                        user_name=settings.admin.get("user_name"),
-                        password=md5.hexdigest(),
-                    )
-                    session.add(user)
-                    await session.commit()
-                    await session.refresh(user)
-                    await UserRoleDao.set_admin_user(user.user_id)
-                    from bisheng.permission.domain.services.legacy_rbac_sync_service import (
-                        LegacyRBACSyncService,
-                    )
-
-                    await LegacyRBACSyncService.sync_user_auth_created(
-                        user.user_id,
-                        [AdminRole],
-                    )
 
                 await _backfill_guest_department_membership(session)
 
