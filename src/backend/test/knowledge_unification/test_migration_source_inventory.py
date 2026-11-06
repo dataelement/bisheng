@@ -157,7 +157,7 @@ async def test_actual_six_sources_preserve_versions_zero_roots_retired_and_priva
     async with AsyncSession(database) as session, session.begin():
         session.add_all(
             [
-                raw.flow("wf", data=graph(999)),
+                raw.flow("wf", data=graph(777)),
                 raw.flow("wf-empty"),
                 raw.flow("wf-deleted", is_delete=1),
                 FlowVersion(id=1, tenant_id=101, flow_id="wf", name="old", data=graph(11, 12, 31, 999), is_current=0),
@@ -166,6 +166,7 @@ async def test_actual_six_sources_preserve_versions_zero_roots_retired_and_priva
                 ),
                 FlowVersion(id=3, tenant_id=101, flow_id="wf", name="deleted", data=None, is_delete=1),
                 FlowVersion(id=4, tenant_id=101, flow_id="wf-deleted", name="deleted-root", data=None),
+                FlowVersion(id=5, tenant_id=101, flow_id="wf", name="later", data=graph(11)),
                 raw.app("app"),
                 raw.app("app-empty"),
                 version(
@@ -219,7 +220,7 @@ async def test_actual_six_sources_preserve_versions_zero_roots_retired_and_priva
         "knowledge",
         "model_default",
     }
-    assert next(row for key, row in roots.items() if key.source_id == "wf").retained_version_count == 2
+    assert next(row for key, row in roots.items() if key.source_id == "wf").retained_version_count == 3
     for ident in ("wf-empty", "app-empty"):
         assert next(row for key, row in roots.items() if key.source_id == ident).retained_version_count == 0
         assert not any(key.source_id == ident for key in sources)
@@ -241,7 +242,16 @@ async def test_actual_six_sources_preserve_versions_zero_roots_retired_and_priva
         (TargetKey("knowledge_space", 40), "resolved_name"),
         (TargetKey("knowledge_space", 43), "explicit_id"),
     }
+    workflow_order = [
+        row.source_key.source_version
+        for row in records
+        if isinstance(row, (module.SourceInventoryRecord, module.RetiredInventoryRecord))
+        and row.source_key is not None
+        and row.source_key.source_type == "workflow_version"
+    ]
+    assert workflow_order == ["1", "2", "3", "4", "5"]
     physical = {row.target: row.physical_fact for row in references}
+    assert TargetKey("model", 777) not in physical
     assert physical[TargetKey("model", 12)].exists and not physical[TargetKey("model", 12)].is_online
     assert physical[TargetKey("model", 31)].target_tenant_id == 202
     assert not physical[TargetKey("model", 999)].exists
