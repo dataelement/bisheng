@@ -112,3 +112,29 @@ def test_web_rules_win_and_legacy_complete_rule_never_inherits_new_defaults(syst
     old["chunk_size"] = 444
     assert frozen.effective_rule.chunk_size == 333
     assert legacy_rule_from_snapshot(frozen, space_id=40).knowledge_id == 40
+
+
+def test_new_historical_operation_applies_explicit_overrides_to_old_actual_rules(system_defaults):
+    old = FileProcessBase(
+        knowledge_id=40, chunk_size=333, chunk_overlap=17, excel_rule={"slice_length": 12}
+    ).model_dump(mode="json")
+    current_space = changed_defaults(system_defaults, chunk_size=900, slice_length=99)
+    changed = resolve(
+        system_defaults,
+        space_defaults=current_space,
+        legacy_split_rule=old,
+        batch_overrides={"document": {"chunk_size": 222}},
+        file_overrides={"document": {"chunk_overlap": 3}},
+    )
+    assert changed.effective_rule.chunk_size == 222 and changed.effective_rule.chunk_overlap == 3
+    assert changed.effective_rule.force_ocr == old["force_ocr"]
+    table = resolve(
+        system_defaults,
+        file_name="old.xlsx",
+        space_defaults=current_space,
+        legacy_split_rule=old,
+        batch_overrides={"table": {"slice_length": 30}},
+        file_overrides={"table": {"slice_length": 40}},
+    )
+    assert table.effective_rule.slice_length == 40
+    assert old["chunk_size"] == 333 and old["excel_rule"]["slice_length"] == 12
