@@ -131,6 +131,10 @@ class UnificationTaskRepository:
                 row["parent_id"] is None or row["parent_tenant"] != row["tenant_id"]
             ):
                 _blocked("item_parent_invalid")
+            configuration_digest = task_digest({name: row[name] for name in configuration})
+            # Bind the full configuration once, then compose its digest with
+            # the remaining original state; large manifests are not re-encoded.
+            state = {name: value for name, value in row.items() if name not in configuration}
             facts.append(
                 TaskFact(
                     row["tenant_id"],
@@ -141,8 +145,8 @@ class UnificationTaskRepository:
                     row.get("document_id"),
                     row.get("version_id"),
                     row["state"],
-                    task_digest({name: row[name] for name in configuration}),
-                    task_digest(dict(row)),
+                    configuration_digest,
+                    task_digest({"configuration_digest": configuration_digest, "state": state}),
                 )
             )
         return InventoryPage(tuple(facts), rows[limit - 1]["id"] if len(rows) > limit else None)
