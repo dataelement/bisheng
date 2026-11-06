@@ -19,6 +19,7 @@ from bisheng.core.context.tenant import bypass_tenant_filter, management_tenant_
 from bisheng.core.database import tenant_filter
 from bisheng.core.database.tenant_filter import register_tenant_filter_events
 from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.repositories.knowledge_space_listing_repository import KnowledgeSpaceListingRepository
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     F048KnowledgeContainerPermissionAdapter,
@@ -42,10 +43,13 @@ async def catalog(concrete_tenant, monkeypatch):
     register_tenant_filter_events()
     # Other native-SQL fixtures narrow discovery during the first global
     # registration; pin this fixture's real model even in a combined selection.
-    monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", tenant_filter._tenant_aware_tables | {"knowledge"})
+    monkeypatch.setattr(
+        tenant_filter, "_tenant_aware_tables", tenant_filter._tenant_aware_tables | {"knowledge", "knowledgefile"}
+    )
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
     metadata = sa.MetaData()
     table = Knowledge.__table__.to_metadata(metadata)
+    KnowledgeFile.__table__.to_metadata(metadata)
     # Old installations may still contain NULL times; do not mutate shared ORM metadata.
     table.c.update_time.nullable = True
     async with engine.begin() as connection:
