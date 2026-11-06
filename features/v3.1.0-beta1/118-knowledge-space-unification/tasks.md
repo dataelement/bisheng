@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史766编号：639已完成/历史交付、125当前待办、2外移；原137队列已完成26项、剩111项，另14张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史768编号：639已完成/历史交付、127当前待办、2外移；原137队列已完成26项、剩111项，另16张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -6213,6 +6213,22 @@
   **依赖**：T739, T740\
   **覆盖 AC**: AC-49, AC-50, AC-53, AC-54, AC-86\
   **验证 / 完成条件**：准确740前后同选集，真实装配缺失10999保留且生产metadata完整链通过；不删除或skip旧断言，不改生产准入门禁。
+
+## W6实际目录面包屑折叠词条
+
+- [ ] **T767 · Breadcrumb折叠层数中英词条**
+  **类型 / Owner**：文案集成 / INT\
+  **写入文件**：`src/frontend/platform/public/locales/zh-Hans/knowledge.json`；`src/frontend/platform/public/locales/en-US/knowledge.json`\
+  **逻辑 / 测试上下文**：W6§27唯一f118.expand_folders，保{{count}}及原键值，复用现Breadcrumb，无新视觉组件。\
+  **依赖**：T758\
+  **验证 / 完成条件**：JSON可解析、三语键/占位符一致、旧键值语义完全保持、check-i18n通过，实际consumer另验。
+
+- [ ] **T768 · Breadcrumb折叠层数日文词条**
+  **类型 / Owner**：文案集成 / INT\
+  **写入文件**：`src/frontend/platform/public/locales/ja/knowledge.json`\
+  **逻辑 / 测试上下文**：W6§27唯一f118.expand_folders，保{{count}}，与中英同键；不改生成错误词条或QA业务文案。\
+  **依赖**：T759\
+  **验证 / 完成条件**：JSON可解析、三语键/占位符一致、旧键值语义完全保持、check-i18n通过，实际consumer另验。
 
 ## 自动化覆盖索引
 

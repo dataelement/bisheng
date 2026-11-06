@@ -488,3 +488,8 @@ T762测试→T763唯一生产`knowledge/domain/repositories/unification_control_
 
 
 §24.3双DI真实调用补正（已冻结）：已实际读v2 `open_endpoints/api/dependencies.py:get_knowledge_service`，其原直接构造KnowledgeService(repo,file_repo)，并未Depends v1的metadata工厂。T748因此明确两个API DI叶。T742已有application/metadata_legacy.py内定义唯一纯组合函数`build_legacy_metadata_service(*,knowledge_repository,knowledge_file_repository,permission_service=None)`：构造原Domain KnowledgeMetadataService并注同一真实SPACE writer；未显式permission_service沿原KnowledgePermissionService语义，不改当前权限运行时。两个API DI分别调用此application工厂，v1保持原注入permission实例，v2把返回metadata_service传原KnowledgeService；不跨模块import API，不复制业务桥接，也不在Domain反向import application。T741真实双router/DI红测应先暴露v2未注入事实，再检验两端SPACE均通过同TX schema+J1且原v2 principal/data=True保留。
+
+
+§27详情URL与Breadcrumb词条补充（已冻结）：维持现`/filelib/:id`，可选`?parent_id=<positive safe decimal integer>`表示当前目录；无该参数才是根。新query键不是授权证明，只定位真实后端parent；存在但为空、重复、非法格式、非正数或超safe integer时页面明确无效且不请求root/children，不静默退回根。点击folder或真实breadcrumb仅设置/删除parent_id，保fileStatus及其他原query；切目录沿真实完整scope重新读，不能复活旧行。直达合法子目录只读实际breadcrumb/children，不以root info或root.visible作前置；root info错误不阻止独立目录结果。Header新增可选受控title/description，空字符串仍受控，不以window/storage补SPACE权威；未提供props的原QA分支保兼容。
+
+复用当前@bisheng/ui Breadcrumb折叠能力，ariaLabel用现f118.current_folder；新增唯一键f118.expand_folders（须保{{count}}），中文“展开省略的 {{count}} 层目录”、英文“Show {{count}} hidden folder levels”、日文“省略された {{count}} 階層のフォルダーを表示”。locale由INT独写，T767中英/T768日文，原所有key/value不变；不新建UI组件或设计风格。
