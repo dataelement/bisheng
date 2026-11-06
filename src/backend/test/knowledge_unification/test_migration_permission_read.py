@@ -14,7 +14,7 @@ from bisheng.common.errcode.permission import PermissionMigrationBlockedError
 from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.context.tenant import bypass_tenant_filter, management_tenant_scope
 from bisheng.core.openfga.client import FGAClient
-from bisheng.core.openfga.discovery import OpenFGARuntimePin
+from bisheng.core.openfga.discovery import OpenFGARuntimePin, discover_openfga_runtime
 from bisheng.permission.migration.f118_plan import (
     AuthorizationPinBaseline,
     CatalogReleaseBaseline,
@@ -180,3 +180,49 @@ async def test_actual_fga_stream_parser_consumes_2000_or_rejects_the_entire_resu
     assert len(requests) == 1
     assert requests[0].url.path == "/stores/source-store/streamed-list-objects"
     assert client._http.is_closed
+
+
+async def test_boolean_ambient_tenant_is_not_the_root_tenant(module, setup, monkeypatch):
+    monkeypatch.setattr(module, "get_current_tenant_id", lambda: True)
+    async with AsyncSession() as session, session.begin(), reader(module, setup) as instance:
+        with pytest.raises(PermissionMigrationBlockedError):
+            await instance.aget_shared_server_ids(session, 1)
+
+
+async def test_actual_discovery_keeps_the_original_model_when_a_newer_model_exists(module, setup):
+    from bisheng.core.openfga.authorization_model_f048 import (
+        authorization_model_checksum,
+        build_authorization_model_f048,
+    )
+
+    model = build_authorization_model_f048()
+    setup.catalog = replace(
+        setup.catalog,
+        authorization=replace(setup.catalog.authorization, model_checksum=authorization_model_checksum(model)),
+    )
+    seen = []
+
+    def transport(request):
+        assert request.method == "GET"
+        seen.append(request.url.path)
+        if request.url.path == "/stores":
+            payload = {"stores": [{"id": "source-store", "name": "bisheng"}]}
+        elif request.url.path == "/stores/source-store/authorization-models":
+            payload = {"authorization_models": [{"id": "source-model"}, {"id": "zz-new-model"}]}
+        elif request.url.path == "/stores/source-store/authorization-models/source-model":
+            payload = {"authorization_model": model}
+        else:
+            pytest.fail(f"unplanned discovery read: {request.url.path}")
+        return httpx.Response(200, json=payload)
+
+    async with httpx.AsyncClient(base_url="http://offline", transport=httpx.MockTransport(transport)) as http:
+
+        async def actual_discovery(config, **kwargs):
+            return await discover_openfga_runtime(config, http_client=http, **kwargs)
+
+        setup.discovery = actual_discovery
+        async with reader(module, setup):
+            pass
+    assert len(seen) == 3
+    assert seen[-1].endswith("/source-model")
+    setup.client.close.assert_awaited_once()
