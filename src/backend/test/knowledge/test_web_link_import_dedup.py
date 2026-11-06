@@ -54,10 +54,10 @@ async def test_import_web_link_skips_content_dedup_for_placeholder_markdown() ->
     )
 
     with (
-            patch.object(service, "_require_action", new=AsyncMock()),
+        patch.object(service, "_require_action", new=AsyncMock()),
         patch(
             f"{_KS}.KnowledgeDao.aquery_by_id",
-            new=AsyncMock(return_value=SimpleNamespace(tenant_id=1)),
+            new=AsyncMock(return_value=SimpleNamespace(tenant_id=1, state=1, model_transition=None)),
         ),
         patch.object(service, "_ensure_space_async_task_tenant_consistency"),
         patch(
@@ -92,10 +92,10 @@ async def test_import_web_link_still_blocks_real_duplicate_content() -> None:
     )
 
     with (
-            patch.object(service, "_require_action", new=AsyncMock()),
+        patch.object(service, "_require_action", new=AsyncMock()),
         patch(
             f"{_KS}.KnowledgeDao.aquery_by_id",
-            new=AsyncMock(return_value=SimpleNamespace(tenant_id=1)),
+            new=AsyncMock(return_value=SimpleNamespace(tenant_id=1, state=1, model_transition=None)),
         ),
         patch.object(service, "_ensure_space_async_task_tenant_consistency"),
         patch(
@@ -131,10 +131,10 @@ async def test_import_web_link_preserves_name_only_duplicate_error() -> None:
     )
 
     with (
-            patch.object(service, "_require_action", new=AsyncMock()),
+        patch.object(service, "_require_action", new=AsyncMock()),
         patch(
             f"{_KS}.KnowledgeDao.aquery_by_id",
-            new=AsyncMock(return_value=SimpleNamespace(tenant_id=1)),
+            new=AsyncMock(return_value=SimpleNamespace(tenant_id=1, state=1, model_transition=None)),
         ),
         patch.object(service, "_ensure_space_async_task_tenant_consistency"),
         patch(

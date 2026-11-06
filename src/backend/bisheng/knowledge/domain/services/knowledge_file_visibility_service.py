@@ -21,6 +21,8 @@ from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.common.errcode.permission import InvalidCatalogActionError
 from bisheng.core.config.settings import KnowledgeQAFilterConf
 from bisheng.core.database import get_async_db_session
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState, KnowledgeTypeEnum
+from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_processing_idle
 from bisheng.permission.application.access import get_f048_resource_adapter
 from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
@@ -151,6 +153,7 @@ class KnowledgeFileVisibilityService:
             candidates &= {int(x) for x in candidate_file_ids}
 
         scoped = await self._batch_visible_file_ids(space_id, candidates)
+        await self._require_retrieval_processing_idle(space_id, has_visible_files=bool(scoped))
 
         if not scoped:
             return IndexFilter(strategy="empty", accessible_size=0)
@@ -291,6 +294,7 @@ class KnowledgeFileVisibilityService:
         boundary for IN, NOT-IN, and unfiltered retrieval strategies.
         """
         visible_ids = await self.post_filter_visible_files(space_id, file_ids)
+        await self._require_retrieval_processing_idle(space_id, has_visible_files=bool(visible_ids))
         if not visible_ids:
             return set()
         successful_ids = await self._successful_file_ids(space_id, visible_ids)
@@ -299,6 +303,19 @@ class KnowledgeFileVisibilityService:
     # ------------------------------------------------------------------
     # Internal helpers (patched by tests via monkeypatch)
     # ------------------------------------------------------------------
+
+    async def _require_retrieval_processing_idle(self, space_id: int, *, has_visible_files: bool) -> None:
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if (
+            space is None
+            or space.type != KnowledgeTypeEnum.SPACE.value
+            or (space.state != KnowledgeState.REBUILDING.value and space.model_transition is None)
+        ):
+            return
+        # An independently visible child already proves the original retrieval
+        # qualification. Only an empty file scope needs the existing space gate.
+        if has_visible_files or await self.is_space_visible(space_id):
+            require_space_processing_idle(space, operation="retrieval")
 
     async def _list_primary_file_ids_in_space(
         self,

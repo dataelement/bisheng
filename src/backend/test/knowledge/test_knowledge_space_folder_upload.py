@@ -62,7 +62,7 @@ def fake_dao():
 
 @pytest.fixture(autouse=True)
 def _patch_module(fake_dao):
-    space = MagicMock(id=5, tenant_id=1)
+    space = MagicMock(id=5, tenant_id=1, state=1, model_transition=None)
     with (
         patch(f"{_SVC}.KnowledgeDao.aquery_by_id", new=AsyncMock(return_value=space)),
         patch(f"{_SVC}.KnowledgeDao.async_update_knowledge_update_time_by_id", new=AsyncMock()),

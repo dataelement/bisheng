@@ -118,6 +118,7 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgeContainerPermissionRecord,
     KnowledgeFilePermissionRecord,
 )
+from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_processing_idle
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_chat_history_retention_service import (
     build_knowledge_chat_flows,
@@ -3742,6 +3743,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not db_knowledge:
             raise SpaceNotFoundError()
         self._ensure_space_async_task_tenant_consistency(db_knowledge, "import_web_link")
+        require_space_processing_idle(db_knowledge, operation="import_web_link")
 
         level = 0
         file_level_path = ""
@@ -4005,6 +4007,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not db_knowledge:
             raise SpaceFolderNotFoundError()
         self._ensure_space_async_task_tenant_consistency(db_knowledge, "upload_file")
+        require_space_processing_idle(db_knowledge, operation="upload_file")
 
         level = 0
         file_level_path = ""
@@ -4195,6 +4198,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not db_knowledge:
             raise SpaceNotFoundError()
         self._ensure_space_async_task_tenant_consistency(db_knowledge, "upload_file")
+        require_space_processing_idle(db_knowledge, operation="upload_folder_items")
 
         base_path = ""
         base_child_level = 0
@@ -4569,6 +4573,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
             if invalid and not skip_invalid:
                 return {"moved": [], "invalid": invalid}
+
+            if valid:
+                if source_space is not None:
+                    require_space_processing_idle(source_space, operation="move_out")
+                require_space_processing_idle(target_space, operation="move_in")
 
             # ── execute valid items ──
             moved: list[dict] = []
