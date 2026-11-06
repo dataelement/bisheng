@@ -368,7 +368,8 @@ class UnificationInventoryRepository:
         return await self._page(session, LLMModel, CatalogModel, after_id, limit, int, statement=query, check=check)
 
     async def avalidate_global_orphans(self, session) -> None:
-        tenant = _scope(session)
+        """One global existence check per run, outside the tenant loop."""
+        _scope(session)
         # These two child tables have no tenant column. A missing parent has
         # no trustworthy owner at all; only its existence is read globally.
         for child, parent_model, foreign_key in (
@@ -379,6 +380,10 @@ class UnificationInventoryRepository:
             query = select(child.id).outerjoin(parent, parent.c.id == foreign_key).where(parent.c.id.is_(None)).limit(1)
             if await self._read(session, query):
                 _blocked("unowned_child_found")
+
+    async def avalidate_tenant_orphans(self, session) -> None:
+        """One current-tenant existence check; no prior clean result is cached."""
+        tenant = _scope(session)
         # Unlike the children above, AssistantLink has a real isolation key.
         # Inspect it once per tenant, including children no valid root batch
         # could enumerate. Never repeat this scan for each root or child page.
