@@ -25,12 +25,19 @@ def codec():
 
 
 def encode(codec, records=(), **changes):
-    args = dict(run_id=RUN, section="resources", scope="tenant", tenant_id=101, page_index=0, records=records)
+    args = {
+        "run_id": RUN,
+        "section": "resources",
+        "scope": "tenant",
+        "tenant_id": 101,
+        "page_index": 0,
+        "records": records,
+    }
     return codec.encode_inventory_page(**(args | changes))
 
 
 def decode(codec, content, **changes):
-    args = dict(run_id=RUN, section="resources", scope="tenant", tenant_id=101, page_index=0)
+    args = {"run_id": RUN, "section": "resources", "scope": "tenant", "tenant_id": 101, "page_index": 0}
     return codec.decode_inventory_page(content, **(args | changes))
 
 
@@ -94,16 +101,16 @@ def object_fact(codec, **changes):
     return codec.record_from_values(
         "physical_object",
         **(
-            dict(
-                tenant_id=101,
-                space_id=9000,
-                file_id=1,
-                object_kind="original",
-                object_key="private/object-key",
-                exists=True,
-                size=8,
-                etag="etag-is-not-sha",
-            )
+            {
+                "tenant_id": 101,
+                "space_id": 9000,
+                "file_id": 1,
+                "object_kind": "original",
+                "object_key": "private/object-key",
+                "exists": True,
+                "size": 8,
+                "etag": "etag-is-not-sha",
+            }
             | changes
         ),
     )
@@ -187,9 +194,14 @@ def test_canonical_header_counter_extra_keys_and_duplicate_keys_are_rejected(cod
     good = encode(codec, (object_fact(codec),))
     envelope = json.loads(good)
     assert len(envelope["records"]) == 2
-    assert envelope["records"][0] == dict(
-        record_type="page", section="resources", scope="tenant", tenant_id=101, page_index=0, record_count=1
-    )
+    assert envelope["records"][0] == {
+        "record_type": "page",
+        "section": "resources",
+        "scope": "tenant",
+        "tenant_id": 101,
+        "page_index": 0,
+        "record_count": 1,
+    }
     for name, value in (("record_count", True), ("record_count", 2), ("tenant_id", 202), ("scope", "global")):
         bad = json.loads(good)
         bad["records"][0][name] = value
