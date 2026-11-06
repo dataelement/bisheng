@@ -21,8 +21,12 @@ from bisheng.knowledge.domain.schemas.processing_job import ResourceVersionTarge
 
 
 @pytest.fixture
-async def plans(tenant_context):
+def plan_tenant(tenant_context):
     tenant_context(101)
+
+
+@pytest.fixture
+async def plans(plan_tenant):
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
     async with engine.begin() as connection:
         await connection.run_sync(
