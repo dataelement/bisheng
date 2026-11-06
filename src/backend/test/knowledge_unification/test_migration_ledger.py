@@ -128,6 +128,37 @@ async def test_schema_precheck_does_not_autoflush_the_callers_pending_writes(rep
         assert pending.tenant_id is None
 
 
+async def test_read_does_not_autoflush_the_callers_pending_writes(repo, ledger):
+    async with AsyncSession(ledger) as session:
+        pending = KnowledgeUnificationRun(run_id="pending-owner-write", writer_contract_version="caller-owner-v1")
+        session.add(pending)
+        flushes = []
+        event.listen(session.sync_session, "before_flush", lambda *args: flushes.append(True))
+        assert await repo.aget(session, **IDENTITY) is None
+        assert pending in session.new and pending.tenant_id is None and flushes == []
+
+
+async def test_rejected_hash_does_not_flush_until_a_valid_mutation_explicitly_flushes(repo, ledger):
+    async with AsyncSession(ledger, expire_on_commit=False) as session:
+        await freeze(repo, session)
+        await session.commit()
+        pending = KnowledgeUnificationRun(run_id="pending-owner-write", writer_contract_version="caller-owner-v1")
+        session.add(pending)
+        flushes = []
+        event.listen(session.sync_session, "before_flush", lambda *args: flushes.append(True))
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await repo.aadvance(
+                session,
+                **IDENTITY,
+                **dict(HASHES, baseline_hash="f" * 64),
+                expected_phase="baseline_frozen",
+                next_phase="converting",
+            )
+        assert pending in session.new and pending.tenant_id is None and flushes == []
+        await repo.aadvance(session, **IDENTITY, **HASHES, expected_phase="baseline_frozen", next_phase="converting")
+        assert pending not in session.new and pending.tenant_id == 101 and flushes == [True]
+
+
 async def test_freeze_is_immutable_idempotent_and_consumable_by_the_actual_legacy_reader(repo, ledger):
     async with AsyncSession(ledger) as session:
         row = await freeze(repo, session)
