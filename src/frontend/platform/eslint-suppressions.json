@@ -1959,12 +1959,6 @@
     }
   },
   "src/pages/KnowledgePage/components/Files.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 5
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
