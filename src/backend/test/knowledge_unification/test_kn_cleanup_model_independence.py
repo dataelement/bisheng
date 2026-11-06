@@ -7,6 +7,7 @@ Real Knowledge/delete-job SQL; external vector transports are doubles.
 import asyncio
 from contextlib import contextmanager
 from datetime import timedelta
+from types import SimpleNamespace
 
 import pytest
 import sqlalchemy as sa
@@ -18,6 +19,7 @@ from bisheng.knowledge.domain import knowledge_rag as module
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob, deletion_now
+from bisheng.knowledge.domain.services.knowledge_space_direct_delete_service import KnowledgeSpaceDirectDeleteService
 from bisheng.llm.domain.models.llm_server import LLMModel
 from test.knowledge_unification import test_kn_rag_model_admission as fixtures
 
@@ -137,3 +139,44 @@ async def test_arbitrary_current_resource_index_override_is_rejected(cleanup):
     with pytest.raises(ResourceReferenceInvalidError):
         await asyncio.to_thread(KnowledgeRag.init_knowledge_milvus_cleanup_sync, knowledge=actual)
     module.MilvusFactory.init_vectorstore.assert_not_called()
+
+
+@pytest.mark.parametrize("step", ["es", "milvus"])
+@pytest.mark.parametrize("deleted_model", [False, True])
+async def test_actual_purge_step_keeps_new_index_data_and_cleans_frozen_old_target(cleanup, step, deleted_model):
+    context, _, _, job = cleanup
+    if deleted_model:
+        async with context.sessions() as session, session.begin():
+            await session.execute(sa.delete(LLMModel).where(LLMModel.id == 11, LLMModel.tenant_id == 101))
+    collections = {"actual_collection": {1}, "historical_collection": {1}}
+    indices = {"actual_index": {1}, "historical_index": {1}}
+
+    class Collection:
+        def __init__(self, name):
+            self.name = name
+
+        def delete(self, **kwargs):
+            collections[self.name].clear()
+
+        def flush(self):
+            return None
+
+        def query(self, **kwargs):
+            return [{"count(*)": len(collections[self.name])}]
+
+    class Client:
+        indices = SimpleNamespace(exists=lambda **kwargs: True, refresh=lambda **kwargs: None)
+
+        def delete_by_query(self, *, index, **kwargs):
+            indices[index].clear()
+            return {"failures": []}
+
+        def count(self, *, index, **kwargs):
+            return {"count": len(indices[index])}
+
+    module.MilvusFactory.init_vectorstore.side_effect = lambda name, embedding: SimpleNamespace(col=Collection(name))
+    module.ElasticsearchFactory.init_vectorstore_sync.side_effect = lambda name: SimpleNamespace(client=Client())
+    await KnowledgeSpaceDirectDeleteService()._purge_step(step, job)
+    assert collections["actual_collection"] == {1} and indices["actual_index"] == {1}
+    assert not (collections["historical_collection"] if step == "milvus" else indices["historical_index"])
+    module.LLMService.get_bisheng_knowledge_embedding_sync.assert_not_called()
