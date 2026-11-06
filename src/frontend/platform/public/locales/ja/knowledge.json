@@ -443,5 +443,21 @@
     "addPlaceholder": "タグを入力して Enter キーで保存",
     "existingTags": "既存のタグ",
     "emptyTags": "タグはありません"
+  },
+  "f118": {
+    "defaults_title": "解析・分割の既定設定",
+    "documents": "一般文書",
+    "future_uploads_only": "変更は今後のアップロードに適用されます。既存ファイルは再処理されません。",
+    "header_end": "ヘッダー終了行",
+    "header_start": "ヘッダー開始行",
+    "integer_at_least": "{{min}}以上の整数を入力してください",
+    "integer_between": "{{min}}から{{max}}までの整数を入力してください",
+    "invalid_defaults": "両方のルールの必須項目と値の範囲を確認してください。",
+    "move_down": "下に移動",
+    "move_up": "上に移動",
+    "pending_separator": "入力した区切りルールを追加するか、消去してください。",
+    "separator_pattern": "区切りルール{{index}}",
+    "separator_position": "ルール{{index}}の分割位置",
+    "tables": "表形式ファイル"
   }
 }
