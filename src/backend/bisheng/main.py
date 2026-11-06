@@ -149,23 +149,9 @@ async def lifespan(app: FastAPI):
                 await backfill_linsight_task_mode_web_menu()
             except Exception:
                 logger.exception("linsight task-mode menu backfill failed; continuing startup")
-            try:
-                from bisheng.llm.domain.services.linsight_default_model_backfill import (
-                    backfill_linsight_default_model,
-                )
-
-                await backfill_linsight_default_model()
-            except Exception:
-                logger.exception("linsight default-model backfill failed; continuing startup")
-            # Pre-3.0 workbench configs: daily-mode default = the last listed model
-            # (what the old client picked), and the listed models stay visible to
-            # every member once DSH visibility drives the picker.
-            try:
-                from bisheng.llm.domain.services.chat_default_model_backfill import backfill_chat_default_model
-
-                await backfill_chat_default_model()
-            except Exception:
-                logger.exception("chat default-model backfill failed; continuing startup")
+            # F118: legacy default JSON conversion is an offline upgrade step
+            # after service shutdown and formal baseline freeze. API startup
+            # must never change a source payload without its reference index.
             try:
                 from bisheng.dsh.domain.services.workbench_visibility_backfill import (
                     backfill_workbench_model_visibility,
