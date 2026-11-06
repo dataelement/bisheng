@@ -748,3 +748,20 @@ M3时间保留另有C2静态前置：DM当前managed updater会无条件覆盖up
 PROC独占T859860：原unification_inventory_codec.py的canonical/digest与其私有_invalid错误构造原样迁新knowledge/domain/services/unification_fingerprints.py，原codec显式同对象re-export（仍可供原lazy闭集读取），保所有成功字节与拒绝语义；仅两生产叶。不迁整record_from_row/权限映射，不再实现第二套json/hash，不改变MAX_BYTES或协议白名单。新单测试叶test_migration_fingerprints.py锁真实旧字节/异常、同对象、无App/Core/SQLAlchemy反向依赖，配原codec/plan与native M2选集。M3 Repo/Service后继只import Domain SSOT与现Domain Repository唯一列集，不反向导入App。此卡非M3转换。
 
 §49 KN实现载体补充：可用实际Knowledge ORM的SQLAlchemy load_only安全标量投影且raiseload其余字段，保持原loaded-target Loader接口，不复制其permission snapshot/context hash算法。该局部投影不加载model/config/description，不写入或创建假业务事实；原Session在当前批次使用，字段不可隐式重读。
+
+
+## 52. M3原生SQL转换组件 V1：已冻结
+
+PROC独占T861/862新domain/repositories/unification_conversion_repository.py及其新test_migration_conversion_repository.py；T863/864新domain/services/unification_conversion.py及其新test_migration_conversion_service.py。每实现单生产叶、新叶≤600；依赖§43精确M2命令、§48纯DTO/模板、§50可表示时间与§51 Domain canonical/digest。只实现可组合Domain，正式manifest消费App/全局Catalog-namespace/FGA/CLI另冻，不提前闭合原T163164、R2/Coverage或开放执行命令，不绕过待用户答复的AC-80选择。
+
+接口：Repo.alock_scope(session,*,run_id,writer_contract_version,baseline_hash,plan_hash,commands:tuple[ConversionCommand,...])->LockedConversionScope；aapply_and_read_after(session,*,scope)->tuple[ConversionOutcome,...]；aread_after(session,*,scope)为恢复复用同一写后核验。Service.aapply_batch(session,*,batch:VerifiedConversionBatch)->SQLConversionBatchResult；aget_progress(session,*,run_id,writer_contract_version,baseline_hash,plan_hash)->SQLConversionProgress纯读；averify_committed_page(session,*,batch)只读回算前缀。batch只由后继真实App校验冻结manifest membership/全页hash/当前cursor后经Domain私有issuer签发原对象，绑定同native Session、原TransactionIdentity、Run/hash/具体tenant、expected checkpoint/命令ordinal/EOF，registry一次消费，拒bare dict/伪造DTO/跨TX及篡改。单元fixture使用私有issuer不代表正式App已接线，不提供verified=True之类外部布尔绕过。
+
+每批最多200个现有五类命令（ResourceConversion/InitializeV1/TagConversion/TagLinkConversion/DefaultConversion），不跳过未知kind计完成。原current具体tenant、no_autoflush；锁Run converting及精确checkpoint→Knowledge PK→File PK→Doc→Version→Tag→TagLink→own default实际rowID，全部升序/去重且每SQL IDs≤200。坏version链先COUNT聚合查重，Root JSON仅本批ResourceCommand所需Root一次，不在每file重复；survivor联合IDs超200分批，不做File×Version/Source×slot笛卡尔积。现RunRepo只flush，调用方唯一commit/rollback；组件无Session工厂、DDL、FGA/存储/provider IO。出错传播，外层整个批次必须回滚；若错误被外层捕获，也不得将部分业务与游标当成功提交。
+
+唯一原行列集复用Domain原unification_resource_repository的RESOURCE_COLUMNS/NEUTRAL_COLUMNS/FILE_COLUMNS/DOCUMENT_COLUMNS/VERSION_COLUMNS/TAG_COLUMNS/LINK_COLUMNS及_values，不复制字段表；所有canonical/digest只§51 Domain SSOT，模板只§48同函数。Resource仅原type0→3、is_released=False、migration_origin=run，旧其余业务20/neutral7按冻结允许差异；File全列零UPDATE（包括time/state/source/chunk/metadata），QA1/type2及无命令原Space不改；仅实际无Version FILE补新Doc/V1及互指真实ID。Tag/Link仅§43已冻type9→8/精确重复删除，保其余列。Default仅own真实row/key，复用原llm Domain两个纯transform，保持其他四key/Root来源不变。所有UPDATE显式旧update_time，新V1两时间显式planned_at，flush后真正SQL标量重读，不信ORM旧缓存；任何trigger/时间或完整planned-after摘要不符失败。M3不对已冻微秒模板临时截断。
+
+after业务/neutral核全部实际SQL事实；新Doc/Version实际互指ID归一回已冻natural_key再核唯一模板hash，并将真实分配ID纳入瞬时Outcome摘要（仅command_key/operation/actual_after_digest/docID/versionID）。两个Source派生digest和Default REF digests/provenance保留命令、由后继App/M4真实SourceOwner/提取器复核，SQL不反向import App、不伪造AuthorizedSnapshot/引用完成。
+
+原Run converting.checkpoints键sql_conversion仅四字段；cursor为sql-v1:<已处理命令ordinal>:<末command_key>、processed_count为该tenant实际命令数、digest=前digest与本批命令/实际after/分配ID的闭集滚动hash，complete只已验frozen EOF。初值/编码/空EOF固定在单一service，不放Outcome全量JSON、不新表。锁内核原expected checkpoint，业务写后核验成功才同TX写新checkpoint；旧bare批重投拒，getter零写。恢复只启动时按≤200分页线性重核已提交prefix并累计同digest，后续新批不每次重扫prefix（禁N²）；实际ID漂移、半链/unknown commit须凭真实checkpoint与完整prefix证明，不猜已执行。SQL complete仅子步，不推进Run backfilling/ready。
+
+最小真实测试含0→3及其他type不变、真实自增与互指、半链/多版本/foreign拒、Tag survivor精确处理、File逐列快照、Default五key与继承、SQL触发器覆盖旧time后真实读回失败且外TX rollback；签发/跨TX/phase/hash/cursor/取消/外rollback、401/10001恢复线性预算、每查询ID上限。DM实库免测，使用SQLite触发器反例和MySQL/DM编译检查静态边界，真实MySQL/升级事务仍需后继环境证明。

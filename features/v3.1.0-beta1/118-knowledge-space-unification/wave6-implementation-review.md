@@ -224,3 +224,10 @@ PROC固定40f40e2cf、root消费者366df1bc经两个非作者分别复查后，�
 PROC51a15e81db的七DTO及纯模板已从App迁至Domain，App显式同对象重导出；作者八路径旧生产230绿+11缺模块→241绿；非作者不同八路径336绿，并逐一比较8定义及App剩余AST、全新进程验证Domain无反向依赖，无确认缺陷。主树合流后受测5ea9f9251cb89e2e104afc92f4be8e47e66e43ca，完整test/knowledge_unification除明确未收集TCP监听mock合同单模块 **3803 passed、55240 warnings、140.95秒**，无fail/skip。日志/JUnit /private/tmp/f118-root-native-broker-domain.log/.xml；与此前3640不同快照，不累计。T841842闭合，非M3执行或E2E证明。
 
 后继M3静态审计发现新V1 planned_at含微秒而MySQL原DateTime默认fsp0；§50只在M2计划生产处统一整秒，先测试后修复。现DM updater无条件覆盖旧update_time亦已核实，升级须业务TX外独立保存/禁用/恢复涉及的原updater状态，M3显式保时间并读回严格摘要；不改全局ORM、不把DM免实测解释为忽略C2。
+
+
+## 原生broker准备实测及纯指纹前置（2026-11-07）
+
+109独立项目实际broker读取已完成：候选5ea9f9251源码archive SHA256 e6d9dde5326f348d032d1ae99ab49b1e024b44814b45c7daebc51a1390893c5d，临时read-only容器从原worker筛选生效CELERY/BROKER配置、克隆MySQL范围3tenant；XDG缓存只tmpfs。实际Redis DB2，当时0 broker消息，SQL4条、Redis只SCAN2/SSCAN5/TYPE32，客户端owned关闭完成，三个账本表仍0。受控Redis execute白名单禁止队列写，原API启动时间2026-11-06T12:16:13.795554937Z未变，3005未操作。证据evidence/preparatory-native-broker.json SHA256 f86ca4a28cd1f19862c35708ebaa7e2216b80e03df8a8194171dde4ec9dc9433，无凭据脚本同目录。初次只读rootfs导入cache路径失败后仅修临时XDG位置，不计产品bug；没有把原API换成新版。这是准备端口证明，非正式M2/M3/升级恢复/E2E。
+
+T857新微秒时钟两行为红/整秒一首绿→T858六路径122绿，非作者原3加2边界绿：原业务微秒完整保留，frozen replay零新clock/ports调用，Domain模板仍原样。T859860三纯指纹函数原样Domain迁移，作者同19路径旧627绿+29缺模块error/2缺模块fail→新658绿；root AST核三定义完全相同、四路径139绿后正常merge。原codec闭集/成功字节/拒绝不改。主树ebf6148ae已合最终协议scope guard与WF、KN，十路径213绿；WF待真实Fence边界复核、KN待独立P2修正后再勾，不据组合绿掩盖。T843844/857858/859860按各自已验证范围闭合；六业务端口未全完、原111112及公开删除仍待办。
