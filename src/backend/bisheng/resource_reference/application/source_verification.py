@@ -11,6 +11,7 @@ from types import MappingProxyType
 from weakref import ReferenceType, WeakKeyDictionary, ref
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanConflictError,
@@ -150,7 +151,9 @@ class SourceReadVerifier:
         return await self._issue(session, request, identity, transient=True)
 
     async def _registration(self, session, scope, identity):
-        if not isinstance(scope, (SourceOwnerReadScope, TransientTargetReadScope)):
+        if not isinstance(session, AsyncSession) or not isinstance(
+            scope, (SourceOwnerReadScope, TransientTargetReadScope)
+        ):
             raise _invalid()
         registration = self._issued.get(scope)
         if (
@@ -265,3 +268,128 @@ class SourceReadVerifier:
 
     async def arevalidate_transient_scope(self, session, scope, identity):
         return await self._revalidate(session, scope, identity, transient=True)
+
+    def _identity_sync(self, identity):
+        tenant = _resolve_tenant_id()
+        if identity is None or is_tenant_filter_bypassed() or type(tenant) is not int or tenant <= 0:
+            raise _invalid()
+        capture = getattr(self._identity_port, "capture", None)
+        if not callable(capture):
+            raise ReferenceCoverageNotReadyError(reason="reference_native_identity_unconfigured")
+        facts = capture(identity)
+        if not isinstance(facts, ReadIdentityFacts) or facts.request_tenant_id != tenant:
+            raise _invalid()
+        return ReadIdentityFacts(tenant, deepcopy(facts.fingerprint))
+
+    def issue_scope(self, session, request, identity):
+        """Native saved-source authority; no asynchronous Session bridge."""
+        if not isinstance(session, Session) or not isinstance(request, SourceReadRequest):
+            raise _invalid()
+        facts = self._identity_sync(identity)
+        owner = self._owners.get(request.source_type)
+        resolve = getattr(owner, "resolve_source", None)
+        if not callable(resolve):
+            raise ReferenceCoverageNotReadyError(reason="reference_native_source_owner_unconfigured")
+        before = self._transaction(session) if session.get_transaction() is not None else None
+        with session.no_autoflush:
+            snapshot = resolve(session, request, identity)
+        self._source_result(request, snapshot)
+        transaction = self._transaction(session)
+        if before is not None:
+            try:
+                before.assert_current(session)
+            except (TypeError, ValueError) as exc:
+                raise _invalid() from exc
+        if self._identity_sync(identity) != facts:
+            raise _invalid()
+        scope = SourceOwnerReadScope(snapshot, request.purpose)
+        self._issued[scope] = _Registration(
+            owner, request, snapshot, identity, facts, transaction, scope._nonce, ref(scope)
+        )
+        return scope
+
+    def _registration_sync(self, session, scope, identity):
+        if not isinstance(session, Session) or not isinstance(scope, SourceOwnerReadScope):
+            raise _invalid()
+        registration = self._issued.get(scope)
+        if (
+            registration is None
+            or registration.scope_ref() is not scope
+            or registration.identity is not identity
+            or scope.snapshot is not registration.snapshot
+            or scope._nonce is not registration.nonce
+            or scope.purpose != registration.request.purpose
+        ):
+            raise _invalid()
+        try:
+            registration.transaction.assert_current(session)
+        except (TypeError, ValueError) as exc:
+            raise _invalid() from exc
+        if self._identity_sync(identity) != registration.facts:
+            raise _invalid()
+        return registration
+
+    def get_source_snapshot(self, session, scope, identity):
+        return self._registration_sync(session, scope, identity).snapshot
+
+    def assert_target_keys(self, session, scope, identity, target_keys, *, allowed_types):
+        registration = self._registration_sync(session, scope, identity)
+        types = {TargetType(kind) for kind in allowed_types}
+        expected = {value.target for value in registration.snapshot.references if value.target.target_type in types}
+        if (
+            not isinstance(target_keys, tuple)
+            or any(not isinstance(key, TargetKey) for key in target_keys)
+            or len(target_keys) != len(set(target_keys))
+            or set(target_keys) != expected
+        ):
+            raise _invalid("reference_read_target_plan_changed")
+        return registration.snapshot
+
+    def _inspect_targets(self, session, scope, identity):
+        registration = self._registration_sync(session, scope, identity)
+        registration.target_plan = None
+        if self._target_owners is None:
+            raise ReferenceCoverageNotReadyError(reason="reference_read_targets_unconfigured")
+        keys = tuple(
+            sorted({value.target for value in registration.snapshot.references}, key=lambda k: k.lock_order_key)
+        )
+        groups = []
+        for key in keys:
+            owner = self._target_owners.get(key.target_type)
+            if owner is None or not callable(getattr(owner, "inspect_source_targets", None)):
+                raise ReferenceCoverageNotReadyError(reason="reference_native_target_owner_unconfigured")
+            group = next((group for group in groups if group[0] is owner), None)
+            if group is None:
+                groups.append((owner, [key]))
+            else:
+                group[1].append(key)
+        facts = []
+        for owner, group in groups:
+            with session.no_autoflush:
+                result = owner.inspect_source_targets(session, scope, tuple(group), identity=identity)
+            if (
+                not isinstance(result, tuple)
+                or len(result) != len(group)
+                or any(not isinstance(fact, ReferenceTargetReadFact) for fact in result)
+                or {fact.key for fact in result} != set(group)
+            ):
+                raise _invalid("reference_read_target_owner_result_invalid")
+            self._registration_sync(session, scope, identity)
+            facts.extend(result)
+        registration.target_plan = tuple(sorted(facts, key=lambda fact: fact.key.lock_order_key))
+        return registration.target_plan
+
+    def revalidate_scope(self, session, scope, identity):
+        registration = self._registration_sync(session, scope, identity)
+        if registration.target_plan is None:
+            raise _invalid("reference_read_target_plan_required")
+        registration.target_plan = None
+        revalidate = getattr(registration.owner, "revalidate_source", None)
+        if not callable(revalidate):
+            raise ReferenceCoverageNotReadyError(reason="reference_native_source_owner_unconfigured")
+        with session.no_autoflush:
+            current = revalidate(session, registration.request, identity, registration.snapshot)
+        self._registration_sync(session, scope, identity)
+        if current != registration.snapshot:
+            raise KnowledgeOperationPlanConflictError(reason="reference_read_source_changed")
+        return registration.snapshot
