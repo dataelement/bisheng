@@ -173,13 +173,88 @@ class F048PermissionRuntime:
             )
             if action != _CREATOR_DELETE_ACTION or actor.subject_type != "service_account" or all(results):
                 return results
-            return tuple(
-                [
-                    allowed or await self._creator_grant_allows_delete(actor, target, action)
-                    for target, allowed in zip(targets, results, strict=True)
-                ]
-            )
+            return await self._creator_delete_batch(actor, targets, results)
         return await self._decision.batch_check_visible(actor, targets)
+
+    async def _creator_delete_batch(
+        self,
+        actor: PermissionActor,
+        targets: tuple[VerifiedPermissionTarget, ...],
+        results: tuple[bool, ...],
+    ) -> tuple[bool, ...]:
+        remaining = [
+            (index, target)
+            for index, (target, allowed) in enumerate(zip(targets, results, strict=True))
+            if not allowed and target.tenant_id == actor.tenant_id
+        ]
+        if not remaining:
+            return results
+        resolved = list(results)
+        try:
+            catalog = await self._runtime_catalog()
+            models = tuple(
+                item.snapshot
+                for item in catalog.models
+                if item.snapshot.model_key == _CREATOR_DELETE_MODEL_KEY and item.snapshot.active
+            )
+            if not models:
+                return tuple(resolved)
+            snapshots = await self._state.permission_snapshots(
+                tuple(
+                    dict.fromkeys(
+                        (target.tenant_id, target.resource_type, target.resource_id) for _, target in remaining
+                    )
+                )
+            )
+            eligible = []
+            for index, target in remaining:
+                mode = snapshots.get((target.tenant_id, target.resource_type, target.resource_id))
+                if mode is None or (
+                    mode.version != target.resource_version
+                    or mode.parent_type != target.parent_type
+                    or mode.parent_id != target.parent_id
+                    or mode.projection_state != "CURRENT"
+                ):
+                    continue
+                if mode.mode == "INHERIT":
+                    # Only the actual mode chooses the original ancestor path;
+                    # CUSTOM files can also have a verified parent.
+                    resolved[index] = await self._creator_grant_allows_delete(actor, target, _CREATOR_DELETE_ACTION)
+                elif mode.mode == "CUSTOM":
+                    eligible.append((index, target))
+            roster_targets = {}
+            for _, target in eligible:
+                roster_targets.setdefault((target.tenant_id, target.resource_type, target.resource_id), target)
+            grants = await self._state.load_grants_batch(targets=tuple(roster_targets.values()), models=models)
+        except PermissionPublishNotReadyError:
+            return tuple(resolved)
+        allowed_keys = {
+            key
+            for key, roster in grants.items()
+            if any(
+                grant.active
+                and grant.model.active
+                and grant.model.model_key == _CREATOR_DELETE_MODEL_KEY
+                and source.active
+                and source.source_type == "CREATOR_GRANT"
+                and source.subject_type == "service_account"
+                and source.subject_id == str(actor.subject_id)
+                and source.userset_relation is None
+                for grant in roster
+                for source in grant.sources
+            )
+        }
+        for index, target in eligible:
+            if (target.tenant_id, target.resource_type, target.resource_id) in allowed_keys:
+                resolved[index] = True
+                logger.info(
+                    "F048 creator delete allowed subject=service_account:{} target={}:{} tenant={}",
+                    str(actor.subject_id),
+                    target.resource_type,
+                    target.resource_id,
+                    target.tenant_id,
+                )
+        return tuple(resolved)
 
     async def _creator_grant_allows_delete(
         self,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import secrets
 from dataclasses import dataclass, replace
 
-from sqlalchemy import update
+from sqlalchemy import and_, or_, update
 from sqlmodel import col, select
 
 from bisheng.common.errcode.permission import (
@@ -13,7 +13,7 @@ from bisheng.common.errcode.permission import (
     PermissionPublishNotReadyError,
     PermissionVersionConflictError,
 )
-from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
+from bisheng.core.context.tenant import is_tenant_filter_bypassed, strict_tenant_filter, tenant_execution_scope
 from bisheng.core.database import get_async_db_session
 from bisheng.permission.application.catalog_api import SqlCatalogState
 from bisheng.permission.application.sql_runtime import (
@@ -365,6 +365,107 @@ class SqlPermissionControlState:
                 projection_state=row.projection_state,
             )
         return snapshots
+
+    async def load_grants_batch(
+        self,
+        *,
+        targets: tuple[VerifiedPermissionTarget, ...],
+        models: tuple[GrantModelSnapshot, ...],
+    ) -> dict[tuple[int, str, str], tuple[GrantSnapshot, ...]]:
+        """Read exact verified scopes without multiplying target/model/source rows."""
+        if (
+            type(targets) is not tuple
+            or len(targets) > 200
+            or any(not isinstance(target, VerifiedPermissionTarget) for target in targets)
+        ):
+            raise ValueError("Grant batches require at most 200 verified targets")
+        keys = tuple(dict.fromkeys((target.tenant_id, target.resource_type, target.resource_id) for target in targets))
+        result = dict.fromkeys(keys, ())
+        if not keys:
+            return result
+        if is_tenant_filter_bypassed():
+            raise PermissionPublishNotReadyError(msg="Grant batch requires the original tenant scope")
+        by_model = {model.model_key: model for model in models}
+        if not by_model:
+            return result
+        predicates = tuple(
+            and_(
+                PermissionGrant.tenant_id == tenant,
+                PermissionGrant.resource_type == resource_type,
+                PermissionGrant.resource_id == resource_id,
+            )
+            for tenant, resource_type, resource_id in keys
+        )
+        async with get_async_db_session() as session:
+            with session.no_autoflush, strict_tenant_filter():
+                rows = list(
+                    (
+                        await session.execute(
+                            select(PermissionGrant)
+                            .where(or_(*predicates), col(PermissionGrant.model_key).in_(tuple(by_model)))
+                            .order_by(PermissionGrant.id)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                if any(
+                    (int(row.tenant_id), row.resource_type, row.resource_id) not in result
+                    or row.model_key not in by_model
+                    for row in rows
+                ):
+                    raise PermissionPublishNotReadyError(msg="Grant rows do not match their exact verified scopes")
+                grant_ids = tuple(dict.fromkeys(int(row.id) for row in rows))
+                sources: dict[int, list[GrantSourceRecord]] = {}
+                for offset in range(0, len(grant_ids), 200):
+                    query = (
+                        select(PermissionGrantAssignee)
+                        .where(
+                            col(PermissionGrantAssignee.grant_id).in_(grant_ids[offset : offset + 200]),
+                            PermissionGrantAssignee.state == "ACTIVE",
+                        )
+                        .order_by(PermissionGrantAssignee.id)
+                        .limit(200)
+                    )
+                    after = None
+                    while True:
+                        assignees = (
+                            (
+                                await session.execute(
+                                    query if after is None else query.where(PermissionGrantAssignee.id > after)
+                                )
+                            )
+                            .scalars()
+                            .all()
+                        )
+                        for source in assignees:
+                            sources.setdefault(int(source.grant_id), []).append(self._source_snapshot(source))
+                        if len(assignees) < 200:
+                            break
+                        after = int(assignees[-1].id)
+        grouped: dict[tuple[int, str, str], list[GrantSnapshot]] = {}
+        for row in rows:
+            key = (int(row.tenant_id), row.resource_type, row.resource_id)
+            roster = tuple(sources.get(int(row.id), ()))
+            grouped.setdefault(key, []).append(
+                GrantSnapshot(
+                    grant_id=stable_grant_key(
+                        tenant_id=key[0],
+                        resource_type=key[1],
+                        resource_id=key[2],
+                        model_key=row.model_key,
+                    ),
+                    tenant_id=key[0],
+                    resource_type=key[1],
+                    resource_id=key[2],
+                    model=by_model[row.model_key],
+                    active=row.state == "ACTIVE" and bool(roster),
+                    version=row.version,
+                    sources=roster,
+                )
+            )
+        result.update((key, tuple(values)) for key, values in grouped.items())
+        return result
 
     async def load_grants(
         self,
