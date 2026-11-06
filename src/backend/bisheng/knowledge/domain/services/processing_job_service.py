@@ -55,12 +55,24 @@ class ProcessingJobService:
             raise KnowledgeProcessingConflictError(reason="processing_kind_unavailable")
 
     @staticmethod
+    def require_rebuild_scope_ready(scope):
+        if any(row.status in {1, 4, 5} for row in scope):
+            raise KnowledgeProcessingConflictError(reason="processing_file_state_not_ready")
+
+    @staticmethod
     async def _authorize(identity, space_id):
         await require_business_action(identity, resource_type="knowledge_space", resource_id=space_id, action="edit")
 
     @staticmethod
     def _versions(preview, scope):
-        targets = {f"{row.target.file_id}:{row.target.version_id}": row.revision for row in scope}
+        targets = {
+            f"{row.target.file_id}:{row.target.version_id}": {
+                "revision": row.revision,
+                "original_status": row.status,
+                "participates": row.status == 2,
+            }
+            for row in scope
+        }
         targets["models"] = {
             f"{item.target.key.target_type.value}:{item.target.key.target_id}": item.target.target_revision
             for item in preview.bindings.verified.context.receipts
@@ -83,7 +95,10 @@ class ProcessingJobService:
         parameters = request.parameters.model_dump(mode="json")
         preview = await self.owner.apreview(session, space_id, identity=identity, parameters=parameters)
         scope = await self.scope.aload_scope(session, space_id)
+        self.require_rebuild_scope_ready(scope)
         targets, source = self._versions(preview, scope)
+        participants = tuple(row for row in scope if row.status == 2)
+        skipped_count = len(scope) - len(participants)
         plan = await self.plans.acreate(
             session,
             operation=request.kind,
@@ -93,12 +108,24 @@ class ProcessingJobService:
             target_revisions=targets,
             source_revisions=source,
             parameters=parameters,
-            impact={"whole_version_count": len(scope), "retrieval_paused": True, "preserves_chunks": True},
+            impact={
+                "whole_version_count": len(scope),
+                "participating_version_count": len(participants),
+                "skipped_version_count": skipped_count,
+                "retrieval_paused": True,
+                "preserves_chunks": True,
+            },
             expires_at=self.plans.clock() + timedelta(minutes=5),
         )
         # A whole-space command confirms its container/count. Hidden file IDs
         # and names remain only in the private persisted target manifest.
-        return plan.model_copy(update={"valid_items": [OperationItem(id=space_id, type="space")] if scope else []})
+        return plan.model_copy(
+            update={
+                "can_execute": bool(participants),
+                "valid_items": [OperationItem(id=space_id, type="space")] if participants else [],
+                "requires_skip_confirmation": bool(skipped_count),
+            }
+        )
 
     @staticmethod
     def _accepted(result):
@@ -137,6 +164,7 @@ class ProcessingJobService:
             raise KnowledgeOperationConfirmationRequiredError()
         preview = await self.owner.apreview(session, space_id, identity=identity, parameters=plan.parameters)
         scope = await self.scope.aload_scope(session, space_id, for_update=True)
+        self.require_rebuild_scope_ready(scope)
         targets, source = self._versions(preview, scope)
         if (
             targets != plan.target_revisions
@@ -144,6 +172,9 @@ class ProcessingJobService:
             or [row.target.model_dump(mode="json") for row in scope] != plan.target_manifest
         ):
             raise KnowledgeOperationPlanChangedError()
+        participants = tuple(row for row in scope if row.status == 2)
+        if not participants:
+            raise KnowledgeOperationConfirmationRequiredError()
         actual = await self.owner.aprepare(
             session,
             space_id,
@@ -172,9 +203,9 @@ class ProcessingJobService:
                     target=row.target,
                     expected_space_id=space_id,
                     expected_parent_id=row.parent_id,
-                    processing_snapshot={"mode": "existing_chunks"},
+                    processing_snapshot={"mode": "existing_chunks", "original_status": 2},
                 )
-                for row in scope
+                for row in participants
             ],
         )
         await self.plans.aconsume(session, plan.id, operation_id=result.job.id, expected_digest=plan.plan_digest)
