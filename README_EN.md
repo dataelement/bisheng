@@ -102,6 +102,7 @@ BISHENG is an **open-source, all-in-one enterprise Agent platform** focused on o
 
 7. **🏢 Enterprise-grade features: the controls that enterprise AI needs**
 
+   - **Central desktop client management**: Administrators centrally configure the models, skills, API/MCP tools and knowledge spaces available in the client, granting employees access according to enterprise configuration and resource permissions. The enterprise plugin marketplace distributes plugins and workbenches, while monthly credits, call usage and audit records are managed centrally.
    - **Department and user management**: Maintain the organization structure, users and quotas.
    - **Separate feature and resource permissions**: RBAC roles control feature menus and actions. ReBAC controls access to knowledge spaces, folders and individual files, with grants to individuals, departments (including sub-departments) or user groups. Folders and files inherit parent permissions by default and can also be configured independently.
    - **Approvals**: Joining a knowledge space, subscribing to a channel, requesting menu permissions and other actions can require approval. You can customize approval flows and nodes.
