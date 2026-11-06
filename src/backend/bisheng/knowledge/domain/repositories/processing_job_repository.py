@@ -9,14 +9,17 @@ rendering the corresponding error, rather than roll it back by raising early.
 
 import hashlib
 import json
+import re
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from inspect import ismethod
 from typing import Any
 from uuid import uuid4
+from weakref import WeakKeyDictionary
 
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func, inspect, or_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -38,12 +41,15 @@ from bisheng.knowledge.domain.models.knowledge_processing_retry import Knowledge
 from bisheng.knowledge.domain.repositories.model_reference_repository import KnowledgeModelReferenceRepository
 from bisheng.knowledge.domain.schemas.processing_job import ItemState, JobState, ProcessingKind, ResourceVersionTarget
 from bisheng.knowledge.domain.services.processing_cutover_receipts import consume_cutover_receipt
+from bisheng.resource_reference.application.contracts import TransactionIdentity
 
 
 @dataclass(frozen=True)
 class ProcessingConfiguration:
     model_config_revision: int
     index_generation: str | None
+    metadata_schema_revision: int | None = None
+    metadata_schema_digest: str | None = None
 
     def __post_init__(self):
         if type(self.model_config_revision) is not int or self.model_config_revision < 0:
@@ -52,6 +58,15 @@ class ProcessingConfiguration:
             not isinstance(self.index_generation, str) or not self.index_generation or len(self.index_generation) > 64
         ):
             raise ValueError("index_generation must be a nonempty stable identifier")
+        if self.metadata_schema_revision is None and self.metadata_schema_digest is None:
+            return
+        if (
+            type(self.metadata_schema_revision) is not int
+            or self.metadata_schema_revision < 0
+            or not isinstance(self.metadata_schema_digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", self.metadata_schema_digest) is None
+        ):
+            raise ValueError("metadata schema evidence requires a non-negative revision and canonical digest")
 
 
 @dataclass(frozen=True)
@@ -132,6 +147,148 @@ def _utc_now() -> datetime:
 def _digest(value: Any) -> str:
     canonical = json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True, slots=True, eq=False, weakref_slot=True)
+class _MetadataCompletionReceipt:
+    space_id: int
+    schema_revision: int
+    schema_digest: str
+
+
+_metadata_completions: WeakKeyDictionary = WeakKeyDictionary()
+
+
+def _metadata_completion_facts(space_id, actor_user_id, actor_reference, parameters, configuration):
+    # Orchestration adds its actual ledger identifiers later; it cannot change
+    # the accepted business request, schema, values or timestamp through them.
+    business = {
+        key: value for key, value in parameters.items() if key not in {"operation_id", "confirmation_id", "plan_digest"}
+    }
+    return (
+        space_id,
+        actor_user_id,
+        _digest(actor_reference),
+        _digest(business),
+        configuration.model_config_revision,
+        configuration.index_generation,
+        configuration.metadata_schema_revision,
+        configuration.metadata_schema_digest,
+    )
+
+
+async def _metadata_root_facts(session, space_id):
+    tenant = get_current_tenant_id()
+    if not isinstance(session, AsyncSession) or not session.in_transaction() or type(tenant) is not int or tenant <= 0:
+        raise ResourceReferenceInvalidError(reason="metadata_completion_native_transaction_required")
+    from bisheng.core.context.tenant import is_tenant_filter_bypassed
+
+    if is_tenant_filter_bypassed():
+        raise ResourceReferenceInvalidError(reason="metadata_completion_concrete_tenant_required")
+    fields = (
+        "id",
+        "tenant_id",
+        "type",
+        "metadata_schema_revision",
+        "metadata_fields",
+        "model_config_revision",
+        "index_generation",
+    )
+    with session.no_autoflush, strict_tenant_filter():
+        row = (
+            await session.execute(select(*(getattr(Knowledge, key) for key in fields)).where(Knowledge.id == space_id))
+        ).one_or_none()
+    if row is None or row.tenant_id != tenant or row.type != KnowledgeTypeEnum.SPACE.value:
+        raise ResourceReferenceInvalidError(reason="metadata_completion_space_required")
+    return (
+        row.id,
+        row.tenant_id,
+        row.metadata_schema_revision,
+        _digest(row.metadata_fields or []),
+        row.model_config_revision,
+        row.index_generation,
+    )
+
+
+def _assert_no_pending_metadata_root(session, space_id):
+    fields = (
+        "id",
+        "tenant_id",
+        "type",
+        "metadata_fields",
+        "metadata_schema_revision",
+        "model_config_revision",
+        "index_generation",
+    )
+    for collection in (session.new, session.dirty, session.deleted):
+        for row in collection:
+            state = inspect(row)
+            if isinstance(row, Knowledge) and space_id in (state.dict.get("id"), *(state.identity or ())):
+                if (
+                    row in session.new
+                    or row in session.deleted
+                    or any(state.attrs[name].history.has_changes() for name in fields)
+                ):
+                    raise ResourceReferenceInvalidError(reason="metadata_completion_pending_schema_change")
+
+
+class _MetadataCompletionAuthority:
+    """Private capability whose only issuance path executes the bound Owner."""
+
+    def __init__(self, owner):
+        callback = getattr(owner, "_aperform_metadata_acceptance", None)
+        if not ismethod(callback) or callback.__self__ is not owner:
+            raise TypeError("metadata completion requires its bound business Owner")
+        self._callback = callback
+
+    async def aaccept(self, session, prepared, *, identity):
+        transaction = TransactionIdentity.capture(session)
+        before = await _metadata_root_facts(session, prepared.space_id)
+        accepted = await self._callback(session, prepared, identity=identity)
+        transaction.assert_current(session)
+        after = await _metadata_root_facts(session, prepared.space_id)
+        facts = _metadata_completion_facts(
+            accepted.space_id,
+            accepted.actor_user_id,
+            accepted.actor_reference,
+            accepted.parameters,
+            accepted.configuration,
+        )
+        if (
+            after[:2] != before[:2]
+            or after[2] != before[2] + 1
+            or after[4:] != before[4:]
+            or (after[2], after[3])
+            != (accepted.configuration.metadata_schema_revision, accepted.configuration.metadata_schema_digest)
+        ):
+            raise ResourceReferenceInvalidError(reason="metadata_completion_business_result_changed")
+        if accepted.items:
+            return accepted, None
+        receipt = _MetadataCompletionReceipt(after[0], after[2], after[3])
+        _metadata_completions[receipt] = (transaction, self, facts, after)
+        return accepted, receipt
+
+
+async def _consume_metadata_completion(
+    session, receipt, *, space_id, actor_user_id, actor_reference, parameters, configuration
+):
+    registered = _metadata_completions.get(receipt) if isinstance(receipt, _MetadataCompletionReceipt) else None
+    try:
+        if registered is None:
+            raise ValueError("metadata completion was not issued")
+        registered[0].assert_current(session)
+        facts = _metadata_completion_facts(space_id, actor_user_id, actor_reference, parameters, configuration)
+        _assert_no_pending_metadata_root(session, space_id)
+        if (
+            facts != registered[2]
+            or await _metadata_root_facts(session, space_id) != registered[3]
+            or (receipt.space_id, receipt.schema_revision, receipt.schema_digest)
+            != (space_id, configuration.metadata_schema_revision, configuration.metadata_schema_digest)
+        ):
+            raise ValueError("metadata completion context changed")
+    except (ValueError, TypeError) as error:
+        raise ResourceReferenceInvalidError(reason="metadata_completion_receipt_invalid") from error
+    del _metadata_completions[receipt]
 
 
 class ProcessingJobRepository:
@@ -378,13 +535,20 @@ class ProcessingJobRepository:
         configuration: ProcessingConfiguration,
         items: Sequence[NewProcessingItem],
         space_config_version: int = 0,
+        metadata_acceptance=None,
     ) -> JobRequestResult:
         tenant_id = self._tenant_id()
         kind = ProcessingKind(kind).value
         idempotency_key = self._key(idempotency_key)
         actor = self._actor(actor_user_id, actor_reference)
-        if type(space_config_version) is not int or space_config_version < 0 or not items:
+        if (
+            type(space_config_version) is not int
+            or space_config_version < 0
+            or (not items and kind != "metadata_schema_change")
+        ):
             raise ValueError("a nonempty frozen scope and non-negative settings version are required")
+        if not items:
+            _assert_no_pending_metadata_root(session, space_id)
         manifest = []
         for value in items:
             target = ResourceVersionTarget.model_validate(value.target.model_dump(mode="json"))
@@ -402,20 +566,24 @@ class ProcessingJobRepository:
         if len({(value["file_id"], value["version_id"]) for value in manifest}) != len(manifest):
             raise ValueError("duplicate file/version scope")
         payload = deepcopy(dict(parameters))
-        request_hash = _digest(
-            {
-                "tenant_id": tenant_id,
-                "space_id": space_id,
-                "kind": kind,
-                "actor_user_id": actor_user_id,
-                "actor_reference": actor,
-                "parameters": payload,
-                "scope_manifest": manifest,
-                "model_config_revision": configuration.model_config_revision,
-                "index_generation": configuration.index_generation,
-                "space_config_version": space_config_version,
-            }
-        )
+        request_facts = {
+            "tenant_id": tenant_id,
+            "space_id": space_id,
+            "kind": kind,
+            "actor_user_id": actor_user_id,
+            "actor_reference": actor,
+            "parameters": payload,
+            "scope_manifest": manifest,
+            "model_config_revision": configuration.model_config_revision,
+            "index_generation": configuration.index_generation,
+            "space_config_version": space_config_version,
+        }
+        if kind == "metadata_schema_change":
+            request_facts.update(
+                metadata_schema_revision=configuration.metadata_schema_revision,
+                metadata_schema_digest=configuration.metadata_schema_digest,
+            )
+        request_hash = _digest(request_facts)
         # The verified owning resource lock serializes same-space creation;
         # the database unique key is the final cross-space collision guard.
         await self._space(session, space_id)
@@ -434,6 +602,16 @@ class ProcessingJobRepository:
             if existing.tenant_id != tenant_id or existing.request_hash != request_hash:
                 raise KnowledgeIdempotencyConflictError()
             return JobRequestResult(existing, True)
+        if not manifest:
+            await _consume_metadata_completion(
+                session,
+                metadata_acceptance,
+                space_id=space_id,
+                actor_user_id=actor_user_id,
+                actor_reference=actor,
+                parameters=payload,
+                configuration=configuration,
+            )
         now = self._now()
         job = KnowledgeProcessingJob(
             tenant_id=tenant_id,
@@ -455,6 +633,10 @@ class ProcessingJobRepository:
             next_dispatch_at=now,
             create_time=now,
             update_time=now,
+            state="accepted" if manifest else "succeeded",
+            pending_dispatch=bool(manifest),
+            started_at=None if manifest else now,
+            finished_at=None if manifest else now,
         )
         session.add(job)
         for value in manifest:
@@ -484,6 +666,23 @@ class ProcessingJobRepository:
             reason = "model_config_revision_changed"
         elif job.expected_index_generation != configuration.index_generation:
             reason = "index_generation_changed"
+        elif job.kind == "metadata_schema_change":
+            metadata_evidence = job.parameters if isinstance(job.parameters, Mapping) else {}
+            revision = metadata_evidence.get("metadata_schema_revision")
+            digest = metadata_evidence.get("metadata_schema_digest")
+            if (
+                type(revision) is not int
+                or revision < 0
+                or not isinstance(digest, str)
+                or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+                or configuration.metadata_schema_revision is None
+                or configuration.metadata_schema_digest is None
+            ):
+                reason = "metadata_schema_evidence_missing"
+            elif revision != configuration.metadata_schema_revision:
+                reason = "metadata_schema_revision_changed"
+            elif digest != configuration.metadata_schema_digest:
+                reason = "metadata_schema_digest_changed"
         if reason is None:
             return True
         job.state = "obsolete"
