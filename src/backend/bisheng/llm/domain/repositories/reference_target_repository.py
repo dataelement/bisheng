@@ -24,6 +24,7 @@ from bisheng.llm.domain.schemas import AssistantLLMConfig, EvaluationLLMConfig, 
 from bisheng.resource_reference.application.contracts import (
     DeletionEvidence,
     SourceKey,
+    SourceType,
     TargetKey,
     TargetType,
     TransactionIdentity,
@@ -180,12 +181,7 @@ class ModelReferenceTargetRepository:
     @staticmethod
     def _child(topology, tenant_id):
         root, child = topology.get(ROOT_TENANT_ID), topology.get(tenant_id)
-        return bool(
-            root
-            and child
-            and child.id != ROOT_TENANT_ID
-            and child.parent_tenant_id == ROOT_TENANT_ID
-        )
+        return bool(root and child and child.id != ROOT_TENANT_ID and child.parent_tenant_id == ROOT_TENANT_ID)
 
     @classmethod
     def _inherited_ids(cls, topology, configs, tenant_id):
@@ -245,6 +241,20 @@ class ModelReferenceTargetRepository:
             .execution_options(populate_existing=True)
         )
 
+    @classmethod
+    def _binding_inherited_ids(cls, topology, configs, tenant_id, source_key):
+        # A Child default write will become an own override. Its old Root
+        # fallback cannot prove the new binding's post-write eligibility.
+        if (
+            tenant_id != ROOT_TENANT_ID
+            and source_key is not None
+            and source_key.source_type == SourceType.MODEL_DEFAULT
+        ):
+            configs = tuple(
+                row for row in configs if not (row.tenant_id == ROOT_TENANT_ID and row.key == source_key.source_id)
+            )
+        return cls._inherited_ids(topology, configs, tenant_id)
+
     def _lock_plan(self, target_keys, source_key, operation, *, session=None, prelock_sources=None):
         tenant_id = _tenant(source_key, operation)
         if not isinstance(target_keys, tuple) or any(
@@ -265,7 +275,7 @@ class ModelReferenceTargetRepository:
         if needs_sharing:
             candidate_topology = {row.id: row for row in (yield self._topology_statement(tenant_id, lock=False), True)}
             candidate_configs = yield self._config_statement(tenant_id, lock=False), True
-        inherited_ids = self._inherited_ids(candidate_topology, candidate_configs, tenant_id)
+        inherited_ids = self._binding_inherited_ids(candidate_topology, candidate_configs, tenant_id, source_key)
         all_ids = ids | inherited_ids
         all_candidates = yield self._business_statement(LLMModel, all_ids, owners, lock=False), True
         mapping = {row.id: row.server_id for row in all_candidates}
@@ -284,7 +294,7 @@ class ModelReferenceTargetRepository:
         if needs_sharing:
             topology = {row.id: row for row in (yield self._topology_statement(tenant_id, lock=True), True)}
             configs = yield self._config_statement(tenant_id, lock=True), True
-            if self._inherited_ids(topology, configs, tenant_id) != inherited_ids:
+            if self._binding_inherited_ids(topology, configs, tenant_id, source_key) != inherited_ids:
                 raise ResourceReferenceConflictError(reason="reference_lock_plan_changed")
             inherited_servers = frozenset(
                 row.server_id
