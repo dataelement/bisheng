@@ -420,3 +420,44 @@ it("preserves the server's numeric fallback for a missing ancestor", async () =>
   expect(await screen.findAllByText("Current")).not.toHaveLength(0);
   expect(mocks.info).not.toHaveBeenCalled();
 });
+it("updates the actual directory filter for a same-parent URL status change", async () => {
+  const view = mount("/filelib/7?parent_id=9&keep=1");
+  await screen.findByRole("button", { name: "report.pdf" });
+  mocks.children.mockClear();
+  await view.go("/filelib/7?parent_id=9&keep=1&fileStatus=abnormal");
+  await waitFor(() =>
+    expect(mocks.children).toHaveBeenCalledWith(
+      "/api/v1/knowledge/space/7/children",
+      expect.objectContaining({ parent_id: 9, file_status: [3, 6, 7] }),
+    ),
+  );
+  expect(screen.getByTestId("location")).toHaveTextContent("keep=1");
+});
+it("restores all-file requests when the URL abnormal filter is removed", async () => {
+  const view = mount("/filelib/7?parent_id=9&keep=1&fileStatus=abnormal");
+  await screen.findByRole("button", { name: "report.pdf" });
+  expect(mocks.children.mock.lastCall?.[1].file_status).toEqual([3, 6, 7]);
+  mocks.children.mockClear();
+  await view.go("/filelib/7?parent_id=9&keep=1");
+  await waitFor(() => expect(mocks.children).toHaveBeenCalled());
+  expect(mocks.children.mock.lastCall?.[1].file_status).toBeUndefined();
+  expect(screen.getByTestId("location")).toHaveTextContent("keep=1");
+});
+it("retires a delayed abnormal page across fileStatus URL ABA", async () => {
+  const pending = deferred<ReturnType<typeof page>>();
+  mocks.children
+    .mockResolvedValueOnce(page([child(11, "first-normal.pdf")]))
+    .mockReturnValueOnce(pending.promise)
+    .mockResolvedValue(page([child(13, "latest-normal.pdf")]));
+  const view = mount("/filelib/7?parent_id=9&keep=1");
+  await screen.findByRole("button", { name: "first-normal.pdf" });
+  await view.go("/filelib/7?parent_id=9&keep=1&fileStatus=abnormal");
+  await waitFor(() => expect(mocks.children).toHaveBeenCalledTimes(2));
+  await view.go("/filelib/7?parent_id=9&keep=1");
+  await screen.findByRole("button", { name: "latest-normal.pdf" });
+  await act(async () =>
+    pending.resolve(page([child(12, "retired-abnormal.pdf")])),
+  );
+  expect(screen.queryByText("retired-abnormal.pdf")).not.toBeInTheDocument();
+  expect(mocks.children).toHaveBeenCalledTimes(3);
+});
