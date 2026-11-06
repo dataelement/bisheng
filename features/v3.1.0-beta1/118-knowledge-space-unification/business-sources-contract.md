@@ -162,3 +162,13 @@ INT-APP薄Port及APP专属factory(T442/443、T511–516)显式临时转交APP ag
 ### Gateway 最终模型身份核验端口（T445–T449）
 
 `HostedAppDeclarationPort.assert_model_binding(principal, requested: str, resolved: ResolvedModel) -> None` 为 async。APP 在原 adapter/bus 叶实现，同 Session whole-source execute 准入后比 frozen 模型slot与实际resolved ID，server 从同 Session LLM真实 frozen-model facts核验；不从名字缓存或已删除目标猜 server。Gateway 在旧 resolve_range_and_subject（头/访问token优先顺序不变）与 resolve_model_name 之后、`_instantiate` 前通过原注册port调用。返回 None 才完成；原 ModelFaceError 保留，10994映射26516，其他引用无效/漂移映射26513，未知故障26516并保cause。非hosted原路径不变。filelib 的真实文件是 `open_endpoints/api/endpoints/filelib.py`，hosted retrieve 透传原 `principal=principal`，不能只传用户ID/credential ID后再造身份。
+
+
+### 最终别名与人工修复闭合（T541–T544）
+
+LLM新增 async `resolve_model_alias_current(session, tenant_id, requested, *, identity, plan, range=None) -> ResolvedModel`。只沿原私有NamePlan完整当前校验与已锁目录，用原bare exact优先/qualified规则解析；请求须为原planned模型的bare/qualified alias，结果ID/server仍是原planned结果，不扩大requested_names、不追加锁/另Session/读名称缓存，空plan拒。APP专属runtime显式持有同一 `source_owner`，成功whole-source require后由该Owner私有plan验证请求当前结果、其原语义slot冻结ID及Gateway实际ID/server，不把“属于其他声明槽”误认为同槽一致。泛用DTO和authority不扩展。
+
+知识人工明确改绑修复时，若真实旧收据为INVALID_DELETED/INVALID_LEGACY，或VALID但new_binding_allowed=False，且不处于DELETING，可在业务+R2同事务解除旧A，将实际model=B、transition current=B/pending=B保operation，完整source只依赖合法B，finalize清stage。普通可执行A→B仍双槽；DELETING保原写冻结。禁止以pending子集执行绕过失效旧槽。embedding类型仅由已验证原收据约束的同Session精确模型/父server列事实读取，不能信req.model_type或裸客户端tenant。
+
+
+空间创建不能以 skip_hook 永久跳过实际SPACE投影：真实flush资源后以同外部Session完成SPACE投影、creator成员、资源模型来源+R2唯一commit，再沿原initial grants/tag完成既有创建生命周期；普通文档库调用实际library创建投影。批量模型变更的commands显式带实际资源tenant_id与actor_user_id；后者只审计/telemetry，不由裸UID制造授权身份。命令 operation/revision/generation 为业务当前配置事实，worker模型仍从资源pending槽选择；派发在整体SQL提交后，队列失败不伪称业务已回滚。
