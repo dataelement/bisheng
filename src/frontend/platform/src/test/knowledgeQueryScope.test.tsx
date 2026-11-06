@@ -72,39 +72,33 @@ const plan: OperationPrecheck = {
 function apiPort() {
   return {
     getSpaceInfo: vi.fn().mockResolvedValue({ id: 7, name: "Space" }),
-    listChildren: vi
-      .fn()
-      .mockResolvedValue({
-        data: [],
-        page_size: 40,
-        has_more: false,
-        next_cursor: null,
-      }),
+    listChildren: vi.fn().mockResolvedValue({
+      data: [],
+      page_size: 40,
+      has_more: false,
+      next_cursor: null,
+    }),
     listAdminSpaces: vi.fn().mockResolvedValue({ data: [], total: 0 }),
     getProcessingSettings: vi.fn().mockResolvedValue(settings),
     updateProcessingSettings: vi
       .fn()
       .mockResolvedValue({ ...settings, config_version: 1 }),
     precheckProcessing: vi.fn().mockResolvedValue(plan),
-    createProcessingJob: vi
-      .fn()
-      .mockResolvedValue({
-        job_id: "job-1",
-        accepted: true,
-        state: "running",
-        reused: true,
-      }),
+    createProcessingJob: vi.fn().mockResolvedValue({
+      job_id: "job-1",
+      accepted: true,
+      state: "running",
+      reused: true,
+    }),
     listProcessingJobs: vi.fn().mockResolvedValue({ data: [], total: 0 }),
     getProcessingJob: vi.fn(),
     listProcessingItems: vi.fn().mockResolvedValue({ data: [], total: 0 }),
-    retryProcessingJob: vi
-      .fn()
-      .mockResolvedValue({
-        job_id: "job-1",
-        accepted: true,
-        state: "partial_failed",
-        reused: true,
-      }),
+    retryProcessingJob: vi.fn().mockResolvedValue({
+      job_id: "job-1",
+      accepted: true,
+      state: "partial_failed",
+      reused: true,
+    }),
   } satisfies KnowledgeSpaceApi;
 }
 
@@ -283,11 +277,18 @@ describe("processing actions retain their issuing scope", () => {
       ({ value }) => useKnowledgeProcessingActions(value, 7, api),
       { ...queryHost(), initialProps: { value: scope } },
     );
-    await result.current.precheck({ kind: "embedding_rebuild", parameters: {} });
+    await result.current.precheck({
+      kind: "embedding_rebuild",
+      parameters: {},
+    });
     rerender({ value: { ...scope } });
-    await expect(result.current.createJob({
-      idempotency_key: "create-1", confirmation_id: plan.confirmation_id, plan_digest: plan.plan_digest,
-    })).resolves.toMatchObject({ job_id: "job-1", state: "running" });
+    await expect(
+      result.current.createJob({
+        idempotency_key: "create-1",
+        confirmation_id: plan.confirmation_id,
+        plan_digest: plan.plan_digest,
+      }),
+    ).resolves.toMatchObject({ job_id: "job-1", state: "running" });
   });
 
   it("passes only frozen plan/retry data and preserves the server's job state", async () => {
