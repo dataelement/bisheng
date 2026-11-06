@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bisheng.common.errcode.permission import PermissionInvalidResourceError
+from bisheng.permission.application.control_state import RuntimeCatalogSnapshot, RuntimeModelSnapshot
+from bisheng.permission.application.runtime import F048PermissionRuntime
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 from bisheng.permission.domain.services.grant_source_service import (
     GrantModelSnapshot,
@@ -15,6 +17,7 @@ from bisheng.permission.domain.services.grant_source_service import (
     model_snapshot_for_target,
 )
 from bisheng.permission.domain.services.owner_service import F048OwnerProjectionService, OwnerProjectionContext
+from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from bisheng.permission.domain.services.projection_plan import ProjectionOutcome
 
 
@@ -194,3 +197,72 @@ async def test_projection_failure_never_finalizes_sql_state():
     assert events == ["prepare-plan", "prepare-state", "execute-projection"]
     state.finalize.assert_not_awaited()
     state.mark_compensation_required.assert_awaited_once_with(context, error)
+
+
+@pytest.mark.parametrize("resource_type", ("tool", "linsight_skill"))
+async def test_real_builtin_creation_reaches_owner_with_only_visible_and_current_pure_model(monkeypatch, resource_type):
+    from bisheng.linsight.domain.services.skill_permission import ensure_builtin_skill_permission
+    from bisheng.permission.application import process_runtime, system_resource_reconcile
+    from bisheng.tool.domain.services.f048_tool_permission import F048ToolPermissionAdapter, ToolPermissionRecord
+
+    owner, projection, state, events = harness()
+    runtime = object.__new__(F048PermissionRuntime)
+    runtime._sources = GrantSourceService()
+    runtime._owner = owner
+    runtime._runtime_catalog = AsyncMock(
+        return_value=RuntimeCatalogSnapshot(
+            1,
+            "catalog",
+            1,
+            "c" * 64,
+            "store",
+            "model",
+            "m" * 64,
+            (
+                RuntimeModelSnapshot(
+                    GrantModelSnapshot(
+                        "viewer",
+                        True,
+                        ("download",),
+                        1,
+                        visibility_only_resource_types=("tool", "linsight_skill"),
+                        visibility_level=1,
+                    ),
+                    "Viewer",
+                    "STANDARD",
+                    1,
+                ),
+            ),
+            action_resource_scopes=(("download", ("folder", "knowledge_file")),),
+        )
+    )
+    if resource_type == "tool":
+        adapter = F048ToolPermissionAdapter(loader=object(), permission=runtime)
+        await adapter.authorize_created(
+            record=ToolPermissionRecord(5, "builtin-1", "ACTIVE", None, 0, "builtin-v0", True),
+            actor=PermissionActor(user_id=7, current_tenant_id=5),
+        )
+    else:
+        monkeypatch.setattr(
+            process_runtime,
+            "get_f048_process_runtime",
+            AsyncMock(return_value=SimpleNamespace(components=SimpleNamespace(facade=runtime))),
+        )
+        states = iter(("MISSING", "CURRENT"))
+
+        def inspect(resources):
+            return (system_resource_reconcile.SystemOwnedResourceState(resources[0], next(states)),)
+
+        monkeypatch.setattr(system_resource_reconcile, "inspect_system_owned_resources", AsyncMock(side_effect=inspect))
+        await ensure_builtin_skill_permission(SimpleNamespace(id=1, tenant_id=5))
+    context = state.prepare.call_args.args[0]
+    assert context.system_action_codes == ("visible",)
+    assert context.target.resource_type == resource_type and context.target.tenant_id == 5
+    grant = context.creation_grants[0]
+    assert grant.model.model_key == "viewer" and grant.model.visibility_only
+    assert grant.model.action_codes == () and grant.model.derived_level == 1
+    assert grant.sources[0].projected_subject == "tenant:5#member" and grant.sources[0].source_type == "TENANT"
+    deltas = projection.prepare.call_args.args[0].deltas
+    assert any(row.user == "tenant:5#member" and row.relation == "visible" for row in deltas)
+    assert not any("use" in row.relation or row.relation.startswith("system_") for row in deltas)
+    assert events == ["prepare-plan", "prepare-state", "execute-projection", "finalize-state"]
