@@ -14,6 +14,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.common.cursor import decode_cursor, encode_cursor
 from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
 from bisheng.core.context.tenant import bypass_tenant_filter, management_tenant_scope
+from bisheng.core.database import tenant_filter
 from bisheng.core.database.tenant_filter import register_tenant_filter_events
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.repositories.knowledge_space_listing_repository import KnowledgeSpaceListingRepository
@@ -35,6 +36,9 @@ def concrete_tenant(tenant_context):
 @pytest.fixture
 async def catalog(concrete_tenant, monkeypatch):
     register_tenant_filter_events()
+    # Other native-SQL fixtures narrow discovery during the first global
+    # registration; pin this fixture's real model even in a combined selection.
+    monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", tenant_filter._tenant_aware_tables | {"knowledge"})
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
     metadata = sa.MetaData()
     table = Knowledge.__table__.to_metadata(metadata)
