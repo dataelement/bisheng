@@ -56,7 +56,7 @@ class Broker:
 
 async def test_scheduler_presence_does_not_replace_missing_broker_even_on_outer_commit(module, complete, transport):
     error = None
-    app = inventory.application(module, transport)
+    app = inventory.application(module, transport, broker_reader=None)
     async with AsyncSession(complete.engine) as session, session.begin():
         try:
             await app.arun(session, **transport.inputs)

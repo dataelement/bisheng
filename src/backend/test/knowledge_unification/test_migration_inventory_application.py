@@ -237,6 +237,13 @@ class Queued:
         )
 
 
+class EmptyBroker:
+    async def aiter_facts(self, *, tenant_ids):
+        assert tenant_ids == (1, 101, 202)
+        for record in ():
+            yield record
+
+
 def application(module, transport, **changes):
     return module.UnificationInventoryApplication(
         **(
@@ -245,6 +252,7 @@ def application(module, transport, **changes):
                 "sharing_reader_factory": transport.reader_factory,
                 "physical_reader": Physical(),
                 "queued_task_reader": Queued(),
+                "broker_reader": EmptyBroker(),
             }
             | changes
         )
@@ -282,7 +290,7 @@ async def test_actual_default_composition_freezes_all_tenants_and_private_baseli
     assert plan["records"][1]["baseline_ref"] == result.baseline_ref
 
 
-@pytest.mark.parametrize("port", ["physical_reader", "queued_task_reader", "sharing_reader_factory"])
+@pytest.mark.parametrize("port", ["physical_reader", "queued_task_reader", "broker_reader", "sharing_reader_factory"])
 async def test_missing_required_real_port_fails_closed_without_run_writes(module, complete, transport, port):
     async with AsyncSession(complete.engine) as session, session.begin():
         with pytest.raises(ReferenceCoverageNotReadyError):
