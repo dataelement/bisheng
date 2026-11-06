@@ -5,7 +5,9 @@ import fnmatch
 import hashlib
 import json
 from dataclasses import dataclass, field
-from urllib.parse import parse_qs, unquote, urlsplit
+from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlsplit, urlunsplit
+
+from kombu.utils.url import parse_url
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.knowledge.domain.repositories.unification_task_repository import task_digest
@@ -66,6 +68,15 @@ _ALLOWED_OPTIONS = _CONNECTION_OPTIONS | {
     "queue_order_strategy",
     "body_encoding",
     "ack_emulation",
+}
+_SSL_OPTIONS = {
+    "ssl_cert_reqs",
+    "ssl_ca_certs",
+    "ssl_ca_data",
+    "ssl_certfile",
+    "ssl_keyfile",
+    "ssl_check_hostname",
+    "ssl_password",
 }
 
 
@@ -128,6 +139,9 @@ class BrokerReadConfiguration:
             read = getattr(conf, "broker_read_url", None) or original
             write = getattr(conf, "broker_write_url", None) or original
             mode, identity, parsed, database = _url(read)
+            driver = getattr(conf, "broker_transport", None)
+            if driver is not None and driver != mode:
+                _blocked("unsupported_transport_driver")
             if _url(write)[:2] != (mode, identity):
                 _blocked("read_write_broker_mismatch")
             options = getattr(conf, "broker_transport_options", None) or {}
@@ -182,6 +196,25 @@ class BrokerReadConfiguration:
                 if {"master_name", "sentinel_kwargs", "min_other_sentinels"} & set(options):
                     _blocked("unsupported_transport_options")
                 connection["url"] = read
+            # Kombu's pure URL parser supplies the actual SSL query coercions.
+            # No Connection/Channel is constructed and no decoder is invoked.
+            tls = parse_url(read.split(";")[0]).get("ssl", getattr(conf, "broker_use_ssl", None))
+            if tls is True or (tls is not None and tls is not False and type(tls) is not dict):
+                _blocked("ambiguous_ssl_configuration")
+            if not tls and mode == "rediss":
+                tls = {"ssl_cert_reqs": 0}  # Original Kombu rediss default.
+            if tls:
+                if set(tls) - _SSL_OPTIONS:
+                    _blocked("unsupported_ssl_options")
+                connection.update(json.loads(_canonical(tls)))
+                if mode == "sentinel":
+                    connection["ssl"] = True
+                else:
+                    uri = urlsplit(read)
+                    query = urlencode(
+                        [(key, value) for key, value in parse_qsl(uri.query) if not key.startswith("ssl_")]
+                    )
+                    connection["url"] = urlunsplit(("rediss", uri.netloc, uri.path, query, uri.fragment))
             routes = getattr(conf, "task_routes", None) or {}
             if type(routes) is not dict:
                 _blocked("static_routes_required")
@@ -205,7 +238,16 @@ class BrokerReadConfiguration:
                 sep,
                 tuple(steps),
                 *keys,
-                task_digest({"read": read, "write": write, "options": options, "queues": sorted(queues)}),
+                task_digest(
+                    {
+                        "read": read,
+                        "write": write,
+                        "options": options,
+                        "driver": driver,
+                        "ssl": tls,
+                        "queues": sorted(queues),
+                    }
+                ),
             )
         except KnowledgeOperationPlanConflictError:
             raise
