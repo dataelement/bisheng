@@ -234,3 +234,45 @@ async def test_historical_preview_requires_full_saved_source_before_manager_io(w
             "actual-app", fixtures.fixtures.HISTORY, actor=writing.user, purpose="management"
         )
     start.assert_not_awaited()
+
+
+async def test_publish_checks_complete_stored_version_before_constructing_manager(deleting, monkeypatch):
+    from bisheng.app_runtime.domain.constants import AppAuditAction
+    from bisheng.app_runtime.domain.services.runtime_authorization_service import RuntimeAuthorizationService
+    from bisheng.open_api.domain.context import reset_current_open_api_principal, set_current_open_api_principal
+
+    app = SimpleNamespace(
+        id="actual-app",
+        tenant_id=101,
+        owner_user_id=4,
+        state="stopped",
+        current_version_id=fixtures.fixtures.VERSION,
+        pending_version_id=fixtures.fixtures.HISTORY,
+    )
+    version = SimpleNamespace(id=fixtures.fixtures.HISTORY, tier_id="light")
+    monkeypatch.setattr(module.AppStateService, "_load_version", AsyncMock(return_value=version))
+    monkeypatch.setattr(module.AppStateService, "_resolve_tier", AsyncMock(return_value={"cpu": 1, "mem": 512}))
+    frozen = {"target": {"tenant_id": 101, "app_id": app.id, "version_id": version.id}, "purpose": "approved_start"}
+    monkeypatch.setattr(RuntimeAuthorizationService, "capture_user", AsyncMock(return_value=frozen))
+    monkeypatch.setattr(RuntimeAuthorizationService, "validate_user", AsyncMock())
+    runtime = SimpleNamespace(
+        verifier=SimpleNamespace(aissue_scope=AsyncMock()),
+        arequire_source_valid=AsyncMock(side_effect=ResourceReferenceInvalidError(reason="invalid_saved_model")),
+    )
+    get_runtime = AsyncMock(return_value=runtime)
+    monkeypatch.setattr(module, "get_hosted_app_user_reference_runtime", get_runtime, raising=False)
+    monkeypatch.setattr(
+        coordinator_module,
+        "RuntimeDeliveryCoordinator",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("manager before reference admission")),
+    )
+    token = set_current_open_api_principal(None)
+    try:
+        with pytest.raises(ResourceReferenceInvalidError):
+            await module.AppStateService._start_authorized(
+                app, actor=deleting.user, audit_action=AppAuditAction.PUBLISH, shortage_state=None
+            )
+        assert get_runtime.await_args.args[0] is frozen
+        assert runtime.verifier.aissue_scope.await_args.args[2] is deleting.user
+    finally:
+        reset_current_open_api_principal(token)
