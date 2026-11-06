@@ -1,0 +1,167 @@
+"""Actual Knowledge business source and complete model admission in both modes.
+
+覆盖 AC: AC-37, AC-68, AC-71, AC-79, AC-87, AC-88, AC-89, AC-91, AC-92.
+Uses real Knowledge/R2 SQL and Model read Owner; C4 sharing/action transports
+are test boundaries. No model provider, queue, FGA or production DB is called.
+"""
+
+import json
+from contextlib import contextmanager
+from dataclasses import replace
+from unittest.mock import AsyncMock
+
+import pytest
+import sqlalchemy as sa
+from sqlmodel import Session
+
+from bisheng.common.errcode.knowledge import (
+    KnowledgeOperationPlanConflictError,
+    ReferenceCoverageNotReadyError,
+    ResourceReferenceInvalidError,
+)
+from bisheng.knowledge.application import model_reference_read as module
+from bisheng.knowledge.application import reference_source_owner as owner_module
+from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication
+from bisheng.knowledge.application.model_reference_read import KnowledgeModelReadRuntime
+from bisheng.knowledge.application.reference_read_identity import KnowledgeModelReadIdentityPort
+from bisheng.knowledge.application.reference_source_owner import KnowledgeReferenceSourceOwner
+from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.llm.application.source_read_target_owner import ModelSourceReadTargetOwner
+from bisheng.llm.domain.models.llm_server import LLMModel
+from bisheng.permission.application.identity import get_current_permission_actor, set_current_permission_actor
+from bisheng.resource_reference.application.contracts import SourceType
+from bisheng.resource_reference.application.source_contracts import SourceReadRequest
+from bisheng.resource_reference.application.source_read import ReferenceSourceReadRuntime
+from bisheng.resource_reference.application.source_verification import SourceReadVerifier
+from bisheng.resource_reference.domain.repositories.source_read_repository import SourceReadRepository
+from test.knowledge_unification import test_kn_model_bindings as fixtures
+
+store = fixtures.store
+tenant = fixtures.tenant
+business = fixtures.business
+
+
+@pytest.fixture
+async def admission(business, monkeypatch):
+    identity = KnowledgeModelReadIdentityPort()
+    source = KnowledgeReferenceSourceOwner(identity_port=identity)
+    verifier = SourceReadVerifier({SourceType.KNOWLEDGE: source}, identity)
+    target = ModelSourceReadTargetOwner(verifier)
+    core = ReferenceSourceReadRuntime(verifier, SourceReadRepository(verifier), {"model": target})
+    runtime = KnowledgeModelReadRuntime(core, identity)
+    monkeypatch.setattr(owner_module, "require_business_action", AsyncMock())
+    monkeypatch.setattr(module, "get_async_db_session", business.sessions)
+
+    @contextmanager
+    def native_sessions():
+        with Session(business.sync, expire_on_commit=False) as session:
+            yield session
+
+    monkeypatch.setattr(module, "get_sync_db_session", native_sessions)
+    await fixtures.seed(business)
+    return business, runtime, source, identity
+
+
+async def test_real_source_snapshot_contains_private_business_model_configuration(admission):
+    context, runtime, _, _ = admission
+    async with context.sessions() as session:
+        result = await runtime.arequire(40, login_user=context.user, session=session)
+        assert result.model_id == 11 and result.tenant_id == 101 and result.slot_key == "model"
+        snapshot = result.read.snapshot
+        facts = json.loads(snapshot.payload_json)["knowledge"]
+        assert facts["model"] == "11" and facts["model_config_revision"] == 0
+        assert facts["index_generation"] == "g0" and facts["model_transition"] is None
+        owner_module.require_business_action.assert_awaited_with(
+            context.user, resource_type="knowledge_space", resource_id=40, action="visible"
+        )
+        assert all(not isinstance(row, Knowledge) for row in session.identity_map.values())
+
+
+def test_native_source_and_read_core_match_async_and_borrow_session(admission):
+    context, runtime, _, _ = admission
+    with Session(context.sync) as session:
+        result = runtime.require(40, login_user=context.user, session=session)
+        assert result.model_id == 11 and result.read.source_revision == 1
+        assert session.in_transaction()
+        session.rollback()
+
+
+async def test_complete_source_rejects_invalid_pending_even_when_requesting_current_slot(admission):
+    context, runtime, _, _ = admission
+    async with context.sessions() as session:
+        prepared = await KnowledgeModelReferenceApplication.aprepare_model_change(
+            session, 40, 12, login_user=context.user
+        )
+        await KnowledgeModelReferenceApplication.aapply_model_change(session, prepared)
+        await session.commit()
+    async with context.sessions() as session, session.begin():
+        await session.execute(sa.delete(LLMModel).where(LLMModel.id == 12, LLMModel.tenant_id == 101))
+    async with context.sessions() as session:
+        with pytest.raises(ResourceReferenceInvalidError):
+            await runtime.arequire(40, login_user=context.user, session=session, slot_key="model")
+
+
+async def test_expected_business_revision_is_obsolescence_not_authorization(admission):
+    context, runtime, _, _ = admission
+    async with context.sessions() as session:
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await runtime.arequire(40, login_user=context.user, session=session, expected_model_config_revision=99)
+        with pytest.raises(ResourceReferenceInvalidError):
+            await runtime.arequire(40, login_user=context.user, session=session, slot_key="task.model_id")
+
+
+async def test_missing_source_index_and_source_config_drift_are_fail_closed(admission):
+    context, runtime, _, _ = admission
+    async with context.sessions() as session:
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            await runtime.arequire(10, login_user=context.user, session=session)
+    async with context.sessions() as session, session.begin():
+        await session.execute(
+            sa.update(Knowledge).where(Knowledge.id == 40, Knowledge.tenant_id == 101).values(model="12")
+        )
+    async with context.sessions() as session:
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            await runtime.arequire(40, login_user=context.user, session=session)
+
+
+async def test_real_source_owner_revalidates_model_configuration_after_target_plan(admission):
+    context, _, source, _ = admission
+    async with context.sessions() as session:
+        request = SourceReadRequest(SourceType.KNOWLEDGE, "40", "current")
+        snapshot = await source.aresolve_source(session, request, context.user)
+        await session.execute(
+            sa.update(Knowledge).where(Knowledge.id == 40, Knowledge.tenant_id == 101).values(index_generation="g1")
+        )
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await source.arevalidate_source(session, request, context.user, snapshot)
+
+
+async def test_private_actor_scope_is_same_original_and_current_transaction_only(admission):
+    context, runtime, _, identity = admission
+    async with context.sessions() as session, context.sessions() as other:
+        original_actor = get_current_permission_actor()
+        private = await identity.aissue(session, 40)
+        request = SourceReadRequest(SourceType.KNOWLEDGE, "40", "current")
+        with pytest.raises(ResourceReferenceInvalidError):
+            await runtime.core.verifier.aissue_scope(session, request, replace(private))
+        with pytest.raises(ResourceReferenceInvalidError):
+            await runtime.core.verifier.aissue_scope(other, request, private)
+        token = set_current_permission_actor(replace(original_actor))
+        try:
+            with pytest.raises(ResourceReferenceInvalidError):
+                await runtime.core.verifier.aissue_scope(session, request, private)
+        finally:
+            from bisheng.permission.application.identity import reset_current_permission_actor
+
+            reset_current_permission_actor(token)
+        assert (await runtime.arequire(40, session=session)).model_id == 11
+        owner_module.require_business_action.assert_awaited_with(
+            None, resource_type="knowledge_space", resource_id=40, action="visible", actor=original_actor
+        )
+
+
+async def test_private_actor_scope_never_uses_user_id_to_read_foreign_knowledge(admission):
+    context, runtime, _, _ = admission
+    async with context.sessions() as session:
+        with pytest.raises(ResourceReferenceInvalidError):
+            await runtime.arequire(30, session=session)
