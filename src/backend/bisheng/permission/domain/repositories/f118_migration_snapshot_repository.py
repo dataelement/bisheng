@@ -7,11 +7,17 @@ All tenant-owned pages stay strictly scoped. Nothing is written or published.
 
 from dataclasses import fields
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.errcode.permission import PermissionMigrationBlockedError
-from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed, strict_tenant_filter
+from bisheng.core.context.tenant import (
+    bypass_tenant_filter,
+    get_current_tenant_id,
+    is_tenant_filter_bypassed,
+    strict_tenant_filter,
+)
+from bisheng.database.models.tenant import Tenant
 from bisheng.permission.domain.models import (
     AuthorizationModelRelease,
     PermissionAction,
@@ -54,6 +60,39 @@ def _record(cls, row, **overrides):
 
 
 class PermissionMigrationSnapshotRepository:
+    async def avalidate_global_integrity(self, session):
+        """One run-wide raw probe per original table, never per tenant."""
+        self._scope(session)
+        if not session.in_transaction():
+            _blocked("native_transaction_required")
+        tenant = Tenant.__table__.alias("f118_permission_actual_tenant")
+        queries = []
+        for model in (
+            ResourcePermissionMode,
+            PermissionGrant,
+            PermissionGrantAssignee,
+            PermissionVisibleSourceProjection,
+        ):
+            table = model.__table__.alias("f118_original_" + model.__tablename__)
+            queries.append(
+                select(table.c.id)
+                .outerjoin(tenant, tenant.c.id == table.c.tenant_id)
+                .where(or_(table.c.tenant_id.is_(None), tenant.c.id.is_(None)))
+                .limit(1)
+            )
+        assignee = PermissionGrantAssignee.__table__.alias("f118_global_assignee")
+        grant = PermissionGrant.__table__.alias("f118_global_grant")
+        queries.append(
+            select(assignee.c.id)
+            .outerjoin(grant, grant.c.id == assignee.c.grant_id)
+            .where(or_(grant.c.id.is_(None), assignee.c.tenant_id != grant.c.tenant_id))
+            .limit(1)
+        )
+        with session.no_autoflush, strict_tenant_filter(), bypass_tenant_filter():
+            for query in queries:
+                if (await session.execute(query)).first() is not None:
+                    _blocked("global_original_orphan")
+
     @staticmethod
     def _scope(session):
         tenant = get_current_tenant_id()
