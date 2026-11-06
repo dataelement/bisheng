@@ -4880,7 +4880,7 @@
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_processing_dispatch.py`\
   **逻辑 / 测试上下文**：持久intent到broker失败/丢ack/重复消息、tenant headers/proof、revision/lease和obsolete持久化，至少一真实kind闭环。\
-  **依赖**：T064\
+  **依赖**：T064, T066\
   **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
   **验证 / 完成条件**：测试先提交，记录真实红/首绿，不在测试卡改生产。
 
@@ -5175,6 +5175,14 @@
   **依赖**：T648\
   **覆盖 AC**: AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-33, AC-35, AC-84\
   **验证 / 完成条件**：先测试独立红/首绿，再实现≤2叶；真实接线与有界行为不能由fake-only Service代替。
+
+- [ ] **T650 · 已知生命周期旧adapter回归对齐**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/permission/test_f048_knowledge_space_adapter.py`\
+  **逻辑 / 测试上下文**：原COPYING非法资源断言改为真实未知/已删除态；保租户缺失/错误type/隐藏响应及原FGA拒绝断言，不按新已知生命周期误拒。\
+  **依赖**：T078\
+  **覆盖 AC**: AC-30, AC-31, AC-33, AC-35, AC-48\
+  **验证 / 完成条件**：记录语义退休差异，配新旧adapter/preview/download同选集全绿；不得通过删拒绝测试实现。
 
 ## 自动化覆盖索引
 
