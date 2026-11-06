@@ -64,7 +64,7 @@ def test_real_hooks_issue_exact_context_then_revoke_it_on_exit():
     assert get_current_background_task() is None
 
 
-@pytest.mark.parametrize("values", [dict(headers=False), dict(called_directly=True), dict(task_id=None)])
+@pytest.mark.parametrize("values", [{"headers": False}, {"called_directly": True}, {"task_id": None}])
 def test_fallback_root_or_direct_call_is_not_a_worker_permit(values):
     sender = task(**values)
     restore_tenant_context(sender=sender)
@@ -87,12 +87,15 @@ def test_reused_worker_thread_does_not_keep_the_previous_task_object():
         reset_tenant_context(sender=second)
 
 
-def test_saved_context_is_not_live_after_actual_task_stack_leaves():
+def test_copied_async_context_remains_live_only_until_actual_postrun():
+    from contextvars import copy_context
+
     sender = task()
     restore_tenant_context(sender=sender)
-    try:
-        assert get_current_background_task() is not None
-        _CURRENT[0] = None
-        assert get_current_background_task() is None
-    finally:
-        reset_tenant_context(sender=sender)
+    copied = copy_context()
+    original = get_current_background_task()
+    # The persistent asyncio loop has no Celery thread-local task stack.
+    _CURRENT[0] = None
+    assert copied.run(get_current_background_task) is original
+    reset_tenant_context(sender=sender)
+    assert copied.run(get_current_background_task) is None
