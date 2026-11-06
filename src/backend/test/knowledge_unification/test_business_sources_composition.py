@@ -39,6 +39,7 @@ async def test_register_installs_actual_remaining_owners_and_distinct_private_gr
 
     def unexpected(*args, **kwargs):
         raise AssertionError("composition must not initialize business or permission I/O")
+
     monkeypatch.setattr(database, "get_async_db_session", unexpected)
     monkeypatch.setattr(database, "get_sync_db_session", unexpected)
     monkeypatch.setattr(source_read_target_owner, "get_permission_relation_api", unexpected)
