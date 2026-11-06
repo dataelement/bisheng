@@ -192,6 +192,51 @@ def test_sse_frames_have_role_content_stop_optional_usage_and_done(api, include_
         assert events[-1]["choices"] == [] and events[-1]["usage"]["total_tokens"] > 0
 
 
+@pytest.mark.parametrize("options", [[], "", 0, False])
+def test_stream_options_rejects_falsey_non_objects_before_counting(api, options):
+    """AC-38: falsey invalid options must not be coerced into an empty object."""
+    response = api.post(
+        "/v1/chat/completions",
+        json={
+            "model": "f118-chat",
+            "messages": [{"role": "user", "content": "e2e-f118"}],
+            "stream": True,
+            "stream_options": options,
+        },
+    )
+    assert response.status_code == 400 and response.json()["error"]["type"] == "invalid_request_error"
+    assert api.get("/__control/stats").json()["totals"]["chat_stream"] == 0
+
+
+@pytest.mark.parametrize("include_usage", ["false", 0, 1, None, [], {}])
+def test_include_usage_requires_a_real_boolean_before_counting(api, include_usage):
+    """AC-38: include_usage follows the real SDK boolean wire contract."""
+    response = api.post(
+        "/v1/chat/completions",
+        json={
+            "model": "f118-chat",
+            "messages": [{"role": "user", "content": "e2e-f118"}],
+            "stream": True,
+            "stream_options": {"include_usage": include_usage},
+        },
+    )
+    assert response.status_code == 400 and response.json()["error"]["type"] == "invalid_request_error"
+    assert api.get("/__control/stats").json()["totals"]["chat_stream"] == 0
+
+
+@pytest.mark.parametrize("include_options", [False, True])
+def test_missing_or_null_stream_options_keeps_valid_sse_without_usage(api, include_options):
+    """AC-38: omitted/null stream options remain valid and do not request usage."""
+    payload = {"model": "f118-chat", "messages": [{"role": "user", "content": "e2e-f118"}], "stream": True}
+    if include_options:
+        payload["stream_options"] = None
+    response = api.post("/v1/chat/completions", json=payload)
+    assert response.status_code == 200 and response.headers["content-type"].startswith("text/event-stream")
+    frames = [part.removeprefix("data: ") for part in response.text.strip().split("\n\n")]
+    assert frames.pop() == "[DONE]"
+    assert all(json.loads(frame)["choices"] for frame in frames)
+
+
 @pytest.fixture
 def pdf_file(tmp_path):
     path = tmp_path / "e2e-f118-etl-target.pdf"
