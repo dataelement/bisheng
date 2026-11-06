@@ -274,3 +274,69 @@ async def test_user_preview_uses_original_qualification_and_pending_task_not_own
     finally:
         reset_current_permission_actor(actor_token)
         reset_current_open_api_principal(token)
+
+
+async def test_current_user_uses_visibility_and_noncurrent_retains_edit_gate(application, monkeypatch):
+    user = UserPayload(user_id=22, user_name="viewer", tenant_id=101, user_role=[])
+    visible = AsyncMock()
+    monkeypatch.setattr(module, "require_business_action", visible)
+    token = set_current_open_api_principal(None)
+    actor_token = set_current_permission_actor(PermissionActor(subject_type="user", subject_id=22, tenant_id=101))
+    try:
+        async with AsyncSession(application.engine) as session, session.begin():
+            await module.HostedAppReferenceSourceOwner().aresolve_source(session, request(), user)
+            visible.assert_awaited_once_with(user, resource_type="app", resource_id="actual-app", action="visible")
+            application.auth.assert_not_awaited()
+            await module.HostedAppReferenceSourceOwner().aresolve_source(session, request(HISTORY), user)
+            assert application.auth.await_args.args[0] is user
+            assert application.auth.await_args.args[2] == "management_preview"
+    finally:
+        reset_current_permission_actor(actor_token)
+        reset_current_open_api_principal(token)
+
+
+async def test_original_publish_only_service_account_uses_frozen_operation_without_extra_edit(application):
+    original = principal(
+        actor_kind="service_account",
+        actor_id=77,
+        subject_ref=None,
+        scopes=frozenset({"app:manage"}),
+        authorization_subject_type="service_account",
+        authorization_subject_id=77,
+    )
+    context = {
+        "schema": 1,
+        "origin_kind": "user_request",
+        "mode": "S",
+        "purpose": "approved_start",
+        "required_actions": ["publish"],
+        "actor": {"subject_type": "service_account", "subject_id": 77, "tenant_id": 101},
+        "credential_ref": {"kind": "api_credential", "credential_id": 9, "tenant_id": 101},
+        "target": {"tenant_id": 101, "app_id": "actual-app", "version_id": HISTORY},
+    }
+    token = set_current_open_api_principal(original)
+    actor_token = set_current_permission_actor(
+        PermissionActor(subject_type="service_account", subject_id=77, tenant_id=101)
+    )
+    try:
+        async with AsyncSession(application.engine) as session, session.begin():
+            await session.execute(
+                sa.update(ApiCredential)
+                .where(ApiCredential.id == 9)
+                .values(subject_kind="service_account", subject_id=77, scopes=["app:manage"])
+            )
+            owner = module.HostedAppReferenceSourceOwner(authorization_context=context)
+            snapshot = await owner.aresolve_source(session, request(HISTORY), original)
+            assert snapshot.source_key.source_version == HISTORY
+            assert application.auth.await_args.args[0] is original
+            assert application.auth.await_args.args[2] == "approved_start"
+            from datetime import datetime
+
+            await session.execute(
+                sa.update(ApiCredential).where(ApiCredential.id == 9).values(revoked_at=datetime.utcnow())
+            )
+            with pytest.raises(OpenApiCredentialInvalidError):
+                await owner.arevalidate_source(session, request(HISTORY), original, snapshot)
+    finally:
+        reset_current_permission_actor(actor_token)
+        reset_current_open_api_principal(token)
