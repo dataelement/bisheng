@@ -144,3 +144,47 @@ async def test_management_principal_requires_original_capability_and_context(aut
 
     with pytest.raises(ResourceReferenceInvalidError):
         await AppManagementSourceReadIdentity().acapture(authenticated)
+
+
+@pytest.mark.parametrize("management", [False, True])
+async def test_actor_current_tenant_cannot_drift_while_home_and_ambient_tenant_stay_same(authenticated, management):
+    from bisheng.app_publish.application.reference_read_identity import AppManagementSourceReadIdentity
+
+    class DriftedActor(PermissionActor):
+        @property
+        def current_tenant_id(self):
+            return 202
+
+    original = authenticated
+    context = None
+    if management:
+        original = principal(
+            actor_kind="service_account",
+            actor_id=4,
+            subject_ref=None,
+            scopes=frozenset({"app:manage"}),
+            authorization_subject_type="service_account",
+        )
+        context = {
+            "schema": 1,
+            "origin_kind": "user_request",
+            "mode": "S",
+            "credential_ref": {"kind": "api_credential", "credential_id": 9, "tenant_id": 101},
+            "actor": {"subject_type": "service_account", "subject_id": 4, "tenant_id": 101},
+        }
+    token = set_current_open_api_principal(original)
+    actor_token = set_current_permission_actor(
+        DriftedActor(
+            subject_type=original.authorization_subject_type,
+            subject_id=original.authorization_subject_id,
+            tenant_id=101,
+            data_scope=None,
+        )
+    )
+    try:
+        adapter = AppManagementSourceReadIdentity(context) if management else AppSourceReadIdentity()
+        with pytest.raises(ResourceReferenceInvalidError):
+            await adapter.acapture(original)
+    finally:
+        reset_current_permission_actor(actor_token)
+        reset_current_open_api_principal(token)
