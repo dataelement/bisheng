@@ -913,7 +913,7 @@
   **类型 / Owner**：测试 / LLM\
   **写入文件**：`src/backend/test/knowledge_unification/test_llm_refs.py`（拟新增）\
   **逻辑 / 测试上下文**：五类模型及共享两租户依赖均计数；仅历史聊天审计不阻；检查失败与未ready不能当无引用，不能泄露名称。\
-  **依赖**：T058, T104\
+  **依赖**：T058, T652, T654\
   **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-75, AC-76, AC-89\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -5183,6 +5183,56 @@
   **依赖**：T078\
   **覆盖 AC**: AC-30, AC-31, AC-33, AC-35, AC-48\
   **验证 / 完成条件**：记录语义退休差异，配新旧adapter/preview/download同选集全绿；不得通过删拒绝测试实现。
+
+## W6 LLM 精确影响核心真实接缝
+
+- [ ] **T651 · 受信Owner有界入向引用查询测试**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_reference_owner_paging.py`\
+  **逻辑 / 测试上下文**：真实native Session、issued owner scope/transaction/目标全集、稳定页跨tenant与多来源多slot、分页总量无截断/无Cartesian，裸target/跨事务拒绝。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-77, AC-85, AC-89\
+  **验证 / 完成条件**：先真实红/首绿测试再实现，每卡≤2叶；无真实Coverage不能假ready，后续执行/HTTP另验。
+
+- [ ] **T652 · 受信Owner有界入向引用仓储**
+  **类型 / Owner**：后端 Domain / LLM\
+  **写入文件**：`src/backend/bisheng/resource_reference/domain/repositories/reference_repository.py`\
+  **逻辑 / 测试上下文**：仅扩原REF仓储的受信scope seek分页及必要聚合；不开放任意tenant查询，不改R2写协议。\
+  **依赖**：T651\
+  **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-77, AC-85, AC-89\
+  **验证 / 完成条件**：先真实红/首绿测试再实现，每卡≤2叶；无真实Coverage不能假ready，后续执行/HTTP另验。
+
+- [ ] **T653 · 模型删除目标归属原生仓储测试**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_model_deletion_repository.py`\
+  **逻辑 / 测试上下文**：模型/服务真实归属、具体tenant/固定锁序、retained ID完整性，跨其他Child/异server注入拒绝，读锁无share副作用。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-77, AC-85, AC-89\
+  **验证 / 完成条件**：先真实红/首绿测试再实现，每卡≤2叶；无真实Coverage不能假ready，后续执行/HTTP另验。
+
+- [ ] **T654 · 模型删除目标归属原生仓储**
+  **类型 / Owner**：后端 Domain / LLM\
+  **写入文件**：`src/backend/bisheng/llm/domain/repositories/model_deletion_repository.py`\
+  **逻辑 / 测试上下文**：外部Session读取/锁服务及模型完整集合，真实owner验证，不沿用旧bulk无tenant漏口；写DML留后续执行合同。\
+  **依赖**：T653\
+  **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-77, AC-85, AC-89\
+  **验证 / 完成条件**：先真实红/首绿测试再实现，每卡≤2叶；无真实Coverage不能假ready，后续执行/HTTP另验。
+
+- [ ] **T655 · 模型独立持久确认仓储测试**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_model_delete_plan_repo.py`\
+  **逻辑 / 测试上下文**：模型manifest/space_id=None、稳定原actor排trace、命令/修订/inbound/Coverage/到期绑定、consume幂等和秘密拒绝。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-77, AC-85, AC-89\
+  **验证 / 完成条件**：先真实红/首绿测试再实现，每卡≤2叶；无真实Coverage不能假ready，后续执行/HTTP另验。
+
+- [ ] **T656 · 模型独立持久确认仓储**
+  **类型 / Owner**：后端 Domain / LLM\
+  **写入文件**：`src/backend/bisheng/llm/domain/repositories/model_delete_plan_repository.py`\
+  **逻辑 / 测试上下文**：复用现plan表且模型协议独立于PROC，外部Session仅flush；不存API key/服务完整body，不用modelID冒充文件。\
+  **依赖**：T655\
+  **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-77, AC-85, AC-89\
+  **验证 / 完成条件**：先真实红/首绿测试再实现，每卡≤2叶；无真实Coverage不能假ready，后续执行/HTTP另验。
 
 ## 自动化覆盖索引
 
