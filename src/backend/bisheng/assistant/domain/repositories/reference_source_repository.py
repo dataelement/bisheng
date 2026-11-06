@@ -1,16 +1,36 @@
 """Exact, read-only assistant facts in the admission caller's transaction."""
 
 from copy import deepcopy
+from dataclasses import dataclass
+from datetime import datetime
 
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.http_error import UnAuthorizedError
-from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id, is_tenant_filter_bypassed
+from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
+from bisheng.core.context.tenant import (
+    bypass_tenant_filter,
+    get_current_tenant_id,
+    is_tenant_filter_bypassed,
+    strict_tenant_filter,
+)
+from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.database.models.assistant import Assistant, AssistantLink
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.session import MessageSession
 from bisheng.share_link.domain.models.share_link import ResourceTypeEnum, ShareLink, ShareLinkStatusEnum
+
+
+@dataclass(frozen=True, slots=True)
+class AssistantSourceDisclosureRow:
+    id: str
+    tenant_id: int
+    name: str
+    status: int
+    user_id: int
+    is_delete: int
+    update_time: datetime | None
 
 
 class AssistantReferenceSourceRepository:
@@ -21,6 +41,31 @@ class AssistantReferenceSourceRepository:
         tenant_id = get_current_tenant_id()
         if type(tenant_id) is not int or tenant_id <= 0 or is_tenant_filter_bypassed():
             raise UnAuthorizedError()
+
+    async def alist_disclosure_rows(
+        self, session, *, assistant_ids: tuple[str, ...]
+    ) -> tuple[AssistantSourceDisclosureRow, ...]:
+        tenant = _resolve_tenant_id()
+        if (
+            not isinstance(session, AsyncSession)
+            or not session.in_transaction()
+            or is_tenant_filter_bypassed()
+            or type(tenant) is not int
+            or tenant <= 0
+            or type(assistant_ids) is not tuple
+            or len(assistant_ids) > 200
+            or any(type(ident) is not str or not ident for ident in assistant_ids)
+        ):
+            raise ReferenceCoverageNotReadyError(reason="assistant_disclosure_scope")
+        if not assistant_ids:
+            return ()
+        columns = ("id", "tenant_id", "name", "status", "user_id", "is_delete", "update_time")
+        query = select(*(getattr(Assistant, name) for name in columns)).where(
+            Assistant.tenant_id == tenant, Assistant.id.in_(tuple(dict.fromkeys(assistant_ids)))
+        )
+        with session.no_autoflush, strict_tenant_filter():
+            rows = (await session.execute(query)).mappings().all()
+        return tuple(AssistantSourceDisclosureRow(**row) for row in rows)
 
     async def _require_inspection(
         self, session: AsyncSession, token: str, assistant_id: str, *, for_update: bool
