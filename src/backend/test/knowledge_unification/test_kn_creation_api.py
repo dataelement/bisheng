@@ -116,6 +116,29 @@ async def test_non_admin_with_real_creation_menu_can_create_with_explicit_model_
     assert web_create.menu.await_count >= 2
 
 
+async def test_super_creation_uses_selected_tenant_without_changing_its_home_identity(web_create):
+    user = web_create.context.user
+    user.tenant_id = 1
+    user.is_global_super = True
+    user._runtime_credential_reference = {"kind": "web_session", "user_id": 7, "tenant_id": 1}
+    web_create.scope.return_value = EffectiveManagementScope(101, "selected", None)
+    result = await post_create(
+        web_create, {"name": "selected", "embedding_model_id": 12}, {"X-Management-Tenant": "101"}
+    )
+    assert result["status_code"] == 200 and result["data"]["tenant_id"] == 101
+    assert user.tenant_id == 1
+    web_create.menu.assert_not_awaited()
+
+
+async def test_management_scope_changed_after_request_admission_rejects_even_a_matching_new_header(web_create):
+    web_create.scope.return_value = EffectiveManagementScope(202, "selected", None)
+    before = creation_fixtures.state(web_create.context)
+    result = await post_create(
+        web_create, {"name": "late scope", "embedding_model_id": 12}, {"X-Management-Tenant": "202"}
+    )
+    assert result["status_code"] == 19704 and creation_fixtures.state(web_create.context) == before
+
+
 @pytest.mark.parametrize("header,code", [(None, 19703), ("202", 19704), ("all", 19704)])
 async def test_advanced_create_conditionally_rejects_missing_or_changed_scope_before_writes(web_create, header, code):
     before = creation_fixtures.state(web_create.context)
