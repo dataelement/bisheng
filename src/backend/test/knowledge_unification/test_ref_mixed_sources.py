@@ -105,7 +105,9 @@ async def test_roots_keep_independent_cas_revisions_and_receipts(components):
         await runtime.aapply_source_bindings(session, wrong)
 
 
-@pytest.mark.parametrize("kind", ["foreign", "other_source", "other_target", "duplicate", "same_root", "restore_default"])
+@pytest.mark.parametrize(
+    "kind", ["foreign", "other_source", "other_target", "duplicate", "same_root", "restore_default"]
+)
 async def test_mixed_rejects_unsupported_identity_before_prelock(components, kind):
     session, runtime, _owner, events = components
     items = changes(events)

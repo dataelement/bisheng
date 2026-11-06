@@ -222,6 +222,13 @@ class ReferenceTargetVerifier:
         sources = tuple(source for source, _ in planned)
         union = self._keys(tuple(key for _, keys in planned for key in keys))
         _, _, identity, groups = self._plan(session, sources[0], union, "bind")
+        if not groups:
+            owner = self._owners.get(TargetType.MODEL)
+            if owner is None:
+                raise ReferenceCoverageNotReadyError(reason="reference_mixed_prelock_unavailable")
+            # Even a zero-reference configuration has policy/tenant auxiliary
+            # rows that must precede Knowledge business roots in this batch.
+            groups = ((owner, ()),)
         for owner, keys in groups:
             prelock = getattr(owner, "aprelock_mixed_targets", None)
             if not callable(prelock):
