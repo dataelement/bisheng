@@ -504,7 +504,7 @@ async def test_many_roots_and_historical_versions_are_linear_pages_with_one_glob
     )
     async with AsyncSession(native.engine) as session, session.begin():
         await repo.avalidate_global_integrity(session)
-        assert len(native.queries) == 13  # original eleven plus two run-wide Tag parent probes
+        assert len(native.queries) == 14  # original eleven, two Tag probes and one projected unique-key probe
         native.queries.clear()
         roots = await collect(repo, "resources", session)
         docs = await collect(repo, "documents", session)
@@ -547,7 +547,7 @@ async def test_global_tag_probe_does_not_interpret_other_business_opaque_ids_as_
     await native.insert(TagLink, [data("tag_links", 1) | {"resource_type": 10, "resource_id": "opaque-hosted-app-id"}])
     async with AsyncSession(native.engine) as session, session.begin():
         await repo.avalidate_global_integrity(session)
-    assert len(native.queries) == 13
+    assert len(native.queries) == 14
     assert all("LIMIT" in sql.upper() for sql, _ in native.queries)
 
 
@@ -580,7 +580,7 @@ async def test_tag_probes_use_primary_key_searches_and_case_only_string_rhs(repo
             await repo.avalidate_global_integrity(session)
     finally:
         sa.event.remove(native.engine.sync_engine, "before_cursor_execute", observed)
-    assert len(statements) == 2 and len(native.queries) == 13
+    assert len(statements) == 2 and len(native.queries) == 14
     plans = []
     async with native.engine.connect() as connection:
         for sql, parameters in native.queries[-2:]:
@@ -655,6 +655,65 @@ async def test_invalid_ancestor_inputs_fail_before_sql(repo, native, values):
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await repo.ainspect_file_ancestors(session, file_ids=values)
     assert not native.queries
+
+
+@pytest.mark.parametrize(
+    ("collation", "before", "existing"),
+    [("NOCASE", "Upgrade-A", "upgrade-a"), ("RTRIM", "", " "), ("BINARY", "", "")],
+)
+async def test_projected_creation_collision_uses_native_unique_key_semantics(repo, native, collation, before, existing):
+    metadata = sa.MetaData()
+    table = Knowledge.__table__.to_metadata(metadata)
+    table.c.creation_request_id.type = sa.String(64, collation=collation)
+    async with native.engine.begin() as connection:
+        await connection.run_sync(Knowledge.__table__.drop)
+        await connection.run_sync(metadata.create_all)
+    await native.insert(
+        Knowledge,
+        [resource(40, creation_request_id=before), resource(41, type=3, creation_request_id=existing)],
+    )
+    with pytest.raises(sa.exc.IntegrityError):
+        async with AsyncSession(native.engine) as session, session.begin():
+            await session.execute(sa.update(Knowledge).where(Knowledge.id == 40).values(type=3))
+    native.queries.clear()
+    async with AsyncSession(native.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError) as error:
+            await repo.avalidate_global_integrity(session)
+    assert error.value.kwargs == {"reason": "unification_resource_projected_creation_conflict", "id": 40}
+    grouped = [sql for sql, _ in native.queries if "GROUP BY" in sql.upper()]
+    assert len(grouped) == 1 and "HAVING count(" in grouped[0] and "LIMIT" in grouped[0].upper()
+    assert "Upgrade-A" not in str(error.value) and "upgrade-a" not in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"user_id": None},
+        {"creation_request_id": None},
+        {"tenant_id": 202},
+        {"user_id": 8},
+        {"type": 1},
+        {"type": 2},
+        {"creation_request_id": "upgrade-a"},
+    ],
+)
+async def test_projected_creation_probe_preserves_null_other_scopes_and_database_distinct_keys(repo, native, changes):
+    before = resource(40, creation_request_id="Upgrade-A")
+    if changes.get("user_id", 7) is None or changes.get("creation_request_id", "Upgrade-A") is None:
+        before.update(changes)
+    await native.insert(
+        Knowledge,
+        [
+            before,
+            resource(41, type=3, creation_request_id="Upgrade-A") | changes,
+        ],
+    )
+    native.queries.clear()
+    async with AsyncSession(native.engine) as session, session.begin():
+        await repo.avalidate_global_integrity(session)
+    assert len(native.queries) <= 14
+    grouped = [sql for sql, _ in native.queries if "GROUP BY" in sql.upper()]
+    assert len(grouped) <= 1
 
 
 @pytest.mark.parametrize("kind", MODELS)

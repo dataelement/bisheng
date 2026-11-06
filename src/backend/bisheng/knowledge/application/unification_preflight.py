@@ -164,6 +164,8 @@ class UnificationPreflight:
                     if method == "resources":
                         if row.type not in {0, 1, 2, 3}:
                             _blocked("unknown_knowledge_type")
+                        if row.type == 0 and row.user_id is None:
+                            _blocked("creator_missing")
                         spaces[row.id] = data
                     elif method == "files":
                         if row.file_type not in {0, 1} or row.knowledge_id not in spaces:
