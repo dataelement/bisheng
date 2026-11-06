@@ -572,3 +572,5 @@ Files将当前容器已读取的真实upload_file能力挂实际入口，Toolbar
 T795先测试→T796只扩现`permission/application/migration_read.py`，新增frozen/slots `OriginalTupleFact(user,relation,object)`及`PinnedMigrationPermissionReader.aiter_original_tuples()`。只能在现真实原pin discovery成功并进入reader后，沿同一原FGAClient.iter_tuples(consistency='HIGHER_CONSISTENCY')无过滤完整读Store一次；不按tenant或资源重复扫描、不list_objects推断完整原tuple，不写FGA/SQL、不读provider/token/配置或导出客户端。流生命周期不允许同reader第二次采集，关闭/重pin/途中错误明确失败，不缓存全Store、不丢重复或只保知识namespace。
 
 每个真实tuple key严格恰user/relation/object三个非空字符串（各有界4096，不含NUL）；condition或未知权威字段阻断，不静默删除。每yield前重验reader仍open、客户端仍原store/model；输出闭集fact，不泄露raw key至错误文本。普通共享读取aget_shared_server_ids及原tenant/native TX限制完全保持。全Store事实供§34同run原基线，不代表全主体×资源授权矩阵已核；M4仍按原冻结SQL/compiler及实际既定用例验证。
+
+§34全局freeze续跑澄清：原子性要求不能存在preparing/未冻与已冻混合；不要求M3/M4各tenant后继阶段锁步。全部tenant已冻结、tenant集合/writer/原baseline及plan完全一致、无failed时，合法baseline_frozen/converting/backfilling/verifying/verified/completed阶段差异仍返回同一原global proof并零flush，不重盘点/重冻/倒退阶段。任一failed沿原显式恢复协议，不借getter恢复；未解释的证据/集合差异继续拒绝。

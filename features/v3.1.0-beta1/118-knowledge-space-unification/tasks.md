@@ -6446,7 +6446,7 @@
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_original_tuples.py`\
   **逻辑 / 测试上下文**：W6§37真实FGA transport分页、原pin、一次全Store、未知condition/错client/关闭/中断拒绝，流式无全Store缓存。\
-  **依赖**：T707\
+  **依赖**：T713\
   **覆盖 AC**: AC-56, AC-63, AC-78, AC-79, AC-80, AC-85\
   **验证 / 完成条件**：真实缺方法红→实际原client分页绿，旧共享合同回归及固定独立复核；不计完整M2。
 

@@ -216,5 +216,5 @@
 | T792 | 目录当前容器实际上传入口与工具栏 | 前端 Platform / PLATFORM | T791 |
 | T793 | 普通上传真实状态中英文词条 | 文案集成 / INT | T789 |
 | T794 | 普通上传真实状态日文词条 | 文案集成 / INT | T793 |
-| T795 | M2原固定Store完整tuple流测试 | 测试 / INT | T707 |
+| T795 | M2原固定Store完整tuple流测试 | 测试 / INT | T713 |
 | T796 | M2原固定Store完整tuple只读适配 | 后端 Permission Application / INT | T795 |
