@@ -4974,6 +4974,24 @@
   **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
   **验证 / 完成条件**：运行配对T624及真实Owner组合；相关原回归不退化。
 
+## W6 平台高级写管理头接缝
+
+- [ ] **T626 · 平台高级命令管理头路径测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/frontend/platform/src/test/f118ProcessingManagementScope.test.ts`\
+  **逻辑 / 测试上下文**：按后端T221路径配对断言advanced允许携带原管理snapshot；所有普通文件写、GET及v2保持原边界，不扩大网页头要求。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-04, AC-05, AC-33, AC-35, AC-84\
+  **验证 / 完成条件**：测试先独立提交再实现，同选集及原具体租户回归全绿；真实API联调另验。
+
+- [ ] **T627 · 平台高级命令管理头路径接线**
+  **类型 / Owner**：前端 Platform / INT\
+  **写入文件**：`src/frontend/platform/src/controllers/managementScope.ts`\
+  **逻辑 / 测试上下文**：仅补与后端一致的两个精准路径正则；复用已有request/response范围snapshot，不改身份/tenant权威来源。\
+  **依赖**：T626\
+  **覆盖 AC**: AC-04, AC-05, AC-33, AC-35, AC-84\
+  **验证 / 完成条件**：测试先独立提交再实现，同选集及原具体租户回归全绿；真实API联调另验。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。

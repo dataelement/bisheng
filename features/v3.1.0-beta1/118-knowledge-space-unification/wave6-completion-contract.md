@@ -41,6 +41,10 @@ index_generation是受控业务操作代际。本轮复用原物理索引与mode
 
 ## 3. 执行与环境边界
 
+### 平台高级命令管理头接缝：已冻结
+
+前端managementScope的精确写路径须与已落地后端T221相同：PUT单空间processing-settings；POST单空间processing-jobs、processing-jobs/precheck、processing-jobs/{job_id}/retry。复用原request snapshot和X-Management-Tenant，不变更authority来源/response guard；GET、普通文件上传/rename/move/delete及v2机器调用不新增网页管理头要求。此接缝由INT独写，不占两端API lane文件。
+
 INT统一合同、任务、locale、共享装配与合流；各lane从冻结提交建立独立worktree，只写登记叶子。测试先提交，再实现，已有正确行为如实记首绿。禁止repo-wide stash/reset/clean/无path restore及整文件theirs；不覆盖其他worktree。不push、不自动合入发版线。
 
 用户已提供109:3005专用验证环境并授权准备场景数据、验证迁移升级。首次只读确认该入口是DM8部署，后续限定其关联服务与隔离测试租户；同机其他部署不得改动。凭据不入仓库/报告。停服升级须先一致备份再正式盘点冻结，脚本不探测/控制停服。完整双库、中间件、浏览器E2E及备份恢复需实际证据，不能用单元测试或HTTP健康替代。
