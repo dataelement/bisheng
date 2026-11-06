@@ -599,7 +599,7 @@
   **类型 / Owner**：后端 Domain / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/services/metadata_processing_service.py`（拟新增）\
   **逻辑 / 测试上下文**：新增字段历史为空，rename/drop 冻结前后 schema 与范围且二次确认，SQL/索引实际结果计 item，不用 accepted 冒充完成；仍原容器 edit，失败可恢复。\
-  **依赖**：T071\
+  **依赖**：T071, T740, T742\
   **配对测试**：T071\
   **验证 / 完成条件**：运行配对测试 T071；验证本卡预期，相关范围检查通过。
 
@@ -5904,6 +5904,94 @@
   **依赖**：T728\
   **覆盖 AC**: AC-02, AC-03, AC-04, AC-87\
   **验证 / 完成条件**：记录原缺表失败，补真实空表后原列表/创建/新异常测试同选集通过，无生产范围变更。
+
+## W6元数据结构实际Owner与账本消费闭环
+
+- [ ] **T733 · 元数据精确执行仓储与配置测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_metadata_execution_repository.py`\
+  **逻辑 / 测试上下文**：实际SQL精确链/父/租户/source/value漂移，after-schema revision/digest及大空间逐item查询预算，无全空间重复扫描。\
+  **依赖**：T715\
+  **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
+
+- [ ] **T734 · 元数据实际配置与逐item值提交仓储**
+  **类型 / Owner**：后端 Repository / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/metadata_execution_repository.py`\
+  **逻辑 / 测试上下文**：W6§24真实Root配置与指定链读取、受控确定after值写；只外部TX、不改File状态或R/G。\
+  **依赖**：T733\
+  **配对测试**：T733\
+  **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
+
+- [ ] **T735 · 元数据Owner/J1 schema过期及空范围测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_metadata_owner.py`；`src/backend/test/knowledge_unification/test_metadata_job_repository.py`\
+  **逻辑 / 测试上下文**：实际core计划+schemaCAS+J1同TX，非空/空结构记录、幂等回滚、schema ABA与RG过期、零伪file。\
+  **依赖**：T734\
+  **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
+
+- [ ] **T736 · 元数据Owner与J1配置合同**
+  **类型 / Owner**：后端 Application / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/application/metadata_owner.py`；`src/backend/bisheng/knowledge/domain/repositories/processing_job_repository.py`\
+  **逻辑 / 测试上下文**：W6§24 actual Owner组合、metadata配置可选事实和仅metadata空item已完成记录，其余kind原限制保留。\
+  **依赖**：T735\
+  **配对测试**：T735\
+  **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
+
+- [ ] **T737 · 元数据实际预检接收重试与worker测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_metadata_job.py`；`src/backend/test/knowledge_unification/test_metadata_job_worker.py`\
+  **逻辑 / 测试上下文**：实际ASGI/Service/Owner/J1/Celery路径，cancel零写、历史全版本、索引部分失败/重试、lease/config失效及File值同TX。\
+  **依赖**：T736\
+  **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
+
+- [ ] **T738 · 元数据通用处理Service与业务Owner接线**
+  **类型 / Owner**：后端 Service / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/processing_job_service.py`；`src/backend/bisheng/knowledge/application/processing_owner.py`\
+  **逻辑 / 测试上下文**：W6§24 metadata独立preview/accept/retry，原kind不变，不进入rebuild切换或File解析。\
+  **依赖**：T737\
+  **配对测试**：T737, T735\
+  **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
+
+- [ ] **T739 · 元数据实际Celery分流与租约执行**
+  **类型 / Owner**：Worker / PROC\
+  **写入文件**：`src/backend/bisheng/worker/knowledge/metadata_jobs.py`；`src/backend/bisheng/worker/knowledge/processing_jobs.py`\
+  **逻辑 / 测试上下文**：W6§24专用runner逐步原身份/模型/schema/lease/版本guard，真实handler及File值+item完成，部分失败和obsolete落账。\
+  **依赖**：T738\
+  **配对测试**：T737\
+  **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
+
+- [ ] **T740 · 元数据真实HTTP装配与kind开放**
+  **类型 / Owner**：后端 API / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/api/endpoints/processing.py`\
+  **逻辑 / 测试上下文**：全部实际执行/retry路径通过后才开放metadata，现A1 wire及原actor/scope保持。\
+  **依赖**：T739\
+  **配对测试**：T737, T071\
+  **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
+
+- [ ] **T741 · 旧metadata SPACE协议事务桥接测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_metadata_legacy.py`\
+  **逻辑 / 测试上下文**：原三个操作请求/响应字段，SPACE同TX schema+job，不派旧BackgroundTask，空空间无伪文件且实际SQL完成，QA保持。\
+  **依赖**：T740\
+  **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
+
+- [ ] **T742 · 旧metadata业务入口实际桥接**
+  **类型 / Owner**：后端 Application/Service / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/application/metadata_legacy.py`；`src/backend/bisheng/knowledge/domain/services/knowledge_metadata_service.py`\
+  **逻辑 / 测试上下文**：W6§24原UserPayload/容器edit，同TX准备接受schema+J1再commit；原协议加只读实际job状态，不以接受报索引完成。\
+  **依赖**：T741\
+  **配对测试**：T741, T071\
+  **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
 
 ## 自动化覆盖索引
 

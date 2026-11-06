@@ -341,3 +341,32 @@ T725先两叶repo/service测试→T726 repo/schema；T727一叶API测试→T728 
 
 
 §23测试接缝：T732仅补原test_kn_list.py catalog fixture的真实KnowledgeFile空表及tenant注册，保持原断言；真实final-page EXISTS不可用mock或缺表fallback绕过。
+
+
+## 24. 元数据结构Owner/J1与实际消费闭环子合同 V1：已冻结
+
+依赖已合MetadataProcessingService准备核、MetadataProcessingRepository完整链/CAS和native metadata index handler。继续原容器edit、原身份/凭据/tenant、全部真实历史版本，File edit不扩展、不触Model R/G/R2、不创建任务模型绑定、不做在途外部IO竞态治理。元数据只绑定本操作接受后schema revision及完整after-schema摘要，使用J1 parameters/每item snapshot现JSON存储；不新造schema列或以空间处理默认版本代替。全文件接受前范围完整核验只做常数次数；逐item/guard必须精确PK链读取，不能每个Chunk批次重扫全部空间items/版本而形成N²。
+
+### 24.1 接受、配置与空范围
+
+新增application/metadata_owner.py:MetadataProcessingOwner，唯一装配真实MetadataProcessingService、MetadataExecutionRepository和现jobs。`apreview(session,space_id,*,identity,parameters)`重验原identity和空间edit后返回实际core计划及source revisions；`aaccept(session,prepared,*,identity)`消费同一native TX私有计划，执行schema CAS并产真实job参数及NewProcessingItem tuple。业务Owner不得接受HTTP提供的after-schema/after-values/physical indexes。每item snapshot闭集包括schema_version/mode、真实target/parent、source_revision、before/after-values及digest、original_status、受影响字段；参数保存request_parameters、operation/confirmation/plan标识、accepted后schema revision/digest/after-schema/changed_at。源完整摘要/每版本source与values摘要参与precheck→create重验，其他事务/改动/伪造计划拒绝。
+
+ProcessingConfiguration增加optional metadata_schema_revision与metadata_schema_digest（其他kind默认None保持兼容）。metadata的J1 claim/renew/item/retry/finalize必须比较这两个实际当前事实与job中接受后schema证据以及原Model R/G；缺证据不能继续，schema A→B→A仍由递增revision过期。`MetadataExecutionRepository.aread_configuration(session,space_id)`只读真实当前root scalars，保native TX/具体tenant；执行的模型由实际KnowledgeModelReadRuntime按当前原identity准入，不从job历史ID或File split_rule取模型。空范围不需要provider IO。
+
+空空间是合法schema操作：aaccept真实CAS成功后建立kind=metadata_schema_change、items=0的已完成**结构操作记录**，state=succeeded/total=pending=0/finished_at真实提交时刻、无dispatch intent，不构造file_id=0或虚假文件item。现JobAccepted仍返回真实job_id/state=succeeded，区别于非空accepted；这不是把异步索引报成完成。J1只为该kind允许空items，其余kind原非空限制及幂等保持；事务回滚时schema与该记录都消失。新作业不授予模型/文件权限，不能作为迁移或业务引用来源。
+
+### 24.2 精确执行、失败与重试
+
+新增domain/repositories/metadata_execution_repository.py，只用外部native Session、严格tenant且非bypass、无commit/外部IO。`aread_item(session,job,item)`验证真实space/File/Document/Version精确链、原parent/source_digest及File状态2/3/6/7，当前值只允许冻结before或after摘要；目录/孤儿/foreign/移动/手动值漂移拒绝，guard不重扫整个空间。`awrite_values(session,job,item)`在有效租约/配置校验后原File.user_metadata写确定after值，同TX jobs.acomplete_item；不改变File.status、分段/解析规则、Chunk文本、版本或Model R/G。命名/签名内部可窄化但这些真实验证不可跳过，也不能增加通用exclude_job/跳权限参数。
+
+KnowledgeProcessingOwner持有metadata Owner，metadata preview/create/retry走该Owner；其余kind的模型切换/文件恢复完全保持。metadata retry消费最新原actor receipt、原schema证据及实际当前模型，原任务只重排失败item，不加模型重建围栏/重新变更schema。原错误和obsolete必须在真实事务提交，不以raise把已判过期回滚；无效凭据/缺权限不继续下一IO。
+
+新增worker/knowledge/metadata_jobs.py专用async runner，由现processing_jobs._execute_processing_job在确认真实worker proof/当前job kind后分流；不走existing_chunks或file parse逻辑。复用现原actor restoration及jobs leases，消息仍仅jobID/revision。每item真实索引handler受控guard每次恢复原凭据、重验edit/实际模型配置、schema、job+item lease及精确原版本，再提交guard事务后才执行下一IO；不长持SQL连接跨Milvus/ES。handler成功后重新原身份/guard，File值与item成功同事务，真实counts写checkpoint；单item索引错误记该item失败并可继续其他item，部分成功为partial_failed，不假全成功。重投按冻结after值替换幂等，ES失败后可重试；过期/租约丢失停止后续IO并保当前账本结果。全部item完成后真实配置/租约检查finalize，不改变空间published/rebuilding状态或借用rebuild retry fence。
+
+只在runner/Owner/retry与真实API组合通过后，processing endpoint和service available_kinds开放metadata_schema_change；此前继续明确unavailable。T733–T740配对/ASGI→实际Owner/J1→实际Celery函数→native IO形状及失败注入证明，不以孤立helper完成原T071/T072；真实索引服务另E2E。
+
+### 24.3 既有metadata协议桥接
+
+随后T741/T742将原KnowledgeMetadataService的SPACE add/rename/delete接application/metadata_legacy.py真实Owner/J1，QA等原不在统一范围的逻辑保持。原三个路由、请求字段及已有响应字段不改；原已确认操作请求可在服务器同TX准备/接受，不要求旧SDK新增确认字段。原background_tasks参数可保签名但SPACE不再派原无账本BackgroundTask。仅使用原真实UserPayload，不从audit ID复造actor；原容器edit及二次确认UI仍保，原返回Knowledge字段为接受后schema，不声称全部File/index已完成。
+
+响应可加只读processing_job={job_id,state,accepted,completed}指示真实结构操作状态，completed仅state=succeeded；不覆盖原字段。非空返回accepted/之后真实查询；空范围实际SQL完成无file item。相同新协议idempotency沿confirmation/request key；旧无幂等字段请求不猜跨请求同一intent，接受时产生服务器operation key并留账。旧自有Repository.update/commit不能先写schema再补job，整个SPACE桥接同一原native TX一次commit；失败全回滚。接口响应/现端UI提交文案与任务展示继续T183/T124复核，不能用HTTP200当索引成功。原T071先完整链测试，T072在桥接、查询/重试及固定独立复查后才勾。
