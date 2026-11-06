@@ -476,3 +476,6 @@ T762测试→T763唯一生产`knowledge/domain/repositories/unification_control_
 每个新成功物理文件复用已存在`_create_primary_document_for_file`形成真实Doc/V1/主指针，去除add_file内重复注册代码；原版本开关只影响UI/显式版本操作，不能使普通上传无V1。dedup失败结果不造新版本、成功后才原scheduler派发，配额/格式/权限初始化失败走原补偿，不留Doc/Version。folder_upload_items按原目录分组调用add_file，自然使用同一配置解析；不改folder深度/同层重名规则。
 
 测试需沿真实process_one_file和snapshot adapter读回File.split_rule，验证文档/表格空间默认、无默认系统fallback、专用音视频分支、实际preview key、后续改默认不改变既有快照；原native Doc/Version形成和回滚、历史版本不改、目录委托、重建拒绝零派发及旧上传回归组合。外部MinIO/模型/调度可隔离，不能把process_one_file自身替成固定结果来冒配置生效。网页独立专用separator/overlap0、原md/HTML与overwrite链不在此步骤改为普通文档默认。显式批次/文件参数新wire、版本UI/实际动作及整个T084其他用例须后续真实检查，首阶段不凭此默认修复勾完整T083/T084。
+
+
+§30旧假结果兼容：T765只补两个原上传测试叶中process_one_file假返回行的已保存split_rule，保持原权限补偿/不新建审批断言。实际14路径对照：前驱770含新测试18红/72绿，候选18红/72绿；集合差异是新增快照3红已修而原假split_rule缺失另3红。其余15个旧version用例的缺metadata_schema_revision夹具/旧HTTPException断言前后完全一致，另记未绿，不扩大本次上传生产修复。真实process_one_file总是先写split_rule，生产不能给None静默补系统值。
