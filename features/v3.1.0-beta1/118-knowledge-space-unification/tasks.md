@@ -5735,6 +5735,25 @@
   **覆盖 AC**: AC-56, AC-63, AC-64, AC-70, AC-87, AC-88, AC-89, AC-93\
   **验证 / 完成条件**：配对/旧pin及原NameCatalog边界通过，固定独立审；M2/CLI完整消费仍待后续。
 
+## W6元数据逐版本真实索引handler前置
+
+- [ ] **T714 · 元数据完整索引分页与恢复测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_metadata_index_worker.py`\
+  **逻辑 / 测试上下文**：真实native query_iterator/upsert/ES调用形状，10001+块越界不截断、pk/vector/文本与非目标字段不变；add清残留、rename/delete幂等及ES失败重试，迭代器finally关闭/guard中断和真实统计失败。\
+  **依赖**：T702\
+  **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54\
+  **验证 / 完成条件**：先真实红/首绿，IO边界fakes明确列出；不将native形状测试称真实服务或公开kind完成。
+
+- [ ] **T715 · 元数据逐version索引同步native handler**
+  **类型 / Owner**：Worker / PROC\
+  **写入文件**：`src/backend/bisheng/worker/knowledge/metadata_worker.py`\
+  **逻辑 / 测试上下文**：W6§20精确原physical indexes全量分页，参数化字段替换、真实count/失败结果、guard/close与幂等，不嵌入、不写SQL或改变原File状态。\
+  **依赖**：T714\
+  **配对测试**：T714\
+  **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54\
+  **验证 / 完成条件**：配对/原Chunk与索引相关回归、C2静态及固定独立审，Owner/J1真实装配后才开放kind。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。

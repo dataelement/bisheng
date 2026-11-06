@@ -289,3 +289,13 @@ T705先测两个受控fields→原T178；T706再测父Editor/Dialog→T707两叶
 `aget_shared_server_ids(session,tenant_id)->frozenset[int]`要求已进入reader、外部native事务、具体当前tenant且相等、非bypass，原Root返回空；其他tenant使用完整`stream_list_objects(user='tenant:{id}',relation='shared_with',type='llm_server',consistency='HIGHER_CONSISTENCY')`消费全部NDJSON。每次请求显式原model ID；非法prefix/非规范正整数/流中错误或中断全部失败，不能返回已读前缀或当空共享。每tenant一次，由SourceInventory编排，后续交真实`ModelNameResolutionRepository.ainspect_catalog`核原Root拓扑/默认继承/Provider父链。此读取只说明原sharing事实，不自行授予模型引用资格。
 
 退出必关闭专属client；异常保持cause，旧reader/关闭后拒用；无进程全局缓存、SQL写/flush/commit/BRR/Coverage/授权收据或配置泄露。可为测试替换同形discovery/transport factory，生产默认始终真实现有discovery与FGAClient，不设mock开关。factory结果的store/model也须等于原pin，不接受客户端自行repin；不触碰通用online runtime。T712先测→T713单叶实现，真OpenFGA专项实测与正式M2装配另记。
+
+## 20. 元数据逐版本索引处理子合同 V1：已冻结
+
+先做T714/T715真实native索引handler，再由后续Owner/J1组合接线；未接线前metadata kind保持unavailable，原T071/T072不勾。`worker/knowledge/metadata_worker.py:apply_metadata_index_item(*,knowledge:Knowledge,invoke_user_id:int,file_id:int,affected_fields:tuple[str,...],after_values:dict|None,guard:Callable[[],Awaitable[None]]) -> MetadataIndexResult`为异步内部函数，结果frozen/slots为file_id/milvus_count/es_count。knowledge与file/version归属、after_values及guard必须由后续真实Owner从已接受J1快照及当前业务配置提供，不接受HTTP中的索引名、任意目标或历史模型回退。没有可用guard明确拒绝，任何SQL值写/完成记录均由后续Owner leased completion同事务执行；handler不自开Session/flush/commit、不改File状态或Model R/G/R2。
+
+复用现KnowledgeRag原真实vector/ES初始化，只访问该knowledge原collection/index中document_id=file_id的记录。受影响字段是changes中原名/新名去重集合，以冻结该version的SQL after_values[field].field_value为权威，移除受影响旧键后设置这些字段的确定新值；add无该键即清残留为空。其余user_metadata/完整record字段、pk/vector/Chunk文本/原文件保持。该替换按同一接受快照幂等，ES失败后重试不会丢已rename值或复活残留。
+
+Milvus沿现同步Collection.query_iterator(batch_size=1000,limit=-1,expr精确file,out_fields全部schema字段)，循环至真实EOF，逐批copy+upsert保原pk/vector，核真实upsert_count与该批一致；finally close迭代器，异常/guard拒绝后停止新IO。ES用参数化字段名和值、精确term(document_id)的update_by_query，结果timed_out/failures/version_conflicts或统计不完整均明确失败，cause保留，不把部分索引更新称成功；正常完成返回真实count。ES refresh=True确保完成后的读取可见。无记录的失败/安全态版本可为0，但物理索引缺失或native异常不能吞成0成功。
+
+guard在初始化/每个受控批次写前、ES写前及返回前await；后续将验证原actor、item lease、当前Model R/G、接受后schema revision/after schema和该version物理摘要。外部在途IO与用户修改竞态仍按用户排除，不新增staging/双写/强制回退。单测用真实native方法形状与10001+行分页/故障注入，不冒称真实Milvus环境；正式E2E接线后再实测。原手动Chunk元数据以File业务值为权威只对本次字段变更，不修改其他内容。
