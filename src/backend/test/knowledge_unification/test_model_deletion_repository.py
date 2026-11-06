@@ -96,3 +96,13 @@ async def test_borrowed_transaction_is_never_committed_or_business_rows_changed(
     second = await inspect(removal_session, (11,))
     assert second.server_revision != first.server_revision
     assert len((await removal_session.execute(select(LLMModel))).scalars().all()) == 6
+
+
+async def test_provider_revision_also_binds_retained_model_configuration(removal_session):
+    first = await inspect(removal_session, (11, 12))
+    retained = await removal_session.get(LLMModel, 12)
+    retained.model_name = "new-retained-configuration"
+    await removal_session.flush()
+    second = await inspect(removal_session, (11, 12))
+    assert second.targets == first.targets
+    assert second.server_revision != first.server_revision
