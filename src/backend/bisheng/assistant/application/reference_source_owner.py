@@ -2,7 +2,10 @@
 
 from datetime import date, datetime
 from enum import Enum
+from hashlib import sha256
+from urllib.parse import quote
 
+from bisheng.api.services.f048_application_permission import ApplicationPermissionRecord
 from bisheng.assistant.domain.repositories.reference_source_repository import AssistantReferenceSourceRepository
 from bisheng.assistant.domain.services.reference_extractor import (
     ASSISTANT_REFERENCE_EXTRACTOR_VERSION,
@@ -10,15 +13,28 @@ from bisheng.assistant.domain.services.reference_extractor import (
 )
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.assistant import AssistantNotExistsError
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
-from bisheng.permission.application.business_authorization import require_business_action
-from bisheng.resource_reference.application.contracts import SourceKey, SourceType
+from bisheng.common.errcode.knowledge import (
+    KnowledgeOperationPlanConflictError,
+    ReferenceCoverageNotReadyError,
+    ResourceReferenceInvalidError,
+)
+from bisheng.common.errcode.public_endpoints import PublicGuestAccessDisabledError
+from bisheng.core.context.tenant import is_tenant_filter_bypassed
+from bisheng.core.database.tenant_filter import _resolve_tenant_id
+from bisheng.database.models.assistant import AssistantStatus
+from bisheng.permission.application.access import get_f048_resource_adapter, get_f048_runtime
+from bisheng.permission.application.business_authorization import batch_check_business_actions, require_business_action
+from bisheng.permission.application.identity import resolve_permission_actor
+from bisheng.permission.domain.services.data_scope import DATA_SCOPE_ALL
+from bisheng.resource_reference.application.contracts import SourceKey, SourceType, TransactionIdentity
+from bisheng.resource_reference.application.read_identity import AuthenticatedSourceReadIdentity
 from bisheng.resource_reference.application.source_contracts import (
     AuthorizedSourceSnapshot,
     SourceReadRequest,
     canonical_payload_json,
     payload_digest,
 )
+from bisheng.resource_reference.application.source_disclosure import SourceDisclosure
 
 
 def _json_value(value):
@@ -36,6 +52,119 @@ def _json_value(value):
 class AssistantReferenceSourceOwner:
     def __init__(self, repository: AssistantReferenceSourceRepository | None = None):
         self.repository = repository or AssistantReferenceSourceRepository()
+
+    async def adisclose_sources(
+        self, session, *, identity, source_keys: tuple[SourceKey, ...]
+    ) -> tuple[SourceDisclosure | None, ...]:
+        if (
+            type(source_keys) is not tuple
+            or len(source_keys) > 200
+            or any(
+                not isinstance(key, SourceKey)
+                or key.source_type != SourceType.ASSISTANT
+                or key.source_version != "current"
+                for key in source_keys
+            )
+        ):
+            raise ReferenceCoverageNotReadyError(reason="assistant_disclosure_batch")
+        if not source_keys:
+            return ()
+        try:
+            tenant = _resolve_tenant_id()
+            if (
+                not isinstance(identity, UserPayload)
+                or type(tenant) is not int
+                or tenant <= 0
+                or is_tenant_filter_bypassed()
+            ):
+                raise ReferenceCoverageNotReadyError(reason="assistant_disclosure_identity")
+            transaction = TransactionIdentity.capture(session)
+            ids = tuple(dict.fromkeys(key.source_id for key in source_keys if key.tenant_id == tenant))
+            if not ids:
+                return (None,) * len(source_keys)
+            capture = AuthenticatedSourceReadIdentity()
+            original = await capture.acapture(identity)
+            if original.request_tenant_id != tenant:
+                raise ReferenceCoverageNotReadyError(reason="assistant_disclosure_identity_changed")
+            actor = await resolve_permission_actor(identity)
+            rows = await self.repository.alist_disclosure_rows(session, assistant_ids=ids)
+            by_id = {row.id: row for row in rows}
+            if len(by_id) != len(rows) or set(by_id) != set(ids):
+                raise ReferenceCoverageNotReadyError(reason="assistant_disclosure_missing_metadata")
+            runtime = await get_f048_runtime()
+            snapshots = await runtime.get_permission_snapshots(tuple((tenant, "assistant", ident) for ident in ids))
+            records = []
+            for ident in ids:
+                row, snapshot = by_id[ident], snapshots.get((tenant, "assistant", ident))
+                if (
+                    row.tenant_id != tenant
+                    or row.is_delete
+                    or type(row.name) is not str
+                    or snapshot is None
+                    or type(snapshot.version) is not int
+                    or snapshot.version <= 0
+                    or snapshot.mode != "CUSTOM"
+                    or snapshot.parent_type is not None
+                    or snapshot.parent_id is not None
+                ):
+                    raise ReferenceCoverageNotReadyError(reason="assistant_disclosure_invalid_metadata")
+                status = AssistantStatus(row.status).name
+                context = sha256(
+                    f"{snapshot.context_version}|{row.update_time.isoformat() if row.update_time else '0'}".encode()
+                ).hexdigest()
+                records.append(
+                    ApplicationPermissionRecord(
+                        tenant, "assistant", ident, status, row.user_id, snapshot.version, context
+                    )
+                )
+            adapter = await get_f048_resource_adapter("assistant")
+            # Validate the loaded business rows even on existing public/system paths.
+            for record in records:
+                adapter._record_target(record, actor, action="visible")
+            from bisheng.public_endpoints.domain.services import guest_policy
+
+            allowed, pending = {}, []
+            for record in records:
+                if guest_policy.is_public_published_resource(record.resource_id, "assistant"):
+                    try:
+                        await guest_policy.ensure_guest_link_enabled("assistant", record.resource_id)
+                        allowed[record.resource_id] = True
+                    except PublicGuestAccessDisabledError:
+                        allowed[record.resource_id] = False
+                else:
+                    pending.append(record)
+            if actor.super_admin and actor.data_scope == DATA_SCOPE_ALL and pending:
+                decisions = await batch_check_business_actions(
+                    identity,
+                    resource_type="assistant",
+                    resource_ids=tuple(row.resource_id for row in pending),
+                    actions=("visible",),
+                )
+                if set(decisions) != {row.resource_id for row in pending}:
+                    raise ReferenceCoverageNotReadyError(reason="assistant_disclosure_incomplete_permissions")
+                allowed.update((ident, "visible" in actions) for ident, actions in decisions.items())
+            else:
+                for offset in range(0, len(pending), 100):
+                    batch = tuple(pending[offset : offset + 100])
+                    decisions = await adapter.batch_check_loaded(records=batch, actor=actor, action="visible")
+                    if len(decisions) != len(batch):
+                        raise ReferenceCoverageNotReadyError(reason="assistant_disclosure_incomplete_permissions")
+                    allowed.update(
+                        (record.resource_id, bool(value)) for record, value in zip(batch, decisions, strict=True)
+                    )
+            transaction.assert_current(session)
+            if await capture.acapture(identity) != original:
+                raise ReferenceCoverageNotReadyError(reason="assistant_disclosure_identity_changed")
+            return tuple(
+                SourceDisclosure(key, by_id[key.source_id].name, None, f"/assistant/{quote(key.source_id, safe='')}")
+                if key.tenant_id == tenant and allowed[key.source_id]
+                else None
+                for key in source_keys
+            )
+        except ReferenceCoverageNotReadyError:
+            raise
+        except Exception as error:
+            raise ReferenceCoverageNotReadyError(reason="assistant_disclosure_failed") from error
 
     async def _load(self, session, request, identity, *, for_update):
         if (
