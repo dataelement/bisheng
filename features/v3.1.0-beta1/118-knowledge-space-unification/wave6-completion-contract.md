@@ -465,3 +465,14 @@ T762测试→T763唯一生产`knowledge/domain/repositories/unification_control_
 `avalidate_global_integrity(session)`整个run一次，只对UserTenant/Department/Role/UserRole四表做NULL/<=0/未知Tenant的LIMIT1存在性探针（闭集reason+id；UserRole诊断用完整三键），不按tenant重跑，不读foreign个人信息。关系存在性与活动资格分别留给精确事实和后续预检，不以INNER JOIN静默过滤历史记录。
 
 不新增配额统计SQL：后续M2消费§28真实资源流线性汇总，原个人SPACE计数type3且排除部门空间，原租户计数包含部门空间；迁移来源长期个人豁免由M3及T165/166接线。存储只原file_source channel/space_upload且不按处理状态过滤。保Tenant/Role原quota配置及多角色/原管理身份语义，不自行新增user_count、重算租户用量或把全局每用户显示口径改成本tenant。测试以native SQL覆盖401页、同id不同user/role复合键、500精确ID三批、外部dirty零写、跨scope事实与普通页隔离、历史成员及deleted但存在creator、非法JSON；C2按既有模型/SQL静态复核，DM8实库按用户免测。
+
+
+## 30. SPACE普通上传的实际配置快照与V1共用接线：已冻结
+
+原T083测试叶与T084生产叶先闭合`KnowledgeSpaceService.add_file`默认配置遗漏，不新建普通上传J1 kind或改loader/scheduler。服务原root/folder upload_file、实际tenant归属、重建idle、角色字节及目标tenant链配额、dedup/失败结果、版本和权限补偿均保持；不得借此增加file.edit/空间edit/管理header，不能因edit-only settings读取接口阻止合法普通上传。
+
+`FileProcessBase(knowledge_id=...)`仅作为未显式提供规则的原始请求传既有`KnowledgeService.process_one_file(...,processing_rule_request=...)`；`KnowledgeFileOne(file_path=...)`不手动填ExcelRule，让现实际snapshot解析器依文件类型消费空间/系统默认。实际File.split_rule在入队前保存完整有效规则与`_effective_processing`；preview缓存key与worker都读取该真实split_rule，不能用系统ExcelRule重新拼接。默认值读取内部已加载Knowledge的配置，不请求额外edit-only HTTP。后续保存默认不改这些已保存快照、不重处理历史。
+
+每个新成功物理文件复用已存在`_create_primary_document_for_file`形成真实Doc/V1/主指针，去除add_file内重复注册代码；原版本开关只影响UI/显式版本操作，不能使普通上传无V1。dedup失败结果不造新版本、成功后才原scheduler派发，配额/格式/权限初始化失败走原补偿，不留Doc/Version。folder_upload_items按原目录分组调用add_file，自然使用同一配置解析；不改folder深度/同层重名规则。
+
+测试需沿真实process_one_file和snapshot adapter读回File.split_rule，验证文档/表格空间默认、无默认系统fallback、专用音视频分支、实际preview key、后续改默认不改变既有快照；原native Doc/Version形成和回滚、历史版本不改、目录委托、重建拒绝零派发及旧上传回归组合。外部MinIO/模型/调度可隔离，不能把process_one_file自身替成固定结果来冒配置生效。网页独立专用separator/overlap0、原md/HTML与overwrite链不在此步骤改为普通文档默认。显式批次/文件参数新wire、版本UI/实际动作及整个T084其他用例须后续真实检查，首阶段不凭此默认修复勾完整T083/T084。
