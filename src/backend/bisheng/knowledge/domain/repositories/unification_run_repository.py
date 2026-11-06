@@ -8,6 +8,7 @@ Lifecycle progress does not certify reference Coverage or perform migration.
 import re
 from collections.abc import Mapping
 from copy import deepcopy
+from dataclasses import dataclass, field
 from itertools import pairwise
 from typing import NoReturn
 
@@ -16,7 +17,13 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
-from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed, strict_tenant_filter
+from bisheng.core.context.tenant import (
+    bypass_tenant_filter,
+    get_current_tenant_id,
+    is_tenant_filter_bypassed,
+    strict_tenant_filter,
+    tenant_execution_scope,
+)
 from bisheng.database.models.tenant import Tenant
 from bisheng.knowledge.domain.models.knowledge_unification_run import (
     KnowledgeUnificationPhase,
@@ -82,7 +89,134 @@ def _failure(error_code, error_reason) -> None:
         _reject("invalid_failure")
 
 
+@dataclass(frozen=True, slots=True)
+class FrozenGlobalInventoryResult:
+    run_id: str
+    writer_contract_version: str
+    tenant_ids: tuple[int, ...]
+    baseline_ref: dict = field(repr=False)
+    plan_ref: dict = field(repr=False)
+
+
 class KnowledgeUnificationRunRepository:
+    def _global_scope(self, session):
+        self._tenant()
+        if not isinstance(session, AsyncSession) or not session.in_transaction():
+            _reject("native_transaction_required")
+
+    @staticmethod
+    def assert_inventory_clean(session):
+        # A global flush must never carry an unrelated caller's write with it.
+        if session.new or session.dirty or session.deleted:
+            _reject("pending_caller_writes")
+
+    async def alist_actual_tenant_ids(self, session, *, lock=False):
+        self._global_scope(session)
+        ids, after = [], 0
+        while True:
+            statement = select(Tenant.id).where(Tenant.id > after).order_by(Tenant.id).limit(200)
+            if lock:
+                statement = statement.with_for_update()
+            with session.no_autoflush, strict_tenant_filter(), bypass_tenant_filter():
+                page = tuple((await session.execute(statement)).scalars())
+            if any(type(ident) is not int or ident <= after for ident in page):
+                _reject("invalid_tenant_inventory")
+            ids.extend(page)
+            if len(page) < 200:
+                return tuple(ids)
+            after = page[-1]
+
+    async def _global_rows(self, session, run_id, writer_contract_version, tenant_ids, *, lock=False):
+        self._global_scope(session)
+        self._identity(run_id, writer_contract_version)
+        if (
+            type(tenant_ids) is not tuple
+            or not tenant_ids
+            or any(type(ident) is not int or ident <= 0 for ident in tenant_ids)
+            or tuple(sorted(set(tenant_ids))) != tenant_ids
+            or await self.alist_actual_tenant_ids(session, lock=lock) != tenant_ids
+        ):
+            _reject("tenant_inventory_changed")
+        statement = (
+            select(KnowledgeUnificationRun)
+            .where(KnowledgeUnificationRun.run_id == run_id)
+            .order_by(KnowledgeUnificationRun.tenant_id)
+            .execution_options(populate_existing=True)
+        )
+        if lock:
+            statement = statement.with_for_update()
+        with session.no_autoflush, strict_tenant_filter(), bypass_tenant_filter():
+            rows = tuple((await session.execute(statement)).scalars())
+            competing = (
+                await session.execute(
+                    select(KnowledgeUnificationRun.id)
+                    .where(
+                        KnowledgeUnificationRun.writer_contract_version == writer_contract_version,
+                        KnowledgeUnificationRun.origin == "migration",
+                        KnowledgeUnificationRun.run_id != run_id,
+                    )
+                    .order_by(KnowledgeUnificationRun.tenant_id)
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+        if competing is not None:
+            _reject("another_run_exists")
+        if not rows:
+            return ()
+        if tuple(row.tenant_id for row in rows) != tenant_ids or (
+            any(row.phase == "preparing" for row in rows) and not all(row.phase == "preparing" for row in rows)
+        ):
+            _reject("mixed_global_state")
+        for row in rows:
+            with tenant_execution_scope(row.tenant_id):
+                self._validate(row, run_id, writer_contract_version)
+            if row.phase == "failed":
+                _reject("explicit_recovery_required")
+        if len({(row.baseline_hash, row.plan_hash) for row in rows}) != 1 or any(
+            row.baseline_ref != rows[0].baseline_ref or row.plan_ref != rows[0].plan_ref for row in rows
+        ):
+            _reject("global_evidence_changed")
+        return rows
+
+    @staticmethod
+    def _global_result(run_id, writer_contract_version, tenant_ids, rows):
+        if not rows or rows[0].phase == "preparing":
+            return None
+        return FrozenGlobalInventoryResult(
+            run_id, writer_contract_version, tenant_ids, deepcopy(rows[0].baseline_ref), deepcopy(rows[0].plan_ref)
+        )
+
+    async def aget_global_freeze(self, session, *, run_id, writer_contract_version, tenant_ids):
+        rows = await self._global_rows(session, run_id, writer_contract_version, tenant_ids)
+        return self._global_result(run_id, writer_contract_version, tenant_ids, rows)
+
+    async def afreeze_all(self, session, *, run_id, writer_contract_version, tenant_ids, baseline_ref, plan_ref):
+        self._global_scope(session)
+        self.assert_inventory_clean(session)
+        baseline, plan = _descriptor(baseline_ref), _descriptor(plan_ref)
+        rows = await self._global_rows(session, run_id, writer_contract_version, tenant_ids, lock=True)
+        frozen = self._global_result(run_id, writer_contract_version, tenant_ids, rows)
+        if frozen is not None:
+            if frozen.baseline_ref != baseline or frozen.plan_ref != plan:
+                _reject("frozen_evidence_changed")
+            return frozen
+        if not rows:
+            rows = tuple(
+                KnowledgeUnificationRun(
+                    tenant_id=ident, run_id=run_id, writer_contract_version=writer_contract_version, origin="migration"
+                )
+                for ident in tenant_ids
+            )
+        # All validation and locks precede the first mutation. No business or
+        # Coverage fields are written, and the outer caller alone commits.
+        for row in rows:
+            row.baseline_ref, row.plan_ref = deepcopy(baseline), deepcopy(plan)
+            row.baseline_hash, row.plan_hash = baseline["sha256"], plan["sha256"]
+            row.phase, row.update_time = "baseline_frozen", unification_now()
+            session.add(row)
+        await session.flush()
+        return self._global_result(run_id, writer_contract_version, tenant_ids, rows)
+
     @staticmethod
     def _tenant() -> int:
         tenant = get_current_tenant_id()
