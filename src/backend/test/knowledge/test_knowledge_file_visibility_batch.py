@@ -2,7 +2,7 @@
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, call
 
 import pytest
 
@@ -83,7 +83,11 @@ def batch_visibility(monkeypatch):
         )
 
     state.files = AsyncMock(side_effect=load_files)
-    state.space = AsyncMock(return_value=SimpleNamespace(id=10, tenant_id=1, type=KnowledgeTypeEnum.SPACE.value))
+    state.space = AsyncMock(
+        return_value=SimpleNamespace(
+            id=10, tenant_id=1, type=KnowledgeTypeEnum.SPACE.value, state=1, model_transition=None
+        )
+    )
     state.single_file = AsyncMock(side_effect=AssertionError("files must be loaded in batches"))
     state.versions = SimpleNamespace(
         get_permission_snapshots=AsyncMock(side_effect=snapshots),
@@ -129,7 +133,7 @@ async def test_thousand_file_filters_use_bounded_bulk_loading(batch_visibility, 
     else:
         assert await service.post_filter_visible_files(10, state.rows) == state.allowed
 
-    state.space.assert_awaited_once_with(10)
+    assert state.space.await_args_list == [call(10)] * (2 if prefilter else 1)
     assert state.files.await_count == 11
     assert state.versions.get_permission_snapshots.await_count == 11
     assert state.runtime.batch_check_actions.await_count == 11
@@ -152,7 +156,7 @@ async def test_concurrent_large_space_filters_do_not_multiply_connections_by_fil
     results = await asyncio.wait_for(asyncio.gather(*(request(index % 2) for index in range(8))), timeout=10)
 
     assert results == [len(state.allowed)] * 8
-    assert state.space.await_count == 8
+    assert state.space.await_args_list == [call(10)] * 12
     assert state.files.await_count == 88
     assert state.versions.get_permission_snapshots.await_count == 88
     assert state.peak_io <= 8
@@ -208,7 +212,7 @@ async def test_empty_inputs_do_not_initialize_permissions(batch_visibility, pref
         assert (await service.build_index_prefilter(10, None)).is_empty
     else:
         assert await service.post_filter_visible_files(10, []) == set()
-    state.space.assert_not_awaited()
+    assert state.space.await_args_list == ([call(10)] if prefilter else [])
     state.files.assert_not_awaited()
     state.adapter.assert_not_awaited()
 
