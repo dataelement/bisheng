@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史814编号：663已完成/历史交付、149当前待办、2外移；原137队列已完成28项、剩109项，另40张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史815编号：685已完成/历史交付、128当前待办、2外移；原137队列已完成28项、剩109项，另19张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -6283,7 +6283,7 @@
   **依赖**：T757\
   **验证 / 完成条件**：官方prune退出0；Header空抑制检查零诊断，平台strict与既有22条基线精确比较无新增，目标路径回归通过。
 
-- [ ] **T775 · SPACE显式批次规则真实上传接线测试**
+- [x] **T775 · SPACE显式批次规则真实上传接线测试**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_upload_overrides.py`\
   **逻辑 / 测试上下文**：W6§33真实请求DTO/handler、process_one_file快照、类型隔离、非法零写及原批量补偿；不fake实际保存快照。\
@@ -6291,7 +6291,7 @@
   **覆盖 AC**: AC-09, AC-10, AC-11, AC-38, AC-43, AC-44, AC-45, AC-86\
   **验证 / 完成条件**：先真实红，实际入口和原快照组合绿；固定独立复核，原T083/T084整卡保持未闭。
 
-- [ ] **T776 · SPACE显式批次规则真实协议与业务接线**
+- [x] **T776 · SPACE显式批次规则真实协议与业务接线**
   **类型 / Owner**：后端 API/Domain / INT\
   **写入文件**：`src/backend/bisheng/knowledge/domain/schemas/knowledge_space_schema.py`、`src/backend/bisheng/knowledge/api/endpoints/knowledge_space.py`、`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`\
   **逻辑 / 测试上下文**：W6§33可选typed overrides经真实原上传用例与原输入收据；保持旧缺省协议、动作/审批/配额/V1/队列。\
@@ -6300,7 +6300,7 @@
   **覆盖 AC**: AC-09, AC-10, AC-11, AC-38, AC-43, AC-44, AC-45, AC-86\
   **验证 / 完成条件**：配对及原上传组合绿，独立复核和静态；不宣称per-file/整上传或真实模型E2E完成。
 
-- [ ] **T777 · M2闭集事实与分层manifest编码测试**
+- [x] **T777 · M2闭集事实与分层manifest编码测试**
   **类型 / Owner**：测试 / MIG\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_inventory_codec.py`\
   **逻辑 / 测试上下文**：W6§34完整正式M2入口的确定接缝；显式闭集、全租户/原TX、线性聚合、失败封闭，不把required假port当正式freeze。\
@@ -6308,7 +6308,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-63, AC-78, AC-85, AC-93\
   **验证 / 完成条件**：配对真实红绿、固定独立复核与静态；仅完成实际接缝，原完整功能须真实装配/验收后另闭合。
 
-- [ ] **T778 · M2闭集事实与分层manifest编码**
+- [x] **T778 · M2闭集事实与分层manifest编码**
   **类型 / Owner**：后端 Application / MIG\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_inventory_codec.py`\
   **逻辑 / 测试上下文**：W6§34完整正式M2入口的确定接缝；显式闭集、全租户/原TX、线性聚合、失败封闭，不把required假port当正式freeze。\
@@ -6332,7 +6332,7 @@
   **配对测试**：T779\
   **验证 / 完成条件**：配对真实红绿、固定独立复核与静态；仅完成实际接缝，原完整功能须真实装配/验收后另闭合。
 
-- [ ] **T781 · 全租户正式基线原子冻结测试**
+- [x] **T781 · 全租户正式基线原子冻结测试**
   **类型 / Owner**：测试 / MIG\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_global_freeze.py`\
   **逻辑 / 测试上下文**：W6§34完整正式M2入口的确定接缝；显式闭集、全租户/原TX、线性聚合、失败封闭，不把required假port当正式freeze。\
@@ -6340,7 +6340,7 @@
   **覆盖 AC**: AC-56, AC-63, AC-78, AC-85, AC-93\
   **验证 / 完成条件**：配对真实红绿、固定独立复核与静态；仅完成实际接缝，原完整功能须真实装配/验收后另闭合。
 
-- [ ] **T782 · 全租户正式基线原子冻结**
+- [x] **T782 · 全租户正式基线原子冻结**
   **类型 / Owner**：后端 Repository / MIG\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/unification_run_repository.py`\
   **逻辑 / 测试上下文**：W6§34完整正式M2入口的确定接缝；显式闭集、全租户/原TX、线性聚合、失败封闭，不把required假port当正式freeze。\
@@ -6364,7 +6364,7 @@
   **配对测试**：T783\
   **验证 / 完成条件**：配对真实红绿、固定独立复核与静态；仅完成实际接缝，原完整功能须真实装配/验收后另闭合。
 
-- [ ] **T785 · 移动索引真实替换与恢复端口测试**
+- [x] **T785 · 移动索引真实替换与恢复端口测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_move_worker.py`\
   **逻辑 / 测试上下文**：W6§35真实索引IO、双目标全验证与持久checkpoint先于清源；实际J1/归属/源删除后继未闭。\
@@ -6372,7 +6372,7 @@
   **覆盖 AC**: AC-19, AC-20, AC-21, AC-23, AC-24, AC-49, AC-54, AC-86\
   **验证 / 完成条件**：配对真实红绿、固定独立复核与静态；仅完成实际接缝，原完整功能须真实装配/验收后另闭合。
 
-- [ ] **T786 · 移动索引真实替换与恢复adapter**
+- [x] **T786 · 移动索引真实替换与恢复adapter**
   **类型 / Owner**：Worker / PROC\
   **写入文件**：`src/backend/bisheng/worker/knowledge/move_worker.py`\
   **逻辑 / 测试上下文**：W6§35真实索引IO、双目标全验证与持久checkpoint先于清源；实际J1/归属/源删除后继未闭。\
@@ -6380,7 +6380,7 @@
   **配对测试**：T785\
   **验证 / 完成条件**：配对真实红绿、固定独立复核与静态；仅完成实际接缝，原完整功能须真实装配/验收后另闭合。
 
-- [ ] **T787 · SPACE暂存与注册真实API合同测试**
+- [x] **T787 · SPACE暂存与注册真实API合同测试**
   **类型 / Owner**：测试 / PLATFORM\
   **写入文件**：`src/frontend/platform/src/test/knowledgeUploadsContract.test.ts`\
   **逻辑 / 测试上下文**：W6§36实际暂存→SPACE注册→按真实ID状态，原容器upload_file、scope/parent/ABA退休，不经legacy处理或新增edit。\
@@ -6388,7 +6388,7 @@
   **覆盖 AC**: AC-03, AC-09, AC-10, AC-11, AC-30, AC-31, AC-43, AC-55, AC-86\
   **验证 / 完成条件**：配对真实红绿、实际入口组合及固定独立复核；严格类型无新增诊断/抑制，不将普通上传计作完整版本/高级验收。
 
-- [ ] **T788 · SPACE暂存与注册真实API**
+- [x] **T788 · SPACE暂存与注册真实API**
   **类型 / Owner**：前端 Platform / PLATFORM\
   **写入文件**：`src/frontend/platform/src/controllers/API/knowledgeUploads.ts`\
   **逻辑 / 测试上下文**：W6§36实际暂存→SPACE注册→按真实ID状态，原容器upload_file、scope/parent/ABA退休，不经legacy处理或新增edit。\
@@ -6396,7 +6396,7 @@
   **配对测试**：T787\
   **验证 / 完成条件**：配对真实红绿、实际入口组合及固定独立复核；严格类型无新增诊断/抑制，不将普通上传计作完整版本/高级验收。
 
-- [ ] **T789 · 平台SPACE普通上传真实页面测试**
+- [x] **T789 · 平台SPACE普通上传真实页面测试**
   **类型 / Owner**：测试 / PLATFORM\
   **写入文件**：`src/frontend/platform/src/test/f118SpaceUpload.test.tsx`\
   **逻辑 / 测试上下文**：W6§36实际暂存→SPACE注册→按真实ID状态，原容器upload_file、scope/parent/ABA退休，不经legacy处理或新增edit。\
@@ -6404,7 +6404,7 @@
   **覆盖 AC**: AC-03, AC-09, AC-10, AC-11, AC-30, AC-31, AC-43, AC-55, AC-86\
   **验证 / 完成条件**：配对真实红绿、实际入口组合及固定独立复核；严格类型无新增诊断/抑制，不将普通上传计作完整版本/高级验收。
 
-- [ ] **T790 · 平台SPACE普通上传路由与队列面板**
+- [x] **T790 · 平台SPACE普通上传路由与队列面板**
   **类型 / Owner**：前端 Platform / PLATFORM\
   **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/filesUpload.tsx`、`src/frontend/platform/src/pages/KnowledgePage/components/SpaceFileUploadPanel.tsx`\
   **逻辑 / 测试上下文**：W6§36实际暂存→SPACE注册→按真实ID状态，原容器upload_file、scope/parent/ABA退休，不经legacy处理或新增edit。\
@@ -6412,7 +6412,7 @@
   **配对测试**：T789\
   **验证 / 完成条件**：配对真实红绿、实际入口组合及固定独立复核；严格类型无新增诊断/抑制，不将普通上传计作完整版本/高级验收。
 
-- [ ] **T791 · 目录当前容器上传入口测试**
+- [x] **T791 · 目录当前容器上传入口测试**
   **类型 / Owner**：测试 / PLATFORM\
   **写入文件**：`src/frontend/platform/src/test/f118SpaceDirectoryUpload.test.tsx`\
   **逻辑 / 测试上下文**：W6§36实际暂存→SPACE注册→按真实ID状态，原容器upload_file、scope/parent/ABA退休，不经legacy处理或新增edit。\
@@ -6420,7 +6420,7 @@
   **覆盖 AC**: AC-03, AC-09, AC-10, AC-11, AC-30, AC-31, AC-43, AC-55, AC-86\
   **验证 / 完成条件**：配对真实红绿、实际入口组合及固定独立复核；严格类型无新增诊断/抑制，不将普通上传计作完整版本/高级验收。
 
-- [ ] **T792 · 目录当前容器实际上传入口与工具栏**
+- [x] **T792 · 目录当前容器实际上传入口与工具栏**
   **类型 / Owner**：前端 Platform / PLATFORM\
   **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/components/Files.tsx`、`src/frontend/platform/src/pages/KnowledgePage/components/SpaceDirectoryToolbar.tsx`\
   **逻辑 / 测试上下文**：W6§36实际暂存→SPACE注册→按真实ID状态，原容器upload_file、scope/parent/ABA退休，不经legacy处理或新增edit。\
@@ -6428,21 +6428,21 @@
   **配对测试**：T791\
   **验证 / 完成条件**：配对真实红绿、实际入口组合及固定独立复核；严格类型无新增诊断/抑制，不将普通上传计作完整版本/高级验收。
 
-- [ ] **T793 · 普通上传真实状态中英文词条**
+- [x] **T793 · 普通上传真实状态中英文词条**
   **类型 / Owner**：文案集成 / INT\
   **写入文件**：`src/frontend/platform/public/locales/zh-Hans/knowledge.json`、`src/frontend/platform/public/locales/en-US/knowledge.json`\
   **逻辑 / 测试上下文**：W6§36五个真实状态与跟踪提示键，只区分暂存/已提交/取消/状态不可取，不把提交当解析完成。\
   **依赖**：T789\
   **验证 / 完成条件**：保所有旧键值，三语key对齐及check-i18n通过，实际consumer随后T790验证。
 
-- [ ] **T794 · 普通上传真实状态日文词条**
+- [x] **T794 · 普通上传真实状态日文词条**
   **类型 / Owner**：文案集成 / INT\
   **写入文件**：`src/frontend/platform/public/locales/ja/knowledge.json`\
   **逻辑 / 测试上下文**：与T793同五键，沿原三语生成链，不输出未翻译key。\
   **依赖**：T793\
   **验证 / 完成条件**：保所有旧键值，三语key对齐及check-i18n通过，实际consumer随后T790验证。
 
-- [ ] **T795 · M2原固定Store完整tuple流测试**
+- [x] **T795 · M2原固定Store完整tuple流测试**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_original_tuples.py`\
   **逻辑 / 测试上下文**：W6§37真实FGA transport分页、原pin、一次全Store、未知condition/错client/关闭/中断拒绝，流式无全Store缓存。\
@@ -6450,7 +6450,7 @@
   **覆盖 AC**: AC-56, AC-63, AC-78, AC-79, AC-80, AC-85\
   **验证 / 完成条件**：真实缺方法红→实际原client分页绿，旧共享合同回归及固定独立复核；不计完整M2。
 
-- [ ] **T796 · M2原固定Store完整tuple只读适配**
+- [x] **T796 · M2原固定Store完整tuple只读适配**
   **类型 / Owner**：后端 Permission Application / INT\
   **写入文件**：`src/backend/bisheng/permission/application/migration_read.py`\
   **逻辑 / 测试上下文**：W6§37新增闭集OriginalTupleFact及aiter_original_tuples；保全部原共享方法，禁写/重pin或猜原授权。\
@@ -6458,14 +6458,14 @@
   **配对测试**：T795\
   **验证 / 完成条件**：配对及旧共享合同绿、固定独立复核与静态，原正式入口待真实集成。
 
-- [ ] **T797 · SPACE上传替换后的官方静态抑制清理**
+- [x] **T797 · SPACE上传替换后的官方静态抑制清理**
   **类型 / Owner**：静态集成 / INT\
   **写入文件**：`src/frontend/platform/eslint-suppressions.json`\
   **逻辑 / 测试上下文**：W6§38官方prune仅移除失效旧上传抑制，主树strict原22及空suppression检查，保旧无关诊断。\
   **依赖**：T790\
   **验证 / 完成条件**：实际登记范围验证、独立复核与静态；不得将fixture/adapter绿计作正式迁移或E2E。
 
-- [ ] **T798 · 共享SQLite知识schema夹具补真实metadata修订列**
+- [x] **T798 · 共享SQLite知识schema夹具补真实metadata修订列**
   **类型 / Owner**：测试夹具 / INT\
   **写入文件**：`src/backend/test/fixtures/table_definitions.py`\
   **逻辑 / 测试上下文**：W6§38真实Model/中性DDL已有列补入旧夹具，保原move断言，不改生产或吞行为失败。\
@@ -6584,7 +6584,7 @@
   **配对测试**：T811\
   **验证 / 完成条件**：配对真实红绿、独立复核/静态，完整旧协议回归与真实入口组合；本卡不代替未完成后继验收。
 
-- [ ] **T813 · 目标FGA模板checksum纯协议测试**
+- [x] **T813 · 目标FGA模板checksum纯协议测试**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_target_checksum.py`\
   **逻辑 / 测试上下文**：W6§37仓库SSOT目标模板摘要、无参数/IO/旧pin替代；真实缺方法红。\
@@ -6592,13 +6592,20 @@
   **覆盖 AC**: AC-56, AC-63, AC-78, AC-79\
   **验证 / 完成条件**：实际SSOT/应用层架构边界绿，不把纯getter当权限发布或M2完成。
 
-- [ ] **T814 · 目标FGA模板checksum应用纯协议**
+- [x] **T814 · 目标FGA模板checksum应用纯协议**
   **类型 / Owner**：后端 Permission Application / INT\
   **写入文件**：`src/backend/bisheng/permission/application/migration_read.py`\
   **逻辑 / 测试上下文**：W6§37公开无参target_authorization_model_checksum，由permission侧封装SSOT，知识侧不跨core。\
   **依赖**：T813\
   **配对测试**：T813\
   **验证 / 完成条件**：配对及旧pin/tuple回归、逐叶arch绿，无runtime或外部副作用。
+
+- [ ] **T815 · 旧版本读取三项夹具接真实新读口**
+  **类型 / Owner**：测试夹具 / EDGE\
+  **写入文件**：`src/backend/test/knowledge/test_knowledge_version_service_read.py`\
+  **逻辑 / 测试上下文**：W6§39已复现新旧控制恰3个新read夹具失败；真实UserPayload/tenant/native factory/loaded F048边界替代MagicMock身份，保原三项业务断言及无链404旧协议。\
+  **依赖**：T804\
+  **验证 / 完成条件**：三原读断言不削减，实际新read组合与原write控制对比无新增失败；其他13原失败继续如实报告，不顺带改旧写权限或异常语义。
 
 ## 自动化覆盖索引
 
