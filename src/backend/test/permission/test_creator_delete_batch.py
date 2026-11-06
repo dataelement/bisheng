@@ -359,3 +359,65 @@ async def test_batch_repository_rejects_oversized_input_before_sql(batch_case):
     with pytest.raises(ValueError):
         await case.runtime._state.load_grants_batch(targets=tuple(target(str(i)) for i in range(201)), models=())
     assert not case.queries
+
+
+async def test_custom_file_with_a_parent_is_still_batched_by_its_real_mode(batch_case):
+    case = batch_case
+    await seed(case, 50)
+    async with case.engine.begin() as conn:
+        await conn.execute(
+            sa.update(ResourcePermissionMode)
+            .where(ResourcePermissionMode.resource_id.like("bulk-%"))
+            .values(resource_type="knowledge_file", parent_type="knowledge_space", parent_id="7")
+        )
+        await conn.execute(sa.update(PermissionGrant).values(resource_type="knowledge_file"))
+        await conn.execute(
+            sa.insert(ResourcePermissionMode).values(
+                id=7000,
+                tenant_id=101,
+                resource_type="knowledge_space",
+                resource_id="7",
+                mode="CUSTOM",
+                version=1,
+                projection_state="CURRENT",
+            )
+        )
+    targets = tuple(
+        target(f"bulk-{i}", resource_type="knowledge_file", parent_type="knowledge_space", parent_id="7")
+        for i in range(50)
+    )
+    assert await case.runtime._creator_grant_allows_delete(case.actor, targets[0], "delete") is True
+    case.queries.clear()
+    assert await case.runtime.batch_check_actions(case.actor, targets, "delete") == (True,) * 50
+    assert select_count(case, "permission_catalog_release") == 1
+    assert select_count(case, "permission_grant ") == 1
+
+
+async def test_many_sources_of_one_grant_are_complete_and_sql_result_pages_are_bounded(batch_case):
+    case = batch_case
+    await seed(case, 1)
+    rows = []
+    for source_id in range(2, 402):
+        source = asdict(
+            GrantSourceService().canonicalize_source(
+                source_id=source_id,
+                subject_type="service_account",
+                subject_id="44",
+                source_type="CREATOR_GRANT",
+                source_ref=f"app-create:bulk-0:{source_id}",
+            )
+        )
+        source.pop("active")
+        source["id"] = source.pop("source_id")
+        rows.append(source | {"tenant_id": 101, "grant_id": 1, "state": "ACTIVE"})
+    async with case.engine.begin() as conn:
+        await conn.execute(sa.insert(PermissionGrantAssignee), rows)
+    catalog = await case.runtime.current_catalog()
+    manager = tuple(row.snapshot for row in catalog.models if row.snapshot.model_key == "manager")
+    case.queries.clear()
+    found = await case.runtime._state.load_grants_batch(targets=(target("bulk-0"),), models=manager)
+    sources = found[(101, "app", "bulk-0")][0].sources
+    assert tuple(item.source_id for item in sources) == tuple(range(1, 402))
+    assert select_count(case, "permission_grant ") == 1
+    assert select_count(case, "permission_grant_assignee") == 3
+    assert all("LIMIT" in sql.upper() for sql, _ in case.queries if "FROM permission_grant_assignee" in sql)
