@@ -1550,21 +1550,21 @@
   **类型 / Owner**：前端 Platform / PLATFORM\
   **写入文件**：`src/frontend/platform/src/components/bs-comp/permission/PermissionGrantTab.tsx`；`src/frontend/platform/src/components/bs-comp/permission/PermissionListTab.tsx`\
   **逻辑 / 测试上下文**：当前动作不显示use；纯可见模型虽动作数组为空仍展示有效主体、原Source与可撤销能力，等级按服务端；普通非法空模型不允许授予。\
-  **依赖**：T186, T022\
+  **依赖**：T631, T632, T022\
   **验证 / 完成条件**：所有资源权限弹窗use-only迁移授权可授予/列出/撤销，其他Source仍生效，file rename不被edit替代；关联规格：AC-78, AC-81, AC-83。
 
 - [ ] **T193 · 平台全员与托管应用动作**
   **类型 / Owner**：前端 Platform / PLATFORM\
   **写入文件**：`src/frontend/platform/src/components/bs-comp/permission/AllMembersPermission.tsx`；`src/frontend/platform/src/pages/BuildPage/hostedApp/appActions.ts`\
   **逻辑 / 测试上下文**：全员纯可见和 APP 原使用按钮按服务端 visible 解释，不再独立 use；发布、分享、编辑、删除与管理按钮使用各自服务端动作结果，不能由 visible 推断；保护原管理等级和可撤销性。\
-  **依赖**：T192, T136\
+  **依赖**：T192, T136, T633\
   **验证 / 完成条件**：全员Source撤销/其他来源并集，app可见但无编辑动作按钮矩阵；历史审计文字不改写；关联规格：AC-78, AC-79, AC-81, AC-83。
 
 - [ ] **T194 · 客户端通用授权展示**
   **类型 / Owner**：前端 Client / CLIENT\
   **写入文件**：`src/frontend/client/src/components/permission/PermissionListTab.tsx`；`src/frontend/client/src/components/permission/UnifiedPermissionControls.tsx`\
   **逻辑 / 测试上下文**：当前模型动作去use，合法纯可见主体及Source继续显示、管理和撤销；保既有管理能力/等级，继承模式统一解析。\
-  **依赖**：T191, T022\
+  **依赖**：T628, T629, T022\
   **验证 / 完成条件**：仅use迁移后列表不消失、可撤单来源，其他来源仍有效；view不能edit/download/rename；关联规格：AC-30, AC-31, AC-78, AC-81, AC-83。
 
 - [ ] **T195 · 客户端纯可见授予选择**
@@ -4991,6 +4991,56 @@
   **依赖**：T626\
   **覆盖 AC**: AC-04, AC-05, AC-33, AC-35, AC-84\
   **验证 / 完成条件**：测试先独立提交再实现，同选集及原具体租户回归全绿；真实API联调另验。
+
+## W6 两端通用授权独立验证接缝
+
+- [ ] **T628 · 客户端纯可见授权真实组件回归**
+  **类型 / Owner**：测试 / CLIENT\
+  **写入文件**：`src/frontend/client/src/components/permission/PermissionGrantTab.test.tsx`；`src/frontend/client/src/components/permission/PermissionListTab.test.tsx`\
+  **逻辑 / 测试上下文**：使用真实Grant/List组件，服务器pure模型保原等级、可选可撤/精确Source版本；撤一源保其他源，管理/受保护/继承/停用边界不放宽。\
+  **依赖**：T187\
+  **覆盖 AC**: AC-30, AC-31, AC-78, AC-79, AC-81, AC-83\
+  **验证 / 完成条件**：测试先独立提交，记录真实红/首绿，再按配对生产叶验证；不以mock证明真实FGA/跨租户。
+
+- [ ] **T629 · 客户端纯可见模型只读DTO**
+  **类型 / Owner**：前端 Client / CLIENT\
+  **写入文件**：`src/frontend/client/src/api/permissionTypes.ts`\
+  **逻辑 / 测试上下文**：GrantablePermissionModel只补visibility_only?:boolean，原wrapper/Controls无缺陷则不改，不新增actions空过滤或写请求字段。\
+  **依赖**：T628\
+  **覆盖 AC**: AC-30, AC-31, AC-78, AC-79, AC-81, AC-83\
+  **验证 / 完成条件**：测试先独立提交，记录真实红/首绿，再按配对生产叶验证；不以mock证明真实FGA/跨租户。
+
+- [ ] **T630 · 平台纯可见只读DTO协议回归**
+  **类型 / Owner**：测试 / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/test/f048PermissionApi.test.ts`\
+  **逻辑 / 测试上下文**：复用catalog/grantable/assignee wire mocks，验证只读字段保真且不自动进入mutation，不改变版本/原错误协议。\
+  **依赖**：T175\
+  **覆盖 AC**: AC-30, AC-31, AC-78, AC-79, AC-81, AC-83\
+  **验证 / 完成条件**：测试先独立提交，记录真实红/首绿，再按配对生产叶验证；不以mock证明真实FGA/跨租户。
+
+- [ ] **T631 · 平台纯可见模型只读DTO**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/controllers/API/permission.ts`\
+  **逻辑 / 测试上下文**：CatalogModel补visibility_only_resource_types/visibility_level，Grantable模型补visibility_only，均optional；server grantable列表权威。\
+  **依赖**：T630\
+  **覆盖 AC**: AC-30, AC-31, AC-78, AC-79, AC-81, AC-83\
+  **验证 / 完成条件**：测试先独立提交，记录真实红/首绿，再按配对生产叶验证；不以mock证明真实FGA/跨租户。
+
+- [ ] **T632 · 平台纯可见授予及来源列表组件回归**
+  **类型 / Owner**：测试 / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/test/f048PermissionGrantTab.test.tsx`；`src/frontend/platform/src/test/f048PermissionRoster.test.tsx`\
+  **逻辑 / 测试上下文**：纯可见原等级授予、inactive撤销、精确assignee/version和其他Source保留；原manage/protected/LOCAL/editable保持，首绿如实记。\
+  **依赖**：T631\
+  **覆盖 AC**: AC-30, AC-31, AC-78, AC-79, AC-81, AC-83\
+  **验证 / 完成条件**：测试先独立提交，记录真实红/首绿，再按配对生产叶验证；不以mock证明真实FGA/跨租户。
+
+- [ ] **T633 · 平台全员来源及APP动作组件回归**
+  **类型 / Owner**：测试 / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/components/bs-comp/permission/AllMembersPermission.test.tsx`；`src/frontend/platform/src/test/f114AppActions.test.tsx`\
+  **逻辑 / 测试上下文**：全员pure模型沿服务端key ADD、仅REMOVE服务器来源ID/version；失败不伪成功、无管理不得操作，visible不推导各管理动作。\
+  **依赖**：T192\
+  **覆盖 AC**: AC-30, AC-31, AC-78, AC-79, AC-81, AC-83\
+  **验证 / 完成条件**：测试先独立提交，记录真实红/首绿，再按配对生产叶验证；不以mock证明真实FGA/跨租户。
 
 ## 自动化覆盖索引
 
