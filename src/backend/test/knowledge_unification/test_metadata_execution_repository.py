@@ -188,6 +188,8 @@ async def test_original_terminal_file_statuses_are_preserved(execution, status):
         "directory",
         "document",
         "version",
+        "duplicate",
+        "primary",
         "parent",
         "source",
         "values",
@@ -210,6 +212,10 @@ async def test_precise_physical_or_frozen_chain_drift_rejected(execution, broken
             (await session.get(KnowledgeDocument, 80)).knowledge_id = 999
         elif broken == "version":
             (await session.get(KnowledgeDocumentVersion, 181)).knowledge_file_id = 82
+        elif broken == "duplicate":
+            session.add(KnowledgeDocumentVersion(id=999, document_id=80, knowledge_file_id=81, version_no=3))
+        elif broken == "primary":
+            (await session.get(KnowledgeDocument, 80)).primary_version_id = 999
         elif broken == "parent":
             row.file_level_path = "/90"
         elif broken == "source":
@@ -251,7 +257,7 @@ async def test_unrelated_pending_file_remark_remains_owned_by_caller(execution):
         assert (await session.get(KnowledgeFile, 81)).remark == "pending unrelated note"
 
 
-@pytest.mark.parametrize("pending", ["root", "values", "version"])
+@pytest.mark.parametrize("pending", ["root", "values", "version", "new_duplicate"])
 async def test_pending_critical_target_change_rejected_before_flush(execution, pending):
     async with execution.context.sessions() as session:
         job, item = await loaded(session, execution)
@@ -259,8 +265,10 @@ async def test_pending_critical_target_change_rejected_before_flush(execution, p
             (await session.get(Knowledge, 40)).metadata_schema_revision = 99
         elif pending == "values":
             (await session.get(KnowledgeFile, 81)).user_metadata = {"manual": {}}
-        else:
+        elif pending == "version":
             (await session.get(KnowledgeDocumentVersion, 181)).knowledge_file_id = 82
+        else:
+            session.add(KnowledgeDocumentVersion(document_id=80, knowledge_file_id=81, version_no=3))
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await MetadataExecutionRepository().awrite_values(session, job, item, lease=lease(job, item))
         await session.rollback()
