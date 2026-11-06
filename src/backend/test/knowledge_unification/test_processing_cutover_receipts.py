@@ -51,7 +51,7 @@ async def test_authority_calls_business_callback_and_receipt_is_consumed_once(jo
     job, lease, owner, issued = await receipt(repository, job_session, configuration)
     assert owner.calls == 1
     after = consume_cutover_receipt(job_session, issued, job, lease)
-    assert after.model_config_revision == 8 and after.index_generation == "index-7"
+    assert after == (8, "index-7")
     assert job.accepted_model_config_revision == 7
     with pytest.raises(ResourceReferenceInvalidError):
         consume_cutover_receipt(job_session, issued, job, lease)
