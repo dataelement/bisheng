@@ -233,3 +233,17 @@ FlowVersion/AssistantLink使用真实父+tenant+类型键核验，坏父显式�
 hook新增`useKnowledgeVisibleSpaces(scope,queryWithoutCursor,api?)`（useInfiniteQuery，next_cursor保不透明，空data且has_more=true仍可继续）、`useKnowledgeCreationSettings(scope,api?)`、`useCreateKnowledgeSpace(scope,api?)`。query key带原identity/tenant/managementTenant/view和筛选；mutation开始捕获scope及管理tenant，切scope后旧返回不得给新scope写cache、跳转或返回可被新页面消费的成功值；仅成功后失效发起scope列表，失败保原ApiError。测试port扩相同方法，不设生产mock开关。
 
 后续创建表单只在原ID为正整数字符串时转number；失效/非数字默认显示待修复并要求有效显式选择，禁止NaN→null触发默认回退。T178先做受控规则编辑/父级草稿边界，系统初值必须来自此GET；先不改T179旧上传到默认接线完成。T176拆为列表shell、单叶create、detail另卡，T177目录/版本另冻结；locale由INT统一三语提交，不全局替换仍并列的旧selector标签。
+
+## 15. 元数据结构原子准备子合同 V1：已冻结
+
+原T071/T072最终仍须真实J1、worker、旧v1/v2入口与指定版本值更新接线，本节只冻结T699–T702前置；不得以核心helper宣称原两卡或AC-47/49全部完成。现`metadata_schema_revision`与`MetadataSchemaParameters`为权威，无新DDL/kind。QA=1保原独立业务路径，不套SPACE整版本任务。
+
+`MetadataProcessingRepository.aload_scope(session,space_id,*,for_update=False)->MetadataScope`接外部native AsyncSession、具体tenant/strict/no_autoflush，只读或flush、不commit。返回frozen/slots闭集快照：tenant/space、当前schema及schema修订、model R/G、完整物理文件与实际Document/Version三元组、parent、状态、物理source摘要、SQL user_metadata原JSON（repr隐藏）。SPACE实际File集合与全部逻辑链须一致；空JOIN不代表空空间，孤立/跨tenant/重复/目录被版本引用/错误primary/缺主链均明确拒绝。合法空目录允许。所有历史版本含失败/安全拒绝态都保留；1/4/5或重建/COPYING/model_transition、活动metadata任务及同范围处理冲突明确拒绝，不能默默只处理成功文件。SQL查询和集合/primary检查按文件/版本线性编译，无逐版本全扫、无逐slot目录读，无外部IO。
+
+`MetadataProcessingService(repository=None).apreview(session,space_id,parameters:MetadataSchemaParameters)->PreparedMetadataSchema`读取上述scope，生成变更前后schema、n→n+1、精确targets、物理摘要、每item SQL值before/after及参数摘要；取消/preview零写。原Owner先行核原identity和容器edit，本内核不创造新授权入口。内核复用原字段命名/类型/内置字段保护及既有明确错误；批内重复、rename冲突/不存在、delete不存在全部先验再变更，不能返回部分成功。接受同批变更按声明顺序处理，但不接受两个操作触碰同一原/新字段的歧义计划。
+
+SQL原值结构`{field:{field_value,field_type,updated_at}}`与索引的`field→primitive`分开：add使所有历史该field为空（清理残留同名值，不复活上次失败delete的数据），rename保值/类型并更新该field时间，delete移除；其他字段完整保留。新field在SQL缺key即空，不伪造历史值。before/after和变更timestamp接受后固定，重试不能用当前时间重算。纯物理source摘要不含本操作自己修改的user_metadata；其before/after摘要单独校验。
+
+`aaccept(session,prepared)->PreparedMetadataSchema`只消费本实例在同一SessionTransaction签发的plan，锁并重读完整事实/原schema revision及摘要，漂移拒绝；然后CAS更新schema与metadata_schema_revision仅一次、只flush。外部J1/items/consume必须同事务一起落地；任一失败整体回滚，内核不自行提交、不写Model R/G/R2、不改File处理状态、不调用provider/索引。执行/重试未来须核接受后的schema revision及after schema和原Model R/G；不得重复接受递增修订。空scope直接真实SQL变更结果，不造零项异步job；有文件的add同样有索引清空残留步骤，不能仅Root append便称全部成功。
+
+后续真实handler固定要求：逐version Milvus query_iterator分页保pk/vector/完整字段、只改user_metadata并finally close；ES参数化脚本、校验timed_out/failures/conflicts；不重新嵌入、不改Chunk文本/原文件、不limit10000截断。SQL文件值与leased item成功同事务，失败明示并只重试失败项。只对冻结目标范围和可控步骤校验；不新增物理staging、外部在途I/O竞态治理或与业务无关整空间写围栏。完整handler/旧公开确认桥与响应的具体叶子在本前置完成后另冻结，旧公开请求/响应和原授权不由前置helper改写。

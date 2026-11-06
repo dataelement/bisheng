@@ -5599,6 +5599,42 @@
   **覆盖 AC**: AC-02, AC-03, AC-05, AC-06, AC-07, AC-87\
   **验证 / 完成条件**：按冻结合同测试先行、≤2叶；目标检查与既有诊断基线比较，真实HTTP/环境E2E另行举证。
 
+## W6元数据结构原子准备前置
+
+- [ ] **T699 · 元数据完整原始范围与事务仓储测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_metadata_processing_repository.py`\
+  **逻辑 / 测试上下文**：实际物理File与完整Doc/Version链、401历史版本含失败与安全态、合法空目录和目录坏链、C3/严格Session/noautoflush、线性primary集合与冲突拒绝。\
+  **依赖**：T674, T684\
+  **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-53, AC-54\
+  **验证 / 完成条件**：先真实红/首绿，≤2叶和固定SHA独立复查；不把原生事务核心冒充任务或公开入口完成。
+
+- [ ] **T700 · 元数据完整范围原生事务仓储**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/metadata_processing_repository.py`\
+  **逻辑 / 测试上下文**：按W6§15提供完整闭集scope及schema CAS需要的原生事务能力；无commit/外部IO/SQL跨层，无model R/G变化、无File状态变更。\
+  **依赖**：T699\
+  **配对测试**：T699\
+  **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-53, AC-54\
+  **验证 / 完成条件**：先真实红/首绿，≤2叶和固定SHA独立复查；不把原生事务核心冒充任务或公开入口完成。
+
+- [ ] **T701 · 元数据结构原子准备与固定值快照测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_metadata_processing_preparation.py`\
+  **逻辑 / 测试上下文**：真实preview取消零写，add清残留为空、rename/delete校验及保留非目标字段，schema n→n+1与外部回滚；plan同Session/事务/实例不可伪造，漂移无写。\
+  **依赖**：T700\
+  **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-53, AC-54\
+  **验证 / 完成条件**：先真实红/首绿，≤2叶和固定SHA独立复查；不把原生事务核心冒充任务或公开入口完成。
+
+- [ ] **T702 · 元数据结构原子准备内核**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/metadata_processing_service.py`\
+  **逻辑 / 测试上下文**：实现W6§15 apreview/aaccept签名和不可伪造同事务plan，只flush真实schema CAS及固定逐项before/after；J1/worker/旧入口后续，不能勾原T072整卡。\
+  **依赖**：T701\
+  **配对测试**：T701\
+  **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-53, AC-54\
+  **验证 / 完成条件**：先真实红/首绿，≤2叶和固定SHA独立复查；不把原生事务核心冒充任务或公开入口完成。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
