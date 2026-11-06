@@ -138,7 +138,9 @@ async def database(resource_native, monkeypatch):
         run_id=IDENTITY["run_id"], writer_contract_version=IDENTITY["writer_contract_version"], planned_at=NOW
     )
     for kind in producer.KINDS:
-        getattr(builder, "add_" + kind)(facts[kind])
+        values = facts[kind]
+        for offset in range(0, max(len(values), 1), 200):
+            getattr(builder, "add_" + kind)(values[offset : offset + 200])
     builder.add_defaults(defaults)
     commands = tuple(builder.finish())
     return SimpleNamespace(
@@ -323,3 +325,65 @@ async def test_native_cancellation_after_sql_write_rolls_back_only_owned_savepoi
         with pytest.raises(asyncio.CancelledError):
             await apply(repo, session, database.commands)
     assert await snapshot(database) == before
+
+
+@pytest.mark.parametrize("change", ["incoming_nonknowledge", "same_name", "broken_primary"])
+async def test_tag_conversion_rechecks_actual_owner_and_link_version_relations(repo, database, change):
+    async with database.engine.begin() as connection:
+        if change == "incoming_nonknowledge":
+            await connection.execute(
+                raw.TagLink.__table__.insert(),
+                raw.data("tag_links", 90) | {"tag_id": 1, "resource_id": "app-uuid", "resource_type": 1},
+            )
+        elif change == "same_name":
+            await connection.execute(
+                raw.Tag.__table__.insert(), raw.data("tags", 90) | {"business_type": "knowledge_space"}
+            )
+        else:
+            await connection.execute(
+                raw.KnowledgeDocument.__table__.insert(), {"id": 400, "knowledge_id": 9000, "primary_version_id": None}
+            )
+            await connection.execute(
+                raw.KnowledgeDocumentVersion.__table__.insert(),
+                {"id": 401, "document_id": 400, "knowledge_file_id": 1, "version_no": 1, "is_primary": False},
+            )
+    commands = tuple(cmd for cmd in database.commands if cmd.operation in {"tag_conversion", "tag_link_conversion"})
+    before = await snapshot(database)
+    async with AsyncSession(database.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await apply(repo, session, commands)
+    assert await snapshot(database) == before
+
+
+async def test_actual_version_rows_are_not_rescanned_for_each_file_in_a_batch(repo, database, monkeypatch):
+    await database.insert(raw.KnowledgeFile, [raw.file(ident) for ident in range(10, 411)])
+    facts = await producer.acquire(database)
+    builder = importlib.import_module(
+        "bisheng.knowledge.application.unification_conversion_plan"
+    ).ConversionPlanBuilder(
+        run_id=IDENTITY["run_id"], writer_contract_version=IDENTITY["writer_contract_version"], planned_at=NOW
+    )
+    for kind in producer.KINDS:
+        values = facts[kind]
+        for offset in range(0, max(len(values), 1), 200):
+            getattr(builder, "add_" + kind)(values[offset : offset + 200])
+    builder.add_defaults(())
+    commands = tuple(cmd for cmd in builder.finish() if cmd.operation == "initialize_v1")[:200]
+    scans = []
+    original = repo._load
+
+    class MeasuredRows(dict):
+        def values(self):
+            for row in super().values():
+                scans.append(True)
+                yield row
+
+    async def measured(*args):
+        data = await original(*args)
+        data["versions"] = MeasuredRows(data["versions"])
+        return data
+
+    monkeypatch.setattr(repo, "_load", measured)
+    async with AsyncSession(database.engine) as session, session.begin():
+        assert len(await apply(repo, session, commands)) == 200
+    assert len(scans) <= 2000  # Actual native rows, not an N-file x N-version loop.
