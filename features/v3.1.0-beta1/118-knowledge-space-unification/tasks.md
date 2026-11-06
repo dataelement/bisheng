@@ -5754,6 +5754,25 @@
   **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54\
   **验证 / 完成条件**：配对/原Chunk与索引相关回归、C2静态及固定独立审，Owner/J1真实装配后才开放kind。
 
+## W6六来源原始引用流真实消费
+
+- [ ] **T716 · 六来源原始配置引用流集成测试**
+  **类型 / Owner**：测试 / MIG\
+  **写入文件**：`src/backend/test/knowledge_unification/test_migration_source_inventory.py`\
+  **逻辑 / 测试上下文**：真实native SQL+13原分页+六extractor+NameIndex/NameCatalog/physical预检，根零版本/历史/disabled/退休与零set；401+页/重复targets有界计数、无raw内容泄漏、全量失败不假ready。\
+  **依赖**：T694, T704, T711, T713\
+  **覆盖 AC**: AC-56, AC-63, AC-64, AC-70, AC-71, AC-80, AC-85, AC-87, AC-88, AC-89, AC-93\
+  **验证 / 完成条件**：先真实红/首绿，sharing仅HTTP边界fakes且全实际consumer组合；Source头和slot count/digest核对，不能把本流等同全资源M2。
+
+- [ ] **T717 · 六来源盘点引用流实际装配**
+  **类型 / Owner**：后端 Application / MIG\
+  **写入文件**：`src/backend/bisheng/knowledge/application/unification_sources.py`\
+  **逻辑 / 测试上下文**：W6§21生产默认真实Reader/Repository/extractors/NameIndex/physical facts，阶段确定流与闭集records；目录一次、重复slot不重查target，无SQL写/ready/停服检测。\
+  **依赖**：T716\
+  **配对测试**：T716\
+  **覆盖 AC**: AC-56, AC-63, AC-64, AC-70, AC-71, AC-80, AC-85, AC-87, AC-88, AC-89, AC-93\
+  **验证 / 完成条件**：配对/原源提取及盘点相关组合、C2/SQL预算/保密静态和固定独立审；全租户正式freeze与回填/转换另验。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。

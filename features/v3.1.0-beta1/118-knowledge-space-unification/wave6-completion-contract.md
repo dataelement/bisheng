@@ -299,3 +299,17 @@ T705先测两个受控fields→原T178；T706再测父Editor/Dialog→T707两叶
 Milvus沿现同步Collection.query_iterator(batch_size=1000,limit=-1,expr精确file,out_fields全部schema字段)，循环至真实EOF，逐批copy+upsert保原pk/vector，核真实upsert_count与该批一致；finally close迭代器，异常/guard拒绝后停止新IO。ES用参数化字段名和值、精确term(document_id)的update_by_query，结果timed_out/failures/version_conflicts或统计不完整均明确失败，cause保留，不把部分索引更新称成功；正常完成返回真实count。ES refresh=True确保完成后的读取可见。无记录的失败/安全态版本可为0，但物理索引缺失或native异常不能吞成0成功。
 
 guard在初始化/每个受控批次写前、ES写前及返回前await；后续将验证原actor、item lease、当前Model R/G、接受后schema revision/after schema和该version物理摘要。外部在途IO与用户修改竞态仍按用户排除，不新增staging/双写/强制回退。单测用真实native方法形状与10001+行分页/故障注入，不冒称真实Milvus环境；正式E2E接线后再实测。原手动Chunk元数据以File业务值为权威只对本次字段变更，不修改其他内容。
+
+## 21. 六来源原事实与引用流实际消费子合同 V1：已冻结
+
+`knowledge/application/unification_sources.py:UnificationSourceInventory(repository=None,*,sharing_reader,model_names_repository=None,knowledge_targets=None,model_targets=None)`默认装配现真实UnificationInventoryRepository、ModelNameResolutionRepository和两个MigrationTargetRepository；sharing_reader须为已进入的PinnedMigrationPermissionReader。`aiter_tenant_source_records(session,*,run_id,writer_contract_version)`是async iterator，要求外部native活跃TX/可信具体tenant/非bypass，run/writer形状沿现ledger。先当前tenant孤儿探针一次；global APP/CH孤儿证明由外层整个run一次，不能放入本tenant iterator循环。没有真实共享读取依赖明确拒绝，测试可替换同形IO边界、生产默认无mock开关。
+
+每tenant一次原sharing读取→一次真实ainspect_catalog→一次KN原名称目录→一次UnificationNameIndex编译，模型/服务商/KN目录不按slot重扫。复用现六extractor版本与真实原形状，WF每真实FlowVersion、APP每真实AppVersion UUID；零版本root只root记录不造current；Flow.data镜像不另Source。AS实际model_name为数字ID，links0/None为零；CH整批≤200根读子页至EOF，disabled sync仍引用；KN0/1/3原模型/transition为来源，2只退休清单；defaults仅本tenant实际own五key，None/空值零引用，不复制Root继承。旧0的引用域名是knowledge_space同ID，SQL/FGA namespace转换仍由后续计划执行。
+
+已删除WF根/版本、AS根、APP根以及KN退休2只产生Retired记录，不猜恢复为有效来源；未删除APP所有历史版本包含rejected/withdrawn，非current WF、下线AS和关闭CH目标均保留。精确已知delete标志外的非法形状明确失败，不静默归成deleted或空配置。未知KN type仍作为明确预检错误，不复活/删除。创建者原ID仅保留，不猜测主体；完整creator存在性、文件/版本/标签/配额等全资源预检由后续外层M2完成，本消费流不冒充整个T162。
+
+闭集frozen/slots输出四类（同一应用叶定义）：RootInventoryRecord(root_key,creator_id,lifecycle,configuration_digest,retained_version_count)；SourceInventoryRecord(source_key,extractor_version,configuration_digest,reference_digest,reference_count,lifecycle)；ReferenceInventoryRecord(source_key,slot_key,target,origin:explicit_id|resolved_name,physical_fact)；RetiredInventoryRecord(root_key,source_key可空,lifecycle,configuration_digest)。lifecycle只原状态/类型/版本等标量元组，不放名称/完整配置。config digest由该原source的完整实际引用业务配置规范JSON计算，原None/空值按各原语义处理；raw graph/capabilities/prompt/transition/default JSON仅内存，不存入record/repr或artifact。每个slot独立record，Source头不塞超大refs数组；后续外层每≤200闭集record/≤16MiB组现sources artifact，完整count/digest校验后才可全租户freeze。
+
+同tenant同TX iterator-local physical事实缓存按TargetKey复用，所有新unique targets按≤200整批精确PK预检，查询数按unique目标数，不按重复slot×来源×目录增长。fact只物理存在/owner/parent/type，不在本流判valid/legacy或写证据：foreign/offline/type2/坏父不变成missing，Root旧数值槽撤共享的原槽provenance与资格分类须后续单独协议。APP原数字ID origin=explicit_id，名称解析origin=resolved_name；名字无候选/歧义/离线无明确原ID仍失败，不从全局同名猜缺失。每源原references经normalize/digest/count完整枚举，保持确定阶段/PK/slot顺序；所有缓存均当前iterator内，不跨tenant/run/事务。
+
+本流仅只读实际SQL/FGA，不上传artifact、不写BRR/SourceSet/legacy/tombstone/Coverage/ready或ledger phase，不启停/探测服务、不做转换；全部依赖实际装配及分页/原extractor/原NameCatalog/physical预检集成后才能勾T716/T717，完整M2、初始回填/资格与CLI另卡。
