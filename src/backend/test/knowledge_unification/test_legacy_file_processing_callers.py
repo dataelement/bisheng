@@ -94,6 +94,9 @@ async def test_real_save_inherits_space_only_when_old_client_did_not_supply_valu
     assert not failed and len(accepted) == 1 and accepted[0].status == 5
     actual = json.loads(accepted[0].split_rule)
     assert actual["chunk_size"] == 800 and actual["force_ocr"] == 0
+    snapshot = actual["_effective_processing"]
+    assert snapshot["space_config_version"] == 3 and snapshot["effective_rule"]["chunk_size"] == 800
+    assert not {"knowledge_id", "file_name", "file_path", "model_id", "cache"} & set(snapshot)
     assert request.chunk_size == 1000 and request.force_ocr == 1
     async with legacy.files.context.sessions() as session:
         root = await session.get(Knowledge, 40)
@@ -137,6 +140,7 @@ async def test_old_rebuild_keeps_actual_prior_rules_and_applies_only_new_explici
     actual = json.loads(updated.split_rule)
     assert actual["chunk_size"] == (333 if size is None else size)
     assert actual["force_ocr"] == 0 and updated.id == 81 and updated.status == 5
+    assert actual["_effective_processing"]["effective_rule"]["chunk_size"] == actual["chunk_size"]
     assert legacy.publish.call_args.args[0] == 81
     async with legacy.files.context.sessions() as session:
         assert (await session.get(Knowledge, 40)).processing_defaults == legacy.defaults
