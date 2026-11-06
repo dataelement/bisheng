@@ -478,6 +478,7 @@
     "current_folder": "現在のフォルダー",
     "loading_directory": "フォルダーを読み込み中…",
     "directory_empty": "このフォルダーには表示できる項目がありません。",
-    "more_files": "さらに読み込む"
+    "more_files": "さらに読み込む",
+    "expand_folders": "省略された {{count}} 階層のフォルダーを表示"
   }
 }
