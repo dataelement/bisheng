@@ -62,8 +62,6 @@ GitHub で **17k Star** を獲得しています。
 
    > モバイルアプリは近日公開予定です。機能と公開スケジュールは、各バージョンの説明をご確認ください。
 
-   ![BISHENG 企業管理画面のクライアント用クレジットと利用量](docs/images/readme/bisheng-enterprise-management.png)
-
 2. **🚀 タスクモード：複数ステップの複雑な作業に対応する汎用エージェント**
    目標を伝え、必要に応じてファイル、ナレッジベース、ツール、スキルを添付すると、エージェントがタスクを分解して順に実行し、最後にレポート、PPT、Excel、Word を納品します。
 
@@ -116,6 +114,8 @@ GitHub で **17k Star** を獲得しています。
    - **国産 IT 基盤（信創）対応**：MySQL と達夢（Dameng）DM8 の両方に対応しています。
    - そのほか、SSO/LDAP、高可用性デプロイ、コンテンツセキュリティ審査、トラフィック制御、モニタリングと統計、脆弱性スキャンと修正に対応しています。
    <p align="center"><img src="https://dataelem.com/bs/pro.png" alt="enterprise"></p>
+
+   ![BISHENG 企業管理画面のクライアント用クレジットと利用量](docs/images/readme/bisheng-enterprise-management.png)
 
 8. **🔍 高精度ドキュメント解析**：5 年間蓄積した大量の高品質データで学習した高精度ドキュメント解析モデルを、無料でプライベート環境にデプロイできます。高精度な印刷文字・手書き文字・難読文字の認識モデル、表認識モデル、レイアウト解析モデル、印鑑モデルなどを含みます。
    <p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="ocr"></p>

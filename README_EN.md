@@ -62,8 +62,6 @@ BISHENG is an **open-source, all-in-one enterprise Agent platform** focused on o
 
    > The mobile app is coming soon. Features and release plans are subject to the relevant release documentation.
 
-   ![BISHENG enterprise administration: desktop client credits and usage](docs/images/readme/bisheng-enterprise-management.png)
-
 2. **🚀 Task Mode: a general-purpose agent for complex, multi-step work**
    You give it a goal and, if needed, attach files, knowledge bases, tools and skills. The agent breaks the goal into tasks, runs them step by step, and delivers a report, PPT, Excel or Word file.
 
@@ -116,6 +114,8 @@ BISHENG is an **open-source, all-in-one enterprise Agent platform** focused on o
    - **Xinchuang (domestic IT stack) support**: Supports both MySQL and Dameng DM8.
    - Also: SSO/LDAP, high-availability deployment, content security review, traffic control, monitoring and statistics, and vulnerability scanning and fixes.
    <p align="center"><img src="https://dataelem.com/bs/pro.png" alt="enterprise"></p>
+
+   ![BISHENG enterprise administration: desktop client credits and usage](docs/images/readme/bisheng-enterprise-management.png)
 
 8. **🔍 High-precision document parsing**: Our document parsing models are trained on a large amount of high-quality data collected over 5 years, and you can deploy them privately for free. They include high-precision models for printed text, handwriting and rare characters, table recognition, layout analysis, and seals.
    <p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="ocr"></p>

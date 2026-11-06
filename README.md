@@ -62,8 +62,6 @@ GitHub 已获 **17k Star**。
 
    > 手机 App 即将推出，具体功能与上线安排以版本说明为准。
 
-   ![BISHENG 企业管理后台的客户端积分与用量页面](docs/images/readme/bisheng-enterprise-management.png)
-
 2. **🚀 任务模式：面向多步骤复杂工作的通用 Agent**
    你给出目标，按需附上文件、知识库、工具和技能，它会拆解任务、逐步执行，最后交付报告、PPT、Excel 或 Word。
 
@@ -116,6 +114,8 @@ GitHub 已获 **17k Star**。
    - **信创适配**：同时支持 MySQL 和达梦 DM8。
    - 以及 SSO/LDAP、高可用部署方案、安全审查、流量控制、监控统计、漏洞扫描修复。
    <p align="center"><img src="https://dataelem.com/bs/pro.png" alt="enterprise"></p>
+
+   ![BISHENG 企业管理后台的客户端积分与用量页面](docs/images/readme/bisheng-enterprise-management.png)
 
 8. **🔍 高精度文档解析**：5年海量数据沉淀，高精度文档解析模型支持免费私有化部署使用，包括高精度印刷体、手写体与生僻字识别模型、表格识别模型、版式分析模型、印章模型...
    <p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="ocr"></p>
