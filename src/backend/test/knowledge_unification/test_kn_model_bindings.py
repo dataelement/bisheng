@@ -8,7 +8,7 @@ permission sharing and action transport are explicit test boundaries.
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import sqlalchemy as sa
@@ -18,6 +18,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import (
     KnowledgeNoEmbeddingError,
+    KnowledgeOperationPlanConflictError,
     KnowledgeProcessingConflictError,
     ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
@@ -302,3 +303,48 @@ async def test_prepared_business_model_command_cannot_be_cloned_or_used_in_anoth
             await KnowledgeModelReferenceApplication.aapply_model_change(session, replace(prepared))
         with pytest.raises(ResourceReferenceInvalidError):
             await KnowledgeModelReferenceApplication.aapply_model_change(other, prepared)
+
+
+def test_native_creation_and_switch_use_real_sql_and_external_rollback(business):
+    before = state(business)
+    with Session(business.sync, expire_on_commit=False) as session:
+        row = Knowledge(id=40, tenant_id=101, user_id=7, name="native", type=1, model="11", index_generation="g0")
+        projection = Mock()
+        assert (
+            KnowledgeModelReferenceApplication.create(
+                session, row, login_user=business.user, project_created=projection
+            )
+            is row
+        )
+        projection.assert_called_once_with(row)
+        session.commit()
+        prepared = KnowledgeModelReferenceApplication.prepare_model_change(
+            session, 40, 12, login_user=business.user, operation_id="native-1"
+        )
+        KnowledgeModelReferenceApplication.apply_model_change(session, prepared)
+        assert row.model == "11" and row.model_transition["pending_model_id"] == "12"
+        session.rollback()
+        assert row.model_transition is None and row.model_config_revision == 0
+    assert len(state(business)["knowledge"]) == len(before["knowledge"]) + 1
+
+
+async def test_stale_expected_configuration_and_config_index_drift_fail_without_writes(business):
+    await seed(business)
+    before = state(business)
+    async with business.sessions() as session:
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await KnowledgeModelReferenceApplication.aprepare_model_change(
+                session, 40, 12, login_user=business.user, expected_model_config_revision=99
+            )
+        await session.rollback()
+    assert state(business) == before
+    async with business.sessions() as session, session.begin():
+        await session.execute(
+            sa.update(Knowledge).where(Knowledge.id == 40, Knowledge.tenant_id == 101).values(model="12")
+        )
+    before = state(business)
+    async with business.sessions() as session:
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            await KnowledgeModelReferenceApplication.aprepare_model_change(session, 40, 11, login_user=business.user)
+        await session.rollback()
+    assert state(business) == before
