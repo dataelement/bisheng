@@ -1127,32 +1127,12 @@ class LLMService:
         await cls._save_model_default(key.value, data, tenant_id=tenant_id, login_user=login_user, session=session)
         return data
 
-    @staticmethod
-    def _dispatch_model_default_commands(commands):
-        from bisheng.worker.knowledge.qa import rebuild_qa_knowledge_celery
-        from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
-
-        for command in commands:
-            task = rebuild_qa_knowledge_celery if command.type == 1 else rebuild_knowledge_celery
-            task.apply_async(
-                args=(command.knowledge_id, None, command.actor_user_id),
-                kwargs={
-                    "operation_id": command.operation_id,
-                    "expected_model_config_revision": command.expected_model_config_revision,
-                    "expected_index_generation": command.expected_index_generation,
-                },
-                headers={"tenant_id": command.tenant_id},
-            )
-
     @classmethod
     async def _save_model_default(cls, key, data, *, tenant_id=None, login_user=None, session=None):
         current_model_default_tenant(tenant_id)
 
-        async def save(active, *, command_owner):
-            if command_owner:
-                result = await ModelDefaultApplication.asave_with_commands(active, key, data, login_user=login_user)
-            else:
-                result = await ModelDefaultApplication._asave(active, key, data, login_user=login_user)
+        async def save(active):
+            result = await ModelDefaultApplication._asave(active, key, data, login_user=login_user)
             if result.embedding_changed:
                 embeddings = await cls.get_bisheng_embedding(
                     model_id=result.config.embedding_model.id,
@@ -1169,12 +1149,10 @@ class LLMService:
             return result
 
         if session is not None:
-            return (await save(session, command_owner=False)).config
+            return (await save(session)).config
         async with get_async_db_session() as active:
-            result = await save(active, command_owner=True)
+            result = await save(active)
             await active.commit()
-        if result.commands:
-            cls._dispatch_model_default_commands(result.commands)
         return result.config
 
     @classmethod

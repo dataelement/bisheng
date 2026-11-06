@@ -369,6 +369,15 @@ class ModelNameResolutionPort:
     async def assert_plan_current(self, session, tenant_id, *, identity, plan, range=None):
         await self._validate_plan(session, tenant_id, identity=identity, plan=plan, range=range)
 
+    async def resolve_model_names_current(self, session, tenant_id, *, identity, plan, range=None):
+        """Revalidate once and return the entire issued plan for this stage.
+
+        The result is data, not a reusable authority: each later source-read or
+        locked verification stage must call this method again in its original
+        transaction and identity. No sharing/catalog validation is cached.
+        """
+        return await self._validate_plan(session, tenant_id, identity=identity, plan=plan, range=range)
+
     async def resolve_model_alias_current(self, session, tenant_id, requested, *, identity, plan, range=None):
         resolutions = await self._validate_plan(session, tenant_id, identity=identity, plan=plan, range=range)
         allowed_aliases = {

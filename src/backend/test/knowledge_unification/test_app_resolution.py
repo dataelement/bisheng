@@ -1,6 +1,7 @@
 """APP resolver consumes real complete name plans. 覆盖 AC: AC-37, AC-68, AC-87, AC-89, AC-92."""
 
 from copy import deepcopy
+from unittest.mock import AsyncMock
 
 import pytest
 import sqlalchemy as sa
@@ -10,6 +11,7 @@ from bisheng.app_publish.application import reference_resolution as module
 from bisheng.app_publish.domain.schemas.app_manifest import CapabilityDeclaration
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
 from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.llm.domain.models.llm_server import LLMModel
 from bisheng.resource_reference.application.contracts import ReferenceSpec, TargetKey, TargetType
 from test.knowledge_unification import test_model_name_resolution as name_fixtures
 
@@ -138,4 +140,48 @@ async def test_empty_plan_still_requires_original_authority(resolving):
         with pytest.raises(ResourceReferenceInvalidError):
             await module.resolve_app_references(
                 session, CapabilityDeclaration(), identity=identity, source_tenant_id=101, model_name_plan=replace(plan)
+            )
+
+
+@pytest.mark.parametrize("model_count", [1, 10, 30])
+async def test_each_resolution_stage_revalidates_complete_catalog_once(resolving, ctx, monkeypatch, model_count):
+    engine, identity, names = resolving
+    requested = tuple(f"batch-{index}" for index in range(model_count))
+    async with AsyncSession(engine) as session, session.begin():
+        session.add_all(
+            LLMModel(id=100 + index, tenant_id=101, server_id=1, model_name=name, model_type="llm")
+            for index, name in enumerate(requested)
+        )
+        await session.flush()
+        plan = await names.aprepare_model_names_current(session, 101, requested, identity=identity)
+        catalog = AsyncMock(wraps=names.repository.arevalidate_catalog)
+        shared = AsyncMock(wraps=ctx[3].list_resource_ids)
+        monkeypatch.setattr(names.repository, "arevalidate_catalog", catalog)
+        monkeypatch.setattr(ctx[3], "list_resource_ids", shared)
+        declaration = CapabilityDeclaration(models=[{"name": name} for name in requested])
+        for stage in range(2):
+            refs = await module.resolve_app_references(
+                session, declaration, identity=identity, source_tenant_id=101, model_name_plan=plan
+            )
+            assert {ref.target.target_id for ref in refs} == {str(100 + index) for index in range(model_count)}
+            assert catalog.await_count == stage + 1
+            assert shared.await_count == stage + 1
+
+
+@pytest.mark.parametrize("drift", ["sharing", "offline", "name"])
+async def test_next_resolution_stage_rejects_current_catalog_drift(resolving, ctx, drift):
+    declaration = CapabilityDeclaration(models=[{"name": "root/same"}])
+    engine, identity, _ = resolving
+    async with AsyncSession(engine) as session, session.begin():
+        _, plan = await resolve(resolving, session, declaration)
+        if drift == "sharing":
+            ctx[3].allowed = ()
+        else:
+            values = {"online": False} if drift == "offline" else {"model_name": "renamed"}
+            await session.execute(
+                sa.update(LLMModel).where(LLMModel.id == 21, LLMModel.tenant_id == 1).values(**values)
+            )
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await module.resolve_app_references(
+                session, declaration, identity=identity, source_tenant_id=101, model_name_plan=plan
             )

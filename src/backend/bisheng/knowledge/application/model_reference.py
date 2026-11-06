@@ -33,7 +33,6 @@ from bisheng.resource_reference.application.access import (
 )
 from bisheng.resource_reference.application.contracts import (
     ReferenceState,
-    SourceBindingChange,
     SourceKey,
     SourceType,
     TargetKey,
@@ -65,7 +64,6 @@ class PreparedKnowledgeModelChange:
 
 
 _issued: WeakKeyDictionary = WeakKeyDictionary()
-_batches: WeakKeyDictionary = WeakKeyDictionary()
 _removals: WeakKeyDictionary = WeakKeyDictionary()
 
 
@@ -88,27 +86,6 @@ class KnowledgeModelRebuildCommand:
     expected_index_generation: str
     tenant_id: int
     actor_user_id: int
-
-
-@dataclass(frozen=True, slots=True, eq=False, weakref_slot=True)
-class KnowledgeModelChangeBatch:
-    changes: tuple[SourceBindingChange, ...]
-    commands: tuple[KnowledgeModelRebuildCommand, ...]
-
-    async def alock_inventory(self, session):
-        state = KnowledgeModelReferenceApplication._batch_state(session, self)
-        if state["locked"] is None:
-            rows = await KnowledgeModelReferenceApplication.repository.alist_spaces(session, for_update=True)
-            if tuple(KnowledgeModelReferenceApplication._facts(row) for row in rows) != state["facts"]:
-                raise KnowledgeOperationPlanConflictError(reason="knowledge_space_inventory_changed")
-            for row in rows:
-                await KnowledgeModelReferenceApplication._authorize(state["user"], row)
-            state["locked"] = {row.id: row for row in rows}
-        elif (
-            tuple(KnowledgeModelReferenceApplication._facts(row) for row in state["locked"].values()) != state["facts"]
-        ):
-            raise KnowledgeOperationPlanConflictError(reason="knowledge_space_inventory_changed")
-        return tuple(state["locked"].values())
 
 
 class KnowledgeModelReferenceApplication:
@@ -484,131 +461,6 @@ class KnowledgeModelReferenceApplication:
             await cls.repository.asave(session, prepared.row)
             await prepared.runtime.aapply_source_bindings(session, prepared.bindings)
         return prepared.row
-
-    @staticmethod
-    def _batch_values(batch):
-        return deepcopy(
-            (
-                tuple(
-                    (
-                        change.source_key,
-                        change.references,
-                        change.extractor_version,
-                        id(change.lock_source_root),
-                        change.new_source,
-                        change.effective,
-                    )
-                    for change in batch.changes
-                ),
-                batch.commands,
-            )
-        )
-
-    @classmethod
-    def _batch_state(cls, session, batch):
-        state = _batches.get(batch) if isinstance(batch, KnowledgeModelChangeBatch) else None
-        if state is None or state["original"]() is not batch or cls._batch_values(batch) != state["manifest"]:
-            raise ResourceReferenceInvalidError(reason="knowledge_model_batch_not_issued")
-        try:
-            state["transaction"].assert_current(session)
-        except (TypeError, ValueError) as error:
-            raise ResourceReferenceInvalidError(reason="knowledge_model_batch_transaction") from error
-        if cls.repository._tenant_id() != state["tenant"]:
-            raise ResourceReferenceInvalidError(reason="knowledge_model_batch_tenant")
-        return state
-
-    @classmethod
-    async def aplan_workbench_model_changes(cls, session, new_model_id, *, login_user, operation_id=None):
-        cls._user(login_user)
-        rows = await cls.repository.alist_spaces(session)
-        operation = operation_id or str(uuid4())
-        candidates, changes, commands = {}, [], []
-        batch_ref = None
-        for row in rows:
-            _, selected, transition, references = cls._plan_inputs(row, new_model_id, None, None, operation)
-            generation = str(uuid4())
-            key = cls._source(row)
-            candidates[key] = (selected, transition, generation)
-
-            async def lock_root(active, knowledge_id=row.id):
-                original = batch_ref() if batch_ref is not None else None
-                state = cls._batch_state(active, original)
-                await original.alock_inventory(active)
-                return state["locked"][knowledge_id]
-
-            changes.append(SourceBindingChange(key, references, KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION, lock_root))
-            current = canonical_target_id(row.model) if row.model else None
-            if current != selected or row.model_transition is not None:
-                commands.append(
-                    KnowledgeModelRebuildCommand(
-                        row.id,
-                        row.type,
-                        operation,
-                        row.model_config_revision + 1,
-                        generation,
-                        row.tenant_id,
-                        login_user.user_id,
-                    )
-                )
-        batch = KnowledgeModelChangeBatch(tuple(changes), tuple(commands))
-        batch_ref = ref(batch)
-        _batches[batch] = {
-            "original": batch_ref,
-            "transaction": TransactionIdentity.capture(session),
-            "manifest": cls._batch_values(batch),
-            "tenant": cls.repository._tenant_id(),
-            "facts": tuple(cls._facts(row) for row in rows),
-            "candidates": candidates,
-            "runtime": await get_reference_binding_runtime(),
-            "user": login_user,
-            "locked": None,
-        }
-        return batch
-
-    @classmethod
-    async def aapply_workbench_model_changes(cls, session, batch, prepared_sources):
-        state = cls._batch_state(session, batch)
-        if not isinstance(prepared_sources, tuple):
-            raise ResourceReferenceInvalidError(reason="knowledge_model_batch_prepared_required")
-        relevant = tuple(item for item in prepared_sources if item.source_key.source_type == SourceType.KNOWLEDGE)
-        if len({item.source_key for item in relevant}) != len(relevant) or {
-            item.source_key for item in relevant
-        } != set(state["candidates"]):
-            raise ResourceReferenceInvalidError(reason="knowledge_model_batch_sources_changed")
-        await batch.alock_inventory(session)
-        changes = {item.source_key: item for item in batch.changes}
-        plans = []
-        # Validate/freeze every source before the first business write.
-        for bindings in relevant:
-            key = bindings.source_key
-            change = changes[key]
-            if (
-                bindings.verified.references != change.references
-                or bindings.verified.extractor_version != change.extractor_version
-                or not bindings.effective
-            ):
-                raise ResourceReferenceInvalidError(reason="knowledge_model_batch_sources_changed")
-            row = state["locked"][int(key.source_id)]
-            selected, transition, generation = state["candidates"][key]
-            kinds = await cls.repository.amodel_kinds(
-                session, state["runtime"].verifier, key, bindings.verified.context
-            )
-            repair = cls._validate_configuration(row, bindings, kinds, selected)
-            plans.append(
-                cls._freeze(
-                    session,
-                    row,
-                    state["runtime"],
-                    bindings,
-                    selected,
-                    transition,
-                    repair,
-                    new_generation=generation,
-                )
-            )
-        for plan in plans:
-            await cls.aapply_model_change(session, plan)
-        return batch.commands
 
     @classmethod
     def _removal_plan(cls, session, row, bindings, runtime, only_clear):

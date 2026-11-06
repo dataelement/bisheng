@@ -150,7 +150,7 @@ WF57c1b17ef、AS03ec42355（真实Target测试补98a23538e）、REF9dccf1ef7、P
 
 ## 11. W4剩余业务来源
 
-从24481f0ca延续，先三agent只读核APP/CH/LLM，INT核KN，再冻结[W4合同](./business-sources-contract.md)及T422–T512单叶卡。APP/CH/LLM从同一合同checkpoint建独立worktree，先独立extractor/Repository；INT先交原生REF sync、窄权限sync、mixed源核心及APP后台授权Port，LLM接真实Target/名称计划后APP再接；KN批业务前置就绪后LLM接全空间默认联动。每卡1–2叶，Owner热点串行，不在不同lane直接改同文件，不将fake装生产。INT独占KN及generic REF/权限/glue/composition/main/docs；LLM新增native Model read及mixed Model physical四个现有叶由INT显式交接，其他REF叶不转交。
+从24481f0ca延续，先三agent只读核APP/CH/LLM，INT核KN，再冻结[W4合同](./business-sources-contract.md)及T422–T512单叶卡。APP/CH/LLM从同一合同checkpoint建独立worktree，先独立extractor/Repository；INT先交原生REF sync、窄权限sync、mixed源核心及APP后台授权Port，LLM接真实Target/名称计划后APP再接；KN单空间模型业务与LLM默认来源独立接线；2026-11-06 用户确认撤销默认全空间联动，默认只供新建空间初始选择。每卡1–2叶，Owner热点串行，不在不同lane直接改同文件，不将fake装生产。INT独占KN及generic REF/权限/glue/composition/main/docs；LLM新增native Model read及mixed Model physical四个现有叶由INT显式交接，其他REF叶不转交。
 
 遵既有AC92全源strict，不增加subset授权；旧清失效ID/drop配置不沿用。旧worktree/主工作区保持，禁止repo-wide stash/reset/clean/pathlessrestore及checkout--theirs。固定提交由他人交叉复核后INT按依赖正常merge；无push/部署/真实迁移。
 

@@ -10,6 +10,7 @@
 - [Spec：94 条验收标准](./spec.md)
 - [技术设计：迁移、策略统一、业务绑定维护和强制删除](./design.md)
 - [实施任务：接口、依赖、文件 Owner 与验证](./tasks.md)
+- [剩余159项：模块分组、逐项编号和依赖](./pending-tasks.md)
 - [多 agent 并行开发：边界、耦合与合流协议](./parallel-development.md)
 - [QA 参考：140 条八列用例](./test-cases.md)
 - [任务拆分复审记录：原213项LGTM](./tasks-review.md)

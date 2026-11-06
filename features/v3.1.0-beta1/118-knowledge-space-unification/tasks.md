@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | W0/W1、W2及W3运行准入已合流，完整特性仍在开发 | 296 / 574 项；W4来源合同先冻结、按依赖实施中；独立复查/组合测试见[W3记录](./wave3-implementation-review.md)，未运行迁移 |
+| 实现 | W0/W1–W4已合流，完整特性仍在开发 | 438 / 597 项；159待办见[分组清单](./pending-tasks.md)；默认Embedding仅创建时初始化、APP同阶段批量校验；独立复查/组合测试见[W4记录](./wave4-implementation-review.md)，未运行迁移 |
 
 ## 领取与执行规则
 
@@ -1690,6 +1690,10 @@
   **逻辑 / 测试上下文**：执行 /sdd-code-review --base feat/3.1.0-beta1；确认发布契约C1–C8、活动use全调用面、来源覆盖、保护启用就绪。偏差先回写design/任务并复核；仅实际完成任务打勾，不自动merge/push。额外文档回写每次按1–2文件另拆。\
   **依赖**：T212\
   **验证 / 完成条件**：评审无未闭合问题，所有必要验证有证据；否则实现状态保持未完成。
+
+## 本轮范围修订（2026-11-06）
+
+用户确认默认 Embedding 只供空间创建初始化，T480/T481 改为默认来源原子维护与既有空间不受影响回归；T488/T489 原全空间联动已退役，历史完成编号保留，不再作为开发要求。空间显式改模型仍重建。APP 多模型声明每个候选/锁后阶段只重验目录一次，保持私有计划和原权限边界。以上修订不勾选其他未完成卡：仍 438/597 完成、159 待办；分组与逐项依赖见 [pending-tasks.md](./pending-tasks.md)。
 
 ## 合同冻结后追加任务（保持既有编号）
 
@@ -3793,7 +3797,7 @@
   **配对测试**：T478\
   **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
 
-- [x] **T480 · 工作台默认与空间模型全事务联动红测**
+- [x] **T480 · 工作台默认原子保存与空间独立模型回归**
   **类型 / Owner**：测试 / LLM\
   **写入文件**：`src/backend/test/knowledge_unification/test_workbench_reference_atomicity.py`\
   **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
@@ -3801,7 +3805,7 @@
   **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
   **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
 
-- [x] **T481 · 工作台默认统一知识业务联动**
+- [x] **T481 · 工作台默认独立来源维护**
   **类型 / Owner**：实现 / LLM\
   **写入文件**：`src/backend/bisheng/llm/application/model_default.py`；`src/backend/bisheng/llm/domain/services/llm.py`\
   **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
@@ -3857,15 +3861,15 @@
   **配对测试**：T486\
   **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
 
-- [x] **T488 · 完整空间清单及默认联动计划红测**
+- [x] **T488 · 原全空间默认联动测试退役（用户范围修订）**
   **类型 / Owner**：测试 / KN\
-  **写入文件**：`src/backend/test/knowledge_unification/test_kn_workbench_model_batch.py`\
+  **写入文件**：`src/backend/test/knowledge_unification/test_workbench_reference_atomicity.py`\
   **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
   **依赖**：T487, T475\
   **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
   **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
 
-- [x] **T489 · 知识空间完整清单批量模型计划**
+- [x] **T489 · 原全空间批量模型计划退役（用户范围修订）**
   **类型 / Owner**：实现 / KN\
   **写入文件**：`src/backend/bisheng/knowledge/application/model_reference.py`；`src/backend/bisheng/knowledge/domain/repositories/model_reference_repository.py`\
   **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\

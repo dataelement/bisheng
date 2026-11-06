@@ -1,25 +1,22 @@
-"""T480: the real default and complete personal-space set commit as one unit.
+"""Default Embedding saves preserve all existing space configurations and references.
 
-覆盖 AC: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-91, AC-92
-Actual SQL/R2/KN application; provider and postcommit queue transports are doubles.
+覆盖 AC: AC-06, AC-37, AC-68, AC-71, AC-87, AC-88, AC-89, AC-91, AC-92.
+Real default/Knowledge/R2 SQL; authorization and provider IO are doubles.
 """
 
-import json
-import sys
+import re
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import BackgroundTasks
-from sqlalchemy import delete, select
+from sqlalchemy import delete, event, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.common.errcode.knowledge import (
-    KnowledgeOperationPlanConflictError,
-    ReferenceCoverageNotReadyError,
-    ResourceReferenceInvalidError,
-)
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
+from bisheng.core.database import tenant_filter
 from bisheng.knowledge.application import model_reference as knowledge
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.llm.application import model_default as defaults
 from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfig
 from bisheng.llm.domain.schemas import WorkbenchModelConfig
@@ -27,12 +24,10 @@ from bisheng.llm.domain.services import llm as service
 from bisheng.permission.application.identity import PermissionActor
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
 from test.knowledge_unification import test_kn_model_bindings as facts
-from test.knowledge_unification import test_kn_workbench_model_batch as fixtures
 
-store = fixtures.store
-tenant = fixtures.tenant
-business = fixtures.business
-spaces = fixtures.spaces
+store = facts.store
+tenant = facts.tenant
+business = facts.business
 
 
 def snapshot_state(context):
@@ -47,38 +42,34 @@ def snapshot_state(context):
 
 
 @pytest.fixture
-async def workbench(spaces, monkeypatch):
-    monkeypatch.setattr(defaults, "get_reference_binding_runtime", AsyncMock(return_value=spaces.runtime))
+async def workbench(business, monkeypatch):
+    names = tenant_filter._tenant_aware_tables | {TenantSystemModelConfig.__tablename__}
+    monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", names)
+    monkeypatch.setattr(tenant_filter, "_discover_tenant_aware_tables", lambda: names)
+    async with business.sessions() as session, session.begin():
+        await session.execute(delete(Knowledge).where(Knowledge.tenant_id == 101, Knowledge.type == 3))
+    monkeypatch.setattr(defaults, "get_reference_binding_runtime", AsyncMock(return_value=business.runtime))
     monkeypatch.setattr(
         defaults,
         "resolve_permission_actor",
         AsyncMock(return_value=PermissionActor(subject_id=7, tenant_id=101, tenant_admin_tenant_ids=frozenset({101}))),
     )
-    monkeypatch.setattr(service, "get_async_db_session", spaces.sessions)
+    monkeypatch.setattr(service, "get_async_db_session", business.sessions)
     probe = AsyncMock(return_value=[0.1, 0.2])
     monkeypatch.setattr(
         service.LLMService, "get_bisheng_embedding", AsyncMock(return_value=SimpleNamespace(aembed_query=probe))
     )
-    queued = []
+    business.probe = probe
+    return business
 
-    def dispatch(commands):
-        # Queue publishing must observe the already committed business/indexes.
-        state = snapshot_state(spaces)
-        payload = next(
-            row["value"]
-            for row in state["tenant_system_model_config"]
-            if row["tenant_id"] == 101 and row["key"] == "linsight_llm"
+
+async def add(context, ident, model="11"):
+    async with context.sessions() as session:
+        row = Knowledge(id=ident, tenant_id=101, user_id=7, name=str(ident), type=3, model=model, index_generation="g0")
+        await knowledge.KnowledgeModelReferenceApplication.acreate(
+            session, row, login_user=context.user, project_created=AsyncMock()
         )
-        assert json.loads(payload)["embedding_model"]["id"] == "12"
-        for command in commands:
-            row = next(item for item in state["knowledge"] if item["id"] == command.knowledge_id)
-            assert row["model_config_revision"] == command.expected_model_config_revision
-            assert row["index_generation"] == command.expected_index_generation
-        queued.append(commands)
-
-    monkeypatch.setattr(service.LLMService, "_dispatch_model_default_commands", dispatch, raising=False)
-    spaces.probe, spaces.queued = probe, queued
-    return spaces
+        await session.commit()
 
 
 def config(ident="12"):
@@ -86,45 +77,56 @@ def config(ident="12"):
 
 
 async def save(context, *, session=None, ident="12"):
-    return await service.LLMService.update_workbench_llm(
-        7, config(ident), BackgroundTasks(), login_user=context.user, session=session
+    tasks = BackgroundTasks()
+    result = await service.LLMService.update_workbench_llm(
+        7, config(ident), tasks, login_user=context.user, session=session
     )
+    assert not tasks.tasks
+    return result
 
 
-async def test_actual_service_commits_all_spaces_and_default_before_publishing_original_commands(workbench):
-    await fixtures.add(workbench, 40)
-    await fixtures.add(workbench, 41)
-    result = await save(workbench)
-    assert result.embedding_model.id == "12" and len(workbench.queued) == 1 and len(workbench.queued[0]) == 2
-    assert {(item.knowledge_id, item.tenant_id, item.actor_user_id) for item in workbench.queued[0]} == {
-        (40, 101, 7),
-        (41, 101, 7),
+def space_state(state):
+    return {
+        name: [row for row in rows if name == "knowledge" or row["source_type"] == "knowledge"]
+        for name, rows in state.items()
+        if name in {"knowledge", "business_reference_set", "business_resource_reference"}
     }
-    assert all(not hasattr(item, "model_id") for item in workbench.queued[0])
-    state = snapshot_state(workbench)
-    changed = [row for row in state["knowledge"] if row["id"] in {40, 41}]
-    assert all(row["model"] == "11" and row["model_transition"]["pending_model_id"] == "12" for row in changed)
-    assert all(row["model_config_revision"] == 4 for row in state["knowledge"] if row["id"] in {12, 13})
-    assert {row["target_id"] for row in state["business_resource_reference"] if row["source_type"] == "knowledge"} == {
-        "11",
-        "12",
-    }
+
+
+@pytest.mark.parametrize("space_count", [0, 1, 25])
+async def test_default_save_does_not_read_or_mutate_existing_spaces_or_bindings(workbench, space_count):
+    for ident in range(40, 40 + space_count):
+        await add(workbench, ident)
+    before = space_state(snapshot_state(workbench))
+    statements = []
+
+    def observe(conn, cursor, statement, parameters, context, many):
+        statements.append(statement)
+
+    event.listen(workbench.engine.sync_engine, "before_cursor_execute", observe)
+    try:
+        result = await save(workbench)
+    finally:
+        event.remove(workbench.engine.sync_engine, "before_cursor_execute", observe)
+    assert result.embedding_model.id == "12"
+    assert not any(re.search(r"\bknowledge\b", sql, re.IGNORECASE) for sql in statements)
+    after = snapshot_state(workbench)
+    assert space_state(after) == before
+    default_refs = [row for row in after["business_resource_reference"] if row["source_type"] == "model_default"]
+    assert {(row["slot_key"], row["target_id"]) for row in default_refs} == {("embedding_model.id", "12")}
     workbench.probe.assert_awaited_once()
 
 
-@pytest.mark.parametrize("failure", ["second_source", "probe", "commit"])
-async def test_every_precommit_failure_rolls_back_all_business_and_references(workbench, monkeypatch, failure):
-    await fixtures.add(workbench, 40)
-    await fixtures.add(workbench, 41)
+@pytest.mark.parametrize("failure", ["references", "probe", "commit"])
+async def test_precommit_failure_rolls_back_default_and_its_references(workbench, monkeypatch, failure):
+    await add(workbench, 40)
     before = snapshot_state(workbench)
-    if failure == "second_source":
+    if failure == "references":
         original = workbench.runtime.aapply_source_bindings
 
         async def fail(active, prepared):
-            result = await original(active, prepared)
-            if prepared.source_key.source_type == "knowledge" and prepared.source_key.source_id == "41":
-                raise RuntimeError("second source failed")
-            return result
+            await original(active, prepared)
+            raise RuntimeError("reference save failed")
 
         monkeypatch.setattr(workbench.runtime, "aapply_source_bindings", fail)
     elif failure == "probe":
@@ -138,210 +140,124 @@ async def test_every_precommit_failure_rolls_back_all_business_and_references(wo
         monkeypatch.setattr(AsyncSession, "commit", fail_commit)
     with pytest.raises(RuntimeError):
         await save(workbench)
-    assert snapshot_state(workbench) == before and not workbench.queued
+    assert snapshot_state(workbench) == before
 
 
-async def test_any_existing_space_missing_index_blocks_before_provider_or_default_side_effect(workbench):
-    await fixtures.add(workbench, 40)
-    await fixtures.add(workbench, 41)
+async def test_unindexed_or_uneditable_space_cannot_block_independent_default_save(workbench, monkeypatch):
+    await add(workbench, 40)
     async with workbench.sessions() as session, session.begin():
         await session.execute(
             delete(BusinessReferenceSet).where(
                 BusinessReferenceSet.tenant_id == 101,
                 BusinessReferenceSet.source_type == "knowledge",
-                BusinessReferenceSet.source_id == "41",
+                BusinessReferenceSet.source_id == "40",
                 BusinessReferenceSet.source_version == "current",
             )
         )
-    before = snapshot_state(workbench)
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await save(workbench)
-    assert snapshot_state(workbench) == before and not workbench.queued
-    workbench.probe.assert_not_awaited()
+    denied = AsyncMock(side_effect=AssertionError("default save must not request edit on existing spaces"))
+    monkeypatch.setattr(knowledge, "require_business_action", denied)
+    before = space_state(snapshot_state(workbench))
+    await save(workbench)
+    assert space_state(snapshot_state(workbench)) == before
+    denied.assert_not_awaited()
 
 
-@pytest.mark.parametrize("caller", ["application_without_commands", "external_service"])
-async def test_external_transaction_must_explicitly_own_nonempty_postcommit_commands(workbench, caller):
-    await fixtures.add(workbench, 40)
-    before = snapshot_state(workbench)
-    async with workbench.sessions() as session:
-        with pytest.raises(ResourceReferenceInvalidError) as raised:
-            if caller == "application_without_commands":
-                await defaults.ModelDefaultApplication.asave(
-                    session, "linsight_llm", config(), login_user=workbench.user
-                )
-            else:
-                await save(workbench, session=session)
-        assert raised.value.kwargs["reason"] == "workbench_model_change_requires_command_owner"
-        await session.rollback()
-    assert snapshot_state(workbench) == before and not workbench.queued
-    workbench.probe.assert_not_awaited()
-
-
-async def test_explicit_application_commands_remain_with_external_transaction_owner(workbench):
-    await fixtures.add(workbench, 40)
+@pytest.mark.parametrize("caller", ["application", "external_service"])
+async def test_external_owner_can_save_default_and_rollback_without_command_contract(workbench, caller):
+    await add(workbench, 40)
     before = snapshot_state(workbench)
     async with workbench.sessions() as session:
-        result = await defaults.ModelDefaultApplication.asave_with_commands(
-            session, "linsight_llm", config(), login_user=workbench.user, operation_id="one-operation"
-        )
-        assert (
-            result.config.embedding_model.id == "12"
-            and len(result.commands) == 1
-            and result.commands[0].operation_id == "one-operation"
-        )
-        assert session.in_transaction() and not workbench.queued
+        if caller == "application":
+            result = await defaults.ModelDefaultApplication.asave(
+                session, "linsight_llm", config(), login_user=workbench.user
+            )
+        else:
+            result = await save(workbench, session=session)
+        assert result.embedding_model.id == "12" and session.in_transaction()
         await session.rollback()
     assert snapshot_state(workbench) == before
 
 
-async def test_initially_empty_space_inventory_is_rechecked_before_default_write(workbench, monkeypatch):
-    original = knowledge.KnowledgeModelReferenceApplication.aplan_workbench_model_changes
-
-    async def add_after_plan(*args, **kwargs):
-        batch = await original(*args, **kwargs)
-        await fixtures.add(workbench, 41)
-        return batch
-
-    monkeypatch.setattr(knowledge.KnowledgeModelReferenceApplication, "aplan_workbench_model_changes", add_after_plan)
-    with pytest.raises(KnowledgeOperationPlanConflictError):
-        await save(workbench)
-    state = snapshot_state(workbench)
-    assert not state["tenant_system_model_config"] and not workbench.queued
-    assert next(row for row in state["knowledge"] if row["id"] == 41)["model"] == "11"
-    workbench.probe.assert_not_awaited()
-
-
-async def test_queue_failure_after_commit_does_not_claim_sql_was_rolled_back(workbench, monkeypatch):
-    await fixtures.add(workbench, 40)
-    queued = []
-
-    def fail(commands):
-        queued.extend(commands)
-        raise RuntimeError("queue unavailable after commit")
-
-    monkeypatch.setattr(service.LLMService, "_dispatch_model_default_commands", fail)
-    with pytest.raises(RuntimeError, match="queue unavailable"):
-        await save(workbench)
-    state = snapshot_state(workbench)
-    assert (
-        queued
-        and next(row for row in state["knowledge"] if row["id"] == 40)["model_transition"]["pending_model_id"] == "12"
-    )
-    assert (
-        json.loads(next(row["value"] for row in state["tenant_system_model_config"] if row["tenant_id"] == 101))[
-            "embedding_model"
-        ]["id"]
-        == "12"
-    )
-
-
-def test_dispatch_uses_frozen_business_expectations_and_actual_tenant_header(monkeypatch):
-    from bisheng.knowledge.application.model_reference import KnowledgeModelRebuildCommand
-
-    document = SimpleNamespace(apply_async=Mock())
-    qa = SimpleNamespace(apply_async=Mock())
-    monkeypatch.setitem(
-        sys.modules,
-        "bisheng.worker.knowledge.rebuild_knowledge_worker",
-        SimpleNamespace(rebuild_knowledge_celery=document),
-    )
-    monkeypatch.setitem(sys.modules, "bisheng.worker.knowledge.qa", SimpleNamespace(rebuild_qa_knowledge_celery=qa))
-    commands = tuple(
-        KnowledgeModelRebuildCommand(i, t, "operation", 4, "generation", 101, 7) for i, t in [(40, 3), (41, 1)]
-    )
-    service.LLMService._dispatch_model_default_commands(commands)
-    for task, ident in ((document, 40), (qa, 41)):
-        task.apply_async.assert_called_once_with(
-            args=(ident, None, 7),
-            kwargs={
-                "operation_id": "operation",
-                "expected_model_config_revision": 4,
-                "expected_index_generation": "generation",
-            },
-            headers={"tenant_id": 101},
-        )
-
-
-async def test_same_canonical_embedding_has_no_rebuild_probe_or_hidden_commands(workbench, monkeypatch):
+async def test_same_canonical_embedding_does_not_repeat_provider_probe(workbench):
     async with workbench.sessions() as session, session.begin():
         await defaults.ModelDefaultApplication.asave(session, "linsight_llm", config("11"), login_user=workbench.user)
-    await fixtures.add(workbench, 40)
-    before = snapshot_state(workbench)["knowledge"]
-    plan = AsyncMock(side_effect=AssertionError("unchanged embedding planned a rebuild"))
-    monkeypatch.setattr(knowledge.KnowledgeModelReferenceApplication, "aplan_workbench_model_changes", plan)
+    await add(workbench, 40)
+    before = space_state(snapshot_state(workbench))
     result = await save(workbench, ident="011")
-    assert result.embedding_model.id == "11" and snapshot_state(workbench)["knowledge"] == before
-    plan.assert_not_awaited()
+    assert result.embedding_model.id == "11" and space_state(snapshot_state(workbench)) == before
     workbench.probe.assert_not_awaited()
-    assert not workbench.queued
 
 
-async def test_clearing_default_embedding_preserves_independent_space_configuration(workbench):
+async def test_clearing_default_preserves_independent_space_configuration(workbench):
     async with workbench.sessions() as session, session.begin():
         await defaults.ModelDefaultApplication.asave(session, "linsight_llm", config("11"), login_user=workbench.user)
-    await fixtures.add(workbench, 40)
-    before = snapshot_state(workbench)["knowledge"]
+    await add(workbench, 40)
+    before = space_state(snapshot_state(workbench))
     result = await service.LLMService.update_workbench_llm(
         7, WorkbenchModelConfig(models=[]), BackgroundTasks(), login_user=workbench.user
     )
-    assert result.embedding_model is None and snapshot_state(workbench)["knowledge"] == before
-    assert not workbench.queued
+    assert result.embedding_model is None and space_state(snapshot_state(workbench)) == before
+    assert not [
+        row for row in snapshot_state(workbench)["business_resource_reference"] if row["source_type"] == "model_default"
+    ]
     workbench.probe.assert_not_awaited()
 
 
-async def test_any_space_action_denial_prevents_default_save_and_provider_io(workbench, monkeypatch):
-    await fixtures.add(workbench, 40)
-    await fixtures.add(workbench, 41)
-    before = snapshot_state(workbench)
-
-    async def permission(user, *, resource_type, resource_id, action):
-        assert user is workbench.user and resource_type == "knowledge_space" and action == "edit"
-        if resource_id == 41:
-            raise ResourceReferenceInvalidError(reason="test_space_edit_denied")
-
-    monkeypatch.setattr(knowledge, "require_business_action", permission)
-    with pytest.raises(ResourceReferenceInvalidError):
-        await save(workbench)
-    assert snapshot_state(workbench) == before and not workbench.queued
-    workbench.probe.assert_not_awaited()
-
-
-async def test_service_override_repairs_old_root_binding_using_post_override_sharing(workbench, monkeypatch):
+async def test_default_override_does_not_repair_existing_spaces_with_revoked_root_model(workbench):
     from sqlalchemy import update
 
     from bisheng.database.models.tenant import Tenant
-    from bisheng.knowledge.application.reference_legacy_evidence import KnowledgeLegacyReferenceEvidence
-    from bisheng.llm.application import reference_target_owner as model_module
-    from bisheng.llm.application.reference_target_owner import ModelReferenceTargetOwner
-    from bisheng.resource_reference.application.target_verification import ReferenceTargetVerifier
-    from bisheng.resource_reference.application.write_runtime import ReferenceBindingRuntime
-    from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
 
-    await fixtures.add(workbench, 40, "22")
+    await add(workbench, 40, "22")
     async with workbench.sessions() as session, session.begin():
         await session.execute(update(Tenant).where(Tenant.id == 1).values(share_default_to_children=1))
         session.add(TenantSystemModelConfig(tenant_id=1, key="linsight_llm", value='{"embedding_model":{"id":"22"}}'))
-    monkeypatch.setattr(
-        model_module,
-        "get_permission_relation_api",
-        AsyncMock(return_value=SimpleNamespace(list_resource_ids=AsyncMock(return_value=()))),
-    )
-    verifier = ReferenceTargetVerifier(
-        {"model": ModelReferenceTargetOwner(legacy_evidence=KnowledgeLegacyReferenceEvidence())}
-    )
-    runtime = ReferenceBindingRuntime(ReferenceRepository(verifier=verifier), verifier)
-    monkeypatch.setattr(defaults, "get_reference_binding_runtime", AsyncMock(return_value=runtime))
-    monkeypatch.setattr(knowledge, "get_reference_binding_runtime", AsyncMock(return_value=runtime))
+    workbench.sharing.allowed = frozenset()
+    before = space_state(snapshot_state(workbench))
     await save(workbench)
+    assert space_state(snapshot_state(workbench)) == before
+
+
+async def test_unavailable_new_default_is_rejected_without_altering_spaces(workbench):
+    await add(workbench, 40)
+    before = snapshot_state(workbench)
+    with pytest.raises(ResourceReferenceInvalidError):
+        await save(workbench, ident="999")
+    assert snapshot_state(workbench) == before
+    workbench.probe.assert_not_awaited()
+
+
+async def test_frontend_creation_snapshots_default_and_later_spaces_use_new_default(workbench, monkeypatch):
+    from bisheng.common.models.space_channel_member import SpaceChannelMember
+    from bisheng.knowledge.domain.services import knowledge_space_service as module
+    from bisheng.llm.domain.repositories.model_default_repository import ModelDefaultRepository
+
+    SpaceChannelMember.__table__.create(workbench.sync)
+    owner = module.KnowledgeSpaceService(None, workbench.user)
+    monkeypatch.setattr(module, "get_async_db_session", workbench.sessions)
+    monkeypatch.setattr(owner, "_existing_creation", AsyncMock(return_value=None))
+    monkeypatch.setattr(owner, "_assert_space_creation_quota", AsyncMock())
+    monkeypatch.setattr(owner, "_is_auto_tag_feature_visible", AsyncMock(return_value=False))
+    monkeypatch.setattr(owner, "_project_space_created", AsyncMock())
+    monkeypatch.setattr(owner, "_complete_knowledge_creation", AsyncMock(side_effect=lambda row, **kwargs: row))
+    monkeypatch.setattr(module.KnowledgeService, "_init_knowledge_indices_sync", lambda *args: None)
+    monkeypatch.setattr(module.KnowledgeAuditTelemetryService, "audit_create_knowledge_space", AsyncMock())
+
+    async def current_default():
+        # Execution admission is covered by the default-consumer suite; use the
+        # real persisted payload here to exercise the actual creation snapshot.
+        async with workbench.sessions() as session:
+            effective = await ModelDefaultRepository().aresolve(session, "linsight_llm")
+            return WorkbenchModelConfig.model_validate_json(effective.payload_json)
+
+    monkeypatch.setattr(module.LLMService, "get_workbench_llm", current_default)
+    async with workbench.sessions() as session, session.begin():
+        await defaults.ModelDefaultApplication.asave(session, "linsight_llm", config("11"), login_user=workbench.user)
+    first = await owner.create_knowledge_space("before default change")
+    await save(workbench)
+    second = await owner.create_knowledge_space("after default change")
     state = snapshot_state(workbench)
-    row = next(row for row in state["knowledge"] if row["id"] == 40)
-    assert row["model"] == "12" and row["model_transition"]["current_model_id"] == "12"
+    assert next(row for row in state["knowledge"] if row["id"] == first.id)["model"] == "11"
+    assert next(row for row in state["knowledge"] if row["id"] == second.id)["model"] == "12"
     refs = [row for row in state["business_resource_reference"] if row["source_type"] == "knowledge"]
-    assert {row["target_id"] for row in refs} == {"12"}
-    assert (
-        json.loads(next(row["value"] for row in state["tenant_system_model_config"] if row["tenant_id"] == 1))[
-            "embedding_model"
-        ]["id"]
-        == "22"
-    )
+    assert {(row["source_id"], row["target_id"]) for row in refs} == {(str(first.id), "11"), (str(second.id), "12")}

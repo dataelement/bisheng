@@ -45,7 +45,7 @@ async def resolve_app_references(
     known IDs, and any manifest change requires a new outer transaction.
     """
     names = get_model_name_resolution_port()
-    await names.assert_plan_current(
+    resolutions = await names.resolve_model_names_current(
         session, source_tenant_id, identity=identity, plan=model_name_plan, range=model_range
     )
     try:
@@ -55,17 +55,11 @@ async def resolve_app_references(
     requested_names = tuple(sorted({item.requested_name for item in requests if item.target_type == TargetType.MODEL}))
     if model_name_plan.requested_names != requested_names or model_name_plan.tenant_id != source_tenant_id:
         raise _invalid("app_model_plan_incomplete")
+    models = {item.requested: item.resolved for item in resolutions}
     resolved_targets = {}
     for request in requests:
         if request.target_type == TargetType.MODEL:
-            model = await names.resolve_model_name_current(
-                session,
-                source_tenant_id,
-                request.requested_name,
-                identity=identity,
-                plan=model_name_plan,
-                range=model_range,
-            )
+            model = models[request.requested_name]
             resolved_targets[request.slot_key] = TargetKey(TargetType.MODEL, str(model.model_id))
 
     knowledge_requests = tuple(item for item in requests if item.target_type == TargetType.KNOWLEDGE_SPACE)

@@ -788,13 +788,13 @@ AS共用Agent init/run/stream及缓存复用都读取实际snapshot配置/links�
 | KNOWLEDGE | 实际 model 与已定义 transition.pending_model_id 是模型槽，processing_defaults 无模型字段。创建、修改、删除及 finalize 的业务配置和出向 R2 同事务；清空保留模型配置与引用。RAG/重建 worker 从准入后的实际当前配置取模型，不依赖任务中保存的模型 ID。 |
 | MODEL_DEFAULT | knowledge_llm / assistant_llm / evaluation_llm / workflow_llm / linsight_llm 五个实际 key/current；Root 继承只有 Root source，Child override 才有 Child source。恢复继承解除 Child source，不修改 Root。业务 getter 全 key strict，管理 raw 保失效 ID，完整准入后再取原槽。 |
 
-APP 名称在同 Session 以完整 uncached 目录解析并冻结到真实版本模型 ID；Gateway 在 provider 实例化前比对原请求别名、当前解析 ID/server 与冻结槽。管理页使用纯只读名称 findings 和 Core inspect，逐行保留失效 ID，不将观察结果当执行资格。filelib 透传原 principal，不能由裸 credential/user ID 补造身份。
+APP 名称在同 Session 以完整 uncached 目录解析并冻结到真实版本模型 ID。resolve_model_names_current 在每个候选读取/锁后复核阶段各完整验证一次私有计划，返回整批 NameResolution，再按 requested 名称映射各槽位；不再逐槽重复读取目录、查询共享及重算全部声明。空计划仍验证原身份/事务/范围，不跨阶段缓存校验结果；共享撤销、下线、重命名和目录漂移在下一阶段仍拒绝。名称匹配由 O(M²×C) 降至 O(M×C)，目录 SQL/共享查询不随槽位数重复；Gateway 在 provider 实例化前比对原请求别名、当前解析 ID/server 与冻结槽。管理页使用纯只读名称 findings 和 Core inspect，逐行保留失效 ID，不将观察结果当执行资格。filelib 透传原 principal，不能由裸 credential/user ID 补造身份。
 
-默认 embedding 联动先生成全空间计划和业务命令，模型 server→model→Root/current Tenant 辅助锁→KN/default roots，整批比较原清单、配置与引用，然后同一事务一次提交。即使目标 union 为空也不跳过 Tenant 辅助锁。所有即将 override 的 key 对同批各来源都不再贡献继承授权；其他仍继承 key 和真实显式共享保留。否则保存后可能立即让 currentA/pendingB 的 A 失去资格，确定性阻断后续执行。原旧槽已失效或实际资格已撤销且非 DELETING 时，按明确改绑修复分支将实际 current/pending 同指向合法 B；正常 A→B 保双槽，finalize 才解除 A。
+2026-11-06 用户确认：每个空间独立保存 Embedding。工作台默认 Embedding 只在创建时复制到该空间 model 槽并建立自身引用；更换、清空默认或恢复 Root 继承只修改对应 model_default 来源及其 R2，不盘点、锁定、编辑已有空间，不修复旧空间模型，也不派发空间重建。删除旧全空间批次计划、清单校验及默认命令出口，避免默认设置随空间数增长。默认写保留原管理员/租户/目标验证、Root/current Tenant 辅助锁、旧有效配置并发检查和变更时 provider probe。其他资源依旧遵守实时共享/模型可用性校验，不因保存过旧默认获得永久共享授权。显式更改某一空间自己的模型才沿原变更用例重建：正常 A→B 保双槽，已失效旧槽按明确修复分支处理，finalize 才解除 A。
 
 状态查询保原visible、状态/错误提示及阶段诊断，不再自动派发旧三参数重建；显式变更由事务Owner派发，查询不补造新操作或以visible取得重建资格。
 
-7 字段重建命令只含 knowledge/type/operation/config_revision/index_generation/tenant/审计 actor_user_id，不绑定模型。整体 commit 后派发，队列失败保留已提交配置并明确失败；外部 Session 调用者须取 asave_with_commands 返回并负责 commit 后派发，无命令出口的调用实际产生非空命令时在写入前拒绝。worker 还核真实 Celery 上下文、资源 operation/revision/generation；受控逐文件partial正常完成后finalize，整体异常/过期/guard失败保当前stage诊断，不无条件发布成功/解除pending；finalize 同事务把 model=B、清 transition、PUBLISHED、revision+1、保同一 build generation 并更新 R2。完整处理框架和在途外部 IO 竞态不因这组接线自动完成。 旧仅 ID/modelHint/审计 UID 的重建消息缺显式期望或 stage，IO 前明确拒绝并保留诊断，不从当前值补造旧操作证明；M2 盘点，未来 M3 受控转换或运维按新操作恢复，正式升级适配完成前不放行。
+7 字段重建命令只含 knowledge/type/operation/config_revision/index_generation/tenant/审计 actor_user_id，不绑定模型。只由显式空间模型变更的事务 Owner 在 commit 后派发，队列失败保留已提交配置并明确失败；默认配置写不产生此命令，外部 Session 无需拥有空间任务派发出口。worker 还核真实 Celery 上下文、资源 operation/revision/generation；受控逐文件partial正常完成后finalize，整体异常/过期/guard失败保当前stage诊断，不无条件发布成功/解除pending；finalize 同事务把 model=B、清 transition、PUBLISHED、revision+1、保同一 build generation 并更新 R2。完整处理框架和在途外部 IO 竞态不因这组接线自动完成。 旧仅 ID/modelHint/审计 UID 的重建消息缺显式期望或 stage，IO 前明确拒绝并保留诊断，不从当前值补造旧操作证明；M2 盘点，未来 M3 受控转换或运维按新操作恢复，正式升级适配完成前不放行。
 
 KnowledgeModelReadRuntime 是内部模型配置消费门面，独立私有 graph 保原身份对象、当前 tenant 与 Session 事务，核完整模型配置/引用和实际资格，不重复增加 Knowledge.visible；数据访问继续沿原 AS/WF/检索与文件过滤（包括 knowledge_auth=False）。无 User 的合法同租户内部 RAG 不造人；后台命令另外核真实 worker proof。普通用户来源 inspect/读取仍保原可见规则，私有门面不成为 HTTP 许可。
 
@@ -805,3 +805,7 @@ API、Celery 和独立 Linsight 子进程在原生来源读取接收业务前显
 W4最终验证：d4d02e48b7d724c9ffe31d9650b75951eeb94e14，81路径2390 passed及6 subtests；438/597任务完成。170文件格式通过，架构及Ruff新增0，55条既有Ruff诊断已比对。此为本地SQLite/Port与实际调用链证据，不是双库/中间件、完整特性E2E或升级放行。
 
 评审后兼容修复：普通/workbench响应独立派生ASR实时能力，依据仍为实际asr_rt类型，结果只写响应副本；管理/workbench/settings与用于共享资格的with_meta保持raw，避免探测失效ID或递归资格读取。不恢复丢弃失效ID的旧sanitize逻辑；完整来源执行仍沿原严格准入。
+
+## 15.8 本轮修订与剩余范围（2026-11-06）
+
+独立评审两项热点已按用户确认处理：撤销默认 Embedding 的全空间联动，APP 改为每阶段一次目录复核。若未来增加明确的管理员批量换模型功能，应另行设计显式范围、确认与批次校验，不能恢复默认设置隐式联动。任务账面仍为 438/597 完成、159 待办，完整分组及逐条编号见 [pending-tasks.md](./pending-tasks.md)。本地回归不代表完整特性或升级验收。

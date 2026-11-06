@@ -206,3 +206,15 @@ ASR修复bb65647c9与此前Linsight修复b949fb70b均已提交至功能主分支
 | `codex/3.1.0-beta1/118-wave4-kn` | `883ced1815d96bb867a300bf13193459dea34c40` |
 | `codex/3.1.0-beta1/118-wave4-llm` | `3ab5ab61fcdb25d8a02dab74a877d482ae45fb1e` |
 | `codex/3.1.0-beta1/118-wave4-worker` | `d3617ccf0059e595b8cf2eadf80c93e42ff55dfe` |
+
+## 独立性能复审与用户范围修订（2026-11-06）
+
+独立 reviewer 在 61a8587b4 确认两个 P2：默认 Embedding 的逐空间回调重复完整批次校验，产生持锁 O(N²)；APP 名称解析逐槽重验整目录与全部声明，产生 O(M²×C) 和重复 SQL/共享查询。未确认 SQL join 型笛卡尔积、新的跨租户越权、引用漏写或空间动作退化；此结论限已实现阶段，不能替代正式迁移与全特性验收。
+
+用户明确默认 Embedding 仅供空间初始创建选择，因此直接撤销全空间联动：删除 KnowledgeModelChangeBatch、计划/apply、完整空间清单 Repository 及默认命令派发出口。默认保存只更新 model_default 配置/R2，保留原授权、目标锁/辅助锁、effective 并发检查与 provider probe；更换/清空/恢复继承不读写既有空间，不隐式修复它们。显式改单个空间模型仍使用原 current/pending、提交后派发及 finalize。原联动测试已退役，替换为真实 SQL 与服务回归；任务 T480/T481 口径修正，T488/T489 保留历史完成编号并标记退役。
+
+APP 新增 resolve_model_names_current：同一候选/锁后阶段完整重验一次，返回整批解析数据，逐槽按名称映射；每个后续阶段必须重新验证，不缓存共享或执行许可。M=1/10/30 的实际 resolver 回归均验证每阶段仅一次目录和共享查询；后续阶段共享撤销、模型下线及重命名仍明确拒绝。名称匹配降为 O(M×C)，保留原身份、租户、事务、私有计划、空计划及冻结 ID 规则。
+
+先在旧实现运行新行为用例得到 10 failed / 17 passed，失败对应额外空间读取、空间引用/编辑权限阻断、外部事务命令限制、旧空间被改写及逐声明重复目录校验。修复后定向组合135项通过；另补实际前台创建链验证默认 A→B 后旧空间仍为 A、新空间为 B，并各自保存真实模型引用。最终完整81路径组合 **2402 passed、6 subtests passed**（53.88秒），无fail/skip；日志 `/private/tmp/f118-review-fixes-tests.log` 与同名JSON记录基线61a8587b4及当时工作树diff，随后只作测试未使用import/排序整理和文档收口。9个改动Python文件 Ruff/format/arch-guard 通过，全diff检查及HTML的13张SVG、ID和本地导航/文档链接校验通过。
+
+spec、design、业务/公共合同、升级说明、QA、tasks、README 和HTML已同步；历史验证段落保留其时点含义，以本节为最新口径。剩余仍为 **159项**，全部编号/Owner/依赖见 [pending-tasks.md](./pending-tasks.md)，不因两项修正自动勾选其他任务。未修改主工作区、创建临时lane、推送、运行真实双库/FGA/队列/检索/模型/E2E、执行迁移或部署。

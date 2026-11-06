@@ -6,7 +6,7 @@
 
 - source 取实际业务根/版本/租户，不接受 HTTP 自报 SourceKey、ownerTenant、receipt、ready 或 identity。原 ContextTenant、actor、OpenAPI/Public principal、credential scope、管理 pin 与 trace 保持；不靠改 ContextTenant、裸 user_id 或 owner 身份换人。
 - 同一外部 SQL Session：读旧完整配置与索引 → 全部旧/新 targets 统一锁序 → 真实业务 root/版本/子行 current-read 并重授权 → 旧配置摘要与 set/raw 一致 → 业务保存及 R2 apply → 唯一 commit。新资源可为真实 ID 首次 flush；不得先 commit 业务再补绑定。Repository 不 begin/commit/rollback，读用 no_autoflush；批量 DML 显式可信 tenant/parent 边界。
-- 现 `averify_batch_targets` 只支持同 root，不放宽其语义。默认+多空间跨 root 联动新增 `runtime.aprepare_mixed_source_bindings(session, changes)->tuple[PreparedSourceBindings,...]`，只允许同可信 tenant 的 model_default/knowledge 来源及 MODEL 目标；`SourceBindingChange` 含 source_key/references/extractor_version/lock_source_root/new_source/effective（回调不进 repr/HTTP）。Core 先候选读每个 source，再由新 `verifier.averify_mixed_source_targets` 一次全局纯物理预锁 MODEL server全组→model全组，并逐 source 单独发行原槽/legacy收据；各真实 root 按稳定类型/ID序当前锁并重验，各 guard/source CAS仍独立。同source重复、异tenant、其他target拒10996，任何集合漂移10998整Txn回滚，不在root后追加反序锁。返回按source_type/source_id/source_version规范序，各自root修订独立，不使用单base_root_revision批次。LLM Model Owner/Repository提供 `aprelock_mixed_targets(session,target_keys,source_keys)->None`，仅物理锁；旧同root `_sources` 保持严格。
+- 现 `averify_batch_targets` 只支持同 root，不放宽其语义。Core 已实现通用混合来源 API `runtime.aprepare_mixed_source_bindings(session, changes)->tuple[PreparedSourceBindings,...]`，只允许同可信 tenant 的 model_default/knowledge 来源及 MODEL 目标；`SourceBindingChange` 含 source_key/references/extractor_version/lock_source_root/new_source/effective（回调不进 repr/HTTP）。Core 先候选读每个 source，再由新 `verifier.averify_mixed_source_targets` 一次全局纯物理预锁 MODEL server全组→model全组，并逐 source 单独发行原槽/legacy收据；各真实 root 按稳定类型/ID序当前锁并重验，各 guard/source CAS仍独立。同source重复、异tenant、其他target拒10996，任何集合漂移10998整Txn回滚，不在root后追加反序锁。返回按source_type/source_id/source_version规范序，各自root修订独立，不使用单base_root_revision批次。LLM Model Owner/Repository提供 `aprelock_mixed_targets(session,target_keys,source_keys)->None`，仅物理锁；旧同root `_sources` 保持严格。2026-11-06 起默认 Embedding 保存不调用此混合来源 API，不隐式枚举或更改任何空间。
 - 新来源即使零引用也建 ready 的完整 source set。existing 来源缺 index/guard、版本不完整、未知 raw 或配置/索引漂移 10994，不在线自动 bootstrap。旧失效同 source/version/slot 原样保留或解除；新 slot/copy/version 仍需合法目标。deleting 冻结写，强删及存量失效证据沿既有协议。
 - 按已确认 AC-92，**每个来源完整执行严格检查**，不增加 subset/slot 执行通道，不借 inspect 结果授执行许可。APP 每个版本、频道 current、各默认 key/current、空间 current 分别独立；同一来源尚有失效项不能执行/发布。管理读取可展示失效原 ID，不能静默丢项、sanitize 或换首个有效模型。
 - 显式选择知识的新引用沿真实 0/1→library、3→space 和原主体/凭据检查原业务选择条件；旧同槽可逐项修复。不扩文件 edit，不更改 rename，也不新增 use、任务模型绑定或 worker 在途外部 IO 一致性方案。
@@ -88,9 +88,9 @@ prepared = await ChannelSyncExecutionAdmission.prepare(
 
 INT 给普通 UserPayload 来源读图注册 Channel Owner；内部 automation facade 保本次恢复对象与完整环境指纹。KN 独占移除 delete_space/delete_folder/batch_delete 主动 `adelete_by_space_id/adelete_by_folder_ids` 清同步配置的三处调用，保失效选项和引用；CH 不越权修改 KN。
 
-## 6. 空间/QA 模型业务配置与默认联动（KN/INT）
+## 6. 空间/QA 独立模型业务配置（KN/INT）
 
-KN 新提取器与外部 Session Repository/应用用例是唯一出向模型绑定写口，接真实 create_knowledge_base/acreate_knowledge_base、QA/space 真删除/clear、旧改 embedding 接口及工作台默认 embedding 联动；原 permission 投影成功顺序不反转。创建模型验证/权限失败不得留下 Knowledge 或引用，索引创建等外部 IO 在 SQL/投影资格之后。metadata 修改不重置模型/索引修订；不改变 file edit/rename。
+KN 新提取器与外部 Session Repository/应用用例是唯一出向模型绑定写口，接真实 create_knowledge_base/acreate_knowledge_base、QA/space 真删除/clear、旧改 embedding 接口；默认 embedding 仅在空间创建时作为初始选择；原 permission 投影成功顺序不反转。创建模型验证/权限失败不得留下 Knowledge 或引用，索引创建等外部 IO 在 SQL/投影资格之后。metadata 修改不重置模型/索引修订；不改变 file edit/rename。
 
 ```python
 prepared = await KnowledgeModelReferenceApplication.aprepare_model_change(
@@ -101,9 +101,9 @@ prepared = await KnowledgeModelReferenceApplication.aprepare_model_change(
 await KnowledgeModelReferenceApplication.aapply_model_change(session, prepared)
 ```
 
-多空间前置另提供 `aplan_workbench_model_changes(session,new_model_id,*,login_user,operation_id=None)->KnowledgeModelChangeBatch`，含 `.changes:tuple[SourceBindingChange,...]`、`.alock_inventory(session)`、已冻结业务命令。inventory在第一个knowledge root回调（无空间时default root回调）按当前tenant/type和稳定ID锁完整空间清单，比候选全集，变化10998整体回滚不增补计划；各回调只用已核当前行。LLM将default change与batch.changes交新mixed Core一次prepare，再由 `aapply_workbench_model_changes(session,batch,prepared_sources)` 保存KN业务及对应R2，LLM保存default及对应R2，同一外部事务唯一commit；commit后使用原业务命令派发。
+工作台默认 Embedding 保存只更新 model_default 自身配置/R2。已撤销 aplan_workbench_model_changes / KnowledgeModelChangeBatch / aapply_workbench_model_changes 及整空间清单 Repository；不扫描、锁定、改绑已有空间或派发重建。前台创建读取当时默认并写入独立 model 槽，既有空间继续自身配置；显式改单个空间模型才使用上面的 prepare/apply。
 
-prepare 不 commit/入队/外部 IO，targets 后当前锁 Knowledge，校验旧 source/index/model 与原动作并冻结结果。多空间联动先全部 source 预锁并在锁后核完整空间清单，默认来源与所有空间变更在同一调用者事务提交；失败不部分保存默认或空间。commit 后才逐资源派发，不声称派发失败可回滚已提交业务；重试用原业务 operation/revision，不能重新切一次模型。
+prepare 不 commit/入队/外部 IO，targets 后当前锁该 Knowledge，校验旧 source/index/model 与原动作并冻结结果。该空间业务与 R2 同一调用者事务提交；仅显式空间重建命令在 commit 后派发，重试使用原业务 operation/revision，不能重新切一次模型。默认写没有任务命令。
 
 需要阶段配置时 `model_transition` 仅识别明确 schema_version=1、operation_id、current_model_id、pending_model_id；两模型均为资源业务槽，未知形状拒 10994，不递归猜 ID。current 实际选择 `Knowledge.model`，变更单调推进 model_config_revision/索引 generation，名称/说明不推进。worker 从当前真实业务配置选模型，task 原 model_id 仅兼容校验提示；新派发携业务 operation/revision/generation 期望，缺有效业务或被后续操作替换则在外部 IO 前拒，不能恢复任务历史模型。资源 transition finalize 与 R2 同事务解除旧业务槽；任务本身没有引用。完整分代重建/处理任务框架仍按原任务依赖推进，不把本波接线当成该处理框架完成。
 
@@ -123,7 +123,7 @@ admitted = await reads.arequire_default_slot(key, slot_key, login_user=None, ses
 
 私有 DefaultReadIdentity 捕获原 ambient tenant/visible/management/actor/OpenAPI/Public/trace，给原 UserPayload 时保持其对象；无 UserPayload 只内部域发行，不伪造个人或浏览器 session。多租户缺 current tenant 拒 10996，显式 tenant 参数只能校验相等而不能补授权；单租户沿 core 默认语义。独立 default Runtime/Verifier/Model Target/Legacy 同 authority，同步异步同根重验，不改 W3 用户身份接口。
 
-所有五 setter、_base_update、set_default_model 均走唯一 writer。自动补默认只取 own 原始配置的真正空槽，不把 Root 继承配置复制成 override，不替换已有失效非空 ID。workbench embedding 更新不再 LLM 自行逐 KnowledgeDao commit/入队，改调用 KN 外部事务接口及全局批锁。
+所有五 setter、_base_update、set_default_model 均走唯一 writer。自动补默认只取 own 原始配置的真正空槽，不把 Root 继承配置复制成 override，不替换已有失效非空 ID。workbench embedding 更新不读取或修改已有 Knowledge，只保存默认来源。
 
 API 启动取消 linsight_default_model_backfill/chat_default_model_backfill 的自动 DB 转换；未来只能纳入 M3 **停服、备份、正式盘点及冻结 baseline/plan 之后** 的受控转换。脚本不检测停服；本波不运行迁移，也不以 read/write 装配标记全量 Coverage ready。
 
@@ -138,7 +138,7 @@ APP：app_publish 域上述业务源文件与 app_runtime state/entry；CH：cha
 
 `pending_app_reviews(viewer_user_id,app_id,version_ids,*,session=None,for_update=False)` 及其Repository仅增加复用外部Session当前读，不改变pending任务/真实审批人/应用版本资格或流转；已加载App的原动作由 `app_runtime.application.authorization.authorize_loaded_app(identity,app,operation,*,resume=False)` 导出，避免SourceOwner调用另开Session的load。
 
-Name Port增加 `await assert_plan_current(session,tenant_id,identity=identity,plan=plan,range=model_range)->None`，与resolve同一私有发行/完整目录重验，支持空名称Plan；不能以公开DTO字段当证明。KN名称计划在完整model物理预锁之后、任何source root前锁完整候选name/id+冻结KN集合，私有保存候选manifest；最终普通目录比较及仅已锁ID当前读，变化10998，不root后锁新候选。初始名称范围锁与真实双库隔离行为仍须中央验证；不把SQLite证明为实际gap锁。
+Name Port增加 `await assert_plan_current(session,tenant_id,identity=identity,plan=plan,range=model_range)->None`，与resolve同一私有发行/完整目录重验，支持空名称Plan；不能以公开DTO字段当证明。KN名称计划在完整model物理预锁之后、任何source root前锁完整候选name/id+冻结KN集合，私有保存候选manifest；最终普通目录比较及仅已锁ID当前读，变化10998，不root后锁新候选。初始名称范围锁与真实双库隔离行为仍须中央验证；不把SQLite证明为实际gap锁。 同阶段多槽消费使用 resolve_model_names_current(session,tenant_id,identity=identity,plan=plan,range=model_range)->tuple[NameResolution,...]：完整重验一次后返回数据映射，不能把公开返回值当后续阶段的证明。候选/锁后阶段必须各自调用，空名称计划也不跳过身份、事务及共享检查。
 
 
 ### 实施边界补充（2026-11-06）
@@ -203,7 +203,7 @@ KnowledgeModelReadRuntime是内部配置消费门面，不是知识数据读取A
 
 `ainspect_model_names_current(session,tenant_id,requested tuple,*,identity)`返回每项ModelNameInspection(requested,resolved|None,status=valid/unresolvable/ambiguous/offline)，完整uncached批次、原bare/qualified规则，只读无锁/prepare/cache/执行authority；IO/权限故障明确失败。APP `inspect_saved_capabilities(app_id,version_id,identity,*,session=None)`沿真实UUID/Core inspect/frozen ID与该findings比较，保存原ID/label逐行标失效/not_ready，不catch成[]；draft预检不造来源。普通SAK/PAT inspect允许context=None的原principal当前credential+management_read，不伪造RuntimeAuthorizationContext；execute/start/publish保持原严格上下文。
 
-`ModelDefaultSaveResult(config,commands,embedding_changed=False)`由App真实old effective配置生成；`asave_with_commands`的外部事务Owner须commit后派发7字段命令。LLMService ownSession沿原probe→唯一commit→派发，队列失败不假回滚。Service外部Session及原App.asave无命令出口而实际commands非空时，写业务/R2前拒workbench_model_change_requires_command_owner，指引显式带commands API；不加collector/Session事件。embedding_changed由实际计划而非service旧raw读决定；清空默认embedding不自动清空间自身模型，明确非None更换才联动。
+`ModelDefaultSaveResult(config,embedding_changed=False)` 从实际 old effective 配置生成。默认 application.asave 与 Service 外部 Session 均支持原事务回滚，不再有 asave_with_commands、命令派发或 workbench_model_change_requires_command_owner 拒绝。LLMService ownSession 沿原 provider probe→唯一 commit；embedding_changed 只控制默认模型变更探测，不代表空间发生改变。更换、清空默认及恢复继承均不修改既有空间或引用。
 
 ### 辅助锁与删除清理读取（T500/T575–T576）
 

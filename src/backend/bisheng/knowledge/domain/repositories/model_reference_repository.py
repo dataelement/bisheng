@@ -159,15 +159,9 @@ class KnowledgeModelReferenceRepository:
     def _kind(row):
         return row.type in {KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.QA.value, KnowledgeTypeEnum.SPACE.value}
 
-    def _statement(self, knowledge_id=None, *, spaces=False, for_update=False):
+    def _statement(self, knowledge_id, *, for_update=False):
         self._tenant_id()
-        query = select(Knowledge)
-        query = (
-            query.where(Knowledge.type == KnowledgeTypeEnum.SPACE.value)
-            if spaces
-            else query.where(Knowledge.id == knowledge_id)
-        )
-        query = query.order_by(Knowledge.id)
+        query = select(Knowledge).where(Knowledge.id == knowledge_id)
         return query.with_for_update().execution_options(populate_existing=True) if for_update else query
 
     def get(self, session, knowledge_id, *, for_update=False):
@@ -179,16 +173,6 @@ class KnowledgeModelReferenceRepository:
         with session.no_autoflush, strict_tenant_filter():
             row = (await session.exec(self._statement(knowledge_id, for_update=for_update))).one_or_none()
         return row if row is not None and row.tenant_id == self._tenant_id() and self._kind(row) else None
-
-    def list_spaces(self, session, *, for_update=False):
-        with session.no_autoflush, strict_tenant_filter():
-            rows = session.exec(self._statement(spaces=True, for_update=for_update)).all()
-        return tuple(row for row in rows if row.tenant_id == self._tenant_id())
-
-    async def alist_spaces(self, session, *, for_update=False):
-        with session.no_autoflush, strict_tenant_filter():
-            rows = (await session.exec(self._statement(spaces=True, for_update=for_update))).all()
-        return tuple(row for row in rows if row.tenant_id == self._tenant_id())
 
     def _new(self, session, row):
         tenant_id = self._tenant_id()

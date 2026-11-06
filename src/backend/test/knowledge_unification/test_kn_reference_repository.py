@@ -133,17 +133,17 @@ async def test_native_async_operations_are_equivalent_and_do_not_commit(store):
 
 
 @pytest.mark.parametrize("mode", ["sync", "async"])
-async def test_owned_reads_are_strict_and_space_inventory_is_complete_stable_and_tenant_local(store, mode):
+async def test_owned_reads_and_locks_are_strict_and_tenant_local(store, mode):
     sync, engine = store
     repo = KnowledgeModelReferenceRepository()
     if mode == "sync":
         with Session(sync) as session:
             assert repo.get(session, 20) is None and repo.get(session, 30) is None
-            assert [row.id for row in repo.list_spaces(session, for_update=True)] == [10, 11]
+            assert repo.get(session, 10, for_update=True).id == 10
     else:
         async with AsyncSession(engine) as session:
             assert await repo.aget(session, 20) is None and await repo.aget(session, 30) is None
-            assert [row.id for row in await repo.alist_spaces(session, for_update=True)] == [10, 11]
+            assert (await repo.aget(session, 10, for_update=True)).id == 10
 
 
 @pytest.mark.parametrize("revision,generation", [(3, "generation-4"), (4, "different")])
