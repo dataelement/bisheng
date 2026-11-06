@@ -24,6 +24,7 @@ from bisheng.knowledge.domain.services.processing_job_service import ProcessingJ
 from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.information.reconcile import _active_tenant_ids
+from bisheng.worker.knowledge import metadata_jobs
 from bisheng.worker.knowledge.file_worker import prepare_processing_file, write_processing_file
 from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_processing_file, reset_processing_target
 from bisheng.worker.main import bisheng_celery
@@ -141,11 +142,13 @@ async def _execute_processing_job(job_id: str, expected_dispatch_revision: int):
     lease = None
     revision = expected_dispatch_revision
     async with get_async_db_session() as session:
-        job = await owner.jobs.aget(session, job_id)
+        job = await owner.jobs.aget_execution(session, job_id)
         if job.revision != expected_dispatch_revision or job.state not in {"accepted", "running"}:
             return _summary(job)
         reference = await owner.jobs.alatest_retry_actor(session, job_id)
         space_id, kind, operation_id = job.space_id, job.kind, job.parameters.get("operation_id")
+    if kind == "metadata_schema_change":
+        return await metadata_jobs.execute_metadata_job(job_id, expected_dispatch_revision, owner=owner, proof=proof)
     try:
         if kind not in PROCESSING_HANDLERS:
             raise KnowledgeProcessingConflictError(reason="processing_kind_unavailable")
