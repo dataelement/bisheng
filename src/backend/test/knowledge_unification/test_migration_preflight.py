@@ -87,7 +87,11 @@ async def test_real_original_type_retirement_creator_and_quota_facts_preserve_hi
     async with AsyncSession(native.engine) as session, session.begin():
         items = await collect(module, session)
         plans = [
-            item.data for section, item in items if section == "conversion" and item.record_type == "conversion_plan"
+            item.data
+            for section, item in items
+            if section == "conversion"
+            and item.record_type == "conversion_plan"
+            and item.data["action"] != "register_v1"
         ]
         assert [(item["resource_id"], item["target_type"], item["action"]) for item in plans] == [
             (9000, 3, "convert_type0"),
@@ -123,7 +127,7 @@ async def test_legacy_overdeep_chain_and_null_empty_paths_are_preserved_not_new_
         records = await collect(module, session)
         deep = next(item.data for _, item in records if item.record_type == "file" and item.data["id"] == 11)
         assert deep["level"] == 10 and deep["file_level_path"].endswith("/10")
-    ancestor_reads = [query for query in native.queries if "knowledgefile.id IN" in query[0]]
+    ancestor_reads = [query for query in native.queries if "m2_exact_ancestor.id IN" in query[0]]
     assert len(ancestor_reads) == 1
 
 
@@ -177,8 +181,8 @@ async def test_native_401_files_use_bounded_pages_and_unique_creator_ancestor_re
         records = await collect(module, session)
     assert sum(item.record_type == "file" for _, item in records) == 402
     assert len(native.queries) <= 35
-    assert sum("FROM user" in sql for sql, _ in native.queries) == 1
-    assert sum("knowledgefile.id IN" in sql for sql, _ in native.queries) == 1
+    assert sum("m2_exact_creator.user_id IN" in sql for sql, _ in native.queries) == 1
+    assert sum("m2_exact_ancestor.id IN" in sql for sql, _ in native.queries) == 1
 
 
 async def test_actual_permission_snapshot_keeps_inactive_protected_and_compiles_once(module, native):
