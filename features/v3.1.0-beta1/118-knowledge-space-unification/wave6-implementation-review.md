@@ -187,3 +187,10 @@ EDGE固定ce4c7c81b（六生产叶/四新测试叶），主agent读全部入口/
 T139/T140既有生产已由W4 694859943→2a4e7e991及SourceOwner/Core接线实现。独立EDGE只读确认provider前核实时alias ID/server与当前UUID版本冻结槽；原SDK卡T134并非调用依赖，按§45改为真实T136/T447。固定8315b03071仅在原test_app_model_binding.py补两条真实回归：实际删LLMModel+tombstone后命中旧catalog cache仍ModelRevoked且零provider；真实signed OBO/PreviewCapabilityProvider、credential/operation/route/approval与不同active/pending版本全链，preview仅准当前pending模型；同名漂移及逐项撤销分别拒绝且零provider。未改生产/SDK/审批业务，旧断言保持，新测试可运行时首绿；夹具缺composition/删除事实/唯一键恢复顺序问题不计产品红。
 
 主agent逐段复核实际接线和新增fixture后正常merge，主树四路径42 passed、2090 warnings、2.30秒，日志/JUnit /private/tmp/f118-root-app-model-binding.log/.xml。原两任务据实际完整模型绑定范围闭合，不代表SDK/所有开放入口/模型公开删除或E2E完成。
+
+
+## 迁移来源个人配额原任务闭合（2026-11-07）
+
+INT固定71cfbc884，两生产叶只15行新增/3行替换：同一私有纯COUNT谓词接KnowledgeDao原sync/async创建计数及QuotaService user分支。非空migration_origin持续个人豁免，NULL/空串仍计；原tenant总量、部门排除开关、普通列表、全局per-user显示口径、文件source/status/SUM与错误处理均未改，无Model/DDL变更。T165测试3ba71→fec格式后实测9行为红4首绿→13绿，初夹具API名错误/网络依赖不计产品红。原test/quota及新叶组合96绿，主树合流后同组合再96绿，日志/private/tmp/f118-root-main-quota.log/.xml。
+
+EDGE固定archive独立复核无行动项：原96绿，额外2格native SQL（2400行、换owner/nonempty标记、lists不隐藏、原跨tenant/global口径）通过；每个sync/async/user/tenant计数各1条COUNT，无行装载/N+1。Ruff两个legacy叶相对原同config rule/message多集24/7完全相同，新增0；新叶Ruff/format与两prod arch均绿。原T165166按count-only交付闭合，正式M3转换后MySQL/配额联验仍由T203完成，不能以SQLite证明正式升级。

@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史838编号：713已完成/历史交付、123当前待办、2外移；原137队列已完成30项、剩107项，另16张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史838编号：715已完成/历史交付、121当前待办、2外移；原137队列已完成32项、剩105项，另16张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -1347,7 +1347,7 @@
   **配对测试**：T163\
   **验证 / 完成条件**：运行配对测试 T163；验证本卡预期，相关范围检查通过。
 
-- [ ] **T165 · 迁移空间配额显示与创建统一：先写测试**
+- [x] **T165 · 迁移空间配额显示与创建统一：先写测试**
   **类型 / Owner**：测试 / KN\
   **写入文件**：`src/backend/test/knowledge_unification/test_quota.py`（拟新增）\
   **逻辑 / 测试上下文**：W6§44：原sync/async创建计数与QuotaService user显示同一count-only条件；换owner/新Session后origin仍豁免，tenant总量/部门/文件SUM不变。正式T164转换与配额联验保留在T203。\
@@ -1355,7 +1355,7 @@
   **覆盖 AC**: AC-14, AC-61, AC-62\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T166 · 迁移空间配额显示与创建统一**
+- [x] **T166 · 迁移空间配额显示与创建统一**
   **类型 / Owner**：后端 Domain / KN\
   **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge.py`；`src/backend/bisheng/role/domain/services/quota_service.py`\
   **逻辑 / 测试上下文**：以durable migration origin持续豁免个人新建空间数量，tenant总量超额保存量限新增；部门/存储原规则保持，校验与展示同计数，不按一次标记跳检查。\
