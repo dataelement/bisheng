@@ -348,3 +348,26 @@ async def test_stale_expected_configuration_and_config_index_drift_fail_without_
             await KnowledgeModelReferenceApplication.aprepare_model_change(session, 40, 11, login_user=business.user)
         await session.rollback()
     assert state(business) == before
+
+
+@pytest.mark.parametrize("field", ["model", "new_generation", "bindings", "runtime", "knowledge_id", "changed"])
+async def test_original_prepared_object_cannot_authorize_reflected_plan_mutation(business, field):
+    await seed(business)
+    before = state(business)
+    async with business.sessions() as session:
+        prepared = await KnowledgeModelReferenceApplication.aprepare_model_change(
+            session, 40, 12, login_user=business.user
+        )
+        values = {
+            "model": "33",
+            "new_generation": "forged-generation",
+            "bindings": replace(prepared.bindings, verified=replace(prepared.bindings.verified, references=())),
+            "runtime": SimpleNamespace(),
+            "knowledge_id": 999,
+            "changed": False,
+        }
+        object.__setattr__(prepared, field, values[field])
+        with pytest.raises(ResourceReferenceInvalidError):
+            await KnowledgeModelReferenceApplication.aapply_model_change(session, prepared)
+        await session.rollback()
+    assert state(business) == before
