@@ -281,3 +281,25 @@ async def test_layered_manifests_are_bounded_and_real_store_can_read_every_node(
         descriptor = await store.aput_canonical(run_id=RUN, kind="baseline", content=node.content)
         assert descriptor == node.descriptor
         assert await store.aload_canonical(descriptor, run_id=RUN, kind="baseline") == node.content
+
+
+def test_permission_change_plan_has_closed_digests_and_explicit_namespace(codec):
+    record = codec.record_from_values(
+        "permission_plan",
+        tenant_id=101,
+        resource_type="knowledge_library",
+        resource_id="40",
+        target_resource_type="knowledge_space",
+        plan_checksum=DIGEST,
+        before_digest=DIGEST,
+        after_grants_digest=DIGEST,
+        visibility_deltas_digest=DIGEST,
+        expected_use_changes_digest=DIGEST,
+    )
+    assert decode(
+        codec,
+        encode(codec, (record,), section="permission"),
+        section="permission",
+    ).records == (record,)
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        codec.record_from_values("permission_plan", **(record.data | {"actor_reference": "private-secret"}))
