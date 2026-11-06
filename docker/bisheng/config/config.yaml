@@ -398,8 +398,7 @@ logger_conf:
 # 调试模式
 # debug 的代码默认值：false；当前显式 false 会被顶层空值归一化转成 []，请保持省略
 
-# 初始化管理员
-# admin 的代码默认值：{}；仅初始化管理员时使用；当前显式 {} 会被归一化转成 []，请保持省略
+# 首次注册的用户成为超级管理员；不支持通过配置文件预置账号。
 
 # 灵思部署项；任务参数见 bisheng/initdb_config.yaml 的 linsight 段
 # linsight_conf:

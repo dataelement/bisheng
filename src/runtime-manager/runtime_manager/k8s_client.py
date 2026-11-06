@@ -17,6 +17,7 @@ from datetime import datetime
 import httpx
 
 from runtime_manager.k8s_config import KubernetesConfig
+from runtime_manager.k8s_quota_diagnostics import quota_from_response, safe_quota
 
 _CORE = {"pods", "services", "persistentvolumeclaims", "secrets", "events", "endpoints"}
 _DISCOVERY = {"endpointslices"}
@@ -28,9 +29,10 @@ _TRANSIENT = {429, 500, 502, 503, 504}
 class KubernetesAPIError(RuntimeError):
     """Safe classification; never includes API response or transport details."""
 
-    def __init__(self, reason: str, status_code: int | None = None):
+    def __init__(self, reason: str, status_code: int | None = None, *, quota: dict | None = None):
         super().__init__(reason)
         self.status_code = status_code
+        self.quota = safe_quota(quota)
 
 
 def _name(value: str) -> str:
@@ -107,7 +109,10 @@ class KubernetesClient:
                     self.checkpoint()
                     return response
                 if response.status_code not in _TRANSIENT or attempt + 1 == attempts:
-                    raise KubernetesAPIError("k8s_api_refused", response.status_code)
+                    quota = quota_from_response(response)
+                    raise KubernetesAPIError(
+                        "k8s_quota_exceeded" if quota else "k8s_api_refused", response.status_code, quota=quota
+                    )
             self.checkpoint()
             delay = min(0.1 * 2**attempt, max(0, deadline - time.monotonic()))
             self.sleep(delay)
@@ -264,6 +269,7 @@ class KubernetesClient:
             "storage-guard",
             "schema-init",
             "assembler",
+            "image-check",
         }:
             raise ValueError("k8s_log_container_invalid")
         path = self._path("pods", pod_name) + "/log"

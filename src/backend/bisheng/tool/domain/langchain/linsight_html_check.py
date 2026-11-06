@@ -12,7 +12,8 @@ closes that loop with two layers:
   ``output/x.png`` alike — renders as a hole.
 - **Render checks** (headless Chromium via Playwright, best effort): script
   errors, network attempts made from JS, broken images, horizontal overflow at a
-  desktop and a phone width, and a desktop screenshot written to ``scratch/``.
+  desktop and a phone width, per-page overflow of a paged layout (slides), and a
+  desktop screenshot written to ``scratch/``.
   Chromium ships in the standard backend image (``base.Dockerfile``) but not in
   stripped customer images, so a missing browser is reported honestly and never
   fails the task.
@@ -55,6 +56,16 @@ _MAX_LISTED = 5
 
 ERROR = "ERROR"
 WARN = "WARN"
+# Context the model needs to act on the findings (page counts, what was not
+# measured). Never affects the verdict.
+INFO = "INFO"
+
+# A paged layout lists every overflowing page: the model fixes exactly these and
+# leaves the rest alone. Without the full list it falls back to estimating pixel
+# heights in its reasoning page by page (cofco svid f59e076c: 82 calls polishing a
+# 37-slide deck), which is the loop this check exists to end.
+_MAX_PAGES_LISTED = 60
+_PAGE_OVERFLOW_PX = 2
 
 
 @dataclass(frozen=True)
@@ -249,10 +260,109 @@ _PROBE_JS = """
     const parent = t.parentElement;
     return parent && t.scrollWidth > parent.clientWidth + 2 && getComputedStyle(parent).overflowX === 'visible';
   }).length;
+  // Paged layout: >= 2 elements whose class ends in "slide"/"page", or any element
+  // carrying data-slide, grouped by tag + kind across the document: a deck often wraps each
+  // slide in its own scaling frame, so the slides are not siblings. Only the
+  // outermost match counts (a .slide's inner .slide-page is part of that slide).
+  // The largest group is the deck. A fixed-size page whose content is taller or
+  // wider than the page has scrollHeight/scrollWidth beyond its client box,
+  // whatever its overflow mode clips or spills.
+  const pageRe = /(?:^|-)(slide|page)$/i;
+  const kindOf = (el) => {
+    for (const c of el.classList) { const m = pageRe.exec(c); if (m) return m[1].toLowerCase(); }
+    return el.hasAttribute('data-slide') ? 'slide' : null;
+  };
+  const matches = [...(document.body || doc).querySelectorAll('*')].filter(el => !el.closest('svg') && kindOf(el));
+  const matchSet = new Set(matches);
+  const groups = new Map();
+  for (const el of matches) {
+    let up = el.parentElement, nested = false;
+    while (up) { if (matchSet.has(up)) { nested = true; break; } up = up.parentElement; }
+    if (nested) continue;
+    const key = el.tagName + ':' + kindOf(el);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(el);
+  }
+  let deck = [];
+  // Two or more pages make a deck; an explicit data-slide marks one even when it has a single page.
+  for (const list of groups.values())
+    if ((list.length >= 2 || list[0].hasAttribute('data-slide')) && list.length > deck.length) deck = list;
+  // Click-through decks show one slide at a time; the rest (or their frames) are
+  // display:none. Reveal each hidden page and its hidden ancestors with inline
+  // styles, measure, then restore the original style attributes.
+  const shown = deck.find(el => el.getClientRects().length > 0);
+  const showAs = shown ? getComputedStyle(shown).display : 'block';
+  const reveal = (el) => {
+    const saved = [];
+    for (let node = el; node && node !== document.body; node = node.parentElement) {
+      const cs = getComputedStyle(node);
+      if (cs.display === 'none' || cs.visibility === 'hidden') {
+        saved.push([node, node.getAttribute('style')]);
+        node.style.setProperty('display', node === el ? showAs : 'block', 'important');
+        node.style.setProperty('visibility', 'visible', 'important');
+      }
+    }
+    return () => { for (const [node, style] of saved) style === null ? node.removeAttribute('style') : node.setAttribute('style', style); };
+  };
+  const pages = deck.map((el) => {
+    const restore = reveal(el);
+    try {
+      if (el.getClientRects().length === 0 || el.clientHeight === 0) return {hidden: true};
+      const cs = getComputedStyle(el);
+      if (/auto|scroll/.test(cs.overflowX + ' ' + cs.overflowY)) return {scrollable: true};
+      const h = el.querySelector('h1,h2,h3');
+      return {dy: el.scrollHeight - el.clientHeight, dx: el.scrollWidth - el.clientWidth,
+              title: h ? h.textContent.replace(/\\s+/g, ' ').trim().slice(0, 20) : ''};
+    } finally { restore(); }
+  });
   return {scrollWidth: doc.scrollWidth, clientWidth: doc.clientWidth, broken, small, wide,
-          height: doc.scrollHeight};
+          height: doc.scrollHeight, pages};
 }
 """
+
+
+def page_findings(pages: list[dict]) -> list[Finding]:
+    """Per-page overflow of a paged layout, from the probe's ``pages`` list.
+
+    One ERROR per overflowing page (content outside a fixed-size slide is cut off
+    or overlaps the next one), plus one INFO line with the page count, so the model
+    knows the unlisted pages already fit and must not be touched again.
+    """
+    if not pages:
+        return []
+    findings: list[Finding] = []
+    measured = hidden = 0
+    over: list[tuple[int, dict]] = []
+    for no, page in enumerate(pages, start=1):
+        if page.get("hidden"):
+            hidden += 1
+            continue
+        if page.get("scrollable"):
+            measured += 1
+            continue
+        measured += 1
+        if int(page.get("dy") or 0) > _PAGE_OVERFLOW_PX or int(page.get("dx") or 0) > _PAGE_OVERFLOW_PX:
+            over.append((no, page))
+    for no, page in over[:_MAX_PAGES_LISTED]:
+        parts = []
+        if int(page.get("dy") or 0) > _PAGE_OVERFLOW_PX:
+            parts.append(f"纵向超出 {int(page['dy'])}px")
+        if int(page.get("dx") or 0) > _PAGE_OVERFLOW_PX:
+            parts.append(f"横向超出 {int(page['dx'])}px")
+        title = f"「{page['title']}」" if page.get("title") else ""
+        findings.append(Finding(ERROR, "分页溢出", f"第 {no} 页{title}内容{'、'.join(parts)}。"))
+    summary = f"共 {len(pages)} 页，逐页测量 {measured} 页"
+    if over:
+        summary += f"，其中 {len(over)} 页溢出（见上方 ERROR）"
+        if len(over) > _MAX_PAGES_LISTED:
+            summary += f"，只列出前 {_MAX_PAGES_LISTED} 页"
+        summary += "。只修改这些页；未列出的页已经装得下，不要再改"
+    else:
+        summary += "，均未溢出"
+    if hidden:
+        summary += f"；另有 {hidden} 页无法显示，没有测量"
+    findings.append(Finding(INFO, "分页测量", summary + "。"))
+    return findings
 
 
 def _render_findings(
@@ -337,6 +447,7 @@ def _render_findings(
                         broken = [s for s in probe["broken"] if s not in known_refs]
                         for src in broken[:_MAX_LISTED]:
                             findings.append(Finding(ERROR, "图片裂开", f"图片 {src or '(无 src)'} 没有显示出来。"))
+                        findings += page_findings(probe.get("pages") or [])
                         if probe["small"]:
                             findings.append(
                                 Finding(WARN, "字号过小", f"有 {probe['small']} 处文字小于 12px，阅读吃力。")
@@ -377,6 +488,7 @@ def _render_findings(
 def format_report(path: str, size: int, findings: list[Finding], shot_path: str | None, unavailable: str | None) -> str:
     errors = [f for f in findings if f.level == ERROR]
     warns = [f for f in findings if f.level == WARN]
+    infos = [f for f in findings if f.level == INFO]
     lines = [f"check_html 报告：{path}（{size / 1024:.1f} KB）"]
     if errors:
         lines.append("ERROR（必须修复）：")
@@ -384,6 +496,9 @@ def format_report(path: str, size: int, findings: list[Finding], shot_path: str 
     if warns:
         lines.append("WARN（建议修复，不影响交付）：")
         lines += [f"- [{f.topic}] {f.detail}" for f in warns]
+    if infos:
+        lines.append("说明：")
+        lines += [f"- [{f.topic}] {f.detail}" for f in infos]
     if unavailable:
         lines.append(f"渲染检查未执行：{unavailable}。以上只是静态检查结果。")
     if shot_path:
@@ -404,6 +519,8 @@ class CheckHtmlTool(BaseTool):
     description: str = (
         "检查 output/ 下的 HTML 交付物能否在离线环境、预览框和下载后正常显示。\n"
         "写完 html 后调用一次；报告里有 ERROR 就用 edit_file 修复后再调用，WARN 可酌情修复。\n"
+        "幻灯片等固定尺寸的分页版式会逐页测量内容是否超出页面，并列出溢出的页和超出的像素；"
+        "某页装不装得下以这份测量为准，不要自己估算。\n"
         "返回静态检查和浏览器渲染检查的结果，渲染成功时还会把桌面截图存到 scratch/。"
     )
     args_schema: type[BaseModel] = _CheckHtmlInput
