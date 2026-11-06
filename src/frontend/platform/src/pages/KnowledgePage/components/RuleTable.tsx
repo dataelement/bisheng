@@ -32,7 +32,7 @@ export function TableProcessingDefaultsFields({ value, onChange, disabled = fals
   const { t } = useTranslation('knowledge');
   const id = useId();
   const numbers = [
-    ['slice_length', 'maxRowsPerSegment'], ['header_start_row', 'f118.headerStart'], ['header_end_row', 'f118.headerEnd'],
+    ['slice_length', 'maxRowsPerSegment'], ['header_start_row', 'f118.header_start'], ['header_end_row', 'f118.header_end'],
   ] as const;
   return <fieldset disabled={disabled} className="space-y-4 rounded-lg border p-4">
     {numbers.map(([key, label]) => <div key={key} className="space-y-2">
@@ -40,7 +40,7 @@ export function TableProcessingDefaultsFields({ value, onChange, disabled = fals
       <InputNumber id={`${id}-${key}`} aria-label={t(label)} value={value[key]} min={1} precision={0} disabled={disabled}
         onChange={number => onChange({ ...value, [key]: number })}
         increaseLabel={t('bs:sharedUi.increase')} decreaseLabel={t('bs:sharedUi.decrease')}
-        errorMessage={() => t('f118.integerAtLeast', { min: 1 })} />
+        errorMessage={() => t('f118.integer_at_least', { min: 1 })} />
     </div>)}
     <div className="flex items-center gap-2">
       <Checkbox id={`${id}-append`} checked={value.append_header === 1} disabled={disabled}

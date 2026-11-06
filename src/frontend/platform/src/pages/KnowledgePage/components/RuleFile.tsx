@@ -57,7 +57,7 @@ export function DocumentProcessingDefaultsFields({ value, onChange, disabled = f
                 <InputNumber id={`${id}-${key}`} aria-label={t(label)} value={value[key]} min={min} max={max}
                     precision={0} disabled={disabled} onChange={number => onChange({ ...value, [key]: number })}
                     increaseLabel={t('bs:sharedUi.increase')} decreaseLabel={t('bs:sharedUi.decrease')}
-                    errorMessage={() => t(max === undefined ? 'f118.integerAtLeast' : 'f118.integerBetween', { min, max })} />
+                    errorMessage={() => t(max === undefined ? 'f118.integer_at_least' : 'f118.integer_between', { min, max })} />
             </div>)}
         </div>
         <div className="flex items-center gap-2">
