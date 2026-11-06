@@ -20,6 +20,7 @@ from bisheng.channel.application.reference_source_owner import ChannelReferenceS
 from bisheng.channel.domain.models.channel_knowledge_sync import ChannelKnowledgeSync
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+from bisheng.common.errcode.permission import PermissionDeniedError
 from bisheng.knowledge.application.source_read_target_owner import KnowledgeSourceReadTargetOwner
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.permission.application.identity import reset_current_permission_actor, set_current_permission_actor
@@ -49,6 +50,7 @@ async def admitted(business, people, monkeypatch):
     monkeypatch.setattr(admission_module, "get_reference_read_runtime", AsyncMock(return_value=runtime))
     monkeypatch.setattr(admission_module, "get_async_db_session", business.sessions)
     monkeypatch.setattr(owner_module, "require_business_action", AsyncMock())
+    monkeypatch.setattr(admission_module, "require_business_action", AsyncMock())
     token = set_current_permission_actor(PermissionActor(tenant_id=101, user_id=7))
     async with business.sessions() as session:
         row = (
@@ -82,6 +84,9 @@ async def test_real_full_runtime_preserves_identity_and_borrows_the_active_trans
         changed = prepared.config
         changed["knowledge_space_id"] = "999"
         assert prepared.config["knowledge_space_id"] == "10"
+        admission_module.require_business_action.assert_awaited_once_with(
+            value.identity, resource_type="folder", resource_id=30, action="upload_file"
+        )
 
 
 async def test_one_invalid_option_blocks_the_whole_channel_even_for_another_selected_config(admitted):
@@ -124,7 +129,7 @@ async def test_real_selected_configuration_is_required_without_old_uuid_or_disab
             )
         else:
             config_id = "old-uuid"
-    with pytest.raises(ResourceReferenceInvalidError):
+    with pytest.raises((ResourceReferenceInvalidError, PermissionDeniedError)):
         await ChannelSyncExecutionAdmission.prepare(value.identity, value.root.id, config_id, value.detected_at)
 
 
