@@ -33,6 +33,30 @@ def _body(value):
     return getattr(value, "body", value)
 
 
+async def _await_cleanup(task):
+    interrupted = None
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError as error:
+            if task.cancelled():
+                break
+            interrupted = error
+        except BaseException:
+            # The cleanup task has settled; its result/cause is read below.
+            break
+    try:
+        result = task.result()
+    except BaseException:
+        if interrupted is not None:
+            logger.warning("M2 owned-client cleanup failed while cancellation was pending")
+            raise interrupted
+        raise
+    if interrupted is not None:
+        raise interrupted
+    return result
+
+
 def _count(value):
     if type(value) is str and re.fullmatch(r"0|[1-9][0-9]*", value):
         value = int(value)
@@ -94,16 +118,19 @@ class PhysicalInventoryReader:
     async def aopen(cls, config: VectorStores, *, storage):
         if not isinstance(config, VectorStores):
             _invalid("configuration_required")
-        es, mv = None, None
+        es, mv, opening = None, None, None
         try:
             es = AsyncElasticsearch(hosts=config.elasticsearch.elasticsearch_url, **config.elasticsearch.ssl_verify)
             arguments = deepcopy(config.milvus.connection_args or {})
             if arguments.get("host") and arguments.get("port"):
                 arguments["uri"] = f"http://{arguments.pop('host')}:{arguments.pop('port')}"
-            mv = await asyncio.to_thread(MilvusClient, **arguments)
+            opening = asyncio.create_task(asyncio.to_thread(MilvusClient, **arguments))
+            mv = await asyncio.shield(opening)
             reader = cls(es_client=es, milvus_client=mv, storage=storage, owns_clients=True)
-        except Exception as error:
-            await cls._close_clients(es, mv, primary=error)
+        except BaseException as error:
+            await _await_cleanup(asyncio.create_task(cls._cleanup_opening(es, opening, error)))
+            if not isinstance(error, Exception):
+                raise
             raise KnowledgeOperationPlanConflictError(reason="migration_physical_initialize_failed") from error
         primary = None
         try:
@@ -117,19 +144,37 @@ class PhysicalInventoryReader:
                 await cls._close_clients(es, mv, primary=primary)
 
     @staticmethod
+    async def _cleanup_opening(es, opening, primary):
+        mv = None
+        if opening is not None:
+            try:
+                mv = await opening
+            except BaseException:
+                # The original initialization error/cancellation is retained.
+                logger.warning("M2 native construction did not produce a client during cleanup")
+        await PhysicalInventoryReader._close_clients(es, mv, primary=primary)
+
+    @staticmethod
     async def _close_clients(es, mv, *, primary=None):
+        await _await_cleanup(asyncio.create_task(PhysicalInventoryReader._close_owned(es, mv, primary=primary)))
+
+    @staticmethod
+    async def _close_owned(es, mv, *, primary=None):
         errors = []
         if es is not None:
             try:
                 await es.close()
-            except Exception as error:
+            except BaseException as error:
                 errors.append(error)
         if mv is not None:
             try:
                 await asyncio.to_thread(mv.close)
-            except Exception as error:
+            except BaseException as error:
                 errors.append(error)
         if errors:
+            for error in errors:
+                if not isinstance(error, Exception):
+                    raise error
             if primary is None:
                 raise KnowledgeOperationPlanConflictError(reason="migration_physical_close_failed") from errors[0]
             logger.warning("M2 physical clients failed to close after a primary error")
