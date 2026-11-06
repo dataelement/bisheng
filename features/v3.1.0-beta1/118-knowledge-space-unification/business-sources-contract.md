@@ -192,4 +192,15 @@ DefaultRead facade追加 `require_default(key,login_user=None,session=None)` / a
 
 KN出向delete/clear及transition finalize由同域Application+Repository在业务外Session实施：目标plan→root/current业务摘要→原投影成功→files/QA/资源SQL+R2同事务，clear保模型引用，实际删除才解除出向；不称完整入向R3协调器完成。finalize只认当前资源operation/revision/generation，不恢复job模型。
 
-`core.context.background_execution.get_current_background_task()`返回内部只读 `BackgroundTaskContext(tenant_id,task_id,task_name)` 或None；后台proof来自真实Celery task_prerun的显式合法tenant header、request.id及called_directly=False，postrun原上下文回收。普通tenant_execution_scope数值不是worker证明，也不改变原C3 header/跨租户行为。无原actor的KN私有身份只接受此同对象/当前tenant后台上下文，跨task/退出后失效；User/原actor+原principal分支保既有C4 visible，不从invoke_user_id补人。不得将客户端元数据当后台permit。缺tenant仍failclosed且默认配置两adapter将NoTenantContextError按已签合同转10996，保cause，不回退Root。
+`core.context.background_execution.get_current_background_task()`返回内部只读 `BackgroundTaskContext(tenant_id,task_id,task_name)` 或None；后台proof来自真实Celery task_prerun的显式合法tenant header、request.id及called_directly=False，postrun原上下文回收。普通tenant_execution_scope数值不是worker证明，也不改变原C3 header/跨租户行为。502后台命令验证只接受此同对象/当前tenant后台上下文，跨task/退出后失效；普通内部模型配置消费与数据权限边界按下节，不从invoke_user_id补人。不得将客户端元数据当后台permit。缺tenant仍failclosed且默认配置两adapter将NoTenantContextError按已签合同转10996，保cause，不回退Root。
+
+
+### 内部模型配置消费与数据权限边界
+
+KnowledgeModelReadRuntime是内部配置消费门面，不是知识数据读取API。其dedicated graph始终由私有port包装实际own Knowledge/当前tenant、原User（若有）/actor/Open/Public原对象、完整fingerprint及原SessionTxn；只做业务配置、完整模型引用和资格的当前校验，不重复叠KN.visible。否则已确认的AS knowledge_auth=False及WF绑定库检索会被额外授权改变。数据权限继续由原AS/WF/检索与文件过滤负责，不造User、不从invoke UID授权，不接受外租户/客户端模型替代配置。无User/actor的合法同步内部RAG可消费实际同tenant配置，缺可信tenant仍拒；后台命令另须实际worker证明。Generic用户SourceOwner/状态查询保原UserPayload+visible，私有model port拒inspect，不成为HTTP执行许可。该方案不新增跨域父来源委托框架。
+
+### Saved管理观察和最终默认写返回（T563–T574）
+
+`ainspect_model_names_current(session,tenant_id,requested tuple,*,identity)`返回每项ModelNameInspection(requested,resolved|None,status=valid/unresolvable/ambiguous/offline)，完整uncached批次、原bare/qualified规则，只读无锁/prepare/cache/执行authority；IO/权限故障明确失败。APP `inspect_saved_capabilities(app_id,version_id,identity,*,session=None)`沿真实UUID/Core inspect/frozen ID与该findings比较，保存原ID/label逐行标失效/not_ready，不catch成[]；draft预检不造来源。普通SAK/PAT inspect允许context=None的原principal当前credential+management_read，不伪造RuntimeAuthorizationContext；execute/start/publish保持原严格上下文。
+
+`ModelDefaultSaveResult(config,commands,embedding_changed=False)`由App真实old effective配置生成；`asave_with_commands`的外部事务Owner须commit后派发7字段命令。LLMService ownSession沿原probe→唯一commit→派发，队列失败不假回滚。Service外部Session及原App.asave无命令出口而实际commands非空时，写业务/R2前拒workbench_model_change_requires_command_owner，指引显式带commands API；不加collector/Session事件。embedding_changed由实际计划而非service旧raw读决定；清空默认embedding不自动清空间自身模型，明确非None更换才联动。

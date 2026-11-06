@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | W0/W1、W2及W3运行准入已合流，完整特性仍在开发 | 296 / 562 项；W4来源合同先冻结、按依赖实施中；独立复查/组合测试见[W3记录](./wave3-implementation-review.md)，未运行迁移 |
+| 实现 | W0/W1、W2及W3运行准入已合流，完整特性仍在开发 | 296 / 574 项；W4来源合同先冻结、按依赖实施中；独立复查/组合测试见[W3记录](./wave3-implementation-review.md)，未运行迁移 |
 
 ## 领取与执行规则
 
@@ -4452,6 +4452,102 @@
   **依赖**：T561\
   **配对测试**：T561\
   **验证 / 完成条件**：固定提交独立复查、真实定向/组合回归，原行为断言保留；未跑真实环境不称验收。
+
+- [ ] **T563 · 模型名称完整批次只读观察红测**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_model_name_resolution.py`\
+  **逻辑 / 测试上下文**：按冻结观察/身份/真实来源合同实施；管理观察不授执行，失效保原ID逐行展示；旧fixture保原正反断言，运行时不自动造index，不以Mock替代事务证明。\
+  **依赖**：T542\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：定向真实红绿/等价fixture、固定提交独立复查及主组合通过，不声称真实中间件验收。
+
+- [ ] **T564 · 名称逐项只读findings无执行authority**
+  **类型 / Owner**：实现 / LLM\
+  **写入文件**：`src/backend/bisheng/llm/application/model_name_resolution.py`；`src/backend/bisheng/llm/domain/repositories/model_name_resolution_repository.py`\
+  **逻辑 / 测试上下文**：按冻结观察/身份/真实来源合同实施；管理观察不授执行，失效保原ID逐行展示；旧fixture保原正反断言，运行时不自动造index，不以Mock替代事务证明。\
+  **依赖**：T563\
+  **配对测试**：T563\
+  **验证 / 完成条件**：定向真实红绿/等价fixture、固定提交独立复查及主组合通过，不声称真实中间件验收。
+
+- [ ] **T565 · 名称Port缺tenant一致错误码红测**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_model_name_resolution.py`\
+  **逻辑 / 测试上下文**：按冻结观察/身份/真实来源合同实施；管理观察不授执行，失效保原ID逐行展示；旧fixture保原正反断言，运行时不自动造index，不以Mock替代事务证明。\
+  **依赖**：T564\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：定向真实红绿/等价fixture、固定提交独立复查及主组合通过，不声称真实中间件验收。
+
+- [ ] **T566 · 名称Port缺tenant按10996拒绝**
+  **类型 / Owner**：实现 / LLM\
+  **写入文件**：`src/backend/bisheng/llm/application/model_name_resolution.py`\
+  **逻辑 / 测试上下文**：按冻结观察/身份/真实来源合同实施；管理观察不授执行，失效保原ID逐行展示；旧fixture保原正反断言，运行时不自动造index，不以Mock替代事务证明。\
+  **依赖**：T565\
+  **配对测试**：T565\
+  **验证 / 完成条件**：定向真实红绿/等价fixture、固定提交独立复查及主组合通过，不声称真实中间件验收。
+
+- [ ] **T567 · 已保存应用能力失效状态保行红测**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_saved_capabilities.py`\
+  **逻辑 / 测试上下文**：按冻结观察/身份/真实来源合同实施；管理观察不授执行，失效保原ID逐行展示；旧fixture保原正反断言，运行时不自动造index，不以Mock替代事务证明。\
+  **依赖**：T445, T564\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：定向真实红绿/等价fixture、固定提交独立复查及主组合通过，不声称真实中间件验收。
+
+- [ ] **T568 · 应用发布状态基于实际UUID引用inspect**
+  **类型 / Owner**：实现 / APP\
+  **写入文件**：`src/backend/bisheng/app_publish/domain/services/capability_bus_service.py`；`src/backend/bisheng/app_publish/domain/services/publish_status_service.py`\
+  **逻辑 / 测试上下文**：按冻结观察/身份/真实来源合同实施；管理观察不授执行，失效保原ID逐行展示；旧fixture保原正反断言，运行时不自动造index，不以Mock替代事务证明。\
+  **依赖**：T567\
+  **配对测试**：T567\
+  **验证 / 完成条件**：定向真实红绿/等价fixture、固定提交独立复查及主组合通过，不声称真实中间件验收。
+
+- [ ] **T569 · 旧入口动作及legacy协议fixture适配**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/app_runtime/test_entry_authz_service.py`\
+  **逻辑 / 测试上下文**：按冻结观察/身份/真实来源合同实施；管理观察不授执行，失效保原ID逐行展示；旧fixture保原正反断言，运行时不自动造index，不以Mock替代事务证明。\
+  **依赖**：T052\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：定向真实红绿/等价fixture、固定提交独立复查及主组合通过，不声称真实中间件验收。
+
+- [ ] **T570 · 旧预览入口fixture明确legacy协议**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/app_publish/test_preview_entry.py`\
+  **逻辑 / 测试上下文**：按冻结观察/身份/真实来源合同实施；管理观察不授执行，失效保原ID逐行展示；旧fixture保原正反断言，运行时不自动造index，不以Mock替代事务证明。\
+  **依赖**：T052\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：定向真实红绿/等价fixture、固定提交独立复查及主组合通过，不声称真实中间件验收。
+
+- [ ] **T571 · 旧模型知识能力测试真实来源适配**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/app_publish/test_capability_model.py`；`src/backend/test/app_publish/test_capability_knowledge.py`\
+  **逻辑 / 测试上下文**：按冻结观察/身份/真实来源合同实施；管理观察不授执行，失效保原ID逐行展示；旧fixture保原正反断言，运行时不自动造index，不以Mock替代事务证明。\
+  **依赖**：T574\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：定向真实红绿/等价fixture、固定提交独立复查及主组合通过，不声称真实中间件验收。
+
+- [ ] **T572 · 旧撤销审计测试全source规则适配**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/app_publish/test_capability_revoked.py`；`src/backend/test/app_publish/test_capability_audit.py`\
+  **逻辑 / 测试上下文**：按冻结观察/身份/真实来源合同实施；管理观察不授执行，失效保原ID逐行展示；旧fixture保原正反断言，运行时不自动造index，不以Mock替代事务证明。\
+  **依赖**：T574\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：定向真实红绿/等价fixture、固定提交独立复查及主组合通过，不声称真实中间件验收。
+
+- [ ] **T573 · 助手管理pin默认模型真实读取适配**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_as_management_scope.py`\
+  **逻辑 / 测试上下文**：按冻结观察/身份/真实来源合同实施；管理观察不授执行，失效保原ID逐行展示；旧fixture保原正反断言，运行时不自动造index，不以Mock替代事务证明。\
+  **依赖**：T479, T473\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：定向真实红绿/等价fixture、固定提交独立复查及主组合通过，不声称真实中间件验收。
+
+- [ ] **T574 · 旧应用测试显式来源SQL辅助fixture**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/app_publish/reference_fixtures.py`\
+  **逻辑 / 测试上下文**：按冻结观察/身份/真实来源合同实施；管理观察不授执行，失效保原ID逐行展示；旧fixture保原正反断言，运行时不自动造index，不以Mock替代事务证明。\
+  **依赖**：T445\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：定向真实红绿/等价fixture、固定提交独立复查及主组合通过，不声称真实中间件验收。
 
 ## 自动化覆盖索引
 
