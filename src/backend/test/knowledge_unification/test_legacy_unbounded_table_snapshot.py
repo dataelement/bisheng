@@ -97,3 +97,26 @@ def test_internal_unbounded_snapshot_requires_explicit_honest_marker(system_defa
         EffectiveProcessingSnapshot.model_validate(values)
     values["effective_rule"]["legacy_unbounded"] = True
     assert EffectiveProcessingSnapshot.model_validate(values).effective_rule.slice_length == 0
+
+
+def test_public_defaults_reject_internal_legacy_model_instances(system_defaults):
+    legacy = LegacyTableProcessingRule(slice_length=0, header_start_row=1, header_end_row=1, append_header=1)
+    with pytest.raises(ValidationError):
+        ProcessingDefaults(document=system_defaults.document, table=legacy)
+
+
+@pytest.mark.parametrize("length", [None, 0, -2])
+def test_actual_csv_loader_preserves_unbounded_content_and_chunk_count(system_defaults, tmp_path, length):
+    from bisheng.knowledge.rag.pipeline.loader.excel import ExcelLoader
+    source = tmp_path / "source.csv"
+    source.write_text("name\n" + "\n".join(f"row-{i}" for i in range(45)), encoding="utf-8")
+    old = FileProcessBase(knowledge_id=40, excel_rule={"slice_length": length})
+    adapted = legacy_rule_from_snapshot(snapshot(system_defaults, legacy_split_rule=old.model_dump(mode="json")), space_id=40)
+    def load(rule, directory):
+        directory.mkdir()
+        return ExcelLoader(file_path=str(source), file_metadata={"document_id": 81}, file_extension="csv", tmp_dir=str(directory), data_rows=rule.slice_length, header_rows=[0, 0], append_header=rule.append_header).load()
+    actual = load(old.excel_rule, tmp_path / "old")
+    result = load(adapted.excel_rule, tmp_path / "adapted")
+    assert len(actual) == len(result) == 1
+    assert [document.page_content for document in actual] == [document.page_content for document in result]
+    assert "row-0" in result[0].page_content and "row-44" in result[0].page_content
