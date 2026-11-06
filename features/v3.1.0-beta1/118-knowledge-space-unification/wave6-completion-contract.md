@@ -338,3 +338,6 @@ verify edit后挂现ProcessingDefaultsDialog和基本信息Dialog，copy/delete/
 前端KnowledgeVisibleQuery/KnowledgeAdminQuery与Info仅补真实布尔类型，沿原query key/参数透传，不引入假的前端统计。现KnowledgeFile恢复原FileAbnormalStatusCell与已上线共享Select/trigger内联筛选（原F064设计中的TableHeadEnumFilter已无实际定义，不新造组件），筛选重置各自普通cursor或管理page，在scope/view变更时退休；原文件夹/详情/QA不改。F064测试仅改新必需scope及实际查询hook夹具，保原五个能力断言，并验证普通/管理真实参数及分页重置。T176依赖本节后端+API及新测试，不能因为原DTO暂缺字段删断言来标绿。
 
 T725先两叶repo/service测试→T726 repo/schema；T727一叶API测试→T728 service/endpoint，固定独立审后交T729旧前端测试夹具→T730 API；KnowledgeFile依然原T176两生产叶范围内，T729可同时补现Page测试。T731只执行官方lint:prune生成目标suppression收缩，禁止手改或增加冻结项；若生成无diff则记录验证不制造提交。保C2原生SQLModel，真实MySQL查询预算后续E2E，不将SQLite/native形状测试冒称实库证明。
+
+
+§23测试接缝：T732仅补原test_kn_list.py catalog fixture的真实KnowledgeFile空表及tenant注册，保持原断言；真实final-page EXISTS不可用mock或缺表fallback绕过。
