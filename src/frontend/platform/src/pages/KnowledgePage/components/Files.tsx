@@ -1,4 +1,4 @@
-import { Button, Input, SearchInput } from "@bisheng/ui";
+import { Button, Input } from "@bisheng/ui";
 import {
   useInfiniteQuery,
   useQuery,
@@ -38,6 +38,7 @@ import { showApiError } from "@/controllers/request";
 import { FileStatusFilter } from "./FileStatusFilter";
 import PreviewFile from "./PreviewFile";
 import { SpaceDirectoryRow } from "./SpaceDirectoryRow";
+import { SpaceDirectoryToolbar } from "./SpaceDirectoryToolbar";
 export { StatusIndicator } from "./KnowledgeFileStatus";
 export interface FilesProps {
   scope?: KnowledgeQueryScope;
@@ -389,25 +390,21 @@ function Directory({
       }
     : null;
 
+  const containerActions = container?.epoch === epoch ? container.actions : [];
   return (
     <div className="relative space-y-4">
-      <div className="flex items-center justify-end gap-3">
-        <SearchInput
-          aria-label={t("searchFileName")}
-          placeholder={t("searchFileName")}
-          value={keyword}
-          onChange={(event) => {
-            setKeyword(event.target.value);
-            setPage(1);
-          }}
-        />
-        {container?.epoch === epoch &&
-          container.actions.includes("create_folder") && (
-            <Button onClick={() => handleEdit()}>
-              {t("f118.create_folder")}
-            </Button>
-          )}
-      </div>
+      <SpaceDirectoryToolbar
+        spaceId={spaceId}
+        parentId={parentId}
+        keyword={keyword}
+        onKeywordChange={(value) => {
+          setKeyword(value);
+          setPage(1);
+        }}
+        canCreateFolder={containerActions.includes("create_folder")}
+        onCreateFolder={() => handleEdit()}
+        canUpload={containerActions.includes("upload_file")}
+      />
       <Table>
         <TableHeader>
           <TableRow>

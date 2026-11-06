@@ -2,12 +2,12 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead
-from bisheng.knowledge.domain.schemas.processing_settings import ProcessingDefaults
+from bisheng.knowledge.domain.schemas.processing_settings import ProcessingDefaults, ProcessingOverrides
 from bisheng.permission.domain.schemas import GrantSubjectInput
 
 
@@ -191,6 +191,25 @@ class FolderRenameReq(BaseModel):
 class FileCreateReq(BaseModel):
     file_path: list[str] = Field(..., description="File Path")
     parent_id: int | None = Field(None, description="Parent Folder ID")
+    overrides: ProcessingOverrides | None = None
+
+    @field_validator("overrides", mode="before")
+    @classmethod
+    def require_integer_override_flags(cls, value):
+        # Literal[0, 1] also accepts Python booleans/floats by equality.
+        # This new public wire accepts integer flags, as the rule UI emits.
+        if isinstance(value, dict):
+            for group, names in (
+                ("document", ("retain_images", "force_ocr", "enable_formula", "filter_page_header_footer")),
+                ("table", ("append_header",)),
+            ):
+                rules = value.get(group)
+                if isinstance(rules, dict):
+                    for name in names:
+                        flag = rules.get(name)
+                        if flag is not None and type(flag) is not int:
+                            raise ValueError("processing override flags must be integer 0 or 1")
+        return value
 
 
 class WebLinkCreateReq(BaseModel):

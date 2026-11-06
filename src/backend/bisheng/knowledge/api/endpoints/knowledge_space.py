@@ -574,6 +574,7 @@ async def add_file(
         knowledge_id=space_id,
         file_path=req.file_path,
         parent_id=req.parent_id,
+        **({"processing_overrides": req.overrides} if req.overrides is not None else {}),
     )
     return resp_200(file_record)
 

@@ -479,6 +479,11 @@
     "loading_directory": "フォルダーを読み込み中…",
     "directory_empty": "このフォルダーには表示できる項目がありません。",
     "more_files": "さらに読み込む",
-    "expand_folders": "省略された {{count}} 階層のフォルダーを表示"
+    "expand_folders": "省略された {{count}} 階層のフォルダーを表示",
+    "upload_staged": "一時保存済み",
+    "upload_registered": "処理を依頼しました",
+    "upload_cancelled": "キャンセル済み",
+    "upload_status_unavailable": "処理状況を取得できません。もう一度お試しください。",
+    "upload_may_continue": "追跡を停止しても、依頼済みのファイル処理は取り消されません。"
   }
 }

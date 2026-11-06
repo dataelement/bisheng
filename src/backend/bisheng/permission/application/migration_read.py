@@ -1,7 +1,9 @@
 """Original-pin reads for explicit operational inventory, never online gates."""
 
 import re
+from contextlib import aclosing
 from copy import deepcopy
+from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +17,13 @@ from bisheng.permission.migration.f118_plan import PermissionCatalogBaseline
 
 def _blocked(reason):
     return PermissionMigrationBlockedError(reason=f"f118_inventory_sharing_{reason}")
+
+
+@dataclass(frozen=True, slots=True)
+class OriginalTupleFact:
+    user: str
+    relation: str
+    object: str
 
 
 class PinnedMigrationPermissionReader:
@@ -48,6 +57,7 @@ class PinnedMigrationPermissionReader:
         self._factory = client_factory if client_factory is not None else FGAClient
         self._client = None
         self._entered = False
+        self._tuple_inventory_started = False
 
     async def __aenter__(self):
         if self._entered:
@@ -99,6 +109,41 @@ class PinnedMigrationPermissionReader:
             or is_tenant_filter_bypassed()
         ):
             raise _blocked("concrete_native_tenant_required")
+
+    def _tuple_scope(self, client=None):
+        actual = self._client
+        if (
+            actual is None
+            or (client is not None and actual is not client)
+            or (actual.store_id, actual.model_id) != (self._pin.store_id, self._pin.model_id)
+        ):
+            raise _blocked("original_tuple_reader_not_open_or_changed")
+
+    async def aiter_original_tuples(self):
+        self._tuple_scope()
+        if self._tuple_inventory_started:
+            raise _blocked("original_tuple_inventory_already_started")
+        self._tuple_inventory_started = True
+        client = self._client
+        try:
+            async with aclosing(client.iter_tuples(consistency="HIGHER_CONSISTENCY")) as stream:
+                async for key in stream:
+                    self._tuple_scope(client)
+                    if (
+                        type(key) is not dict
+                        or set(key) != {"user", "relation", "object"}
+                        or any(
+                            not isinstance(value, str) or not value.strip() or len(value) > 4096 or "\x00" in value
+                            for value in key.values()
+                        )
+                    ):
+                        raise _blocked("original_tuple_key_invalid")
+                    yield OriginalTupleFact(key["user"], key["relation"], key["object"])
+            self._tuple_scope(client)
+        except PermissionMigrationBlockedError:
+            raise
+        except Exception as error:
+            raise _blocked("complete_original_tuple_stream_required") from error
 
     async def aget_shared_server_ids(self, session, tenant_id) -> frozenset[int]:
         self._scope(session, tenant_id)

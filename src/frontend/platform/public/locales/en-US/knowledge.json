@@ -485,6 +485,11 @@
     "loading_directory": "Loading folder…",
     "directory_empty": "No items to show in this folder.",
     "more_files": "Load more",
-    "expand_folders": "Show {{count}} hidden folder levels"
+    "expand_folders": "Show {{count}} hidden folder levels",
+    "upload_staged": "Upload staged",
+    "upload_registered": "Submitted for processing",
+    "upload_cancelled": "Cancelled",
+    "upload_status_unavailable": "Processing status is temporarily unavailable. Try again.",
+    "upload_may_continue": "Stopping tracking does not cancel file processing already submitted."
   }
 }

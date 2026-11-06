@@ -106,7 +106,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceListItemResp,
     SpaceSubscriptionStatusEnum,
 )
-from bisheng.knowledge.domain.schemas.processing_settings import ProcessingDefaults
+from bisheng.knowledge.domain.schemas.processing_settings import ProcessingDefaults, ProcessingOverrides
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
     KnowledgeAuditTelemetryService,
 )
@@ -4011,6 +4011,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_source: FileSource = None,
         skip_approval: bool = False,
         skip_dedup: bool = False,
+        *,
+        processing_overrides: ProcessingOverrides | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         if file_source is None:
             file_source = FileSource.SPACE_UPLOAD
@@ -4076,7 +4078,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 tmp += f"/{folder_name}"
             return tmp
 
-        file_split_rule = FileProcessBase(knowledge_id=knowledge_id)
+        explicit_rules = (
+            ProcessingOverrides.model_validate(processing_overrides).model_dump(mode="json", exclude_none=True)
+            if processing_overrides is not None
+            else {}
+        )
+        file_split_rule = FileProcessBase(
+            knowledge_id=knowledge_id,
+            **explicit_rules.get("document", {}),
+            **({"excel_rule": explicit_rules["table"]} if explicit_rules.get("table") else {}),
+        )
         process_files = []
         failed_files = []
         preview_cache_keys = []
