@@ -151,7 +151,9 @@ class SourceReadVerifier:
         return await self._issue(session, request, identity, transient=True)
 
     async def _registration(self, session, scope, identity):
-        if not isinstance(scope, (SourceOwnerReadScope, TransientTargetReadScope)):
+        if not isinstance(session, AsyncSession) or not isinstance(
+            scope, (SourceOwnerReadScope, TransientTargetReadScope)
+        ):
             raise _invalid()
         registration = self._issued.get(scope)
         if (
