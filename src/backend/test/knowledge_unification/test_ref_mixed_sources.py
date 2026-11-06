@@ -57,6 +57,7 @@ async def components():
 def changes(events, *, keys=KEYS, new_source=True):
     values = []
     for index, key in enumerate(keys):
+
         async def root(session, key=key):
             events.append(("root", key.source_type.value, key.source_id))
 
@@ -65,12 +66,13 @@ def changes(events, *, keys=KEYS, new_source=True):
 
 
 async def test_global_union_precedes_sorted_roots_and_all_sets_rollback(components):
-    session, runtime, owner, events = components
+    session, runtime, _owner, events = components
     prepared = await runtime.aprepare_mixed_source_bindings(session, changes(events))
     assert tuple(item.source_key for item in prepared) == tuple(reversed(KEYS))
     assert events[0] == ("prelock", ("1", "2"), tuple(reversed(KEYS)))
     assert [event for event in events if event[0] == "root"] == [
-        ("root", "knowledge", "7"), ("root", "model_default", "linsight_llm")
+        ("root", "knowledge", "7"),
+        ("root", "model_default", "linsight_llm"),
     ]
     assert all(event[0] == "verify" for event in events[1:3])
     for item in prepared:
@@ -83,12 +85,14 @@ async def test_global_union_precedes_sorted_roots_and_all_sets_rollback(componen
 
 
 async def test_roots_keep_independent_cas_revisions_and_receipts(components):
-    session, runtime, owner, events = components
+    session, runtime, _owner, events = components
     for item in await runtime.aprepare_mixed_source_bindings(session, changes(events)):
         await runtime.aapply_source_bindings(session, item)
     await session.commit()
+
     async def lock(session):
         pass
+
     one = await runtime.aprepare_source_bindings(
         session, KEYS[0], (batch.ref(2),), extractor_version="v1", lock_source_root=lock
     )
@@ -103,7 +107,7 @@ async def test_roots_keep_independent_cas_revisions_and_receipts(components):
 
 @pytest.mark.parametrize("kind", ["foreign", "other_source", "other_target", "duplicate", "same_root"])
 async def test_mixed_rejects_unsupported_identity_before_prelock(components, kind):
-    session, runtime, owner, events = components
+    session, runtime, _owner, events = components
     items = changes(events)
     if kind == "foreign":
         items = (replace(items[0], source_key=replace(KEYS[0], tenant_id=202)), items[1])
@@ -121,23 +125,29 @@ async def test_mixed_rejects_unsupported_identity_before_prelock(components, kin
 
 
 async def test_existing_missing_coverage_fails_before_owner_or_root(components):
-    session, runtime, owner, events = components
+    session, runtime, _owner, events = components
     with pytest.raises(ReferenceCoverageNotReadyError):
         await runtime.aprepare_mixed_source_bindings(session, changes(events, new_source=False))
     assert events == []
 
 
 async def test_candidate_drift_on_second_root_rolls_back_whole_operation(components):
-    session, runtime, owner, events = components
+    session, runtime, _owner, events = components
     for item in await runtime.aprepare_mixed_source_bindings(session, changes(events)):
         await runtime.aapply_source_bindings(session, item)
     await session.commit()
     items = changes(events, new_source=False)
+
     async def drift(s):
-        await s.execute(update(BusinessReferenceSet).where(
-            BusinessReferenceSet.source_type == "model_default",
-            BusinessReferenceSet.source_version == "__root__",
-        ).values(source_revision=2))
+        await s.execute(
+            update(BusinessReferenceSet)
+            .where(
+                BusinessReferenceSet.source_type == "model_default",
+                BusinessReferenceSet.source_version == "__root__",
+            )
+            .values(source_revision=2)
+        )
+
     items = (replace(items[0], lock_source_root=drift), items[1])
     with pytest.raises(KnowledgeOperationPlanConflictError):
         await runtime.aprepare_mixed_source_bindings(session, items)
@@ -146,7 +156,7 @@ async def test_candidate_drift_on_second_root_rolls_back_whole_operation(compone
 
 
 async def test_same_root_batch_contract_is_not_weakened(components):
-    session, runtime, owner, events = components
+    session, runtime, _owner, events = components
     await session.begin()
     with pytest.raises(ResourceReferenceInvalidError):
         await runtime.verifier.averify_batch_targets(session, tuple((key, ()) for key in KEYS))
