@@ -113,6 +113,7 @@ class NativeES:
         self.cursors, self.closed, self.cleared, self.pages = {}, False, [], []
         self.exists, self.fail_delete, self.fail_add, self.retains, self.tamper = True, None, None, False, None
         self.delete_result, self.add_ids = None, []
+        self.total_override = None
         self.indices = SimpleNamespace(exists=self.index_exists, refresh=self.refresh)
         self.client = self
 
@@ -135,7 +136,13 @@ class NativeES:
                 "_scroll_id": cursor,
                 "_shards": {"failed": 0},
                 "timed_out": False,
-                "hits": {"hits": deepcopy(rows[:size])},
+                "hits": {
+                    "hits": deepcopy(rows[:size]),
+                    "total": {
+                        "value": len(rows) if self.total_override is None else self.total_override,
+                        "relation": "eq",
+                    },
+                },
             }
         )
 
@@ -146,7 +153,18 @@ class NativeES:
         self.cursors[scroll_id] = (rows, offset + len(result))
         self.pages.append(len(result))
         return response(
-            {"_scroll_id": scroll_id, "_shards": {"failed": 0}, "timed_out": False, "hits": {"hits": deepcopy(result)}}
+            {
+                "_scroll_id": scroll_id,
+                "_shards": {"failed": 0},
+                "timed_out": False,
+                "hits": {
+                    "hits": deepcopy(result),
+                    "total": {
+                        "value": len(rows) if self.total_override is None else self.total_override,
+                        "relation": "eq",
+                    },
+                },
+            }
         )
 
     async def clear_scroll(self, *, scroll_id):
@@ -315,7 +333,8 @@ async def test_10001_source_chunks_are_streamed_in_bounded_native_batches(native
     result = await apply(native)
     assert result.source_count == result.milvus_count == result.es_count == 10001
     assert [len(batch) for batch in native.target_mv.batches] == [1000] * 10 + [1]
-    assert max(native.source_es.pages) <= 1000 and len(native.source_es.cleared) == 1
+    assert max(native.source_es.pages) <= 1000
+    assert set(native.source_es.cleared) == set(native.source_es.cursors)
 
 
 async def test_cleanup_failure_replay_keeps_two_target_rows_and_does_not_reembed(native):
@@ -458,3 +477,44 @@ async def test_bad_owner_scope_refuses_before_native_io(native, change):
 async def test_readonly_source_milvus_initialization_uses_existing_fake_embeddings(native):
     await apply(native)
     assert all(isinstance(embedding, FakeEmbeddings) for ident, embedding in native.factory_calls if ident == 40)
+
+
+async def test_boolean_schema_version_is_not_a_valid_durable_checkpoint(native):
+    native.source_es.fail_delete = RuntimeError("cleanup failed")
+    with pytest.raises(KnowledgeFileFailedError):
+        await apply(native)
+    native.checkpoint = replace(native.checkpoint, schema_version=True)
+    native.source_es.fail_delete = None
+    native.events.clear()
+    with pytest.raises(ResourceReferenceInvalidError):
+        await apply(native)
+    assert "source_delete" not in native.events
+
+
+async def test_premature_scroll_eof_cannot_drop_a_source_with_more_reported_chunks(native):
+    native.source_es.total_override = 3
+    with pytest.raises(KnowledgeFileFailedError):
+        await apply(native)
+    assert "source_delete" not in native.events and native.checkpoint is None
+    assert set(native.source_es.cleared) == set(native.source_es.cursors)
+
+
+async def test_wrong_embedding_dimension_cannot_be_verified_as_usable_target(native):
+    native.embedding.aembed_documents.side_effect = lambda texts: [[0.1] for _ in texts]
+    with pytest.raises(KnowledgeFileFailedError):
+        await apply(native)
+    assert "source_delete" not in native.events
+
+
+@pytest.mark.parametrize("primary", [False, True])
+async def test_all_owned_es_clients_close_even_when_first_client_close_raises(native, primary):
+    close_error = RuntimeError("source client close failed")
+    native.source_es.close = AsyncMock(side_effect=close_error)
+    native.target_es.close = AsyncMock()
+    if primary:
+        native.target_es.fail_add = RuntimeError("primary ES write failed")
+    with pytest.raises(KnowledgeFileFailedError) as error:
+        await apply(native)
+    assert error.value.__cause__ is (native.target_es.fail_add if primary else close_error)
+    native.source_es.close.assert_awaited_once()
+    native.target_es.close.assert_awaited_once()
