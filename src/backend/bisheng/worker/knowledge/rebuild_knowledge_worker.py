@@ -1,52 +1,62 @@
+import json
+
 from loguru import logger
+from pymilvus import Collection
 
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
-from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeFileFailedError,
+    KnowledgeOperationPlanConflictError,
+    KnowledgeUnificationError,
+    ResourceReferenceInvalidError,
+)
+from bisheng.core.ai import FakeEmbeddings
+from bisheng.core.context.background_execution import get_current_background_task
+from bisheng.core.database import get_sync_db_session
 from bisheng.core.logger import trace_id_var
+from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication
+from bisheng.knowledge.application.model_reference_read import get_knowledge_model_read_runtime_sync
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeState
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus
-from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain import LLMService
+from bisheng.resource_reference.application.contracts import canonical_target_id
 from bisheng.worker.main import bisheng_celery
 
 
 @bisheng_celery.task(acks_late=True)
-def rebuild_knowledge_celery(knowledge_id: int, new_model_id: int, invoke_user_id: int) -> str:
-    """
-    Asynchronous task to rebuild knowledge base
-
-    Args:
-        knowledge_id: The knowledge base uponID
-        new_model_id: New.. embeddingModelsID
-        invoke_user_id: Call UserID
-
-    Returns:
-        str: Task Execution Results
-    """
+def rebuild_knowledge_celery(
+    knowledge_id: int,
+    new_model_id: int | None,
+    invoke_user_id: int,
+    *,
+    operation_id: str | None = None,
+    expected_model_config_revision: int | None = None,
+    expected_index_generation: str | None = None,
+) -> str:
+    """Rebuild the current business pending slot; the user ID is audit only."""
     trace_id_var.set(f"rebuild_knowledge_{knowledge_id}")
     logger.info(f"rebuild_knowledge_celery start knowledge_id={knowledge_id} new_model_id={new_model_id}")
     try:
-        # Get Knowledge Base Information
-        knowledge = KnowledgeDao.query_by_id(knowledge_id)
-        if not knowledge:
-            logger.error(f"knowledge_id={knowledge_id} not found")
-            return f"knowledge {knowledge_id} not found"
+        command = {
+            "operation_id": operation_id,
+            "expected_model_config_revision": expected_model_config_revision,
+            "expected_index_generation": expected_index_generation,
+        }
+        knowledge, selected_model_id = _require_current_rebuild(knowledge_id, new_model_id, **command)
 
         # 1. according knowledge_id Found knowledgefile All in the tablestatus=2Andstatus=4File, put thestatusto4
         files = KnowledgeFileDao.get_files_by_multiple_status(
             knowledge_id, [KnowledgeFileStatus.SUCCESS.value, KnowledgeFileStatus.REBUILDING.value]
         )
         # 2. According to thecollection_namewentmilvusDelete Vector Store in
-        KnowledgeService.delete_knowledge_file_in_vector(knowledge=knowledge, del_es=False)
+        _delete_rebuild_vectors(knowledge, invoke_user_id, **command)
 
         if not files:
             logger.info(f"knowledge_id={knowledge_id} has no success files")
-            # Directly update knowledge base status to success
-            knowledge.state = KnowledgeState.PUBLISHED.value
-            KnowledgeDao.update_one(knowledge)
+            _finalize_rebuild(knowledge_id, **command)
             return f"knowledge {knowledge_id} rebuild completed (no files)"
 
         # Updating file status to rebuild in progress
@@ -56,7 +66,9 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: int, invoke_user_i
         logger.info(f"Updated {len(files)} files to rebuilding status")
 
         # 3. accordingindex_nameFROMesGot it inchunkinformation, reembeddingInsertmilvus
-        success_files, failed_files = _rebuild_embeddings(knowledge, files, new_model_id, invoke_user_id)
+        success_files, failed_files = _rebuild_embeddings(
+            knowledge, files, selected_model_id, invoke_user_id, **command
+        )
 
         # 4. Update file status
         KnowledgeFileDao.update_status_bulk(success_files, KnowledgeFileStatus.SUCCESS)
@@ -76,37 +88,100 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: int, invoke_user_i
         # the space unreachable and reported it as "invalid resource type or ID".
         if failed_files:
             # DeleteesIndex andmilvusCollections to avoid data inconsistencies
-            _delete_es_files(knowledge, failed_files)
+            _delete_es_files(knowledge, failed_files, **_rebuild_rag_scope(**command))
             logger.error(f"knowledge_id={knowledge_id} rebuild failed, failed_files={failed_files}")
         else:
             logger.info(f"knowledge_id={knowledge_id} rebuild completed successfully")
 
-        knowledge.state = KnowledgeState.PUBLISHED.value
-        KnowledgeDao.update_one(knowledge)
+        _finalize_rebuild(knowledge_id, **command)
 
         return f"knowledge {knowledge_id} rebuild completed"
 
     except Exception as e:
         logger.exception(f"rebuild_knowledge_celery error: {e!s}")
-        # Leave the knowledge usable rather than stranding it in REBUILDING: the
-        # run is over either way, and the per-file status already records what
-        # did not make it.
-        try:
-            knowledge = KnowledgeDao.query_by_id(knowledge_id)
-            if knowledge:
-                knowledge.state = KnowledgeState.PUBLISHED.value
-                KnowledgeDao.update_one(knowledge)
-        except Exception as e2:
-            logger.exception(f"Failed to update knowledge state after error: {e2!s}")
-
-        raise e
+        # Global failures did not complete the operation. Keep its actual
+        # pending slot/revision and let Celery retain the failure diagnostic.
+        raise
 
 
-def _delete_es_files(knowledge: Knowledge, file_ids: list[int]):
+def _rebuild_rag_scope(*, operation_id, expected_model_config_revision, expected_index_generation):
+    return {
+        "model_slot": "model_transition.pending_model_id",
+        "expected_operation_id": operation_id,
+        "expected_model_config_revision": expected_model_config_revision,
+        "expected_index_generation": expected_index_generation,
+    }
+
+
+def _require_current_rebuild(
+    knowledge_id, model_hint, *, operation_id, expected_model_config_revision, expected_index_generation
+):
+    if get_current_background_task() is None:
+        raise ResourceReferenceInvalidError(reason="knowledge_rebuild_background_required")
+    if (
+        not isinstance(operation_id, str)
+        or not operation_id
+        or type(expected_model_config_revision) is not int
+        or expected_model_config_revision < 0
+        or not isinstance(expected_index_generation, str)
+        or not expected_index_generation
+    ):
+        raise KnowledgeOperationPlanConflictError(reason="knowledge_rebuild_command_expectations_required")
+    with get_sync_db_session() as session:
+        candidate = KnowledgeModelReferenceApplication.repository.get(session, knowledge_id)
+        if candidate is not None and candidate.model_transition is None:
+            raise KnowledgeOperationPlanConflictError(reason="knowledge_rebuild_operation_missing")
+        result = get_knowledge_model_read_runtime_sync().require(
+            knowledge_id,
+            session=session,
+            slot_key="model_transition.pending_model_id",
+            expected_operation_id=operation_id,
+            expected_model_config_revision=expected_model_config_revision,
+            expected_index_generation=expected_index_generation,
+        )
+        if model_hint is not None:
+            try:
+                if canonical_target_id(model_hint) != str(result.model_id):
+                    raise ValueError("legacy model hint differs from the business pending slot")
+            except (TypeError, ValueError) as error:
+                raise KnowledgeOperationPlanConflictError(reason="knowledge_rebuild_model_hint_obsolete") from error
+        facts = json.loads(result.read.snapshot.payload_json)["knowledge"]
+        return Knowledge(**facts), result.model_id
+
+
+def _finalize_rebuild(knowledge_id, *, operation_id, expected_model_config_revision, expected_index_generation):
+    with get_sync_db_session() as session:
+        prepared = KnowledgeModelReferenceApplication.prepare_finalization(
+            session,
+            knowledge_id,
+            operation_id=operation_id,
+            expected_model_config_revision=expected_model_config_revision,
+            expected_index_generation=expected_index_generation,
+        )
+        KnowledgeModelReferenceApplication.apply_finalization(session, prepared)
+        session.commit()
+
+
+def _delete_rebuild_vectors(knowledge, invoke_user_id, **command):
+    # The existing collection-only deletion rule remains, but the standard
+    # RAG admission now checks this exact pending operation before its IO.
+    vector = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+        invoke_user_id=invoke_user_id,
+        knowledge=knowledge,
+        embeddings=FakeEmbeddings(),
+        **_rebuild_rag_scope(**command),
+    )
+    if isinstance(vector.col, Collection):
+        if not knowledge.collection_name.startswith("col"):
+            raise ValueError("knowledge.collection_name must start with 'col' not support partition mode")
+        vector.col.drop()
+
+
+def _delete_es_files(knowledge: Knowledge, file_ids: list[int], **scope):
     """DeleteESFile data in"""
     try:
         index_name = knowledge.index_name or knowledge.collection_name
-        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
+        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge, **scope)
 
         if not es_client.client.indices.exists(index=index_name):
             logger.warning(f"ES index {index_name} does not exist, skipping deletion")
@@ -120,10 +195,11 @@ def _delete_es_files(knowledge: Knowledge, file_ids: list[int]):
 
     except Exception as e:
         logger.exception(f"Failed to delete ES files for knowledge_id={knowledge.id}: {e!s}")
+        raise
 
 
 def _rebuild_embeddings(
-    knowledge: Knowledge, files: list[KnowledgeFile], new_model_id: int, invoke_user_id: int
+    knowledge: Knowledge, files: list[KnowledgeFile], new_model_id: int, invoke_user_id: int, **command
 ) -> tuple[list[int], list[int]]:
     """
     Rebuildembeddings
@@ -138,7 +214,8 @@ def _rebuild_embeddings(
     try:
         # DapatkanEShitting the nail on the headchunkMessage
         index_name = knowledge.index_name
-        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
+        scope = _rebuild_rag_scope(**command)
+        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge, **scope)
 
         # Get newembeddingModel and createMilvusClient
         logger.info(f"[DEBUG] Begin initializing newembeddingModelsmodel_id={new_model_id}")
@@ -158,22 +235,21 @@ def _rebuild_embeddings(
         except Exception as e:
             logger.error(f"[DEBUG] EmbeddingModel Test Failed: {e!s}")
             # Model test failure should terminate the entire process, not continue
-            raise Exception(f"EmbeddingModel not available: {e!s}")
+            raise RuntimeError(f"EmbeddingModel not available: {e!s}") from e
 
         vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
             invoke_user_id=invoke_user_id,
             knowledge=knowledge,
             embeddings=new_embeddings,
             metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA,
+            **scope,
         )
         logger.info(f"[DEBUG] Slider Created Successfully.MilvusClientcollection_name={knowledge.collection_name}")
 
         # OthersESWhether the index is present (check in advance, avoid double-checking in the loop)
         if not es_client.client.indices.exists(index=index_name):
             logger.error(f"ES index {index_name} does not exist")
-            # Index does not exist, all files failed
-            failed_files = [f.id for f in files]
-            return success_files, failed_files
+            raise RuntimeError(f"Rebuild source index {index_name} does not exist")
 
         # Regenerate for each fileembeddings
         for file in files:
@@ -184,14 +260,15 @@ def _rebuild_embeddings(
                     logger.info(f"Successfully rebuilt embeddings for file_id={file.id}")
                 else:
                     failed_files.append(file.id)
+            except KnowledgeUnificationError:
+                raise
             except Exception as e:
                 logger.exception(f"Failed to rebuild embeddings for file_id={file.id}: {e!s}")
                 failed_files.append(file.id)
 
     except Exception as e:
         logger.exception(f"Failed to rebuild embeddings: {e!s}")
-        # If the entire process fails, all unsuccessful files are marked as failed
-        failed_files.extend([f.id for f in files if f.id not in success_files])
+        raise
 
     return success_files, failed_files
 
