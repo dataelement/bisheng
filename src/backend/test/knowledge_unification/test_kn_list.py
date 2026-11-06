@@ -12,8 +12,10 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.cursor import decode_cursor, encode_cursor
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
-from bisheng.core.context.tenant import bypass_tenant_filter, management_tenant_scope
+from bisheng.common.errcode.permission import PermissionDeniedError
+from bisheng.core.context.tenant import bypass_tenant_filter, management_tenant_scope, tenant_execution_scope
 from bisheng.core.database import tenant_filter
 from bisheng.core.database.tenant_filter import register_tenant_filter_events
 from bisheng.knowledge.domain.models.knowledge import Knowledge
@@ -25,7 +27,9 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import (
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.permission.application import business_authorization
 from bisheng.permission.application.control_state import PermissionResourceSnapshot
-from bisheng.permission.domain.services.permission_action_service import PermissionActor
+from bisheng.permission.application.data_scope import DATA_SCOPE_PERSONAL
+from bisheng.permission.application.identity import reset_current_permission_actor, set_current_permission_actor
+from bisheng.permission.domain.services.permission_action_service import F048PermissionService, PermissionActor
 
 
 @pytest.fixture
@@ -222,3 +226,104 @@ async def test_permission_failure_does_not_turn_partial_scan_into_a_success_page
     catalog.runtime.batch_check_actions.side_effect = RuntimeError("permission transport unavailable")
     with pytest.raises(RuntimeError, match="permission transport unavailable"):
         await catalog.service.list_visible_spaces()
+
+
+async def test_real_root_super_uses_existing_business_shortcut_after_selected_tenant_target_validation(
+    catalog, monkeypatch
+):
+    await catalog.seed([row(1), row(2), row(3, tenant=1), row(4, tenant=202)])
+    original = UserPayload(user_id=7, tenant_id=1, user_role=[], is_global_super=True)
+    service = KnowledgeSpaceService(
+        None,
+        original,
+        f048_permission_adapter=catalog.service.f048_permission_adapter,
+        space_listing_repository=catalog.repository,
+    )
+    fga = SimpleNamespace(batch_check=AsyncMock(return_value=[]))
+    decision = F048PermissionService(
+        catalog=SimpleNamespace(ensure_runtime_ready=AsyncMock()),
+        scope_fence=SimpleNamespace(ensure_readable=AsyncMock()),
+        marker=SimpleNamespace(consistency_for=AsyncMock()),
+        fga=fga,
+        list_policy=SimpleNamespace(),
+    )
+    runtime = AsyncMock(return_value=decision)
+    monkeypatch.setattr(business_authorization, "get_f048_runtime", runtime)
+    token = set_current_permission_actor(None)
+    try:
+        with management_tenant_scope(101):
+            actor = await service._permission_actor()
+            assert actor.current_tenant_id == 1 and actor.super_admin
+            loaded = await catalog.repository.alist_candidates(limit=100)
+            targets = await service.f048_permission_adapter.resolve_permission_targets_from_rows(
+                rows=loaded,
+                resource_type="knowledge_space",
+                actor=actor,
+            )
+            assert {target.tenant_id for target in targets} == {101}
+            # The joined/square visible protocol must keep its original tenant
+            # fence; the business full-scope-super shortcut is a separate path.
+            assert await decision.batch_check_actions(actor, targets, "visible") == (False, False)
+            page = await service.list_visible_spaces()
+        assert [item.id for item in page.data] == [2, 1]
+        assert original.tenant_id == actor.current_tenant_id == 1
+        assert await service._permission_actor() is actor
+        runtime.assert_not_awaited()
+        fga.batch_check.assert_not_awaited()
+        assert all(key[0] == 101 for batch in catalog.facts.snapshots for key in batch)
+    finally:
+        reset_current_permission_actor(token)
+
+
+async def test_real_super_home_actor_cannot_adopt_sql_tenant_without_management_pin(catalog, monkeypatch):
+    original = UserPayload(user_id=7, tenant_id=1, user_role=[], is_global_super=True)
+    service = KnowledgeSpaceService(
+        None,
+        original,
+        f048_permission_adapter=catalog.service.f048_permission_adapter,
+        space_listing_repository=catalog.repository,
+    )
+    scan = AsyncMock(side_effect=AssertionError("untrusted tenant must not scan SQL"))
+    monkeypatch.setattr(catalog.repository, "alist_candidates", scan)
+    token = set_current_permission_actor(None)
+    try:
+        with tenant_execution_scope(101), pytest.raises(PermissionDeniedError):
+            await service.list_visible_spaces()
+        scan.assert_not_awaited()
+        assert original.tenant_id == (await service._permission_actor()).current_tenant_id == 1
+    finally:
+        reset_current_permission_actor(token)
+
+
+@pytest.mark.parametrize("home,super_admin,narrowed", [(1, False, False), (202, False, False), (1, True, True)])
+async def test_management_pin_does_not_expand_ordinary_tenant_admin_or_narrowed_actor(
+    catalog, monkeypatch, home, super_admin, narrowed
+):
+    from bisheng.permission.application import relation_api
+
+    original = UserPayload(user_id=7, tenant_id=home, user_role=[], is_global_super=super_admin)
+    monkeypatch.setattr(relation_api, "is_tenant_admin", AsyncMock(return_value=home == 202))
+    service = KnowledgeSpaceService(
+        None,
+        original,
+        f048_permission_adapter=catalog.service.f048_permission_adapter,
+        space_listing_repository=catalog.repository,
+    )
+    scan = AsyncMock(side_effect=AssertionError("cross-tenant denied identity must not scan SQL"))
+    monkeypatch.setattr(catalog.repository, "alist_candidates", scan)
+    contextual = (
+        PermissionActor(user_id=7, current_tenant_id=home, super_admin=True, data_scope=DATA_SCOPE_PERSONAL)
+        if narrowed
+        else None
+    )
+    token = set_current_permission_actor(contextual)
+    try:
+        with management_tenant_scope(101), pytest.raises(PermissionDeniedError):
+            await service.list_visible_spaces()
+        scan.assert_not_awaited()
+        actor = await service._permission_actor()
+        assert actor.current_tenant_id == original.tenant_id == home
+        if narrowed:
+            assert actor is contextual
+    finally:
+        reset_current_permission_actor(token)
