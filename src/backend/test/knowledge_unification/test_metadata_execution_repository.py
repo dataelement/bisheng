@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import FrozenInstanceError, replace
 from datetime import datetime, timedelta
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import event, update
@@ -237,6 +238,45 @@ async def test_stale_lease_cannot_write_values_or_complete_item(execution):
             item.state == "running"
             and (await session.get(KnowledgeFile, 81)).user_metadata == execution.accepted.items[0].before_values
         )
+
+
+async def test_unrelated_pending_file_remark_remains_owned_by_caller(execution):
+    async with execution.context.sessions() as session:
+        job, item = await loaded(session, execution)
+        row = await session.get(KnowledgeFile, 81)
+        row.remark = "pending unrelated note"
+        assert await MetadataExecutionRepository().awrite_values(session, job, item, lease=lease(job, item))
+        await session.commit()
+    async with execution.context.sessions() as session:
+        assert (await session.get(KnowledgeFile, 81)).remark == "pending unrelated note"
+
+
+@pytest.mark.parametrize("pending", ["root", "values", "version"])
+async def test_pending_critical_target_change_rejected_before_flush(execution, pending):
+    async with execution.context.sessions() as session:
+        job, item = await loaded(session, execution)
+        if pending == "root":
+            (await session.get(Knowledge, 40)).metadata_schema_revision = 99
+        elif pending == "values":
+            (await session.get(KnowledgeFile, 81)).user_metadata = {"manual": {}}
+        else:
+            (await session.get(KnowledgeDocumentVersion, 181)).knowledge_file_id = 82
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await MetadataExecutionRepository().awrite_values(session, job, item, lease=lease(job, item))
+        await session.rollback()
+    async with execution.context.sessions() as session:
+        assert (await session.get(Knowledge, 40)).metadata_schema_revision == 1
+        assert (await session.get(KnowledgeFile, 81)).user_metadata == execution.accepted.items[0].before_values
+        assert (await session.get(KnowledgeDocumentVersion, 181)).knowledge_file_id == 81
+
+
+async def test_completion_refusal_cannot_leave_file_values_written(execution):
+    async with execution.context.sessions() as session:
+        job, item = await loaded(session, execution)
+        repo = MetadataExecutionRepository()
+        repo.jobs.acomplete_item = AsyncMock(return_value=False)
+        assert not await repo.awrite_values(session, job, item, lease=lease(job, item))
+        assert (await session.get(KnowledgeFile, 81)).user_metadata == execution.accepted.items[0].before_values
 
 
 async def test_values_and_item_completion_share_external_rollback(execution):
