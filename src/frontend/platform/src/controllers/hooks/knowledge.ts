@@ -1,11 +1,17 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   knowledgeSpaceApi,
   type KnowledgeSpaceApi,
   type KnowledgeSpaceInfo,
   type KnowledgeChildrenQuery,
   type KnowledgeAdminQuery,
+  type KnowledgeVisibleQuery,
+  type KnowledgeSpaceCreateRequest,
   type ProcessingJobsQuery,
   type ProcessingItemsQuery,
   type ProcessingPrecheckRequest,
@@ -62,6 +68,17 @@ const spaceKey = (scope: KnowledgeQueryScope, spaceId: number) =>
 
 export const knowledgeQueryKeys = {
   scope: scopeKey,
+  visible: (
+    scope: KnowledgeQueryScope,
+    query?: Omit<KnowledgeVisibleQuery, "cursor">,
+  ) =>
+    [
+      ...scopeKey(scope),
+      "visible-list",
+      ...(query === undefined ? [] : [{ ...query }]),
+    ] as const,
+  creation: (scope: KnowledgeQueryScope) =>
+    [...scopeKey(scope), "creation-settings"] as const,
   space: spaceKey,
   info: (scope: KnowledgeQueryScope, spaceId: number) =>
     [...spaceKey(scope, spaceId), "info"] as const,
@@ -140,6 +157,77 @@ export function useKnowledgeSpaceInfo(
     enabled: canQuery(scope, spaceId),
     keepPreviousData: false,
   });
+}
+export function useKnowledgeVisibleSpaces(
+  scope: KnowledgeQueryScope,
+  query: Omit<KnowledgeVisibleQuery, "cursor"> = {},
+  api: KnowledgeSpaceApi = knowledgeSpaceApi,
+) {
+  useKnowledgeScope(scope);
+  return useInfiniteQuery({
+    queryKey: knowledgeQueryKeys.visible(scope, query),
+    queryFn: ({ pageParam }) =>
+      api.listVisibleSpaces({
+        ...query,
+        ...(pageParam === undefined ? {} : { cursor: pageParam }),
+      }),
+    getNextPageParam: (page) =>
+      page.has_more ? (page.next_cursor ?? undefined) : undefined,
+    enabled: canQuery(scope) && scope.view === "ordinary",
+    keepPreviousData: false,
+  });
+}
+export function useKnowledgeCreationSettings(
+  scope: KnowledgeQueryScope,
+  api: KnowledgeSpaceApi = knowledgeSpaceApi,
+) {
+  useKnowledgeScope(scope);
+  return useQuery({
+    queryKey: knowledgeQueryKeys.creation(scope),
+    queryFn: () => api.getCreationSettings(),
+    enabled: canQuery(scope),
+    keepPreviousData: false,
+  });
+}
+export function useCreateKnowledgeSpace(
+  scope: KnowledgeQueryScope,
+  api: KnowledgeSpaceApi = knowledgeSpaceApi,
+) {
+  const { client, current, stableScope } = useKnowledgeScope(scope);
+  const epoch = useMemo(() => ({ current, api }), [current, api]);
+  const latest = useRef<typeof epoch | null>(epoch);
+  latest.current = epoch;
+  useEffect(() => {
+    latest.current = epoch;
+    return () => {
+      if (latest.current === epoch) latest.current = null;
+    };
+  }, [epoch]);
+  return useMemo(
+    () => ({
+      async createSpace(body: KnowledgeSpaceCreateRequest) {
+        const assertCurrent = () => {
+          if (latest.current !== epoch || !canQuery(stableScope))
+            throw scopeChanged("knowledge_scope_changed");
+        };
+        assertCurrent();
+        const result = await api.createSpace(
+          body,
+          stableScope.managementTenantId,
+        );
+        assertCurrent();
+        await Promise.all([
+          client.invalidateQueries({
+            queryKey: knowledgeQueryKeys.visible(stableScope),
+          }),
+          client.invalidateQueries({ queryKey: [...current, "admin-list"] }),
+        ]);
+        assertCurrent();
+        return result;
+      },
+    }),
+    [api, client, current, epoch, stableScope],
+  );
 }
 export function useKnowledgeSpaceChildren(
   scope: KnowledgeQueryScope,

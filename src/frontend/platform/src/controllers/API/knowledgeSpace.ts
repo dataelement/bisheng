@@ -1,4 +1,5 @@
 import axios from "@/controllers/request";
+import type { PermissionGrantSubjectInput } from "./permission";
 
 export interface KnowledgeSpaceSummary {
   id: number;
@@ -166,6 +167,41 @@ export interface KnowledgePageQuery {
 export interface KnowledgeAdminQuery extends KnowledgePageQuery {
   keyword?: string;
 }
+export interface KnowledgeVisibleQuery {
+  keyword?: string;
+  page_size?: number;
+  cursor?: string | null;
+}
+export interface KnowledgeSpaceCreateRequest {
+  name: string;
+  description?: string | null;
+  icon?: string | null;
+  auth_type?: "public" | "private" | "approval";
+  is_released?: boolean;
+  auto_tag_enabled?: boolean;
+  auto_tag_library_id?: number | null;
+  auto_tag_custom_tags?: string[] | null;
+  creation_request_id?: string | null;
+  initial_permissions?: {
+    expected_catalog_release_id: number;
+    grants?: { model_key: string; subject: PermissionGrantSubjectInput }[];
+  } | null;
+  embedding_model_id?: number | null;
+  processing_defaults?: ProcessingDefaults | null;
+}
+export type KnowledgeSpaceCreateResponse = KnowledgeSpaceInfo & {
+  initial_permission_result?: {
+    status: "succeeded" | "failed";
+    resource_version?: number | null;
+    assignee_ids?: string[];
+    error_code?: number | null;
+    message?: string | null;
+  } | null;
+};
+export interface SpaceCreationSettings {
+  embedding_model: { id: string; name: string } | null;
+  system_defaults: ProcessingDefaults;
+}
 export type BinaryFlag = 0 | 1;
 export type SplitMode = "auto" | "custom" | "hierarchical";
 export type SeparatorRule = "before" | "after";
@@ -193,7 +229,10 @@ export interface TableProcessingRule {
 }
 
 /** Actual legacy file snapshot only; new defaults and commands keep positive row counts. */
-export interface LegacyTableProcessingRule extends Omit<TableProcessingRule, "slice_length"> {
+export interface LegacyTableProcessingRule extends Omit<
+  TableProcessingRule,
+  "slice_length"
+> {
   slice_length: 0;
   legacy_unbounded: true;
 }
@@ -225,7 +264,8 @@ export interface ProcessingSettingsWrite {
 export interface EffectiveProcessingSnapshot {
   schema_version: 1;
   file_kind: string;
-  effective_rule: DocumentProcessingRule | TableProcessingRule | LegacyTableProcessingRule;
+  effective_rule:
+    DocumentProcessingRule | TableProcessingRule | LegacyTableProcessingRule;
   space_config_version: number;
   supplied_fields_by_layer: Partial<
     Record<"system" | "space" | "batch" | "file" | "specialized", string[]>
@@ -383,6 +423,55 @@ export interface ProcessingItemsQuery extends KnowledgePageQuery {
 const spacePath = (spaceId: number) => `/api/v1/knowledge/space/${spaceId}`;
 const jobsPath = (spaceId: number) => `${spacePath(spaceId)}/processing-jobs`;
 
+export function listVisibleSpaces(
+  query: KnowledgeVisibleQuery = {},
+): Promise<CursorPage<KnowledgeSpaceInfo>> {
+  return axios.get<unknown, CursorPage<KnowledgeSpaceInfo>>(
+    "/api/v1/knowledge/space/list",
+    { params: query },
+  );
+}
+export function getCreationSettings(): Promise<SpaceCreationSettings> {
+  return axios.get<unknown, SpaceCreationSettings>(
+    "/api/v1/knowledge/space/creation-settings",
+  );
+}
+export async function createSpace(
+  body: KnowledgeSpaceCreateRequest,
+  expectedManagementTenantId: number | null,
+): Promise<KnowledgeSpaceCreateResponse> {
+  if (
+    body.embedding_model_id != null &&
+    (!Number.isSafeInteger(body.embedding_model_id) ||
+      body.embedding_model_id <= 0)
+  ) {
+    throw Object.assign(new Error("knowledge_embedding_model_invalid"), {
+      code: "knowledge_embedding_model_invalid",
+    });
+  }
+  if (body.embedding_model_id != null || body.processing_defaults != null) {
+    if (
+      !Number.isSafeInteger(expectedManagementTenantId) ||
+      expectedManagementTenantId === null ||
+      expectedManagementTenantId <= 0
+    ) {
+      throw Object.assign(new Error("knowledge_management_tenant_required"), {
+        code: "knowledge_management_tenant_required",
+      });
+    }
+    return axios.post<unknown, KnowledgeSpaceCreateResponse>(
+      "/api/v1/knowledge/space",
+      body,
+      {
+        headers: { "X-Management-Tenant": String(expectedManagementTenantId) },
+      },
+    );
+  }
+  return axios.post<unknown, KnowledgeSpaceCreateResponse>(
+    "/api/v1/knowledge/space",
+    body,
+  );
+}
 export function getSpaceInfo(spaceId: number): Promise<KnowledgeSpaceInfo> {
   return axios.get<unknown, KnowledgeSpaceInfo>(`${spacePath(spaceId)}/info`);
 }
@@ -473,6 +562,9 @@ export function retryProcessingJob(
 
 /** Test ports have this exact shape; production always uses the wrapped request module. */
 export const knowledgeSpaceApi = {
+  listVisibleSpaces,
+  getCreationSettings,
+  createSpace,
   getSpaceInfo,
   listChildren,
   listAdminSpaces,

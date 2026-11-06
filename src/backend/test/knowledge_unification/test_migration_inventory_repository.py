@@ -224,6 +224,33 @@ async def test_all_tenant_statuses_knowledge_types_and_only_physical_own_default
         assert [row.value for row in defaults[:2]] == [None, ""]
 
 
+async def test_knowledge_names_are_exact_owned_facts_in_one_bounded_scan_including_duplicate_and_retired_types(
+    repo, storage
+):
+    originals = {
+        1: (0, "Same name"),
+        2: (3, "Same name"),
+        3: (1, "Same name"),
+        4: (2, "Same name"),
+        5: (3, " Same name"),
+        6: (0, "Same Name"),
+    }
+    async with AsyncSession(storage) as session, session.begin():
+        for ident in range(1, 402):
+            kind, name = originals.get(ident, (3, f"Knowledge {ident}"))
+            session.add(Knowledge(id=ident, tenant_id=101, user_id=7, name=name, type=kind, model="42"))
+        session.add(Knowledge(id=999, tenant_id=202, user_id=7, name="Same name", type=3))
+        await session.flush()
+        statements = record_queries(session)
+        rows = await pages(repo, "alist_knowledge", session)
+        assert len(rows) == 401 and all(row.tenant_id == 101 for row in rows)
+        assert {row.id: (row.type, row.name) for row in rows[:6]} == originals
+        assert [row.name for row in rows if row.name == "Same name"] == ["Same name"] * 4
+        assert len(statements) == 3
+        assert all(query._offset_clause is None and int(query._limit_clause.value) == 201 for query in statements)
+        assert all("knowledge.name" in str(query) for query in statements)
+
+
 async def test_batched_assistant_links_and_disabled_channel_configs_keep_empty_roots_and_original_slots(repo, storage):
     async with AsyncSession(storage) as session, session.begin():
         session.add_all(

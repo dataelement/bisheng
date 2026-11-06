@@ -224,6 +224,8 @@ FlowVersion/AssistantLink使用真实父+tenant+类型键核验，坏父显式�
 
 孤儿完整性补充（大数据复查后冻结）：`avalidate_global_orphans(session)`只做无tenant列的APPVersion/ChannelSync无payload缺父证明，整个正式盘点调用一次；另`avalidate_tenant_orphans(session)`对当前tenant的AssistantLink作一次LEFT raw父的无payload LIMIT1存在性检查，缺父或父tenant不一致明确失败；仅从合法root批取links不能证明无此类孤儿。后者每tenant一次，不每root/子页重扫；前者正常无孤儿仍可能扫全表，严禁放进tenant循环造成T×全局子表扫描。两方法均保native/no_autoflush/strict/具体tenant要求，无进程缓存/跨事务记忆或跨tenant配置读取；正式Service显式编排global once+tenant once。原T693/694两叶补真实多tenant SQL计数回归与所有原拒绝，未改产品要求。
 
+名称解析原事实补充：KnowledgeRow闭集还包含真实`name:str`，供原APP name-only知识声明在本tenant、type0/3候选中按原名称精确解析。name仅内存建立一次索引，不按slot反复SQL、不改type1/2参与范围、不输出完整业务配置；原T693/694两叶增量补真实同名/foreign/type行及SQL预算测试。没有该字段不得猜一个ID、造missing或绕道逐slot查全表。
+
 ## 14. 平台普通清单、创建初值与 scope 子合同 V1：已冻结
 
 先补原T176/T178真实前置，不增加产品能力。`GET /knowledge/space/creation-settings`为静态路由，沿原`KnowledgeCreationPolicy.prepare(login_user)`核原web凭据和创建菜单/角色，不将普通创建改为仅管理员。应用用例`get_space_creation_settings(login_user, *, session)`用外部native Session读取真实`model_default_read`的`aget_default(linsight_llm, login_user=原identity, session=原session)`；这是修复/显示原配置的读取，不调用严格执行准入或先核所有默认模型。返回闭集`{embedding_model:{id:string,name:string}|null,system_defaults:ProcessingDefaults}`，只投影工作台Embedding原ID/名称；保留已失效原ID供显式修复，不回退其他默认、不选第一个模型、不输出provider/其他配置。系统规则复用已有`system_processing_defaults(0)`纯schema投影；0不作资源查询、授权或持久化。此GET零SQL写/无FGA变更/无任务/无模型执行，普通读取不加管理租户写头。
@@ -247,3 +249,53 @@ SQL原值结构`{field:{field_value,field_type,updated_at}}`与索引的`field�
 `aaccept(session,prepared)->PreparedMetadataSchema`只消费本实例在同一SessionTransaction签发的plan，锁并重读完整事实/原schema revision及摘要，漂移拒绝；然后CAS更新schema与metadata_schema_revision仅一次、只flush。外部J1/items/consume必须同事务一起落地；任一失败整体回滚，内核不自行提交、不写Model R/G/R2、不改File处理状态、不调用provider/索引。执行/重试未来须核接受后的schema revision及after schema和原Model R/G；不得重复接受递增修订。空scope直接真实SQL变更结果，不造零项异步job；有文件的add同样有索引清空残留步骤，不能仅Root append便称全部成功。
 
 后续真实handler固定要求：逐version Milvus query_iterator分页保pk/vector/完整字段、只改user_metadata并finally close；ES参数化脚本、校验timed_out/failures/conflicts；不重新嵌入、不改Chunk文本/原文件、不limit10000截断。SQL文件值与leased item成功同事务，失败明示并只重试失败项。只对冻结目标范围和可控步骤校验；不新增物理staging、外部在途I/O竞态治理或与业务无关整空间写围栏。完整handler/旧公开确认桥与响应的具体叶子在本前置完成后另冻结，旧公开请求/响应和原授权不由前置helper改写。
+
+## 16. 正式盘点目标物理事实子合同 V1：已冻结
+
+M2不能将现在线bind Owner经tenant过滤后的exists=False当全局物理缺失，否则非法跨tenant会被伪装成invalid_legacy。T703/T704只提供两个业务Owner专用的迁移事实仓储：`knowledge/domain/repositories/unification_target_repository.py:KnowledgeMigrationTargetRepository`与`llm/domain/repositories/migration_target_repository.py:ModelMigrationTargetRepository`，各`ainspect(session,*,source_key:SourceKey,targets:tuple[TargetKey,...])->tuple[对应MigrationTargetFact,...]`。普通在线Owner/receipt协议不改；这些事实既不是R2授权收据也不是失效证据签发，不依赖BRR已有索引、不写Source/ready/tombstone。
+
+外部native AsyncSession，调用前须可信具体tenant、strict、非bypass；source_key.tenant_id须等于原当前tenant。targets空返空、去重保持第一次顺序，每批≤200个唯一精确数字PK；非法类型/游标形状/bool/超批在任何SQL前拒绝。KN只接受knowledge_space/knowledge_file，LLM只接受model，禁止通用字符串目标。查询时只在最窄context内按这些精确PK跨tenant读取闭集标量，退出必恢复原scope；无全表扫描/OFFSET、无逐target查询、无provider/config/业务内容、no_autoflush/零写/无commit或外部IO。多target/parent用批量JOIN或IN，一批查询数只与目标kind有关，不随slot增长。
+
+同叶frozen/slots事实不保存原ORM：Model含key、exists、target_tenant_id、model_type、is_online、server_id、server_exists、server_tenant_id、闭集revision_digest；Knowledge含key、exists、target_tenant_id、knowledge_id、knowledge_type、file_type、space_exists、space_tenant_id、闭集revision_digest。space目标knowledge_id即自身；file目标由真实File.knowledge_id和LEFT父空间派生，DIR可能是原频道的合法文件夹引用，不能一概过滤；type0/1/2/3都返回原type事实。digest只覆盖实际闭集标量及相关update_time/model R/G，不声称等价provider全配置摘要，不在事实中输出后者。
+
+全局真实行存在即exists=True，包括foreign、offline、type2、父不存在或父tenant错误；这些必须保留可区分事实，不能因JOIN/资格条件过滤成missing。只有精确原数字ID在该实体全局不存在才exists=False。目标tenant不属于当前、类型不适用或父关系错误由后续真实迁移Owner资格组合明确拒绝；Root共享/默认继承必须使用原真实sharing证据，不能因全局目录已知便扩大资格。未能唯一解析出原ID的APP名称、离线仅名候选/歧义都不能造target_missing证据，仍待M2显式阻断/原语义解析。正式盘点、名称资格、原始失效证据bootstrap与Coverage转换消费者在后续子合同装配，当前两卡不等于完整T162/T168完成。
+
+## 17. 平台处理默认策略受控草稿子合同 V1：已冻结
+
+原T178仅写RuleFile/RuleTable两现有叶，新增具名受控`DocumentProcessingDefaultsFields`、`TableProcessingDefaultsFields`及各自Draft类型（真实Document/Table规则数字字段为number|null，其余逐字段保原类型）；旧默认export/上传/预览调用保持，禁止复用其清空自动补1000/0/10/1、fileList或逐文件开关进入默认保存。新分支复用既有布局/提示和已done共享InputNumber/Checkbox/Select，无新组件库/视觉规范；不得跨client导入。若共享同一旧render实现，必须同样保证所有新草稿边界，文件≤600行。
+
+完整映射：splitMode→split_mode；chunkSize/chunkOverlap/hierarchyLevel/maxChunkSize→四snake数字；appendTitle→bool append_title；retainImages/forceOcr/enableFormula/pageHeaderFooter→0|1；strategies[].regex/position→有序separator/separator_rule。Table四snake字段直接对应，默认模式不展示逐file设置/预览。默认文档策略保现有PDF专用选项及既有适用范围提示，不能因无fileList全部隐藏；选项执行仍由真实文件能力过滤，不新增解析能力。
+
+新`ProcessingDefaultsEditor.tsx`仅受控`value:ProcessingDefaultsDraft,onChange,disabled?`，统一两份草稿，类型切换不重置隐藏字段；含纯toDraft/validate-and-to-wire函数，只有合法完整schema_version=1的ProcessingDefaults才可保存。数字以InputNumber保持number|null；empty不得coerce到0/默认。所有类型一起校验finite/safeInteger、正数/非负、hierarchy1..6、overlap≤chunk_size、header_start≤header_end（append_header=0也校验）、separator非空且两个数组等长/position合法。不校验未展示类型的错误会构成漏口，不能仅依赖blur。
+
+分隔符补充：上述“非空”指数组至少一项，元素允许已有空字符串（真实字符回退标记），原token/顺序/escape不trim或按译文重写。UI待添加pattern/position须由父草稿保留，非空未添加输入在保存前要求添加或清空，切类型不丢；可放在Draft专有UI字段，to-wire时仅投影真实规则字段。原FileUploadSplitStrategy局部输入及译文label→regex行为不接入默认编辑；默认分支可在Editor同叶复用布局实现受控行，旧上传不改。前端不以JS RegExp验证Python regex，本波不新增正则引擎或后端校验合同。
+
+新`ProcessingDefaultsDialog.tsx`用现get/updateProcessingSettings和scope hooks，收到space_id/scope/open/onOpenChange等原页面props。打开先读服务端有效默认和config_version，不猜初值；编辑保持完整draft与发起scope/config_version，保存整体types提交expected_config_version。不为设置保存建J1、不改变历史文件。成功且scope仍原值才更新已保存状态/关闭；取消、校验失败、CAS/服务器失败不污染服务端旧值，失败不自动关闭；scope变化清除旧草稿并拒迟到成功。原资源edit/后台资格由页面与后端独立控制，Dialog不创造新权限动作。
+
+T705先测两个受控fields→原T178；T706再测父Editor/Dialog→T707两叶。创建Dialog、T176三tab/detail与T179上传后续独立接线，不能以此四组件代替整入口完成。locale由INT唯一Owner：平台继续useTranslation与public/locales，不套skill通用client路径；新键统一knowledge:f118命名空间，原save/cancel/字段名及提示优先复用，新增键需报root三语同步，不修改API errors生成文件。
+
+## 18. APP迁移原名称线性索引子合同 V1：已冻结
+
+`knowledge/application/unification_names.py:UnificationNameIndex(model_catalog:NameCatalog,knowledge_rows:tuple[KnowledgeRow,...])`只编译一次本tenant原名目录；`resolve(requests:tuple[AppReferenceRequest,...])->dict[str,TargetKey]`按原slot返完整结果。它是纯内存解析，不是授权/缺失证明，不查SQL/FGA、不写Source/ready、不变更配置；后续M2生产组合必须由真实`ModelNameResolutionRepository.ainspect_catalog`及原auth pin的sharing读取构造NameCatalog（每tenant一次），不能用全局模型目录或任意共享ID扩大可选范围。相应真实sharing装配仍待下一子合同，当前纯索引不关闭T162。
+
+模型原语义以`ModelNameResolutionPort._resolve`为对照：仅原visible_server_ids内llm，online精确裸名先于provider/name（名称本身可含slash），重复明确ambiguous；无online匹配而原同名eligible offline存在则offline，否则not_found。Root继承/共享候选已由原NameCatalog资格确定，本索引只消费、不补宽；坏provider/tenant链或重复ID目录拒绝。知识仅本tenant type0/3原name精确候选，QA1/退休2不参与普通APP知识名称解析；同名歧义/无候选沿原app_knowledge错误，不能登记invalid_legacy。APP原明确数字ID优先，直接保该ID交物理预检，绝不name fallback；不改原immutable declaration。非法request/重复slot不同含义/目录tenant不一致拒绝，不静默遗漏slot。
+
+编译bare/qualified online、offline及knowledge名字索引均按目录线性一次；后续不同source/slot的lookup不得重新扫描整个Catalog或KN页，不调用原逐name扫描实现。每次resolve仅与请求数/实际同名候选数相关，不使用跨tenant/跨run全局缓存。测试以原NameCatalog+原Port对照优先级/歧义/离线、原APP extractor明确ID与名称边界，并以大量不同名称请求实测目录属性访问预算不随slot×模型增长。源目录/原配置仅内存，结果只slot/TargetKey，名称不额外落公开artifact。
+
+## 19. M2原授权pin与模型共享读取子合同 V1：已冻结
+
+`permission/application/migration_read.py:PinnedMigrationPermissionReader(config:OpenFGAConf,catalog:PermissionCatalogBaseline)`为显式停服操作专用async context manager。进入时使用现`discover_openfga_runtime(expected_model=None,allow_bootstrap=False,required_store_id=原SQL CURRENT授权pin.store_id,required_model_id=原pin.model_id)`验证唯一命名Store及原模型真实checksum；全部匹配原catalog.authorization（ACTIVE及与release的required ID一致）才构造同store/model的原FGAClient。升级前模型允许是已冻结的前驱，不通过普通在线expected新模型/ready gate，不创建/写模型/Store或发heartbeat，不检测/控制停服，不设置全局在线client或HTTP/worker准入。
+
+`aget_shared_server_ids(session,tenant_id)->frozenset[int]`要求已进入reader、外部native事务、具体当前tenant且相等、非bypass，原Root返回空；其他tenant使用完整`stream_list_objects(user='tenant:{id}',relation='shared_with',type='llm_server',consistency='HIGHER_CONSISTENCY')`消费全部NDJSON。每次请求显式原model ID；非法prefix/非规范正整数/流中错误或中断全部失败，不能返回已读前缀或当空共享。每tenant一次，由SourceInventory编排，后续交真实`ModelNameResolutionRepository.ainspect_catalog`核原Root拓扑/默认继承/Provider父链。此读取只说明原sharing事实，不自行授予模型引用资格。
+
+退出必关闭专属client；异常保持cause，旧reader/关闭后拒用；无进程全局缓存、SQL写/flush/commit/BRR/Coverage/授权收据或配置泄露。可为测试替换同形discovery/transport factory，生产默认始终真实现有discovery与FGAClient，不设mock开关。factory结果的store/model也须等于原pin，不接受客户端自行repin；不触碰通用online runtime。T712先测→T713单叶实现，真OpenFGA专项实测与正式M2装配另记。
+
+## 20. 元数据逐版本索引处理子合同 V1：已冻结
+
+先做T714/T715真实native索引handler，再由后续Owner/J1组合接线；未接线前metadata kind保持unavailable，原T071/T072不勾。`worker/knowledge/metadata_worker.py:apply_metadata_index_item(*,knowledge:Knowledge,invoke_user_id:int,file_id:int,affected_fields:tuple[str,...],after_values:dict|None,guard:Callable[[],Awaitable[None]]) -> MetadataIndexResult`为异步内部函数，结果frozen/slots为file_id/milvus_count/es_count。knowledge与file/version归属、after_values及guard必须由后续真实Owner从已接受J1快照及当前业务配置提供，不接受HTTP中的索引名、任意目标或历史模型回退。没有可用guard明确拒绝，任何SQL值写/完成记录均由后续Owner leased completion同事务执行；handler不自开Session/flush/commit、不改File状态或Model R/G/R2。
+
+复用现KnowledgeRag原真实vector/ES初始化，只访问该knowledge原collection/index中document_id=file_id的记录。受影响字段是changes中原名/新名去重集合，以冻结该version的SQL after_values[field].field_value为权威，移除受影响旧键后设置这些字段的确定新值；add无该键即清残留为空。其余user_metadata/完整record字段、pk/vector/Chunk文本/原文件保持。该替换按同一接受快照幂等，ES失败后重试不会丢已rename值或复活残留。
+
+Milvus沿现同步Collection.query_iterator(batch_size=1000,limit=-1,expr精确file,out_fields全部schema字段)，循环至真实EOF，逐批copy+upsert保原pk/vector，核真实upsert_count与该批一致；finally close迭代器，异常/guard拒绝后停止新IO。ES用参数化字段名和值、精确term(document_id)的update_by_query，结果timed_out/failures/version_conflicts或统计不完整均明确失败，cause保留，不把部分索引更新称成功；正常完成返回真实count。ES refresh=True确保完成后的读取可见。无记录的失败/安全态版本可为0，但物理索引缺失或native异常不能吞成0成功。
+
+guard在初始化/每个受控批次写前、ES写前及返回前await；后续将验证原actor、item lease、当前Model R/G、接受后schema revision/after schema和该version物理摘要。外部在途IO与用户修改竞态仍按用户排除，不新增staging/双写/强制回退。单测用真实native方法形状与10001+行分页/故障注入，不冒称真实Milvus环境；正式E2E接线后再实测。原手动Chunk元数据以File业务值为权威只对本次字段变更，不修改其他内容。

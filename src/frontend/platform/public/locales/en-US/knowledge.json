@@ -449,5 +449,23 @@
     "addPlaceholder": "Enter a tag and press Enter to save",
     "existingTags": "Existing tags",
     "emptyTags": "No tags"
+  },
+  "f118": {
+    "defaults_title": "Parsing and splitting defaults",
+    "documents": "Documents",
+    "future_uploads_only": "Applies to future uploads; existing files stay unchanged.",
+    "header_end": "Header end row",
+    "header_start": "Header start row",
+    "integer_at_least": "Enter a whole number of at least {{min}}",
+    "integer_between": "Enter a whole number between {{min}} and {{max}}",
+    "invalid_defaults": "Check required values and ranges in both rule types.",
+    "load_failed": "Could not load defaults. Try again.",
+    "loading_defaults": "Loading defaults…",
+    "move_down": "Move down",
+    "move_up": "Move up",
+    "pending_separator": "Add or clear the entered separator rule first.",
+    "separator_pattern": "Separator rule {{index}}",
+    "separator_position": "Split position for rule {{index}}",
+    "tables": "Tables"
   }
 }

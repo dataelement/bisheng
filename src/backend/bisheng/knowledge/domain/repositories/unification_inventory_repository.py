@@ -146,6 +146,7 @@ class KnowledgeRow:
     id: int
     tenant_id: int
     type: int
+    name: str
     user_id: int | None
     state: int | None
     is_released: bool
