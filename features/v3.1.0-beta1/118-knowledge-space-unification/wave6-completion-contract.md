@@ -266,6 +266,8 @@ M2不能将现在线bind Owner经tenant过滤后的exists=False当全局物理�
 
 新`ProcessingDefaultsEditor.tsx`仅受控`value:ProcessingDefaultsDraft,onChange,disabled?`，统一两份草稿，类型切换不重置隐藏字段；含纯toDraft/validate-and-to-wire函数，只有合法完整schema_version=1的ProcessingDefaults才可保存。数字以InputNumber保持number|null；empty不得coerce到0/默认。所有类型一起校验finite/safeInteger、正数/非负、hierarchy1..6、overlap≤chunk_size、header_start≤header_end（append_header=0也校验）、separator非空且两个数组等长/position合法。不校验未展示类型的错误会构成漏口，不能仅依赖blur。
 
+分隔符补充：上述“非空”指数组至少一项，元素允许已有空字符串（真实字符回退标记），原token/顺序/escape不trim或按译文重写。UI待添加pattern/position须由父草稿保留，非空未添加输入在保存前要求添加或清空，切类型不丢；可放在Draft专有UI字段，to-wire时仅投影真实规则字段。原FileUploadSplitStrategy局部输入及译文label→regex行为不接入默认编辑；默认分支可在Editor同叶复用布局实现受控行，旧上传不改。前端不以JS RegExp验证Python regex，本波不新增正则引擎或后端校验合同。
+
 新`ProcessingDefaultsDialog.tsx`用现get/updateProcessingSettings和scope hooks，收到space_id/scope/open/onOpenChange等原页面props。打开先读服务端有效默认和config_version，不猜初值；编辑保持完整draft与发起scope/config_version，保存整体types提交expected_config_version。不为设置保存建J1、不改变历史文件。成功且scope仍原值才更新已保存状态/关闭；取消、校验失败、CAS/服务器失败不污染服务端旧值，失败不自动关闭；scope变化清除旧草稿并拒迟到成功。原资源edit/后台资格由页面与后端独立控制，Dialog不创造新权限动作。
 
 T705先测两个受控fields→原T178；T706再测父Editor/Dialog→T707两叶。创建Dialog、T176三tab/detail与T179上传后续独立接线，不能以此四组件代替整入口完成。locale由INT唯一Owner：平台继续useTranslation与public/locales，不套skill通用client路径；新键统一knowledge:f118命名空间，原save/cancel/字段名及提示优先复用，新增键需报root三语同步，不修改API errors生成文件。
