@@ -17,7 +17,19 @@ from bisheng.permission.migration import f118_plan as permission
 
 MAX_BYTES = 16 * 1024 * 1024
 SECTIONS = frozenset(
-    {"resources", "control", "permission", "catalog", "physical", "tasks", "fga", "manifest", "conversion"}
+    {
+        "resources",
+        "control",
+        "permission",
+        "catalog",
+        "physical",
+        "tasks",
+        "fga",
+        "manifest",
+        "conversion",
+        "sources",
+        "evidence",
+    }
 )
 KINDS = frozenset({"baseline", "plan", "permission_catalog", "permission_resources", "conversion", "verification"})
 OBJECT_KINDS = frozenset({"original", "preview", "bbox", "thumbnail", "html_snapshot"})
@@ -95,6 +107,12 @@ def _spec(text):
 
 # These are wire allowlists, deliberately independent of dataclass introspection.
 _SCHEMAS = {
+    "evidence_material": _spec(
+        "material_kind:str environment:str writer_contract_version:str tenant_inventory_digest:hash material_ref:descriptor"
+    ),
+    "queued_task_orphan": _spec(
+        "task_kind:str task_id:str space_id:int? file_id:int? document_id:int? version_id:int? payload_tenant_id:positive? state:str reason:str configuration_digest:hash record_digest:hash"
+    ),
     "permission_plan": _spec(
         "tenant_id:positive resource_type:str resource_id:str target_resource_type:str plan_checksum:hash before_digest:hash after_grants_digest:hash visibility_deltas_digest:hash expected_use_changes_digest:hash"
     ),
@@ -200,6 +218,10 @@ def _validate(tag, data):
     for name, spec in schema.items():
         _value(data[name], spec)
     if tag == "physical_object" and data["object_kind"] not in OBJECT_KINDS:
+        _invalid()
+    if tag == "queued_task_orphan" and data["reason"] not in {"file_missing", "space_missing", "unresolved_tenant"}:
+        _invalid()
+    if tag == "evidence_material" and data["material_kind"] not in {"backup", "schema"}:
         _invalid()
     if tag == "file":
         for name in ("object_name", "preview_file_object_name", "bbox_object_name", "html_snapshot_object_name"):
@@ -348,11 +370,17 @@ def _parse(content):
 
 def encode_inventory_page(*, run_id, section, scope, tenant_id, page_index, records, kind="baseline"):
     _identity(run_id, section, scope, tenant_id, page_index, kind)
-    if type(records) is not tuple or len(records) > 199:
+    if type(records) is not tuple or len(records) > 199 or section == "sources":
+        _invalid()
+    if section == "evidence" and (scope != "global" or kind != "verification"):
         _invalid()
     facts = []
     for record in records:
         if type(record) is not InventoryRecord:
+            _invalid()
+        if record.record_type == "queued_task_orphan" and (section != "tasks" or scope != "global"):
+            _invalid()
+        if (record.record_type == "evidence_material") != (section == "evidence"):
             _invalid()
         data = record.data
         actual_tenant = data.get("tenant_id")
