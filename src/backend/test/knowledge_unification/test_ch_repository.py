@@ -13,8 +13,8 @@ from bisheng.channel.domain.models.channel import Channel
 from bisheng.channel.domain.models.channel_knowledge_sync import ChannelKnowledgeSync
 from bisheng.channel.domain.repositories.reference_binding_repository import ChannelReferenceBindingRepository
 from bisheng.common.errcode.channel import ChannelNotFoundError
-from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.common.models.space_channel_member import SpaceChannelMember
 from bisheng.core.context.tenant import (
     bypass_tenant_filter,
