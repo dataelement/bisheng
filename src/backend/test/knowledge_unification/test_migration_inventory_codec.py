@@ -303,3 +303,100 @@ def test_permission_change_plan_has_closed_digests_and_explicit_namespace(codec)
     ).records == (record,)
     with pytest.raises(KnowledgeOperationPlanConflictError):
         codec.record_from_values("permission_plan", **(record.data | {"actor_reference": "private-secret"}))
+
+
+def orphan(codec, **changes):
+    return codec.record_from_values(
+        "queued_task_orphan",
+        **(
+            {
+                "task_kind": "scheduler_queue",
+                "task_id": "raw-key:occurrence-1",
+                "space_id": None,
+                "file_id": 909,
+                "document_id": None,
+                "version_id": None,
+                "payload_tenant_id": 101,
+                "state": "queued",
+                "reason": "file_missing",
+                "configuration_digest": DIGEST,
+                "record_digest": DIGEST,
+            }
+            | changes
+        ),
+    )
+
+
+def test_sources_manifest_entry_uses_source_codec_only(codec):
+    entry = codec.record_from_values(
+        "manifest_entry",
+        section="sources",
+        scope="tenant",
+        tenant_id=101,
+        page_index=0,
+        record_count=1,
+        descriptor=DESCRIPTOR,
+        level=0,
+    )
+    content = encode(codec, (entry,), section="manifest", scope="global", tenant_id=None)
+    assert decode(codec, content, section="manifest", scope="global", tenant_id=None).records == (entry,)
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        encode(codec, (object_fact(codec),), section="sources")
+
+
+def test_global_orphan_task_preserves_claim_without_assigning_tenant(codec):
+    row = orphan(codec)
+    content = encode(codec, (row,), section="tasks", scope="global", tenant_id=None)
+    assert decode(codec, content, section="tasks", scope="global", tenant_id=None).records == (row,)
+    assert "tenant_id" not in row.data and row.data["payload_tenant_id"] == 101
+    for changes in ({"reason": "network_error"}, {"payload_tenant_id": True}, {"file_id": 1.0}, {"tenant_id": 101}):
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            orphan(codec, **changes)
+
+
+@pytest.mark.parametrize(
+    "section,scope,tenant", [("tasks", "tenant", 101), ("resources", "global", None), ("fga", "global", None)]
+)
+def test_orphan_is_never_a_tenant_task_or_other_section(codec, section, scope, tenant):
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        encode(codec, (orphan(codec),), section=section, scope=scope, tenant_id=tenant)
+
+
+def material(codec, **changes):
+    return codec.record_from_values(
+        "evidence_material",
+        **(
+            {
+                "material_kind": "backup",
+                "environment": "test",
+                "writer_contract_version": "f118-v1",
+                "tenant_inventory_digest": DIGEST,
+                "material_ref": DESCRIPTOR,
+            }
+            | changes
+        ),
+    )
+
+
+def test_evidence_manifest_is_bounded_verification_only_and_keeps_declared_material_separate(codec):
+    row = material(codec)
+    content = encode(codec, (row,), section="evidence", scope="global", tenant_id=None, kind="verification")
+    assert decode(codec, content, section="evidence", scope="global", tenant_id=None, kind="verification").records == (
+        row,
+    )
+    for changes in (
+        {"material_kind": "online_probe"},
+        {"tenant_inventory_digest": False},
+        {"credential": "private-secret"},
+    ):
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            material(codec, **changes)
+
+
+@pytest.mark.parametrize(
+    "changes", [{"kind": "baseline"}, {"scope": "tenant", "tenant_id": 101}, {"section": "resources"}]
+)
+def test_evidence_cannot_borrow_other_authority_or_tenant_page(codec, changes):
+    args = {"section": "evidence", "scope": "global", "tenant_id": None, "kind": "verification"} | changes
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        encode(codec, (material(codec),), **args)
