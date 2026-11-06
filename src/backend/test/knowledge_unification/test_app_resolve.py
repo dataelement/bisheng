@@ -10,6 +10,12 @@ from bisheng.app_publish.domain.services.reference_extractor import (
     extract_app_references,
 )
 from bisheng.resource_reference.application.contracts import TargetKey, TargetType
+from test.knowledge_unification import test_app_snapshot as saved_fixtures
+
+ctx = saved_fixtures.ctx
+resolving = saved_fixtures.resolving
+application = saved_fixtures.application
+writing = saved_fixtures.writing
 
 
 def declaration():
@@ -76,3 +82,18 @@ def test_resolved_target_cannot_replace_numeric_id_or_resource_kind():
 def test_unresolvable_declaration_is_not_silently_discarded(ref):
     with pytest.raises(ValueError):
         extract_app_reference_requests(CapabilityDeclaration(knowledge_bases=[ref]))
+
+
+async def test_actual_new_version_rejects_qa_and_leaves_business_and_reference_rows_unchanged(writing):
+    import sqlalchemy as sa
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
+    from bisheng.knowledge.domain.models.knowledge import Knowledge
+
+    async with AsyncSession(writing.engine) as session, session.begin():
+        await session.execute(sa.update(Knowledge).where(Knowledge.id == 7).values(type=1))
+    before = await saved_fixtures.snapshot(writing.engine)
+    with pytest.raises(ResourceReferenceInvalidError):
+        await saved_fixtures.module.VersionService._insert_version(saved_fixtures.deployment())
+    assert await saved_fixtures.snapshot(writing.engine) == before

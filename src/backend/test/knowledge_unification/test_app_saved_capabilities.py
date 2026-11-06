@@ -93,6 +93,16 @@ async def test_name_observation_failure_keeps_all_rows_explicitly_not_ready(save
     assert all(row.revoked and row.reason == "not_ready" for row in rows)
 
 
+async def test_historical_qa_inspection_preserves_original_id_and_marks_business_unsupported(saved):
+    async with AsyncSession(saved.engine) as session, session.begin():
+        await session.execute(sa.update(Knowledge).where(Knowledge.id == 7).values(type=1))
+    rows = await bus.inspect_saved_capabilities("actual-app", VERSION, saved.user)
+    knowledge = next(row for row in rows if row.kind == "knowledge")
+    assert knowledge.label == "7" and knowledge.detail["target_id"] == "7"
+    assert knowledge.revoked and knowledge.reason == "unsupported"
+    assert knowledge.detail["state"] == "unsupported"
+
+
 async def test_publish_status_forwards_actual_identity_and_exact_saved_uuid_and_crops_private_rows(saved, monkeypatch):
     async with AsyncSession(saved.engine) as session, session.begin():
         root = await session.get(App, "actual-app")
