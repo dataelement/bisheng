@@ -387,6 +387,31 @@ async def test_unrelated_pending_writes_remain_owned_by_caller(metadata):
         await session.rollback()
 
 
+async def test_other_root_file_document_version_and_model_pending_are_allowed(metadata):
+    from bisheng.llm.domain.models.llm_server import LLMModel
+
+    async with metadata.context.sessions() as session:
+        session.add_all(
+            [
+                KnowledgeFile(id=191, tenant_id=101, knowledge_id=10, file_name="other", status=2),
+                KnowledgeDocument(id=190, knowledge_id=10, primary_version_id=291),
+                KnowledgeDocumentVersion(id=291, document_id=190, knowledge_file_id=191, version_no=1, is_primary=True),
+            ]
+        )
+        await session.commit()
+    async with metadata.context.sessions() as session:
+        repo = MetadataProcessingRepository()
+        scope = await repo.aload_scope(session, 40)
+        row = await session.get(KnowledgeFile, 191)
+        document = await session.get(KnowledgeDocument, 190)
+        version = await session.get(KnowledgeDocumentVersion, 291)
+        model = await session.get(LLMModel, 11)
+        row.object_name, document.level, version.version_no, model.name = "other-object", 2, 2, "other-name"
+        assert (await repo.areplace_schema(session, scope, after_schema=scope.schema_fields)).schema_revision == 1
+        assert (row.object_name, document.level, version.version_no, model.name) == ("other-object", 2, 2, "other-name")
+        await session.rollback()
+
+
 @pytest.mark.parametrize("drift", ["schema", "generation", "values", "source"])
 async def test_cas_rechecks_real_scope_and_refuses_drift(metadata, drift):
     repo = MetadataProcessingRepository()
