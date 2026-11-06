@@ -141,25 +141,28 @@ class HostedAppReferenceSourceOwner:
         ):
             raise _invalid("app_management_source_context")
         if isinstance(identity, OpenApiPrincipal):
-            facts = await self.repository.aget_runtime_identity(
-                session, root, identity.credential_id, for_update=for_update
-            )
-            credential = facts["credential"]
-            now = datetime.utcnow()
-            if (
-                credential is None
-                or credential["revoked_at"] is not None
-                or (credential["expires_at"] is not None and credential["expires_at"] <= now)
-                or (credential["tenant_id"], credential["subject_kind"], credential["subject_id"])
-                != (identity.tenant_id, identity.actor_kind, identity.actor_id)
-                or frozenset(credential["scopes"] or ()) != identity.scopes
-            ):
-                raise OpenApiCredentialInvalidError()
+            await self._management_credential(session, root, identity, for_update=for_update)
         elif context.get("credential_ref") != identity._runtime_credential_reference:
             raise _invalid("app_management_source_credential")
         await authorize_loaded_app(
             identity, SimpleNamespace(**root), context.get("purpose"), resume=context.get("resume_after_restore", False)
         )
+
+    async def _management_credential(self, session, root, identity, *, for_update):
+        facts = await self.repository.aget_runtime_identity(
+            session, root, identity.credential_id, for_update=for_update
+        )
+        credential = facts["credential"]
+        now = datetime.utcnow()
+        if (
+            credential is None
+            or credential["revoked_at"] is not None
+            or (credential["expires_at"] is not None and credential["expires_at"] <= now)
+            or (credential["tenant_id"], credential["subject_kind"], credential["subject_id"])
+            != (identity.tenant_id, identity.actor_kind, identity.actor_id)
+            or frozenset(credential["scopes"] or ()) != identity.scopes
+        ):
+            raise OpenApiCredentialInvalidError()
 
     async def _qualification(self, session, root, version, identity, qualification, *, viewer_id, for_update):
         q = qualification
@@ -344,6 +347,10 @@ class HostedAppReferenceSourceOwner:
             version_id, preview = await self._principal(session, root, request, identity, for_update=for_update)
         else:
             await AppManagementSourceReadIdentity(self.authorization_context).acapture(identity)
+            if isinstance(identity, OpenApiPrincipal) and self.authorization_context is None:
+                if request.purpose != "inspect":
+                    raise _invalid("app_management_execution_context_required")
+                await self._management_credential(session, root, identity, for_update=for_update)
             context_version = (
                 (self.authorization_context.get("target") or {}).get("version_id")
                 if isinstance(self.authorization_context, dict)
