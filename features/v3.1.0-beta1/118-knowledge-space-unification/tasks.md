@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史838编号：711已完成/历史交付、125当前待办、2外移；原137队列已完成28项、剩109项，另16张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史838编号：713已完成/历史交付、123当前待办、2外移；原137队列已完成30项、剩107项，另16张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -1137,7 +1137,7 @@
   **配对测试**：T137\
   **验证 / 完成条件**：运行配对测试 T137；验证本卡预期，相关范围检查通过。
 
-- [ ] **T139 · 应用模型执行逐槽核对冻结ID：先写测试**
+- [x] **T139 · 应用模型执行逐槽核对冻结ID：先写测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_app_model_binding.py`（拟新增）\
   **逻辑 / 测试上下文**：W6§45：保已有真实同名ID/server漂移等回归，补实际preview principal→gateway和真实删除Model→零provider两例；原主体/route/SQL来源完整，不改SDK或生产以凑断言。\
@@ -1145,7 +1145,7 @@
   **覆盖 AC**: AC-68, AC-71, AC-87, AC-91\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T140 · 应用模型执行逐槽核对冻结ID**
+- [x] **T140 · 应用模型执行逐槽核对冻结ID**
   **类型 / Owner**：后端 Domain / EDGE\
   **写入文件**：`src/backend/bisheng/open_api/domain/services/model_range_policy.py`；`src/backend/bisheng/open_api/domain/services/model_gateway_service.py`\
   **逻辑 / 测试上下文**：消费 APP 版本SourceKey及冻结slot目标映射，保原名称协议但最终实际ID必须匹配该版本绑定；改名/同名解析漂移明确失败，不转用新模型。预览/运行共检查，历史manifest原文不改。\

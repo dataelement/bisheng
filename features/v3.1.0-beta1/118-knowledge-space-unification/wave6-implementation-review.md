@@ -180,3 +180,10 @@ metadata主树五路径70通过，EDGE固定独立复核77项及S/D只读scope�
 EDGE固定ce4c7c81b（六生产叶/四新测试叶），主agent读全部入口/面板及实际scope协议后正常合入47b6ad7a0。开关映射原knowledges.version_management.enabled，历史入口沿非folder/is_multi_version/实际file.visible；hidden primary仍nullable、按opening隔离并取消旧响应，无版本写/预览/下载扩围。原大目录测试不改，Files只加三透传props、现599行。
 
 实际红绿：T81610行为红→10绿，T818缺API/Sheet两模块collection error→24绿；测试localStorage夹具修复不计产品红；T8207实际行为红6首绿→13绿，未删异步observer断言。主agent固定ce4与合流主树各11路径161通过（同选集两次不相加），主树日志/private/tmp/f118-root-main-history-ui.log。strict主树与原22条精确诊断相等；旧locationContext空suppression10诊断的rule/message多集相等，新增叶空suppression lint0，无新抑制。T816–T821按真实范围闭合，整个T177及高级写仍待办。APP T139/140另核已有生产，补真实preview与删Model两条证据后再决定原卡闭合。
+
+
+## 原APP模型绑定任务闭合（2026-11-07）
+
+T139/T140既有生产已由W4 694859943→2a4e7e991及SourceOwner/Core接线实现。独立EDGE只读确认provider前核实时alias ID/server与当前UUID版本冻结槽；原SDK卡T134并非调用依赖，按§45改为真实T136/T447。固定8315b03071仅在原test_app_model_binding.py补两条真实回归：实际删LLMModel+tombstone后命中旧catalog cache仍ModelRevoked且零provider；真实signed OBO/PreviewCapabilityProvider、credential/operation/route/approval与不同active/pending版本全链，preview仅准当前pending模型；同名漂移及逐项撤销分别拒绝且零provider。未改生产/SDK/审批业务，旧断言保持，新测试可运行时首绿；夹具缺composition/删除事实/唯一键恢复顺序问题不计产品红。
+
+主agent逐段复核实际接线和新增fixture后正常merge，主树四路径42 passed、2090 warnings、2.30秒，日志/JUnit /private/tmp/f118-root-app-model-binding.log/.xml。原两任务据实际完整模型绑定范围闭合，不代表SDK/所有开放入口/模型公开删除或E2E完成。
