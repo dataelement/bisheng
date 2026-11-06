@@ -56,28 +56,39 @@ async def native(tmp_path, monkeypatch):
     rows = [
         original.resource(ident, tenant=tenant, type=kind, user_id=user, migration_origin=origin)
         for ident, tenant, kind, user, origin in (
-            (1, 101, 3, 7, None), (2, 101, 3, 7, "run-A"),
-            (3, 101, 3, 7, None), (4, 101, 3, 7, "run-A"),
-            (5, 101, 3, 7, ""), (6, 101, 0, 7, None),
-            (7, 101, 1, 7, None), (8, 101, 2, 7, None),
-            (9, 202, 3, 7, None), (10, 202, 3, 7, "run-B"),
-            (11, 101, 3, 8, None), (12, 101, 3, 8, "run-A"),
+            (1, 101, 3, 7, None),
+            (2, 101, 3, 7, "run-A"),
+            (3, 101, 3, 7, None),
+            (4, 101, 3, 7, "run-A"),
+            (5, 101, 3, 7, ""),
+            (6, 101, 0, 7, None),
+            (7, 101, 1, 7, None),
+            (8, 101, 2, 7, None),
+            (9, 202, 3, 7, None),
+            (10, 202, 3, 7, "run-B"),
+            (11, 101, 3, 8, None),
+            (12, 101, 3, 8, "run-A"),
         )
     ]
     with sync_engine.begin() as connection:
         connection.execute(Knowledge.__table__.insert(), rows)
-        connection.execute(DepartmentKnowledgeSpace.__table__.insert(), [
-            {"id": i, "tenant_id": 101, "department_id": i, "space_id": i + 2, "created_by": 7}
-            for i in (1, 2)
-        ])
-        connection.execute(KnowledgeFile.__table__.insert(), [
-            original.file(i, tenant=t, knowledge_id=k, file_size=size, file_source=source, status=status)
-            for i, t, k, size, source, status in (
-                (1, 101, 1, 100, "channel", 2), (2, 101, 2, 200, "space_upload", 2),
-                (3, 101, 2, 1000, "upload", 2), (4, 101, 2, 400, "space_upload", 3),
-                (5, 202, 10, 600, "channel", 7),
-            )
-        ])
+        connection.execute(
+            DepartmentKnowledgeSpace.__table__.insert(),
+            [{"id": i, "tenant_id": 101, "department_id": i, "space_id": i + 2, "created_by": 7} for i in (1, 2)],
+        )
+        connection.execute(
+            KnowledgeFile.__table__.insert(),
+            [
+                original.file(i, tenant=t, knowledge_id=k, file_size=size, file_source=source, status=status)
+                for i, t, k, size, source, status in (
+                    (1, 101, 1, 100, "channel", 2),
+                    (2, 101, 2, 200, "space_upload", 2),
+                    (3, 101, 2, 1000, "upload", 2),
+                    (4, 101, 2, 400, "space_upload", 3),
+                    (5, 202, 10, 600, "channel", 7),
+                )
+            ],
+        )
     try:
         yield SimpleNamespace(engine=sync_engine)
     finally:
@@ -85,10 +96,18 @@ async def native(tmp_path, monkeypatch):
         sync_engine.dispose()
 
 
-@pytest.mark.parametrize("tenant,user,exclude,expected", [
-    (101, 7, True, 2), (101, 7, False, 3), (202, 7, True, 1), (101, 8, True, 1),
-])
-async def test_real_sync_and_async_creation_counters_exclude_only_migration_origin(native, tenant, user, exclude, expected):
+@pytest.mark.parametrize(
+    "tenant,user,exclude,expected",
+    [
+        (101, 7, True, 2),
+        (101, 7, False, 3),
+        (202, 7, True, 1),
+        (101, 8, True, 1),
+    ],
+)
+async def test_real_sync_and_async_creation_counters_exclude_only_migration_origin(
+    native, tenant, user, exclude, expected
+):
     with tenant_execution_scope(tenant):
         assert KnowledgeDao.count_spaces_by_user(user, exclude_department_spaces=exclude) == expected
         assert await KnowledgeDao.async_count_spaces_by_user(user, exclude_department_spaces=exclude) == expected
@@ -137,7 +156,9 @@ async def test_real_creation_gate_uses_same_count_without_changing_role_rules(na
 
 
 async def test_tenant_chain_remains_exhausted_even_when_personal_migrations_exempt(native, monkeypatch):
-    tenant = SimpleNamespace(id=101, parent_tenant_id=None, quota_config={"knowledge_space": 7}, status="active", tenant_name="test")
+    tenant = SimpleNamespace(
+        id=101, parent_tenant_id=None, quota_config={"knowledge_space": 7}, status="active", tenant_name="test"
+    )
     monkeypatch.setattr("bisheng.database.models.tenant.TenantDao.aget_by_id", AsyncMock(return_value=tenant))
     monkeypatch.setattr("bisheng.database.models.tenant.TenantDao.aget_children_ids_active", AsyncMock(return_value=[]))
     with tenant_execution_scope(101):
