@@ -131,8 +131,11 @@ APP 候选与锁后复核各执行一次完整模型目录/共享验证，逐声
 
 W5本地100路径2852测试/15子测试通过，当前137待办；平台typecheck及扩大旧回归的基线失败已单列，不据此宣称全验收。见[W5完整验证](./wave5-implementation-review.md)。
 
-## W6持续实施（2026-11-06）
+## W6持续实施（2026-11-07）
 
-W6持续实施；历史702编号：579已完成/历史交付、121当前待办、2外移；原137队列已完成22项、剩115项，另6张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
+W6持续实施；历史731编号：605已完成/历史交付、124当前待办、2外移；原137队列已完成23项、剩114项，另10张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
 
 109:3005由用户撤回后保持不动；109新独立项目已启动标准旧版本API/worker和真实中间件，真实注册/登录并准备隔离租户和mock模型，尚未执行F118迁移。用户选mock模型/ETL并免除本轮DM8实测；不免C2静态，也不以此代替MySQL事务、索引、投影和升级恢复演练。
+
+
+原授权pin只读实测已在独立MySQL/OpenFGA执行：CURRENT SQL pin与原Store/模型checksum相符，tenant2/3完整shared_with流均读到原Root服务1；SQL两次读取且无写/FGA变更。证据为独立环境evidence/permission-original-pin-smoke.json。这是迁移读取adapter证明，尚未执行正式停服盘点、冻结、转换或恢复。新版源不能替换运行中的旧API并据健康检查宣称升级完成。统一列表旧异常能力按W6§23保留，正式升级后还须真实接口和两端页面验证。

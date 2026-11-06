@@ -660,7 +660,7 @@ flowchart TD
 
 AC 范围写法仅用于本设计表格概览；正式 tasks 的覆盖字段必须逐项写完整 AC-ID。本轮不生成或要求 Worker 在途外部 I/O 迟到与用户后续修改竞态的验收用例，该范围已由用户明确暂缓；表中的旧任务检查仅验证任务状态、可控步骤与 SQL finalize。
 
-单元测试覆盖配置解析、兼容序列化、迁移 diff、任务状态与权限计划；集成测试覆盖事务、幂等、F048 投影及双索引故障恢复；API E2E 与两端页面清单验证真实行为。MySQL 与 DM8 均需通过对应兼容测试，DM8/中间件集成由中央环境验证；本地用 mock 通过不能替代迁移演练。新测试放 `test/knowledge/`、`test/llm/` 等模块目录。
+单元测试覆盖配置解析、兼容序列化、迁移 diff、任务状态与权限计划；集成测试覆盖事务、幂等、F048 投影及双索引故障恢复；API E2E 与两端页面清单验证真实行为。本轮用户免除DM8实库验证，保留C2的SQLModel/Repository/DDL静态兼容检查；MySQL及实际中间件继续验证事务、索引、投影与升级恢复。本地用 mock 通过不能替代迁移演练。新测试放 `test/knowledge/`、`test/llm/` 等模块目录。
 
 日志至少带 trace_id、tenant、job/run、operation、space/file/version、step 和错误码；指标记录接受/完成/失败数、步骤耗时、重试、索引验证失败和未完成投影。日志不存凭据、分段全文或无权依赖详情。迁移报告按租户保存前后计数、授权差异、任务检查点和校验结论。
 
@@ -830,8 +830,13 @@ Skill的可见性不能兼任全局enabled状态：真实使用/选择边界avai
 
 边界仍以scope-review为准。本波没有新Service/任务平台/新协议/页面风格，也未恢复默认Embedding联动；T063–T076因真实前置缺口保持待办。受测34fcbd7fec1809e5d4dc0513e7c2420f4489f6bc：100路径2852绿及15子测试；34个Python静态通过，前端目标6绿、全lint通过。平台typecheck22条与冻结基线相同，扩展APP query25/前端7个旧失败同集合、新增0，不能伪报这些范围全绿。真实双库/中间件/E2E、正式Coverage/迁移及部署未执行，无push。
 
-## W6持续实施（2026-11-06）
+## W6持续实施（2026-11-07）
 
-W6持续实施；历史702编号：579已完成/历史交付、121当前待办、2外移；原137队列已完成22项、剩115项，另6张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
+W6持续实施；历史731编号：605已完成/历史交付、124当前待办、2外移；原137队列已完成23项、剩114项，另10张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
 
 109:3005由用户撤回后保持不动；109新独立项目已启动标准旧版本API/worker和真实中间件，真实注册/登录并准备隔离租户和mock模型，尚未执行F118迁移。用户选mock模型/ETL并免除本轮DM8实测；不免C2静态，也不以此代替MySQL事务、索引、投影和升级恢复演练。
+
+
+## 既有异常文件列表能力兼容
+
+统一后的普通及管理空间列表保留F064已上线的异常布尔与筛选能力：仅FILE状态3/6/7，按空间列表准入返回页级布尔，不泄露失败文件明细。SQL EXISTS先筛后分页、严格tenant，最终页一次有界批量标记；无需逐文件FGA循环或新统计列。原行点击仍进入未预筛详情，遵循既有b1635e9d34修复。QA不受影响。实现合同及尚未闭合任务见[W6§23](./wave6-completion-contract.md#23-统一列表保留既有异常文件标记与筛选子合同-v1已冻结)与T725–T731，不以当前缺DTO字段为由删除旧能力。

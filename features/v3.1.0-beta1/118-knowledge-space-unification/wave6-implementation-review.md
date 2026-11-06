@@ -61,3 +61,21 @@ INT统一结构补充链：`f118_metadata_schema → f118_processing_acceptance 
 主树受测源码`55e2e3bc459e716c1023dece7d51f3ac547d6000`：完整F118目录加11个原知识/权限路径，**2567 passed**、35693 warnings、73.99秒，无fail/skip；日志`/private/tmp/f118-w6-integrated-file-inventory.log`与同名前缀JUnit。该次已包含本段全部合入生产变更和创建初值；之后只有冻结合同/任务文档变更，不累计前次2395/2347为独立用例总数。
 
 T692两端只读旧表格实际规则镜像通过平台63/client20原API回归、目标lint；strict与各自既有22/145诊断比较新增0。没有改依赖/锁文件或把全构建报为通过。原94AC、140QA及13张SVG不变；本轮DM8实测由用户免除，保持C2静态；标准旧环境、mock/MinIO证明与正式迁移、F118部署、完整E2E分别记录。没有push或生产环境变更。
+
+
+## 2026-11-07滚动出口：元数据前置、平台表单与正式来源流
+
+当前历史731编号：605完成/历史交付、124待办、2外移；范围内729复选框。原137队列累计23完成、114待办，另10张同需求必要接缝卡未完成。T697–T719、T723/T724与原T178按固定提交独立审及主树验证闭合；T176/T720–T722及T725–T731仍待实际合入和兼容收口。新增叶子只补已有接口遗漏，不增加产品AC；旧121待办是上个checkpoint，不当作当前数字。
+
+- Metadata准备固定147a7cb5a已合入：真实全历史版本/物理链，schema CAS与单事务私有计划，冻结每版本before/after值，不写File值/索引/Model R/G。独立审确认并修复DIR foreign tenant漏检、pending ORM越过CAS及活跃job no-autoflush漏口；24路径361绿，另1001条过期job批量补查预算3次。不是完整Owner/J1接线，T071/T072仍未勾。
+- Native metadata索引handler固定5e1af6068已合入：原KnowledgeRag准入，Milvus 10001条11批及真实ES调用形状，保pk/vector/文本、按冻结File业务值替换受影响字段；partial失败、guard、取消及资源close均明确处理。作者配对32绿，独立相关150绿加3项取消/guard补测，无行动项。尚未注册metadata kind，未宣称真实索引E2E通过。
+- 原名称索引固定6bb7400d1已合入：模型/知识原目录各线性编译一次，后续slot不重扫。600槽实测原model目录601500读取→编译3000，server2100→3，两个1200槽查询目录读取0；独立70目录1531项差分一致。原目录name显式补齐5173f265d，401行三次分页查询。Root旧数值槽撤共享及失效初始BRR的正式分类/回填仍待下一合同，不把原ID当历史授权证明。
+- 精确物理facts固定d5771649a已合入：Knowledge与Model/Server完整global PK存在性，批≤200，不把foreign/offline/退休类型/坏父链误记missing。200目标KN两次/model一次SQL；配对及root25绿，不写BRR或legacy证据。
+- 原授权pin读取固定3b14ee02f已合入：SQL CURRENT pin、唯一Store及原模型checksum绑定，完整原共享流、具体tenant/原native TX、无写或在线repin。21配对绿，独立159相关绿；另已在109独立真实MySQL/OpenFGA验证，两次SQL读取、Root空集、tenant2/3各读到共享server1，无SQL/FGA写。证据`/opt/server/f118-e2e/evidence/permission-original-pin-smoke.json`，受测源码archive SHA256 `2565f353cf021a26846e84b2719b19dacca9dce097eba35af89107ac07746802`。这不是正式基线冻结或权限转换。
+- 六来源实际消费流固定51697e888已合入：真实13分页/六extractor/原NameCatalog与共享读取/线性解析/物理facts，零版本root不伪造current，历史和disabled来源保留，闭集root/source/slot/retired记录不泄露raw graph或provider配置。配对20绿；独立7路径213绿，大场景1607来源36 SELECT，401唯一目标按4批预检，不按重复slot重扫。全资源/creator预检、artifact正式freeze、资格和初始回填未完成，T161/T162不勾。
+- 原T178及受控Editor/Dialog固定92e276174已合入：两个类型完整数字/字面regex校验，合法空regex保留，pending分隔符不丢；关闭/重开/卸载/ABA及共享query读取隔离。独立2个真实红后绿，root八路径132绿。窄基本信息API9c5128da已合入，name/description/is_released显式投影；实际创建和列表入口固定4bc757a2d正在独立审，尚未合主树，不能以组件通过宣称完整页面通过。
+- sidebar与入口三语实际locale同步，原keys/其他values逐项保留，check-i18n无新增漂移。旧F064异常标记/筛选在统一列表的兼容缺口已登记W6§23/T725–T731，后端SQL及前端并行补齐，保既有五个测试断言；原b1635e9d34已发布的无预筛导航保持。不能通过删除旧断言或假造前端字段收口。
+
+主树受测源码7680121ce67081ac878e9d8efa711bbcab7ab5f9：完整F118目录加11个旧知识/权限路径，**2812 passed**、38853 warnings、84.65秒，无fail/skip。日志`/private/tmp/f118-w6-source-metadata-integrated.log`及同名前缀JUnit；包含已合元数据handler与SourceInventory，未包含尚未合入的旧异常兼容修复。历史2760/2567不重复累加。平台主树八路径132绿是基本信息API合入之前的快照；4bc平台候选13路径182绿且strict为原22+旧F064 scope夹具5，已明确未闭合，不报全量绿。
+
+真实旧环境已保留两个版本历史、人工Chunk文本和File元数据值、QA独立数据。旧Chunk PUT曾500后真实GET确认部分已写、旧QA关键词filter偏差均记录在准备证据，未冒称API成功或扩大需求修复。标准旧API仍运行，候选源只在独立临时只读容器验证读取适配；未执行新版API部署、正式停服/备份/盘点冻结/转换/恢复或完整E2E。用户免DM8实测，保C2静态与真实MySQL/中间件验证；3005不操作，无push/生产变更。
