@@ -130,7 +130,10 @@ def native(monkeypatch):
         events.append("es_init")
         assert knowledge is state.knowledge
         assert kwargs["expected_model_config_revision"] == 4 and kwargs["expected_index_generation"] == "g4"
-        return SimpleNamespace(client=SimpleNamespace(update_by_query=state.update))
+        return SimpleNamespace(client=SimpleNamespace(update_by_query=state.update, close=state.es_close))
+
+    async def es_close():
+        events.append("es_close")
 
     async def update(*, index, body, refresh):
         events.append("es")
@@ -165,7 +168,7 @@ def native(monkeypatch):
         if state.deny is not None:
             state.deny()
 
-    state.update, state.guard = AsyncMock(side_effect=update), guard
+    state.update, state.guard, state.es_close = AsyncMock(side_effect=update), guard, AsyncMock(side_effect=es_close)
     state.vector_init, state.es_init = AsyncMock(side_effect=vector_init), AsyncMock(side_effect=es_init)
     monkeypatch.setattr(module.KnowledgeRag, "init_knowledge_milvus_vectorstore", state.vector_init)
     monkeypatch.setattr(module.KnowledgeRag, "init_knowledge_es_vectorstore", state.es_init)
@@ -243,6 +246,28 @@ async def test_same_frozen_snapshot_recovers_es_failure_without_losing_renamed_v
     await apply(native)
     assert native.collection.records == before
     assert native.es_rows[0]["user_metadata"] == native.collection.records[1]["user_metadata"]
+
+
+@pytest.mark.parametrize("fail", [False, True])
+async def test_owned_native_es_client_is_closed_on_success_or_failure(native, fail):
+    if fail:
+        native.es_error = RuntimeError("native ES failure")
+        with pytest.raises(KnowledgeFileFailedError):
+            await apply(native)
+    else:
+        await apply(native)
+    native.es_close.assert_awaited_once()
+
+
+@pytest.mark.parametrize("primary_failure", [False, True])
+async def test_es_cleanup_failure_does_not_hide_the_original_native_error(native, primary_failure):
+    primary, cleanup = RuntimeError("ES primary failed"), RuntimeError("ES cleanup failed")
+    native.es_error = primary if primary_failure else None
+    native.es_close.side_effect = cleanup
+    with pytest.raises(KnowledgeFileFailedError) as failure:
+        await apply(native)
+    assert failure.value.__cause__ is (primary if primary_failure else cleanup)
+    native.es_close.assert_awaited_once()
 
 
 @pytest.mark.parametrize(
