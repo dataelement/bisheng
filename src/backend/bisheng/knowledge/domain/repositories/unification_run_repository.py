@@ -163,7 +163,9 @@ class KnowledgeUnificationRunRepository:
             _reject("another_run_exists")
         if not rows:
             return ()
-        if tuple(row.tenant_id for row in rows) != tenant_ids or len({row.phase for row in rows}) != 1:
+        if tuple(row.tenant_id for row in rows) != tenant_ids or (
+            any(row.phase == "preparing" for row in rows) and not all(row.phase == "preparing" for row in rows)
+        ):
             _reject("mixed_global_state")
         for row in rows:
             with tenant_execution_scope(row.tenant_id):
