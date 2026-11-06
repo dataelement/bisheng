@@ -147,13 +147,6 @@ docker compose -f docker-compose.yml -p bisheng up -d
 
 詳細なインストールおよびデプロイに関する問題は、こちらを参照してください：[私有化部署](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
-## リソース
-
-- [📄 アプリ活用例・ユースケース集](https://dataelem.feishu.cn/wiki/ZfkmwLPfeiAhQSkK2WvcX87unxc)
-- [📄 活用のヒント](https://dataelem.feishu.cn/wiki/OWFRwknFaiIMajke4m5cFeLrnie)
-- [📄 機能ガイド](https://dataelem.feishu.cn/wiki/WxH6wubbAiBkRIkSEyecmpDMnjF)
-- [📄 BISHENG Blog](https://dataelem.feishu.cn/wiki/BiNowcaYWilewdksXQ5cZl3tnzy)
-
 ## 謝辞
 このリポジトリは [langchain](https://github.com/langchain-ai/langchain) [langflow](https://github.com/logspace-ai/langflow) [unstructured](https://github.com/Unstructured-IO/unstructured) および [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) の恩恵を受けています。素晴らしい作品に感謝します。
 
