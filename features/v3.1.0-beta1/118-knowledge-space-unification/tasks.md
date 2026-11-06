@@ -5681,6 +5681,22 @@
   **覆盖 AC**: AC-07, AC-38, AC-39, AC-40, AC-41, AC-42, AC-43, AC-44, AC-87\
   **验证 / 完成条件**：配对、旧规则/上传调用回归、lint/strict新增0，固定独立审；真实页面挂载与E2E另卡。
 
+## W6平台默认策略三语实际词条
+
+- [ ] **T708 · 平台默认策略中英文文案**
+  **类型 / Owner**：文案集成 / INT\
+  **写入文件**：`src/frontend/platform/public/locales/zh-Hans/knowledge.json`；`src/frontend/platform/public/locales/en-US/knowledge.json`\
+  **逻辑 / 测试上下文**：原平台实际locale源新增knowledge:f118受控默认策略词条，nested snake_case，字段/范围/失败和未来上传提示；不全局改selector或错误码生成文件。\
+  **依赖**：T705, T002\
+  **验证 / 完成条件**：JSON无重复可解析，原keys原值不变，新键与日文同集且插值一致；原T198整体最终词条门禁另验。
+
+- [ ] **T709 · 平台默认策略日文与三语核对**
+  **类型 / Owner**：文案集成 / INT\
+  **写入文件**：`src/frontend/platform/public/locales/ja/knowledge.json`\
+  **逻辑 / 测试上下文**：补同一批日文专业词条，保持平台useTranslation命名空间与原键；范围提示、校验和无保存失败结果一致。\
+  **依赖**：T708\
+  **验证 / 完成条件**：三语新key/插值完全一致，现有i18n检查无新增问题；不把独立文案完成当页面或E2E完成。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
