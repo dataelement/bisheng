@@ -233,3 +233,37 @@ class ModelNameResolutionRepository:
         if topology != expected.topology or configs != expected.configs:
             raise KnowledgeOperationPlanConflictError(reason="model_name_catalog_changed")
         return current
+
+    async def aresolve_frozen_model_identities(self, session, tenant_id, model_ids):
+        self._tenant(tenant_id)
+        rows = await self._models(session, tenant_id, model_ids, ())
+        if {row.id for row in rows} != set(model_ids):
+            raise ResourceReferenceInvalidError(reason="model_name_frozen_identity_unavailable")
+        if any(row.tenant_id != tenant_id for row in rows):
+            topology = {row.id: row for row in await self._topology(session, tenant_id)}
+            if not ModelReferenceTargetRepository._child(topology, tenant_id):
+                raise ResourceReferenceInvalidError(reason="model_name_frozen_identity_unavailable")
+        server_ids = {row.server_id for row in rows}
+        servers = (
+            await self._rows(
+                session,
+                select(
+                    LLMServer.id,
+                    LLMServer.tenant_id,
+                    LLMServer.name,
+                    LLMServer.type,
+                )
+                .where(
+                    LLMServer.id.in_(sorted(server_ids)),
+                    LLMServer.tenant_id.in_(sorted({ROOT_TENANT_ID, tenant_id})),
+                )
+                .order_by(LLMServer.id),
+                CatalogServer,
+            )
+            if server_ids
+            else ()
+        )
+        by_id = {row.id: row for row in servers}
+        if any(row.server_id not in by_id or by_id[row.server_id].tenant_id != row.tenant_id for row in rows):
+            raise ResourceReferenceInvalidError(reason="model_name_frozen_identity_unavailable")
+        return tuple((row.id, row.server_id) for row in rows)

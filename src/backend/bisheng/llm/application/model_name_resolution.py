@@ -4,6 +4,8 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from weakref import WeakKeyDictionary, ref
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
 from bisheng.common.errcode.model_face import (
@@ -21,8 +23,9 @@ from bisheng.llm.domain.services.model_catalog import TENANT_RANGE, CallableMode
 from bisheng.open_api.application.access_context import get_current_open_api_principal
 from bisheng.open_api.domain.context import OpenApiPrincipal
 from bisheng.permission.application import PermissionSubject, get_permission_relation_api
+from bisheng.permission.application.identity import PermissionActor, get_current_permission_actor
 from bisheng.public_endpoints.application.access_context import get_current_public_api_principal
-from bisheng.resource_reference.application.contracts import TransactionIdentity
+from bisheng.resource_reference.application.contracts import TransactionIdentity, canonical_target_id
 from bisheng.resource_reference.application.read_identity import AuthenticatedSourceReadIdentity
 from bisheng.resource_reference.application.source_contracts import canonical_payload_json, payload_digest
 
@@ -95,11 +98,27 @@ class ModelNameResolutionPort:
             or get_current_public_api_principal() is not None
         ):
             raise _invalid()
+        actor = get_current_permission_actor()
+        if actor is not None and not isinstance(actor, PermissionActor):
+            raise _invalid()
+        actor_facts = (
+            None
+            if actor is None
+            else {
+                "subject_type": actor.subject_type,
+                "subject_id": actor.subject_id,
+                "current_tenant_id": actor.current_tenant_id,
+                "super_admin": actor.super_admin,
+                "tenant_admin_ids": sorted(actor.tenant_admin_tenant_ids),
+                "data_scope": actor.data_scope,
+            }
+        )
         visible = get_visible_tenant_ids()
         return payload_digest(
             canonical_payload_json(
                 {
                     "principal": identity.model_dump(mode="json"),
+                    "actor": actor_facts,
                     "tenant": tenant_id,
                     "visible": sorted(visible) if visible is not None else None,
                     "management": is_management_all_tenants(),
@@ -185,6 +204,8 @@ class ModelNameResolutionPort:
         frozen_models=(),
         range=None,
     ):
+        if not isinstance(session, AsyncSession):
+            raise _invalid()
         fingerprint = await self._identity(identity, tenant_id)
         scope = range if range is not None else TENANT_RANGE
         if (
@@ -224,7 +245,7 @@ class ModelNameResolutionPort:
             TransactionIdentity.capture(session),
             identity,
             fingerprint,
-            scope,
+            deepcopy(scope),
             frozen_models,
             shared_ids,
             catalog,
@@ -270,6 +291,27 @@ class ModelNameResolutionPort:
         if resolutions != plan.resolutions:
             raise KnowledgeOperationPlanConflictError(reason="model_name_catalog_changed")
         return resolutions
+
+    async def aresolve_frozen_model_identities(self, session, tenant_id, model_ids, *, identity):
+        if not isinstance(session, AsyncSession) or not isinstance(model_ids, tuple):
+            raise _invalid()
+        try:
+            model_ids = tuple(sorted({int(canonical_target_id(value)) for value in model_ids}))
+        except (TypeError, ValueError) as error:
+            raise _invalid() from error
+        fingerprint = await self._identity(identity, tenant_id)
+        prior = TransactionIdentity.capture(session) if session.in_transaction() else None
+        try:
+            rows = await self.repository.aresolve_frozen_model_identities(session, tenant_id, model_ids)
+        except ResourceReferenceInvalidError:
+            raise
+        except Exception as error:
+            raise ModelFaceCatalogUnavailableError(exception=error) from error
+        if prior is not None:
+            self._assert_transaction(prior, session)
+        if await self._identity(identity, tenant_id) != fingerprint:
+            raise _invalid()
+        return tuple(FrozenModelIdentity(model_id, server_id) for model_id, server_id in rows)
 
     async def assert_plan_current(self, session, tenant_id, *, identity, plan, range=None):
         await self._validate_plan(session, tenant_id, identity=identity, plan=plan, range=range)
