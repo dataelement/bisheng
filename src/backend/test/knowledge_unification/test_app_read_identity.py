@@ -103,3 +103,44 @@ async def test_trace_and_credential_scope_are_bound_without_mutation(authenticat
         assert (await adapter.acapture(narrowed)).fingerprint != before.fingerprint
     finally:
         reset_current_open_api_principal(token)
+
+
+@pytest.mark.parametrize("kind,subject", [("service_account", "service_account"), ("natural_person", "user")])
+async def test_management_principal_keeps_original_actor_and_frozen_credential(authenticated, kind, subject):
+    from bisheng.app_publish.application.reference_read_identity import AppManagementSourceReadIdentity
+
+    original = principal(
+        actor_kind=kind,
+        actor_id=7,
+        subject_ref=None,
+        scopes=frozenset({"app:manage"}),
+        authorization_subject_type=subject,
+        authorization_subject_id=7,
+    )
+    context = {
+        "schema": 1,
+        "origin_kind": "user_request",
+        "mode": "S",
+        "credential_ref": {"kind": "api_credential", "credential_id": 9, "tenant_id": 101},
+        "actor": {"subject_type": subject, "subject_id": 7, "tenant_id": 101},
+    }
+    token = set_current_open_api_principal(original)
+    actor_token = set_current_permission_actor(PermissionActor(subject_type=subject, subject_id=7, tenant_id=101))
+    try:
+        adapter = AppManagementSourceReadIdentity(authorization_context=context)
+        assert (await adapter.acapture(original)).request_tenant_id == 101
+        with pytest.raises(ResourceReferenceInvalidError):
+            await adapter.acapture(original.model_copy())
+        context["credential_ref"]["credential_id"] = 10
+        with pytest.raises(ResourceReferenceInvalidError):
+            await adapter.acapture(original)
+    finally:
+        reset_current_permission_actor(actor_token)
+        reset_current_open_api_principal(token)
+
+
+async def test_management_principal_requires_original_capability_and_context(authenticated):
+    from bisheng.app_publish.application.reference_read_identity import AppManagementSourceReadIdentity
+
+    with pytest.raises(ResourceReferenceInvalidError):
+        await AppManagementSourceReadIdentity().acapture(authenticated)
