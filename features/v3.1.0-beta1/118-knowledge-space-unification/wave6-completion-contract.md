@@ -741,3 +741,10 @@ Runtime使用现AuthenticatedSourceReadIdentity捕获原身份并在批次后核
 现Doc/Version为通用DateTime无MySQL fsp，不能冻结带微秒新建时间再由数据库舍入。INT独占T857单新测试叶test_migration_plan_time.py、T858原unification_inventory.py单生产叶；正式M2仅全run一次unification_now()后去microsecond再交所有tenant builder（UTC整秒）。原业务时间从SQL读出后保持，Domain模板/字段/codec/canonical/digest不改，不变更Model/DDL，也不在M3临时归一已冻结材料；旧微秒计划不满足可写前置时应明确失败/重新正式规划，不能同run静默替换。实际微秒clock+跨tenant新V1命令、模板hash及整秒clock均须回归。
 
 M3时间保留另有C2静态前置：DM当前managed updater会无条件覆盖update_time，故停服且中性DDL完成后，在业务事务之外独立运维连接仅对白名单涉及表updater保存原定义摘要与启用状态、临时禁用；原disabled/absent不更改，不触FK/其他trigger；阶段结束恢复原状态并核验，失败保持维护，不再执行bootstrap/Alembic重建触发器。DM DDL前隐式commit，绝不能在M3业务Session里ALTER。M3本体显式写原time并flush后真实重读摘要校验；未做好前置就回滚，不能放宽hash或假设DDL回滚。此处是运维要求，不扩展自动触发器管理协议/代码；DM实测继续免除。
+
+
+## 51. 迁移纯指纹SSOT的Domain前置 V1：已冻结
+
+PROC独占T859860：原unification_inventory_codec.py的canonical/digest与其私有_invalid错误构造原样迁新knowledge/domain/services/unification_fingerprints.py，原codec显式同对象re-export（仍可供原lazy闭集读取），保所有成功字节与拒绝语义；仅两生产叶。不迁整record_from_row/权限映射，不再实现第二套json/hash，不改变MAX_BYTES或协议白名单。新单测试叶test_migration_fingerprints.py锁真实旧字节/异常、同对象、无App/Core/SQLAlchemy反向依赖，配原codec/plan与native M2选集。M3 Repo/Service后继只import Domain SSOT与现Domain Repository唯一列集，不反向导入App。此卡非M3转换。
+
+§49 KN实现载体补充：可用实际Knowledge ORM的SQLAlchemy load_only安全标量投影且raiseload其余字段，保持原loaded-target Loader接口，不复制其permission snapshot/context hash算法。该局部投影不加载model/config/description，不写入或创建假业务事实；原Session在当前批次使用，字段不可隐式重读。
