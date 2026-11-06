@@ -109,7 +109,8 @@ def test_j1_single_file_entry_reads_current_business_model_and_never_finalizes(r
     file = SimpleNamespace(id=701, tenant_id=101, knowledge_id=40)
     rebuild.file_dao.query_by_id_sync.return_value = file
     rebuild.vector.col.delete = Mock()
-    assert module.rebuild_processing_file(701, space_id=40, invoke_user_id=987, **rebuild.arguments)
+    result = module.rebuild_processing_file(701, space_id=40, invoke_user_id=987, **rebuild.arguments)
+    assert result.succeeded and result.chunk_count == 1
     assert ("provider", 12, 987) in rebuild.events
     rebuild.vector.col.drop.assert_not_called()
     rebuild.vector.col.delete.assert_called_once_with("document_id == 701 && knowledge_id == 40")
@@ -128,3 +129,16 @@ def test_j1_single_file_expectations_cannot_be_omitted(rebuild, field):
     with pytest.raises(KnowledgeOperationPlanConflictError):
         module.rebuild_processing_file(701, space_id=40, invoke_user_id=987, **{**rebuild.arguments, field: None})
     assert rebuild.events == []
+
+
+@pytest.mark.parametrize("status,expected", [(2, True), (3, False), (5, False), (6, False)])
+def test_empty_source_never_turns_unparsed_failure_into_success(status, expected):
+    source = ChunkSource(count=0)
+    vector = SimpleNamespace(add_texts=Mock())
+    assert (
+        module._process_single_file(
+            SimpleNamespace(id=701, status=status), SimpleNamespace(client=source), "idx40", vector
+        )
+        is expected
+    )
+    vector.add_texts.assert_not_called()
