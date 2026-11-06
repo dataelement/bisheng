@@ -108,13 +108,26 @@ def test_public_defaults_reject_internal_legacy_model_instances(system_defaults)
 @pytest.mark.parametrize("length", [None, 0, -2])
 def test_actual_csv_loader_preserves_unbounded_content_and_chunk_count(system_defaults, tmp_path, length):
     from bisheng.knowledge.rag.pipeline.loader.excel import ExcelLoader
+
     source = tmp_path / "source.csv"
     source.write_text("name\n" + "\n".join(f"row-{i}" for i in range(45)), encoding="utf-8")
     old = FileProcessBase(knowledge_id=40, excel_rule={"slice_length": length})
-    adapted = legacy_rule_from_snapshot(snapshot(system_defaults, legacy_split_rule=old.model_dump(mode="json")), space_id=40)
+    adapted = legacy_rule_from_snapshot(
+        snapshot(system_defaults, legacy_split_rule=old.model_dump(mode="json")), space_id=40
+    )
+
     def load(rule, directory):
         directory.mkdir()
-        return ExcelLoader(file_path=str(source), file_metadata={"document_id": 81}, file_extension="csv", tmp_dir=str(directory), data_rows=rule.slice_length, header_rows=[0, 0], append_header=rule.append_header).load()
+        return ExcelLoader(
+            file_path=str(source),
+            file_metadata={"document_id": 81},
+            file_extension="csv",
+            tmp_dir=str(directory),
+            data_rows=rule.slice_length,
+            header_rows=[0, 0],
+            append_header=rule.append_header,
+        ).load()
+
     actual = load(old.excel_rule, tmp_path / "old")
     result = load(adapted.excel_rule, tmp_path / "adapted")
     assert len(actual) == len(result) == 1
