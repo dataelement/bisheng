@@ -33,11 +33,7 @@ BISHENG is an **open-source, all-in-one enterprise Agent platform** focused on o
 
 ## Major update: BISHENG Desktop connects your computer to enterprise AI
 
-**Built on DSH (DeepSeek Harness), BISHENG Desktop gives employees a desktop entry point to enterprise AI services.** Start with project files on your computer, bring in enterprise knowledge, tools and skills, and let the Agent organize materials, analyze information and deliver office documents.
-
-- **Work with local materials**: Select an authorized directory in Work to organize files, create Word reports, Excel spreadsheets and presentations, and continue refining the results in the same task.
-- **Connect to enterprise cloud capabilities**: Sign in with a BISHENG enterprise account to ask knowledge questions, start cloud tasks in Chat, and use the models, knowledge bases, tools and skills your account is authorized to access.
-- **Manage resources centrally**: Administrators configure resources, accounts and permissions, and manage monthly credits and usage, extending enterprise controls to desktop work.
+**BISHENG Desktop is a desktop Agent that connects local work with enterprise AI.** Employees sign in with their enterprise account to use authorized models, knowledge bases, tools and skills for knowledge Q&A, multi-step tasks and generating Word, Excel and PowerPoint files, then continue refining them in authorized local directories. The enterprise centrally manages resources, permissions, credits and usage.
 
 ![BISHENG Desktop enterprise introduction page on the official website](docs/images/readme/bisheng-desktop-enterprise.png)
 
