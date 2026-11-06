@@ -4,10 +4,13 @@
 已确认的 2026-09、2026-10 修复方式:
 
 1. 不修改 point_rule。M1、M4、M6 必须已经是启用且分值为 200、100、50,否则停止且不删流水。
-2. 删除这两个 biz_id 上 source=monthly_reward 的全部流水,并按原 delta 扣回余额。
-3. 按当前知识空间所有者/管理员重新圈人,多规则取最高分,平台超管不发。
+2. 只处理当前三类人: 公共库所有者(M1, owner)、部门库管理者(M4, manager)、科室库管理者(M6, manager)。
+   不在这三类里的人,月奖流水不检查、不删除、不改余额。
+3. 这三类人在这两个 biz_id 上 source=monthly_reward 的全部流水删除,并按原 delta 扣回余额。
+   多条规则同时命中时只发这三条里的最高分,平台超管不发。
 4. 用当前月奖配置写入新流水。9 月记 2026-10-01 00:05,10 月记 2026-11-01 00:05(北京时间,naive)。
-5. 新流水插回该时刻,重算其后的 balance_after。不发站内信。
+5. 账户余额只加减月奖差额。被删月奖之后写入的旧流水扣掉被删分值,新流水接在调整后的余额后面。
+   不按入账时间重放整本流水,历史余额对不上也不停止。不发站内信。
 6. last_earned_at 取该用户剩余获得流水的最晚时间,不把账户最近获得时间改早。
 
 默认只预览。写入必须显式 --apply。执行前暂停积分发放和月奖任务。
@@ -113,33 +116,6 @@ def validate_admin_reward_scores(rules: list[tuple[str, str, int]]) -> list[str]
     return problems
 
 
-def _sort_logs(logs: list[LedgerEntry]) -> list[LedgerEntry]:
-    return sorted(logs, key=lambda row: (row.occurred_at, row.id))
-
-
-def opening_balance(logs: list[LedgerEntry]) -> int:
-    """第一条流水之前的余额。"""
-    first = _sort_logs(logs)[0]
-    return int(first.balance_after) - int(first.delta)
-
-
-def assert_chain(logs: list[LedgerEntry], account_balance: int, *, user_id: int) -> None:
-    """已有流水的 balance_after 必须能从前往后加总到账户余额。"""
-    if not logs:
-        if account_balance != 0:
-            raise RebuildRejected(f"user {user_id} 没有流水但余额是 {account_balance}")
-        return
-    running = opening_balance(logs)
-    for row in _sort_logs(logs):
-        running += int(row.delta)
-        if running != int(row.balance_after):
-            raise RebuildRejected(
-                f"user {user_id} log {row.id} balance_after={row.balance_after},按流水累加应为 {running}"
-            )
-    if running != account_balance:
-        raise RebuildRejected(f"user {user_id} 账户余额 {account_balance} 与最后一条流水 {running} 不一致")
-
-
 def plan_user_rebuild(
     logs: list[LedgerEntry],
     *,
@@ -147,7 +123,7 @@ def plan_user_rebuild(
     delete_ids: set[int],
     new_awards: list[NewAward],
 ) -> UserRebuildPlan:
-    """删掉指定流水并按入账时间插入新奖,返回余额调整。"""
+    """删掉指定月奖,账户余额只加减差额。不重放整本流水。"""
     if not logs and not new_awards:
         raise RebuildRejected("没有可处理的流水")
     user_ids = {row.user_id for row in logs} | {row.user_id for row in new_awards}
@@ -161,9 +137,9 @@ def plan_user_rebuild(
     for row in logs:
         if row.id in delete_ids and (row.delta <= 0 or row.direction != "earn"):
             raise RebuildRejected(f"user {user_id} log {row.id} 不是正向获得流水,delta={row.delta}")
-    assert_chain(logs, account_balance, user_id=user_id)
 
     kept = [row for row in logs if row.id not in delete_ids]
+    deleted_rows = [row for row in logs if row.id in delete_ids]
     kept_keys = {row.idempotency_key for row in kept}
     for award in new_awards:
         if award.idempotency_key in kept_keys:
@@ -171,42 +147,25 @@ def plan_user_rebuild(
         if award.delta <= 0:
             raise RebuildRejected(f"user {user_id} 新月奖分值必须为正")
 
-    opening = opening_balance(logs) if logs else 0
-    combined: list[tuple[str, LedgerEntry | NewAward]] = [("old", row) for row in kept]
-    combined.extend(("new", award) for award in new_awards)
-    combined.sort(
-        key=lambda item: (
-            item[1].occurred_at,
-            0 if item[0] == "old" else 1,
-            item[1].id if item[0] == "old" else 0,
-        )
-    )
-    running = opening
     balance_updates: dict[int, int] = {}
-    new_balances: list[tuple[NewAward, int]] = []
-    earn_times: list[datetime] = []
-    for kind, item in combined:
-        running += int(item.delta)
-        if kind == "old":
-            assert isinstance(item, LedgerEntry)
-            if int(item.balance_after) != running:
-                balance_updates[item.id] = running
-            if item.direction == "earn" and item.delta > 0:
-                earn_times.append(item.occurred_at)
-        else:
-            assert isinstance(item, NewAward)
-            new_balances.append((item, running))
-            earn_times.append(item.occurred_at)
-    deleted_sum = sum(row.delta for row in logs if row.id in delete_ids)
+    for row in kept:
+        removed_before = sum(item.delta for item in deleted_rows if item.id < row.id)
+        if removed_before:
+            balance_updates[row.id] = int(row.balance_after) - removed_before
+    deleted_sum = sum(row.delta for row in deleted_rows)
     added_sum = sum(award.delta for award in new_awards)
-    balance_delta = running - account_balance
-    if balance_delta != added_sum - deleted_sum:
-        raise RebuildRejected(f"user {user_id} 余额差额 {balance_delta} 与删插分值 {added_sum - deleted_sum} 不一致")
+    running = account_balance - deleted_sum
+    new_balances: list[tuple[NewAward, int]] = []
+    for award in sorted(new_awards, key=lambda item: (item.occurred_at, item.period_key, item.rule_code)):
+        running += award.delta
+        new_balances.append((award, running))
+    earn_times = [row.occurred_at for row in kept if row.direction == "earn" and row.delta > 0]
+    earn_times.extend(award.occurred_at for award in new_awards)
     return UserRebuildPlan(
         delete_ids=tuple(sorted(delete_ids)),
         balance_updates=balance_updates,
         new_balances=tuple(new_balances),
-        balance_delta=balance_delta,
+        balance_delta=added_sum - deleted_sum,
         lifetime_earned_delta=added_sum - deleted_sum,
         last_earned_at=max(earn_times) if earn_times else None,
     )
@@ -289,7 +248,7 @@ async def _collect_candidates(rules) -> dict[int, tuple[str, int]]:
     active = {
         code: matcher
         for code, matcher in MONTHLY_RULE_MATCHERS.items()
-        if code in rule_by_code and fixed_score(rule_by_code[code].score_expr) > 0
+        if code in EXPECTED_SCORES and code in rule_by_code and fixed_score(rule_by_code[code].score_expr) > 0
     }
     service = PointsMonthlyRewardService()
     try:
@@ -320,6 +279,11 @@ def _awards_for(candidates: dict[int, tuple[str, int]], rules, periods: tuple[st
                 )
             )
     return awards
+
+
+def rows_for_candidates(rows, candidate_user_ids: set[int]):
+    """只保留当前 M1、M4、M6 命中用户的月奖流水。"""
+    return [row for row in rows if int(row.user_id) in candidate_user_ids]
 
 
 async def _load_monthly_logs(tenant_id: int, periods: tuple[str, ...]):
@@ -553,10 +517,13 @@ async def run(args: argparse.Namespace) -> int:
     await _ensure_openfga()
     candidates = await _collect_candidates(rules)
     awards = _awards_for(candidates, rules, periods)
-    monthly_rows = await _load_monthly_logs(int(args.tenant_id), periods)
-    user_ids = sorted({int(row.user_id) for row in monthly_rows} | {award.user_id for award in awards})
+    monthly_rows = rows_for_candidates(
+        await _load_monthly_logs(int(args.tenant_id), periods),
+        set(candidates),
+    )
+    user_ids = sorted(candidates)
     if not user_ids:
-        print("没有待删除的月奖流水,也没有当前管理员可发。")
+        print("没有当前的公共库所有者、部门库管理者或科室库管理者。")
         return 0
     logs_by_user, balances = await _load_user_state(int(args.tenant_id), user_ids)
     delete_ids_by_user: dict[int, set[int]] = {user_id: set() for user_id in user_ids}
