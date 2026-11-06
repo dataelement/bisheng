@@ -203,7 +203,7 @@ export interface KnowledgeSpaceRead {
   index_name?: string | null;
   state?: number | null;
   is_released?: boolean;
-  auth_type?: "public" | "private";
+  auth_type?: "public" | "private" | "approval";
   is_shared?: boolean;
   auto_tag_enabled?: boolean;
   auto_tag_library_id?: number | null;
