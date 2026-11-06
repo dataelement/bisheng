@@ -40,6 +40,7 @@ admission = fixtures.admission
 def processing(admission, monkeypatch):
     context, runtime, _, _ = admission
     monkeypatch.setattr(module, "get_knowledge_model_read_runtime", AsyncMock(return_value=runtime))
+    monkeypatch.setattr(module, "require_business_action", AsyncMock())
     return context, KnowledgeProcessingOwner()
 
 

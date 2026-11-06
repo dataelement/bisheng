@@ -59,6 +59,7 @@ async def dispatch(application, monkeypatch):
     monkeypatch.setattr(module, "_new_owner", lambda: app.owner)
     monkeypatch.setattr(module, "_active_tenant_ids", AsyncMock(return_value=[101]))
     monkeypatch.setattr(module, "require_business_action", AsyncMock())
+    monkeypatch.setattr(processing_owner, "require_business_action", AsyncMock())
     monkeypatch.setattr(processing_identity, "resolve_web_runtime_identity", AsyncMock(return_value=app.context.user))
     monkeypatch.setattr("bisheng.permission.application.relation_api.is_tenant_admin", AsyncMock(return_value=False))
     monkeypatch.setattr(handler, "get_sync_db_session", sessions)
