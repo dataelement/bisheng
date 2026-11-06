@@ -504,7 +504,7 @@ async def test_many_roots_and_historical_versions_are_linear_pages_with_one_glob
     )
     async with AsyncSession(native.engine) as session, session.begin():
         await repo.avalidate_global_integrity(session)
-        assert len(native.queries) == 11  # run-wide seven tenant probes and four parent/pointer probes
+        assert len(native.queries) == 13  # original eleven plus two run-wide Tag parent probes
         native.queries.clear()
         roots = await collect(repo, "resources", session)
         docs = await collect(repo, "documents", session)
@@ -516,6 +516,45 @@ async def test_many_roots_and_historical_versions_are_linear_pages_with_one_glob
             for kind in ("resources", "documents", "files", "versions"):
                 assert [row.id for row in await collect(repo, kind, session)] == [8000]
         assert len(native.queries) == 12  # no repeated global probe when the coordinator advances tenant
+
+
+@pytest.mark.parametrize("broken", ["tag_missing", "tag_foreign", "file_missing", "file_foreign"])
+async def test_global_tag_parent_and_file_probes_keep_missing_and_foreign_visible(repo, native, broken):
+    await native.insert(Knowledge, [resource(9000), resource(8000, 202)])
+    await native.insert(KnowledgeFile, [file(1), file(2, 202, knowledge_id=8000)])
+    await native.insert(Tag, [data("tags", 1, 202 if broken == "tag_foreign" else 101)])
+    link = data("tag_links", 1)
+    if broken == "tag_missing":
+        link["tag_id"] = 99
+    elif broken == "file_missing":
+        link["resource_id"] = "99"
+    elif broken == "file_foreign":
+        link["resource_id"] = "2"
+    await native.insert(TagLink, [link])
+    async with AsyncSession(native.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await repo.avalidate_global_integrity(session)
+    assert all("LIMIT" in sql.upper() for sql, _ in native.queries)
+    assert "LEFT OUTER JOIN" in native.queries[-1][0].upper()
+
+
+async def test_global_tag_probe_does_not_interpret_other_business_opaque_ids_as_files(repo, native):
+    await native.insert(Tag, [data("tags", 1) | {"business_type": "application", "business_id": "hosted-app"}])
+    await native.insert(TagLink, [data("tag_links", 1) | {"resource_type": 10, "resource_id": "opaque-hosted-app-id"}])
+    async with AsyncSession(native.engine) as session, session.begin():
+        await repo.avalidate_global_integrity(session)
+    assert len(native.queries) == 13
+    assert all("LIMIT" in sql.upper() for sql, _ in native.queries)
+
+
+async def test_unrelated_application_orphan_tag_link_remains_an_original_fact(repo, native):
+    await native.insert(
+        TagLink, [data("tag_links", 1) | {"tag_id": 999, "resource_type": 10, "resource_id": "opaque-app"}]
+    )
+    async with AsyncSession(native.engine) as session, session.begin():
+        await repo.avalidate_global_integrity(session)
+        row = (await repo.alist_tag_links(session)).items[0]
+        assert (row.tag_id, row.resource_type, row.resource_id) == (999, 10, "opaque-app")
 
 
 async def test_ancestor_500_unique_keys_use_three_queries_and_keep_foreign_and_missing_distinct(repo, native):
