@@ -19,6 +19,7 @@ from bisheng.common.errcode.knowledge import (
     ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
+from bisheng.core.context.background_execution import get_current_background_task
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeState, KnowledgeTypeEnum
 from bisheng.knowledge.domain.repositories.model_reference_repository import KnowledgeModelReferenceRepository
 from bisheng.knowledge.domain.services.model_reference_extractor import (
@@ -59,6 +60,8 @@ class PreparedKnowledgeModelChange:
     bindings: PreparedSourceBindings = field(repr=False)
     row: Knowledge = field(repr=False)
     runtime: object = field(repr=False)
+    next_state: int = KnowledgeState.REBUILDING.value
+    purpose: str = "change"
 
 
 _issued: WeakKeyDictionary = WeakKeyDictionary()
@@ -215,14 +218,21 @@ class KnowledgeModelReferenceApplication:
             row,
             runtime,
         )
+        return cls._register_model_plan(session, plan)
+
+    @classmethod
+    def _register_model_plan(cls, session, plan, background=None):
         _issued[plan] = (
             ref(plan),
             TransactionIdentity.capture(session),
-            cls._facts(row),
+            cls._facts(plan.row),
             cls._plan_values(plan),
-            bindings,
-            runtime,
-            row,
+            plan.bindings,
+            plan.runtime,
+            plan.row,
+            None
+            if background is None
+            else (background, (background.tenant_id, background.task_id, background.task_name)),
         )
         return plan
 
@@ -269,6 +279,8 @@ class KnowledgeModelReferenceApplication:
                 plan.expected_generation,
                 plan.new_generation,
                 plan.changed,
+                plan.next_state,
+                plan.purpose,
                 cls._binding_values(plan.bindings),
             )
         )
@@ -291,6 +303,11 @@ class KnowledgeModelReferenceApplication:
             raise ResourceReferenceInvalidError(reason="knowledge_model_plan_not_issued")
         if cls._facts(plan.row) != issued[2]:
             raise KnowledgeOperationPlanConflictError(reason="knowledge_model_plan_changed")
+        if issued[7] is not None:
+            background, values = issued[7]
+            current = get_current_background_task()
+            if current is not background or (current.tenant_id, current.task_id, current.task_name) != values:
+                raise ResourceReferenceInvalidError(reason="knowledge_model_finalization_background_changed")
         cls.repository._bound(session, plan.row)
 
     @classmethod
@@ -445,7 +462,7 @@ class KnowledgeModelReferenceApplication:
                 expected_generation=prepared.expected_generation,
                 new_generation=prepared.new_generation,
             )
-            prepared.row.state = KnowledgeState.REBUILDING.value
+            prepared.row.state = prepared.next_state
             cls.repository.save(session, prepared.row)
             prepared.runtime.apply_source_bindings(session, prepared.bindings)
         return prepared.row
@@ -463,7 +480,7 @@ class KnowledgeModelReferenceApplication:
                 expected_generation=prepared.expected_generation,
                 new_generation=prepared.new_generation,
             )
-            prepared.row.state = KnowledgeState.REBUILDING.value
+            prepared.row.state = prepared.next_state
             await cls.repository.asave(session, prepared.row)
             await prepared.runtime.aapply_source_bindings(session, prepared.bindings)
         return prepared.row
@@ -716,3 +733,144 @@ class KnowledgeModelReferenceApplication:
             await prepared.runtime.aapply_source_bindings(session, prepared.bindings)
             await cls.repository.adelete(session, prepared.row)
         return prepared.row
+
+    @classmethod
+    def _finalization_inputs(cls, row, operation_id, expected_revision, expected_generation):
+        if row is None:
+            raise KnowledgeNotExistError()
+        background = get_current_background_task()
+        if (
+            background is None
+            or background.tenant_id != row.tenant_id
+            or background.tenant_id != cls.repository._tenant_id()
+        ):
+            raise ResourceReferenceInvalidError(reason="knowledge_model_finalization_background_required")
+        cls._references(row)
+        transition = row.model_transition
+        if (
+            transition is None
+            or transition["operation_id"] != operation_id
+            or type(expected_revision) is not int
+            or row.model_config_revision != expected_revision
+            or not isinstance(expected_generation, str)
+            or not expected_generation
+            or row.index_generation != expected_generation
+        ):
+            raise KnowledgeOperationPlanConflictError(reason="knowledge_model_operation_obsolete")
+        return cls._facts(row), canonical_target_id(transition["pending_model_id"]), background
+
+    @classmethod
+    def _freeze_finalization(cls, session, row, runtime, bindings, selected, operation, background, kinds):
+        if bindings.verified.context.old_references_digest != reference_set_digest(cls._references(row)):
+            raise ReferenceCoverageNotReadyError(reason="knowledge_source_configuration_drift")
+        target_key = TargetKey(TargetType.MODEL, selected)
+        target = next(item.target for item in bindings.verified.context.receipts if item.target.key == target_key)
+        if target.state != ReferenceState.VALID or not target.new_binding_allowed:
+            raise ResourceReferenceInvalidError(reason="knowledge_pending_model_invalid")
+        if kinds.get(target_key) != "embedding":
+            raise KnowledgeNoEmbeddingError()
+        plan = PreparedKnowledgeModelChange(
+            row.id,
+            row.tenant_id,
+            operation,
+            selected,
+            None,
+            row.model_config_revision,
+            row.index_generation,
+            row.index_generation,
+            True,
+            bindings,
+            row,
+            runtime,
+            KnowledgeState.PUBLISHED.value,
+            "finalize",
+        )
+        return cls._register_model_plan(session, plan, background)
+
+    @classmethod
+    def prepare_finalization(
+        cls,
+        session,
+        knowledge_id,
+        *,
+        operation_id,
+        expected_model_config_revision,
+        expected_index_generation,
+    ):
+        if get_current_background_task() is None:
+            raise ResourceReferenceInvalidError(reason="knowledge_model_finalization_background_required")
+        row = cls.repository.get(session, knowledge_id)
+        facts, selected, background = cls._finalization_inputs(
+            row, operation_id, expected_model_config_revision, expected_index_generation
+        )
+        runtime = get_reference_binding_runtime_sync()
+
+        def lock_root(active):
+            locked = cls.repository.get(active, knowledge_id, for_update=True)
+            current, pending, worker = cls._finalization_inputs(
+                locked, operation_id, expected_model_config_revision, expected_index_generation
+            )
+            if current != facts or pending != selected or worker is not background:
+                raise KnowledgeOperationPlanConflictError(reason="knowledge_model_operation_obsolete")
+            return locked
+
+        bindings = runtime.prepare_source_bindings(
+            session,
+            cls._source(row),
+            extract_knowledge_model_references(model=selected),
+            extractor_version=KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
+            lock_source_root=lock_root,
+        )
+        kinds = cls.repository.model_kinds(session, runtime.verifier, cls._source(row), bindings.verified.context)
+        return cls._freeze_finalization(session, row, runtime, bindings, selected, operation_id, background, kinds)
+
+    @classmethod
+    async def aprepare_finalization(
+        cls,
+        session,
+        knowledge_id,
+        *,
+        operation_id,
+        expected_model_config_revision,
+        expected_index_generation,
+    ):
+        if get_current_background_task() is None:
+            raise ResourceReferenceInvalidError(reason="knowledge_model_finalization_background_required")
+        row = await cls.repository.aget(session, knowledge_id)
+        facts, selected, background = cls._finalization_inputs(
+            row, operation_id, expected_model_config_revision, expected_index_generation
+        )
+        runtime = await get_reference_binding_runtime()
+
+        async def lock_root(active):
+            locked = await cls.repository.aget(active, knowledge_id, for_update=True)
+            current, pending, worker = cls._finalization_inputs(
+                locked, operation_id, expected_model_config_revision, expected_index_generation
+            )
+            if current != facts or pending != selected or worker is not background:
+                raise KnowledgeOperationPlanConflictError(reason="knowledge_model_operation_obsolete")
+            return locked
+
+        bindings = await runtime.aprepare_source_bindings(
+            session,
+            cls._source(row),
+            extract_knowledge_model_references(model=selected),
+            extractor_version=KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
+            lock_source_root=lock_root,
+        )
+        kinds = await cls.repository.amodel_kinds(
+            session, runtime.verifier, cls._source(row), bindings.verified.context
+        )
+        return cls._freeze_finalization(session, row, runtime, bindings, selected, operation_id, background, kinds)
+
+    @classmethod
+    def apply_finalization(cls, session, prepared):
+        if not isinstance(prepared, PreparedKnowledgeModelChange) or prepared.purpose != "finalize":
+            raise ResourceReferenceInvalidError(reason="knowledge_model_finalization_plan_required")
+        return cls.apply_model_change(session, prepared)
+
+    @classmethod
+    async def aapply_finalization(cls, session, prepared):
+        if not isinstance(prepared, PreparedKnowledgeModelChange) or prepared.purpose != "finalize":
+            raise ResourceReferenceInvalidError(reason="knowledge_model_finalization_plan_required")
+        return await cls.aapply_model_change(session, prepared)
