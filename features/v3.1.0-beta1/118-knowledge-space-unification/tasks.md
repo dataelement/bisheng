@@ -5178,8 +5178,8 @@
 
 - [ ] **T650 · 已知生命周期旧adapter回归对齐**
   **类型 / Owner**：测试 / KN\
-  **写入文件**：`src/backend/test/permission/test_f048_knowledge_space_adapter.py`\
-  **逻辑 / 测试上下文**：原COPYING非法资源断言改为真实未知/已删除态；保租户缺失/错误type/隐藏响应及原FGA拒绝断言，不按新已知生命周期误拒。\
+  **写入文件**：`src/backend/test/permission/test_f048_knowledge_space_adapter.py`；`src/backend/test/knowledge/test_managed_spaces_visible_edit.py`\
+  **逻辑 / 测试上下文**：原COPYING/FAILED非法资源断言改为真实未知/已删除态；保租户缺失/错误type/快照/隐藏响应及原FGA拒绝断言，不按新已知生命周期误拒。\
   **依赖**：T078\
   **覆盖 AC**: AC-30, AC-31, AC-33, AC-35, AC-48\
   **验证 / 完成条件**：记录语义退休差异，配新旧adapter/preview/download同选集全绿；不得通过删拒绝测试实现。
