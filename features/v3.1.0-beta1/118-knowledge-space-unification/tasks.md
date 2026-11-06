@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | W0/W1、W2及W3运行准入已合流，完整特性仍在开发 | 296 / 552 项；W4来源合同先冻结、按依赖实施中；独立复查/组合测试见[W3记录](./wave3-implementation-review.md)，未运行迁移 |
+| 实现 | W0/W1、W2及W3运行准入已合流，完整特性仍在开发 | 296 / 562 项；W4来源合同先冻结、按依赖实施中；独立复查/组合测试见[W3记录](./wave3-implementation-review.md)，未运行迁移 |
 
 ## 领取与执行规则
 
@@ -4372,6 +4372,86 @@
   **依赖**：T546, T504\
   **配对测试**：T546\
   **验证 / 完成条件**：实际红绿、固定源码独立复核及组合通过，未运行真实middleware不称验收完成。
+
+- [ ] **T553 · 清空删除资源模型出向绑定同事务红测**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_model_lifecycle_transaction.py`\
+  **逻辑 / 测试上下文**：按已冻结真实业务接缝及唯一叶Owner实施；不伪造User/worker标记、不分事务补R2、不扩重建并发治理，不把fixture问题当业务红。\
+  **依赖**：T487\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：固定提交独立复查、真实定向/组合回归，原行为断言保留；未跑真实环境不称验收。
+
+- [ ] **T554 · 模型出向清空删除prepare及SQL原子应用**
+  **类型 / Owner**：实现 / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/application/model_reference.py`；`src/backend/bisheng/knowledge/domain/repositories/model_reference_repository.py`\
+  **逻辑 / 测试上下文**：按已冻结真实业务接缝及唯一叶Owner实施；不伪造User/worker标记、不分事务补R2、不扩重建并发治理，不把fixture问题当业务红。\
+  **依赖**：T553\
+  **配对测试**：T553\
+  **验证 / 完成条件**：固定提交独立复查、真实定向/组合回归，原行为断言保留；未跑真实环境不称验收。
+
+- [ ] **T555 · 业务模型阶段finalize同事务红测**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_model_finalize.py`\
+  **逻辑 / 测试上下文**：按已冻结真实业务接缝及唯一叶Owner实施；不伪造User/worker标记、不分事务补R2、不扩重建并发治理，不把fixture问题当业务红。\
+  **依赖**：T554\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：固定提交独立复查、真实定向/组合回归，原行为断言保留；未跑真实环境不称验收。
+
+- [ ] **T556 · 业务模型阶段及来源索引一起finalize**
+  **类型 / Owner**：实现 / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/application/model_reference.py`；`src/backend/bisheng/knowledge/domain/repositories/model_reference_repository.py`\
+  **逻辑 / 测试上下文**：按已冻结真实业务接缝及唯一叶Owner实施；不伪造User/worker标记、不分事务补R2、不扩重建并发治理，不把fixture问题当业务红。\
+  **依赖**：T555\
+  **配对测试**：T555\
+  **验证 / 完成条件**：固定提交独立复查、真实定向/组合回归，原行为断言保留；未跑真实环境不称验收。
+
+- [ ] **T557 · 后台原始执行上下文来源证明红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_trusted_worker_context.py`\
+  **逻辑 / 测试上下文**：按已冻结真实业务接缝及唯一叶Owner实施；不伪造User/worker标记、不分事务补R2、不扩重建并发治理，不把fixture问题当业务红。\
+  **依赖**：T422\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：固定提交独立复查、真实定向/组合回归，原行为断言保留；未跑真实环境不称验收。
+
+- [ ] **T558 · Celery实际header发行回收后台执行上下文**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/core/context/background_execution.py`；`src/backend/bisheng/worker/tenant_context.py`\
+  **逻辑 / 测试上下文**：按已冻结真实业务接缝及唯一叶Owner实施；不伪造User/worker标记、不分事务补R2、不扩重建并发治理，不把fixture问题当业务红。\
+  **依赖**：T557\
+  **配对测试**：T557\
+  **验证 / 完成条件**：固定提交独立复查、真实定向/组合回归，原行为断言保留；未跑真实环境不称验收。
+
+- [ ] **T559 · 知识创建旧补偿用例真实rollback适配**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge/test_knowledge_create_atomicity.py`\
+  **逻辑 / 测试上下文**：按已冻结真实业务接缝及唯一叶Owner实施；不伪造User/worker标记、不分事务补R2、不扩重建并发治理，不把fixture问题当业务红。\
+  **依赖**：T491\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：固定提交独立复查、真实定向/组合回归，原行为断言保留；未跑真实环境不称验收。
+
+- [ ] **T560 · 空间创建旧用例新事务接缝等价适配**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge/test_unified_permission_creation.py`\
+  **逻辑 / 测试上下文**：按已冻结真实业务接缝及唯一叶Owner实施；不伪造User/worker标记、不分事务补R2、不扩重建并发治理，不把fixture问题当业务红。\
+  **依赖**：T495\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：固定提交独立复查、真实定向/组合回归，原行为断言保留；未跑真实环境不称验收。
+
+- [ ] **T561 · 默认来源缺可信tenant错误码红测**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_llm_default_source.py`；`src/backend/test/knowledge_unification/test_llm_defaults.py`\
+  **逻辑 / 测试上下文**：按已冻结真实业务接缝及唯一叶Owner实施；不伪造User/worker标记、不分事务补R2、不扩重建并发治理，不把fixture问题当业务红。\
+  **依赖**：T469, T056\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：固定提交独立复查、真实定向/组合回归，原行为断言保留；未跑真实环境不称验收。
+
+- [ ] **T562 · 默认来源缺tenant按合同10996拒绝**
+  **类型 / Owner**：实现 / LLM\
+  **写入文件**：`src/backend/bisheng/llm/application/model_default_read_identity.py`；`src/backend/bisheng/llm/application/model_default.py`\
+  **逻辑 / 测试上下文**：按已冻结真实业务接缝及唯一叶Owner实施；不伪造User/worker标记、不分事务补R2、不扩重建并发治理，不把fixture问题当业务红。\
+  **依赖**：T561\
+  **配对测试**：T561\
+  **验证 / 完成条件**：固定提交独立复查、真实定向/组合回归，原行为断言保留；未跑真实环境不称验收。
 
 ## 自动化覆盖索引
 

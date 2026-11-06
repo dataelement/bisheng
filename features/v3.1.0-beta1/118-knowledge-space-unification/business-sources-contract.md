@@ -179,3 +179,17 @@ LLM新增 async `resolve_model_alias_current(session, tenant_id, requested, *, i
 API正常已有配置与Celery启动原来都可能只注册lazy F048而从未初始化。两端启动在原生引用读取装配/业务接收前显式await既有get_f048_process_runtime：API沿当前事件循环，Celery用既有持久worker loop run_async_task；仅openfga.enabled时调用，错误明确阻止进入可接收业务就绪路径。原生getter保持只读READY对象，无懒初始化或SQL async/sync桥。
 
 RetrievalEngine在原调用处向KnowledgeRag透传既有self.login_user，保留原身份对象及ambient Open/Public principal/PermissionActor，不从invoke_user_id补造人。标准模型执行仍whole-source strict；命名的清理专用vectorstore构造只消费已授权实际资源或持久删除job冻结manifest的index身份，不调用模型、不能用于标准执行准入。旧FakeEmbeddings清理两处调用转该构造，失效模型不能阻断文件删除；不能仅凭isFake跳过运行源校验。其他无原身份的Root共享调用先逐入口核验真实授权来源，不能用静态is_shared替代C4。
+
+
+### 批量默认覆盖的提交后资格（T433/T435/T474/T475）
+
+mixed API仅承接MODEL_DEFAULT的有效own override（effective=True）；恢复继承继续走单source既有专用API。该批全部MODEL_DEFAULT.source_id键构成私有prospective排除集：对同批每个KN/default来源的继承资格都排除这些即将不再继承的Root key，辅助模型/服务物理union锁也按该集合计算。逐source收据与legacy证据仍隔离，其他未修改key或显式共享贡献保持。否则旧Root embedding A只因该key获权时，保存override后KN currentA/pendingB会立即失效并阻断自身worker；统一prospective资格让其原槽得到new_binding_allowed=False，再由已冻结人工明确改绑修复分支解除A，业务和R2仍一次提交。不得以异步竞态排除此确定提交后状态。
+
+DefaultRead facade追加 `require_default(key,login_user=None,session=None)` / async `arequire_default`，业务原五getter默认全key strict，router管理raw独立读；真实无源返回明确空schema，已有own '{}'需ready零集合。whole/slot结果取Core已准入snapshot payload，不能准入新B后返回先前raw A。
+
+
+### 删除/finalize事务与后台身份（T553–T562）
+
+KN出向delete/clear及transition finalize由同域Application+Repository在业务外Session实施：目标plan→root/current业务摘要→原投影成功→files/QA/资源SQL+R2同事务，clear保模型引用，实际删除才解除出向；不称完整入向R3协调器完成。finalize只认当前资源operation/revision/generation，不恢复job模型。
+
+`core.context.background_execution.get_current_background_task()`返回内部只读 `BackgroundTaskContext(tenant_id,task_id,task_name)` 或None；后台proof来自真实Celery task_prerun的显式合法tenant header、request.id及called_directly=False，postrun原上下文回收。普通tenant_execution_scope数值不是worker证明，也不改变原C3 header/跨租户行为。无原actor的KN私有身份只接受此同对象/当前tenant后台上下文，跨task/退出后失效；User/原actor+原principal分支保既有C4 visible，不从invoke_user_id补人。不得将客户端元数据当后台permit。缺tenant仍failclosed且默认配置两adapter将NoTenantContextError按已签合同转10996，保cause，不回退Root。
