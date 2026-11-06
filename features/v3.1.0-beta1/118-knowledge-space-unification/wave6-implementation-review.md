@@ -210,3 +210,10 @@ MIG固定7998349db的六生产/六测试叶已合主树ddd0894ec58b1075e6df762a9
 独立EDGE实际发现两P2并由原作者分别修复：数据库实际collation下的创建目标唯一键漏检（GROUP BY原列+CASE投影，仅SQL NULL豁免）；type0 NULL创建者绕过检查（窄拒无原owner证明）。原正式M2四格逐字对照c3d2红2绿→7998四绿，误commit仍Run0；空串、existingSPACE NULL、deleted但真实User另3绿，六路径288绿。QA/type2不误拦，纯builder不伪装知道DB collation。所有六生产Ruff/format/arch无输出；旧集成测试FGA import告警同基线单列。本卡不代替联合namespace/Catalog计划、原T162/163/164、引用初始回填/Coverage或维护演练。
 
 root原T151/152固定af8b90142仅workstation recent/pin及open workflow invoke三个内部use字面改visible；新ASGI测试7真实红8首绿→15绿，保原scope、SAK/PAT/OBO原主体及snapshot、状态和部门lease。T839只旧两个pin测试补原union缺失的空App表/visible断言，未删业务断言；未改生产archive复现8缺表失败4绿。主树五路径52、联装聊天九路径98通过；PERM对固定194edb3f archive独立实跑五路径52绿、无确认缺陷，源码review严格三处literal、路由/分享/派发/协议不变，原151/152与839据实际范围闭合。
+
+
+## 原生broker与M2 required装配闭合（2026-11-07）
+
+PROC固定40f40e2cf、root消费者366df1bc经两个非作者分别复查后，正常合主树c4f911d0db7a2f42c3b292d03ee595ada8033383。主树实际八路径230 passed、3612 warnings、12.91秒，日志/JUnit /private/tmp/f118-root-main-broker-integrated.log/.xml；作者完整15路径577绿、独立producer及额外原反例104绿、消费者原133绿及真实reader联装/取消清理33绿均为各自选集，不相加。旧生产controller/queue不变，required broker与scheduler独立；真实配置/严格JSON、SQL归属、原始只读队列、全run一次及冻结重放已联装。
+
+独立发现并关闭Job父空间跨tenant漏检及含glob前缀漏盘两个P2，原反例由发现者重跑通过；保DeleteJob目标已删的合法账本。10001消息实际102 SQL/10002 LRANGE、单消息10000目标150 SQL/2 LRANGE，无消息×目标笛卡尔积；原消息零写。LRANGE1、HSCAN接收后64MiB预算的真实内存边界已补合同，不伪报Redis响应分配前硬上限。T823–830及T840按本范围闭合，尚未把准备阶段读取称为正式M2/转换/恢复或E2E；联合namespace/Catalog计划、真实M3/Coverage与CLI仍待办。

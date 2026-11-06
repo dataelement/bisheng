@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史842编号：728已完成/历史交付、112当前待办、2外移；原137队列已完成36项、剩101项，另11张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史842编号：737已完成/历史交付、103当前待办、2外移；原137队列已完成36项、剩101项，另2张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -6662,7 +6662,7 @@
   **依赖**：T806\
   **验证 / 完成条件**：实际入口、nullable主版本和失败/取消/ABA红绿；独立复核、原目录行为及静态无新增；不代替T177完整高级功能或浏览器E2E。
 
-- [ ] **T823 · 原生broker配置及JSON协议离线产物测试**
+- [x] **T823 · 原生broker配置及JSON协议离线产物测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_broker_codec.py`\
   **逻辑 / 测试上下文**：W6§42真实生效broker配置/原始Redis只读消息，签名与SQL归属闭集，取消/规模有界，原消息零写。\
@@ -6670,7 +6670,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-63, AC-85, AC-86, AC-93\
   **验证 / 完成条件**：真实Kombu离线编码与native SQL/只读Redis形状红绿，10001规模/tenant/异常与独立复核；非Redis或缺端口拒绝，不代替正式M2/维护证明。
 
-- [ ] **T824 · 原生broker配置及受限JSON协议codec**
+- [x] **T824 · 原生broker配置及受限JSON协议codec**
   **类型 / Owner**：后端 Application / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_broker_codec.py`\
   **逻辑 / 测试上下文**：W6§42真实生效broker配置/原始Redis只读消息，签名与SQL归属闭集，取消/规模有界，原消息零写。\
@@ -6678,7 +6678,7 @@
   **配对测试**：T823\
   **验证 / 完成条件**：真实Kombu离线编码与native SQL/只读Redis形状红绿，10001规模/tenant/异常与独立复核；非Redis或缺端口拒绝，不代替正式M2/维护证明。
 
-- [ ] **T825 · broker实际业务目标批查仓储测试**
+- [x] **T825 · broker实际业务目标批查仓储测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_task_repository.py`\
   **逻辑 / 测试上下文**：W6§42真实生效broker配置/原始Redis只读消息，签名与SQL归属闭集，取消/规模有界，原消息零写。\
@@ -6686,7 +6686,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-63, AC-85, AC-86, AC-93\
   **验证 / 完成条件**：真实Kombu离线编码与native SQL/只读Redis形状红绿，10001规模/tenant/异常与独立复核；非Redis或缺端口拒绝，不代替正式M2/维护证明。
 
-- [ ] **T826 · broker实际业务目标批查仓储**
+- [x] **T826 · broker实际业务目标批查仓储**
   **类型 / Owner**：后端 Repository / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/unification_task_repository.py`\
   **逻辑 / 测试上下文**：W6§42真实生效broker配置/原始Redis只读消息，签名与SQL归属闭集，取消/规模有界，原消息零写。\
@@ -6694,7 +6694,7 @@
   **配对测试**：T825\
   **验证 / 完成条件**：真实Kombu离线编码与native SQL/只读Redis形状红绿，10001规模/tenant/异常与独立复核；非Redis或缺端口拒绝，不代替正式M2/维护证明。
 
-- [ ] **T827 · broker只读流与规模取消安全测试**
+- [x] **T827 · broker只读流与规模取消安全测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_broker.py`\
   **逻辑 / 测试上下文**：W6§42真实生效broker配置/原始Redis只读消息，签名与SQL归属闭集，取消/规模有界，原消息零写。\
@@ -6702,7 +6702,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-63, AC-85, AC-86, AC-93\
   **验证 / 完成条件**：真实Kombu离线编码与native SQL/只读Redis形状红绿，10001规模/tenant/异常与独立复核；非Redis或缺端口拒绝，不代替正式M2/维护证明。
 
-- [ ] **T828 · broker全局原始消息只读reader**
+- [x] **T828 · broker全局原始消息只读reader**
   **类型 / Owner**：后端 Application / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_broker.py`\
   **逻辑 / 测试上下文**：W6§42真实生效broker配置/原始Redis只读消息，签名与SQL归属闭集，取消/规模有界，原消息零写。\
@@ -6710,7 +6710,7 @@
   **配对测试**：T827\
   **验证 / 完成条件**：真实Kombu离线编码与native SQL/只读Redis形状红绿，10001规模/tenant/异常与独立复核；非Redis或缺端口拒绝，不代替正式M2/维护证明。
 
-- [ ] **T829 · M2 broker闭集与真实required-port联装测试**
+- [x] **T829 · M2 broker闭集与真实required-port联装测试**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_inventory_codec.py`、`src/backend/test/knowledge_unification/test_migration_broker_application.py`\
   **逻辑 / 测试上下文**：W6§42真实生效broker配置/原始Redis只读消息，签名与SQL归属闭集，取消/规模有界，原消息零写。\
@@ -6718,7 +6718,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-63, AC-85, AC-86, AC-93\
   **验证 / 完成条件**：真实Kombu离线编码与native SQL/只读Redis形状红绿，10001规模/tenant/异常与独立复核；非Redis或缺端口拒绝，不代替正式M2/维护证明。
 
-- [ ] **T830 · M2 broker闭集与全run装配**
+- [x] **T830 · M2 broker闭集与全run装配**
   **类型 / Owner**：后端 Application / INT\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_inventory_codec.py`、`src/backend/bisheng/knowledge/application/unification_inventory.py`\
   **逻辑 / 测试上下文**：W6§42真实生效broker配置/原始Redis只读消息，签名与SQL归属闭集，取消/规模有界，原消息零写。\
@@ -6797,7 +6797,7 @@
   **依赖**：T151\
   **验证 / 完成条件**：两旧叶与新入口/原v2身份/invoke组合通过，独立复核不削断言或替真实DAO。
 
-- [ ] **T840 · M2原集成夹具补独立required broker端口**
+- [x] **T840 · M2原集成夹具补独立required broker端口**
   **类型 / Owner**：测试夹具 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_inventory_application.py`\
   **逻辑 / 测试上下文**：W6§42 root装配required broker后，仅原fixture供独立只读broker port、缺口矩阵补broker；原Catalog/Source/physical/queued/材料与全部原行为断言保持，不fake实际UnificationInventoryApplication。\

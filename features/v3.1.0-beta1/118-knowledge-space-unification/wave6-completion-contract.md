@@ -635,7 +635,7 @@ PROC独占三组：T823/824新application/unification_broker_codec.py及test_mig
 
 纯codec公开frozen BrokerReadConfiguration/DecodedKnowledgeMessage；配置默认取实际bisheng_celery.conf broker_url/read_url/write_url/transport_options（含CELERY环境覆盖），不用cache redis_url或result_backend。专用raw redis.asyncio与Sentinel.master_for，支持当前single redis/rediss与真实builder Sentinel master、DB/TLS/ACL/global_keyprefix。非Redis、多独立broker failover/读写源不一致、未知driver/options明确required-port fail closed，不能报空。原配置凭据repr=False不输出。Reader为RedisBrokerInventoryReader(session,*,repository=None,configuration=None,redis_connection=None).aiter_facts(*,tenant_ids:tuple[int,...])，每run全局一次；外部native Session/TX、no_autoflush、原tenant严格窗口，只读原事实。aclose只关自建raw客户端、借用不关；取消及原异常完整settle owned生命周期，不能Kombu close引发重投。
 
-遍历生效knowledge/ocr/default与静态knowledge routes、SCAN实际LIST候选和只读SSCAN _kombu.binding.*历史queue；含生效priority_steps/sep及global_keyprefix。SCAN COUNT是hint，处理切批≤200；cluster cursor映射/重复键去重沿已冻结task reader规则，不按消息内容去重重复occurrence。LRANGE offset200；共享queue仅凭严格解码已知非knowledge task跳过，不读其业务。未知/畸形且无法证明非知识不能静默漏；已知知识签名非法拒绝。全局unacked HSCAN值按真实Kombu `[raw,exchange,routing_key]`，ZSET score与mutex只读事实，不按时间推停服；index孤立metadata仅global诊断。有效同任务不同物理位置分别计occurrence，稳定ID含UUID/位置/offset或delivery tag摘要。
+遍历生效knowledge/ocr/default与静态knowledge routes、SCAN实际LIST候选和只读SSCAN _kombu.binding.*历史queue；含生效priority_steps/sep及global_keyprefix。SCAN COUNT是hint，处理切批≤200；cluster cursor映射/重复键去重沿已冻结task reader规则，不按消息内容去重重复occurrence。LRANGE逐条offset读取，单次1条以控制原始消息内存；共享queue仅凭严格解码已知非knowledge task跳过，不读其业务。未知/畸形且无法证明非知识不能静默漏；已知知识签名非法拒绝。全局unacked HSCAN值按真实Kombu `[raw,exchange,routing_key]`，ZSET score与mutex只读事实，不按时间推停服；index孤立metadata仅global诊断。有效同任务不同物理位置分别计occurrence，稳定ID含UUID/位置/offset或delivery tag摘要。
 
 只stdlib JSON：UTF8、拒重复键/nonfinite、content-type application/json、encoding utf-8、strict base64，v1 body task/id/args/kwargs与v2 headers task/id、body=[args,kwargs,embed]均真实Kombu离线产物测试。单raw及decoded≤16MiB；不支持的压缩/serializer、不可辨知识签名/非空未冻结canvas明确拒绝，禁pickle/yaml/decoder registry。headers含argsrepr/properties/body/callback只一次安全digest，不入artifact；不执行任何签名。
 
@@ -644,6 +644,9 @@ PROC独占三组：T823/824新application/unification_broker_codec.py及test_mig
 T829/830新增唯一broker_task闭集，只tasks页，原queued_task十字段加header_tenant_id（nullable）、其中tenant_id允许null，task_kind真实task_name，state为上述明确闭集；tenant来自SQL归属，null仅global_control/明确target_missing/unacked_metadata_orphan。QA/job ID不塞file槽；完整target集合/count/顺序/SQL事实入record_digest。M2全run一次消费required真实broker port，known tenant分tenant页，null分global页，合原manifest/hash；scheduler和broker均必须存在，不以一个代替另一个。各message摘要一次、targets去重批查≤200，不逐target重编整个消息、不message×space/file×version相乘；10001消息/targets与优先级/unacked重复投递预算必须实测，读取前后raw字节/队列不变。
 
 §42原生分类补充：broker_task.task_kind仅明确unacked_index-only无message的transport metadata孤儿允许null，不伪造知识task_name；此类state使用unacked_metadata_orphan。真实消息保完整原task_name。同broker DB共用cache时，已配置或_kombu.binding登记queue的坏/不可分类消息拒绝；未登记未知LIST只有外层满足真实Kombu envelope才纳入候选，确定普通业务LIST不纳入。有效Kombu未知历史queue中的知识前缀必须捕获，已辨非知识任务只隔离，不核其业务参数；不把任意聊天LIST坏JSON变成本次M2故障。
+
+
+§42固定实现补充：原始LIST每次LRANGE一条，SQL目标仍≤200，非一批200条原始消息；HSCAN COUNT=1仅为Redis提示，整个已接收响应另以64MiB预算拒绝，不能声称网络响应分配前有硬上限。带glob字符的global_keyprefix仅在Redis SCAN/MATCH处转义为字面前缀；实际键值不改。Job/DeleteJob有实际父空间时须核对同tenant；J1缺父空间仅保明确target_missing诊断，原DeleteJob父空间已删仍是合法删除账本，不伪造新目标。root消费者在所有broker事实与artifact读回成功后才freeze，取消/异常必须settle reader owned关闭并使外部事务不能误提交部分Run。
 
 
 ## 43. M2精确可执行SQL阶段转换计划子合同 V1：已冻结
