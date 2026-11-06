@@ -2,6 +2,7 @@ import request from "~/api/request";
 import * as api from "./knowledgeProcessing";
 import type {
   JobAccepted,
+  KnowledgeSpaceRead,
   OperationPrecheck,
   ProcessingDefaults,
   ProcessingIdentityScope,
@@ -56,6 +57,17 @@ it("keeps existing space info and cursor children on their original routes", asy
   expect(transport.get).toHaveBeenNthCalledWith(1, "/api/v1/knowledge/space/3/info");
   expect(transport.get).toHaveBeenNthCalledWith(2, "/api/v1/knowledge/space/3/children", { params: query, paramsSerializer: request.paramsSerializer });
   expect(children).not.toHaveProperty("total");
+});
+
+it("preserves approval-required access in the existing space info response", async () => {
+  const info: KnowledgeSpaceRead = {
+    id: 3, name: "Approval space", type: 3, auth_type: "approval", actions: ["visible"],
+  };
+  transport.get.mockResolvedValueOnce(envelope(info));
+  const received = await api.getSpaceInfo(3);
+  expect(received).toBe(info);
+  expect(received.auth_type).toBe("approval");
+  expect(transport.get).toHaveBeenCalledWith("/api/v1/knowledge/space/3/info");
 });
 
 it("keeps admin PageData separate from cursor pagination without adding a UI entry", async () => {
