@@ -214,3 +214,7 @@ T500 的 Repository 第二叶专供清理 index 身份核验。清理可读取�
 ### 旧重建消息的升级边界（T501/T502）
 
 新重建命令必须具有真实当前 transition/pending 和显式 operation/config_revision/index_generation 期望，并核真实后台身份。旧消息仅带 knowledge_id/modelHint/auditUser，缺期望或业务已无 stage 时，在外部 IO 前明确 10998（缺可信身份为 10996）；不能从任务 model 选型，也不能从当下配置补造该旧消息的操作证明。保留业务、队列及诊断，不偷偷改模型/state。本波不新增 legacy metadata-only finalize 框架；M2 正式盘点该类待执行消息，未来 M3 受控转换或运维按新业务操作恢复，相关升级适配未完成前不称全特性可升级。其他已有合法消费任务仍依既有入口，不一概拒绝所有队列。
+
+### 实际文件/QA清理消费者（T584–T585）
+
+`api/services/knowledge_imp.py` 的 `delete_vector_files`（含 file_worker/原文件删除）和 `delete_vector_data`（QA 删除）也必须消费命名 cleanup 构造，不能沿 FakeEmbeddings 调标准模型准入导致模型失效阻断文件清理。INT 单独拥有此旧叶，仅改这两处构造，保 document_id/file_id 删除过滤、原上游动作/引用保护及投影顺序；copy 等其他执行路径仍 whole-source strict。该补漏不把完整入向 R3 标完成。

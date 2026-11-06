@@ -4621,6 +4621,22 @@
   **配对测试**：T582\
   **验证 / 完成条件**：红绿、固定提交独立复查及主组合通过。
 
+- [ ] **T584 · 文档和QA实际向量删除不依赖失效模型红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_file_vector_cleanup_source.py`\
+  **逻辑 / 测试上下文**：trace实际delete_vector_files/delete_vector_data仍调用标准模型准入；以真实own资源/删除模型/外部vector double确认原文件和QA清理不被model失效阻断，校验知识tenant/index漂移拒绝，无provider。\
+  **依赖**：T500, T550\
+  **覆盖 AC**: AC-68, AC-71, AC-79, AC-83, AC-89, AC-92, AC-94\
+  **验证 / 完成条件**：真实固定红→命名清理构造绿，保持原删除过滤字段/上游动作和投影顺序，固定提交独立复查及组合通过。
+
+- [ ] **T585 · 文件和QA删除消费命名清理构造**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/api/services/knowledge_imp.py`\
+  **逻辑 / 测试上下文**：仅两处delete_vector_files/delete_vector_data消费已验证当前own index的cleanup helper；不改copy/执行调用，不添加文件动作，不跳过原引用/投影门槛。\
+  **依赖**：T584\
+  **配对测试**：T584\
+  **验证 / 完成条件**：配对红绿、固定提交独立复查及主组合通过；不称完整R3已完成。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
