@@ -1,11 +1,10 @@
+import { Dropdown, DropdownItem } from "@bisheng/ui";
 import { Tooltip } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
 import type { MouseEvent, ReactElement, ReactNode } from 'react';
-import { cloneElement, useState } from 'react';
+import { cloneElement } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { ActionMenuContent, ActionMenuDivider, ActionMenuItem } from '~/components/ActionMenu';
 import { useStartNewChat } from '~/components/Nav/NewChat';
-import { DropdownMenu, DropdownMenuTrigger } from '~/components/ui/DropdownMenu';
 import { useLocalize } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { cn } from '~/utils';
@@ -13,9 +12,7 @@ import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 import { UserPopMenu } from '../UserPopMenu';
 import { useWorkbenchNavLinks } from '../useWorkbenchNavLinks';
 import { SidebarConversationList } from './SidebarConversationList';
-import { SidebarCustomizeDialog } from './SidebarCustomizeDialog';
 import { SidebarProjects } from './SidebarProjects';
-import { useSidebarPrefs } from './sidebarPrefs';
 import { splitSidebarEntries, useSidebarEntries } from './useSidebarEntries';
 
 /** Shown next to the logo when the admin has not configured a 首页 display name. */
@@ -49,7 +46,7 @@ function SidebarNavRow({ to, icon, label, active = false, onClick }: SidebarNavR
  *
  * The module area lists the modules the account may open — what the user HAS — then 广场,
  * what they can discover across all of them. The nav shows at most four rows, 新建对话
- * included; the rest, and the entries the user hid in 管理侧边栏, are reached through 更多.
+ * included; the remaining entries are reached through the overflow menu.
  */
 interface WorkbenchSidebarProps {
   /** Keep it mounted but out of layout (设置 swaps its own nav into this slot), so the
@@ -64,12 +61,10 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
   const navigate = useNavigate();
   const { links, showAdminEntry } = useWorkbenchNavLinks();
   const allEntries = useSidebarEntries();
-  const prefs = useSidebarPrefs();
   const startNewChat = useStartNewChat();
-  const [customizeOpen, setCustomizeOpen] = useState(false);
 
   const homeLink = links.find((link) => link.section === 'home');
-  const { shown: entries, more: moreEntries } = splitSidebarEntries(allEntries, prefs, homeLink !== undefined);
+  const { shown: entries, more: moreEntries } = splitSidebarEntries(allEntries, homeLink !== undefined);
   const moreActive = moreEntries.some((entry) => entry.active);
   const brandName = bsConfig?.homeMenuDisplayName?.trim() || DEFAULT_BRAND_NAME;
   const logoSrc = bsConfig?.sidebarIcon?.image ? __APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image : '';
@@ -137,11 +132,19 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
             onClick={handleSamePathClick(entry.to)}
           />
         ))}
-        {/* The area's last row: 更多 while something is tucked away (管理侧边栏 is its last
-            item), else 管理侧边栏 itself. */}
-        {moreEntries.length > 0 ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+        {moreEntries.length > 0 && (
+          <Dropdown  align="start" menu={<>
+              {moreEntries.map((entry) => (
+                <DropdownItem
+                  key={entry.id}
+                  icon={entry.icon}
+
+                  onSelect={() => {
+                    if (entry.to !== pathname) navigate(entry.to);
+                  }}
+                >{entry.label}</DropdownItem>
+              ))}
+             </>}>
               <button
                 type="button"
                 className={cn(NAV_ROW, 'data-[state=open]:bg-fill-1', moreActive && 'bg-fill-2 hover:bg-fill-2')}
@@ -149,38 +152,12 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
                 <Outlined.More className="size-4 shrink-0" />
                 <span className="min-w-0 flex-1 truncate py-px">{localize('com_workbench_sidebar.more')}</span>
               </button>
-            </DropdownMenuTrigger>
-            <ActionMenuContent align="start" width={216}>
-              {moreEntries.map((entry) => (
-                <ActionMenuItem
-                  key={entry.id}
-                  icon={entry.icon}
-                  label={entry.label}
-                  onSelect={() => {
-                    if (entry.to !== pathname) navigate(entry.to);
-                  }}
-                />
-              ))}
-              {/* A hairline like the sidebar's own rules — the 1px divider reads too heavy
-                  in this short menu. */}
-              <ActionMenuDivider hairline />
-              <ActionMenuItem
-                icon={<Outlined.Setting />}
-                label={localize('com_workbench_sidebar.customize')}
-                onSelect={() => setCustomizeOpen(true)}
-              />
-            </ActionMenuContent>
-          </DropdownMenu>
-        ) : allEntries.length > 0 ? (
-          <button type="button" onClick={() => setCustomizeOpen(true)} className={NAV_ROW}>
-            <Outlined.Setting className="size-4 shrink-0" />
-            <span className="min-w-0 flex-1 truncate py-px">{localize('com_workbench_sidebar.customize')}</span>
-          </button>
-        ) : null}
+             </Dropdown>
+        )}
       </nav>
 
       {homeLink && homeGranted ? (
-        <SidebarConversationList leading={<SidebarProjects />} />
+        <SidebarConversationList leading={<SidebarProjects onStartChat={startNewChat} />} />
       ) : (
         <div className="min-h-0 flex-1" />
       )}
@@ -204,7 +181,6 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
           </Tooltip>
         )}
       </div>
-      <SidebarCustomizeDialog open={customizeOpen} onOpenChange={setCustomizeOpen} />
     </aside>
   );
 }

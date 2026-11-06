@@ -1,4 +1,4 @@
-import { Button } from "@/components/bs-ui/button";
+import { Alert, Button } from "@bisheng/ui";
 import { getAuditMode, saveAuditMode } from "@/controllers/API/dshModelAudit";
 import type { AuditMode, AuditModeSnapshot } from "@/types/dshModelAudit";
 import { useEffect, useId, useState } from "react";
@@ -88,8 +88,8 @@ export function ModelAuditMode({
         {canConfigure && (
           <Button
             type="button"
-            size="sm"
-            variant="ghost"
+            size="small"
+            variant="text" color="default"
             className="text-sm [@media(pointer:coarse)]:min-h-11"
             aria-expanded={open}
             aria-controls={panelId}
@@ -98,16 +98,6 @@ export function ModelAuditMode({
             {t("dsh.modelAuditView.configure")}
           </Button>
         )}
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="text-sm [@media(pointer:coarse)]:min-h-11"
-          disabled={busy}
-          onClick={() => setRevision((old) => old + 1)}
-        >
-          {t("dsh.modelAuditView.refresh_mode")}
-        </Button>
       </div>
       <p
         id={`${panelId}-collection-hint`}
@@ -116,18 +106,18 @@ export function ModelAuditMode({
         {t("dsh.modelAuditView.collectionHint")}
       </p>
       {snapshot && !canCaptureContent && (
-        <p
-          role="alert"
-          className="col-span-full rounded-md border border-input bg-muted/50 px-3 py-2 text-sm"
-        >
-          {t(
+        <Alert
+          live
+          type="warning"
+          className="col-span-full m-0"
+          description={t(
             snapshot.content_available === undefined
               ? "dsh.modelAuditView.contentReadinessUnknown"
               : snapshot.mode === "CONTENT"
                 ? "dsh.modelAuditView.contentKeyLost"
                 : "dsh.modelAuditView.contentKeyMissing",
           )}
-        </p>
+        />
       )}
       {(failed || saveFailed) && (
         <p role="alert" className="col-span-full text-sm text-destructive">
@@ -161,7 +151,7 @@ export function ModelAuditMode({
             />
             <Button
               type="button"
-              size="sm"
+              size="small"
               className="text-sm"
               disabled={
                 !tenantId ||

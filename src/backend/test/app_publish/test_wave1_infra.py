@@ -306,7 +306,7 @@ def test_default_tier_code_is_light():
 # ---- alembic (T003) ----------------------------------------------------------
 
 
-def test_revision_chains_onto_the_130_release_head():
+def test_revision_chains_onto_the_f054_head():
     import importlib.util
 
     path = (
@@ -316,13 +316,13 @@ def test_revision_chains_onto_the_130_release_head():
         / "database"
         / "alembic"
         / "versions"
-        / "v3_0_0_f130_cloud_workbenches.py"
+        / "v3_0_0_f055_app_publish_tables.py"
     )
     spec = importlib.util.spec_from_file_location("f055_revision", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    assert module.revision == "f130_cloud_workbenches"
-    assert module.down_revision == "f111_matched_words"
+    assert module.revision == "f055_app_publish_tables"
+    assert module.down_revision == "f054_app_runtime_tables"
 
 
 # ---- conftest fixtures (T007) ------------------------------------------------

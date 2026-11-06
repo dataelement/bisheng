@@ -51,14 +51,6 @@ describe("versionTerminalStateI18nKey", () => {
 })
 
 describe("versionOutcomeI18nKey", () => {
-  it("reports a failed iteration instead of claiming approval is still pending", () => {
-    expect(versionOutcomeI18nKey(version({ deployment_status: "failed" }))).toBe(
-      "hostedApp.phase.failed",
-    )
-    expect(versionOutcomeI18nKey(version({ deployment_status: "failed", terminal_state: "online" }))).toBe(
-      "hostedApp.versionList.outcomeOnline",
-    )
-  })
   it("test_pending_version_reads_as_pending_online_not_blank", () => {
     expect(versionOutcomeI18nKey(version({ is_pending: true }))).toBe(
       "hostedApp.versionList.outcomePendingOnline",

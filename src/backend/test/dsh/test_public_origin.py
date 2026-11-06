@@ -142,3 +142,11 @@ async def test_host_and_origin_validation_stays_bound_to_config(configured, expe
 def test_deployment_origin_has_one_unambiguous_http_authority(value):
     with pytest.raises(ValidationError):
         DshSettings(enabled=True, platform_public_url=value)
+
+
+def test_work_runtime_can_start_without_optional_dsh_origin():
+    policy = work_transport_security(None)
+    assert policy.enable_dns_rebinding_protection
+    assert policy.allowed_hosts == []
+    assert policy.allowed_origins == []
+    assert create_work_mcp_runtime(policy) is not None

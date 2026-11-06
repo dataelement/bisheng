@@ -227,7 +227,7 @@ async def test_status_returns_reject_reason_full_text(
     from bisheng.approval.domain.models.approval_instance import ApprovalInstanceStatus, ApprovalTaskStatus
     from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
 
-    reason = "驳回原因:" + "接口缺少鉴权。" * 30
+    reason = "驳回原因：" + "接口缺少鉴权。" * 30
     app, version = await app_factory(with_version=True)
     deployment = await deployment_factory(
         app_id=app.id, stage="precheck_probe", status="running", version_id=version.id, tier_code="light"

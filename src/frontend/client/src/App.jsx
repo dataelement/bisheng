@@ -1,3 +1,4 @@
+import { shouldRetryApiError } from '@bisheng/api-client';
 import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
@@ -19,6 +20,7 @@ const App = () => {
     defaultOptions: {
       queries: {
         refetchOnWindowFocus: false,
+        retry: (failureCount, error) => shouldRetryApiError(error) && failureCount < 3,
       },
     },
     queryCache: new QueryCache({

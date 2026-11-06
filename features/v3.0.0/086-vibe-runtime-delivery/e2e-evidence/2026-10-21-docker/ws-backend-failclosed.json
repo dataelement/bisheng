@@ -1,0 +1,6 @@
+{
+  "scenario": "backend_unavailable",
+  "closed_after_seconds": 4.013150930404663,
+  "close_code": 4503,
+  "new_http_status": 503
+}

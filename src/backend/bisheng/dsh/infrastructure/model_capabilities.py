@@ -1,7 +1,5 @@
 """Protocol adaptation from existing provider implementations, never an authorization list."""
 
-from urllib.parse import urlsplit
-
 from bisheng.dsh.domain.schemas.chat import ChatCapabilities
 from bisheng.dsh.domain.schemas.reasoning import model_parameters, reasoning_declaration
 
@@ -24,16 +22,6 @@ def model_capabilities(model, server) -> ChatCapabilities:
     client = adapter.get("client")
     tools = client is not None and getattr(client, "bind_tools", None) is not BaseChatModel.bind_tools
     reasoning = reasoning_declaration(model.config or {})
-    provider_config = getattr(server, "config", None) or {}
-    base_url = provider_config.get("openai_api_base") or provider_config.get("base_url") or ""
-    # M2.7's OpenAI SSE endpoint can end a tool call before its argument value.
-    # Cover both the dedicated provider and existing OpenAI-compatible setups.
-    minimax = server.type == "minimax" or urlsplit(base_url).hostname in {
-        "api.minimaxi.com",
-        "api.minimax.io",
-        "api.minimax.cn",
-    }
-    buffered_tools = minimax and getattr(model, "model_name", "") in {"MiniMax-M2.7", "MiniMax-M2.7-highspeed"}
     if reasoning is not None and server.type not in {"openai", "azure_openai"}:
         raise ValueError("Provider has no reasoning effort mapping")
     if reasoning is not None and any(
@@ -44,9 +32,7 @@ def model_capabilities(model, server) -> ChatCapabilities:
     return ChatCapabilities(
         streaming=server.type != "moonshot",
         tools=tools,
-        tool_streaming=not buffered_tools,
         reasoning_content=True,
-        reasoning_split=buffered_tools,
         # OpenAI SDK adapters accept this input natively or translate it in
         # their existing payload builder (for example ChatQwen -> max_tokens).
         max_completion_tokens=client is not None and issubclass(client, BaseChatOpenAI),

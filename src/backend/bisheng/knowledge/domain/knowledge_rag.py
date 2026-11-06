@@ -6,6 +6,7 @@ from langchain_elasticsearch import AsyncElasticsearchStore, ElasticsearchStore
 from langchain_milvus import Milvus
 
 from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.errcode.knowledge import KnowledgeEmbeddingUnavailableError
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgePermissionService,
@@ -191,9 +192,14 @@ class KnowledgeRag:
     ) -> Milvus:
         knowledge = await cls._get_knowledge(knowledge, knowledge_id)
         if embeddings is None:
-            embeddings = await LLMService.get_bisheng_knowledge_embedding(
-                model_id=int(knowledge.model), invoke_user_id=invoke_user_id
-            )
+            try:
+                embeddings = await LLMService.get_bisheng_knowledge_embedding(
+                    model_id=int(knowledge.model), invoke_user_id=invoke_user_id
+                )
+            except Exception as exc:
+                raise KnowledgeEmbeddingUnavailableError(
+                    knowledge_name=knowledge.name, knowledge_id=knowledge.id
+                ) from exc
         return cls.init_milvus_vectorstore(knowledge.collection_name, embeddings, **kwargs)
 
     @classmethod

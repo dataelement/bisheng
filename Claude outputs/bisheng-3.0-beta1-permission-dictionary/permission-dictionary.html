@@ -1,0 +1,1041 @@
+<title>毕昇权限配置数据字典</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@700&display=swap">
+<style>
+:root {
+  --ground: #F5F7FA;
+  --surface: #FFFFFF;
+  --ink: #1D2129;
+  --ink-2: #4E5969;
+  --ink-3: #86909C;
+  --rule: #E5E6EB;
+  --rule-strong: #C9CDD4;
+  --accent: #165DFF;
+  --accent-ink: #024DE3;
+  --accent-tint: #E8F3FF;
+  --warn: #B85200;
+  --warn-tint: #FFF3E8;
+  --warn-rule: #FFD2A8;
+  --code-bg: #F2F4F7;
+  --chip-bg: #EDF1F7;
+  --chip-ink: #1D2129;
+  --focus: #165DFF;
+  --font-display: "Noto Serif SC", "Songti SC", "SimSun", serif;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  --fs-xs: 12.5px;
+  --fs-sm: 13.5px;
+  --fs-md: 15px;
+  --fs-lg: 18px;
+  --fs-xl: 24px;
+  --fs-2xl: 32px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #141518;
+    --surface: #1D1E22;
+    --ink: #E8EAED;
+    --ink-2: #B4B9C2;
+    --ink-3: #7F8793;
+    --rule: #2E3036;
+    --rule-strong: #454852;
+    --accent: #4F8BFF;
+    --accent-ink: #8DB3FF;
+    --accent-tint: #172440;
+    --warn: #FFA24D;
+    --warn-tint: #2B1F12;
+    --warn-rule: #5A3A18;
+    --code-bg: #17181C;
+    --chip-bg: #262932;
+    --chip-ink: #E8EAED;
+    --focus: #8DB3FF;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #141518;
+  --surface: #1D1E22;
+  --ink: #E8EAED;
+  --ink-2: #B4B9C2;
+  --ink-3: #7F8793;
+  --rule: #2E3036;
+  --rule-strong: #454852;
+  --accent: #4F8BFF;
+  --accent-ink: #8DB3FF;
+  --accent-tint: #172440;
+  --warn: #FFA24D;
+  --warn-tint: #2B1F12;
+  --warn-rule: #5A3A18;
+  --code-bg: #17181C;
+  --chip-bg: #262932;
+  --chip-ink: #E8EAED;
+  --focus: #8DB3FF;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--fs-md);
+  line-height: 1.75;
+  padding-inline: 24px;
+  padding-block: 0 64px;
+}
+a { color: var(--accent-ink); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+
+.masthead {
+  max-width: 1180px;
+  margin-inline: auto;
+  padding-block: 44px 28px;
+  border-bottom: 1px solid var(--rule);
+  display: grid;
+  gap: 14px;
+}
+.eyebrow {
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+}
+.eyebrow .ver {
+  font-family: var(--font-mono);
+  color: var(--accent-ink);
+  background: var(--accent-tint);
+  padding: 1px 8px;
+  border-radius: 4px;
+  letter-spacing: 0;
+}
+h1 {
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  line-height: 1.3;
+  margin: 0;
+  text-wrap: balance;
+}
+.lede { margin: 0; color: var(--ink-2); max-width: 64ch; }
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  margin: 6px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.meta dt { color: var(--ink-3); display: inline; }
+.meta dd { display: inline; margin: 0 0 0 6px; color: var(--ink); }
+
+.shell {
+  max-width: 1180px;
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  gap: 56px;
+  padding-top: 32px;
+}
+.index {
+  position: sticky;
+  top: 20px;
+  align-self: start;
+  font-size: var(--fs-sm);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+.index h2 {
+  font-family: var(--font-body);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  font-weight: 500;
+  margin: 0 0 10px;
+}
+.index ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.index a {
+  display: block;
+  color: var(--ink);
+  text-decoration: none;
+  padding: 5px 10px;
+  border-radius: 6px;
+}
+.index a:hover { background: var(--chip-bg); }
+.index .tables {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  line-height: 1.5;
+  margin-top: 1px;
+  overflow-wrap: anywhere;
+}
+
+main { min-width: 0; display: grid; gap: 56px; }
+section { display: grid; gap: 18px; scroll-margin-top: 16px; }
+h2 {
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  line-height: 1.35;
+  margin: 0;
+  text-wrap: balance;
+}
+h3 {
+  font-size: var(--fs-lg);
+  line-height: 1.4;
+  margin: 10px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+h3 .tname { font-family: var(--font-mono); font-weight: 500; }
+h3 .tdesc { font-size: var(--fs-sm); color: var(--ink-2); font-weight: 400; }
+p { margin: 0; max-width: 68ch; }
+.muted { color: var(--ink-2); }
+code, .mono { font-family: var(--font-mono); font-size: 0.9em; }
+p code, li code, td code {
+  background: var(--chip-bg);
+  color: var(--chip-ink);
+  padding: 1px 5px;
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+
+.rules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--rule);
+}
+.rules li {
+  display: grid;
+  grid-template-columns: 9.5em minmax(0, 1fr);
+  gap: 16px;
+  padding-block: 14px;
+  border-bottom: 1px solid var(--rule);
+}
+.rules strong { font-weight: 700; }
+
+.callout {
+  background: var(--warn-tint);
+  border: 1px solid var(--warn-rule);
+  border-radius: 8px;
+  padding: 14px 18px;
+  display: grid;
+  gap: 6px;
+}
+.callout .label {
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+th, td {
+  text-align: left;
+  vertical-align: top;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--rule);
+}
+tr:last-child td { border-bottom: 0; }
+th {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  background: var(--ground);
+  white-space: nowrap;
+}
+td.col { white-space: nowrap; }
+td.col .n { font-family: var(--font-mono); font-weight: 500; font-size: 13px; display: block; }
+td.col .t { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3); display: block; }
+td .n-inline { font-family: var(--font-mono); font-weight: 500; font-size: 13px; white-space: nowrap; }
+.v {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--chip-bg);
+  color: var(--chip-ink);
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.key-row td { background: var(--accent-tint); }
+
+.matrix th.m, .matrix td.m { text-align: center; width: 5.5em; }
+.matrix td.m { font-family: var(--font-mono); color: var(--accent); font-weight: 500; }
+.matrix td.m.no { color: var(--rule-strong); font-weight: 400; }
+.matrix th.m .mk { display: block; font-family: var(--font-mono); letter-spacing: 0; color: var(--ink-2); }
+
+.diagram {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+}
+.diagram pre.mermaid { margin: 0; background: transparent; }
+
+.dialect {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  font-size: var(--fs-sm);
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--rule-strong);
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label {
+  padding: 5px 14px;
+  cursor: pointer;
+  color: var(--ink-2);
+}
+.seg input:checked + label { background: var(--accent); color: #FFFFFF; }
+.seg input:focus-visible + label { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+.query { display: grid; gap: 0; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.query header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--rule);
+}
+.query header .qt { font-weight: 500; }
+.query header .qid { font-family: var(--font-mono); color: var(--accent-ink); margin-right: 8px; }
+.query header .qn { font-size: var(--fs-xs); color: var(--ink-3); }
+.copy {
+  font: inherit;
+  font-size: var(--fs-xs);
+  color: var(--accent-ink);
+  background: var(--accent-tint);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 3px 12px;
+  cursor: pointer;
+}
+.copy:hover { border-color: var(--accent); }
+.query pre {
+  margin: 0;
+  padding: 14px 16px;
+  background: var(--code-bg);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink);
+  tab-size: 2;
+}
+.queries { display: grid; gap: 18px; }
+
+.notes { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.notes li { display: grid; gap: 4px; padding-left: 14px; border-left: 2px solid var(--rule-strong); }
+.notes li strong { font-weight: 700; }
+
+footer.verify {
+  border-top: 1px solid var(--rule);
+  padding-top: 18px;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+@media (max-width: 960px) {
+  .shell { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .index { position: static; max-height: none; overflow: visible; }
+  .index ol { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; }
+  .index li { flex: none; }
+  .index a { background: var(--surface); border: 1px solid var(--rule); white-space: nowrap; }
+  .index .tables { display: none; }
+}
+@media (max-width: 560px) {
+  body { padding-inline: 16px; }
+  h1 { font-size: 26px; }
+  h2 { font-size: 21px; }
+  .rules li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
+</style>
+
+<header class="masthead">
+  <div class="eyebrow"><span>数据字典</span><span class="ver">3.0.0-beta1</span><span>直连数据库只读查询</span></div>
+  <h1>毕昇权限配置数据字典</h1>
+  <p class="lede">说明毕昇平台的权限配置保存在哪些表、每个字段和取值的含义，并附上可直接执行的查询，用来回答"谁把什么权限配给了谁"。</p>
+  <dl class="meta">
+    <div><dt>适用数据库</dt><dd>MySQL · 达梦 DM8</dd></div>
+    <div><dt>核对日期</dt><dd>2026-09-14</dd></div>
+    <div><dt>范围</dt><dd>权限配置，不含最终生效结果</dd></div>
+  </dl>
+</header>
+
+<div class="shell">
+  <nav class="index" aria-label="章节">
+    <h2>目录</h2>
+    <ol>
+      <li><a href="#read-first">读库前先看</a></li>
+      <li><a href="#map">配置存在哪里</a></li>
+      <li><a href="#grants">资源授权<span class="tables">permission_grant<br>permission_grant_assignee</span></a></li>
+      <li><a href="#models">权限模型<span class="tables">permission_model<br>permission_action</span></a></li>
+      <li><a href="#mode">继承与自定义<span class="tables">resource_permission_mode</span></a></li>
+      <li><a href="#space">知识空间加入方式<span class="tables">knowledge.auth_type</span></a></li>
+      <li><a href="#org">组织归属<span class="tables">user_department · usergroup</span></a></li>
+      <li><a href="#roles">角色与菜单<span class="tables">userrole · roleaccess</span></a></li>
+      <li><a href="#admins">管理员身份<span class="tables">department_admin_grant · openfga.tuple</span></a></li>
+      <li><a href="#sql">常用查询</a></li>
+      <li><a href="#notes">读库注意事项</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <section id="read-first" aria-labelledby="h-read-first">
+      <h2 id="h-read-first">读库前先看</h2>
+      <ul class="rules">
+        <li><strong>这是配置</strong><span>库里记录的是"配给了谁"。某人最终能看到、能操作什么，还要叠加部门成员（含下级部门）、用户组成员、文件夹继承、知识空间加入方式和管理员身份，单靠读表得不出这个结果。</span></li>
+        <li><strong>只取生效行</strong><span>授权表只取 <code>state = 'ACTIVE'</code> 的行。<code>INACTIVE</code> 是已撤销的历史记录。</span></li>
+        <li><strong>只读，不写</strong><span>直接改表不会同步到权限引擎，界面上不生效，还会让两边数据不一致。请使用只读账号。</span></li>
+        <li><strong>按版本核对</strong><span>表结构随版本变化。本字典按 3.0.0-beta1 核对，平台升级后请重新核对。</span></li>
+      </ul>
+    </section>
+
+    <section id="map" aria-labelledby="h-map">
+      <h2 id="h-map">配置存在哪里</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>想知道</th><th>去读</th></tr></thead>
+          <tbody>
+            <tr><td>某个资源授给了谁、给的什么权限</td><td><code>permission_grant</code> + <code>permission_grant_assignee</code></td></tr>
+            <tr><td>每个权限模型包含哪些操作</td><td><code>permission_model</code> · <code>permission_model_action</code> · <code>permission_action</code></td></tr>
+            <tr><td>文件夹、文件是继承上级还是自定义</td><td><code>resource_permission_mode</code></td></tr>
+            <tr><td>知识空间是公开、需审批还是私有</td><td><code>knowledge.auth_type</code></td></tr>
+            <tr><td>人属于哪个部门、哪个用户组</td><td><code>user_department</code> · <code>usergroup</code></td></tr>
+            <tr><td>人有哪些角色、角色能进哪些菜单</td><td><code>userrole</code> · <code>role</code> · <code>roleaccess</code> · <code>user_menu_access</code></td></tr>
+            <tr><td>谁是管理员</td><td><code>userrole</code> · <code>department_admin_grant</code> · <code>usergroup</code>，另有两类只在 OpenFGA 库的 <code>tuple</code> 表</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="grants" aria-labelledby="h-grants">
+      <h2 id="h-grants">资源授权</h2>
+      <p>知识空间、知识库、文件、工作流、助手、工具、频道、看板的授权都存在这两张表。<code>permission_grant</code> 每行是"某资源上的某个权限模型"，被授予的人、部门、用户组挂在 <code>permission_grant_assignee</code> 下面。</p>
+      <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+  G["permission_grant&lt;br/&gt;资源 × 权限模型"] -->|"grant_id"| A["permission_grant_assignee&lt;br/&gt;授给谁"]
+  G -->|"resource_type + resource_id"| R["业务表&lt;br/&gt;knowledge / knowledgefile / flow …"]
+  G -->|"model_key"| M["permission_model&lt;br/&gt;当前目录版本"]
+  M --> PA["permission_model_action&lt;br/&gt;→ permission_action"]
+  A -->|"subject_type + subject_id"| S["user / department&lt;br/&gt;group / service_account"]
+</pre>
+      </div>
+
+      <h3><span class="tname">permission_grant</span><span class="tdesc">资源上的一个权限模型</span></h3>
+      <p class="muted">同一资源上每个权限模型只有一行（唯一键：<code>tenant_id, resource_type, resource_id, model_key</code>）。</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>字段</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td class="col"><span class="n">id</span><span class="t">BIGINT</span></td><td>主键，被 <code>permission_grant_assignee.grant_id</code> 引用</td></tr>
+            <tr><td class="col"><span class="n">tenant_id</span><span class="t">BIGINT</span></td><td>租户 ID。单租户部署恒为 <span class="v">1</span></td></tr>
+            <tr class="key-row"><td class="col"><span class="n">resource_type</span><span class="t">VARCHAR(64)</span></td><td>资源类型，取值见下方「资源类型」</td></tr>
+            <tr class="key-row"><td class="col"><span class="n">resource_id</span><span class="t">VARCHAR(64)</span></td><td>资源 ID，按资源类型对应到业务表。数字 ID 也以字符串保存</td></tr>
+            <tr class="key-row"><td class="col"><span class="n">model_key</span><span class="t">VARCHAR(64)</span></td><td>权限模型编码，对应 <code>permission_model.model_key</code></td></tr>
+            <tr><td class="col"><span class="n">state</span><span class="t">VARCHAR(64)</span></td><td>状态，取值见下方「状态」</td></tr>
+            <tr><td class="col"><span class="n">projection_state</span><span class="t">VARCHAR(64)</span></td><td>同步到权限引擎的进度：<span class="v">CURRENT</span> 已同步，<span class="v">PENDING</span> / <span class="v">PROJECTING</span> 同步中，<span class="v">FAILED_CLOSED</span> 同步失败</td></tr>
+            <tr><td class="col"><span class="n">version</span><span class="t">BIGINT</span></td><td>并发控制用的版本号</td></tr>
+            <tr><td class="col"><span class="n">create_time · update_time</span><span class="t">DATETIME</span></td><td>创建、最后修改时间</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3><span class="tname">permission_grant_assignee</span><span class="tdesc">这个权限模型授给了谁</span></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>字段</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td class="col"><span class="n">id</span><span class="t">BIGINT</span></td><td>主键</td></tr>
+            <tr><td class="col"><span class="n">tenant_id</span><span class="t">BIGINT</span></td><td>租户 ID</td></tr>
+            <tr class="key-row"><td class="col"><span class="n">grant_id</span><span class="t">BIGINT</span></td><td>所属授权，外键指向 <code>permission_grant.id</code></td></tr>
+            <tr class="key-row"><td class="col"><span class="n">subject_type</span><span class="t">VARCHAR(64)</span></td><td>授权对象类型，取值见下方「授权对象」</td></tr>
+            <tr class="key-row"><td class="col"><span class="n">subject_id</span><span class="t">VARCHAR(64)</span></td><td>授权对象 ID，按对象类型对应到用户、部门、用户组或服务账号表</td></tr>
+            <tr><td class="col"><span class="n">include_children</span><span class="t">BOOLEAN</span></td><td><span class="v">1</span> = 连同下级部门一起授权。只有部门会用到</td></tr>
+            <tr><td class="col"><span class="n">userset_relation</span><span class="t">VARCHAR(64)</span></td><td>部门：<span class="v">member</span> 仅本部门，<span class="v">subtree_member</span> 含下级部门；用户组：<span class="v">member</span> 全体成员，<span class="v">admin</span> 仅组管理员；用户和服务账号为空</td></tr>
+            <tr class="key-row"><td class="col"><span class="n">source_type</span><span class="t">VARCHAR(64)</span></td><td>这条授权是怎么来的，取值见下方「授权来源」</td></tr>
+            <tr><td class="col"><span class="n">protected</span><span class="t">BOOLEAN</span></td><td><span class="v">1</span> = 受保护授权（创建人的所有者身份），界面上不能移除</td></tr>
+            <tr><td class="col"><span class="n">state</span><span class="t">VARCHAR(64)</span></td><td>状态，与 <code>permission_grant.state</code> 取值相同。两张表都要取 <span class="v">ACTIVE</span></td></tr>
+            <tr><td class="col"><span class="n">projected_subject</span><span class="t">VARCHAR(256)</span></td><td>写入权限引擎的对象串，例如 <code>department:4#subtree_member</code></td></tr>
+            <tr><td class="col"><span class="n">source_ref · source_locator · source_fingerprint</span><span class="t">VARCHAR / CHAR(64)</span></td><td>来源定位和去重键，系统内部使用，读数时可忽略</td></tr>
+            <tr><td class="col"><span class="n">version · create_time · update_time</span><span class="t">BIGINT / DATETIME</span></td><td>版本号、创建与修改时间</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>资源类型<span class="tdesc"><code>resource_type</code> → 业务表</span></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>取值</th><th>界面名称</th><th>对应表.字段</th><th>名称字段</th><th>补充</th></tr></thead>
+          <tbody>
+            <tr><td><span class="v">knowledge_space</span></td><td>知识空间</td><td><span class="n-inline">knowledge.id</span></td><td><span class="n-inline">name</span></td><td><code>type = 3</code></td></tr>
+            <tr><td><span class="v">knowledge_library</span></td><td>知识库</td><td><span class="n-inline">knowledge.id</span></td><td><span class="n-inline">name</span></td><td><code>type = 0</code> 文档库，<code>type = 1</code> 问答库</td></tr>
+            <tr><td><span class="v">folder</span></td><td>文件夹</td><td><span class="n-inline">knowledgefile.id</span></td><td><span class="n-inline">file_name</span></td><td><code>file_type = 0</code></td></tr>
+            <tr><td><span class="v">knowledge_file</span></td><td>文件</td><td><span class="n-inline">knowledgefile.id</span></td><td><span class="n-inline">file_name</span></td><td>知识库和知识空间的文件都在这张表</td></tr>
+            <tr><td><span class="v">workflow</span></td><td>工作流</td><td><span class="n-inline">flow.id</span></td><td><span class="n-inline">name</span></td><td><code>flow_type = 10</code></td></tr>
+            <tr><td><span class="v">assistant</span></td><td>助手</td><td><span class="n-inline">assistant.id</span></td><td><span class="n-inline">name</span></td><td><code>is_delete = 1</code> 为已删除</td></tr>
+            <tr><td><span class="v">tool</span></td><td>工具</td><td><span class="n-inline">t_gpts_tools_type.id</span></td><td><span class="n-inline">name</span></td><td>按工具集授权；<code>is_delete = 1</code> 为已删除</td></tr>
+            <tr><td><span class="v">channel</span></td><td>频道</td><td><span class="n-inline">channel.id</span></td><td><span class="n-inline">name</span></td><td></td></tr>
+            <tr><td><span class="v">dashboard</span></td><td>看板</td><td><span class="n-inline">dashboard.id</span></td><td><span class="n-inline">title</span></td><td></td></tr>
+            <tr><td><span class="v">linsight_skill</span></td><td>灵思技能</td><td><span class="n-inline">linsight_skill.id</span></td><td><span class="n-inline">name</span></td><td>只记录创建人</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>授权对象<span class="tdesc"><code>subject_type</code> → 组织表</span></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>取值</th><th>含义</th><th>对应表.字段</th><th>名称字段与说明</th></tr></thead>
+          <tbody>
+            <tr><td><span class="v">user</span></td><td>用户</td><td><span class="n-inline">user.user_id</span></td><td><code>user_name</code>；<code>delete = 1</code> 为已停用</td></tr>
+            <tr><td><span class="v">department</span></td><td>部门</td><td><span class="n-inline">department.id</span></td><td><code>name</code>；<code>path</code> 为 <code>/1/2/3/</code> 形式的层级路径</td></tr>
+            <tr><td><span class="v">user_group</span></td><td>用户组</td><td><span class="n-inline">group.id</span></td><td><code>group_name</code></td></tr>
+            <tr><td><span class="v">service_account</span></td><td>服务账号</td><td><span class="n-inline">service_account.id</span></td><td><code>name</code>；开放接口的调用方</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>授权来源<span class="tdesc"><code>source_type</code></span></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>取值</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td><span class="v">DIRECT</span></td><td>在「权限管理」中直接授给某个用户或服务账号</td></tr>
+            <tr><td><span class="v">DEPARTMENT</span></td><td>授给部门</td></tr>
+            <tr><td><span class="v">USER_GROUP</span></td><td>授给用户组</td></tr>
+            <tr><td><span class="v">CREATOR</span></td><td>资源创建人自动获得「所有者」，<code>protected = 1</code></td></tr>
+            <tr><td><span class="v">CREATOR_GRANT</span></td><td>服务账号创建资源时，自身获得「管理者」</td></tr>
+            <tr><td><span class="v">SPACE_MEMBERSHIP</span></td><td>知识空间成员身份：空间管理员对应「管理者」，普通成员对应「查看者」</td></tr>
+            <tr><td><span class="v">CHANNEL_MEMBERSHIP</span></td><td>频道成员身份</td></tr>
+            <tr><td><span class="v">SNAPSHOT_FROM_PARENT</span></td><td>文件夹或文件从「继承」改为「自定义」时，从上级复制下来的授权</td></tr>
+            <tr><td><span class="v">OTHER</span></td><td>其他来源</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>状态<span class="tdesc"><code>state</code>，两张表通用</span></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>取值</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td><span class="v">ACTIVE</span></td><td>生效</td></tr>
+            <tr><td><span class="v">INACTIVE</span></td><td>已撤销，保留作历史</td></tr>
+            <tr><td><span class="v">PENDING</span></td><td>正在写入</td></tr>
+            <tr><td><span class="v">FAILED_CLOSED</span></td><td>处理失败，系统按未授权对待</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="models" aria-labelledby="h-models">
+      <h2 id="h-models">权限模型</h2>
+      <p>权限模型是一组操作的集合，例如「编辑者」包含上传、重命名、编辑等。管理员调整模型时会生成新的<strong>目录版本</strong>，模型表按版本存多份，读取时必须只取当前版本，否则同一模型会重复出现。</p>
+
+      <h3><span class="tname">permission_catalog_release</span><span class="tdesc">目录版本</span></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>字段</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td class="col"><span class="n">id</span><span class="t">BIGINT</span></td><td>主键，被模型表和操作表的 <code>catalog_release_id</code> 引用</td></tr>
+            <tr><td class="col"><span class="n">version</span><span class="t">BIGINT</span></td><td>版本序号</td></tr>
+            <tr class="key-row"><td class="col"><span class="n">status</span><span class="t">VARCHAR(64)</span></td><td><span class="v">CURRENT</span> 为当前生效版本（只有一行）；<span class="v">DRAFT</span> 草稿，<span class="v">RETIRED</span> 已退役，<span class="v">COMMITTED</span> / <span class="v">PROJECTING</span> 发布中，<span class="v">FAILED_CLOSED</span> 发布失败</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3><span class="tname">permission_model</span><span class="tdesc">权限模型</span></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>字段</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td class="col"><span class="n">catalog_release_id</span><span class="t">BIGINT</span></td><td>所属目录版本</td></tr>
+            <tr class="key-row"><td class="col"><span class="n">model_key</span><span class="t">VARCHAR(64)</span></td><td>模型编码。内置 <span class="v">viewer</span> <span class="v">editor</span> <span class="v">manager</span> <span class="v">owner</span>；管理员自建的是随机 ID；平台升级迁移生成的形如 <code>legacy-custom-…</code></td></tr>
+            <tr><td class="col"><span class="n">name</span><span class="t">VARCHAR(255)</span></td><td>界面显示名，如「查看者」</td></tr>
+            <tr><td class="col"><span class="n">kind</span><span class="t">VARCHAR(64)</span></td><td><span class="v">STANDARD</span> 内置，<span class="v">CUSTOM</span> 自定义</td></tr>
+            <tr><td class="col"><span class="n">derived_level</span><span class="t">INT</span></td><td>权限等级 1–4：查看者 1、编辑者 2、管理者 3、所有者 4；自定义模型按所含操作推算</td></tr>
+            <tr><td class="col"><span class="n">active</span><span class="t">BOOLEAN</span></td><td>是否启用</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3><span class="tname">permission_model_action · permission_action</span><span class="tdesc">模型包含的操作</span></h3>
+      <p class="muted"><code>permission_model_action</code> 用 <code>model_id</code>、<code>action_id</code> 连接两张表。<code>permission_action.name</code> 存的是英文编码，中文名见下表。</p>
+      <div class="table-wrap">
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th>操作编码</th><th>中文名</th><th>适用资源</th>
+              <th class="m">查看者<span class="mk">viewer</span></th>
+              <th class="m">编辑者<span class="mk">editor</span></th>
+              <th class="m">管理者<span class="mk">manager</span></th>
+              <th class="m">所有者<span class="mk">owner</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><span class="v">use</span></td><td>使用</td><td>知识库、工作流、助手、工具</td><td class="m">●</td><td class="m">●</td><td class="m">●</td><td class="m">●</td></tr>
+            <tr><td><span class="v">download</span></td><td>下载</td><td>文件夹、文件</td><td class="m">●</td><td class="m">●</td><td class="m">●</td><td class="m">●</td></tr>
+            <tr><td><span class="v">edit</span></td><td>编辑</td><td>知识空间、知识库、工作流、助手、工具、频道、看板</td><td class="m no">—</td><td class="m">●</td><td class="m">●</td><td class="m">●</td></tr>
+            <tr><td><span class="v">rename</span></td><td>重命名</td><td>文件夹、文件</td><td class="m no">—</td><td class="m">●</td><td class="m">●</td><td class="m">●</td></tr>
+            <tr><td><span class="v">create_folder</span></td><td>新建文件夹</td><td>知识空间、文件夹</td><td class="m no">—</td><td class="m">●</td><td class="m">●</td><td class="m">●</td></tr>
+            <tr><td><span class="v">upload_file</span></td><td>上传文件</td><td>知识空间、文件夹</td><td class="m no">—</td><td class="m">●</td><td class="m">●</td><td class="m">●</td></tr>
+            <tr><td><span class="v">move</span></td><td>移动</td><td>文件夹、文件</td><td class="m no">—</td><td class="m">●</td><td class="m">●</td><td class="m">●</td></tr>
+            <tr><td><span class="v">share</span></td><td>分享</td><td>知识空间、文件、工作流、助手</td><td class="m no">—</td><td class="m no">—</td><td class="m">●</td><td class="m">●</td></tr>
+            <tr><td><span class="v">publish</span></td><td>发布</td><td>工作流、助手</td><td class="m no">—</td><td class="m no">—</td><td class="m">●</td><td class="m">●</td></tr>
+            <tr><td><span class="v">unpublish</span></td><td>取消发布</td><td>工作流、助手</td><td class="m no">—</td><td class="m no">—</td><td class="m">●</td><td class="m">●</td></tr>
+            <tr><td><span class="v">manage_permission</span></td><td>权限管理</td><td>全部资源</td><td class="m no">—</td><td class="m no">—</td><td class="m">●</td><td class="m">●</td></tr>
+            <tr><td><span class="v">delete</span></td><td>删除</td><td>全部资源</td><td class="m no">—</td><td class="m no">—</td><td class="m no">—</td><td class="m">●</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted">上表是四个内置模型的默认配置。自定义模型以及贵方实际配置，以查询 Q2 的结果为准。</p>
+    </section>
+
+    <section id="mode" aria-labelledby="h-mode">
+      <h2 id="h-mode">继承与自定义</h2>
+      <h3><span class="tname">resource_permission_mode</span><span class="tdesc">资源的权限模式</span></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>字段</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td class="col"><span class="n">resource_type · resource_id</span><span class="t">VARCHAR(64)</span></td><td>资源，含义同授权表</td></tr>
+            <tr class="key-row"><td class="col"><span class="n">mode</span><span class="t">VARCHAR(64)</span></td><td><span class="v">INHERIT</span> 继承：除自身授权外，上级的授权也对它生效；<span class="v">CUSTOM</span> 自定义：只按自身授权</td></tr>
+            <tr><td class="col"><span class="n">parent_type · parent_id</span><span class="t">VARCHAR(64)</span></td><td>上级资源（知识空间、知识库或文件夹）。顶层资源没有上级，恒为 <span class="v">CUSTOM</span></td></tr>
+            <tr><td class="col"><span class="n">projection_state · version · update_time</span><span class="t">—</span></td><td>同步进度、版本号、修改时间</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted">从继承改为自定义时，系统把当时上级的授权复制一份到自身，这些授权的来源记为 <code>SNAPSHOT_FROM_PARENT</code>。</p>
+    </section>
+
+    <section id="space" aria-labelledby="h-space">
+      <h2 id="h-space">知识空间加入方式</h2>
+      <p>知识空间（<code>knowledge.type = 3</code>）的 <code>auth_type</code> 决定其他人能否申请加入。库里存的是大写值。</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>取值</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td><span class="v">PUBLIC</span></td><td>公开，申请后直接加入</td></tr>
+            <tr><td><span class="v">APPROVAL</span></td><td>需要空间管理员审批</td></tr>
+            <tr><td><span class="v">PRIVATE</span></td><td>私有，不接受申请</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted">加入后的成员会以 <code>SPACE_MEMBERSHIP</code> 来源出现在资源授权表里，所以统计空间成员直接读授权表即可。</p>
+    </section>
+
+    <section id="org" aria-labelledby="h-org">
+      <h2 id="h-org">组织归属</h2>
+      <p>授权给部门或用户组时，授权表只记录部门、用户组本身。要知道具体涉及哪些人，需要结合下面几张表。</p>
+
+      <h3><span class="tname">user</span><span class="tdesc">用户</span></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>字段</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td class="col"><span class="n">user_id</span><span class="t">INT</span></td><td>主键，授权表中 <code>subject_type = 'user'</code> 的 <code>subject_id</code></td></tr>
+            <tr><td class="col"><span class="n">user_name</span><span class="t">VARCHAR(128)</span></td><td>用户名</td></tr>
+            <tr><td class="col"><span class="n">external_id</span><span class="t">VARCHAR</span></td><td>外部系统账号（组织同步、单点登录）</td></tr>
+            <tr><td class="col"><span class="n">delete</span><span class="t">INT</span></td><td><span class="v">1</span> = 已停用</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3><span class="tname">department</span><span class="tdesc">部门</span></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>字段</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr class="key-row"><td class="col"><span class="n">id</span><span class="t">INT</span></td><td>主键，授权表中部门的 <code>subject_id</code> 就是它</td></tr>
+            <tr><td class="col"><span class="n">dept_id · external_id</span><span class="t">VARCHAR</span></td><td>部门编码、外部系统部门 ID。不要拿它们去关联授权表</td></tr>
+            <tr><td class="col"><span class="n">name</span><span class="t">VARCHAR(128)</span></td><td>部门名称</td></tr>
+            <tr><td class="col"><span class="n">parent_id · path</span><span class="t">INT / VARCHAR</span></td><td>上级部门、层级路径（如 <code>/1/3/12/</code>）。查下级部门可用 <code>path LIKE '/1/3/%'</code></td></tr>
+            <tr><td class="col"><span class="n">status · is_deleted</span><span class="t">VARCHAR / INT</span></td><td><code>status = 'active'</code> 为正常</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3><span class="tname">user_department</span><span class="tdesc">用户所属部门</span></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>字段</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td class="col"><span class="n">user_id</span><span class="t">INT</span></td><td>用户</td></tr>
+            <tr><td class="col"><span class="n">department_id</span><span class="t">INT</span></td><td>部门，对应 <code>department.id</code></td></tr>
+            <tr><td class="col"><span class="n">is_primary</span><span class="t">INT</span></td><td><span class="v">1</span> = 主部门。一个人可以属于多个部门</td></tr>
+            <tr><td class="col"><span class="n">source</span><span class="t">VARCHAR</span></td><td>来源（手工维护或组织同步）</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3><span class="tname">group · usergroup</span><span class="tdesc">用户组及其成员</span></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>字段</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td class="col"><span class="n">group.id</span><span class="t">INT</span></td><td>用户组主键，授权表中用户组的 <code>subject_id</code></td></tr>
+            <tr><td class="col"><span class="n">group.group_name</span><span class="t">VARCHAR</span></td><td>用户组名称</td></tr>
+            <tr><td class="col"><span class="n">usergroup.user_id · group_id</span><span class="t">INT</span></td><td>成员关系</td></tr>
+            <tr><td class="col"><span class="n">usergroup.is_group_admin</span><span class="t">BOOLEAN</span></td><td><span class="v">1</span> = 用户组管理员</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="roles" aria-labelledby="h-roles">
+      <h2 id="h-roles">角色与菜单</h2>
+      <p>3.0 起，角色只决定能进入哪些菜单，不再决定能访问哪些资源；资源权限全部以上面的资源授权表为准。</p>
+
+      <h3><span class="tname">role · userrole</span><span class="tdesc">角色及用户的角色</span></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>字段</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr class="key-row"><td class="col"><span class="n">role.id</span><span class="t">INT</span></td><td>角色主键。<span class="v">1</span> 为系统管理员</td></tr>
+            <tr><td class="col"><span class="n">role.role_name</span><span class="t">VARCHAR</span></td><td>角色名称</td></tr>
+            <tr><td class="col"><span class="n">role.role_type</span><span class="t">VARCHAR(16)</span></td><td><span class="v">global</span> 所有租户可见，<span class="v">tenant</span> 仅本租户</td></tr>
+            <tr><td class="col"><span class="n">role.department_id</span><span class="t">INT</span></td><td>角色所属部门（部门自建的角色）</td></tr>
+            <tr><td class="col"><span class="n">userrole.user_id · role_id</span><span class="t">INT</span></td><td>用户拥有的角色</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3><span class="tname">roleaccess</span><span class="tdesc">角色的菜单权限</span></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>字段</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td class="col"><span class="n">role_id</span><span class="t">INT</span></td><td>角色</td></tr>
+            <tr class="key-row"><td class="col"><span class="n">type</span><span class="t">INT</span></td><td><span class="v">99</span> = 菜单权限。1–12 是旧版资源授权类型，3.0 起不再使用</td></tr>
+            <tr><td class="col"><span class="n">third_id</span><span class="t">VARCHAR</span></td><td><code>type = 99</code> 时为菜单编码，见下表</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>菜单编码</th><th>界面名称</th><th>菜单编码</th><th>界面名称</th></tr></thead>
+          <tbody>
+            <tr><td><span class="v">workstation</span></td><td>工作台</td><td><span class="v">admin</span></td><td>管理后台</td></tr>
+            <tr><td><span class="v">home</span></td><td>首页（工作台）</td><td><span class="v">linsight_task_mode</span></td><td>灵思任务模式</td></tr>
+            <tr><td><span class="v">apps</span></td><td>应用中心</td><td><span class="v">build</span></td><td>应用构建</td></tr>
+            <tr><td><span class="v">create_app</span></td><td>新建应用</td><td><span class="v">knowledge</span></td><td>知识管理</td></tr>
+            <tr><td><span class="v">create_knowledge</span></td><td>新建知识库</td><td><span class="v">knowledge_space</span></td><td>知识空间</td></tr>
+            <tr><td><span class="v">model</span></td><td>模型管理</td><td><span class="v">tool</span></td><td>工具管理</td></tr>
+            <tr><td><span class="v">mcp</span></td><td>MCP 服务</td><td><span class="v">channel</span></td><td>频道管理</td></tr>
+            <tr><td><span class="v">evaluation</span></td><td>模型评测</td><td><span class="v">dataset</span></td><td>数据集管理</td></tr>
+            <tr><td><span class="v">mark_task</span></td><td>标注任务</td><td><span class="v">board</span></td><td>数据看板</td></tr>
+            <tr><td><span class="v">subscription</span></td><td>订阅管理</td><td><span class="v">frontend</span> <span class="v">backend</span> <span class="v">create_dashboard</span></td><td>已废弃，可忽略</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3><span class="tname">user_menu_access</span><span class="tdesc">通过审批单独获得的菜单</span></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>字段</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td class="col"><span class="n">user_id</span><span class="t">INT</span></td><td>用户</td></tr>
+            <tr><td class="col"><span class="n">menu_key · menu_name</span><span class="t">VARCHAR</span></td><td>菜单编码与名称</td></tr>
+            <tr><td class="col"><span class="n">grant_source</span><span class="t">VARCHAR(64)</span></td><td><span class="v">approval_instance</span> 通过审批获得</td></tr>
+            <tr class="key-row"><td class="col"><span class="n">status</span><span class="t">VARCHAR(32)</span></td><td><span class="v">active</span> 生效，<span class="v">revoked</span> 已收回</td></tr>
+            <tr><td class="col"><span class="n">revoked_reason · revoked_by_user_id · revoked_at</span><span class="t">—</span></td><td>收回原因、操作人、时间</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="admins" aria-labelledby="h-admins">
+      <h2 id="h-admins">管理员身份</h2>
+      <p>管理员不受资源授权限制，授权表里没有他们的记录也能操作。其中两类只记录在 OpenFGA（平台的权限引擎）自己的库里。</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>身份</th><th>记录在</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td>超级管理员</td><td><code>userrole.role_id = 1</code>，以及 OpenFGA 库中 <code>system:global</code> 的 <span class="v">super_admin</span> 关系</td><td>两处任一即为超级管理员，建议合并去重</td></tr>
+            <tr><td>子租户管理员</td><td>仅 OpenFGA 库：<code>tenant:&lt;租户 ID&gt;</code> 的 <span class="v">admin</span> 关系</td><td>只在多租户部署中存在</td></tr>
+            <tr><td>部门管理员</td><td><code>department_admin_grant</code></td><td><code>grant_source</code>：<span class="v">manual</span> 手工设置，<span class="v">sso</span> 单点登录同步</td></tr>
+            <tr><td>用户组管理员</td><td><code>usergroup.is_group_admin = 1</code></td><td></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3><span class="tname">tuple</span><span class="tdesc">OpenFGA 库中的关系表</span></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>字段</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td class="col"><span class="n">object_type · object_id</span><span class="t">VARCHAR</span></td><td>对象，如 <code>system</code> / <code>global</code>、<code>tenant</code> / <code>3</code></td></tr>
+            <tr><td class="col"><span class="n">relation</span><span class="t">VARCHAR(50)</span></td><td>关系，如 <span class="v">super_admin</span>、<span class="v">admin</span></td></tr>
+            <tr><td class="col"><span class="n">_user</span><span class="t">VARCHAR(256)</span></td><td>主体，形如 <code>user:1</code>，冒号后是 <code>user.user_id</code></td></tr>
+            <tr><td class="col"><span class="n">store · inserted_at</span><span class="t">CHAR(26) / TIMESTAMP</span></td><td>存储 ID（一套部署通常只有一个）、写入时间</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted">位置：Docker Compose 默认部署时，是业务库所在 MySQL 实例上的 <code>openfga</code> 库；达梦部署时，是 OpenFGA 服务配置 <code>OPENFGA_DATASTORE_URI</code> 指定的模式。只读这张表，不要修改。</p>
+    </section>
+
+    <section id="sql" aria-labelledby="h-sql">
+      <h2 id="h-sql">常用查询</h2>
+      <div class="dialect">
+        <span class="muted">数据库</span>
+        <div class="seg" role="radiogroup" aria-label="数据库方言">
+          <input type="radio" name="dialect" id="dialect-mysql" value="mysql" checked><label for="dialect-mysql">MySQL</label>
+          <input type="radio" name="dialect" id="dialect-dm8" value="dm8"><label for="dialect-dm8">达梦 DM8</label>
+        </div>
+        <span class="muted" id="dialect-hint">关键字 user、group、mode、protected 用反引号</span>
+      </div>
+      <div class="queries">
+
+        <article class="query">
+          <header><span class="qt"><span class="qid">Q1</span>资源授权明细：哪个资源、什么权限、授给了谁</span><button class="copy" type="button">复制</button></header>
+<pre data-sql><code>SELECT
+  g.tenant_id,
+  g.resource_type,
+  g.resource_id,
+  COALESCE(k.name, f.file_name, w.name, s.name, t.name, c.name, b.title, sk.name) AS resource_name,
+  CASE WHEN k.id IS NULL AND f.id IS NULL AND w.id IS NULL AND s.id IS NULL
+            AND t.id IS NULL AND c.id IS NULL AND b.id IS NULL AND sk.id IS NULL
+       THEN 0 ELSE 1 END AS resource_exists,
+  g.model_key,
+  pm.name AS model_name,
+  a.subject_type,
+  a.subject_id,
+  CASE a.subject_type
+    WHEN 'user' THEN u.user_name
+    WHEN 'department' THEN d.name
+    WHEN 'user_group' THEN ug.group_name
+    WHEN 'service_account' THEN sa.name
+  END AS subject_name,
+  a.include_children,
+  a.source_type,
+  a.`protected`,
+  a.create_time,
+  a.update_time
+FROM permission_grant g
+JOIN permission_grant_assignee a
+  ON a.grant_id = g.id AND a.state = 'ACTIVE'
+LEFT JOIN permission_catalog_release r
+  ON r.status = 'CURRENT'
+LEFT JOIN permission_model pm
+  ON pm.catalog_release_id = r.id AND pm.model_key = g.model_key
+LEFT JOIN knowledge k
+  ON g.resource_type IN ('knowledge_space', 'knowledge_library') AND CONCAT('', k.id) = g.resource_id
+LEFT JOIN knowledgefile f
+  ON g.resource_type IN ('folder', 'knowledge_file') AND CONCAT('', f.id) = g.resource_id
+LEFT JOIN flow w
+  ON g.resource_type = 'workflow' AND w.id = g.resource_id
+LEFT JOIN assistant s
+  ON g.resource_type = 'assistant' AND s.id = g.resource_id AND s.is_delete = 0
+LEFT JOIN t_gpts_tools_type t
+  ON g.resource_type = 'tool' AND CONCAT('', t.id) = g.resource_id AND t.is_delete = 0
+LEFT JOIN channel c
+  ON g.resource_type = 'channel' AND c.id = g.resource_id
+LEFT JOIN dashboard b
+  ON g.resource_type = 'dashboard' AND CONCAT('', b.id) = g.resource_id
+LEFT JOIN linsight_skill sk
+  ON g.resource_type = 'linsight_skill' AND CONCAT('', sk.id) = g.resource_id
+LEFT JOIN `user` u
+  ON a.subject_type = 'user' AND CONCAT('', u.user_id) = a.subject_id
+LEFT JOIN department d
+  ON a.subject_type = 'department' AND CONCAT('', d.id) = a.subject_id
+LEFT JOIN `group` ug
+  ON a.subject_type = 'user_group' AND CONCAT('', ug.id) = a.subject_id
+LEFT JOIN service_account sa
+  ON a.subject_type = 'service_account' AND CONCAT('', sa.id) = a.subject_id
+WHERE g.state = 'ACTIVE'
+ORDER BY g.tenant_id, g.resource_type, g.resource_id, pm.derived_level, a.subject_type, a.subject_id;</code></pre>
+        </article>
+
+        <article class="query">
+          <header><span class="qt"><span class="qid">Q2</span>当前生效的权限模型及其操作</span><button class="copy" type="button">复制</button></header>
+<pre data-sql><code>SELECT pm.model_key, pm.name AS model_name, pm.kind, pm.derived_level, pm.active,
+       pa.code AS action_code
+FROM permission_catalog_release r
+JOIN permission_model pm ON pm.catalog_release_id = r.id
+LEFT JOIN permission_model_action pma ON pma.model_id = pm.id
+LEFT JOIN permission_action pa ON pa.id = pma.action_id
+WHERE r.status = 'CURRENT'
+ORDER BY pm.derived_level, pm.model_key, pa.sort_order;</code></pre>
+        </article>
+
+        <article class="query">
+          <header><span class="qt"><span class="qid">Q3</span>文件夹、文件的继承 / 自定义模式</span><button class="copy" type="button">复制</button></header>
+<pre data-sql><code>SELECT m.tenant_id, m.resource_type, m.resource_id, m.`mode`, m.parent_type, m.parent_id, m.update_time
+FROM resource_permission_mode m
+ORDER BY m.tenant_id, m.resource_type, m.resource_id;</code></pre>
+        </article>
+
+        <article class="query">
+          <header><span class="qt"><span class="qid">Q4</span>知识空间加入方式</span><button class="copy" type="button">复制</button></header>
+<pre data-sql><code>SELECT k.tenant_id, k.id AS space_id, k.name, k.auth_type
+FROM knowledge k
+WHERE k.type = 3
+ORDER BY k.tenant_id, k.id;</code></pre>
+        </article>
+
+        <article class="query">
+          <header><span class="qt"><span class="qid">Q5</span>用户所属部门、用户组</span><span class="qn">两条语句</span><button class="copy" type="button">复制</button></header>
+<pre data-sql><code>SELECT ud.user_id, u.user_name, ud.department_id, d.name AS department_name, d.path, ud.is_primary
+FROM user_department ud
+JOIN `user` u ON u.user_id = ud.user_id
+JOIN department d ON d.id = ud.department_id
+ORDER BY ud.user_id, ud.is_primary DESC;
+
+SELECT x.user_id, u.user_name, x.group_id, g.group_name, x.is_group_admin
+FROM usergroup x
+JOIN `user` u ON u.user_id = x.user_id
+JOIN `group` g ON g.id = x.group_id
+ORDER BY x.group_id, x.user_id;</code></pre>
+        </article>
+
+        <article class="query">
+          <header><span class="qt"><span class="qid">Q6</span>用户角色、角色菜单、审批获得的菜单</span><span class="qn">三条语句</span><button class="copy" type="button">复制</button></header>
+<pre data-sql><code>SELECT ur.user_id, u.user_name, ur.role_id, r.role_name, r.department_id AS role_department_id
+FROM userrole ur
+JOIN `user` u ON u.user_id = ur.user_id
+JOIN role r ON r.id = ur.role_id
+ORDER BY ur.user_id, ur.role_id;
+
+SELECT ra.role_id, r.role_name, ra.third_id AS menu_key
+FROM roleaccess ra
+JOIN role r ON r.id = ra.role_id
+WHERE ra.type = 99
+ORDER BY ra.role_id, ra.third_id;
+
+SELECT uma.user_id, u.user_name, uma.menu_key, uma.menu_name, uma.grant_source, uma.create_time
+FROM user_menu_access uma
+JOIN `user` u ON u.user_id = uma.user_id
+WHERE uma.status = 'active'
+ORDER BY uma.user_id, uma.menu_key;</code></pre>
+        </article>
+
+        <article class="query">
+          <header><span class="qt"><span class="qid">Q7</span>部门管理员、超级管理员</span><span class="qn">三条语句，最后一条读 OpenFGA 库</span><button class="copy" type="button">复制</button></header>
+<pre data-sql><code>SELECT dag.user_id, u.user_name, dag.department_id, d.name AS department_name, dag.grant_source
+FROM department_admin_grant dag
+JOIN `user` u ON u.user_id = dag.user_id
+JOIN department d ON d.id = dag.department_id
+ORDER BY dag.department_id, dag.user_id;
+
+SELECT ur.user_id, u.user_name
+FROM userrole ur
+JOIN `user` u ON u.user_id = ur.user_id
+WHERE ur.role_id = 1;
+
+SELECT object_type, object_id, relation, _user AS subject, inserted_at
+FROM openfga.tuple
+WHERE (object_type = 'system' AND relation = 'super_admin')
+   OR (object_type = 'tenant' AND relation = 'admin')
+ORDER BY object_type, object_id;</code></pre>
+        </article>
+      </div>
+    </section>
+
+    <section id="notes" aria-labelledby="h-notes">
+      <h2 id="h-notes">读库注意事项</h2>
+      <ul class="notes">
+        <li><strong>资源删除后授权可能残留</strong><span>Q1 输出的 <code>resource_exists = 0</code> 表示业务表里已找不到该资源，统计时请过滤掉。</span></li>
+        <li><strong>ID 以字符串关联</strong><span><code>resource_id</code>、<code>subject_id</code> 是字符串，业务表的数字主键要先转成字符串再比较。示例用 <code>CONCAT('', id)</code>，MySQL 和达梦都适用。</span></li>
+        <li><strong>多租户部署</strong><span>各表都有 <code>tenant_id</code>，跨表关联时请同时带上租户条件。单租户部署恒为 1。</span></li>
+        <li><strong>数据量</strong><span>接入组织同步的部署，<code>user</code>、<code>user_department</code>、<code>userrole</code> 可能有十万行以上，建议加条件查询，不要整表导出。</span></li>
+        <li><strong>只读账号</strong><span>MySQL 示例如下。业务库名以部署配置为准，Docker Compose 默认是 <code>bisheng</code>。</span>
+<div class="query"><header><span class="qt">创建只读账号（MySQL）</span><button class="copy" type="button">复制</button></header><pre><code>CREATE USER 'bisheng_readonly'@'%' IDENTIFIED BY '请替换为强密码';
+GRANT SELECT ON bisheng.* TO 'bisheng_readonly'@'%';
+GRANT SELECT ON openfga.tuple TO 'bisheng_readonly'@'%';</code></pre></div>
+        </li>
+      </ul>
+    </section>
+
+    <footer class="verify">
+      核对方式：字段与取值逐项对照 3.0.0-beta1 源码；全部查询已在达梦数据库上实际运行通过，MySQL 语法已单独验证。
+    </footer>
+  </main>
+</div>
+
+<script>
+(function () {
+  var blocks = Array.prototype.slice.call(document.querySelectorAll("pre[data-sql] code"));
+  var originals = blocks.map(function (el) { return el.textContent; });
+  var hint = document.getElementById("dialect-hint");
+
+  function toDm8(sql) {
+    return sql.replace(/`/g, '"').replace("FROM openfga.tuple", "FROM <openfga_schema>.tuple");
+  }
+
+  function render(dialect) {
+    blocks.forEach(function (el, i) {
+      el.textContent = dialect === "dm8" ? toDm8(originals[i]) : originals[i];
+    });
+    hint.textContent = dialect === "dm8"
+      ? "关键字用双引号；OpenFGA 表前请换成实际模式名"
+      : "关键字 user、group、mode、protected 用反引号";
+  }
+
+  var saved = null;
+  try { saved = localStorage.getItem("perm-dict-dialect"); } catch (e) { saved = null; }
+  if (saved === "dm8") {
+    document.getElementById("dialect-dm8").checked = true;
+    render("dm8");
+  }
+
+  document.querySelectorAll('input[name="dialect"]').forEach(function (input) {
+    input.addEventListener("change", function () {
+      render(input.value);
+      try { localStorage.setItem("perm-dict-dialect", input.value); } catch (e) { /* storage unavailable */ }
+    });
+  });
+
+  document.querySelectorAll(".copy").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var code = btn.closest(".query").querySelector("pre code");
+      var text = code.textContent;
+      function selectFallback() {
+        var range = document.createRange();
+        range.selectNodeContents(code);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        btn.textContent = "已选中，请按 Ctrl+C";
+      }
+      try {
+        navigator.clipboard.writeText(text).then(function () {
+          btn.textContent = "已复制";
+          setTimeout(function () { btn.textContent = "复制"; }, 1600);
+        }, selectFallback);
+      } catch (e) {
+        selectFallback();
+      }
+    });
+  });
+})();
+</script>

@@ -12,14 +12,7 @@ import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
 import { Button } from "~/components/ui/Button";
-import { SearchInput } from "@bisheng/ui";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from "~/components/ui/DropdownMenu";
+import { Dropdown, DropdownItem, DropdownSeparator, SearchInput } from "@bisheng/ui";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -232,80 +225,72 @@ export function ChannelMemberManagementPanel({
                 );
             }
             return (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <button type="button" className={ROLE_SELECT_TRIGGER_CLASS}>
-                            {getRoleLabel(member.role, localize)}
-                            <ChevronDown className="size-3.5" />
-                        </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="z-[120] w-28 rounded-lg border-border-base p-1">
-                        <DropdownMenuItem
-                            className={cn(
-                                "cursor-default",
-                                member.role === "member" &&
-                                    "bg-blue-50 text-blue-500 data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-500",
+                <Dropdown
+                    align="end"
+                    menu={
+                        <>
+                            {/* The current role, shown for reference only. */}
+                            <DropdownItem checked={member.role === "member"}>
+                                {localize("member") || "订阅用户"}
+                            </DropdownItem>
+                            {member.role === "member" && (
+                                <>
+                                    <DropdownSeparator />
+                                    <DropdownItem danger onSelect={() => setRemoveTarget(member)}>
+                                        {localize("remove")}
+                                    </DropdownItem>
+                                </>
                             )}
-                            onClick={(e) => e.preventDefault()}
-                        >
-                            {localize("member") || "订阅用户"}
-                        </DropdownMenuItem>
-                        {member.role === "member" && (
-                            <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={() => setRemoveTarget(member)}>
-                                    {localize("remove")}
-                                </DropdownMenuItem>
-                            </>
-                        )}
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            );
-        }
-
-        return (
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+                        </>
+                    }
+                >
                     <button type="button" className={ROLE_SELECT_TRIGGER_CLASS}>
                         {getRoleLabel(member.role, localize)}
                         <ChevronDown className="size-3.5" />
                     </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="z-[120] w-28 rounded-lg border-border-base p-1">
-                    <DropdownMenuItem
-                        className={cn(
-                            member.role === "admin" &&
-                                "bg-blue-50 text-blue-500 data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-500",
+                </Dropdown>
+            );
+        }
+
+        return (
+            <Dropdown
+                align="end"
+                menu={
+                    <>
+                        <DropdownItem
+                            checked={member.role === "admin"}
+                            onSelect={() => {
+                                if (!canCreatorManage || member.role === "admin" || member.role === "creator") return;
+                                void handlePromoteAdmin(member);
+                            }}
+                        >
+                            {localize("admin") || "管理员"}
+                        </DropdownItem>
+                        <DropdownItem
+                            checked={member.role === "member"}
+                            onSelect={() => {
+                                if (!canCreatorManage || member.role === "member") return;
+                                void handleDemoteToMember(member);
+                            }}
+                        >
+                            {localize("member") || "订阅用户"}
+                        </DropdownItem>
+                        {canCreatorManage && (
+                            <>
+                                <DropdownSeparator />
+                                <DropdownItem danger onSelect={() => setRemoveTarget(member)}>
+                                    {localize("remove")}
+                                </DropdownItem>
+                            </>
                         )}
-                        onClick={() => {
-                            if (!canCreatorManage || member.role === "admin" || member.role === "creator") return;
-                            void handlePromoteAdmin(member);
-                        }}
-                    >
-                        {localize("admin") || "管理员"}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                        className={cn(
-                            member.role === "member" &&
-                                "bg-blue-50 text-blue-500 data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-500",
-                        )}
-                        onClick={() => {
-                            if (!canCreatorManage || member.role === "member") return;
-                            void handleDemoteToMember(member);
-                        }}
-                    >
-                        {localize("member") || "订阅用户"}
-                    </DropdownMenuItem>
-                    {canCreatorManage && (
-                        <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => setRemoveTarget(member)}>
-                                {localize("remove")}
-                            </DropdownMenuItem>
-                        </>
-                    )}
-                </DropdownMenuContent>
-            </DropdownMenu>
+                    </>
+                }
+            >
+                <button type="button" className={ROLE_SELECT_TRIGGER_CLASS}>
+                    {getRoleLabel(member.role, localize)}
+                    <ChevronDown className="size-3.5" />
+                </button>
+            </Dropdown>
         );
     };
 

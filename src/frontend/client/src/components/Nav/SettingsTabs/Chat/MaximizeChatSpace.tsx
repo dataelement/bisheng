@@ -1,5 +1,5 @@
 import { useRecoilState } from 'recoil';
-import { Switch } from '~/components/ui/Switch';
+import { Switch } from '@bisheng/ui';
 import useLocalize from '~/hooks/useLocalize';
 import store from '~/store';
 
@@ -29,7 +29,7 @@ export default function MaximizeChatSpace({
         id="maximizeChatSpace"
         checked={maximizeChatSpace}
         onCheckedChange={handleCheckedChange}
-        className="ml-4"
+        className="peer ml-4"
         data-testid="maximizeChatSpace"
       />
     </div>

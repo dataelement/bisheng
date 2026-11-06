@@ -1,5 +1,5 @@
 import os
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
@@ -9,6 +9,9 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 
 from bisheng.api.router import router, router_rpc
+from bisheng.app_runtime.api.endpoints.runtime_material import router as runtime_material_router
+from bisheng.app_runtime.api.exception_handlers import register_app_runtime_exception_handlers
+from bisheng.app_runtime.domain.services.app_access_log_service import flush_pending_access_records
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.exceptions.auth import AuthJWTException
 from bisheng.common.init_data import init_default_data
@@ -22,6 +25,7 @@ from bisheng.open_api.api.middleware import OpenApiAuditMiddleware
 from bisheng.open_api.api.openapi_schema import install_open_api_schema
 from bisheng.open_api.domain.services.call_audit_service import open_api_call_audit_service
 from bisheng.open_api.domain.services.model_call_record_writer import model_call_record_writer
+from bisheng.open_mcp.server import OpenMcpDispatchMiddleware, create_open_mcp_runtime
 from bisheng.public_endpoints.api.exception_handlers import register_public_exception_handlers
 from bisheng.public_endpoints.api.router import router_public
 from bisheng.utils.http_middleware import CustomMiddleware, WebSocketLoggingMiddleware
@@ -111,11 +115,19 @@ def _register_app_publish_composition() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with app.state.work_mcp_runtime.run():
+    async with AsyncExitStack() as stack:
+        await stack.enter_async_context(app.state.open_mcp_runtime.lifespan())
+        await stack.enter_async_context(app.state.work_mcp_runtime.run())
         await initialize_app_context(config=settings)
         _register_permission_runtime_contexts()
         _register_app_publish_composition()
+        from bisheng.app_runtime.domain.services.entry_authz_service import diagnose_obo_configuration
+
+        diagnose_obo_configuration()
         open_api_call_audit_service.start()
+        # F051: the model protocol face writes one model_call_record per call
+        # write-behind. Own writer, own table — the audit page must not be drowned
+        # by a face a local coding agent calls in a loop.
         model_call_record_writer.start()
         try:
             await init_default_data()
@@ -162,11 +174,12 @@ async def lifespan(app: FastAPI):
             # LangfuseInstance.update()
             yield
         finally:
-            from bisheng.app_runtime.domain.services.app_access_log_service import flush_pending_access_records
-
-            await flush_pending_access_records()
             await open_api_call_audit_service.stop()
             await model_call_record_writer.stop()
+            # Hosted-app access records are written fire-and-forget (F054 AC-38);
+            # give the in-flight ones a bounded chance to land before the database
+            # goes away, so a deploy restart is not a silent gap in an audit asset.
+            await flush_pending_access_records(timeout=5.0)
             try:
                 dsh_runtime = getattr(app.state, "dsh_runtime", None)
                 if dsh_runtime is not None:
@@ -183,10 +196,21 @@ def create_app():
         exception_handlers=_EXCEPTION_HANDLERS,
         lifespan=lifespan,
     )
+    app.state.open_mcp_runtime = create_open_mcp_runtime()
+    # /api/v2 and /api/v3 answer with real HTTP status codes while keeping the
+    # platform envelope in the body. Registered via add_exception_handler rather
+    # than in ``_EXCEPTION_HANDLERS`` because they must sit *below*
+    # ``BaseErrorCode`` in the lookup — Starlette walks ``type(exc).__mro__``
+    # and picks the first registered class, so the narrower handlers win for
+    # their own errors and ``handle_http_exception`` keeps every other error
+    # unchanged.
     app.state.work_mcp_runtime = create_work_mcp_runtime()
     register_open_api_exception_handlers(app)
     install_open_api_schema(app)
     register_public_exception_handlers(app)
+    # F054: app-proxy branches on a real 401 to tell "our shared secret is
+    # wrong" from "this visitor may not enter" (which is 200 + a decision).
+    register_app_runtime_exception_handlers(app)
 
     # Browsers reject ACAO=* when axios uses withCredentials=true.
     # Override with comma-separated BISHENG_CORS_ORIGINS when needed.
@@ -222,6 +246,7 @@ def create_app():
     # the inbound path, which means AdminScopeMiddleware must be added
     # *first* (inner). See ``common/middleware/admin_scope.py`` docstring.
     app.add_middleware(AdminScopeMiddleware)
+    app.add_middleware(OpenMcpDispatchMiddleware, mcp_app=app.state.open_mcp_runtime.app)
     app.add_middleware(OpenApiAuditMiddleware)
     app.add_middleware(CustomMiddleware)
     app.add_middleware(WebSocketLoggingMiddleware)
@@ -236,10 +261,6 @@ def create_app():
     app.include_router(compatibility_router)
     app.include_router(router_rpc)
     app.include_router(router_public)
-    from bisheng.app_runtime.api.endpoints.runtime_material import router as runtime_material_router
-    from bisheng.app_runtime.api.exception_handlers import register_app_runtime_exception_handlers
-
-    register_app_runtime_exception_handlers(app)
     app.include_router(runtime_material_router)
     from bisheng.department.api.endpoints.department_limit import (
         router as department_limit_router,

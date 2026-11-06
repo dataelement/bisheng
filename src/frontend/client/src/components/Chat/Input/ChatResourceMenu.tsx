@@ -5,8 +5,10 @@ import { ComposerMenuText } from '~/components/ui/ComposerMenuText';
 import { useLocalize } from '~/hooks';
 import { ComposerMenuContext, ComposerSubmenu } from './ComposerSubmenu';
 import { KnowledgeSpaceDialog } from './KnowledgeSpaceDialog';
+import { KnowledgeBaseDialog } from './KnowledgeBaseDialog';
+import type { BsConfig } from '~/types/chat';
 import { useComposerMenuAnchor } from './useComposerMenuAnchor';
-import type { KnowledgeItem } from './knowledgeTypes';
+import type { KnowledgeItem, KnowledgeType } from './knowledgeTypes';
 import { useAgentToolSelection, isToolGroupEnabled, labelForGroup, type AvailableToolGroup } from './AgentToolSelector';
 
 /** Match Harness: one 16px surface fade, only while more rows remain below. */
@@ -41,6 +43,7 @@ function ComposerMenuScroll({ children }: { children: ReactNode }) {
 const EMPTY_TOOLS: AvailableToolGroup[] = [];
 
 interface Props {
+  config?: BsConfig;
   disabled?: boolean;
   availableTools?: AvailableToolGroup[];
   showTools?: boolean;
@@ -61,7 +64,7 @@ interface Props {
 }
 
 /** Chat context sources: local files and authorized knowledge spaces. */
-export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpload,
+export function ChatResourceMenu({ config, disabled, showKnowledgeSelection, showFileUpload,
   fileUploadDisabled, value, onChange, onFileUploadClick, onFolderUploadClick,
   availableTools = EMPTY_TOOLS, showTools, showWebSearch, webSearchActive, onWebSearchChange,
   showResearch, researchActive, onResearchChange, children }: Props) {
@@ -77,7 +80,7 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
   };
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState<string | null>(null);
-  const [selecting, setSelecting] = useState(false);
+  const [selecting, setSelecting] = useState<KnowledgeType | null>(null);
   const anchor = useComposerMenuAnchor(trigger, open);
   return <>
     <DropdownMenu open={open} onOpenChange={(next) => { setOpen(next); if (!next) setPage(null); }}>
@@ -127,9 +130,13 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
         {showFileUpload && onFolderUploadClick && <DropdownMenuItem disabled={fileUploadDisabled} onSelect={onFolderUploadClick} className="gap-2">
           <Outlined.FolderClose size={16} /><span className="dsh-command-name">{localize('com_ui_upload_folder')}</span>
         </DropdownMenuItem>}
-        {showKnowledgeSelection && <DropdownMenuItem aria-label={localize('dshChat.selectKnowledge')} onSelect={() => { setOpen(false); setSelecting(true); }} className="gap-2">
+        {showKnowledgeSelection && <DropdownMenuItem aria-label={localize('dshChat.selectKnowledge')} onSelect={() => { setOpen(false); setSelecting('space'); }} className="gap-2">
           <Outlined.FolderClose size={16} /><span className="dsh-command-name">{localize('dshChat.selectKnowledge')}</span>
           <span className="dsh-command-description">{localize('dshChat.knowledgeDescription')}</span>
+        </DropdownMenuItem>}
+        {showKnowledgeSelection && config?.knowledgeBase?.enabled !== false && <DropdownMenuItem
+          aria-label={localize('dshChat.selectKnowledgeBases')} onSelect={() => { setOpen(false); setSelecting('org'); }} className="gap-2">
+          <Outlined.Books size={16} /><span className="dsh-command-name">{localize('dshChat.selectKnowledgeBases')}</span>
         </DropdownMenuItem>}
         </>}
         </ComposerMenuContext.Provider>
@@ -143,8 +150,12 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
         <Outlined.ListSuccess size={14} /><span>{localize('com_linsight_task_mode')}</span><Outlined.Close size={12} />
       </button>}
     </div>
-    {selecting && <KnowledgeSpaceDialog value={value} onConfirm={onChange} onClose={() => {
-      setSelecting(false);
+    {selecting === 'space' && <KnowledgeSpaceDialog value={value} onConfirm={onChange} onClose={() => {
+      setSelecting(null);
+      requestAnimationFrame(returnFocus);
+    }} />}
+    {selecting === 'org' && <KnowledgeBaseDialog configured={config?.orgKbs} value={value} onConfirm={onChange} onClose={() => {
+      setSelecting(null);
       requestAnimationFrame(returnFocus);
     }} />}
   </>;

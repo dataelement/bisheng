@@ -5,15 +5,8 @@ import { ShieldEllipsis } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
 import { Permissions, SystemRoles, roleDefaults, PermissionTypes } from '~/types/chat';
 import type { Control, UseFormSetValue, UseFormGetValues } from 'react-hook-form';
-import {
-  OGDialog,
-  OGDialogTitle,
-  OGDialogContent,
-  OGDialogTrigger,
-  Button,
-  Switch,
-  DropdownPopup,
-} from '~/components/ui';
+import { OGDialog, OGDialogTitle, OGDialogContent, OGDialogTrigger, Button, DropdownPopup } from '~/components/ui';
+import { Switch } from '@bisheng/ui';
 import { useUpdatePromptPermissionsMutation } from '~/hooks/queries/data-provider';
 import { useLocalize, useAuthContext } from '~/hooks';
 import { useToastContext, useConfirm } from '~/Providers';
@@ -41,7 +34,7 @@ const LabelController: React.FC<LabelControllerProps> = ({
       name={promptPerm}
       control={control}
       render={({ field }) => (
-        <Switch
+        <Switch className="peer"
           {...field}
           checked={field.value}
           onCheckedChange={(val) => {

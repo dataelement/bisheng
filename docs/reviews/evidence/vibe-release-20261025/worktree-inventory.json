@@ -1,0 +1,107 @@
+[
+  {
+    "path": "/private/tmp/f059-cli-capacity",
+    "branch": "codex/f059-cli-capacity",
+    "head": "01b58350e97d71e87c784d4ebc58fd039a94b80c",
+    "contained": true,
+    "dirty": false
+  },
+  {
+    "path": "/private/tmp/f059-destroy-fact-tests",
+    "branch": "codex/f059-destroy-fact-tests",
+    "head": "9f50990b6b477556bf35de433c83d022ba9641b6",
+    "contained": true,
+    "dirty": false
+  },
+  {
+    "path": "/private/tmp/f059-destroy-maintenance-phase",
+    "branch": "codex/f059-destroy-maintenance-phase",
+    "head": "dd549c009fbdd4cdac5d9d97ee7d2a9c67fa75f4",
+    "contained": true,
+    "dirty": false
+  },
+  {
+    "path": "/private/tmp/f059-installer-dnat",
+    "branch": "codex/059-installer-dnat",
+    "head": "dedc4831bb462f832877940901201061b1e027cf",
+    "contained": true,
+    "dirty": false
+  },
+  {
+    "path": "/private/tmp/f059-prepare-cancel-tests",
+    "branch": "codex/f059-prepare-cancel-tests",
+    "head": "a277ad2bdaaa071d662e3099e8c4ce5ee3bdd61b",
+    "contained": true,
+    "dirty": false
+  },
+  {
+    "path": "/private/tmp/f059-protection-backend-tests",
+    "branch": "codex/f059-protection-backend-tests",
+    "head": "cc1afdd3deccb2554687728b4adf3272df478589",
+    "contained": true,
+    "dirty": false
+  },
+  {
+    "path": "/private/tmp/f059-protection-runtime",
+    "branch": "codex/f059-protection-runtime",
+    "head": "0338d2f65ff2b16af047648cbf2e90657bc9b8cb",
+    "contained": true,
+    "dirty": false
+  },
+  {
+    "path": "/private/tmp/f059-restore-resume-tests",
+    "branch": "codex/f059-restore-resume-tests",
+    "head": "7968f3453da5ea5ed4f5f9e8325d3f4898891021",
+    "contained": true,
+    "dirty": false
+  },
+  {
+    "path": "/Users/zhangguoqing/.codex/worktrees/f059-e2e/bisheng",
+    "branch": "codex/f059-e2e",
+    "head": "21250d32900c4c4ba893248aa5b8cc1d8d65182b",
+    "contained": true,
+    "dirty": false
+  },
+  {
+    "path": "/Users/zhangguoqing/.codex/worktrees/f059-image-release/bisheng",
+    "branch": "codex/f059-image-release",
+    "head": "f84415f2540b1b762dcfba2b7e8e521ca170f3bd",
+    "contained": true,
+    "dirty": false
+  },
+  {
+    "path": "/Users/zhangguoqing/.codex/worktrees/f059-installation/bisheng",
+    "branch": "codex/f059-installation",
+    "head": "992905292418308b298d48a24d20cc9e19032c15",
+    "contained": true,
+    "dirty": false
+  },
+  {
+    "path": "/Users/zhangguoqing/.codex/worktrees/vibe-k8s-runtime/bisheng",
+    "branch": "codex/059-k8s-runtime",
+    "head": "cda8dccf26298af91a1df277dcd1a49787b6b444",
+    "contained": true,
+    "dirty": false
+  },
+  {
+    "path": "/Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng",
+    "branch": "codex/086-vibe-runtime-delivery",
+    "head": "667546bb77eeb366e66a13d544d122ef24811e35",
+    "contained": true,
+    "dirty": true
+  },
+  {
+    "path": "/Users/zhangguoqing/.codex/worktrees/vibe-tenant-prerequisites/bisheng",
+    "branch": "codex/f086-tenant-bootstrap",
+    "head": "9d156f261cc7769fcf75f41caeb104a425308017",
+    "contained": true,
+    "dirty": false
+  },
+  {
+    "path": "/Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration",
+    "branch": "feat/3.0.0-vibe",
+    "head": "804e4a1965cb4134a09633e1d36b85131ca96d6c",
+    "contained": true,
+    "dirty": false
+  }
+]

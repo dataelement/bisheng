@@ -1,7 +1,7 @@
 """覆盖 AC: AC-03、AC-07、AC-08、AC-13、AC-14、AC-30、AC-31、AC-48、AC-49、AC-52."""
 
 import hashlib
-from datetime import datetime, timedelta
+from datetime import timedelta
 from types import SimpleNamespace
 
 import httpx
@@ -51,11 +51,8 @@ def heartbeat(**changes):
 
 
 @pytest.fixture
-async def coordination(control, monkeypatch):
-    from bisheng.app_runtime.domain.models.runtime_host_isolation import RuntimeHostIsolationReport
-    from bisheng.app_runtime.domain.repositories.host_isolation_repository import REQUIRED
+async def coordination(control):
     from bisheng.app_runtime.domain.services.runtime_operation_service import RuntimeOperationService
-    from bisheng.common.services.config_service import settings
 
     ctrl, repository, op = control
     op.kind = "prepare"
@@ -65,27 +62,6 @@ async def coordination(control, monkeypatch):
         "profile": op.payload["resolved_delivery"]["profile"],
     }
     await repository.save(op)
-    # The Docker compatibility cases still require actual fixture host proof;
-    # compatibility must not bypass the current isolation admission contract.
-    bindings = {
-        node: {"engine_id": engine, "network_id": "network-a", "config_digest": "a" * 64}
-        for node, engine in [("node-a", "cluster-a/namespace-a"), ("docker-node", "docker-engine")]
-    }
-    monkeypatch.setattr(settings.app_runtime, "runtime_host_isolation_nodes", bindings)
-    async with repository.transaction() as session:
-        for node, binding in bindings.items():
-            session.add(
-                RuntimeHostIsolationReport(
-                    id=node,
-                    **binding,
-                    rule_digest="b" * 64,
-                    revision=1,
-                    checked_at=datetime.utcnow(),
-                    valid_until=datetime.utcnow() + timedelta(seconds=60),
-                    status="valid",
-                    checks=dict.fromkeys(REQUIRED, True),
-                )
-            )
     svc = RuntimeOperationService(repository, clock=lambda: NOW)
     return SimpleNamespace(svc=svc, control=ctrl, repo=repository, op=op)
 

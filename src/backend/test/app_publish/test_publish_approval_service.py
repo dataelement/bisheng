@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import pytest
 
-from .conftest import OWNER_USER_ID, ROOT_TENANT_ID, SUB_TENANT_ID, SUPER_ADMIN_USER_ID
+from .conftest import OWNER_USER_ID, ROOT_TENANT_ID, SERVICE_ACCOUNT_USER_ID, SUB_TENANT_ID, SUPER_ADMIN_USER_ID
 
 pytestmark = pytest.mark.asyncio
 

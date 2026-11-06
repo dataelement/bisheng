@@ -1,5 +1,5 @@
-import { Button } from "@/components/bs-ui/button";
-import { Input } from "@/components/bs-ui/input";
+import { Button } from "@bisheng/ui";
+import { Input } from "@bisheng/ui";
 import {
   Popover,
   PopoverAnchor,
@@ -189,7 +189,7 @@ export function ModelAuditModelSelect({
               >
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="text" color="default"
                   tabIndex={-1}
                   className="h-auto min-h-8 w-full justify-start whitespace-normal break-all text-left text-sm [@media(pointer:coarse)]:min-h-11"
                   onMouseDown={(event) => event.preventDefault()}
@@ -218,8 +218,8 @@ export function ModelAuditModelSelect({
           <div className="flex flex-wrap gap-2 border-t pt-1">
             <Button
               type="button"
-              size="sm"
-              variant="ghost"
+              size="small"
+              variant="text" color="default"
               onClick={() => handleChoose()}
             >
               {t("dsh.modelAuditView.allModels")}
@@ -227,8 +227,8 @@ export function ModelAuditModelSelect({
             {failed && (
               <Button
                 type="button"
-                size="sm"
-                variant="ghost"
+                size="small"
+                variant="text" color="default"
                 onClick={() => setRevision((old) => old + 1)}
               >
                 {t("dsh.refresh")}
@@ -237,8 +237,8 @@ export function ModelAuditModelSelect({
             {hasMore && !loading && !failed && (
               <Button
                 type="button"
-                size="sm"
-                variant="ghost"
+                size="small"
+                variant="text" color="default"
                 onClick={() => {
                   setLoading(true);
                   setPage((old) => old + 1);

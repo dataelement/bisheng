@@ -17,6 +17,7 @@
  *   consumers can keep using this configured full address.
  */
 import axios from "@/controllers/request"
+import { isApiError } from "@bisheng/api-client"
 
 /** The five application states (design D8 / AC-03). */
 export type HostedAppState =
@@ -32,7 +33,10 @@ export type HostedAppPhase =
   | "stopped"
   | "failed"
 
+export type HostedAppAction = 'use' | 'edit' | 'manage_permission' | 'delete' | 'publish' | 'unpublish'
+
 export interface HostedAppDetail {
+  allowed_actions?: HostedAppAction[]
   app_id: string
   slug: string
   name: string
@@ -55,8 +59,9 @@ export interface HostedAppInstance {
   health: string | null
   current_version_id: string | null
   started_at: string | null
-  restart_count: number
+  restart_count: number | null
   last_probe_at: string | null
+  observation_state?: 'current' | 'no_execution' | 'execution_missing'
 }
 
 export interface HostedAppVersion {
@@ -65,7 +70,7 @@ export interface HostedAppVersion {
   version_no: number
   kind: "initial" | "iteration"
   terminal_state: "online" | "rejected" | "withdrawn" | null
-  deployment_status?: "running" | "waiting_approval" | "succeeded" | "failed" | null
+  approval_status?: string | null
   submitted_at: string | null
   is_current: boolean
   is_pending: boolean
@@ -232,7 +237,7 @@ export async function updateHostedAppMetaApi(
 export async function deleteHostedAppApi(
   appId: string,
 ): Promise<HostedAppActionResult> {
-  return await axios.delete(`${APPS_BASE}/${appId}`)
+  return await axios.delete(`${APPS_BASE}/${appId}`, { showError: false })
 }
 
 export async function publishHostedAppApi(
@@ -245,19 +250,19 @@ export async function publishHostedAppApi(
 export async function manualPublishHostedAppApi(
   appId: string,
 ): Promise<HostedAppActionResult> {
-  return await axios.post(`${APPS_BASE}/${appId}/actions/manual-publish`)
+  return await axios.post(`${APPS_BASE}/${appId}/actions/manual-publish`, undefined, { showError: false })
 }
 
 export async function stopHostedAppApi(
   appId: string,
 ): Promise<HostedAppActionResult> {
-  return await axios.post(`${APPS_BASE}/${appId}/actions/stop`)
+  return await axios.post(`${APPS_BASE}/${appId}/actions/stop`, undefined, { showError: false })
 }
 
 export async function resumeHostedAppApi(
   appId: string,
 ): Promise<HostedAppActionResult> {
-  return await axios.post(`${APPS_BASE}/${appId}/actions/resume`)
+  return await axios.post(`${APPS_BASE}/${appId}/actions/resume`, undefined, { showError: false })
 }
 
 // ---------------------------------------------------------------------------
@@ -435,12 +440,13 @@ export async function manualPublishViaPipelineApi(
  * pydantic model without a default, so a bodyless POST is a 422.
  */
 export async function withdrawApprovalApi(
+  appId: string,
   instanceId: number,
   reason?: string,
 ): Promise<unknown> {
   return await axios.post(
-    `/api/v1/approval/instances/${instanceId}/withdraw`,
-    reason ? { reason } : {},
+    `${APPS_BASE}/${appId}/withdraw`,
+    { expected_instance_id: instanceId, ...(reason ? { reason } : {}) },
   )
 }
 
@@ -564,6 +570,7 @@ export function getHostedAppErrorCode(error: unknown): number | undefined {
 
 /** Human-readable text carried by a rejected envelope, if any. */
 export function getHostedAppErrorMessage(error: unknown): string {
+  if (isApiError(error)) return error.message
   if (error && typeof error === "object" && "status_message" in error) {
     const message = (error as { status_message?: unknown }).status_message
     if (typeof message === "string") return message

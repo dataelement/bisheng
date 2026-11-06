@@ -17,7 +17,7 @@ from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.citation.domain.services.citation_handle_service import strip_citation_handles
 from bisheng.citation.domain.services.citation_prompt_helper import strip_citation_markers
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
-from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.dependencies.user_deps import UserPayload, record_business_activity
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.linsight import (
@@ -49,6 +49,13 @@ from bisheng.linsight.domain.schemas.linsight_schema import (
     LinsightQuestionSubmitSchema,
     SubmitFileSchema,
 )
+from bisheng.linsight.domain.services.artifact_preview_service import LinsightArtifactPreviewService
+from bisheng.linsight.domain.services.deliverable_download_service import (
+    deliverable_workspace_path,
+    find_deliverable,
+    workspace_fetcher,
+)
+from bisheng.linsight.domain.services.md_image_refs import build_markdown_bundle, inline_local_images
 from bisheng.linsight.domain.services.message_stream_handle import MessageStreamHandle
 from bisheng.linsight.domain.services.state_message_manager import (
     LinsightStateMessageManager,
@@ -142,32 +149,25 @@ async def linsight_file_download(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
 ) -> UnifiedResponseModel:
-    with bypass_tenant_filter_if(share_link is not None):
-        session_version_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
-    if not session_version_model:
-        raise NotFoundError()
-
-    # judge permission
-    if session_version_model.user_id != login_user.user_id and not login_user.is_admin():
-        # Access by sharing a link. Both share shapes grant, same as
-        # session-version-list / execute-task-detail: a workbench_chat share
-        # carries resource_id = the session and no versionId, and its recipient
-        # must still be able to open the task's output files.
-        shared_to_session = share_link is not None and share_link.resource_id == session_version_model.session_id
-        shared_to_version = (
-            share_link is not None
-            and share_link.meta_data is not None
-            and share_link.meta_data.get("versionId") == session_version_id
-        )
-        if not (shared_to_session or shared_to_version):
-            raise UnAuthorizedError()
+    version = await LinsightArtifactPreviewService.load_accessible_version(session_version_id, login_user, share_link)
 
     minio_client = await get_minio_storage()
-    file_url = file_url.lstrip("/")
-    if file_url.startswith(minio_client.bucket):
-        file_url = file_url[len(minio_client.bucket) + 1 :]
-    file_share_url = await minio_client.get_share_link(file_url)
+    file_key = LinsightArtifactPreviewService.owned_file_key(version, file_url, minio_client.bucket)
+    file_share_url = await minio_client.get_share_link(file_key)
     return resp_200(data={"file_path": file_share_url})
+
+
+@router.post("/workbench/file_preview", summary="Task Result Slide Preview", response_model=UnifiedResponseModel)
+async def linsight_file_preview(
+    file_url: str = Body(..., embed=True),
+    session_version_id: str = Body(..., embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
+) -> UnifiedResponseModel:
+    """PDF preview of a task-generated .ppt/.pptx: ready with a signed link, or still converting."""
+    version = await LinsightArtifactPreviewService.load_accessible_version(session_version_id, login_user, share_link)
+    result = await LinsightArtifactPreviewService.get_pptx_preview(version, file_url)
+    return resp_200(data=result)
 
 
 # Submit an Idea User Issue Request
@@ -357,6 +357,8 @@ async def continue_conversation(
 
     await MessageSessionDao.touch_session(session_version_model.session_id)
 
+    await record_business_activity(login_user)
+
     # Flip back to IN_PROGRESS BEFORE enqueue so the worker's pre-flight
     # non-terminal guard accepts the continue item.
     await LinsightSessionVersionDao.batch_update_session_versions_status(
@@ -432,6 +434,7 @@ async def user_input(
     already_completed = existing_task is not None and existing_task.status == ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
 
     if not already_completed:
+        await record_business_activity(login_user)
         # Legacy parked sessions created before the pseudo-task row existed have
         # no row for a session-level clarify; the resume reads the answer from the
         # queue item, so persistence is best-effort there (skip when no row).
@@ -792,7 +795,11 @@ async def get_queue_status(
 async def download_md_to_pdf_or_docx(
     file_info: DownloadFilesSchema = Body(..., description="File information"),
     to_type: Literal["pdf", "docx"] = Body(..., description="the target file type of the conversion,pdfORdocx"),
+    session_version_id: str | None = Body(
+        None, description="Task version owning the md; when given, its workspace images are embedded"
+    ),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
+    share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
 ):
     """
     InspirationmdTransferpdf or docx Mengunduh
@@ -801,6 +808,11 @@ async def download_md_to_pdf_or_docx(
     :param login_user:
     :return:
     """
+    version = (
+        await LinsightArtifactPreviewService.load_accessible_version(session_version_id, login_user, share_link)
+        if session_version_id
+        else None
+    )
     try:
         # Call the implementation class to process the file download
         file_name, file_bytes = await LinsightWorkbenchImpl.download_file(file_info)
@@ -811,6 +823,16 @@ async def download_md_to_pdf_or_docx(
         from bisheng.citation.domain.services.citation_export_service import bake_citations_for_export
 
         md_str = await bake_citations_for_export(file_bytes.decode("utf-8"), login_user)
+
+        # Workspace images are inlined as data URIs: the converter's sanitizer
+        # drops scheme-less src values, so a plain path would lose the image.
+        if version is not None:
+            minio_client = await get_minio_storage()
+            file_key = LinsightArtifactPreviewService.owned_file_key(version, file_info.file_url, minio_client.bucket)
+            deliverable = find_deliverable(version, file_key, minio_client.bucket)
+            source_path = deliverable_workspace_path(version, deliverable) if deliverable else None
+            if source_path:
+                md_str, _ = await inline_local_images(md_str, source_path, workspace_fetcher(version.id))
 
         # Filename Removal Extension
         file_name = os.path.splitext(file_name)[0]
@@ -837,6 +859,54 @@ async def download_md_to_pdf_or_docx(
         )
     except Exception as e:
         logger.error(f"This content failed to load: {e!s}")
+        return ResourceDownloadError.return_resp(data=str(e))
+
+
+@router.post("/workbench/download-md-bundle", summary="Download a markdown deliverable with its images")
+async def download_md_bundle(
+    session_version_id: str = Body(..., embed=True),
+    file_url: str = Body(..., embed=True),
+    file_name: str = Body(..., embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
+):
+    """Zip a markdown deliverable with the workspace images it references.
+
+    The md is rewritten to point at ``images/<name>`` inside the zip, so it
+    renders when opened locally. When none of its images can be found, the md
+    alone is returned (``text/markdown``); the caller tells the two apart by
+    the Content-Type.
+    """
+    version = await LinsightArtifactPreviewService.load_accessible_version(session_version_id, login_user, share_link)
+    minio_client = await get_minio_storage()
+    file_key = LinsightArtifactPreviewService.owned_file_key(version, file_url, minio_client.bucket)
+    deliverable = find_deliverable(version, file_key, minio_client.bucket)
+    if deliverable is None:
+        raise NotFoundError()
+    try:
+        _, file_bytes = await LinsightWorkbenchImpl.download_file(
+            DownloadFilesSchema(file_name=file_name, file_url=file_key)
+        )
+        from bisheng.citation.domain.services.citation_export_service import bake_citations_for_export
+
+        md_str = await bake_citations_for_export(file_bytes.decode("utf-8"), login_user)
+        source_path = deliverable_workspace_path(version, deliverable)
+        bundle = (
+            await build_markdown_bundle(md_str, file_name, source_path, workspace_fetcher(version.id))
+            if source_path
+            else None
+        )
+        if bundle is None:
+            content, media_type, out_name = md_str.encode("utf-8"), "text/markdown; charset=utf-8", file_name
+        else:
+            content, media_type, out_name = bundle, "application/zip", f"{os.path.splitext(file_name)[0]}.zip"
+        return StreamingResponse(
+            iter([content]),
+            media_type=media_type,
+            headers={"Content-Disposition": f"attachment; filename={parse.quote(out_name)}"},
+        )
+    except Exception as e:
+        logger.error(f"markdown bundle download failed: {e!s}")
         return ResourceDownloadError.return_resp(data=str(e))
 
 

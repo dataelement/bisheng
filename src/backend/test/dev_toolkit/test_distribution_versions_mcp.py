@@ -1,7 +1,8 @@
-"""The 130 toolkit advertises deployed endpoints without credential material.
+"""F052 T206a — the MCP address the access-information panel copies.
 
-The standalone Open MCP transport is outside this port. Desktop Work MCP is
-separately authenticated and is not an application MCP capability endpoint.
+One address, derived the same way the skill packs derive theirs, so the panel
+never composes a second URL of its own. It carries no credential: the key is
+issued separately and travels in the Authorization header.
 """
 
 from __future__ import annotations
@@ -28,15 +29,22 @@ async def versions(headers: dict[str, str] | None = None) -> dict:
     return response.json()["data"]
 
 
-async def test_versions_does_not_advertise_an_unshipped_mcp_transport(monkeypatch):
+async def test_versions_carries_the_mcp_url_from_the_configured_public_base_url(monkeypatch):
     monkeypatch.setattr(settings.open_api, "public_base_url", "https://kb.example.com")
-    assert (await versions())["mcp"] is None
+    payload = await versions()
+    assert payload["mcp"] == {
+        "url": "https://kb.example.com/api/v2/mcp",
+        "transport": "streamable-http",
+        "auth": "bearer",
+    }
 
 
-async def test_forwarded_hosts_do_not_create_an_unshipped_capability(monkeypatch):
+async def test_versions_mcp_url_falls_back_to_the_forwarded_headers(monkeypatch):
+    """Behind nginx the backend sees the internal upstream, not what the user typed."""
+
     monkeypatch.setattr(settings.open_api, "public_base_url", "")
     payload = await versions({"X-Forwarded-Proto": "https", "X-Forwarded-Host": "bisheng.corp.example.com"})
-    assert payload["mcp"] is None
+    assert payload["mcp"]["url"] == "https://bisheng.corp.example.com/api/v2/mcp"
 
 
 async def test_versions_carries_the_model_face_base_url(monkeypatch):
@@ -56,13 +64,13 @@ async def test_versions_carries_the_model_face_base_url(monkeypatch):
     }
 
 
-async def test_the_model_address_uses_the_platform_origin(monkeypatch):
+async def test_the_model_and_mcp_addresses_share_one_origin(monkeypatch):
     """Two addresses, one derivation — a second origin would be a second bug."""
 
     monkeypatch.setattr(settings.open_api, "public_base_url", "")
     payload = await versions({"X-Forwarded-Proto": "https", "X-Forwarded-Host": "bisheng.corp.example.com"})
     assert payload["model"]["base_url"] == "https://bisheng.corp.example.com/api/v2/model/v1"
-    assert payload["model"]["base_url"].startswith(payload["platform"]["base_url"] + "/")
+    assert payload["mcp"]["url"].startswith("https://bisheng.corp.example.com/")
 
 
 async def test_versions_carries_the_platform_base_url_every_other_address_is_built_on(monkeypatch):
@@ -80,7 +88,7 @@ async def test_versions_carries_the_platform_base_url_every_other_address_is_bui
     base = payload["platform"]["base_url"]
     assert base == "https://portal.example.com/bisheng"
     # Same prefix as the two addresses the panel does not build itself.
-    assert payload["mcp"] is None
+    assert payload["mcp"]["url"] == f"{base}/api/v2/mcp"
     assert payload["model"]["base_url"] == f"{base}/api/v2/model/v1"
 
 
@@ -115,5 +123,5 @@ def test_the_address_is_absent_where_the_open_capability_layer_is_not_deployed()
     from bisheng.api import router as router_module
 
     source = inspect.getsource(router_module)
-    assert "if runtime_settings.open_platform.enabled:" in source
+    assert "if settings.open_platform.enabled:" in source
     assert "router.include_router(dev_toolkit_router)" in source

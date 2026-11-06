@@ -1,12 +1,13 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import { LoadingIcon } from "@/components/bs-icons/loading"
 import { Alert, AlertDescription } from "@/components/bs-ui/alert"
-import { Badge } from "@/components/bs-ui/badge"
-import { Button } from "@/components/bs-ui/button"
-import ShadTooltip from "@/components/ShadTooltipComponent"
+
+import { Tooltip } from "@bisheng/ui"
+import { Outlined } from "bisheng-icons"
 import { getChatHistoryApi } from "@/controllers/API"
 import ResouceModal from "@/pages/ChatAppPage/components/ResouceModal"
-import { ArrowLeft, Bot } from "lucide-react"
+import { Bot } from "lucide-react"
 import { useContext, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useParams } from "react-router-dom"
@@ -111,13 +112,9 @@ export default function DailyChatDetail() {
             <div className="bg-background-login px-4">
                 <div className="flex justify-between items-center py-4">
                     <div className="flex items-center">
-                        <ShadTooltip content={t('back')} side="top">
-                            <Button
-                                className="w-[36px] px-2 rounded-full"
-                                variant="outline"
-                                onClick={() => window.history.back()}
-                            ><ArrowLeft className="side-bar-button-size" /></Button>
-                        </ShadTooltip>
+                        <Tooltip content={t('back')} side="top">
+                            <Button size="medium" aria-label={t('back')} variant="outlined" onClick={() => window.history.back()} color="default" iconOnly><Outlined.ArrowLeft size={16} /></Button>
+                        </Tooltip>
                         <span className=" text-gray-700 text-sm font-black pl-4">{t('log.detailedSession')}</span>
                     </div>
                 </div>
@@ -154,7 +151,7 @@ export default function DailyChatDetail() {
                                                 <MessageContent text={msg.text} />
 
                                                 {msg.source === 1 && <div className="mt-2">
-                                                    <Badge className="cursor-pointer" onClick={() => showResouce(msg.messageId, msg.text)}>{t('chat.source')}</Badge>
+                                                    <Button variant="text" size="small" onClick={() => showResouce(msg.messageId, msg.text)} color="default">{t('chat.source')}</Button>
                                                 </div>}
                                             </div>
                                     }

@@ -87,8 +87,9 @@ class TenantQuotaResponse(BaseModel):
 class TenantQuotaUsageItem(BaseModel):
     """Per-resource-type usage entry within a TenantQuotaTreeNode."""
     resource_type: str
-    used: int
-    limit: int  # -1 = unlimited
+    # storage_gb is measured in GB and is fractional; the count types stay ints.
+    used: int | float
+    limit: int | float  # -1 = unlimited
     utilization: float  # 0.0 ~ 1.0+ (>1.0 indicates over-quota)
 
 

@@ -13,6 +13,7 @@
  * toolbar stays presentational and easy to unit-test.
  */
 
+import { isApiError } from '@bisheng/api-client';
 import { useCallback, useState, type ComponentType } from 'react';
 import { Download, X } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
@@ -21,9 +22,9 @@ import {
     exportMessagesApi,
     triggerBrowserDownload,
 } from '~/api/messageExport';
-import { translateApiErrorMessage } from '~/api/request';
+import { showApiError } from '~/api/request';
 import { Button } from '~/components/ui/Button';
-import { Checkbox } from '~/components/ui/Checkbox';
+import { Checkbox } from '@bisheng/ui';
 import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import { useLocalize } from '~/hooks';
 import { type SelectableMessage, useMessageSelection } from '~/hooks/useMessageSelection';
@@ -81,7 +82,7 @@ export function MessageSelectionToolbar({
             const ids = getSelectedIds(messages);
             if (!ids.length) {
                 showToast({
-                    message: localize('workstation.messageExport.noSelection') ?? '请先选择消息',
+                    message: localize('workstation.messageExport.noSelection'),
                     severity: NotificationSeverity.WARNING,
                 });
                 return;
@@ -101,15 +102,12 @@ export function MessageSelectionToolbar({
                     format,
                 });
                 triggerBrowserDownload(file);
-            } catch (err: any) {
-                showToast({
-                    message:
-                        translateApiErrorMessage({ status_code: err?.status_code, status_message: err?.status_message })
-                        || localize('workstation.messageExport.renderFailed'),
+            } catch (error) {
+                if (isApiError(error)) showApiError(error);
+                else showToast({
+                    message: localize('workstation.messageExport.renderFailed'),
                     severity: NotificationSeverity.WARNING,
                 });
-                // The error envelope is already logged by the axios interceptor;
-                // we surface the user-facing message and leave the trace to it.
             } finally {
                 setExporting(null);
             }
@@ -121,7 +119,7 @@ export function MessageSelectionToolbar({
         const ids = getSelectedIds(messages);
         if (!ids.length) {
             showToast({
-                message: localize('workstation.messageExport.noSelection') ?? '请先选择消息',
+                message: localize('workstation.messageExport.noSelection'),
                 severity: NotificationSeverity.WARNING,
             });
             return;
@@ -175,7 +173,7 @@ export function MessageSelectionToolbar({
                 className="flex shrink-0 cursor-pointer items-center gap-2 text-sm"
                 title={localize('workstation.messageExport.selectAll')}
             >
-                <Checkbox
+                <Checkbox className="peer"
                     checked={selectAllChecked}
                     onCheckedChange={(v) => setGlobalSelectAll(v === true)}
                 />

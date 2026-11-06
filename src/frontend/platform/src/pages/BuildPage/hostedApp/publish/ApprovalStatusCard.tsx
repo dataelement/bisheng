@@ -82,7 +82,7 @@ export function ApprovalStatusCard({
   const runWithdraw = async (instanceId: number) => {
     setWithdrawing(true)
     try {
-      await withdrawApprovalApi(instanceId)
+      await withdrawApprovalApi(app.app_id, instanceId)
       notification.open({
         title: t("prompt"),
         type: "success",
@@ -109,18 +109,14 @@ export function ApprovalStatusCard({
       title: t("hostedApp.publishStatus.withdrawTitle"),
       desc: t("hostedApp.publishStatus.withdrawDesc", { name: app.name }),
       okTxt: t("hostedApp.publishStatus.withdraw"),
-      onOk(next: () => void) {
+      async onOk(next: () => void) {
+        await runWithdraw(instanceId)
         next()
-        void runWithdraw(instanceId)
       },
     })
   }
 
-  // AC-06 — every application in this release arrives through the CLI and
-  // has no draft workspace on the platform, so there is nothing for a submit
-  // button to submit. Shown disabled with the real remedy as the panel's
-  // description rather than hidden: an owner looking for "where do I publish"
-  // needs to be told where publishing happens, not to find nothing.
+  // Releases are submitted through the CLI; keep its guidance in the panel.
   const actions = (
     <>
       {canWithdraw && (
@@ -134,9 +130,6 @@ export function ApprovalStatusCard({
           {t("hostedApp.publishStatus.withdraw")}
         </Button>
       )}
-      <Button variant="outline" size="sm" disabled>
-        {t("hostedApp.publishStatus.submit")}
-      </Button>
     </>
   )
 

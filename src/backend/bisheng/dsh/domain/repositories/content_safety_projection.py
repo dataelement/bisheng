@@ -64,7 +64,7 @@ def _request_id(event: ContentSafetyEvent) -> str | None:
     return event.backend_request_id.lower() if event.backend_request_id else None
 
 
-def _external(fact: DshContentSafetyEvent, request_id: str) -> DshModelAuditRequest:
+def _external(fact: DshContentSafetyEvent, request_id: str, model_name: str) -> DshModelAuditRequest:
     hints = fact.conversation or {}
     conversation_id = hints.get("conversation_id")
     return DshModelAuditRequest(
@@ -81,8 +81,8 @@ def _external(fact: DshContentSafetyEvent, request_id: str) -> DshModelAuditRequ
         usage_settlement=None,
         content_status="NOT_CAPTURED",
         audit_status="NOT_APPLICABLE",
-        model_name="",
-        model_name_digest=sha256(b"").hexdigest(),
+        model_name=model_name,
+        model_name_digest=sha256(model_name.encode("utf8")).hexdigest(),
         started_at=fact.request_started_at,
         safety_source_id=fact.source_id,
         safety_gateway_request_id=fact.gateway_request_id,
@@ -158,7 +158,7 @@ def _merge_summary(session: Session, row: DshModelAuditRequest, event: ContentSa
     session.expire(row)
 
 
-def merge_audit(session: Session, event: ContentSafetyEvent) -> DshModelAuditRequest | None:
+def merge_audit(session: Session, event: ContentSafetyEvent, *, model_name: str = "") -> DshModelAuditRequest | None:
     """Merge a saved fact; None preserves an unconfirmed association as event-only.
 
     Coverage AC: AC-27, AC-32, AC-35, AC-36, AC-37, AC-38, AC-39, AC-40, AC-44, AC-48.
@@ -183,8 +183,13 @@ def merge_audit(session: Session, event: ContentSafetyEvent) -> DshModelAuditReq
         # the historical row already owning the unique safety association.
         return None
     if row is None:
-        row = _external(fact, request_id)
+        row = _external(fact, request_id, model_name)
         session.add(row)
+        session.flush()
+    if row.record_origin == "EXTERNAL_SAFETY" and not row.model_name and model_name:
+        row.model_name = model_name
+        row.model_name_digest = sha256(model_name.encode("utf8")).hexdigest()
+        row.group_index_pending = bool(row.conversation_key)
         session.flush()
     _merge_summary(session, row, event)
     _associate_fact(session, fact, request_id)

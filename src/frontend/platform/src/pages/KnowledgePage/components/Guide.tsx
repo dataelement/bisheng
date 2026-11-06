@@ -1,7 +1,8 @@
 // @ts-strict-ignore
-import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader } from "@/components/bs-ui/alertDialog";
-import { Button } from "@/components/bs-ui/button";
-import { useEffect, useState } from "react";
+import { Button } from '@bisheng/ui';
+import { AlertDialog,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader } from "@/components/bs-ui/alertDialog";
+
+import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function Guide() {
@@ -41,7 +42,7 @@ export default function Guide() {
                         <AlertDialogCancel onClick={handleCancelClick} className="px-11">
                             {t('cancel')}
                         </AlertDialogCancel>
-                        <Button onClick={handleOkClick} className="px-11">
+                        <Button onClick={handleOkClick}>
                             {t('dontRemind')}
                         </Button>
                     </AlertDialogFooter>

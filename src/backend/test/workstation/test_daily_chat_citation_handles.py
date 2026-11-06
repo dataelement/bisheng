@@ -1,4 +1,4 @@
-"""F072 — the daily chat turn under the short-handle contract.
+"""F075 — the daily chat turn under the short-handle contract.
 
 Drives the real SSE generator (no-tools branch) with a scripted model stream
 and a handle table preloaded as if earlier turns had allocated it, then checks

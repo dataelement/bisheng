@@ -24,6 +24,7 @@ import { useConfirm } from "~/Providers";
 import { canMutatePermissionAssignee } from "./assigneePolicy";
 import { PermissionEmptyState } from "./PermissionEmptyState";
 import { SourceBadge } from "./SourceBadge";
+import { PermissionModelStatus } from "./PermissionModelStatus";
 
 interface PermissionListTabProps {
   resourceType: ResourceType;
@@ -41,6 +42,12 @@ const SUBJECT_ICONS = {
   department: Outlined.City,
   user_group: Outlined.PeopleGroup,
 };
+
+const SUBJECT_SEARCH_EMPTY_KEYS = {
+  user: "com_permission.empty_search",
+  department: "com_permission.empty_search_departments",
+  user_group: "com_permission.empty_search_user_groups",
+} as const;
 
 function createMutationIdempotencyKey(): string {
   return `grant-mutate-${Date.now()}-${Math.random()
@@ -122,6 +129,7 @@ function RosterRow({
           </p>
           <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1 text-xs text-[#86909C]">
             <SourceBadge source={assignee.source} />
+            <PermissionModelStatus active={assignee.model.active} />
             <span>
               {localize(
                 `f048_permission.scope.${assignee.scope.toLowerCase()}`,
@@ -478,7 +486,7 @@ export function PermissionListTab({
             <PermissionEmptyState
               message={localize(
                 searchQuery.trim()
-                  ? "com_permission.empty_search"
+                  ? SUBJECT_SEARCH_EMPTY_KEYS[fixedSubjectType]
                   : "com_permission.list_empty_for_subject",
               )}
             />

@@ -52,7 +52,16 @@ export interface ApprovalInstanceItem {
   update_time?: string;
 }
 
+export interface AppCurrentVisibility {
+  state: 'available' | 'unavailable' | 'deleted';
+  checked_at?: string;
+  owner_only?: boolean | null;
+  admin_implicit_access?: boolean;
+  subjects: { type: 'user' | 'department' | 'user_group'; id: string; name: string; userset_relation?: 'member' | 'admin' | 'subtree_member'; include_children?: boolean }[];
+}
+
 export interface ApprovalTaskDetail extends ApprovalTaskItem {
+  current_visibility?: AppCurrentVisibility;
   comment?: string | null;
   reason?: string | null;
   detail_snapshot?: Record<string, any>;
@@ -77,6 +86,7 @@ export interface ApprovalFlowNode {
 }
 
 export interface ApprovalInstanceDetail extends ApprovalInstanceItem {
+  current_visibility?: AppCurrentVisibility;
   reason?: string | null;
   granted_keys?: string[];
   revoked_keys?: string[];

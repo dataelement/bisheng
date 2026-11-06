@@ -4,6 +4,8 @@ from bisheng.worker.admin_scope.tasks import admin_scope_cleanup
 from bisheng.worker.app_publish.tasks import run_publish_pipeline
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
 from bisheng.worker.commercial_license.tasks import refresh_etl_license
+
+# DSH tasks register without performing network IO; startup owns approved runtimes.
 from bisheng.worker.dsh.registry import register_dsh_tasks
 from bisheng.worker.information.article import dispatch_information_article_poll, sync_information_articles
 from bisheng.worker.information.knowledge_delivery import (
@@ -19,6 +21,9 @@ from bisheng.worker.knowledge.file_worker import (
     parse_knowledge_file_celery,
     retry_knowledge_file_celery,
 )
+from bisheng.worker.knowledge.knowledge_chat_history_retention import (
+    rehome_knowledge_chat_sessions as rehome_knowledge_chat_sessions,
+)
 from bisheng.worker.knowledge.move_worker import migrate_file_vectors
 from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery, insert_qa_celery, rebuild_qa_knowledge_celery
 from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery, rebuild_knowledge_file_chunk
@@ -26,14 +31,20 @@ from bisheng.worker.knowledge.scheduler import (
     reconcile_file_scheduler_task,
     trigger_dispatch_task,
 )
+from bisheng.worker.knowledge.space_delete import dispatch_pending_deletes, purge_space_delete
 from bisheng.worker.knowledge.stale_projection_reconciler import (
     reconcile_stale_parent_projections as reconcile_stale_parent_projections,
+)
+from bisheng.worker.linsight.personal_skill_sweep import (
+    dispatch_personal_skill_orphan_sweep,
+    sweep_personal_skill_orphans,
 )
 from bisheng.worker.main import bisheng_celery
 from bisheng.worker.permission.retry_failed_tuples import (
     cleanup_succeeded_failed_tuples,
     retry_failed_tuples,
 )
+from bisheng.worker.runtime_audit.tasks import runtime_audit_export, runtime_audit_reconcile
 from bisheng.worker.telemetry.mid_table import (
     sync_mid_app_increment,
     sync_mid_knowledge_increment,
@@ -54,6 +65,7 @@ __all__ = [
     "copy_qa_knowledge_celery",
     "dispatch_information_article_poll",
     "dispatch_information_subscription_reconcile",
+    "dispatch_personal_skill_orphan_sweep",
     "execute_approval_outbox",
     "execute_workflow",
     "file_copy_celery",
@@ -69,8 +81,8 @@ __all__ = [
     "retry_approval_outbox",
     "retry_failed_tuples",
     "retry_knowledge_file_celery",
-    "run_publish_pipeline",
     "stop_workflow",
+    "sweep_personal_skill_orphans",
     "sync_information_articles",
     "sync_mid_app_increment",
     "sync_mid_knowledge_increment",

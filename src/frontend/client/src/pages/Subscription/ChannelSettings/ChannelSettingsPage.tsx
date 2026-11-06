@@ -88,8 +88,9 @@ export function ChannelSettingsPage() {
               _resourceType,
               _resourceId,
               config,
+              params,
             ) =>
-              getCreationUserGroups("channel", config),
+              getCreationUserGroups("channel", config, params),
           }
         : undefined,
     [isEditMode],
@@ -130,6 +131,12 @@ export function ChannelSettingsPage() {
         .filter((row) => row.subjectType === "user_group")
         .map((row) => row.subjectId),
     }),
+    [displayedPermissionRows],
+  );
+  const disabledDepartmentSubtreeRootIds = useMemo(
+    () => displayedPermissionRows
+      .filter((row) => row.subjectType === "department" && row.includeChildren)
+      .map((row) => row.subjectId),
     [displayedPermissionRows],
   );
 
@@ -362,6 +369,7 @@ export function ChannelSettingsPage() {
         resourceType="channel"
         resourceId={channelId}
         disabledIds={disabledSubjectIds}
+        disabledDepartmentSubtreeRootIds={disabledDepartmentSubtreeRootIds}
         relationModels={relationOptions}
         canAddNonUserSubjects={relationOptions.length > 0}
         onConfirm={settings.permissionDraft.addRows}

@@ -1,9 +1,10 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button";
+import { Button, Input, toast } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input } from "@/components/bs-ui/input";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
+import { Dialog,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
+
+
 import { importKnowledgeWebLinkApi } from "@/controllers/API";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -53,7 +54,7 @@ export default function WebLinkImportDialog({
     onImported,
 }: WebLinkImportDialogProps) {
     const { t } = useTranslation("knowledge");
-    const { message } = useToast();
+
     const [webLinkUrl, setWebLinkUrl] = useState("");
     const [webLinkTitle, setWebLinkTitle] = useState("");
     const [webLinkLoading, setWebLinkLoading] = useState(false);
@@ -99,10 +100,7 @@ export default function WebLinkImportDialog({
             title: normalizedTitle,
             ...(overwrite ? { overwrite: true } : {}),
         });
-        message({
-            variant: "success",
-            description: t("webLinkImportStarted", { defaultValue: "网页链接已开始导入" }),
-        });
+        toast.show({ type: "success", message: String(t("webLinkImportStarted", { defaultValue: "网页链接已开始导入" }) ?? '') });
         setWebLinkUrl("");
         setWebLinkTitle("");
         onOpenChange(false);
@@ -112,33 +110,21 @@ export default function WebLinkImportDialog({
     const handleImportWebLink = async () => {
         const normalizedUrl = webLinkUrl.trim();
         if (!knowledgeId) {
-            message({
-                variant: "warning",
-                description: t("knowledgeIdMissing", { defaultValue: "知识库不存在" }),
-            });
+            toast.show({ type: "warning", message: String(t("knowledgeIdMissing", { defaultValue: "知识库不存在" }) ?? '') });
             return;
         }
         if (!normalizedUrl) {
-            message({
-                variant: "warning",
-                description: t("webLinkUrlRequired", { defaultValue: "请输入网页链接" }),
-            });
+            toast.show({ type: "warning", message: String(t("webLinkUrlRequired", { defaultValue: "请输入网页链接" }) ?? '') });
             return;
         }
         try {
             const parsed = new URL(normalizedUrl);
             if (!["http:", "https:"].includes(parsed.protocol)) {
-                message({
-                    variant: "warning",
-                    description: t("webLinkHttpOnly", { defaultValue: "仅支持 http 或 https 链接" }),
-                });
+                toast.show({ type: "warning", message: String(t("webLinkHttpOnly", { defaultValue: "仅支持 http 或 https 链接" }) ?? '') });
                 return;
             }
         } catch (error) {
-            message({
-                variant: "warning",
-                description: t("webLinkInvalid", { defaultValue: "请输入有效的网页链接" }),
-            });
+            toast.show({ type: "warning", message: String(t("webLinkInvalid", { defaultValue: "请输入有效的网页链接" }) ?? '') });
             return;
         }
 
@@ -163,23 +149,17 @@ export default function WebLinkImportDialog({
                         try {
                             await importWebLink(normalizedUrl, true);
                         } catch (overwriteError: any) {
-                            message({
-                                variant: "error",
-                                description: resolveErrorMessage(
+                            toast.show({ type: "error", message: String(resolveErrorMessage(
                                     overwriteError,
                                     "webLinkOverwriteFailed",
                                     "网页链接覆盖失败",
-                                ),
-                            });
+                                ) ?? '') });
                         }
                     },
                 });
                 return;
             }
-            message({
-                variant: "error",
-                description: resolveErrorMessage(error, "webLinkImportFailed", "网页链接导入失败"),
-            });
+            toast.show({ type: "error", message: String(resolveErrorMessage(error, "webLinkImportFailed", "网页链接导入失败") ?? '') });
         } finally {
             setWebLinkLoading(false);
         }
@@ -201,26 +181,16 @@ export default function WebLinkImportDialog({
                 >
                     <label className="block space-y-2 text-sm text-[#1d2129]">
                         <span className="font-medium">{t("webLinkUrl", { defaultValue: "链接地址" })}</span>
-                        <Input
-                            value={webLinkUrl}
-                            onChange={(event) => setWebLinkUrl(event.currentTarget.value)}
-                            placeholder="https://example.com/page"
-                            disabled={webLinkLoading}
-                        />
+                        <Input value={webLinkUrl} onChange={(event) => setWebLinkUrl(event.currentTarget.value)} placeholder="https://example.com/page" disabled={webLinkLoading} />
                     </label>
                     <label className="block space-y-2 text-sm text-[#1d2129]">
                         <span className="font-medium">{t("webLinkTitle", { defaultValue: "显示名称" })}</span>
-                        <Input
-                            value={webLinkTitle}
-                            onChange={(event) => setWebLinkTitle(event.currentTarget.value)}
-                            placeholder={t("webLinkTitlePlaceholder", {
+                        <Input value={webLinkTitle} onChange={(event) => setWebLinkTitle(event.currentTarget.value)} placeholder={t("webLinkTitlePlaceholder", {
                                 defaultValue: "留空则自动读取网页标题",
-                            })}
-                            disabled={webLinkLoading}
-                        />
+                            })} disabled={webLinkLoading} />
                     </label>
                     <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={webLinkLoading}>
+                        <Button type="button" variant="outlined" onClick={() => onOpenChange(false)} disabled={webLinkLoading} color="default">
                             {t("cancel", { defaultValue: "取消" })}
                         </Button>
                         <Button type="submit" disabled={webLinkLoading}>

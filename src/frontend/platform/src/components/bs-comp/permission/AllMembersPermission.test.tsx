@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AllMembersPermission } from './AllMembersPermission'
 import { mutateResourceGrantsApi } from '@/controllers/API/permission'
 
@@ -13,7 +13,14 @@ const context = {
   all_members_sources: [{ assignee_id: '9007199254740999', assignee_version: 2 }],
 }
 
-beforeEach(() => { vi.clearAllMocks(); vi.mocked(mutateResourceGrantsApi).mockResolvedValue({ resource_version: 4, items: [] }) })
+const browserCrypto = globalThis.crypto
+beforeEach(() => {
+  vi.clearAllMocks()
+  // HTTP intranet origins expose getRandomValues but not randomUUID.
+  vi.stubGlobal('crypto', { getRandomValues: browserCrypto.getRandomValues.bind(browserCrypto) })
+  vi.mocked(mutateResourceGrantsApi).mockResolvedValue({ resource_version: 4, items: [] })
+})
+afterEach(() => vi.unstubAllGlobals())
 
 describe('all-member authorization', () => {
   it('revokes the persisted public grant with version checks and refreshes', async () => {
@@ -22,6 +29,7 @@ describe('all-member authorization', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'allMembers.title' }))
     await waitFor(() => expect(onChanged).toHaveBeenCalledOnce())
     expect(mutateResourceGrantsApi).toHaveBeenCalledWith('tool', '42', expect.objectContaining({
+      idempotency_key: expect.stringMatching(/^[0-9a-f]{32}$/),
       expected_resource_version: 3, expected_catalog_release_id: 4,
       changes: [{ op: 'REMOVE', assignee_id: '9007199254740999', expected_assignee_version: 2 }],
     }))
@@ -31,6 +39,8 @@ describe('all-member authorization', () => {
     render(<AllMembersPermission resourceType="linsight_skill" resourceId="2" context={{ ...context, all_members_sources: [] }} onChanged={vi.fn()} />)
     fireEvent.click(screen.getByRole('switch'))
     await waitFor(() => expect(mutateResourceGrantsApi).toHaveBeenCalledWith('linsight_skill', '2', expect.objectContaining({
+      idempotency_key: expect.stringMatching(/^[0-9a-f]{32}$/),
+      expected_resource_version: 3, expected_catalog_release_id: 4,
       changes: [{ op: 'ADD', model_key: 'viewer', subject: { type: 'tenant', id: '7' } }],
     })))
   })

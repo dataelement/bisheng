@@ -1,7 +1,8 @@
-import { Button } from "@/components/bs-ui/button";
+import { Button, Pagination } from "@bisheng/ui";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input } from "@/components/bs-ui/input";
-import { toast } from "@/components/bs-ui/toast/use-toast";
+import { Input } from "@bisheng/ui";
+import { notification } from "@bisheng/ui";
 import { getMarketContext } from "@/controllers/API/dshMarket";
 import {
     getMarketWorkbench, importWorkbenchBundle, listMarketWorkbenches, listWorkbenchImports,
@@ -15,6 +16,7 @@ const MAX_UPLOAD = 8 * 1024 * 1024;
 
 export function WorkbenchMarketSection() {
     const { t } = useTranslation("dshMarket");
+    const paginationLocale = usePaginationLocale();
     const [tenant, setTenant] = useState<number | null>(null);
     const [page, setPage] = useState(1);
     const [data, setData] = useState<{ data: MarketWorkbench[]; total: number }>({ data: [], total: 0 });
@@ -95,16 +97,16 @@ export function WorkbenchMarketSection() {
     async function uploadFile() {
         if (!file || tenant === null || !preview?.allowed || checking || displayName.length > 128) return;
         if (!file.name.toLowerCase().endsWith(".tgz") || file.size > MAX_UPLOAD) {
-            toast({ title: t("workbenchInvalidFile"), description: "", variant: "error" }); return;
+            notification.open({ title: t("workbenchInvalidFile"), description: "", type: "error" }); return;
         }
         const controller = new AbortController(); upload.current = controller;
         setBusy(true); setProgress(0);
         try {
             const task = await importWorkbenchBundle(file, tenant, displayName, controller.signal, setProgress);
             if (task.status === "failed") {
-                toast({ title: t("workbenchValidationFailed"), description: task.error_code, variant: "error" });
+                notification.open({ title: t("workbenchValidationFailed"), description: task.error_code, type: "error" });
             } else {
-                toast({ title: t("workbenchImported"), description: "" });
+                notification.open({ title: t("workbenchImported"), description: "" });
                 setUploadOpen(false); setFile(null); setDisplayName("");
             }
         } catch { if (!controller.signal.aborted && mounted.current) setError(true); }
@@ -125,7 +127,7 @@ export function WorkbenchMarketSection() {
             </Button>
         </header>
         {error && <div role="alert" className="text-red-600 flex items-center gap-3">{t("loadFailed")}
-            <Button variant="outline" onClick={reload}>{t("retry")}</Button></div>}
+            <Button variant="outlined" color="default" onClick={reload}>{t("retry")}</Button></div>}
         {loading ? <p role="status">{t("loading")}</p> : <div className="border rounded-lg overflow-x-auto">
             <table className="w-full text-sm text-left"><thead className="bg-muted"><tr>
                 {["workbenchName", "version", "workbenchIdentity", "updated", "actions"].map(key =>
@@ -135,19 +137,25 @@ export function WorkbenchMarketSection() {
                 <td className="p-4">{row.current_version.version}</td>
                 <td className="p-4">{row.workbench_key || row.legacy_id}</td>
                 <td className="p-4">{new Date(/(?:Z|[+-]\d{2}:\d{2})$/.test(row.updated_at) ? row.updated_at : `${row.updated_at}Z`).toLocaleString()}</td>
-                <td className="p-4"><Button variant="outline" onClick={() => void openDetail(row.id)}>{t("details")}</Button></td>
+                <td className="p-4"><Button variant="outlined" color="default" onClick={() => void openDetail(row.id)}>{t("details")}</Button></td>
             </tr>)}</tbody></table>
             {!data.data.length && <p className="p-10 text-center text-muted-foreground">{t("workbenchEmpty")}</p>}
         </div>}
-        <div className="flex items-center justify-end gap-4"><span>{t("workbenchTotal", { count: data.total })}</span>
-            {data.total > 20 && <><Button variant="outline" disabled={page === 1 || loading} onClick={() => setPage(value => value - 1)}>{t("previous")}</Button>
-                <span>{page}</span><Button variant="outline" disabled={page * 20 >= data.total || loading} onClick={() => setPage(value => value + 1)}>{t("next")}</Button></>}</div>
+        <Pagination
+            locale={paginationLocale}
+            current={page}
+            pageSize={20}
+            total={data.total}
+            showTotal
+            disabled={loading}
+            onChange={(nextPage) => setPage(nextPage)}
+        />
         {imports.some(job => job.status !== "completed") && <section className="border rounded-lg p-4 space-y-3">
             <h3 className="font-semibold">{t("imports")}</h3>
             {imports.filter(job => job.status !== "completed").map(job => <div key={job.id} className="flex gap-3 items-center text-sm">
                 <span>{new Date(/(?:Z|[+-]\d{2}:\d{2})$/.test(job.created_at) ? job.created_at : `${job.created_at}Z`).toLocaleString()}</span>
                 <span>{t(job.status)}</span><span>{job.error_code}</span>
-                <Button variant="outline" disabled={busy} onClick={async () => {
+                <Button variant="outlined" color="default" disabled={busy} onClick={async () => {
                     setBusy(true);
                     try { await resumeWorkbenchImport(job.id, tenant!); reload(); }
                     catch { setError(true); }
@@ -174,7 +182,7 @@ export function WorkbenchMarketSection() {
             </div>}
             {file && <p>{file.name} · {(file.size / 1048576).toFixed(1)} MiB</p>}
             {progress !== null && <p role="status">{progress < 100 ? `${progress}%` : t("validating")}</p>}
-            <div className="flex gap-3 justify-end"><Button variant="outline" onClick={() => {
+            <div className="flex gap-3 justify-end"><Button variant="outlined" color="default" onClick={() => {
                 upload.current?.abort(); if (!busy) setUploadOpen(false);
             }}>{t("cancel")}</Button><Button disabled={!file || busy || checking || !preview?.allowed || displayName.length > 128}
                 onClick={() => void uploadFile()}>{t("workbenchImport")}</Button></div>

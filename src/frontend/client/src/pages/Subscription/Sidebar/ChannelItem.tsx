@@ -1,23 +1,9 @@
+import { Dropdown, DropdownItem, DropdownSeparator } from "@bisheng/ui";
 import { useLocalize } from "~/hooks";
 import { LogOut, MoreHorizontal, Pin, PinOff, Settings } from "lucide-react";
 import { useState } from "react";
 import { canDeleteChannel, canEditChannelSettings, canManageChannelPermissions, type Channel } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
-import {
-    DropdownMenu,
-    DropdownMenuItem,
-    DropdownMenuTrigger
-} from "~/components/ui/DropdownMenu";
-import {
-    SidebarListMoreMenuContent,
-    SidebarListMoreMenuDivider,
-    sidebarListMoreMenuDangerIconClassName,
-    sidebarListMoreMenuDangerItemClassName,
-    sidebarListMoreMenuDangerLabelClassName,
-    sidebarListMoreMenuIconClassName,
-    sidebarListMoreMenuItemClassName,
-    sidebarListMoreMenuLabelClassName,
-} from "~/components/SidebarListMoreMenu";
 import { useConfirm, useToastContext } from "~/Providers";
 import { cn, getFullWidthLength } from "~/utils";
 import { ChannelPinIcon } from "~/components/icons/channels";
@@ -150,8 +136,72 @@ export default function ChannelItem({
                     </span>
                 )}
 
-                <DropdownMenu onOpenChange={setMenuOpen}>
-                    <DropdownMenuTrigger asChild>
+                {/* Keep menu clicks from bubbling to the row, which selects the channel. */}
+                <span className="contents" onClick={(e) => e.stopPropagation()}>
+                    <Dropdown
+                        align="end"
+                        onOpenChange={setMenuOpen}
+                        menu={
+                            <>
+                                {(canEditChannelSettings(channel.actions) || canManageChannelPermissions(channel.actions)) && (
+                                    <DropdownItem icon={<Settings />} onSelect={() => onChannelSettings(channel)}>
+                                        {localize("com_subscription.channel_settings")}
+                                    </DropdownItem>
+                                )}
+                                <DropdownItem
+                                    icon={channel.isPinned ? <PinOff /> : <Pin />}
+                                    onSelect={() => onPin(channel.id, !channel.isPinned, type)}
+                                >
+                                    {channel.isPinned
+                                        ? localize("com_subscription.unpin")
+                                        : localize("com_subscription.pin_channel")}
+                                </DropdownItem>
+                                {(canDissolve || canUnsubscribe) && <DropdownSeparator />}
+
+                                {canDissolve && (
+                                    <DropdownItem
+                                        danger
+                                        icon={<ClosedIcon />}
+                                        onSelect={async () => {
+                                            const ok = await confirm({
+                                                title: localize("com_subscription.prompt_tip"),
+                                                description: localize("com_subscription.confirm_delete_channel_for_all"),
+                                                confirmText: localize("com_subscription.confirm"),
+                                                cancelText: localize("com_subscription.cancel")
+                                            })
+
+                                            if (ok) {
+                                                onDelete(channel.id);
+                                            }
+                                        }}
+                                    >
+                                        {localize("com_subscription.dissolve_channel")}
+                                    </DropdownItem>
+                                )}
+
+                                {canUnsubscribe && (
+                                    <DropdownItem
+                                        danger
+                                        icon={<LogOut />}
+                                        onSelect={async () => {
+                                            const ok = await confirm({
+                                                title: localize("com_subscription.prompt_tip"),
+                                                description: localize("com_subscription.confirm_unsubscribe_channel_and_subs"),
+                                                confirmText: localize("com_subscription.confirm"),
+                                                cancelText: localize("com_subscription.cancel")
+                                            })
+
+                                            if (ok) {
+                                                onUnsubscribe(channel.id);
+                                            }
+                                        }}
+                                    >
+                                        {localize("com_subscription.unsubscribe")}
+                                    </DropdownItem>
+                                )}
+                            </>
+                        }
+                    >
                         <button
                             type="button"
                             className={cn(
@@ -160,89 +210,11 @@ export default function ChannelItem({
                                 !menuOpen &&
                                 "coarse-pointer:opacity-100 fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100",
                             )}
-                            onClick={(e) => e.stopPropagation()}
                         >
                             <MoreHorizontal className="size-4 text-text-2" />
                         </button>
-                    </DropdownMenuTrigger>
-
-                    <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                        {(canEditChannelSettings(channel.actions) || canManageChannelPermissions(channel.actions)) && (
-                            <DropdownMenuItem
-                                className={sidebarListMoreMenuItemClassName}
-                                onClick={() => onChannelSettings(channel)}
-                            >
-                                <Settings className={sidebarListMoreMenuIconClassName} />
-                                <span className={sidebarListMoreMenuLabelClassName}>
-                                    {localize("com_subscription.channel_settings")}
-                                </span>
-                            </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem
-                            onClick={() => onPin(channel.id, !channel.isPinned, type)}
-                            className={sidebarListMoreMenuItemClassName}
-                        >
-                            {channel.isPinned ? (
-                                <>
-                                    <PinOff className={sidebarListMoreMenuIconClassName} />
-                                    <span className={sidebarListMoreMenuLabelClassName}>{localize("com_subscription.unpin")}</span>
-                                </>
-                            ) : (
-                                <>
-                                    <Pin className={sidebarListMoreMenuIconClassName} />
-                                    <span className={sidebarListMoreMenuLabelClassName}>{localize("com_subscription.pin_channel")}</span>
-                                </>
-                            )}
-                        </DropdownMenuItem>
-                        {(canDissolve || canUnsubscribe) && <SidebarListMoreMenuDivider />}
-
-                        {canDissolve && (
-                            <DropdownMenuItem
-                                onClick={async () => {
-                                    const ok = await confirm({
-                                        title: localize("com_subscription.prompt_tip"),
-                                        description: localize("com_subscription.confirm_delete_channel_for_all"),
-                                        confirmText: localize("com_subscription.confirm"),
-                                        cancelText: localize("com_subscription.cancel")
-                                    })
-
-                                    if (ok) {
-                                        onDelete(channel.id);
-                                    }
-                                }}
-                                className={sidebarListMoreMenuDangerItemClassName}
-                            >
-                                <ClosedIcon className={sidebarListMoreMenuDangerIconClassName} />
-                                <span className={sidebarListMoreMenuDangerLabelClassName}>
-                                    {localize("com_subscription.dissolve_channel")}
-                                </span>
-                            </DropdownMenuItem>
-                        )}
-
-                        {canUnsubscribe && (
-                            <DropdownMenuItem
-                                onClick={async () => {
-                                    const ok = await confirm({
-                                        title: localize("com_subscription.prompt_tip"),
-                                        description: localize("com_subscription.confirm_unsubscribe_channel_and_subs"),
-                                        confirmText: localize("com_subscription.confirm"),
-                                        cancelText: localize("com_subscription.cancel")
-                                    })
-
-                                    if (ok) {
-                                        onUnsubscribe(channel.id);
-                                    }
-                                }}
-                                className={sidebarListMoreMenuDangerItemClassName}
-                            >
-                                <LogOut className={sidebarListMoreMenuDangerIconClassName} />
-                                <span className={sidebarListMoreMenuDangerLabelClassName}>
-                                    {localize("com_subscription.unsubscribe")}
-                                </span>
-                            </DropdownMenuItem>
-                        )}
-                    </SidebarListMoreMenuContent>
-                </DropdownMenu>
+                    </Dropdown>
+                </span>
             </div>
         </div>
     );

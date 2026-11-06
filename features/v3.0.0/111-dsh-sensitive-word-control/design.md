@@ -289,7 +289,7 @@ backend 新表 dsh_content_safety_event 采用现有 SQLModel 基类和 dialect_
 
 输入阻断用 gateway_request_id 建外部审计条目，model_entered=false，不生成 dsh_model_call。Gateway 转发前将该 UUID 作为 X-Request-ID 覆盖客户端同名头并透传，backend 复用；backend_request_id 在发起转发前即设为该编号，不依赖响应头。转发异常时依既有投影建立 EXTERNAL_SAFETY 摘要：model_entered=NULL，不生成模型调用或用量事实。有 conversation_id 的摘要进入会话记录，无 conversation_id 的摘要进入未关联请求。事件明细仍单独持久化在 dsh_content_safety_event，请求摘要在 dsh_model_audit_request。历史无编号、可信身份不匹配或唯一约束冲突时，事件继续保留在数据库供debug，不在界面提供“未关联检查”；不按用户、时间或模型猜关联。
 
-外部条目的 effective_mode、model_result、response_result、usage_settlement 和 session_id 等未确认字段允许 NULL；content_status=NOT_CAPTURED，audit_status=NOT_APPLICABLE，不计入模型 NORMAL/ABNORMAL。状态派生先按 record_origin 分支，停滞扫描仅扫描真实模型条目；外部条目不要求模型终态或原文 manifest，不参与原文密钥就绪门槛。未知 model_name 用空字符串及其摘要建立可索引占位，界面仅显示模型编号；原生审计后到补齐名称和摘要，不让未知名称卡住全租户 readiness。输入阻断展示“不适用”，缺少原生审计的输出条目展示“未观测”；usage 缺失为 null，不用数值 0 替代。
+外部条目的 effective_mode、model_result、response_result、usage_settlement 和 session_id 等未确认字段允许 NULL；content_status=NOT_CAPTURED，audit_status=NOT_APPLICABLE，不计入模型 NORMAL/ABNORMAL。状态派生先按 record_origin 分支，停滞扫描仅扫描真实模型条目；外部条目不要求模型终态或原文 manifest，不参与原文密钥就绪门槛。安全事件接收后在认证租户scope内，复用LLMService.get_dsh_model_metadata_snapshot（含Root共享与离线模型元数据规则）取得服务商/模型名称，并随EXTERNAL_SAFETY摘要及其名称摘要保存。标签读取最多200ms，包含在既有2秒回传预算中，不实例化模型、不调用Gateway；失败或模型删除则以空名称及其摘要占位、界面回退模型编号，检查事实仍须可靠入库。后到或重发事件可补齐空名称，已保存的非空名称快照不随当前配置重命名；原生MODEL名称始终优先，原生审计后到仍按原提升规则补齐。保持未知名称不阻塞租户readiness。仅开启敏感词检查时也可通过现有标题接口补齐本人、本租户保留摘要的标题；以已接收检查事实为绑定依据，不依赖Gateway实时开关，详见审计设计§4.7.3。正文模式仍为OFF，无body/manifest/对象存储写入；标题和名称不证明模型执行成功或实际用量。输入阻断展示“不适用”，缺少原生审计的输出条目展示“未观测”；usage 缺失为 null，不用数值 0 替代。
 
 仅有外部事件不证明模型执行；接收端可读取相同 tenant/user/model/request_id 的 dsh_model_call 或原生证据确认 model_entered，但不能由 forwarded 或收到响应头推断执行成功。查到调用用量可按既有补数逻辑展示，模型审计模式和 ASGI 交付结果仍不能编造。
 
@@ -331,7 +331,21 @@ AC-61 的采集说明放在 ModelAuditMode 状态栏下方，始终占满既有�
 
 词库、输入/输出方向、提示等作为一次原子保存，使用 Checkbox 和保存按钮；不把“拨动后仍需保存”的行为伪装成 Switch 即时设置。运行开关若使用 Switch 则独立立即提交，等待锁定、失败回弹，并基于已保存的有效词库校验。沿用现有表单/审计布局，不增加新的组件样式。
 
-依据当前 UI 规范，状态使用 Tag，计数才使用 Badge。已落地组件优先；无已落地组件时沿用当前页面实现。过滤切换清游标和缓存，列表显示输入/输出命中及汇总，详情显示阶段和策略。外部条目隐藏原文入口；N/A、未知、已清理均区别展示。
+依据当前 UI 规范，状态使用 Tag，计数才使用 Badge。已落地组件优先；无已落地组件时沿用当前页面实现。过滤切换清游标和缓存，列表显示输入/输出命中及汇总，检查详情仅展示命中词与检查时间。外部条目隐藏原文入口；N/A、未知、已清理均区别展示。
+
+AC-68、AC-69界面收敛：ModelAuditMode移除配置旁的“刷新状态”，保留配置保存失败后的revision自动重读及租户变更取消；ModelAuditPanel移除范围说明入口、状态及面板，保留采集关闭时的安全摘要说明、刷新记录、原文权限和请求信息展开。ModelAuditFilters及查询API不改，模型名称、审计状态、有命中、方向、检查结果、请求编号、会话编号全部保留，仍显式点击查询后应用。ModelAuditSafetySummary移除safety_summary_version的可视展示，保留原统计状态、safety_summary_as_of更新时间以及已就绪命中数量；会话和树形子会话共用该组件。API及后端统计版本仍保留，不改变就绪判定、查询或统计计算。
+
+ModelAuditCard仅在汇总与两个阶段均PASSED且has_sensitive_hit/input_sensitive_hit/output_sensitive_hit均不为true时隐藏检查详情，未知字段不补成通过；条件更新后立即卸载详情并由原cleanup中止请求。ContentSafetyRequestDetails按AC-71将同一请求已加载的事件汇总为一个区域，只保留命中词与检查时间，不显示重复阶段状态、来源、UUID、规则编号、策略/词库版本、读取状态及计量提示。输入/输出的词值跨事件和已加载分页求并集，以React纯文本展示；DECISION和后续DRAIN等保留同一快照时只展示一次，后到无命中/异常快照不清除此前命中词。检查时间取已加载的BLOCKED或含词值事件中最早的occurred_at；没有命中事实时取最早检查事件，加载更早页面后更新该时间。若任一旧命中事件缺少词值，在已知词值旁保留无法还原提示；全部无词且无命中时显示“无已记录的命中词”，不等同通过。原始事件仍按事件身份合并在组件状态中，不修改backend/Gateway事件或数据库；明细原有按需加载、分页、刷新替换、失败保留当前数据及精确游标重试、请求/租户切换取消和迟到响应屏障均保留。
+
+AC-72请求详情收敛：ModelAuditCard展开区域使用section、独立h3标题和与检查详情一致的分组布局；请求按钮aria-controls关联section，section通过aria-labelledby关联标题。正文仅保留model_result、response_result、usage_settlement、content_status四个业务轴，删除请求/会话UUID、记录来源、重复模型名称、单独model_entered行和model_started_at展示。模型结果有真实值时优先展示；外部摘要无模型结果时，model_entered=false显示未调用模型，其余显示未观测到模型执行结果，其他未取得的轴保持未知或既有不适用语义。失败原因仍经auditFailure白名单归类，保留HTTP状态和异常说明，不显示任意provider诊断。状态说明移至dl外的正文，保持合法语义。复用既有翻译键、组件样式与响应式布局，不新增UI库；卡片头部模型名称/请求时间、原文开关/权限、模型计量、安全详情和查询协议均保留。原始字段继续留在后台及API供排查。
+
+AC-73统计就绪展示：ModelAuditSafetySummary在整体或任一所需计数未就绪时直接不渲染，包含数字、准备状态、已知命中摘要和旧时间；请求自身安全命中标签不变。树节点只渲染ready的自身/分支计数和异常汇总，不显示summary_pending/branch_pending/known_abnormal占位；旧式会话列表在状态/名称就绪且indexing_pending=false时才显示计数与汇总。ModelAuditPanel移除索引和关系/统计准备、更新中说明，真实readiness读取失败仍显示固定错误；保留已有会话、请求、刷新、扫描上限与查询错误恢复。无新表或统计模型，未引入“隐藏未就绪会话”的路径。
+
+AC-74两方向检查：DshContentSafetySettings移除总开关，draftOf及每次handleChange都以input_enabled||output_enabled计算enabled。仍通过现有命令字段向Gateway原子保存，Gateway无改动；两个方向均关闭时沿原关闭校验，不要求词库/阻断提示，但字节和Unicode上限仍校验。初始快照按两个方向解释，不增加旧总开关独立关闭/保留方向的兼容逻辑，不执行旧数据迁移；CAS、租户取消、读取失败和草稿冲突恢复保持原样。该段替代AC-70关于五个复选框的旧展示约定，当前为四个复选框（两个方向、两个词库来源）及两个文本域。
+
+AC-75会话内辅助请求过滤：QueryService.groups仅key非空的会话内分支向Repository.page传内部exclude_auxiliary=true；仓储在WHERE中以request_kind IS NULL OR request_kind NOT IN (session-title,compaction)过滤，再执行原keyset、limit+1及cursor编码，且游标指纹绑定该内部范围。普通page、外层group/tree查询及投影计数完全不改，未关联请求/诊断查询也不启用该参数；用户明确只改变会话内列表，汇总仍按原ALL_INDEXED_REQUESTS口径，不对隐藏辅助请求重新计费或删记录。ModelAuditCard移除用途/来源标签，仅改变展示，不丢弃后台字段。无需schema、索引、Gateway或Desktop改动；未来部署需先更新backend会话内查询再验收前端，当前不部署。
+
+AC-70配置页收敛：DshContentSafetySettings保留全部五个复选框和两个文本域、原子保存及只读权限；移除description/scope_hint、version/builtin_digest/effective_word_count诊断区和custom/effective词库大小说明。自定义词说明改为“每行一个词，按字面匹配，区分大小写”，仅说明既有支持的录入方式，不修改分隔解析；阻断提示保留安全文案约束，5秒生效说明合入保存成功反馈。正常可用状态不显示刷新；有效租户下，能力读取结束且不可用、策略读取失败、版本冲突或本轮刷新失败时显示原刷新按钮。首次策略读取失败仍不显示空配置；已有草稿的策略刷新失败不再隐藏表单，并由feedback唯一显示加载失败，conflict锁继续禁止保存；成功重读保留本地修改并刷新expected_version，后续仍需用户明确保存。useDshContentSafety、API wrapper、限制/CAS/租户缓存和Gateway不改，技术字段仍参与原验证和保存协议。
 
 API wrapper 留在 controllers/API，新取数遵循当前根 AGENTS 约定的 @tanstack/react-query v4，不新增 react-query v3 用法或开展全站迁移。当前分支 platform/package.json 只直接声明 v3；tasks 单列补充 workspace 已锁定的 v4.44.0 直接依赖，并在本特性设置组件内提供局部 QueryClientProvider，不更换全站 v3 Provider。新键补齐 zh-Hans/en/ja；错误文案只写 packages/locales 源文件并走生成流程，触及旧硬编码文件时按项目规则迁出。
 
@@ -463,7 +477,7 @@ AC-64 移除独立未关联检查产品界面：删除 ModelAuditViews 的入口
 
 AC-66命中词展示：CompiledPolicy.wordsForRules仅在有命中引用时对本请求不可变rules映射做一次有界检索（词库≤30000项），不请求当前配置、不复制整份词库或请求正文、不新增网络调用。Manager按输入/输出提取去重词值，Observation深复制并覆盖toString以不显示词值；DECISION与DRAIN沿同一冻结词值快照。Outbox把可选matched_words加入v1事件；新backend兼容旧发送方省略/null，旧backend严格拒绝未知字段，因此上线必须先迁移及更新全部backend实例、确认均能接收该字段，再更新Gateway，前端可独立兼容旧数据；回退先停止新Gateway字段，再退backend，新增列保留。
 
-事件表增加可空JsonType列matched_words，不回填旧记录，不改schema_version=1约束、请求摘要表或列表索引。append_event保存规范JSON，saved_fact严格比较新增字段，原始wire哈希仍区分省略/null/有值；metadata只通过原授权请求事件查询返回。主列表不联表、不逐行查词值，用户展开检查详情时按方向显示命中词；React按文本渲染，历史缺失或无可用快照明确提示无法还原，不从当前rule_ref配置反推。原命中截断标识继续提示有界观察，不能保证已发现全部命中。原审计OFF时也可保存这份配置词值证据，输入/输出正文仍按采集模式控制，两开关OFF仍不新增事件。
+事件表增加可空JsonType列matched_words，不回填旧记录，不改schema_version=1约束、请求摘要表或列表索引。append_event保存规范JSON，saved_fact严格比较新增字段，原始wire哈希仍区分省略/null/有值；metadata只通过原授权请求事件查询返回。主列表不联表、不逐行查词值，用户展开检查详情时合并输入/输出词值并去重显示命中词，保留事件occurred_at作为检查时间；React按文本渲染，历史缺失或无可用快照明确提示无法还原，不从当前rule_ref配置反推。命中快照仍是有界观察，不能保证已发现全部命中；截断标记留在后端诊断数据中，检查详情不显示技术字段。原审计OFF时也可保存这份配置词值证据，输入/输出正文仍按采集模式控制，两开关OFF仍不新增事件。
 
 迁移revision=f111_matched_words，down_revision由实际alembic heads核实为f111_dsh_content_safety；使用column_exists/table_exists与既有JsonType，只有幂等ADD COLUMN，NULL兼容历史，无数据迁移。默认拒绝破坏性downgrade；MySQL实测与Linux DM8实测分开记录，不把SQLite/类型编译当双库验收。命中词属于获授权的平台审计数据，AC-29的模型内容接收方仍不得收到命中词；普通日志、客户端错误/终止帧和指标标签不携带词值。
 
@@ -572,6 +586,12 @@ curl --fail-with-body -N "$GATEWAY_ORIGIN/api/v1/dsh/responses" \
 
 | 日期 | 改动 | 原因 |
 |---|---|---|
+| 2026-10-29 | AC-73、AC-74、AC-75：未就绪统计不展示、两方向控制检查、只在会话内隐藏辅助请求及类型标签 | 用户确认保留会话和请求、无需旧配置兼容，并收窄第三项范围；不加表、不改外层分页/汇总 |
+| 2026-10-28 | AC-72：请求详情增加分类标题并聚焦四项业务状态，合并重复模型结果 | 用户要求沿敏感词详情原则简化；保留失败原因、未知语义与原文权限 |
+| 2026-10-28 | AC-68补充：移除统计版本，仅保留统计状态、更新时间及命中数量 | 用户明确精简统计展示；不更改后台汇总协议 |
+| 2026-10-28 | AC-71：请求内检查进展事件汇总去重，只显示一份命中词及首次命中时间 | 用户指出DECISION/DRAIN两条同词快照重复展示并授权修复；保留内部事件 |
+| 2026-10-28 | AC-70：敏感词配置页按相同原则精简，保留完整配置与异常恢复 | 用户要求配置界面同样简化；不改变检查策略或存储 |
+| 2026-10-28 | AC-68、AC-69：审计界面简化，全部通过隐藏检查详情；保留全部高级筛选与后端诊断数据 | 用户确认demo并补充全部通过不展示详情，授权修改项目代码 |
 | 2026-10-27 | AC-65、AC-66：移除请求明细导航；冻结命中词快照入库并在授权检查详情展示 | 用户明确要求；覆盖前版只保留规则编号的取舍，不记录周边正文或普通日志 |
 | 2026-10-27 | AC-64：移除未关联检查入口、专属页面和前端查询；未关联事件仅保留数据库用于debug | 用户明确移除产品功能，保留会话和未关联请求；不改数据保留与归并 |
 | 2026-10-27 | AC-62、AC-63：Gateway 预生成并透传模型 UUID，backend 通用复用；无响应头可关联外部摘要，保留历史异常入口 | 用户确认统一编号方案并要求实现、测试与文档同步；不提交、不推送、不部署 |

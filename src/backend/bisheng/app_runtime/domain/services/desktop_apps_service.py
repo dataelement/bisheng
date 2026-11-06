@@ -67,7 +67,7 @@ class DesktopAppsService:
     async def page(self, principal, *, after=None, managed=False):
         with principal_scope(principal):
             actor = await self.actor(principal)
-            return await hosted_app_page(actor, self.repository, after=after, managed=managed)
+            return await workbench_page(actor, self.repository, after=after, managed=managed)
 
     async def launch(self, principal, app_id):
         _actor, app = await self.require(principal, app_id, "use")
@@ -84,7 +84,7 @@ class DesktopAppsService:
         }
 
 
-async def hosted_app_page(actor, repository, *, after=None, managed=False):
+async def workbench_page(actor, repository, *, after=None, managed=False):
     """One tenant- and action-scoped catalog for Desktop and browser app entrances."""
     rows, cursor = await repository.page(after=after)
     items = []

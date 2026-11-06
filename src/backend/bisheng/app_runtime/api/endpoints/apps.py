@@ -90,9 +90,9 @@ async def list_workbenches(
     cursor: str | None = Query(default=None, pattern=r"^[a-f0-9]{32}$"),
 ):
     from bisheng.app_runtime.domain.repositories.desktop_app_repository import DesktopAppRepository
-    from bisheng.app_runtime.domain.services.desktop_apps_service import hosted_app_page
+    from bisheng.app_runtime.domain.services.desktop_apps_service import workbench_page
 
-    page = await hosted_app_page(user, DesktopAppRepository(), after=cursor)
+    page = await workbench_page(user, DesktopAppRepository(), after=cursor)
     for item in page["items"]:
         item["entry_url"] = AppQueryService.entry_url(item["slug"]).rstrip("/") + "/"
     return resp_200(data=page)
@@ -160,7 +160,7 @@ async def patch_app(
 
 @router.delete("/{app_id}", response_model=UnifiedResponseModel[dict], summary="Delete an application")
 async def delete_app(app_id: str, user: UserPayload = Depends(UserPayload.get_login_user)):
-    """AC-42 / AC-43 / AC-44 — owner only, blocked while online, purges the data."""
+    """AC-42 / AC-43 / AC-44 — eligible owner/admin, blocked while online, purges the data."""
     return resp_200(data=_action_payload(await AppStateService.delete(app_id, actor=user)))
 
 

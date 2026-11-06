@@ -89,18 +89,17 @@ async def test_v2_environment_satisfies_shipped_sdk_contract_and_preserves_other
     monkeypatch.setattr(capability_bus_service, "model_face_base_url", lambda: model_base)
     staged = []
 
-    async def stage(app_id, *, operation, scopes, session):
+    async def stage(app_id, *, operation, scopes, repository):
         staged.append((app_id, operation.id, scopes))
         return "fixture-app-token"
 
-    monkeypatch.setattr(AppRuntimeCredentialService, "stage_in_transaction", stage)
+    monkeypatch.setattr(AppRuntimeCredentialService, "stage", stage)
     op = operation()
     op.kind = "preview" if preview else "deploy"
     op = await runtime_repo.create_operation(op)
     coordinator = RuntimeDeliveryCoordinator(runtime_repo, control=SimpleNamespace())
     await coordinator.inject_environment(
         op,
-        secret_snapshot=SimpleNamespace(revision=0, env={}, sensitive_env_names=[], declaration_digest="a" * 64),
         capabilities={"models": [{"name": "fixture-model"}]} if models else {},
         environment={
             "APP_CUSTOM_FLAG": "kept",
@@ -144,3 +143,42 @@ async def test_v2_environment_satisfies_shipped_sdk_contract_and_preserves_other
             assert "OPENAI_BASE_URL" not in env and "OPENAI_API_KEY" not in env
     await coordinator.inject_environment(op, preview=preview)
     assert (await runtime_repo.get(type(op), op.id)).payload["sealed_env"] == saved.payload["sealed_env"]
+
+
+async def test_probe_freezes_runtime_health_and_does_not_allocate_a_version_number():
+    """F119 覆盖 AC: AC-07, AC-08, AC-09, AC-10, AC-11."""
+    from bisheng.app_publish.domain.schemas.app_manifest import AppManifest
+
+    seen = []
+
+    class Repository:
+        async def get_application(self, app_id):
+            return SimpleNamespace(id=app_id, slug="fixture", tenant_id=1)
+
+    class Coordinator(RuntimeDeliveryCoordinator):
+        async def delivery(self, app_id, version_id):
+            return SimpleNamespace(content={"mode": "bundle"})
+
+        async def submit(self, app, **kwargs):
+            seen.append(kwargs)
+            return SimpleNamespace(id="probe")
+
+        async def inject_environment(self, *args, **kwargs):
+            pass
+
+        async def wake(self, op):
+            pass
+
+        async def wait(self, op):
+            return {}
+
+    deployment = SimpleNamespace(id="d", app_id="a", version_id="v", authorization_context={})
+    await Coordinator(Repository()).probe(
+        deployment,
+        AppManifest(name="test", runtime="node20", port=8081),
+        SimpleNamespace(memory_mb=512, cpu_millicores=250),
+    )
+    assert seen[0]["payload"]["runtime"] == "node20"
+    assert seen[0]["payload"]["health"] == {"path": "/"}
+    assert "version_no" not in seen[0]["payload"]
+    assert seen[0]["version_id"] == "v"

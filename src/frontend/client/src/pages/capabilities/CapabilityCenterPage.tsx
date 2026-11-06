@@ -65,7 +65,7 @@ export function CapabilityCenterPage() {
     </div>
     <main className="scroll-on-scroll flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto">
       <div className={`${MODULE_HOME_COLUMN} flex flex-1 flex-col pb-3 pt-4`}>
-        {active !== 'tool' && <SkillCenterPane search={search} uploadOpen={uploadOpen} onUploadOpenChange={setUploadOpen} />}
+        {active !== 'tool' && <SkillCenterPane onSearchClear={() => setSearch('')} search={search} uploadOpen={uploadOpen} onUploadOpenChange={setUploadOpen} />}
         {availability.isError && <p role="alert" className="text-body-sm text-danger">{t('availability_failed')}</p>}
         {active !== 'skill' && ((identity.isError || catalog.isError) ? <StateView title={t('failed')} description={t('retry_hint')} action={<Button color="default" variant="outlined" onClick={() => { void identity.refetch(); void catalog.refetch(); }}>{t('retry')}</Button>} />
         : (identity.isLoading || catalog.isLoading) ? <SkillListSkeleton />

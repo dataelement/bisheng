@@ -18,7 +18,6 @@ interface QRPhaseProps {
   otpauthUrl: string;
   onNext: () => void;
   onSuccess?: () => void;
-  onError?: (error: Error) => void;
 }
 
 export const QRPhase: React.FC<QRPhaseProps> = ({ secret, otpauthUrl, onNext }) => {

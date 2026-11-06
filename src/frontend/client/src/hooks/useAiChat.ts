@@ -1,6 +1,6 @@
 /**
  * Core chat state hook — manages messages, submission, and SSE lifecycle.
- * Uses useState/useRef for local state, Recoil only for shared atoms (chatModel, kbs, searchType).
+ * Uses useState/useRef for local state, Recoil only for shared atoms (chatModel, searchType).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -10,6 +10,12 @@ import type { ConversationData, TConversation } from "~/types/chat";
 import { QueryKeys, dataService } from "~/types/chat";
 import { addConversation, updateConvoFields } from "~/utils";
 import store from "~/store";
+import type { SelectedOrgKb } from "~/store/modeltype";
+import { useAuthContext } from "~/hooks/AuthContext";
+import { knowledgeSpaceTagFilters } from "~/utils/knowledgeTagSelection";
+import { canProcessChatImage } from "~/common/chatAccept";
+import { useKnowledgeSpaceAccess } from "~/hooks/useKnowledgeSpaceAccess";
+import { useConversationKnowledge } from "~/hooks/useConversationKnowledge";
 import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import type { ChatMessage } from "~/api/chatApi";
@@ -95,7 +101,10 @@ interface OutgoingAttachment {
     file_name?: string;
 }
 
-export default function useAiChat(initialConversationId: string = "new", isLingsi: boolean = false, shareToken: string = "") {
+export default function useAiChat(initialConversationId: string = "new", isLingsi: boolean = false, shareToken: string = "", draftScope = "chat") {
+    const [historyError, setHistoryError] = useState<unknown>(null);
+    const [historyReload, setHistoryReload] = useState(0);
+    const retryHistory = () => setHistoryReload(value => value + 1);
     const localize = useLocalize();
     const { showToast } = useToastContext();
     // --- Local state ---
@@ -197,7 +206,6 @@ export default function useAiChat(initialConversationId: string = "new", isLings
 
     // Shared Recoil atoms
     const [chatModel] = useRecoilState(store.chatModel);
-    const [selectedOrgKbs] = useRecoilState(store.selectedOrgKbs);
     const [searchType] = useRecoilState(store.searchType);
     // v2.5 Agent-mode: tools toggled on in the chat input bar. Non-empty
     // means the backend dispatcher routes to the LangGraph Agent flow (which
@@ -209,6 +217,17 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     // Admin-level org-KB toggle. Knowledge spaces remain available even when
     // the org knowledge base feature is disabled, so we only strip org ids.
     const { data: bsConfig } = useGetBsConfig();
+    const { user } = useAuthContext();
+    const knowledgeDefaults = useMemo<SelectedOrgKb[]>(() => bsConfig?.knowledgeBase?.enabled === false
+        ? [] : (bsConfig?.orgKbs ?? []).filter((kb) => kb.default_checked)
+            .map((kb) => ({ id: String(kb.id), name: kb.name, type: 'org' })), [bsConfig]);
+    const { selectedOrgKbs: savedKnowledge, setSelectedOrgKbs, promoteSelection } = useConversationKnowledge(
+        user?.id == null ? undefined : String(user.id), conversationId, knowledgeDefaults,
+        bsConfig?.knowledgeBase?.enabled !== false, draftScope,
+    );
+
+    const { available: selectedOrgKbs, message: knowledgeAccessMessage, blocked: knowledgeAccessBlocked } =
+        useKnowledgeSpaceAccess(savedKnowledge, `${draftScope}:${conversationId}`, !shareToken);
 
     const queryClient = useQueryClient();
 
@@ -268,14 +287,16 @@ export default function useAiChat(initialConversationId: string = "new", isLings
      *  be forgotten again.
      */
     const adoptConversationId = useCallback(
-        (turn: { cid: string }, next: string) => {
+        (turn: { cid: string; knowledge: SelectedOrgKb[] }, next: string) => {
             if (!next || next === turn.cid) return;
+            const previousId = turn.cid;
+            promoteSelection(previousId, next, turn.knowledge);
             promoteBucket(turn.cid, next);
             promoteStream(turn.cid, next);
             turn.cid = next;
-            setConversationId(next);
+            setConversationId((current) => current === previousId ? next : current);
         },
-        [promoteBucket, promoteStream],
+        [promoteBucket, promoteStream, promoteSelection],
     );
 
     // Every live turn belongs to the page, not to this component's lifetime —
@@ -302,7 +323,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     const skipLoadConvoRef = useRef<string | null>(null);
 
     // Track previous external ID to distinguish sidebar navigation from self-navigate
-    const prevExternalIdRef = useRef(initialConversationId);
+    const [previousExternalId, setPreviousExternalId] = useState(initialConversationId);
     const internalConvoIdRef = useRef(conversationId);
     internalConvoIdRef.current = conversationId;
 
@@ -351,43 +372,18 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         [],
     );
 
-    // --- Sync internal state when external conversationId prop changes ---
-    // This is essential for sidebar navigation: clicking a different conversation
-    // changes initialConversationId. But we must NOT reset when WE navigated
-    // from /new to /c/abc123 after creating a conversation (that would wipe messages).
-    useEffect(() => {
-        const prevId = prevExternalIdRef.current;
-        prevExternalIdRef.current = initialConversationId;
-
-        // Skip on mount (no change)
-        if (prevId === initialConversationId) return;
-
-        // Skip if the new external ID matches our own internal ID — this means
-        // it was OUR OWN navigation (e.g., /new → /c/abc123 after SSE created convo).
-        // In this case don't reset, messages are still valid.
-        if (initialConversationId === internalConvoIdRef.current) return;
-
-        // Genuine sidebar navigation. Nothing of the conversation we are leaving
-        // is torn down: its stream keeps generating into its own bucket and its
-        // attachment poll keeps running, which is the whole point. We only say
-        // the conversation we are arriving at is loading — and only if it has
-        // nothing of its own yet, so stepping back into a live turn shows it
-        // rather than a spinner over content we already have.
-        const arriving = initialConversationId;
-        const arrivingIsLive = !!streamingByConvo[arriving] || !!liveStreams.get(streamKey(ownerIdRef.current, arriving));
-        setLoadingFor(arriving, arriving !== "new" && !arrivingIsLive);
-        // Drop the post-handoff skip guard: it only protects the ONE in-place
-        // refetch right after a task handoff. The handoff happens mid-stream, so
-        // the load effect's `isStreaming` guard already suppresses that refetch
-        // and the skip guard never gets consumed — it lingers set to that convo.
-        // Once we genuinely navigate away, it's stale; if left set, returning to
-        // that convo would hit the skip branch and load NOTHING (blank page on the
-        // first switch-back, only loading on the second). Clearing it here makes
-        // the first return load history normally.
-        skipLoadConvoRef.current = null;
-        setConversationId(initialConversationId);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [initialConversationId]);
+    // Resolve sidebar navigation during render so the composer, its callbacks,
+    // and the message bucket commit with the same conversation identity.
+    if (previousExternalId !== initialConversationId) {
+        setPreviousExternalId(initialConversationId);
+        if (initialConversationId !== conversationId) {
+            const arrivingIsLive = !!streamingByConvo[initialConversationId]
+                || !!liveStreams.get(streamKey(ownerIdRef.current, initialConversationId));
+            setLoadingFor(initialConversationId, initialConversationId !== "new" && !arrivingIsLive);
+            skipLoadConvoRef.current = null;
+            setConversationId(initialConversationId);
+        }
+    }
 
     // --- Load existing messages when conversationId changes ---
     // Only re-runs when conversationId itself changes — NOT when streaming ends.
@@ -396,6 +392,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     // streaming end we'd refetch and overwrite the just-streamed messages,
     // causing a visible flash on the first reply of a new chat.)
     useEffect(() => {
+        setHistoryError(null);
         if (isStreaming) return;
         if (!conversationId || conversationId === "new") {
             return;
@@ -413,17 +410,21 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         // Returns ChatMessage[] with category + structured fields (reasoning,
         // tool_calls, steps, thinking_segments) already expanded; legacy
         // regenerate siblings are pre-collapsed server-side.
+        let active = true;
         getAgentMessages(conversationId, shareToken || undefined)
             .then((msgs) => {
+                if (!active) return;
                 setMessages(msgs);
                 setIsLoading(false);
             })
             .catch((err) => {
-                console.error("Failed to load messages:", err);
+                if (!active) return;
+                setHistoryError(err);
                 setIsLoading(false);
             });
+        return () => { active = false; };
         // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally exclude isStreaming
-    }, [conversationId, shareToken]);
+    }, [conversationId, shareToken, historyReload]);
 
     // Load the conversation's stored name. The history endpoints return messages
     // only, so opening an existing conversation by URL (deep link or share link)
@@ -509,13 +510,29 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     const sendMessage = useCallback(
         (text: string, files?: any[] | null, opts?: { taskMode?: boolean }) => {
             if ((!text.trim() && !(files?.length)) || isStreaming) return false;
+            if (knowledgeAccessBlocked) {
+                showToast({ message: knowledgeAccessMessage, status: "warning" });
+                return false;
+            }
+            if (opts?.taskMode && selectedOrgKbs.some(item => item.type === 'space' && item.tag)) {
+                showToast({ message: localize("com_knowledge.tag_filter_daily_only"), status: "warning" });
+                return false;
+            }
+            const vision = bsConfig?.models?.some(model => String(model.id) === String(chatModel.id) && model.visual) ?? false;
+            if (!opts?.taskMode && !isLingsi && files?.some(file => !canProcessChatImage(
+                file.name || file.filename || file.file_name || '', vision, !!bsConfig?.enable_etl4lm,
+            ))) {
+                showToast({ message: localize("chatImage.processingRequired"), status: "warning" });
+                return false;
+            }
             // This turn belongs to the conversation it started in, and every
             // write below must land there even if the user walks away mid-answer.
             // Shadowing the viewed-conversation writers with turn-scoped ones is
             // what makes that true for all of the callbacks at once: `turn.cid`
             // is the single place the id lives, so a mid-stream promotion from
             // "new" to a real id carries the whole turn with it.
-            const turn = { cid: conversationId };
+            const turn = { cid: conversationId, knowledge: selectedOrgKbs };
+            setSelectedOrgKbs(turn.knowledge);
             const setMessages = (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) =>
                 setMessagesFor(turn.cid, updater);
             const setTitle = (updater: string | ((prev: string) => string)) =>
@@ -595,7 +612,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             setMessages(updatedMessages);
 
             // Build SSE payload (same structure as useChatFunctions.ask).
-            // Backend expects List[int] for both id fields; atom holds strings
+            // Backend expects List[int] for both id fields; selections hold strings
             // so we coerce via Number here.
             const orgKbDisabled = (bsConfig as any)?.knowledgeBase?.enabled === false;
             const orgKbs = orgKbDisabled
@@ -617,6 +634,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     personal_knowledge_enabled: false,
                     organization_knowledge_ids: orgKbs,
                     knowledge_space_ids: spaceKbs,
+                    knowledge_space_tag_filters: knowledgeSpaceTagFilters(selectedOrgKbs),
                 },
                 isContinued: false,
                 isTemporary: false,
@@ -637,6 +655,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 task_mode: taskMode,
                 // Ordinary turns carry an empty skill selection.
                 skills: taskMode ? dailyTaskSkills.map((s) => s.name) : [],
+                skill_ids: taskMode ? dailyTaskSkills.flatMap((s) => (typeof s.id === 'number' ? [s.id] : [])) : [],
             };
 
             // Correlation key for the user (question) message. Starts as the
@@ -1094,7 +1113,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             beginStream(turn.cid, submission);
             return true;
         },
-        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, showToast, queryClient, finishMediaParsing]
+        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, showToast, queryClient, finishMediaParsing]
     );
 
     // --- Stop generating ---
@@ -1119,13 +1138,18 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     const regenerate = useCallback(
         (parentMessageId: string) => {
             if (isStreaming) return;
+            if (knowledgeAccessBlocked) {
+                showToast({ message: knowledgeAccessMessage, status: "warning" });
+                return;
+            }
             // This turn belongs to the conversation it started in, and every
             // write below must land there even if the user walks away mid-answer.
             // Shadowing the viewed-conversation writers with turn-scoped ones is
             // what makes that true for all of the callbacks at once: `turn.cid`
             // is the single place the id lives, so a mid-stream promotion from
             // "new" to a real id carries the whole turn with it.
-            const turn = { cid: conversationId };
+            const turn = { cid: conversationId, knowledge: selectedOrgKbs };
+            setSelectedOrgKbs(turn.knowledge);
             const setMessages = (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) =>
                 setMessagesFor(turn.cid, updater);
             const setIsStreaming = (value: boolean) => setStreamingFor(turn.cid, value);
@@ -1137,6 +1161,13 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 (m) => m.messageId === parentMessageId
             );
             if (!parentMsg) return;
+            const vision = bsConfig?.models?.some(model => String(model.id) === String(chatModel.id) && model.visual) ?? false;
+            if (parentMsg.files?.some(file => !canProcessChatImage(
+                file.name || file.filename || file.file_name || '', vision, !!bsConfig?.enable_etl4lm,
+            ))) {
+                showToast({ message: localize("chatImage.processingRequired"), status: "warning" });
+                return;
+            }
 
             // Create a new placeholder response as sibling
             const newResponseId = v4();
@@ -1174,6 +1205,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     knowledge_space_ids: selectedOrgKbs
                         .filter((kb) => kb.type === 'space')
                         .map((kb) => Number(kb.id)),
+                    knowledge_space_tag_filters: knowledgeSpaceTagFilters(selectedOrgKbs),
                 },
                 isContinued: false,
                 isRegenerate: true,
@@ -1281,10 +1313,13 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             setIsStreaming(true);
             beginStream(turn.cid, submission);
         },
-        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, localize]
+        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, localize, showToast]
     );
 
     return {
+        historyError,
+        isClearing: false,
+        retryHistory,
         // State
         messages,
         // Legacy alias — kept null to maintain the old destructuring shape
@@ -1295,6 +1330,10 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         isLoading,
         isStreaming,
         isParsingMedia,
+
+        selectedOrgKbs,
+        knowledgeAccessMessage,
+        setSelectedOrgKbs,
 
         // Actions
         sendMessage,

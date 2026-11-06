@@ -93,19 +93,19 @@ def test_migration_is_idempotent_and_keeps_old_rows_null():
     from alembic.migration import MigrationContext
     from alembic.operations import Operations
 
-    migration = importlib.import_module("bisheng.core.database.alembic.versions.v3_0_0_f130_cloud_workbenches")
+    migration = importlib.import_module("bisheng.core.database.alembic.versions.v3_0_0_f112_release_notes")
     engine = sa.create_engine("sqlite://")
     with engine.begin() as connection:
         for table in ("app_deployment", "app_version"):
             connection.execute(sa.text(f"CREATE TABLE {table} (id INTEGER PRIMARY KEY)"))
             connection.execute(sa.text(f"INSERT INTO {table} (id) VALUES (1)"))
         with Operations.context(MigrationContext.configure(connection)):
-            migration.add_release_notes_columns()
-            migration.add_release_notes_columns()
+            migration.upgrade()
+            migration.upgrade()
             for table in ("app_deployment", "app_version"):
                 assert connection.execute(sa.text(f"SELECT release_notes FROM {table}")).scalar() is None
             migration.downgrade()
             migration.downgrade()
         for table in ("app_deployment", "app_version"):
-            assert "release_notes" in {column["name"] for column in sa.inspect(connection).get_columns(table)}
+            assert "release_notes" not in {column["name"] for column in sa.inspect(connection).get_columns(table)}
     engine.dispose()

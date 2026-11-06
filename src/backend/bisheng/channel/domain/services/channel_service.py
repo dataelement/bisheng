@@ -109,7 +109,10 @@ from bisheng.permission.domain.services.permission_action_service import (
 )
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
-from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
+from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import (
+    DEFAULT_AUTO_REPLY,
+    SensitiveWordPolicyService,
+)
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
 
@@ -257,6 +260,13 @@ class ChannelService:
         return set(action_map.get(str(channel_id), frozenset()))
 
     @staticmethod
+    async def _has_channel_subscription_access(channel_id: str, login_user: UserPayload) -> bool:
+        # Match the square's business visibility check. Administrative access
+        # permits inspection, but must not impersonate a subscription grant.
+        visible = await batch_check_business_visible(login_user, resource_type="channel", resource_ids=(channel_id,))
+        return visible.get(str(channel_id), False)
+
+    @staticmethod
     def _resolve_subscription_status(
         membership_status: MembershipStatusEnum | None,
         update_time: datetime | None = None,
@@ -276,10 +286,20 @@ class ChannelService:
         return SubscriptionStatusEnum.NOT_SUBSCRIBED
 
     @classmethod
-    def _resolve_membership_subscription_status(cls, membership) -> SubscriptionStatusEnum:
-        if membership is None:
+    def _resolve_effective_subscription_status(
+        cls,
+        *,
+        can_read: bool,
+        approval_required: bool,
+        membership_status: MembershipStatusEnum | None,
+        update_time: datetime | None = None,
+    ) -> SubscriptionStatusEnum:
+        """Use effective access for subscribed and membership for application progress."""
+        if can_read:
+            return SubscriptionStatusEnum.SUBSCRIBED
+        if membership_status == MembershipStatusEnum.ACTIVE or not approval_required:
             return SubscriptionStatusEnum.NOT_SUBSCRIBED
-        return cls._resolve_subscription_status(membership.status, membership.update_time)
+        return cls._resolve_subscription_status(membership_status, update_time)
 
     @staticmethod
     def _current_tenant_id(login_user: UserPayload) -> int:
@@ -319,6 +339,9 @@ class ChannelService:
         can_view_sensitive: bool,
     ) -> ArticleSensitiveReview:
         violated = bool(hits)
+        # Existing policies share the upload default; article readers need reading-specific wording.
+        if auto_reply == DEFAULT_AUTO_REPLY:
+            auto_reply = "该文章未通过安全审查，无法查看详情"  # noqa: RUF001
         return ArticleSensitiveReview(
             enabled=enabled,
             violated=violated,
@@ -1570,13 +1593,11 @@ class ChannelService:
             subscriber_count = row[3]
             article_count = article_counts[i] if i < len(article_counts) else 0
 
-            status = (
-                SubscriptionStatusEnum.SUBSCRIBED
-                if visible_map.get(str(channel.id), False)
-                else self._resolve_subscription_status(
-                    membership_status=user_subscription_status,
-                    update_time=user_subscription_update_time,
-                )
+            status = self._resolve_effective_subscription_status(
+                can_read=visible_map.get(str(channel.id), False),
+                approval_required=channel.visibility == ChannelVisibilityEnum.REVIEW,
+                membership_status=user_subscription_status,
+                update_time=user_subscription_update_time,
             )
 
             # Prepare source infos
@@ -1631,35 +1652,24 @@ class ChannelService:
             raise ChannelNotFoundError()
         channel = channels[0]
 
-        existing_membership = await self.space_channel_member_repository.find_membership(
-            business_id=req.channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
-        )
-        if existing_membership and existing_membership.user_role != UserRoleEnum.MEMBER:
+        if await self._has_channel_subscription_access(req.channel_id, login_user):
             return SubscriptionStatusEnum.SUBSCRIBED
 
-        # 3. Check channel visibility
         if channel.visibility == ChannelVisibilityEnum.PRIVATE:
             raise ChannelAccessDeniedError()
 
-        # 4. Determine subscription status based on channel visibility
-        if channel.visibility == ChannelVisibilityEnum.PUBLIC:
-            status = MembershipStatusEnum.ACTIVE
-            return_status = SubscriptionStatusEnum.SUBSCRIBED
-        elif channel.visibility == ChannelVisibilityEnum.REVIEW:
-            status = MembershipStatusEnum.PENDING
-            return_status = SubscriptionStatusEnum.PENDING
-        else:
+        existing_membership = await self.space_channel_member_repository.find_membership(
+            business_id=req.channel_id,
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=login_user.user_id,
+            include_inactive=True,
+        )
+        if existing_membership and existing_membership.user_role != UserRoleEnum.MEMBER:
+            raise ChannelAccessDeniedError(msg="A channel administrator must update this authorization")
+        if channel.visibility not in (ChannelVisibilityEnum.PUBLIC, ChannelVisibilityEnum.REVIEW):
             raise ValueError(f"Unsupported channel visibility: {channel.visibility}")
-
-        if existing_membership and existing_membership.status == MembershipStatusEnum.ACTIVE:
-            return SubscriptionStatusEnum.SUBSCRIBED
-        if (
-            existing_membership
-            and existing_membership.status == MembershipStatusEnum.PENDING
-            and status == MembershipStatusEnum.PENDING
-        ):
-            return SubscriptionStatusEnum.PENDING
-
+        # Persist application progress first; effective access becomes the success signal.
+        status = MembershipStatusEnum.PENDING
         if not existing_membership or existing_membership.status == MembershipStatusEnum.REJECTED:
             await QuotaService.check_quota(
                 user_id=login_user.user_id,
@@ -1681,10 +1691,7 @@ class ChannelService:
                 status=status,
             )
 
-        # Public channels activate the subscriber immediately, so mirror the
-        # membership into an explicit ReBAC viewer grant. Review channels stay
-        # PENDING here and are synced once their approval passes.
-        if status == MembershipStatusEnum.ACTIVE:
+        if channel.visibility == ChannelVisibilityEnum.PUBLIC:
             await self.__class__.sync_direct_channel_user_permissions(
                 req.channel_id,
                 login_user.user_id,
@@ -1692,6 +1699,9 @@ class ChannelService:
                 is_active=True,
                 operator_user_id=login_user.user_id,
             )
+            member_row.status = MembershipStatusEnum.ACTIVE
+            await self.space_channel_member_repository.update(member_row)
+            return SubscriptionStatusEnum.SUBSCRIBED
 
         if channel.visibility == ChannelVisibilityEnum.REVIEW:
             gate = self.approval_gate or self._build_channel_approval_gate()
@@ -1718,32 +1728,13 @@ class ChannelService:
                 )
             )
             if gate_result.decision == ApprovalGateDecision.PASS:
-                # Reuse the membership row created/updated above instead of
-                # re-fetching it. The old re-fetch raced a concurrent unsubscribe
-                # (returned None between create and re-fetch → the just-approved
-                # access was silently dropped, no error). member_row is always set
-                # by the create/update block above.
-                if member_row is not None:
-                    member_row.status = MembershipStatusEnum.ACTIVE
-                    await self.space_channel_member_repository.update(member_row)
-                else:
-                    # Defensive upsert: the row vanished (concurrent unsubscribe);
-                    # recreate it ACTIVE so an approved subscription is never lost.
-                    await self.space_channel_member_repository.add_member(
-                        business_id=req.channel_id,
-                        business_type=BusinessTypeEnum.CHANNEL,
-                        user_id=login_user.user_id,
-                        role=UserRoleEnum.MEMBER,
-                        status=MembershipStatusEnum.ACTIVE,
-                    )
-                await self.__class__.sync_direct_channel_user_permissions(
-                    req.channel_id,
-                    login_user.user_id,
-                    UserRoleEnum.MEMBER,
-                    is_active=True,
-                    operator_user_id=login_user.user_id,
+                # ApprovalGate dispatches the durable outbox for automatic approvals too.
+                # Its handler owns activation; report the access that has actually landed.
+                return self._resolve_effective_subscription_status(
+                    can_read=await self._has_channel_subscription_access(req.channel_id, login_user),
+                    approval_required=True,
+                    membership_status=MembershipStatusEnum.PENDING,
                 )
-                return SubscriptionStatusEnum.SUBSCRIBED
             if gate_result.decision == ApprovalGateDecision.PENDING and gate_result.task_ids and self.message_service:
                 await self._send_channel_approval_notification(
                     channel=channel,
@@ -1752,13 +1743,16 @@ class ChannelService:
                     task_ids=gate_result.task_ids,
                 )
 
-        return return_status
+        return SubscriptionStatusEnum.PENDING
 
     def _build_channel_approval_gate(self) -> ApprovalGate:
         registry = ApprovalRegistry.with_default_presets()
         registry.register_handler(
             "channel_subscribe_request",
-            ChannelSubscribeScenarioHandler(self.space_channel_member_repository),
+            ChannelSubscribeScenarioHandler(
+                self.space_channel_member_repository,
+                sync_permissions=self.__class__.sync_direct_channel_user_permissions,
+            ),
         )
         return ApprovalGate(registry=registry)
 
@@ -1978,14 +1972,12 @@ class ChannelService:
             return
 
         if old_visibility == ChannelVisibilityEnum.REVIEW and new_visibility == ChannelVisibilityEnum.PUBLIC:
-            activated_members = await self.space_channel_member_repository.activate_pending_members(channel_id)
-            if activated_members:
-                logger.info(
-                    "Activated %d pending members for channel_id=%s after visibility change from REVIEW to PUBLIC",
-                    len(activated_members),
-                    channel_id,
-                )
-                for member in activated_members:
+            members = await self.space_channel_member_repository.find_all(
+                business_id=channel_id,
+                business_type=BusinessTypeEnum.CHANNEL,
+            )
+            for member in members:
+                if member.status == MembershipStatusEnum.PENDING:
                     await self.__class__.sync_direct_channel_user_permissions(
                         channel_id,
                         member.user_id,
@@ -1993,6 +1985,8 @@ class ChannelService:
                         is_active=True,
                         operator_user_id=login_user.user_id,
                     )
+                    member.status = MembershipStatusEnum.ACTIVE
+                    await self.space_channel_member_repository.update(member)
             await self.space_channel_member_repository.remove_rejected_members(channel_id)
             if self.message_service:
                 await self.message_service.batch_approve_channel_subscription_messages(
@@ -2082,12 +2076,13 @@ class ChannelService:
                         {"id": sid, "source_name": "Unknown", "source_icon": "", "source_type": "", "description": ""}
                     )
 
-        # Determine subscription status. ``current_membership`` is ACTIVE-only (it
-        # gates permissions), but the subscribe button must also reflect PENDING /
-        # REJECTED applications — the same states the channel square shows. F040:
-        # ``status_membership`` (the highest-rank row of any status from the split
-        # lookup above) carries that PENDING/REJECTED state, so use it directly.
-        subscription_status = self._resolve_membership_subscription_status(status_membership)
+        # Subscription presentation follows effective access; membership tracks application progress.
+        subscription_status = self._resolve_effective_subscription_status(
+            can_read=await self._has_channel_subscription_access(channel_id, login_user),
+            approval_required=channel.visibility == ChannelVisibilityEnum.REVIEW,
+            membership_status=status_membership.status if status_membership else None,
+            update_time=status_membership.update_time if status_membership else None,
+        )
 
         # Knowledge-sync config — only returned for the channel creator since
         # the feature is creator-only (Module D). Members don't need to see it.

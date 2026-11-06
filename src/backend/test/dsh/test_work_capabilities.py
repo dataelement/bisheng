@@ -199,3 +199,21 @@ def test_skill_dependencies_require_explicit_positive_tool_ids(metadata):
 def test_skill_dependencies_preserve_declared_ids_and_default_to_empty():
     assert WorkCapabilitiesService._dependencies({}) == []
     assert WorkCapabilitiesService._dependencies({"metadata": {"bisheng-work": {"tool_ids": [7, 8]}}}) == [7, 8]
+
+
+def test_personal_bundle_reads_the_owner_namespace(tmp_path, monkeypatch):
+    import base64
+
+    from bisheng.linsight.domain.services.skill_store import SkillStore
+    from test.linsight.fixtures.fake_minio import FakeMinioStorage
+
+    store = SkillStore(root=tmp_path, minio=FakeMinioStorage())
+    shared = {"SKILL.md": b"---\nname: report\ndescription: Shared\n---\nShared body"}
+    personal = {"SKILL.md": b"---\nname: report\ndescription: Personal\n---\nPersonal body", "image.bin": b"\x00\xff"}
+    store.write_bundle(2, "report", shared)
+    bundle = store.write_bundle(2, "report", personal, owner_user_id=42)
+    monkeypatch.setattr("bisheng.linsight.domain.services.skill_store.SkillStore", lambda: store)
+    row = SimpleNamespace(name="report", content_hash=bundle.content_hash, owner_user_id=42)
+    result = service()._read_bundle(row)
+    assert "Personal body" in result["content"]
+    assert {entry["path"]: base64.b64decode(entry["data"]) for entry in result["files"]} == personal

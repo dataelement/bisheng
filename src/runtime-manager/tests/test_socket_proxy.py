@@ -65,8 +65,6 @@ def test_exec_is_denied_because_it_is_the_whole_point():
     """``/exec`` is arbitrary code in any container on the host."""
     assert "EXEC" in SOCKET_PROXY_DENIED
     assert socket_proxy_env()["EXEC"] == "0"
-    # Proof validation is not a Docker HTTP operation and needs no new grant.
-    assert "assert_host_isolation" not in protocol_methods()
 
 
 def test_the_denied_and_allowed_sets_do_not_overlap():

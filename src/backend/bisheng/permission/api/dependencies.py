@@ -99,6 +99,8 @@ class ResourcePermissionApiPort(Protocol):
         actor: PermissionActor,
         cursor: str | None,
         page_size: int,
+        keyword: str = "",
+        subject_type: str | None = None,
     ) -> Any: ...
 
     async def get_my_permissions(

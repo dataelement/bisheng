@@ -14,7 +14,6 @@ from bisheng.app_runtime.domain.models.runtime_delivery import (
     RuntimeNode,
     RuntimeOperation,
 )
-from bisheng.app_runtime.domain.models.runtime_host_isolation import RuntimeHostIsolationReport
 from bisheng.app_runtime.domain.models.runtime_kubernetes import KUBERNETES_TABLES, RuntimeExecutionResource
 from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import RuntimeConflict
 from bisheng.core.context.tenant import current_tenant_id
@@ -39,7 +38,7 @@ async def repo():
         connection.exec_driver_sql("BEGIN")
 
     async with engine.begin() as c:
-        for model in (*RUNTIME_TABLES, *KUBERNETES_TABLES, RuntimeHostIsolationReport):
+        for model in (*RUNTIME_TABLES, *KUBERNETES_TABLES):
             await c.run_sync(model.__table__.create)
 
     @asynccontextmanager

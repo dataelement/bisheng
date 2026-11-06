@@ -30,7 +30,7 @@ PLACEHOLDERS = ("__SKILL_EXEC_LINE__", "__SKILL_DELIVERABLE_LINE__", "__KB_EXEC_
 
 @pytest.mark.parametrize("has_kb", [True, False])
 def test_skill_lines_absent_when_no_skill_materialized(has_kb):
-    """No bundle copied -> no "Available Skills" section -> never mention skills."""
+    """No bundle copied -> no "可用技能" section -> never mention skills."""
     prompt = _build_linsight_system_prompt(has_kb, skills_present=False)
     assert "SKILL.md" not in prompt
     assert "技能优先" not in prompt

@@ -280,7 +280,7 @@ class F048ResourcePermissionApi:
                         actor=actor,
                     )
                 except PermissionInvalidResourceError:
-                    # 19003 also covers cross-tenant and unauthorizable states.
+                    # 25022 also covers cross-tenant and unauthorizable states.
                     # Only a business-confirmed absence may skip the resource
                     # check; every other case keeps the deletion blocked.
                     if not await self._resources.confirm_absent(
@@ -388,7 +388,19 @@ class F048ResourcePermissionApi:
             actor,
             "visible",
         )
-        await self._require_visible(actor, target)
+        can_manage = await self._can_manage(actor, target)
+        if not can_manage:
+            # A manager -- the owner, a granted manager, or an admin via the
+            # identity short-circuit in check_action -- may always load the
+            # permission context to render the management dialog. Everyone
+            # else must be able to SEE the resource, which keeps the
+            # read-only view for viewers. Gating on visibility ALONE wrongly
+            # excluded admins: `visible` is deliberately not expanded for
+            # super / tenant admins (see check_visible), so an admin who did
+            # not own the resource got 19000 opening its authorization dialog
+            # -- the sibling list_grants already gates on manage_permission,
+            # not visibility. (F048 hosted-app authorization via the UI.)
+            await self._require_visible(actor, target)
         mode = await self._runtime.current_mode(target)
         catalog = await self._runtime.current_catalog()
         can_manage = await self._can_manage(actor, target)
@@ -426,6 +438,8 @@ class F048ResourcePermissionApi:
         actor: PermissionActor,
         cursor: str | None,
         page_size: int,
+        keyword: str = "",
+        subject_type: str | None = None,
     ) -> dict:
         target = await self._target(
             resource_type,
@@ -439,12 +453,27 @@ class F048ResourcePermissionApi:
             target=target,
             catalog_release_id=catalog.release_id,
         )
-        selected, has_more = await self._runtime.list_permission_sources_page(
-            actor=actor,
-            target=target,
-            after_id=after_id,
-            limit=page_size,
-        )
+        if keyword.strip() or subject_type:
+            from .roster_search import search_source_page
+
+            selected, has_more = await search_source_page(
+                runtime=self._runtime,
+                subjects=self._subjects,
+                actor=actor,
+                target=target,
+                after_id=after_id,
+                page_size=page_size,
+                keyword=keyword,
+                subject_type=subject_type,
+                model_names={item.snapshot.model_key: item.name for item in catalog.models},
+            )
+        else:
+            selected, has_more = await self._runtime.list_permission_sources_page(
+                actor=actor,
+                target=target,
+                after_id=after_id,
+                limit=page_size,
+            )
         names = await self._subjects.display_names(
             tuple(dict.fromkeys((row.subject_type, row.subject_id) for row in selected))
         )
@@ -456,6 +485,9 @@ class F048ResourcePermissionApi:
         )
         parent_names = await self._subjects.resource_display_names(parents) if parents else {}
         model_names = {item.snapshot.model_key: item.name for item in catalog.models}
+        model_states = {item.snapshot.model_key: item.snapshot.active for item in catalog.models}
+        if any(row.model_key not in model_states for row in selected):
+            raise PermissionVersionConflictError(msg="Permission Catalog changed while reading sources")
         data = [
             {
                 "assignee_id": str(row.source_id),
@@ -472,7 +504,7 @@ class F048ResourcePermissionApi:
                         row.model_key,
                     ),
                     "level": row.model_level,
-                    "active": True,
+                    "active": model_states[row.model_key],
                 },
                 "source": {
                     "type": row.source_type,
@@ -602,7 +634,7 @@ class F048ResourcePermissionApi:
         for change in request.changes:
             source = None
             if change.subject is not None:
-                if change.subject.type == "tenant" and resource_type not in {"tool", "linsight_skill", "app"}:
+                if change.subject.type == "tenant" and resource_type not in {"tool", "linsight_skill"}:
                     raise PermissionInvalidResourceError()
                 source = await self._subjects.canonical_source(
                     tenant_id=target.tenant_id,
@@ -622,6 +654,7 @@ class F048ResourcePermissionApi:
                     target_model_key=change.target_model_key,
                 )
             )
+        manageable = await self._runtime.manageable_model_keys(actor=actor, target=target)
         result = await self._runtime.mutate_grants(
             actor=actor,
             target=target,
@@ -652,10 +685,10 @@ class F048ResourcePermissionApi:
                 "scope": "LOCAL",
                 "inherited_from": None,
                 "protected": source.protected,
-                "editable": not source.protected,
+                "editable": not source.protected and grant.model.model_key in manageable,
             }
             for grant in result.grants
-            if grant.active and grant.model.active
+            if grant.active
             for source in grant.sources
             if source.active
         ]

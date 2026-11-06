@@ -1,5 +1,5 @@
-import { Button } from '@/components/bs-ui/button'
-import { Input } from '@/components/bs-ui/input'
+import { Button } from "@bisheng/ui";
+import { Input } from "@bisheng/ui";
 import { getModelVisibility, saveModelVisibility } from '@/controllers/API/dshUnified'
 import { getDshRequestErrorKey } from '@/utils/dshRequestError'
 import { Check, Loader2, RotateCw } from 'lucide-react'
@@ -70,7 +70,7 @@ export function ModelMultiplierInput({ modelId, modelName, onSavingChange }: Mod
 
     return <div className="min-w-36 max-w-64">
         <div className="flex items-center gap-2">
-            <Input aria-label={label} inputMode="decimal" boxClassName="w-24 shrink-0" className="h-8"
+            <Input aria-label={label} inputMode="decimal" className="h-8 w-24 shrink-0"
                 value={draft} disabled={loading || saving || confirmed === null}
                 aria-invalid={confirmed !== null && !valid}
                 aria-describedby={error ? `model-multiplier-error-${modelId}` : undefined}
@@ -79,7 +79,7 @@ export function ModelMultiplierInput({ modelId, modelName, onSavingChange }: Mod
                 onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void save() } }} />
             {(loading || saving) && <Loader2 className="size-4 animate-spin text-muted-foreground" aria-label={t(saving ? 'dsh.unified.saving' : 'dsh.loading')} />}
             {saved && !saving && <Check className="size-4 text-green-600" aria-label={t('dsh.unified.saved')} />}
-            {error && error !== 'dsh.unified.multiplierInvalid' && <Button variant="ghost" size="icon"
+            {error && error !== 'dsh.unified.multiplierInvalid' && <Button variant="text" iconOnly
                 aria-label={`${t('dsh.refresh')} · ${modelName}`} disabled={saving}
                 onClick={() => { if (confirmed === null) setRevision(old => old + 1); else void save() }}>
                 <RotateCw className="size-4" />

@@ -1,9 +1,11 @@
 import asyncio
 from collections.abc import Sequence
+from contextlib import nullcontext
 from datetime import datetime
 from time import perf_counter
 from typing import TYPE_CHECKING
 
+from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
 from langchain_classic.memory import ConversationBufferWindowMemory
 from loguru import logger
@@ -26,6 +28,7 @@ from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
 from bisheng.common.services.config_service import settings
 from bisheng.common.services.metric_log import emit_metric
+from bisheng.core.context.tenant import strict_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType, UserLinkType
@@ -57,6 +60,35 @@ if TYPE_CHECKING:
 _FLOW_PERMISSION_SCAN_BATCH_SIZE = 50
 _APP_COMPAT_PAGE_SCAN_BATCH_SIZE = 50
 
+#: F056: hosted applications are asked for ``use`` in the square, matching the
+#: public entry's own decision (``check_business_action("app", id, actor,
+#: "use")``). This pins only *which action decides visibility* for a type; any
+#: further actions come from the caller's ``additional_actions`` exactly as for
+#: the other types, so a caller that lazy-loads per-card actions (beta1
+#: ``7559c9871``, ``additional_actions=()``) asks the ``app`` bucket for ``use``
+#: alone. ``share`` is never legal for ``app`` (``catalog_policy.py``, K6) and is
+#: dropped by ``_legal_actions_for`` — there is no share-token bypass for a
+#: hosted application, and requesting it would fabricate a capability.
+_SQUARE_VISIBILITY_ACTION_BY_TYPE: dict[str, str] = {"app": "use"}
+
+#: F056: hosted-application states the square lists. "stopped" stays visible on
+#: purpose (决议-5); drafts / pending-capacity / deleted are excluded in SQL, so
+#: the rule holds for owners and administrators too without a second check.
+SQUARE_APP_STATES: frozenset[str] = frozenset({"online", "stopped"})
+
+#: F056: types excluded from the lists whose cards open a **conversation** page
+#: (``/app/{chatId}/{id}/{flow_type}``): application centre / frequently used and
+#: the workbench recommendation strip. A hosted application has no conversation,
+#: so such a card opens a blank screen — and no acceptance criterion covers that
+#: path, so nothing else would catch it. Not a side effect of the legality
+#: filter: these lists ask for ``visible``, which is legal for ``app``.
+CHAT_ENTRY_EXCLUDED_FLOW_TYPES: frozenset[int] = frozenset({FlowType.HOSTED_APP.value})
+
+#: Actions that bypass the per-resource-type legality filter (F056 design D3).
+#: ``visible`` is answered by ``batch_check_visible``, a different FGA relation
+#: that is deliberately absent from ``REGISTERED_ACTION_CODES`` and therefore
+#: from ``ACTION_RESOURCE_SCOPES``.
+_ACTION_SCOPE_EXEMPT = frozenset({"visible"})
 # F048 visible-first: upper bound on the number of visible app ids OpenFGA may
 # return per resource type (workflow + assistant queried separately). Matches
 # the ceiling used for knowledge_library / knowledge_space / channel so all
@@ -64,10 +96,6 @@ _APP_COMPAT_PAGE_SCAN_BATCH_SIZE = 50
 # runtime emits ``capacity_80_percent`` telemetry before this hits the
 # schema-level 5 000 hard cap.
 _APP_VISIBLE_MAX_RESULTS = 5000
-_SQUARE_VISIBILITY_ACTION_BY_TYPE = {"app": "use"}
-SQUARE_APP_STATES = frozenset({"online", "stopped"})
-CHAT_ENTRY_EXCLUDED_FLOW_TYPES = frozenset({FlowType.HOSTED_APP.value})
-_ACTION_SCOPE_EXEMPT = frozenset({"visible"})
 
 
 class WorkflowResourceAuthorizationPort:
@@ -93,12 +121,41 @@ class WorkflowResourceAuthorizationPort:
 
 class WorkFlowService(BaseService):
     SUPPORTED_APP_TYPES = {FlowType.WORKFLOW.value, FlowType.ASSISTANT.value, FlowType.HOSTED_APP.value}
+    #: Types that only exist where the app-factory runtime layer is deployed.
+    #: Kept apart from SUPPORTED_APP_TYPES so the switch subtracts rather than
+    #: the set being rebuilt in two places (F054 design K12).
     _RUNTIME_LAYER_APP_TYPES = frozenset({FlowType.HOSTED_APP.value})
     _FLOW_TYPE_TO_RESOURCE_TYPE = {
         FlowType.WORKFLOW.value: "workflow",
         FlowType.ASSISTANT.value: "assistant",
         FlowType.HOSTED_APP.value: "app",
     }
+
+    @classmethod
+    def enabled_app_types(cls) -> set[int]:
+        """App types this deployment lists — ``SUPPORTED_APP_TYPES`` minus what is not installed.
+
+        AC-58 requires that with the runtime layer absent the build page shows
+        neither the hosted-application type nor a single hosted card. The front
+        end hides the filter option, but a page asking for "all types" would
+        still be answered by the server, so the gate lives here as well: the
+        list contract is the backend's to keep, not the SPA's.
+        """
+        if settings.app_runtime.enabled:
+            return cls.SUPPORTED_APP_TYPES
+        return cls.SUPPORTED_APP_TYPES - cls._RUNTIME_LAYER_APP_TYPES
+
+    @classmethod
+    def _tag_resource_types(cls) -> list[ResourceTypeEnum]:
+        """Resource types the application tag filter spans (design D8, gate 5).
+
+        Miss a type here and the symptom is not an error but an always-empty
+        result once a tag is selected — the filter box works, the list is blank.
+        """
+        types = [ResourceTypeEnum.WORK_FLOW, ResourceTypeEnum.ASSISTANT]
+        if FlowType.HOSTED_APP.value in cls.enabled_app_types():
+            types.append(ResourceTypeEnum.HOSTED_APP)
+        return types
 
     @classmethod
     def filter_supported_apps(cls, data: list[dict]) -> list[dict]:
@@ -139,6 +196,7 @@ class WorkFlowService(BaseService):
         # Get user information in the list
         user_infos = UserDao.get_user_by_ids(user_ids)
         user_dict = {one.user_id: one.user_name for one in user_infos}
+        owner_activity = {one.user_id: int(getattr(one, "delete", 0) or 0) != 1 for one in user_infos}
 
         # Get version information in the list
         version_infos = FlowVersionDao.get_list_by_flow_ids(resource_ids)
@@ -154,7 +212,14 @@ class WorkFlowService(BaseService):
         # Add additional information (F008: removed group_ids, AC-08)
         for one in data:
             one["user_name"] = user_dict.get(one["user_id"], one["user_id"])
-            one["write"] = managed or str(one["id"]) in writeable_ids
+            if int(one.get("flow_type") or 0) == FlowType.HOSTED_APP.value:
+                # Owner activity is informational; exact actions decide management.
+                one["owner_active"] = owner_activity.get(one["user_id"], False)
+            one["write"] = (
+                "edit" in one.get("allowed_actions", ())
+                if int(one.get("flow_type") or 0) == FlowType.HOSTED_APP.value and managed
+                else managed or str(one["id"]) in writeable_ids
+            )
             one["version_list"] = flow_versions.get(one["id"], [])
             one["tags"] = resource_tag_dict.get(one["id"], [])
             one["logo"] = cls.get_logo_share_link(one["logo"])
@@ -176,6 +241,30 @@ class WorkFlowService(BaseService):
                 frozenset(),
             )
         return data
+
+    @classmethod
+    def _legal_actions_for(cls, resource_type: str, actions: tuple[str, ...]) -> tuple[str, ...]:
+        """Keep only the actions F048 recognises for ``resource_type`` (F056 design D3).
+
+        Asking for an action outside a resource type's scope is not a harmless
+        no-op: ``_prepare_action_target`` raises ``InvalidCatalogActionError``,
+        which is a ``BaseErrorCode`` and therefore comes back as **HTTP 200 with
+        business code 25001**, not a 500. The SPA rejects, the list blanks, and
+        the server log shows nothing to grep for. Both administrator
+        short-circuits run *before* that check, so the failure only ever reaches
+        ordinary users.
+
+        ``visible`` is exempt on purpose: it is not a registered action code
+        (``_normalize_action`` rejects it and ``batch_check_visible`` answers it
+        instead), so ``ACTION_RESOURCE_SCOPES`` has no row for it. Filtering it
+        out would drop the square's only visibility question and return an empty
+        page for every type.
+        """
+        return tuple(
+            action
+            for action in actions
+            if action in _ACTION_SCOPE_EXEMPT or resource_type in ACTION_RESOURCE_SCOPES.get(action, frozenset())
+        )
 
     @classmethod
     async def _application_action_map(
@@ -308,7 +397,17 @@ class WorkFlowService(BaseService):
                 data,
                 tuple(dict.fromkeys((required_action, "edit"))),
             )
-            data = [one for one in data if required_action in permission_map.get(str(one.get("id")), frozenset())]
+            if managed:
+                await cls._managed_hosted_actions(user, data)
+            data = [
+                one
+                for one in data
+                if (
+                    cls._managed_visible(one, permission_map, required_action)
+                    if managed
+                    else required_action in permission_map.get(str(one.get("id")), frozenset())
+                )
+            ]
             writeable_ids = {str(app_id) for app_id, action_codes in permission_map.items() if "edit" in action_codes}
             logger.info(
                 "[perf][workflow.list.permission_map] user_id={} flow_type={} rows={} kept={} writeable={} "
@@ -345,6 +444,23 @@ class WorkFlowService(BaseService):
             (perf_counter() - total_start) * 1000,
         )
         return data, has_more
+
+    @classmethod
+    async def _managed_hosted_actions(cls, user, rows):
+        from bisheng.app_runtime.application.authorization import management_actions_for_ids
+
+        ids = [str(row["id"]) for row in rows if int(row.get("flow_type") or 0) == FlowType.HOSTED_APP.value]
+        actions = await management_actions_for_ids(user, ids)
+        for row in rows:
+            if int(row.get("flow_type") or 0) == FlowType.HOSTED_APP.value:
+                row["allowed_actions"] = sorted(actions.get(str(row["id"]), ()))
+        return actions
+
+    @classmethod
+    def _managed_visible(cls, item, permission_map, required_action):
+        if int(item.get("flow_type") or 0) == FlowType.HOSTED_APP.value:
+            return bool(set(item.get("allowed_actions", ())) - {"use"})
+        return required_action in permission_map.get(str(item.get("id")), frozenset())
 
     @classmethod
     async def _scan_visible_flows_cursor(
@@ -414,11 +530,24 @@ class WorkFlowService(BaseService):
             if not batch:
                 return visible[:page_size], False, writeable_ids
 
+            if managed:
+                await cls._managed_hosted_actions(user, batch)
             if admin_bypass:
                 # Admin sees everything and edits everything — no BatchCheck,
                 # every row is kept and every id counts toward writeable_ids.
-                kept = batch
-                writeable_ids |= {str(one.get("id")) for one in batch}
+                kept = [
+                    one
+                    for one in batch
+                    if not managed
+                    or int(one.get("flow_type") or 0) != FlowType.HOSTED_APP.value
+                    or bool(set(one.get("allowed_actions", ())) - {"use"})
+                ]
+                writeable_ids |= {
+                    str(one.get("id"))
+                    for one in kept
+                    if int(one.get("flow_type") or 0) != FlowType.HOSTED_APP.value
+                    or "edit" in one.get("allowed_actions", ())
+                }
             else:
                 permission_map_start = perf_counter()
                 permission_map = await cls._application_action_map(
@@ -426,7 +555,15 @@ class WorkFlowService(BaseService):
                     batch,
                     tuple(dict.fromkeys((required_action, "edit"))),
                 )
-                kept = [one for one in batch if required_action in permission_map.get(str(one.get("id")), frozenset())]
+                kept = [
+                    one
+                    for one in batch
+                    if (
+                        cls._managed_visible(one, permission_map, required_action)
+                        if managed
+                        else required_action in permission_map.get(str(one.get("id")), frozenset())
+                    )
+                ]
                 writeable_ids |= {
                     str(app_id) for app_id, action_codes in permission_map.items() if "edit" in action_codes
                 }
@@ -457,6 +594,40 @@ class WorkFlowService(BaseService):
             # re-emitted on the next batch.
             last_db = batch[-1]
             batch_cursor = [last_db["update_time"], last_db["id"]]
+
+    @classmethod
+    def _square_visibility_action(cls, item: dict, default_action: str) -> str:
+        """Which action decides whether this row is visible in the square."""
+        resource_type = cls._FLOW_TYPE_TO_RESOURCE_TYPE.get(int(item.get("flow_type") or 0))
+        return _SQUARE_VISIBILITY_ACTION_BY_TYPE.get(resource_type, default_action)
+
+    @classmethod
+    async def _attach_hosted_app_entry_fields(cls, data: list[dict]) -> None:
+        """Fill ``slug`` on the hosted-application rows of one page.
+
+        Deliberately **not** in ``add_extra_field``: the "uncategorised" tab
+        (``get_uncategorized_flows``) never calls that function, so a card there
+        would link to ``/apps/undefined`` and carry no state badge — silently,
+        and on the very tab the acceptance script uses. The two square entries
+        only share this function, so it is the one place that reaches both.
+
+        ``app_state`` normally arrives already projected by the UNION's third
+        leg; it is filled here only when missing, so this function stays correct
+        if that projection ever changes.
+        """
+        hosted = [item for item in data if int(item.get("flow_type") or 0) == FlowType.HOSTED_APP.value]
+        if not hosted:
+            return
+
+        from bisheng.database.models.app import AppDao
+
+        async with get_async_db_session() as session:
+            rows = await AppDao.alist_slug_state_by_ids(session, [str(item.get("id")) for item in hosted])
+        for item in hosted:
+            slug, state = rows.get(str(item.get("id")), (None, None))
+            item["slug"] = slug
+            if state is not None and not item.get("app_state"):
+                item["app_state"] = state
 
     @classmethod
     async def _scan_visible_apps_cursor(
@@ -729,7 +900,9 @@ class WorkFlowService(BaseService):
         # F048 visible-first strategy:
         #   * Super admins and tenant admins skip the permission system
         #     entirely and scan the business DB directly; every returned row
-        #     gets ``write=True`` because they are effectively unrestricted.
+        #     gets ``write=True`` within their management scope. A tenant
+        #     admin's managed list must exclude root-tenant candidates before
+        #     pagination; the default readable scope also includes root rows.
         #     Enumerating "all apps in a tenant" through OpenFGA is wasteful
         #     for these identities and prone to trip the 5 000-object visible
         #     enumeration cap.
@@ -786,20 +959,22 @@ class WorkFlowService(BaseService):
                 )
             effective_flow_ids = visible_id_list
 
-        data, has_more, writeable_ids = await cls._scan_visible_flows_cursor(
-            user=user,
-            name=name,
-            status=status,
-            flow_ids=effective_flow_ids,
-            flow_type=flow_type,
-            cursor=decoded,
-            page_size=page_size,
-            managed=managed,
-            search_description=search_description,
-            required_action=required_action,
-            app_state=app_state,
-            admin_bypass=is_admin,
-        )
+        management_scope = strict_tenant_filter() if managed and is_admin and not actor.super_admin else nullcontext()
+        with management_scope:
+            data, has_more, writeable_ids = await cls._scan_visible_flows_cursor(
+                user=user,
+                name=name,
+                status=status,
+                flow_ids=effective_flow_ids,
+                flow_type=flow_type,
+                cursor=decoded,
+                page_size=page_size,
+                managed=managed,
+                search_description=search_description,
+                required_action=required_action,
+                app_state=app_state,
+                admin_bypass=is_admin,
+            )
 
         enrich_start = perf_counter()
         data = cls.add_extra_field(
@@ -979,34 +1154,43 @@ class WorkFlowService(BaseService):
         )
 
         node_data = BaseNodeData(**node_data.get("data", {}))
-        base_callback = BaseCallback()
-        graph_state = GraphState()
-        graph_state.history_memory = ConversationBufferWindowMemory(k=10)
-        node = NodeFactory.instance_node(
-            node_type=node_data.type,
-            node_data=node_data,
-            user_id=login_user.user_id,
-            workflow_id=workflow_info.id,
-            workflow_name=workflow_info.name,
-            graph_state=graph_state,
-            target_edges=None,
-            max_steps=233,
-            callback=base_callback,
-        )
-        if node_data.type == NodeType.CODE.value:
-            node.handle_input({"code_input": [{"key": k, "value": v, "type": "input"} for k, v in node_input.items()]})
-        elif node_data.type == NodeType.TOOL.value:
-            user_input = {}
-            for k, v in node_input.items():
-                user_input[k] = v
-            node.handle_input(user_input)
-        else:
-            for key, val in node_input.items():
-                graph_state.set_variable_by_str(key, val)
 
-        exec_id = generate_uuid()
-        result = node._run(exec_id)
-        log_data = node.parse_log(exec_id, result)
+        def _run_node():
+            # Nodes are sync and some reach async services through run_async_safe
+            # (a tool node builds its tool that way), which refuses to run on the
+            # request's event loop. In a worker thread it hops back to the loop.
+            base_callback = BaseCallback()
+            graph_state = GraphState()
+            graph_state.history_memory = ConversationBufferWindowMemory(k=10)
+            node = NodeFactory.instance_node(
+                node_type=node_data.type,
+                node_data=node_data,
+                user_id=login_user.user_id,
+                workflow_id=workflow_info.id,
+                workflow_name=workflow_info.name,
+                graph_state=graph_state,
+                target_edges=None,
+                max_steps=233,
+                callback=base_callback,
+            )
+            if node_data.type == NodeType.CODE.value:
+                node.handle_input(
+                    {"code_input": [{"key": k, "value": v, "type": "input"} for k, v in node_input.items()]}
+                )
+            elif node_data.type == NodeType.TOOL.value:
+                user_input = {}
+                for k, v in node_input.items():
+                    user_input[k] = v
+                node.handle_input(user_input)
+            else:
+                for key, val in node_input.items():
+                    graph_state.set_variable_by_str(key, val)
+
+            exec_id = generate_uuid()
+            result = node._run(exec_id)
+            return node.parse_log(exec_id, result)
+
+        log_data = await run_in_threadpool(_run_node)
         res = []
         for one_batch in log_data:
             ret = []
@@ -1354,87 +1538,3 @@ class WorkFlowService(BaseService):
     @classmethod
     def get_first_app(cls) -> dict | None:
         return FlowDao.get_first_app()
-
-    @classmethod
-    async def _attach_hosted_app_entry_fields(cls, data: list[dict]) -> None:
-        """Fill ``slug`` on the hosted-application rows of one page.
-
-        Deliberately **not** in ``add_extra_field``: the "uncategorised" tab
-        (``get_uncategorized_flows``) never calls that function, so a card there
-        would link to ``/apps/undefined`` and carry no state badge — silently,
-        and on the very tab the acceptance script uses. The two square entries
-        only share this function, so it is the one place that reaches both.
-
-        ``app_state`` normally arrives already projected by the UNION's third
-        leg; it is filled here only when missing, so this function stays correct
-        if that projection ever changes.
-        """
-        hosted = [item for item in data if int(item.get("flow_type") or 0) == FlowType.HOSTED_APP.value]
-        if not hosted:
-            return
-
-        from bisheng.database.models.app import AppDao
-
-        async with get_async_db_session() as session:
-            rows = await AppDao.alist_slug_state_by_ids(session, [str(item.get("id")) for item in hosted])
-        for item in hosted:
-            slug, state = rows.get(str(item.get("id")), (None, None))
-            item["slug"] = slug
-            if state is not None and not item.get("app_state"):
-                item["app_state"] = state
-
-    @classmethod
-    def _legal_actions_for(cls, resource_type: str, actions: tuple[str, ...]) -> tuple[str, ...]:
-        """Keep only the actions F048 recognises for ``resource_type`` (F056 design D3).
-
-        Asking for an action outside a resource type's scope is not a harmless
-        no-op: ``_prepare_action_target`` raises ``InvalidCatalogActionError``,
-        which is a ``BaseErrorCode`` and therefore comes back as **HTTP 200 with
-        business code 25001**, not a 500. The SPA rejects, the list blanks, and
-        the server log shows nothing to grep for. Both administrator
-        short-circuits run *before* that check, so the failure only ever reaches
-        ordinary users.
-
-        ``visible`` is exempt on purpose: it is not a registered action code
-        (``_normalize_action`` rejects it and ``batch_check_visible`` answers it
-        instead), so ``ACTION_RESOURCE_SCOPES`` has no row for it. Filtering it
-        out would drop the square's only visibility question and return an empty
-        page for every type.
-        """
-        return tuple(
-            action
-            for action in actions
-            if action in _ACTION_SCOPE_EXEMPT or resource_type in ACTION_RESOURCE_SCOPES.get(action, frozenset())
-        )
-
-    @classmethod
-    def _square_visibility_action(cls, item: dict, default_action: str) -> str:
-        """Which action decides whether this row is visible in the square."""
-        resource_type = cls._FLOW_TYPE_TO_RESOURCE_TYPE.get(int(item.get("flow_type") or 0))
-        return _SQUARE_VISIBILITY_ACTION_BY_TYPE.get(resource_type, default_action)
-
-    @classmethod
-    def _tag_resource_types(cls) -> list[ResourceTypeEnum]:
-        """Resource types the application tag filter spans (design D8, gate 5).
-
-        Miss a type here and the symptom is not an error but an always-empty
-        result once a tag is selected — the filter box works, the list is blank.
-        """
-        types = [ResourceTypeEnum.WORK_FLOW, ResourceTypeEnum.ASSISTANT]
-        if FlowType.HOSTED_APP.value in cls.enabled_app_types():
-            types.append(ResourceTypeEnum.HOSTED_APP)
-        return types
-
-    @classmethod
-    def enabled_app_types(cls) -> set[int]:
-        """App types this deployment lists — ``SUPPORTED_APP_TYPES`` minus what is not installed.
-
-        AC-58 requires that with the runtime layer absent the build page shows
-        neither the hosted-application type nor a single hosted card. The front
-        end hides the filter option, but a page asking for "all types" would
-        still be answered by the server, so the gate lives here as well: the
-        list contract is the backend's to keep, not the SPA's.
-        """
-        if settings.app_runtime.enabled:
-            return cls.SUPPORTED_APP_TYPES
-        return cls.SUPPORTED_APP_TYPES - cls._RUNTIME_LAYER_APP_TYPES

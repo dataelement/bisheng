@@ -142,7 +142,26 @@ describe("audit encryption readiness", () => {
     expect(api.save).not.toHaveBeenCalled();
   });
 
-  it("refreshes availability without silently changing a persisted content policy", async () => {
+  // Coverage AC: AC-68.
+  it("reloads the persisted policy automatically after a failed save without a refresh button", async () => {
+    api.mode.mockResolvedValueOnce({ mode: "OFF", version: 1, content_available: true })
+      .mockResolvedValueOnce({ mode: "CONTENT", version: 2, content_available: false });
+    api.save.mockRejectedValueOnce(Error("synthetic private conflict"));
+    render(<ModelAuditMode tenantId={2} canConfigure />);
+    await screen.findByText("dsh.modelAuditView.modes.OFF");
+    openModes();
+    fireEvent.click(await screen.findByRole("option", { name: "dsh.modelAuditView.modes.METADATA" }));
+    fireEvent.click(screen.getByRole("button", { name: "dsh.save" }));
+    await screen.findByText("dsh.modelAuditView.contentKeyLost");
+    expect(screen.getByRole("combobox")).toHaveTextContent("dsh.modelAuditView.modes.CONTENT");
+    expect(api.mode).toHaveBeenCalledTimes(2);
+    expect(api.save).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("dsh.modelAuditView.loadError")).toHaveAttribute("role", "alert");
+    expect(screen.queryByText("synthetic private conflict")).toBeNull();
+    expect(screen.queryByRole("button", { name: "dsh.modelAuditView.refresh_mode" })).toBeNull();
+  });
+
+  it("reloads availability for a new tenant without silently changing a persisted content policy", async () => {
     api.mode
       .mockResolvedValueOnce({
         mode: "CONTENT",
@@ -154,11 +173,10 @@ describe("audit encryption readiness", () => {
         version: 2,
         content_available: false,
       });
-    render(<ModelAuditMode tenantId={2} canConfigure={false} />);
+    const view = render(<ModelAuditMode tenantId={2} canConfigure={false} />);
     await screen.findByText("dsh.modelAuditView.modes.CONTENT");
-    fireEvent.click(
-      screen.getByRole("button", { name: "dsh.modelAuditView.refresh_mode" }),
-    );
+    expect(screen.queryByRole("button", { name: "dsh.modelAuditView.refresh_mode" })).toBeNull();
+    view.rerender(<ModelAuditMode tenantId={3} canConfigure={false} />);
     await screen.findByText("dsh.modelAuditView.contentKeyLost");
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(
@@ -188,6 +206,7 @@ describe("audit collection explanation", () => {
         screen.getByText("dsh.modelAuditView.collectionHint"),
       ).toBeVisible();
       expect(screen.queryByRole("combobox")).toBeNull();
+      expect(screen.queryByRole("button", { name: "dsh.modelAuditView.refresh_mode" })).toBeNull();
       expect(api.save).not.toHaveBeenCalled();
     },
   );

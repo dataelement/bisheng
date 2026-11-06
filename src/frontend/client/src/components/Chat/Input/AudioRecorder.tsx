@@ -1,9 +1,10 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useCallback } from 'react';
 import { useChatFormContext, useToastContext } from '~/Providers';
 import { ListeningIcon, Spinner } from '~/components/svg';
 import { useLocalize, useSpeechToText } from '~/hooks';
-import { TooltipAnchor } from '~/components/ui';
+
 import { globalAudioId } from '~/common';
 import { cn } from '~/utils';
 
@@ -81,10 +82,7 @@ export default function AudioRecorder({
   };
 
   return (
-    <TooltipAnchor
-      description={localize('com_ui_use_micrphone')}
-      render={
-        <button
+    <SharedTooltip  content={localize('com_ui_use_micrphone')}  ><button
           id="audio-recorder"
           type="button"
           aria-label={localize('com_ui_use_micrphone')}
@@ -99,8 +97,6 @@ export default function AudioRecorder({
           aria-pressed={isListening}
         >
           {renderIcon()}
-        </button>
-      }
-    />
+        </button></SharedTooltip>
   );
 }

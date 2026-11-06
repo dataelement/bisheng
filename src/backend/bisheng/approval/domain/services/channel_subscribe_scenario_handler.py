@@ -128,15 +128,16 @@ class ChannelSubscribeScenarioHandler:
                 f"channel_id={payload_snapshot.get('channel_id')}, "
                 f"applicant_user_id={payload_snapshot.get('applicant_user_id')}"
             )
+        if self.sync_permissions is None:
+            raise RuntimeError("Channel approval requires a permission synchronizer")
+        await self.sync_permissions(
+            str(payload_snapshot["channel_id"]),
+            membership.user_id,
+            membership.user_role,
+            is_active=True,
+        )
         membership.status = MembershipStatusEnum.ACTIVE
         await self.space_channel_member_repository.update(membership)
-        if self.sync_permissions:
-            await self.sync_permissions(
-                str(payload_snapshot["channel_id"]),
-                membership.user_id,
-                membership.user_role,
-                is_active=True,
-            )
         return {"status": MembershipStatusEnum.ACTIVE.value}
 
     async def on_rejected(self, instance_id: int, payload_snapshot: dict, reason: str | None) -> None:

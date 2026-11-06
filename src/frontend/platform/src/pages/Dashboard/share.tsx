@@ -1,7 +1,7 @@
 // @ts-strict-ignore
 "use client"
 import { getDashboard } from "@/controllers/API/dashboard"
-import { useQuery } from "react-query"
+import { useQuery } from "@tanstack/react-query"
 import { useParams } from "react-router-dom"
 import { EditorCanvas } from "./components/editor/EditorCanvas"
 import { DashboardQueryKey } from "./hook"

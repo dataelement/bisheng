@@ -3,164 +3,149 @@
  * Items (spec §1): Upload file / Task mode toggle / Add Skill (submenu with
  * the multi-select skill list).
  */
-import { Check } from 'lucide-react';
-import { useState } from 'react';
-import { Outlined } from 'bisheng-icons';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSub,
-    DropdownMenuSubContent,
-    DropdownMenuSubTrigger,
-    DropdownMenuTrigger,
-} from '~/components/ui';
-import { useLocalize, useMediaQuery } from '~/hooks';
-import type { TaskModeSkill } from '~/store/linsight';
-import { cn } from '~/utils';
-import { SkillSelector } from './SkillSelector';
-import { SkillMenuEntries } from '~/components/Skills/SkillMenuEntries';
-import { SkillMenuPanel } from '~/components/Skills/SkillMenuPanel';
-import { skillCenterPreviewEnabled } from '~/components/Skills/types';
+import { Check } from "lucide-react";
+import { useState } from "react";
+import { Outlined } from "bisheng-icons";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "~/components/ui";
+import { useLocalize, useMediaQuery } from "~/hooks";
+import type { TaskModeSkill } from "~/store/linsight";
+import { cn } from "~/utils";
+import { SkillMenuEntries, SkillUploadHost } from "~/components/Skills/SkillMenuEntries";
+import { SkillMenuPanel } from "~/components/Skills/SkillMenuPanel";
 
 interface PlusMenuProps {
-    disabled?: boolean;
-    /** Opens the hidden file picker (InputFiles imperative ref). */
-    onUploadFile: () => void;
-    /**
-     * Opens the hidden DIRECTORY picker. Task mode only — omit it and the entry
-     * is hidden, which is what daily mode wants (no workspace, no tree to keep).
-     */
-    onUploadFolder?: () => void;
-    taskModeActive: boolean;
-    onToggleTaskMode: () => void;
-    selectedSkills: TaskModeSkill[];
-    onSkillsChange: (skills: TaskModeSkill[]) => void;
-    /** Add-skill entry is task-mode only; daily mode hides it (unified input). */
-    showAddSkill?: boolean;
+  disabled?: boolean;
+  /** Opens the hidden file picker (InputFiles imperative ref). */
+  onUploadFile: () => void;
+  /**
+   * Opens the hidden DIRECTORY picker. Task mode only — omit it and the entry
+   * is hidden, which is what daily mode wants (no workspace, no tree to keep).
+   */
+  onUploadFolder?: () => void;
+  taskModeActive: boolean;
+  onToggleTaskMode: () => void;
+  selectedSkills: TaskModeSkill[];
+  onSkillsChange: (skills: TaskModeSkill[]) => void;
+  /** Add-skill entry is task-mode only; daily mode hides it (unified input). */
+  showAddSkill?: boolean;
 }
 
 export function PlusMenu({
-    disabled = false,
-    onUploadFile,
-    onUploadFolder,
-    taskModeActive,
-    onToggleTaskMode,
-    selectedSkills,
-    onSkillsChange,
-    showAddSkill = true,
+  disabled = false,
+  onUploadFile,
+  onUploadFolder,
+  taskModeActive,
+  onToggleTaskMode,
+  selectedSkills,
+  onSkillsChange,
+  showAddSkill = true,
 }: PlusMenuProps) {
-    const localize = useLocalize();
-    const isMobile = useMediaQuery('(max-width: 576px)');
-    const [skillPanelOpen, setSkillPanelOpen] = useState(false);
+  const localize = useLocalize();
+  const isMobile = useMediaQuery("(max-width: 576px)");
+  const [skillPanelOpen, setSkillPanelOpen] = useState(false);
 
-    return (
-        <DropdownMenu onOpenChange={(open) => { if (!open) setSkillPanelOpen(false); }}>
-            <DropdownMenuTrigger asChild disabled={disabled}>
-                <button
-                    type="button"
-                    aria-label={localize('com_ui_upload_files')}
-                    className={cn(
-                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-text-2 outline-none transition-colors hover:bg-black/5',
-                        disabled && 'cursor-not-allowed opacity-50',
-                    )}
-                >
-                    <Outlined.Plus size={18} />
-                </button>
-            </DropdownMenuTrigger>
-
-            <DropdownMenuContent
-                align="start"
-                className={cn('flex w-[200px] flex-col gap-1 rounded-2xl border-slate-100 p-3 shadow-xl', isMobile && skillPanelOpen && 'max-h-[min(440px,var(--radix-dropdown-menu-content-available-height))] w-[min(calc(100vw-24px),320px)] gap-0 p-2')}
+  return (
+    <SkillUploadHost>
+      {(openSkillUpload) => (
+        <DropdownMenu
+          onOpenChange={(open) => {
+            if (!open) setSkillPanelOpen(false);
+          }}
+        >
+          <DropdownMenuTrigger asChild disabled={disabled}>
+            <button
+              type="button"
+              aria-label={localize("com_ui_upload_files")}
+              className={cn(
+                "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-text-2 outline-none transition-colors hover:bg-black/5",
+                disabled && "cursor-not-allowed opacity-50",
+              )}
             >
-                {isMobile && skillPanelOpen ? <SkillMenuPanel selected={selectedSkills} onChange={onSkillsChange} onBack={() => setSkillPanelOpen(false)} /> : <>
+              <Outlined.Plus size={18} />
+            </button>
+          </DropdownMenuTrigger>
+
+          <DropdownMenuContent
+            align="start"
+            className={cn(
+              "flex w-[200px] flex-col gap-1 rounded-2xl border-slate-100 p-3 shadow-xl",
+              isMobile &&
+                skillPanelOpen &&
+                "max-h-[min(440px,var(--radix-dropdown-menu-content-available-height))] w-[min(calc(100vw-24px),320px)] gap-0 p-2",
+            )}
+          >
+            {isMobile && skillPanelOpen && showAddSkill ? (
+              <SkillMenuPanel
+                selected={selectedSkills}
+                onChange={onSkillsChange}
+                onUpload={openSkillUpload}
+                onBack={() => setSkillPanelOpen(false)}
+              />
+            ) : (
+              <>
                 {/* Upload file — same icon component as the daily-mode "+" menu:
                     the old `link.svg` asset bakes its own colour in and can't
                     follow the shared resting tint. */}
                 <DropdownMenuItem
-                    onSelect={() => onUploadFile()}
-                    className="flex h-8 cursor-pointer items-center gap-3 rounded-lg px-2 outline-none"
+                  onSelect={() => onUploadFile()}
+                  className="flex h-8 cursor-pointer items-center gap-3 rounded-lg px-2 outline-none"
                 >
-                    <Outlined.Attachment size={16} className="shrink-0 text-text-2" />
-                    <span className="text-[14px] font-normal text-slate-700">
-                        {localize('com_ui_upload_files')}
-                    </span>
+                  <Outlined.Attachment size={16} className="shrink-0 text-text-2" />
+                  <span className="text-[14px] font-normal text-slate-700">
+                    {localize("com_ui_upload_files")}
+                  </span>
                 </DropdownMenuItem>
 
                 {/* Upload folder — task mode only; the whole directory tree is
                     rebuilt inside the task workspace. */}
                 {onUploadFolder && (
-                    <DropdownMenuItem
-                        onSelect={() => onUploadFolder()}
-                        className="flex h-8 cursor-pointer items-center gap-3 rounded-lg px-2 outline-none"
-                    >
-                        <Outlined.FolderClose size={16} className="shrink-0 text-text-2" />
-                        <span className="text-[14px] font-normal text-slate-700">
-                            {localize('com_ui_upload_folder')}
-                        </span>
-                    </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => onUploadFolder()}
+                    className="flex h-8 cursor-pointer items-center gap-3 rounded-lg px-2 outline-none"
+                  >
+                    <Outlined.FolderClose size={16} className="shrink-0 text-text-2" />
+                    <span className="text-[14px] font-normal text-slate-700">
+                      {localize("com_ui_upload_folder")}
+                    </span>
+                  </DropdownMenuItem>
                 )}
 
-                <SkillMenuEntries selected={selectedSkills} onChange={onSkillsChange} onOpenMobile={isMobile ? () => setSkillPanelOpen(true) : undefined} />
+                {showAddSkill && (
+                  <SkillMenuEntries
+                    selected={selectedSkills}
+                    onChange={onSkillsChange}
+                    onUpload={openSkillUpload}
+                    onOpenMobile={isMobile ? () => setSkillPanelOpen(true) : undefined}
+                  />
+                )}
 
                 {/* Divider between upload and the mode entries (spec §1) */}
                 <div className="my-1 h-px bg-slate-100" />
 
                 {/* Task mode toggle */}
                 <DropdownMenuItem
-                    onSelect={() => onToggleTaskMode()}
-                    className="flex h-8 cursor-pointer items-center gap-3 rounded-lg px-2 outline-none"
+                  onSelect={() => onToggleTaskMode()}
+                  className="flex h-8 cursor-pointer items-center gap-3 rounded-lg px-2 outline-none"
                 >
-                    <Outlined.ListSuccess size={16} className={cn(taskModeActive ? 'text-blue-500' : 'text-text-2')} />
-                    <span
-                        className={cn(
-                            'flex-1 text-[14px] font-normal',
-                            taskModeActive ? 'text-blue-500' : 'text-slate-700',
-                        )}
-                    >
-                        {localize('com_linsight_task_mode')}
-                    </span>
-                    {taskModeActive && <Check size={14} className="text-blue-500" />}
+                  <Outlined.ListSuccess
+                    size={16}
+                    className={cn(taskModeActive ? "text-blue-500" : "text-text-2")}
+                  />
+                  <span
+                    className={cn(
+                      "flex-1 text-[14px] font-normal",
+                      taskModeActive ? "text-blue-500" : "text-slate-700",
+                    )}
+                  >
+                    {localize("com_linsight_task_mode")}
+                  </span>
+                  {taskModeActive && <Check size={14} className="text-blue-500" />}
                 </DropdownMenuItem>
-
-                {/* Add Skill submenu — task mode only (hidden in daily mode) */}
-                {!skillCenterPreviewEnabled && showAddSkill && (
-                    <DropdownMenuSub>
-                        <DropdownMenuSubTrigger
-                            className={cn(
-                                'flex h-8 cursor-pointer items-center justify-between rounded-lg px-2 outline-none',
-                                '!bg-transparent hover:!bg-transparent focus:!bg-transparent',
-                            )}
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className="relative">
-                                    <Outlined.Skill
-                                        size={16}
-                                        className={cn(selectedSkills.length > 0 ? 'text-blue-500' : 'text-text-2')}
-                                    />
-                                    {selectedSkills.length > 0 && (
-                                        <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
-                                    )}
-                                </div>
-                                <span className="text-[14px] font-normal text-slate-700">
-                                    {localize('com_linsight_add_skill')}
-                                </span>
-                            </div>
-                            {/* ChevronRight is rendered by DropdownMenuSubTrigger itself */}
-                        </DropdownMenuSubTrigger>
-                        {/* Layout mirrors the daily-mode knowledge panel shell (ChatKnowledge `variant === 'knowledge'`).
-                            `align="center"` centers the panel vertically on the trigger row. */}
-                        <DropdownMenuSubContent
-                            align="center"
-                            collisionPadding={8}
-                            className="ml-2 flex max-h-[440px] w-[280px] flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-white px-3 pb-0 pt-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
-                        >
-                            <SkillSelector selected={selectedSkills} onChange={onSkillsChange} />
-                        </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                )}
-                </>}
-            </DropdownMenuContent>
+              </>
+            )}
+          </DropdownMenuContent>
         </DropdownMenu>
-    );
+      )}
+    </SkillUploadHost>
+  );
 }

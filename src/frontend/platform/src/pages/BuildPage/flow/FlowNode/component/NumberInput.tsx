@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { useEffect, useState } from "react";
+import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
 
 function NumberInput({ value, onChange }) {

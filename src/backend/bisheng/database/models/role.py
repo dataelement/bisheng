@@ -1,96 +1,119 @@
 from datetime import datetime
-from typing import List, Optional
 
-from sqlalchemy import Column, Computed, DateTime, Integer, String, false, text, func, delete, and_, or_, UniqueConstraint
+from sqlalchemy import (
+    Column,
+    Computed,
+    DateTime,
+    Integer,
+    String,
+    UniqueConstraint,
+    and_,
+    delete,
+    func,
+    or_,
+    text,
+)
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
+from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.role_access import RoleAccess
-from bisheng.user.domain.models.user_role import UserRole
+from bisheng.database.models.user_role import UserRole
+
 
 class RoleBase(SQLModelSerializable):
-    role_name: str = Field(index=False, description='Frontend Display Name')
+    role_name: str = Field(index=False, description="Frontend Display Name")
     role_type: str = Field(
-        default='tenant',
-        sa_column=Column(String(16), nullable=False, server_default=text("'tenant'"),
-                         comment='global: cross-tenant visible; tenant: tenant-scoped'),
+        default="tenant",
+        sa_column=Column(
+            String(16),
+            nullable=False,
+            server_default=text("'tenant'"),
+            comment="global: cross-tenant visible; tenant: tenant-scoped",
+        ),
     )
-    department_id: Optional[int] = Field(
+    department_id: int | None = Field(
         default=None,
-        sa_column=Column(Integer, nullable=True, index=True,
-                         comment='Department scope ID; NULL = no scope restriction'),
+        sa_column=Column(
+            Integer, nullable=True, index=True, comment="Department scope ID; NULL = no scope restriction"
+        ),
     )
-    quota_config: Optional[dict] = Field(
+    quota_config: dict | None = Field(
         default=None,
-        sa_column=Column(JsonType, nullable=True,
-                         comment='Resource quota config JSON'),
+        sa_column=Column(JsonType, nullable=True, comment="Resource quota config JSON"),
     )
-    remark: Optional[str] = Field(default=None, index=False)
+    remark: str | None = Field(default=None, index=False)
     # ── deprecated fields (AD-07, AD-08) ──
-    group_id: Optional[int] = Field(default=None, index=True)  # deprecated: use department_id
-    knowledge_space_file_limit: Optional[int] = Field(default=0, index=False)  # deprecated: use quota_config
+    group_id: int | None = Field(default=None, index=True)  # deprecated: use department_id
+    knowledge_space_file_limit: int | None = Field(default=0, index=False)  # deprecated: use quota_config
     # timestamps
-    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
+    create_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, index=True, server_default=text("CURRENT_TIMESTAMP"))
+    )
+    update_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT)
+    )
+
 
 class Role(RoleBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    tenant_id: Optional[int] = Field(
+    id: int | None = Field(default=None, primary_key=True)
+    tenant_id: int | None = Field(
         default=None,
-        sa_column=Column(Integer, nullable=False, server_default=text('1'),
-                         index=True, comment='Tenant ID'),
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
     )
-    create_user: Optional[int] = Field(
+    create_user: int | None = Field(
         default=None,
-        sa_column=Column(Integer, nullable=True, comment='Role creator user ID'),
+        sa_column=Column(Integer, nullable=True, comment="Role creator user ID"),
     )
-    department_scope_key: Optional[int] = Field(
+    department_scope_key: int | None = Field(
         default=None,
         sa_column=Column(
             Integer,
-            Computed('COALESCE(department_id, -1)', persisted=True),
+            Computed("COALESCE(department_id, -1)", persisted=True),
             nullable=False,
-            comment='Normalized department scope key; -1 = no scope restriction',
+            comment="Normalized department scope key; -1 = no scope restriction",
         ),
     )
 
     __table_args__ = (
         UniqueConstraint(
-            'tenant_id',
-            'role_type',
-            'role_name',
-            'department_scope_key',
-            name='uk_tenant_roletype_rolename_scope_key',
+            "tenant_id",
+            "role_type",
+            "role_name",
+            "department_scope_key",
+            name="uk_tenant_roletype_rolename_scope_key",
         ),
     )
 
+
 class RoleRead(RoleBase):
-    id: Optional[int] = None
+    id: int | None = None
+
 
 class RoleUpdate(RoleBase):
-    role_name: Optional[str] = None
-    remark: Optional[str] = None
-    knowledge_space_file_limit: Optional[int] = None
+    role_name: str | None = None
+    remark: str | None = None
+    knowledge_space_file_limit: int | None = None
+
 
 class RoleCreate(RoleBase):
     pass
 
-class RoleDao(RoleBase):
 
+class RoleDao(RoleBase):
     # ── Legacy methods (kept for backward compat) ──
 
     @classmethod
-    def get_role_by_groups(cls, group: List[int], keyword: str = None, page: int = 0, limit: int = 0) -> List[Role]:
+    def get_role_by_groups(
+        cls, group: list[int], keyword: str | None = None, page: int = 0, limit: int = 0
+    ) -> list[Role]:
         statement = select(Role).where(Role.id > AdminRole)
         if group:
             statement = statement.where(Role.group_id.in_(group))
         if keyword:
-            statement = statement.filter(Role.role_name.like(f'%{keyword}%'))
+            statement = statement.filter(Role.role_name.like(f"%{keyword}%"))
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(Role.create_time.desc())
@@ -98,12 +121,12 @@ class RoleDao(RoleBase):
             return session.exec(statement).all()
 
     @classmethod
-    def count_role_by_groups(cls, group: List[int], keyword: str = None) -> int:
+    def count_role_by_groups(cls, group: list[int], keyword: str | None = None) -> int:
         statement = select(func.count(Role.id)).where(Role.id > AdminRole)
         if group:
             statement = statement.where(Role.group_id.in_(group))
         if keyword:
-            statement = statement.filter(Role.role_name.like(f'%{keyword}%'))
+            statement = statement.filter(Role.role_name.like(f"%{keyword}%"))
         with get_sync_db_session() as session:
             return session.scalar(statement)
 
@@ -150,12 +173,12 @@ class RoleDao(RoleBase):
             await session.commit()
 
     @classmethod
-    def get_role_by_ids(cls, role_ids: List[int]) -> List[Role]:
+    def get_role_by_ids(cls, role_ids: list[int]) -> list[Role]:
         with get_sync_db_session() as session:
             return session.query(Role).filter(Role.id.in_(role_ids)).all()
 
     @classmethod
-    async def aget_role_by_ids(cls, role_ids: List[int]) -> List[Role]:
+    async def aget_role_by_ids(cls, role_ids: list[int]) -> list[Role]:
         statement = select(Role).where(Role.id.in_(role_ids))
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
@@ -167,8 +190,20 @@ class RoleDao(RoleBase):
 
     @classmethod
     async def aget_role_by_id(cls, role_id: int) -> Role:
+        from bisheng.core.context.tenant import bypass_tenant_filter, get_is_management_api
+        from bisheng.core.database.tenant_filter import build_tenant_filter_clause
+
+        statement = select(Role).where(Role.id == role_id)
+        if get_is_management_api():
+            # Global role definitions are a shared catalog, not another tenant's custom role.
+            scope = build_tenant_filter_clause(Role.tenant_id)
+            if scope is not None:
+                statement = statement.where(or_(Role.role_type == "global", scope))
+            with bypass_tenant_filter():
+                async with get_async_db_session() as session:
+                    return (await session.execute(statement)).scalars().first()
         async with get_async_db_session() as session:
-            result = await session.execute(select(Role).where(Role.id == role_id))
+            result = await session.execute(statement)
             return result.scalars().first()
 
     @classmethod
@@ -181,7 +216,7 @@ class RoleDao(RoleBase):
         """
         with get_sync_db_session() as session:
             role_id_rows = session.exec(select(Role.id).where(Role.group_id == group_id)).all()
-            role_ids: List[int] = []
+            role_ids: list[int] = []
             for row in role_id_rows:
                 if row is None:
                     continue
@@ -199,8 +234,8 @@ class RoleDao(RoleBase):
     def _build_visible_roles_stmt(
         cls,
         tenant_id: int,
-        keyword: str = None,
-        department_ids: List[int] = None,
+        keyword: str | None = None,
+        department_ids: list[int] | None = None,
         tenant_custom_roles_only: bool = False,
     ):
         """Build statement for visible roles: global + current tenant, excluding AdminRole.
@@ -217,19 +252,19 @@ class RoleDao(RoleBase):
         stmt = select(Role).where(
             Role.id > AdminRole,
             or_(
-                Role.role_type == 'global',
-                and_(Role.role_type == 'tenant', Role.tenant_id == tenant_id),
+                Role.role_type == "global",
+                and_(Role.role_type == "tenant", True if tenant_id is None else Role.tenant_id == tenant_id),
             ),
         )
         if keyword:
-            stmt = stmt.where(Role.role_name.like(f'%{keyword}%'))
+            stmt = stmt.where(Role.role_name.like(f"%{keyword}%"))
         if department_ids is not None:
             if not department_ids:
                 stmt = stmt.where(
                     or_(
-                        Role.role_type == 'global',
+                        Role.role_type == "global",
                         and_(
-                            Role.role_type == 'tenant',
+                            Role.role_type == "tenant",
                             Role.department_id.is_(None),
                         ),
                     ),
@@ -237,9 +272,9 @@ class RoleDao(RoleBase):
             else:
                 stmt = stmt.where(
                     or_(
-                        Role.role_type == 'global',
+                        Role.role_type == "global",
                         and_(
-                            Role.role_type == 'tenant',
+                            Role.role_type == "tenant",
                             or_(
                                 Role.department_id.is_(None),
                                 Role.department_id.in_(department_ids),
@@ -248,27 +283,31 @@ class RoleDao(RoleBase):
                     ),
                 )
         elif tenant_custom_roles_only:
-            stmt = stmt.where(Role.role_type == 'tenant')
+            stmt = stmt.where(Role.role_type == "tenant")
         return stmt
 
     @classmethod
     async def aget_visible_roles(
         cls,
         tenant_id: int,
-        keyword: str = None,
+        keyword: str | None = None,
         page: int = 1,
         limit: int = 10,
-        department_ids: List[int] = None,
+        department_ids: list[int] | None = None,
         tenant_custom_roles_only: bool = False,
-    ) -> List[Role]:
+    ) -> list[Role]:
         """Get visible roles for role list API (AD-09).
 
         Returns global roles + current tenant's roles, excluding AdminRole(id=1).
         Uses bypass_tenant_filter so global roles from other tenants are visible.
         """
         from bisheng.core.context.tenant import bypass_tenant_filter
+
         stmt = cls._build_visible_roles_stmt(
-            tenant_id, keyword, department_ids, tenant_custom_roles_only,
+            tenant_id,
+            keyword,
+            department_ids,
+            tenant_custom_roles_only,
         )
         stmt = stmt.order_by(Role.create_time.desc())
         if page and limit:
@@ -281,14 +320,18 @@ class RoleDao(RoleBase):
     async def acount_visible_roles(
         cls,
         tenant_id: int,
-        keyword: str = None,
-        department_ids: List[int] = None,
+        keyword: str | None = None,
+        department_ids: list[int] | None = None,
         tenant_custom_roles_only: bool = False,
     ) -> int:
         """Count visible roles (companion for aget_visible_roles)."""
         from bisheng.core.context.tenant import bypass_tenant_filter
+
         base_stmt = cls._build_visible_roles_stmt(
-            tenant_id, keyword, department_ids, tenant_custom_roles_only,
+            tenant_id,
+            keyword,
+            department_ids,
+            tenant_custom_roles_only,
         )
         stmt = select(func.count()).select_from(base_stmt.subquery())
         with bypass_tenant_filter():
@@ -301,8 +344,8 @@ class RoleDao(RoleBase):
         tenant_id: int,
         role_type: str,
         role_name: str,
-        department_id: Optional[int],
-    ) -> Optional[Role]:
+        department_id: int | None,
+    ) -> Role | None:
         """Check for duplicate role name within the same role scope."""
         stmt = select(Role).where(
             Role.role_type == role_type,
@@ -318,13 +361,15 @@ class RoleDao(RoleBase):
             return (await session.exec(stmt)).first()
 
     @classmethod
-    async def aget_user_count_by_role_ids(cls, role_ids: List[int]) -> dict:
+    async def aget_user_count_by_role_ids(cls, role_ids: list[int]) -> dict:
         """Get user count for each role ID. Returns {role_id: count}."""
         if not role_ids:
             return {}
-        stmt = select(UserRole.role_id, func.count(UserRole.user_id)).where(
-            UserRole.role_id.in_(role_ids)
-        ).group_by(UserRole.role_id)
+        stmt = (
+            select(UserRole.role_id, func.count(UserRole.user_id))
+            .where(UserRole.role_id.in_(role_ids))
+            .group_by(UserRole.role_id)
+        )
         async with get_async_db_session() as session:
             rows = (await session.exec(stmt)).all()
             return {row[0]: row[1] for row in rows}

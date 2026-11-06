@@ -1,6 +1,6 @@
 import UsersSelect from '@/components/bs-comp/selectComponent/Users'
 import type { DepartmentUserOption } from '@/components/bs-comp/selectComponent/DepartmentUsersSelect'
-import { Checkbox } from '@/components/bs-ui/checkBox'
+import { Checkbox } from "@bisheng/ui";
 import type { PolicySubject, PolicySubjectOption } from '@/controllers/API/dshUnified'
 import { useTranslation } from 'react-i18next'
 

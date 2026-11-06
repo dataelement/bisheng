@@ -12,17 +12,21 @@ import { type ClassValue, clsx } from 'clsx';
  * 16px. Registering them in the `font-size` group makes cn() preserve size +
  * color together, and collapse size-vs-size correctly.
  *
- * NOTE: this uses the tailwind-merge **v1.x** config shape (`classGroups` at the
- * top level). v2+ nests it under `extend` — do not copy a v2 snippet here while
- * the dependency is pinned to ^1.14.0 (kept in the workspace catalog).
  */
-const twMerge = extendTailwindMerge({
+const classGroups = {
+  'font-size': [
+    { text: ['caption-sm', 'caption', 'body-sm', 'body', 'h1', 'h2', 'h3', 'h4', 'display', 'metric'] },
+  ],
+};
+// The transformer API works with both v1 and v2. The v2-only `extend` object
+// is silently ignored by v1, causing text-body to remove text-white in Tooltip.
+const twMerge = extendTailwindMerge((config) => ({
+  ...config,
   classGroups: {
-    'font-size': [
-      { text: ['caption-sm', 'caption', 'body-sm', 'body', 'h1', 'h2', 'h3', 'h4', 'display', 'metric'] },
-    ],
+    ...config.classGroups,
+    'font-size': [...config.classGroups['font-size'], ...classGroups['font-size']],
   },
-});
+}));
 
 /**
  * Merges the tailwind classes (using twMerge). Conditionally removes false values

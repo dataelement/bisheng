@@ -1,51 +1,57 @@
 // @ts-strict-ignore
-import { LoadingIcon } from "@/components/bs-icons/loading";
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Alert, Button, Input, Select, toast } from '@bisheng/ui';
+
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button, LoadButton } from "@/components/bs-ui/button";
-import { Input } from "@/components/bs-ui/input";
+
+
 import { Label } from "@/components/bs-ui/label";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import { Switch } from "@/components/bs-ui/switch";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import { Button as SharedButton, Switch, Tooltip as SharedTooltip } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+
+import { ModelFieldHint } from "./ModelFieldHint";
 import { generateUUID } from "@/components/bs-ui/utils";
-import ShadTooltip from "@/components/ShadTooltipComponent";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { addLLmServer, deleteLLmServer, getLLmServerDetail, updateLLmServer } from "@/controllers/API/finetune";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { useAdminScope } from "@/hooks/useAdminScope";
-import { ArrowLeft, Plus } from "lucide-react";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import CustomForm from "./CustomForm";
+import { CustomForm } from "./CustomForm";
 import { canShareToChildren, isGlobalSuperUser } from "./permissions";
 import { useLinsightConfig } from "./tabs/WorkbenchModel";
 import { useModelProviderInfo } from "./useLink";
 import { ModelItem } from "./ModelItem";
 import { hasDuplicateModelName, hasInvalidModelName, trimModelNames } from "./modelNameTrim";
 
+// `group` is an i18n key under model.providerGroups; ungrouped entries stay on top, groups follow in first-appearance order.
 export const modelProvider = [
-    { "name": "OpenAI", "value": "openai" },
-    { "name": "Azure OpenAI", "value": "azure_openai" },
-    { "name": "Ollama", "value": "ollama" },
-    { "name": "xinference", "value": "xinference" },
-    { "name": "llamacpp", "value": "llamacpp" },
-    { "name": "vllm", "value": "vllm" },
-    { "name": "", "labelKey": "model.providerNames.qwen", "value": "qwen" },
-    { "name": "DeepSeek", "value": "deepseek" },
-    { "name": "", "labelKey": "model.providerNames.silicon", "value": "silicon" },
-    { "name": "", "labelKey": "model.providerNames.volcengine", "value": "volcengine" },
-    { "name": "", "labelKey": "model.providerNames.zhipu", "value": "zhipu" },
-    { "name": "", "labelKey": "model.providerNames.spark", "value": "spark" },
-    { "name": "", "labelKey": "model.providerNames.tencent", "value": "tencent" },
-    { "name": "", "labelKey": "model.providerNames.moonshot", "value": "moonshot" },
-    { "name": "", "labelKey": "model.providerNames.qianfan", "value": "qianfan" },
-    { "name": "Minimax", "value": "minimax" },
-    { "name": "Anthropic", "value": "anthropic" },
-    { "name": "MindIE", "value": "MindIE" },
+    { "name": "", "labelKey": "model.providerNames.openaiCompatible", "value": "openai_compatible" },
+    { "name": "OpenAI", "value": "openai", "group": "cloud" },
+    { "name": "Azure OpenAI", "value": "azure_openai", "group": "cloud" },
+    { "name": "", "labelKey": "model.providerNames.qwen", "value": "qwen", "group": "cloud" },
+    { "name": "DeepSeek", "value": "deepseek", "group": "cloud" },
+    { "name": "", "labelKey": "model.providerNames.silicon", "value": "silicon", "group": "cloud" },
+    { "name": "", "labelKey": "model.providerNames.volcengine", "value": "volcengine", "group": "cloud" },
+    { "name": "", "labelKey": "model.providerNames.zhipu", "value": "zhipu", "group": "cloud" },
+    { "name": "", "labelKey": "model.providerNames.spark", "value": "spark", "group": "cloud" },
+    { "name": "", "labelKey": "model.providerNames.tencent", "value": "tencent", "group": "cloud" },
+    { "name": "", "labelKey": "model.providerNames.moonshot", "value": "moonshot", "group": "cloud" },
+    { "name": "", "labelKey": "model.providerNames.qianfan", "value": "qianfan", "group": "cloud" },
+    { "name": "Minimax", "value": "minimax", "group": "cloud" },
+    { "name": "Anthropic", "value": "anthropic", "group": "cloud" },
+    { "name": "Ollama", "value": "ollama", "group": "local" },
+    { "name": "xinference", "value": "xinference", "group": "local" },
+    { "name": "llamacpp", "value": "llamacpp", "group": "local" },
+    { "name": "vllm", "value": "vllm", "group": "local" },
+    { "name": "MindIE", "value": "MindIE", "group": "local" },
 ]
-const bishengModelProvider = { "name": "bishengRT", "value": "bisheng_rt" }
+const bishengModelProvider = { "name": "bishengRT", "value": "bisheng_rt", "group": "local" }
+
+// Admins looking for a "custom" provider search for these words; they all lead to the OpenAI-compatible type.
+const OPENAI_COMPATIBLE_SEARCH_WORDS = ['custom', 'compatible', 'one api', 'oneapi', 'gateway', 'proxy']
 
 // Providers with a localized display name carry `labelKey`; the rest use `name` as-is.
 const providerLabel = (provider, translate) => provider?.labelKey ? translate(provider.labelKey) : (provider?.name || '')
@@ -69,12 +75,16 @@ const defaultForm = {
 
 export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforSave, onAfterSave }) {
     const { t } = useTranslation()
+    const selectLabels = useSelectLabels()
     const { refetch: refetchConfig } = useLinsightConfig();
     const { user } = useContext(userContext);
     const { appConfig } = useContext(locationContext);
 
     const [formData, setFormData] = useState({ ...defaultForm })
     const [nameError, setNameError] = useState('')
+    const [detailError, setDetailError] = useState<unknown>(null)
+    const [detailLoading, setDetailLoading] = useState(id !== -1)
+    const [detailReload, setDetailReload] = useState(0)
 
     // Create mode reads the admin scope fresh instead of taking it from the
     // list page: the scope is a server-side lease that can expire while the
@@ -93,20 +103,31 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
     });
 
     useEffect(() => {
-        if (id === -1) return
-        getLLmServerDetail(id).then(res => {
-            setFormData(res)
-        })
-    }, [id])
+        let active = true;
+        setDetailError(null);
+        setFormData({ ...defaultForm });
+        setDetailLoading(id !== -1);
+        if (id === -1) return;
+        void getLLmServerDetail(id).then(res => {
+            if (active) setFormData(res);
+        }).catch(error => {
+            if (!active) return;
+            setDetailError(error);
+            showApiError(error);
+        }).finally(() => { if (active) setDetailLoading(false); });
+        return () => { active = false; };
+    }, [id, detailReload])
 
     const getModelsByType = useSelectModel()
     const handleTypeChange = (val) => {
         const name = onGetName(providerLabel(_modelProvider.find(el => el.value === val), t))
         const models = getModelsByType(val)
-        setFormData({ ...formData, type: val, name, models })
+        setFormData({ ...formData, type: val, name, models, config: {} })
     }
 
     const handleAddModel = () => {
+        if (formData.limit_flag && (String((formData.limit) ?? '') !== '' && (!Number.isFinite(Number(formData.limit)) || Number(formData.limit) < 1))) return;
+
         const maxIndex = formData.models.reduce((max, el, i) => el.name.match(/model (\d+)/) ? Math.max(max, +el.name.match(/model (\d+)/)[1]) : max, 0)
 
         const model = {
@@ -145,31 +166,24 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         setFormData({ ...formData, models })
     }
 
-    const { message } = useToast()
+
     const formRef = useRef(null)
     const [isLoading, setIsLoading] = useState(false);
     const handleSave = async () => {
+        if (formData.limit_flag && (String((formData.limit) ?? '') !== '' && (!Number.isFinite(Number(formData.limit)) || Number(formData.limit) < 1))) return;
+
         setIsLoading(true)
         try {
             const exists = onBerforSave(formData.id, formData.name)
             if (exists) {
-                return message({
-                    variant: 'warning',
-                    description: t('model.duplicateServiceProviderName')
-                })
+                return toast.show({ type: 'warning', message: String(t('model.duplicateServiceProviderName') ?? '') })
             }
             if (!formData.name || formData.name.length > 100) {
-                return message({
-                    variant: 'warning',
-                    description: t('model.duplicateServiceProviderNameValidation')
-                })
+                return toast.show({ type: 'warning', message: String(t('model.duplicateServiceProviderNameValidation') ?? '') })
             }
             const [config, errorKey] = formRef.current.getData();
             if (errorKey) {
-                return message({
-                    variant: 'warning',
-                    description: `${errorKey} ${t('model.notBeEmpty')}`
-                })
+                return toast.show({ type: 'warning', message: String(`${errorKey} ${t('model.notBeEmpty')}`) })
             }
 
             const trimmedModels = trimModelNames(formData.models)
@@ -182,22 +196,13 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                 }
             }
             if (hasInvalidModelName(trimmedModels)) {
-                return message({
-                    variant: 'warning',
-                    description: t('model.modelNameValidation')
-                })
+                return toast.show({ type: 'warning', message: String(t('model.modelNameValidation') ?? '') })
             }
             if (hasDuplicateModelName(trimmedModels)) {
-                return message({
-                    variant: 'warning',
-                    description: t('model.modelDuplicate')
-                })
+                return toast.show({ type: 'warning', message: String(t('model.modelDuplicate') ?? '') })
             }
             if (hasTTSVoiceError) {
-                return message({
-                    variant: 'warning',
-                    description: t('model.voiceTypeRequired')
-                })
+                return toast.show({ type: 'warning', message: String(t('model.voiceTypeRequired') ?? '') })
             }
 
             const saveData = {
@@ -207,19 +212,19 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
             }
 
             if (id === -1) {
-                await captureAndAlertRequestErrorHoc(addLLmServer(saveData).then(res => {
+                await addLLmServer(saveData).then(res => {
                     onAfterSave(res.code === 10803 ? res.msg : t('model.addSuccess'))
                     onBack()
-                }))
+                })
             } else {
-                await captureAndAlertRequestErrorHoc(updateLLmServer(saveData).then(res => {
+                await updateLLmServer(saveData).then(res => {
                     onAfterSave(t('model.updateSuccess'))
                     onBack()
-                }))
+                })
             }
             refetchConfig()
         } catch (error) {
-            console.error('Save error:', error);
+            showApiError(error);
         } finally {
             setIsLoading(false);
         }
@@ -229,15 +234,23 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         bsConfirm({
             desc: t('model.deleteConfirmation'),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteLLmServer(id).then(res => {
-                    onAfterSave(t('model.deleteSuccess'))
-                    refetchConfig()
-                }))
-                onBack()
-                next()
+                return deleteLLmServer(id).then(() => {
+                    onAfterSave(t('model.deleteSuccess'));
+                    refetchConfig();
+                    onBack();
+                    next();
+                });
             }
         })
     }
+
+    const filterProvider = useCallback((keyword: string, option: { value: string | number, label: string }) => {
+        const word = keyword.trim().toLowerCase()
+        if (option.label.toLowerCase().includes(word)) return true
+        if (option.value !== 'openai_compatible') return false
+        const localized = t('model.openaiCompatibleSearchWords').split(',')
+        return [...OPENAI_COMPATIBLE_SEARCH_WORDS, ...localized].some(w => w.trim().toLowerCase().includes(word))
+    }, [t])
 
     const _modelProvider = useMemo(() => {
         return id === -1 ? modelProvider : [...modelProvider, bishengModelProvider]
@@ -245,43 +258,52 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
 
     const providerInfo = useModelProviderInfo(formData.type)
 
-    if (!formData) return <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-        <LoadingIcon />
+    if (detailLoading) return <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+        <Outlined.Loading  className="size-4 animate-spin"/>
     </div>
+
+    if (detailError) return <Alert type="error" live
+        description={detailError instanceof Error ? detailError.message : String(t('api_errors:fallback'))}
+        actions={[{ label: t('retry', { ns: 'knowledge' }), onClick: () => setDetailReload(value => value + 1) }]}
+    />;
 
     return <div className="relative size-full py-4">
         <div className="flex ml-6 items-center gap-x-3">
-            <ShadTooltip content={t('back', { ns: 'bs' })} side="right">
-                <button className="extra-side-bar-buttons w-[36px]" onClick={() => onBack()}>
-                    <ArrowLeft strokeWidth={1.5} className="side-bar-button-size" />
-                </button>
-            </ShadTooltip>
+            <SharedTooltip content={t('back', { ns: 'bs' })} side="right">
+                <SharedButton variant="ghost" size="icon" aria-label={t('back', { ns: 'bs' })} onClick={() => onBack()}>
+                    <Outlined.ArrowLeft />
+                </SharedButton>
+            </SharedTooltip>
             <span>{id === -1 ? t('model.addModel') : t('model.modelConfiguration')}</span>
         </div>
         <div className="mx-auto mt-6 h-[calc(100vh-220px-var(--license-banner-h,0px))] w-full max-w-[720px] overflow-y-auto px-4 pb-10">
             <section className="space-y-4">
-                <h3 className="text-sm font-medium">{t('model.sectionConnection')}</h3>
                 <div className="space-y-2">
-                    <Label className="bisheng-label">
+                    <Label className="bisheng-label inline-flex items-center">
                         <span>{t('model.providerType')}</span>
-                        <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.providerTypeTip')} />
+                        <ModelFieldHint className="ml-1" content={t('model.providerTypeTip')} />
                     </Label>
-                    <Select value={formData.type} disabled={id !== -1} onValueChange={handleTypeChange}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                {_modelProvider.map((model => <SelectItem key={model.value} value={model.value}>{providerLabel(model, t)}</SelectItem>))}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
+                    <Select
+                        {...selectLabels}
+                        aria-label={t('model.providerType')}
+                        disabled={id !== -1}
+                        options={_modelProvider
+                            .filter(model => model.value != null && model.value !== '')
+                            .map(model => ({
+                                value: model.value,
+                                label: providerLabel(model, t),
+                                group: model.group ? t(`model.providerGroups.${model.group}`) : undefined,
+                            }))}
+                        filterOption={filterProvider}
+                        value={formData.type || null}
+                        onChange={(val) => { if (val != null) handleTypeChange(val) }}
+                    />
                 </div>
                 <div className="space-y-2">
-                    <Label className="bisheng-label">
+                    <Label className="bisheng-label inline-flex items-center">
                         <span>{t('model.serviceProviderName')}</span>
                         <span className="text-red-500">*</span>
-                        <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.serviceProviderNameTooltip')} />
+                        <ModelFieldHint className="ml-1" content={t('model.serviceProviderNameTooltip')} />
                     </Label>
                     <Input value={formData.name} onChange={(e) => {
                         const name = e.target.value
@@ -295,6 +317,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     showDefault={id === -1}
                     provider={formData.type}
                     formData={formData.config}
+                    modelTypes={formData.models.map(model => model.model_type)}
                     providerName={providerLabel(_modelProvider.find(el => el.value === formData.type), t)}
                     apiKeySite={providerInfo?.apiKeyUrl}
                 />
@@ -304,30 +327,26 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     <h3 className="text-sm font-medium">{t('model.sectionUsage')}</h3>
                     <div className="space-y-3">
                         <div className="flex items-center justify-between gap-4">
-                            <Label className="bisheng-label">
+                            <Label className="bisheng-label inline-flex items-center">
                                 <span>{t('model.dailyCallLimit')}</span>
-                                <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.dailyCallLimitTip')} />
+                                <ModelFieldHint className="ml-1" content={t('model.dailyCallLimitTip')} />
                             </Label>
                             <Switch checked={formData.limit_flag} onCheckedChange={(val) => setFormData(form => ({ ...form, limit_flag: val }))} />
                         </div>
                         {formData.limit_flag && (
-                            <div className="flex items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
-                                <span>{t('model.dailyLimitPrefix')}</span>
+                            <div className="flex flex-nowrap items-center gap-2 text-sm text-text-3">
                                 <div className="w-28 shrink-0">
-                                    <Input type="number" min={1} value={formData.limit}
-                                        onChange={(e) => setFormData({ ...formData, limit: Number(e.target.value) })}
-                                        className="h-8"
-                                    ></Input>
+                                    <Input type="number" size="medium" min={1} value={formData.limit} aria-label={t('model.dailyCallLimit')} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, { min: 1 })) return; return setFormData({ ...formData, limit: Number(e.target.value) }); }}></Input>
                                 </div>
-                                <span>{t('model.dailyLimitSuffix')}</span>
+                                <span className="shrink-0 whitespace-nowrap">{t('model.timesPerDay')}</span>
                             </div>
                         )}
                     </div>
                     {showShareToggle && (
                         <div className="flex items-center justify-between gap-4">
-                            <Label className="bisheng-label">
+                            <Label className="bisheng-label inline-flex items-center">
                                 <span>{t('model.shareToChildren')}</span>
-                                <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.shareToChildrenTip')} />
+                                <ModelFieldHint className="ml-1" content={t('model.shareToChildrenTip')} />
                             </Label>
                             <Switch
                                 checked={formData.share_to_children}
@@ -356,8 +375,8 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                                 />
                             ))
                         }
-                        <Button className="w-full border-dashed border-border" variant="outline" onClick={handleAddModel}>
-                            <Plus className="size-5 text-primary mr-1" />
+                        <Button className="w-full border-dashed border-border" variant="outlined" onClick={handleAddModel} disabled={(String((formData.limit) ?? '') !== '' && (!Number.isFinite(Number(formData.limit)) || Number(formData.limit) < 1))} color="default">
+                            <Outlined.Plus />
                             <span>{t('model.addModel')}</span>
                         </Button>
                     </div>
@@ -365,16 +384,11 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
             </div>
         </div>
         <div className="absolute right-0 bottom-0 p-4 flex gap-4">
-            {id !== -1 && <Button className="px-8" variant="destructive" onClick={handleModelDel}>{t('model.delete')}</Button>}
-            <Button className="px-8" variant="outline" onClick={() => onBack()}>{t('model.cancel')}</Button>
-            <LoadButton
-                className="px-16"
-                disabled={!formData.type}
-                loading={isLoading}
-                onClick={handleSave}
-            >
-                {isLoading ? t('model.modelStatusChecking') : t('model.save')}
-            </LoadButton>
+            {id !== -1 && <Button variant="outlined" onClick={handleModelDel} color="danger">{t('model.delete')}</Button>}
+            <Button variant="outlined" onClick={() => onBack()} color="default">{t('model.cancel')}</Button>
+            <Button loading={isLoading} onClick={handleSave} disabled={((String((formData.limit) ?? '') !== '' && (!Number.isFinite(Number(formData.limit)) || Number(formData.limit) < 1))) || (Boolean(isLoading) || (!formData.type))}>
+                {t('model.save')}
+            </Button>
         </div>
     </div>
 }

@@ -309,7 +309,7 @@ async def test_tier_and_capabilities_enter_snapshot(publish_db, accepted, fake_o
     assert version.runtime == "python3.11"
     assert version.code_object_key == f"apps/{app_row.id}/versions/{result.version_id}/code.tar.gz"
     assert version.manifest["port"] == 8080
-    assert version.capabilities == {"models": [], "knowledge_bases": [], "secrets": []}
+    assert version.capabilities == {"models": [], "knowledge_bases": []}
 
 
 async def test_capability_declaration_change_audited_each_release(publish_db, accepted, fake_orchestrator, audit_sink):
@@ -319,7 +319,7 @@ async def test_capability_declaration_change_audited_each_release(publish_db, ac
 
     declared = next(call for call in audit_sink if call["action"] == "app.release.capability_declared")
     assert declared["metadata"]["tier_code"] == "light"
-    assert declared["metadata"]["capabilities"] == {"models": [], "knowledge_bases": [], "secrets": []}
+    assert declared["metadata"]["capabilities"] == {"models": [], "knowledge_bases": []}
 
 
 # ---------------------------------------------------------------------------

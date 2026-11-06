@@ -6,7 +6,21 @@ from enum import Enum
 from typing import Union
 
 from pydantic import field_validator
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, and_, case, false, func, null, or_, text, type_coerce
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Integer,
+    String,
+    and_,
+    case,
+    false,
+    func,
+    null,
+    or_,
+    text,
+    type_coerce,
+)
 from sqlmodel import Field, col, select, update
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
@@ -32,13 +46,16 @@ class FlowStatus(Enum):
 
 
 class FlowType(Enum):
-    HOSTED_APP = 35
     ASSISTANT = 5
     WORKFLOW = 10
     WORKSTATION = 15
     LINSIGHT = 20  # Inspiration Mode
     CHANNEL_ARTICLE = 25  # Channel Article AI Assistant
     KNOLEDGE_SPACE = 30
+    # F054: hosted application. Only a *type tag* for the shared list pipeline —
+    # the row lives in ``app``, not in ``flow`` (design D8). 35 is the next free
+    # value; 5/10/15/20/25/30 are taken.
+    HOSTED_APP = 35
 
 
 class AppEnum(Enum):
@@ -502,6 +519,30 @@ class FlowDao(FlowBase):
             data.append(cls._app_row_to_dict(one))
         return data, total
 
+    @staticmethod
+    def _app_row_to_dict(one) -> dict:
+        """Map one UNION row to the list payload.
+
+        ``app_state`` is attached **only to hosted-application rows**. Workflows
+        and assistants keep the exact payload they had before F054 — a null
+        ``app_state`` on every card would be a new field in a response two
+        front-ends already parse, for no reader (AC-59).
+        """
+        item = {
+            "id": one[0],
+            "name": one[1],
+            "description": one[2],
+            "flow_type": one[3],
+            "logo": one[4],
+            "user_id": one[5],
+            "status": one[6],
+            "create_time": one[7],
+            "update_time": one[8],
+        }
+        if one[3] == FlowType.HOSTED_APP.value:
+            item["app_state"] = one[9]
+        return item
+
     @classmethod
     async def aget_all_apps(
         cls,
@@ -669,6 +710,22 @@ class FlowDao(FlowBase):
                 item["_sort_time"] = one[11]
             data.append(item)
         return data, has_more
+
+    @classmethod
+    def _build_status_clause(cls, sub_query, *, status: int, status_exempt_flow_types: set[int] | None = None):
+        """The outer ``status`` predicate, with an optional per-type exemption (F056 design D9).
+
+        The square must keep listing stopped hosted applications: hiding them
+        reads as "you lost access" rather than "this app is paused" (决议-5).
+        Their ``status`` projection is 1 (offline), so the square exempts
+        ``flow_type = 35`` from the equality instead of changing the
+        projection — folding "stopped" into 2 would silently break the build
+        page's online/offline filter, which reads the same column.
+        """
+        clause = sub_query.c.status == status
+        if status_exempt_flow_types:
+            clause = or_(clause, sub_query.c.flow_type.in_(sorted(status_exempt_flow_types)))
+        return clause
 
     @classmethod
     def _build_apps_subquery(cls, *, app_state_in: set[str] | None = None):
@@ -946,43 +1003,3 @@ class FlowDao(FlowBase):
                     }
                 )
             return data[0] if data else None
-
-    @classmethod
-    def _build_status_clause(cls, sub_query, *, status: int, status_exempt_flow_types: set[int] | None = None):
-        """The outer ``status`` predicate, with an optional per-type exemption (F056 design D9).
-
-        The square must keep listing stopped hosted applications: hiding them
-        reads as "you lost access" rather than "this app is paused" (决议-5).
-        Their ``status`` projection is 1 (offline), so the square exempts
-        ``flow_type = 35`` from the equality instead of changing the
-        projection — folding "stopped" into 2 would silently break the build
-        page's online/offline filter, which reads the same column.
-        """
-        clause = sub_query.c.status == status
-        if status_exempt_flow_types:
-            clause = or_(clause, sub_query.c.flow_type.in_(sorted(status_exempt_flow_types)))
-        return clause
-
-    @staticmethod
-    def _app_row_to_dict(one) -> dict:
-        """Map one UNION row to the list payload.
-
-        ``app_state`` is attached **only to hosted-application rows**. Workflows
-        and assistants keep the exact payload they had before F054 — a null
-        ``app_state`` on every card would be a new field in a response two
-        front-ends already parse, for no reader (AC-59).
-        """
-        item = {
-            "id": one[0],
-            "name": one[1],
-            "description": one[2],
-            "flow_type": one[3],
-            "logo": one[4],
-            "user_id": one[5],
-            "status": one[6],
-            "create_time": one[7],
-            "update_time": one[8],
-        }
-        if one[3] == FlowType.HOSTED_APP.value:
-            item["app_state"] = one[9]
-        return item

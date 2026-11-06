@@ -70,12 +70,10 @@ class TestVersions:
         assert [row["version_no"] for row in rows] == [2, 1]
         assert body["data"]["total"] == 2
         assert set(rows[0]) == {
-            "release_notes",
             "version_id",
             "version_no",
             "kind",
             "terminal_state",
-            "deployment_status",
             "submitted_at",
             "is_current",
             "is_pending",

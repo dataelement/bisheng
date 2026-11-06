@@ -1,14 +1,17 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button";
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Button, Input } from '@bisheng/ui';
+
 import { Calendar } from "@/components/bs-ui/calendar";
-import { Checkbox } from "@/components/bs-ui/checkBox";
-import { Input } from "@/components/bs-ui/input";
+
 import { Label } from "@/components/bs-ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
+import { Popover,PopoverContent,PopoverTrigger } from "@/components/bs-ui/popover";
 import { cn } from "@/utils";
-import { endOfDay, endOfMonth, format, getHours, getMonth, getYear, setHours, startOfDay, startOfMonth, subDays } from "date-fns";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Checkbox } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+import { endOfDay,endOfMonth,format,getHours,getMonth,getYear,setHours,startOfDay,startOfMonth,subDays } from "date-fns";
+
+import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
 
 // --- Type Definitions ---
@@ -62,18 +65,13 @@ const MonthPicker = ({
   return (
     <div className="p-3">
       <div className="flex items-center justify-between mb-4">
-        <Button variant="outline" size="icon" onClick={() => setYearState(year - 1)} className="h-7 w-7"><ChevronLeft className="h-4 w-4" /></Button>
+        <Button variant="outlined" size="medium" onClick={() => setYearState(year - 1)} className="h-7 w-7" color="default" iconOnly><Outlined.Left className="h-4 w-4" /></Button>
         <span className="font-semibold">{year}{t('yearUnit')}</span>
-        <Button variant="outline" size="icon" onClick={() => setYearState(year + 1)} className="h-7 w-7"><ChevronRight className="h-4 w-4" /></Button>
+        <Button variant="outlined" size="medium" onClick={() => setYearState(year + 1)} className="h-7 w-7" color="default" iconOnly><Outlined.Right className="h-4 w-4" /></Button>
       </div>
       <div className="grid grid-cols-3 gap-2">
         {months.map((m) => (
-          <Button
-            key={m}
-            variant={isSelected(m) ? "default" : "outline"}
-            className={cn("h-9", isSelected(m) && "bg-primary text-primary-foreground")}
-            onClick={() => onSelect(new Date(year, m, 1))}
-          >
+          <Button key={m} variant={isSelected(m) ? "default" : "outline"} className={cn("h-9", isSelected(m) && "bg-primary text-primary-foreground")} onClick={() => onSelect(new Date(year, m, 1))}>
             {m + 1}{t('monthUnit')}
           </Button>
         ))}
@@ -145,7 +143,7 @@ export function AdvancedDatePicker({
     }
   }, [value]);
 
-  // When the pop-up window opens, if it is in dynamic mode, automatically refresh the time range 
+  // When the pop-up window opens, if it is in dynamic mode, automatically refresh the time range
   useEffect(() => {
     if (open && value?.isDynamic && value?.shortcutKey) {
       applyDynamicShortcut(value.shortcutKey);
@@ -169,6 +167,8 @@ export function AdvancedDatePicker({
   };
 
   const handleConfirm = () => {
+        if ((String((startHour) ?? '') !== '' && (!Number.isFinite(Number(startHour)) || Number(startHour) < 0 || Number(startHour) > 23)) || (String((endHour) ?? '') !== '' && (!Number.isFinite(Number(endHour)) || Number(endHour) < 0 || Number(endHour) > 23))) return;
+
     if (!dateRange?.from) return setOpen(false);
 
     let finalStart = new Date(dateRange.from);
@@ -250,15 +250,12 @@ export function AdvancedDatePicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant={"outline"}
-          className={cn(
+        <Button variant={"outline"} className={cn(
             "w-92 flex-1 justify-start text-left font-normal",
             value ? "text-prompt-description" : "text-muted-foreground",
             isDark && "dark:text-gray-200"
-          )}
-        >
-          <CalendarIcon className="mr-2 h-4 w-4" />
+          )}>
+          <Outlined.Calendar className="mr-2 h-4 w-4" />
           {getDisplayValue() || placeholder}
         </Button>
       </PopoverTrigger>
@@ -269,8 +266,8 @@ export function AdvancedDatePicker({
           <div className="flex">
             {granularity === "month" ? (
               <div className="flex flex-row gap-2 p-2">
-                {/* Simplified Month Selection: 
-                   First click selects 'from', second click selects 'to'. 
+                {/* Simplified Month Selection:
+                   First click selects 'from', second click selects 'to'.
                 */}
                 <MonthPicker
                   mode={mode}
@@ -320,31 +317,15 @@ export function AdvancedDatePicker({
             <div className="flex justify-between items-center px-3 mb-3">
               <div className="flex items-center gap-2">
                 <Label className="text-xs text-muted-foreground break-keep">{t('startHour')}</Label>
-                <Input
-                  type="number"
-                  min={0} max={23}
-                  className="w-16 h-6"
-                  value={startHour}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value);
-                    if (!isNaN(v) && v >= 0 && v <= 23) setStartHour(v);
-                  }}
-                />
+                <Input type="number" min={0} max={23} value={startHour} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, { min: 0, max: 23 })) return; const v = parseInt(e.target.value);
+if (!isNaN(v) && v >= 0 && v <= 23) setStartHour(v); }} className={"w-16 h-6"} />
               </div>
 
               {mode === "range" && (
                 <div className="flex items-center gap-2">
                   <Label className="text-xs text-muted-foreground break-keep">{t('endHour')}</Label>
-                  <Input
-                    type="number"
-                    min={0} max={23}
-                    className="w-16 h-6"
-                    value={endHour}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value);
-                      if (!isNaN(v) && v >= 0 && v <= 23) setEndHour(v);
-                    }}
-                  />
+                  <Input type="number" min={0} max={23} value={endHour} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, { min: 0, max: 23 })) return; const v = parseInt(e.target.value);
+if (!isNaN(v) && v >= 0 && v <= 23) setEndHour(v); }} className={"w-16 h-6"} />
                 </div>
               )}
             </div>
@@ -355,13 +336,7 @@ export function AdvancedDatePicker({
             <div className="px-3 mb-3">
               <div className="flex flex-wrap gap-2">
                 {shortcuts.map((sc) => (
-                  <Button
-                    key={sc.key}
-                    variant={selectedShortcut === sc.key ? "default" : "outline"}
-                    size="sm"
-                    className="h-6 text-xs"
-                    onClick={() => handleShortcutClick(sc.days, sc.key)}
-                  >
+                  <Button key={sc.key} variant={selectedShortcut === sc.key ? "default" : "outline"} size="small" className="h-6 text-xs" onClick={() => handleShortcutClick(sc.days, sc.key)}>
                     {sc.label}
                   </Button>
                 ))}
@@ -384,8 +359,8 @@ export function AdvancedDatePicker({
 
           {/* Footer Action */}
           <div className="flex justify-end gap-2 px-3 mb-3">
-            <Button className="h-6" variant="ghost" size="sm" onClick={handleClear}>{t('clear')}</Button>
-            <Button className="h-6" size="sm" onClick={handleConfirm}>{t('confirm')}</Button>
+            <Button variant="text" size="small" onClick={handleClear} color="default">{t('clear')}</Button>
+            <Button size="small" onClick={handleConfirm} disabled={(String((startHour) ?? '') !== '' && (!Number.isFinite(Number(startHour)) || Number(startHour) < 0 || Number(startHour) > 23)) || (String((endHour) ?? '') !== '' && (!Number.isFinite(Number(endHour)) || Number(endHour) < 0 || Number(endHour) > 23))}>{t('confirm')}</Button>
           </div>
 
         </div>

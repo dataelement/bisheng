@@ -21,12 +21,12 @@ async def test_catalog_rechecks_each_person_and_keeps_cursor_across_denied_rows(
     repo = SimpleNamespace(page=AsyncMock(return_value=(rows, "next-page")))
     check = AsyncMock(side_effect=lambda user, **target: user.user_id == 10 and target["resource_id"] == "allowed")
     monkeypatch.setattr(module, "check_action", check)
-    result = await module.hosted_app_page(actor, repo, after="previous-page")
+    result = await module.workbench_page(actor, repo, after="previous-page")
     assert [item["id"] for item in result["items"]] == ["allowed"]
     assert result["next_cursor"] == "next-page"
     assert result["items"][0]["entry_path"] == "/apps/allowed/"
     assert [call.kwargs["action"] for call in check.await_args_list] == ["use", "use"]
-    assert not (await module.hosted_app_page(SimpleNamespace(user_id=11, tenant_id=2), repo))["items"]
+    assert not (await module.workbench_page(SimpleNamespace(user_id=11, tenant_id=2), repo))["items"]
     repo.page.assert_any_await(after="previous-page")
 
 

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ToolPayload(BaseModel):
@@ -17,6 +17,27 @@ class UseKnowledgeBaseParam(BaseModel):
     personal_knowledge_enabled: bool | None = False
     organization_knowledge_ids: list[int] | None = []
     knowledge_space_ids: list[int] | None = []
+    knowledge_space_tag_filters: dict[Annotated[int, Field(gt=0)], Annotated[int, Field(strict=True, gt=0)]] = Field(
+        default_factory=dict
+    )
+
+    @field_validator("knowledge_space_tag_filters", mode="before")
+    @classmethod
+    def validate_space_tag_filter_keys(cls, value: Any):
+        if value is None:
+            return {}
+        if isinstance(value, dict) and any(
+            isinstance(key, bool) or not (isinstance(key, int) or (isinstance(key, str) and key.isdecimal()))
+            for key in value
+        ):
+            raise ValueError("Knowledge space ids must be positive integers")
+        return value
+
+    @model_validator(mode="after")
+    def validate_selected_space_tag_filters(self):
+        if not set(self.knowledge_space_tag_filters).issubset(self.knowledge_space_ids or []):
+            raise ValueError("Tag filters must belong to selected knowledge spaces")
+        return self
 
     @field_validator("organization_knowledge_ids", mode="before")
     @classmethod
@@ -45,6 +66,7 @@ class APIChatCompletion(BaseModel):
     tools: list[ToolPayload] | None = None
     task_mode: bool | None = False
     skills: list[str] | None = None
+    skill_ids: list[int] | None = None
     use_knowledge_base: UseKnowledgeBaseParam | None = None
     files: list[dict] | None = None
     search_enabled: bool | None = False
@@ -58,4 +80,3 @@ class APIChatCompletion(BaseModel):
         if value is None or isinstance(value, str):
             return value
         return str(value)
-

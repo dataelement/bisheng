@@ -12,7 +12,6 @@ export * from './Messages';
 export * from './Plugins';
 export * from './Prompts';
 export * from './Roles';
-export * from './SSE';
 
 export * from './AuthContext';
 export * from './ThemeContext';
@@ -41,3 +40,4 @@ export { default as useTextToSpeech } from './Input/useTextToSpeech';
 export { default as useGenerationsByLatest } from './useGenerationsByLatest';
 export { default as useDocumentTitle } from './useDocumentTitle';
 export { useVersionManagementEnabled } from './useVersionManagementEnabled';
+export { useAppRuntimeEnabled, useBishengEnvQuery, BISHENG_ENV_QUERY_KEY } from './useAppRuntimeEnabled';

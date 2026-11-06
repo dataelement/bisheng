@@ -1,8 +1,9 @@
+import { SubjectSelectionSummary } from "./SubjectSelectionSummary";
 import { Button, Radio, RadioGroup } from "@bisheng/ui";
 import type { ComponentProps } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { ResourceType, SelectedSubject, SubjectType } from "~/api/permission";
-import { Checkbox } from "~/components/ui/Checkbox";
+import { Checkbox } from '@bisheng/ui';
 import {
   Dialog,
   DialogContent,
@@ -38,6 +39,7 @@ export interface PermissionDraftPickerDialogProps {
   resourceType: ResourceType;
   resourceId?: string;
   disabledIds: Record<SubjectType, number[]>;
+  disabledDepartmentSubtreeRootIds?: number[];
   relationModels: RelationModelOption[];
   canAddNonUserSubjects: boolean;
   onConfirm: (rows: PermissionDraftRow[]) => void;
@@ -51,6 +53,7 @@ export function PermissionDraftPickerDialog({
   resourceType,
   resourceId,
   disabledIds,
+  disabledDepartmentSubtreeRootIds = [],
   relationModels,
   canAddNonUserSubjects,
   onConfirm,
@@ -77,9 +80,6 @@ export function PermissionDraftPickerDialog({
 
   const handleSubjectTypeChange = (value: string) => {
     setSubjectType(value as SubjectType);
-    setSubjects([]);
-    setIncludeChildren(true);
-    setSelectedModelId("");
   };
 
   const handleConfirm = () => {
@@ -88,6 +88,8 @@ export function PermissionDraftPickerDialog({
       subjectType: subject.type,
       subjectId: subject.id,
       subjectName: subject.name,
+      externalId: subject.externalId,
+      departmentPath: subject.departmentPath,
       modelKey: activeModel.id,
       modelName: activeModel.name,
       modelLevel: activeModel.level,
@@ -140,7 +142,7 @@ export function PermissionDraftPickerDialog({
             {subjectType === "department" && (
               <label className={INCLUDE_CHILDREN_LABEL_CLASS}>
                 <Checkbox
-                  className={INCLUDE_CHILDREN_CHECKBOX_CLASS}
+                  className={`peer ${(INCLUDE_CHILDREN_CHECKBOX_CLASS) || ''}`}
                   checked={includeChildren}
                   onCheckedChange={(checked) => setIncludeChildren(checked === true)}
                 />
@@ -158,6 +160,7 @@ export function PermissionDraftPickerDialog({
               <SubjectSearchDepartment
                 {...searchProps}
                 includeChildren={includeChildren}
+                disabledSubtreeRootIds={disabledDepartmentSubtreeRootIds}
                 departmentChildrenApi={searchApi?.departmentChildrenApi}
                 departmentSearchApi={searchApi?.departmentSearchApi}
               />
@@ -166,6 +169,7 @@ export function PermissionDraftPickerDialog({
               <SubjectSearchUserGroup {...searchProps} userGroupsApi={searchApi?.userGroupsApi} />
             )}
           </div>
+          <SubjectSelectionSummary subjects={subjects} />
         </div>
         {/* Mobile stacks the relation picker above a full-width action pair, with
             the divider directly above the buttons — matching the resource grant
@@ -181,6 +185,7 @@ export function PermissionDraftPickerDialog({
               options={selectableModels}
               disabled={selectableModels.length === 0}
               className="w-[132px]"
+              aria-label={localize("com_permission.uniform_grant")}
             />
           </div>
           <div

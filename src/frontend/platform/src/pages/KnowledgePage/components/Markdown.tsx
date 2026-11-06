@@ -1,7 +1,7 @@
 // @ts-strict-ignore
 import { Label } from "@/components/bs-ui/label";
-import { Switch } from "@/components/bs-ui/switch";
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { Switch } from "@bisheng/ui";
+import { forwardRef,useEffect,useImperativeHandle,useRef,useState } from "react";
 import AceEditor from "react-ace";
 import { useTranslation } from "react-i18next";
 import Vditor from 'vditor';

@@ -1,17 +1,25 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button";
-import { Input } from "@/components/bs-ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import Tip from "@/components/bs-ui/tooltip/tip";
-import { updateVariableNameByCode } from "@/util/flowUtils";
-import { ChevronDown, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Button, Input, Select } from '@bisheng/ui';
+
+
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import { FlowTooltip as Tip } from "@/pages/BuildPage/flow/FlowTooltip";
+import { findInvalidRefItems, updateVariableNameByCode } from "@/util/flowUtils";
+import { Outlined } from "bisheng-icons";
+
+import { useEffect,useState } from "react";
 import { useTranslation } from 'react-i18next';
+import useFlowStore from "../../flowStore";
 import { useUpdateVariableState } from "../flowNodeStore";
 import SelectVar from "./SelectVar";
 
-const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteItem }) => {
+const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteItem, refInvalid = false }) => {
     const { t } = useTranslation('flow');
+    const selectLabels = useSelectLabels();
+    const typeOptions = [
+        { value: 'ref', label: t('reference') },
+        { value: 'input', label: t('input') },
+    ];
 
     const handleTypeChange = (newType) => {
         onUpdateItem(index, { ...item, type: newType, label: '', value: '' });
@@ -42,37 +50,39 @@ const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteIt
             <Input value={item.key} placeholder={t('parameterName')} onChange={handleKeyChange} className={`${(error || sameKey === item.key) && 'border-red-500'} h-8`} />
             {/* type */}
 
-            <Select value={item.type} onValueChange={handleTypeChange}>
-                <SelectTrigger className="max-w-32 w-24 h-8">
-                    <SelectValue placeholder={t('type')} />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectGroup>
-                        <SelectItem value="ref">{t('reference')}</SelectItem>
-                        <SelectItem value="input">{t('input')}</SelectItem>
-                    </SelectGroup>
-                </SelectContent>
-            </Select>
+            <Select
+                {...selectLabels}
+                options={typeOptions}
+                value={item.type || null}
+                onChange={(v) => {
+                    // Re-picking the current type is a no-op (Radix never fired for it).
+                    const next = v == null ? '' : String(v);
+                    if (next !== item.type) handleTypeChange(next);
+                }}
+                placeholder={t('type')}
+                aria-label={t('type')}
+                className="nodrag w-24 shrink-0"
+            />
             {/* value */}
             {item.type === 'ref' ? <SelectVar nodeId={nodeId} itemKey={''} onSelect={(E, v) => {
                 onUpdateItem(index, { ...item, label: `${E.name}/${v.label}`, value: `${E.id}.${v.value}` })
             }}>
                 <Tip content={item.label} side="top">
-                    <div className="no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400">
+                    <div className={`no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border ${refInvalid ? 'border-red-500' : 'border-input'} bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}>
                         {item.label ? <span className="flex items-center">
                             {item.label}
                         </span> : <span className="bisheng-label">{t('value')}</span>}
-                        <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
+                        <Outlined.Down className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
                     </div>
                 </Tip>
-            </SelectVar> : <Input value={item.value} placeholder={t('value')} onChange={handleValueChange} className="h-8" />}
-            <Trash2 onClick={() => onDeleteItem(index)} className="min-w-5 hover:text-red-600 cursor-pointer" />
+            </SelectVar> : <Input value={item.value} placeholder={t('value')} onChange={handleValueChange} className={"h-8"} />}
+            <Outlined.Delete size={16} onClick={() => onDeleteItem(index)} className="min-w-5 hover:text-red-600 cursor-pointer" />
         </div>
     );
 };
 
 
-export default function CodeInputItem({ nodeId, data: paramItem, onValidate, onChange, i18nPrefix }) {
+export default function CodeInputItem({ nodeId, data: paramItem, onValidate, onVarEvent = undefined, onChange, i18nPrefix }) {
     const { t } = useTranslation('flow');
     const [items, setItems] = useState(paramItem.value);
 
@@ -84,12 +94,14 @@ export default function CodeInputItem({ nodeId, data: paramItem, onValidate, onC
     };
 
     const handleUpdateItem = (index, newItem) => {
+        setInvalidIndexes([])
         const newItems = items.map((item, i) => (i === index ? newItem : item));
         setItems(newItems);
         onChange(newItems);
     };
 
     const handleDeleteItem = (index) => {
+        setInvalidIndexes([])
         const newItems = items.filter((_, i) => i !== index);
         setItems(newItems);
         onChange(newItems);
@@ -131,7 +143,20 @@ export default function CodeInputItem({ nodeId, data: paramItem, onValidate, onC
         return () => onValidate(() => { })
     }, [paramItem.value])
 
-    // Update Preset Questions 
+    // Referenced variables must still exist when the flow runs
+    const { flow } = useFlowStore();
+    const [invalidIndexes, setInvalidIndexes] = useState<number[]>([])
+    useEffect(() => {
+        if (!onVarEvent) return
+        onVarEvent(() => {
+            const { error, indexes } = findInvalidRefItems(nodeId, flow.nodes, paramItem.value)
+            setInvalidIndexes(indexes)
+            return Promise.resolve(error)
+        })
+        return () => onVarEvent(() => { })
+    }, [nodeId, onVarEvent, paramItem, items, flow])
+
+    // Update Preset Questions
     // const [_, forceUpdate] = useState(false)
     const [updateVariable] = useUpdateVariableState()
     useEffect(() => {
@@ -162,9 +187,10 @@ export default function CodeInputItem({ nodeId, data: paramItem, onValidate, onC
                     index={index}
                     onUpdateItem={handleUpdateItem}
                     onDeleteItem={handleDeleteItem}
+                    refInvalid={invalidIndexes.includes(index)}
                 />
             ))}
-            <Button onClick={handleAddItem} variant="outline" className="border-primary text-primary mt-2 h-8">
+            <Button onClick={handleAddItem} variant="outlined" className="border-primary text-primary mt-2 h-8" color="default">
                 {t('addNewParameter')}
             </Button>
         </div>

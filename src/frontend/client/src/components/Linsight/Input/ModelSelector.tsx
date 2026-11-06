@@ -6,11 +6,13 @@
  * falling back to the first option when absent. The picked id is sent as the
  * `model` field of the task submission.
  */
+import { Select } from '@bisheng/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 import { getLinsightModelConfig } from '~/api/linsight';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
+import { useLocalize } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
+import useSelectCopy from '~/hooks/useSelectCopy';
 
 interface ModelSelectorProps {
     value: string;
@@ -19,6 +21,8 @@ interface ModelSelectorProps {
 }
 
 export function ModelSelector({ value, disabled = false, onChange }: ModelSelectorProps) {
+    const localize = useLocalize();
+    const selectCopy = useSelectCopy();
     const { data: bsConfig } = useGetBsConfig();
     const { data: linsightModelCfg } = useQuery({
         queryKey: ['linsightModelConfig'],
@@ -33,10 +37,9 @@ export function ModelSelector({ value, disabled = false, onChange }: ModelSelect
         const models = (bsConfig as any)?.models || [];
         const seen = new Set<string>();
         return models.filter((opt: any) => {
-            // Radix <SelectItem> throws when its value is an empty string.
             // A stale / mis-configured workbench model can carry a blank id
-            // (older backends don't sanitize it out), so drop those here —
-            // never render <SelectItem value="">, which crashes the page.
+            // (older backends don't sanitize it out); an option without a
+            // usable value can never be picked, so drop those here.
             if (opt?.id == null || String(opt.id) === "") return false;
             const id = String(opt.id);
             if (seen.has(id)) return false;
@@ -61,37 +64,29 @@ export function ModelSelector({ value, disabled = false, onChange }: ModelSelect
         if (!valid) onChange(defaultId);
     }, [defaultId, value, options, onChange]);
 
-    const label = useMemo(() => {
-        const current = options.find((opt: any) => String(opt.id) === String(value));
-        return current?.displayName ?? current?.name ?? '';
-    }, [options, value]);
+    const selectOptions = useMemo(
+        () =>
+            options.map((opt) => ({
+                value: String(opt.id),
+                label: opt.displayName ?? opt.name,
+                description: opt.description || undefined,
+            })),
+        [options],
+    );
 
     if (options.length === 0) return null;
 
     return (
-        <Select value={String(value)} disabled={disabled} onValueChange={onChange}>
-            <SelectTrigger className="h-8 w-auto min-w-0 max-w-[min(40vw,220px)] max-md:max-w-[min(40vw,140px)] gap-1 overflow-hidden border-none bg-transparent px-2 text-text-2 shadow-none outline-none hover:bg-black/5 focus:ring-0">
-                <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-normal">
-                    {label}
-                </span>
-            </SelectTrigger>
-            <SelectContent className="bg-white max-w-[240px]">
-                {options.map((opt: any) => (
-                    <SelectItem key={String(opt.id)} value={String(opt.id)} textValue={opt.displayName ?? opt.name}>
-                        <div className="flex min-w-0 items-center py-0.5">
-                            <span className="shrink-0">{opt.displayName ?? opt.name}</span>
-                            {opt.description && (
-                                <>
-                                    <span className="mx-1.5 h-3 w-px shrink-0 bg-fill-3" />
-                                    <span className="min-w-0 truncate text-xs font-normal text-text-3">
-                                        {opt.description}
-                                    </span>
-                                </>
-                            )}
-                        </div>
-                    </SelectItem>
-                ))}
-            </SelectContent>
-        </Select>
+        <Select
+            {...selectCopy}
+            variant="ghost"
+            options={selectOptions}
+            value={value ? String(value) : null}
+            disabled={disabled}
+            onChange={(next) => next != null && onChange(String(next))}
+            aria-label={localize('com_ui_select_model')}
+            className="min-w-0 max-w-[min(40vw,220px)] max-md:max-w-[min(40vw,140px)]"
+            panelClassName="max-w-[240px]"
+        />
     );
 }

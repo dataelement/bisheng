@@ -177,6 +177,7 @@ export function TaskModeChatInput({ conversationId = 'new' }: TaskModeChatInputP
                 // Model selector value rides along with the submission (F035).
                 model,
                 skills: skills.map((s) => s.name),
+                skill_ids: skills.flatMap((s) => (typeof s.id === 'number' ? [s.id] : [])),
                 enableWebSearch: false,
                 useKnowledgeBase: context.knowledge.length > 0,
                 // New session on the landing page.

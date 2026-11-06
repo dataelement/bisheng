@@ -335,7 +335,7 @@ async def test_local_executor_binds_task_workspace(monkeypatch, tmp_path, execut
     assert tools[0].executor.local_sync_path == str(tmp_path)
     assert tools[0].executor.workspace_prefix == "workspace/SV-1"
     assert init_one.await_args.kwargs["tool"].extra["config"] == {
-        "local": {"local_sync_path": str(tmp_path), "workspace_prefix": "workspace/SV-1"}
+        "local": {"local_sync_path": str(tmp_path), "workspace_prefix": "workspace/SV-1", "keep_run_dir": True}
     }
     assert category.extra == extra
     if 100 in selected:
@@ -372,6 +372,7 @@ async def test_local_workspace_binding_preserves_admin_options(monkeypatch, tmp_
         "local": {
             "local_sync_path": str(tmp_path),
             "workspace_prefix": "workspace/current",
+            "keep_run_dir": True,
             "timeout": 90,
         }
     }
@@ -408,6 +409,10 @@ def test_task_metadata_uses_host_runner_credentials(monkeypatch, tmp_path):
             get_minio_conf=settings.get_minio_conf,
         ),
     )
+    monkeypatch.setattr(
+        "bisheng_langchain.gpts.tools.code_interpreter.factory.load_sandbox_conf",
+        lambda: SandboxConf(endpoints=["http://trusted:8080"], token="host-only"),
+    )
     row = GptsTools(
         tool_key="bisheng_code_interpreter",
         extra={
@@ -424,3 +429,30 @@ def test_task_metadata_uses_host_runner_credentials(monkeypatch, tmp_path):
     tool = ToolExecutor._init_preset_tool(row, SimpleNamespace(extra=None))
     assert tool.executor.endpoints == ["http://trusted:8080"]
     assert tool.executor.token == "host-only"
+
+
+async def test_image_view_config_row_is_not_initialized(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    """A saved Image View selection is skipped. Loading it as a tool aborts the task."""
+    image_view_id = 39
+
+    async def by_key(tool_key: str):
+        if tool_key == "image_view":
+            return SimpleNamespace(id=image_view_id, tool_key="image_view")
+        return _fake_code_tool_row()
+
+    monkeypatch.setattr(GptsToolsDao, "aget_tool_by_tool_key", by_key)
+    init_one = AsyncMock(return_value=object())
+    monkeypatch.setattr(ToolExecutor, "init_by_tool_id", init_one)
+    init_many = AsyncMock(return_value=[object()])
+    monkeypatch.setattr(ToolExecutor, "init_by_tool_ids", init_many)
+
+    tools = await LinsightWorkbenchImpl.init_linsight_config_tools(
+        session_version=_session_with_tools([100, image_view_id]),
+        llm=object(),
+        need_upload=True,
+        file_dir=str(tmp_path),
+    )
+
+    init_one.assert_awaited_once()
+    assert init_many.await_args.args[0] == [100]
+    assert len(tools) == 2

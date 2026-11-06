@@ -1,0 +1,2 @@
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+PASS pre-import rollback restored old service, current101 + pending102 unchanged, SDK0.1.1 CRUD

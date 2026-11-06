@@ -1,40 +1,39 @@
 // @ts-strict-ignore
-import i18next from "i18next"
-import { useEffect, useContext } from "react"
-import { locationContext } from "../../../contexts/locationContext"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { useTranslation } from "react-i18next"
-import { getOfficeTokenApi } from "@/controllers/API/flow"
-import { getOfficeReachableUrl } from "@/utils/officeUrl"
+import { notification } from '@bisheng/ui';
+
+import { getOfficeTokenApi } from "@/controllers/API/flow";
+import { getOfficeReachableUrl } from "@/utils/officeUrl";
+import i18next from "i18next";
+import { useContext, useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { locationContext } from "../../../contexts/locationContext";
 
 export default function Word({ data, workflow }) {
-    const { appConfig } = useContext(locationContext)
-    const { t } = useTranslation('flow')
+    const { appConfig } = useContext(locationContext);
+    const { t } = useTranslation("flow");
 
-    const wordUrl = appConfig.officeUrl
+    const wordUrl = appConfig.officeUrl;
     // The document server POSTs this callback itself — in local dev override the
     // origin via VITE_OFFICE_PUBLIC_ORIGIN (see utils/officeUrl).
-    const backUrl = getOfficeReachableUrl(
-        workflow ? '/api/v1/workflow/report/callback' : '/api/v1/report/callback'
-    )
+    const backUrl = getOfficeReachableUrl(workflow ? "/api/v1/workflow/report/callback" : "/api/v1/report/callback");
 
     const editorConfig = {
         // Editor width
-        width: '100%',
+        width: "100%",
         // Editor height
-        height: '100%',
+        height: "100%",
         // Editor type: word (document), cell (spreadsheet), slide (PPT)
-        documentType: 'word',
+        documentType: "word",
         // Document config
         document: {
-            // File type  
-            fileType: 'docx',
+            // File type
+            fileType: "docx",
             // Document identifier
             key: data.key,
             // Document URL, absolute path
             url: data.path,
             // Document title
-            title: 'bisheng.docx',
+            title: "bisheng.docx",
             permissions: {
                 changeHistory: true,
                 comment: true,
@@ -44,12 +43,12 @@ export default function Word({ data, workflow }) {
                 print: true,
                 reader: true,
                 rename: false,
-                review: true
-            }
+                review: true,
+            },
         },
         editorConfig: {
             callbackUrl: backUrl,
-            lang: i18next.language === 'zh-Hans' ? "zh-CN" : 'en',
+            lang: i18next.language === "zh-Hans" ? "zh-CN" : "en",
             mode: "edit",
             customization: {
                 anonymous: { request: false, label: "" },
@@ -65,76 +64,71 @@ export default function Word({ data, workflow }) {
                 unit: "cm",
                 uiTheme: "theme-dark",
                 logo: {
-                    "image": location.origin + __APP_ENV__.BASE_URL + "/assets/bisheng/logo.jpeg",
-                    "imageDark": location.origin + __APP_ENV__.BASE_URL + "/assets/bisheng/logo.jpeg",
-                    "url": "https://example.com"
-                }
+                    image: location.origin + __APP_ENV__.BASE_URL + "/assets/bisheng/logo.jpeg",
+                    imageDark: location.origin + __APP_ENV__.BASE_URL + "/assets/bisheng/logo.jpeg",
+                    url: "https://example.com",
+                },
             },
             plugins: {
-                autostart: ['asc.{D2A0F3BE-CC8D-4956-BCD9-6CBEA6E8960E}']
+                autostart: ["asc.{D2A0F3BE-CC8D-4956-BCD9-6CBEA6E8960E}"],
                 // pluginsData: ['ommon-plugins/config.json']
             },
             user: {
                 group: "Group1",
                 id: "001",
-                name: ""
-            }
-        }
-    }
-
+                name: "",
+            },
+        },
+    };
 
     const createEditor = (config) => {
-        window.editor = new window.DocsAPI.DocEditor('bsoffice', config)
-    }
+        window.editor = new window.DocsAPI.DocEditor("bsoffice", config);
+    };
 
     // Sign editorConfig with JWT and then create editor
     const initEditor = async () => {
-        const finalConfig = { ...editorConfig }
+        const finalConfig = { ...editorConfig };
         try {
-            const res = await getOfficeTokenApi(editorConfig)
+            const res = await getOfficeTokenApi(editorConfig);
             if (res.token) {
-                finalConfig.token = res.token
+                finalConfig.token = res.token;
             }
         } catch (e) {
             // If token request fails, proceed without token (for non-JWT setups)
-            console.warn('Failed to get OnlyOffice JWT token, proceeding without it:', e)
+            console.warn("Failed to get OnlyOffice JWT token, proceeding without it:", e);
         }
-        createEditor(finalConfig)
-    }
+        createEditor(finalConfig);
+    };
 
-    const { toast } = useToast()
+
     useEffect(() => {
         if (window.DocsAPI) {
-            initEditor()
+            initEditor();
         } else {
             if (!wordUrl) {
-                toast({
-                    variant: 'error',
-                    title: t('wordEditorLoadFailed'), // 'word编辑器加载失败',
-                    description: t('checkOfficeServiceConfig') // '请检查Office服务地址配置是否正确并正常启动.'
-                })
+                notification.open({ type: "error", title: String(t("wordEditorLoadFailed") ?? ''), description: String(t("checkOfficeServiceConfig") ?? '') });
             }
-            const script = document.createElement('script')
-            script.src = wordUrl + '/web-apps/apps/api/documents/api.js' // OnlyOffice editor service
-            script.onload = initEditor
-            document.head.appendChild(script)
+            const script = document.createElement("script");
+            script.src = wordUrl + "/web-apps/apps/api/documents/api.js"; // OnlyOffice editor service
+            script.onload = initEditor;
+            document.head.appendChild(script);
             script.onerror = () => {
-                toast({
-                    variant: 'error',
-                    title: t('wordEditorLoadFailed'), // 'word编辑器加载失败',
-                    description: t('checkOfficeServiceConfig') // '请检查Office服务地址配置是否正确并正常启动.'
-                })
-            }
+                notification.open({ type: "error", title: String(t("wordEditorLoadFailed") ?? ''), description: String(t("checkOfficeServiceConfig") ?? '') });
+            };
         }
 
         return () => {
-            console.log('destroyEditor :>> ');
+            console.log("destroyEditor :>> ");
             window.editor?.destroyEditor();
-        }
-    }, [])
+        };
+    }, []);
 
-    return <div className="relative w-full h-full">
-        <div className="absolute bg-[#252525] left-0 top-0 h-[26px] leading-[26px] w-full text-gray-400 text-center text-xs">ctrl+s to save</div>
-        <div id="bsoffice"></div>
-    </div>
-};
+    return (
+        <div className="relative w-full h-full">
+            <div className="absolute bg-[#252525] left-0 top-0 h-[26px] leading-[26px] w-full text-gray-400 text-center text-xs">
+                ctrl+s to save
+            </div>
+            <div id="bsoffice"></div>
+        </div>
+    );
+}

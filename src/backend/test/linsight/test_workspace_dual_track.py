@@ -344,8 +344,13 @@ def test_ingest_route_truth_table():
     assert Impl._ingest_route("page.html") == "parse"
     assert Impl._ingest_route("page.htm") == "parse"
 
+    # Spreadsheets skip the ETL and land as the original only (spreadsheet_original).
+    assert Impl._ingest_route("book.xlsx") == "original"
+    assert Impl._ingest_route("legacy.XLS") == "original"
+    # WPS .et goes through the xinchuang converter before anything can read it.
+    assert Impl._ingest_route("wps.et") == "parse"
+
     # Parser-only types are untouched by any of this.
-    assert Impl._ingest_route("book.xlsx") == "parse"
     assert Impl._ingest_route("scan.pdf") == "parse"
     assert Impl._ingest_route("photo.png") == "parse"
 

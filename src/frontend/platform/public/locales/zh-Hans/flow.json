@@ -8,6 +8,9 @@
   "chooseTemplateOrCreateBlank": "您可以选择一个模板开始，或者自定义创建一个空白应用",
   "workflow": "工作流",
   "assistant": "助手",
+  "hostedApp": "托管应用",
+  "hostedAppDesc": "本地写代码,部署到平台",
+  "viewTutorial": "看部署教程",
   "short": "MM 月 dd 日 HH:mm",
   "leaveIdea": "留下您的想法~",
   "skill": "技能",
@@ -21,7 +24,6 @@
   "templateManagementDescription": "应用模板管理，模板对所有用户可见，支持拖拽排序、删除操作",
   "maxNameLengthAssistant": "名称最多50个字符",
   "maxNameLengthWorkflow": "工作流名称不可超过 50 字",
-  "minDescLengthAssistant": "为了更好的助手效果，描述需要大于20 个字",
   "edit": "编辑",
   "create": "创建",
   "name": "工作流名称",
@@ -156,6 +158,7 @@
   "cannotBeEmpty": "{{label}}不可为空",
   "editReportTemplate": "编辑报告模板",
   "nodeErrorMessage": "{{nodeName}}节点错误：{{varNameCn}}已失效.",
+  "nodeLogError": "失败原因",
   "required": "不可为空",
   "isRequired": "是否必填",
   "documentKnowledgeBase": "文档知识库",
@@ -601,5 +604,8 @@
       }
     }
   },
-  "hostedApp": "托管应用"
+  "rerunWorkflow": "重新运行",
+  "type": "类型",
+  "valueType": "值类型",
+  "selectDbType": "请选择数据库类型"
 }

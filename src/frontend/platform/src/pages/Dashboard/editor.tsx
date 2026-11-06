@@ -2,7 +2,7 @@
 import { getDashboard } from "@/controllers/API/dashboard"
 import { useEditorDashboardStore } from "@/store/dashboardStore"
 import { useEffect } from "react"
-import { useQuery } from "react-query"
+import { useQuery } from "@tanstack/react-query"
 import { useNavigate, useParams } from "react-router-dom"
 import { EditorCanvas } from "./components/editor/EditorCanvas"
 import { EditorHeader } from "./components/editor/EditorHeader"

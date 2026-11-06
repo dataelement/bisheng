@@ -4,7 +4,8 @@ import { ArrowUpDown, Database } from 'lucide-react';
 import { FileSources, FileContext } from '~/types/chat';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { TFile } from '~/types/chat';
-import { Button, Checkbox, OpenAIMinimalIcon, AzureMinimalIcon } from '~/components';
+import { Button, OpenAIMinimalIcon, AzureMinimalIcon } from '~/components';
+import { Checkbox } from '@bisheng/ui';
 import ImagePreview from '~/components/Chat/Input/Files/ImagePreview';
 import FilePreview from '~/components/Chat/Input/Files/FilePreview';
 import { SortFilterHeader } from './SortFilterHeader';
@@ -32,7 +33,7 @@ export const columns: ColumnDef<TFile>[] = [
           }
           onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
           aria-label="Select all"
-          className="flex"
+          className="peer flex"
         />
       );
     },
@@ -42,7 +43,7 @@ export const columns: ColumnDef<TFile>[] = [
           checked={row.getIsSelected()}
           onCheckedChange={(value) => row.toggleSelected(!!value)}
           aria-label="Select row"
-          className="flex"
+          className="peer flex"
         />
       );
     },

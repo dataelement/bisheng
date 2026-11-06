@@ -22,7 +22,16 @@ class OpenApiConf(BaseModel):
         ),
     )
     pat_admin_ttl_days: int = Field(default=7, ge=1)
-    model_catalog_ttl_seconds: int = Field(default=30, ge=1)
+    model_catalog_ttl_seconds: int = Field(
+        default=30,
+        ge=1,
+        description=(
+            "How long the model protocol face caches a tenant's callable model "
+            "catalog. Capped at 60s because that is the outward promise for a "
+            "model taken offline in model management (F051 AC-14); the same 60s "
+            "bound already governs the LLM row cache underneath."
+        ),
+    )
     management_ui_enabled: bool = Field(
         default=True,
         description=(
@@ -50,6 +59,11 @@ class OpenApiConf(BaseModel):
     def cap_credential_cache_ttl(cls, value: int) -> int:
         return min(value, 5)
 
+    @field_validator("model_catalog_ttl_seconds")
+    @classmethod
+    def cap_model_catalog_ttl(cls, value: int) -> int:
+        return min(value, 60)
+
     @field_validator("public_base_url")
     @classmethod
     def normalise_public_base_url(cls, value: str) -> str:
@@ -64,7 +78,72 @@ class OpenApiConf(BaseModel):
             )
         return text
 
-    @field_validator("model_catalog_ttl_seconds")
+
+class OpenMcpConf(BaseModel):
+    """Inbound MCP transport and file-adaptation safety limits."""
+
+    max_inline_upload_bytes: int = Field(default=50 * 1024 * 1024, ge=1)
+    file_url_allowed_hosts: list[str] = Field(default_factory=list)
+    enable_dns_rebinding_protection: bool = False
+    transport_allowed_hosts: list[str] = Field(
+        default_factory=lambda: [
+            "127.0.0.1",
+            "127.0.0.1:*",
+            "localhost",
+            "localhost:*",
+            "[::1]",
+            "[::1]:*",
+        ]
+    )
+    transport_allowed_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://127.0.0.1:*",
+            "http://127.0.0.1",
+            "http://localhost:*",
+            "http://localhost",
+            "http://[::1]:*",
+            "http://[::1]",
+        ]
+    )
+    connect_timeout_seconds: float = Field(default=5.0, gt=0, le=60)
+    read_timeout_seconds: float = Field(default=60.0, gt=0, le=600)
+    max_redirects: int = Field(default=3, ge=0, le=10)
+
+    @field_validator("file_url_allowed_hosts")
     @classmethod
-    def cap_model_catalog_ttl(cls, value: int) -> int:
-        return min(value, 60)
+    def normalize_hosts(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for value in values:
+            host = value.strip().lower().rstrip(".")
+            if not host or "://" in host or "/" in host or "@" in host:
+                raise ValueError("open_mcp allowed hosts must contain host names only")
+            if host not in normalized:
+                normalized.append(host)
+        return normalized
+
+    @field_validator("transport_allowed_hosts")
+    @classmethod
+    def validate_transport_hosts(cls, values: list[str]) -> list[str]:
+        normalized = [value.strip() for value in values if value.strip()]
+        if any("/" in value or "://" in value or "@" in value for value in normalized):
+            raise ValueError("open_mcp transport_allowed_hosts must contain Host header values")
+        return list(dict.fromkeys(normalized))
+
+    @field_validator("transport_allowed_origins")
+    @classmethod
+    def validate_transport_origins(cls, values: list[str]) -> list[str]:
+        normalized = [value.strip().rstrip("/") for value in values if value.strip()]
+        for value in normalized:
+            candidate = value[:-2] if value.endswith(":*") else value
+            parts = urlsplit(candidate)
+            if parts.scheme not in {"http", "https"} or not parts.netloc or parts.path or parts.query or parts.fragment:
+                raise ValueError("open_mcp transport_allowed_origins must contain HTTP origins")
+        return list(dict.fromkeys(normalized))
+
+    @property
+    def max_base64_characters(self) -> int:
+        return 4 * ((self.max_inline_upload_bytes + 2) // 3)
+
+    @property
+    def max_request_body_bytes(self) -> int:
+        return self.max_base64_characters + 1024 * 1024

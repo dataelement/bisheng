@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { TooltipAnchor } from '~/components/ui';
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
+
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 
@@ -7,10 +8,7 @@ export default function StopButton({ stop, setShowStopButton }) {
   const localize = useLocalize();
 
   return (
-    <TooltipAnchor
-      description={localize('com_nav_stop_generating')}
-      render={
-        <button
+    <SharedTooltip  content={localize('com_nav_stop_generating')}  ><button
           type="button"
           className={cn(
             'btn-brand-primary rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10',
@@ -31,8 +29,6 @@ export default function StopButton({ stop, setShowStopButton }) {
           >
             <rect x="7" y="7" width="10" height="10" rx="1.25" fill="currentColor"></rect>
           </svg>
-        </button>
-      }
-    ></TooltipAnchor>
+        </button></SharedTooltip>
   );
 }

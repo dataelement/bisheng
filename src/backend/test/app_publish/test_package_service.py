@@ -133,7 +133,7 @@ async def test_reject_over_max_package_entries(tmp_path, tarball_factory, app_ru
 
 
 async def test_missing_manifest_is_16203_not_a_package_error(tmp_path, tarball_factory):
-    """ "You forgot the manifest" is its own code — it is a fixable authoring mistake, not a broken package."""
+    """"You forgot the manifest" is its own code — it is a fixable authoring mistake, not a broken package."""
     from bisheng.app_publish.domain.services.package_service import read_manifest_bytes
     from bisheng.common.errcode.app_publish import AppManifestMissingError
 
@@ -200,9 +200,7 @@ async def test_snapshot_immutable_and_retrievable(tmp_path, tarball_factory, fak
     assert await fetch_package(key) == original
 
 
-async def test_orphan_cleanup_on_next_deploy_same_app(
-    publish_db, tmp_path, tarball_factory, fake_minio, app_factory, deployment_factory
-):
+async def test_orphan_cleanup_on_next_deploy_same_app(publish_db, tmp_path, tarball_factory, fake_minio, app_factory, deployment_factory):
     """Failed attempts keep their snapshot 7 days for debugging, then the next deploy of that app sweeps it (D2).
 
     Driven from ``app_deployment`` rather than by listing the bucket: every key
@@ -221,15 +219,9 @@ async def test_orphan_cleanup_on_next_deploy_same_app(
     fresh_key = await store_package(tarball_factory(), app_id=app_row.id, version_id="fresh-version")
     kept_key = await store_package(tarball_factory(), app_id=app_row.id, version_id=live_version.id)
 
-    stale = await deployment_factory(
-        app_id=app_row.id, status=STATUS_FAILED, version_id="stale-version", code_object_key=stale_key
-    )
-    await deployment_factory(
-        app_id=app_row.id, status=STATUS_FAILED, version_id="fresh-version", code_object_key=fresh_key
-    )
-    await deployment_factory(
-        app_id=app_row.id, status=STATUS_FAILED, version_id=live_version.id, code_object_key=kept_key
-    )
+    stale = await deployment_factory(app_id=app_row.id, status=STATUS_FAILED, version_id="stale-version", code_object_key=stale_key)
+    await deployment_factory(app_id=app_row.id, status=STATUS_FAILED, version_id="fresh-version", code_object_key=fresh_key)
+    await deployment_factory(app_id=app_row.id, status=STATUS_FAILED, version_id=live_version.id, code_object_key=kept_key)
 
     async with publish_db() as session:
         await session.exec(

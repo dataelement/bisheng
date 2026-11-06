@@ -232,12 +232,12 @@ class ApprovalScenarioAdminService:
     @classmethod
     async def list_nodes(cls, *, tenant_id: int, flow_definition_id: int):
         flow = await ApprovalScenarioRepository.get_flow_definition(flow_definition_id)
-        if flow is None or flow.tenant_id != tenant_id:
+        if flow is None or (tenant_id is not None and flow.tenant_id != tenant_id):
             raise ValueError(f"flow not found: {flow_definition_id}")
-        version = await ApprovalScenarioRepository.get_active_flow_version(tenant_id, flow_definition_id)
+        version = await ApprovalScenarioRepository.get_active_flow_version(flow.tenant_id, flow_definition_id)
         if version is None:
             return []
-        rows = await ApprovalScenarioRepository.list_node_definitions(tenant_id, version.id)
+        rows = await ApprovalScenarioRepository.list_node_definitions(flow.tenant_id, version.id)
         return [row.model_dump() for row in rows]
 
     @classmethod

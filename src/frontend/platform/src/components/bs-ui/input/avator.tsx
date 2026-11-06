@@ -1,7 +1,9 @@
+// @ts-strict-ignore
+import { toast } from '@bisheng/ui';
 import { Camera, X } from "lucide-react";
 import type { ChangeEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { useToast } from "../toast/use-toast";
+
 import { cname } from "../utils";
 
 interface AvatorProps {
@@ -27,7 +29,6 @@ export default function Avator({
     disabled = false,
     label = undefined,
 }: AvatorProps) {
-    const { message } = useToast();
     const { t } = useTranslation()
 
     const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -42,10 +43,7 @@ export default function Avator({
             if (!isValidSize) errormgs.push(`${t('build.fileSizeLimit')} ${size / 1024 / 1024}MB`)
             if (!isValidType) errormgs.push(`${t('build.fileTypeLimit')} ${accept}`)
 
-            errormgs.length ? message({
-                variant: 'error',
-                description: errormgs
-            }) : onChange(file)
+            errormgs.length ? toast.show({ type: 'error', message: errormgs.filter(Boolean).join('\n') }) : onChange(file)
         }
     };
 

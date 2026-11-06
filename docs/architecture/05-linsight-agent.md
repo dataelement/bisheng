@@ -173,7 +173,7 @@ Agent 的推理和执行逻辑实现在 `src/backend/bisheng_langchain/linsight/
 - **任务树构建**（`rebuild_tasks`）：将 LLM 生成的任务 JSON 实例化为 `Task`（Function Calling 模式）或 `ReactTask`（ReAct 模式），处理父子关系和执行顺序。
 - **工具 Schema 增强**：所有工具的参数 Schema 中自动注入 `call_reason` 必填字段，要求 LLM 在调用工具时说明原因。同时添加内置的 `call_user_input` 伪工具，用于触发用户输入事件。
 - **执行调度**（`ainvoke_task`）：串行执行根任务，通过内部异步队列（`aqueue`）收集事件并向上层传递。
-- **历史管理**：当工具调用历史超过 `tool_buffer` 配置的 token 数时，自动调用 LLM 进行摘要压缩。
+- **历史管理**：（2.0 引擎）当工具调用历史超过 `tool_buffer` 配置的 token 数时，自动调用 LLM 进行摘要压缩。迁移到 deepagents 后这套机制已退役，`tool_buffer` 也已删除；现在由模型上下文长度决定压缩时机，见 [F087 design](../../features/v3.0.0/087-context-window-budget/design.md)。
 
 ### 执行模式
 
@@ -319,6 +319,40 @@ MCP（Model Context Protocol）集成模块位于 `src/backend/bisheng/mcp_manag
 }
 ```
 
+### 远程示例：Parallel Search
+
+[Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp) 提供 `web_search`（搜索公开网页）和 `web_fetch`（提取网页内容），匿名连接不需要 Parallel 账号或 API Key，免费使用有速率限制。
+
+在工具页面选择「MCP工具」→「添加MCP服务器」，填写服务名称，并将下面的 JSON 粘贴到 MCP 服务配置中。`type` 必须为 `streamable`；省略后会按 SSE 连接，无法使用此端点。每次添加一个服务器：
+
+```json
+{
+  "mcpServers": {
+    "parallel-search": {
+      "type": "streamable",
+      "name": "Parallel Search",
+      "description": "搜索公开网页并提取网页内容",
+      "url": "https://search.parallel.ai/mcp"
+    }
+  }
+}
+```
+
+配置框失去焦点或点击刷新时，BiSheng 就会连接 Parallel 获取工具列表，不必等到保存。确认「可用工具」中出现 `web_search` 和 `web_fetch` 后，可点击工具旁的测试按钮。在 `web_search` 的测试窗口，按参数分别填写下面的值，`search_queries` 使用 JSON 数组：
+
+```json
+{
+  "objective": "查找 Parallel Search MCP 的官方使用文档",
+  "search_queries": ["Parallel Search MCP documentation"]
+}
+```
+
+保存后，在需要联网检索的 Agent 或工作流中选择这些工具。Agent 获得工具后可能自行调用；搜索词、请求的 URL，以及传入的目标、上下文和元数据会发送给 Parallel。请只传入允许发送给该服务的内容。此配置不会替换现有搜索工具或更改权限，也不需要设置认证请求头。
+
+企业部署前，请确认服务端可以访问 `https://search.parallel.ai`，且符合组织的外网访问和数据出境策略；未经授权，不要传入企业敏感数据。匿名免费额度适合探索和轻量使用，生产环境如需更高额度，可按官方文档配置 API Key 认证。
+
+停止使用时，先从相关 Agent 或工作流中移除这些工具；不再需要该连接时，可由有权限的用户在 MCP 服务器编辑页删除它。
+
 ### 传输层实现
 
 所有客户端继承自 `BaseMcpClient` 抽象基类，统一实现 `get_transport()` 方法返回读写流，由基类的 `initialize()` 方法建立 `ClientSession`。
@@ -371,16 +405,12 @@ LangChain StructuredTool
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `debug` | `false` | 调试模式，开启后记录 LLM 输入输出 |
-| `tool_buffer` | `100000` | 工具执行历史的最大 token 数，超过后自动摘要 |
 | `max_steps` | `200` | 单个任务最大执行步骤数，防止死循环 |
 | `retry_num` | `3` | 模型调用失败重试次数 |
 | `retry_sleep` | `5` | 重试间隔（秒） |
-| `max_file_num` | `5` | SOP 生成时 prompt 中放入的用户文件数量 |
-| `max_knowledge_num` | `20` | SOP 生成时 prompt 中放入的知识库数量 |
 | `default_temperature` | `0` | 默认模型温度 |
-| `retry_temperature` | `1` | ReAct 模式 JSON 解析失败后重试时的模型温度 |
-| `file_content_length` | `5000` | 拆分子任务时读取文件内容的字符数上限 |
-| `max_file_content_num` | `3` | 拆分子任务时读取的中间过程文件数量 |
+
+> 压缩时机不再由配置项决定：任务模式按所用模型的上下文长度计算（模型高级配置 `context_window`、Ollama 上下文长度字段或服务商接口），见 [F087 design](../../features/v3.0.0/087-context-window-budget/design.md)。`tool_buffer`、`max_file_num`、`max_knowledge_num`、`retry_temperature`、`file_content_length`、`max_file_content_num` 已于 F087 删除，旧配置里留着也不影响启动。
 
 ### McpConf
 

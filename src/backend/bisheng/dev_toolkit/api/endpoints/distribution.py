@@ -129,9 +129,20 @@ def get_dev_toolkit_versions(request: Request):
             # SDK on this platform at all" off this one branch, and `notice`
             # carries the human half.
             "sdk": sdk,
-            # The 130 port ships desktop Work MCP, not the standalone F052
-            # transport. Never advertise an address that answers 404.
-            "mcp": None,
+            # F052: where a local coding agent points its MCP client. One
+            # address, derived the same way the skill packs derive theirs, so
+            # the access-information panel does not compose a second URL of its
+            # own. It carries no credential — the key is issued separately and
+            # travels in the Authorization header.
+            #
+            # This router is only mounted when the open-capability layer is on,
+            # so "the address does not appear where the layer is not deployed"
+            # needs no code.
+            "mcp": {
+                "url": f"{resolve_public_base_url(request)}/api/v2/mcp",
+                "transport": "streamable-http",
+                "auth": "bearer",
+            },
             # F051's slot, filled (T046). ``model_gateway_base_url`` is the one
             # producer of this address (F051 AC-30 / design D2) — the same
             # function ``GET /api/v2/auth/whoami`` answers with — so the

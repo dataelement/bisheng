@@ -1,0 +1,2071 @@
+{
+ "id": "operating",
+ "name": "经营",
+ "scenes": "管理层经营分析、月度/季度数据汇报、金融与投资分析",
+ "mood": "克制、数据优先；藏青为主，香槟金只用于关键数字",
+ "canvas": {
+  "width_pt": 960.0,
+  "height_pt": 540.0,
+  "ratio": "16:9"
+ },
+ "palette": {
+  "primary": "1B2A4A",
+  "secondary": "44618C",
+  "accent": "B8955A",
+  "background": "FFFFFF",
+  "surface": "F3F5F8",
+  "text": "20293A",
+  "muted": "66707F"
+ },
+ "fonts": {
+  "title": "微软雅黑",
+  "body": "微软雅黑",
+  "latin": "Arial"
+ },
+ "layouts": [
+  {
+   "layout_id": "cover",
+   "slide_index": 0,
+   "family": "cover",
+   "name": "封面",
+   "use_for": "文稿开头；主标题写核心判断或文稿名称",
+   "slots": [
+    {
+     "name": "kicker",
+     "role": "label",
+     "capacity": 32,
+     "max_lines": 1,
+     "font_size": 13,
+     "sample": "示例 · 2026 年度工作汇报",
+     "bullets": false
+    },
+    {
+     "name": "title",
+     "role": "title",
+     "capacity": 18,
+     "max_lines": 2,
+     "font_size": 44,
+     "sample": "示例：主标题写一句核心判断或文稿名称",
+     "bullets": false
+    },
+    {
+     "name": "subtitle",
+     "role": "subtitle",
+     "capacity": 46,
+     "max_lines": 2,
+     "font_size": 18,
+     "sample": "示例：副标题补充范围、时间或汇报对象",
+     "bullets": false
+    },
+    {
+     "name": "org",
+     "role": "label",
+     "capacity": 33,
+     "max_lines": 1,
+     "font_size": 14,
+     "sample": "示例单位名称",
+     "bullets": false
+    },
+    {
+     "name": "date",
+     "role": "label",
+     "capacity": 38,
+     "max_lines": 1,
+     "font_size": 12,
+     "sample": "2026 年 10 月",
+     "bullets": false
+    },
+    {
+     "name": "highlight.number",
+     "role": "number",
+     "capacity": 3,
+     "max_lines": 1,
+     "font_size": 60,
+     "sample": "36.8%",
+     "bullets": false
+    },
+    {
+     "name": "highlight.label",
+     "role": "caption",
+     "capacity": 36,
+     "max_lines": 2,
+     "font_size": 14,
+     "sample": "示例：一项最能代表本期结论的指标",
+     "bullets": false
+    }
+   ],
+   "groups": {
+    "highlight": [
+     "highlight.number",
+     "highlight.label"
+    ]
+   },
+   "samples": [
+    "示例 · 2026 年度工作汇报",
+    "示例：主标题写一句核心判断或文稿名称",
+    "示例：副标题补充范围、时间或汇报对象",
+    "示例单位名称",
+    "2026 年 10 月",
+    "36.8%",
+    "示例：一项最能代表本期结论的指标"
+   ]
+  },
+  {
+   "layout_id": "agenda",
+   "slide_index": 1,
+   "family": "agenda",
+   "name": "目录",
+   "use_for": "4–5 个章节的目录",
+   "slots": [
+    {
+     "name": "kicker",
+     "role": "label",
+     "capacity": 22,
+     "max_lines": 1,
+     "font_size": 12,
+     "sample": "CONTENTS",
+     "bullets": false
+    },
+    {
+     "name": "title",
+     "role": "title",
+     "capacity": 7,
+     "max_lines": 1,
+     "font_size": 40,
+     "sample": "目录",
+     "bullets": false
+    },
+    {
+     "name": "item1.no",
+     "role": "number",
+     "capacity": 1,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "01",
+     "bullets": false
+    },
+    {
+     "name": "item1.text",
+     "role": "body",
+     "capacity": 20,
+     "max_lines": 1,
+     "font_size": 18,
+     "sample": "示例：经营概况",
+     "bullets": false
+    },
+    {
+     "name": "item2.no",
+     "role": "number",
+     "capacity": 1,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "02",
+     "bullets": false
+    },
+    {
+     "name": "item2.text",
+     "role": "body",
+     "capacity": 20,
+     "max_lines": 1,
+     "font_size": 18,
+     "sample": "示例：重点工作进展",
+     "bullets": false
+    },
+    {
+     "name": "item3.no",
+     "role": "number",
+     "capacity": 1,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "03",
+     "bullets": false
+    },
+    {
+     "name": "item3.text",
+     "role": "body",
+     "capacity": 20,
+     "max_lines": 1,
+     "font_size": 18,
+     "sample": "示例：问题与原因分析",
+     "bullets": false
+    },
+    {
+     "name": "item4.no",
+     "role": "number",
+     "capacity": 1,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "04",
+     "bullets": false
+    },
+    {
+     "name": "item4.text",
+     "role": "body",
+     "capacity": 20,
+     "max_lines": 1,
+     "font_size": 18,
+     "sample": "示例：下一步计划",
+     "bullets": false
+    },
+    {
+     "name": "item5.no",
+     "role": "number",
+     "capacity": 1,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "05",
+     "bullets": false
+    },
+    {
+     "name": "item5.text",
+     "role": "body",
+     "capacity": 20,
+     "max_lines": 1,
+     "font_size": 18,
+     "sample": "示例：需协调事项",
+     "bullets": false
+    },
+    {
+     "name": "footer",
+     "role": "footer",
+     "capacity": 50,
+     "max_lines": 1,
+     "font_size": 10,
+     "sample": "示例单位 · 文稿名称",
+     "bullets": false
+    }
+   ],
+   "groups": {
+    "item1": [
+     "item1.no",
+     "item1.text",
+     "item1.rule"
+    ],
+    "item2": [
+     "item2.no",
+     "item2.text",
+     "item2.rule"
+    ],
+    "item3": [
+     "item3.no",
+     "item3.text",
+     "item3.rule"
+    ],
+    "item4": [
+     "item4.no",
+     "item4.text",
+     "item4.rule"
+    ],
+    "item5": [
+     "item5.no",
+     "item5.text",
+     "item5.rule"
+    ]
+   },
+   "samples": [
+    "CONTENTS",
+    "目录",
+    "01",
+    "示例：经营概况",
+    "02",
+    "示例：重点工作进展",
+    "03",
+    "示例：问题与原因分析",
+    "04",
+    "示例：下一步计划",
+    "05",
+    "示例：需协调事项",
+    "示例单位 · 文稿名称"
+   ]
+  },
+  {
+   "layout_id": "section",
+   "slide_index": 2,
+   "family": "section",
+   "name": "章节页",
+   "use_for": "章节过渡，一句话交代本章问题",
+   "slots": [
+    {
+     "name": "no",
+     "role": "number",
+     "capacity": 2,
+     "max_lines": 1,
+     "font_size": 88,
+     "sample": "01",
+     "bullets": false
+    },
+    {
+     "name": "title",
+     "role": "title",
+     "capacity": 16,
+     "max_lines": 1,
+     "font_size": 34,
+     "sample": "示例：章节标题",
+     "bullets": false
+    },
+    {
+     "name": "subtitle",
+     "role": "subtitle",
+     "capacity": 66,
+     "max_lines": 2,
+     "font_size": 17,
+     "sample": "示例：一句话说明本章要回答的问题",
+     "bullets": false
+    },
+    {
+     "name": "footer",
+     "role": "footer",
+     "capacity": 50,
+     "max_lines": 1,
+     "font_size": 10,
+     "sample": "示例单位 · 文稿名称",
+     "bullets": false
+    }
+   ],
+   "groups": {},
+   "samples": [
+    "01",
+    "示例：章节标题",
+    "示例：一句话说明本章要回答的问题",
+    "示例单位 · 文稿名称"
+   ]
+  },
+  {
+   "layout_id": "statement",
+   "slide_index": 3,
+   "family": "statement",
+   "name": "观点页",
+   "use_for": "一句结论加一段依据，用于关键判断",
+   "slots": [
+    {
+     "name": "kicker",
+     "role": "label",
+     "capacity": 42,
+     "max_lines": 1,
+     "font_size": 11,
+     "sample": "01 · 核心观点",
+     "bullets": false
+    },
+    {
+     "name": "footer",
+     "role": "footer",
+     "capacity": 50,
+     "max_lines": 1,
+     "font_size": 10,
+     "sample": "示例单位 · 文稿名称",
+     "bullets": false
+    },
+    {
+     "name": "statement",
+     "role": "title",
+     "capacity": 62,
+     "max_lines": 3,
+     "font_size": 34,
+     "sample": "示例：用一句完整的话写出本页结论，让听众不看其他内容也能带走它",
+     "bullets": false
+    },
+    {
+     "name": "support",
+     "role": "body",
+     "capacity": 110,
+     "max_lines": 3,
+     "font_size": 16,
+     "sample": "示例：用一两句话交代支撑这个判断的事实、数据或依据。",
+     "bullets": false
+    },
+    {
+     "name": "source",
+     "role": "caption",
+     "capacity": 57,
+     "max_lines": 1,
+     "font_size": 10,
+     "sample": "示例来源：填写数据或材料出处",
+     "bullets": false
+    }
+   ],
+   "groups": {},
+   "samples": [
+    "01 · 核心观点",
+    "示例单位 · 文稿名称",
+    "示例：用一句完整的话写出本页结论，让听众不看其他内容也能带走它",
+    "示例：用一两句话交代支撑这个判断的事实、数据或依据。",
+    "示例来源：填写数据或材料出处"
+   ]
+  },
+  {
+   "layout_id": "two-column",
+   "slide_index": 4,
+   "family": "two-column",
+   "name": "图文两栏",
+   "use_for": "左侧要点、右侧照片或截图",
+   "slots": [
+    {
+     "name": "kicker",
+     "role": "label",
+     "capacity": 42,
+     "max_lines": 1,
+     "font_size": 11,
+     "sample": "01 · 示例章节",
+     "bullets": false
+    },
+    {
+     "name": "title",
+     "role": "title",
+     "capacity": 29,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "示例：图文页的标题写本页结论",
+     "bullets": false
+    },
+    {
+     "name": "footer",
+     "role": "footer",
+     "capacity": 50,
+     "max_lines": 1,
+     "font_size": 10,
+     "sample": "示例单位 · 文稿名称",
+     "bullets": false
+    },
+    {
+     "name": "lead",
+     "role": "subtitle",
+     "capacity": 39,
+     "max_lines": 2,
+     "font_size": 18,
+     "sample": "示例：先用一句加粗的话点题，再展开要点。",
+     "bullets": false
+    },
+    {
+     "name": "body",
+     "role": "body",
+     "capacity": 270,
+     "max_lines": 12,
+     "font_size": 15,
+     "sample": "示例要点一：写事实或做法，一行一个要点\n示例要点二：数字要带单位和期间\n示例要点三：最多五条，放不下就拆页",
+     "bullets": true
+    },
+    {
+     "name": "image",
+     "role": "image_area",
+     "bounds": [
+      480,
+      118.0,
+      432,
+      344
+     ]
+    }
+   ],
+   "groups": {
+    "image": [
+     "image.box",
+     "image.label"
+    ]
+   },
+   "samples": [
+    "01 · 示例章节",
+    "示例：图文页的标题写本页结论",
+    "示例单位 · 文稿名称",
+    "示例：先用一句加粗的话点题，再展开要点。",
+    "示例要点一：写事实或做法，一行一个要点\n示例要点二：数字要带单位和期间\n示例要点三：最多五条，放不下就拆页",
+    "示例：图片区，替换为现场照片或产品截图"
+   ]
+  },
+  {
+   "layout_id": "cards-3",
+   "slide_index": 5,
+   "family": "cards",
+   "name": "三卡片",
+   "use_for": "三个并列的举措、成果或特点",
+   "slots": [
+    {
+     "name": "kicker",
+     "role": "label",
+     "capacity": 42,
+     "max_lines": 1,
+     "font_size": 11,
+     "sample": "01 · 示例章节",
+     "bullets": false
+    },
+    {
+     "name": "title",
+     "role": "title",
+     "capacity": 29,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "示例：三个并列要点的总标题",
+     "bullets": false
+    },
+    {
+     "name": "footer",
+     "role": "footer",
+     "capacity": 50,
+     "max_lines": 1,
+     "font_size": 10,
+     "sample": "示例单位 · 文稿名称",
+     "bullets": false
+    },
+    {
+     "name": "lead",
+     "role": "subtitle",
+     "capacity": 51,
+     "max_lines": 1,
+     "font_size": 15,
+     "sample": "示例：一句话说明这三点之间的关系或共同指向。",
+     "bullets": false
+    },
+    {
+     "name": "card1.no",
+     "role": "number",
+     "capacity": 2,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "01",
+     "bullets": false
+    },
+    {
+     "name": "card1.title",
+     "role": "subtitle",
+     "capacity": 21,
+     "max_lines": 2,
+     "font_size": 18,
+     "sample": "示例：要点一的小标题",
+     "bullets": false
+    },
+    {
+     "name": "card1.body",
+     "role": "body",
+     "capacity": 72,
+     "max_lines": 5,
+     "font_size": 14,
+     "sample": "示例：两三句话说明做了什么、带来什么变化，最好有一个数字。",
+     "bullets": false
+    },
+    {
+     "name": "card2.no",
+     "role": "number",
+     "capacity": 2,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "02",
+     "bullets": false
+    },
+    {
+     "name": "card2.title",
+     "role": "subtitle",
+     "capacity": 21,
+     "max_lines": 2,
+     "font_size": 18,
+     "sample": "示例：要点二的小标题",
+     "bullets": false
+    },
+    {
+     "name": "card2.body",
+     "role": "body",
+     "capacity": 72,
+     "max_lines": 5,
+     "font_size": 14,
+     "sample": "示例：两三句话说明做了什么、带来什么变化，最好有一个数字。",
+     "bullets": false
+    },
+    {
+     "name": "card3.no",
+     "role": "number",
+     "capacity": 2,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "03",
+     "bullets": false
+    },
+    {
+     "name": "card3.title",
+     "role": "subtitle",
+     "capacity": 21,
+     "max_lines": 2,
+     "font_size": 18,
+     "sample": "示例：要点三的小标题",
+     "bullets": false
+    },
+    {
+     "name": "card3.body",
+     "role": "body",
+     "capacity": 72,
+     "max_lines": 5,
+     "font_size": 14,
+     "sample": "示例：两三句话说明做了什么、带来什么变化，最好有一个数字。",
+     "bullets": false
+    }
+   ],
+   "groups": {
+    "card1": [
+     "card1.bg",
+     "card1.no",
+     "card1.title",
+     "card1.body"
+    ],
+    "card2": [
+     "card2.bg",
+     "card2.no",
+     "card2.title",
+     "card2.body"
+    ],
+    "card3": [
+     "card3.bg",
+     "card3.no",
+     "card3.title",
+     "card3.body"
+    ]
+   },
+   "samples": [
+    "01 · 示例章节",
+    "示例：三个并列要点的总标题",
+    "示例单位 · 文稿名称",
+    "示例：一句话说明这三点之间的关系或共同指向。",
+    "01",
+    "示例：要点一的小标题",
+    "示例：两三句话说明做了什么、带来什么变化，最好有一个数字。",
+    "02",
+    "示例：要点二的小标题",
+    "示例：两三句话说明做了什么、带来什么变化，最好有一个数字。",
+    "03",
+    "示例：要点三的小标题",
+    "示例：两三句话说明做了什么、带来什么变化，最好有一个数字。"
+   ]
+  },
+  {
+   "layout_id": "cards-4",
+   "slide_index": 6,
+   "family": "cards",
+   "name": "四卡片",
+   "use_for": "四个维度或四项工作",
+   "slots": [
+    {
+     "name": "kicker",
+     "role": "label",
+     "capacity": 42,
+     "max_lines": 1,
+     "font_size": 11,
+     "sample": "01 · 示例章节",
+     "bullets": false
+    },
+    {
+     "name": "title",
+     "role": "title",
+     "capacity": 29,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "示例：四项工作或四个维度的总标题",
+     "bullets": false
+    },
+    {
+     "name": "footer",
+     "role": "footer",
+     "capacity": 50,
+     "max_lines": 1,
+     "font_size": 10,
+     "sample": "示例单位 · 文稿名称",
+     "bullets": false
+    },
+    {
+     "name": "card1.no",
+     "role": "number",
+     "capacity": 2,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "01",
+     "bullets": false
+    },
+    {
+     "name": "card1.title",
+     "role": "subtitle",
+     "capacity": 18,
+     "max_lines": 1,
+     "font_size": 18,
+     "sample": "示例：维度一",
+     "bullets": false
+    },
+    {
+     "name": "card1.body",
+     "role": "body",
+     "capacity": 46,
+     "max_lines": 2,
+     "font_size": 14,
+     "sample": "示例：一两句话写清现状与成效。",
+     "bullets": false
+    },
+    {
+     "name": "card2.no",
+     "role": "number",
+     "capacity": 2,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "02",
+     "bullets": false
+    },
+    {
+     "name": "card2.title",
+     "role": "subtitle",
+     "capacity": 18,
+     "max_lines": 1,
+     "font_size": 18,
+     "sample": "示例：维度二",
+     "bullets": false
+    },
+    {
+     "name": "card2.body",
+     "role": "body",
+     "capacity": 46,
+     "max_lines": 2,
+     "font_size": 14,
+     "sample": "示例：一两句话写清现状与成效。",
+     "bullets": false
+    },
+    {
+     "name": "card3.no",
+     "role": "number",
+     "capacity": 2,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "03",
+     "bullets": false
+    },
+    {
+     "name": "card3.title",
+     "role": "subtitle",
+     "capacity": 18,
+     "max_lines": 1,
+     "font_size": 18,
+     "sample": "示例：维度三",
+     "bullets": false
+    },
+    {
+     "name": "card3.body",
+     "role": "body",
+     "capacity": 46,
+     "max_lines": 2,
+     "font_size": 14,
+     "sample": "示例：一两句话写清现状与成效。",
+     "bullets": false
+    },
+    {
+     "name": "card4.no",
+     "role": "number",
+     "capacity": 2,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "04",
+     "bullets": false
+    },
+    {
+     "name": "card4.title",
+     "role": "subtitle",
+     "capacity": 18,
+     "max_lines": 1,
+     "font_size": 18,
+     "sample": "示例：维度四",
+     "bullets": false
+    },
+    {
+     "name": "card4.body",
+     "role": "body",
+     "capacity": 46,
+     "max_lines": 2,
+     "font_size": 14,
+     "sample": "示例：一两句话写清现状与成效。",
+     "bullets": false
+    }
+   ],
+   "groups": {
+    "card1": [
+     "card1.bg",
+     "card1.no",
+     "card1.title",
+     "card1.body"
+    ],
+    "card2": [
+     "card2.bg",
+     "card2.no",
+     "card2.title",
+     "card2.body"
+    ],
+    "card3": [
+     "card3.bg",
+     "card3.no",
+     "card3.title",
+     "card3.body"
+    ],
+    "card4": [
+     "card4.bg",
+     "card4.no",
+     "card4.title",
+     "card4.body"
+    ]
+   },
+   "samples": [
+    "01 · 示例章节",
+    "示例：四项工作或四个维度的总标题",
+    "示例单位 · 文稿名称",
+    "01",
+    "示例：维度一",
+    "示例：一两句话写清现状与成效。",
+    "02",
+    "示例：维度二",
+    "示例：一两句话写清现状与成效。",
+    "03",
+    "示例：维度三",
+    "示例：一两句话写清现状与成效。",
+    "04",
+    "示例：维度四",
+    "示例：一两句话写清现状与成效。"
+   ]
+  },
+  {
+   "layout_id": "kpi-4",
+   "slide_index": 7,
+   "family": "kpi",
+   "name": "关键指标",
+   "use_for": "3–4 个关键数字加一句解读",
+   "slots": [
+    {
+     "name": "kicker",
+     "role": "label",
+     "capacity": 42,
+     "max_lines": 1,
+     "font_size": 11,
+     "sample": "01 · 示例章节",
+     "bullets": false
+    },
+    {
+     "name": "title",
+     "role": "title",
+     "capacity": 29,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "示例：用四个关键指标概括本期成绩",
+     "bullets": false
+    },
+    {
+     "name": "footer",
+     "role": "footer",
+     "capacity": 50,
+     "max_lines": 1,
+     "font_size": 10,
+     "sample": "示例单位 · 文稿名称",
+     "bullets": false
+    },
+    {
+     "name": "kpi1.number",
+     "role": "number",
+     "capacity": 3,
+     "max_lines": 1,
+     "font_size": 44,
+     "sample": "128.6",
+     "bullets": false
+    },
+    {
+     "name": "kpi1.unit",
+     "role": "caption",
+     "capacity": 14,
+     "max_lines": 1,
+     "font_size": 12,
+     "sample": "示例单位：亿元",
+     "bullets": false
+    },
+    {
+     "name": "kpi1.label",
+     "role": "label",
+     "capacity": 10,
+     "max_lines": 1,
+     "font_size": 16,
+     "sample": "示例：营业收入",
+     "bullets": false
+    },
+    {
+     "name": "kpi1.note",
+     "role": "caption",
+     "capacity": 43,
+     "max_lines": 3,
+     "font_size": 12,
+     "sample": "示例：一句话说明口径或变化原因",
+     "bullets": false
+    },
+    {
+     "name": "kpi2.number",
+     "role": "number",
+     "capacity": 3,
+     "max_lines": 1,
+     "font_size": 44,
+     "sample": "12.4%",
+     "bullets": false
+    },
+    {
+     "name": "kpi2.unit",
+     "role": "caption",
+     "capacity": 14,
+     "max_lines": 1,
+     "font_size": 12,
+     "sample": "示例单位：同比",
+     "bullets": false
+    },
+    {
+     "name": "kpi2.label",
+     "role": "label",
+     "capacity": 10,
+     "max_lines": 1,
+     "font_size": 16,
+     "sample": "示例：增长率",
+     "bullets": false
+    },
+    {
+     "name": "kpi2.note",
+     "role": "caption",
+     "capacity": 43,
+     "max_lines": 3,
+     "font_size": 12,
+     "sample": "示例：一句话说明口径或变化原因",
+     "bullets": false
+    },
+    {
+     "name": "kpi3.number",
+     "role": "number",
+     "capacity": 3,
+     "max_lines": 1,
+     "font_size": 44,
+     "sample": "36",
+     "bullets": false
+    },
+    {
+     "name": "kpi3.unit",
+     "role": "caption",
+     "capacity": 14,
+     "max_lines": 1,
+     "font_size": 12,
+     "sample": "示例单位：个",
+     "bullets": false
+    },
+    {
+     "name": "kpi3.label",
+     "role": "label",
+     "capacity": 10,
+     "max_lines": 1,
+     "font_size": 16,
+     "sample": "示例：新签项目",
+     "bullets": false
+    },
+    {
+     "name": "kpi3.note",
+     "role": "caption",
+     "capacity": 43,
+     "max_lines": 3,
+     "font_size": 12,
+     "sample": "示例：一句话说明口径或变化原因",
+     "bullets": false
+    },
+    {
+     "name": "kpi4.number",
+     "role": "number",
+     "capacity": 3,
+     "max_lines": 1,
+     "font_size": 44,
+     "sample": "98.7%",
+     "bullets": false
+    },
+    {
+     "name": "kpi4.unit",
+     "role": "caption",
+     "capacity": 14,
+     "max_lines": 1,
+     "font_size": 12,
+     "sample": "示例单位：全年",
+     "bullets": false
+    },
+    {
+     "name": "kpi4.label",
+     "role": "label",
+     "capacity": 10,
+     "max_lines": 1,
+     "font_size": 16,
+     "sample": "示例：交付准时率",
+     "bullets": false
+    },
+    {
+     "name": "kpi4.note",
+     "role": "caption",
+     "capacity": 43,
+     "max_lines": 3,
+     "font_size": 12,
+     "sample": "示例：一句话说明口径或变化原因",
+     "bullets": false
+    },
+    {
+     "name": "takeaway.text",
+     "role": "body",
+     "capacity": 145,
+     "max_lines": 3,
+     "font_size": 15,
+     "sample": "示例：一句话解读这组数字说明了什么。",
+     "bullets": false
+    },
+    {
+     "name": "source",
+     "role": "caption",
+     "capacity": 77,
+     "max_lines": 1,
+     "font_size": 10,
+     "sample": "示例来源：填写数据口径与出处",
+     "bullets": false
+    }
+   ],
+   "groups": {
+    "kpi1": [
+     "kpi1.number",
+     "kpi1.unit",
+     "kpi1.label",
+     "kpi1.note"
+    ],
+    "kpi2": [
+     "kpi2.rule",
+     "kpi2.number",
+     "kpi2.unit",
+     "kpi2.label",
+     "kpi2.note"
+    ],
+    "kpi3": [
+     "kpi3.rule",
+     "kpi3.number",
+     "kpi3.unit",
+     "kpi3.label",
+     "kpi3.note"
+    ],
+    "kpi4": [
+     "kpi4.rule",
+     "kpi4.number",
+     "kpi4.unit",
+     "kpi4.label",
+     "kpi4.note"
+    ],
+    "takeaway": [
+     "takeaway.bg",
+     "takeaway.text"
+    ]
+   },
+   "samples": [
+    "01 · 示例章节",
+    "示例：用四个关键指标概括本期成绩",
+    "示例单位 · 文稿名称",
+    "128.6",
+    "示例单位：亿元",
+    "示例：营业收入",
+    "示例：一句话说明口径或变化原因",
+    "12.4%",
+    "示例单位：同比",
+    "示例：增长率",
+    "示例：一句话说明口径或变化原因",
+    "36",
+    "示例单位：个",
+    "示例：新签项目",
+    "示例：一句话说明口径或变化原因",
+    "98.7%",
+    "示例单位：全年",
+    "示例：交付准时率",
+    "示例：一句话说明口径或变化原因",
+    "示例：一句话解读这组数字说明了什么。",
+    "示例来源：填写数据口径与出处"
+   ]
+  },
+  {
+   "layout_id": "chart-insight",
+   "slide_index": 8,
+   "family": "chart",
+   "name": "图表加解读",
+   "use_for": "一张趋势或对比图，右侧写读图结论",
+   "slots": [
+    {
+     "name": "kicker",
+     "role": "label",
+     "capacity": 42,
+     "max_lines": 1,
+     "font_size": 11,
+     "sample": "01 · 示例章节",
+     "bullets": false
+    },
+    {
+     "name": "title",
+     "role": "title",
+     "capacity": 29,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "示例：图表页的标题直接写出数据结论",
+     "bullets": false
+    },
+    {
+     "name": "footer",
+     "role": "footer",
+     "capacity": 50,
+     "max_lines": 1,
+     "font_size": 10,
+     "sample": "示例单位 · 文稿名称",
+     "bullets": false
+    },
+    {
+     "name": "chart",
+     "role": "chart_area",
+     "bounds": [
+      48.0,
+      118.0,
+      560,
+      330
+     ],
+     "chart_style": {
+      "palette": [
+       "1B2A4A",
+       "B8955A",
+       "44618C",
+       "66707F",
+       "DADFE6"
+      ],
+      "text": "20293A",
+      "muted": "66707F",
+      "line": "DADFE6",
+      "font": "Arial",
+      "negative": "C0504D"
+     }
+    },
+    {
+     "name": "insight.title",
+     "role": "subtitle",
+     "capacity": 23,
+     "max_lines": 2,
+     "font_size": 18,
+     "sample": "示例：读图要点",
+     "bullets": false
+    },
+    {
+     "name": "insight.body",
+     "role": "body",
+     "capacity": 158,
+     "max_lines": 11,
+     "font_size": 14,
+     "sample": "示例：拐点或异常出现在哪里\n示例：原因是什么\n示例：意味着什么、要做什么",
+     "bullets": true
+    },
+    {
+     "name": "source",
+     "role": "caption",
+     "capacity": 50,
+     "max_lines": 1,
+     "font_size": 10,
+     "sample": "示例来源：填写数据口径与出处",
+     "bullets": false
+    }
+   ],
+   "groups": {
+    "insight": [
+     "insight.bg",
+     "insight.title",
+     "insight.body"
+    ]
+   },
+   "samples": [
+    "01 · 示例章节",
+    "示例：图表页的标题直接写出数据结论",
+    "示例单位 · 文稿名称",
+    "示例：读图要点",
+    "示例：拐点或异常出现在哪里\n示例：原因是什么\n示例：意味着什么、要做什么",
+    "示例来源：填写数据口径与出处"
+   ]
+  },
+  {
+   "layout_id": "compare",
+   "slide_index": 9,
+   "family": "compare",
+   "name": "对比",
+   "use_for": "两个方案、改革前后、我们与对标的对比",
+   "slots": [
+    {
+     "name": "kicker",
+     "role": "label",
+     "capacity": 42,
+     "max_lines": 1,
+     "font_size": 11,
+     "sample": "01 · 示例章节",
+     "bullets": false
+    },
+    {
+     "name": "title",
+     "role": "title",
+     "capacity": 29,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "示例：对比页的标题写出取舍结论",
+     "bullets": false
+    },
+    {
+     "name": "footer",
+     "role": "footer",
+     "capacity": 50,
+     "max_lines": 1,
+     "font_size": 10,
+     "sample": "示例单位 · 文稿名称",
+     "bullets": false
+    },
+    {
+     "name": "left.title",
+     "role": "subtitle",
+     "capacity": 39,
+     "max_lines": 2,
+     "font_size": 17,
+     "sample": "示例：方案 A / 改革前",
+     "bullets": false
+    },
+    {
+     "name": "left.body",
+     "role": "body",
+     "capacity": 210,
+     "max_lines": 9,
+     "font_size": 14,
+     "sample": "示例：对比维度一的表现\n示例：对比维度二的表现\n示例：对比维度三的表现",
+     "bullets": true
+    },
+    {
+     "name": "right.title",
+     "role": "subtitle",
+     "capacity": 39,
+     "max_lines": 2,
+     "font_size": 17,
+     "sample": "示例：方案 B / 改革后",
+     "bullets": false
+    },
+    {
+     "name": "right.body",
+     "role": "body",
+     "capacity": 210,
+     "max_lines": 9,
+     "font_size": 14,
+     "sample": "示例：对比维度一的表现\n示例：对比维度二的表现\n示例：对比维度三的表现",
+     "bullets": true
+    },
+    {
+     "name": "conclusion.text",
+     "role": "body",
+     "capacity": 97,
+     "max_lines": 2,
+     "font_size": 15,
+     "sample": "示例结论：在什么条件下选哪一个，理由是什么。",
+     "bullets": false
+    }
+   ],
+   "groups": {
+    "left": [
+     "left.bg",
+     "left.head",
+     "left.title",
+     "left.body"
+    ],
+    "right": [
+     "right.bg",
+     "right.head",
+     "right.title",
+     "right.body"
+    ],
+    "conclusion": [
+     "conclusion.bg",
+     "conclusion.text"
+    ]
+   },
+   "samples": [
+    "01 · 示例章节",
+    "示例：对比页的标题写出取舍结论",
+    "示例单位 · 文稿名称",
+    "示例：方案 A / 改革前",
+    "示例：对比维度一的表现\n示例：对比维度二的表现\n示例：对比维度三的表现",
+    "示例：方案 B / 改革后",
+    "示例：对比维度一的表现\n示例：对比维度二的表现\n示例：对比维度三的表现",
+    "示例结论：在什么条件下选哪一个，理由是什么。"
+   ]
+  },
+  {
+   "layout_id": "process",
+   "slide_index": 10,
+   "family": "process",
+   "name": "流程",
+   "use_for": "3–4 个有先后顺序的步骤",
+   "slots": [
+    {
+     "name": "kicker",
+     "role": "label",
+     "capacity": 42,
+     "max_lines": 1,
+     "font_size": 11,
+     "sample": "01 · 示例章节",
+     "bullets": false
+    },
+    {
+     "name": "title",
+     "role": "title",
+     "capacity": 29,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "示例：流程页的标题说明整体做法",
+     "bullets": false
+    },
+    {
+     "name": "footer",
+     "role": "footer",
+     "capacity": 50,
+     "max_lines": 1,
+     "font_size": 10,
+     "sample": "示例单位 · 文稿名称",
+     "bullets": false
+    },
+    {
+     "name": "step1.no",
+     "role": "number",
+     "capacity": 3,
+     "max_lines": 2,
+     "font_size": 20,
+     "sample": "1",
+     "bullets": false
+    },
+    {
+     "name": "step1.title",
+     "role": "subtitle",
+     "capacity": 16,
+     "max_lines": 2,
+     "font_size": 17,
+     "sample": "示例：第一步",
+     "bullets": false
+    },
+    {
+     "name": "step1.body",
+     "role": "body",
+     "capacity": 64,
+     "max_lines": 6,
+     "font_size": 13,
+     "sample": "示例：这一步做什么、谁负责、产出什么。",
+     "bullets": false
+    },
+    {
+     "name": "step2.no",
+     "role": "number",
+     "capacity": 3,
+     "max_lines": 2,
+     "font_size": 20,
+     "sample": "2",
+     "bullets": false
+    },
+    {
+     "name": "step2.title",
+     "role": "subtitle",
+     "capacity": 16,
+     "max_lines": 2,
+     "font_size": 17,
+     "sample": "示例：第二步",
+     "bullets": false
+    },
+    {
+     "name": "step2.body",
+     "role": "body",
+     "capacity": 64,
+     "max_lines": 6,
+     "font_size": 13,
+     "sample": "示例：这一步做什么、谁负责、产出什么。",
+     "bullets": false
+    },
+    {
+     "name": "step3.no",
+     "role": "number",
+     "capacity": 3,
+     "max_lines": 2,
+     "font_size": 20,
+     "sample": "3",
+     "bullets": false
+    },
+    {
+     "name": "step3.title",
+     "role": "subtitle",
+     "capacity": 16,
+     "max_lines": 2,
+     "font_size": 17,
+     "sample": "示例：第三步",
+     "bullets": false
+    },
+    {
+     "name": "step3.body",
+     "role": "body",
+     "capacity": 64,
+     "max_lines": 6,
+     "font_size": 13,
+     "sample": "示例：这一步做什么、谁负责、产出什么。",
+     "bullets": false
+    },
+    {
+     "name": "step4.no",
+     "role": "number",
+     "capacity": 3,
+     "max_lines": 2,
+     "font_size": 20,
+     "sample": "4",
+     "bullets": false
+    },
+    {
+     "name": "step4.title",
+     "role": "subtitle",
+     "capacity": 16,
+     "max_lines": 2,
+     "font_size": 17,
+     "sample": "示例：第四步",
+     "bullets": false
+    },
+    {
+     "name": "step4.body",
+     "role": "body",
+     "capacity": 64,
+     "max_lines": 6,
+     "font_size": 13,
+     "sample": "示例：这一步做什么、谁负责、产出什么。",
+     "bullets": false
+    }
+   ],
+   "groups": {
+    "step1": [
+     "step1.dot",
+     "step1.no",
+     "step1.bg",
+     "step1.title",
+     "step1.body"
+    ],
+    "step2": [
+     "step2.dot",
+     "step2.no",
+     "step2.link",
+     "step2.bg",
+     "step2.title",
+     "step2.body"
+    ],
+    "step3": [
+     "step3.dot",
+     "step3.no",
+     "step3.link",
+     "step3.bg",
+     "step3.title",
+     "step3.body"
+    ],
+    "step4": [
+     "step4.dot",
+     "step4.no",
+     "step4.link",
+     "step4.bg",
+     "step4.title",
+     "step4.body"
+    ]
+   },
+   "samples": [
+    "01 · 示例章节",
+    "示例：流程页的标题说明整体做法",
+    "示例单位 · 文稿名称",
+    "1",
+    "示例：第一步",
+    "示例：这一步做什么、谁负责、产出什么。",
+    "2",
+    "示例：第二步",
+    "示例：这一步做什么、谁负责、产出什么。",
+    "3",
+    "示例：第三步",
+    "示例：这一步做什么、谁负责、产出什么。",
+    "4",
+    "示例：第四步",
+    "示例：这一步做什么、谁负责、产出什么。"
+   ]
+  },
+  {
+   "layout_id": "timeline",
+   "slide_index": 11,
+   "family": "timeline",
+   "name": "时间轴",
+   "use_for": "3–5 个时间节点的历程或计划",
+   "slots": [
+    {
+     "name": "kicker",
+     "role": "label",
+     "capacity": 42,
+     "max_lines": 1,
+     "font_size": 11,
+     "sample": "01 · 示例章节",
+     "bullets": false
+    },
+    {
+     "name": "title",
+     "role": "title",
+     "capacity": 29,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "示例：时间轴页的标题写出发展主线",
+     "bullets": false
+    },
+    {
+     "name": "footer",
+     "role": "footer",
+     "capacity": 50,
+     "max_lines": 1,
+     "font_size": 10,
+     "sample": "示例单位 · 文稿名称",
+     "bullets": false
+    },
+    {
+     "name": "node1.time",
+     "role": "number",
+     "capacity": 6,
+     "max_lines": 1,
+     "font_size": 22,
+     "sample": "2022",
+     "bullets": false
+    },
+    {
+     "name": "node1.title",
+     "role": "subtitle",
+     "capacity": 18,
+     "max_lines": 2,
+     "font_size": 15,
+     "sample": "示例：关键事件",
+     "bullets": false
+    },
+    {
+     "name": "node1.body",
+     "role": "body",
+     "capacity": 93,
+     "max_lines": 8,
+     "font_size": 12,
+     "sample": "示例：一两句话说明意义或成果。",
+     "bullets": false
+    },
+    {
+     "name": "node2.time",
+     "role": "number",
+     "capacity": 6,
+     "max_lines": 1,
+     "font_size": 22,
+     "sample": "2023",
+     "bullets": false
+    },
+    {
+     "name": "node2.title",
+     "role": "subtitle",
+     "capacity": 18,
+     "max_lines": 2,
+     "font_size": 15,
+     "sample": "示例：关键事件",
+     "bullets": false
+    },
+    {
+     "name": "node2.body",
+     "role": "body",
+     "capacity": 93,
+     "max_lines": 8,
+     "font_size": 12,
+     "sample": "示例：一两句话说明意义或成果。",
+     "bullets": false
+    },
+    {
+     "name": "node3.time",
+     "role": "number",
+     "capacity": 6,
+     "max_lines": 1,
+     "font_size": 22,
+     "sample": "2024",
+     "bullets": false
+    },
+    {
+     "name": "node3.title",
+     "role": "subtitle",
+     "capacity": 18,
+     "max_lines": 2,
+     "font_size": 15,
+     "sample": "示例：关键事件",
+     "bullets": false
+    },
+    {
+     "name": "node3.body",
+     "role": "body",
+     "capacity": 93,
+     "max_lines": 8,
+     "font_size": 12,
+     "sample": "示例：一两句话说明意义或成果。",
+     "bullets": false
+    },
+    {
+     "name": "node4.time",
+     "role": "number",
+     "capacity": 6,
+     "max_lines": 1,
+     "font_size": 22,
+     "sample": "2025",
+     "bullets": false
+    },
+    {
+     "name": "node4.title",
+     "role": "subtitle",
+     "capacity": 18,
+     "max_lines": 2,
+     "font_size": 15,
+     "sample": "示例：关键事件",
+     "bullets": false
+    },
+    {
+     "name": "node4.body",
+     "role": "body",
+     "capacity": 93,
+     "max_lines": 8,
+     "font_size": 12,
+     "sample": "示例：一两句话说明意义或成果。",
+     "bullets": false
+    },
+    {
+     "name": "node5.time",
+     "role": "number",
+     "capacity": 6,
+     "max_lines": 1,
+     "font_size": 22,
+     "sample": "2026",
+     "bullets": false
+    },
+    {
+     "name": "node5.title",
+     "role": "subtitle",
+     "capacity": 18,
+     "max_lines": 2,
+     "font_size": 15,
+     "sample": "示例：关键事件",
+     "bullets": false
+    },
+    {
+     "name": "node5.body",
+     "role": "body",
+     "capacity": 93,
+     "max_lines": 8,
+     "font_size": 12,
+     "sample": "示例：一两句话说明意义或成果。",
+     "bullets": false
+    }
+   ],
+   "groups": {
+    "node1": [
+     "node1.dot",
+     "node1.time",
+     "node1.title",
+     "node1.body"
+    ],
+    "node2": [
+     "node2.dot",
+     "node2.time",
+     "node2.title",
+     "node2.body"
+    ],
+    "node3": [
+     "node3.dot",
+     "node3.time",
+     "node3.title",
+     "node3.body"
+    ],
+    "node4": [
+     "node4.dot",
+     "node4.time",
+     "node4.title",
+     "node4.body"
+    ],
+    "node5": [
+     "node5.dot",
+     "node5.time",
+     "node5.title",
+     "node5.body"
+    ]
+   },
+   "samples": [
+    "01 · 示例章节",
+    "示例：时间轴页的标题写出发展主线",
+    "示例单位 · 文稿名称",
+    "2022",
+    "示例：关键事件",
+    "示例：一两句话说明意义或成果。",
+    "2023",
+    "示例：关键事件",
+    "示例：一两句话说明意义或成果。",
+    "2024",
+    "示例：关键事件",
+    "示例：一两句话说明意义或成果。",
+    "2025",
+    "示例：关键事件",
+    "示例：一两句话说明意义或成果。",
+    "2026",
+    "示例：关键事件",
+    "示例：一两句话说明意义或成果。"
+   ]
+  },
+  {
+   "layout_id": "table",
+   "slide_index": 12,
+   "family": "table",
+   "name": "表格",
+   "use_for": "任务清单、责任分工、多维对照",
+   "slots": [
+    {
+     "name": "kicker",
+     "role": "label",
+     "capacity": 42,
+     "max_lines": 1,
+     "font_size": 11,
+     "sample": "01 · 示例章节",
+     "bullets": false
+    },
+    {
+     "name": "title",
+     "role": "title",
+     "capacity": 29,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "示例：表格页的标题写出需要关注的结论",
+     "bullets": false
+    },
+    {
+     "name": "footer",
+     "role": "footer",
+     "capacity": 50,
+     "max_lines": 1,
+     "font_size": 10,
+     "sample": "示例单位 · 文稿名称",
+     "bullets": false
+    },
+    {
+     "name": "table",
+     "role": "table",
+     "bounds": [
+      48.0,
+      118.0,
+      864.0,
+      200
+     ],
+     "row_h": 40,
+     "col_widths": [
+      3.2,
+      2.2,
+      1.6,
+      1.4
+     ],
+     "style": {
+      "font": "微软雅黑",
+      "latin": "Arial",
+      "header_fill": "1B2A4A",
+      "header_color": "FFFFFF",
+      "header_size": 13,
+      "body_size": 12,
+      "body_color": "20293A",
+      "stripe_fill": "F3F5F8",
+      "body_fill": "FFFFFF",
+      "line_color": "DADFE6",
+      "highlight_fill": "FBE9E7",
+      "highlight_color": "B3261E"
+     }
+    },
+    {
+     "name": "note",
+     "role": "caption",
+     "capacity": 118,
+     "max_lines": 2,
+     "font_size": 13,
+     "sample": "示例：表下说明一句需要领导关注或协调的事项。",
+     "bullets": false
+    }
+   ],
+   "groups": {},
+   "samples": [
+    "01 · 示例章节",
+    "示例：表格页的标题写出需要关注的结论",
+    "示例单位 · 文稿名称",
+    "示例：事项",
+    "责任单位",
+    "完成时限",
+    "进展",
+    "示例：重点任务一",
+    "示例部门",
+    "2026-12",
+    "已完成",
+    "示例：重点任务二",
+    "示例部门",
+    "2026-12",
+    "推进中",
+    "示例：重点任务三",
+    "示例部门",
+    "2027-03",
+    "推进中",
+    "示例：重点任务四",
+    "示例部门",
+    "2027-06",
+    "未启动",
+    "示例：表下说明一句需要领导关注或协调的事项。"
+   ]
+  },
+  {
+   "layout_id": "scorecard",
+   "slide_index": 13,
+   "family": "table",
+   "name": "指标计分表",
+   "use_for": "多项指标的目标与完成情况，突出异常行",
+   "slots": [
+    {
+     "name": "kicker",
+     "role": "label",
+     "capacity": 42,
+     "max_lines": 1,
+     "font_size": 11,
+     "sample": "01 · 示例章节",
+     "bullets": false
+    },
+    {
+     "name": "title",
+     "role": "title",
+     "capacity": 29,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "示例：五项指标四项达标，回款率需要关注",
+     "bullets": false
+    },
+    {
+     "name": "footer",
+     "role": "footer",
+     "capacity": 50,
+     "max_lines": 1,
+     "font_size": 10,
+     "sample": "示例单位 · 文稿名称",
+     "bullets": false
+    },
+    {
+     "name": "table",
+     "role": "table",
+     "bounds": [
+      48.0,
+      118.0,
+      864.0,
+      240
+     ],
+     "row_h": 40,
+     "col_widths": [
+      2.6,
+      1.2,
+      1.2,
+      1.2,
+      3.0
+     ],
+     "style": {
+      "font": "微软雅黑",
+      "latin": "Arial",
+      "header_fill": "1B2A4A",
+      "header_color": "FFFFFF",
+      "header_size": 13,
+      "body_size": 12,
+      "body_color": "20293A",
+      "stripe_fill": "F3F5F8",
+      "body_fill": "FFFFFF",
+      "line_color": "DADFE6",
+      "highlight_fill": "FBE9E7",
+      "highlight_color": "B3261E"
+     }
+    },
+    {
+     "name": "alert.text",
+     "role": "body",
+     "capacity": 104,
+     "max_lines": 2,
+     "font_size": 14,
+     "sample": "示例：异常说明——哪一项没达标、原因、补救动作和时间。",
+     "bullets": false
+    }
+   ],
+   "groups": {
+    "alert": [
+     "alert.bg",
+     "alert.flag",
+     "alert.text"
+    ]
+   },
+   "samples": [
+    "01 · 示例章节",
+    "示例：五项指标四项达标，回款率需要关注",
+    "示例单位 · 文稿名称",
+    "示例：指标",
+    "目标",
+    "实际",
+    "完成率",
+    "说明",
+    "营业收入（亿元）",
+    "120.0",
+    "128.6",
+    "107%",
+    "示例：超额完成",
+    "净利润（亿元）",
+    "10.0",
+    "10.8",
+    "108%",
+    "示例：结构优化",
+    "回款率",
+    "95%",
+    "86%",
+    "91%",
+    "示例：两个大项目延期付款",
+    "新签合同（亿元）",
+    "150.0",
+    "162.3",
+    "108%",
+    "示例：新签大单两项",
+    "安全生产事故",
+    "0",
+    "0",
+    "达标",
+    "示例：全年无事故",
+    "示例：异常说明——哪一项没达标、原因、补救动作和时间。"
+   ]
+  },
+  {
+   "layout_id": "bridge",
+   "slide_index": 14,
+   "family": "chart",
+   "name": "贡献对账",
+   "use_for": "起点到终点的变化拆解（瀑布图）",
+   "slots": [
+    {
+     "name": "kicker",
+     "role": "label",
+     "capacity": 42,
+     "max_lines": 1,
+     "font_size": 11,
+     "sample": "01 · 示例章节",
+     "bullets": false
+    },
+    {
+     "name": "title",
+     "role": "title",
+     "capacity": 29,
+     "max_lines": 1,
+     "font_size": 26,
+     "sample": "示例：收入增长主要来自销量，汇率拖累 1.6 亿元",
+     "bullets": false
+    },
+    {
+     "name": "footer",
+     "role": "footer",
+     "capacity": 50,
+     "max_lines": 1,
+     "font_size": 10,
+     "sample": "示例单位 · 文稿名称",
+     "bullets": false
+    },
+    {
+     "name": "chart",
+     "role": "chart_area",
+     "bounds": [
+      48.0,
+      118.0,
+      580,
+      330
+     ],
+     "chart_style": {
+      "palette": [
+       "1B2A4A",
+       "B8955A",
+       "44618C",
+       "66707F",
+       "DADFE6"
+      ],
+      "text": "20293A",
+      "muted": "66707F",
+      "line": "DADFE6",
+      "font": "Arial",
+      "negative": "C0504D"
+     }
+    },
+    {
+     "name": "insight.title",
+     "role": "subtitle",
+     "capacity": 21,
+     "max_lines": 2,
+     "font_size": 18,
+     "sample": "示例：对账结论",
+     "bullets": false
+    },
+    {
+     "name": "insight.body",
+     "role": "body",
+     "capacity": 138,
+     "max_lines": 11,
+     "font_size": 14,
+     "sample": "示例：起点加各项贡献等于终点\n示例：最大正向贡献及原因\n示例：最大拖累及应对",
+     "bullets": true
+    },
+    {
+     "name": "source",
+     "role": "caption",
+     "capacity": 52,
+     "max_lines": 1,
+     "font_size": 10,
+     "sample": "示例来源：填写数据口径与出处",
+     "bullets": false
+    }
+   ],
+   "groups": {
+    "insight": [
+     "insight.bg",
+     "insight.title",
+     "insight.body"
+    ]
+   },
+   "samples": [
+    "01 · 示例章节",
+    "示例：收入增长主要来自销量，汇率拖累 1.6 亿元",
+    "示例单位 · 文稿名称",
+    "示例：对账结论",
+    "示例：起点加各项贡献等于终点\n示例：最大正向贡献及原因\n示例：最大拖累及应对",
+    "示例来源：填写数据口径与出处"
+   ]
+  },
+  {
+   "layout_id": "closing",
+   "slide_index": 15,
+   "family": "closing",
+   "name": "结尾页",
+   "use_for": "致谢与联系方式",
+   "slots": [
+    {
+     "name": "title",
+     "role": "title",
+     "capacity": 12,
+     "max_lines": 1,
+     "font_size": 44,
+     "sample": "感谢聆听",
+     "bullets": false
+    },
+    {
+     "name": "subtitle",
+     "role": "subtitle",
+     "capacity": 31,
+     "max_lines": 1,
+     "font_size": 18,
+     "sample": "示例：恳请各位领导批评指正",
+     "bullets": false
+    },
+    {
+     "name": "contact",
+     "role": "caption",
+     "capacity": 88,
+     "max_lines": 2,
+     "font_size": 13,
+     "sample": "示例单位 · 联系人 · 联系方式",
+     "bullets": false
+    }
+   ],
+   "groups": {},
+   "samples": [
+    "感谢聆听",
+    "示例：恳请各位领导批评指正",
+    "示例单位 · 联系人 · 联系方式"
+   ]
+  }
+ ]
+}

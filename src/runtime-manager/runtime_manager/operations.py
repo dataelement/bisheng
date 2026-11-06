@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from threading import Event, Lock, Thread
 
+from runtime_manager.bundle_inputs import BundleInputError
 from runtime_manager.container_runner import OP_LABEL, PHASE_LABEL, ExecutionError
 from runtime_manager.docker_backend import get_docker_backend
 from runtime_manager.executors.docker import DockerExecutor
@@ -86,6 +87,27 @@ class OperationExecutor:
             raise ExecutionError("operation_timeout")
         return current
 
+    def _permit(self, operation, phase):
+        current = self.checkpoint(operation)
+        receipt = self.runtime._controller() if self.config.executor_kind == "kubernetes" else {}
+        permit = self.platform.authorize_step(current, phase, controller=receipt)
+        keys = ("operation_id", "tenant_id", "app_id", "version_id", "node_id", "generation", "owner_epoch")
+        if (
+            any(permit.get(key) != current.get(key) for key in keys)
+            or permit.get("phase") != phase
+            or permit.get("stage") != current["stage"]
+        ):
+            raise ExecutionError("stage_permit_mismatch")
+        try:
+            expiry = datetime.fromisoformat(permit["valid_until"].replace("Z", "+00:00"))
+            if expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=UTC)
+            if datetime.fromtimestamp(self.clock.time(), UTC) >= expiry:
+                raise ValueError("expired")
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ExecutionError("stage_permit_expired") from exc
+        return permit
+
     def report(self, operation, phase, *, exec_ref="", detail=None):
         # Retries query the committed sequence, never guess whether a fact was accepted.
         current = self.platform.operation(operation["operation_id"])
@@ -95,9 +117,22 @@ class OperationExecutor:
                 detail[key] = current["result"][key]
         if self.config.executor_kind == "kubernetes":
             detail["controller"] = self.runtime._controller()
-        return self.platform.fact(
-            operation, int(current.get("fact_sequence", 0)) + 1, phase, exec_ref=exec_ref, detail=detail
-        )
+        sequence = int(current.get("fact_sequence", 0)) + 1
+        try:
+            return self.platform.fact(operation, sequence, phase, exec_ref=exec_ref, detail=detail)
+        except PlatformError:
+            if phase != "maintenance":
+                raise
+            committed = self.platform.operation(operation["operation_id"])
+            transition = committed.get("payload", {}).get("maintenance_transition") or {}
+            if (
+                transition.get("operation_id"),
+                transition.get("generation"),
+                transition.get("owner_epoch"),
+                transition.get("fact_sequence"),
+            ) != (operation["operation_id"], operation["generation"], operation["owner_epoch"], sequence):
+                raise
+            return {"operation_id": operation["operation_id"], "phase": phase, "sequence": sequence}
 
     def _wait_cleanup(self, operation, cleanup):
         while True:
@@ -213,6 +248,7 @@ class OperationExecutor:
                 self.platform.claim(operation_id)
                 kind, body = operation["kind"], operation["payload"]
                 if kind == "prepare":
+                    self._permit(operation, "prepare")
                     delivery = self._prepared_delivery(operation)
                     self._wait_cleanup(operation, lambda: self.runtime.cleanup(operation))
                     self.report(
@@ -229,6 +265,7 @@ class OperationExecutor:
                         return
                     current = self.checkpoint(operation)
                     if kind != "probe" or current["stage"] != "ready":
+                        self._permit(operation, "probe" if kind == "probe" else "preview")
                         self.report(operation, "starting")
                         outcome = self._launch(operation, preview=(kind == "preview"))
                         self.report(operation, "ready", exec_ref=outcome["exec_ref"], detail=outcome)
@@ -294,26 +331,42 @@ class OperationExecutor:
                 if self.config.executor_kind == "docker":
                     self.runtime.cleanup_local_scratch(operation)
 
-    @staticmethod
-    def _safe_diagnostic(operation, text):
-        from runtime_manager.secret_redaction import redact_output
+    def _safe_diagnostic(self, operation, text):
+        from runtime_manager.secret_redaction import bounded_diagnostic, diagnostic_environment
 
         payload = operation.get("payload", {})
-        return redact_output(text, payload.get("runtime_env", {}), payload.get("sensitive_env_names", []))[-16384:]
+        return bounded_diagnostic(
+            text, diagnostic_environment(self.config, payload), payload.get("sensitive_env_names", [])
+        )
 
     def _deploy(self, operation, runner=None):
         body, kind = operation["payload"], operation["kind"]
         current = self.checkpoint(operation)
-        if current["stage"] not in {"ready", "serving", "retiring"} and (
+        if kind in {"deploy", "restore"} and current["stage"] not in {"serving", "retiring"}:
+            if kind != "restore" or body.get("resume_after_restore", True):
+                phase = (
+                    "starting"
+                    if current["stage"] in {"snapshot_confirmed", "migrating", "starting", "ready"}
+                    else "maintenance"
+                )
+                self._permit(operation, phase)
+                self.runtime.preflight(operation)
+        if current["stage"] not in {"starting", "ready", "serving", "retiring"} and (
             body.get("uses_sqlite", True) or kind in {"restore", "migrate"}
         ):
-            self.report(operation, "maintenance")
+            if not current.get("payload", {}).get("maintenance_transition"):
+                self._permit(operation, "maintenance")
+                self.report(operation, "maintenance")
+            self.checkpoint(operation)
             self.stop_instances(operation, include_current=False)
             if kind == "restore":
+                self._permit(operation, "data_write")
                 self.runtime.data(operation, "restore", {"snapshot_id": body["snapshot_id"]})
             elif body.get("migration_plan"):
+                self._permit(operation, "data_write")
                 snapshot = self.runtime.data(operation, "backup", {})
                 self.report(operation, "snapshot_confirmed", detail={"snapshot": snapshot})
+                self._permit(operation, "data_write")
                 self.report(operation, "migrating")
                 self.runtime.data(operation, "migrate", {"plan": body["migration_plan"], "snapshot": snapshot})
         if kind == "migrate" or (kind == "restore" and not body.get("resume_after_restore", True)):
@@ -322,6 +375,7 @@ class OperationExecutor:
         current = self.checkpoint(operation)
         if current["stage"] not in {"serving", "retiring"}:
             if current["stage"] != "ready":
+                self._permit(operation, "starting")
                 self.report(operation, "starting")
             self.stop_instances(operation, include_current=False)
             outcome = self._launch(operation, runner)
@@ -483,6 +537,13 @@ class OperationExecutor:
         unknown_build = current.get("payload", {}).get("legacy_build_state") == "started"
         if unknown_build and current["status"] in TERMINAL:
             return
+        tail = getattr(exc, "tail", "")
+        if not tail and current["status"] not in TERMINAL and hasattr(self.runtime, "diagnostics"):
+            try:
+                tail = self.runtime.diagnostics(operation)
+            except Exception as diagnostic_error:
+                # A failed optional read cannot change the primary failure/cleanup result.
+                logger.warning("operation output unavailable (%s)", type(diagnostic_error).__name__)
         stopped = complete = False
         try:
             # A stop owns no serving Pod itself; its empty resource set cannot
@@ -496,7 +557,9 @@ class OperationExecutor:
         reason = (
             "legacy_build_stop_unconfirmed"
             if unknown_build
-            else (str(exc) if isinstance(exc, (ExecutionError, ExecutorError)) else "execution_failed")
+            else (
+                str(exc) if isinstance(exc, (ExecutionError, ExecutorError, BundleInputError)) else "execution_failed"
+            )
         )
         phase = (
             current["status"]
@@ -509,9 +572,12 @@ class OperationExecutor:
                 else "failed"
             )
         )
+        from runtime_manager.secret_redaction import image_failure_context
+
         failure = {
+            **image_failure_context(exc),
             "reason": reason,
-            "diagnostic_tail": self._safe_diagnostic(operation, getattr(exc, "tail", "")),
+            "diagnostic_tail": self._safe_diagnostic(operation, tail),
             "failed_stage": current["stage"],
             "maintenance": operation["kind"] in {"deploy", "restore", "migrate"}
             and current["stage"] in {"maintenance", "snapshot_confirmed", "migrating", "starting", "ready"},
@@ -520,7 +586,20 @@ class OperationExecutor:
         }
         if current["status"] in TERMINAL:
             # Cleanup progress must not replace the original failure or revive expired diagnostics.
-            failure = {key: value for key, value in current.get("failure", {}).items() if key in failure}
+            failure = {
+                key: value
+                for key, value in current.get("failure", {}).items()
+                if key
+                in {
+                    "reason",
+                    "diagnostic_tail",
+                    "failed_stage",
+                    "maintenance",
+                    "data_may_have_changed",
+                    "image_role",
+                    "image_ref",
+                }
+            }
         try:
             self.report(
                 operation,

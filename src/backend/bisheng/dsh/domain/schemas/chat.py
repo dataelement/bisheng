@@ -19,8 +19,6 @@ class ChatCapabilities(BaseModel):
     streaming: bool = Field(default=True, description="Whether the provider supports streamed chat responses.")
     vision: bool = False
     tools: bool = Field(default=True, description="Whether the provider supports function tools and tool choice.")
-    tool_streaming: bool = Field(default=True, description="Internal upstream support for streamed tool arguments.")
-    reasoning_split: bool = Field(default=False, description="Internal provider switch for separated thinking output.")
     reasoning_content: bool = Field(
         default=False, description="Whether assistant reasoning content is supported by the provider."
     )

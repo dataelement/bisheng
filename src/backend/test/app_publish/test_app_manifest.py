@@ -164,10 +164,14 @@ async def test_tier_unknown_or_disabled_rejected_16223_with_details_reason(publi
     assert (excinfo.value.code, excinfo.value.kwargs["details"]["reason"]) == (16223, "disabled")
 
 
-async def test_capability_declarations_are_preserved_for_precheck_resolution(tier_seed):
-    """The capability bus now resolves declarations after manifest validation."""
-    validated = await _validate(_yaml(capabilities={"models": [{"name": "Qwen3"}]}))
-    assert validated.manifest.capabilities.models[0].name == "Qwen3"
+async def test_capabilities_non_empty_rejected_16231(tier_seed):
+    """Refused, not silently ignored (design D16)."""
+    from bisheng.common.errcode.app_publish import AppCapabilityBusDisabledError
+
+    with pytest.raises(AppCapabilityBusDisabledError) as excinfo:
+        await _validate(_yaml(capabilities={"models": [{"name": "Qwen3"}]}))
+    assert excinfo.value.code == 16231
+    assert excinfo.value.kwargs["details"]["field"].startswith("capabilities")
 
     # An empty / absent block is fine — the common case must not be collateral.
     assert (await _validate(_yaml(capabilities={"models": [], "knowledge_bases": []}))).manifest is not None

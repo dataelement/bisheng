@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { toast } from '@bisheng/ui';
+
 import { cname, generateUUID } from "@/components/bs-ui/utils";
 import { locationContext } from "@/contexts/locationContext";
 import { useContext, useEffect, useRef, useState } from "react";
@@ -42,7 +43,7 @@ const KnowledgeUploadComponent = ({
     initialFiles = []
 }) => {
     const { t } = useTranslation()
-    const { message } = useToast()
+
 
     const [progressList, setProgressList] = useState<Progress[]>([])
     const progressCountRef = useRef(0) // 文件总数
@@ -101,11 +102,7 @@ const KnowledgeUploadComponent = ({
 
 
         if (bigFiles.length > 0) {
-            message({
-                title: t('prompt'),
-                description: bigFiles.map(str => `${t('code.file')}: ${str} ${t('code.sizeExceedsLimit', { size: getKnowledgeUploadSizeLimitMB({ name: str } as File, appConfig) + 'MB' })}`).join('；'),
-                variant: 'error'
-            });
+            toast.show({ type: 'error', message: [String(t('prompt') ?? ''), String(bigFiles.map(str => `${t('code.file')}: ${str} ${t('code.sizeExceedsLimit', { size: getKnowledgeUploadSizeLimitMB({ name: str } as File, appConfig) + 'MB' })}`).join('；') ?? '')].filter(Boolean).join('\n') });
         }
         if (!files?.length) return
         setProgressList((list) => {

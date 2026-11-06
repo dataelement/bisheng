@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Textarea } from '@bisheng/ui';
 import { Eraser, TerminalSquare, Variable } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { alertContext } from "../../contexts/alertContext";
@@ -12,7 +13,7 @@ import ChatMessage from "./chatMessage";
 
 import cloneDeep from "lodash-es/cloneDeep";
 import { useTranslation } from "react-i18next";
-import { Badge } from "../../components/bs-ui/badge";
+import { Tag } from '@bisheng/ui';
 import {
   Dialog,
   DialogContent,
@@ -21,8 +22,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../../components/bs-ui/dialog";
-import { Textarea } from "../../components/bs-ui/input";
-import ToggleShadComponent from "../../components/toggleShadComponent";
+
+import { Switch } from '@bisheng/ui';
 import {
   Accordion,
   AccordionContent,
@@ -447,9 +448,9 @@ export default function FormModal({
                       <AccordionItem className="w-full" key={k} value={i}>
                         <AccordionTrigger className="flex gap-2">
                           <div className="file-component-badge-div">
-                            <Badge variant="gray" size="md">
+                            <Tag  >
                               {i}
-                            </Badge>
+                            </Tag>
 
                             <div
                               className="-mb-1"
@@ -457,9 +458,9 @@ export default function FormModal({
                                 event.stopPropagation();
                               }}
                             >
-                              <ToggleShadComponent
-                                enabled={chatKey === i}
-                                setEnabled={(value) =>
+                              <Switch
+                                checked={chatKey === i}
+                                onCheckedChange={(value) =>
                                   handleOnCheckedChange(value, i)
                                 }
                                 size="small"
@@ -479,21 +480,16 @@ export default function FormModal({
                                   Source: Component
                                 </div>
                               )}
-                            <Textarea
-                              value={
+                            <Textarea value={
                                 input_keys[i]
-                              }
-                              onChange={(e) => {
+                              } onChange={(e) => {
                                 setTabsState((old) => {
                                   const newTabsState = cloneDeep(old);
                                   const input = newTabsState[id.current].formKeysData.input_keys.find((el: any) => !el.type) || {}
                                   input[i] = e.target.value;
                                   return newTabsState;
                                 });
-                              }}
-                              disabled={chatKey === i}
-                              placeholder="Enter text..."
-                            ></Textarea>
+                              }} disabled={chatKey === i} placeholder="Enter text..."></Textarea>
                           </div>
                         </AccordionContent>
                       </AccordionItem>
@@ -504,9 +500,9 @@ export default function FormModal({
                   <AccordionItem key={k} value={i}>
                     <div className="tab-accordion-badge-div group">
                       <div className="group-hover:underline">
-                        <Badge size="md" variant="gray">
+                        <Tag  >
                           {i}
-                        </Badge>
+                        </Tag>
                       </div>
                       Used as memory key
                     </div>

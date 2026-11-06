@@ -5,6 +5,7 @@ import {
     type ArtifactFile,
     applyHtmlViewerTabIdentity,
     fetchArtifactBlob,
+    getArtifactPreviewKind,
     isAbsoluteImageSrc,
     isDeliverableLinkHref,
     isHtmlArtifact,
@@ -13,6 +14,7 @@ import {
     resolveDeliverableLink,
     stripEmptyHtmlPlaceholders,
     stripWorkspacePaths,
+    toUploadedArtifacts,
 } from './artifactUtils';
 
 jest.mock('~/api/request', () => ({
@@ -694,5 +696,46 @@ describe('fetchArtifactBlob citation baking', () => {
         const { blob } = await fetchArtifactBlob(report, 'SV-1', { citations: [] });
 
         expect(await readBlobText(blob)).toBe('Claim end.');
+    });
+});
+
+describe('uploaded spreadsheet kept as the original workbook', () => {
+    // Original-only entry: the seed object and the original are the same .xlsx.
+    const entry = {
+        file_id: 'f1',
+        original_filename: 'sales.xlsx',
+        valid: true,
+        ingest_mode: 'spreadsheet_original',
+        markdown_file_path: 'linsight/c1/f1.xlsx',
+        original_file_path: 'linsight/c1/f1.xlsx',
+    };
+
+    it('previews and downloads the workbook instead of rendering it as markdown', async () => {
+        const [artifact] = toUploadedArtifacts([entry]);
+
+        expect(artifact.file_url).toBe('linsight/c1/f1.xlsx');
+        expect(artifact.previewAsOriginal).toBe(true);
+        expect(getArtifactPreviewKind(artifact)).toBe('document');
+
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            blob: async () => new Blob(['PK']),
+        }) as unknown as typeof fetch;
+        const { fileName } = await fetchArtifactBlob({ ...artifact, directUrl: 'http://x/f1.xlsx' }, 'SV-1');
+        expect(fileName).toBe('sales.xlsx');
+    });
+
+    it('keeps the markdown view for dual-track entries parsed before this change', () => {
+        const [artifact] = toUploadedArtifacts([
+            {
+                ...entry,
+                ingest_mode: undefined,
+                markdown_file_path: 'linsight/c1/f1.md',
+                original_file_path: 'linsight/c1/f1_original.xlsx',
+            },
+        ]);
+
+        expect(artifact.file_url).toBe('linsight/c1/f1.md');
+        expect(getArtifactPreviewKind(artifact)).toBe('markdown');
     });
 });

@@ -1,3 +1,4 @@
+jest.mock('react-dom/server', () => jest.requireActual('react-dom/server.node'));
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import AiChatInput from './AiChatInput';
 
@@ -57,9 +58,9 @@ jest.mock('./Input/AgentToolSelector', () => () => <button>tools</button>);
 jest.mock('./Input/ChatFormTools', () => ({ ChatToolDown: () => <button>legacy tools</button> }));
 jest.mock('~/components/Linsight/Input/TaskModeToggle', () => ({ TaskModeToggle: () => <button>research</button> }));
 jest.mock('./Input/ChatResourceMenu', () => ({
-  ChatResourceMenu: ({ showKnowledgeSelection, showFileUpload, onFileUploadClick, showTools, showResearch, children }) => (
+  ChatResourceMenu: ({ showKnowledgeSelection, showFileUpload, onFileUploadClick, showTools, showResearch, researchActive, onResearchChange, children }) => (
     <div>
-      {children}{showTools && <button>tools</button>}{showResearch && <button>research</button>}
+      {children}{showTools && <button>tools</button>}{showResearch && <button aria-pressed={researchActive} onClick={onResearchChange}>research</button>}
       {showKnowledgeSelection && <button>spaces</button>}
       {showFileUpload && <button onClick={onFileUploadClick}>upload</button>}
     </div>
@@ -109,13 +110,16 @@ test('new chat offers setup, established chat hides setup while preserving conte
   for (const label of ['skills', 'tools', 'research', 'spaces']) {
     expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
   }
-  expect(screen.getByText('@Reference')).toBeInTheDocument();
+  expect(screen.getByText('Reference')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'tools' }).closest('.dsh-chat-composer')).toBeTruthy();
   view.rerender(<AiChatInput {...input} allowConfiguration={false} />);
-  for (const label of ['tools', 'research']) {
+  for (const label of ['tools']) {
     expect(screen.queryByRole('button', { name: label })).toBeNull();
   }
-  expect(screen.getByText('@Reference')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'research' })).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', { name: 'research' }));
+  expect(input.onToggleTaskMode).toHaveBeenCalledTimes(1);
+  expect(screen.getByText('Reference')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'spaces' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'skills' })).toBeInTheDocument();
   expect(screen.getByRole('textbox')).toHaveAttribute('contenteditable', 'true');
@@ -123,7 +127,7 @@ test('new chat offers setup, established chat hides setup while preserving conte
   expect(mockSetSkills).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: 'model' })).toBeInTheDocument();
   view.rerender(<AiChatInput {...input} />);
-  expect(screen.getByText('@Reference')).toBeInTheDocument();
+  expect(screen.getByText('Reference')).toBeInTheDocument();
 });
 
 test('follow-up retains attachment upload and sends its text and file', () => {
@@ -167,22 +171,22 @@ test('selecting a skill in ordinary chat activates task mode and keeps the selec
   fireEvent.click(screen.getByRole('button', { name: 'skills' }));
   expect(mockSetSkills).toHaveBeenCalledWith(mockSkills);
   expect(onToggleTaskMode).toHaveBeenCalledTimes(1);
-  expect(screen.queryByText('/research')).toBeNull();
+  expect(screen.getByRole('textbox')).not.toHaveTextContent('research');
   expect(screen.getByRole('button', { name: 'research' })).toBeInTheDocument();
 });
 
 test('returning to ordinary chat clears selected task skills', () => {
   const input = props();
   const view = render(<AiChatInput {...input} />);
-  expect(screen.getByText('/research')).toBeInTheDocument();
+  expect(screen.getByRole('textbox')).toHaveTextContent('research');
   view.rerender(<AiChatInput {...input} features={{ taskModeEntry: true, taskMode: false }} />);
   expect(mockSetSkills).toHaveBeenCalledWith([]);
-  expect(screen.queryByText('/research')).toBeNull();
+  expect(screen.getByRole('textbox')).not.toHaveTextContent('research');
   expect(screen.getByRole('button', { name: 'skills' })).toBeInTheDocument();
 });
 
 
-test.each([true, false])('send acceptance %s controls the entire skill draft reset', (accepted) => {
+test.each([true, false])('send acceptance %s preserves selected skills while resetting accepted message drafts', (accepted) => {
   const input = props();
   input.onSend.mockReturnValue(accepted);
   render(<AiChatInput {...input} />);
@@ -193,14 +197,19 @@ test.each([true, false])('send acceptance %s controls the entire skill draft res
   fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
   expect(input.onSend).toHaveBeenCalledWith('Prepare a report', [{ name: 'notes.txt', filepath: '/notes.txt' }]);
   if (accepted) {
-    expect(mockSetSkills).toHaveBeenCalledWith([]);
-    expect(mockSetSkills.mock.invocationCallOrder[0]).toBeGreaterThan(input.onSend.mock.invocationCallOrder[0]);
+    expect(mockSetSkills).not.toHaveBeenCalled();
     expect(editor).not.toHaveTextContent('Prepare a report');
-    expect(editor).not.toHaveTextContent('/research');
+    expect(editor).toHaveTextContent('research');
     expect(screen.queryByText('notes.txt')).toBeNull();
+    editor.append(document.createTextNode('Continue the report'));
+    fireEvent.input(editor);
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    expect(input.onSend).toHaveBeenLastCalledWith('Continue the report', null);
+    expect(editor).toHaveTextContent('research');
+    expect(mockSetSkills).not.toHaveBeenCalled();
   } else {
     expect(mockSetSkills).not.toHaveBeenCalled();
-    expect(editor).toHaveTextContent('/research');
+    expect(editor).toHaveTextContent('research');
     expect(editor).toHaveTextContent('Prepare a report');
     expect(screen.getByTestId('attachments')).toHaveTextContent('notes.txt');
   }
@@ -228,11 +237,11 @@ test('ordinary chat exposes skill selection to users with task mode access', () 
 test('account availability removes a selected skill while the picker stays closed', () => {
   const input = props();
   const view = render(<AiChatInput {...input} />);
-  expect(screen.getByText('/research')).toBeInTheDocument();
+  expect(screen.getByRole('textbox')).toHaveTextContent('research');
   mockAvailableSkills = [];
   view.rerender(<AiChatInput {...input} allowConfiguration={false} />);
   expect(mockSetSkills).toHaveBeenCalledWith([]);
-  expect(screen.queryByText('/research')).toBeNull();
+  expect(screen.getByRole('textbox')).not.toHaveTextContent('research');
 });
 
 function pasteImage() {
@@ -304,4 +313,16 @@ test('clipboard image passes the real uploader and reaches the send payload with
     filepath: '/uploads/pasted-image.png', file_id: 'uploaded-image', type: 'image/png',
   })]);
   expect(mockToast).not.toHaveBeenCalled();
+});
+
+
+test('shows the permission reason next to the composer and preserves a blocked question', () => {
+  const input = props();
+  input.onSend.mockReturnValue(false);
+  render(<AiChatInput {...input} knowledgeAccessMessage="Space access expired. Choose an accessible space."
+    value="D6-W" />);
+  expect(screen.getByRole('status')).toHaveTextContent('Space access expired');
+  fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+  expect(input.onSend).toHaveBeenCalled();
+  expect(screen.getByRole('textbox')).toHaveTextContent('D6-W');
 });

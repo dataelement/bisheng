@@ -221,10 +221,93 @@ class TestSaveDefeatsTheInfoCache:
             p3,
             p4,
             p5,
+            patch("bisheng.llm.domain.services.llm.LLMDao.aupdate_model_status", AsyncMock()),
             patch.object(LLMService, "test_model_status", record_cache_state),
         ):
             await LLMService.update_llm_server(MagicMock(), _login_user(), self._server_req())
+            await _drain_background_probes()
 
         # The probe ran (the name changed) and saw neither stale row.
         assert seen["model_cached_at_probe_time"] is None
         assert seen["server_cached_at_probe_time"] is None
+
+
+async def _drain_background_probes():
+    from bisheng.llm.domain.services import llm as llm_service_module
+
+    pending = list(llm_service_module._background_probes)
+    if pending:
+        await asyncio.gather(*pending)
+
+
+class TestSaveDoesNotWaitForTheProbe:
+    """One slow provider response used to hold the save request for the whole
+    probe timeout. Save marks the changed models unknown and returns; the probe
+    finishes in the background."""
+
+    async def test_save_returns_while_the_probe_is_still_running(self):
+        from bisheng.llm.domain.const import LLMModelStatus
+        from bisheng.llm.domain.models.llm_server import LLMServer
+        from bisheng.llm.domain.schemas import LLMModelInfo, LLMServerInfo
+
+        db_server = LLMServer(id=1, name="provider", type="openai", config={}, tenant_id=2)
+        renamed = LLMModelInfo(
+            id=7, server_id=1, name="model 1", model_name="gpt-x-renamed", model_type="llm", status=0
+        )
+        new_server_info = LLMServerInfo(id=1, name="provider", type="openai", models=[renamed])
+        release_probe = asyncio.Event()
+        probed = []
+
+        async def slow_probe(model, login_user):
+            await release_probe.wait()
+            probed.append(model.id)
+
+        status_writes = AsyncMock()
+        p1, p2, p3, p4, p5 = TestSaveDefeatsTheInfoCache()._patches(db_server, new_server_info, [_model()])
+        with (
+            p1,
+            p2,
+            p3,
+            p4,
+            p5,
+            patch("bisheng.llm.domain.services.llm.LLMDao.aupdate_model_status", status_writes),
+            patch.object(LLMService, "test_model_status", slow_probe),
+        ):
+            ret = await asyncio.wait_for(
+                LLMService.update_llm_server(MagicMock(), _login_user(), TestSaveDefeatsTheInfoCache()._server_req()),
+                timeout=1,
+            )
+            # Returned before the probe finished, with the stale verdict cleared.
+            assert probed == []
+            assert ret.models[0].status == LLMModelStatus.UNKNOWN.value
+            status_writes.assert_awaited_once_with(7, LLMModelStatus.UNKNOWN.value, "")
+
+            release_probe.set()
+            await _drain_background_probes()
+        assert probed == [7]
+
+    async def test_unchanged_models_are_not_probed(self):
+        from bisheng.llm.domain.models.llm_server import LLMServer
+        from bisheng.llm.domain.schemas import LLMModelInfo, LLMServerInfo
+
+        db_server = LLMServer(id=1, name="provider", type="openai", config={}, tenant_id=2)
+        same = LLMModelInfo(id=7, server_id=1, name="model 1", model_name="gpt-x", model_type="llm", status=0)
+        new_server_info = LLMServerInfo(id=1, name="provider", type="openai", models=[same])
+        req = TestSaveDefeatsTheInfoCache()._server_req()
+        req.models[0].model_name = "gpt-x"
+        probe = AsyncMock()
+        status_writes = AsyncMock()
+        p1, p2, p3, p4, p5 = TestSaveDefeatsTheInfoCache()._patches(db_server, new_server_info, [_model()])
+        with (
+            p1,
+            p2,
+            p3,
+            p4,
+            p5,
+            patch("bisheng.llm.domain.services.llm.LLMDao.aupdate_model_status", status_writes),
+            patch.object(LLMService, "test_model_status", probe),
+        ):
+            await LLMService.update_llm_server(MagicMock(), _login_user(), req)
+            await _drain_background_probes()
+        probe.assert_not_awaited()
+        status_writes.assert_not_awaited()

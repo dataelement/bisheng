@@ -1,12 +1,6 @@
 import { Outlined } from "bisheng-icons";
 import { KnowledgeSpace } from "~/api/knowledge";
-import {
-    ActionMenuDivider,
-    ActionMenuItem,
-    ActionMenuSub,
-    ActionMenuSubContent,
-    ActionMenuSubTrigger,
-} from "~/components/ActionMenu";
+import { DropdownItem, DropdownSub, DropdownSeparator } from "@bisheng/ui";
 import { useLocalize } from "~/hooks";
 
 export interface SpaceActionMenuItemsProps {
@@ -38,9 +32,9 @@ export function getSpaceActionFlags({
     canLeaveSpace = false,
 }: SpaceActionMenuItemsProps) {
     const showSettings = (canEditSpace || canManageMembers) && !!onOpenSettings;
-    const showDelete = canDeleteSpace && !!onDeleteSpace;
-    // Leaving is the joined-space counterpart of deleting, never both at once.
-    const showLeave = !showDelete && canLeaveSpace && !!onLeaveSpace;
+    const showDelete = !canLeaveSpace && canDeleteSpace && !!onDeleteSpace;
+    // A joined-space action must never fall through to deleting the shared space.
+    const showLeave = canLeaveSpace && !!onLeaveSpace;
     return { showSettings, showDelete, showLeave, hasAny: showSettings || showDelete || showLeave };
 }
 
@@ -56,14 +50,8 @@ export function SpaceActionMenuItems(props: SpaceActionMenuItemsProps) {
     return (
         <>
             {showInfo && (
-                <ActionMenuSub>
-                    <ActionMenuSubTrigger
-                        hideChevron
-                        icon={<Outlined.Info />}
-                        label={localize("com_knowledge.space_info")}
-                    />
-                    <ActionMenuSubContent width={240}>
-                        <div className="space-y-1.5 text-sm text-text-1">
+                <DropdownSub icon={<Outlined.Info />} label={localize("com_knowledge.space_info")}>
+<div className="space-y-1.5 text-sm text-text-1">
                             <div>
                                 <span className="text-text-3">{localize("com_knowledge.space_desc_label")}</span>
                                 <p className="break-words">{space.description || "-"}</p>
@@ -81,32 +69,32 @@ export function SpaceActionMenuItems(props: SpaceActionMenuItemsProps) {
                                 <p>{space.totalFileCount || 0}</p>
                             </div>
                         </div>
-                    </ActionMenuSubContent>
-                </ActionMenuSub>
+
+                </DropdownSub>
             )}
             {showSettings && (
-                <ActionMenuItem
-                    onClick={onOpenSettings}
+                <DropdownItem
+                    onSelect={onOpenSettings}
                     icon={<Outlined.Edit />}
-                    label={localize("com_knowledge.space_settings")}
-                />
+
+                >{localize("com_knowledge.space_settings")}</DropdownItem>
             )}
-            {(showDelete || showLeave) && <ActionMenuDivider hairline />}
+            {(showDelete || showLeave) && <DropdownSeparator />}
             {showDelete && (
-                <ActionMenuItem
+                <DropdownItem
                     danger
-                    onClick={onDeleteSpace}
+                    onSelect={onDeleteSpace}
                     icon={<Outlined.Delete />}
-                    label={localize("com_knowledge.delete_space")}
-                />
+
+                >{localize("com_knowledge.delete_space")}</DropdownItem>
             )}
             {showLeave && (
-                <ActionMenuItem
+                <DropdownItem
                     danger
-                    onClick={onLeaveSpace}
+                    onSelect={onLeaveSpace}
                     icon={<Outlined.LogOut />}
-                    label={localize("com_knowledge.exit_space_short")}
-                />
+
+                >{localize("com_knowledge.exit_space_short")}</DropdownItem>
             )}
         </>
     );

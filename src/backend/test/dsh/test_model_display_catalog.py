@@ -50,13 +50,15 @@ async def test_chat_projection_uses_stored_labels_and_keeps_permission_filter(mo
         AsyncMock(
             return_value=(
                 SimpleNamespace(id=42, model_name="vendor-id", name="alias"),
-                SimpleNamespace(name="Provider", type="openai"),
+                SimpleNamespace(id=7, name="Provider", type="openai"),
             )
         ),
     )
     monkeypatch.setattr(model_capabilities, "desktop_model_capabilities", AsyncMock(return_value=ChatCapabilities()))
     result = await project_workbench_config(config, 20)
-    assert [(model.id, model.displayName) for model in result.models] == [("42", "Provider / Custom label")]
+    assert [(model.id, model.displayName) for model in result.models] == [("42", "Custom label")]
+    assert result.models[0].provider_id == "7"
+    assert result.models[0].provider_name == "Provider"
     assert result.chat_default_model_id == "42"
     assert config.models[0].displayName == "Custom label"
     assert config.models[0].description == "Retain"

@@ -306,10 +306,8 @@ def socket_proxy_env() -> dict[str, str]:
 
 
 def protocol_methods() -> tuple[str, ...]:
-    """Docker HTTP operations, excluding the local platform-proof guard."""
-    return tuple(
-        sorted(name for name in vars(DockerBackend) if not name.startswith("_") and name != "assert_host_isolation")
-    )
+    """Method names of the :class:`DockerBackend` protocol, for the lockstep test."""
+    return tuple(sorted(name for name in vars(DockerBackend) if not name.startswith("_")))
 
 
 _backend: DockerBackend | None = None

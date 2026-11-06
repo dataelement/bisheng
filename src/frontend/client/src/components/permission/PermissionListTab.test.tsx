@@ -91,6 +91,29 @@ describe("F048 Client PermissionListTab", () => {
     });
   });
 
+  it.each([
+    ["user", "com_permission.empty_search"],
+    ["department", "com_permission.empty_search_departments"],
+    ["user_group", "com_permission.empty_search_user_groups"],
+  ] as const)("identifies an empty %s search in the authorized list", async (subjectType, message) => {
+    mockedGetGrants.mockResolvedValueOnce({
+      data: [], page_size: 50, has_more: false, next_cursor: null,
+    });
+    render(
+      <PermissionListTab
+        resourceType="knowledge_space"
+        resourceId="space-1"
+        context={context}
+        fixedSubjectType={subjectType}
+      />,
+    );
+    expect(await screen.findByText("com_permission.list_empty_for_subject")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "missing" } });
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } });
+    expect(await screen.findByText("com_permission.list_empty_for_subject")).toBeInTheDocument();
+  });
+
   it("keeps direct and department sources as separate rows in the legacy list layout", async () => {
     render(
       <PermissionListTab

@@ -98,7 +98,7 @@ class ExcelLoader(BaseBishengLoader):
             content = f.read()
         # Defensive: the char budget in the renderer should have prevented this. If
         # it ever fires, the budget math has drifted from the renderer.
-        if len(content) > self.max_chunk_limit:
+        if self.split_for_retrieval and len(content) > self.max_chunk_limit:
             raise KnowledgeExcelChunkMaxError()
         return content
 
@@ -132,7 +132,7 @@ class ExcelLoader(BaseBishengLoader):
             candidate = f"{block}\n\n{ref}"
             # Keep the heading on every chunk when a sheet has enough pictures to
             # overflow one segment.
-            if len(candidate) > self.max_chunk_limit and block != heading:
+            if self.split_for_retrieval and len(candidate) > self.max_chunk_limit and block != heading:
                 chunks.append(block)
                 block = f"{heading}\n\n{ref}"
             else:
@@ -150,11 +150,11 @@ class ExcelLoader(BaseBishengLoader):
             sheet_order = convert_file_to_markdown(
                 input_file_path=self.file_path,
                 num_header_rows=self.header_rows,
-                rows_per_markdown=self.data_rows,
+                rows_per_markdown=self.data_rows if self.split_for_retrieval else 0,
                 base_output_dir=md_file_path,
                 append_header=self.append_header,
-                max_chars=self.max_chunk_limit,
-                long_row_splitter=self._split_long_row_text,
+                max_chars=self.max_chunk_limit if self.split_for_retrieval else None,
+                long_row_splitter=self._split_long_row_text if self.split_for_retrieval else None,
             )
         except ExcelRowTooLongError as e:
             # Only reachable if no splitter was supplied, which cannot happen here.

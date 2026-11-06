@@ -183,7 +183,7 @@ async def test_manual_reconfig_survives_reseed(publish_db):
         scenario = (
             await session.exec(select(ApprovalScenario).where(ApprovalScenario.scenario_code == APP_PUBLISH_SCENARIO))
         ).first()
-        scenario.scenario_name = "应用发布(自定义)"
+        scenario.scenario_name = "应用发布（自定义）"
         node = (
             await session.exec(
                 select(ApprovalNodeDefinition).where(ApprovalNodeDefinition.node_code == "app_publish_admin")
@@ -207,7 +207,7 @@ async def test_manual_reconfig_survives_reseed(publish_db):
                 )
             ).all()
         )
-    assert scenario.scenario_name == "应用发布(自定义)"
+    assert scenario.scenario_name == "应用发布（自定义）"
     assert len(nodes) == 1
     assert nodes[0].approver_config == {"sources": [{"type": "direct_user", "user_ids": [9]}]}
 

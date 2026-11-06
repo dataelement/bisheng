@@ -26,6 +26,7 @@ from bisheng.knowledge.domain.services.knowledge_file_visibility_service import 
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
     KnowledgeSpaceChatService,
 )
+from bisheng.knowledge.domain.services.retrieval_engine import RetrievalEngine
 
 
 def _make_doc(file_id: int, content: str = "") -> Document:
@@ -39,7 +40,25 @@ def _make_service(*, is_admin: bool = False, user_id: int = 7) -> KnowledgeSpace
     login_user.is_admin = MagicMock(return_value=is_admin)
     svc = KnowledgeSpaceChatService(request=MagicMock(), login_user=login_user)
     svc.version_repo = MagicMock()
+    svc.chat_session_repo = MagicMock()
+    svc.chat_session_repo.find_first_by_effective_entry = AsyncMock(
+        return_value=MagicMock(chat_id="cid", flow_id="fid", name="title")
+    )
     return svc
+
+
+def _make_engine(*, user_id: int = 7):
+    """F052 T101: the filter loop itself now lives in ``RetrievalEngine``.
+
+    The chat service still exposes ``_retrieve_and_filter`` (the folder-chat
+    path calls it) but only as a delegate, so these tests drive the engine
+    directly rather than asserting through a one-line forwarder.
+    """
+
+    login_user = MagicMock()
+    login_user.user_id = user_id
+    login_user.user_name = f"user-{user_id}"
+    return RetrievalEngine(login_user, version_repo=MagicMock())
 
 
 # ---------------------------------------------------------------------------
@@ -50,7 +69,7 @@ def _make_service(*, is_admin: bool = False, user_id: int = 7) -> KnowledgeSpace
 @pytest.mark.asyncio
 async def test_retrieve_and_filter_empty_strategy_skips_invocation(monkeypatch):
     """IndexFilter.strategy='empty' → returns [] without touching retriever."""
-    svc = _make_service()
+    svc = _make_engine()
     visibility = MagicMock()
     visibility.build_index_prefilter = AsyncMock(return_value=IndexFilter(strategy="empty", accessible_size=0))
     visibility.post_filter_retrievable_files = AsyncMock()
@@ -59,11 +78,11 @@ async def test_retrieve_and_filter_empty_strategy_skips_invocation(monkeypatch):
     space = MagicMock(id=10)
     invoke_mock = AsyncMock(return_value=[_make_doc(1)])
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRetrieverTool",
+        "bisheng.knowledge.domain.services.retrieval_engine.KnowledgeRetrieverTool",
         lambda **kwargs: MagicMock(ainvoke=invoke_mock),
     )
 
-    docs = await svc._retrieve_and_filter(space=space, query="q", candidate_file_ids=None, max_content=1000)
+    docs = await svc.retrieve_and_filter(space=space, query="q", candidate_file_ids=None, max_content=1000)
 
     assert docs == []
     visibility.build_index_prefilter.assert_awaited_once_with(10, None)
@@ -74,7 +93,7 @@ async def test_retrieve_and_filter_empty_strategy_skips_invocation(monkeypatch):
 @pytest.mark.asyncio
 async def test_retrieve_and_filter_first_attempt_satisfies(monkeypatch):
     """First attempt returns docs all of which pass post-filter → no expansion."""
-    svc = _make_service()
+    svc = _make_engine()
     visibility = MagicMock()
     visibility.build_index_prefilter = AsyncMock(
         return_value=IndexFilter(strategy="in", accessible_size=3, milvus_expr="document_id in [1, 2, 3]"),
@@ -87,11 +106,11 @@ async def test_retrieve_and_filter_first_attempt_satisfies(monkeypatch):
 
     # Patch vectorstore init + retriever_tool to deterministic stub.
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_milvus_vectorstore",
+        "bisheng.knowledge.domain.services.retrieval_engine.KnowledgeRag.init_knowledge_milvus_vectorstore",
         AsyncMock(return_value=MagicMock(as_retriever=lambda **kw: MagicMock())),
     )
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_es_vectorstore",
+        "bisheng.knowledge.domain.services.retrieval_engine.KnowledgeRag.init_knowledge_es_vectorstore",
         AsyncMock(return_value=MagicMock(as_retriever=lambda **kw: MagicMock())),
     )
 
@@ -103,11 +122,11 @@ async def test_retrieve_and_filter_first_attempt_satisfies(monkeypatch):
         return docs_first
 
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRetrieverTool",
+        "bisheng.knowledge.domain.services.retrieval_engine.KnowledgeRetrieverTool",
         lambda **kwargs: MagicMock(ainvoke=fake_ainvoke),
     )
 
-    docs = await svc._retrieve_and_filter(space=space, query="q", candidate_file_ids=None, max_content=1000)
+    docs = await svc.retrieve_and_filter(space=space, query="q", candidate_file_ids=None, max_content=1000)
 
     assert [int(d.metadata["document_id"]) for d in docs] == [1, 2, 3]
     visibility.post_filter_retrievable_files.assert_awaited_once()
@@ -117,7 +136,7 @@ async def test_retrieve_and_filter_first_attempt_satisfies(monkeypatch):
 @pytest.mark.asyncio
 async def test_retrieve_and_filter_post_filter_drops_some(monkeypatch):
     """First attempt returns docs but only a subset passes post-filter."""
-    svc = _make_service()
+    svc = _make_engine()
     visibility = MagicMock()
     visibility.build_index_prefilter = AsyncMock(return_value=IndexFilter(strategy="none", accessible_size=10))
     # Only file_ids 1 and 3 are permitted; 2 and 4 dropped.
@@ -126,11 +145,11 @@ async def test_retrieve_and_filter_post_filter_drops_some(monkeypatch):
 
     space = MagicMock(id=10)
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_milvus_vectorstore",
+        "bisheng.knowledge.domain.services.retrieval_engine.KnowledgeRag.init_knowledge_milvus_vectorstore",
         AsyncMock(return_value=MagicMock(as_retriever=lambda **kw: MagicMock())),
     )
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_es_vectorstore",
+        "bisheng.knowledge.domain.services.retrieval_engine.KnowledgeRag.init_knowledge_es_vectorstore",
         AsyncMock(return_value=MagicMock(as_retriever=lambda **kw: MagicMock())),
     )
 
@@ -140,11 +159,11 @@ async def test_retrieve_and_filter_post_filter_drops_some(monkeypatch):
         return docs_first
 
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRetrieverTool",
+        "bisheng.knowledge.domain.services.retrieval_engine.KnowledgeRetrieverTool",
         lambda **kwargs: MagicMock(ainvoke=fake_ainvoke),
     )
 
-    docs = await svc._retrieve_and_filter(space=space, query="q", candidate_file_ids=None, max_content=1000)
+    docs = await svc.retrieve_and_filter(space=space, query="q", candidate_file_ids=None, max_content=1000)
 
     surviving_ids = sorted(int(d.metadata["document_id"]) for d in docs)
     assert surviving_ids == [1, 3]
@@ -153,7 +172,7 @@ async def test_retrieve_and_filter_post_filter_drops_some(monkeypatch):
 @pytest.mark.asyncio
 async def test_retrieve_and_filter_capped_at_two_attempts(monkeypatch):
     """AD-03: if both attempts produce 0 survivors, stop; no third attempt."""
-    svc = _make_service()
+    svc = _make_engine()
     visibility = MagicMock()
     visibility.build_index_prefilter = AsyncMock(return_value=IndexFilter(strategy="none", accessible_size=100))
     visibility.post_filter_retrievable_files = AsyncMock(return_value=set())
@@ -161,11 +180,11 @@ async def test_retrieve_and_filter_capped_at_two_attempts(monkeypatch):
 
     space = MagicMock(id=10)
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_milvus_vectorstore",
+        "bisheng.knowledge.domain.services.retrieval_engine.KnowledgeRag.init_knowledge_milvus_vectorstore",
         AsyncMock(return_value=MagicMock(as_retriever=lambda **kw: MagicMock())),
     )
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_es_vectorstore",
+        "bisheng.knowledge.domain.services.retrieval_engine.KnowledgeRag.init_knowledge_es_vectorstore",
         AsyncMock(return_value=MagicMock(as_retriever=lambda **kw: MagicMock())),
     )
 
@@ -177,11 +196,11 @@ async def test_retrieve_and_filter_capped_at_two_attempts(monkeypatch):
         return [_make_doc(invoke_count * 10)]
 
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRetrieverTool",
+        "bisheng.knowledge.domain.services.retrieval_engine.KnowledgeRetrieverTool",
         lambda **kwargs: MagicMock(ainvoke=fake_ainvoke),
     )
 
-    docs = await svc._retrieve_and_filter(space=space, query="q", candidate_file_ids=None, max_content=1000)
+    docs = await svc.retrieve_and_filter(space=space, query="q", candidate_file_ids=None, max_content=1000)
 
     assert docs == []
     assert invoke_count == 2  # AD-03 hard cap
@@ -190,7 +209,7 @@ async def test_retrieve_and_filter_capped_at_two_attempts(monkeypatch):
 @pytest.mark.asyncio
 async def test_retrieve_and_filter_expansion_succeeds_second_attempt(monkeypatch):
     """First attempt → 0 survivors; second attempt → survivors. Used."""
-    svc = _make_service()
+    svc = _make_engine()
     visibility = MagicMock()
     visibility.build_index_prefilter = AsyncMock(
         return_value=IndexFilter(strategy="in", accessible_size=5, milvus_expr="document_id in [1,2,3,4,5]")
@@ -208,11 +227,11 @@ async def test_retrieve_and_filter_expansion_succeeds_second_attempt(monkeypatch
 
     space = MagicMock(id=10)
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_milvus_vectorstore",
+        "bisheng.knowledge.domain.services.retrieval_engine.KnowledgeRag.init_knowledge_milvus_vectorstore",
         AsyncMock(return_value=MagicMock(as_retriever=lambda **kw: MagicMock())),
     )
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_es_vectorstore",
+        "bisheng.knowledge.domain.services.retrieval_engine.KnowledgeRag.init_knowledge_es_vectorstore",
         AsyncMock(return_value=MagicMock(as_retriever=lambda **kw: MagicMock())),
     )
 
@@ -226,11 +245,11 @@ async def test_retrieve_and_filter_expansion_succeeds_second_attempt(monkeypatch
         return [_make_doc(3), _make_doc(5)]  # only 5 survives
 
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRetrieverTool",
+        "bisheng.knowledge.domain.services.retrieval_engine.KnowledgeRetrieverTool",
         lambda **kwargs: MagicMock(ainvoke=fake_ainvoke),
     )
 
-    docs = await svc._retrieve_and_filter(space=space, query="q", candidate_file_ids=None, max_content=1000)
+    docs = await svc.retrieve_and_filter(space=space, query="q", candidate_file_ids=None, max_content=1000)
 
     assert call_count == 2
     assert sorted(int(d.metadata["document_id"]) for d in docs) == [5]
@@ -240,7 +259,7 @@ async def test_retrieve_and_filter_expansion_succeeds_second_attempt(monkeypatch
 async def test_retrieve_and_filter_logs_structured_fields(monkeypatch, caplog):
     """AC-27: each retrieval attempt writes the permission_filter log fields."""
 
-    svc = _make_service()
+    svc = _make_engine()
     visibility = MagicMock()
     visibility.build_index_prefilter = AsyncMock(
         return_value=IndexFilter(strategy="in", accessible_size=2, milvus_expr="document_id in [1,2]")
@@ -250,11 +269,11 @@ async def test_retrieve_and_filter_logs_structured_fields(monkeypatch, caplog):
 
     space = MagicMock(id=10)
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_milvus_vectorstore",
+        "bisheng.knowledge.domain.services.retrieval_engine.KnowledgeRag.init_knowledge_milvus_vectorstore",
         AsyncMock(return_value=MagicMock(as_retriever=lambda **kw: MagicMock())),
     )
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_es_vectorstore",
+        "bisheng.knowledge.domain.services.retrieval_engine.KnowledgeRag.init_knowledge_es_vectorstore",
         AsyncMock(return_value=MagicMock(as_retriever=lambda **kw: MagicMock())),
     )
 
@@ -262,7 +281,7 @@ async def test_retrieve_and_filter_logs_structured_fields(monkeypatch, caplog):
         return [_make_doc(1), _make_doc(2)]
 
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRetrieverTool",
+        "bisheng.knowledge.domain.services.retrieval_engine.KnowledgeRetrieverTool",
         lambda **kwargs: MagicMock(ainvoke=fake_ainvoke),
     )
 
@@ -276,7 +295,7 @@ async def test_retrieve_and_filter_logs_structured_fields(monkeypatch, caplog):
 
     handler_id = loguru_logger.add(sink, level="INFO")
     try:
-        await svc._retrieve_and_filter(space=space, query="q", candidate_file_ids=None, max_content=1000)
+        await svc.retrieve_and_filter(space=space, query="q", candidate_file_ids=None, max_content=1000)
     finally:
         loguru_logger.remove(handler_id)
 
@@ -314,11 +333,6 @@ async def test_chat_single_file_logs_view_file_passed_debug(monkeypatch):
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeDao.aquery_by_id",
         AsyncMock(return_value=space),
-    )
-    session = MagicMock(chat_id="cid", flow_id="fid", name="title")
-    monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.MessageSessionDao.afilter_session",
-        AsyncMock(return_value=[session]),
     )
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_milvus_vectorstore",

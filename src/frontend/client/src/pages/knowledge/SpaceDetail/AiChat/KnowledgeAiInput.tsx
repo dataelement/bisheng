@@ -25,9 +25,14 @@ import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import { cn } from "~/utils";
+import { useVoiceDraft } from "~/hooks/Input/useVoiceDraft";
 
 interface KnowledgeAiInputProps {
     availableTags: { id: number; name: string }[];
+    tagsLoading?: boolean;
+    tagsError?: boolean;
+    onTagPickerOpen?: () => void;
+    onRetryTags?: () => void;
     modelOptions?: BsConfig["models"];
     modelValue?: number;
     /** User picked a model — the dock owns the selection, this input never
@@ -56,6 +61,10 @@ const TAG_TEXT_CLASS = "text-text-1";
 
 export function KnowledgeAiInput({
     availableTags,
+    tagsLoading = false,
+    tagsError = false,
+    onTagPickerOpen,
+    onRetryTags,
     modelOptions,
     modelValue = 0,
     onModelChange,
@@ -74,9 +83,11 @@ export function KnowledgeAiInput({
     const badgeRef = useRef<HTMLSpanElement>(null);
     const [badgeIndentPx, setBadgeIndentPx] = useState<number | undefined>(undefined);
     const [inputText, setInputText] = useState("");
+    const voice = useVoiceDraft(textareaRef, inputText, setInputText);
     const [selectedTag, setSelectedTag] = useState<FolderChatTag | null>(null);
     const [showPicker, setShowPicker] = useState(false);
     const [pickerSearch, setPickerSearch] = useState("");
+    useEffect(() => { if (showPicker) onTagPickerOpen?.(); }, [showPicker, onTagPickerOpen]);
     const [tagDeleteHighlight, setTagDeleteHighlight] = useState(false);
     /** Restacks the input from single-row to two-row when the textarea wraps.
      *  Only escalates (one-way) to avoid oscillation; resets when the input is cleared. */
@@ -126,7 +137,7 @@ export function KnowledgeAiInput({
         const ro = new ResizeObserver(() => apply());
         ro.observe(el);
         return () => ro.disconnect();
-    }, [selectedTag?.id, selectedTag?.name]);
+    }, [selectedTag]);
 
     useEffect(() => {
         setTagDeleteHighlight(false);
@@ -136,7 +147,7 @@ export function KnowledgeAiInput({
         if (inputText.trim()) setTagDeleteHighlight(false);
     }, [inputText]);
 
-    // 已选 tag 时仅用短文案；部分浏览器不会随 React placeholder 属性刷新，需同步到 DOM
+    // Keep the DOM placeholder synchronized when a tag selects the shorter prompt.
     const resolvedPlaceholder = selectedTag
         ? localize("com_knowledge.ai_input_placeholder_short")
         : placeholder ?? localize("com_knowledge.ai_input_placeholder");
@@ -151,6 +162,7 @@ export function KnowledgeAiInput({
     const handleInput = useCallback(
         (e: React.ChangeEvent<HTMLTextAreaElement>) => {
             const val = e.target.value;
+            voice.handleEdit(val);
             setInputText(val);
 
             if (isComposingRef.current) return;
@@ -170,7 +182,7 @@ export function KnowledgeAiInput({
             }
             setShowPicker(false);
         },
-        [selectedTag]
+        [selectedTag, voice]
     );
 
     // Select a tag from the picker
@@ -210,6 +222,7 @@ export function KnowledgeAiInput({
 
     // Handle send
     const handleSend = useCallback(() => {
+        if (voice.busy) return;
         if (isStreaming || disabled || !inputText.trim()) return;
         onSend(inputText.trim(), null, selectedTag ?? undefined);
         setInputText("");
@@ -217,7 +230,7 @@ export function KnowledgeAiInput({
         // Mobile: blur after sending so the keyboard dismisses and the grey overlay
         // (driven by focus → keyboardVisible) clears instead of lingering.
         if (isH5) textareaRef.current?.blur();
-    }, [isStreaming, disabled, inputText, selectedTag, onSend, isH5]);
+    }, [voice.busy, isStreaming, disabled, inputText, selectedTag, onSend, isH5]);
 
     // Handle keydown
     const handleKeyDown = useCallback(
@@ -276,11 +289,10 @@ export function KnowledgeAiInput({
         <div className="flex shrink-0 items-center gap-2">
             {showVoice && (
                 <SpeechToTextComponent
-                    disabled={disabled}
-                    onChange={(e) => {
-                        const newText = (inputText || "") + e;
-                        setInputText(newText);
-                    }}
+                    {...voice.props}
+                    disabled={disabled || isStreaming}
+                    realtime={!!modelData?.asr_model?.realtime}
+                    modelId={modelData?.asr_model?.id}
                 />
             )}
             {isStreaming ? (
@@ -305,7 +317,7 @@ export function KnowledgeAiInput({
                 <button
                     type="button"
                     onClick={handleSend}
-                    disabled={disabled || !inputText.trim()}
+                    disabled={disabled || voice.busy || !inputText.trim()}
                     className="btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10"
                     aria-label="Send message"
                     data-testid="send-button"
@@ -333,6 +345,9 @@ export function KnowledgeAiInput({
                         tags={availableTags
                             .filter((t) => !selectedTag || t.id !== selectedTag.id)
                             .map((t) => t.name)}
+                        loading={tagsLoading}
+                        failed={tagsError}
+                        onRetry={onRetryTags}
                         searchText={pickerSearch}
                         onSelect={handleTagSelect}
                         onClose={() => setShowPicker(false)}
@@ -341,7 +356,7 @@ export function KnowledgeAiInput({
             )}
 
             {/* Single-row: model on the left, inline with the textarea. */}
-            {!stacked && <div className="shrink-0">{modelSelect}</div>}
+            {!stacked && <div className="min-w-0 max-w-[min(200px,40%)] shrink-0">{modelSelect}</div>}
 
             {/* Textarea + tag badge. The badge overlays the first line; outer wrapper scrolls so the badge moves with text. */}
             <div className={cn(stacked ? "w-full" : "min-w-0 flex-1")}>
@@ -375,9 +390,11 @@ export function KnowledgeAiInput({
                             onChange={handleInput}
                             onKeyDown={handleKeyDown}
                             onCompositionStart={() => {
+                                voice.compositionStart();
                                 isComposingRef.current = true;
                             }}
                             onCompositionEnd={() => {
+                                voice.compositionEnd();
                                 isComposingRef.current = false;
                             }}
                             onFocus={() => onFocusChange?.(true)}
@@ -396,8 +413,8 @@ export function KnowledgeAiInput({
             </div>
 
             {/* Controls. Single-row: mic + send pinned right. Stacked: model on the left, mic + send on the right. */}
-            <div className={cn("flex items-center", stacked ? "w-full justify-between" : "shrink-0")}>
-                {stacked && <div className="shrink-0">{modelSelect}</div>}
+            <div className={cn("flex items-center", stacked ? "w-full justify-between gap-2" : "shrink-0")}>
+                {stacked && <div className="min-w-0 max-w-[min(240px,60%)]">{modelSelect}</div>}
                 {sendControls}
             </div>
         </div>

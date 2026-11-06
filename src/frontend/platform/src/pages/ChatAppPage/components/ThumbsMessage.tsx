@@ -1,9 +1,10 @@
 // @ts-strict-ignore
+import { Button, Textarea, toast } from '@bisheng/ui';
 
-import { Button } from '@/components/bs-ui/button';
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/bs-ui/dialog';
-import { Textarea } from '@/components/bs-ui/input';
-import { useToast } from '@/components/bs-ui/toast/use-toast';
+
+
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import { useTranslation } from "react-i18next";
 import { disLikeCommentApi } from "../../../controllers/API";
@@ -25,14 +26,10 @@ const ThumbsMessage = forwardRef((props, ref) => {
         }
     }));
 
-    const { message } = useToast()
+
     const handleSubmit = () => {
-        if (!msgRef.current.value) {
-            message({
-                title: t('prompt'),
-                variant: 'warning',
-                description: t('chat.feedbackRequired')
-            });
+        if (!msgRef.current.value || msgRef.current.value.length > 9999) {
+            toast.show({ type: 'warning', message: [String(t('prompt') ?? ''), String(t('chat.feedbackRequired') ?? '')].filter(Boolean).join('\n') });
             return setError(true);
         }
 
@@ -48,9 +45,9 @@ const ThumbsMessage = forwardRef((props, ref) => {
             </DialogHeader>
             <div className="">
                 <p className="mb-2"></p>
-                <Textarea ref={msgRef} maxLength={9999} className={`textarea ${error ? 'border border-red-400' : ''}`} ></Textarea>
+                <Textarea ref={msgRef} maxLength={9999} textareaClassName={`textarea ${error ? 'border border-red-400' : ''}`} showCount></Textarea>
                 <div className="flex justify-end gap-4 mt-4">
-                    <Button className='px-11' variant="outline" onClick={() => setOpen(false)}>{t('cancel')}</Button>
+                    <Button className='px-11' variant="outlined" onClick={() => setOpen(false)} color="default">{t('cancel')}</Button>
                     <Button className='px-11' onClick={handleSubmit}>{t('submit')}</Button>
                 </div>
             </div>

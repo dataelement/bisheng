@@ -18,7 +18,7 @@ from bisheng.dsh.domain.repositories.admin_operation import require_tenant
 from bisheng.dsh.domain.repositories.subject_policy import DshSubjectPolicyRepository
 from bisheng.dsh.domain.schemas.model_policy import DshModelPolicyState, DshPolicySnapshot
 from bisheng.dsh.domain.schemas.unified_policy import (
-    CreditRuleInput,
+    CreditRuleValue,
     ModelVisibilityInput,
     PolicySubject,
     credits_from_tokens,
@@ -147,7 +147,7 @@ class UnifiedPolicyRepository:
         self._audit(actor, f"model:{model_id}", before, after)
         return after
 
-    def save_rule(self, subject: PolicySubject, actor: int, value: CreditRuleInput) -> dict:
+    def save_rule(self, subject: PolicySubject, actor: int, value: CreditRuleValue) -> dict:
         tenant = require_tenant()
         self.memberships._lock_tenant()
         self._validate_subject(subject)

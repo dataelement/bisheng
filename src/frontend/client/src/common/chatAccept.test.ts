@@ -32,6 +32,32 @@ describe("buildChatAccept", () => {
         });
         expect(accept.split(",")).toEqual(expect.arrayContaining([".png", ".mp3", ".mp4", ".py"]));
     });
+
+    it("allows backend-supported image formats for a vision model", () => {
+        const accept = buildChatAccept({ ...DAILY, enableVision: true });
+        expect(accept.split(",")).toEqual(expect.arrayContaining([".png", ".jpg", ".jpeg", ".webp", ".gif"]));
+    });
+
+    it("keeps image intake available for a non-vision model", () => {
+        const accept = buildChatAccept({ ...DAILY, enableVision: false });
+        expect(accept.split(",")).toContain(".png");
+        expect(accept.split(",")).toContain(".ofd");
+    });
+
+    it("does not duplicate parser-supported images for a vision model", () => {
+        const accept = buildChatAccept({ ...DAILY, enableEtl4lm: true, enableVision: true });
+        expect(accept.split(",").filter((ext) => ext === ".png")).toHaveLength(1);
+        expect(accept.split(",")).toEqual(expect.arrayContaining([".bmp", ".webp", ".gif"]));
+    });
+
+    it("keeps vision images accepted when leaving task mode", () => {
+        const taskAccept = buildChatAccept({ ...DAILY, enableVision: true, taskMode: true });
+        const dailyAccept = buildChatAccept({ ...DAILY, enableVision: true });
+        for (const ext of [".png", ".jpg", ".jpeg", ".webp", ".gif"]) {
+            expect(taskAccept.split(",")).toContain(ext);
+            expect(dailyAccept.split(",")).toContain(ext);
+        }
+    });
 });
 
 describe("isFileNameAccepted", () => {
@@ -56,6 +82,14 @@ describe("isFileNameAccepted", () => {
         expect(isFileNameAccepted("analyze.py", daily)).toBe(false);
         expect(isFileNameAccepted("data.csv", daily)).toBe(false);
         expect(isFileNameAccepted("report.pdf", daily)).toBe(true);
+    });
+
+    it("checks image processing at send time after switching models", () => {
+        const vision = buildChatAccept({ ...DAILY, enableVision: true });
+        const textOnly = buildChatAccept({ ...DAILY, enableVision: false });
+        expect(isFileNameAccepted("diagram.webp", vision)).toBe(true);
+        expect(isFileNameAccepted("diagram.webp", textOnly)).toBe(true);
+        expect(canProcessChatImage("diagram.webp", false, false)).toBe(false);
     });
 
     it("treats an empty or wildcard accept as no restriction", () => {

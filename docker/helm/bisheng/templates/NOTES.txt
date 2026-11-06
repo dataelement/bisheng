@@ -1,0 +1,19 @@
+bisheng {{ .Chart.Version }}
+
+Frontend Service: {{ include "bisheng.frontendService" . }}:{{ .Values.frontend.service.port }}
+Backend Service:  {{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }}
+
+{{- if .Values.sandbox.enabled }}
+
+Sandbox endpoints (one URL per replica, not the Service VIP):
+{{- range .Values.sandbox.endpoints }}
+  {{ . }}
+{{- end }}
+
+Install the sibling chart first, for example:
+
+  helm upgrade --install sandbox docker/helm/bisheng-sandbox \
+    --namespace bisheng-sandbox --create-namespace
+
+Keep SANDBOX_TOKEN / BS_SANDBOX_CONF__TOKEN identical on both releases.
+{{- end }}

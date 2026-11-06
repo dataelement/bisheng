@@ -1,7 +1,7 @@
 """最小托管应用样例 —— 零第三方依赖,直接可 `bisheng deploy`。
 
-四条托管运行契约(见 SKILL.md §1)都体现在这几行里,每一条在本地
-`python main.py` 时都是无害的默认值,所以本地验过的行为在平台上成立:
+四条托管运行契约(见 SKILL.md §1)都体现在这几行里。
+本地通过 `bisheng dev` 注入同名变量,与托管环境使用同一份代码:
 
 * 铁律①  监听平台注入的 PORT。
 * 铁律②  绑 0.0.0.0,不是 127.0.0.1。
@@ -12,7 +12,7 @@
 计数放在 `/hits`。
 
 本地跑:``bisheng dev`` 然后开它打印的 http://127.0.0.1:8080/apps/hello-hosted/
-(直接 ``python main.py`` 也能跑,那时没有前缀,开 http://127.0.0.1:8080)
+直接运行时也须显式提供本地数据库路径 `BISHENG_APP_DB_PATH`。
 """
 
 from __future__ import annotations
@@ -27,8 +27,10 @@ PORT = int(os.environ.get("PORT") or os.environ.get("BISHENG_APP_PORT") or 8080)
 # 铁律④:对外基路径。平台上和 bisheng dev 下都是 /apps/{slug};直接 python main.py 时未设置。所有对外链接都过 url()。
 BASE_PATH = (os.environ.get("BISHENG_APP_BASE_PATH") or "").rstrip("/")
 
-# 铁律③:只往 /data 写。平台用 BISHENG_APP_DB_PATH 告诉应用数据库在哪;本地退回当前目录。
-DB_PATH = os.environ.get("BISHENG_APP_DB_PATH") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.db")
+# 铁律③:使用平台或 bisheng dev 注入的数据库,不回退到只读源码目录。
+DB_PATH = os.environ.get("BISHENG_APP_DB_PATH")
+if not DB_PATH:
+    raise RuntimeError("Missing BISHENG_APP_DB_PATH; run with bisheng dev or configure the application database")
 
 
 def url(path: str) -> str:
@@ -38,7 +40,7 @@ def url(path: str) -> str:
 
 def bump_and_read() -> int:
     conn = sqlite3.connect(DB_PATH)
-    # 换版本时新旧两个实例会同时打开这个文件,WAL 让读写互不阻塞。
+    # WAL 改善同一运行版本中多请求的读写并发;版本切换仍由平台隔离写入者。
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("CREATE TABLE IF NOT EXISTS hits (id INTEGER PRIMARY KEY AUTOINCREMENT)")
     conn.execute("INSERT INTO hits DEFAULT VALUES")

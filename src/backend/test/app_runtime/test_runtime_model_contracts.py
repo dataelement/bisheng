@@ -91,7 +91,7 @@ def test_byte_counters_hold_the_documented_snapshot_limit(model, field):
 
 
 def migration(monkeypatch, kind="integer", present=True):
-    module = import_module("bisheng.core.database.alembic.versions.v3_0_0_f130_cloud_workbenches")
+    module = import_module("bisheng.core.database.alembic.versions.f086_runtime_byte_counters")
     calls = []
     monkeypatch.setattr(module.op, "get_bind", lambda: object())
     monkeypatch.setattr(module, "table_exists", lambda table: present)
@@ -103,10 +103,10 @@ def migration(monkeypatch, kind="integer", present=True):
 
 def test_upgrade_widens_both_existing_counters(monkeypatch):
     module, calls = migration(monkeypatch)
-    module.widen_existing_byte_counters()
+    module.upgrade()
     assert [args for args, _ in calls] == [("runtime_artifact", "size_bytes"), ("runtime_transfer", "offset")]
     assert all(isinstance(kwargs["type_"], BigInteger) and kwargs["existing_nullable"] is False for _, kwargs in calls)
-    assert module.down_revision == "f111_matched_words"
+    assert module.down_revision == "merge_vibe_f077_heads"
     module.downgrade()
     assert len(calls) == 2  # A downgrade must not narrow existing large counters.
 
@@ -114,14 +114,14 @@ def test_upgrade_widens_both_existing_counters(monkeypatch):
 @pytest.mark.parametrize("kind,present", [("BIGINT", True), ("biginteger", True), ("integer", False)])
 def test_upgrade_skips_fresh_or_missing_tables(monkeypatch, kind, present):
     module, calls = migration(monkeypatch, kind, present)
-    module.widen_existing_byte_counters()
+    module.upgrade()
     assert not calls
 
 
 def test_upgrade_rejects_an_unexpected_column_type(monkeypatch):
     module, calls = migration(monkeypatch, "varchar")
     with pytest.raises(RuntimeError, match="Unexpected byte-counter"):
-        module.widen_existing_byte_counters()
+        module.upgrade()
     assert not calls
 
 

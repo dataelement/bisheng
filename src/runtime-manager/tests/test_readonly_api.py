@@ -201,7 +201,7 @@ def test_logs_redact_known_injected_secrets(rtm_client, rtm_config, fake_docker)
     lines = rtm_client.get(f"/v1/apps/{APP_ID}/logs").json()["lines"]
 
     assert secret not in "\n".join(lines)
-    assert "<redacted>" in lines[0]
+    assert "***" in lines[0]
 
 
 def test_logs_do_not_pretend_to_redact_app_output(rtm_client, rtm_config, fake_docker):

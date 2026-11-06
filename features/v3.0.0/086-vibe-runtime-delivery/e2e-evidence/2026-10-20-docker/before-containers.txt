@@ -1,0 +1,26 @@
+15efc4bf6f41 dsh-backend-worker Up 28 minutes
+f58671d259b9 dsh-backend Up 29 minutes (healthy)
+da6dd35c740f dsh-frontend Up 4 hours
+0e07fed02c74 bisheng-information-api Up 11 days
+684c8e984eeb bisheng-frontend-dm Up 4 weeks
+7ff3f24efeee bisheng-backend-worker-ocr-dm Up 4 weeks
+b2ad936ec5e7 bisheng-backend-dm Up 4 weeks (healthy)
+66cc654093a7 bisheng-backend-worker-dm Up 4 weeks
+c6812b9eb270 dsh-minio Up 5 weeks (healthy)
+a21b0ad897a3 dsh-telemetry Up 5 weeks
+0077dbe31f2c dsh-openfga Up 5 weeks (healthy)
+811a96614149 dsh-milvus Up 5 weeks (healthy)
+38d8cbca7b4a dsh-etcd Up 5 weeks (healthy)
+3c98c7162ba4 dsh-redis Up 5 weeks (healthy)
+b6d15ee4df25 dsh-elasticsearch Up 5 weeks
+38a4eddc27f0 dsh-mysql Up 5 weeks (healthy)
+f7849abe912d bisheng-mysql Up 2 months (healthy)
+7b186824f0d4 bisheng-gateway-dm Up 2 months
+2d16ab42cf16 bisheng-openfga-dm Up 2 months (healthy)
+0f8e1e33bf14 bisheng-milvus-standalone Up 2 months (healthy)
+b54593bdcee6 bisheng-milvus-minio Up 2 months (healthy)
+84d6c9cef933 bisheng-milvus-etcd Up 2 months (healthy)
+94e8565700e5 bisheng-es-dm Up 2 months
+599ade9773b6 bisheng-redis Up 2 months (healthy)
+187e0ea624f5 bisheng-telemetry Up 2 months
+0ef1aadc50fc bisheng-gateway Up 2 months

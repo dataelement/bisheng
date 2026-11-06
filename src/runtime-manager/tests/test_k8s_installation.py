@@ -1173,25 +1173,6 @@ def test_chart_cni_identity_is_admission_source_and_invalidates_only_old_report(
 @contextmanager
 def chart_lookup_api(objects):
     requests = []
-    # Helm 4 resolves every rendered kind through discovery during server-side
-    # dry runs. Keep the fake API complete without contacting a real cluster.
-    resources = {
-        "v1": [
-            ("configmaps", "ConfigMap", True),
-            ("namespaces", "Namespace", False),
-            ("services", "Service", True),
-            ("serviceaccounts", "ServiceAccount", True),
-            ("resourcequotas", "ResourceQuota", True),
-            ("limitranges", "LimitRange", True),
-            ("persistentvolumes", "PersistentVolume", False),
-        ],
-        "apps/v1": [("deployments", "Deployment", True)],
-        "rbac.authorization.k8s.io/v1": [("roles", "Role", True), ("rolebindings", "RoleBinding", True)],
-        "networking.k8s.io/v1": [("networkpolicies", "NetworkPolicy", True)],
-        "admissionregistration.k8s.io/v1": [
-            ("validatingwebhookconfigurations", "ValidatingWebhookConfiguration", False)
-        ],
-    }
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_args):
@@ -1210,34 +1191,20 @@ def chart_lookup_api(objects):
                     "serverAddressByClientCIDRs": [],
                 }
             elif path == "/apis":
-                response = {
-                    "kind": "APIGroupList",
-                    "apiVersion": "v1",
-                    "groups": [
-                        {
-                            "name": group.split("/")[0],
-                            "versions": [{"groupVersion": group, "version": "v1"}],
-                            "preferredVersion": {"groupVersion": group, "version": "v1"},
-                        }
-                        for group in resources
-                        if group != "v1"
-                    ],
-                }
-            elif path == "/api/v1" or path.removeprefix("/apis/") in resources:
-                group = "v1" if path == "/api/v1" else path.removeprefix("/apis/")
+                response = {"kind": "APIGroupList", "apiVersion": "v1", "groups": []}
+            elif path == "/api/v1":
                 response = {
                     "kind": "APIResourceList",
                     "apiVersion": "v1",
-                    "groupVersion": group,
+                    "groupVersion": "v1",
                     "resources": [
                         {
-                            "name": name,
+                            "name": "configmaps",
                             "singularName": "",
-                            "namespaced": namespaced,
-                            "kind": kind,
+                            "namespaced": True,
+                            "kind": "ConfigMap",
                             "verbs": ["get"],
                         }
-                        for name, kind, namespaced in resources[group]
                     ],
                 }
             else:
@@ -1351,9 +1318,6 @@ def render_upgrade(values, tmp_path, objects, *, expect_success=True):
                 str(values_path),
                 "--is-upgrade",
                 "--dry-run=server",
-                # The fixture serves lookup objects, not a Kubernetes OpenAPI
-                # schema. Helm 4 validates that schema even for template runs.
-                "--disable-openapi-validation",
                 "--kubeconfig",
                 str(config_path),
             ],

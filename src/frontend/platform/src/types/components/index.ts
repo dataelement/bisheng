@@ -23,13 +23,6 @@ export type InputComponentType = {
   blurOnEnter?: boolean;
   type?: 'input' | 'textarea'
 };
-export type ToggleComponentType = {
-  enabled: boolean;
-  setEnabled: (state: boolean) => void;
-  disabled: boolean | undefined;
-  size: "small" | "medium" | "large";
-  id?: string;
-};
 export type DropDownComponentType = {
   value: string;
   options: string[];
@@ -212,14 +205,6 @@ export type ShadTooltipProps = {
   content: ReactNode;
   children: ReactNode;
   style?: string;
-};
-export type ShadToolTipType = {
-  content?: ReactNode | null;
-  side?: "top" | "right" | "bottom" | "left";
-  asChild?: boolean;
-  children?: ReactElement;
-  delayDuration?: number;
-  styleClasses?: string;
 };
 
 export type TextHighlightType = {

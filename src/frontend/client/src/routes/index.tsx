@@ -23,7 +23,7 @@ import MenuApprovalPluginGate from '@/layouts/MenuApprovalPluginGate';
 import { appsSectionLinkTarget } from '@/layouts/appModuleNavPaths';
 import { canOpenWorkbench } from '@/utils/platformAccess';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
-import { skillCenterPreviewEnabled } from '~/components/Skills/types';
+
 import { usePrefersMobileLayout } from '~/hooks';
 import { squareTypePath } from '~/pages/square/squarePaths';
 
@@ -37,6 +37,9 @@ const AgentCenter = lazy(() => import('@/pages/apps'));
 const CloudWorkbenches = lazy(() => import('@/pages/apps/CloudWorkbenches').then(module => ({ default: module.CloudWorkbenches })));
 const ExplorePlaza = lazy(() => import('@/pages/apps/explore'));
 const Share = lazy(() => import('@/pages/share'));
+const SkillCenterPage = lazy(() =>
+  import('~/pages/skills/SkillCenterPage').then((module) => ({ default: module.SkillCenterPage })),
+);
 const Sop = lazy(() => import('@/components/Sop'));
 const Subscription = lazy(() => import('~/pages/Subscription'));
 const Knowledge = lazy(() => import('~/pages/knowledge'));
@@ -60,9 +63,6 @@ const SquarePage = lazy(() =>
   import('~/pages/square/SquarePage').then((module) => ({ default: module.SquarePage })),
 );
 const CapabilityCenterPage = lazy(() => import('~/pages/capabilities/CapabilityCenterPage').then(module => ({ default: module.CapabilityCenterPage })));
-const SkillCenterPage = lazy(() =>
-  import('~/pages/skills/SkillCenterPage').then((module) => ({ default: module.SkillCenterPage })),
-);
 
 function RouteLoading() {
   return (
@@ -166,6 +166,12 @@ export const router = createBrowserRouter([
             children: [
               { index: true, element: <HomeEntryRedirect /> },
               {
+                path: 'c/skills',
+                element: (
+                  <MenuApprovalPluginGate pluginId="home">{suspended(<SkillCenterPage />)}</MenuApprovalPluginGate>
+                ),
+              },
+              {
                 path: 'c/media-playback',
                 element: (
                   <MenuApprovalPluginGate pluginId="home">
@@ -234,13 +240,13 @@ export const router = createBrowserRouter([
           { path: 'square', element: suspended(<SquarePage />) },
           { path: 'capabilities', element: suspended(<MenuApprovalPluginGate pluginId="home"><CapabilityCenterPage /></MenuApprovalPluginGate>) },
           {
-            // 技能 module home (我的技能 / 技能广场) — preview-gated, rides on 首页's menu grant.
+            // Skill entry follows the home module grant.
             path: 'skills',
-            element: skillCenterPreviewEnabled ? suspended(
+            element: suspended(
               <MenuApprovalPluginGate pluginId="home">
                 <SkillCenterPage />
               </MenuApprovalPluginGate>
-            ) : <Navigate to="/404" replace />,
+            ),
           },
           { path: 'channel', element: suspended(
             <MenuApprovalPluginGate pluginId="subscription">

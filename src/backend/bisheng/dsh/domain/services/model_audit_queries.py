@@ -156,7 +156,10 @@ class DshModelAuditQueryService:
                     query.get("model_name") and not ready["name_ready"]
                 ):
                     raise ValueError("Audit query backfill required")
-            return {**repository.page(now=self.now(), **query), "request_filter_scope": "MATCHING_REQUESTS"}
+            return {
+                **repository.page(now=self.now(), exclude_auxiliary=True, **query),
+                "request_filter_scope": "MATCHING_REQUESTS",
+            }
 
         try:
             # Cancellation retains the executor slot until actual DB work ends.

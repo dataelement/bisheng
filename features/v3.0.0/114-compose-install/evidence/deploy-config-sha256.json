@@ -1,0 +1,17 @@
+{
+  "docker/.env.example": "2420120a9b6b4730ec89913d581ca212232d99d0f4080d116945937665a8f124",
+  "docker/docker-compose.yml": "1ec630b9d3f29cda096c936d39fef307ec6f1402e2d5a2865dbc72ecc868b8c1",
+  "docker/install.sh": "5b9176aea0000809d82296dcce65d95771fb6a24a8f620c9eb999b2d846b1c5c",
+  "docker/lib/env.awk": "190a2e1c4e1a560a4d78e2ac4e9eee2e117ff9c75083d6b48383f3f43d7222d9",
+  "docker/lib/install-env.sh": "c916918cc7f43110106ff08680e1aae9451cc8e1f8d636cc01473e31e4b97163",
+  "docker/gateway/config/application.yml": "a5ad7f3c083783419c00a65265349c669e96b6358dc7e14451be840a8053008c",
+  "docker/gateway/init.sh": "65f8856625d7a0934b3db303122ec44f7f6b9d79aec0817f7b6419e9296a1a8d",
+  "docker/gateway/init.sql": "c534ac522fd9375308ab327e7561c7a4d42b466616cba8394256cc77df459b52",
+  "docker/nginx/conf.d/default.conf": "b75135dc8ec3f4c06b7e64096f7f044dc804ccaa631a13da5bb4a191f199c9d4",
+  "docker/nginx/conf.d/websocket.conf": "2255f65cde423b65aca3d4b7f191f627c6850b1d96909087d9a6dd59c336a9ab",
+  "docker/nginx/nginx.conf": "602ed78d0e08a745e8a72a1e751d9f534f61059f42af49f171884ce7100f3787",
+  "docker/bisheng/config/config.yaml": "8d81f5551bd4b2685a805fdd87082f6542ab7aa5c51c03f8ed817fb4e77b6577",
+  "docker/bisheng/entrypoint.sh": "87c399dea4e4d2d731c23c98760b98994c0b77646d343997aa5807b8af15c671",
+  "docker/mysql/conf/my.cnf": "85a42b02a7b10e8daf9899be6d314617d564b8183fa52c28be3d86da45fcadb5",
+  "docker/redis/redis.conf": "ac7d3b58db76b87c878ffbb8978d483195ac694b37cacc0aced6768894518d4d"
+}

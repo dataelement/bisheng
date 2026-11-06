@@ -12,7 +12,6 @@ jest.mock('~/components/Chat/useDesktopNavigation', () => ({ useDesktopNavigatio
 jest.mock('~/components/Chat/useDesktopAppearance', () => ({ useDesktopAppearance: () => {} }));
 jest.mock('./useDesktopLocale', () => ({ useDesktopLocale: () => {} }));
 jest.mock('./useWorkbenchNavLinks', () => ({ useWorkbenchNavLinks: () => ({ links: [{ section: 'home', label: 'Welcome' }] }) }));
-jest.mock('./WorkbenchSidebar/sidebarPrefs', () => ({ useSidebarPrefs: () => ({}) }));
 jest.mock('./WorkbenchSidebar/useSidebarEntries', () => ({
   useSidebarEntries: () => mockEntries,
   splitSidebarEntries: (entries: unknown[]) => ({ shown: entries.slice(0, 3) }),

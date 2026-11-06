@@ -1,8 +1,8 @@
-"use client"
+import { Button } from '@bisheng/ui';
 
 import { Copy } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Button } from "@/components/bs-ui/button"
+
 import { copyText } from "@/utils"
 import { loadScript } from "./Mermaid"
 
@@ -113,24 +113,16 @@ export default function ECharts({ option }: { option: string }) {
                 {/* 头部切换按钮 */}
                 <div className="flex items-center justify-between p-2 relative z-10 bg-muted">
                     <div className="flex gap-1 bg-background rounded-md">
-                        <Button
-                            onClick={() => setMode("chart")}
-                            variant={mode === "chart" ? "default" : "ghost"}
-                            className="text-xs h-8"
-                        >
+                        <Button onClick={() => setMode("chart")} variant={mode === "chart" ? "default" : "ghost"} className="text-xs h-8">
                             图表
                         </Button>
-                        <Button
-                            onClick={() => setMode("code")}
-                            variant={mode === "code" ? "default" : "ghost"}
-                            className="text-xs h-8"
-                        >
+                        <Button onClick={() => setMode("code")} variant={mode === "code" ? "default" : "ghost"} className="text-xs h-8">
                             代码
                         </Button>
                     </div>
                     {mode === "code" && (
                         <div className="flex items-center">
-                            <Button onClick={handleCopy} variant="ghost" className="text-xs h-8">
+                            <Button onClick={handleCopy} variant="text" className="text-xs h-8" color="default">
                                 <Copy size={16} />
                                 {copySuccess ? "已复制" : "复制"}
                             </Button>

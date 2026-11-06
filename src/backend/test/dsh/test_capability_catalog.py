@@ -7,12 +7,11 @@ import pytest
 from fastapi import HTTPException
 
 from bisheng.dsh.domain.services.capability_catalog import CapabilityCatalogService
+from bisheng.tool.domain.services.user_availability import UserToolAvailabilityService
 
 
 @pytest.fixture(autouse=True)
 def account_availability(monkeypatch):
-    from bisheng.tool.domain.services.user_availability import UserToolAvailabilityService
-
     monkeypatch.setattr(UserToolAvailabilityService, "disabled_ids", AsyncMock(return_value=set()))
 
 
@@ -277,3 +276,25 @@ async def test_tool_order_stays_stable_across_availability_changes_and_reload(mo
             target = next(item for item in items if item["resource_id"] == target_id)
             assert target["availability_enabled"] is enabled
             assert target["ready"] is enabled
+
+
+async def test_daily_picker_only_exposes_curated_children_and_preserves_defaults(monkeypatch):
+    app, _ = make_service(monkeypatch, [tool(id=1), tool(id=2)])
+    from bisheng.permission.application import business_authorization
+    from bisheng.tool.domain.services.tool import ToolServices
+
+    permission = AsyncMock(return_value={"12": frozenset({"use"})})
+    monkeypatch.setattr(business_authorization, "batch_check_business_actions", permission)
+    monkeypatch.setattr(UserToolAvailabilityService, "disabled_ids", AsyncMock(return_value={1}))
+    result = await app.picker_tools(
+        configured_tools=[
+            {"id": 99, "name": "unauthorized", "default_checked": True, "children": [{"id": 100}]},
+            {"id": 12, "name": "curated", "default_checked": True, "children": [{"id": 1, "tool_key": "time"}]},
+        ]
+    )
+    assert [group["id"] for group in result] == [12]
+    assert result[0]["default_checked"] is True
+    assert [child["id"] for child in result[0]["children"]] == [1]
+    assert result[0]["children"][0]["enabled"] is False
+    assert await app.picker_tools(configured_tools=[]) == []
+    ToolServices().get_tool_list.assert_not_awaited()

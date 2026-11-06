@@ -1,0 +1,1 @@
+⚠️  [arch-guard] RULE-7 WARNING: settings.py — 疑似硬编码敏感信息

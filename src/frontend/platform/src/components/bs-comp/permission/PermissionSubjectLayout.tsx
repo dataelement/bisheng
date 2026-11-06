@@ -1,4 +1,4 @@
-import { TabsList, TabsTrigger } from "@/components/bs-ui/tabs"
+import { Tabs } from "@bisheng/ui"
 import { Building2, Users } from "lucide-react"
 import type { ReactNode } from "react"
 import type { SubjectType } from "./types"
@@ -13,15 +13,8 @@ interface PermissionSubjectTabsProps {
 
 /** The roster uses Radix tabs; the grant form uses a controlled button strip. */
 export function PermissionSubjectTabs({ tabs, value, onChange }: PermissionSubjectTabsProps) {
-  if (onChange) return <div className="inline-flex w-fit shrink-0 items-center justify-center rounded-[6px] border border-[#ECECEC] bg-white p-[3px]">
-    {tabs.map(tab => <button key={tab.value} type="button" aria-pressed={value === tab.value}
-      className={`min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] leading-[22px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${value === tab.value ? "bg-primary/10 font-medium text-primary" : "font-normal text-[#818181]"}`}
-      onClick={() => onChange(tab.value)}>{tab.label}</button>)}
-  </div>
-  return <TabsList className="h-auto w-fit shrink-0 rounded-[6px] border border-[#ECECEC] bg-white p-[3px] shadow-none">
-    {tabs.map(tab => <TabsTrigger key={tab.value} value={tab.value}
-      className="min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] font-normal leading-[22px] text-[#818181] shadow-none data-[state=active]:border-transparent data-[state=active]:bg-primary/10 data-[state=active]:font-medium data-[state=active]:text-primary data-[state=active]:shadow-none data-[state=inactive]:border-transparent">{tab.label}</TabsTrigger>)}
-  </TabsList>
+  return <Tabs activeKey={value} onChange={key => onChange?.(key as SubjectType)}
+    items={tabs.map(tab => ({ key: tab.value, label: tab.label }))} />
 }
 
 interface PermissionSubjectIdentityProps {

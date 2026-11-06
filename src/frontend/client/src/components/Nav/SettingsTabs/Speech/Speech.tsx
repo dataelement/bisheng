@@ -1,6 +1,6 @@
 import { useRecoilState } from 'recoil';
-import * as Tabs from '@radix-ui/react-tabs';
-import { Lightbulb, Cog } from 'lucide-react';
+import { Tabs } from '@bisheng/ui';
+import { Outlined } from 'bisheng-icons';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useGetCustomConfigSpeechQuery } from '~/hooks/queries';
 import {
@@ -21,14 +21,14 @@ import {
   DecibelSelector,
 } from './STT';
 import ConversationModeSwitch from './ConversationModeSwitch';
-import { useOnClickOutside, usePrefersMobileLayout } from '~/hooks';
-import { cn, logger } from '~/utils';
+import { useOnClickOutside, useLocalize } from '~/hooks';
+import { logger } from '~/utils';
 import store from '~/store';
 
 function Speech() {
   const [confirmClear, setConfirmClear] = useState(false);
   const { data } = useGetCustomConfigSpeechQuery();
-  const isSmallScreen = usePrefersMobileLayout();
+  const localize = useLocalize();
 
   const [sttExternal, setSttExternal] = useState(false);
   const [ttsExternal, setTtsExternal] = useState(false);
@@ -140,43 +140,18 @@ function Speech() {
   useOnClickOutside(contentRef, () => confirmClear && setConfirmClear(false), []);
 
   return (
-    <Tabs.Root
-      defaultValue={'simple'}
-      orientation="horizontal"
-      value={advancedMode ? 'advanced' : 'simple'}
-    >
+    <div>
       <div className="sticky -top-1 z-50 mb-4 bg-white dark:bg-gray-700">
-        <Tabs.List className="flex justify-center bg-background">
-          <Tabs.Trigger
-            onClick={() => setAdvancedMode(false)}
-            className={cn(
-              'group m-1 flex items-center justify-center gap-2 bg-transparent px-4 py-2 text-sm text-text-secondary transition-all duration-200 ease-in-out radix-state-active:bg-secondary radix-state-active:text-foreground radix-state-active:shadow-lg',
-              isSmallScreen ? 'flex-row rounded-lg' : 'rounded-xl',
-              'w-full',
-            )}
-            value="simple"
-            style={{ userSelect: 'none' }}
-          >
-            <Lightbulb />
-            Simple
-          </Tabs.Trigger>
-          <Tabs.Trigger
-            onClick={() => setAdvancedMode(true)}
-            className={cn(
-              'group m-1 flex items-center justify-center gap-2 bg-transparent px-4 py-2 text-sm text-text-secondary transition-all duration-200 ease-in-out radix-state-active:bg-secondary radix-state-active:text-foreground radix-state-active:shadow-lg',
-              isSmallScreen ? 'flex-row rounded-lg' : 'rounded-xl',
-              'w-full',
-            )}
-            value="advanced"
-            style={{ userSelect: 'none' }}
-          >
-            <Cog />
-            Advanced
-          </Tabs.Trigger>
-        </Tabs.List>
+        <Tabs
+          activeKey={advancedMode ? 'advanced' : 'simple'}
+          onChange={(key) => setAdvancedMode(key === 'advanced')}
+          items={[
+            { key: 'simple', label: localize('com_ui_simple'), icon: <Outlined.Bulb /> },
+            { key: 'advanced', label: localize('com_ui_advanced'), icon: <Outlined.Setting /> },
+          ]}
+        />
       </div>
-
-      <Tabs.Content value={'simple'}>
+      {!advancedMode ? <div>
         <div className="flex flex-col gap-3 text-sm text-text-primary">
           <SpeechToTextSwitch />
           <EngineSTTDropdown external={sttExternal} />
@@ -186,9 +161,9 @@ function Speech() {
           <EngineTTSDropdown external={ttsExternal} />
           <VoiceDropdown />
         </div>
-      </Tabs.Content>
+      </div> :
 
-      <Tabs.Content value={'advanced'}>
+      <div>
         <div className="flex flex-col gap-3 text-sm text-text-primary">
           <ConversationModeSwitch />
           <div className="mt-2 h-px bg-border-medium" role="none" />
@@ -225,8 +200,8 @@ function Speech() {
           </div>
           <CacheTTSSwitch />
         </div>
-      </Tabs.Content>
-    </Tabs.Root>
+      </div>}
+    </div>
   );
 }
 

@@ -121,7 +121,7 @@ export default function FilePreviewPage() {
             if (!downloadUrl) return;
 
             const link = document.createElement("a");
-            link.href = downloadUrl;
+            link.href = resolveKnowledgePreviewUrl(downloadUrl);
             link.download = fileName;
             link.target = "_blank";
             document.body.appendChild(link);

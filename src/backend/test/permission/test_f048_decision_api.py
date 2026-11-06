@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -12,12 +13,28 @@ from bisheng.common.errcode.permission import (
     PermissionInvalidResourceError,
 )
 from bisheng.permission.api.dependencies import get_permission_decision_api
+from bisheng.permission.api.endpoints import decision as decision_endpoints
 from bisheng.permission.api.endpoints.decision import router
 from bisheng.permission.application.resource_authorization import (
     PermissionDecisionApplication,
     ResourceAuthorizationRegistry,
 )
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+from bisheng.permission.domain.services.permission_action_service import PermissionActor
+
+
+@pytest.fixture(autouse=True)
+def authenticated_actor(monkeypatch):
+    """Keep HTTP decision tests independent of live identity infrastructure."""
+
+    async def resolve(login_user):
+        return PermissionActor(
+            user_id=login_user.user_id,
+            tenant_id=login_user.tenant_id,
+            super_admin=login_user.is_global_super,
+        )
+
+    monkeypatch.setattr(decision_endpoints, "permission_actor", resolve)
 
 
 class _BusinessResourcePort:
@@ -184,7 +201,7 @@ def test_unknown_action_and_fga_unavailable_preserve_distinct_errors() -> None:
         ).json()
 
     assert unknown["status_code"] == 25001
-    assert unavailable["status_code"] == 19002
+    assert unavailable["status_code"] == 25021
 
 
 def test_missing_and_cross_tenant_targets_are_equally_hidden() -> None:
@@ -204,7 +221,7 @@ def test_missing_and_cross_tenant_targets_are_equally_hidden() -> None:
                 ).json()
             )
 
-    assert [body["status_code"] for body in bodies] == [19003, 19003]
+    assert [body["status_code"] for body in bodies] == [25022, 25022]
     assert [body["status_message"] for body in bodies] == [
         "Invalid resource type or ID",
         "Invalid resource type or ID",

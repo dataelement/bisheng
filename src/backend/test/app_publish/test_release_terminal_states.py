@@ -124,7 +124,7 @@ async def test_reject_of_an_iteration_leaves_the_running_version_alone(
 
 async def test_reject_reason_full_text_is_recorded(publish_db, app_factory, deployment_factory, audit_sink):
     """Kept whole, never truncated — a reason an owner cannot read is a resubmission."""
-    reason = "本次发布被驳回:" + "详细说明 " * 40
+    reason = "本次发布被驳回：" + "详细说明 " * 40
     _, _, _, payload = await _scene(app_factory, deployment_factory)
 
     await _handler().on_rejected(1, payload, reason)

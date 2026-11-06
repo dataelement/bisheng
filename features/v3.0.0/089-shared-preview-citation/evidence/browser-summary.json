@@ -1,0 +1,100 @@
+{
+  "date": "2026-10-25",
+  "method": "Headless Chrome/CDP; actual app Vite config and production output, local fixtures, no live backend acceptance",
+  "development": [
+    {
+      "app": "platform",
+      "pdf": [
+        {
+          "width": 1083,
+          "height": 2166
+        },
+        {
+          "width": 1083,
+          "height": 541
+        }
+      ],
+      "passed": [
+        "canvas",
+        "zoom",
+        "docx",
+        "markdown-newlines",
+        "csv",
+        "sandbox",
+        "image",
+        "audio-playback",
+        "citation-locate",
+        "charts",
+        "dedup",
+        "3-locales",
+        "narrow"
+      ],
+      "exceptions": 0
+    },
+    {
+      "app": "client",
+      "pdf": [
+        {
+          "width": 1083,
+          "height": 2166
+        },
+        {
+          "width": 1083,
+          "height": 541
+        }
+      ],
+      "passed": [
+        "canvas",
+        "zoom",
+        "docx",
+        "markdown-newlines",
+        "csv",
+        "sandbox",
+        "image",
+        "audio-playback",
+        "citation-locate",
+        "charts",
+        "dedup",
+        "3-locales",
+        "narrow"
+      ],
+      "exceptions": 0
+    }
+  ],
+  "directSourceTransformHttp": "passed for MarkdownViewer and usePreviewResource in both apps",
+  "production": [
+    {
+      "app": "platform",
+      "productionBootstrap": true,
+      "highlightModules": [
+        "vendor-editor-D7ITX5FM.js"
+      ],
+      "referenceErrors": 0,
+      "assets": {
+        "echarts.min.js": "0ff3236103347d4ae255cde530dc33bc13761c953d1e6e93a91cd8a21208fa12",
+        "mermaid.min.js": "9fd79a9d157f600665ce139f750dd2d3a1d582d326fd55a705e116d651be5b0f"
+      },
+      "firstScreenHeavy": [],
+      "firstScreenModules": 4,
+      "runtimeExceptionCount": 0,
+      "exceptionNote": "none"
+    },
+    {
+      "app": "client",
+      "productionBootstrap": true,
+      "highlightModules": [
+        "markdown_highlight.9Xf5tPFZ.js"
+      ],
+      "referenceErrors": 0,
+      "assets": {
+        "echarts.min.js": "0ff3236103347d4ae255cde530dc33bc13761c953d1e6e93a91cd8a21208fa12",
+        "mermaid.min.js": "9fd79a9d157f600665ce139f750dd2d3a1d582d326fd55a705e116d651be5b0f"
+      },
+      "firstScreenHeavy": [],
+      "firstScreenModules": 5,
+      "runtimeExceptionCount": 1,
+      "exceptionNote": "One expected offline environment API 404; no ReferenceError/HighlightJS"
+    }
+  ],
+  "workerCmapsAndPwa": "Both workers and CMaps present; client precaches root graph assets"
+}

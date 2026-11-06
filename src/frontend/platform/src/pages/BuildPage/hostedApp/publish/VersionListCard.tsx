@@ -10,9 +10,8 @@
  *
  * The list is paged through `useTable` (design K11: `react-query` is frozen
  * on the platform, and this hook is the platform's own table state). It asks
- * the backend for `{ data, total }` one page at a time; the pager only appears
- * once there is a second page, because a card with a single row does not need
- * to announce that it has one page.
+ * the backend for `{ data, total }` one page at a time; the shared pager also
+ * stays visible for a single page or an empty list.
  *
  * The outcome column is mapped through i18n rather than printing the enum:
  * `online` / `rejected` / `withdrawn` are wire values, and an owner reading
@@ -23,16 +22,18 @@
  * states that look identical in the row data and completely different to the
  * person waiting on them.
  */
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination"
+import { Pagination } from "@bisheng/ui";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import {
   getHostedAppErrorMessage,
   getHostedAppVersionPageApi,
   type HostedAppVersion,
 } from "@/controllers/API/hostedApp"
 import { useTable } from "@/util/hook"
-import { Fragment, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { versionOutcomeI18nKey } from "../types"
+import { VersionReleaseNotes } from "../VersionReleaseNotes"
 import { formatTimestamp, Panel, StatusTag } from "./Panel"
 
 const PAGE_SIZE = 10
@@ -55,6 +56,7 @@ export function VersionListCard(props: VersionListCardProps) {
 
 function VersionHistory({ appId, reloadKey = "" }: VersionListCardProps) {
   const { t } = useTranslation()
+  const paginationLocale = usePaginationLocale();
   // `useTable` swallows a rejected fetch (it only clears `loading`), and a
   // non-owner is refused with a business code inside a 200 envelope. The
   // message is captured here so the refusal is shown, not rendered as "no
@@ -129,46 +131,39 @@ function VersionHistory({ appId, reloadKey = "" }: VersionListCardProps) {
               <th className="px-3 py-2 text-left font-normal">
                 {t("hostedApp.versionList.outcome")}
               </th>
+              <th className="w-28 px-3 py-2 text-left font-normal">
+                {t("operations")}
+              </th>
             </tr>
           </thead>
           <tbody>
             {rows.map((version) => (
-              <Fragment key={version.version_id}>
-                <tr className="border-t">
-                  <td className="px-3 py-2">
-                    <span className="mr-2">{`v${version.version_no}`}</span>
-                    {version.is_current && (
-                      <StatusTag className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                        {t("hostedApp.versionList.current")}
-                      </StatusTag>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    {t(
-                      version.kind === "initial"
-                        ? "hostedApp.versionList.kindInitial"
-                        : "hostedApp.versionList.kindIteration",
-                    )}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {formatTimestamp(version.submitted_at)}
-                  </td>
-                  <td className="px-3 py-2">
-                    {t(versionOutcomeI18nKey(version))}
-                  </td>
-                </tr>
-                <tr>
-                  <td colSpan={4} className="max-w-0 px-3 py-2">
-                    <div className="text-caption text-text-3">
-                      {t("hostedApp.releaseNotes.title")}
-                    </div>
-                    <p className="max-w-[calc(100vw-6rem)] whitespace-pre-wrap break-words text-body-sm text-text-1 [overflow-wrap:anywhere] sm:max-w-none">
-                      {version.release_notes ||
-                        t("hostedApp.releaseNotes.empty")}
-                    </p>
-                  </td>
-                </tr>
-              </Fragment>
+              <tr key={version.version_id} className="border-t">
+                <td className="px-3 py-2">
+                  <span className="mr-2">{`v${version.version_no}`}</span>
+                  {version.is_current && (
+                    <StatusTag className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                      {t("hostedApp.versionList.current")}
+                    </StatusTag>
+                  )}
+                </td>
+                <td className="px-3 py-2">
+                  {t(
+                    version.kind === "initial"
+                      ? "hostedApp.versionList.kindInitial"
+                      : "hostedApp.versionList.kindIteration",
+                  )}
+                </td>
+                <td className="px-3 py-2 tabular-nums">
+                  {formatTimestamp(version.submitted_at)}
+                </td>
+                <td className="px-3 py-2">
+                  {t(versionOutcomeI18nKey(version))}
+                </td>
+                <td className="w-28 whitespace-nowrap px-3 py-2">
+                  <VersionReleaseNotes notes={version.release_notes} />
+                </td>
+              </tr>
             ))}
           </tbody>
         </table>
@@ -187,10 +182,10 @@ function VersionHistory({ appId, reloadKey = "" }: VersionListCardProps) {
       {!!failure && (
         <p className="mt-3 text-sm text-muted-foreground">{failure}</p>
       )}
-      {!failure && total > pageSize && (
-        <AutoPagination
+      {!failure && (
+        <Pagination locale={paginationLocale} size="small"
           className="mt-3 justify-end"
-          page={page}
+          current={page}
           pageSize={pageSize}
           total={total}
           showTotal={true}

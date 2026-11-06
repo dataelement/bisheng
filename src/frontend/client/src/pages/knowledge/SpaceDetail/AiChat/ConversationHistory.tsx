@@ -5,12 +5,8 @@
 import { useEffect, useRef, useState } from "react";
 import { MessageSquareIcon } from "lucide-react";
 import { Outlined } from "bisheng-icons";
+import { Dropdown, DropdownItem, DropdownSeparator } from "@bisheng/ui";
 import { NotificationSeverity } from "~/common";
-import {
-    DropdownMenu,
-    DropdownMenuTrigger,
-} from "~/components/ui/DropdownMenu";
-import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
 import { Input } from "~/components/ui/Input";
 import type { FolderSession } from "~/api/chatApi";
 import { useLocalize } from "~/hooks";
@@ -244,13 +240,33 @@ export function ConversationHistory({
                                         </div>
                                     )}
                                     {!isEditing && (
-                                        <DropdownMenu
-                                            open={menuOpen}
-                                            onOpenChange={(open) =>
-                                                setMenuOpenChatId(open ? session.chat_id : null)
-                                            }
-                                        >
-                                            <DropdownMenuTrigger asChild>
+                                        // Keep menu clicks from bubbling to the row, which opens the session.
+                                        <span className="contents" onClick={(e) => e.stopPropagation()}>
+                                            <Dropdown
+                                                align="end"
+                                                open={menuOpen}
+                                                onOpenChange={(open) =>
+                                                    setMenuOpenChatId(open ? session.chat_id : null)
+                                                }
+                                                menu={
+                                                    <>
+                                                        <DropdownItem
+                                                            icon={<Outlined.Edit />}
+                                                            onSelect={() => startInlineRename(session)}
+                                                        >
+                                                            {localize("com_knowledge.rename")}
+                                                        </DropdownItem>
+                                                        <DropdownSeparator />
+                                                        <DropdownItem
+                                                            danger
+                                                            icon={<Outlined.Delete />}
+                                                            onSelect={() => onDelete(session.chat_id)}
+                                                        >
+                                                            {localize("com_notifications_delete")}
+                                                        </DropdownItem>
+                                                    </>
+                                                }
+                                            >
                                                 <button
                                                     type="button"
                                                     className={cn(
@@ -260,35 +276,12 @@ export function ConversationHistory({
                                                         (menuOpen || session.chat_id === activeChatId) &&
                                                             "opacity-100",
                                                     )}
-                                                    onClick={(e) => e.stopPropagation()}
                                                     aria-label="More actions"
                                                 >
                                                     <Outlined.More className="size-4" />
                                                 </button>
-                                            </DropdownMenuTrigger>
-                                            <ActionMenuContent
-                                                width={140}
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                <ActionMenuItem
-                                                    icon={<Outlined.Edit />}
-                                                    label={localize("com_knowledge.rename")}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        startInlineRename(session);
-                                                    }}
-                                                />
-                                                <ActionMenuItem
-                                                    danger
-                                                    icon={<Outlined.Delete />}
-                                                    label={localize("com_notifications_delete")}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        onDelete(session.chat_id);
-                                                    }}
-                                                />
-                                            </ActionMenuContent>
-                                        </DropdownMenu>
+                                            </Dropdown>
+                                        </span>
                                     )}
                                 </div>
                             );

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { SelectedOrgKb } from '~/store/modeltype';
 import { useActivate } from 'react-activation';
 
 /**
@@ -19,7 +20,9 @@ import { useActivate } from 'react-activation';
  */
 export interface ChatAsk {
   text: string;
-  space?: { id: string; name: string };
+  /** Stable model ID chosen in the originating input. */
+  modelId?: number;
+  space?: { id: string; name: string; tag?: { id: number; name: string } };
   attachment?: File;
 }
 
@@ -32,7 +35,7 @@ export interface AttachmentAsk {
 }
 
 /** The chat's knowledge selection as the store types it (`type` is a plain string there). */
-type KbSelection = { id: string; name: string; type: string };
+type KbSelection = SelectedOrgKb;
 
 let pendingAsk: ChatAsk | null = null;
 let askSeq = 0;
@@ -43,11 +46,18 @@ export function parkChatAsk(ask: ChatAsk) {
 
 interface UseChatAskHandoffParams {
   conversationId: string;
+  /** Conversation currently bound to the send callback. */
+  activeConversationId: string;
   /** Changes on every navigation — the usual wake-up call. */
   locationKey: string;
   selectedKbs: KbSelection[];
   setSelectedKbs: (next: KbSelection[]) => void;
-  sendMessage: (text: string) => void;
+  sendMessage: (text: string) => boolean;
+  /** Daily mode, model catalog and the fresh chat state are ready. */
+  ready: boolean;
+  selectedModelId: number;
+  selectModel: (id: number) => boolean;
+  onModelUnavailable: (ask: ChatAsk) => void;
   /** Runs as the ask is taken — the cached chat tab may still be in some other mode. */
   onTake?: () => void;
 }
@@ -58,52 +68,76 @@ interface UseChatAskHandoffParams {
  */
 export function useChatAskHandoff({
   conversationId,
+  activeConversationId,
   locationKey,
   selectedKbs,
   setSelectedKbs,
   sendMessage,
+  ready,
+  selectedModelId,
+  selectModel,
+  onModelUnavailable,
   onTake,
 }: UseChatAskHandoffParams) {
-  /** A space ask whose space has been mounted and which is waiting for that to land —
-   *  `sendMessage` closes over the knowledge selection, so it takes a second render. */
-  const mountedAskRef = useRef<ChatAsk | null>(null);
+  const [mountedAsk, setMountedAsk] = useState<ChatAsk | null>(null);
+  const submittedAskRef = useRef<ChatAsk | null>(null);
+  const preparingAskRef = useRef<ChatAsk | null>(null);
+  const [preparedAsk, setPreparedAsk] = useState<ChatAsk | null>(null);
   const [attachmentAsk, setAttachmentAsk] = useState<AttachmentAsk | null>(null);
 
   const takePendingAsk = useCallback(() => {
-    // Only a fresh conversation may take it: on /c/<id> the question would be appended
-    // to whatever conversation the cached chat tab last showed.
-    if (!pendingAsk || conversationId !== 'new') return;
+    // A fresh conversation owns the imported question.
+    if (!pendingAsk || conversationId !== 'new' || activeConversationId !== 'new') return;
     const ask = pendingAsk;
     pendingAsk = null;
+    preparingAskRef.current = null;
+    setPreparedAsk(null);
     onTake?.();
-    if (ask.attachment) {
-      // The article is the whole context; a knowledge source left mounted from an
-      // earlier chat would only blur the answer.
-      setSelectedKbs([]);
-      askSeq += 1;
-      setAttachmentAsk({ key: `ask-${askSeq}`, text: ask.text, file: ask.attachment });
-      return;
-    }
-    if (ask.space) {
-      mountedAskRef.current = ask;
-      setSelectedKbs([{ id: ask.space.id, name: ask.space.name, type: 'space' }]);
-      return;
-    }
-    sendMessage(ask.text);
-  }, [conversationId, setSelectedKbs, sendMessage, onTake]);
+    setMountedAsk(ask);
+  }, [conversationId, activeConversationId, onTake]);
 
   useEffect(takePendingAsk, [takePendingAsk, locationKey]);
   useActivate(takePendingAsk);
 
   useEffect(() => {
-    const ask = mountedAskRef.current;
-    if (!ask?.space || conversationId !== 'new') return;
-    const mounted =
-      selectedKbs.length === 1 && selectedKbs[0].type === 'space' && String(selectedKbs[0].id) === ask.space.id;
+    const ask = mountedAsk;
+    if (!ask || submittedAskRef.current === ask) return;
+    if (conversationId !== 'new' || activeConversationId !== 'new' || !ready) return;
+    if (preparingAskRef.current !== ask) {
+      // Claim preparation before publishing to external stores: their synchronous
+      // subscribers can flush this effect again during the same commit.
+      preparingAskRef.current = ask;
+      setSelectedKbs(ask.space
+        ? [{ ...ask.space, type: 'space' }]
+        : []);
+      if (ask.modelId !== undefined && !selectModel(ask.modelId)) {
+        setMountedAsk(null);
+        onModelUnavailable(ask);
+        return;
+      }
+      // Preparation owns its render transition, including when both selections
+      // already match and their setters preserve the existing state.
+      setPreparedAsk(ask);
+      return;
+    }
+    // A reentrant commit observes the claim and waits for preparation to finish.
+    if (preparedAsk !== ask) return;
+    if (ask.modelId !== undefined && selectedModelId !== ask.modelId) return;
+    const mounted = ask.space
+      ? selectedKbs.length === 1 && selectedKbs[0].type === 'space' && String(selectedKbs[0].id) === ask.space.id && selectedKbs[0].tag?.id === ask.space.tag?.id
+      : selectedKbs.length === 0;
     if (!mounted) return;
-    mountedAskRef.current = null;
-    sendMessage(ask.text);
-  }, [conversationId, selectedKbs, sendMessage]);
+    if (ask.attachment) {
+      askSeq += 1;
+      submittedAskRef.current = ask;
+      setAttachmentAsk({ key: `ask-${askSeq}`, text: ask.text, file: ask.attachment });
+      setMountedAsk(null);
+    } else if (sendMessage(ask.text)) {
+      // A rejected send stays staged until the sender accepts it.
+      submittedAskRef.current = ask;
+      setMountedAsk(null);
+    }
+  }, [mountedAsk, preparedAsk, conversationId, activeConversationId, ready, selectedModelId, selectModel, onModelUnavailable, selectedKbs, setSelectedKbs, sendMessage]);
 
   const retireAttachmentAsk = useCallback(() => setAttachmentAsk(null), []);
 

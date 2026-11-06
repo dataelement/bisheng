@@ -7,6 +7,7 @@ from sqlmodel import select, update
 
 from bisheng.app_publish.domain.models.app_deployment import ACTIVE_STATUSES, AppDeployment
 from bisheng.app_publish.domain.models.app_secret_config import AppSecretConfig
+from bisheng.common.errcode.app_factory import AppNotFoundError
 from bisheng.common.errcode.app_publish import AppPublishOwnerOnlyError, AppSecretRevisionConflictError
 from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.core.database import get_async_db_session
@@ -29,6 +30,21 @@ class AppSecretConfigRepository:
             except Exception:
                 await session.rollback()
                 raise
+
+    @asynccontextmanager
+    async def read_transaction(self, app_id):
+        """Keep dependent reads in the concrete request scope and retain actor identity.
+
+        The service authorizes the application before reading its configuration.
+        Strict filtering preserves the selected tenant without resetting the
+        management context needed by F048 to check the original caller.
+        """
+        async with self._factory() as session:
+            with strict_tenant_filter():
+                app = (await session.exec(select(App).where(App.id == app_id))).first()
+                if app is None:
+                    raise AppNotFoundError(app_id=app_id)
+                yield session, app
 
     async def app(self, session, app_id, *, lock=False):
         statement = select(App).where(App.id == app_id)

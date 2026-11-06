@@ -16,7 +16,9 @@ class SkillPermissionAdapter:
         row = await self.repository.get(int(resource_id)) if resource_id.isdigit() else None
         if row is None or row.tenant_id != actor.current_tenant_id:
             raise PermissionInvalidResourceError()
-        if row.source == "personal" and (actor.subject_type != "user" or row.created_by != actor.user_id):
+        owner_user_id = int(getattr(row, "owner_user_id", 0) or 0)
+        personal_owner = owner_user_id or (row.created_by if row.source == "personal" else 0)
+        if personal_owner and (actor.subject_type != "user" or personal_owner != actor.user_id):
             raise PermissionInvalidResourceError()
         if action == "use" and not row.enabled:
             raise PermissionInvalidResourceError()

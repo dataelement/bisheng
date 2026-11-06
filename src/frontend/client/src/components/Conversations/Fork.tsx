@@ -4,13 +4,8 @@ import { GitFork, InfoIcon } from 'lucide-react';
 import * as Popover from '@radix-ui/react-popover';
 import { ForkOptions } from '~/types/chat';
 import { GitCommit, GitBranchPlus, ListTree } from 'lucide-react';
-import {
-  Checkbox,
-  HoverCard,
-  HoverCardTrigger,
-  HoverCardPortal,
-  HoverCardContent,
-} from '~/components/ui';
+import { HoverCard, HoverCardTrigger, HoverCardPortal, HoverCardContent } from '~/components/ui';
+import { Checkbox } from '@bisheng/ui';
 import OptionHover from '~/components/SidePanel/Parameters/OptionHover';
 import { TranslationKeys, useLocalize, useNavigateToConvo } from '~/hooks';
 import { useForkConvoMutation } from '~/hooks/queries/data-provider';
@@ -283,7 +278,7 @@ export default function Fork({
                   <Checkbox
                     checked={splitAtTarget}
                     onCheckedChange={(checked: boolean) => setSplitAtTarget(checked)}
-                    className="m-2 transition duration-300 ease-in-out"
+                    className="peer m-2 transition duration-300 ease-in-out"
                   />
                   {localize('com_ui_fork_split_target')}
                 </div>
@@ -309,7 +304,7 @@ export default function Fork({
                       }
                       setRemember(checked);
                     }}
-                    className="m-2 transition duration-300 ease-in-out"
+                    className="peer m-2 transition duration-300 ease-in-out"
                   />
                   {localize('com_ui_fork_remember')}
                 </div>

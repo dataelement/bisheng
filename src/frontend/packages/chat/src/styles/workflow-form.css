@@ -1,0 +1,19 @@
+/* Isolate client form presentation from legacy host label/input selectors. */
+.bisheng-chat-form {
+  color: rgb(var(--text-1));
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+}
+.bisheng-chat-form label {
+  color: inherit;
+  font: inherit;
+}
+.bisheng-chat-file-field {
+  background: var(--search-input);
+  color: rgb(var(--text-3));
+  border-color: rgb(var(--border-base));
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+}

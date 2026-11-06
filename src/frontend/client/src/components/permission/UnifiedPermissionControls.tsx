@@ -1,7 +1,7 @@
 import { Button, RadioCard, RadioGroup } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import type { ComponentType, ReactNode } from "react";
-import { Switch } from "~/components/ui/Switch";
+import { Switch } from '@bisheng/ui';
 
 export type SettingsSectionKind = "basic" | "advanced" | "permission";
 
@@ -40,6 +40,7 @@ interface AccessModeSelectorProps {
   sharedLabel: string;
   sharedDescription: string;
   disabled?: boolean;
+  privateDisabled?: boolean;
 }
 
 export function AccessModeSelector({
@@ -50,6 +51,7 @@ export function AccessModeSelector({
   sharedLabel,
   sharedDescription,
   disabled,
+  privateDisabled = false,
 }: AccessModeSelectorProps) {
   const options = [
     {
@@ -81,6 +83,7 @@ export function AccessModeSelector({
           value={option.value}
           label={option.label}
           description={option.description}
+          disabled={option.value === "private" && privateDisabled}
         />
       ))}
     </RadioGroup>
@@ -119,7 +122,7 @@ export function SettingsSwitchRow({
         {children}
       </div>
       {/* Compact settings rows use the small档 (designer call, 2026-08-25). */}
-      <Switch
+      <Switch className="peer"
         size="small"
         aria-label={label}
         checked={checked}

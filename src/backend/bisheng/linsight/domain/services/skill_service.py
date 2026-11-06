@@ -15,6 +15,7 @@ import asyncio
 from typing import NamedTuple, Protocol
 
 from loguru import logger
+from sqlalchemy.exc import IntegrityError
 
 from bisheng.common.errcode.linsight import (
     SkillBundleTooLargeError,
@@ -77,6 +78,16 @@ class SkillMeta(NamedTuple):
 
 
 SKILL_OBJECT_TYPE = "linsight_skill"
+
+
+def _display_name_from_frontmatter(meta: dict, fallback: str) -> str:
+    """Read a human name from frontmatter, then fall back to the skill id."""
+    metadata = meta.get("metadata") if isinstance(meta.get("metadata"), dict) else {}
+    for value in (metadata.get(DISPLAY_NAME_META_KEY), meta.get("display_name"), meta.get("display-name")):
+        text = str(value or "").strip()
+        if text:
+            return text
+    return fallback
 
 
 class LinsightSkillOwnerProjectionPort(Protocol):
@@ -194,7 +205,9 @@ class SkillService:
 
         skill = await authorized()
         bundle = await asyncio.to_thread(
-            lambda: pack_bundle_zip(self._load_existing_bundle(tenant_id, skill.name, version))
+            lambda: pack_bundle_zip(
+                self._load_existing_bundle(tenant_id, skill.name, version, owner_user_id=skill.owner_user_id)
+            )
         )
         await authorized()
         return bundle
@@ -280,7 +293,9 @@ class SkillService:
         if form.name != name:
             raise SkillValidationError(msg="skill ID cannot be changed when editing")
         self._validate_fields(form.name, form.display_name, form.description)
-        await self._check_duplicate(form.name, form.display_name, exclude_id=skill.id)
+        await self._check_duplicate(
+            form.name, form.display_name, exclude_id=skill.id, owner_user_id=skill.owner_user_id
+        )
         # Re-render SKILL.md, keep any other bundle assets untouched.
         new_md = compose_skill_md(
             name=form.name, description=form.description, body=form.content, display_name=form.display_name
@@ -294,8 +309,33 @@ class SkillService:
         await LinsightSkillDao.update(skill)
         return await self.get_detail(tenant_id, name)
 
+    @staticmethod
+    def _keep_skill_id(
+        files: dict[str, bytes],
+        meta: SkillMeta,
+        skill_name: str,
+        *,
+        current_display_name: str = "",
+    ) -> SkillMeta:
+        """Keep the skill ID already stored on this row.
+
+        An uploaded bundle may name itself differently. The row, its id and the
+        directory stay. SKILL.md is rewritten so its frontmatter matches. A bundle
+        with no display name of its own reports its skill id as the display name;
+        that must not replace the name already shown for this skill.
+        """
+        uploaded_name = meta.name
+        if meta.name != skill_name:
+            parsed, body = parse_skill_md(files[SKILL_MD].decode("utf-8"))
+            parsed["name"] = skill_name
+            files[SKILL_MD] = render_skill_md(parsed, body).encode("utf-8")
+            meta = meta._replace(name=skill_name, normalized_from=None)
+        if current_display_name and meta.display_name == uploaded_name:
+            meta = meta._replace(display_name=current_display_name)
+        return meta
+
     async def update_from_upload(self, tenant_id: int, name: str, filename: str, data: bytes) -> SkillDetail:
-        """Whole-bundle replacement; frontmatter name (after normalization) must equal the path name."""
+        """Whole-bundle replacement. The skill ID stays the path name."""
         skill = await self._get_or_404(name)
         meta, files = self._parse_upload(
             filename,
@@ -303,9 +343,8 @@ class SkillService:
             max_size=await resolve_skill_upload_limit(),
             max_unpacked=await resolve_skill_unpacked_limit(),
         )
-        if meta.name != name:
-            raise SkillValidationError(msg=f"frontmatter name '{meta.name}' must equal skill ID '{name}'")
-        await self._check_duplicate(name, meta.display_name, exclude_id=skill.id)
+        meta = self._keep_skill_id(files, meta, name, current_display_name=skill.display_name or "")
+        await self._check_duplicate(name, meta.display_name, exclude_id=skill.id, owner_user_id=skill.owner_user_id)
         ref = self.store.write_bundle(tenant_id, name, files)
         skill.display_name, skill.description = meta.display_name, meta.description
         skill.size, skill.content_hash, skill.object_path = ref.size, ref.content_hash, ref.object_key
@@ -346,14 +385,14 @@ class SkillService:
         max_unpacked: int = MAX_UNPACKED_SIZE,
     ) -> tuple[SkillMeta, dict[str, bytes]]:
         if len(data) > max_size:
-            raise SkillFileTooLargeError()
+            raise SkillFileTooLargeError(limit_mb=max_size // (1024 * 1024))
         lower = (filename or "").lower()
         if lower.endswith(_ARCHIVE_SUFFIXES):
             try:
                 # The unpacked cap is checked inside, before anything is decompressed.
                 files = unpack_zip_bytes(data, max_unpacked=max_unpacked)
             except BundleTooLargeError:
-                raise SkillBundleTooLargeError()
+                raise SkillBundleTooLargeError(limit_mb=max_unpacked // (1024 * 1024))
             except ValueError as exc:
                 raise SkillValidationError(msg=str(exc))
         elif lower.endswith(".md"):
@@ -380,8 +419,7 @@ class SkillService:
             raise SkillValidationError(msg=str(exc))
         name = str(meta.get("name") or "").strip()
         description = str(meta.get("description") or "").strip()
-        metadata = meta.get("metadata") or {}
-        display_name = str(metadata.get(DISPLAY_NAME_META_KEY) or "").strip() or name
+        display_name = _display_name_from_frontmatter(meta, name)
         if not description:
             raise SkillValidationError(msg="frontmatter 'description' is required")
         normalized_from: str | None = None
@@ -389,9 +427,10 @@ class SkillService:
             slug = slugify_pinyin(name)
             if not validate_skill_name(slug):
                 normalized_from, name = name, slug
-                display_name = str(metadata.get(DISPLAY_NAME_META_KEY) or "").strip() or normalized_from
+                display_name = _display_name_from_frontmatter(meta, normalized_from)
                 meta["name"] = slug
-                if not metadata.get(DISPLAY_NAME_META_KEY):
+                metadata = meta.get("metadata") if isinstance(meta.get("metadata"), dict) else {}
+                if display_name == normalized_from and not metadata.get(DISPLAY_NAME_META_KEY):
                     metadata[DISPLAY_NAME_META_KEY] = normalized_from
                     meta["metadata"] = metadata
                 files[SKILL_MD] = render_skill_md(meta, body).encode("utf-8")
@@ -406,17 +445,28 @@ class SkillService:
         if not description or len(description) > MAX_DESCRIPTION_LEN:
             raise SkillValidationError(msg=f"description is required and must be <= {MAX_DESCRIPTION_LEN} chars")
 
-    async def _check_duplicate(self, name: str, display_name: str, exclude_id: int | None = None) -> None:
-        existing = await LinsightSkillDao.get_by_name(name)
+    async def _check_duplicate(
+        self,
+        name: str,
+        display_name: str,
+        exclude_id: int | None = None,
+        *,
+        owner_user_id: int = 0,
+    ) -> None:
+        existing = await LinsightSkillDao.get_by_name(name, owner_user_id=owner_user_id)
         if existing and existing.id != exclude_id:
             raise SkillNameDuplicateError()
-        if self.personal_owner is not None:
+        # A personal skill is keyed by its skill id. The same display name with a
+        # different id is a new skill. Tenant skills (owner 0) keep the display-name check.
+        if owner_user_id != 0:
             return
-        existing = await LinsightSkillDao.get_by_display_name(display_name)
+        existing = await LinsightSkillDao.get_by_display_name(display_name, owner_user_id=owner_user_id)
         if existing and existing.id != exclude_id:
             raise SkillNameDuplicateError()
 
-    def _load_existing_bundle(self, tenant_id: int, name: str, content_hash: str) -> dict[str, bytes]:
+    def _load_existing_bundle(
+        self, tenant_id: int, name: str, content_hash: str, *, owner_user_id: int = 0
+    ) -> dict[str, bytes]:
         """Read a stored bundle back as a file mapping (edit = read-modify-write).
 
         Goes through the store's reader rather than joining paths itself; the
@@ -424,9 +474,18 @@ class SkillService:
         version is materialized locally.
         """
         return {
-            entry["path"]: self.store.read_bytes(tenant_id, name, content_hash, entry["path"])
-            for entry in self.store.list_files(tenant_id, name, content_hash)
+            entry["path"]: self.store.read_bytes(
+                tenant_id, name, content_hash, entry["path"], owner_user_id=owner_user_id
+            )
+            for entry in self.store.list_files(tenant_id, name, content_hash, owner_user_id=owner_user_id)
         }
+
+    async def _discard_unpublished(self, tenant_id: int, name: str, content_hash: str, owner_user_id: int = 0) -> None:
+        """A lost insert must not leave an object the saved row does not point at."""
+        current = await LinsightSkillDao.get_by_name(name, owner_user_id=owner_user_id)
+        if current is not None and current.content_hash == content_hash:
+            return
+        self.store.delete_version(tenant_id, name, content_hash, owner_user_id=owner_user_id)
 
     async def _create(
         self,
@@ -452,7 +511,11 @@ class SkillService:
             size=ref.size,
             created_by=user_id,
         )
-        skill = await LinsightSkillDao.create(skill)
+        try:
+            skill = await LinsightSkillDao.create(skill)
+        except IntegrityError:
+            await self._discard_unpublished(tenant_id, name, ref.content_hash)
+            raise SkillNameDuplicateError() from None
         await self._owner_projection.authorize_created(
             tenant_id=tenant_id,
             resource_type=SKILL_OBJECT_TYPE,

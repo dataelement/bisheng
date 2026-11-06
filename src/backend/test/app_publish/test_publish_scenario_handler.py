@@ -325,7 +325,6 @@ async def test_detail_snapshot_fields_match_contract(publish_db):
     detail = await _handler().build_detail(_req())
 
     assert set(detail) == {
-        "release_notes",
         "scenario_code",
         "app_name",
         "release_kind_text",

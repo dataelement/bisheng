@@ -16,7 +16,7 @@ from bisheng.dsh.domain.repositories.admin_operation import require_tenant
 from bisheng.dsh.domain.repositories.subject_policy import DshSubjectPolicyRepository
 from bisheng.dsh.domain.repositories.unified_policy import UnifiedPolicyRepository
 from bisheng.dsh.domain.schemas.unified_policy import (
-    CreditRuleInput,
+    CreditRuleValue,
     ModelVisibilityInput,
     PolicySubject,
     credits_from_tokens,
@@ -60,7 +60,7 @@ def migrate_legacy_credits(session, *, actor_id: int, apply: bool = False) -> di
     # Validate the entire import before any writes. Values remain exact token amounts.
     visibility = {model: ModelVisibilityInput(version=0, subjects=subjects) for model, subjects in grants.items()}
     credits = {
-        user: CreditRuleInput(version=0, monthly_credits=credits_from_tokens(limit))
+        user: CreditRuleValue(version=0, monthly_credits=credits_from_tokens(limit))
         for user, limit in allowances.items()
     }
     summary = {

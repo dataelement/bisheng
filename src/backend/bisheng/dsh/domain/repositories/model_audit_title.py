@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 
+from sqlalchemy import or_
 from sqlmodel import select
 
 from bisheng.dsh.domain.models.model_audit_request import DshModelAuditRequest as Request
@@ -15,15 +16,31 @@ class DshModelAuditTitleRepository(DshModelAuditSettingRepository):
     def update_title(self, user_id, command):
         tenant = require_tenant()
         mode = self._row(lock=True)
-        if mode is None or mode.mode not in {"METADATA", "CONTENT"}:
-            return {"status": "DISABLED"}
         key = conversation_key(tenant, user_id, command.conversation_id)
-        existing = self.session.exec(
-            select(Request.conversation_id)
-            .where(Request.tenant_id == tenant, Request.user_id == user_id, Request.conversation_key == key)
-            .limit(1)
-        ).first()
+        statement = select(Request.conversation_id).where(
+            Request.tenant_id == tenant, Request.user_id == user_id, Request.conversation_key == key
+        )
+        if mode is None or mode.mode == "OFF":
+            # A committed check authorizes metadata for this retained request;
+            # titles alone never create collection or contact the Gateway.
+            statement = statement.where(
+                Request.safety_source_id.is_not(None),
+                Request.safety_gateway_request_id.is_not(None),
+                or_(
+                    Request.input_safety_state.in_(["PASSED", "BLOCKED", "ERROR"]),
+                    Request.output_safety_state.in_(["PASSED", "BLOCKED", "ERROR"]),
+                ),
+            )
+        existing = self.session.exec(statement.limit(1)).first()
         if existing != command.conversation_id:
+            if mode is None or mode.mode == "OFF":
+                retained = self.session.exec(
+                    select(Request.conversation_id)
+                    .where(Request.tenant_id == tenant, Request.user_id == user_id, Request.conversation_key == key)
+                    .limit(1)
+                ).first()
+                if retained == command.conversation_id:
+                    return {"status": "DISABLED"}
             return {"status": "NOT_READY"}
         title = self.session.exec(
             select(Title)

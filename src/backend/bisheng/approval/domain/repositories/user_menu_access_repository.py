@@ -118,3 +118,4 @@ class UserMenuAccessRepository:
             await session.commit()
             await session.refresh(row)
         return row
+

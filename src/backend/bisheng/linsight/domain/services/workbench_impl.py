@@ -17,7 +17,7 @@ from loguru import logger
 
 from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
-from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.dependencies.user_deps import UserPayload, record_business_activity
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.common.errcode.linsight import (
@@ -79,6 +79,40 @@ class TaskNode:
         return task_dict
 
 
+def build_e2b_file_list(file_dir: str) -> list[WriteEntry]:
+    """Files the E2B sandbox receives when the code tool is constructed.
+
+    The walk happens at tool init, so skill bundles have to already be in
+    ``file_dir``. A file over ``SIZE_AUTOPUSH`` (5 MiB) is left out; the local
+    and container executors still read it from the session directory.
+    """
+    file_list: list[WriteEntry] = []
+    oversized: list[str] = []
+    for root, _dirs, files in os.walk(file_dir):
+        for file in files:
+            file_path = os.path.join(root, file)
+            try:
+                if os.path.getsize(file_path) > SIZE_AUTOPUSH:
+                    oversized.append(file_path)
+                    continue
+            except OSError:
+                # Unstattable file: let it through rather than silently dropping
+                # it — the push itself will surface any real problem.
+                pass
+            file_list.append(WriteEntry(data=file_path, path=file_path.replace(file_dir, ".")))
+    if oversized:
+        # Never let a bounded copy-in look complete: the model is told these
+        # paths exist, so a silent drop reads as "the tool is broken".
+        logger.warning(
+            "code interpreter: {} file(s) exceed the E2B auto-push ceiling ({} bytes) and were not "
+            "pushed into the sandbox: {}",
+            len(oversized),
+            SIZE_AUTOPUSH,
+            ", ".join(os.path.basename(p) for p in oversized),
+        )
+    return file_list
+
+
 class LinsightWorkbenchImpl:
     """LinsightWorkbench Implementation Class"""
 
@@ -92,8 +126,8 @@ class LinsightWorkbenchImpl:
     _IMAGE_EXTS = frozenset({"png", "jpg", "jpeg", "gif", "webp", "bmp"})
     # Types whose ORIGINAL bytes stay useful after parsing, because the markdown
     # view is lossy in a way that defeats the user's actual intent: a spreadsheet
-    # loses cell types / sheets / formulas (and ExcelLoader is a RAG chunker that
-    # hard-fails past 10k chars), a Word file loses styling, a PDF loses table
+    # loses cell types / sheets / formulas (small enough xlsx/xls skip the view
+    # altogether, see _SPREADSHEET_ORIGINAL_EXTS), a Word file loses styling, a PDF loses table
     # geometry. These land in the workspace ALONGSIDE the .md so
     # ``bisheng_code_interpreter`` can open them with pandas / python-docx / fitz.
     # Images are deliberately absent: their originals are already promoted for
@@ -279,6 +313,7 @@ class LinsightWorkbenchImpl:
             # codes the frontend branches on, which a deferred ingest could only
             # report minutes later as a generic task failure.
             cls.validate_submitted_files(submit_obj.files)
+            await record_business_activity(login_user)
             # Continue an existing session when session_id is supplied, else
             # start a fresh one. Continuing reuses the MessageSession and only
             # appends a new version, so follow-up rounds stay in one 会话 (F035).
@@ -341,6 +376,8 @@ class LinsightWorkbenchImpl:
                 )
 
             # Create Ideas Conversation Version (id == svid used for the workspace)
+            from bisheng.linsight.domain.services.skill_provisioning import pending_skill_snapshot
+
             linsight_session_version = LinsightSessionVersion(
                 id=svid,
                 session_id=chat_id,
@@ -355,6 +392,7 @@ class LinsightWorkbenchImpl:
                 pending_files=pending_files,
                 model=submit_obj.model,
                 skills=submit_obj.skills,
+                skill_snapshot=pending_skill_snapshot(submit_obj.skill_ids),
                 api_meta=api_meta,
             )
             linsight_session_version = await LinsightSessionVersionDao.insert_one(linsight_session_version)
@@ -729,7 +767,8 @@ class LinsightWorkbenchImpl:
         # failure. ``unsupported`` short-circuits for the same reason; the pipeline
         # would reject it on exactly the same extension check.
         route = cls._ingest_route(file_name)
-        if route == "passthrough":
+        original_only = route == "passthrough" or cls._spreadsheet_original_applies(file_name, local_path)
+        if original_only:
             raw = await cls._read_local_bytes(local_path)
             if raw is None:
                 return {
@@ -740,7 +779,15 @@ class LinsightWorkbenchImpl:
                     "valid": False,
                     "error_message": "file bytes unavailable after download",
                 }
-            return await cls._finalize_passthrough(submit_file, file_name, chat_id, minio_client, raw, used_names)
+            return await cls._finalize_passthrough(
+                submit_file,
+                file_name,
+                chat_id,
+                minio_client,
+                raw,
+                used_names,
+                ingest_mode="passthrough" if route == "passthrough" else cls._SPREADSHEET_ORIGINAL_MODE,
+            )
         if route == "unsupported":
             return await cls._keep_original_in_workspace(
                 submit_file,
@@ -969,6 +1016,7 @@ class LinsightWorkbenchImpl:
         used_names: set[str] | None,
         *,
         degraded_from: Exception | None = None,
+        ingest_mode: str = "passthrough",
     ) -> dict:
         """Land a file in the workspace AS ITSELF, with no markdown view.
 
@@ -979,6 +1027,10 @@ class LinsightWorkbenchImpl:
         ``read_file`` and the code interpreter can open, so it is reported as a
         SUCCESS — the historical ``failed`` / ``valid=False`` marking made the
         chip cry wolf about a file that works.
+
+        A spreadsheet (``ingest_mode=spreadsheet_original``) lands the same way but
+        is binary: only the code interpreter can open it, and the pointer block
+        says so instead of advertising ``read_file``.
 
         ``parsing_status`` stays ``"completed"`` on purpose. It is not "which
         pipeline ran", it is "is ingestion finished / may this be submitted": the
@@ -1001,7 +1053,7 @@ class LinsightWorkbenchImpl:
             "relative_path": submit_file.relative_path,
             "parsing_status": "completed",
             "valid": True,
-            "ingest_mode": "passthrough",
+            "ingest_mode": ingest_mode,
             # Not markdown, despite the name — see the key's docstring. It is the
             # workspace SEED object, and three downstream consumers key off it
             # (local prefetch, the workspace write below, the attachment drawer).
@@ -1009,7 +1061,7 @@ class LinsightWorkbenchImpl:
             "original_file_path": formal_object,
             # Set BEFORE the workspace write: that path only ``setdefault``s a 0
             # for non-markdown attachments, so a real count has to be there first.
-            "line_count": cls._count_text_lines(raw),
+            "line_count": cls._count_text_lines(raw) if ingest_mode == "passthrough" else 0,
             "image_count": 0,
         }
         if degraded_from is not None:
@@ -1090,6 +1142,28 @@ class LinsightWorkbenchImpl:
     # Derived, not hand-maintained, so it can never drift from the routing sets.
     _TEXT_LIKE_EXTS = _PASSTHROUGH_TEXT_EXTS
 
+    # Spreadsheets skip the RAG ETL and land AS THEMSELVES, with no text view.
+    # ``ExcelLoader`` is a knowledge-base chunker: it repeats the header in every
+    # slice, drops cell types and hard-fails once a slice outgrows the chunk
+    # ceiling. The model reads the workbook through the code interpreter instead
+    # (``read_file`` refuses binary content). Unlike a text passthrough the
+    # original is NOT readable by ``read_file``, so the pointer block words it
+    # separately. ``.et`` stays on the parser: it goes through the xinchuang
+    # converter first.
+    _SPREADSHEET_ORIGINAL_EXTS = frozenset({"xlsx", "xls"})
+    _SPREADSHEET_ORIGINAL_MODE = "spreadsheet_original"
+    # ingest_mode values whose workspace file IS the original (no markdown product).
+    _ORIGINAL_ONLY_MODES = frozenset({"passthrough", _SPREADSHEET_ORIGINAL_MODE})
+
+    @classmethod
+    def _spreadsheet_original_applies(cls, filename: str, local_path: str | None) -> bool:
+        """Whether an ``original``-routed spreadsheet really lands as-is.
+
+        Over the carry ceiling the original never reaches the workspace, so the
+        old parsed markdown is the only data the model could get.
+        """
+        return cls._ingest_route(filename) == "original" and cls._should_keep_raw(filename, local_path)
+
     @classmethod
     def _ingest_route(cls, filename: str) -> str:
         """Decide how a submitted file enters the workspace.
@@ -1099,6 +1173,10 @@ class LinsightWorkbenchImpl:
             (plus, for ``_RAW_KEEP_EXTS``, the original beside it).
           - ``"passthrough"``: skip the parser entirely; the original IS the
             workspace file.
+          - ``"original"``: a spreadsheet. No ETL and no text view: the
+            original is the workspace file, read through the code interpreter.
+            Callers fall back to ``"parse"`` when the original is too large to
+            carry (``_spreadsheet_original_applies``).
           - ``"unsupported"``: no loader and no consumer — short-circuit instead
             of burning an ETL round-trip on a guaranteed failure.
 
@@ -1110,6 +1188,8 @@ class LinsightWorkbenchImpl:
         from bisheng.knowledge.rag.base_file_pipeline import FileExtensionMap
 
         ext = os.path.splitext(filename or "")[1].lower().lstrip(".")
+        if ext in cls._SPREADSHEET_ORIGINAL_EXTS:
+            return "original"
         if ext in cls._PASSTHROUGH_TEXT_EXTS and ext not in FileExtensionMap:
             return "passthrough"
         if ext in cls._PASSTHROUGH_TEXT_EXTS:
@@ -1148,7 +1228,7 @@ class LinsightWorkbenchImpl:
         # A passthrough file has no markdown product, so its formal object keeps the
         # real extension — the drawer builds a preview URL straight off this key and
         # a ``.csv`` served as ``.md`` would be handed to the markdown renderer.
-        is_passthrough = bool(temp_info) and temp_info.get("ingest_mode") == "passthrough"
+        is_passthrough = bool(temp_info) and temp_info.get("ingest_mode") in cls._ORIGINAL_ONLY_MODES
         formal_object = (
             cls._formal_original_object(submit_file.file_id, chat_id, submit_file.file_name)
             if is_passthrough
@@ -1687,6 +1767,7 @@ class LinsightWorkbenchImpl:
         records: list[tuple[str, str, str]] = []
         has_raw = False
         has_passthrough = False
+        has_sheet_original = False
         has_unparsed = False
         has_media = False
         for file in session_version.files:
@@ -1715,6 +1796,20 @@ class LinsightWorkbenchImpl:
                     (
                         rel_dir,
                         f"- path: {path}\n  name: {name}\n  note: 解析失败，工作区只有二进制原件（不可 read_file）",
+                        name,
+                    )
+                )
+                continue
+
+            if file.get("ingest_mode") == cls._SPREADSHEET_ORIGINAL_MODE:
+                # No text view and no line count: the workbook is the file. The
+                # path is rendered relative, same reason as ``raw`` below.
+                has_sheet_original = True
+                records.append(
+                    (
+                        rel_dir,
+                        f"- path: {path}\n  name: {name}\n  raw: {path.lstrip('/')}\n"
+                        "  note: Excel 原件，没有文本视图（不可 read_file）",
                         name,
                     )
                 )
@@ -1798,8 +1893,23 @@ class LinsightWorkbenchImpl:
                     "本次没有可用的代码执行工具，无法读取二进制原件——请基于文本视图作答，"
                     "并在结论中说明受原件格式限制的部分。"
                 )
-        elif has_passthrough and has_code_interpreter:
+        elif (has_passthrough or has_sheet_original) and has_code_interpreter:
             detail_parts.append("raw 是相对当前工作目录的路径，在代码里直接用该相对路径打开。")
+        if has_sheet_original:
+            if has_code_interpreter:
+                detail_parts.append(
+                    "Excel 条目只有原件，用 bisheng_code_interpreter 读取："
+                    "先列出全部工作表名并查看每个表的前几行，确认表头在第几行（报表常有标题行或多行表头），"
+                    "再用 pandas.read_excel(raw, sheet_name=..., header=...) 读取；"
+                    "read_excel 默认只读第一个工作表。"
+                )
+            else:
+                # Prompt <-> tool lockstep: never point the model at a tool that is
+                # not bound. It cannot open the workbook at all, so it must say so.
+                detail_parts.append(
+                    "本次没有可用的代码执行器工具，无法读取 Excel 原件；"
+                    "不要猜测或编造表格内容，请明确告诉用户：需要添加代码执行器工具后才能分析这些 Excel 文件。"
+                )
         if detail_parts:
             header_parts.append("说明：" + "".join(detail_parts) + "\n")
         header = "".join(header_parts)
@@ -2126,8 +2236,11 @@ class LinsightWorkbenchImpl:
             # here than on the daily path: a parse failure is reported to the
             # follow-up input as ``failed``, and that input DELETES the attachment
             # from the box on sight — so without this a ``.py`` could not even be
-            # submitted, let alone used.
-            if cls._ingest_route(original_filename) == "passthrough":
+            # submitted, let alone used. Spreadsheets under the carry ceiling take
+            # the same shape, minus the line count (they are binary).
+            is_text_passthrough = cls._ingest_route(original_filename) == "passthrough"
+            if is_text_passthrough or cls._spreadsheet_original_applies(original_filename, file_path):
+                mode = "passthrough" if is_text_passthrough else cls._SPREADSHEET_ORIGINAL_MODE
                 raw_bytes = await cls._read_local_bytes(file_path)
                 if raw_bytes is not None:
                     minio_client = await get_minio_storage()
@@ -2137,15 +2250,15 @@ class LinsightWorkbenchImpl:
                         "file_id": file_id,
                         "original_filename": original_filename,
                         "parsing_status": "completed",
-                        "ingest_mode": "passthrough",
-                        "parse_type": "passthrough",
+                        "ingest_mode": mode,
+                        "parse_type": mode,
                         "markdown_filename": tmp_key,
                         "markdown_file_path": tmp_key,
                         "markdown_file_md5": await async_calculate_md5(raw_bytes),
                         # Counted here, where the bytes are already in hand. The
                         # workspace write only ``setdefault``s a 0 for non-markdown
                         # attachments, so a real count has to arrive before it.
-                        "line_count": cls._count_text_lines(raw_bytes),
+                        "line_count": cls._count_text_lines(raw_bytes) if is_text_passthrough else 0,
                         # Deliberately no ``original_file_path``: ingest promotes
                         # this same key to the formal bucket, and setting it would
                         # make it store a second copy of identical bytes.
@@ -2263,39 +2376,17 @@ class LinsightWorkbenchImpl:
 
             # File tools and follow-up turns read the same durable workspace.
             executor_config["workspace_prefix"] = f"{WORKSPACE_PREFIX}/{session_version_id}"
-        if executor_type == "container":
+        if executor_type == "local":
+            executor_config["keep_run_dir"] = True
+        elif executor_type == "container":
             executor_config["keep_session"] = True
-            executor_config["timeout"] = 600
+            executor_config["timeout"] = 3600
         elif executor_type == "e2b":
             executor_config["timeout"] = 3600
             executor_config["keep_sandbox"] = True
             # E2B eagerly reads this copy-in set. Local uses the task directory
             # directly; container copies its working set at run().
-            file_list = []
-            oversized: list[str] = []
-            for root, _dirs, files in os.walk(file_dir):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    try:
-                        if os.path.getsize(file_path) > SIZE_AUTOPUSH:
-                            oversized.append(file_path)
-                            continue
-                    except OSError:
-                        # Unstattable file: let it through rather than silently dropping
-                        # it — the push itself will surface any real problem.
-                        pass
-                    file_list.append(WriteEntry(data=file_path, path=file_path.replace(file_dir, ".")))
-            if oversized:
-                # Never let a bounded copy-in look complete: the model is told these
-                # paths exist, so a silent drop reads as "the tool is broken".
-                logger.warning(
-                    "code interpreter: {} file(s) exceed the E2B auto-push ceiling ({} bytes) and were not "
-                    "pushed into the sandbox: {}",
-                    len(oversized),
-                    SIZE_AUTOPUSH,
-                    ", ".join(os.path.basename(p) for p in oversized),
-                )
-            executor_config["file_list"] = file_list
+            executor_config["file_list"] = build_e2b_file_list(file_dir)
 
         bisheng_code_tool = GptsTools(**bisheng_code_tool.model_dump())
         bisheng_code_tool.extra = code_config
@@ -2338,6 +2429,21 @@ class LinsightWorkbenchImpl:
                     tool_ids, file_dir, user_id=session_version.user_id, session_version_id=session_version.id
                 )
             )
+
+        # Retired builtin row. Saved task selections may still name it.
+        # Passing the row to load_tools raises "Got unknown tool image_view"
+        # and aborts the task before skills or any other tool run.
+        from bisheng.common.image_view.loop import IMAGE_VIEW_TOOL_KEY
+
+        image_view_tool = await GptsToolsDao.aget_tool_by_tool_key(tool_key=IMAGE_VIEW_TOOL_KEY)
+        if image_view_tool and image_view_tool.id in tool_ids:
+            tool_ids.remove(image_view_tool.id)
+            logger.info("skip image_view tool id={}: config row is not a callable tool", image_view_tool.id)
+
+        # Unified-resource direction (2026-06-16): task mode reuses the daily
+        # tool selection directly. Every selected tool id (a real GptsTools id
+        # the user already has access to) binds. The code interpreter is already
+        # consumed above when selected, so it is never built twice.
         valid_tool_ids = tool_ids
 
         # Initialization Tools

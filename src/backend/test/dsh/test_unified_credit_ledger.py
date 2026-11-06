@@ -63,11 +63,11 @@ async def test_weighted_usage_survives_full_redis_loss(quota, store):
     with Session(store) as session, session.begin():
         repo = UnifiedPolicyRepository(session)
         repo.save_visibility(7, 20, ModelVisibilityInput(version=0, everyone=True, credit_multiplier="1.25"))
-        repo.save_rule(PolicySubject(kind="USER", id=20), 20, CreditRuleInput(version=0, monthly_credits="0.001"))
+        repo.save_rule(PolicySubject(kind="USER", id=20), 20, CreditRuleInput(version=0, monthly_credits="0.1"))
     event = terminal(running(model=7).model_copy(update={"credit_rate": 125}), 80)
     persist(store, [event])
     await erase(quota)
     connect(quota, store)
     result = await quota.read_usage(2, 20, "2026-09")
     assert result["used"] == 100
-    assert result["remaining"] == 900
+    assert result["remaining"] == 99_900

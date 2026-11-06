@@ -1,21 +1,19 @@
-import DepartmentUsersSelect, { DepartmentUserOption } from "./DepartmentUsersSelect";
+import DepartmentUsersSelect, { type DepartmentUserOption } from "./DepartmentUsersSelect"
 
-export default function UsersSelect({ multiple = false, lockedValues = [], value, disabled = false, onChange }:
-    { multiple?: boolean, lockedValues?: any[], value: any, disabled?: boolean, onChange: (a: any) => any }) {
-    const mappedValue: DepartmentUserOption[] = (value || []).map((v: any) => {
-        const dp = v?.department_path
-        return {
-            label: String(v?.label ?? ''),
-            value: Number(v?.value),
-            department_path: typeof dp === "string" && dp.trim() ? dp.trim() : undefined,
-        }
-    }).filter((x) => x.label && Number.isFinite(x.value))
+interface UsersSelectProps {
+  multiple?: boolean
+  lockedValues?: (number | string)[]
+  value: DepartmentUserOption[]
+  disabled?: boolean
+  onChange: (value: DepartmentUserOption[]) => void
+}
 
-    return <DepartmentUsersSelect
-        multiple={multiple}
-        value={mappedValue}
-        lockedValues={(lockedValues || []).map((x: any) => Number(x))}
-        disabled={disabled}
-        onChange={onChange}
-    />
-};
+export default function UsersSelect({ multiple = false, lockedValues = [], value, disabled = false, onChange }: UsersSelectProps) {
+  const mappedValue = (value || []).map(option => ({
+    ...option,
+    value: Number(option.value),
+    external_id: option.external_id ?? null,
+  })).filter(option => option.label && Number.isFinite(option.value))
+
+  return <DepartmentUsersSelect multiple={multiple} value={mappedValue} lockedValues={lockedValues.map(Number)} disabled={disabled} onChange={onChange} />
+}

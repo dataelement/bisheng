@@ -244,7 +244,6 @@ def is_scope_granted(required: str, granted: frozenset[str] | set[str]) -> bool:
         return True
     return not OPEN_API_SCOPE_IMPLIED_BY.get(required, frozenset()).isdisjoint(granted)
 
-
 OPEN_API_SCOPE_ATTR = "__open_api_scope__"
 
 #: ``OpenApiPrincipal.actor_kind`` of a hosted application, fixed by

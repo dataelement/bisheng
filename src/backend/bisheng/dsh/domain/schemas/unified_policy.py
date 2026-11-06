@@ -6,7 +6,12 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 TOKENS_PER_CREDIT = 1_000_000
+MAX_MONTHLY_CREDITS = 1_000_000
 MAX_TOKEN_LIMIT = 9_223_372_036_854_775_807
+# A user no enabled credit rule reaches is not capped. The ledger compares
+# counters as int64 strings, so the int64 ceiling admits every call while every
+# int-typed consumer keeps working unchanged.
+UNLIMITED_TOKEN_LIMIT = MAX_TOKEN_LIMIT
 
 
 def credits_from_tokens(tokens: int) -> str:
@@ -48,7 +53,9 @@ class ModelVisibilityInput(BaseModel):
         return self.everyone or any(subject.id in memberships[subject.kind] for subject in self.subjects)
 
 
-class CreditRuleInput(BaseModel):
+class CreditRuleValue(BaseModel):
+    """Exact stored allowance, including values imported from legacy policies."""
+
     model_config = ConfigDict(extra="forbid", strict=True)
     version: int = Field(ge=0)
     monthly_credits: str = Field(pattern=r"^(0|[1-9][0-9]{0,12})(\.[0-9]{1,6})?$")
@@ -66,13 +73,30 @@ class CreditRuleInput(BaseModel):
         return int(Decimal(self.monthly_credits) * TOKENS_PER_CREDIT)
 
 
+class CreditRuleInput(CreditRuleValue):
+    """Business limits for administrator-created or edited allowances."""
+
+    monthly_credits: str = Field(pattern=r"^(0|[1-9][0-9]{0,6})(\.[0-9])?$")
+
+    @model_validator(mode="after")
+    def validate_monthly_allowance(self):
+        if self.monthly_token_limit > MAX_MONTHLY_CREDITS * TOKENS_PER_CREDIT:
+            raise ValueError("Monthly credits must be between 0 and 1000000 with up to 1 decimal place")
+        return self
+
+
 def effective_token_limit(*, user_id: int, departments: set[int], roles: set[int], rules: list[dict]) -> int:
-    """Use the highest enabled allowance across matching users, departments and roles."""
+    """Use the highest enabled allowance across matching users, departments and roles.
+
+    No matching enabled rule means no cap: enabling the client module must not
+    cut off daily chat and task mode for everyone the admin has not configured.
+    Once any rule matches it applies as written, including an explicit zero.
+    """
     memberships = {"USER": {user_id}, "DEPARTMENT": departments, "ROLE": roles}
     matching = [
         rule for rule in rules if rule["enabled"] and rule["subject_id"] in memberships.get(rule["subject_type"], set())
     ]
-    return max((rule["monthly_token_limit"] for rule in matching), default=0)
+    return max((rule["monthly_token_limit"] for rule in matching), default=UNLIMITED_TOKEN_LIMIT)
 
 
 def credit_balance(*, limit: int, used: int | None) -> dict:
@@ -81,4 +105,7 @@ def credit_balance(*, limit: int, used: int | None) -> dict:
         "used": credits_from_tokens(used) if used is not None else None,
         "remaining": credits_from_tokens(max(0, limit - used)) if used is not None else None,
         "tokens_per_credit": TOKENS_PER_CREDIT,
+        # limit/remaining stay numeric strings for existing clients; a client that
+        # knows this flag shows "unlimited" instead of the int64 ceiling.
+        "unlimited": limit == UNLIMITED_TOKEN_LIMIT,
     }

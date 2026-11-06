@@ -67,7 +67,7 @@ async def scoped_data(request: Request):
     with service._guard:
         lock = service._apps.setdefault(app_id, Lock())
     if not lock.acquire(blocking=False):
-        raise DataBusyError("Application data is under maintenance")
+        raise DataBusyError("Application data operation is busy; please retry")
     try:
         yield DataExecutor(
             service.config.with_overrides(

@@ -5,7 +5,11 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_subscribe_channel_uses_role_quota_service():
+async def test_subscribe_channel_uses_role_quota_service(monkeypatch):
+    monkeypatch.setattr(
+        "bisheng.channel.domain.services.channel_service.batch_check_business_visible",
+        AsyncMock(return_value={"channel-1": False}),
+    )
     from bisheng.channel.domain.models.channel import ChannelVisibilityEnum
     from bisheng.channel.domain.schemas.channel_manager_schema import (
         SubscribeChannelRequest,
@@ -19,31 +23,36 @@ async def test_subscribe_channel_uses_role_quota_service():
     )
     from bisheng.role.domain.services.quota_service import QuotaResourceType
 
-    channel = SimpleNamespace(id='channel-1', visibility=ChannelVisibilityEnum.PUBLIC)
+    channel = SimpleNamespace(id="channel-1", visibility=ChannelVisibilityEnum.PUBLIC)
     channel_repository = SimpleNamespace(
         find_channels_by_ids=AsyncMock(return_value=[channel]),
     )
     member_repository = SimpleNamespace(
         find_membership=AsyncMock(return_value=None),
-        add_member=AsyncMock(),
+        add_member=AsyncMock(return_value=SimpleNamespace(status=MembershipStatusEnum.PENDING)),
+        update=AsyncMock(),
     )
     service = ChannelService(
         channel_repository=channel_repository,
         space_channel_member_repository=member_repository,
         channel_info_source_repository=SimpleNamespace(),
     )
+    service._get_channel_actions = AsyncMock(return_value=set())
     login_user = SimpleNamespace(user_id=42, tenant_id=7, is_admin=lambda: False)
 
-    with patch(
-        'bisheng.channel.domain.services.channel_service.QuotaService.check_quota',
-        new=AsyncMock(return_value=True),
-    ) as mock_check, patch.object(
-        ChannelService,
-        'sync_direct_channel_user_permissions',
-        new_callable=AsyncMock,
+    with (
+        patch(
+            "bisheng.channel.domain.services.channel_service.QuotaService.check_quota",
+            new=AsyncMock(return_value=True),
+        ) as mock_check,
+        patch.object(
+            ChannelService,
+            "sync_direct_channel_user_permissions",
+            new_callable=AsyncMock,
+        ),
     ):
         status = await service.subscribe_channel(
-            SubscribeChannelRequest(channel_id='channel-1'),
+            SubscribeChannelRequest(channel_id="channel-1"),
             login_user,
         )
 
@@ -55,9 +64,9 @@ async def test_subscribe_channel_uses_role_quota_service():
         login_user=login_user,
     )
     member_repository.add_member.assert_awaited_once_with(
-        business_id='channel-1',
+        business_id="channel-1",
         business_type=BusinessTypeEnum.CHANNEL,
         user_id=42,
         role=UserRoleEnum.MEMBER,
-        status=MembershipStatusEnum.ACTIVE,
+        status=MembershipStatusEnum.PENDING,
     )

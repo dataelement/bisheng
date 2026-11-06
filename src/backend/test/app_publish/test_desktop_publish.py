@@ -166,3 +166,46 @@ async def test_ac03_app_cookie_rechecks_parent_session_and_app_binding(monkeypat
     actor.return_value = SimpleNamespace(user_id=31, tenant_id=2)
     verdict = await module.authorize_desktop_entry(slug="reused-slug", access_token="bs-view-test", runtime=object())
     assert verdict == {"decision": "forbidden", "reason": "application_identity_changed"}
+
+
+async def test_desktop_submission_persists_revalidatable_origin(
+    publish_db,
+    tier_seed,
+    tarball_factory,
+    fake_minio,
+    app_factory,
+    fake_publish_approval,
+    audit_sink,
+    app_runtime_settings,
+    monkeypatch,
+):
+    from bisheng.app_publish.domain.models.app_deployment import AppDeploymentDao
+    from bisheng.app_publish.domain.services import publish_pipeline_service as pipeline
+    from bisheng.app_publish.domain.services.desktop_publish_service import DesktopPublishService
+    from bisheng.app_runtime.domain.services.app_authorization_service import AppAuthorizationService
+    from bisheng.permission.application.identity import PermissionActor
+
+    app_runtime_settings(enabled=True)
+    app, _ = await app_factory(with_version=False)
+    principal = DshPrincipal(tenant_id="1", user_id="31", session_id="desktop-device")
+    actor = SimpleNamespace(user_id=31, tenant_id=1, user_name="editor", is_global_super=False)
+    apps = SimpleNamespace(require=AsyncMock(return_value=(actor, app)))
+    monkeypatch.setattr(pipeline, "require_owner_tenant", AsyncMock())
+    monkeypatch.setattr(pipeline, "enqueue_pipeline", AsyncMock())
+    monkeypatch.setattr(AppAuthorizationService, "load_app", AsyncMock(return_value=app))
+    # External permission decisions are controlled, but the pipeline captures
+    # and persists the real actor/session reference through its normal entry.
+    monkeypatch.setattr(AppAuthorizationService, "authorize_loaded_app", AsyncMock(return_value=app))
+    monkeypatch.setattr(
+        AppAuthorizationService, "resolve_actor", AsyncMock(return_value=PermissionActor(subject_id=31, tenant_id=1))
+    )
+    result = await DesktopPublishService(apps).accept(principal, tarball_factory(), app_id=app.id)
+    async with publish_db() as session:
+        deployment = await AppDeploymentDao.aget(session, result.deployment_id)
+        assert deployment.submitted_by_user_id == 31
+        assert deployment.authorization_context["credential_ref"] == {
+            "kind": "dsh_session",
+            "principal": principal.model_dump(),
+        }
+        assert deployment.authorization_context["actor"] == {"subject_type": "user", "subject_id": 31, "tenant_id": 1}
+    pipeline.enqueue_pipeline.assert_awaited_once_with(result.deployment_id)

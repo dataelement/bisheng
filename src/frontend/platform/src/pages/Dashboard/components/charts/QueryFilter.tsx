@@ -1,14 +1,15 @@
 // @ts-strict-ignore
-"use client"
+import { Button } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
 
-import { Button } from "@/components/bs-ui/button"
-import { useEditorDashboardStore } from "@/store/dashboardStore"
-import { cn } from "@/utils"
-import { GripHorizontalIcon, Search } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
-import { DashboardComponent, QueryConfig, TimeRangeMode, TimeRangeType } from "../../types/dataConfig"
-import { AdvancedDatePicker, DatePickerValue } from "../AdvancedDatePicker"
-import { useTranslation } from "react-i18next"
+
+import { useEditorDashboardStore } from "@/store/dashboardStore";
+import { cn } from "@/utils";
+import { GripHorizontalIcon } from "lucide-react";
+import { useEffect,useRef,useState } from "react";
+import { useTranslation } from "react-i18next";
+import { DashboardComponent,QueryConfig,TimeRangeMode,TimeRangeType } from "../../types/dataConfig";
+import { AdvancedDatePicker,DatePickerValue } from "../AdvancedDatePicker";
 
 interface QueryFilterProps {
     component: DashboardComponent  // Query the ID of the component, which is used to trigger the refresh of the associated chart
@@ -28,8 +29,8 @@ export function QueryFilter({ hasChanged, isDark, component, isPreviewMode = fal
     }
 
     const handleQuery = () => {
-        console.log("查询日期:", date)
-        // Refresh the associated chart based on the query component ID 
+        console.log("{t('queryDateLabel')}", date)
+        // Refresh the associated chart based on the query component ID
         refreshChartsByQuery(component, filter)
     }
 
@@ -88,7 +89,7 @@ export function QueryFilter({ hasChanged, isDark, component, isPreviewMode = fal
                         }}
                     />
                     <Button onClick={handleQuery} className=" gap-1">
-                        <Search className="h-4 w-4" />
+                        <Outlined.Search className="h-4 w-4" />
                         {t('query')}
                     </Button>
                 </div>

@@ -1,26 +1,28 @@
-import { Button } from "@/components/bs-ui/button";
+import { Button, Input, notification } from '@bisheng/ui';
+
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
+Dialog,
+DialogContent,
+DialogDescription,
+DialogFooter,
+DialogHeader,
+DialogTitle,
 } from "@/components/bs-ui/dialog";
-import { Input } from "@/components/bs-ui/input";
+
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
+Select,
+SelectContent,
+SelectItem,
+SelectTrigger,
 } from "@/components/bs-ui/select";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import type { BrandAsset, BrandAssetCategory, BrandAssetOption } from "@/controllers/API";
-import { deleteBrandAssetApi, uploadBrandAssetApi } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+
+import type { BrandAsset,BrandAssetCategory,BrandAssetOption } from "@/controllers/API";
+import { deleteBrandAssetApi,uploadBrandAssetApi } from "@/controllers/API";
+import { showApiError } from "@/controllers/request";
 import { withBrandBaseUrl } from "@/utils/brand";
-import { Check, Eye, ImageIcon, Link, Loader2, Trash2, Upload } from "lucide-react";
-import { ChangeEvent, MouseEvent, PointerEvent, ReactNode, useMemo, useRef, useState } from "react";
+import { Outlined } from "bisheng-icons";
+import { ImageIcon,Link } from "lucide-react";
+import { ChangeEvent,MouseEvent,PointerEvent,ReactNode,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BRAND_ASSET_ACCEPT } from "./brandTypes";
 
@@ -138,7 +140,7 @@ function AssetOptionContent({
                     )}
                 </div>
             </div>
-            {selected && <Check className="size-4 shrink-0 text-primary" />}
+            {selected && <Outlined.Check className="size-4 shrink-0 text-primary" />}
             {canDelete && (
                 <button
                     type="button"
@@ -152,7 +154,7 @@ function AssetOptionContent({
                     onMouseUp={handleDeleteMouseUp}
                     onClick={handleDeleteClick}
                 >
-                    {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                    {deleting ? <Outlined.Loading className="size-4 animate-spin" /> : <Outlined.Delete className="size-4" />}
                 </button>
             )}
         </div>
@@ -176,7 +178,7 @@ export default function BrandAssetUpload({
     onUrlAdded,
 }: BrandAssetUploadProps) {
     const { t } = useTranslation();
-    const { toast } = useToast();
+
     const inputRef = useRef<HTMLInputElement>(null);
     const suppressSelectValueRef = useRef("");
     const [uploading, setUploading] = useState(false);
@@ -218,17 +220,16 @@ export default function BrandAssetUpload({
             formData.append("category", category);
         }
         setUploading(true);
-        const uploaded = await captureAndAlertRequestErrorHoc(uploadBrandAssetApi(formData));
-        setUploading(false);
-        if (!uploaded) return;
-
+        try {
+        const uploaded = await uploadBrandAssetApi(formData);
         onChange(uploaded);
         onUploaded?.(uploaded);
-        toast({
-            title: t("prompt"),
-            variant: "success",
-            description: t("theme.brandAssetUploadSuccess"),
-        });
+        notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("theme.brandAssetUploadSuccess") ?? '') });
+        } catch (error) {
+            showApiError(error);
+        } finally {
+            setUploading(false);
+        }
     };
 
     const handleAssetSelect = (assetValue: string) => {
@@ -269,22 +270,14 @@ export default function BrandAssetUpload({
                 onChange(fallbackAsset);
             }
             onDeleted?.(option, fallbackAsset, deletedWasSelected);
-            toast({
-                title: t("prompt"),
-                variant: "success",
-                description: t("theme.brandAssetDeleteSuccess"),
-            });
+            notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("theme.brandAssetDeleteSuccess") ?? '') });
             return;
         }
 
         if (!category) return;
         setDeletingValue(optionValue);
-        const defaultAsset = await captureAndAlertRequestErrorHoc(
-            deleteBrandAssetApi(category, option.relative_path)
-        );
-        setDeletingValue("");
-        if (!defaultAsset) return;
-
+        try {
+        const defaultAsset = await deleteBrandAssetApi(category, option.relative_path);
         const fallbackAsset: BrandAsset = {
             url: defaultAsset.url || fallbackUrl,
             relative_path: defaultAsset.relative_path || "",
@@ -295,11 +288,12 @@ export default function BrandAssetUpload({
             onChange(fallbackAsset);
         }
         onDeleted?.(option, fallbackAsset, deletedWasSelected);
-        toast({
-            title: t("prompt"),
-            variant: "success",
-            description: t("theme.brandAssetDeleteSuccess"),
-        });
+        notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("theme.brandAssetDeleteSuccess") ?? '') });
+        } catch (error) {
+            showApiError(error);
+        } finally {
+            setDeletingValue("");
+        }
     };
 
     const handleOpenUrlDialog = () => {
@@ -310,11 +304,7 @@ export default function BrandAssetUpload({
     const handleUrlConfirm = () => {
         const nextUrl = urlValue.trim();
         if (!isValidAssetUrl(nextUrl)) {
-            toast({
-                title: t("prompt"),
-                variant: "warning",
-                description: t("theme.brandAssetUrlInvalid"),
-            });
+            notification.open({ type: "warning", title: String(t("prompt") ?? ''), description: String(t("theme.brandAssetUrlInvalid") ?? '') });
             return;
         }
 
@@ -326,11 +316,7 @@ export default function BrandAssetUpload({
         onChange(urlAsset);
         onUrlAdded?.(urlAsset);
         setUrlDialogOpen(false);
-        toast({
-            title: t("prompt"),
-            variant: "success",
-            description: t("theme.brandAssetUrlAddSuccess"),
-        });
+        notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("theme.brandAssetUrlAddSuccess") ?? '') });
     };
 
     const handleUrlChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -354,42 +340,26 @@ export default function BrandAssetUpload({
                 )}
             </div>
             <div className="min-w-0 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 basis-48 grow">
                         <p className="truncate text-sm font-medium text-foreground">{label}</p>
                         <p className="mt-1 text-xs text-muted-foreground">{spec}</p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex max-w-full flex-wrap items-center gap-2">
                         {onPreview && (
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant={previewActive ? "default" : "outline"}
-                                onClick={onPreview}
-                            >
-                                <Eye className="mr-1 size-4" />
+                            <Button type="button" size="small" variant={previewActive ? "default" : "outline"} onClick={onPreview}>
+                                <Outlined.Eye className="mr-1 size-4" />
                                 {t("theme.brandPreviewButton")}
                             </Button>
                         )}
                         {allowUrlOption && (
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={handleOpenUrlDialog}
-                            >
+                            <Button type="button" size="small" variant="outlined" onClick={handleOpenUrlDialog} color="default">
                                 <Link className="mr-1 size-4" />
                                 {t("theme.brandPasteUrl")}
                             </Button>
                         )}
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={uploading}
-                            onClick={handlePickFile}
-                        >
-                            <Upload className="mr-1 size-4" />
+                        <Button type="button" size="small" variant="outlined" disabled={uploading} onClick={handlePickFile} color="default">
+                            <Outlined.Upload className="mr-1 size-4" />
                             {uploading ? t("theme.brandUploading") : t("theme.brandUpload")}
                         </Button>
                     </div>
@@ -431,11 +401,7 @@ export default function BrandAssetUpload({
                         </SelectContent>
                     </Select>
                 ) : (
-                    <Input
-                        value={value?.url || ""}
-                        placeholder={t("theme.brandAssetUrlPlaceholder")}
-                        onChange={handleUrlChange}
-                    />
+                    <Input value={value?.url || ""} placeholder={t("theme.brandAssetUrlPlaceholder")} onChange={handleUrlChange} />
                 )}
             </div>
             <input
@@ -452,18 +418,13 @@ export default function BrandAssetUpload({
                         <DialogTitle>{t("theme.brandUrlDialogTitle")}</DialogTitle>
                         <DialogDescription>{t("theme.brandUrlDialogDescription")}</DialogDescription>
                     </DialogHeader>
-                    <Input
-                        value={urlValue}
-                        placeholder={t("theme.brandAssetUrlPlaceholder")}
-                        onChange={(event) => setUrlValue(event.target.value)}
-                        onKeyDown={(event) => {
+                    <Input value={urlValue} placeholder={t("theme.brandAssetUrlPlaceholder")} onChange={(event) => setUrlValue(event.target.value)} onKeyDown={(event) => {
                             if (event.key === "Enter") {
                                 handleUrlConfirm();
                             }
-                        }}
-                    />
+                        }} />
                     <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => setUrlDialogOpen(false)}>
+                        <Button type="button" variant="outlined" onClick={() => setUrlDialogOpen(false)} color="default">
                             {t("theme.brandUrlDialogCancel")}
                         </Button>
                         <Button type="button" onClick={handleUrlConfirm}>

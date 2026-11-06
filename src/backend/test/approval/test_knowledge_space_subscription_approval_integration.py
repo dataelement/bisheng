@@ -21,7 +21,7 @@ async def test_approval_space_subscription_uses_approval_gate_pending():
     )
 
     space = SimpleNamespace(
-        id=12, name="研发知识空间", type=KnowledgeTypeEnum.SPACE.value, auth_type=AuthTypeEnum.APPROVAL
+        id=12, user_id=1, name="研发知识空间", type=KnowledgeTypeEnum.SPACE.value, auth_type=AuthTypeEnum.APPROVAL
     )
 
     with (
@@ -85,7 +85,7 @@ async def test_approval_space_subscription_gate_failure_leaves_no_membership():
     service.approval_gate = SimpleNamespace(request_or_pass=AsyncMock(side_effect=ApprovalScenarioDisabledError()))
 
     space = SimpleNamespace(
-        id=12, name="研发知识空间", type=KnowledgeTypeEnum.SPACE.value, auth_type=AuthTypeEnum.APPROVAL
+        id=12, user_id=1, name="研发知识空间", type=KnowledgeTypeEnum.SPACE.value, auth_type=AuthTypeEnum.APPROVAL
     )
 
     with (
@@ -132,7 +132,7 @@ async def test_approval_space_subscription_direct_pass_activates_member():
         request_or_pass=AsyncMock(return_value=SimpleNamespace(decision="pass", instance_id=22))
     )
     space = SimpleNamespace(
-        id=12, name="研发知识空间", type=KnowledgeTypeEnum.SPACE.value, auth_type=AuthTypeEnum.APPROVAL
+        id=12, user_id=1, name="研发知识空间", type=KnowledgeTypeEnum.SPACE.value, auth_type=AuthTypeEnum.APPROVAL
     )
     membership = SimpleNamespace(
         id=9, business_id="12", user_id=42, user_role="member", status=MembershipStatusEnum.REJECTED

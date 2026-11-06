@@ -273,7 +273,8 @@ async def _after_gate(deployment, *, app, payload: dict, result: ApprovalGateRes
             approver_user_ids=approver_ids,
             business_name=str(payload.get("app_name") or app.name),
             instance_id=int(result.instance_id),
-            task_id=result.task_ids[0] if result.task_ids else None,
+            # Each recipient resolves their own task from this instance.
+            task_id=None,
         )
 
     if getattr(handler, "last_self_approval", False):
@@ -320,6 +321,8 @@ async def _build_payload(
     second net.
     """
     manifest = deployment.manifest if isinstance(deployment.manifest, dict) else {}
+    authorization = deployment.authorization_context or {}
+    submission_actor = {**authorization.get("actor", {}), "name": authorization.get("actor_name")}
     return {
         "app_id": app.id,
         "app_name": app.name,
@@ -329,6 +332,8 @@ async def _build_payload(
         "version_no": version_no,
         "release_notes": deployment.release_notes,
         "deployment_id": deployment.id,
+        "submission_actor": submission_actor,
+        "self_review_user_id": authorization.get("self_review_user_id"),
         "release_kind": release_kind,
         "owner_user_id": owner_user_id,
         "owner_user_name": owner_user_name,

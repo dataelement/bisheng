@@ -114,9 +114,7 @@ async def test_version_row_created_after_gate_not_before(publish_db, app_factory
     assert rows[0].terminal_state is None
 
 
-async def test_gate_exception_approver_empty_still_inserts_version(
-    publish_db, app_factory, deployment_factory, audit_sink
-):
+async def test_gate_exception_approver_empty_still_inserts_version(publish_db, app_factory, deployment_factory, audit_sink):
     """AC-18: no approver is an administrator's problem, not a reason to have nothing to publish."""
     from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision
 
@@ -187,9 +185,7 @@ async def test_compensation_cancels_approval_when_insert_fails(
 # ---------------------------------------------------------------------------
 
 
-async def test_version_no_is_max_plus_one_with_unique_constraint(
-    publish_db, app_factory, deployment_factory, audit_sink
-):
+async def test_version_no_is_max_plus_one_with_unique_constraint(publish_db, app_factory, deployment_factory, audit_sink):
     from sqlalchemy.exc import IntegrityError
 
     from bisheng.database.models.app_version import AppVersion, AppVersionDao
@@ -292,11 +288,7 @@ async def test_mark_terminal_state_is_the_only_update_writer():
     """One writer for the one column that may be updated (F054 D8's single exception)."""
     from bisheng.database.models.app_version import AppVersionDao
 
-    writers = [
-        name
-        for name in dir(AppVersionDao)
-        if name.startswith("a") and name not in {"aget", "alist_by_app", "amax_version_no", "ainsert"}
-    ]
+    writers = [name for name in dir(AppVersionDao) if name.startswith("a") and name not in {"aget", "alist_by_app", "amax_version_no", "ainsert"}]
     assert writers == ["amark_terminal"], f"app_version gained another writer: {writers}"
 
 

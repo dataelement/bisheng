@@ -21,7 +21,7 @@ async def _aget_hosted_app(resource_id: str):
     """One hosted application row, or ``None`` once it is deleted.
 
     Deliberately not routed through ``AppQueryService``: that service answers
-    the detail page's question (owner or tenant administrator), while tagging
+    the detail page's question (owner ∪ tenant administrator), while tagging
     asks the generic F048 ``edit`` question a few lines below. Reusing it would
     quietly apply two different rules to the same request. A ``deleted`` app is
     reported as absent — the row survives for audit, but it is not a resource
@@ -40,7 +40,7 @@ async def _aget_hosted_app(resource_id: str):
 class TagService:
     @classmethod
     def get_all_tag(
-        cls, request: Request, login_user: UserPayload, keyword: str | None = None, page: int = 0, limit: int = 10
+        cls, request: Request, login_user: UserPayload, keyword: str = None, page: int = 0, limit: int = 10
     ) -> (list[Tag], int):
         """Get all tags"""
         result = TagDao.search_tags(

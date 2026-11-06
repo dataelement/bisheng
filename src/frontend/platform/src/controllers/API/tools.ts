@@ -110,6 +110,26 @@ export const testMcpApi = async (data: { file_content: string }) => {
  * 工具测试接口
  * @returns 
  */
+export interface SandboxConfView {
+    endpoints: string[]
+    token: string
+    address_source: 'page' | 'deployment' | 'default'
+    token_source: 'page' | 'deployment' | 'default'
+    deployment_address: string
+}
+
+export const getSandboxConfApi = async (): Promise<SandboxConfView> => {
+    return await axios.get(`/api/v1/tool/sandbox_conf`)
+}
+
+export const saveSandboxConfApi = async (data: { endpoints: string[]; token: string }) => {
+    return await axios.post(`/api/v1/tool/sandbox_conf`, data)
+}
+
+export const testSandboxConfApi = async (data: { endpoints: string[]; token: string }): Promise<{ results: { url: string; status: string }[] }> => {
+    return await axios.post(`/api/v1/tool/sandbox_conf/test`, data)
+}
+
 export const testToolApi = async (data: {
     server_host: string
     extra: string

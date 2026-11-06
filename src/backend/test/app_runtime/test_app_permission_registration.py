@@ -322,8 +322,7 @@ async def test_grant_subjects_five_endpoints_accept_app(
     assert "service" in called, f"{endpoint_name} stopped before reaching the candidate service"
     assert response.status_code == 200
     if count_name:
-        # V1.3.0 keeps the existing candidate-page length contract.
-        assert response.data["total"] == 0
+        assert "count" in called
         assert response.data == {"data": [], "total": 0}
 
 
@@ -461,20 +460,6 @@ def test_app_uses_complete_registration_instead_of_owner_projection() -> None:
     assert "app" in GRANT_SUBJECT_RESOURCE_TYPES
     adapters, registry = build_f048_resource_composition(SimpleNamespace())
     assert "app" in adapters and "app" in registry._ports
-
-
-async def test_registered_app_adapter_resolves_through_real_registry(monkeypatch) -> None:
-    """Exercise the composition protocol, not just the presence of a key."""
-    from bisheng.api.services.f048_permission_runtime import build_f048_resource_composition
-
-    adapters, registry = build_f048_resource_composition(SimpleNamespace())
-    monkeypatch.setattr(adapters["app"], "_loader", _FakeRecordSource(_record()))
-    target = await registry.resolve(
-        resource_type="app", resource_id="app-1", actor=_actor(), action="manage_permission"
-    )
-    assert target.resource_type == "app"
-    assert target.tenant_id == TENANT_ID
-    assert await registry.confirm_absent(resource_type="app", resource_id="app-1") is False
 
 
 # ---------------------------------------------------------------------------

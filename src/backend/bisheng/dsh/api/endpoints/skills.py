@@ -29,10 +29,16 @@ async def list_skills(user=Depends(UserPayload.get_login_user)):
             "description": skill.description,
             "enabled": enabled,
             "content_hash": skill.content_hash,
-            "source": "personal" if skill.source == "personal" else "platform",
+            "source": "personal" if skill.source == "personal" or skill.owner_user_id else "platform",
+            "builtin_key": skill.name if skill.source == "builtin" else None,
             "updated_at": skill.update_time or skill.create_time,
         }
-        if skill.source == "personal":
+        if skill.owner_user_id:
+            from bisheng.linsight.domain.services.personal_skill_service import PersonalSkillService
+
+            detail = await PersonalSkillService().get(user_id=user.user_id, skill_id=skill.id)
+            entry.update(instructions=detail.preview, files=detail.files)
+        elif skill.source == "personal":
             detail = await SkillService(personal_owner=user.user_id).get_detail(user.tenant_id, skill.name)
             entry.update(instructions=detail.preview, files=[f.path for f in detail.files])
         rows.append(entry)
@@ -70,12 +76,29 @@ async def update_personal(skill_id: int, file: UploadFile = File(...), user=Depe
 @router.get("/personal/{skill_id}/bundle")
 async def download(skill_id: int, user=Depends(UserPayload.get_login_user)):
     row = await UserSkillsService(user.user_id).personal(skill_id)
-    files = await asyncio.to_thread(SkillService()._load_existing_bundle, user.tenant_id, row.name, row.content_hash)
+    from bisheng.linsight.domain.services.skill_store import SkillStore
+
+    store = SkillStore()
+
+    def read_bundle():
+        return {
+            entry["path"]: store.read_bytes(
+                user.tenant_id, row.name, row.content_hash, entry["path"], owner_user_id=row.owner_user_id
+            )
+            for entry in store.list_files(user.tenant_id, row.name, row.content_hash, owner_user_id=row.owner_user_id)
+        }
+
+    files = await asyncio.to_thread(read_bundle)
     return Response(pack_bundle_zip(files), media_type="application/zip")
 
 
 @router.delete("/personal/{skill_id}")
 async def delete_personal(skill_id: int, user=Depends(UserPayload.get_login_user)):
     row = await UserSkillsService(user.user_id).personal(skill_id)
-    await SkillService(personal_owner=user.user_id).delete(user.tenant_id, row.name)
+    if row.owner_user_id:
+        from bisheng.linsight.domain.services.personal_skill_service import PersonalSkillService
+
+        await PersonalSkillService().delete(user_id=user.user_id, skill_id=skill_id)
+    else:
+        await SkillService(personal_owner=user.user_id).delete(user.tenant_id, row.name)
     return resp_200()

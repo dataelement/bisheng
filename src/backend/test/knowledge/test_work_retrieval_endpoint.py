@@ -2,7 +2,7 @@
 
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
@@ -16,7 +16,16 @@ from bisheng.knowledge.api.endpoints.knowledge_space import router
 
 class WorkRetrievalEndpointTests(unittest.TestCase):
     def setUp(self):
-        self.service = SimpleNamespace(aretrieve_chunks=AsyncMock(return_value=[]))
+        self.service = SimpleNamespace(
+            login_user=SimpleNamespace(user_id=27, tenant_id=1),
+            aretrieve_chunks=AsyncMock(return_value=[]),
+        )
+        self.catalog = AsyncMock(return_value={91: SimpleNamespace(tool_key="bisheng_knowledge_search")})
+        catalog_patch = patch(
+            "bisheng.dsh.domain.services.work_capabilities.WorkCapabilitiesService._tools", self.catalog
+        )
+        catalog_patch.start()
+        self.addCleanup(catalog_patch.stop)
         self.version_repo = object()
         self.app = FastAPI()
         self.app.include_router(router)
@@ -32,7 +41,14 @@ class WorkRetrievalEndpointTests(unittest.TestCase):
                     page_content="Policy passage",
                     metadata={"document_id": 12, "document_name": "Policy.pdf", "chunk_index": 3},
                 ),
-            )
+            ),
+            (
+                9,
+                SimpleNamespace(
+                    page_content="Budget marker K2",
+                    metadata={"document_id": 13, "document_name": "Budget.pdf", "chunk_index": 1},
+                ),
+            ),
         ]
         response = self.client.post(
             "/knowledge/space/retrieve", json={"query": " leave policy ", "space_ids": [7, 7, 9]}
@@ -51,9 +67,23 @@ class WorkRetrievalEndpointTests(unittest.TestCase):
                     "document_id": 12,
                     "document_name": "Policy.pdf",
                     "chunk_index": 3,
-                }
+                },
+                {
+                    "content": "Budget marker K2",
+                    "space_id": 9,
+                    "document_id": 13,
+                    "document_name": "Budget.pdf",
+                    "chunk_index": 1,
+                },
             ],
         )
+
+    def test_missing_catalog_blocks_retrieval_before_accessing_documents(self):
+        self.catalog.return_value = {}
+        response = self.client.post("/knowledge/space/retrieve", json={"query": "q", "space_ids": [7, 9]})
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("Enable this tool", response.json()["detail"])
+        self.service.aretrieve_chunks.assert_not_awaited()
 
     def test_permission_failure_propagates(self):
         self.service.aretrieve_chunks.side_effect = HTTPException(status_code=403, detail="Forbidden")

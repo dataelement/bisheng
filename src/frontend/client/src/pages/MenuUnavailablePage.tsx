@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ApprovalApiError, applyMenuAccessApi, checkMenuAccessPendingApi } from '~/api/approval';
+import { isApiError } from '@bisheng/api-client';
+import { applyMenuAccessApi, checkMenuAccessPendingApi } from '~/api/approval';
 import { useToastContext } from '~/Providers';
 import { NotificationSeverity } from '~/common';
 import { useAuthContext, useLocalize, useWorkbenchMenuNames, type WorkbenchMenuKey } from '~/hooks';
@@ -86,14 +87,12 @@ export default function MenuUnavailablePage() {
         severity: NotificationSeverity.SUCCESS,
       });
     } catch (err) {
-      const errMsg = err instanceof ApprovalApiError
-        ? (localize(`api_errors.${err.statusCode}` as any, { defaultValue: '' }) as string
-            || localize('com_menu_unavailable_apply_failed'))
-        : localize('com_menu_unavailable_apply_failed');
+      if (isApiError(err) && (err.kind === 'canceled' || err.presentation !== 'none')) return;
       showToast({
-        message: errMsg,
+        message: err instanceof Error ? err.message : localize('com_menu_unavailable_apply_failed'),
         severity: NotificationSeverity.WARNING,
       });
+      if (isApiError(err)) err.presentation = 'toast';
     } finally {
       setSubmitting(false);
     }

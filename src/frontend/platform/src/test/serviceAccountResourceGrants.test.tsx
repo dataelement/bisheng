@@ -1,7 +1,6 @@
 import userEvent from "@testing-library/user-event"
-import type { InputHTMLAttributes } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { message } from "@/components/bs-ui/toast/use-toast"
+import { toast } from '@bisheng/ui';
 import {
   listServiceAccountGrantableResourcesApi,
   listServiceAccountKeysApi,
@@ -20,7 +19,8 @@ import {
   SERVICE_ACCOUNT_PERMISSION_TIERS,
   SERVICE_ACCOUNT_RESOURCE_TYPES,
 } from "@/pages/SystemPage/components/ServiceAccount/resourceGrantUtils"
-import { render, screen, waitFor, within } from "@/test/test-utils"
+import { screen, waitFor, within } from "@/test/test-utils"
+import { renderWithServiceAccountScope as render } from "@/test/serviceAccountTestScope"
 import type {
   ApiKeyItem,
   ServiceAccountResourceGrant,
@@ -48,20 +48,22 @@ vi.mock("@/controllers/API/permission", () => ({
   getResourcePermissionContextApi: vi.fn(),
 }))
 
-vi.mock("@/controllers/request", () => ({
+vi.mock("@/controllers/request", async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/controllers/request')>(),
   captureAndAlertRequestErrorHoc: vi.fn(),
 }))
 
-vi.mock("@/components/bs-ui/toast/use-toast", () => ({
+vi.mock('@bisheng/ui', async () => {
+const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const previous = await (() => ({
   message: vi.fn(),
   toast: vi.fn(),
-}))
+}))();
+const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
+return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+})
 
-vi.mock("@/components/bs-ui/input", () => ({
-  SearchInput: (props: InputHTMLAttributes<HTMLInputElement>) => (
-    <input {...props} />
-  ),
-}))
+
 
 vi.mock("@/components/bs-icons", () => ({
   LoadIcon: () => <span data-testid="load-icon" />,
@@ -193,16 +195,15 @@ describe("service-account resource grants", () => {
       }),
     )
     expect(copyText).toHaveBeenCalledWith("knowledge_library:1042")
-    expect(message).toHaveBeenCalledWith(
+    expect(toast.show).toHaveBeenCalledWith(
       expect.objectContaining({
-        className: expect.stringContaining("bottom-6"),
-        description:
+        message:
           "openApiManagement.feedback.resourceCopied:knowledge_library:1042",
       }),
     )
 
     await user.type(
-      screen.getByRole("textbox", {
+      screen.getByRole("searchbox", {
         name: "openApiManagement.grants.resourceSearch",
       }),
       "Reimbursement",
@@ -282,7 +283,7 @@ describe("service-account resource grants", () => {
     )
     await screen.findByText("Contract library")
     await user.type(
-      screen.getByRole("textbox", {
+      screen.getByRole("searchbox", {
         name: "openApiManagement.grants.resourceSearch",
       }),
       "nothing-matches",
@@ -465,6 +466,7 @@ describe("service-account resource grants", () => {
       { key: "manager", name: "Manager", level: 3, active: true },
       { key: "viewer", name: "Viewer", level: 1, active: true },
       { key: "editor", name: "Editor", level: 2, active: true },
+      { key: "custom_auditor", name: "Auditor", level: 2, active: true },
     ])
     const user = userEvent.setup()
 
@@ -504,7 +506,11 @@ describe("service-account resource grants", () => {
     expect(await screen.findAllByRole("option")).toHaveLength(
       SERVICE_ACCOUNT_PERMISSION_TIERS.length,
     )
-    expect(screen.queryByRole("option", { name: /owner/i })).toBeNull()
+    expect(
+      screen.getByRole("option", {
+        name: "openApiManagement.permissionTiers.owner",
+      }),
+    ).toBeVisible()
   })
 
   it("requires an active key with the matching non-delegate scope", () => {

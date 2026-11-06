@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 import pytest_asyncio
@@ -12,6 +12,7 @@ from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.approval.domain.models.approval_instance import (
+    ApprovalActionLog,
     ApprovalException,
     ApprovalExceptionType,
     ApprovalInstance,
@@ -38,6 +39,7 @@ async def approval_db_engine():
         poolclass=StaticPool,
     )
     tables = [
+        ApprovalActionLog.__table__,
         ApprovalScenario.__table__,
         ApprovalInstance.__table__,
         ApprovalTask.__table__,
@@ -151,6 +153,134 @@ async def test_repository_returns_existing_duplicate_pending_instance(patched_ap
 
     assert duplicate is not None
     assert duplicate.status == ApprovalInstanceStatus.PENDING
+
+
+async def test_failed_request_projection_isolates_tenant_user_scenario_and_latest_state(
+    patched_approval_repositories, isolated_approval_tenant_events
+):
+    from bisheng.approval.application.request_state import get_failed_request_keys
+    from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id, tenant_execution_scope
+
+    with bypass_tenant_filter():
+        for tenant, user, scenario, key, status in [
+            (1, 7, "knowledge_space_subscribe_request", "space:77:user:7", "execute_failed"),
+            (1, 7, "knowledge_space_subscribe_request", "space:77:user:7", "pending"),
+            (1, 7, "knowledge_space_subscribe_request", "space:78:user:7", "execute_failed"),
+            (2, 7, "knowledge_space_subscribe_request", "space:77:user:7", "execute_failed"),
+            (1, 8, "knowledge_space_subscribe_request", "space:77:user:7", "execute_failed"),
+            (1, 7, "channel_subscribe_request", "space:77:user:7", "execute_failed"),
+        ]:
+            await ApprovalInstanceRepository.create_instance(
+                ApprovalInstance(
+                    tenant_id=tenant,
+                    applicant_user_id=user,
+                    applicant_user_name="applicant",
+                    scenario_code=scenario,
+                    scenario_name="scenario",
+                    handler_key=scenario,
+                    business_key=key,
+                    business_resource_type="knowledge_space",
+                    business_resource_id=key.split(":")[1],
+                    business_name="space",
+                    status=status,
+                )
+            )
+    with tenant_execution_scope(2):
+        assert await get_failed_request_keys(
+            tenant_id=1,
+            scenario_code="knowledge_space_subscribe_request",
+            applicant_user_id=7,
+            business_keys=["space:77:user:7", "space:78:user:7"],
+        ) == frozenset({"space:78:user:7"})
+        assert get_current_tenant_id() == 2
+
+
+@pytest.fixture
+def isolated_approval_tenant_events(monkeypatch):
+    from sqlalchemy import event
+
+    from bisheng.core.database import tenant_filter
+
+    listeners = []
+    original = event.listens_for
+
+    def record_listener(target, identifier, **kwargs):
+        def decorate(callback):
+            listeners.append((target, identifier, callback))
+            return original(target, identifier, **kwargs)(callback)
+
+        return decorate
+
+    monkeypatch.setattr(event, "listens_for", record_listener)
+    monkeypatch.setattr(tenant_filter, "_initialized", False)
+    monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", set())
+    monkeypatch.setattr(tenant_filter, "_force_import_all_models", lambda: None)
+    tenant_filter.register_tenant_filter_events()
+    try:
+        yield
+    finally:
+        for target, identifier, callback in reversed(listeners):
+            event.remove(target, identifier, callback)
+
+
+async def test_cancelling_failed_instance_allows_new_approval_task(patched_approval_repositories):
+    old = await ApprovalInstanceRepository.create_instance(
+        ApprovalInstance(
+            tenant_id=1,
+            scenario_code="knowledge_space_subscribe_request",
+            scenario_name="space approval",
+            handler_key="knowledge_space_subscribe_request",
+            business_key="space:77:user:7",
+            business_resource_type="knowledge_space",
+            business_resource_id="77",
+            business_name="space",
+            applicant_user_id=7,
+            applicant_user_name="applicant",
+            status="cancelled",
+        )
+    )
+    handler = SimpleNamespace(
+        build_detail=AsyncMock(return_value={}),
+        build_title=AsyncMock(return_value="space"),
+        resolve_approvers=AsyncMock(return_value=[1]),
+    )
+    scenarios = SimpleNamespace(
+        get_scenario_by_code=AsyncMock(
+            return_value=SimpleNamespace(id=2, enabled=True, scenario_name="space approval")
+        ),
+        list_route_rules=AsyncMock(return_value=[]),
+        get_active_flow_version=AsyncMock(return_value=SimpleNamespace(id=2)),
+        list_node_definitions=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    node_code="owner", node_name="owner approval", node_order=1, node_mode="or", approver_config={}
+                )
+            ]
+        ),
+    )
+    gate = ApprovalGate(
+        registry=SimpleNamespace(get_handler=AsyncMock(return_value=handler)),
+        scenario_repository=scenarios,
+        route_matcher=AsyncMock(return_value=SimpleNamespace(id=2, route_type="flow", flow_definition_id=2)),
+    )
+    with patch("bisheng.approval.domain.services.approval_gate.AuditLogDao.ainsert_v2", new_callable=AsyncMock):
+        result = await gate.request_or_pass(
+            ApprovalGateRequest(
+                tenant_id=1,
+                scenario_code="knowledge_space_subscribe_request",
+                business_key="space:77:user:7",
+                business_resource_type="knowledge_space",
+                business_resource_id="77",
+                business_name="space",
+                applicant_user_id=7,
+                applicant_user_name="applicant",
+            )
+        )
+    assert result.decision == "pending"
+    assert result.instance_id != old.id
+    tasks = await ApprovalInstanceRepository.list_tasks(result.instance_id)
+    assert len(tasks) == 1 and tasks[0].status == "pending" and tasks[0].approver_user_id == 1
+    assert (await ApprovalInstanceRepository.get_instance(old.id)).status == "cancelled"
 
 
 @pytest.mark.asyncio
@@ -333,7 +463,8 @@ async def test_gate_raises_disabled_error_when_scenario_disabled():
 
 
 @pytest.mark.asyncio
-async def test_gate_pass_when_route_direct_approve():
+async def test_gate_pass_when_route_direct_approve(monkeypatch):
+    monkeypatch.setattr("bisheng.approval.domain.services.approval_gate.AuditLogDao.ainsert_v2", AsyncMock())
     handler = SimpleNamespace(
         build_detail=AsyncMock(return_value={"menu_name": "知识管理"}),
         build_title=AsyncMock(return_value="知识管理"),
@@ -356,6 +487,7 @@ async def test_gate_pass_when_route_direct_approve():
     instance_repository = SimpleNamespace(
         find_duplicate_active_instance=AsyncMock(return_value=None),
         create_instance=AsyncMock(side_effect=lambda row: row.model_copy(update={"id": 201})),
+        create_outbox=AsyncMock(side_effect=lambda row: row.model_copy(update={"id": 400})),
         create_exception=AsyncMock(),
         create_task=AsyncMock(),
     )
@@ -365,6 +497,7 @@ async def test_gate_pass_when_route_direct_approve():
         instance_repository=instance_repository,
         route_matcher=AsyncMock(return_value=SimpleNamespace(id=11, route_type="pass")),
     )
+    gate._dispatch_outbox_task = Mock()
 
     result = await gate.request_or_pass(
         ApprovalGateRequest(
@@ -385,10 +518,12 @@ async def test_gate_pass_when_route_direct_approve():
     assert result.task_ids == []
     instance_repository.create_exception.assert_not_awaited()
     instance_repository.create_task.assert_not_awaited()
+    gate._dispatch_outbox_task.assert_called_once_with(400)
 
 
 @pytest.mark.asyncio
-async def test_gate_pending_when_route_hits_flow():
+async def test_gate_pending_when_route_hits_flow(monkeypatch):
+    monkeypatch.setattr("bisheng.approval.domain.services.approval_gate.AuditLogDao.ainsert_v2", AsyncMock())
     handler = SimpleNamespace(
         build_detail=AsyncMock(return_value={"space_name": "研发知识空间"}),
         build_title=AsyncMock(return_value="研发知识空间"),
@@ -422,6 +557,7 @@ async def test_gate_pending_when_route_hits_flow():
     instance_repository = SimpleNamespace(
         find_duplicate_active_instance=AsyncMock(return_value=None),
         create_instance=AsyncMock(side_effect=lambda row: row.model_copy(update={"id": 300})),
+        create_action_log=AsyncMock(),
         create_exception=AsyncMock(),
         create_task=AsyncMock(side_effect=lambda row: row.model_copy(update={"id": next(task_ids)})),
     )
@@ -753,9 +889,15 @@ def test_registry_exposes_default_presets():
 
     presets = {preset.scenario_code: preset for preset in registry.list_presets()}
 
-    assert set(presets) == {
+    # Membership of the catalogue is asserted as a superset: it is the admin
+    # page's scenario dropdown and grows whenever a feature adds a scenario
+    # (F055 added "app_publish_request"). What must never regress is that every
+    # preset carries a handler_key — it has no default, so a missing one is an
+    # ImportError at startup rather than a failure at approval time.
+    assert set(presets) >= {
         "menu_access_request",
         "channel_subscribe_request",
         "knowledge_space_subscribe_request",
     }
+    assert all(preset.handler_key for preset in presets.values())
     assert presets["menu_access_request"].handler_key == "menu_access_request"

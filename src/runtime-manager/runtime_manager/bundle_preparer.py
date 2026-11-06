@@ -14,6 +14,7 @@ from runtime_manager.bundle_inputs import (
     startup_command,
 )
 from runtime_manager.container_runner import ContainerRunner, ExecutionError
+from runtime_manager.static_inputs import has_static_build, select_static_root
 
 
 class BundlePreparer:
@@ -59,11 +60,27 @@ class BundlePreparer:
         body = operation["payload"]
         profile = body["profile"]
         language = profile["language"]
+        # Check both fixed roles before source/material IO; a preparer is not a runtime.
+        self.runner.ensure_image(
+            profile["runtime_image"],
+            platform=profile["platform"],
+            expected_id=profile["runtime_image_id"],
+            role="runtime",
+        )
+        self.runner.ensure_image(
+            profile["preparer_image"],
+            platform=profile["platform"],
+            expected_id=profile["preparer_image_id"],
+            role="preparer",
+        )
         opid = operation["operation_id"]
         root = self.config.data_root / "tasks" / opid
         root.mkdir(parents=True, exist_ok=True)
         self.runner.cleanup(opid)
         original = self._source(operation, root)
+        static_built = language == "static" and has_static_build(original)
+        if language == "static" and not static_built:
+            select_static_root(original, built=False)
         source = root / "source"
         if source.exists():
             shutil.rmtree(source)
@@ -87,7 +104,10 @@ class BundlePreparer:
         materials = root / "materials"
         materials.mkdir(exist_ok=True)
         image = self.runner.ensure_image(
-            profile["preparer_image"], platform=profile["platform"], expected_id=profile["preparer_image_id"]
+            profile["preparer_image"],
+            platform=profile["platform"],
+            expected_id=profile["preparer_image_id"],
+            role="preparer",
         )
         common_env = {
             "PIP_DISABLE_PIP_VERSION_CHECK": "1",
@@ -220,7 +240,7 @@ class BundlePreparer:
             gid=profile["gid"],
         )
         self.platform.dependencies(opid, key, artifact_id=dependency_id, verified=True)
-        code = source / "dist" if language == "static" and (source / "dist" / "index.html").is_file() else source
+        code = select_static_root(source, built=static_built) if language == "static" else source
         archive = archive_directory(
             code,
             root / "compiled.tar.gz",
@@ -258,7 +278,10 @@ class BundlePreparer:
             shutil.rmtree(temporary)
         temporary.mkdir()
         image = self.runner.ensure_image(
-            profile["runtime_image"], platform=profile["platform"], expected_id=profile["runtime_image_id"]
+            profile["runtime_image"],
+            platform=profile["platform"],
+            expected_id=profile["runtime_image_id"],
+            role="runtime",
         )
         script = 'python -m venv --system-site-packages /opt/venv && /opt/venv/bin/python -m pip install --no-index --find-links=/materials/wheels --require-hashes -r /materials/runtime.lock && /opt/venv/bin/python -m pip check && /opt/venv/bin/python -c "import bisheng_sdk"'
         self.runner.run(

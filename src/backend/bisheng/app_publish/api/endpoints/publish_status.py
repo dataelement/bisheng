@@ -25,6 +25,7 @@ subclasses, which the platform handler wraps into a 200.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel, ConfigDict, Field
 
 from bisheng.app_publish.domain.services.publish_status_service import PublishStatusService
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -63,3 +64,25 @@ async def manual_publish(app_id: str, user: UserPayload = Depends(UserPayload.ge
     success.
     """
     return resp_200(data=await PublishStatusService.request_manual_publish(app_id, actor=user))
+
+
+class WithdrawPublishInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_instance_id: int = Field(gt=0)
+    reason: str | None = Field(default=None, max_length=4000)
+
+
+@router.post("/{app_id}/withdraw", response_model=UnifiedResponseModel[dict])
+async def withdraw_publish(
+    app_id: str, body: WithdrawPublishInput, user: UserPayload = Depends(UserPayload.get_login_user)
+):
+    from bisheng.app_publish.domain.services.publish_terminal_service import PublishTerminalService
+
+    return resp_200(
+        data=await PublishTerminalService.request_withdraw(
+            app_id,
+            instance_id=body.expected_instance_id,
+            actor=user,
+            reason=body.reason,
+        )
+    )

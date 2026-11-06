@@ -411,7 +411,6 @@ async def test_delete_hook_revokes_the_runtime_credential(
     subject_id = await _subject_id(app.id)
     assert len(await _live_credentials(subject_id)) == 1
 
-    await _set_state(publish_db, app.id, "deleted")
     failures = await lifecycle_hooks.on_app_deleted(
         app_id=app.id, actor_user_id=owner_user.user_id, tenant_id=ROOT_TENANT_ID
     )
@@ -534,7 +533,6 @@ async def test_the_delete_hook_audits_the_revocation(
     app, _ = await app_factory(state="stopped")
     await AppRuntimeCredentialService.issue(app.id)
 
-    await _set_state(publish_db, app.id, "deleted")
     failures = await lifecycle_hooks.on_app_deleted(
         app_id=app.id, actor_user_id=owner_user.user_id, tenant_id=ROOT_TENANT_ID
     )

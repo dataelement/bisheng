@@ -66,6 +66,10 @@ class _FakeFlowDao:
         search_description=False,
         cursor=None,
         ranking_user_id=None,
+        # F056 pins these on both square entries (status_exempt_flow_types /
+        # app_state_in). The real DAO takes them; swallow them here so this
+        # fixture keeps testing the cursor walk and nothing else.
+        **_f056_square_filters,
     ):
         self.cursors.append(cursor)
         self.id_lists.append(id_list)
@@ -89,8 +93,14 @@ class _FakeFlowDao:
         return [copy.deepcopy(row) for row in window], has_more
 
 
-async def _fake_action_map(user, data, actions):
-    return {str(item["id"]): (frozenset(actions) if str(item["id"]) in _VISIBLE_IDS else frozenset()) for item in data}
+async def _fake_action_map(user, data, actions, actions_by_type=None):
+    # F056 asks the square for per-resource-type actions (``actions_by_type``);
+    # these rows are all plain workflows, so the default set is what applies.
+    del actions_by_type
+    return {
+        str(item["id"]): (frozenset(actions) if str(item["id"]) in _VISIBLE_IDS else frozenset())
+        for item in data
+    }
 
 
 @pytest.mark.asyncio

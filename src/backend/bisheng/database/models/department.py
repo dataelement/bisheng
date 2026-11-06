@@ -12,6 +12,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     SmallInteger,
     String,
@@ -242,7 +243,10 @@ class Department(SQLModelSerializable, table=True):
         ),
     )
 
-    __table_args__ = (UniqueConstraint("source", "external_id", name="uk_source_external_id"),)
+    __table_args__ = (
+        UniqueConstraint("source", "external_id", name="uk_source_external_id"),
+        Index("ix_department_external_id_search", "external_id"),
+    )
 
 
 class UserDepartment(SQLModelSerializable, table=True):

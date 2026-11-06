@@ -170,24 +170,62 @@ def environment_key(profile, lock: bytes, *, tenant_id, app_id):
 
 
 def startup_command(root: Path, language, declared=None):
-    if declared:
-        if not isinstance(declared, list) or not all(isinstance(x, str) and x and "\x00" not in x for x in declared):
+    root = Path(root)
+    if declared is not None:
+        if (
+            not isinstance(declared, list)
+            or not declared
+            or not all(isinstance(x, str) and x and "\x00" not in x and len(x) <= 4096 for x in declared)
+        ):
             raise BundleInputError("startup_command_invalid")
         return declared
-    proc = Path(root) / "Procfile"
+    proc = safe_relative(root, "Procfile")
     if proc.exists():
-        commands = [line.split(":", 1)[1].strip() for line in proc.read_text().splitlines() if line.startswith("web:")]
+        if not proc.is_file():
+            raise BundleInputError("procfile_invalid")
+        try:
+            commands = [
+                line.split(":", 1)[1].strip() for line in proc.read_text().splitlines() if line.startswith("web:")
+            ]
+        except UnicodeError as exc:
+            raise BundleInputError("procfile_invalid") from exc
         if len(commands) != 1 or not commands[0]:
             raise BundleInputError("procfile_web_ambiguous")
+        if "\x00" in commands[0]:
+            raise BundleInputError("startup_command_invalid")
         return ["/bin/sh", "-c", commands[0]]
     if language == "static":
         return ["nginx", "-g", "daemon off;"]
+    if language == "python3.11":
+        for entry in ("main.py", "app.py"):
+            if safe_relative(root, entry).is_file():
+                return ["python", entry]
     if language == "node20":
-        package = Path(root) / "package.json"
-        if package.exists() and json.loads(package.read_text()).get("scripts", {}).get("start"):
-            return ["npm", "start"]
-        if (Path(root) / "server.js").is_file():
-            return ["node", "server.js"]
+        package = safe_relative(root, "package.json")
+        if package.exists():
+            try:
+                document = json.loads(package.read_text())
+            except (ValueError, UnicodeError) as exc:
+                raise BundleInputError("package_json_invalid") from exc
+            if not isinstance(document, dict) or not isinstance(document.get("scripts", {}), dict):
+                raise BundleInputError("package_json_invalid")
+            script = document.get("scripts", {}).get("start")
+            if script is not None:
+                if not isinstance(script, str) or not script.strip() or "\x00" in script:
+                    raise BundleInputError("startup_command_invalid")
+                # npm start would also execute implicit prestart/poststart hooks.
+                return ["/bin/sh", "-c", script]
+            main = document.get("main")
+            if main is not None:
+                if not isinstance(main, str) or not main:
+                    raise BundleInputError("startup_entry_invalid")
+                main = main[2:] if main.startswith("./") else main
+                if not safe_relative(root, main).is_file():
+                    raise BundleInputError("startup_entry_missing")
+                return ["node", main]
+        for entry in ("server.js", "index.js", "app.js", "main.js"):
+            if safe_relative(root, entry).is_file():
+                return ["node", entry]
     raise BundleInputError("startup_command_required")
 
 

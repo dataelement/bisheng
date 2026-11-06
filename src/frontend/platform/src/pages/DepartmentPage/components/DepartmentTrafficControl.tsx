@@ -1,9 +1,10 @@
-import { Button } from "@/components/bs-ui/button";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { Button, notification } from '@bisheng/ui';
+
+
 import { FlowControl } from "@/components/Pro/FlowControl";
 import { FlowRadio } from "@/components/Pro/FlowRadio";
 import { getDepartmentLimitDetailApi, saveDepartmentLimitApi } from "@/controllers/API/pro";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { DepartmentTreeNode } from "@/types/api/department";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,7 +15,7 @@ type Props = {
 
 export function DepartmentTrafficControl({ dept }: Props) {
     const { t } = useTranslation()
-    const { toast } = useToast()
+
     const [deptLimit, setDeptLimit] = useState(0)
     const assistantRef = useRef<any[]>([])
     const skillRef = useRef<any[]>([])
@@ -22,11 +23,11 @@ export function DepartmentTrafficControl({ dept }: Props) {
 
     useEffect(() => {
         // Load existing limit config
-        captureAndAlertRequestErrorHoc(getDepartmentLimitDetailApi(dept.id)).then((res) => {
+        getDepartmentLimitDetailApi(dept.id).then((res) => {
             if (res) {
                 setDeptLimit(res.dept_limit ?? 0)
             }
-        })
+        }).catch(showApiError)
         // Reset resource refs on dept change
         assistantRef.current = []
         skillRef.current = []
@@ -42,9 +43,9 @@ export function DepartmentTrafficControl({ dept }: Props) {
                 skill: skillRef.current,
                 workFlows: workFlowsRef.current
             })
-            toast({ title: t('prompt'), description: t('save') + t('success'), variant: 'success' })
-        } catch {
-            toast({ title: t('prompt'), description: t('save') + t('failed'), variant: 'error' })
+            notification.open({ type: 'success', title: String(t('prompt') ?? ''), description: String(t('save') + t('success')) })
+        } catch (error) {
+            showApiError(error)
         }
     }
 
@@ -77,7 +78,7 @@ export function DepartmentTrafficControl({ dept }: Props) {
             />
 
             <div className="flex justify-center gap-4 pt-4">
-                <Button className="px-16" onClick={handleSave}>{t('save')}</Button>
+                <Button onClick={handleSave}>{t('save')}</Button>
             </div>
         </div>
     )

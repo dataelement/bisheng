@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
+from files import ManifestError, split_copy_in_body
+
 
 class FakeUnreachableError(ConnectionError):
     """Raised when a replica is marked unreachable — same class family as a TCP miss."""
@@ -206,7 +208,7 @@ class FakeRunnerClient:
                 replica.sessions.pop(session_id, None)
                 return FakeResponse(200, json_data={"ok": True})
             if rest == ["files"] and method == "PUT":
-                return self._put_files(session, header_map, content or b"")
+                return self._put_files(session, content or b"")
             if rest == ["files"] and method == "GET":
                 return self._get_files(session)
             if rest == ["exec"] and method == "POST":
@@ -231,15 +233,13 @@ class FakeRunnerClient:
             },
         )
 
-    def _put_files(self, session: FakeSession, header_map: dict, body: bytes) -> FakeResponse:
-        raw_manifest = header_map.get("x-file-manifest") or "{}"
+    def _put_files(self, session: FakeSession, body: bytes) -> FakeResponse:
         try:
-            manifest = json.loads(raw_manifest)
-        except json.JSONDecodeError:
+            manifest, tar_body = split_copy_in_body(body)
+        except ManifestError:
             return FakeResponse(400, json_data={"error": "invalid manifest"})
-        if not isinstance(manifest, dict):
-            return FakeResponse(400, json_data={"error": "invalid manifest"})
-        members = _untar(body)
+        members = _untar(tar_body)
+        self.last_put_body = body
         self.last_put_members = list(members)
         self.last_put_bytes = sum(len(v) for v in members.values())
         written: list[str] = []

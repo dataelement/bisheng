@@ -13,6 +13,7 @@ from loguru import logger
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.dsh import DshModelNotAllowedError
 from bisheng.common.errcode.http_error import NotFoundError, ServerError
 from bisheng.common.errcode.llm import (
@@ -20,6 +21,7 @@ from bisheng.common.errcode.llm import (
     ServerAddAllError,
     ServerAddError,
     ServerExistError,
+    SpeechCredentialError,
     WorkbenchChatDefaultModelError,
     WorkbenchEmbeddingError,
 )
@@ -36,6 +38,7 @@ from bisheng.common.errcode.server import (
     TtsSynthesisFailedError,
 )
 from bisheng.common.models.config import ConfigKeyEnum
+from bisheng.core.ai.asr.volcengine import SpeechAccessRejected, VolcengineRealtimeASRClient
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import (
     bypass_tenant_filter,
@@ -46,7 +49,7 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState, KnowledgeTypeEnum
-from bisheng.llm.domain.const import LLMModelType
+from bisheng.llm.domain.const import LLMModelStatus, LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMDao, LLMModel, LLMServer
 from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfigDao
 from bisheng.llm.domain.schemas import (
@@ -60,8 +63,9 @@ from bisheng.llm.domain.schemas import (
     WorkbenchModelConfig,
     WSModel,
 )
+from bisheng.llm.domain.services.context_window import ContextWindowService
 from bisheng.llm.domain.share_fallback import avalidate_system_model_refs
-from bisheng.llm.domain.utils import invalidate_llm_info_cache, usable_proxy_url
+from bisheng.llm.domain.utils import invalidate_llm_info_cache, to_llm_invoke_error, usable_proxy_url
 from bisheng.tenant.domain.constants import TenantAuditAction
 from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
 from bisheng.utils import generate_uuid, md5_hash
@@ -74,6 +78,12 @@ from ..llm.rerank import BishengRerank
 # A probe sends a couple of tokens; anything slower than this is unusable in a
 # real request anyway, and without a cap one dead endpoint hangs the caller.
 MODEL_TEST_TIMEOUT = 30
+# Probes started by a save run concurrently, but a provider with many models
+# should not get them all at once.
+MODEL_TEST_CONCURRENCY = 4
+# A save returns before its probes finish, so the tasks outlive the request.
+# Keep a strong reference: the event loop holds pending tasks only weakly.
+_background_probes: set[asyncio.Task] = set()
 
 
 def _resolve_tenant_id(tenant_id: int | None) -> int:
@@ -128,6 +138,7 @@ def _workbench_model_ref_values(config: WorkbenchModelConfig) -> list[Any]:
         getattr(config.asr_model, "id", None),
         getattr(config.tts_model, "id", None),
         getattr(config.chat_title_llm, "id", None),
+        getattr(config.image_read_model, "id", None),
     ]
 
 
@@ -470,7 +481,6 @@ class LLMService:
             return await cls._list_shared_root_servers()
 
         leaf_id = get_current_tenant_id() or ROOT_TENANT_ID
-
         llm_servers = await cls.acollect_visible_servers(leaf_id)
 
         # share_to_children is intentionally left at default False on list
@@ -713,6 +723,26 @@ class LLMService:
         return info
 
     @classmethod
+    async def _ensure_volcengine_speech(cls, server_type: str, config: dict | None, models) -> None:
+        """Reject a Volcengine Resource ID the credentials are not granted, before saving.
+
+        Construction only checks that the id is one of the four known values. The
+        vendor answers a mismatch with HTTP 403 on the websocket handshake, which
+        used to surface the first time someone pressed the microphone.
+        """
+        if server_type != LLMServerType.VOLCENGINE.value:
+            return
+        if not any(model.model_type == LLMModelType.ASR_RT.value for model in models):
+            return
+        try:
+            await VolcengineRealtimeASRClient("bigmodel", config or {}).verify_access()
+        except SpeechAccessRejected:
+            raise SpeechCredentialError.http_exception() from None
+        except Exception as exc:
+            logger.exception("volcengine speech credential check failed")
+            raise ServerAddAllError.http_exception(str(exc)) from None
+
+    @classmethod
     async def add_llm_server(
         cls, request: Request, login_user: UserPayload, server: LLMServerCreateReq
     ) -> LLMServerInfo:
@@ -731,6 +761,7 @@ class LLMService:
         db_server = LLMServer(**server.model_dump(exclude={"models", "share_to_children"}))
         db_server.config = cls.strip_config_whitespace(db_server.config)
         db_server.user_id = login_user.user_id
+        await cls._ensure_volcengine_speech(db_server.type, db_server.config, model_dict.values())
 
         db_server = await LLMDao.ainsert_server_with_models(
             db_server,
@@ -757,8 +788,12 @@ class LLMService:
                     await cls.get_bisheng_llm(model_id=one.id, ignore_online=True, **common_params)
                 elif one.model_type == LLMModelType.EMBEDDING.value:
                     await cls.get_bisheng_embedding(model_id=one.id, ignore_online=True, **common_params)
-                elif one.model_type == LLMModelType.ASR.value:
-                    await cls.get_bisheng_asr(model_id=one.id, ignore_online=True, **common_params)
+                elif LLMModelType.is_speech(one.model_type):
+                    # Constructing the client does not talk to the vendor. A sample
+                    # transcription does, and a refusal or an unreachable endpoint
+                    # drops the model instead of saving it as usable.
+                    async with asyncio.timeout(MODEL_TEST_TIMEOUT):
+                        await cls._invoke_model_probe(one, common_params)
                 elif one.model_type == LLMModelType.TTS.value:
                     await cls.get_bisheng_tts(model_id=one.id, ignore_online=True, **common_params)
 
@@ -819,8 +854,6 @@ class LLMService:
 
         handle_types = []
         for one in server.models:
-            # test model status
-            await cls.test_model_status(one, login_user)
             if one.model_type in handle_types:
                 continue
             handle_types.append(one.model_type)
@@ -828,7 +861,41 @@ class LLMService:
             # Determine if this is the firstllmorembeddingModels
             if model_info.id == one.id:
                 await cls.set_default_model(model_info)
+        await cls.probe_models_in_background(server.models, login_user)
         return True
+
+    @classmethod
+    async def probe_models_in_background(cls, models: list[LLMModel | LLMModelInfo], login_user: UserPayload) -> None:
+        """Mark the models as unknown now and probe them after the request returns.
+
+        A probe is a real call to the provider and can take up to
+        MODEL_TEST_TIMEOUT. Saving a provider must not wait for it: one slow
+        response used to hold the save button for the whole timeout. The status
+        is reset first, so the list never shows a verdict about a model that the
+        save has just changed. If the process stops before a probe finishes, the
+        model stays unknown and the admin can check it again from the list.
+        """
+        if not models:
+            return
+        for one in models:
+            await LLMDao.aupdate_model_status(one.id, LLMModelStatus.UNKNOWN.value, "")
+        semaphore = asyncio.Semaphore(MODEL_TEST_CONCURRENCY)
+
+        async def _probe(model: LLMModel | LLMModelInfo) -> None:
+            async with semaphore:
+                await cls.test_model_status(model, login_user)
+
+        async def _probe_all() -> None:
+            # test_model_status records every failure on the model itself, so
+            # nothing is expected to reach here; log it if something does.
+            results = await asyncio.gather(*(_probe(one) for one in models), return_exceptions=True)
+            for model, result in zip(models, results, strict=True):
+                if isinstance(result, BaseException):
+                    logger.opt(exception=result).error("background model probe failed: {}", model.id)
+
+        task = asyncio.create_task(_probe_all())
+        _background_probes.add(task)
+        task.add_done_callback(_background_probes.discard)
 
     @classmethod
     async def test_model_status(cls, model: LLMModel | LLMModelInfo, login_user: UserPayload):
@@ -871,11 +938,13 @@ class LLMService:
         elif model.model_type == LLMModelType.TTS.value:
             bisheng_tts = await cls.get_bisheng_tts(model_id=model.id, ignore_online=True, **common_params)
             await bisheng_tts.ainvoke("hello")
-        elif model.model_type == LLMModelType.ASR.value:
+        elif LLMModelType.is_speech(model.model_type):
             example_file_path = os.path.join(os.path.dirname(__file__), "./asr_example.wav")
             with open(example_file_path, "rb") as f:
                 bisheng_asr = await cls.get_bisheng_asr(model_id=model.id, ignore_online=True, **common_params)
-                await bisheng_asr.ainvoke(f)
+                transcript = await bisheng_asr.ainvoke(f)
+                if not transcript.strip():
+                    raise ValueError("ASR model check returned no final transcript for the sample")
         elif model.model_type == LLMModelType.RERANK.value:
             bisheng_rerank = await cls.get_bisheng_rerank(model_id=model.id, ignore_online=True, **common_params)
             await bisheng_rerank.acompress_documents(documents=[Document(page_content="hello world")], query="hello")
@@ -937,7 +1006,7 @@ class LLMService:
             if not workbench_llm.tts_model or not workbench_llm.tts_model.id:
                 workbench_llm.tts_model = WSModel(id=str(model.id), name=model.model_name)
                 await cls.update_workbench_llm(0, workbench_llm, BackgroundTasks())
-        elif model.model_type == LLMModelType.ASR.value:
+        elif LLMModelType.is_speech(model.model_type):
             workbench_llm = await cls.get_workbench_llm()
             if not workbench_llm.asr_model or not workbench_llm.asr_model.id:
                 workbench_llm.asr_model = WSModel(id=str(model.id), name=model.model_name)
@@ -971,15 +1040,18 @@ class LLMService:
             else:
                 raise ModelNameRepeatError.http_exception()
 
+        mask_maker = JsonFieldMasker()
+        merged_config = cls.strip_config_whitespace(
+            mask_maker.update_json_with_masked(exist_server.config, server.config)
+        )
+        await cls._ensure_volcengine_speech(server.type, merged_config, model_dict.values())
+
         exist_server.name = server.name
         exist_server.description = server.description
         exist_server.type = server.type
         exist_server.limit_flag = server.limit_flag
         exist_server.limit = server.limit
-        mask_maker = JsonFieldMasker()
-        exist_server.config = cls.strip_config_whitespace(
-            mask_maker.update_json_with_masked(exist_server.config, server.config)
-        )
+        exist_server.config = merged_config
 
         # Route share_to_children flips through the dedicated DAO helper
         # so super-admin / Root-only invariants are enforced via FGA.
@@ -1028,8 +1100,12 @@ class LLMService:
         invalidate_llm_info_cache(server_id=db_server.id)
         for one in new_server_info.models:
             invalidate_llm_info_cache(model_id=one.id)
+        # F087: the provider-reported context window is cached in Redis for an
+        # hour; a saved config (new base URL, model name, ...) must re-read it.
+        await ContextWindowService.invalidate([one.id for one in new_server_info.models])
 
         # Determine if the model status needs to be re-determined
+        to_probe = []
         for one in new_server_info.models:
             if one.id not in old_model_dict:
                 await cls.set_default_model(one)
@@ -1039,7 +1115,10 @@ class LLMService:
                 or old_model_dict[one.id].model_name != one.model_name
                 or old_model_dict[one.id].model_type != one.model_type
             ):
-                await cls.test_model_status(one, login_user)
+                one.status = LLMModelStatus.UNKNOWN.value
+                one.remark = ""
+                to_probe.append(one)
+        await cls.probe_models_in_background(to_probe, login_user)
         return new_server_info
 
     @classmethod
@@ -1058,6 +1137,7 @@ class LLMService:
         # its old name and reported back as "does not exist". Evict first — an
         # on-demand check that answers from a minute-old snapshot is worthless.
         invalidate_llm_info_cache(model_id=model_id, server_id=exist_model.server_id)
+        await ContextWindowService.invalidate([model_id])
         # Probing ignores the online flag on purpose: a model taken offline
         # still needs checking before you decide to bring it back.
         await cls.test_model_status(exist_model, login_user)
@@ -1528,6 +1608,7 @@ class LLMService:
                         config_obj.asr_model,
                         config_obj.tts_model,
                         config_obj.chat_title_llm,
+                        config_obj.image_read_model,
                     )
                 ),
             ],
@@ -1580,7 +1661,8 @@ class LLMService:
                 try:
                     await embeddings.aembed_query("test")
                 except Exception as e:
-                    raise Exception(f"EmbeddingModel initialization failed: {e!s}")
+                    logger.exception("workbench embedding model probe failed")
+                    raise to_llm_invoke_error(embeddings, e) from e
 
                 # Update Personal Knowledge Base
                 # 1.Upgrading alltypeare2(Private Repository)right of privacyknowledgeStatus and Model
@@ -1619,6 +1701,28 @@ class LLMService:
         return cfg
 
     @classmethod
+    async def get_workbench_llm_for_picker(cls) -> WorkbenchModelConfig:
+        """Add public provider labels to the already tenant-validated model list."""
+        config = (await cls.get_workbench_llm()).model_copy(deep=True)
+        if not config.models:
+            return config
+        # get_workbench_llm has checked local/Root ownership before this batch
+        # read. The bypass resolves only those configured models and their servers.
+        with bypass_tenant_filter():
+            models = await LLMDao.aget_model_by_ids([int(model.id) for model in config.models])
+            servers = await LLMDao.aget_server_by_ids(list({model.server_id for model in models}))
+        model_by_id = {str(model.id): model for model in models}
+        server_by_id = {server.id: server for server in servers}
+        for option in config.models:
+            model = model_by_id.get(str(option.id))
+            server = server_by_id.get(model.server_id) if model else None
+            option.provider_id = str(server.id) if server else None
+            option.provider_name = (server.name.strip() or server.type) if server else None
+            if model:
+                option.name = model.model_name
+        return config
+
+    @classmethod
     async def aget_workbench_llm_with_meta(
         cls,
         tenant_id: int | None = None,
@@ -1634,6 +1738,9 @@ class LLMService:
             target,
             inherited_from_root=inherited,
         )
+        if config.asr_model and config.asr_model.id:
+            model, server = await BishengASR.get_model_server_info(int(config.asr_model.id))
+            config.asr_model.realtime = BishengASR.uses_realtime(model, server)
         return config, inherited, blocked
 
     @classmethod
@@ -1661,15 +1768,17 @@ class LLMService:
         model_info = await LLMDao.aget_model_by_id(int(workbench_llm.asr_model.id))
         if not model_info:
             raise AsrModelConfigDeletedError.http_exception()
-        asr_client = await cls.get_bisheng_asr(
-            model_id=int(workbench_llm.asr_model.id),
-            app_id=ApplicationTypeEnum.ASR.value,
-            app_name=ApplicationTypeEnum.ASR.value,
-            app_type=ApplicationTypeEnum.ASR,
-            user_id=login_user.user_id,
-        )
         try:
+            asr_client = await cls.get_bisheng_asr(
+                model_id=int(workbench_llm.asr_model.id),
+                app_id=ApplicationTypeEnum.ASR.value,
+                app_name=ApplicationTypeEnum.ASR.value,
+                app_type=ApplicationTypeEnum.ASR,
+                user_id=login_user.user_id,
+            )
             return await asr_client.ainvoke(file.file)
+        except BaseErrorCode:
+            raise
         except Exception as e:
             # Provider-level recognition failure (rate limit, auth, an audio
             # format the model will not take) — surface as a dedicated business

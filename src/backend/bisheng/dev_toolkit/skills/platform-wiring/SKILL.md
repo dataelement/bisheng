@@ -252,7 +252,7 @@ storage.delete("报告/2026-Q1.pdf")                # 逐个删，没有「清�
 ## 4. 应用数据库
 
 平台给每个应用一个**自己的 SQLite 数据库**，数据在 `/data` 卷上、**跨版本发布保留**、别的应用碰不到。
-应用只用标准库 `sqlite3`，**不引第三方 ORM**（构建不联网、少一个失败面）。
+此样例只用标准库 `sqlite3`，减少依赖材料的准备工作。其它依赖按部署纳管技能包的离线材料或受控下载合同准备。
 
 ### 连接信息从环境变量读，不要写死
 
@@ -266,7 +266,9 @@ storage.delete("报告/2026-Q1.pdf")                # 逐个删，没有「清�
 ```python
 import os, sqlite3
 
-DB_PATH = os.environ.get("BISHENG_APP_DB_PATH") or "app.db"   # 本地直跑时退回当前目录
+DB_PATH = os.environ.get("BISHENG_APP_DB_PATH")
+if not DB_PATH:
+    raise RuntimeError("Missing BISHENG_APP_DB_PATH; run with bisheng dev")
 
 def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
@@ -544,9 +546,7 @@ SDK 由**平台自己分发**，不需要公网：
 pip install --extra-index-url <平台地址>/api/v1/dev-toolkit/simple/ bisheng-sdk
 ```
 
-托管构建期**什么都不用配**：在 `requirements.txt` 里写一行 `bisheng-sdk` 即可，平台的构建环境
-已经指向同一个索引。（装不上时先看 `<平台地址>/api/v1/dev-toolkit/versions` 的 `sdk` 段是不是 null——
-是就说明这个部署没发布 SDK 安装件，找管理员。）
+托管应用在 `requirements.txt` 声明 `bisheng-sdk`，所需精确版本仍须存在于平台材料中。离线模式不访问索引，应使用内置或获授权导入的材料；允许受控下载时，平台才会在下载阶段访问已配置的软件源。装不上时先看 `<平台地址>/api/v1/dev-toolkit/versions` 的 `sdk` 段和实际失败原因，确认安装件、版本及传递依赖齐备；配置缺失请联系管理员。
 
 SDK 的版本**独立于平台版本**。平台会声明自己支持的最低 SDK 版本，太旧时你的应用会在第一次
 `retrieve` / `storage` 调用得到一句明确的报错（含双方版本与处置方式），不会「看起来能跑、行为悄悄不对」；

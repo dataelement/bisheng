@@ -11,6 +11,7 @@ from loguru import logger
 from bisheng.common.errcode.permission import (
     AuthorizationModelMismatchError,
     InvalidPermissionModeError,
+    PermissionEnumerationIncompleteError,
     PermissionInvalidResourceError,
     PermissionPublishNotReadyError,
     PermissionVersionConflictError,
@@ -522,7 +523,7 @@ class F048PermissionRuntime:
         owner_user_id: int,
     ) -> None:
         """Undo a fresh file/folder creation using its frozen projection ledger."""
-        if target.resource_type not in {"folder", "knowledge_file"} or target.resource_version != 0:
+        if target.resource_type not in {"folder", "knowledge_file", "app"} or target.resource_version != 0:
             raise PermissionInvalidResourceError()
         repository = CreationRollbackRepository()
         creation = await repository.aget_operation_by_idempotency(
@@ -590,7 +591,6 @@ class F048PermissionRuntime:
         idempotency_key: str | None = None,
     ) -> ProjectionOutcome:
         catalog = await self._runtime_catalog()
-        await self._require_current_target(target)
         plan = build_delete_plan(
             target,
             store_id=catalog.store_id,
@@ -608,6 +608,17 @@ class F048PermissionRuntime:
         operation = await self._projection.prepare(plan)
         if str(operation.status) == ProjectionOperationStatus.PREPARED.value:
             try:
+                mode = await self._state.mode_for_target(target)
+                if (
+                    mode.version != target.resource_version
+                    or mode.parent_type != target.parent_type
+                    or mode.parent_id != target.parent_id
+                    or not (
+                        mode.projection_state == "CURRENT"
+                        or (mode.projection_state == "PROJECTING" and mode.operation_id == int(operation.id))
+                    )
+                ):
+                    raise PermissionPublishNotReadyError(msg="Delete target does not match its projection reservation")
                 await self._state.mark_projecting(
                     target=target,
                     expected_catalog_release_id=catalog.release_id,
@@ -885,6 +896,34 @@ class F048PermissionRuntime:
     ) -> tuple[GrantModelSnapshot, ...]:
         return self._grants.grantable_models(await self.build_grant_context(actor=actor, target=target))
 
+    async def manageable_model_keys(
+        self,
+        *,
+        actor: PermissionActor,
+        target: VerifiedPermissionTarget,
+    ) -> frozenset[str]:
+        """Read existing-binding eligibility without loading the complete roster."""
+
+        await self._require_manage_permission(actor, target)
+        await self._require_current_target(target)
+        catalog = await self._runtime_catalog()
+        return await self._manageable_model_keys(actor, target, catalog)
+
+    async def _manageable_model_keys(
+        self,
+        actor: PermissionActor,
+        target: VerifiedPermissionTarget,
+        catalog: RuntimeCatalogSnapshot,
+    ) -> frozenset[str]:
+        system_authorized = self._system_authorized(actor, target)
+        capabilities = () if system_authorized else await self._grant_capabilities(actor, target)
+        models = self._grants.manageable_models_for_capabilities(
+            models=tuple(item.snapshot for item in catalog.models),
+            capabilities=capabilities,
+            system_authorized=system_authorized,
+        )
+        return frozenset(model.model_key for model in models)
+
     async def mutate_grants(
         self,
         *,
@@ -1080,6 +1119,10 @@ class F048PermissionRuntime:
                         grant_key=target_grant.grant_id,
                         source_fingerprint=source.source_fingerprint,
                     ),
+                )
+                stable_source = await self._state.resolve_business_source_version(
+                    target=target,
+                    source=stable_source,
                 )
                 changes.append(
                     CanonicalGrantChange(
@@ -1293,13 +1336,53 @@ class F048PermissionRuntime:
         await self._require_manage_permission(actor, target)
         catalog = await self._runtime_catalog()
         mode = await self._require_current_target(target)
-        return await self._state.load_source_page(
+        rows, has_more = await self._state.load_source_page(
             target=target,
             mode=mode.mode,
             models=tuple(item.snapshot for item in catalog.models),
             after_id=after_id,
             limit=limit,
         )
+        if not any(row.editable for row in rows):
+            return rows, has_more
+        manageable = await self._manageable_model_keys(actor, target, catalog)
+        return tuple(replace(row, editable=row.editable and row.model_key in manageable) for row in rows), has_more
+
+    async def read_effective_action_sources(self, *, target, action):
+        """Trusted business read after its own qualification; not an HTTP roster.
+
+        The owning business service must verify the target and reader first.
+        This does not change the manage_permission gate on ordinary rosters.
+        """
+        catalog = await self._runtime_catalog()
+        models = tuple(item.snapshot for item in catalog.models)
+        before = await self._state.source_read_stamp(target=target, models=models)
+        mode = await self._require_current_target(target)
+        eligible = tuple(model for model in models if action in model.action_codes)
+        rows, after_id = [], 0
+        while eligible:
+            page, more = await self._state.load_source_page(
+                target=target, mode=mode.mode, models=eligible, after_id=after_id, limit=500
+            )
+            rows.extend(page)
+            if len(rows) > 5000:
+                raise PermissionEnumerationIncompleteError(reason="summary_limit")
+            if not more:
+                break
+            next_id = max((row.source_id for row in page), default=after_id)
+            if next_id <= after_id or len(rows) >= 5000:
+                raise PermissionEnumerationIncompleteError(reason="source_pagination_incomplete")
+            after_id = next_id
+        after = await self._state.source_read_stamp(target=target, models=models)
+        latest = await self._runtime_catalog()
+        await self._require_current_target(target)
+        if before != after or (catalog.release_id, catalog.version, catalog.checksum) != (
+            latest.release_id,
+            latest.version,
+            latest.checksum,
+        ):
+            raise PermissionPublishNotReadyError(reason="summary_scope_changed")
+        return tuple(rows)
 
     async def list_effective_direct_user_ids_by_model(
         self,

@@ -21,7 +21,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getSelectableSkills } from '~/api/linsight';
 import { ChatSkillSelector } from "./Input/ChatSkillSelector";
 import { ChatResourceMenu } from "~/components/Chat/Input/ChatResourceMenu";
-import { skillCenterPreviewEnabled } from "~/components/Skills/types";
+
 import { ComposerEditor } from "./Input/ComposerEditor";
 import { useComposerReferences } from "./Input/useComposerReferences";
 import { handleComposerResourceKeyDown } from "./Input/composerResourceKeyboard";
@@ -30,6 +30,7 @@ import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
 import { Outlined } from "bisheng-icons";
 import { ArrowDown } from "lucide-react";
 import { Button } from "~/components/ui";
+import { useVoiceDraft } from "~/hooks/Input/useVoiceDraft";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useContainerCompact, TOOLBAR_COMPACT_THRESHOLD } from "~/hooks";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
@@ -116,6 +117,7 @@ interface AiChatInputProps {
     bsConfig?: any;
     /** Knowledge base state */
     selectedOrgKbs?: any[];
+    knowledgeAccessMessage?: string;
     onSelectedOrgKbsChange?: (val: any[]) => void;
     /** Search type state (for tools) */
     searchType?: string;
@@ -169,6 +171,7 @@ const AiChatInput = memo(
         onChange: onExternalChange,
         bsConfig,
         selectedOrgKbs = [],
+        knowledgeAccessMessage,
         onSelectedOrgKbsChange,
         searchType = "",
         onSearchTypeChange,
@@ -201,7 +204,7 @@ const AiChatInput = memo(
         // viewport's) runs short — e.g. once the sidebar opens on a mid-size screen.
         const { ref: toolbarRef } = useContainerCompact(TOOLBAR_COMPACT_THRESHOLD);
 
-        // Skills belong to the current draft, shared by the landing and conversation inputs.
+        // Keep selected task skills across sends, shared by the landing and conversation inputs.
         const [dailySkills, setDailySkills] = useRecoilState(taskModeSkillsState('new'));
         const skillCatalog = useQuery({ queryKey: ['linsightSelectableSkills'], queryFn: getSelectableSkills,
             enabled: taskMode && !isLingsi, refetchOnWindowFocus: true, staleTime: 0 });
@@ -232,6 +235,7 @@ const AiChatInput = memo(
             [isControlled, onExternalChange]
         );
         const textAreaRef = useRef<HTMLDivElement>(null);
+        const voice = useVoiceDraft(textAreaRef, text, setText);
         const [isTextareaScrollable, setIsTextareaScrollable] = useState(false);
         /** True only while user is actively scrolling — drives .scroll-on-scroll (see style.css). */
         const [isTextareaScrolling, setIsTextareaScrolling] = useState(false);
@@ -346,7 +350,7 @@ const AiChatInput = memo(
         const agentMode = Array.isArray(bsConfig?.tools) && bsConfig.tools.length > 0;
         const showSkillPicker = !isLingsi && !!onSelectedOrgKbsChange
             && (taskMode || (taskModeEntry && !!onToggleTaskMode))
-            && (showAddSkill || skillCenterPreviewEnabled);
+            && showAddSkill;
         const showToolPicker = allowConfiguration && tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
         const filesDisabled = !!disabled;
 
@@ -370,8 +374,6 @@ const AiChatInput = memo(
             }
         }, [externalValue, isControlled]);
 
-        const hasAttachedFiles =
-            (chatFiles?.length ?? 0) > 0 || uploadingFiles.length > 0;
         const filesParsing = (chatFiles ?? []).some(
             (file) => file?.parsing_status && !['completed', 'failed'].includes(file.parsing_status),
         );
@@ -397,7 +399,6 @@ const AiChatInput = memo(
             )) ?? chatFiles);
             if (accepted === false) return;
             setText("");
-            if (taskMode && !isLingsi) setDailySkills([]);
             setChatFiles(null);
             setUploadingFiles([]);
             inputFilesRef.current?.clear();
@@ -411,7 +412,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, setDailySkills, supportsVision, supportsImageParsing, showToast, localize]);
+        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, supportsVision, supportsImageParsing, showToast, localize]);
 
         // ── Handed-over ask (chatAskHandoff): upload its file, then send unattended ──
         const startedAskKeyRef = useRef<string | null>(null);
@@ -492,6 +493,9 @@ const AiChatInput = memo(
 
         return (
             <div className="dsh-chat-input-shell px-4 sm:px-0 pb-1 touch-mobile:px-0 touch-mobile:pb-1 shrink-0 relative">
+                {knowledgeAccessMessage && (
+                    <p role="status" className="mb-2 text-body-sm text-text-3">{knowledgeAccessMessage}</p>
+                )}
                 {/* Drag-drop overlay */}
                 {isDragging && <DragDropOverlay />}
 
@@ -632,10 +636,10 @@ const AiChatInput = memo(
                             value={text}
                             references={references}
                             onReferencesChange={onReferencesChange}
-                            onChange={setText}
+                            onChange={(next) => { voice.handleEdit(next); setText(next); }}
                             onKeyDown={handleKeyDown}
-                            onCompositionStart={handleCompositionStart}
-                            onCompositionEnd={handleCompositionEnd}
+                            onCompositionStart={() => { voice.compositionStart(); handleCompositionStart(); }}
+                            onCompositionEnd={() => { voice.compositionEnd(); handleCompositionEnd(); }}
                             onPaste={handlePaste}
                             onScroll={handleTextareaScroll}
                             disabled={disabled || isStreaming}
@@ -651,6 +655,7 @@ const AiChatInput = memo(
                             {/* Add files and knowledge spaces to the conversation context. */}
                             {!isLingsi && onSelectedOrgKbsChange && (
                                 <ChatResourceMenu
+                                    config={bsConfig}
                                     availableTools={agentMode ? bsConfig.tools : undefined}
                                     showTools={!!showToolPicker && agentMode}
                                     showWebSearch={!!showToolPicker && !agentMode}
@@ -662,7 +667,7 @@ const AiChatInput = memo(
                                             onSelectedOrgKbsChange?.([]);
                                         }
                                     }}
-                                    showResearch={allowConfiguration && taskModeEntry}
+                                    showResearch={taskModeEntry}
                                     researchActive={taskMode}
                                     onResearchChange={onToggleTaskMode ?? (() => navigate('/c/new'))}
                                     showKnowledgeSelection={knowledgeBase}
@@ -744,38 +749,34 @@ const AiChatInput = memo(
                                         />
                                     </svg>
                                 </button>
-                            ) : showVoice && !text?.trim() && !hasAttachedFiles ? (
-                                // Empty input → voice button (default); typing any
-                                // text flips it to the send button below.
-                                // When files are attached, keep the send button visible
-                                // (disabled until text is entered).
-                                <SpeechToTextComponent
-                                    disabled={disabled}
-                                    onChange={(e) => {
-                                        const newText = (text || "") + e;
-                                        setText(newText);
-                                    }}
-                                />
                             ) : (
+                                <div className="flex items-center gap-2">
+                                {showVoice && (
+                                    <SpeechToTextComponent
+                                        {...voice.props}
+                                        disabled={disabled || isParsingMedia}
+                                        realtime={!!modelData?.asr_model?.realtime}
+                                        modelId={modelData?.asr_model?.id}
+                                    />
+                                )}
                                 <button
                                     type="button"
                                     onClick={handleSend}
                                     disabled={
-                                        !text?.trim() ||
+                                        voice.busy || !text?.trim() ||
                                         disabled ||
                                         sendDisabled ||
                                         isParsingMedia ||
                                         fileUploading ||
                                         filesParsing
                                     }
-                                    className="dsh-composer-submit btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-fill-3 disabled:text-text-3 disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-text-2"
+                                    className="dsh-composer-submit btn-brand-primary"
                                     aria-label="Send message"
                                     data-testid="send-button"
                                 >
-                                    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                                        <path fill="currentColor" d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" />
-                                    </svg>
+                                    <Outlined.ArrowUp size={18} />
                                 </button>
+                                </div>
                             )}
                         </div>
                     </div>

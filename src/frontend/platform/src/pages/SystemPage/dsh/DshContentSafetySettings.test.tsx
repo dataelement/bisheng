@@ -71,7 +71,67 @@ describe("content safety settings with the real local v4 lifecycle", () => {
     await waitFor(() => expect(words().value).toBe("Synthetic word"));
     expect(transport.caps.mock.calls[0][0]).toBe(101);
     expect(transport.caps.mock.calls[0][1]).toBeInstanceOf(AbortSignal);
-    expect(screen.getByText("dsh.contentSafety.settings.activation_hint")).toBeTruthy();
+    expect(screen.queryByText("dsh.contentSafety.settings.activation_hint")).toBeNull();
+  });
+  // Coverage AC: AC-70.
+  it("keeps every configuration control while hiding diagnostics and normal-state refresh", async () => {
+    await mounted();
+    for (const key of ["input_enabled", "output_enabled", "builtin_words", "custom_words"])
+      expect(checkbox(key)).toBeVisible();
+    expect(words()).toBeVisible();
+    expect(reply()).toBeVisible();
+    expect(saveButton()).toBeVisible();
+    expect(screen.queryByRole("button", { name: "dsh.contentSafety.actions.refresh" })).toBeNull();
+    for (const key of ["version", "builtin_digest", "effective_words", "custom_words_limit", "effective_words_limit", "activation_hint", "scope_hint"])
+      expect(screen.queryByText("dsh.contentSafety.settings." + key)).toBeNull();
+    expect(screen.queryByText("dsh.contentSafety.description")).toBeNull();
+    expect(screen.queryByText(base.builtin_digest)).toBeNull();
+    expect(screen.getByText("dsh.contentSafety.settings.custom_words_hint")).toBeVisible();
+    expect(screen.getByText("dsh.contentSafety.settings.auto_reply_hint")).toBeVisible();
+  });
+  // Coverage AC: AC-74.
+  it.each([[false, false], [true, false], [false, true], [true, true]])(
+    "derives enablement from input=%s/output=%s in one explicit save",
+    async (input, output) => {
+      await mounted();
+      expect(screen.queryByRole("checkbox", { name: "dsh.contentSafety.settings.enabled" })).toBeNull();
+      if (!input) fireEvent.click(checkbox("input_enabled"));
+      if (output) fireEvent.click(checkbox("output_enabled"));
+      fireEvent.change(words(), { target: { value: "Updated synthetic words" } });
+      fireEvent.click(saveButton());
+      await waitFor(() => expect(transport.save).toHaveBeenCalledOnce());
+      expect(transport.save.mock.calls[0][1]).toMatchObject({ enabled: input || output, input_enabled: input, output_enabled: output });
+    },
+  );
+  it("retains a conflicting draft and its refresh recovery after a failed reload", async () => {
+    await mounted();
+    fireEvent.change(words(), { target: { value: "Retained conflicting words" } });
+    transport.save.mockRejectedValueOnce({ response: { status: 409 } });
+    fireEvent.click(saveButton());
+    await screen.findByText("dsh.contentSafety.errors.version_conflict");
+    transport.get.mockRejectedValueOnce(Error("Synthetic private reload failure"));
+    fireEvent.click(refreshButton());
+    await screen.findByText("dsh.contentSafety.errors.load_failed");
+    expect(words().value).toBe("Retained conflicting words");
+    expect(saveButton()).toBeDisabled();
+    expect(screen.queryByText("Synthetic private reload failure")).toBeNull();
+    transport.get.mockResolvedValueOnce({ ...base, version: 8 });
+    fireEvent.click(refreshButton());
+    await waitFor(() => expect(saveButton()).not.toBeDisabled());
+    expect(screen.queryByRole("button", { name: "dsh.contentSafety.actions.refresh" })).toBeNull();
+    expect(words().value).toBe("Retained conflicting words");
+    fireEvent.click(saveButton());
+    await screen.findByText("dsh.contentSafety.actions.saved");
+    expect(transport.save.mock.calls[1][1].expected_version).toBe(8);
+  });
+  it("offers recovery for a failed policy read and hides refresh once loading succeeds", async () => {
+    transport.get.mockRejectedValueOnce(Error("Synthetic private read failure"));
+    render(<DshContentSafetySettings tenantId={101} canConfigure />);
+    await screen.findByText("dsh.contentSafety.errors.load_failed");
+    fireEvent.click(refreshButton());
+    await waitFor(() => expect(words().value).toBe("Synthetic word"));
+    expect(screen.queryByRole("button", { name: "dsh.contentSafety.actions.refresh" })).toBeNull();
+    expect(transport.save).not.toHaveBeenCalled();
   });
   it.each([undefined, 409])("keeps a failed save private while retaining feedback and draft: %s", async (status) => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -174,7 +234,7 @@ describe("content safety settings with the real local v4 lifecycle", () => {
     fireEvent.click(button);
     fireEvent.click(button);
     await waitFor(() => expect(transport.save).toHaveBeenCalledOnce());
-    expect(checkbox("enabled").disabled).toBe(true);
+    expect(checkbox("input_enabled").disabled).toBe(true);
     expect(words().disabled).toBe(true);
     finish({ ...base, custom_words: "One save only", version: 2, effective_within_seconds: 5 });
     await screen.findByText("dsh.contentSafety.actions.saved");
@@ -182,7 +242,6 @@ describe("content safety settings with the real local v4 lifecycle", () => {
   it.each([
     ["reply_required", () => fireEvent.change(reply(), { target: { value: "" } })],
     ["words_required", () => fireEvent.change(words(), { target: { value: " ,，|\n " } })],
-    ["checks_required", () => fireEvent.click(checkbox("input_enabled"))],
   ])("blocks invalid %s before transport", async (key, change) => {
     await mounted();
     change();
@@ -192,22 +251,23 @@ describe("content safety settings with the real local v4 lifecycle", () => {
   });
   it("allows an intentional off state with no words or block reply, then re-enabling validates the same draft", async () => {
     await mounted();
-    fireEvent.click(checkbox("enabled"));
+    fireEvent.click(checkbox("input_enabled"));
     fireEvent.change(words(), { target: { value: "" } });
     fireEvent.change(reply(), { target: { value: "" } });
     expect(saveButton().disabled).toBe(false);
     fireEvent.click(saveButton());
     await screen.findByText("dsh.contentSafety.actions.saved");
     expect(transport.save.mock.calls[0][1]).toMatchObject({ enabled: false, custom_words: "", auto_reply: "" });
-    fireEvent.click(checkbox("enabled"));
+    fireEvent.click(checkbox("input_enabled"));
     await screen.findByText("dsh.contentSafety.validation.reply_required");
     expect(saveButton().disabled).toBe(true);
   });
   it("renders permissions as read-only without a second mutable entry", async () => {
     await mounted(101, false);
-    expect(checkbox("enabled").disabled).toBe(true);
+    expect(checkbox("input_enabled").disabled).toBe(true);
     expect(words().disabled).toBe(true);
     expect(screen.queryByRole("button", { name: "dsh.contentSafety.actions.save" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "dsh.contentSafety.actions.refresh" })).toBeNull();
   });
   it.each([
     [{ ...caps, enabled: false }, "deployment_disabled"],
@@ -237,6 +297,8 @@ describe("content safety settings with the real local v4 lifecycle", () => {
       ...base,
       version: 0,
       enabled: false,
+      input_enabled: false,
+      output_enabled: false,
       custom_words: "",
       auto_reply: "",
       effective_word_count: 0,
@@ -244,7 +306,8 @@ describe("content safety settings with the real local v4 lifecycle", () => {
     render(<DshContentSafetySettings tenantId={101} canConfigure />);
     await screen.findByText("dsh.contentSafety.settings.default_off");
     expect(saveButton()).toBeDisabled();
-    expect(checkbox("enabled")).not.toBeChecked();
+    expect(checkbox("input_enabled")).not.toBeChecked();
+    expect(checkbox("output_enabled")).not.toBeChecked();
   });
   it("does not pretend a failed policy read is an off policy", async () => {
     transport.get.mockRejectedValueOnce({ response: { status: 503 } });

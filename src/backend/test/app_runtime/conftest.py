@@ -81,6 +81,8 @@ _SESSION_PATCH_TARGETS = (
     "bisheng.app_runtime.domain.services.app_state_service",
     "bisheng.app_runtime.domain.services.app_meta_service",
     "bisheng.app_runtime.domain.services.app_query_service",
+    "bisheng.app_publish.domain.repositories.version_review_repository",
+    "bisheng.approval.domain.repositories.approval_instance_repository",
     "bisheng.app_runtime.domain.services.app_data_service",
     "bisheng.app_runtime.domain.services.entry_authz_service",
     "bisheng.app_runtime.domain.services.f048_app_permission",
@@ -108,6 +110,7 @@ _TABLES = (
     "app",
     "app_version",
     "app_deployment",
+    "approval_instance",
     "app_instance",
     "app_access_log",
     # F055's preview session row, read by the ``/apps/preview/{session}`` verdict.
@@ -205,6 +208,7 @@ async def app_engine():
         "bisheng.database.models.app",
         "bisheng.database.models.app_version",
         "bisheng.app_publish.domain.models.app_deployment",
+        "bisheng.approval.domain.models.approval_instance",
         "bisheng.database.models.app_instance",
         "bisheng.database.models.app_access_log",
         "bisheng.database.models.resource_tier",
@@ -612,6 +616,8 @@ _TENANT_ADMIN_TARGETS = (
     "bisheng.app_runtime.domain.services.app_state_service",
     "bisheng.app_runtime.domain.services.app_meta_service",
     "bisheng.app_runtime.domain.services.app_query_service",
+    "bisheng.app_publish.domain.repositories.version_review_repository",
+    "bisheng.approval.domain.repositories.approval_instance_repository",
 )
 
 

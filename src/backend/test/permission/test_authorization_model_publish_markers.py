@@ -148,6 +148,12 @@ def publication(monkeypatch):
     monkeypatch.setattr(cli, "FGAClient", Client)
     monkeypatch.setattr(cli, "_find_remote_model_id", AsyncMock(side_effect=lambda *_args: state.remote_model_id))
     monkeypatch.setattr(cli, "load_service_account_resource_markers", AsyncMock(return_value=markers))
+    # The fixture Catalog already carries service-account markers (built with
+    # marker_subject="service_account:*"); the legacy-Catalog test overrides this.
+    state.catalog_markers = frozenset()
+    monkeypatch.setattr(
+        cli, "load_service_account_catalog_markers", AsyncMock(side_effect=lambda: state.catalog_markers)
+    )
     monkeypatch.setattr(cli, "_assert_apply_window", state.window)
     monkeypatch.setattr(cli, "_authorization_release_id", AsyncMock(return_value=5))
     monkeypatch.setattr(cli, "_activate_model_release", state.activate)
@@ -216,6 +222,69 @@ async def test_current_model_repairs_inheritance_and_is_repeatable(publication, 
     state.publisher.assert_not_awaited()
     state.activate.assert_not_awaited()
     state.cutover.assert_not_awaited()
+
+
+async def test_current_model_repairs_a_catalog_released_before_service_accounts(publication, capsys):
+    """A Catalog from before 2026-09-09 has only user:* model-release markers.
+
+    Every action a service account gets through a model then evaluates to false
+    (found on 114: a service account could not edit a knowledge base it had just
+    created). An unchanged model must still add the service-account half.
+    """
+    state = publication
+    sa_catalog = _active_model_tuples(actions=("edit", "rename", "upload_file"), marker_subject="service_account:*")
+    user_catalog = _active_model_tuples(actions=("edit", "rename", "upload_file"), marker_subject="user:*")
+    sa_only = {row for row in sa_catalog if row[0] == "service_account:*"}
+    state.tuples = (state.tuples - sa_only) | user_catalog
+    state.initial_tuples = set(state.tuples)
+    state.catalog_markers = frozenset(sa_only)
+
+    before = ModelEvaluator(build_authorization_model_f048(), state.tuples)
+    assert not before.check("service_account:2", "can_edit", "knowledge_space:137")
+
+    assert await cli.execute(state.args, live_settings=state.settings) == 0
+
+    after = ModelEvaluator(build_authorization_model_f048(), state.tuples)
+    assert after.check("service_account:2", "can_edit", "knowledge_space:137")
+    assert not after.check("service_account:3", "can_edit", "knowledge_space:137")
+    assert user_catalog <= state.tuples, "the user half of the Catalog is left as it was"
+    result = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert result["event"] == "already_current"
+    assert result["service_account_catalog_marker_tuples_verified"] == len(sa_only)
+
+    snapshot = set(state.tuples)
+    assert await cli.execute(state.args, live_settings=state.settings) == 0
+    assert state.tuples == snapshot
+
+
+async def test_catalog_markers_follow_the_publish_rule_for_service_accounts_only(monkeypatch):
+    model = SimpleNamespace(
+        model_key="manager",
+        active=True,
+        action_codes=("edit", "manage_permission", "use"),
+        derived_level=3,
+        allow_same_level=False,
+    )
+    snapshot = SimpleNamespace(release_key="catalog-v2", models=(SimpleNamespace(snapshot=model),))
+
+    class ControlState:
+        async def current_catalog(self):
+            return snapshot
+
+    monkeypatch.setattr(reconcile, "SqlPermissionControlState", ControlState)
+    markers = await reconcile.load_service_account_catalog_markers()
+
+    release = "permission_model_release:catalog-v2~manager"
+    assert {user for user, _relation, _object in markers} == {"service_account:*"}
+    assert ("service_account:*", "active", "permission_catalog_release:catalog-v2") in markers
+    assert {relation for _user, relation, obj in markers if obj == release} == {
+        "enabled_marker",
+        "edit_marker",
+        "manage_permission_marker",
+        "use_marker",
+        "grant_level_1_marker",
+        "grant_level_2_marker",
+    }
 
 
 @pytest.mark.parametrize("existing_model", [None, "new-model"])

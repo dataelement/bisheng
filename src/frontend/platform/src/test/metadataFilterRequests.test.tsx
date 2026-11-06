@@ -1,7 +1,5 @@
-import type { InputHTMLAttributes, ReactNode } from "react";
-
 import MetadataFilter from "@/pages/BuildPage/flow/FlowNode/component/MetadataFilter";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const getKnowledgeDetailApi = vi.fn();
@@ -15,19 +13,8 @@ vi.mock("@/controllers/API", () => ({
   getKnowledgeDetailApi: (...args: unknown[]) => getKnowledgeDetailApi(...args),
 }));
 
-vi.mock("@/components/bs-ui/select", () => ({
-  Select: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SelectContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SelectItem: ({ children, value }: { children: ReactNode; value: string }) => (
-    <div data-testid={`metadata-option-${value}`}>{children}</div>
-  ),
-  SelectTrigger: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SelectValue: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-}));
 
-vi.mock("@/components/bs-ui/input", () => ({
-  Input: (props: InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
-}));
+
 
 describe("MetadataFilter metadata loading", () => {
   beforeEach(() => {
@@ -114,9 +101,11 @@ describe("MetadataFilter metadata loading", () => {
       "uploader",
       "updater",
     ];
+    fireEvent.click(screen.getByRole("combobox", { name: "selectVariable" }));
     await waitFor(() => {
+      const listbox = screen.getByRole("listbox");
       defaultFields.forEach((field) => {
-        expect(screen.getByTestId(`metadata-option-9001-${field}`)).toBeInTheDocument();
+        expect(within(listbox).getAllByText(field).length).toBeGreaterThan(0);
       });
     });
     expect(getKnowledgeDetailApi).not.toHaveBeenCalled();

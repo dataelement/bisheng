@@ -13,7 +13,6 @@ const fadeAnimation = {
 
 interface SetupPhaseProps {
   onNext: () => void;
-  onError: (error: Error) => void;
   isGenerating: boolean;
   onGenerate: () => void;
 }

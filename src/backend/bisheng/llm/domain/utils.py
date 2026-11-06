@@ -1,14 +1,24 @@
+import asyncio
 import functools
 import time
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Union
+from typing import Any, Union
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.exceptions import ContextOverflowError
 from langchain_core.outputs import ChatGenerationChunk, ChatResult, GenerationChunk
 from loguru import logger
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, StatusEnum
+from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.common.errcode.dsh import (
+    DshModelNotAllowedError,
+    DshMonthlyTokenLimitExceededError,
+    DshQuotaUnavailableError,
+    DshUserDisabledError,
+)
+from bisheng.common.errcode.server import LlmInvokeError
 from bisheng.common.schemas.telemetry.event_data_schema import ModelInvokeEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.metric_log import emit_metric
@@ -16,11 +26,33 @@ from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_
 from bisheng.core.logger import trace_id_var
 from bisheng.llm.domain.const import LLM_CACHE, LLMModelStatus
 
-if TYPE_CHECKING:
-    from bisheng.llm.domain.llm.base import BishengBase
-
 # httpx / langchain reject values without a scheme (``URL('admin')``).
 _PROXY_URL_SCHEMES = ("http://", "https://", "socks://", "socks4://", "socks5://", "socks5h://")
+
+
+class LlmProviderDailyLimitExceededError(Exception):
+    """The provider's daily call limit configured in model management is used up.
+
+    Same base class and same message as the bare ``Exception`` it replaced, so
+    every existing ``except Exception`` caller is unaffected. It exists so a
+    caller that needs to answer differently — the model protocol face returns
+    HTTP 429 rather than a generic 502 — can tell this apart from an upstream
+    failure without matching on message text.
+    """
+
+
+# Failures that say nothing about the model's health, so they must not flip its
+# shared status to "abnormal" for every user:
+# - F087: the request was too long for the model.
+# - Client-module (DSH) admission: this one user is out of credits, may not use
+#   the model, or is disabled. Rejected before the provider is ever called.
+_NOT_A_MODEL_FAULT = (
+    ContextOverflowError,
+    DshModelNotAllowedError,
+    DshMonthlyTokenLimitExceededError,
+    DshQuotaUnavailableError,
+    DshUserDisabledError,
+)
 
 
 def usable_proxy_url(value: object) -> str | None:
@@ -118,10 +150,6 @@ def normalize_reasoning_content(payload: Any) -> Any:
     return payload
 
 
-class LlmProviderDailyLimitExceededError(Exception):
-    """Typed form of the existing daily provider quota refusal."""
-
-
 async def bisheng_model_limit_check(self: "BishengBase"):
     now = datetime.now().strftime("%Y-%m-%d")
     if self.server_info.limit_flag:
@@ -145,6 +173,47 @@ def sync_bisheng_model_limit_check(self: "BishengBase"):
             raise LlmProviderDailyLimitExceededError(
                 f"{self.server_info.name}/{self.model_info.model_name} Quota used up"
             )
+
+
+def _model_name_for_error(model: Any) -> str:
+    """Provider model name carried on a failed call, for the error text."""
+    info = getattr(model, "model_info", None)
+    name = str(getattr(info, "model_name", "") or getattr(model, "model_name", "") or "").strip()
+    if name:
+        return name
+    display = str(getattr(info, "name", "") or "").strip()
+    if display:
+        return display
+    model_id = getattr(model, "model_id", None)
+    return str(model_id) if model_id is not None else ""
+
+
+def _annotate_model_error(model: Any, exc: BaseException) -> str:
+    """Prefix the provider error with the model name, keeping the original type.
+
+    The status remark, the chat error detail and ``str(exc)`` in the log all
+    read this text. The SDK type and ``body`` stay so callers can still
+    classify the failure.
+    """
+    text = str(exc)
+    name = _model_name_for_error(model)
+    if not name:
+        return text
+    prefix = f"model={name}: "
+    if text.startswith(prefix):
+        return text
+    annotated = prefix + text
+    try:
+        rest = exc.args[1:] if exc.args else ()
+        exc.args = (annotated, *rest)
+    except Exception:
+        return text
+    if hasattr(exc, "message"):
+        try:
+            exc.message = annotated
+        except Exception:
+            pass
+    return annotated
 
 
 def get_token_from_usage(token_usage: dict[str, Any] | None) -> tuple[int, int, int, int]:
@@ -305,17 +374,24 @@ def wrapper_bisheng_model_limit_check(func):
             result = func(*args, **kwargs)
 
             return result
+        except _NOT_A_MODEL_FAULT:
+            # Record the failed call but leave the model's status alone: the
+            # model itself is fine (see _NOT_A_MODEL_FAULT).
+            status = None
+            telemetry_status = StatusEnum.FAILED
+            raise
         except Exception as e:
             status = LLMModelStatus.ERROR.value
-            remark = str(e)
+            remark = _annotate_model_error(self, e)
             telemetry_status = StatusEnum.FAILED
-            raise e
+            raise
         finally:
             end_time = time.time()
             # Avoid blocking the main thread by uploading logs asynchronously using the thread pool
             first_token_cost_time = telemetry_callback.first_token_time if telemetry_callback else 0
             upload_telemetry_log(self, start_time, end_time, first_token_cost_time, telemetry_status, result=result)
-            self.sync_update_model_status(status, remark)
+            if status is not None:
+                self.sync_update_model_status(status, remark)
 
     return wrapper
 
@@ -342,16 +418,30 @@ def wrapper_bisheng_model_limit_check_async(func):
                     kwargs["run_manager"].handlers.append(telemetry_callback)
             result = await func(*args, **kwargs)
             return result
+        except asyncio.CancelledError:
+            # The caller gave up (a probe timeout, a closed request). The call did
+            # not succeed, but nothing says the model is broken either: record a
+            # failed invocation and leave the model status to the caller.
+            status = None
+            telemetry_status = StatusEnum.FAILED
+            raise
+        except _NOT_A_MODEL_FAULT:
+            # Record the failed call but leave the model's status alone: the
+            # model itself is fine (see _NOT_A_MODEL_FAULT).
+            status = None
+            telemetry_status = StatusEnum.FAILED
+            raise
         except Exception as e:
             status = LLMModelStatus.ERROR.value
-            remark = str(e)
+            remark = _annotate_model_error(self, e)
             telemetry_status = StatusEnum.FAILED
-            raise e
+            raise
         finally:
             end_time = time.time()
             first_token_cost_time = telemetry_callback.first_token_time if telemetry_callback else 0
             upload_telemetry_log(self, start_time, end_time, first_token_cost_time, telemetry_status, result=result)
-            await args[0].update_model_status(status, remark)
+            if status is not None:
+                await args[0].update_model_status(status, remark)
 
     return wrapper
 
@@ -377,15 +467,22 @@ def wrapper_bisheng_model_generator(func):
                 yield item
                 if first_token_cost_time == 0:
                     first_token_cost_time = int((time.time() - start_time) * 1000)
+        except _NOT_A_MODEL_FAULT:
+            # Record the failed call but leave the model's status alone: the
+            # model itself is fine (see _NOT_A_MODEL_FAULT).
+            status = None
+            telemetry_status = StatusEnum.FAILED
+            raise
         except Exception as e:
             status = LLMModelStatus.ERROR.value
-            remark = str(e)
+            remark = _annotate_model_error(self, e)
             telemetry_status = StatusEnum.FAILED
-            raise e
+            raise
         finally:
             end_time = time.time()
             upload_telemetry_log(self, start_time, end_time, first_token_cost_time, telemetry_status, True, result=item)
-            self.sync_update_model_status(status, remark)
+            if status is not None:
+                self.sync_update_model_status(status, remark)
 
     return wrapper
 
@@ -410,15 +507,22 @@ def wrapper_bisheng_model_generator_async(func):
                 yield item
                 if first_token_cost_time == 0:
                     first_token_cost_time = int((time.time() - start_time) * 1000)
+        except _NOT_A_MODEL_FAULT:
+            # Record the failed call but leave the model's status alone: the
+            # model itself is fine (see _NOT_A_MODEL_FAULT).
+            status = None
+            telemetry_status = StatusEnum.FAILED
+            raise
         except Exception as e:
             status = LLMModelStatus.ERROR.value
-            remark = str(e)
+            remark = _annotate_model_error(self, e)
             telemetry_status = StatusEnum.FAILED
-            raise e
+            raise
         finally:
             end_time = time.time()
             upload_telemetry_log(self, start_time, end_time, first_token_cost_time, telemetry_status, True, result=item)
-            await self.update_model_status(status, remark)
+            if status is not None:
+                await self.update_model_status(status, remark)
 
     return wrapper
 
@@ -500,3 +604,51 @@ def wrapper_bisheng_llm_info_async(key_prefix: str):
         return wrapper
 
     return decorator
+
+
+_INVOKE_ERROR_REASON_LIMIT = 200
+
+
+def _provider_error_reason(exc: Exception) -> str:
+    """Pick the short, human-readable part of a provider exception.
+
+    OpenAI-compatible SDKs put the provider's own message in ``body`` and wrap it
+    in a long ``Error code: 401 - {...}`` repr; everything else falls back to
+    ``str(exc)``. The full exception is still logged by the caller.
+    """
+    message = ""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error")
+        if isinstance(error, dict):
+            message = str(error.get("message") or "")
+        elif isinstance(error, str):
+            message = error
+        message = message or str(body.get("message") or "")
+    message = message or str(exc) or type(exc).__name__
+    status_code = getattr(exc, "status_code", None)
+    if isinstance(status_code, int) and str(status_code) not in message:
+        message = f"HTTP {status_code}: {message}"
+    if len(message) > _INVOKE_ERROR_REASON_LIMIT:
+        message = message[:_INVOKE_ERROR_REASON_LIMIT] + "..."
+    return message
+
+
+def to_llm_invoke_error(model: Any, exc: Exception) -> Exception:
+    """Translate a failed model call into ``LlmInvokeError``.
+
+    Use it where a model call runs inside a plain request/response endpoint, so
+    the user is told which model failed instead of a bare HTTP 500. Business
+    errors (offline model, missing config, quota) already carry their own code
+    and are returned unchanged.
+    """
+    if isinstance(exc, BaseErrorCode):
+        return exc
+    model_info = getattr(model, "model_info", None)
+    server_info = getattr(model, "server_info", None)
+    return LlmInvokeError(
+        exception=exc,
+        model_name=getattr(model_info, "model_name", None) or "",
+        server_name=getattr(server_info, "name", None) or "",
+        reason=_provider_error_reason(exc),
+    )

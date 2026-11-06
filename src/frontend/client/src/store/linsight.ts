@@ -207,6 +207,13 @@ export function isLinsightParked(info: { sessionSteps?: any[]; tasks?: any[] }):
  */
 export const conversationTaskRunningState = selectorFamily<boolean, string>({
     key: 'conversationTaskRunningState',
+    // Recoil's default cache (keep-all, reference equality) keys every entry on
+    // the dependency value, so it would retain every version of
+    // linsightMapState. The WS pump publishes a new map per streamed token frame
+    // (each holding a fresh copy of the step history), which made retained memory
+    // grow quadratically with frame count and froze the browser on long tasks.
+    // Only the current value matters here.
+    cachePolicy_UNSTABLE: { eviction: 'most-recent' },
     get:
         (conversationId: string) =>
         ({ get }) => {
@@ -250,6 +257,8 @@ export type SubmissionState = {
     model: string;
     /** F035 Track H: skill names picked in the task-mode input (enabled skills only). */
     skills?: string[];
+    /** Skill rows the user checked. Same order as `skills`. */
+    skill_ids?: number[];
     enableWebSearch: boolean;
     useKnowledgeBase: boolean;
     prevVersionId?: string;
@@ -287,6 +296,7 @@ export type TaskModeToolItem = {
 };
 
 export type TaskModeSkill = {
+    id?: number;
     name: string;
     display_name: string;
     description?: string;

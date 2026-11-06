@@ -8,6 +8,7 @@
  * able to read has to come through `translateApiErrorMessage`.
  */
 
+import i18next from "i18next";
 import { translateApiErrorMessage } from "~/api/request";
 
 type ApiStatusLike = {
@@ -85,13 +86,13 @@ function toErrorEnvelope(input: unknown): { status_code: number | null; status_m
 export function extractApiErrorMessage(input: unknown): string {
     const translated = translateApiErrorMessage(toErrorEnvelope(input));
     if (typeof translated === "string" && translated.trim()) return translated;
-    return input instanceof Error ? input.message : "";
+    return String(i18next.t("api_errors.fallback", { defaultValue: "Request failed. Please try again." }) || "Request failed. Please try again.");
 }
 
 export function createApiStatusError(input: unknown): Error & { statusCode?: number; status_code?: number } {
     const code = extractApiStatusCode(input);
     const message =
-        extractApiErrorMessage(input) || `API request failed${code != null ? ` (${code})` : ""}`;
+        extractApiErrorMessage(input);
     const error = new Error(message) as Error & { statusCode?: number; status_code?: number };
     if (code != null) {
         error.statusCode = code;

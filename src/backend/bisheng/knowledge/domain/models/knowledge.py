@@ -206,15 +206,6 @@ class KnowledgeCreate(BaseModel):
 
 class KnowledgeDao(KnowledgeBase):
     @classmethod
-    async def aget_by_exact_names(cls, names: list[str]) -> list[Knowledge]:
-        """Return all tenant-scoped matches so ambiguous declarations are refused."""
-        if not names:
-            return []
-        async with get_async_db_session() as session:
-            result = await session.exec(select(Knowledge).where(col(Knowledge.name).in_(names)))
-            return result.all()
-
-    @classmethod
     async def aget_by_creation_request(
         cls,
         *,
@@ -319,6 +310,23 @@ class KnowledgeDao(KnowledgeBase):
     async def aget_list_by_ids(cls, ids: list[int]) -> list[Knowledge]:
         async with get_async_db_session() as session:
             result = await session.exec(select(Knowledge).where(col(Knowledge.id).in_(ids)))
+            return result.all()
+
+    @classmethod
+    async def aget_by_exact_names(cls, names: list[str]) -> list[Knowledge]:
+        """Every knowledge base whose name is exactly one of ``names``.
+
+        Unlike :meth:`aget_knowledge_by_name` this returns **all** matches rather
+        than the first: a name is not unique within a tenant, and a caller that
+        has to tell "one match" from "several" (F055's capability declaration
+        resolves ``knowledge_bases[].name`` and must refuse an ambiguous one
+        instead of binding to whichever row was created first) cannot do that
+        with a ``.first()``.
+        """
+        if not names:
+            return []
+        async with get_async_db_session() as session:
+            result = await session.exec(select(Knowledge).where(col(Knowledge.name).in_(names)))
             return result.all()
 
     @classmethod

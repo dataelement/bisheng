@@ -1,9 +1,10 @@
 // @ts-strict-ignore
 
 import { TipIcon } from "@/components/bs-icons/tip"
+import { showApiError } from "@/controllers/request"
 import i18next from "i18next"
 import { X } from "lucide-react"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { createRoot } from "react-dom/client"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "."
 
@@ -15,9 +16,11 @@ interface ConfirmParams {
     showClose?: boolean
     /** Acknowledge-only: hide Cancel so the user has a single way out. */
     hideCancel?: boolean
+    /** Close only this confirmation when its owning view is invalidated. */
+    signal?: AbortSignal
     onClose?: () => void
     onCancel?: () => void
-    onOk?: (next) => void
+    onOk?: (next: () => void) => unknown
 }
 
 let openFn = (_: ConfirmParams) => { }
@@ -25,13 +28,17 @@ let openFn = (_: ConfirmParams) => { }
 function ConfirmWrapper() {
 
     const [open, setOpen] = useState(false)
+    const [pending, setPending] = useState(false)
+    const [revision, setRevision] = useState(0)
     const paramRef = useRef(null)
     const settledRef = useRef(false)
 
     openFn = (params: ConfirmParams) => {
         paramRef.current = params
         settledRef.current = false
+        setPending(false)
         setOpen(true)
+        setRevision(value => value + 1)
     }
 
     const close = () => {
@@ -39,12 +46,30 @@ function ConfirmWrapper() {
         setOpen(false)
     }
 
+    useEffect(() => {
+        const params = paramRef.current
+        const signal = params?.signal as AbortSignal | undefined
+        if (!open || !signal) return
+        const abort = () => {
+            if (paramRef.current !== params) return
+            params.onClose?.()
+            setOpen(false)
+        }
+        signal.addEventListener("abort", abort, { once: true })
+        if (signal.aborted) abort()
+        return () => signal.removeEventListener("abort", abort)
+    }, [open, revision])
+
     const handleOkClick = () => {
         if (settledRef.current) return
         settledRef.current = true
-        paramRef.current?.onOk
-            ? paramRef.current?.onOk?.(close)
-            : close()
+        setPending(true)
+        void Promise.resolve().then(() => paramRef.current?.onOk
+            ? paramRef.current.onOk(close)
+            : close()).catch(showApiError).finally(() => {
+                settledRef.current = false
+                setPending(false)
+            })
     }
 
     const handleCancelClick = () => {
@@ -63,6 +88,7 @@ function ConfirmWrapper() {
         <AlertDialog
             open={open}
             onOpenChange={(next) => {
+                if (pending) return
                 if (!next && paramRef.current?.hideCancel) {
                     handleOkClick()
                     return
@@ -80,8 +106,8 @@ function ConfirmWrapper() {
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    {!hideCancel && <AlertDialogCancel onClick={handleCancelClick} className="px-11">{canelTxt}</AlertDialogCancel>}
-                    <AlertDialogAction onClick={handleOkClick} className="px-11">{okTxt}</AlertDialogAction>
+                    {!hideCancel && <AlertDialogCancel disabled={pending} onClick={handleCancelClick} className="px-11">{canelTxt}</AlertDialogCancel>}
+                    <AlertDialogAction disabled={pending} onClick={(event) => { event.preventDefault(); handleOkClick() }} className="px-11">{okTxt}</AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
@@ -91,14 +117,14 @@ function ConfirmWrapper() {
 let confirmRoot: ReturnType<typeof createRoot> | null = null;
 
 (function () {
-    // 挂载组件
+    // Mount the singleton dialog host.
     let el = document.getElementById('confirm-wrap');
     if (!el) {
         el = document.createElement('div');
         el.id = 'confirm-wrap';
         document.body.append(el);
     }
-    // 统一使用 createRoot (React 18+)
+    // Reuse the React 18 root.
     if (!confirmRoot) {
         confirmRoot = createRoot(el);
     }

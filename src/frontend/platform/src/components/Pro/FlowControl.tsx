@@ -1,12 +1,14 @@
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { Pagination, Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
+import { SearchInput } from '@bisheng/ui';
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+
 import { getGroupFlowsApi, getDepartmentFlowsApi } from "@/controllers/API/pro";
 import { useTable } from "@/util/hook";
 import { CircleHelp } from "lucide-react";
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { SearchInput } from "@/components/bs-ui/input";
+
 import { FlowRadio } from "./FlowRadio";
 
 type FlowControlProps = {
@@ -18,6 +20,7 @@ type FlowControlProps = {
 
 export function FlowControl({ entityId, entityType, type, onChange }: FlowControlProps) {
     const { t } = useTranslation()
+    const paginationLocale = usePaginationLocale();
     const map: Record<number, { name: string; label: string; placeholder: string }> = {
         3: { name: t('build.assistantName'), label: t('system.AssistantFlowCtrl'), placeholder: t('system.assistantName') },
         2: { name: t('skills.skillName'), label: t('system.SkillFlowCtrl'), placeholder: t('skills.skillName') },
@@ -59,16 +62,7 @@ export function FlowControl({ entityId, entityType, type, onChange }: FlowContro
         <div className="flex items-center mb-4 justify-between">
             <div className="flex items-center space-x-2">
                 <p className="text-xl font-bold">{label}</p>
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger>
-                            <CircleHelp className="w-4 h-4" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>{t('system.iconHover')}</p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
+                <SharedTooltipProvider ><SharedTooltip  content={<><p>{t('system.iconHover')}</p></>} ><button type="button" ><CircleHelp className="w-4 h-4" /></button></SharedTooltip></SharedTooltipProvider>
             </div>
             <SearchInput placeholder={placeholder} onChange={handleSearch} />
         </div>
@@ -91,8 +85,8 @@ export function FlowControl({ entityId, entityType, type, onChange }: FlowContro
                     </TableRow>))}
                 </TableBody>
             </Table>
-            <AutoPagination className="m-0 mt-4 w-auto justify-end"
-                page={page} pageSize={pageSize} total={total}
+            <Pagination locale={paginationLocale} className="m-0 mt-4 w-auto justify-end"
+                current={page} pageSize={pageSize} total={total}
                 onChange={setPage}
             />
         </div>

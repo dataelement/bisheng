@@ -18,10 +18,24 @@ class DesktopPublishIdentity:
     actor_kind: str = "natural_person"
     credential_id: None = None
     source: str = "desktop"
+    is_global_super: bool = False
+    _runtime_credential_reference: dict | None = None
+
+    @property
+    def user_id(self):
+        return self.effective_user_id
 
 
-def publish_identity(actor, owner_user_id):
-    return DesktopPublishIdentity(actor.tenant_id, owner_user_id, actor.user_id, actor.user_id, actor.user_name)
+def publish_identity(actor, owner_user_id, principal):
+    return DesktopPublishIdentity(
+        actor.tenant_id,
+        owner_user_id,
+        actor.user_id,
+        actor.user_id,
+        actor.user_name,
+        is_global_super=bool(getattr(actor, "is_global_super", False)),
+        _runtime_credential_reference={"kind": "dsh_session", "principal": principal.model_dump()},
+    )
 
 
 class DesktopPublishService:
@@ -54,7 +68,7 @@ class DesktopPublishService:
                     raise AppNotOwnedBySubjectError(details={"reason": "unexpected_base_version"})
             return await PublishPipelineService.accept(
                 package_path=package_path,
-                principal=publish_identity(actor, owner),
+                principal=publish_identity(actor, owner, principal),
                 app_id=app_id,
                 confirm_schema_change=confirm_schema_change,
                 release_notes=release_notes,
@@ -66,7 +80,7 @@ class DesktopPublishService:
         with principal_scope(principal):
             actor, app = await self.apps.require(principal, app_id, "edit")
             result = await PublishPipelineService.get_deployment_status(
-                deployment_id, principal=publish_identity(actor, int(app.owner_user_id))
+                deployment_id, principal=publish_identity(actor, int(app.owner_user_id), principal)
             )
             if result.get("app_id") != app_id:
                 raise AppNotOwnedBySubjectError()

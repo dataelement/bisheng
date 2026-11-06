@@ -1,18 +1,21 @@
 // @ts-strict-ignore
-import { LoadIcon } from "@/components/bs-icons";
+import { Button, SearchInput, notification, toast } from '@bisheng/ui';
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import { Outlined } from "bisheng-icons";
+
+
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
-import { hasResourceAction, useLazyResourceActions } from "@/components/bs-comp/permission/useResourceActions";
+import { hasResourceAction,useLazyResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import { Accordion } from "@/components/bs-ui/accordion";
-import { Button } from "@/components/bs-ui/button";
-import { SearchInput } from "@/components/bs-ui/input";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
+
+
 import { userContext } from "@/contexts/userContext";
 import { refreshMcpApi } from "@/controllers/API/assistant";
 import { getToolsApi } from "@/controllers/API/tools";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { CpuIcon, Sparkles, Star, User } from "lucide-react";
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { showApiError } from "@/controllers/request";
+import { CpuIcon,Sparkles,Star,User } from "lucide-react";
+import { useCallback,useContext,useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import McpServerDialog from "./EditMcp";
@@ -25,8 +28,13 @@ import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 const MANAGED_TOOLS = [
     'Dalle3绘画', 'Bing web搜索', '天眼查',
     'Firecrawl', 'Jina AI', 'SiliconFlow',
-    '发送邮件', '飞书消息', '联网搜索', '代码执行器', '经济金融数据', 'Image View'
+    '发送邮件', '飞书消息', '联网搜索', '代码执行器', '经济金融数据'
 ];
+// Newer built-in tools are matched by a child tool_key instead of the stored type name.
+export const MANAGED_TOOL_KEYS = ['web_fetch'];
+
+export const hasManagedToolKey = (children?: { tool_key?: string }[]) =>
+    (children || []).some((child) => MANAGED_TOOL_KEYS.includes(child.tool_key || ''));
 
 interface TabToolsProps {
     select?: any;
@@ -99,9 +107,9 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
         }));
     }, [actions, allData, isBuiltinTool, keyword, type, user?.is_global_super]);
 
-    const hasSet = (name) => {
+    const hasSet = (el) => {
         if (!user?.is_global_super) return false
-        return MANAGED_TOOLS.includes(name)
+        return MANAGED_TOOLS.includes(el.name) || hasManagedToolKey(el.children)
     }
 
     const toolsetRef = useRef(null)
@@ -122,7 +130,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                                 }`}
                             onClick={() => setType("")}
                         >
-                            <User />
+                            <Outlined.PeopleRound />
                             <span>{t("tools.builtinTools")}</span>
                         </div>
                         <div
@@ -164,30 +172,17 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                         </div>
                     }
                     <div className="mb-4">
-                        {type === 'edit' && <Button
-                            id="create-apitool"
-                            className="mt-4  text-[white]"
-                            onClick={() => editRef.current.open()}
-                        >
+                        {type === 'edit' && <Button id="create-apitool" className="mt-4" onClick={() => editRef.current.open()}>
                             {t('create')}{t("tools.createCustomTool")}
                         </Button>}
-                        {type === 'mcp' && <Button
-                            id="create-mcptool"
-                            className="mt-4  text-[white]"
-                            onClick={() => mcpDialogRef.current.open()}
-                        >
+                        {type === 'mcp' && <Button id="create-mcptool" className="mt-4" onClick={() => mcpDialogRef.current.open()}>
                             {t("tools.addMcpServer")}
                         </Button>}
-                        {type === 'mcp' && <Button
-                            variant="outline"
-                            disabled={btnLoading}
-                            className="mt-4 ml-4"
-                            onClick={async () => {
+                        {type === 'mcp' && <Button variant="outlined" disabled={btnLoading} className="mt-4 ml-4" onClick={async () => {
                                 await refresh()
                                 loadMcpData()
-                            }}
-                        >
-                            {btnLoading && <LoadIcon className="text-gray-800" />}
+                            }} color="default">
+                            {btnLoading && <Outlined.Loading className="animate-spin text-gray-800" />}
                             {t("tools.refresh")}
                         </Button>}
                     </div>
@@ -201,8 +196,8 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                                         select={select}
                                         data={el}
                                         onSelect={onSelect}
-                                        onSetClick={hasSet(el.name) ? () => toolsetRef.current.edit(el) : null}
-                                        onEdit={(id) => {
+                                        onSetClick={hasSet(el) ? () => toolsetRef.current.edit(el) : null}
+                                        onEdit={() => {
                                             type === 'mcp' ? mcpDialogRef.current.open(el) :
                                                 editRef.current.edit(el)
                                         }}
@@ -257,26 +252,25 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
 
 export const useMcpRefrensh = () => {
     const [loading, setLoading] = useState(false);
-    const { message, toast } = useToast()
+
     const { t } = useTranslation('tool')
 
     return {
         loading,
         async refresh() {
             setLoading(true);
-            const res = await captureAndAlertRequestErrorHoc(refreshMcpApi())
+            try {
+            const res = await refreshMcpApi()
             if (res.length) {
                 setLoading(false);
-                return toast({
-                    variant: "error",
-                    description: res.map(e => `${e} ${t("toolFetchFailed")}`)
-                })
+                return notification.open({ type: "error", description: (res.map(e => typeof e === "string" ? `${e} ${t("toolFetchFailed")}` : `${e.name}：${t(`api_errors:${e.code}`)}`)).filter(Boolean).join('\n') })
             }
-            message({
-                variant: "success",
-                description: t("refreshSuccess")
-            })
-            setLoading(false);
+            toast.show({ type: "success", message: String(t("refreshSuccess") ?? '') })
+            } catch (error) {
+                showApiError(error);
+            } finally {
+                setLoading(false);
+            }
         }
     }
 }
