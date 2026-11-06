@@ -8,6 +8,7 @@ import sqlalchemy as sa
 from bisheng.app_publish.domain.repositories import preview_runtime_repository
 from bisheng.app_publish.domain.schemas.app_manifest import CapabilityDeclaration
 from bisheng.app_publish.domain.services.app_credential_service import AppRuntimeCredentialService
+from bisheng.app_publish.domain.services.capability_bus_service import derive_scopes
 from bisheng.app_publish.domain.services.reference_extractor import (
     APP_REFERENCE_EXTRACTOR_VERSION,
     extract_app_reference_requests,
@@ -40,6 +41,24 @@ class BoundSource:
     version: object
     principal: object
     plaintext: str
+
+
+async def delete_knowledge_target(session, knowledge):
+    """Explicit durable deletion evidence for the selected seeded physical target."""
+    await session.delete(await session.get(Knowledge, knowledge.id))
+    session.add(
+        ResourceReferenceTombstone(
+            tenant_id=knowledge.tenant_id,
+            target_type="knowledge_space",
+            target_id=str(knowledge.id),
+            target_tenant_id=knowledge.tenant_id,
+            operation_id=f"fixture-delete:{knowledge.id}",
+            operation_type="delete",
+            stage="deleted",
+            actor_type="user",
+            actor_id=str(knowledge.user_id),
+        )
+    )
 
 
 @pytest.fixture
@@ -83,6 +102,44 @@ async def bind_saved_source(publish_engine, publish_db, credential_redis, hosted
     monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", tenant_filter._tenant_aware_tables | actual_tables)
     tenant_filter.register_tenant_filter_events()
     monkeypatch.setattr(preview_runtime_repository, "get_async_db_session", publish_db)
+    from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import RuntimeDeliveryRepository
+    from bisheng.app_runtime.domain.services import app_authorization_service
+    from bisheng.permission.application.identity import get_current_permission_actor
+
+    async def load_app(app_id):
+        return await RuntimeDeliveryRepository(publish_db).get_application(app_id)
+
+    async def check(identity, *, resource_type, resource_id, action, actor=None):
+        actor = actor or get_current_permission_actor()
+        app = await load_app(resource_id)
+        return bool(
+            app is not None
+            and resource_type == "app"
+            and actor is not None
+            and actor.subject_type == "user"
+            and actor.subject_id == app.owner_user_id
+            and actor.tenant_id == app.tenant_id
+            and getattr(identity, "user_id", None) == actor.subject_id
+            and action in {"visible", "edit", "manage_permission", "delete", "publish", "unpublish"}
+        )
+
+    async def batch(identity, *, resource_type, resource_ids, actions):
+        return {
+            app_id: frozenset(
+                [
+                    action
+                    for action in actions
+                    if await check(identity, resource_type=resource_type, resource_id=app_id, action=action)
+                ]
+            )
+            for app_id in resource_ids
+        }
+
+    # App validity/actor resolution stay real. Only the remote permission verdict
+    # is a scoped owner grant, and repository injection uses the actual SQL Repo.
+    monkeypatch.setattr(app_authorization_service.AppAuthorizationService, "load_app", staticmethod(load_app))
+    monkeypatch.setattr(app_authorization_service, "check_business_action", check)
+    monkeypatch.setattr(app_authorization_service, "batch_check_business_actions", batch)
 
     async def bind(app, version=None, *, model_rows=(), server_name="provider"):
         current_tenant_id.set(int(app.tenant_id))
@@ -222,7 +279,7 @@ async def bind_saved_source(publish_engine, publish_db, credential_redis, hosted
                         source_revision=1,
                     )
                 )
-        plaintext = await AppRuntimeCredentialService.issue(actual.id, scopes=["model:invoke", "knowledge:read"])
+        plaintext = await AppRuntimeCredentialService.issue(actual.id, scopes=derive_scopes(declaration))
         principal = await validate_bearer(f"Bearer {plaintext}")
         set_current_open_api_principal(principal)
         set_current_permission_actor(
