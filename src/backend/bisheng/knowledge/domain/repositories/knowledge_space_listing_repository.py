@@ -34,14 +34,17 @@ class KnowledgeSpaceListingRepository:
         )
 
     @staticmethod
-    def _statement(keyword: str | None, has_abnormal: bool | None = None):
+    def _statement(keyword: str | None, has_abnormal: bool | None = None, *, name_only: bool = False):
         tenant_id = get_current_tenant_id()
         if type(tenant_id) is not int or tenant_id <= 0:
             raise ValueError("space lists require a concrete tenant")
         statement = select(Knowledge).where(Knowledge.type == KnowledgeTypeEnum.SPACE.value)
         if has_abnormal is True:
             statement = statement.where(KnowledgeSpaceListingRepository._abnormal_exists())
-        if keyword:
+        if keyword and name_only:
+            literal = keyword.lower().replace("/", "//").replace("%", "/%").replace("_", "/_")
+            statement = statement.where(func.lower(Knowledge.name).like(f"%{literal}%", escape="/"))
+        elif keyword:
             statement = statement.where(
                 or_(col(Knowledge.name).like(f"%{keyword}%"), col(Knowledge.description).like(f"%{keyword}%"))
             )
@@ -61,10 +64,11 @@ class KnowledgeSpaceListingRepository:
         after: tuple[datetime | None, int] | None = None,
         limit: int = 100,
         has_abnormal: bool | None = None,
+        name_only: bool = False,
     ) -> list[Knowledge]:
         if type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError("candidate batches contain 1..100 rows")
-        statement = self._statement(keyword, has_abnormal)
+        statement = self._statement(keyword, has_abnormal, name_only=name_only)
         if after is not None:
             timestamp, ident = after
             if type(ident) is not int or ident <= 0 or (timestamp is not None and not isinstance(timestamp, datetime)):

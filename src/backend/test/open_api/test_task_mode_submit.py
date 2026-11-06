@@ -89,7 +89,7 @@ async def test_available_tool_passes(task_mode_seams):
         ({}, set(), KnowledgeNotExistError),
         ({5: _knowledge(5, 1)}, {5}, KnowledgeTypeNotSupportedError),  # QA library
         ({5: _knowledge(5, 2)}, {5}, KnowledgeTypeNotSupportedError),  # retired personal KB
-        ({5: _knowledge(5, 3)}, {5}, KnowledgeTypeNotSupportedError),  # a space passed as a library
+        ({5: _knowledge(5, 3)}, {5}, PermissionDeniedError),  # migrated ID needs actual space visibility
         ({5: _knowledge(5, 0)}, set(), PermissionDeniedError),
     ],
 )
@@ -136,6 +136,16 @@ async def test_readable_knowledge_passes(task_mode_seams):
     data, _ = task_mode_seams.submitted
     assert data.use_knowledge_base.organization_knowledge_ids == [5]
     assert data.use_knowledge_base.knowledge_space_ids == [6]
+
+
+async def test_migrated_library_slot_uses_space_visibility_and_preserves_original_ids(task_mode_seams):
+    task_mode_seams.knowledge = {5: _knowledge(5, 3)}
+    task_mode_seams.visible = {5}
+    await OpenTaskModeService.submit(sa_principal(), _req(knowledge_ids=[5, 5]), LOGIN_USER)
+    data, _ = task_mode_seams.submitted
+    assert data.use_knowledge_base.organization_knowledge_ids == [5, 5]
+    assert data.use_knowledge_base.knowledge_space_ids == []
+    assert task_mode_seams.permission_calls == [("knowledge_space", (5,), ("visible",))]
 
 
 async def test_permission_engine_failure_is_not_swallowed(task_mode_seams):
