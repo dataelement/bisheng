@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead
+from bisheng.knowledge.domain.schemas.processing_settings import ProcessingDefaults
 from bisheng.permission.domain.schemas import GrantSubjectInput
 
 
@@ -71,6 +72,8 @@ class KnowledgeSpaceCreateReq(BaseModel):
     )
     creation_request_id: str | None = Field(default=None, min_length=1, max_length=64)
     initial_permissions: InitialPermissionsRequest | None = None
+    embedding_model_id: int | None = Field(default=None, gt=0, strict=True)
+    processing_defaults: ProcessingDefaults | None = None
 
     @model_validator(mode="after")
     def require_request_id_for_initial_permissions(self):

@@ -109,6 +109,8 @@ def batch_visibility(monkeypatch):
         )
         result._non_primary_ids = AsyncMock(return_value=set())
         result._list_primary_file_ids_in_space = AsyncMock(return_value=set(rows))
+        # These rows are successful; T657 covers the real SQL status boundary.
+        result._successful_file_ids = AsyncMock(side_effect=lambda _space_id, file_ids=None: set(file_ids or ()))
         result._config = lambda: SimpleNamespace(index_filter_threshold=10000)
         return result
 

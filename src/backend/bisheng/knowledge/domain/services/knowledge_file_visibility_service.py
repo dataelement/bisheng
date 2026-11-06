@@ -284,7 +284,7 @@ class KnowledgeFileVisibilityService:
         space_id: int,
         file_ids: Iterable[int],
     ) -> set[int]:
-        """Return visible current-primary files eligible for RAG retrieval.
+        """Return visible successful current-primary files eligible for RAG retrieval.
 
         Non-primary versions stay indexed by design, so index filters are only
         an optimization. This result-layer intersection is the correctness
@@ -293,7 +293,8 @@ class KnowledgeFileVisibilityService:
         visible_ids = await self.post_filter_visible_files(space_id, file_ids)
         if not visible_ids:
             return set()
-        return visible_ids - await self._non_primary_ids(space_id)
+        successful_ids = await self._successful_file_ids(space_id, visible_ids)
+        return successful_ids - await self._non_primary_ids(space_id) if successful_ids else set()
 
     # ------------------------------------------------------------------
     # Internal helpers (patched by tests via monkeypatch)
@@ -305,16 +306,34 @@ class KnowledgeFileVisibilityService:
         *,
         non_primary_ids: set[int] | None = None,
     ) -> set[int]:
-        """List the primary-version file ids in the space."""
-        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
-
-        async with get_async_db_session() as session:
-            rows = (await session.exec(select(KnowledgeFile.id).where(KnowledgeFile.knowledge_id == space_id))).all()
-        all_ids = {int(row) for row in rows}
+        """List successful primary-version file ids without affecting delivery visibility."""
+        all_ids = await self._successful_file_ids(space_id)
         excluded = non_primary_ids
         if excluded is None:
             excluded = await self._non_primary_ids(space_id)
         return all_ids - excluded
+
+    async def _successful_file_ids(self, space_id: int, file_ids: Iterable[int] | None = None) -> set[int]:
+        """Re-read SQL status for each retrieval round; retained ES text is retry input."""
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileStatus
+
+        statement = select(KnowledgeFile.id).where(
+            KnowledgeFile.knowledge_id == space_id, KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value
+        )
+        if file_ids is None:
+            statements = [statement]
+        else:
+            ids = sorted({int(value) for value in file_ids})
+            statements = [
+                statement.where(KnowledgeFile.id.in_(ids[offset : offset + _FILE_PERMISSION_BATCH_SIZE]))
+                for offset in range(0, len(ids), _FILE_PERMISSION_BATCH_SIZE)
+            ]
+        successful = set()
+        if statements:
+            async with get_async_db_session() as session:
+                for query in statements:
+                    successful.update(int(value) for value in (await session.exec(query)).all())
+        return successful
 
     async def _non_primary_ids(self, space_id: int) -> set[int]:
         """Resolve the set of non-primary file ids for the given space."""
