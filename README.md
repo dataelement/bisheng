@@ -1,3 +1,5 @@
+> 源自中国匠心，希望我们能像 [Deepseek]、[黑神话：悟空] 团队一样，给世界带来更多美好。
+
 <img src="https://dataelem.com/bs/face.png" alt="Bisheng banner">
 
 <p align="center">
@@ -31,15 +33,11 @@ BISHENG是一款 <b>开源的企业级一站式 Agent 平台</b>，专注办公�
 
 ## 重要更新：BISHENG 客户端重磅发布，连接桌面与企业 AI
 
-**BISHENG Desktop 基于 DSH（DeepSeek Harness）开发，是员工使用企业 AI 服务的桌面入口。** 从电脑里的项目材料出发，结合企业知识、工具和技能，让 Agent 完成资料整理、分析与办公文件交付。
-
-- **围绕本地材料完成工作**：在 Work 中选择授权目录，整理文件、制作 Word 汇报、Excel 表格和 PPT，并在同一任务中继续修改成果。
-- **连接企业云端能力**：使用 BISHENG 企业账号登录，在 Chat 中进行知识问答、发起云端任务，调用当前账号获准使用的模型、知识库、工具和技能。
-- **企业统一管理**：管理员在平台侧配置资源、账号与权限，并管理月度积分与用量，让桌面办公沿用企业的管理体系。
+**BISHENG 客户端是连接本地工作与企业 AI 的桌面 Agent。** 员工使用企业账号即可调用获准的模型、知识库、工具和技能，完成资料问答、多步任务及 Word、Excel、PPT 等办公文件生成，并在授权的本地目录中持续修改；企业统一管理资源、权限、积分与用量。
 
 ![BISHENG 客户端官网企业版介绍页面截图](docs/images/readme/bisheng-desktop-enterprise.png)
 
-[下载 BISHENG 客户端](https://dshdesktop.com/zh/enterprise/) · [GitHub 仓库](https://github.com/dataelement/bisheng-desktop)
+[下载 BISHENG 客户端](https://dshdesktop.com/zh/enterprise/) · [客户端 Github 仓库](https://github.com/dataelement/bisheng-desktop)
 
 > 企业接入能力、配置要求及开源与商业版范围，以对应版本说明为准。
 
@@ -49,7 +47,7 @@ BISHENG是一款 <b>开源的企业级一站式 Agent 平台</b>，专注办公�
 
 GitHub 已获 **17k Star**。
 
-[官网与下载](https://dshdesktop.com/zh/) · [GitHub](https://github.com/dataelement/dsh-desktop)
+[DSH 客户端](https://dshdesktop.com/zh/) · [GitHub](https://github.com/dataelement/dsh-desktop)
 
 ## 特点
 
@@ -60,17 +58,19 @@ GitHub 已获 **17k Star**。
    - **模型与积分集中管理**：管理员统一配置模型授权、月度积分和调用记录；Chat 与 Work 的企业模型调用共用当前用户的积分账本，用户可查看余额与用量。
    - **企业扩展统一分发**：管理员集中导入插件和工作台，员工按企业配置与授权获取使用。
 
-   [客户端使用与版本说明](https://dataelem.feishu.cn/wiki/Q9fYwAGXOiwPV5kqREfcDzyQnkF)。具体能力、部署要求及开源与企业版范围，以对应版本说明为准。
-
    ![BISHENG 网页端、桌面端与手机端展示](docs/images/readme/bisheng-platform-overview.png)
 
    > 手机 App 即将推出，具体功能与上线安排以版本说明为准。
 
-   **企业管理**
+2. **🛠️ 应用工场：把 Vibe App 发布给团队**
 
-   ![BISHENG 企业管理后台的客户端积分与用量页面](docs/images/readme/bisheng-enterprise-management.png)
+   - **把业务需求做成应用**：将报名表、项目台账、部门看板等需求做成专门的页面，让同事从应用中心打开使用。
+   - **从本地开发到团队使用**：提交本地或由 Coding Agent 辅助开发的应用，经预检、密钥扫描、构建和发布审批后，再设置使用范围，发布到应用中心。
+   - **复用平台能力**：应用可按需复用平台登录与访问者身份，接入模型和知识资源，减少重复建设；具体能力与配置要求以对应版本说明为准。
 
-2. **🚀 任务模式：面向多步骤复杂工作的通用 Agent**
+   ![BISHENG 应用工场的 Vibe App 发布管理界面](docs/images/readme/bisheng-vibe-app.png)
+
+3. **🚀 任务模式：面向多步骤复杂工作的通用 Agent**
    你给出目标，按需附上文件、知识库、工具和技能，它会拆解任务、逐步执行，最后交付报告、PPT、Excel 或 Word。
 
    - 🧠 **任务规划 + 子 Agent 并行**：主 Agent 动态生成任务清单、跟踪进度，把独立调研交给子 Agent 并行完成。
@@ -79,7 +79,7 @@ GitHub 已获 **17k Star**。
    - 📎 **结论可溯源**：报告带引用角标，点击后打开原文，并定位到被引用的段落。
    <p align="center"><img src="docs/images/readme/task-mode.png" alt="task-mode"></p>
 
-3. **📚 知识空间：企业版团队知识库**
+4. **📚 知识空间：企业版团队知识库**
 
    - 🗂️ **有序组织**：支持多级文件夹、标签、卡片与列表视图，支持关键词和标签联合检索。
    - 👥 **团队共建**：可以按权限模板（所有者/管理者/编辑者/查看者）邀请成员，也可以发布到知识广场供他人加入。超级管理员可以为部门一键开通「部门知识空间」。
@@ -87,35 +87,36 @@ GitHub 已获 **17k Star**。
    - 💬 **AI 问答**：可以针对单篇文档提问，也可以基于整个空间提问；回答标注引用来源，点开即可查看原文及溯源定位。
    <p align="center"><img src="docs/images/readme/knowledge-space.png" alt="knowledge-space"></p>
 
-4. **📡 频道订阅：外部资讯每天自动送达，有价值的一键存成知识**
+5. **📡 频道订阅：外部资讯每天自动送达，有价值的一键存成知识**
 
    - 📰 **主题频道**：把公众号和网站聚合成主题频道，每天自动更新，可以再分子频道。
    - 🎯 **精准过滤**：自定义规则过滤标题和正文，只留下相关资讯。
    <p align="center"><img src="docs/images/readme/channel.png" alt="channel"></p>
 
-5. **🧩 独具特色的 [BISHENG workflow](https://dataelem.feishu.cn/wiki/R7HZwH5ZGiJUDrkHZXicA9pInif)**
+6. **🧩 独具特色的 [BISHENG workflow](https://dataelem.feishu.cn/wiki/R7HZwH5ZGiJUDrkHZXicA9pInif)**
 
    - **独立、完备的应用编排框架**：不区分 chatflow 和 workflow，多轮对话和自动化处理可以混在同一个流程里。
    - **Human in the loop**：流程执行到中途可以等人输入、确认或修改。
    - **成环、并行、批量运行自由组合**：画圈即成环（大多数同类产品不支持成环），并列即并行，多选即批量，适合文档审核、固定版式报告生成等复杂场景。
    <p align="center"><img src="https://dataelem.com/bs/bisheng_workflow.png" alt="workflow"></p>
 
-6. **🛠️ 应用工场：把 Vibe App 发布给团队**
-
-   - **从本地开发到团队使用**：提交本地或由 Coding Agent 辅助开发的应用，经预检、密钥扫描、构建和发布审批后，按授权范围发布到应用中心。
-   - **复用平台能力**：应用可按需接入平台身份、模型和知识资源，减少重复建设；具体能力与配置要求以对应版本说明为准。
-
 7. **🏢 企业级特性：企业 AI 落地需要的管控能力**
 
-   - **部门和用户管理**：组织架构管理和人员设置，支持按角色开放功能菜单和设置配额。
-   - **RBAC + ReBAC 双权限模型**：角色控制能用哪些功能，ReBAC 控制能访问哪份资源（精确到单个文件）。
+   - **客户端统一管理**：管理员集中配置客户端可用的模型、技能、API/MCP 工具与知识空间，按企业配置和资源权限开放给员工；通过企业插件市场分发插件和工作台，并统一管理月度积分、调用用量与审计记录。
+   - **部门和用户管理**：维护组织架构、用户和配额。
+   - **功能与资源权限分开管理**：RBAC 通过角色控制功能菜单与操作；ReBAC 控制知识空间、文件夹和单个文件的访问，可按个人、部门（含下级部门）或用户组授权。文件夹和文件默认继承上级权限，也可独立设置。
    - **操作审批**：知识空间加入、频道订阅、菜单权限申请等操作可以走审批，审批流程和节点可自定义。
    - **审计**：记录会话内容和系统操作日志，可按人、时间、模块追溯。
    - **统计看板**（商业版）：预置用户活跃度、应用使用、token 用量、知识库使用等数据看板。
-   - **API 开放能力**：通过服务账号和 API 密钥调用应用、知识库等接口，也可以按员工本人权限代表用户调用。
+   - **API Key 权限边界**：管理员为服务账号签发密钥，配置有效期、接口权限，并授予可访问的应用、知识库等资源。接口权限决定能做什么，资源授权决定能对哪些资源操作；获得密钥不等于拥有整个平台权限。
+
+     ![BISHENG API Key 签发与权限配置界面](docs/images/readme/bisheng-api-key.png)
+
    - **信创适配**：同时支持 MySQL 和达梦 DM8。
    - 以及 SSO/LDAP、高可用部署方案、安全审查、流量控制、监控统计、漏洞扫描修复。
    <p align="center"><img src="https://dataelem.com/bs/pro.png" alt="enterprise"></p>
+
+   ![BISHENG 企业管理后台的客户端积分与用量页面](docs/images/readme/bisheng-enterprise-management.png)
 
 8. **🔍 高精度文档解析**：5年海量数据沉淀，高精度文档解析模型支持免费私有化部署使用，包括高精度印刷体、手写体与生僻字识别模型、表格识别模型、版式分析模型、印章模型...
    <p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="ocr"></p>

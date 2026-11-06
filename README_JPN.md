@@ -1,6 +1,4 @@
-以下は、あなたが提供したMarkdownコンテンツの日本語翻訳です。
-
----
+> 中国のものづくりの精神から。[Deepseek] や [黒神話：悟空] のチームのように、世界により多くの素晴らしいものを届けたいと願っています。
 
 <img src="https://dataelem.com/bs/face.png" alt="Bisheng banner">
 
@@ -28,12 +26,51 @@
   <!-- <img src="https://img.shields.io/docker/pulls/bisheng-io/bisheng" alt="docker-pull-count" /> -->
 </div>
 
-BISHENGは、エンタープライズシナリオに焦点を当てたオープンなLLMアプリケーションDevOpsプラットフォームです。多くの業界リーディング企業やフォーチュン500企業で使用されています。
 
-「畢昇（Bi Sheng）」は、活版印刷の発明者であり、人類の知識の伝播に重要な役割を果たしました。我々は、BISHENGがインテリジェントアプリケーションの広範な実装に強力なサポートを提供できることを願っています。皆さんの参加を歓迎します。
+## BISHENG エンタープライズプラットフォーム
+
+BISHENG は、**オープンソースの企業向けオールインワン Agent プラットフォーム**です。オフィス業務の効率化と企業での AI アプリケーションの活用に注力し、さまざまな業界の大手組織や Fortune 500 企業に利用されています。
+
+## 重要アップデート：BISHENG クライアントを公開、デスクトップと企業 AI を接続
+
+**BISHENG クライアントは、ローカル作業と企業 AI をつなぐデスクトップ Agent です。** 従業員は企業アカウントで、利用を許可されたモデル、ナレッジベース、ツール、スキルを使い、資料に関する Q&A、複数ステップのタスク、Word・Excel・PPT などのオフィス文書の作成を行い、許可されたローカルディレクトリで修正を続けられます。企業はリソース、権限、クレジット、利用量を一元管理します。
+
+![公式サイトの BISHENG クライアント企業版紹介ページ](docs/images/readme/bisheng-desktop-enterprise.png)
+
+[BISHENG クライアントをダウンロード](https://dshdesktop.com/zh/enterprise/) · [クライアントの GitHub リポジトリ](https://github.com/dataelement/bisheng-desktop)
+
+> 企業連携機能、設定要件、オープンソース版・商用版の提供範囲は、各バージョンの説明をご確認ください。
+
+### DSH クライアント個人版：ローカルのタスクから始める
+
+**DSH Desktop は、Dataelem チームが DeepSeek Harness を基盤に開発したオープンソースのデスクトップ Agent アプリです。** 個人ユーザーは BISHENG の企業プラットフォームをデプロイせずに、モデルを設定し、ローカルの作業ディレクトリを選んで、日常的な資料処理を Agent に任せられます。
+
+GitHub で **17k Star** を獲得しています。
+
+[DSH クライアント](https://dshdesktop.com/zh/) · [GitHub](https://github.com/dataelement/dsh-desktop)
 
 ## 特徴
-1. **🚀 タスクモード：複数ステップの複雑な作業に対応する汎用エージェント**
+
+1. **🖥️ BISHENG クライアント：ローカル作業と企業のクラウドを接続**
+
+   - **Chat と Work の 2 つの作業方法**：Chat はナレッジ Q&A とクラウド上の複数ステップのタスクに対応します。Work は許可されたローカルディレクトリで資料を整理し、編集可能な Word、Excel、PPT を作成して、フィードバックに応じた修正を続けられます。
+   - **アカウントの権限に従って企業リソースを利用**：企業アカウントで許可されたモデル、API/MCP ツール、スキル、ナレッジスペースを利用し、アプリセンターで公開済みのアシスタントやワークフローを開けます。ナレッジ検索では、スペースとファイルの権限が引き続き確認されます。
+   - **モデルとクレジットを一元管理**：管理者はモデルの利用権限、月間クレジット、呼び出し履歴を管理します。Chat と Work での企業モデルの呼び出しは、現在のユーザーの同じクレジット台帳に記録され、残高と利用量を確認できます。
+   - **企業向け拡張機能を一括配布**：管理者がプラグインとワークベンチをまとめてインポートし、従業員は企業の設定と権限に従って利用します。
+
+   ![BISHENG の Web・デスクトップ・モバイル画面](docs/images/readme/bisheng-platform-overview.png)
+
+   > モバイルアプリは近日公開予定です。機能と公開スケジュールは、各バージョンの説明をご確認ください。
+
+2. **🛠️ アプリ工房：Vibe App をチームに公開**
+
+   - **業務上のニーズをアプリに**：申し込みフォーム、プロジェクト台帳、部門ダッシュボードなどの専用ページを作成し、同僚がアプリセンターから開いて利用できます。
+   - **ローカル開発からチームでの利用へ**：ローカルで、または Coding Agent の支援で開発したアプリを提出できます。事前チェック、シークレットスキャン、ビルド、公開承認を経て、利用範囲を設定し、アプリセンターで公開します。
+   - **プラットフォームの機能を再利用**：アプリはプラットフォームのログインとアクセスユーザーの ID を再利用し、必要に応じてモデルやナレッジリソースに接続でき、重複した基盤構築を減らせます。具体的な機能と設定要件は、各バージョンの説明をご確認ください。
+
+   ![BISHENG アプリ工房の Vibe App 公開管理画面](docs/images/readme/bisheng-vibe-app.png)
+
+3. **🚀 タスクモード：複数ステップの複雑な作業に対応する汎用エージェント**
    目標を伝え、必要に応じてファイル、ナレッジベース、ツール、スキルを添付すると、エージェントがタスクを分解して順に実行し、最後にレポート、PPT、Excel、Word を納品します。
 
    - 🧠 **タスク計画 + サブエージェントの並列実行**：メインエージェントがタスクリストを動的に作成して進捗を管理し、独立した調査はサブエージェントに任せて並列に進めます。
@@ -42,7 +79,7 @@ BISHENGは、エンタープライズシナリオに焦点を当てたオープ�
    - 📎 **結論の出典を追跡可能**：レポートには引用マークが付き、クリックすると原文を開いて引用箇所を表示します。
    <p align="center"><img src="docs/images/readme/task-mode.png" alt="task-mode"></p>
 
-2. **📚 ナレッジスペース：企業向けチームナレッジベース**
+4. **📚 ナレッジスペース：企業向けチームナレッジベース**
 
    - 🗂️ **整理しやすい構成**：多階層フォルダ、タグ、カード表示とリスト表示に対応し、キーワードとタグを組み合わせて検索できます。
    - 👥 **チームで共同構築**：権限テンプレート（所有者／管理者／編集者／閲覧者）でメンバーを招待できます。ナレッジ広場に公開して、他のユーザーに参加してもらうこともできます。スーパー管理者は部門ごとに「部門ナレッジスペース」をワンクリックで作成できます。
@@ -50,34 +87,40 @@ BISHENGは、エンタープライズシナリオに焦点を当てたオープ�
    - 💬 **AI Q&A**：1 つのドキュメントにも、スペース全体にも質問できます。回答には引用元が付き、クリックすると原文の該当箇所を表示します。
    <p align="center"><img src="docs/images/readme/knowledge-space.png" alt="knowledge-space"></p>
 
-3. **📡 チャンネル購読：外部ニュースを毎日自動で受け取り、価値ある記事はワンクリックでナレッジに保存**
+5. **📡 チャンネル購読：外部ニュースを毎日自動で受け取り、価値ある記事はワンクリックでナレッジに保存**
 
    - 📰 **テーマチャンネル**：WeChat 公式アカウントや Web サイトをテーマ別のチャンネルにまとめ、毎日自動で更新します。サブチャンネルも作成できます。
    - 🎯 **精密なフィルタリング**：カスタムルールでタイトルと本文をフィルタリングし、関連する記事だけを残します。
    <p align="center"><img src="docs/images/readme/channel.png" alt="channel"></p>
 
-4. **🧩 独自の [BISHENG workflow](https://dataelem.feishu.cn/wiki/R7HZwH5ZGiJUDrkHZXicA9pInif)**
+6. **🧩 独自の [BISHENG workflow](https://dataelem.feishu.cn/wiki/R7HZwH5ZGiJUDrkHZXicA9pInif)**
 
    - **独立した完全なオーケストレーションフレームワーク**：chatflow と workflow を区別せず、多ターン対話と自動処理を同じフローに組み込めます。
    - **Human in the loop**：フローの実行途中で、人の入力、確認、修正を待つことができます。
    - **ループ、並列、バッチ実行を自由に組み合わせ**：円を描けばループ（多くの類似製品はループに非対応）、並べれば並列、複数選択すればバッチ処理になります。ドキュメント審査や固定レイアウトのレポート生成などの複雑なシナリオに適しています。
    <p align="center"><img src="https://dataelem.com/bs/bisheng_workflow.png" alt="workflow"></p>
 
-5. **🏢 エンタープライズ機能：企業で AI を導入するために必要な管理機能**
+7. **🏢 エンタープライズ機能：企業で AI を導入するために必要な管理機能**
 
-   - **部門とユーザーの管理**：組織構造とユーザーを管理し、ロールごとに利用できる機能メニューとクォータを設定できます。
-   - **RBAC + ReBAC の二重権限モデル**：ロールで使える機能を、ReBAC でアクセスできるリソースを制御します（ファイル単位まで）。
+   - **クライアントの一元管理**：管理者はクライアントで利用できるモデル、スキル、API/MCP ツール、ナレッジスペースをまとめて設定し、企業の設定とリソース権限に従って従業員に提供します。企業向けプラグインマーケットでプラグインやワークベンチを配布し、月間クレジット、呼び出し利用量、監査記録も一元管理します。
+   - **部門とユーザーの管理**：組織構造、ユーザー、クォータを管理します。
+   - **機能とリソースの権限を分けて管理**：RBAC のロールで機能メニューと操作を制御します。ReBAC はナレッジスペース、フォルダ、個別ファイルへのアクセスを制御し、個人、部門（下位部門を含む）、ユーザーグループに権限を付与できます。フォルダとファイルは既定で上位の権限を継承し、個別に設定することもできます。
    - **承認フロー**：ナレッジスペースへの参加、チャンネル購読、メニュー権限の申請などに承認を設定でき、承認フローとノードはカスタマイズできます。
    - **監査**：会話内容とシステム操作ログを記録し、ユーザー、時間、モジュール別に追跡できます。
    - **統計ダッシュボード**（商用版）：ユーザーのアクティブ度、アプリ利用、token 使用量、ナレッジベース利用などのダッシュボードを用意しています。
-   - **オープン API**：サービスアカウントと API キーでアプリやナレッジベースなどの API を呼び出せます。従業員本人の権限で、その従業員に代わって呼び出すこともできます。
-   - **DSH Desktop の企業連携**（商用版）：従業員はプラットフォームのアカウントでデスクトップクライアントにログインし、BISHENG で設定したモデルをそのまま使えます。管理者はユーザーごと・月ごとにモデルの利用枠を割り当てられます。
+   - **API キーの権限範囲**：管理者はサービスアカウント用のキーを発行し、有効期限と API の操作権限を設定して、利用可能なアプリやナレッジベースなどのリソースを指定します。API の操作権限が「何ができるか」を、リソースへの権限が「どの対象を操作できるか」を決めます。キーを取得しても、プラットフォーム全体へのアクセス権は得られません。
+
+     ![BISHENG API キーの発行と権限設定画面](docs/images/readme/bisheng-api-key.png)
+
    - **国産 IT 基盤（信創）対応**：MySQL と達夢（Dameng）DM8 の両方に対応しています。
    - そのほか、SSO/LDAP、高可用性デプロイ、コンテンツセキュリティ審査、トラフィック制御、モニタリングと統計、脆弱性スキャンと修正に対応しています。
    <p align="center"><img src="https://dataelem.com/bs/pro.png" alt="enterprise"></p>
 
-6. **🔍 高精度ドキュメント解析**：5 年間蓄積した大量の高品質データで学習した高精度ドキュメント解析モデルを、無料でプライベート環境にデプロイできます。高精度な印刷文字・手書き文字・難読文字の認識モデル、表認識モデル、レイアウト解析モデル、印鑑モデルなどを含みます。
+   ![BISHENG 企業管理画面のクライアント用クレジットと利用量](docs/images/readme/bisheng-enterprise-management.png)
+
+8. **🔍 高精度ドキュメント解析**：5 年間蓄積した大量の高品質データで学習した高精度ドキュメント解析モデルを、無料でプライベート環境にデプロイできます。高精度な印刷文字・手書き文字・難読文字の認識モデル、表認識モデル、レイアウト解析モデル、印鑑モデルなどを含みます。
    <p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="ocr"></p>
+
 
 ## クイックスタート
 
@@ -112,6 +155,13 @@ docker compose -f docker-compose.yml -p bisheng up -d
 
 詳細なインストールおよびデプロイに関する問題は、こちらを参照してください：[私有化部署](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
+## リソース
+
+- [📄 アプリ活用例・ユースケース集](https://dataelem.feishu.cn/wiki/ZfkmwLPfeiAhQSkK2WvcX87unxc)
+- [📄 活用のヒント](https://dataelem.feishu.cn/wiki/OWFRwknFaiIMajke4m5cFeLrnie)
+- [📄 機能ガイド](https://dataelem.feishu.cn/wiki/WxH6wubbAiBkRIkSEyecmpDMnjF)
+- [📄 BISHENG Blog](https://dataelem.feishu.cn/wiki/BiNowcaYWilewdksXQ5cZl3tnzy)
+
 ## 謝辞
 このリポジトリは [langchain](https://github.com/langchain-ai/langchain) [langflow](https://github.com/logspace-ai/langflow) [unstructured](https://github.com/Unstructured-IO/unstructured) および [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) の恩恵を受けています。素晴らしい作品に感謝します。
 
@@ -126,6 +176,26 @@ docker compose -f docker-compose.yml -p bisheng up -d
 
 <img src="https://www.dataelem.com/nstatic/qrcode.png" alt="Wechat QR Code">
 
----
+<!--
+## Star History
 
-この翻訳を使用して、Markdownファイルを作成できます。
+[![Star History Chart](https://api.star-history.com/svg?repos=dataelement/bisheng&type=Date)](https://star-history.com/#dataelement/bisheng&Date)
+-->
+
+## 導入実績
+
+BISHENG は、さまざまな業界の大手企業に導入されています。以下は導入先の一部です。
+
+![HSBC、ボッシュ、ワトソンズ、中国移動、中糧集団、首鋼集団](docs/images/readme/bisheng-customer-logos-row-1.png)
+
+![中国宝武、中金公司、中国輸出信用保険公司、中国石油、中国工商銀行、重慶銀行](docs/images/readme/bisheng-customer-logos-row-2.png)
+
+![中国電建、華泰証券、華夏銀行、遼寧金控、中国民生銀行、龍華資本](docs/images/readme/bisheng-customer-logos-row-3.png)
+
+![蘇交科、中信銀行、中英人寿、北汽集団、中債資信、中国気象局](docs/images/readme/bisheng-customer-logos-row-4.png)
+
+## 企業向けお問い合わせ
+
+BISHENG の企業向けデプロイ、デスクトップクライアント連携、製品デモ、ビジネス連携について、お気軽にお問い合わせください。
+
+[飛書（Feishu）フォームから BISHENG チームに問い合わせる](https://dataelem.feishu.cn/share/base/form/shrcnVow7GQwwKYEBCD41Bu5qoh)
