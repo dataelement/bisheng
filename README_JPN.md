@@ -186,13 +186,13 @@ docker compose -f docker-compose.yml -p bisheng up -d
 
 BISHENG は、さまざまな業界の大手企業に導入されています。以下は導入先の一部です。
 
-![HSBC、ボッシュ、ワトソンズ、中国移動、中糧集団、首鋼集団](docs/images/readme/bisheng-customer-logos-row-1.png)
+![中国気象局、HSBC、ボッシュ、ワトソンズ、中国移動、中糧集団](docs/images/readme/bisheng-customer-logos-row-1.png)
 
-![中国宝武、中金公司、中国輸出信用保険公司、中国石油、中国工商銀行、重慶銀行](docs/images/readme/bisheng-customer-logos-row-2.png)
+![首鋼集団、中国宝武、中金公司、中国輸出信用保険公司、中国石油、中国工商銀行](docs/images/readme/bisheng-customer-logos-row-2.png)
 
-![中国電建、華泰証券、華夏銀行、遼寧金控、中国民生銀行、龍華資本](docs/images/readme/bisheng-customer-logos-row-3.png)
+![重慶銀行、中国電建、華泰証券、華夏銀行、遼寧金控、中国民生銀行](docs/images/readme/bisheng-customer-logos-row-3.png)
 
-![蘇交科、中信銀行、中英人寿、北汽集団、中債資信、中国気象局](docs/images/readme/bisheng-customer-logos-row-4.png)
+![龍華資本、蘇交科、中信銀行、中英人寿、北汽集団、中債資信](docs/images/readme/bisheng-customer-logos-row-4.png)
 
 ## 企業向けお問い合わせ
 

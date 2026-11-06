@@ -193,13 +193,13 @@ Bisheng 采用了以下依赖库:
 
 BISHENG 已服务众多行业头部企业，以下为部分客户。
 
-![汇丰银行、博世、屈臣氏、中国移动、中粮集团、首钢集团](docs/images/readme/bisheng-customer-logos-row-1.png)
+![中国气象局、汇丰银行、博世、屈臣氏、中国移动、中粮集团](docs/images/readme/bisheng-customer-logos-row-1.png)
 
-![中国宝武、中金公司、中国出口信用保险公司、中国石油、中国工商银行、重庆银行](docs/images/readme/bisheng-customer-logos-row-2.png)
+![首钢集团、中国宝武、中金公司、中国出口信用保险公司、中国石油、中国工商银行](docs/images/readme/bisheng-customer-logos-row-2.png)
 
-![中国电建、华泰证券、华夏银行、辽宁金控、中国民生银行、龙华资本](docs/images/readme/bisheng-customer-logos-row-3.png)
+![重庆银行、中国电建、华泰证券、华夏银行、辽宁金控、中国民生银行](docs/images/readme/bisheng-customer-logos-row-3.png)
 
-![苏交科、中信银行、中英人寿、北汽集团、中债资信、中国气象局](docs/images/readme/bisheng-customer-logos-row-4.png)
+![龙华资本、苏交科、中信银行、中英人寿、北汽集团、中债资信](docs/images/readme/bisheng-customer-logos-row-4.png)
 
 ## 企业咨询
 
