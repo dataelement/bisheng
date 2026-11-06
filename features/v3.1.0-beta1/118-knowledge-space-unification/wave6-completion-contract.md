@@ -221,3 +221,5 @@ T693/T694仅UnificationInventoryRepository及配对测试两叶；原生AsyncSes
 Root页保零版本/零links，版本及子页不按current/online/enabled/terminal过滤、保原delete/state由后续显式分类。WF SourceKey是Flow.id+真实FlowVersion.id，Flow.data仅镜像不另建Source；APP为App.id+AppVersion UUID。AS/CH为真实root/current，links知识0/None合法零引用，CH停用sync仍引用；knowledge原type0/1/3为配置来源，只有0转3，QA=1保library、退休2只进历史清单不创建活动Source/转换/删除复活；未知type留原事实供后续明确失败。defaults仅实际own五key，不resolve、不复制Root继承。
 
 FlowVersion/AssistantLink使用真实父+tenant+类型键核验，坏父显式报10998，不靠INNER过滤吞掉。APPVersion/ChannelSync无tenant列，正常页经真实父ORM JOIN隔离；另`avalidate_global_orphans(session)->None`只做无payload LIMIT1缺父存在性探针，发现孤儿报机器reason，不读取其他tenant内容。model页核真实server父及tenant相同。模型目录每tenant完整分页一次，不按声明槽重复；Root共享/默认继承名称候选资格及已保存旧名解析仍须后续冻结的真实M2协议，raw全目录不授予跨tenant引用。后续Service只编排分页/既有extractors/精确Target预检与闭集artifact，不写SQL或猜原ID。
+
+孤儿完整性补充：同一`avalidate_global_orphans`还须对当前tenant的AssistantLink作一次LEFT raw父的无payload LIMIT1存在性检查，缺父或父tenant不一致明确失败；仅从合法root批取links不能证明无此类孤儿。该探针每tenant一次，不每root/子页重扫；不新增方法或跨tenant配置读取。
