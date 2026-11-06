@@ -62,7 +62,7 @@ async def people(store, monkeypatch):
         session.add(Tenant(id=101, tenant_code="t101", tenant_name="actual", status="active"))
         session.add(Tenant(id=202, tenant_code="t202", tenant_name="other", status="active"))
         session.add(UserTenant(user_id=7, tenant_id=101, is_active=1, status="active"))
-        session.add_all([UserRole(user_id=7, role_id=value) for value in (4, 6)])
+        session.add_all([UserRole(id=value, user_id=7, role_id=value) for value in (4, 6)])
     monkeypatch.setattr(person_repository, "get_async_db_session", sessions)
     monkeypatch.setattr(role_module, "get_async_db_session", sessions)
     monkeypatch.setattr(http_middleware, "_check_is_global_super", AsyncMock(return_value=False))
@@ -109,8 +109,9 @@ async def test_current_user_membership_and_tenant_are_not_assumed_from_old_confi
                 else {"tenant_id": 202}
             )
             await session.execute(sa.update(UserTenant).where(UserTenant.user_id == 7).values(**values))
-    async with people() as session, pytest.raises(PermissionDeniedError):
-        await resolve_channel_automation_identity(session, "own", "own", tenant_id=101)
+    async with people() as session:
+        with pytest.raises(PermissionDeniedError):
+            await resolve_channel_automation_identity(session, "own", "own", tenant_id=101)
     assert get_current_tenant_id() == 101
 
 
@@ -136,8 +137,9 @@ async def test_internal_adapter_rejects_unbound_inputs_and_ambient_identity_with
         method = "get_current_open_api_principal" if bad == "open" else "get_current_public_api_principal"
         monkeypatch.setattr(identity_module, method, lambda: object())
     try:
-        async with people() as session, pytest.raises(PermissionDeniedError):
-            await resolve_channel_automation_identity(session, channel, config, tenant_id=tenant_id)
+        async with people() as session:
+            with pytest.raises(PermissionDeniedError):
+                await resolve_channel_automation_identity(session, channel, config, tenant_id=tenant_id)
     finally:
         if actor_token is not None:
             reset_current_permission_actor(actor_token)
