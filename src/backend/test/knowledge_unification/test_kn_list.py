@@ -231,7 +231,16 @@ async def test_permission_failure_does_not_turn_partial_scan_into_a_success_page
 async def test_real_root_super_uses_existing_business_shortcut_after_selected_tenant_target_validation(
     catalog, monkeypatch
 ):
-    await catalog.seed([row(1), row(2), row(3, tenant=1), row(4, tenant=202)])
+    invalid = row(5)
+    invalid.state = -1
+    await catalog.seed([row(1), row(2), row(3, tenant=1), row(4, tenant=202), invalid, row(6)])
+    snapshots = catalog.service.f048_permission_adapter._loader._versions.get_permission_snapshots
+    original_snapshots = snapshots.side_effect
+
+    async def missing_snapshot(keys):
+        return {key: value for key, value in (await original_snapshots(keys)).items() if key[2] != "6"}
+
+    snapshots.side_effect = missing_snapshot
     original = UserPayload(user_id=7, tenant_id=1, user_role=[], is_global_super=True)
     service = KnowledgeSpaceService(
         None,
@@ -239,6 +248,8 @@ async def test_real_root_super_uses_existing_business_shortcut_after_selected_te
         f048_permission_adapter=catalog.service.f048_permission_adapter,
         space_listing_repository=catalog.repository,
     )
+    business_actions = AsyncMock(wraps=service._batch_actions)
+    monkeypatch.setattr(service, "_batch_actions", business_actions)
     fga = SimpleNamespace(batch_check=AsyncMock(return_value=[]))
     decision = F048PermissionService(
         catalog=SimpleNamespace(ensure_runtime_ready=AsyncMock()),
@@ -261,6 +272,7 @@ async def test_real_root_super_uses_existing_business_shortcut_after_selected_te
                 actor=actor,
             )
             assert {target.tenant_id for target in targets} == {101}
+            assert [target.resource_id for target in targets] == ["2", "1"]
             # The joined/square visible protocol must keep its original tenant
             # fence; the business full-scope-super shortcut is a separate path.
             assert await decision.batch_check_actions(actor, targets, "visible") == (False, False)
@@ -268,6 +280,7 @@ async def test_real_root_super_uses_existing_business_shortcut_after_selected_te
         assert [item.id for item in page.data] == [2, 1]
         assert original.tenant_id == actor.current_tenant_id == 1
         assert await service._permission_actor() is actor
+        business_actions.assert_awaited_once_with("knowledge_space", ["2", "1"], ("visible",))
         runtime.assert_not_awaited()
         fga.batch_check.assert_not_awaited()
         assert all(key[0] == 101 for batch in catalog.facts.snapshots for key in batch)
