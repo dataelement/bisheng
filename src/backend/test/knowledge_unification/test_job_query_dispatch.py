@@ -1,11 +1,13 @@
 """T610: real SQL query boundaries, retry provenance and broker recovery CAS."""
 
+from dataclasses import replace
 from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
 
 from bisheng.common.errcode.knowledge import (
+    KnowledgeProcessingConflictError,
     KnowledgeProcessingJobNotFoundError,
     KnowledgeProcessingJobNotRetryableError,
     ResourceReferenceInvalidError,
@@ -186,6 +188,46 @@ async def test_all_success_without_global_failure_is_not_retryable(job_session, 
             actor_reference={"actor_id": 11},
             configuration=configuration,
         )
+
+
+async def reset_claim(repository, session, configuration):
+    root = await session.get(Knowledge, 1)
+    root.index_generation = configuration.index_generation
+    await session.flush()
+    created = await create(repository, session, configuration, parameters={"operation_id": "controlled-reset"})
+    lease = await repository.aclaim(session, created.job.id, configuration=configuration)
+    claimed = await repository.aclaim_next_item(session, lease, configuration=configuration)
+    return created.job, lease, claimed
+
+
+async def test_reset_marker_is_bound_to_first_item_and_real_configuration(job_session, repository, configuration):
+    job, lease, claimed = await reset_claim(repository, job_session, configuration)
+    state = await repository.areset_target_state(job_session, lease)
+    assert state.anchor_item_id == claimed.item.id and not state.prepared
+    assert state.configuration == configuration
+    assert await repository.amark_target_reset(job_session, claimed.lease)
+    assert (await repository.areset_target_state(job_session, lease)).prepared
+    await repository.acomplete_item(job_session, claimed.lease, configuration=configuration, succeeded=True)
+    assert (await repository.areset_target_state(job_session, lease)).prepared
+    assert job.parameters == {"operation_id": "controlled-reset"}
+
+
+async def test_success_without_reset_evidence_is_not_permission_to_drop_again(job_session, repository, configuration):
+    _, lease, claimed = await reset_claim(repository, job_session, configuration)
+    await repository.acomplete_item(job_session, claimed.lease, configuration=configuration, succeeded=True)
+    with pytest.raises(KnowledgeProcessingConflictError):
+        await repository.areset_target_state(job_session, lease)
+
+
+async def test_old_item_lease_and_current_generation_cannot_write_reset_marker(job_session, repository, configuration):
+    job, lease, claimed = await reset_claim(repository, job_session, configuration)
+    assert not await repository.amark_target_reset(job_session, replace(claimed.lease, lease_token="old"))
+    assert not claimed.item.checkpoint
+    root = await job_session.get(Knowledge, 1)
+    root.index_generation = "later-generation"
+    await job_session.flush()
+    assert await repository.areset_target_state(job_session, lease) is None
+    assert job.state == "obsolete" and not claimed.item.checkpoint
 
 
 async def test_job_pages_are_complete_and_stable_for_tied_acceptance_time(job_session, repository, configuration):
