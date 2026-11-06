@@ -15,6 +15,8 @@ from bisheng.database.models.tenant import UserTenant
 from bisheng.database.models.user_role import UserRole
 from bisheng.knowledge.application.unification_sources import ReferenceInventoryRecord
 from bisheng.knowledge.domain.repositories.unification_target_repository import KnowledgeMigrationTargetRepository
+from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
+from bisheng.llm.domain.repositories.migration_target_repository import ModelMigrationTargetRepository
 from bisheng.permission.domain.repositories.f118_migration_snapshot_repository import (
     PermissionMigrationSnapshotRepository,
 )
@@ -35,7 +37,7 @@ def module():
 
 @pytest.fixture
 async def native(resource_native, monkeypatch):
-    models = (User, UserTenant, Role, UserRole, *snapshot.TABLES)
+    models = (User, UserTenant, Role, UserRole, LLMServer, LLMModel, *snapshot.TABLES)
     names = {model.__tablename__ for model in models if "tenant_id" in model.__table__.c} - {"user_tenant"}
     monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", tenant_filter._tenant_aware_tables | names)
     previous = tenant_filter._discover_tenant_aware_tables()
@@ -235,3 +237,38 @@ async def test_explicit_missing_is_not_foreign_retired_or_existing_offline_and_n
             module.source_decision(row, tenant_id=101)
     with pytest.raises(KnowledgeOperationPlanConflictError):
         module.source_decision(replace(rows[1], origin="resolved_name"), tenant_id=101)
+
+
+async def test_original_global_role_and_revoked_root_numeric_model_are_not_new_authority(module, native):
+    await native.insert(Role, [{"id": 5, "tenant_id": 1, "role_name": "Root historical role"}])
+    await native.insert(UserRole, [{"id": 1, "user_id": 7, "role_id": 5, "tenant_id": 101}])
+    await native.insert(
+        LLMServer,
+        [{"id": 1, "tenant_id": 1, "name": "Root", "type": "openai", "config": {"private-secret": "never export"}}],
+    )
+    await native.insert(
+        LLMModel,
+        [
+            {
+                "id": 11,
+                "tenant_id": 1,
+                "server_id": 1,
+                "model_name": "offline saved",
+                "model_type": "llm",
+                "online": False,
+            }
+        ],
+    )
+    source = SourceKey(101, "workflow_version", "flow", "v1")
+    key = TargetKey("model", "11")
+    async with AsyncSession(native.engine) as session, session.begin():
+        fact = (await ModelMigrationTargetRepository().ainspect(session, source_key=source, targets=(key,)))[0]
+        decision = module.source_decision(
+            ReferenceInventoryRecord(source, "old-slot", key, "explicit_id", fact), tenant_id=101
+        )
+        assert decision.data["disposition"] == "existing_saved_slot" and decision.data["exists"]
+        assert "grant" not in decision.data and "new_binding_allowed" not in decision.data
+        records = await collect(module, session)
+        role = next(item for _, item in records if item.record_type == "role_fact")
+        assert role.data["exists"] and role.data["tenant_id"] == 1
+        assert not session.new and not session.dirty
