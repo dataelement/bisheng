@@ -54,16 +54,17 @@ async def catalog(concrete_tenant, monkeypatch):
             facts.open_sessions -= 1
 
     async def seed(rows, null_ids=()):
-        async with sessions() as session, bypass_tenant_filter():
-            session.add_all(rows)
-            await session.flush()
-            if null_ids:
-                await session.exec(
-                    sa.update(Knowledge)
-                    .where(Knowledge.tenant_id == 101, Knowledge.id.in_(null_ids))
-                    .values(update_time=None)
-                )
-            await session.commit()
+        async with sessions() as session:
+            with bypass_tenant_filter():
+                session.add_all(rows)
+                await session.flush()
+                if null_ids:
+                    await session.exec(
+                        sa.update(Knowledge)
+                        .where(Knowledge.tenant_id == 101, Knowledge.id.in_(null_ids))
+                        .values(update_time=None)
+                    )
+                await session.commit()
 
     async def snapshots(keys):
         assert facts.open_sessions == 0
