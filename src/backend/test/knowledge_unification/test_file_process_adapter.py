@@ -61,6 +61,13 @@ def test_each_file_excel_explicit_fields_survive_nested_normalization():
     )
 
 
+def test_explicit_key_capture_keeps_existing_legacy_type_normalization():
+    request = FileProcessBase(knowledge_id=40, chunk_size="400", excel_rule={"slice_length": "20"})
+    assert request.chunk_size == 400 and request.excel_rule.slice_length == 20
+    explicit = capture_legacy_processing_overrides(request)
+    assert explicit.document.chunk_size == 400 and explicit.table.slice_length == 20
+
+
 def test_system_space_batch_file_priority_and_table_separation(system_defaults):
     space = changed_defaults(system_defaults, chunk_size=800, slice_length=20)
     doc = resolve(
