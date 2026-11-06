@@ -4511,7 +4511,7 @@
 
 - [ ] **T570 · 旧预览入口fixture明确legacy协议**
   **类型 / Owner**：测试 / APP\
-  **写入文件**：`src/backend/test/app_publish/test_preview_entry.py`\
+  **写入文件**：`src/backend/test/app_runtime/test_preview_entry.py`\
   **逻辑 / 测试上下文**：按冻结观察/身份/真实来源合同实施；管理观察不授执行，失效保原ID逐行展示；旧fixture保原正反断言，运行时不自动造index，不以Mock替代事务证明。\
   **依赖**：T052\
   **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
@@ -4534,7 +4534,7 @@
   **验证 / 完成条件**：定向真实红绿/等价fixture、固定提交独立复查及主组合通过，不声称真实中间件验收。
 
 - [ ] **T573 · 助手管理pin默认模型真实读取适配**
-  **类型 / Owner**：测试 / INT\
+  **类型 / Owner**：测试 / LLM\
   **写入文件**：`src/backend/test/knowledge_unification/test_as_management_scope.py`\
   **逻辑 / 测试上下文**：按冻结观察/身份/真实来源合同实施；管理观察不授执行，失效保原ID逐行展示；旧fixture保原正反断言，运行时不自动造index，不以Mock替代事务证明。\
   **依赖**：T479, T473\
@@ -4548,6 +4548,22 @@
   **依赖**：T445\
   **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
   **验证 / 完成条件**：定向真实红绿/等价fixture、固定提交独立复查及主组合通过，不声称真实中间件验收。
+
+- [ ] **T575 · 混合own模型批次的tenant辅助锁回归**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_model_mixed_source_locks.py`\
+  **逻辑 / 测试上下文**：即使模型均为own，Tenant拓扑也须在KN业务root之前完成当前锁；无模型union仍调用目标Owner的辅助预锁。SQLite只检查实际SQL顺序，不证明双库锁竞争。\
+  **依赖**：T475\
+  **覆盖 AC**: AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：真实红绿、固定提交复查及混合批次组合通过。
+
+- [ ] **T576 · 模型mixed目标阶段锁定tenant拓扑**
+  **类型 / Owner**：实现 / LLM\
+  **写入文件**：`src/backend/bisheng/llm/domain/repositories/reference_target_repository.py`\
+  **逻辑 / 测试上下文**：按物理全局模型server/model→Tenant拓扑→KN/default业务root顺序；不把无关default JSON变成共享依赖，不改变逐来源收据。\
+  **依赖**：T575\
+  **配对测试**：T575\
+  **验证 / 完成条件**：定向与主组合通过，真实MySQL/DM8竞争另验。
 
 ## 自动化覆盖索引
 

@@ -204,3 +204,9 @@ KnowledgeModelReadRuntime是内部配置消费门面，不是知识数据读取A
 `ainspect_model_names_current(session,tenant_id,requested tuple,*,identity)`返回每项ModelNameInspection(requested,resolved|None,status=valid/unresolvable/ambiguous/offline)，完整uncached批次、原bare/qualified规则，只读无锁/prepare/cache/执行authority；IO/权限故障明确失败。APP `inspect_saved_capabilities(app_id,version_id,identity,*,session=None)`沿真实UUID/Core inspect/frozen ID与该findings比较，保存原ID/label逐行标失效/not_ready，不catch成[]；draft预检不造来源。普通SAK/PAT inspect允许context=None的原principal当前credential+management_read，不伪造RuntimeAuthorizationContext；execute/start/publish保持原严格上下文。
 
 `ModelDefaultSaveResult(config,commands,embedding_changed=False)`由App真实old effective配置生成；`asave_with_commands`的外部事务Owner须commit后派发7字段命令。LLMService ownSession沿原probe→唯一commit→派发，队列失败不假回滚。Service外部Session及原App.asave无命令出口而实际commands非空时，写业务/R2前拒workbench_model_change_requires_command_owner，指引显式带commands API；不加collector/Session事件。embedding_changed由实际计划而非service旧raw读决定；清空默认embedding不自动清空间自身模型，明确非None更换才联动。
+
+### 辅助锁与删除清理读取（T500/T575–T576）
+
+混合批次的所有模型均为 own，或者完整模型 union 为空时，仍由模型 Target Owner 在 source root 前锁 Root/current Tenant 拓扑；空 union 不能跳过该辅助锁阶段。顺序为模型服务→模型→Tenant→KN/默认业务 root；无关默认 JSON 不作为该 own 资格的读取依赖。SQLite 用例核对发出的语句顺序，真实 MySQL/DM8 并发锁行为仍须中央环境验证。
+
+T500 的 Repository 第二叶专供清理 index 身份核验。清理可读取当前 own Knowledge 的真实 index；持久删除 job 在资源行已消失时，只允许同 tenant 的实际 RUNNING job、当前 lease_token 与未过期租约以及冻结 manifest 的 knowledge/index/collection 全部匹配，再返回持久事实。不能从 caller DTO/isFake 取得执行许可；不调用模型或供应商，也不把完整入向 R3 删除协调器标作完成。T551 把实际领取的 job 交给该读取口。
