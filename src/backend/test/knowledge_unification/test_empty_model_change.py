@@ -5,7 +5,7 @@ scheduling. Only FGA/sharing transports use the existing fixture doubles.
 """
 
 from dataclasses import replace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy import delete, update
@@ -159,6 +159,51 @@ async def test_complete_physical_document_version_chain_is_required(empty, broke
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await prepare(empty, session)
         await session.rollback()
+
+
+async def test_directory_referenced_by_orphan_version_is_not_a_complete_empty_scope(empty):
+    async with empty.context.sessions() as session:
+        session.add(KnowledgeFile(id=90, tenant_id=101, knowledge_id=40, file_name="folder", file_type=0))
+        session.add(
+            KnowledgeDocumentVersion(id=290, document_id=999, knowledge_file_id=90, version_no=1, is_primary=True)
+        )
+        await session.commit()
+    async with empty.context.sessions() as session:
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await prepare(empty, session)
+
+
+async def test_primary_integrity_check_reads_each_of_400_versions_once(empty):
+    total = 400
+    async with empty.context.sessions() as session:
+        session.add(KnowledgeDocument(id=99, knowledge_id=40, primary_version_id=2000))
+        for number in range(total):
+            session.add(
+                KnowledgeFile(id=1000 + number, tenant_id=101, knowledge_id=40, file_name=str(number), status=3)
+            )
+            session.add(
+                KnowledgeDocumentVersion(
+                    id=2000 + number,
+                    document_id=99,
+                    knowledge_file_id=1000 + number,
+                    version_no=number + 1,
+                    is_primary=number == 0,
+                )
+            )
+        await session.commit()
+    reads = 0
+    original = KnowledgeDocumentVersion.__getattribute__
+
+    def observe(instance, name):
+        nonlocal reads
+        if name == "is_primary":
+            reads += 1
+        return original(instance, name)
+
+    async with empty.context.sessions() as session:
+        with patch.object(KnowledgeDocumentVersion, "__getattribute__", observe):
+            await ProcessingOwnerRepository().aassert_empty_model_change(session, 40)
+    assert reads <= total * 3
 
 
 @pytest.mark.parametrize("job_state", ["accepted", "running"])
