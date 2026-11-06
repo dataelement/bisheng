@@ -5424,7 +5424,7 @@
 - [ ] **T679 · 旧文件规则真实调用端测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_legacy_file_processing_callers.py`\
-  **逻辑 / 测试上下文**：原save/asave及rebuild消费同adapter，显式null/缺省/每file Excel区分，已有完整规则不套新默认，不改变旧参数/envelope与身份。\
+  **逻辑 / 测试上下文**：旧rebuild精确核file/原请求space归属及原1/4/5/Root重建状态，拒绝前零副作用，不加新权限动作；原save/asave及rebuild消费同adapter，显式null/缺省/每file Excel区分，已有完整规则不套新默认，不改变旧参数/envelope与身份。\
   **依赖**：T070\
   **覆盖 AC**: AC-39, AC-40, AC-43, AC-44, AC-66\
   **验证 / 完成条件**：按冻结接口先独立真实红测/首绿再生产，≤2叶，记录实际相关组合与未运行项；不以局部helper替代完整调用链。
@@ -5432,7 +5432,7 @@
 - [ ] **T680 · 旧文件规则真实调用端接线**
   **类型 / Owner**：后端 Domain / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_service.py`；`src/backend/bisheng/knowledge/domain/services/knowledge_utils.py`\
-  **逻辑 / 测试上下文**：仅原save/asave与旧rebuild规则适配，SpaceService由KN T084串行接，不改其他API/模型/权限语义。\
+  **逻辑 / 测试上下文**：旧rebuild精确核file/原请求space归属及原1/4/5/Root重建状态，拒绝前零副作用，不加新权限动作；仅原save/asave与旧rebuild规则适配，SpaceService由KN T084串行接，不改其他API/模型/权限语义。\
   **依赖**：T679\
   **覆盖 AC**: AC-39, AC-40, AC-43, AC-44, AC-66\
   **配对测试**：T679\
