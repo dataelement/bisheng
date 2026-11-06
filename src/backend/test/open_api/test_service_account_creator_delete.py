@@ -107,9 +107,7 @@ class State:
 
     async def permission_snapshots(self, resources):
         return {
-            key: await self.mode_for_target(
-                SimpleNamespace(tenant_id=key[0], resource_type=key[1], resource_id=key[2])
-            )
+            key: await self.mode_for_target(SimpleNamespace(tenant_id=key[0], resource_type=key[1], resource_id=key[2]))
             for key in dict.fromkeys(resources)
         }
 
