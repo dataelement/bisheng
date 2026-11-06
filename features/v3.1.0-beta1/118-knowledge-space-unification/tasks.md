@@ -5406,8 +5406,8 @@
 
 - [ ] **T677 · 文件处理真实HTTP到worker接线测试**
   **类型 / Owner**：测试 / PROC\
-  **写入文件**：`src/backend/test/knowledge_unification/test_file_processing_wire.py`\
-  **逻辑 / 测试上下文**：真实ASGI/Service/Owner/SQL和两阶段pipeline处理，只指定历史version、不增版本授权、真失败/安全状态、成功保留、旧lease/RG及凭据失效拒绝。\
+  **写入文件**：`src/backend/test/knowledge_unification/test_file_processing_wire.py`；`src/backend/test/knowledge_unification/test_processing_endpoints.py`\
+  **逻辑 / 测试上下文**：原未装配file_reprocess断言改为仍未装配且DTO合法的metadata_schema_change，保原错误/分页拒绝；真实ASGI/Service/Owner/SQL和两阶段pipeline处理，只指定历史version、不增版本授权、真失败/安全状态、成功保留、旧lease/RG及凭据失效拒绝。\
   **依赖**：T068, T676\
   **覆盖 AC**: AC-10, AC-43, AC-44, AC-45, AC-49, AC-50, AC-53, AC-54, AC-86\
   **验证 / 完成条件**：按冻结接口先独立真实红测/首绿再生产，≤2叶，记录实际相关组合与未运行项；不以局部helper替代完整调用链。
