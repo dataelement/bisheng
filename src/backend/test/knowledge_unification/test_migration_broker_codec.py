@@ -229,3 +229,30 @@ def test_duplicate_json_nonfinite_signature_and_unfrozen_canvas_are_not_executab
     value["body"] = base64.b64encode(json.dumps(body).encode()).decode()
     with pytest.raises(KnowledgeOperationPlanConflictError):
         codec.decode_broker_message(json.dumps(value).encode())
+
+
+@pytest.mark.parametrize("protocol", [1, 2])
+def test_empty_canvas_lists_are_the_same_nonexecuting_protocol_as_none(codec, protocol):
+    value = json.loads(message(args=[81], protocol=protocol))
+    body = json.loads(base64.b64decode(value["body"]))
+    canvas = body if protocol == 1 else body[2]
+    canvas["callbacks"], canvas["errbacks"], canvas["chord"] = [], [], {}
+    value["body"] = base64.b64encode(json.dumps(body).encode()).decode()
+    assert codec.decode_broker_message(json.dumps(value).encode()).target_ids == (81,)
+
+
+def test_actual_celery_environment_broker_override_is_used_without_opening_a_connection(codec, monkeypatch):
+    monkeypatch.setenv("CELERY_BROKER_URL", "redis://env-only:6379/8")
+    monkeypatch.delenv("CELERY_BROKER_READ_URL", raising=False)
+    monkeypatch.delenv("CELERY_BROKER_WRITE_URL", raising=False)
+    script = "from celery import Celery; import json; app=Celery('offline',broker='redis://wrong:6379/1'); print(json.dumps({key:getattr(app.conf,key) for key in ('broker_url','broker_read_url','broker_write_url')}))"
+    actual = json.loads(
+        subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=True).stdout
+    )
+    result = codec.BrokerReadConfiguration.from_conf(conf(**actual))
+    assert result.connection_options()["url"] == "redis://env-only:6379/8"
+
+
+def test_message_and_decoded_body_budgets_fail_closed(codec):
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        codec.decode_broker_message(b"x" * (16 * 1024 * 1024 + 1))
