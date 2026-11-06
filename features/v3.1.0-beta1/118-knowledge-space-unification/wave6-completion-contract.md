@@ -524,3 +524,11 @@ INT负责T772测试→T773唯一生产`knowledge/application/unification_source_
 规范UTF8 JSON用ensure_ascii=False/sort_keys/separators及allow_nan=False，最大16MiB，零字节/超限/非bytes/重复键/非规范编码/NaN/额外字段/未知记录/枚举/错run-tenant-index/count/target与fact键错明确10998机器reason，不输出payload；所有digest字段严格64小写hex。Source/Root/Target键走现构造及规范投影，bool/float不能冒整数；nullable原fact scalar按真实类型保留，不借shape校验修数据。只接受精确已登记DTO类型，不因dataclass未来加字段自动导出；新字段必须显式改闭集合同。编码的canonical bytes能直接交现持久store.aput_canonical(kind='sources')，读回decode后仍须后续全页manifest/hash/原业务事实验证才可引用初始化，绝不单凭客户端字典签发证据。
 
 测试必须真实四DTO+双physical Fact roundtrip、跨页199/200边界/空页区分tenant、中文及原lifecycle、dataclass frozen/slots与非法shape/duplicate JSON/错header/错fact/digest/nonfinite/16MiB预算；既有实际UnificationArtifactStore fake-transport读回可组合，但不假称MinIO实测/正式M2。可按已冻结§31 DTO接口与T770并行编码，最终真实组合绿及固定独立审后才合入/闭卡；不为并行给生产加兼容旧缺字段或伪造header事实。
+
+## 33. SPACE原上传协议的显式批次规则接线：已冻结
+
+T775测试→T776只扩展真实POST `/api/v1/knowledge/space/{space_id}/files`：原`file_path:list[str]`与`parent_id`、响应及原上传动作/容器不变，新增可选`overrides:ProcessingOverrides|null`。字段闭集直接使用现public ProcessingOverrides：document/table部分字段，未知字段、bool整数、非正table行数等沿原严格DTO拒绝；不允许客户端传有效快照、配置版本、索引/模型或actor。省略/null/空对象都继承本次实际空间默认，只显式非null规则作为本批覆盖，不能由DTO默认补全将空间默认盖掉。
+
+真实KnowledgeSpaceService.add_file内部kw-only接`processing_overrides`，公开handler仅传req.overrides。以本叶窄纯组合将显式document字段及table字段分别投影到原FileProcessBase输入（table放excel_rule），让已有capture_processing_input产生原输入收据；复用原process_one_file→真实有效快照→保存split_rule→preview key→V1→原scheduler。每个文件继续按真实类型裁剪、表格不吃文档规则、媒体专用约束保留，不能把一个文件的解析规则回写空间默认或另一个文件的收据。旧内部caller省略新kw，旧批量补偿、去重、审批、配额与权限全保。
+
+本节是原T083/T084的实际入口必要接线，不新建upload JobKind、不扩大文件edit、不做在途IO竞态治理，不将批次覆盖等同于per-file覆盖或完整上传/版本验收。测试至少覆盖真实ASGI DTO→service转交、普通省略与显式部分覆盖的实际process_one_file保存快照、mixed table/document隔离、非法请求零写零派发，以及原失败补偿。production Owner仅INT占用schema/endpoint/service三叶，PLATFORM不得改这些叶。
