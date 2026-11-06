@@ -1219,7 +1219,7 @@
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_edge_taskmode.py`（拟新增）\
   **逻辑 / 测试上下文**：提交与执行两阶段同可见语义；missing模型配置明确失败，队列参数不复活旧模型；scope/跨tenant拒绝。\
-  **依赖**：T148\
+  **依赖**：T148, T745\
   **覆盖 AC**: AC-35, AC-68, AC-79, AC-82, AC-83, AC-86\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -1227,7 +1227,7 @@
   **类型 / Owner**：后端 Domain / EDGE\
   **写入文件**：`src/backend/bisheng/open_api/domain/services/task_mode_service.py`\
   **逻辑 / 测试上下文**：提交知识来源批量action和任务执行阶段均按visible，仍读业务资源模型/索引配置和旧ID；保凭证、业务状态，任务不绑定模型。\
-  **依赖**：T149\
+  **依赖**：T149, T745, T746, T747\
   **配对测试**：T149\
   **验证 / 完成条件**：运行配对测试 T149；验证本卡预期，相关范围检查通过。
 
@@ -5992,6 +5992,51 @@
   **配对测试**：T741, T071\
   **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
   **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
+
+## W6旧列表夹具与开放task mode实际消费接缝
+
+- [ ] **T743 · 旧管理员清单port夹具补真实批量标记**
+  **类型 / Owner**：测试夹具 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_create.py`\
+  **逻辑 / 测试上下文**：新真实marker port补AsyncMock空set，原alist_admin exact规范False参数；保所有原角色/身份/tenant断言。\
+  **依赖**：T728\
+  **覆盖 AC**: AC-35, AC-66, AC-68, AC-79, AC-82, AC-83, AC-86, AC-87\
+  **验证 / 完成条件**：精确旧失败/真实红或首绿、实际SQL与真实consumer相关组合，原协议边界、逐叶静态和固定独立审；真实E2E另验。
+
+- [ ] **T744 · 统一列表内部名称模式实际SQL测试**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_list.py`\
+  **逻辑 / 测试上下文**：名称限定/字面%_转义/大小写、DB分页及EOF probe同模式，cursor区分且原keyword语义保持。\
+  **依赖**：T728, T732\
+  **覆盖 AC**: AC-35, AC-66, AC-68, AC-79, AC-82, AC-83, AC-86, AC-87\
+  **验证 / 完成条件**：精确旧失败/真实红或首绿、实际SQL与真实consumer相关组合，原协议边界、逐叶静态和固定独立审；真实E2E另验。
+
+- [ ] **T745 · 有界空间清单内部名称限定**
+  **类型 / Owner**：后端 Repository/Service / PERM\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/knowledge_space_listing_repository.py`；`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`\
+  **逻辑 / 测试上下文**：W6§25内部name_only默认False，SQL先筛候选与probe一致，保原has_abnormal和空间普通权限。\
+  **依赖**：T744\
+  **配对测试**：T744\
+  **覆盖 AC**: AC-35, AC-66, AC-68, AC-79, AC-82, AC-83, AC-86, AC-87\
+  **验证 / 完成条件**：精确旧失败/真实红或首绿、实际SQL与真实consumer相关组合，原协议边界、逐叶静态和固定独立审；真实E2E另验。
+
+- [ ] **T746 · 开放task mode旧查询夹具更新**
+  **类型 / Owner**：测试夹具 / PERM\
+  **写入文件**：`src/backend/test/open_api/task_mode_support.py`；`src/backend/test/open_api/test_task_mode_config.py`\
+  **逻辑 / 测试上下文**：改实际visible键与统一Domain分页消费夹具，保原SA/D、错误、分页投影；不将owner资格借SA。\
+  **依赖**：T149\
+  **配对测试**：T149\
+  **覆盖 AC**: AC-35, AC-66, AC-68, AC-79, AC-82, AC-83, AC-86, AC-87\
+  **验证 / 完成条件**：精确旧失败/真实红或首绿、实际SQL与真实consumer相关组合，原协议边界、逐叶静态和固定独立审；真实E2E另验。
+
+- [ ] **T747 · 开放task mode迁移ID提交回归更新**
+  **类型 / Owner**：测试夹具 / PERM\
+  **写入文件**：`src/backend/test/open_api/test_task_mode_submit.py`\
+  **逻辑 / 测试上下文**：原library槽接受迁移3，保0/3分组、QA/退休/失效/原scope和tenant拒绝，无worker新授权。\
+  **依赖**：T149\
+  **配对测试**：T149\
+  **覆盖 AC**: AC-35, AC-66, AC-68, AC-79, AC-82, AC-83, AC-86, AC-87\
+  **验证 / 完成条件**：精确旧失败/真实红或首绿、实际SQL与真实consumer相关组合，原协议边界、逐叶静态和固定独立审；真实E2E另验。
 
 ## 自动化覆盖索引
 
