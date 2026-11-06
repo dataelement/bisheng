@@ -88,9 +88,7 @@ async def populated(database):
 
 async def collect(inventory, session, *, context=None, **identity):
     options = {} if context is None else {"context": context}
-    return [
-        record async for record in inventory.aiter_tenant_source_records(session, **(RUN | identity), **options)
-    ]
+    return [record async for record in inventory.aiter_tenant_source_records(session, **(RUN | identity), **options)]
 
 
 def selected(module, records, kind, ident, version=None):
@@ -277,7 +275,7 @@ async def test_each_yield_rechecks_context_and_physical_cache_is_stream_local(mo
     "model,where,changes,kind,ident,version",
     [
         (Flow, "wf", {"update_time": LATER}, "workflow_version", "wf", "1"),
-    (Flow, "wf", {"status": 0}, "workflow_version", "wf", "1"),
+        (Flow, "wf", {"status": 0}, "workflow_version", "wf", "1"),
         (Flow, "wf", {"update_time": LATER}, "workflow_version", "wf", "2"),
         (Flow, "wf-empty", {"update_time": LATER}, "workflow_version", "wf-empty", None),
         (Flow, "wf-retired", {"update_time": LATER}, "workflow_version", "wf-retired", None),
