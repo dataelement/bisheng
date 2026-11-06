@@ -172,3 +172,10 @@ LLM新增 async `resolve_model_alias_current(session, tenant_id, requested, *, i
 
 
 空间创建不能以 skip_hook 永久跳过实际SPACE投影：真实flush资源后以同外部Session完成SPACE投影、creator成员、资源模型来源+R2唯一commit，再沿原initial grants/tag完成既有创建生命周期；普通文档库调用实际library创建投影。批量模型变更的commands显式带实际资源tenant_id与actor_user_id；后者只审计/telemetry，不由裸UID制造授权身份。命令 operation/revision/generation 为业务当前配置事实，worker模型仍从资源pending槽选择；派发在整体SQL提交后，队列失败不伪称业务已回滚。
+
+
+### 原生共享读取启动与真实检索调用（T546–T552）
+
+API正常已有配置与Celery启动原来都可能只注册lazy F048而从未初始化。两端启动在原生引用读取装配/业务接收前显式await既有get_f048_process_runtime：API沿当前事件循环，Celery用既有持久worker loop run_async_task；仅openfga.enabled时调用，错误明确阻止进入可接收业务就绪路径。原生getter保持只读READY对象，无懒初始化或SQL async/sync桥。
+
+RetrievalEngine在原调用处向KnowledgeRag透传既有self.login_user，保留原身份对象及ambient Open/Public principal/PermissionActor，不从invoke_user_id补造人。标准模型执行仍whole-source strict；命名的清理专用vectorstore构造只消费已授权实际资源或持久删除job冻结manifest的index身份，不调用模型、不能用于标准执行准入。旧FakeEmbeddings清理两处调用转该构造，失效模型不能阻断文件删除；不能仅凭isFake跳过运行源校验。其他无原身份的Root共享调用先逐入口核验真实授权来源，不能用静态is_shared替代C4。

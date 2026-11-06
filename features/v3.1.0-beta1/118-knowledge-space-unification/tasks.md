@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | W0/W1、W2及W3运行准入已合流，完整特性仍在开发 | 296 / 544 项；W4来源合同先冻结、按依赖实施中；独立复查/组合测试见[W3记录](./wave3-implementation-review.md)，未运行迁移 |
+| 实现 | W0/W1、W2及W3运行准入已合流，完整特性仍在开发 | 296 / 552 项；W4来源合同先冻结、按依赖实施中；独立复查/组合测试见[W3记录](./wave3-implementation-review.md)，未运行迁移 |
 
 ## 领取与执行规则
 
@@ -4308,6 +4308,70 @@
   **依赖**：T543\
   **配对测试**：T543\
   **验证 / 完成条件**：真实红绿、固定提交独立复查和主集成；保原SDK别名/范围/头错误顺序，不调用真实provider。
+
+- [ ] **T545 · 助手来源SQL用例独立注册真实租户表**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_as_source_owner.py`\
+  **逻辑 / 测试上下文**：仅修复组合顺序造成的全局tenant表发现fixture残留，显式纳入本SQL场景实际Assistant/Link/ShareLink/Session表；不改产品源码、不Mock或弱化原跨租户拒绝断言。\
+  **依赖**：T362\
+  **覆盖 AC**: AC-71, AC-87, AC-89\
+  **验证 / 完成条件**：固定a8d7cc28d全F118单路径1129pass/2fail的实际拒绝断言为红；原断言保留且整组合通过，生产AS/C3路径0diff。
+
+- [ ] **T546 · API与worker原生共享读前明确READY红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_native_reference_bootstrap.py`\
+  **逻辑 / 测试上下文**：按真实已核启动/业务调用路径，显式权限READY或保留原身份/删除manifest；不在native getter懒桥async DB，不以FakeEmbeddings作为通用运行permit。\
+  **依赖**：T432\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：实际红绿、固定源码独立复核及组合通过，未运行真实middleware不称验收完成。
+
+- [ ] **T547 · Celery持久loop准备原生读取权限runtime**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/worker/main.py`\
+  **逻辑 / 测试上下文**：按真实已核启动/业务调用路径，显式权限READY或保留原身份/删除manifest；不在native getter懒桥async DB，不以FakeEmbeddings作为通用运行permit。\
+  **依赖**：T546\
+  **配对测试**：T546\
+  **验证 / 完成条件**：实际红绿、固定源码独立复核及组合通过，未运行真实middleware不称验收完成。
+
+- [ ] **T548 · 检索引擎保原身份进入资源模型准入红测**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_retrieval_engine_identity.py`\
+  **逻辑 / 测试上下文**：按真实已核启动/业务调用路径，显式权限READY或保留原身份/删除manifest；不在native getter懒桥async DB，不以FakeEmbeddings作为通用运行permit。\
+  **依赖**：T498\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：实际红绿、固定源码独立复核及组合通过，未运行真实middleware不称验收完成。
+
+- [ ] **T549 · 检索引擎透传既有完整login_user**
+  **类型 / Owner**：实现 / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/retrieval_engine.py`\
+  **逻辑 / 测试上下文**：按真实已核启动/业务调用路径，显式权限READY或保留原身份/删除manifest；不在native getter懒桥async DB，不以FakeEmbeddings作为通用运行permit。\
+  **依赖**：T548\
+  **配对测试**：T548\
+  **验证 / 完成条件**：实际红绿、固定源码独立复核及组合通过，未运行真实middleware不称验收完成。
+
+- [ ] **T550 · 删除清理不依赖可执行模型红测**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_cleanup_model_independence.py`\
+  **逻辑 / 测试上下文**：按真实已核启动/业务调用路径，显式权限READY或保留原身份/删除manifest；不在native getter懒桥async DB，不以FakeEmbeddings作为通用运行permit。\
+  **依赖**：T500\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：实际红绿、固定源码独立复核及组合通过，未运行真实middleware不称验收完成。
+
+- [ ] **T551 · 持久文件删除清理走命名非模型构造**
+  **类型 / Owner**：实现 / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_direct_delete_service.py`\
+  **逻辑 / 测试上下文**：按真实已核启动/业务调用路径，显式权限READY或保留原身份/删除manifest；不在native getter懒桥async DB，不以FakeEmbeddings作为通用运行permit。\
+  **依赖**：T550\
+  **配对测试**：T550\
+  **验证 / 完成条件**：实际红绿、固定源码独立复核及组合通过，未运行真实middleware不称验收完成。
+
+- [ ] **T552 · API启动显式准备原生共享读取权限**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/main.py`\
+  **逻辑 / 测试上下文**：按真实已核启动/业务调用路径，显式权限READY或保留原身份/删除manifest；不在native getter懒桥async DB，不以FakeEmbeddings作为通用运行permit。\
+  **依赖**：T546, T504\
+  **配对测试**：T546\
+  **验证 / 完成条件**：实际红绿、固定源码独立复核及组合通过，未运行真实middleware不称验收完成。
 
 ## 自动化覆盖索引
 
