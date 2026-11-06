@@ -8,7 +8,7 @@ from dataclasses import replace
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 from sqlmodel import select
 
 from bisheng.common.errcode.http_error import UnAuthorizedError
@@ -272,6 +272,41 @@ async def test_same_current_model_is_not_a_manual_rebuild(empty):
         assert not change.changed
         await Models.aapply_model_change(session, change)
         await session.commit()
+    assert state(empty.context) == before
+
+
+async def test_same_model_with_revoked_share_is_invalid_rather_than_repaired_noop(empty):
+    async with empty.context.sessions() as session:
+        await Models.acreate(
+            session,
+            Knowledge(id=41, tenant_id=101, user_id=7, name="empty shared", type=3, model="22", index_generation="g0"),
+            login_user=empty.context.user,
+            project_created=AsyncMock(),
+        )
+        await session.commit()
+    empty.context.sharing.allowed = frozenset()
+    before = state(empty.context)
+    async with empty.context.sessions() as session:
+        with pytest.raises(ResourceReferenceInvalidError):
+            await Models.aprepare_empty_model_change(session, 41, 22, login_user=empty.context.user)
+        await session.rollback()
+    assert state(empty.context) == before
+
+
+@pytest.mark.parametrize("values", [{"model_config_revision": 1}, {"index_generation": "changed-generation"}])
+async def test_apply_preserves_real_configuration_cas_even_with_stale_identity_map(empty, values):
+    before = state(empty.context)
+    async with empty.context.sessions() as session:
+        change = await prepare(empty, session)
+        await session.execute(
+            update(Knowledge)
+            .where(Knowledge.id == 40, Knowledge.tenant_id == 101)
+            .values(**values)
+            .execution_options(synchronize_session=False)
+        )
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await Models.aapply_model_change(session, change)
+        await session.rollback()
     assert state(empty.context) == before
 
 
