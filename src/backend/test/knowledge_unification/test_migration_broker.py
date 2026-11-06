@@ -51,7 +51,17 @@ class BrokerRedis(NativeRedis):
 
     async def scan(self, cursor=0, *, match, count, _type=None, target_nodes=None):
         self.scan_types.append(_type)
-        result = await super().scan(cursor=cursor, match=match, count=count, target_nodes=target_nodes)
+        # Redis glob backslash escapes one literal character; Python fnmatch
+        # instead needs a bracket expression for escaped *, ? and brackets.
+        translated, offset = "", 0
+        while offset < len(match):
+            value = match[offset]
+            if value == "\\" and offset + 1 < len(match):
+                offset += 1
+                value = {"*": "[*]", "?": "[?]", "[": "[[]", "]": "[]]"}.get(match[offset], match[offset])
+            translated += value
+            offset += 1
+        result = await super().scan(cursor=cursor, match=translated, count=count, target_nodes=target_nodes)
         if _type is None or type(result) not in (tuple, list) or len(result) != 2:
             return result
         cursor, keys = result
@@ -417,3 +427,56 @@ async def test_original_native_scope_and_transaction_are_required_and_pending_bu
         async with session.begin():
             with pytest.raises(KnowledgeOperationPlanConflictError):
                 reader._current()
+
+
+@pytest.mark.parametrize("mode", ["redis", "rediss", "sentinel"])
+async def test_owned_builder_uses_actual_native_client_pool_without_connecting(module, original, monkeypatch, mode):
+    from redis.asyncio.connection import AbstractConnection, SSLConnection
+    from redis.asyncio.sentinel import SentinelConnectionPool
+
+    async def forbidden_connect(*args, **kwargs):
+        raise AssertionError("offline builder must never connect")
+
+    monkeypatch.setattr(AbstractConnection, "connect", forbidden_connect)
+    config = messages.conf(broker_url=mode + "://u:private-pass@localhost:6379/3")
+    if mode == "sentinel":
+        config.broker_transport_options = {
+            "master_name": "original-master",
+            "sentinel_kwargs": {"password": "private-monitor"},
+        }
+    reader = module.RedisBrokerInventoryReader(None, configuration=BrokerReadConfiguration.from_conf(config))
+    client = await reader._open()
+    assert client.connection_pool.connection_kwargs["db"] == 3
+    assert client.connection_pool.connection_kwargs["password"] == "private-pass"
+    if mode == "rediss":
+        assert client.connection_pool.connection_class is SSLConnection
+    elif mode == "sentinel":
+        assert isinstance(client.connection_pool, SentinelConnectionPool)
+        assert client.connection_pool.service_name == "original-master"
+        assert len(reader._owned_clients) == 2
+    await reader.aclose()
+    assert reader._owned_clients == []
+
+
+@pytest.mark.parametrize("prefix", ["[celery]:", "celery?:", "celery*:", "celery\\:"])
+async def test_literal_redis_keyprefix_globs_find_queues_and_original_bindings_without_overscan(
+    module, original, prefix
+):
+    original.config = BrokerReadConfiguration.from_conf(
+        messages.conf(broker_transport_options={"global_keyprefix": prefix})
+    )
+    original.redis.lists = {
+        prefix + "knowledge_celery": [raw_message()],
+        prefix + "historical": [raw_message()],
+        "celeryX:other": [b"ordinary unrelated text"],
+    }
+    original.redis.hashes, original.redis.zsets = {}, {}
+    original.redis.sets = {prefix + "_kombu.binding.old": {b"route\x06\x16\x06\x16historical"}}
+    before = original.redis.snapshot()
+    rows = await read(module, original)
+    assert len(rows) == 2 and all(row.data["tenant_id"] == 101 for row in rows)
+    assert original.redis.snapshot() == before
+    original.redis.lists[prefix + "historical"] = [b"malformed knowledge queue"]
+    with pytest.raises(KnowledgeOperationPlanConflictError) as failure:
+        await read(module, original)
+    assert failure.value.kwargs["reason"] == "migration_broker_invalid_envelope"

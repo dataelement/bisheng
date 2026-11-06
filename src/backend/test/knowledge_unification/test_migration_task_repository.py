@@ -356,3 +356,36 @@ async def test_broker_exact_target_batches_are_bounded_empty_is_zero_sql(repo, n
                 await getattr(repo, method)(session, **{parameter: tuple(range(1, 202))})
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await repo.aget_space_facts(session, space_ids=(True,))
+
+
+@pytest.mark.parametrize("kind", ["job", "delete_job"])
+async def test_broker_actual_ledger_cannot_point_to_a_foreign_existing_root(repo, native, kind):
+    await native.insert(resources.Knowledge, [resources.resource(8000, tenant=202)])
+    if kind == "job":
+        await native.insert(Job, [job() | {"space_id": 8000}])
+        method, ident = repo.aget_job_facts, "job-0000"
+    else:
+        await native.insert(DeleteJob, [deletion() | {"space_id": 8000}])
+        method, ident = repo.aget_delete_job_facts, "delete-0000"
+    async with AsyncSession(native.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await method(session, job_ids=(ident,))
+
+
+async def test_broker_delete_ledger_retains_real_tenant_after_formal_root_deletion(repo, native):
+    await native.insert(DeleteJob, [deletion()])
+    native.queries.clear()
+    async with AsyncSession(native.engine) as session, session.begin():
+        fact = (await repo.aget_delete_job_facts(session, job_ids=("delete-0000",)))[0]
+    assert fact.exists and fact.tenant_id == 101 and fact.space_id == 9000
+    assert len(native.queries) == 1 and "manifest" not in native.queries[0][0]
+
+
+async def test_broker_j1_missing_root_has_no_executable_target_but_original_ledger_is_retained(repo, native):
+    await native.insert(Job, [job()])
+    async with AsyncSession(native.engine) as session, session.begin():
+        fact = (await repo.aget_job_facts(session, job_ids=("job-0000",)))[0]
+        assert not fact.exists and fact.tenant_id is None and fact.space_id is None
+        ledger = (await repo.alist_jobs(session)).items[0]
+        assert ledger.task_id == "job-0000" and ledger.tenant_id == 101 and ledger.space_id == 9000
+    assert len(fact.record_digest) == 64

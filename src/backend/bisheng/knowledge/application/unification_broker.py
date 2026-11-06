@@ -65,6 +65,15 @@ class _ScanProxy:
         self.owner, self.wanted = owner, wanted
 
     async def scan(self, **kwargs):
+        # Escape only the literal configured prefix at the native command.
+        # The shared scanner still validates returned keys against its original
+        # unescaped prefix; no Redis glob token becomes migration scope.
+        prefix = self.owner.configuration.global_keyprefix
+        pattern = kwargs["match"]
+        if not pattern.startswith(prefix):
+            _blocked("invalid_scan_prefix")
+        literal = "".join("\\" + char if char in "*?[]\\" else char for char in prefix)
+        kwargs["match"] = literal + pattern[len(prefix) :]
         if self.wanted is not None:
             kwargs["_type"] = self.wanted
         return await self.owner._call(self.owner.redis.scan, **kwargs)
