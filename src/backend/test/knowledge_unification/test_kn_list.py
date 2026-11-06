@@ -54,7 +54,12 @@ async def catalog(concrete_tenant, monkeypatch):
     table.c.update_time.nullable = True
     async with engine.begin() as connection:
         await connection.run_sync(metadata.create_all)
-    facts = SimpleNamespace(open_sessions=0, allowed=set(), checked=[], snapshots=[])
+    facts = SimpleNamespace(open_sessions=0, allowed=set(), checked=[], snapshots=[], queries=[])
+
+    @sa.event.listens_for(engine.sync_engine, "before_cursor_execute")
+    def query_seen(_connection, _cursor, statement, parameters, _context, _many):
+        if statement.lstrip().upper().startswith("SELECT"):
+            facts.queries.append((statement, parameters))
 
     @asynccontextmanager
     async def sessions():
@@ -230,6 +235,90 @@ async def test_permission_failure_does_not_turn_partial_scan_into_a_success_page
     catalog.runtime.batch_check_actions.side_effect = RuntimeError("permission transport unavailable")
     with pytest.raises(RuntimeError, match="permission transport unavailable"):
         await catalog.service.list_visible_spaces()
+
+
+@pytest.mark.parametrize("keyword", ["%", "_", "/", "PoLiCy%_/"])
+async def test_name_only_sql_matches_literal_name_and_keeps_original_keyword_search(catalog, keyword):
+    description_only = row(4, name="unrelated")
+    description_only.description = "POLICY%_/"
+    await catalog.seed(
+        [
+            row(1, name="Policy%_/"),
+            row(2, name="PolicyXYZ"),
+            row(3, name="prefix POLICY%_/ suffix"),
+            description_only,
+            row(5, tenant=202, name="Policy%_/"),
+            row(6, kind=1, name="Policy%_/"),
+            row(7, kind=0, name="Policy%_/"),
+        ]
+    )
+    found, after = [], None
+    for _ in range(3):
+        batch = await catalog.repository.alist_candidates(keyword=keyword, name_only=True, after=after, limit=1)
+        found.extend(item.id for item in batch)
+        if not batch:
+            break
+        after = (batch[-1].update_time, batch[-1].id)
+    assert found == [3, 1]
+    original = await catalog.repository.alist_candidates(keyword="Policy", limit=100)
+    assert [item.id for item in original] == [4, 3, 2, 1]
+    assert all("LIMIT" in sql.upper() for sql, _ in catalog.facts.queries)
+
+
+async def test_name_only_service_trims_name_and_binds_mode_in_both_cursor_directions(catalog):
+    await catalog.seed([row(1, name="Policy"), row(2, name="POLICY")])
+    catalog.facts.allowed.update({1, 2})
+    names = await catalog.service.list_visible_spaces(keyword="  policy  ", name_only=True, page_size=1)
+    assert [item.id for item in names.data] == [2] and names.has_more
+    ordinary = await catalog.service.list_visible_spaces(keyword="policy", page_size=1)
+    for options in [{"cursor": names.next_cursor}, {"cursor": ordinary.next_cursor, "name_only": True}]:
+        with pytest.raises(KnowledgeSpaceInvalidCursorError):
+            await catalog.service.list_visible_spaces(keyword="policy", page_size=1, **options)
+    last = await catalog.service.list_visible_spaces(
+        keyword="policy", name_only=True, page_size=1, cursor=names.next_cursor
+    )
+    assert [item.id for item in last.data] == [1] and not last.has_more
+
+
+async def test_name_only_real_sql_eof_probe_does_not_count_description_matches(catalog, monkeypatch):
+    description_only = row(1, name="other")
+    description_only.description = "policy"
+    await catalog.seed([description_only] + [row(ident, name="Policy") for ident in range(2, 102)])
+    catalog.facts.allowed.update(range(1, 102))
+    original = catalog.repository.alist_candidates
+    calls = []
+
+    async def candidates(**options):
+        calls.append(options)
+        return await original(**options)
+
+    monkeypatch.setattr(catalog.repository, "alist_candidates", candidates)
+    page = await catalog.service.list_visible_spaces(keyword="policy", name_only=True, page_size=100)
+    assert [item.id for item in page.data] == list(range(101, 1, -1))
+    assert not page.has_more and page.next_cursor is None
+    assert [call["limit"] for call in calls] == [100, 1]
+    assert all(call["name_only"] is True for call in calls)
+    assert len(catalog.facts.queries) == 3  # two bounded candidates plus one final-page abnormal marker query
+    assert sum(map(len, catalog.facts.checked)) == 100
+
+
+async def test_name_only_sparse_sql_budget_resumes_after_1000_matching_candidates(catalog):
+    description_rows = [row(ident, name="other") for ident in range(1202, 1503)]
+    for item in description_rows:
+        item.description = "policy"
+    await catalog.seed([row(ident, name="Policy") for ident in range(1, 1202)] + description_rows)
+    catalog.facts.allowed.add(1)
+    first = await catalog.service.list_visible_spaces(keyword="policy", name_only=True, page_size=20)
+    assert first.data == [] and first.has_more and first.next_cursor
+    assert sum(map(len, catalog.facts.checked)) == 1000
+    assert len(catalog.facts.queries) == 11  # ten <=100-row candidates and one unconsumed EOF probe
+    assert all("LIMIT" in sql.upper() for sql, _ in catalog.facts.queries)
+    second = await catalog.service.list_visible_spaces(
+        keyword="policy", name_only=True, page_size=20, cursor=first.next_cursor
+    )
+    assert [item.id for item in second.data] == [1] and not second.has_more
+    assert [ident for batch in catalog.facts.checked for ident in batch] == list(range(1201, 0, -1))
+    catalog.runtime.list_visible_objects.assert_not_awaited()
 
 
 async def test_real_root_super_uses_existing_business_shortcut_after_selected_tenant_target_validation(
