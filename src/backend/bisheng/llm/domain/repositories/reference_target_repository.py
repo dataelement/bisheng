@@ -254,26 +254,31 @@ class ModelReferenceTargetRepository:
         )
 
     @classmethod
-    def _binding_inherited_ids(cls, topology, configs, tenant_id, source_key):
-        # A Child default write will become an own override. Its old Root
-        # fallback cannot prove the new binding's post-write eligibility.
-        if (
-            tenant_id != ROOT_TENANT_ID
-            and source_key is not None
-            and source_key.source_type == SourceType.MODEL_DEFAULT
-        ):
-            configs = tuple(
-                row for row in configs if not (row.tenant_id == ROOT_TENANT_ID and row.key == source_key.source_id)
-            )
+    def _binding_inherited_ids(cls, topology, configs, tenant_id, source_key, overridden_keys=frozenset()):
+        # Eligibility must survive every own override in this mixed plan.
+        # These keys come only from the transaction's original physical plan.
+        excluded = set(overridden_keys)
+        if source_key is not None and source_key.source_type == SourceType.MODEL_DEFAULT:
+            excluded.add(source_key.source_id)
+        if tenant_id != ROOT_TENANT_ID and excluded:
+            configs = tuple(row for row in configs if not (row.tenant_id == ROOT_TENANT_ID and row.key in excluded))
         return cls._inherited_ids(topology, configs, tenant_id)
 
-    def _lock_plan(self, target_keys, source_key, operation, *, session=None, prelock_sources=None):
+    def _lock_plan(self, target_keys, source_key, operation, *, session=None, prelock_sources=None, mixed=False):
         tenant_id = _tenant(source_key, operation)
         if not isinstance(target_keys, tuple) or any(
             not isinstance(key, TargetKey) or key.target_type != TargetType.MODEL for key in target_keys
         ):
             raise ResourceReferenceInvalidError(reason="model_reference_target_type_invalid")
         keys = tuple(sorted(set(target_keys), key=lambda key: key.lock_order_key))
+        proof = self._prelock_proof(session, source_key, operation) if prelock_sources is None else None
+        overridden_keys = (
+            frozenset(key.source_id for key in prelock_sources if key.source_type == SourceType.MODEL_DEFAULT)
+            if mixed
+            else proof[6]
+            if proof is not None
+            else frozenset()
+        )
         originals = []
         sources = prelock_sources if prelock_sources is not None else (source_key,) if source_key else ()
         for source in sources:
@@ -290,18 +295,21 @@ class ModelReferenceTargetRepository:
         inherited_ids = (
             frozenset().union(
                 *(
-                    self._binding_inherited_ids(candidate_topology, candidate_configs, tenant_id, source)
+                    self._binding_inherited_ids(
+                        candidate_topology, candidate_configs, tenant_id, source, overridden_keys
+                    )
                     for source in sources
                 )
             )
             if prelock_sources is not None
-            else self._binding_inherited_ids(candidate_topology, candidate_configs, tenant_id, source_key)
+            else self._binding_inherited_ids(
+                candidate_topology, candidate_configs, tenant_id, source_key, overridden_keys
+            )
         )
         all_ids = ids | inherited_ids
         all_candidates = yield self._business_statement(LLMModel, all_ids, owners, lock=False), True
         mapping = {row.id: row.server_id for row in all_candidates}
         server_ids = {value for value in mapping.values() if type(value) is int and value > 0}
-        proof = self._prelock_proof(session, source_key, operation) if prelock_sources is None else None
         if proof is not None and (not set(keys) <= proof[2] or not all_ids <= proof[3] or not server_ids <= proof[4]):
             raise ResourceReferenceConflictError(reason="reference_lock_plan_changed")
         servers = {
@@ -317,10 +325,13 @@ class ModelReferenceTargetRepository:
             configs = yield self._config_statement(tenant_id, lock=True), True
             current_inherited = (
                 frozenset().union(
-                    *(self._binding_inherited_ids(topology, configs, tenant_id, source) for source in sources)
+                    *(
+                        self._binding_inherited_ids(topology, configs, tenant_id, source, overridden_keys)
+                        for source in sources
+                    )
                 )
                 if prelock_sources is not None
-                else self._binding_inherited_ids(topology, configs, tenant_id, source_key)
+                else self._binding_inherited_ids(topology, configs, tenant_id, source_key, overridden_keys)
             )
             if current_inherited != inherited_ids:
                 raise ResourceReferenceConflictError(reason="reference_lock_plan_changed")
@@ -347,7 +358,14 @@ class ModelReferenceTargetRepository:
                 (),
                 tenant_id,
                 inherited_servers,
-                (sources, frozenset(keys), frozenset(all_ids), frozenset(server_ids), frozenset(tombstones)),
+                (
+                    sources,
+                    frozenset(keys),
+                    frozenset(all_ids),
+                    frozenset(server_ids),
+                    frozenset(tombstones),
+                    overridden_keys,
+                ),
             )
         result = []
         for key in keys:
@@ -454,7 +472,8 @@ class ModelReferenceTargetRepository:
     async def aprelock_mixed_targets(self, session, target_keys, source_keys):
         sources = self._mixed_sources(source_keys)
         await self._adrive(
-            session, self._lock_plan(target_keys, sources[0], "bind", session=session, prelock_sources=sources)
+            session,
+            self._lock_plan(target_keys, sources[0], "bind", session=session, prelock_sources=sources, mixed=True),
         )
 
     def get_inherited_default_server_ids(self, session, tenant_id):
