@@ -387,3 +387,41 @@ async def test_actual_version_rows_are_not_rescanned_for_each_file_in_a_batch(re
     async with AsyncSession(database.engine) as session, session.begin():
         assert len(await apply(repo, session, commands)) == 200
     assert len(scans) <= 2000  # Actual native rows, not an N-file x N-version loop.
+
+
+async def test_unknown_default_algorithm_is_not_executed_as_the_current_transform(repo, database):
+    command = next(cmd for cmd in database.commands if cmd.operation == "default_conversion")
+    async with AsyncSession(database.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await apply(repo, session, (replace(command, algorithm_version="unknown-algorithm"),))
+
+
+async def test_locked_scope_rechecks_the_real_sql_checkpoint_before_any_business_write(repo, database):
+    before = await snapshot(database)
+    checkpoint = {"cursor": "sql-v1:1:" + "a" * 64, "processed_count": 1, "digest": "c" * 64, "complete": False}
+    async with AsyncSession(database.engine) as session, session.begin():
+        scope = await repo.alock_scope(session, **IDENTITY, commands=database.commands)
+        await session.execute(
+            sa.update(KnowledgeUnificationRun.__table__)
+            .where(KnowledgeUnificationRun.run_id == IDENTITY["run_id"], KnowledgeUnificationRun.tenant_id == 101)
+            .values(checkpoints={"converting": {"sql_conversion": checkpoint}})
+        )
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await repo.aapply_and_read_after(session, scope=scope)
+    after = await snapshot(database)
+    assert {key: value for key, value in after.items() if key != "knowledge_unification_run"} == {
+        key: value for key, value in before.items() if key != "knowledge_unification_run"
+    }
+    assert after["knowledge_unification_run"][0]["checkpoints"]["converting"]["sql_conversion"] == checkpoint
+
+
+async def test_core_sql_link_change_after_scope_lock_is_not_erased_by_planned_deletion(repo, database):
+    async with AsyncSession(database.engine) as session, session.begin():
+        scope = await repo.alock_scope(session, **IDENTITY, commands=database.commands)
+        await session.execute(sa.update(raw.TagLink.__table__).where(raw.TagLink.id == 1).values(resource_id="2"))
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await repo.aapply_and_read_after(session, scope=scope)
+    after = await snapshot(database)
+    assert next(row for row in after["taglink"] if row["id"] == 1)["resource_id"] == "2"
+    assert after["knowledge_document"] == after["knowledge_document_version"] == ()
+    assert after["knowledge"][0]["type"] == 0
