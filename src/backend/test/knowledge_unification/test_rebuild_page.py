@@ -99,6 +99,7 @@ def test_vector_failure_does_not_remove_manual_source_chunks():
 
 def test_legacy_partial_failure_retains_es_retry_source_after_real_owner_finalize(rebuild, monkeypatch):
     monkeypatch.setattr(module, "_process_single_file", Mock(side_effect=[True, False]))
+    rebuild.vector.col.delete = Mock()
     fixtures.execute(rebuild, "document")
     rebuild.es.client.delete_by_query.assert_not_called()
     fixtures.assert_finalized(rebuild)
