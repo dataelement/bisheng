@@ -10,6 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bisheng.common.errcode.permission import PermissionMigrationBlockedError
 from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed
+from bisheng.core.openfga.authorization_model_f048 import (
+    authorization_model_checksum,
+    build_authorization_model_f048,
+)
 from bisheng.core.openfga.client import FGAClient
 from bisheng.core.openfga.discovery import discover_openfga_runtime
 from bisheng.permission.migration.f118_plan import PermissionCatalogBaseline
@@ -17,6 +21,10 @@ from bisheng.permission.migration.f118_plan import PermissionCatalogBaseline
 
 def _blocked(reason):
     return PermissionMigrationBlockedError(reason=f"f118_inventory_sharing_{reason}")
+
+
+def target_authorization_model_checksum() -> str:
+    return authorization_model_checksum(build_authorization_model_f048())
 
 
 @dataclass(frozen=True, slots=True)
