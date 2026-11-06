@@ -279,3 +279,72 @@ async def test_original_plan_public_fields_are_not_the_private_name_binding(ctx)
         object.__setattr__(plan, "resolutions", other.resolutions)
         with pytest.raises(ResourceReferenceInvalidError):
             await resolve(ctx, session, plan, "root/same")
+
+
+@pytest.mark.parametrize("change", ["subject", "tenant", "super", "admin", "data_scope", "kind"])
+async def test_original_ambient_permission_actor_is_part_of_principal_plan(ctx, change):
+    from bisheng.permission.application.identity import (
+        PermissionActor,
+        reset_current_permission_actor,
+        set_current_permission_actor,
+    )
+
+    actor = PermissionActor(subject_id=7, tenant_id=101)
+    token = set_current_permission_actor(actor)
+    try:
+        async with AsyncSession(ctx[0]) as session:
+            plan = await prepare(ctx, session, ("alpha",))
+            changes = {
+                "subject": {"subject_id": 8},
+                "tenant": {"tenant_id": 202},
+                "super": {"super_admin": True},
+                "admin": {"tenant_admin_tenant_ids": frozenset({101})},
+                "data_scope": {"data_scope": "personal_only"},
+                "kind": {"subject_type": "service_account"},
+            }[change]
+            replacement = PermissionActor(**{"subject_type": "user", "subject_id": 7, "tenant_id": 101, **changes})
+            changed_token = set_current_permission_actor(replacement)
+            try:
+                with pytest.raises(ResourceReferenceInvalidError):
+                    await ctx[2].assert_plan_current(session, 101, identity=ctx[1], plan=plan)
+            finally:
+                reset_current_permission_actor(changed_token)
+    finally:
+        reset_current_permission_actor(token)
+
+
+async def test_range_is_a_private_value_snapshot_not_a_mutable_original_alias(ctx):
+    scope = ModelRange("declared", frozenset({"alpha"}))
+    async with AsyncSession(ctx[0]) as session:
+        plan = await prepare(ctx, session, ("alpha",), range=scope)
+        object.__setattr__(scope, "declared", frozenset({"alpha", "root/same"}))
+        with pytest.raises(ResourceReferenceInvalidError):
+            await ctx[2].assert_plan_current(session, 101, identity=ctx[1], plan=plan, range=scope)
+
+
+async def test_frozen_identity_resolution_uses_real_ids_without_name_or_sharing_grants(ctx):
+    ctx[3].allowed = ()
+    locked = []
+    async with AsyncSession(ctx[0]) as session:
+        event.listen(
+            session.sync_session,
+            "do_orm_execute",
+            lambda state: (
+                locked.append(state.statement)
+                if state.is_select and state.statement._for_update_arg is not None
+                else None
+            ),
+        )
+        facts = await ctx[2].aresolve_frozen_model_identities(session, 101, (22, 11, 22), identity=ctx[1])
+        assert facts == (names.FrozenModelIdentity(11, 1), names.FrozenModelIdentity(22, 2))
+        assert locked == [] and not session.sync_session.identity_map
+        # These are physical candidates, not permission to bind or call Root.
+        with pytest.raises(ModelFaceModelNotFoundError):
+            await prepare(ctx, session, ("root/same",), frozen_models=facts)
+
+
+@pytest.mark.parametrize("ids", [(999,), (31,), (True,), (0,)])
+async def test_frozen_identity_resolution_never_guesses_deleted_or_foreign_providers(ctx, ids):
+    async with AsyncSession(ctx[0]) as session:
+        with pytest.raises(ResourceReferenceInvalidError):
+            await ctx[2].aresolve_frozen_model_identities(session, 101, ids, identity=ctx[1])
