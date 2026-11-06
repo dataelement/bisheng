@@ -27,6 +27,7 @@ from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler
 )
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.admin_scope import AdminScopeTenantRequiredError
 from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
     DepartmentKnowledgeSpacePrivateError,
@@ -58,7 +59,7 @@ from bisheng.common.models.space_channel_member import (
     UserRoleEnum,
 )
 from bisheng.common.services.metric_log import emit_metric
-from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.core.context.tenant import get_admin_scope_tenant_id, get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
@@ -157,7 +158,7 @@ from bisheng.utils import generate_knowledge_index_name, generate_uuid, get_requ
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 if TYPE_CHECKING:
-    from bisheng.common.schemas.api import PageInfiniteCursorData
+    from bisheng.common.schemas.api import PageData, PageInfiniteCursorData
     from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
         KnowledgeDocumentRepository,
     )
@@ -2090,6 +2091,33 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             members = [member for member in members if int(member.business_id) not in department_space_ids]
         return await self._format_member_spaces(members, order_by)
+
+    async def list_admin_spaces(
+        self, *, keyword: str | None = None, page: int = 1, page_size: int = 20
+    ) -> "PageData[KnowledgeSpaceListItemResp]":
+        """List one trusted management tenant without ordinary visibility filters."""
+        from bisheng.common.schemas.api import PageData
+
+        if type(page) is not int or page < 1 or type(page_size) is not int or not 1 <= page_size <= 200:
+            raise ValueError("page and page_size must be positive and page_size at most 200")
+        tenant_id = get_admin_scope_tenant_id()
+        if type(tenant_id) is not int or tenant_id <= 0:
+            raise AdminScopeTenantRequiredError()
+        actor = await self._permission_actor()
+        if (
+            tenant_id != get_current_tenant_id()
+            or actor.current_tenant_id != tenant_id
+            or actor.subject_type != "user"
+            or actor.data_scope != DATA_SCOPE_ALL
+            or not (actor.super_admin or tenant_id in actor.tenant_admin_tenant_ids)
+        ):
+            raise PermissionDeniedError()
+        rows, total = await self.space_listing_repository.alist_admin(keyword=keyword, page=page, page_size=page_size)
+        if any(row.tenant_id != tenant_id or row.type != KnowledgeTypeEnum.SPACE.value for row in rows):
+            raise SpaceNotFoundError()
+        return PageData[KnowledgeSpaceListItemResp](
+            data=[KnowledgeSpaceListItemResp.model_validate(row) for row in rows], total=total
+        )
 
     @staticmethod
     async def _complete_visible_space_ids(actor: PermissionActor, runtime) -> list[int]:
