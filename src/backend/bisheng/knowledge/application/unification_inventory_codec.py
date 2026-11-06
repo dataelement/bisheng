@@ -6,11 +6,18 @@ import re
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field, fields
 from datetime import datetime
-from enum import Enum
 
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.knowledge.domain.repositories import unification_control_repository as control
 from bisheng.knowledge.domain.repositories import unification_resource_repository as resource
+from bisheng.knowledge.domain.services.unification_fingerprints import (
+    _invalid as _invalid,
+)
+from bisheng.knowledge.domain.services.unification_fingerprints import (
+    canonical as canonical,
+)
+from bisheng.knowledge.domain.services.unification_fingerprints import (
+    digest as digest,
+)
 from bisheng.permission.domain.schemas import VisibleSourceProjectionDTO
 from bisheng.permission.domain.services.catalog_policy import CatalogAction
 from bisheng.permission.migration import f118_plan as permission
@@ -34,32 +41,6 @@ SECTIONS = frozenset(
 KINDS = frozenset({"baseline", "plan", "permission_catalog", "permission_resources", "conversion", "verification"})
 OBJECT_KINDS = frozenset({"original", "preview", "bbox", "thumbnail", "html_snapshot"})
 _BROKER_GLOBAL_STATES = frozenset({"global_control", "target_missing", "unacked_metadata_orphan"})
-
-
-def _invalid():
-    raise KnowledgeOperationPlanConflictError(reason="migration_inventory_codec_invalid")
-
-
-def canonical(value):
-    def scalar(item):
-        if isinstance(item, datetime):
-            return item.isoformat()
-        if isinstance(item, Enum):
-            return item.value
-        if type(item) in (tuple, set, frozenset):
-            return sorted(item) if type(item) in (set, frozenset) else list(item)
-        raise TypeError("unsupported inventory scalar")
-
-    try:
-        return json.dumps(
-            value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False, default=scalar
-        ).encode()
-    except (TypeError, ValueError, UnicodeError, RecursionError):
-        _invalid()
-
-
-def digest(value):
-    return hashlib.sha256(canonical(value)).hexdigest()
 
 
 def _descriptor(value):
