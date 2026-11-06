@@ -12,8 +12,8 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeUnificationError,
     ResourceReferenceInvalidError,
 )
+from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.core.ai import FakeEmbeddings
-from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_sync_db_session
 from bisheng.knowledge.application.model_reference_read import (
     get_knowledge_model_read_runtime,
@@ -253,8 +253,12 @@ class KnowledgeRag:
 
     @staticmethod
     def _cleanup_knowledge(knowledge, deletion_job):
-        if not isinstance(knowledge, Knowledge) or type(get_current_tenant_id()) is not int:
+        if not isinstance(knowledge, Knowledge):
             raise ResourceReferenceInvalidError(reason="knowledge_cleanup_resource_required")
+        try:
+            KnowledgeModelReferenceRepository._tenant_id()
+        except NoTenantContextError as error:
+            raise ResourceReferenceInvalidError(reason="knowledge_cleanup_resource_required") from error
         knowledge_id = KnowledgeRag._resource_id(knowledge, None)
         with get_sync_db_session() as session:
             actual = KnowledgeModelReferenceRepository().load_cleanup_identity(
