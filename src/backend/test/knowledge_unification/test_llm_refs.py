@@ -32,6 +32,7 @@ from bisheng.resource_reference.application.contracts import (
     SourceType,
     tenant_inventory_digest,
 )
+from bisheng.resource_reference.application.source_disclosure import SourceDisclosureRuntime
 from bisheng.resource_reference.application.target_verification import ReferenceTargetVerifier
 from bisheng.resource_reference.application.write_runtime import ReferenceBindingRuntime
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
@@ -42,6 +43,13 @@ from test.knowledge_unification.test_reference_owner_paging import seed
 
 model_owner_tenant = models.model_owner_tenant
 removal_session = models.removal_session
+
+
+class RestrictedMetadata:
+    """These original BRR-only fixtures have no business disclosure metadata."""
+
+    async def adisclose_sources(self, session, *, identity, source_keys):
+        return (None,) * len(source_keys)
 
 
 class SqlLedger:
@@ -110,6 +118,7 @@ async def impact(removal_session, monkeypatch):
     service = ModelReferenceService(
         coverage_factory=lambda active: CoverageRepository(ledger, global_port=ledger), runtime=runtime
     )
+    service.disclosure_runtime = SourceDisclosureRuntime({kind: RestrictedMetadata() for kind in SourceType})
     return session, service, ledger
 
 
