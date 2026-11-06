@@ -22,7 +22,9 @@ async def test_hosted_endpoint_forwards_original_principal_even_without_visitor(
     retrieve = AsyncMock(return_value=RetrievalFacadeResult(chunks=[], total=0, effective_scope=[]))
     monkeypatch.setattr(filelib.CapabilityBusService, "retrieve", retrieve)
     repository = MagicMock()
-    await filelib.retrieve_chunks(request=MagicMock(), req=RetrieveReq(query="q"), version_repo=repository)
+    await filelib.retrieve_chunks(
+        request=MagicMock(), req=RetrieveReq(query="q", knowledge_base_ids=[8]), version_repo=repository
+    )
     passed = retrieve.call_args.kwargs
     assert passed["principal"] is principal
     assert passed["access_user_id"] == visitor
