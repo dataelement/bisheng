@@ -158,7 +158,9 @@ def api_ports(monkeypatch):
     from bisheng.open_api.domain.services import access_context, identity_service
 
     current = [principal()]
-    row = SimpleNamespace(tenant_id=101, subject_kind="service_account", subject_id=7, is_valid_at=lambda now: True)
+    row = SimpleNamespace(
+        id=20, tenant_id=101, subject_kind="service_account", subject_id=7, is_valid_at=lambda now: True
+    )
     get = AsyncMock(return_value=row)
     monkeypatch.setattr(api_identity.CredentialRepository, "get", get)
     monkeypatch.setitem(
@@ -206,7 +208,7 @@ async def test_api_restore_reenters_real_access_context_and_intersects_scope_and
             actual = get_current_permission_actor()
             assert actual.subject_type == original.authorization_subject_type
             assert actual.subject_id == original.authorization_subject_id
-            assert actual.data_scope == DATA_SCOPE_PERSONAL
+            assert actual.data_scope == actor.data_scope
         assert get_current_tenant_id() == 202 and get_current_open_api_principal() is None
 
 
@@ -254,3 +256,13 @@ async def test_api_capture_does_not_save_a_bearer_or_accept_an_unrelated_actor(a
     reference = deepcopy(captured.reference)
     assert reference["credential_reference"]["credential_id"] == 20
     assert not any(secret in captured.payload_json for secret in ["access_token", "bearer", "password"])
+
+
+async def test_api_restore_cannot_replace_original_audit_owner(api_ports):
+    original = principal()
+    with request_context(PermissionActor(subject_type="service_account", subject_id=7, tenant_id=101), original):
+        reference = (await capture(web_user(), "open_api")).reference
+    reference["actor_user_id"] = 99
+    with pytest.raises(PermissionDeniedError):
+        async with identity.restore_processing_actor(reference, tenant_id=101):
+            pytest.fail("changed original owner was restored")
