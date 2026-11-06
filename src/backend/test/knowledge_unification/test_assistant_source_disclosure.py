@@ -12,7 +12,7 @@ from bisheng.api.services.f048_application_permission import F048ApplicationPerm
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
 from bisheng.core.database import tenant_filter
 from bisheng.database.models.assistant import Assistant
-from bisheng.permission.application import access, control_state
+from bisheng.permission.application import access, control_state, sql_runtime
 from bisheng.permission.application.identity import (
     PermissionActor,
     reset_current_permission_actor,
@@ -68,6 +68,7 @@ async def disclosure(source_db, monkeypatch):
             yield session
 
     monkeypatch.setattr(control_state, "get_async_db_session", sessions)
+    monkeypatch.setattr(sql_runtime, "get_async_db_session", sessions)
 
     async def batch(values, **_kwargs):
         checks.append(tuple(values))
@@ -76,7 +77,7 @@ async def disclosure(source_db, monkeypatch):
     fga = SimpleNamespace(batch_check=AsyncMock(side_effect=batch))
     decision = F048PermissionService(
         catalog=SimpleNamespace(ensure_runtime_ready=AsyncMock(), is_action_effective=AsyncMock(return_value=True)),
-        scope_fence=SimpleNamespace(ensure_readable=AsyncMock(return_value=False)),
+        scope_fence=sql_runtime.SqlPermissionScopeFence(),
         marker=SimpleNamespace(consistency_for=AsyncMock(return_value=None)),
         fga=fga,
         list_policy=SimpleNamespace(),
@@ -248,7 +249,7 @@ async def test_401_unique_sources_and_duplicate_slots_use_only_bounded_light_bat
         assert len(duplicates) == 200 and all(item == found[0] for item in duplicates)
         assert not session.new and not session.dirty
     assert sum("FROM assistant " in sql for sql, _ in case.queries) <= 4
-    assert sum("FROM resource_permission_mode" in sql for sql, _ in case.queries) <= 4
+    assert sum("FROM resource_permission_mode" in sql for sql, _ in case.queries) <= 10
     assert sum(len(batch) for batch in case.checks) == 402
     assert all(len(batch) <= 100 for batch in case.checks)
     assert all("private-prompt" not in sql and "system_prompt" not in sql for sql, _ in case.queries)
@@ -354,3 +355,50 @@ async def test_owner_direct_detects_original_actor_mutation_during_permission_io
             await disclose(case, (key(),))
     finally:
         reset_current_permission_actor(token)
+
+
+async def test_original_home_identity_and_trusted_selected_tenant_are_not_rewritten(disclosure):
+    from bisheng.core.context import tenant as context
+
+    case = disclosure
+    home = case.user.model_copy(update={"tenant_id": 1, "is_global_super": True})
+    actor = PermissionActor(user_id=9, tenant_id=1, super_admin=True)
+    tokens = (
+        (context.current_tenant_id, context.set_current_tenant_id(1)),
+        (context._is_management_api, context.set_is_management_api(True)),
+        (context._admin_scope_tenant_id, context.set_admin_scope_tenant_id(101)),
+    )
+    actor_token = set_current_permission_actor(actor)
+    try:
+        async with AsyncSession(case.engine) as session, session.begin():
+            found = await case.owner.adisclose_sources(session, identity=home, source_keys=(key(), key("root", 1)))
+        assert found[0].source == key() and found[1] is None
+        assert home.tenant_id == actor.current_tenant_id == 1 and not case.checks
+    finally:
+        reset_current_permission_actor(actor_token)
+        for variable, token in reversed(tokens):
+            variable.reset(token)
+
+
+@pytest.mark.parametrize(
+    "changes", [{"parent_type": "knowledge_space", "parent_id": "99"}, {"mode": "INHERIT"}, {"version": 0}]
+)
+async def test_bad_existing_permission_parent_or_mode_is_not_hidden_as_a_denied_name(disclosure, changes):
+    case = disclosure
+    case.allowed.add((case.actor.fga_subject, "visible", "assistant:owned"))
+    async with case.engine.begin() as conn:
+        await conn.execute(
+            sa.update(ResourcePermissionMode).where(ResourcePermissionMode.resource_id == "owned").values(**changes)
+        )
+    with pytest.raises(ReferenceCoverageNotReadyError):
+        await disclose(case, (key(),))
+
+
+async def test_original_native_sqlalchemy_async_session_also_consumes_light_rows(disclosure):
+    from sqlalchemy.ext.asyncio import AsyncSession as NativeSession
+
+    case = disclosure
+    case.allowed.add((case.actor.fga_subject, "visible", "assistant:owned"))
+    async with NativeSession(case.engine) as session, session.begin():
+        result = await case.owner.adisclose_sources(session, identity=case.user, source_keys=(key(),))
+        assert result[0].source == key() and not session.new and not session.identity_map
