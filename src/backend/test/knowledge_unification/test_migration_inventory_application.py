@@ -1,8 +1,10 @@
 """Actual SQL/SourceInventory/PinnedReader/Store orchestration, no live IO."""
 
+import hashlib
 import importlib
 import json
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from types import SimpleNamespace
 
 import httpx
@@ -15,7 +17,7 @@ from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.database import tenant_filter
 from bisheng.core.openfga.client import FGAClient
 from bisheng.knowledge.application.unification_artifacts import UnificationArtifactStore
-from bisheng.knowledge.application.unification_inventory_codec import record_from_values
+from bisheng.knowledge.application.unification_inventory_codec import digest, encode_inventory_page, record_from_values
 from bisheng.knowledge.domain.models.knowledge_unification_run import KnowledgeUnificationRun
 from bisheng.permission.application.migration_read import PinnedMigrationPermissionReader
 from test.knowledge_unification import test_migration_inventory_repository as raw
@@ -78,6 +80,29 @@ async def complete(native, monkeypatch):
 @pytest.fixture
 def transport():
     objects, requests = {}, []
+    inputs = dict(RUN)
+    for material_kind in ("backup", "schema"):
+        record = record_from_values(
+            "evidence_material",
+            material_kind=material_kind,
+            environment="test",
+            writer_contract_version="f118-v1",
+            tenant_inventory_digest=digest((1, 101, 202)),
+            material_ref=RUN[f"{material_kind}_ref"],
+        )
+        content = encode_inventory_page(
+            run_id=RUN["run_id"],
+            section="evidence",
+            scope="global",
+            tenant_id=None,
+            page_index=0,
+            records=(record,),
+            kind="verification",
+        )
+        checksum = hashlib.sha256(content).hexdigest()
+        key = f"f118/unification/{RUN['run_id']}/verification/{checksum}.json"
+        objects[key] = content
+        inputs[f"{material_kind}_ref"] = {"object_key": key, "sha256": checksum}
 
     async def exists(**kwargs):
         return kwargs["object_name"] in objects
@@ -119,7 +144,14 @@ def transport():
         ) as reader:
             yield reader
 
-    return SimpleNamespace(store=store, objects=objects, requests=requests, reader_factory=reader_factory)
+    return SimpleNamespace(
+        store=store,
+        objects=objects,
+        requests=requests,
+        reader_factory=reader_factory,
+        inputs=inputs,
+        initial_objects=frozenset(objects),
+    )
 
 
 class Physical:
@@ -224,7 +256,7 @@ async def test_actual_default_composition_freezes_all_tenants_and_private_baseli
     physical, queued = Physical(), Queued()
     app = application(module, transport, physical_reader=physical, queued_task_reader=queued)
     async with AsyncSession(complete.engine) as session, session.begin():
-        result = await app.arun(session, **RUN)
+        result = await app.arun(session, **transport.inputs)
         assert result.tenant_ids == (1, 101, 202) and session.in_transaction()
     assert await count_runs(complete.engine) == 3 and queued.calls == [(1, 101, 202)]
     contents = [json.loads(content) for content in transport.objects.values()]
@@ -248,7 +280,7 @@ async def test_actual_default_composition_freezes_all_tenants_and_private_baseli
 async def test_missing_required_real_port_fails_closed_without_run_writes(module, complete, transport, port):
     async with AsyncSession(complete.engine) as session, session.begin():
         with pytest.raises(ReferenceCoverageNotReadyError):
-            await application(module, transport, **{port: None}).arun(session, **RUN)
+            await application(module, transport, **{port: None}).arun(session, **transport.inputs)
     assert await count_runs(complete.engine) == 0
 
 
@@ -256,7 +288,7 @@ async def test_missing_required_real_port_fails_closed_without_run_writes(module
 async def test_wrong_or_incomplete_physical_record_cannot_prove_section_coverage(module, complete, transport, mode):
     async with AsyncSession(complete.engine) as session, session.begin():
         with pytest.raises(KnowledgeOperationPlanConflictError):
-            await application(module, transport, physical_reader=Physical(mode)).arun(session, **RUN)
+            await application(module, transport, physical_reader=Physical(mode)).arun(session, **transport.inputs)
     assert await count_runs(complete.engine) == 0
 
 
@@ -264,13 +296,13 @@ async def test_late_tenant_failure_keeps_all_artifacts_unbound_and_all_runs_abse
     await complete.insert(resources.Knowledge, [resources.resource(9900, 202, type=99)])
     async with AsyncSession(complete.engine) as session, session.begin():
         with pytest.raises(KnowledgeOperationPlanConflictError):
-            await application(module, transport).arun(session, **RUN)
+            await application(module, transport).arun(session, **transport.inputs)
     assert transport.objects and await count_runs(complete.engine) == 0
 
 
 async def test_replay_reads_original_manifest_only_and_does_not_reclassify_or_call_ports(module, complete, transport):
     async with AsyncSession(complete.engine) as session, session.begin():
-        result = await application(module, transport).arun(session, **RUN)
+        result = await application(module, transport).arun(session, **transport.inputs)
     transport.requests.clear()
     async with complete.engine.begin() as connection:
         await connection.execute(sa.delete(raw.LLMModel))
@@ -278,14 +310,14 @@ async def test_replay_reads_original_manifest_only_and_does_not_reclassify_or_ca
         assert (
             await application(
                 module, transport, physical_reader=None, queued_task_reader=None, sharing_reader_factory=None
-            ).arun(session, **RUN)
+            ).arun(session, **transport.inputs)
             == result
         )
     assert transport.requests == []
     async with AsyncSession(complete.engine) as session, session.begin():
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await application(module, transport).arun(
-                session, **(RUN | {"backup_ref": RUN["backup_ref"] | {"sha256": "f" * 64}})
+                session, **(transport.inputs | {"backup_ref": transport.inputs["backup_ref"] | {"sha256": "f" * 64}})
             )
 
 
@@ -293,12 +325,12 @@ async def test_pending_business_and_external_rollback_never_escape_m2_transactio
     async with AsyncSession(complete.engine) as session, session.begin():
         session.add(raw.flow("caller-pending"))
         with pytest.raises(KnowledgeOperationPlanConflictError):
-            await application(module, transport).arun(session, **RUN)
-        assert session.new and not transport.objects
+            await application(module, transport).arun(session, **transport.inputs)
+        assert session.new and frozenset(transport.objects) == transport.initial_objects
         await session.rollback()
     async with AsyncSession(complete.engine) as session:
         await session.begin()
-        await application(module, transport).arun(session, **RUN)
+        await application(module, transport).arun(session, **transport.inputs)
         await session.rollback()
     assert await count_runs(complete.engine) == 0
 
@@ -310,5 +342,99 @@ async def test_uploaded_content_readback_corruption_blocks_freeze(module, comple
     transport.store.storage.get_object = corrupted
     async with AsyncSession(complete.engine) as session, session.begin():
         with pytest.raises(ReferenceCoverageNotReadyError):
-            await application(module, transport).arun(session, **RUN)
+            await application(module, transport).arun(session, **transport.inputs)
+    assert await count_runs(complete.engine) == 0
+
+
+async def test_unreadable_material_manifest_blocks_before_formal_inventory(module, complete, transport):
+    del transport.objects[transport.inputs["backup_ref"]["object_key"]]
+    async with AsyncSession(complete.engine) as session, session.begin():
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            await application(module, transport).arun(session, **transport.inputs)
+    assert await count_runs(complete.engine) == 0
+
+
+async def test_schema_material_cannot_be_used_as_backup_evidence(module, complete, transport):
+    async with AsyncSession(complete.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await application(module, transport).arun(
+                session, **(transport.inputs | {"backup_ref": transport.inputs["schema_ref"]})
+            )
+    assert await count_runs(complete.engine) == 0
+
+
+async def test_global_orphan_keeps_original_claim_without_source_or_tenant_reassignment(module, complete, transport):
+    class WithOrphan(Queued):
+        async def aiter_facts(self, *, tenant_ids):
+            async for item in super().aiter_facts(tenant_ids=tenant_ids):
+                yield item
+            yield record_from_values(
+                "queued_task_orphan",
+                task_kind="scheduler_queue",
+                task_id="old:occurrence-1",
+                space_id=None,
+                file_id=999,
+                document_id=None,
+                version_id=None,
+                payload_tenant_id=202,
+                state="queued",
+                reason="file_missing",
+                configuration_digest="a" * 64,
+                record_digest="d" * 64,
+            )
+
+    async with AsyncSession(complete.engine) as session, session.begin():
+        await application(module, transport, queued_task_reader=WithOrphan()).arun(session, **transport.inputs)
+    pages = [json.loads(content) for content in transport.objects.values()]
+    orphan_page = next(
+        page for page in pages if any(row.get("record_type") == "queued_task_orphan" for row in page["records"])
+    )
+    assert orphan_page["records"][0]["scope"] == "global" and orphan_page["records"][0]["tenant_id"] is None
+    assert "tenant_id" not in orphan_page["records"][1] and orphan_page["records"][1]["payload_tenant_id"] == 202
+
+
+async def test_actual_401_resource_source_inventory_reuses_directories_and_bounded_pages(module, complete, transport):
+    await complete.insert(resources.Knowledge, [resources.resource(ident, model=None) for ident in range(10000, 10401)])
+    physical = Physical()
+    complete.queries.clear()
+    async with AsyncSession(complete.engine) as session, session.begin():
+        await application(module, transport, physical_reader=physical).arun(session, **transport.inputs)
+    assert sum(len(rows) for rows, _ in physical.calls) == 402
+    assert sum("FROM knowledge " in sql for sql, _ in complete.queries) <= 30
+    assert sum("FROM llm_model" in sql for sql, _ in complete.queries) <= 8
+    assert sum(request.url.path.endswith("/streamed-list-objects") for request in transport.requests) == 2
+    source_pages = [
+        json.loads(content) for content in transport.objects.values() if json.loads(content)["kind"] == "sources"
+    ]
+    assert len(source_pages) >= 5 and all(len(page["records"]) <= 200 for page in source_pages)
+
+
+async def test_required_reader_cannot_smuggle_business_pending_into_ledger_flush(module, complete, transport):
+    async with AsyncSession(complete.engine) as session, session.begin():
+
+        class Dirty(Queued):
+            async def aiter_facts(self, *, tenant_ids):
+                async for item in super().aiter_facts(tenant_ids=tenant_ids):
+                    yield item
+                session.add(raw.flow("unrelated-pending"))
+
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await application(module, transport, queued_task_reader=Dirty()).arun(session, **transport.inputs)
+        assert session.new
+        await session.rollback()
+    assert await count_runs(complete.engine) == 0
+
+
+async def test_actual_reader_must_be_bound_to_the_same_sql_catalog_pin(module, complete, transport):
+    original = transport.reader_factory
+
+    @asynccontextmanager
+    async def different(catalog):
+        changed = replace(catalog, authorization=replace(catalog.authorization, model_id="other-model"))
+        async with original(changed) as reader:
+            yield reader
+
+    async with AsyncSession(complete.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await application(module, transport, sharing_reader_factory=different).arun(session, **transport.inputs)
     assert await count_runs(complete.engine) == 0
