@@ -287,3 +287,25 @@ async def test_default_native_connection_is_resolved_once_and_one_reader_cannot_
         with pytest.raises(KnowledgeOperationPlanConflictError):
             _ = [record async for record in reader.aiter_facts(tenant_ids=(1, 101, 202))]
     getter.assert_awaited_once()
+
+
+@pytest.mark.parametrize("cursor", [{}, True])
+async def test_invalid_native_scan_cursor_cannot_certify_an_empty_inventory(module, original, cursor):
+    original.redis.scan = AsyncMock(return_value=(cursor, []))
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        await read(module, original)
+
+
+async def test_real_foreign_task_tenant_is_not_hidden_by_the_current_scope(module, original):
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        await read(module, original, tenant_ids=(101,))
+
+
+async def test_explicitly_missing_space_is_retained_for_m5_without_queue_changes(module, original):
+    async with original.sql.engine.begin() as connection:
+        await connection.execute(sql.resources.Knowledge.__table__.delete().where(sql.resources.Knowledge.id == 9000))
+    before = deepcopy(original.redis.lists)
+    records = await read(module, original)
+    rows = [row.data for row in records if row.data["file_id"] == 1]
+    assert rows and all(row["state"] == "missing_space" and row["tenant_id"] == 101 for row in rows)
+    assert original.redis.lists == before
