@@ -115,3 +115,8 @@ T692两端只读旧表格实际规则镜像通过平台63/client20原API回归�
 固定作者84c4a5b2经独立EDGE在archive复核：109配对+32额外反例通过，与旧inventory/source同选集208通过；未发现行动项。额外反例覆盖九类稀疏PK间夹foreign行、外租户孤儿全局探针、旧20列逐列摘要变化。主agent读两生产/测试叶后正常merge为9fe943864fd9ee590d90a7effab9b35a82ca7287；主树三路径176 passed（`/private/tmp/f118-root-mig-resource-integrated.log/.xml`），diff-check与文档链接通过。
 
 T760/T761按事实仓储实际范围闭合。九页独立主键seek、每页≤201行、ancestor去重≤500/批200、全局11个LIMIT1探针只由外层每run一次调用；无root×file×version乘积、无DML或自动V1修补。原20业务列摘要和neutral7分离，存量overdeep保留。此为native SQLite真实SQL，不声称MySQL或正式M2已执行；原T161/T162仍待完整创建者/配置/权限事实预检与全租户正式freeze。§29和T762/T763已冻结下一只读事实接口，不新增业务规则。
+
+
+## 原创建者与配额配置盘点事实收口（2026-11-07）
+
+固定05ad0f5d9仅两个新叶，Root已逐段独立读审：User.user_id精确存在性保delete事实、UserTenant显式tenant保历史、UserRole三键完整seek、quota原配置只读且repr隐藏、四个global LIMIT1探针由外层一次调用。作者102配对绿/12路径492绿；Root候选与实际合流树分别四路径278绿（`/private/tmp/f118-root-mig-control-candidate.log`与`/private/tmp/f118-root-mig-control-integrated.log/.xml`），无行动项。MIG原T161/T162仍待完整预检/闭集artifact和全租户正式freeze，不以新增事实仓储替代。
