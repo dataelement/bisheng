@@ -70,12 +70,12 @@ LEGACY_SHAREABLE_TYPES: set[str] = SUPPORTED_SHAREABLE_TYPES | {
 
 F048_SHARED_ACTIONS: dict[str, frozenset[str]] = {
     "knowledge_space": frozenset({"visible", "download"}),
-    "knowledge_library": frozenset({"visible", "use"}),
+    "knowledge_library": frozenset({"visible"}),
     "folder": frozenset({"visible", "download"}),
     "knowledge_file": frozenset({"visible", "download"}),
-    "workflow": frozenset({"visible", "use"}),
-    "assistant": frozenset({"visible", "use"}),
-    "tool": frozenset({"visible", "use"}),
+    "workflow": frozenset({"visible"}),
+    "assistant": frozenset({"visible"}),
+    "tool": frozenset({"visible"}),
     "channel": frozenset({"visible"}),
 }
 
