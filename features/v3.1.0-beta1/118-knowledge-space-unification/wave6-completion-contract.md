@@ -170,6 +170,8 @@ T069/T070规则适配前移为T068真实worker前置，不再假串行等worker�
 
 新操作system→space→batch→file→现支持能力/专用规则；表格只TableRule，网页保持原separator及overlap=0，音视频显式选择现ASR/local能力，不新增OCR/解析类型。hierarchical等仅沿既有pipeline支持范围处理，不为不支持类型新增能力；结果快照明确实际规则。原已保存完整legacy split_rule是实际配置，规范化后直接保留，不重新套新space默认。修改默认不改历史文件快照或使已接受任务过期。
 
+历史文件的新一轮reprocess/resplit以原完整实际legacy规则为基底，明确提供的batch/file overrides仍按顺序覆盖，再应用原专用规则；省略部分不被后来space默认覆盖。否则会使用户明确选择的新重切分参数无效。同一已接受job的retry则直接使用item.effective_processing，不再合任何新默认或覆盖。该差异由原T069/T070测试与adapter叶补回归，不新增请求协议。
+
 T067/T068在原file_worker.py/knowledge_file_pipeline.py复用真实PipelineConfig(TRANSFORMER)：`prepare_processing_file(file_id,*,space_id,invoke_user_id,kind,processing_snapshot,expected_model_config_revision,expected_index_generation)->PreparedFileProcessing`真实加载/转换为内存docs、count和受控file patch；`write_processing_file(prepared,*,space_id,invoke_user_id,expected_model_config_revision,expected_index_generation)->FileProcessingResult`再验当前业务配置后只替换该file的ES/Milvus。两kind保持独立但复用原重跑原文件pipeline能力，不捏造持久全文源；重切分必须确认会覆盖该版本人工Chunk。禁旧addEmbedding/finally自commit路径、整collection reset、新建File/Version/Grant、大docs入账本或持久本地路径。准备物只在进程内，崩溃按原source+冻结规则重跑，不凭checkpoint假定内存docs还在。
 
 T673/T674在现Owner与ScopeRepo增`apreview_file_processing(session,space_id,*,identity,kind,targets,overrides)->PreparedFileProcessingPlan`和`aprepare_file_processing(session,...,expected_configuration,expected_source_revisions,operation_id)->tuple[NewProcessingItem,...]`，真实当前模型/整版本键/对象来源/元数据与settings，外部native Session、固定锁序、仅flush。item snapshot限`schema_version:1,mode,original_status,effective_processing,source_revision`；source_revision是实际对象位置/MD5/大小/来源/版本及原元数据等相关事实摘要，不含受控status/remark/进度字段以免本操作自变造成过期。无provider/model绑定、signedURL、cache/name/sheet临时字段。split_rule保存legacy可消费完整实际规则；实际对象仍从当前File取并验摘要。
@@ -195,3 +197,9 @@ T157/T158纯plan/verify前移不等T120；不复用会检测停服/回填dashboa
 T681/T682采集仓储接外部native Session，所有只读no_autoflush、具体当前tenant/strict，global catalog原始物理行与真实Auth pin读，不经过新derive_action_release。Grant/Assignee/Mode/VisibleSource按各自真实整型PK独立seek分页(limit1..200)，完整保inactive/retired；Assignee真实父Grant/tenant链核验，悬空/坏归属显式失败，无Cartesian/N+1目录读取。方法`aload_catalog_baseline(session,*,environment)`及`alist_resource_modes/alist_grants/alist_assignees/alist_visible_sources(session,*,after_id=None,limit=200)`；catalog全模型/关联读取按真实ID分批，不以旧5001上限当完整。只读无网络/DDL/业务修改/停服参数。
 
 后续真实FGA采集/投影、六源inventory和artifact adapter另冻结，不提前写大装配。正式global manifest含全部tenant（含停用保配置）、权限/六源artifact hash、数量/零集/原失效证据；plan含权限子plan/目标model checksum及每tenant转换/回填plan hash。先持久MinIO对象读回验hash，再同run冻结每tenant，未全部冻结禁止转换；不形成自身hash环，重跑只读原artifact/不重冻。投影仍durable prepare→所有FGA成功→SQL finalize/checkpoint，既有COMMIT_UNKNOWN恢复和批量限制不改。脚本不检测/控制停服。
+
+## 12. MIG持久artifact最小接缝 V1：已冻结
+
+INT独占T688/T689：`UnificationArtifactStore(storage)`消费现MinioStorage的真实async object_exists/put_object/get_object，固定现持久bucket且不得等tmp_bucket。`aput_canonical(*,run_id,kind,content:bytes)->dict`与`aload_canonical(descriptor,*,run_id,kind)->bytes`不接Session、不写SQL/FGA、不开放HTTP。kind只baseline/plan/permission_catalog/permission_resources/sources/conversion/verification；run_id合法长度64标识。外层canonical UTF8 JSON严格`{schema_version:1,run_id,kind,records:list}`，重复键/NaN/非规范编码拒绝；records由上层闭集DTO投影，禁止业务完整配置/画布/manifest/provider请求/凭据直接dump。每对象≤16MiB，完整大数据靠原分页artifact+manifest组成，不设业务总量上限。
+
+key精确`f118/unification/{run_id}/{kind}/{sha256}.json`，descriptor恰好object_key/sha256。SHA256由canonical bytes计算，不把put返回值当hash；写后实际get读回验canonical bytes/hash，全部通过才返回可冻结指针。已有相同内容幂等；已有损坏同key明确失败，不覆盖原冻结证据；读拒绝错run/kind/hash、路径穿越/绝对路径/URL及额外字段，不生成share link或写tmp生命周期bucket。失败保异常因果、对外只机器reason，不输出payload/credential。所有artifact先上传验证，再在单外部SQL事务按Tenant.id升序切可信scope冻结完整tenant集合，全部成功才commit；不用分批phase冒全局M2已闭合。
