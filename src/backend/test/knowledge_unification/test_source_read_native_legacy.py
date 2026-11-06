@@ -72,7 +72,11 @@ def test_native_legacy_reads_original_provenance_without_orm_or_mutation(legacy)
 def test_native_legacy_is_not_transferable_to_another_source_claim(legacy, case):
     with Session(legacy.engine) as session:
         if case == "unmarked":
-            session.execute(update(BusinessResourceReference).values(legacy_invalid_reason=None))
+            session.execute(
+                update(BusinessResourceReference).values(
+                    target_tenant_id=101, legacy_invalid_reason=None, legacy_run_id=None, legacy_evidence_key=None
+                )
+            )
             session.commit()
         scope = legacy.verifier.issue_scope(session, scopes.REQUEST, legacy.identity)
         args = {}
