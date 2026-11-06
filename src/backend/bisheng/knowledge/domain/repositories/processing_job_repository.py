@@ -171,6 +171,22 @@ class ProcessingJobRepository:
     async def aget(self, session: AsyncSession, job_id: str) -> KnowledgeProcessingJob:
         return await self._job(session, job_id, lock=False)
 
+    async def aget_by_request_key(
+        self, session: AsyncSession, kind: str, idempotency_key: str, *, lock: bool = False
+    ) -> KnowledgeProcessingJob | None:
+        tenant = self._tenant_id()
+        query = select(KnowledgeProcessingJob).where(
+            KnowledgeProcessingJob.kind == ProcessingKind(kind).value,
+            KnowledgeProcessingJob.idempotency_key == self._key(idempotency_key),
+        )
+        if lock:
+            query = query.with_for_update().execution_options(populate_existing=True)
+        with strict_tenant_filter():
+            row = (await session.exec(query)).one_or_none()
+        if row is not None and row.tenant_id != tenant:
+            raise KnowledgeProcessingJobNotFoundError()
+        return row
+
     @staticmethod
     def _page(page: int, page_size: int) -> int:
         if type(page) is not int or page < 1 or type(page_size) is not int or not 1 <= page_size <= 200:
