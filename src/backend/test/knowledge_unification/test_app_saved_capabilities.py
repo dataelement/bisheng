@@ -78,7 +78,7 @@ async def test_saved_inspect_keeps_deleted_knowledge_row_and_frozen_id(saved):
     rows = await bus.inspect_saved_capabilities("actual-app", VERSION, saved.user)
     knowledge = next(row for row in rows if row.kind == "knowledge")
     assert knowledge.label == "7" and knowledge.revoked
-    assert knowledge.detail["target_id"] == "7" and knowledge.detail["state"] == "deleted"
+    assert knowledge.detail["target_id"] == "7" and knowledge.detail["state"] == "invalid_deleted"
 
 
 async def test_name_observation_failure_keeps_all_rows_explicitly_not_ready(saved, monkeypatch):
