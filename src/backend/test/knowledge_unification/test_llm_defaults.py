@@ -276,3 +276,30 @@ async def test_workbench_partial_post_keeps_saved_models_in_same_atomic_writer(b
             )
             == 2
         )
+
+
+async def test_writer_missing_tenant_maps_10996_before_opening_transaction(business, monkeypatch):
+    from bisheng.common.errcode.tenant import NoTenantContextError
+    from bisheng.common.services.config_service import settings
+    from test.knowledge_unification.test_ref_repo import tenant
+
+    monkeypatch.setattr(settings.multi_tenant, "enabled", True)
+    with tenant(None):
+        async with AsyncSession(business.engine) as session:
+            with pytest.raises(ResourceReferenceInvalidError) as raised:
+                await ModelDefaultApplication.asave(
+                    session, "evaluation_llm", {"model_id": 11}, login_user=business.user
+                )
+            assert isinstance(raised.value.__cause__, NoTenantContextError)
+            assert not session.in_transaction()
+
+
+def test_writer_single_tenant_keeps_core_default_without_explicit_root_fallback(monkeypatch):
+    from bisheng.common.services.config_service import settings
+    from test.knowledge_unification.test_ref_repo import tenant
+
+    monkeypatch.setattr(settings.multi_tenant, "enabled", False)
+    with tenant(None):
+        assert application.current_model_default_tenant() == 1
+        with pytest.raises(ResourceReferenceInvalidError):
+            application.current_model_default_tenant(101)
