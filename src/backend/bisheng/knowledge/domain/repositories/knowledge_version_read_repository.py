@@ -5,7 +5,7 @@ from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
-from sqlalchemy import case, func
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import load_only
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -133,6 +133,36 @@ class KnowledgeVersionReadRepository:
             raise SpaceFileNotFoundError()
 
     @staticmethod
+    async def _check_links(session, document_ids, tenant_id, space_id):
+        version = KnowledgeDocumentVersion.__table__
+        file = KnowledgeFile.__table__
+        other = version.alias("other_version_reference")
+        duplicate = (
+            select(other.c.id)
+            .where(other.c.knowledge_file_id == version.c.knowledge_file_id, other.c.id != version.c.id)
+            .exists()
+        )
+        # Only relationship scalars for the already-owned documents are inspected.
+        invalid = (
+            select(version.c.id)
+            .select_from(version.outerjoin(file, file.c.id == version.c.knowledge_file_id))
+            .where(
+                version.c.document_id.in_(document_ids),
+                or_(
+                    file.c.id.is_(None),
+                    file.c.tenant_id.is_(None),
+                    file.c.tenant_id != tenant_id,
+                    file.c.knowledge_id != space_id,
+                    file.c.file_type != FileType.FILE.value,
+                    duplicate,
+                ),
+            )
+            .limit(1)
+        )
+        if (await session.execute(invalid)).first() is not None:
+            raise SpaceFileNotFoundError()
+
+    @staticmethod
     async def _file_facts(session, versions, tenant_id, space_id):
         if not versions:
             return {}
@@ -220,6 +250,7 @@ class KnowledgeVersionReadRepository:
                         raise SpaceFileNotFoundError()
                     stats = (await self._stats(session, [document.id])).get(document.id)
                     self._check_document(document, stats)
+                    await self._check_links(session, [document.id], tenant_id, space.id)
                     return VersionAnchorFacts(space, document, version, file, int(stats[0]))
 
     async def alist_chain(
@@ -279,35 +310,32 @@ class KnowledgeVersionReadRepository:
                     ).scalar_one_or_none()
                     if exists is None:
                         raise SpaceFileNotFoundError()
-                    statement = select(KnowledgeDocument).where(KnowledgeDocument.knowledge_id == space_id)
+                    statement = (
+                        select(KnowledgeDocument, KnowledgeDocumentVersion)
+                        .outerjoin(
+                            KnowledgeDocumentVersion,
+                            KnowledgeDocumentVersion.id == KnowledgeDocument.primary_version_id,
+                        )
+                        .where(KnowledgeDocument.knowledge_id == space_id)
+                    )
                     if after_document_id is not None:
                         statement = statement.where(KnowledgeDocument.id > after_document_id)
-                    documents = list(
-                        (await session.execute(statement.order_by(KnowledgeDocument.id).limit(limit + 1)))
-                        .scalars()
-                        .all()
+                    pairs = list(
+                        (await session.execute(statement.order_by(KnowledgeDocument.id).limit(limit + 1))).all()
                     )
-                    more, documents = len(documents) > limit, documents[:limit]
+                    more, pairs = len(pairs) > limit, pairs[:limit]
+                    documents = [pair[0] for pair in pairs]
                     if not documents:
                         return VersionReadBatch((), False, None)
                     stats = await self._stats(session, [row.id for row in documents])
-                    versions = (
-                        (
-                            await session.execute(
-                                select(KnowledgeDocumentVersion).where(
-                                    KnowledgeDocumentVersion.id.in_([row.primary_version_id for row in documents])
-                                )
-                            )
-                        )
-                        .scalars()
-                        .all()
-                    )
+                    versions = [pair[1] for pair in pairs if pair[1] is not None]
                     by_id = {row.id: row for row in versions}
                     for document in documents:
                         self._check_document(document, stats.get(document.id))
                         primary = by_id.get(document.primary_version_id)
                         if primary is None or primary.document_id != document.id or not primary.is_primary:
                             raise SpaceFileNotFoundError()
+                    await self._check_links(session, [row.id for row in documents], tenant_id, space_id)
                     files = await self._file_facts(session, versions, tenant_id, space_id)
                     return VersionReadBatch(
                         tuple(
