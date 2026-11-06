@@ -5544,6 +5544,25 @@
   **覆盖 AC**: AC-40, AC-43, AC-44, AC-66\
   **验证 / 完成条件**：两端既有API合同回归及新增类型诊断0，无依赖/锁文件变化。
 
+## W6六来源正式原始盘点接缝
+
+- [ ] **T693 · 六来源原始分页事实仓储测试**
+  **类型 / Owner**：测试 / MIG\
+  **写入文件**：`src/backend/test/knowledge_unification/test_migration_inventory_repository.py`\
+  **逻辑 / 测试上下文**：真实401+页/单根200+版本、零版本/关联、disabled/非current/删除原状态保留；真实父tenant/type与全局无payload孤儿探针，非法游标/bypass/只读autoflush、<=201预算无Cartesian/OFFSET；目录不按槽重扫，配置不入artifact。\
+  **依赖**：T160, T682\
+  **覆盖 AC**: AC-55, AC-56, AC-63, AC-64, AC-70, AC-71, AC-80, AC-85, AC-87, AC-88, AC-89, AC-93\
+  **验证 / 完成条件**：先真实红/首绿，真实SQL验证原形状及完整枚举；不把raw事实冒充Source授权/ready。
+
+- [ ] **T694 · 六来源原始分页事实仓储**
+  **类型 / Owner**：后端 Domain / MIG\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/unification_inventory_repository.py`\
+  **逻辑 / 测试上下文**：按W6§13全部精确方法/闭集Row，外部Session+no_autoflush+strict；Root/版本/整批子页独立，坏链不静默漏；Knowledge0/1/3/退休2原事实保留，raw配置仅内存repr隐藏。\
+  **依赖**：T693\
+  **配对测试**：T693\
+  **覆盖 AC**: AC-55, AC-56, AC-63, AC-64, AC-70, AC-71, AC-80, AC-85, AC-87, AC-88, AC-89, AC-93\
+  **验证 / 完成条件**：配对及既有ledger/permission原采集组合通过，C2静态保持；未集成正式M2/FGA/CLI前不勾完整T162。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
