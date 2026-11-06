@@ -31,6 +31,7 @@ from bisheng.common.errcode.admin_scope import AdminScopeTenantRequiredError
 from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
     DepartmentKnowledgeSpacePrivateError,
+    KnowledgeSpaceInvalidCursorError,
     SpaceCreationRequestConflictError,
     SpaceFileDuplicateError,
     SpaceFileExtensionError,
@@ -2118,6 +2119,85 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return PageData[KnowledgeSpaceListItemResp](
             data=[KnowledgeSpaceListItemResp.model_validate(row) for row in rows], total=total
         )
+
+    async def list_visible_spaces(
+        self, *, keyword: str | None = None, page_size: int = 20, cursor: str | None = None
+    ) -> "PageInfiniteCursorData[KnowledgeSpaceListItemResp]":
+        """Consume at most 1000 SQL candidates, independently of visible density."""
+        from bisheng.common.cursor import decode_cursor, encode_cursor
+        from bisheng.common.schemas.api import PageInfiniteCursorData
+
+        if type(page_size) is not int or not 1 <= page_size <= 200:
+            raise ValueError("page_size must contain 1..200 items")
+        tenant_id = get_current_tenant_id()
+        actor = await self._permission_actor()
+        if type(tenant_id) is not int or tenant_id <= 0 or actor.current_tenant_id != tenant_id:
+            raise PermissionDeniedError()
+        keyword = keyword.strip() if keyword is not None else None
+        context = (
+            "knowledge-space-visible|"
+            + sha256(
+                json.dumps([tenant_id, actor.fga_subject, actor.data_scope, keyword or "", page_size]).encode()
+            ).hexdigest()
+        )
+        try:
+            decoded = decode_cursor(cursor, expected_key_len=2, expected_context=context)
+            after = None
+            if decoded is not None:
+                timestamp, ident = decoded
+                if type(ident) is not int or ident <= 0 or (timestamp is not None and not isinstance(timestamp, str)):
+                    raise ValueError("invalid space seek key")
+                timestamp = datetime.fromisoformat(timestamp) if timestamp is not None else None
+                if timestamp is not None and timestamp.tzinfo is not None:
+                    raise ValueError("space seek timestamps use the database's naive time")
+                after = (timestamp, ident)
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise KnowledgeSpaceInvalidCursorError() from exc
+
+        items: list[KnowledgeSpaceListItemResp] = []
+        consumed = 0
+        last_key = after
+        adapter = self.f048_permission_adapter or await self._resource_adapter("knowledge_space")
+
+        def result(has_more):
+            return PageInfiniteCursorData[KnowledgeSpaceListItemResp](
+                data=items,
+                page_size=page_size,
+                has_more=has_more,
+                next_cursor=encode_cursor(last_key, context=context) if has_more else None,
+            )
+
+        while consumed < 1000:
+            limit = min(100, 1000 - consumed)
+            batch = await self.space_listing_repository.alist_candidates(keyword=keyword, after=after, limit=limit)
+            if not batch:
+                return result(False)
+            if any(row.tenant_id != tenant_id or row.type != KnowledgeTypeEnum.SPACE.value for row in batch):
+                raise SpaceNotFoundError()
+            # The repository released its data connection before permission I/O.
+            targets = await adapter.resolve_permission_targets_from_rows(
+                rows=batch, resource_type="knowledge_space", actor=actor
+            )
+            visible = await batch_check_verified_business_visible(actor=actor, targets=targets)
+            for row in batch:
+                if len(items) == page_size:
+                    # This row has not been consumed and must remain on the next page.
+                    return result(True)
+                consumed += 1
+                last_key = (row.update_time, row.id)
+                if visible.get(("knowledge_space", str(row.id)), False):
+                    items.append(
+                        KnowledgeSpaceListItemResp.model_validate(row).model_copy(update={"actions": ["visible"]})
+                    )
+            after = last_key
+            if len(batch) < limit:
+                return result(False)
+            if len(items) == page_size or consumed == 1000:
+                # A one-row, unconsumed SQL probe distinguishes EOF. It neither
+                # checks permission nor advances the consumption cursor/budget.
+                pending = await self.space_listing_repository.alist_candidates(keyword=keyword, after=after, limit=1)
+                return result(bool(pending))
+        return result(False)
 
     @staticmethod
     async def _complete_visible_space_ids(actor: PermissionActor, runtime) -> list[int]:
