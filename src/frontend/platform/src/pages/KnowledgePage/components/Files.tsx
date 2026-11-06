@@ -447,6 +447,9 @@ function Directory({
             return (
               <SpaceDirectoryRow
                 key={item.id}
+                scope={scope}
+                spaceId={spaceId}
+                parentId={parentId}
                 item={item}
                 open={!!itemMenu}
                 actions={itemMenu?.actions ?? []}
