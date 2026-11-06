@@ -52,7 +52,10 @@ from dataclasses import dataclass, field
 
 from loguru import logger
 
-from bisheng.app_publish.application.reference_access import get_hosted_app_reference_runtime
+from bisheng.app_publish.application.reference_access import (
+    get_hosted_app_reference_runtime,
+    get_hosted_app_user_reference_runtime,
+)
 from bisheng.app_publish.domain.schemas.app_manifest import CapabilityDeclaration
 from bisheng.app_publish.domain.services.app_credential_service import (
     HOSTED_APP_TOKEN_ENV,
@@ -69,6 +72,7 @@ from bisheng.common.errcode.mcp_face import KnowledgeCapabilityRevokedError
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import current_tenant_id
 from bisheng.core.database import get_async_db_session
+from bisheng.llm.application.model_name_resolution import get_model_name_resolution_port
 from bisheng.open_api.domain.context import OpenApiPrincipal
 from bisheng.open_api.domain.scopes import is_scope_issuable
 from bisheng.open_api.domain.services.public_base_url import MODEL_GATEWAY_BASE_PATH
@@ -213,6 +217,7 @@ def _effective_from_source(result):
     declaration = CapabilityDeclaration.model_validate(payload["capabilities"])
     frozen = {one.slot_key: one.target for one in snapshot.references}
     facts = {one.key: one for one in result.target_states}
+    labels = _declaration_labels(declaration)
     knowledge = []
     for request in extract_app_reference_requests(declaration):
         if request.target_type != TargetType.KNOWLEDGE_SPACE:
@@ -221,7 +226,7 @@ def _effective_from_source(result):
         fact = facts[target]
         knowledge.append(
             DeclaredKnowledge(
-                label=request.target_id or request.requested_name,
+                label=labels[request.slot_key],
                 knowledge_id=int(target.target_id),
                 knowledge_name=request.requested_name or "",
                 reason=REASON_OK if fact.is_valid else REASON_REVOKED,
@@ -249,6 +254,99 @@ async def load_effective_declaration(app_id: str, *, principal=None, purpose="ex
     async with get_async_db_session() as owned, owned.begin():
         _, result, _ = await _read_effective_source(owned, app_id, principal, purpose=purpose)
         return _effective_from_source(result)
+
+
+def _declaration_labels(declaration):
+    labels = {}
+    for one in declaration.models:
+        for request in extract_app_reference_requests(CapabilityDeclaration(models=[one])):
+            labels.setdefault(request.slot_key, one.name)
+    for one in declaration.knowledge_bases:
+        for request in extract_app_reference_requests(CapabilityDeclaration(knowledge_bases=[one])):
+            labels.setdefault(request.slot_key, (one.id or one.name or "").strip())
+    return labels
+
+
+def unready_saved_capabilities(capabilities):
+    """Retain declaration rows when its index/catalog cannot be inspected; never invent IDs."""
+    try:
+        declaration = CapabilityDeclaration.model_validate(capabilities or {})
+        labels = _declaration_labels(declaration)
+        requests = extract_app_reference_requests(declaration)
+    except (TypeError, ValueError):
+        return (CapabilityStatus("configuration", "capabilities", "capabilities", True, "not_ready"),)
+    return tuple(
+        CapabilityStatus(
+            CAPABILITY_KIND_MODEL if one.target_type == TargetType.MODEL else CAPABILITY_KIND_KNOWLEDGE,
+            labels[one.slot_key],
+            labels[one.slot_key],
+            True,
+            "not_ready",
+            {"target_id": one.target_id, "target_type": one.target_type.value, "state": "not_ready"},
+        )
+        for one in requests
+    )
+
+
+async def inspect_saved_capabilities(app_id, version_id, identity, *, session=None):
+    """Observe a real saved source and its frozen IDs, without execution authority."""
+    if session is None:
+        async with get_async_db_session() as owned, owned.begin():
+            return await inspect_saved_capabilities(app_id, version_id, identity, session=owned)
+    runtime = await get_hosted_app_user_reference_runtime()
+    scope = await runtime.verifier.aissue_scope(
+        session, SourceReadRequest(SourceType.HOSTED_APP_VERSION, app_id, version_id, purpose="inspect"), identity
+    )
+    result = await runtime.ainspect_source(session, scope, identity)
+    snapshot = result.snapshot
+    declaration = CapabilityDeclaration.model_validate(json.loads(snapshot.payload_json)["capabilities"])
+    references = {one.slot_key: one.target for one in snapshot.references}
+    states = {one.key: one for one in result.target_states}
+    requests = extract_app_reference_requests(declaration)
+    labels = _declaration_labels(declaration)
+    requested_names = tuple(sorted({one.requested_name for one in requests if one.target_type == TargetType.MODEL}))
+    unavailable = False
+    try:
+        observations = {
+            one.requested: one
+            for one in await get_model_name_resolution_port().ainspect_model_names_current(
+                session, snapshot.source_key.tenant_id, requested_names, identity=identity
+            )
+        }
+    except Exception:
+        logger.exception("app_publish.saved_capability_observation_failed app_id={} version_id={}", app_id, version_id)
+        observations, unavailable = {}, True
+    rows = []
+    for request in requests:
+        target = references[request.slot_key]
+        fact = states[target]
+        model = request.target_type == TargetType.MODEL
+        reason = REASON_OK if fact.is_valid else fact.state.value
+        revoked = not fact.is_valid
+        if model:
+            observed = observations.get(request.requested_name)
+            if observed is None:
+                unavailable = True
+            elif observed.status != "valid":
+                revoked, reason = True, observed.status
+            elif observed.resolved.model_id != int(target.target_id):
+                revoked, reason = True, "binding_identity_changed"
+        label = labels[request.slot_key]
+        rows.append(
+            CapabilityStatus(
+                CAPABILITY_KIND_MODEL if model else CAPABILITY_KIND_KNOWLEDGE,
+                label,
+                label,
+                revoked,
+                reason,
+                {"target_id": target.target_id, "target_type": target.target_type.value, "state": fact.state.value},
+            )
+        )
+    if unavailable:
+        return tuple(
+            CapabilityStatus(row.kind, row.label, row.display_name, True, "not_ready", row.detail) for row in rows
+        )
+    return tuple(rows)
 
 
 async def _resolve_knowledge_refs(
