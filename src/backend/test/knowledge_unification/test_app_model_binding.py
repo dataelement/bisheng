@@ -1,11 +1,18 @@
 """Actual APP whole-source admission and final cached model identity. 覆盖 AC: AC-37, AC-68, AC-71, AC-87, AC-89, AC-91, AC-92."""
 
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock
+
 import pytest
+import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.app_publish import composition
 from bisheng.app_publish.application.reference_access import get_hosted_app_reference_runtime
+from bisheng.app_publish.domain.services import capability_bus_service as bus
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.llm.domain.services.model_catalog import ResolvedModel
 from bisheng.resource_reference.application.contracts import SourceType
 from bisheng.resource_reference.application.source_contracts import SourceReadRequest
@@ -98,3 +105,57 @@ async def test_model_proof_cannot_cross_transaction_or_original_identity(writing
                 await runtime.source_owner.assert_model_binding_current(
                     session, snapshot, writing.identity, "alpha", resolved()
                 )
+
+
+@pytest.fixture
+async def capability_bus(writing, monkeypatch):
+    @asynccontextmanager
+    async def factory():
+        async with AsyncSession(writing.engine, expire_on_commit=False) as session:
+            yield session
+
+    monkeypatch.setattr(bus, "get_async_db_session", factory)
+    # A saved version must consume its frozen index, never old independent DAO/name readers.
+    monkeypatch.setattr(bus, "_resolve_knowledge_refs", AsyncMock(side_effect=AssertionError("free resolution")))
+    composition.register()
+    return writing
+
+
+async def test_actual_adapter_checks_final_cached_model_with_real_full_source(capability_bus):
+    adapter = bus.HostedAppDeclarationAdapter()
+    assert await adapter.assert_model_binding(capability_bus.identity, "own/alpha", resolved()) is None
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        await adapter.assert_model_binding(capability_bus.identity, "alpha", resolved(13))
+
+
+async def test_effective_declaration_uses_original_principal_and_frozen_ids(capability_bus):
+    declaration = await bus.load_effective_declaration("actual-app", principal=capability_bus.identity)
+    assert declaration.version_id == fixtures.fixtures.VERSION
+    assert declaration.knowledge_whitelist == [7]
+    assert declaration.model_names == frozenset({"alpha"})
+    with pytest.raises(ResourceReferenceInvalidError):
+        await bus.load_effective_declaration("actual-app", principal=capability_bus.identity.model_copy())
+
+
+async def test_whole_source_bad_knowledge_blocks_model_and_retrieval_before_io(capability_bus, monkeypatch):
+    from bisheng.knowledge.domain.services.retrieval_facade_service import RetrievalFacadeService
+
+    retrieval = AsyncMock()
+    monkeypatch.setattr(RetrievalFacadeService, "retrieve", retrieval)
+    async with AsyncSession(capability_bus.engine) as session, session.begin():
+        await session.execute(sa.delete(Knowledge).where(Knowledge.id == 7))
+    with pytest.raises(BaseErrorCode):
+        await bus.HostedAppDeclarationAdapter().assert_model_binding(capability_bus.identity, "alpha", resolved())
+    with pytest.raises(BaseErrorCode):
+        await bus.CapabilityBusService.retrieve(
+            app_id="actual-app", principal=capability_bus.identity, access_user_id=4, query="question"
+        )
+    retrieval.assert_not_awaited()
+
+
+async def test_broken_whitelist_never_silently_drops_a_saved_reference():
+    declaration = bus.EffectiveDeclaration(
+        "app", 101, "actual-version", knowledge=(bus.DeclaredKnowledge("7", 7, reason=bus.REASON_REVOKED),)
+    )
+    with pytest.raises(ResourceReferenceInvalidError):
+        _ = declaration.knowledge_whitelist
