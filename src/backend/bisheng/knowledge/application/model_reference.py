@@ -63,6 +63,17 @@ class PreparedKnowledgeModelChange:
 
 _issued: WeakKeyDictionary = WeakKeyDictionary()
 _batches: WeakKeyDictionary = WeakKeyDictionary()
+_removals: WeakKeyDictionary = WeakKeyDictionary()
+
+
+@dataclass(frozen=True, slots=True, eq=False, weakref_slot=True)
+class PreparedKnowledgeRemoval:
+    knowledge_id: int
+    tenant_id: int
+    only_clear: bool
+    bindings: PreparedSourceBindings | None = field(repr=False)
+    row: Knowledge = field(repr=False)
+    runtime: object = field(repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,12 +138,12 @@ class KnowledgeModelReferenceApplication:
             raise ResourceReferenceInvalidError(reason="knowledge_model_original_identity_required")
 
     @staticmethod
-    async def _authorize(login_user, row):
+    async def _authorize(login_user, row, action="edit"):
         await require_business_action(
             login_user,
             resource_type="knowledge_space" if row.type == KnowledgeTypeEnum.SPACE.value else "knowledge_library",
             resource_id=row.id,
-            action="edit",
+            action=action,
         )
 
     @classmethod
@@ -216,23 +227,15 @@ class KnowledgeModelReferenceApplication:
         return plan
 
     @staticmethod
-    def _plan_values(plan):
-        bindings = plan.bindings
+    def _binding_values(bindings):
+        if bindings is None:
+            return None
         verified = bindings.verified
         context = verified.context
         # Frozen DTOs carry values, not authority. Keep a detached manifest of
         # every consumed value, including the original complete receipt plan.
         return deepcopy(
             (
-                plan.knowledge_id,
-                plan.tenant_id,
-                plan.operation_id,
-                plan.model,
-                plan.transition,
-                plan.expected_revision,
-                plan.expected_generation,
-                plan.new_generation,
-                plan.changed,
                 bindings.source_key,
                 bindings.expected_revision,
                 bindings.new_revision,
@@ -250,6 +253,23 @@ class KnowledgeModelReferenceApplication:
                     (id(receipt), receipt.source_key, receipt.target, id(receipt.issuer), receipt.schema_version)
                     for receipt in context.receipts
                 ),
+            )
+        )
+
+    @classmethod
+    def _plan_values(cls, plan):
+        return deepcopy(
+            (
+                plan.knowledge_id,
+                plan.tenant_id,
+                plan.operation_id,
+                plan.model,
+                plan.transition,
+                plan.expected_revision,
+                plan.expected_generation,
+                plan.new_generation,
+                plan.changed,
+                cls._binding_values(plan.bindings),
             )
         )
 
@@ -572,3 +592,127 @@ class KnowledgeModelReferenceApplication:
         for plan in plans:
             await cls.aapply_model_change(session, plan)
         return batch.commands
+
+    @classmethod
+    def _removal_plan(cls, session, row, bindings, runtime, only_clear):
+        if bindings is not None and bindings.verified.context.old_references_digest != reference_set_digest(
+            cls._references(row)
+        ):
+            raise ReferenceCoverageNotReadyError(reason="knowledge_source_configuration_drift")
+        plan = PreparedKnowledgeRemoval(row.id, row.tenant_id, only_clear, bindings, row, runtime)
+        _removals[plan] = (
+            ref(plan),
+            TransactionIdentity.capture(session),
+            cls._facts(row),
+            cls._removal_values(plan),
+            bindings,
+            row,
+            runtime,
+        )
+        return plan
+
+    @classmethod
+    def _removal_values(cls, plan):
+        return deepcopy((plan.knowledge_id, plan.tenant_id, plan.only_clear, cls._binding_values(plan.bindings)))
+
+    @classmethod
+    def _check_removal(cls, session, plan):
+        original = _removals.get(plan) if isinstance(plan, PreparedKnowledgeRemoval) else None
+        if (
+            original is None
+            or original[0]() is not plan
+            or plan.bindings is not original[4]
+            or plan.row is not original[5]
+            or plan.runtime is not original[6]
+            or cls._removal_values(plan) != original[3]
+        ):
+            raise ResourceReferenceInvalidError(reason="knowledge_removal_plan_not_issued")
+        try:
+            original[1].assert_current(session)
+        except (TypeError, ValueError) as error:
+            raise ResourceReferenceInvalidError(reason="knowledge_removal_plan_transaction") from error
+        cls.repository._bound(session, plan.row)
+        if cls._facts(plan.row) != original[2]:
+            raise KnowledgeOperationPlanConflictError(reason="knowledge_removal_plan_changed")
+
+    @classmethod
+    def prepare_removal(cls, session, knowledge_id, *, login_user, only_clear=False):
+        cls._user(login_user)
+        if type(only_clear) is not bool:
+            raise ValueError("explicit Knowledge lifecycle is required")
+        row = cls.repository.get(session, knowledge_id)
+        if row is None:
+            raise KnowledgeNotExistError()
+        facts = cls._facts(row)
+
+        def lock_root(active):
+            locked = cls.repository.get(active, knowledge_id, for_update=True)
+            if locked is None or cls._facts(locked) != facts:
+                raise KnowledgeOperationPlanConflictError(reason="knowledge_removal_plan_changed")
+            run_async_safe(cls._authorize(login_user, locked, action="delete"))
+            return locked
+
+        if only_clear:
+            # No configuration/source mutation: model invalidity must not turn
+            # management cleanup into model execution admission.
+            lock_root(session)
+            return cls._removal_plan(session, row, None, None, True)
+        runtime = get_reference_binding_runtime_sync()
+        bindings = runtime.prepare_source_bindings(
+            session,
+            cls._source(row),
+            (),
+            extractor_version=KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
+            lock_source_root=lock_root,
+            effective=False,
+        )
+        return cls._removal_plan(session, row, bindings, runtime, False)
+
+    @classmethod
+    async def aprepare_removal(cls, session, knowledge_id, *, login_user, only_clear=False):
+        cls._user(login_user)
+        if type(only_clear) is not bool:
+            raise ValueError("explicit Knowledge lifecycle is required")
+        row = await cls.repository.aget(session, knowledge_id)
+        if row is None:
+            raise KnowledgeNotExistError()
+        facts = cls._facts(row)
+
+        async def lock_root(active):
+            locked = await cls.repository.aget(active, knowledge_id, for_update=True)
+            if locked is None or cls._facts(locked) != facts:
+                raise KnowledgeOperationPlanConflictError(reason="knowledge_removal_plan_changed")
+            await cls._authorize(login_user, locked, action="delete")
+            return locked
+
+        if only_clear:
+            await lock_root(session)
+            return cls._removal_plan(session, row, None, None, True)
+        runtime = await get_reference_binding_runtime()
+        bindings = await runtime.aprepare_source_bindings(
+            session,
+            cls._source(row),
+            (),
+            extractor_version=KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
+            lock_source_root=lock_root,
+            effective=False,
+        )
+        return cls._removal_plan(session, row, bindings, runtime, False)
+
+    @classmethod
+    def apply_removal(cls, session, prepared):
+        cls._check_removal(session, prepared)
+        cls.repository.clear_contents(session, prepared.row)
+        if not prepared.only_clear:
+            prepared.runtime.apply_source_bindings(session, prepared.bindings)
+            cls.repository.delete(session, prepared.row)
+        return prepared.row
+
+    @classmethod
+    async def aapply_removal(cls, session, prepared):
+        cls._check_removal(session, prepared)
+        await cls.repository.aclear_contents(session, prepared.row)
+        if not prepared.only_clear:
+            await prepared.runtime.aapply_source_bindings(session, prepared.bindings)
+            await cls.repository.adelete(session, prepared.row)
+        return prepared.row
