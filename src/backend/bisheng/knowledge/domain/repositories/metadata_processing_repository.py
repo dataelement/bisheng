@@ -249,6 +249,24 @@ class MetadataProcessingRepository:
         def changed(state, fields):
             return any(state.attrs[name].history.has_changes() for name in fields)
 
+        job_states = [state for row, state in candidates.values() if isinstance(row, KnowledgeProcessingJob)]
+        missing_jobs = sorted(
+            {
+                value
+                for state in job_states
+                if "space_id" not in state.dict or "state" not in state.dict
+                for value in identities(state)
+                if isinstance(value, str) and value
+            }
+        )
+        stored_jobs = {}
+        with session.no_autoflush, strict_tenant_filter():
+            for offset in range(0, len(missing_jobs), 500):
+                query = select(
+                    KnowledgeProcessingJob.id, KnowledgeProcessingJob.space_id, KnowledgeProcessingJob.state
+                ).where(KnowledgeProcessingJob.id.in_(missing_jobs[offset : offset + 500]))
+                for job_id, space_id, status in (await session.execute(query)).all():
+                    stored_jobs[job_id] = (space_id, status)
         unknown_files, file_types = set(), {}
         for row, state in candidates.values():
             if isinstance(row, KnowledgeFile):
@@ -311,6 +329,13 @@ class MetadataProcessingRepository:
             reject = False
             if isinstance(row, Knowledge) and scope.space_id in identities(state):
                 reject = key in new or key in deleted or changed(state, root_fields)
+            elif isinstance(row, KnowledgeProcessingJob) and key not in deleted:
+                stored_space, stored_state = next(
+                    (stored_jobs[value] for value in identities(state) if value in stored_jobs), (None, None)
+                )
+                space_id = state.dict.get("space_id", stored_space)
+                status = state.dict.get("state", stored_state)
+                reject = space_id == scope.space_id and status in {None, "accepted", "running"}
             elif isinstance(row, KnowledgeFile) and (
                 file_ids.intersection(identities(state)) or scope.space_id in values(state, "knowledge_id")
             ):
