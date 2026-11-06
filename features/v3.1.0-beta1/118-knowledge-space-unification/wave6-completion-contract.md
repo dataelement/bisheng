@@ -184,6 +184,8 @@ T675/T676/T677/T678在原Service/worker/endpoint实际串联后才装配file_rep
 
 T679/T680仅串联原KnowledgeService save/asave及KnowledgeUtils旧rebuild真实调用者；SpaceService上传调用者由KN后续T084按同adapter接入，PROC不抢其热叶。T070只写schema+adapter两叶，不伪称全旧链完成；完整T068须真实wire组合后才勾选。
 
+旧调用接缝补充：`process_one_file`可加可选内部`processing_rule_request:FileProcessBase|None=None`，save/asave传原请求，在真实file_download已得到实际文件名后才解析分类型规则，不以URL/签名query猜类型或重复下载；每file Excel仅原显式值覆盖，向真实消费者传本地副本，不改原request。实际snapshot可随原split_rule JSON的私有`_effective_processing`保存provenance，无URL/name/model/cache/id，不新增HTTP输入或表列，旧FileProcessBase照常消费扁平实际字段。旧rebuild先核真实File.knowledge_id等原已鉴权请求空间，异空间按原not-found拒绝；真实Root重建或File1/4/5冲突在任何规则/状态/queue副作用前10999，不新增权限动作或补visible。此为原T679/T680实际目标/状态接线，其他旧批量和协议仍由T125/T126等完整兼容卡收口。
+
 空配置单列T683/T684：手动纯rebuild无参与文件仍不可执行；显式改模型的空/全部非参与空间可由原ModelReferenceApplication受控prepare/apply直接完成current新槽/R2、清transition、PUBLISHED和单调R/新逻辑G，不伪造0-item新job或BG proof。必须同时核物理非目录File、Document/Version完整链及无活跃操作，不能凭JOIN返回空认定空空间；有未挂版本或活跃解析明确拒绝。保存仍须目标当前有效与二次确认，公开旧/新入口的真实响应由后续KN合同冻结后接。空metadata修改走实际schema CAS的SQL结果，不能伪造文件任务。
 
 ## 11. 全平台权限M2子计划与采集接缝 V1：已冻结
