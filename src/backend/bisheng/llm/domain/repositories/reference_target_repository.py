@@ -8,6 +8,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 
+from sqlalchemy import and_, false, or_
 from sqlmodel import select
 
 from bisheng.common.errcode.knowledge import (
@@ -144,24 +145,53 @@ class ModelReferenceTargetRepository:
         return proof
 
     @staticmethod
-    def _tombstone_statement(key, owner):
+    def _ids(column, ids):
+        values = sorted(ids)
         return (
-            select(ResourceReferenceTombstone)
-            .where(
-                ResourceReferenceTombstone.target_type == TargetType.MODEL.value,
-                ResourceReferenceTombstone.target_id == key.target_id,
-                ResourceReferenceTombstone.target_tenant_id == owner,
-                ResourceReferenceTombstone.tenant_id == owner,
-            )
-            .with_for_update()
-            .execution_options(populate_existing=True)
+            or_(*(column.in_(values[start : start + 200]) for start in range(0, len(values), 200)))
+            if values
+            else false()
         )
 
     @staticmethod
-    def _business_statement(model, ids, owners, *, lock):
+    def _tombstone_statements(targets):
+        # Tombstone's physical ID is VARCHAR. Sort the entire set in that
+        # index's lexicographic order before batching, never numeric chunks.
+        # Server/Model locks stay numeric; returned observations do too.
+        ordered = sorted(targets, key=lambda item: (item[0].target_type.value, item[0].target_id, item[1]))
+        for start in range(0, len(ordered), 200):
+            groups = {}
+            for key, owner in ordered[start : start + 200]:
+                groups.setdefault((key.target_type.value, owner), []).append(key.target_id)
+            yield (
+                select(ResourceReferenceTombstone)
+                .where(
+                    or_(
+                        *(
+                            and_(
+                                ResourceReferenceTombstone.target_type == kind,
+                                ResourceReferenceTombstone.target_id.in_(ids),
+                                ResourceReferenceTombstone.target_tenant_id == owner,
+                                ResourceReferenceTombstone.tenant_id == owner,
+                            )
+                            for (kind, owner), ids in groups.items()
+                        )
+                    )
+                )
+                .order_by(
+                    ResourceReferenceTombstone.target_type,
+                    ResourceReferenceTombstone.target_id,
+                    ResourceReferenceTombstone.target_tenant_id,
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+
+    @classmethod
+    def _business_statement(cls, model, ids, owners, *, lock):
         statement = (
             select(model)
-            .where(model.id.in_(sorted(ids)), model.tenant_id.in_(owners))
+            .where(cls._ids(model.id, ids), model.tenant_id.in_(owners))
             .order_by(model.id)
             .execution_options(populate_existing=True)
         )
@@ -239,8 +269,8 @@ class ModelReferenceTargetRepository:
             and int(value) > 0
         )
 
-    @staticmethod
-    def _original_statement(source, keys):
+    @classmethod
+    def _original_statement(cls, source, keys):
         return (
             select(BusinessResourceReference)
             .where(
@@ -248,7 +278,7 @@ class ModelReferenceTargetRepository:
                 BusinessResourceReference.source_id == source.source_id,
                 BusinessResourceReference.source_version == source.source_version,
                 BusinessResourceReference.target_type == TargetType.MODEL.value,
-                BusinessResourceReference.target_id.in_([key.target_id for key in keys]),
+                cls._ids(BusinessResourceReference.target_id, {key.target_id for key in keys}),
             )
             .execution_options(populate_existing=True)
         )
@@ -357,8 +387,8 @@ class ModelReferenceTargetRepository:
                 for row in originals
                 if row.target_tenant_id is not None
             )
-            for key, owner in sorted(tombstones, key=lambda item: (*item[0].lock_order_key, item[1])):
-                yield self._tombstone_statement(key, owner), True
+            for statement in self._tombstone_statements(tombstones):
+                yield statement, True
             return (
                 (),
                 tenant_id,
@@ -372,7 +402,7 @@ class ModelReferenceTargetRepository:
                     overridden_keys,
                 ),
             )
-        result = []
+        facts = []
         for key in keys:
             row, original = models.get(int(key.target_id)), _original(originals, key)
             server = servers.get(row.server_id) if row else None
@@ -392,15 +422,21 @@ class ModelReferenceTargetRepository:
                 if original
                 else (tenant_id if operation == "owner_query" else None)
             )
-            tombstone = None
             if owner is not None:
                 if proof is not None and (key, owner) not in proof[5]:
                     raise ResourceReferenceConflictError(reason="reference_lock_plan_changed")
-                tombstones = yield (
-                    self._tombstone_statement(key, owner),
-                    True,
+            facts.append((key, row, original, server, owner))
+        tombstones = {}
+        for statement in self._tombstone_statements(
+            {(key, owner) for key, _, _, _, owner in facts if owner is not None}
+        ):
+            for tombstone in (yield statement, True):
+                tombstones[(TargetKey(tombstone.target_type, tombstone.target_id), tombstone.target_tenant_id)] = (
+                    tombstone
                 )
-                tombstone = tombstones[0] if tombstones else None
+        result = []
+        for key, row, original, server, owner in facts:
+            tombstone = tombstones.get((key, owner))
             deletion = DeletionEvidence(tombstone.operation_id, key, owner, tombstone.stage) if tombstone else None
             result.append(
                 ModelTargetObservation(
