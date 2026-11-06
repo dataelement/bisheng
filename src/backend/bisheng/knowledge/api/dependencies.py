@@ -189,12 +189,22 @@ async def get_knowledge_file_visibility_service(
     return service
 
 
+async def get_knowledge_version_read_service(
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    from bisheng.knowledge.domain.services.knowledge_version_read_service import KnowledgeVersionReadService
+
+    return KnowledgeVersionReadService(request, login_user)
+
+
 async def get_knowledge_version_service(
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     doc_repo: KnowledgeDocumentRepository = Depends(get_knowledge_document_repository),
     version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
     knowledge_file_repo: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
+    read_service=Depends(get_knowledge_version_read_service),
 ) -> "KnowledgeVersionService":
     """Get KnowledgeVersionService instance, bound to the current request and login user."""
     from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
@@ -205,4 +215,5 @@ async def get_knowledge_version_service(
         doc_repo=doc_repo,
         version_repo=version_repo,
         knowledge_file_repo=knowledge_file_repo,
+        version_read_service=read_service,
     )
