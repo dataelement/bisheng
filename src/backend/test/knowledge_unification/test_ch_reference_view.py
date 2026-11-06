@@ -14,6 +14,7 @@ from bisheng.channel.domain.services import channel_service as service_module
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
 from bisheng.knowledge.application.source_read_target_owner import KnowledgeSourceReadTargetOwner
 from bisheng.knowledge.domain.models import knowledge as knowledge_module
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.permission.application.identity import reset_current_permission_actor, set_current_permission_actor
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from bisheng.resource_reference.application.read_identity import AuthenticatedSourceReadIdentity
@@ -67,6 +68,10 @@ async def test_valid_view_keeps_original_ids_flags_and_minimal_public_states(vie
 async def test_deleted_space_and_descendant_folder_stay_selected_without_fake_names(view):
     context, root = view
     await fixtures.deleted_space(context)
+    # A real space deletion removes its descendants; a live orphan file is
+    # deliberately rejected by the actual target Owner as inconsistent data.
+    async with context.sessions() as session, session.begin():
+        await session.execute(sa.delete(KnowledgeFile).where(KnowledgeFile.id == 30, KnowledgeFile.tenant_id == 101))
     result = await context.service._load_knowledge_sync(root.id, context.user)
     item = result.main.spaces[0]
     assert (item.knowledge_space_id, item.folder_id, item.knowledge_space_name) == ("10", "30", None)
