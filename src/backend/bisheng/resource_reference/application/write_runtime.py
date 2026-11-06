@@ -205,6 +205,7 @@ class ReferenceBindingRuntime:
             c.source_key.tenant_id != tenant_id
             or c.source_key.source_type not in (SourceType.MODEL_DEFAULT, SourceType.KNOWLEDGE)
             or c.source_key.source_version != "current"
+            or (c.source_key.source_type == SourceType.MODEL_DEFAULT and not c.effective)
             or any(ref.target.target_type != TargetType.MODEL for ref in c.references)
             for c in changes
         ):

@@ -105,7 +105,7 @@ async def test_roots_keep_independent_cas_revisions_and_receipts(components):
         await runtime.aapply_source_bindings(session, wrong)
 
 
-@pytest.mark.parametrize("kind", ["foreign", "other_source", "other_target", "duplicate", "same_root"])
+@pytest.mark.parametrize("kind", ["foreign", "other_source", "other_target", "duplicate", "same_root", "restore_default"])
 async def test_mixed_rejects_unsupported_identity_before_prelock(components, kind):
     session, runtime, _owner, events = components
     items = changes(events)
@@ -117,6 +117,8 @@ async def test_mixed_rejects_unsupported_identity_before_prelock(components, kin
         items = (replace(items[0], references=(replace(batch.ref(1), target=TargetKey("knowledge_space", "1")),)),)
     elif kind == "duplicate":
         items = (items[0], items[0])
+    elif kind == "restore_default":
+        items = (replace(items[0], references=(), effective=False), items[1])
     else:
         items = (items[0], replace(items[0], source_key=replace(KEYS[0], source_version="v2")))
     with pytest.raises(ResourceReferenceInvalidError):

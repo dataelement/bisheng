@@ -132,3 +132,64 @@ API 启动取消 linsight_default_model_backfill/chat_default_model_backfill 的
 APP：app_publish 域上述业务源文件与 app_runtime state/entry；CH：channel 域及原 knowledge_delivery worker；LLM：默认模型业务、同 Session 名称 Port、两个 native Model target 叶；KN/INT：knowledge 域、REF native-sync、权限窄 sync Port、APP access/composition/gateway/filelib、所有生产装配、main 启动及文档。所有 Agent 不写他人热点，新增接缝先登记叶子卡；INT 先交精确接口 checkpoint，消费者再接，fake 不进生产。
 
 三个 W4 worktree从同一冻结合同 checkpoint创建；WF/AS/REF旧 worktree及主工作区不修改，不中途合入其他并发发版线变化。每组先测后实现，依赖具体 SHA，独立 reviewer 固定快照检查，INT 组合回归/架构增量/Ruff/文档完整性后勾选。其余权限消费面、目标删除协调、处理框架、两端 UI、正式回填/Coverage/迁移及完整 E2E 不因本波来源接线自动完成。
+
+
+### W4接线补充合同
+
+`pending_app_reviews(viewer_user_id,app_id,version_ids,*,session=None,for_update=False)` 及其Repository仅增加复用外部Session当前读，不改变pending任务/真实审批人/应用版本资格或流转；已加载App的原动作由 `app_runtime.application.authorization.authorize_loaded_app(identity,app,operation,*,resume=False)` 导出，避免SourceOwner调用另开Session的load。
+
+Name Port增加 `await assert_plan_current(session,tenant_id,identity=identity,plan=plan,range=model_range)->None`，与resolve同一私有发行/完整目录重验，支持空名称Plan；不能以公开DTO字段当证明。KN名称计划在完整model物理预锁之后、任何source root前锁完整候选name/id+冻结KN集合，私有保存候选manifest；最终普通目录比较及仅已锁ID当前读，变化10998，不root后锁新候选。初始名称范围锁与真实双库隔离行为仍须中央验证；不把SQLite证明为实际gap锁。
+
+
+### 实施边界补充（2026-11-06）
+
+INT-APP薄Port及APP专属factory(T442/443、T511–516)显式临时转交APP agent唯一写；Root仍拥有总装配/REF/KN/权限/gateway/filelib与集成。APP用户factory采用新的AppManagementSourceReadIdentity：UserPayload委托未改W3，原SAK/PAT Principal沿原actor/credential/mode/授权上下文当前重验；不能把非hosted管理凭据误走hosted token身份或造owner个人。无q的current版本普通执行沿原visible；非current沿management_preview，q仍沿真实资格，inspect沿management_read。start/publish同样完整校验。
+
+频道item级reference_states保原ID；自动化身份私有weakref原对象登记只绑定实际channel/config/tenant/完整指纹，不成为HTTP许可；Facade在同Session核当前DIR/parent及原SPACE会员和upload_file条件，不新增edit。新默认override对Root继承模型资格作前瞻核验，排除将被该own key覆盖的继承贡献；显式FGA共享或其他仍继承key可用，旧原槽保留/解除沿原规则，不允许保存即失效的新引用。
+
+`SourceRootKey(tenant_id,source_type,source_id)`只用于真实根的完整set/raw盘点，不带假版本。既有root inventory方法接受该Root identity并strict当前tenant；零保存版本且set/raw为空的草稿根可沿原删除，任何未知残留先10994，不编current/app.id为版本。
+
+
+## W4 集成接缝补充（T537–T540）
+
+- 同步知识创建通过 `get_reference_binding_runtime_sync()` 读取与异步 getter 同一个显式注册对象，无 I/O、无懒装配、未注册 10994。SQL 与 R2 仍借原同步 Session。
+- 知识 transition 当前槽 `model` 等于实际 `Knowledge.model=A`；building 时只新增 `model_transition.pending_model_id=B` 槽，current_model_id 必须等于 A。worker 从该业务 pending 读取 B，finalize 才将 model=B 并清 transition，与引用更新同事务；processing_defaults 无模型字段。
+- 已删应用的 runtime-manager 清理读取仅允许实际同 node assignment 的 active_operation_id 绑定未终止、未过期的真实 destroy/purge intent，或既有精确恢复分支 status=timed_out、cleanup_status=pending、failure.reason=operation_timeout（仍须同一完整assignment绑定），完整 app/tenant/node/generation/owner_epoch 匹配；非该清理事实仍拒 application_not_found。不恢复已删业务的源读取、模型调用或凭证，不用客户端 flag 或旧 route 操作替代当前持久销毁事实。普通业务清理完成与 Docker/K8s 实机验收分开记录。
+- 原生共享 API 未注册/未 READY 具有稳定 reason=permission_runtime_not_ready，可映射引用覆盖未就绪并保留 cause；READY 之后的 backend/组件/响应故障明确失败，不降为空共享集合。
+- CH lane 已冻结，KN T482–T502 转交独立 `118-wave4-kn` 工作树唯一 writer；公共 REF、composition、main、gateway、filelib 与文档仍由 INT 写入。
+
+
+### Gateway 最终模型身份核验端口（T445–T449）
+
+`HostedAppDeclarationPort.assert_model_binding(principal, requested: str, resolved: ResolvedModel) -> None` 为 async。APP 在原 adapter/bus 叶实现，同 Session whole-source execute 准入后比 frozen 模型slot与实际resolved ID，server 从同 Session LLM真实 frozen-model facts核验；不从名字缓存或已删除目标猜 server。Gateway 在旧 resolve_range_and_subject（头/访问token优先顺序不变）与 resolve_model_name 之后、`_instantiate` 前通过原注册port调用。返回 None 才完成；原 ModelFaceError 保留，10994映射26516，其他引用无效/漂移映射26513，未知故障26516并保cause。非hosted原路径不变。filelib 的真实文件是 `open_endpoints/api/endpoints/filelib.py`，hosted retrieve 透传原 `principal=principal`，不能只传用户ID/credential ID后再造身份。
+
+
+### 最终别名与人工修复闭合（T541–T544）
+
+LLM新增 async `resolve_model_alias_current(session, tenant_id, requested, *, identity, plan, range=None) -> ResolvedModel`。只沿原私有NamePlan完整当前校验与已锁目录，用原bare exact优先/qualified规则解析；请求须为原planned模型的bare/qualified alias，结果ID/server仍是原planned结果，不扩大requested_names、不追加锁/另Session/读名称缓存，空plan拒。APP专属runtime显式持有同一 `source_owner`，成功whole-source require后由该Owner私有plan验证请求当前结果、其原语义slot冻结ID及Gateway实际ID/server，不把“属于其他声明槽”误认为同槽一致。泛用DTO和authority不扩展。
+
+知识人工明确改绑修复时，若真实旧收据为INVALID_DELETED/INVALID_LEGACY，或VALID但new_binding_allowed=False，且不处于DELETING，可在业务+R2同事务解除旧A，将实际model=B、transition current=B/pending=B保operation，完整source只依赖合法B，finalize清stage。普通可执行A→B仍双槽；DELETING保原写冻结。禁止以pending子集执行绕过失效旧槽。embedding类型仅由已验证原收据约束的同Session精确模型/父server列事实读取，不能信req.model_type或裸客户端tenant。
+
+
+空间创建不能以 skip_hook 永久跳过实际SPACE投影：真实flush资源后以同外部Session完成SPACE投影、creator成员、资源模型来源+R2唯一commit，再沿原initial grants/tag完成既有创建生命周期；普通文档库调用实际library创建投影。批量模型变更的commands显式带实际资源tenant_id与actor_user_id；后者只审计/telemetry，不由裸UID制造授权身份。命令 operation/revision/generation 为业务当前配置事实，worker模型仍从资源pending槽选择；派发在整体SQL提交后，队列失败不伪称业务已回滚。
+
+
+### 原生共享读取启动与真实检索调用（T546–T552）
+
+API正常已有配置与Celery启动原来都可能只注册lazy F048而从未初始化。两端启动在原生引用读取装配/业务接收前显式await既有get_f048_process_runtime：API沿当前事件循环，Celery用既有持久worker loop run_async_task；仅openfga.enabled时调用，错误明确阻止进入可接收业务就绪路径。原生getter保持只读READY对象，无懒初始化或SQL async/sync桥。
+
+RetrievalEngine在原调用处向KnowledgeRag透传既有self.login_user，保留原身份对象及ambient Open/Public principal/PermissionActor，不从invoke_user_id补造人。标准模型执行仍whole-source strict；命名的清理专用vectorstore构造只消费已授权实际资源或持久删除job冻结manifest的index身份，不调用模型、不能用于标准执行准入。旧FakeEmbeddings清理两处调用转该构造，失效模型不能阻断文件删除；不能仅凭isFake跳过运行源校验。其他无原身份的Root共享调用先逐入口核验真实授权来源，不能用静态is_shared替代C4。
+
+
+### 批量默认覆盖的提交后资格（T433/T435/T474/T475）
+
+mixed API仅承接MODEL_DEFAULT的有效own override（effective=True）；恢复继承继续走单source既有专用API。该批全部MODEL_DEFAULT.source_id键构成私有prospective排除集：对同批每个KN/default来源的继承资格都排除这些即将不再继承的Root key，辅助模型/服务物理union锁也按该集合计算。逐source收据与legacy证据仍隔离，其他未修改key或显式共享贡献保持。否则旧Root embedding A只因该key获权时，保存override后KN currentA/pendingB会立即失效并阻断自身worker；统一prospective资格让其原槽得到new_binding_allowed=False，再由已冻结人工明确改绑修复分支解除A，业务和R2仍一次提交。不得以异步竞态排除此确定提交后状态。
+
+DefaultRead facade追加 `require_default(key,login_user=None,session=None)` / async `arequire_default`，业务原五getter默认全key strict，router管理raw独立读；真实无源返回明确空schema，已有own '{}'需ready零集合。whole/slot结果取Core已准入snapshot payload，不能准入新B后返回先前raw A。
+
+
+### 删除/finalize事务与后台身份（T553–T562）
+
+KN出向delete/clear及transition finalize由同域Application+Repository在业务外Session实施：目标plan→root/current业务摘要→原投影成功→files/QA/资源SQL+R2同事务，clear保模型引用，实际删除才解除出向；不称完整入向R3协调器完成。finalize只认当前资源operation/revision/generation，不恢复job模型。
+
+`core.context.background_execution.get_current_background_task()`返回内部只读 `BackgroundTaskContext(tenant_id,task_id,task_name)` 或None；后台proof来自真实Celery task_prerun的显式合法tenant header、request.id及called_directly=False，postrun原上下文回收。普通tenant_execution_scope数值不是worker证明，也不改变原C3 header/跨租户行为。无原actor的KN私有身份只接受此同对象/当前tenant后台上下文，跨task/退出后失效；User/原actor+原principal分支保既有C4 visible，不从invoke_user_id补人。不得将客户端元数据当后台permit。缺tenant仍failclosed且默认配置两adapter将NoTenantContextError按已签合同转10996，保cause，不回退Root。
