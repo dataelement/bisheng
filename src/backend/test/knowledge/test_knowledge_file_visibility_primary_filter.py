@@ -11,6 +11,8 @@ from bisheng.knowledge.domain.services.knowledge_file_visibility_service import 
 def _service(*, threshold: int) -> KnowledgeFileVisibilityService:
     service = KnowledgeFileVisibilityService(request=None, login_user=MagicMock())
     service._config = MagicMock(return_value=SimpleNamespace(index_filter_threshold=threshold))
+    # SQL status is a separate boundary; real status cases live in T657.
+    service._successful_file_ids = AsyncMock(side_effect=lambda _space_id, file_ids=None: set(file_ids or ()))
     return service
 
 
