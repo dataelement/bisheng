@@ -402,6 +402,10 @@ def decode_broker_message(raw, *, required=True):
         if not required:
             return None
         raise KnowledgeOperationPlanConflictError(reason="migration_broker_invalid_envelope") from error
+    return _decode_envelope(value, hashlib.sha256(raw).hexdigest(), required=required)
+
+
+def _decode_envelope(value, raw_digest, *, required=True):
     envelope = {"body", "headers", "properties", "content-type", "content-encoding"}
     if (
         type(value) is not dict
@@ -462,9 +466,32 @@ def decode_broker_message(raw, *, required=True):
             tenant,
             *scope,
             task_digest({"headers": headers, "properties": properties, "body": body}),
-            hashlib.sha256(raw).hexdigest(),
+            raw_digest,
         )
     except KnowledgeOperationPlanConflictError:
         raise
     except (ValueError, TypeError, UnicodeError, RecursionError) as error:
         raise KnowledgeOperationPlanConflictError(reason="migration_broker_invalid_message") from error
+
+
+def decode_unacked_message(raw):
+    if type(raw) is str:
+        raw = raw.encode("utf-8")
+    if type(raw) is not bytes or not raw or len(raw) > MAX_BYTES:
+        _blocked("message_size_or_type")
+    try:
+        value = _parse(raw.decode("utf-8"))
+        if (
+            type(value) is not list
+            or len(value) != 3
+            or type(value[0]) is not dict
+            or type(value[1]) is not str
+            or type(value[2]) is not str
+        ):
+            _blocked("invalid_unacked_tuple")
+        fingerprint = hashlib.sha256(raw).hexdigest()
+        return _decode_envelope(value[0], fingerprint), value[1], value[2], fingerprint
+    except KnowledgeOperationPlanConflictError:
+        raise
+    except (ValueError, TypeError, UnicodeError, RecursionError) as error:
+        raise KnowledgeOperationPlanConflictError(reason="migration_broker_invalid_unacked_tuple") from error
