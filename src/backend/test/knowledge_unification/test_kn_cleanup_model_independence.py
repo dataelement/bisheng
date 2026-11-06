@@ -180,3 +180,33 @@ async def test_actual_purge_step_keeps_new_index_data_and_cleans_frozen_old_targ
     assert collections["actual_collection"] == {1} and indices["actual_index"] == {1}
     assert not (collections["historical_collection"] if step == "milvus" else indices["historical_index"])
     module.LLMService.get_bisheng_knowledge_embedding_sync.assert_not_called()
+
+
+async def test_single_tenant_root_cleanup_uses_c3_default_and_multi_missing_context_rejects(cleanup, monkeypatch):
+    from bisheng.common.services.config_service import settings
+    from bisheng.core.context.tenant import current_tenant_id
+
+    context, _, _, _ = cleanup
+    root = Knowledge(
+        id=50,
+        name="Root cleanup",
+        tenant_id=1,
+        type=3,
+        model="404",
+        collection_name="root_collection",
+        index_name="root_index",
+    )
+    async with context.sessions() as session:
+        session.add(root)
+        await session.commit()
+    monkeypatch.setattr(settings.multi_tenant, "enabled", False)
+    token = current_tenant_id.set(None)
+    try:
+        await asyncio.to_thread(KnowledgeRag.init_knowledge_milvus_cleanup_sync, knowledge=root)
+        assert module.MilvusFactory.init_vectorstore.call_args.args[0] == "root_collection"
+        monkeypatch.setattr(settings.multi_tenant, "enabled", True)
+        with pytest.raises(ResourceReferenceInvalidError) as error:
+            await asyncio.to_thread(KnowledgeRag.init_knowledge_milvus_cleanup_sync, knowledge=root)
+        assert error.value.__cause__ is not None
+    finally:
+        current_tenant_id.reset(token)

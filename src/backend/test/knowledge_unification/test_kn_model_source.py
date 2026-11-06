@@ -323,3 +323,39 @@ async def test_config_only_scope_requires_explicit_tenant_and_original_user_obje
                 await runtime.arequire(40, login_user=context.user, session=session)
         finally:
             current_tenant_id.reset(token)
+
+
+async def test_single_tenant_root_configuration_uses_c3_default_but_multi_missing_context_rejects(
+    admission, monkeypatch
+):
+    from bisheng.common.services.config_service import settings
+    from bisheng.core.context.tenant import current_tenant_id
+    from bisheng.permission.application.identity import PermissionActor, reset_current_permission_actor
+
+    context, runtime, _, _ = admission
+    tenant_token = current_tenant_id.set(1)
+    actor_token = set_current_permission_actor(PermissionActor(user_id=7, tenant_id=1))
+    try:
+        async with context.sessions() as session:
+            row = Knowledge(id=50, name="Root source", tenant_id=1, user_id=7, type=3, model="22")
+            await KnowledgeModelReferenceApplication.acreate(
+                session, row, login_user=context.user.model_copy(update={"tenant_id": 1}), project_created=AsyncMock()
+            )
+            await session.commit()
+    finally:
+        reset_current_permission_actor(actor_token)
+        current_tenant_id.reset(tenant_token)
+    monkeypatch.setattr(settings.multi_tenant, "enabled", False)
+    tenant_token = current_tenant_id.set(None)
+    actor_token = set_current_permission_actor(None)
+    try:
+        async with context.sessions() as session:
+            result = await runtime.arequire(50, session=session)
+            assert result.tenant_id == 1 and result.model_id == 22
+            monkeypatch.setattr(settings.multi_tenant, "enabled", True)
+            with pytest.raises(ResourceReferenceInvalidError) as error:
+                await runtime.arequire(50, session=session)
+            assert error.value.__cause__ is not None
+    finally:
+        reset_current_permission_actor(actor_token)
+        current_tenant_id.reset(tenant_token)
