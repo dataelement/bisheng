@@ -16,7 +16,6 @@ import type {
   CursorPage,
 } from "@/controllers/API/knowledgeSpace";
 import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
-
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
@@ -40,32 +39,12 @@ vi.mock("@/controllers/API", () => ({
   readFileByLibDatabase: mocks.legacy,
   getKnowledgeDetailApi: mocks.legacy,
 }));
-vi.mock("@/contexts/locationContext", async () => ({
-  locationContext: (await import("react")).createContext({ appConfig: {} }),
-}));
-vi.mock("@/util/hook", () => ({
-  useTable: () => ({
-    data: [],
-    page: 1,
-    pageSize: 20,
-    total: 0,
-    loading: false,
-    setPage: vi.fn(),
-    search: vi.fn(),
-    reload: vi.fn(),
-    filterData: vi.fn(),
-  }),
-}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => key,
     i18n: { resolvedLanguage: "en", loadNamespaces: vi.fn() },
   }),
 }));
-vi.mock("@/pages/KnowledgePage/components/MetadataManagementDialog", () => ({
-  MetadataManagementDialog: () => null,
-}));
-
 vi.mock("@/pages/KnowledgePage/components/PreviewFile", () => ({
   default: (props: {
     edit: boolean;
@@ -73,7 +52,6 @@ vi.mock("@/pages/KnowledgePage/components/PreviewFile", () => ({
     urlState: { url: string };
   }) => <output data-testid="original-preview">{JSON.stringify(props)}</output>,
 }));
-
 const scope: KnowledgeQueryScope = {
   identityKey: "user:7",
   tenantId: 101,
@@ -104,6 +82,12 @@ const page = (
   has_more: next_cursor !== null,
   next_cursor,
 });
+const permission = (actions: string[] = []) => ({
+  actions,
+  mode: "INHERIT",
+  sources: [],
+  roster_complete: true,
+});
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: unknown) => void;
@@ -132,6 +116,7 @@ function mount(props: Partial<FilesProps> = {}) {
     update: (next: Partial<FilesProps>) => result.rerender(view(next)),
   };
 }
+const queryRename = () => screen.queryByRole("menuitem", { name: "rename" });
 async function menu(name = "report.pdf") {
   const target = await screen.findByLabelText(`more ${name}`);
   fireEvent.keyDown(target, { key: "Enter" });
@@ -144,7 +129,6 @@ async function rename(name = "report.pdf") {
   );
   return screen.findByRole("dialog");
 }
-
 beforeEach(() => {
   vi.clearAllMocks();
   grants = new Map([["knowledge_space:7", ["visible"]]]);
@@ -170,12 +154,9 @@ beforeEach(() => {
     original_url: "https://objects.test/download.pdf",
     preview_url: "",
   });
-  mocks.permissions.mockImplementation(async (type: string, id: string) => ({
-    actions: grants.get(`${type}:${id}`) ?? [],
-    mode: "INHERIT",
-    sources: [],
-    roster_complete: true,
-  }));
+  mocks.permissions.mockImplementation(async (type: string, id: string) =>
+    permission(grants.get(`${type}:${id}`)),
+  );
   mocks.get.mockImplementation(
     (url: string, options?: { params?: unknown }) => {
       if (url.endsWith("/children")) return mocks.children(options?.params);
@@ -250,7 +231,6 @@ it("keeps search as a real page query and returns to a fresh first directory cur
   expect(mocks.children).toHaveBeenCalledTimes(2);
   expect(mocks.children.mock.lastCall?.[0].cursor).toBeUndefined();
 });
-
 it("only loads each row's real namespace actions when its menu opens", async () => {
   grants.set("knowledge_space:7", ["edit", "delete"]);
   grants.set("knowledge_file:11", ["edit"]);
@@ -262,9 +242,7 @@ it("only loads each row's real namespace actions when its menu opens", async () 
   await waitFor(() =>
     expect(mocks.permissions).toHaveBeenCalledWith("knowledge_file", "11"),
   );
-  expect(
-    screen.queryByRole("menuitem", { name: "rename" }),
-  ).not.toBeInTheDocument();
+  expect(queryRename()).not.toBeInTheDocument();
   expect(
     screen.queryByRole("menuitem", { name: "downloadOriginal" }),
   ).not.toBeInTheDocument();
@@ -278,7 +256,6 @@ it("only loads each row's real namespace actions when its menu opens", async () 
     ),
   ).toBe(false);
 });
-
 it("previews visible-only files through preview without download, Chunk, or file-share", async () => {
   mocks.children.mockResolvedValue(page([{ ...row(), status: 3 }]));
   mount();
@@ -298,7 +275,6 @@ it("previews visible-only files through preview without download, Chunk, or file
   expect(mocks.permissions).not.toHaveBeenCalledWith("knowledge_file", "11");
   expect(mocks.legacy).not.toHaveBeenCalled();
 });
-
 it("uses target rename independently of root edit or delete", async () => {
   grants.set("knowledge_file:11", ["visible", "rename"]);
   mount();
@@ -321,7 +297,6 @@ it("uses target rename independently of root edit or delete", async () => {
     screen.queryByRole("menuitem", { name: "delete" }),
   ).not.toBeInTheDocument();
 });
-
 it("downloads only after an explicit download action and keeps preview separate", async () => {
   grants.set("knowledge_file:11", ["download"]);
   mount();
@@ -339,7 +314,6 @@ it("downloads only after an explicit download action and keeps preview separate"
   expect(anchor.download).toBe("report.pdf");
   expect(mocks.preview).not.toHaveBeenCalled();
 });
-
 it.each([null, 9])(
   "checks create_folder on the actual current container %s",
   async (parentId) => {
@@ -374,7 +348,6 @@ it.each([null, 9])(
       );
   },
 );
-
 it("uses folder rename, not file rename, and sends only the actual name", async () => {
   mocks.children.mockResolvedValue(page([row(9, "Folder", 0)]));
   grants.set("folder:9", ["rename", "download"]);
@@ -392,25 +365,12 @@ it("uses folder rename, not file rename, and sends only the actual name", async 
   );
   expect(mocks.download).not.toHaveBeenCalled();
 });
-
 it.each(["scope", "parent"])(
   "retires delayed permission results across %s ABA",
   async (change) => {
-    const old = deferred<{
-      actions: string[];
-      mode: string;
-      sources: never[];
-      roster_complete: boolean;
-    }>();
+    const old = deferred<ReturnType<typeof permission>>();
     mocks.permissions.mockImplementation((type: string) =>
-      type === "knowledge_file"
-        ? old.promise
-        : Promise.resolve({
-            actions: [],
-            mode: "INHERIT",
-            sources: [],
-            roster_complete: true,
-          }),
+      type === "knowledge_file" ? old.promise : Promise.resolve(permission()),
     );
     const view = mount();
     await menu();
@@ -422,21 +382,11 @@ it.each(["scope", "parent"])(
     await screen.findByText("report.pdf");
     view.update({});
     await screen.findByText("report.pdf");
-    await act(async () =>
-      old.resolve({
-        actions: ["rename", "download"],
-        mode: "INHERIT",
-        sources: [],
-        roster_complete: true,
-      }),
-    );
-    expect(
-      screen.queryByRole("menuitem", { name: "rename" }),
-    ).not.toBeInTheDocument();
+    await act(async () => old.resolve(permission(["rename", "download"])));
+    expect(queryRename()).not.toBeInTheDocument();
     expect(mocks.put).not.toHaveBeenCalled();
   },
 );
-
 it("retires consumed directory cursors and delayed search rows across search ABA", async () => {
   const old = deferred<{
     page: number;
@@ -469,7 +419,6 @@ it("retires consumed directory cursors and delayed search rows across search ABA
   expect(screen.queryByText("obsolete.pdf")).not.toBeInTheDocument();
   expect(mocks.search).toHaveBeenCalledTimes(2);
 });
-
 it("resets opaque paging when a status filter is applied and does not resurrect old pages", async () => {
   mocks.children.mockResolvedValue(page([row()], "next"));
   mount();
@@ -487,7 +436,6 @@ it("resets opaque paging when a status filter is applied and does not resurrect 
   );
   expect(mocks.children.mock.lastCall?.[0].cursor).toBeUndefined();
 });
-
 it("ignores an old preview after closing and opening a different original file", async () => {
   const old = deferred<unknown>();
   mocks.children.mockResolvedValue(page([row(), row(12, "second.pdf")]));
@@ -514,7 +462,6 @@ it("ignores an old preview after closing and opening a different original file",
     "old.pdf",
   );
 });
-
 it("ignores a delayed download after a tenant change", async () => {
   const old = deferred<unknown>();
   mocks.download.mockReturnValue(old.promise);
@@ -535,7 +482,6 @@ it("ignores a delayed download after a tenant change", async () => {
   );
   expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
 });
-
 it("keeps failed rename open and reports the original API error", async () => {
   const error = { status_code: 18023, data: { original: true } };
   mocks.put.mockRejectedValue(error);
@@ -547,7 +493,6 @@ it("keeps failed rename open and reports the original API error", async () => {
   expect(screen.getByRole("dialog")).toBeInTheDocument();
   expect(screen.getByLabelText("name")).toHaveValue("report.pdf");
 });
-
 it("does not close a new rename dialog when an older save completes", async () => {
   const old = deferred<unknown>();
   mocks.put.mockReturnValueOnce(old.promise);
@@ -564,7 +509,6 @@ it("does not close a new rename dialog when an older save completes", async () =
   expect(screen.getByRole("dialog")).toBeInTheDocument();
   expect(mocks.children).toHaveBeenCalledTimes(1);
 });
-
 it("rechecks the dialog epoch after awaiting cache invalidation", async () => {
   const old = deferred<void>();
   grants.set("knowledge_file:11", ["rename"]);
@@ -583,7 +527,6 @@ it("rechecks the dialog epoch after awaiting cache invalidation", async () => {
   await act(async () => old.resolve());
   expect(screen.getByLabelText("name")).toHaveValue("new-draft.pdf");
 });
-
 it("retires a pending preview error on unmount and fails closed without a trusted scope", async () => {
   const old = deferred<unknown>();
   mocks.preview.mockReturnValue(old.promise);
@@ -597,4 +540,61 @@ it("retires a pending preview error on unmount and fails closed without a truste
   mount({ scope: undefined });
   expect(mocks.get).not.toHaveBeenCalled();
   expect(mocks.permissions).not.toHaveBeenCalled();
+});
+it("retires a rename draft permanently when its row disappears before returning", async () => {
+  grants.set("knowledge_file:11", ["rename"]);
+  const view = mount();
+  await rename();
+  fireEvent.change(screen.getByLabelText("name"), {
+    target: { value: "stale-draft.pdf" },
+  });
+  mocks.children.mockResolvedValue(page([]));
+  await act(() => view.client.invalidateQueries());
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  grants.set("knowledge_file:11", ["visible"]);
+  mocks.children.mockResolvedValue(page([row(11, "restored.pdf")]));
+  await act(() => view.client.invalidateQueries());
+  await screen.findByText("restored.pdf");
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(mocks.put).not.toHaveBeenCalled();
+});
+it("ignores a pending grant after refreshed row removal and restoration", async () => {
+  const pending = deferred<ReturnType<typeof permission>>();
+  mocks.permissions.mockImplementation((type: string) =>
+    type === "knowledge_file" ? pending.promise : Promise.resolve(permission()),
+  );
+  const view = mount();
+  await menu();
+  mocks.children.mockResolvedValue(page([]));
+  await act(() => view.client.invalidateQueries());
+  await waitFor(() =>
+    expect(screen.queryByLabelText("more report.pdf")).not.toBeInTheDocument(),
+  );
+  mocks.children.mockResolvedValue(page([row(11, "restored.pdf")]));
+  await act(() => view.client.invalidateQueries());
+  await screen.findByText("restored.pdf");
+  await act(async () => pending.resolve(permission(["rename"])));
+  expect(queryRename()).not.toBeInTheDocument();
+});
+it("presents the successful actions after retrying a failed permission lookup", async () => {
+  const pending = deferred<ReturnType<typeof permission>>();
+  let calls = 0;
+  mocks.permissions.mockImplementation((type: string) => {
+    if (type !== "knowledge_file") return Promise.resolve(permission());
+    return ++calls === 1
+      ? Promise.reject({ status_code: 25011 })
+      : pending.promise;
+  });
+  mount();
+  const target = await menu();
+  fireEvent.click(
+    await within(target).findByRole("menuitem", { name: "retry" }),
+  );
+  await waitFor(() => expect(calls).toBe(2));
+  await act(async () => pending.resolve(permission(["rename"])));
+  expect(
+    await screen.findByRole("menuitem", { name: "rename" }),
+  ).toBeInTheDocument();
 });
