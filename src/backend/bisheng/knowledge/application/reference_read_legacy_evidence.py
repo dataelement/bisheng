@@ -18,3 +18,8 @@ class KnowledgeReferenceReadLegacyEvidence:
                 session, scope, target, run_id=run_id, evidence_key=evidence_key, identity=identity
             )
         )
+
+    def resolve(self, session, scope, target, *, run_id, evidence_key, identity):
+        return LegacyEvidence(
+            *self.repository.load(session, scope, target, run_id=run_id, evidence_key=evidence_key, identity=identity)
+        )
