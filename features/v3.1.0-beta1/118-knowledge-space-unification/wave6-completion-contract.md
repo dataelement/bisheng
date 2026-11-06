@@ -777,3 +777,14 @@ INT接手T855856两已登记默认来源叶，以让PROC专注M3，生产边界�
 
 
 §52依赖精确说明：允许复用现Domain已统一使用的跨模块公共纯合同resource_reference.application.contracts.TransactionIdentity；禁止反向依赖knowledge.application的计划/codec/SourceOwner编排实现，不为路径名重造原事务身份协议。
+
+
+## 54. APP来源展示的原SA创建者删除例外批读 V1：已冻结
+
+PERM审实际原F048Runtime单条fallback发现新批量展示会继承SQL N+1：50根全拒508 SELECT、50根仅CREATOR_GRANT允许delete556 SELECT；Catalog/Mode/Grant分别逐target读取，原语义正确、预算失败。只优化此既有例外所需批量读取，不新建授权政策、SQL跨业务自验或移除例外。T865新test/permission/test_creator_delete_batch.py、T866仅原permission/application/runtime.py与control_state.py两生产叶，APP Owner/Repo不在此卡并写；APP交固定后再做本组。
+
+SqlPermissionControlState新增load_grants_batch(*,targets:tuple[VerifiedPermissionTarget,...],models:tuple[GrantModelSnapshot,...])->dict[(tenant_id,resource_type,resource_id),tuple[GrantSnapshot,...]]。empty零SQL，targets≤200去重，当前caller只传active manager模型；查询按精确三元目标分组AND/OR，不能tenant/type/id独立IN乘积扩围；实际Grant/Assignee IDs每SQL≤200。复用现_source_snapshot/stable_grant_key/GrantSnapshot，同tuple键完整映射（无grant也空tuple），active/source及version完全同单条load_grants，不读其他模型/其他tenant、不为批量做bypass。
+
+Runtime.batch_check_actions只在既有SA+delete且决策剩余拒绝项触发；一次_runtime_catalog核原process pin，从现permission_snapshots按批取Mode。CUSTOM仅同actor.tenant且原version/parent/projection_state=CURRENT精确匹配才调用上述batch；manager/Grant.active/model.active、CREATOR_GRANT active、同service_account subject_id、userset_relation=None逐项原条件不变；原log保留。INHERIT保原nearest CUSTOM ancestor单条fallback，不新改文件继承策略；非SA/非delete/原决策已允许/foreign不多读、原单条check_action不变。不能误将主路径DECIDABLE的PROJECTING许可套在本例外严格CURRENT上；任何原读失败按原方式拒例外，不将异常变ALLOW。
+
+同测试锁原50/50两例语义及实际SQL预算，再覆盖重复目标、空/foreign、撤销source/换model/非creator/非SA/版本或parent漂移/PROJECTING、Catalog pin或IO异常、INHERIT原路径对照。规模须50→200查询不逐项增长，401分批线性，禁止target×model×source关联乘积；不把原产品策略首绿伪称行为红。APP T849850待此预算接缝联装后才能闭合；既有权限其他全库性能不在本卡扩改。
