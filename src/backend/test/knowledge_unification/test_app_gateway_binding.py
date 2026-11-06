@@ -37,7 +37,9 @@ async def test_binding_failures_stop_provider_and_preserve_original_principal(mo
     principal = hosted_app_principal()
     admitted = AsyncMock(side_effect=error)
     monkeypatch.setattr(policy, "_declaration_port", SimpleNamespace(assert_model_binding=admitted))
-    monkeypatch.setattr(gateway, "resolve_range_and_subject", AsyncMock(return_value=(ModelRange(), policy.ResolvedSubject("app_self"))))
+    monkeypatch.setattr(
+        gateway, "resolve_range_and_subject", AsyncMock(return_value=(ModelRange(), policy.ResolvedSubject("app_self")))
+    )
     monkeypatch.setattr(gateway, "resolve_model_name", AsyncMock(return_value=MODEL))
     instantiate = AsyncMock(side_effect=AssertionError("provider must not be initialized"))
     monkeypatch.setattr(gateway.ModelGatewayService, "_instantiate", instantiate)
@@ -56,16 +58,22 @@ async def test_binding_failures_stop_provider_and_preserve_original_principal(mo
 async def test_admission_occurs_immediately_before_provider_initialization(monkeypatch):
     principal = hosted_app_principal()
     events = []
+
     async def admit(identity, requested, resolved):
         assert identity is principal and resolved is MODEL and requested == "gpt-4o"
         events.append("admit")
+
     monkeypatch.setattr(policy, "_declaration_port", SimpleNamespace(assert_model_binding=admit))
-    monkeypatch.setattr(gateway, "resolve_range_and_subject", AsyncMock(return_value=(ModelRange(), policy.ResolvedSubject("app_self"))))
+    monkeypatch.setattr(
+        gateway, "resolve_range_and_subject", AsyncMock(return_value=(ModelRange(), policy.ResolvedSubject("app_self")))
+    )
     monkeypatch.setattr(gateway, "resolve_model_name", AsyncMock(return_value=MODEL))
     monkeypatch.setattr(gateway.ModelGatewayService, "_start_record", Mock(return_value=SimpleNamespace()))
+
     async def instantiate(identity, resolved, request):
         events.append("instantiate")
         raise RuntimeError("stop at provider boundary")
+
     monkeypatch.setattr(gateway.ModelGatewayService, "_instantiate", instantiate)
     with pytest.raises(RuntimeError, match="stop at provider boundary"):
         await gateway.ModelGatewayService.complete(
@@ -74,7 +82,9 @@ async def test_admission_occurs_immediately_before_provider_initialization(monke
     assert events == ["admit", "instantiate"]
 
 
-@pytest.mark.parametrize("port", [SimpleNamespace(), SimpleNamespace(assert_model_binding=AsyncMock(return_value=True))])
+@pytest.mark.parametrize(
+    "port", [SimpleNamespace(), SimpleNamespace(assert_model_binding=AsyncMock(return_value=True))]
+)
 async def test_missing_or_incomplete_binding_port_is_not_a_model_permit(monkeypatch, port):
     monkeypatch.setattr(policy, "_declaration_port", port)
     with pytest.raises(ModelFaceCatalogUnavailableError):
