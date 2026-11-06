@@ -495,3 +495,22 @@ async def test_read_inspection_rejects_non_name_input_and_preserves_explicit_emp
             with pytest.raises(ResourceReferenceInvalidError):
                 await ctx[2].ainspect_model_names_current(session, 101, requested, identity=ctx[1])
         assert await ctx[2].ainspect_model_names_current(session, 101, (), identity=ctx[1]) == ()
+
+
+@pytest.mark.parametrize("operation", ["prepare", "frozen", "inspect"])
+async def test_public_name_ports_map_missing_multitenant_context_to_10996(ctx, monkeypatch, operation):
+    from bisheng.common.errcode.tenant import NoTenantContextError
+    from bisheng.common.services.config_service import settings
+
+    monkeypatch.setattr(settings.multi_tenant, "enabled", True)
+    with tenant(None):
+        async with AsyncSession(ctx[0]) as session:
+            with pytest.raises(ResourceReferenceInvalidError) as raised:
+                if operation == "prepare":
+                    await ctx[2].aprepare_model_names_current(session, 101, ("alpha",), identity=ctx[1])
+                elif operation == "frozen":
+                    await ctx[2].aresolve_frozen_model_identities(session, 101, (11,), identity=ctx[1])
+                else:
+                    await ctx[2].ainspect_model_names_current(session, 101, ("alpha",), identity=ctx[1])
+            assert isinstance(raised.value.__cause__, NoTenantContextError)
+            assert not session.in_transaction()
