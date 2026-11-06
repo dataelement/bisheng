@@ -139,6 +139,15 @@ async def inspect(impact, identity, *, server_id=1, retained=(), delete_server=F
 
 async def test_five_model_kinds_full_pages_and_distinct_source_versions_are_counted(impact):
     session, _, ledger = impact
+    model_queries = []
+
+    def record(state):
+        if state.is_select and any(
+            getattr(table, "name", None) in {"llm_model", "llm_server"} for table in state.statement.get_final_froms()
+        ):
+            model_queries.append(state.statement)
+
+    event.listen(session.sync_session, "do_orm_execute", record)
     for index, kind in enumerate(SourceType):
         _, bindings = seed(session, source_type=kind.value, source_id=f"private-{index}", slots=73)
         for offset, binding in enumerate(bindings):
@@ -153,6 +162,7 @@ async def test_five_model_kinds_full_pages_and_distinct_source_versions_are_coun
     assert result.restricted_counts == result.source_counts
     assert result.coverage_epoch == 1 and len(result.inbound_digest) == 64
     assert "private-" not in json.dumps(asdict(result))
+    assert len(model_queries) <= 10
 
 
 async def test_shared_root_target_counts_both_source_tenants_without_disclosing_them(impact):
@@ -245,3 +255,20 @@ async def test_last_page_changes_digest_and_retained_models_are_excluded(impact)
     assert before.inbound_digest != after.inbound_digest
     assert dict(after.slot_counts)["assistant"] == 201
     assert not retained.blocked and "11" not in {target.target_id for target in retained.targets}
+
+
+@pytest.mark.parametrize("corrupt", ["owner", "space", "legacy"])
+async def test_inbound_target_metadata_must_agree_with_actual_live_owner(impact, corrupt):
+    session, _, _ = impact
+    _, rows = seed(session)
+    if corrupt == "owner":
+        rows[0].target_tenant_id = 202
+    elif corrupt == "space":
+        rows[0].target_space_id = "99"
+    else:
+        rows[0].target_tenant_id = None
+        rows[0].legacy_invalid_reason = "target_missing"
+        rows[0].legacy_run_id, rows[0].legacy_evidence_key = "frozen-run", "frozen-evidence"
+    await session.flush()
+    with actor() as user, pytest.raises(ReferenceCoverageNotReadyError):
+        await inspect(impact, user)
