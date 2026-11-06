@@ -2107,14 +2107,6 @@
       "count": 1
     }
   },
-  "src/pages/KnowledgePage/filesUpload.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 3
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
   "src/pages/KnowledgePage/qas.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 2
