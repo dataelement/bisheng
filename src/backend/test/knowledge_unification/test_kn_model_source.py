@@ -8,6 +8,7 @@ are test boundaries. No model provider, queue, FGA or production DB is called.
 import json
 from contextlib import contextmanager
 from dataclasses import replace
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -19,6 +20,7 @@ from bisheng.common.errcode.knowledge import (
     ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
+from bisheng.core.context.tenant import tenant_execution_scope
 from bisheng.knowledge.application import model_reference_read as module
 from bisheng.knowledge.application import reference_source_owner as owner_module
 from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication
@@ -34,6 +36,7 @@ from bisheng.resource_reference.application.source_contracts import SourceReadRe
 from bisheng.resource_reference.application.source_read import ReferenceSourceReadRuntime
 from bisheng.resource_reference.application.source_verification import SourceReadVerifier
 from bisheng.resource_reference.domain.repositories.source_read_repository import SourceReadRepository
+from bisheng.worker import tenant_context as workers
 from test.knowledge_unification import test_kn_model_bindings as fixtures
 
 store = fixtures.store
@@ -46,7 +49,15 @@ async def admission(business, monkeypatch):
     identity = KnowledgeModelReadIdentityPort()
     source = KnowledgeReferenceSourceOwner(identity_port=identity)
     verifier = SourceReadVerifier({SourceType.KNOWLEDGE: source}, identity)
-    target = ModelSourceReadTargetOwner(verifier)
+
+    class Sharing:
+        def get_shared_server_ids(self, session, tenant_id, server_ids):
+            return frozenset(server_ids) & business.sharing.allowed
+
+        async def aget_shared_server_ids(self, session, tenant_id, server_ids):
+            return self.get_shared_server_ids(session, tenant_id, server_ids)
+
+    target = ModelSourceReadTargetOwner(verifier, sharing=Sharing())
     core = ReferenceSourceReadRuntime(verifier, SourceReadRepository(verifier), {"model": target})
     runtime = KnowledgeModelReadRuntime(core, identity)
     monkeypatch.setattr(owner_module, "require_business_action", AsyncMock())
@@ -165,3 +176,106 @@ async def test_private_actor_scope_never_uses_user_id_to_read_foreign_knowledge(
     async with context.sessions() as session:
         with pytest.raises(ResourceReferenceInvalidError):
             await runtime.arequire(30, session=session)
+
+
+@pytest.mark.parametrize("channel", ["open", "public"])
+async def test_private_scope_preserves_original_principal_and_actual_visitor_actor(admission, channel):
+    from bisheng.open_api.domain.context import (
+        OpenApiPrincipal,
+        reset_current_open_api_principal,
+        set_current_open_api_principal,
+    )
+    from bisheng.public_endpoints.domain.context import (
+        PublicApiPrincipal,
+        reset_current_public_api_principal,
+        set_current_public_api_principal,
+    )
+
+    context, runtime, _, identity = admission
+    if channel == "open":
+        principal = OpenApiPrincipal(
+            credential_id=42,
+            actor_kind="hosted_app",
+            actor_id=91,
+            actor_name="actual app",
+            tenant_id=101,
+            resource_owner_user_id=99,
+            scopes=frozenset({"filelib:retrieve"}),
+            authorization_subject_type="service_account",
+            authorization_subject_id=91,
+            effective_user_id=None,
+        )
+        setter, reset = set_current_open_api_principal, reset_current_open_api_principal
+    else:
+        principal = PublicApiPrincipal(
+            tenant_id=101,
+            operator_user_id=99,
+            operator_name="publisher",
+            resource_type="assistant",
+            resource_id="published",
+        )
+        setter, reset = set_current_public_api_principal, reset_current_public_api_principal
+    token = setter(principal)
+    try:
+        original_actor = get_current_permission_actor()
+        async with context.sessions() as session:
+            private = await identity.aissue(session, 40)
+            result = await runtime.arequire(40, session=session)
+            assert result.model_id == 11
+            owner_module.require_business_action.assert_awaited_with(
+                None, resource_type="knowledge_space", resource_id=40, action="visible", actor=original_actor
+            )
+            # A value-equal replacement is not the same authenticated object.
+            replacement = setter(principal.model_copy())
+            try:
+                with pytest.raises(ResourceReferenceInvalidError):
+                    await identity.acapture(private)
+            finally:
+                reset(replacement)
+            assert (await identity.acapture(private)).request_tenant_id == 101
+    finally:
+        reset(token)
+
+
+async def test_actual_owned_source_can_consume_root_shared_model_and_rejects_revocation(admission):
+    context, runtime, _, _ = admission
+    async with context.sessions() as session:
+        row = Knowledge(id=41, name="shared model source", tenant_id=101, user_id=7, type=3, model="22")
+        await KnowledgeModelReferenceApplication.acreate(
+            session, row, login_user=context.user, project_created=AsyncMock()
+        )
+        await session.commit()
+    async with context.sessions() as session:
+        result = await runtime.arequire(41, session=session)
+        assert result.model_id == 22 and result.tenant_id == 101
+    context.sharing.allowed = frozenset()
+    async with context.sessions() as session:
+        with pytest.raises(ResourceReferenceInvalidError):
+            await runtime.arequire(41, session=session)
+
+
+async def test_actorless_read_requires_actual_background_task_and_expires_after_postrun(admission, monkeypatch):
+    from bisheng.permission.application.identity import reset_current_permission_actor
+
+    context, runtime, _, identity = admission
+    sender = SimpleNamespace(
+        name="bisheng.worker.knowledge.rebuild",
+        request=SimpleNamespace(id="actual-task", headers={"tenant_id": 101}, called_directly=False),
+    )
+    monkeypatch.setattr(workers, "current_task", SimpleNamespace(_get_current_object=lambda: sender))
+    actor_token = set_current_permission_actor(None)
+    try:
+        async with context.sessions() as session:
+            with tenant_execution_scope(101), pytest.raises(ResourceReferenceInvalidError):
+                await identity.aissue(session, 40)
+            workers.restore_tenant_context(sender=sender)
+            try:
+                private = await identity.aissue(session, 40)
+                assert (await runtime.arequire(40, session=session)).model_id == 11
+                owner_module.require_business_action.assert_not_awaited()
+            finally:
+                workers.reset_tenant_context(sender=sender)
+            with pytest.raises(ResourceReferenceInvalidError):
+                await identity.acapture(private)
+    finally:
+        reset_current_permission_actor(actor_token)
