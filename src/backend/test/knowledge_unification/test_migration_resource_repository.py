@@ -518,7 +518,9 @@ async def test_many_roots_and_historical_versions_are_linear_pages_with_one_glob
         assert len(native.queries) == 12  # no repeated global probe when the coordinator advances tenant
 
 
-@pytest.mark.parametrize("broken", ["tag_missing", "tag_foreign", "file_missing", "file_foreign"])
+@pytest.mark.parametrize(
+    "broken", ["tag_missing", "tag_foreign", "file_missing", "file_foreign", "nonknowledge_foreign"]
+)
 async def test_global_tag_parent_and_file_probes_keep_missing_and_foreign_visible(repo, native, broken):
     await native.insert(Knowledge, [resource(9000), resource(8000, 202)])
     await native.insert(KnowledgeFile, [file(1), file(2, 202, knowledge_id=8000)])
@@ -530,6 +532,8 @@ async def test_global_tag_parent_and_file_probes_keep_missing_and_foreign_visibl
         link["resource_id"] = "99"
     elif broken == "file_foreign":
         link["resource_id"] = "2"
+    elif broken == "nonknowledge_foreign":
+        link.update(tenant_id=202, resource_type=10, resource_id="opaque-app")
     await native.insert(TagLink, [link])
     async with AsyncSession(native.engine) as session, session.begin():
         with pytest.raises(KnowledgeOperationPlanConflictError):
@@ -555,6 +559,44 @@ async def test_unrelated_application_orphan_tag_link_remains_an_original_fact(re
         await repo.avalidate_global_integrity(session)
         row = (await repo.alist_tag_links(session)).items[0]
         assert (row.tag_id, row.resource_type, row.resource_id) == (999, 10, "opaque-app")
+
+
+async def test_tag_probes_use_primary_key_searches_and_case_only_string_rhs(repo, native):
+    from sqlalchemy.dialects import mysql
+
+    await native.insert(Knowledge, [resource(9000)])
+    await native.insert(KnowledgeFile, [file(1)])
+    await native.insert(Tag, [data("tags", 1)])
+    await native.insert(TagLink, [data("tag_links", 1)])
+    statements = []
+
+    def observed(_connection, _cursor, sql, _parameters, context, _many):
+        if "m2_relation_link" in sql and context.compiled is not None:
+            statements.append(context.compiled.statement)
+
+    sa.event.listen(native.engine.sync_engine, "before_cursor_execute", observed)
+    try:
+        async with AsyncSession(native.engine) as session, session.begin():
+            await repo.avalidate_global_integrity(session)
+    finally:
+        sa.event.remove(native.engine.sync_engine, "before_cursor_execute", observed)
+    assert len(statements) == 2 and len(native.queries) == 13
+    plans = []
+    async with native.engine.connect() as connection:
+        for sql, parameters in native.queries[-2:]:
+            plans.extend((await connection.exec_driver_sql("EXPLAIN QUERY PLAN " + sql, parameters)).all())
+    details = [row[3] for row in plans]
+    assert any("SEARCH m2_relation_tag USING INTEGER PRIMARY KEY" in detail for detail in details)
+    assert any("SEARCH m2_tag_owner USING INTEGER PRIMARY KEY" in detail for detail in details)
+    assert any("SEARCH m2_linked_file USING INTEGER PRIMARY KEY" in detail for detail in details)
+    for statement in statements:
+        compiled = str(statement.compile(dialect=mysql.dialect()))
+        assert (
+            "CASE WHEN" in compiled
+            and "CAST(m2_linked_file.id" not in compiled
+            and "CAST(m2_tag_owner.id" not in compiled
+        )
+    print("M2_TAG_EXPLAIN", details)
 
 
 async def test_ancestor_500_unique_keys_use_three_queries_and_keep_foreign_and_missing_distinct(repo, native):
