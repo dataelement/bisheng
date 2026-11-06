@@ -443,3 +443,10 @@ Doc/Version无tenant，通过其真实父Knowledge锚定并保raw关系/父tenan
 ainspect_file_ancestors(session,*,file_ids:tuple[int,...])->tuple[FileAncestorFact,...]：positive非bool、去重≤500，内部每批≤200，空输入0SQL，按去重输入顺序返。Fact闭集{id,exists,tenant_id,knowledge_id,file_type,level,file_level_path,update_time}；只有全局PK真不存在才exists=False，foreign也返其真实tenant/type/path scalar，不读名称/内容/配置，入口仍拒ambient bypass。file_level_path是**祖先ID链、不含自身**，原NULL/''/'/'和path/level原样保留不normalize。现MAX_FOLDER_LEVEL9只管新写；存量level10+保持可访问/移动，不在M2设新上限/截断/flatten。后续coordinator聚合真实unique ancestor键按有界批查、验证无环/实际DIR/tenant/space/prefix一致，不逐file逐层SQL；本repo不签发preflight通过或自动修树。
 
 本slice测试须真实native SQL覆盖401分页、完整旧20/neutral7区分、tenant NULL/未知/错误父/foreign链、未建V1事实、legacy overdeep原样、祖先500输入3批且重复IDs不重查、空0SQL及外部TX零写/no-autoflush/原pending保留；大root/多版本只线性PK页，不独立列表相乘或按tenant重跑global探针。标准SQLAlchemy/现JsonType保持C2，MySQL克隆实测尚待审批通路恢复，DM8实库免测不免静态。固定独立审+真实后续consumer之前不将helper记作正式M2完成。
+
+
+### 24.2逐项执行规模与pending关系复核补充：已冻结
+
+独立审已确认no_autoflush下其他既有dirty version的knowledge_file_id可改指目标、历史item的primary file可pending移出；提交前必须把真实当前primary version/file及关联FK history纳入精确必要集合，拒相关关键关系pending，不能先以旧SQL合法链判成功再flush落坏链；无关remark/name继续保留。只精确PK/有界pending候选，不重扫空间。
+
+规模预算覆盖数据库实际JSON反序列化/SQL列，不能只数SELECT或Python属性读取。原401items×4KB快照、10项claim/renew/checkpoint/complete/finalize/retry已实测scope_manifest 55次/94,455,625 bytes及item snapshot 4,387次/18,201,663 bytes。修复中metadata持久scope_manifest仅target/space/parent+各snapshot digest，完整before/after仍在真实JobItem且request_hash仍覆盖完整快照；执行读取使用明确light projection/raiseload，业务查询/audit完整scope兼容保留，不能进程cache遮DB传输。领取下一项只读取实际可领取的最早一条（pending或租约已过期running，保NULL租约语义/原排序/Job锁），不可每次.all读取全部pending snapshots。metadata计数以冻结total_count及真实Item集合核完整性，不为读len而拉整清单；非metadata原行为需同选集回归不回退租约/幂等。原T733/735测试与734/736生产叶内闭合后，由同独立代理复验才允许后继738。
