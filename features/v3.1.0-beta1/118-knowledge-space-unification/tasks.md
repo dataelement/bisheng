@@ -5823,7 +5823,7 @@
   **类型 / Owner**：文案集成 / INT\
   **写入文件**：`src/frontend/platform/public/locales/zh-Hans/bs.json`；`src/frontend/platform/public/locales/en-US/bs.json`\
   **逻辑 / 测试上下文**：仅现menu.knowledge导航名按AC01统一知识空间，QA独立页签；不全局替换旧文档/QA selector及权限资源字段。\
-  **依赖**：T722, T002\
+  **依赖**：T708, T002\
   **验证 / 完成条件**：原其他keys/值完全不变，三语导航语义一致、i18n无新增漂移；实际页面挂载与门禁由T176验证。
 
 - [ ] **T724 · 平台日文入口统一空间名称**
