@@ -85,6 +85,19 @@ class ProcessingOwnerRepository:
         if active is not None:
             raise KnowledgeProcessingConflictError(reason="processing_target_job_active")
         physical = KnowledgeFile.__table__
+        with strict_tenant_filter():
+            directory_version = (
+                await session.exec(
+                    select(Knowledge.id)
+                    .join(physical, physical.c.knowledge_id == Knowledge.id)
+                    .join(KnowledgeDocumentVersion, KnowledgeDocumentVersion.knowledge_file_id == physical.c.id)
+                    .where(Knowledge.id == space_id, physical.c.file_type == FileType.DIR.value)
+                    .with_for_update()
+                    .limit(1)
+                )
+            ).first()
+        if directory_version is not None:
+            raise KnowledgeOperationPlanConflictError(reason="processing_version_scope_incomplete")
         # C3 scopes the selected root. Child columns stay visible to integrity
         # checks even when their tenant/space link is corrupt, as in aload_scope.
         files_query = (
@@ -131,7 +144,9 @@ class ProcessingOwnerRepository:
                 raise KnowledgeProcessingConflictError(reason="processing_scope_not_empty")
             files.add(row["id"])
             versions.add(version.id)
-            documents.setdefault(document.id, []).append(version)
+            primary = documents.setdefault(document.id, [])
+            if version.is_primary:
+                primary.append(version.id)
             facts.append(
                 {
                     "file": KnowledgeFile(**row).model_dump(mode="json"),
@@ -143,8 +158,7 @@ class ProcessingOwnerRepository:
         for _, document, version in document_rows:
             if document.id not in documents or version is None or version.id not in versions:
                 raise KnowledgeOperationPlanConflictError(reason="processing_version_scope_incomplete")
-            primary = [value.id for value in documents[document.id] if value.is_primary]
-            if primary != [document.primary_version_id]:
+            if documents[document.id] != [document.primary_version_id]:
                 raise KnowledgeOperationPlanConflictError(reason="processing_version_scope_incomplete")
             actual_versions.add(version.id)
         if actual_versions != versions:
