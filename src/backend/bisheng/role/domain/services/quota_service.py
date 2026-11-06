@@ -686,13 +686,16 @@ class QuotaService:
             Knowledge,
             KnowledgeDao,
             KnowledgeTypeEnum,
+            _personal_space_quota_count_predicate,
         )
 
         stmt = select(func.count(Knowledge.id)).where(Knowledge.type == KnowledgeTypeEnum.SPACE.value)
         if col == "user_id":
             # Reuse the DAO helper so this stays the same predicate the domain
             # gate uses — two definitions of "department space" would drift.
-            return KnowledgeDao._exclude_department_spaces(stmt.where(Knowledge.user_id == val))
+            return KnowledgeDao._exclude_department_spaces(
+                stmt.where(Knowledge.user_id == val, _personal_space_quota_count_predicate())
+            )
         if col == "tenant_id":
             return stmt.where(Knowledge.tenant_id == val)
         return None

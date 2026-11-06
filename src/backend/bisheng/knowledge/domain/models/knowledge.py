@@ -168,6 +168,11 @@ class Knowledge(KnowledgeBase, table=True):
     )
 
 
+def _personal_space_quota_count_predicate():
+    """Only personal quota counts exempt a durable, nonempty migration origin."""
+    return or_(col(Knowledge.migration_origin).is_(None), Knowledge.migration_origin == "")
+
+
 class KnowledgeRead(KnowledgeBase):
     id: int
     user_name: str | None = None
@@ -780,7 +785,9 @@ class KnowledgeDao(KnowledgeBase):
     def count_spaces_by_user(cls, user_id: int, exclude_department_spaces: bool = False) -> int:
         """Count how many Knowledge Spaces a user has created"""
         statement = select(func.count(Knowledge.id)).where(
-            Knowledge.user_id == user_id, Knowledge.type == KnowledgeTypeEnum.SPACE.value
+            Knowledge.user_id == user_id,
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            _personal_space_quota_count_predicate(),
         )
         if exclude_department_spaces:
             statement = cls._exclude_department_spaces(statement)
@@ -791,7 +798,9 @@ class KnowledgeDao(KnowledgeBase):
     async def async_count_spaces_by_user(cls, user_id: int, exclude_department_spaces: bool = False) -> int:
         """Async: Count how many Knowledge Spaces a user has created"""
         statement = select(func.count(Knowledge.id)).where(
-            Knowledge.user_id == user_id, Knowledge.type == KnowledgeTypeEnum.SPACE.value
+            Knowledge.user_id == user_id,
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            _personal_space_quota_count_predicate(),
         )
         if exclude_department_spaces:
             statement = cls._exclude_department_spaces(statement)
