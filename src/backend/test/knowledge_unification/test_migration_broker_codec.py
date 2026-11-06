@@ -2,13 +2,14 @@
 
 import base64
 import importlib
+import json
+import subprocess
+import sys
 from dataclasses import FrozenInstanceError
+from functools import lru_cache
 from types import SimpleNamespace
 
 import pytest
-from celery.app.amqp import AMQP
-from kombu.serialization import dumps
-from kombu.transport.virtual.base import Base64
 from kombu.utils.json import dumps as envelope_dumps
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
@@ -21,6 +22,29 @@ def codec():
     return importlib.import_module("bisheng.knowledge.application.unification_broker_codec")
 
 
+@lru_cache(maxsize=64)
+def _encoded(spec):
+    # Root test infrastructure stubs celery.app. A fresh offline interpreter
+    # produces the real encoder output without modifying those shared stubs.
+    script = """
+import json,sys
+from celery.app.amqp import AMQP
+from kombu.serialization import dumps
+from kombu.transport.virtual.base import Base64
+from kombu.utils.json import dumps as encode
+spec=json.loads(sys.stdin.read())
+builder=object.__new__(AMQP)
+builder.utc=False
+builder.argsrepr_maxsize=builder.kwargsrepr_maxsize=1024
+msg=getattr(builder,'as_task_v'+str(spec['protocol']))('original-task-id',spec['task'],args=spec['args'],kwargs=spec['kwargs'])
+headers=msg.headers|({'tenant_id':spec['tenant']} if spec['tenant'] is not None else {})
+content,encoding,body=dumps(msg.body,serializer='json')
+value={'body':Base64().encode(body),'content-encoding':encoding,'content-type':content,'headers':headers,'properties':msg.properties|{'body_encoding':'base64','delivery_tag':'original-delivery','delivery_info':{'exchange':'','routing_key':'knowledge_celery'}}}
+sys.stdout.write(encode(value))
+"""
+    return subprocess.run([sys.executable, "-c", script], input=spec, text=True, capture_output=True, check=True).stdout
+
+
 def message(
     task=PREFIX + "file_worker.parse_knowledge_file_celery",
     args=None,
@@ -30,27 +54,11 @@ def message(
     tenant=101,
     **changes,
 ):
-    # AMQP task builders are pure here: no Celery app/Channel is constructed.
-    builder = object.__new__(AMQP)
-    builder.utc, builder.argsrepr_maxsize, builder.kwargsrepr_maxsize = False, 1024, 1024
-    task_message = getattr(builder, f"as_task_v{protocol}")(
-        "original-task-id", task, args=args or [], kwargs=kwargs or {}
+    spec = json.dumps(
+        {"task": task, "args": args or [], "kwargs": kwargs or {}, "protocol": protocol, "tenant": tenant},
+        sort_keys=True,
     )
-    headers = task_message.headers | ({"tenant_id": tenant} if tenant is not None else {})
-    content_type, encoding, body = dumps(task_message.body, serializer="json")
-    value = {
-        "body": Base64().encode(body),
-        "content-encoding": encoding,
-        "content-type": content_type,
-        "headers": headers,
-        "properties": task_message.properties
-        | {
-            "body_encoding": "base64",
-            "delivery_tag": "original-delivery",
-            "delivery_info": {"exchange": "", "routing_key": "knowledge_celery"},
-        },
-    }
-    return envelope_dumps(value | changes).encode()
+    return envelope_dumps(json.loads(_encoded(spec)) | changes).encode()
 
 
 def conf(**changes):
