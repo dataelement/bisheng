@@ -153,7 +153,7 @@ class KnowledgeUnificationRunRepository:
         )
         if lock:
             statement = statement.with_for_update()
-        with strict_tenant_filter():
+        with session.no_autoflush, strict_tenant_filter():
             row = (await session.execute(statement)).scalar_one_or_none()
         if row is not None:
             self._validate(row, run_id, writer_contract_version)
@@ -169,7 +169,7 @@ class KnowledgeUnificationRunRepository:
         # Existing tenants, including disabled tenants retaining configuration,
         # serialize first-run creation without a new lock table or revision.
         tenant = self._tenant()
-        with strict_tenant_filter():
+        with session.no_autoflush, strict_tenant_filter():
             found = (
                 await session.execute(select(Tenant.id).where(Tenant.id == tenant).with_for_update())
             ).scalar_one_or_none()
@@ -177,7 +177,7 @@ class KnowledgeUnificationRunRepository:
             _reject("tenant_missing")
 
     async def _unique_run(self, session, run_id, writer_contract_version) -> None:
-        with strict_tenant_filter():
+        with session.no_autoflush, strict_tenant_filter():
             other = (
                 await session.execute(
                     select(KnowledgeUnificationRun.id)
