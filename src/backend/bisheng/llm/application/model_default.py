@@ -12,6 +12,7 @@ from bisheng.common.errcode.knowledge import (
 )
 from bisheng.common.errcode.llm import WorkbenchChatDefaultModelError, WorkbenchEmbeddingError
 from bisheng.common.errcode.llm_tenant import LLMSystemConfigForbiddenError
+from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.core.context.tenant import is_tenant_filter_bypassed
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.database.models.tenant import ROOT_TENANT_ID
@@ -37,7 +38,10 @@ from bisheng.resource_reference.application.source_contracts import canonical_pa
 
 
 def current_model_default_tenant(expected=None):
-    tenant = _resolve_tenant_id()
+    try:
+        tenant = _resolve_tenant_id()
+    except NoTenantContextError as error:
+        raise ResourceReferenceInvalidError(reason="model_default_tenant_required") from error
     if (
         type(tenant) is not int
         or tenant <= 0
@@ -158,3 +162,36 @@ class ModelDefaultApplication:
         await repository.aput(session, key, canonical_payload_json(config.model_dump(mode="json")))
         await runtime.aapply_source_bindings(session, prepared)
         return config
+
+    @classmethod
+    async def arestore_inheritance(cls, session, key, *, login_user):
+        tenant = current_model_default_tenant()
+        if tenant == ROOT_TENANT_ID:
+            raise LLMSystemConfigForbiddenError()
+        await cls._authorize(login_user, tenant)
+        repository = ModelDefaultRepository()
+        own = await repository.aget_own(session, key)
+        source = SourceKey(tenant, "model_default", key, "current")
+        runtime = await get_reference_binding_runtime()
+        new_source = await cls._old_source(session, runtime, source, own)
+        if own is None and new_source:
+            # A consumer that only inherits Root never acquires its own index.
+            return await repository.aresolve(session, key)
+
+        async def lock_root(active_session):
+            current = await repository.alock_root(active_session, key)
+            await cls._authorize(login_user, tenant)
+            if current != own:
+                raise KnowledgeOperationPlanConflictError(reason="model_default_changed")
+
+        prepared = await runtime.aprepare_source_bindings(
+            session,
+            source,
+            (),
+            extractor_version=MODEL_DEFAULT_REFERENCE_EXTRACTOR_VERSION,
+            lock_source_root=lock_root,
+            effective=False,
+        )
+        await repository.adelete_override(session, key)
+        await runtime.aapply_source_bindings(session, prepared)
+        return await repository.aresolve(session, key)

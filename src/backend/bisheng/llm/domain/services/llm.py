@@ -1,6 +1,5 @@
 import asyncio
 import hashlib
-import json
 import os
 from collections.abc import Iterable
 from typing import Any, Optional
@@ -48,9 +47,9 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.llm.application.model_default import ModelDefaultApplication, current_model_default_tenant
+from bisheng.llm.application.model_default_read import get_model_default_read_runtime
 from bisheng.llm.domain.const import LLMModelStatus, LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMDao, LLMModel, LLMServer
-from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfigDao
 from bisheng.llm.domain.repositories.model_default_repository import ModelDefaultRepository
 from bisheng.llm.domain.schemas import (
     AssistantLLMConfig,
@@ -86,28 +85,6 @@ MODEL_TEST_CONCURRENCY = 4
 _background_probes: set[asyncio.Task] = set()
 
 
-def _resolve_tenant_id(tenant_id: int | None) -> int:
-    """Pick a tenant_id for system-config DAO calls.
-
-    Precedence: explicit arg > admin-scope ContextVar > Root.
-    A warning fires when both are missing — that almost always means a
-    Celery worker forgot to thread tenant_id through its task payload
-    (INV-T18). The Root fallback keeps the consumer alive but the warn
-    surfaces the gap in monitoring.
-    """
-    if tenant_id is not None:
-        return tenant_id
-    ctx_tid = get_current_tenant_id()
-    if ctx_tid is not None:
-        return ctx_tid
-    logger.warning(
-        "tenant_id missing for system-config call; falling back to "
-        "ROOT_TENANT_ID. Likely a Celery worker that omitted tenant_id "
-        "(INV-T18). Metric: llm_system_config_tenant_missing_total."
-    )
-    return ROOT_TENANT_ID
-
-
 def _llm_api_key_hash(config: dict | None) -> str | None:
     """sha256 of the API key, first 16 hex chars — only the fingerprint
     ever lands in audit_log. Returns None when no key is configured."""
@@ -117,42 +94,6 @@ def _llm_api_key_hash(config: dict | None) -> str | None:
     if not key or not isinstance(key, str):
         return None
     return hashlib.sha256(key.encode()).hexdigest()[:16]
-
-
-def _coerce_model_id(value: Any) -> int | None:
-    if value is None or isinstance(value, bool):
-        return None
-    try:
-        model_id = int(value)
-    except (TypeError, ValueError):
-        return None
-    return model_id if model_id > 0 else None
-
-
-def _workbench_model_ref_values(config: WorkbenchModelConfig) -> list[Any]:
-    return [
-        *(one.id for one in (config.models or [])),
-        config.linsight_default_model_id,
-        config.chat_default_model_id,
-        getattr(config.embedding_model, "id", None),
-        getattr(config.asr_model, "id", None),
-        getattr(config.tts_model, "id", None),
-        getattr(config.chat_title_llm, "id", None),
-        getattr(config.image_read_model, "id", None),
-    ]
-
-
-def _allowed_system_model_owner(
-    model_tenant_id: int | None,
-    target_tenant_id: int,
-    *,
-    inherited_from_root: bool,
-) -> bool:
-    if inherited_from_root:
-        return model_tenant_id == ROOT_TENANT_ID
-    if model_tenant_id == target_tenant_id:
-        return True
-    return target_tenant_id != ROOT_TENANT_ID and model_tenant_id == ROOT_TENANT_ID
 
 
 async def _write_llm_audit(
@@ -300,111 +241,25 @@ class LLMService:
     # delegate so the backward-compatible signatures (and discoverable
     # method names) survive.
     @classmethod
-    async def _aget_typed_with_meta(
-        cls,
-        key: ConfigKeyEnum,
-        model_cls,
-        tenant_id: int | None,
-    ) -> tuple[Any, bool, bool]:
-        target = _resolve_tenant_id(tenant_id)
-        value, inherited, blocked = await TenantSystemModelConfigDao.aresolve(
-            tenant_id=target,
-            key=key.value,
+    async def _aget_typed_with_meta(cls, key, model_cls, tenant_id):
+        """Raw management/sharing metadata; never an execution admission."""
+        current_model_default_tenant(tenant_id)
+        raw = await get_model_default_read_runtime().aget_default(key.value)
+        return model_cls.model_validate_json(raw.payload_json), raw.inherited_from_root, raw.fallback_blocked
+
+    @classmethod
+    def _get_typed_sync(cls, key, model_cls, tenant_id, *, login_user=None, session=None):
+        current_model_default_tenant(tenant_id)
+        admitted = get_model_default_read_runtime().require_default(key.value, login_user=login_user, session=session)
+        return model_cls.model_validate_json(admitted.payload_json)
+
+    @classmethod
+    async def _aget_typed_strict(cls, key, model_cls, tenant_id, *, login_user=None, session=None):
+        current_model_default_tenant(tenant_id)
+        admitted = await get_model_default_read_runtime().arequire_default(
+            key.value, login_user=login_user, session=session
         )
-        return model_cls(**(json.loads(value) if value else {})), inherited, blocked
-
-    @classmethod
-    def _get_typed_sync(
-        cls,
-        key: ConfigKeyEnum,
-        model_cls,
-        tenant_id: int | None,
-    ):
-        target = _resolve_tenant_id(tenant_id)
-        value, _, _ = TenantSystemModelConfigDao.resolve(
-            tenant_id=target,
-            key=key.value,
-        )
-        return model_cls(**(json.loads(value) if value else {}))
-
-    @classmethod
-    async def _sanitize_workbench_config_refs(
-        cls,
-        config: WorkbenchModelConfig,
-        target_tenant_id: int,
-        *,
-        inherited_from_root: bool,
-    ) -> WorkbenchModelConfig:
-        model_ids = {
-            model_id
-            for model_id in (_coerce_model_id(value) for value in _workbench_model_ref_values(config))
-            if model_id is not None
-        }
-        if not model_ids:
-            return cls._filter_workbench_config(config, set())
-
-        with bypass_tenant_filter():
-            rows = await LLMDao.aget_model_by_ids(list(model_ids))
-        allowed_ids = {
-            row.id
-            for row in rows
-            if _allowed_system_model_owner(
-                row.tenant_id,
-                target_tenant_id,
-                inherited_from_root=inherited_from_root,
-            )
-        }
-        return cls._filter_workbench_config(config, allowed_ids)
-
-    @classmethod
-    def _sanitize_workbench_config_refs_sync(
-        cls,
-        config: WorkbenchModelConfig,
-        target_tenant_id: int,
-        *,
-        inherited_from_root: bool,
-    ) -> WorkbenchModelConfig:
-        model_ids = {
-            model_id
-            for model_id in (_coerce_model_id(value) for value in _workbench_model_ref_values(config))
-            if model_id is not None
-        }
-        if not model_ids:
-            return cls._filter_workbench_config(config, set())
-
-        with bypass_tenant_filter():
-            rows = LLMDao.get_model_by_ids(list(model_ids))
-        allowed_ids = {
-            row.id
-            for row in rows
-            if _allowed_system_model_owner(
-                row.tenant_id,
-                target_tenant_id,
-                inherited_from_root=inherited_from_root,
-            )
-        }
-        return cls._filter_workbench_config(config, allowed_ids)
-
-    @staticmethod
-    def _filter_workbench_config(
-        config: WorkbenchModelConfig,
-        allowed_ids: set[int],
-    ) -> WorkbenchModelConfig:
-        def is_allowed(value: Any) -> bool:
-            model_id = _coerce_model_id(value)
-            return model_id is not None and model_id in allowed_ids
-
-        if config.models is not None:
-            config.models = [one for one in config.models if is_allowed(one.id)]
-        if not is_allowed(config.linsight_default_model_id):
-            config.linsight_default_model_id = None
-        if not is_allowed(config.chat_default_model_id):
-            config.chat_default_model_id = None
-        for field_name in ("embedding_model", "asr_model", "tts_model", "chat_title_llm"):
-            ws_model = getattr(config, field_name)
-            if ws_model is not None and not is_allowed(ws_model.id):
-                setattr(config, field_name, None)
-        return config
+        return model_cls.model_validate_json(admitted.payload_json)
 
     @classmethod
     async def acollect_visible_servers(cls, leaf_id: int, *, strict: bool = False) -> list[LLMServer]:
@@ -1164,21 +1019,18 @@ class LLMService:
         return LLMModelInfo(**exist_model.model_dump())
 
     @classmethod
-    def get_knowledge_llm(cls, tenant_id: int | None = None) -> KnowledgeLLMConfig:
-        """Default knowledge-base model config for ``tenant_id``.
-
-        ``tenant_id=None`` falls back to the admin-scope ContextVar then
-        Root — see ``_resolve_tenant_id``. Sync resolve goes through the
-        same Root-share fallback as ``aget_knowledge_llm`` so workflow
-        nodes see the same config as API consumers.
-        """
-        return cls._get_typed_sync(ConfigKeyEnum.KNOWLEDGE_LLM, KnowledgeLLMConfig, tenant_id)
+    def get_knowledge_llm(cls, tenant_id: int | None = None, *, login_user=None, session=None) -> KnowledgeLLMConfig:
+        return cls._get_typed_sync(
+            ConfigKeyEnum.KNOWLEDGE_LLM, KnowledgeLLMConfig, tenant_id, login_user=login_user, session=session
+        )
 
     @classmethod
-    async def aget_knowledge_llm(cls, tenant_id: int | None = None) -> KnowledgeLLMConfig:
-        """Get the default model configuration for the knowledge base"""
-        cfg, _, _ = await cls.aget_knowledge_llm_with_meta(tenant_id)
-        return cfg
+    async def aget_knowledge_llm(
+        cls, tenant_id: int | None = None, *, login_user=None, session=None
+    ) -> KnowledgeLLMConfig:
+        return await cls._aget_typed_strict(
+            ConfigKeyEnum.KNOWLEDGE_LLM, KnowledgeLLMConfig, tenant_id, login_user=login_user, session=session
+        )
 
     @classmethod
     async def aget_knowledge_llm_with_meta(
@@ -1319,10 +1171,12 @@ class LLMService:
         )
 
     @classmethod
-    async def get_assistant_llm(cls, tenant_id: int | None = None) -> AssistantLLMConfig:
-        """Get the default model configuration related to the assistant"""
-        cfg, _, _ = await cls.aget_assistant_llm_with_meta(tenant_id)
-        return cfg
+    async def get_assistant_llm(
+        cls, tenant_id: int | None = None, *, login_user=None, session=None
+    ) -> AssistantLLMConfig:
+        return await cls._aget_typed_strict(
+            ConfigKeyEnum.ASSISTANT_LLM, AssistantLLMConfig, tenant_id, login_user=login_user, session=session
+        )
 
     @classmethod
     async def aget_assistant_llm_with_meta(
@@ -1336,12 +1190,11 @@ class LLMService:
         )
 
     @classmethod
-    def sync_get_assistant_llm(cls, tenant_id: int | None = None) -> AssistantLLMConfig:
-        """Get the default model configuration related to the assistant"""
+    def sync_get_assistant_llm(
+        cls, tenant_id: int | None = None, *, login_user=None, session=None
+    ) -> AssistantLLMConfig:
         return cls._get_typed_sync(
-            ConfigKeyEnum.ASSISTANT_LLM,
-            AssistantLLMConfig,
-            tenant_id,
+            ConfigKeyEnum.ASSISTANT_LLM, AssistantLLMConfig, tenant_id, login_user=login_user, session=session
         )
 
     @classmethod
@@ -1353,10 +1206,12 @@ class LLMService:
         )
 
     @classmethod
-    async def get_evaluation_llm(cls, tenant_id: int | None = None) -> EvaluationLLMConfig:
-        """Get the default model configuration for the evaluation feature"""
-        cfg, _, _ = await cls.aget_evaluation_llm_with_meta(tenant_id)
-        return cfg
+    async def get_evaluation_llm(
+        cls, tenant_id: int | None = None, *, login_user=None, session=None
+    ) -> EvaluationLLMConfig:
+        return await cls._aget_typed_strict(
+            ConfigKeyEnum.EVALUATION_LLM, EvaluationLLMConfig, tenant_id, login_user=login_user, session=session
+        )
 
     @classmethod
     async def aget_evaluation_llm_with_meta(
@@ -1370,12 +1225,11 @@ class LLMService:
         )
 
     @classmethod
-    def sync_get_evaluation_llm(cls, tenant_id: int | None = None) -> EvaluationLLMConfig:
-        """Get the default model configuration for the evaluation feature"""
+    def sync_get_evaluation_llm(
+        cls, tenant_id: int | None = None, *, login_user=None, session=None
+    ) -> EvaluationLLMConfig:
         return cls._get_typed_sync(
-            ConfigKeyEnum.EVALUATION_LLM,
-            EvaluationLLMConfig,
-            tenant_id,
+            ConfigKeyEnum.EVALUATION_LLM, EvaluationLLMConfig, tenant_id, login_user=login_user, session=session
         )
 
     @classmethod
@@ -1504,10 +1358,12 @@ class LLMService:
         )
 
     @classmethod
-    async def get_workflow_llm(cls, tenant_id: int | None = None) -> EvaluationLLMConfig:
-        """Get the default model configuration for the evaluation feature"""
-        cfg, _, _ = await cls.aget_workflow_llm_with_meta(tenant_id)
-        return cfg
+    async def get_workflow_llm(
+        cls, tenant_id: int | None = None, *, login_user=None, session=None
+    ) -> EvaluationLLMConfig:
+        return await cls._aget_typed_strict(
+            ConfigKeyEnum.WORKFLOW_LLM, EvaluationLLMConfig, tenant_id, login_user=login_user, session=session
+        )
 
     @classmethod
     async def aget_workflow_llm_with_meta(
@@ -1523,7 +1379,7 @@ class LLMService:
     @classmethod
     async def get_assistant_llm_list(cls, request: Request, login_user: UserPayload) -> list[LLMServerInfo]:
         """Get a list of optional models for the assistant"""
-        assistant_llm = await cls.get_assistant_llm()
+        assistant_llm = await cls.get_assistant_llm(login_user=login_user)
         if not assistant_llm.llm_list:
             return []
         model_list = await LLMDao.aget_model_by_ids([one.model_id for one in assistant_llm.llm_list])
@@ -1572,12 +1428,12 @@ class LLMService:
         )
 
     @classmethod
-    async def get_workbench_llm(cls, tenant_id: int | None = None) -> WorkbenchModelConfig:
-        """
-        Get Workbench Model Configuration
-        """
-        cfg, _, _ = await cls.aget_workbench_llm_with_meta(tenant_id)
-        return cfg
+    async def get_workbench_llm(
+        cls, tenant_id: int | None = None, *, login_user=None, session=None
+    ) -> WorkbenchModelConfig:
+        return await cls._aget_typed_strict(
+            ConfigKeyEnum.LINSIGHT_LLM, WorkbenchModelConfig, tenant_id, login_user=login_user, session=session
+        )
 
     @classmethod
     async def get_workbench_llm_for_picker(cls) -> WorkbenchModelConfig:
@@ -1603,37 +1459,16 @@ class LLMService:
 
     @classmethod
     async def aget_workbench_llm_with_meta(
-        cls,
-        tenant_id: int | None = None,
+        cls, tenant_id: int | None = None
     ) -> tuple[WorkbenchModelConfig, bool, bool]:
-        target = _resolve_tenant_id(tenant_id)
-        config, inherited, blocked = await cls._aget_typed_with_meta(
-            ConfigKeyEnum.LINSIGHT_LLM,
-            WorkbenchModelConfig,
-            target,
-        )
-        config = await cls._sanitize_workbench_config_refs(
-            config,
-            target,
-            inherited_from_root=inherited,
-        )
-        if config.asr_model and config.asr_model.id:
-            model, server = await BishengASR.get_model_server_info(int(config.asr_model.id))
-            config.asr_model.realtime = BishengASR.uses_realtime(model, server)
-        return config, inherited, blocked
+        return await cls._aget_typed_with_meta(ConfigKeyEnum.LINSIGHT_LLM, WorkbenchModelConfig, tenant_id)
 
     @classmethod
-    def get_workbench_llm_sync(cls, tenant_id: int | None = None) -> WorkbenchModelConfig:
-        target = _resolve_tenant_id(tenant_id)
-        value, inherited, _ = TenantSystemModelConfigDao.resolve(
-            tenant_id=target,
-            key=ConfigKeyEnum.LINSIGHT_LLM.value,
-        )
-        config = WorkbenchModelConfig(**(json.loads(value) if value else {}))
-        return cls._sanitize_workbench_config_refs_sync(
-            config,
-            target,
-            inherited_from_root=inherited,
+    def get_workbench_llm_sync(
+        cls, tenant_id: int | None = None, *, login_user=None, session=None
+    ) -> WorkbenchModelConfig:
+        return cls._get_typed_sync(
+            ConfigKeyEnum.LINSIGHT_LLM, WorkbenchModelConfig, tenant_id, login_user=login_user, session=session
         )
 
     @classmethod
@@ -1641,7 +1476,7 @@ class LLMService:
         """Call the workbench'sasrModels Convert Voice to Text"""
         if not file:
             raise ServerError.http_exception("no file upload")
-        workbench_llm = await cls.get_workbench_llm()
+        workbench_llm = await cls.get_workbench_llm(login_user=login_user)
         if not workbench_llm.asr_model or not workbench_llm.asr_model.id:
             raise NoAsrModelConfigError.http_exception()
         model_info = await LLMDao.aget_model_by_id(int(workbench_llm.asr_model.id))
@@ -1679,7 +1514,7 @@ class LLMService:
         :return: minioPath to
         """
 
-        workbench_llm = await cls.get_workbench_llm()
+        workbench_llm = await cls.get_workbench_llm(login_user=login_user)
 
         redis_client = await get_redis_client()
 
