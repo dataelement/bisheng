@@ -1,5 +1,6 @@
 import json
 from copy import deepcopy
+from dataclasses import dataclass
 
 from loguru import logger
 from pymilvus import Collection
@@ -10,6 +11,7 @@ from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.errcode.knowledge import (
     KnowledgeFileFailedError,
     KnowledgeOperationPlanConflictError,
+    KnowledgeProcessingConflictError,
     KnowledgeUnificationError,
     ResourceReferenceInvalidError,
 )
@@ -260,7 +262,20 @@ def _rebuild_embeddings(
     return success_files, failed_files
 
 
+@dataclass(frozen=True, slots=True)
+class ProcessingFileResult:
+    succeeded: bool
+    chunk_count: int
+
+    def __bool__(self):
+        return self.succeeded
+
+
 def _process_single_file(file, es_client, index_name, vector_client):
+    return bool(_process_file_chunks(file, es_client, index_name, vector_client))
+
+
+def _process_file_chunks(file, es_client, index_name, vector_client) -> ProcessingFileResult:
     """Processing of individual filesembeddingRebuild"""
     logger.info(f"Rebuilding embeddings for file_id={file.id}")
 
@@ -275,7 +290,7 @@ def _process_single_file(file, es_client, index_name, vector_client):
 
     if not chunks:
         logger.warning(f"No chunks found for file_id={file.id}")
-        return True  # No data to process, considered a success
+        return ProcessingFileResult(getattr(file, "status", None) == KnowledgeFileStatus.SUCCESS.value, 0)
 
     # Extract text and metadata
     texts = []
@@ -296,7 +311,7 @@ def _process_single_file(file, es_client, index_name, vector_client):
     try:
         vector_client.add_texts(texts=texts, metadatas=metadatas)
         logger.info("[DEBUG] vector_client.add_textsCall successful")
-        return True
+        return ProcessingFileResult(True, len(texts))
     except Exception as add_error:
         logger.error(f"[DEBUG] vector_client.add_textsCall failed: {add_error!s}")
         raise add_error
@@ -336,7 +351,7 @@ def rebuild_processing_file(
     operation_id: str | None,
     expected_model_config_revision: int,
     expected_index_generation: str,
-) -> bool:
+) -> ProcessingFileResult:
     """Actual J1 per-file work; it never finalizes a task or business source."""
     if get_current_background_task() is None:
         raise ResourceReferenceInvalidError(reason="knowledge_rebuild_background_required")
@@ -366,6 +381,12 @@ def rebuild_processing_file(
     file = KnowledgeFileDao.query_by_id_sync(file_id)
     if file is None or file.knowledge_id != space_id or file.tenant_id != knowledge.tenant_id:
         raise ResourceReferenceInvalidError(reason="knowledge_rebuild_file_scope_changed")
+    if file.status not in {
+        KnowledgeFileStatus.SUCCESS.value,
+        KnowledgeFileStatus.FAILED.value,
+        KnowledgeFileStatus.TIMEOUT.value,
+    }:
+        raise KnowledgeProcessingConflictError(reason="processing_file_state_not_ready")
     scope = {
         "model_slot": slot,
         "expected_operation_id": admitted.operation_id,
@@ -387,10 +408,10 @@ def rebuild_processing_file(
     # idempotent without deleting another file or the original ES chunks.
     _delete_file_vectors(vector, space_id, file_id)
     try:
-        success = _process_single_file(file, es, knowledge.index_name or knowledge.collection_name, vector)
-        if not success:
+        result = _process_file_chunks(file, es, knowledge.index_name or knowledge.collection_name, vector)
+        if not result.succeeded:
             _delete_file_vectors(vector, space_id, file_id)
-        return success
+        return result
     except Exception:
         _delete_file_vectors(vector, space_id, file_id)
         raise
