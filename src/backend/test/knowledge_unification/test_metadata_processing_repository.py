@@ -18,6 +18,7 @@ from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.repositories.metadata_processing_repository import MetadataProcessingRepository
 from bisheng.knowledge.domain.repositories.processing_job_repository import NewProcessingItem, ProcessingConfiguration
 from bisheng.knowledge.domain.schemas.processing_job import ResourceVersionTarget
@@ -409,6 +410,87 @@ async def test_other_root_file_document_version_and_model_pending_are_allowed(me
         row.object_name, document.level, version.version_no, model.name = "other-object", 2, 2, "other-name"
         assert (await repo.areplace_schema(session, scope, after_schema=scope.schema_fields)).schema_revision == 1
         assert (row.object_name, document.level, version.version_no, model.name) == ("other-object", 2, 2, "other-name")
+        await session.rollback()
+
+
+def pending_job(*, space_id=40, state="accepted", key="pending-job"):
+    return KnowledgeProcessingJob(
+        tenant_id=101,
+        space_id=space_id,
+        kind="embedding_rebuild",
+        state=state,
+        actor_user_id=7,
+        idempotency_key=key,
+        request_hash="a" * 64,
+        expected_model_config_revision=0,
+    )
+
+
+@pytest.mark.parametrize("entry", ["repository", "service"])
+@pytest.mark.parametrize("change", ["new", "terminal_to_active", "move_into_scope", "expired_scope", "expired_state"])
+async def test_pending_active_job_cannot_appear_during_schema_flush(metadata, entry, change):
+    from bisheng.knowledge.domain.schemas.processing_job import MetadataSchemaParameters
+    from bisheng.knowledge.domain.services.metadata_processing_service import MetadataProcessingService
+
+    job_id = None
+    if change != "new":
+        async with metadata.context.sessions() as session:
+            other = change in {"move_into_scope", "expired_state"}
+            job = pending_job(space_id=10 if other else 40, state="running" if other else "failed")
+            session.add(job)
+            await session.commit()
+            job_id = job.id
+    async with metadata.context.sessions() as session:
+        repo, service = MetadataProcessingRepository(), MetadataProcessingService()
+        scope = await repo.aload_scope(session, 40)
+        plan = await service.apreview(
+            session,
+            40,
+            MetadataSchemaParameters(
+                expected_schema_revision=0,
+                changes=[{"operation": "add", "field_name": "fresh", "field_type": "string"}],
+            ),
+        )
+        if change == "new":
+            job = pending_job()
+            session.add(job)
+        else:
+            job = await session.get(KnowledgeProcessingJob, job_id)
+            if change == "expired_scope":
+                session.expire(job, ["space_id"])
+            elif change == "expired_state":
+                session.expire(job, ["state"])
+            if change in {"terminal_to_active", "expired_scope"}:
+                job.state = "running"
+            else:
+                job.space_id = 40
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            if entry == "repository":
+                await repo.areplace_schema(session, scope, after_schema=scope.schema_fields)
+            else:
+                await service.aaccept(session, plan)
+        with session.no_autoflush:
+            revision = (await session.exec(select(Knowledge.metadata_schema_revision).where(Knowledge.id == 40))).one()
+        assert revision == 0
+        await session.rollback()
+
+
+async def test_unrelated_active_and_terminal_job_pending_remain_caller_owned(metadata):
+    async with metadata.context.sessions() as session:
+        terminal = pending_job(state="failed", key="terminal")
+        session.add(terminal)
+        await session.commit()
+        terminal_id = terminal.id
+    async with metadata.context.sessions() as session:
+        repo = MetadataProcessingRepository()
+        scope = await repo.aload_scope(session, 40)
+        terminal = await session.get(KnowledgeProcessingJob, terminal_id)
+        session.expire(terminal, ["space_id", "state"])
+        terminal.error_message = "caller-owned audit"
+        other = pending_job(space_id=10, key="other-active")
+        session.add(other)
+        assert (await repo.areplace_schema(session, scope, after_schema=scope.schema_fields)).schema_revision == 1
+        assert terminal.error_message == "caller-owned audit" and other.state == "accepted"
         await session.rollback()
 
 
