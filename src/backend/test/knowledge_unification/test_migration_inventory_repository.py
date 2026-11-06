@@ -9,7 +9,7 @@ import json
 from dataclasses import FrozenInstanceError, fields
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import event, update
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -108,7 +108,7 @@ def app_version(ident, parent, **changes):
     return AppVersion(
         id=ident,
         app_id=parent,
-        version_no=int(ident.split("-")[-1]),
+        version_no=int(ident.split("-")[-1]) + 1,
         kind="initial",
         code_object_key="private-code-object",
         tier_id="small",
@@ -150,6 +150,8 @@ async def test_roots_have_real_pk_pages_without_join_multiplication_and_keep_zer
         session.add_all([flow(f"wf-{i:04}", is_delete=i % 2) for i in range(401)])
         session.add_all([flow("other-tenant", 202), Flow(id="other-kind", tenant_id=101, name="Other", flow_type=5)])
         session.add_all([app("app-empty"), app("app-many"), app("app-outside", 202)])
+        session.add(app_version("outside-version-9999", "app-outside"))
+        session.add(FlowVersion(id=9999, tenant_id=202, flow_id="other-tenant", name="outside"))
         for i in range(401):
             session.add(
                 FlowVersion(
@@ -251,6 +253,9 @@ async def test_batched_assistant_links_and_disabled_channel_configs_keep_empty_r
                 )
             )
         await session.flush()
+        # The ORM applies knowledge_id's Python default even for explicit None;
+        # persist a real SQL NULL so the raw inventory must distinguish it.
+        await session.execute(update(AssistantLink).where(AssistantLink.id == 2).values(knowledge_id=None))
         statements = record_queries(session)
         assistants = await pages(repo, "alist_assistants", session)
         channels = await pages(repo, "alist_channels", session)
@@ -390,6 +395,24 @@ async def test_model_catalog_reads_exact_scalar_columns_and_rejects_bad_provider
         await session.flush()
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await repo.alist_models(session, after_id=998)
+
+
+async def test_orphan_probe_does_not_reclassify_valid_foreign_children_or_scan_foreign_assistant_links(repo, storage):
+    async with AsyncSession(storage) as session, session.begin():
+        session.add(app("foreign-app", 202))
+        session.add(app_version("foreign-version-1", "foreign-app", capabilities={"private": "outside"}))
+        session.add(channel("foreign-channel", 202))
+        session.add(
+            ChannelKnowledgeSync(id="foreign-sync", channel_id="foreign-channel", knowledge_space_id="7", user_id=7)
+        )
+        # This tenant's scan must not disclose or classify another tenant's
+        # AssistantLink, even when that foreign tenant needs its own repair.
+        session.add(AssistantLink(id=1, tenant_id=202, assistant_id="missing", knowledge_id=7))
+        await session.flush()
+        statements = record_queries(session)
+        await repo.avalidate_global_orphans(session)
+        assert len(statements) == 3
+        assert all(len(query.selected_columns) == 1 and int(query._limit_clause.value) == 1 for query in statements)
 
 
 async def test_raw_json_and_default_values_are_frozen_closed_rows_with_hidden_payloads(repo, storage):
