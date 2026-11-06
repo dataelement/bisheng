@@ -25,29 +25,13 @@ from bisheng.core.context.tenant import (
     strict_tenant_filter,
 )
 from bisheng.knowledge.domain.models.knowledge_operation_plan import KnowledgeOperationPlan
+from bisheng.permission.application.data_scope import DATA_SCOPE_ALL, DATA_SCOPE_PERSONAL
 from bisheng.resource_reference.application.contracts import TargetKey, TargetType, canonical_target_id
 
 ModelDeleteOperation = Literal["model_update_server", "model_delete_server"]
 _OPERATIONS = frozenset({"model_update_server", "model_delete_server"})
-_FORBIDDEN = frozenset(
-    {
-        "traceid",
-        "token",
-        "bearer",
-        "accesstoken",
-        "refreshtoken",
-        "apikey",
-        "password",
-        "secret",
-        "authorization",
-        "config",
-        "body",
-        "requestbody",
-        "servicerequest",
-        "serverrequest",
-        "providercredentials",
-    }
-)
+_ACTOR_FIELDS = frozenset({"tenant_id", "actor_user_id", "credential_reference", "data_scope"})
+_WEB_FIELDS = frozenset({"kind", "user_id", "tenant_id", "token_version", "expires_at"})
 
 
 def _now() -> datetime:
@@ -68,24 +52,6 @@ def _digest(value) -> str:
     if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
         raise ValueError("a canonical SHA256 digest is required")
     return value
-
-
-def _copy(value):
-    copied = deepcopy(value)
-
-    def check(item):
-        if isinstance(item, dict):
-            for key, nested in item.items():
-                if not isinstance(key, str) or re.sub(r"[^a-z0-9]", "", key.casefold()) in _FORBIDDEN:
-                    raise ValueError("model confirmations reject secrets, trace and complete request bodies")
-                check(nested)
-        elif isinstance(item, (tuple, list)):
-            for nested in item:
-                check(nested)
-
-    check(copied)
-    _hash(copied)
-    return copied
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,22 +83,45 @@ class ModelDeletePlanRepository:
 
     @staticmethod
     def _actor(reference, tenant):
-        if not isinstance(reference, Mapping):
-            raise ValueError("a stable original actor reference is required")
-        actor = _copy(dict(reference))
         if (
-            type(actor.get("tenant_id")) is not int
+            not isinstance(reference, Mapping)
+            or not _ACTOR_FIELDS <= set(reference)
+            or set(reference) - (_ACTOR_FIELDS | {"management_tenant_id"})
+        ):
+            raise ValueError("a stable original actor reference is required")
+        actor = deepcopy(dict(reference))
+        if (
+            type(actor["tenant_id"]) is not int
             or actor["tenant_id"] != tenant
-            or type(actor.get("actor_user_id")) is not int
+            or type(actor["actor_user_id"]) is not int
             or actor["actor_user_id"] <= 0
-            or not isinstance(actor.get("credential_reference"), dict)
-            or not actor["credential_reference"]
+            or not isinstance(actor["data_scope"], str)
+            or actor["data_scope"] not in {DATA_SCOPE_ALL, DATA_SCOPE_PERSONAL}
             or (
                 "management_tenant_id" in actor
                 and (type(actor["management_tenant_id"]) is not int or actor["management_tenant_id"] != tenant)
             )
         ):
             raise ValueError("actor reference does not match the concrete tenant")
+        credential = actor["credential_reference"]
+        if (
+            not isinstance(credential, Mapping)
+            or set(credential) != _WEB_FIELDS
+            or credential["kind"] != "web_session"
+            or type(credential["user_id"]) is not int
+            or credential["user_id"] != actor["actor_user_id"]
+            or type(credential["tenant_id"]) is not int
+            or credential["tenant_id"] <= 0
+            or type(credential["token_version"]) is not int
+            or credential["token_version"] < 0
+            or not isinstance(credential["expires_at"], str)
+            or (credential["tenant_id"] != tenant and actor.get("management_tenant_id") != tenant)
+        ):
+            raise ValueError("model confirmations require the original closed web credential reference")
+        # Parsing is only a shape check. Current credential validity and the
+        # original home identity/management authority are rechecked upstream.
+        datetime.fromisoformat(credential["expires_at"])
+        actor["credential_reference"] = dict(credential)
         return actor
 
     @staticmethod
@@ -279,6 +268,10 @@ class ModelDeletePlanRepository:
     ) -> KnowledgeOperationPlan:
         tenant = self._tenant(session)
         self._operation(operation)
+        try:
+            actor = self._actor(actor_reference, tenant)
+        except (TypeError, ValueError) as error:
+            raise KnowledgeOperationPlanChangedError() from error
         with strict_tenant_filter():
             row = (
                 await session.execute(
@@ -293,7 +286,7 @@ class ModelDeletePlanRepository:
         self._validate(row, expiry=False)
         if (
             row.operation != operation
-            or row.actor_reference != self._actor(actor_reference, tenant)
+            or row.actor_reference != actor
             or row.parameters["command_digest"] != command_digest
             or row.plan_digest != plan_digest
         ):
