@@ -85,6 +85,12 @@ class QueuedFileFact:
 
 @dataclass(frozen=True, slots=True)
 class BrokerTargetFact:
+    """Execution target facts; J1 existence requires its real Root as well.
+
+    The separate all-state TaskFact stream retains every physical ledger row.
+    A delete ledger remains authoritative after its Root was formally deleted.
+    """
+
     target_id: int | str
     exists: bool
     tenant_id: int | None
@@ -384,18 +390,27 @@ class UnificationTaskRepository:
         }[kind]
         table = model.__table__.alias("broker_target")
         query = select(*(table.c[name] for name in names)).where(table.c.id.in_(ids))
-        if kind == "qa":
-            space = Knowledge.__table__.alias("broker_qa_space")
+        if kind in {"qa", "job", "delete_job"}:
+            space = Knowledge.__table__.alias("broker_target_space")
             query = query.add_columns(
                 space.c.id.label("parent_id"),
                 space.c.tenant_id.label("parent_tenant"),
                 space.c.type.label("knowledge_type"),
-            ).outerjoin(space, space.c.id == table.c.knowledge_id)
+            ).outerjoin(space, space.c.id == (table.c.knowledge_id if kind == "qa" else table.c.space_id))
         rows = {row["id"]: row for row in await self._read(session, query)}
         result = []
         for ident in ids:
             row = rows.get(ident)
-            if row is None:
+            if row is not None:
+                if type(row["tenant_id"]) is not int or row["tenant_id"] <= 0:
+                    _blocked("broker_target_tenant_invalid")
+                if (
+                    kind in {"job", "delete_job"}
+                    and row["parent_id"] is not None
+                    and row["parent_tenant"] != row["tenant_id"]
+                ):
+                    _blocked("broker_ledger_parent_invalid")
+            if row is None or (kind == "job" and row["parent_id"] is None):
                 result.append(
                     BrokerTargetFact(
                         ident,
@@ -408,12 +423,17 @@ class UnificationTaskRepository:
                         None,
                         None,
                         kind,
-                        task_digest({"kind": kind, "id": ident, "exists": False}),
+                        task_digest(
+                            {
+                                "kind": kind,
+                                "id": ident,
+                                "exists": False,
+                                "ledger": dict(row) if row is not None else None,
+                            }
+                        ),
                     )
                 )
                 continue
-            if type(row["tenant_id"]) is not int or row["tenant_id"] <= 0:
-                _blocked("broker_target_tenant_invalid")
             if kind == "qa" and (row["parent_id"] is None or row["parent_tenant"] != row["tenant_id"]):
                 _blocked("qa_parent_invalid")
             transition = row.get("model_transition")
