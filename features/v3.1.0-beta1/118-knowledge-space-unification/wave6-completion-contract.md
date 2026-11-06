@@ -686,3 +686,14 @@ EDGE完成只读历史固定ce4后，仅独占原T139的test/knowledge_unificati
 INT按已满足前置T150/T042实施原T151测试test/knowledge_unification/test_edge_apps_rpc.py、T152两生产叶workstation/api/endpoints/apps.py与open_endpoints/api/endpoints/workflow.py。仅将record_used_app、pin_used_app、invoke_workflow内部原use gate显式交现visible协议；原推荐/最近列表已visible，不改其他列表、排序/分页/分享签发。v1路由/UsedAppPin/envelope、app型recent与workflow/assistant型pin的原存在/在线检查、用户link幂等原样。v2原workflow:invoke scope/modes/session依赖、PublishedWorkflow读取/版本状态、原principal/PermissionActor与兼容operator、部门并发lease、enqueue/event/stop/错误保持；不把可见变为发布/分享/管理许可，不改历史配置/对话或新增引用。
 
 先写实际ASGI v1/v2入口回归：仅visible授权可达原写link/prepare边界、不可见零写/零派发、类型与offline原错误、原返回/idempotence；v2 SAK/PAT/OBO原主体/scope/缺scope/业务错误保留。可隔离原认证传输和外部FGA/队列/telemetry，但真实scope dependency与principal→PermissionActor上下文必须执行，不mock整个endpoint或将original operator当授权主体。生产只必要三处literal，不做SDK/MCP/聊天或一般流程重构。配对与原开放invoke/身份回归通过后独立复核再闭原卡，完整E2E留后继。
+
+
+§43有限双投影读取补充：SourceContext当前默认配置仅tenant/key/value，缺精确转换所需row ID/update_time。preflight对own五key做一次≤5行原Row投影，既有source inventory另做一次原Row投影；同native TX、固定五key，不按slot/resource重读。目录与共享仍每tenant一次。此阶段明确是最多两次不同消费的own-default有限投影，不能写成总计一次；不为五行强行扩大Context/sources接口。
+
+## 47. 聊天原任务HTTP规范化与Manager可见性合同 V1：已冻结
+
+EDGE原T141新test/knowledge_unification/test_edge_chat.py，T142仅api/v1/chat.py与common/chat/manager.py两生产叶。HTTP action默认visible，继续只接受visible|use，显式legacy use在HTTP边界归一visible后交原ranked get_online_flows_cursor或update_time get_all_flows_envelope；保ONLINE/flow_type/tag/keyword/search_description/limit/sort与can_share独立装饰。新默认/use/visible共canonical cursor语义，旧use上下文cursor仍按原AppInvalidCursorError拒绝，不猜重写。
+
+Manager仅原check_business_action的action字面值改visible，保私有_has_use_action名字以原旧spy/tenant重验全部复用，不因名字含use新建权限模型；原_dispatch_message先message_admission再以execution.operator核visible，exact execution_snapshot/session_subject/workflowPort和消息对象保留，拒绝零handle_message。无重建actor/凭据、历史改写、引用或队列变更，不碰root §46两叶/WorkflowService/SDK。T141依实际T026/T136/T383，原T134无调用关系，移除人为串行依赖；T418可信根旧回归照常复跑。
+
+ASGI真实默认/use/visible及两sort分支、非法action422，Manager两WorkType可见无use/隐藏、原operator不替换、fresh准入拒绝先于权限/handle均测。现F048 normalize_legacy_action已能使Manager可见行为首绿，如实记录；新增红以HTTP默认及canonical下传为据，不造假产品红。原websocket_tenant_revalidation/wf_client_admission/f040_app_square回归保持；只本任务两生产叶和单新测试叶，超过叶子先交接。

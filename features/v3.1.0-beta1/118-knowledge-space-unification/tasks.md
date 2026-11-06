@@ -1156,8 +1156,8 @@
 - [ ] **T141 · 聊天准入与管理器：先写测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_edge_chat.py`（拟新增）\
-  **逻辑 / 测试上下文**：可见无use可进入，缺scope/已删来源仍拒绝；历史会话快照不改写，不以对话记录建立引用。\
-  **依赖**：T134\
+  **逻辑 / 测试上下文**：W6§47实际online HTTP默认/legacy use规范化与两sort分支；Manager原execution.operator、fresh消息准入和visible gate，旧tenant重验保持；不写历史/引用。\
+  **依赖**：T026, T136, T383\
   **覆盖 AC**: AC-35, AC-79, AC-82, AC-83, AC-91\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
