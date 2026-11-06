@@ -124,7 +124,7 @@ ApprovalCenterService.decide_task()
 
 ### 应用发布当前可见范围（F115）
 
-任务详情、个人实例详情、管理实例详情在原租户与审批阅读门禁通过后，调用 `read_current_scenario_detail()`。仅 `app_publish_request` 使用 Handler 的只读 `read_current_detail()`，其它场景不触发动态查询。新增同级 `current_visibility`；`detail_snapshot`、`payload_snapshot` 仍是冻结值，不回写。应用发布域核对实例绑定的 app/tenant，再经 F048 当前有效 `use` 来源和实时主体资格生成摘要；读取不完整时返回 `unavailable`，不误报“仅负责人可见”。此窄例外不授予长期 manage_permission、审批处理资格或其它资源能力。
+任务详情、个人实例详情、管理实例详情在原租户与审批阅读门禁通过后，调用 `read_current_scenario_detail()`。仅 `app_publish_request` 使用 Handler 的只读 `read_current_detail()`，其它场景不触发动态查询。新增同级 `current_visibility`；`detail_snapshot`、`payload_snapshot` 仍是冻结值，不回写。应用发布域核对实例绑定的 app/tenant，再经 F048 当前有效 `visible` 来源和实时主体资格生成摘要；读取不完整时返回 `unavailable`，不误报“仅负责人可见”。此窄例外不授予长期 manage_permission、审批处理资格或其它资源能力。
 
 ### 四个场景 Handler
 
