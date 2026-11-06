@@ -5,7 +5,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from bisheng.common.errcode.knowledge import KnowledgeProcessingJobNotFoundError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeProcessingJobNotFoundError,
+    KnowledgeProcessingJobNotRetryableError,
+    ResourceReferenceInvalidError,
+)
 from bisheng.common.errcode.knowledge_space import SpaceNotFoundError
 from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 from bisheng.knowledge.domain.models.knowledge import Knowledge
@@ -123,6 +127,65 @@ async def test_failure_requires_actual_background_proof(job_session, repository,
     result = await create(repository, job_session, configuration)
     with pytest.raises(ResourceReferenceInvalidError):
         await repository.afail_attempt(job_session, result.job.id, expected_job_revision=0, error_code=201)
+
+
+async def test_finalize_only_retry_uses_actual_success_items_and_global_error(
+    job_session, repository, configuration, actual_processing_task
+):
+    root = await job_session.get(Knowledge, 1)
+    root.index_generation = configuration.index_generation
+    await job_session.flush()
+    created = await create(repository, job_session, configuration)
+    lease = await repository.aclaim(job_session, created.job.id, configuration=configuration)
+    saved = []
+    for _ in range(2):
+        claimed = await repository.aclaim_next_item(job_session, lease, configuration=configuration)
+        await repository.acomplete_item(job_session, claimed.lease, configuration=configuration, succeeded=True)
+        saved.append((claimed.item, claimed.item.attempt, dict(claimed.item.checkpoint)))
+    failed = await repository.afail_attempt(
+        job_session, created.job.id, expected_job_revision=created.job.revision, error_code=10994, lease=lease
+    )
+    eligible = await repository.aretry_eligibility(job_session, failed.id)
+    assert eligible.retryable and eligible.finalize_only
+    await repository.aretry_failed(
+        job_session,
+        failed.id,
+        idempotency_key="finalize-only",
+        expected_job_revision=failed.revision,
+        actor_user_id=12,
+        actor_reference={"actor_id": 12},
+        configuration=configuration,
+    )
+    for completed_item, attempt, checkpoint in saved:
+        assert (
+            completed_item.state == "succeeded"
+            and completed_item.attempt == attempt
+            and completed_item.checkpoint == checkpoint
+        )
+    assert failed.actor_user_id == 11
+    assert await repository.alatest_retry_actor(job_session, failed.id) == {"actor_id": 12}
+
+
+async def test_all_success_without_global_failure_is_not_retryable(job_session, repository, configuration):
+    created = await create(repository, job_session, configuration)
+    lease = await repository.aclaim(job_session, created.job.id, configuration=configuration)
+    for _ in range(2):
+        claimed = await repository.aclaim_next_item(job_session, lease, configuration=configuration)
+        await repository.acomplete_item(job_session, claimed.lease, configuration=configuration, succeeded=True)
+    created.job.state = "failed"
+    await job_session.flush()
+    eligibility = await repository.aretry_eligibility(job_session, created.job.id)
+    assert not eligibility.retryable and not eligibility.finalize_only
+    with pytest.raises(KnowledgeProcessingJobNotRetryableError):
+        await repository.aretry_failed(
+            job_session,
+            created.job.id,
+            idempotency_key="not-finalize-only",
+            expected_job_revision=created.job.revision,
+            actor_user_id=11,
+            actor_reference={"actor_id": 11},
+            configuration=configuration,
+        )
 
 
 async def test_job_pages_are_complete_and_stable_for_tied_acceptance_time(job_session, repository, configuration):
