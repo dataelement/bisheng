@@ -34,6 +34,7 @@ from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeP
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.models.knowledge_processing_retry import KnowledgeProcessingRetryReceipt
 from bisheng.knowledge.domain.schemas.processing_job import ItemState, JobState, ProcessingKind, ResourceVersionTarget
+from bisheng.knowledge.domain.services.processing_cutover_receipts import consume_cutover_receipt
 
 
 @dataclass(frozen=True)
@@ -672,6 +673,18 @@ class ProcessingJobRepository:
         await session.flush()
         # Actual business/index cutover precedes the explicit afinalize call.
         return True
+
+    async def aacknowledge_cutover(self, session: AsyncSession, lease: JobLease, *, receipt):
+        job = await self._job(session, lease.job_id, lock=True)
+        if not self._active_job_lease(job, lease):
+            return None
+        revision, generation = consume_cutover_receipt(session, receipt, job, lease)
+        job.expected_model_config_revision = revision
+        job.expected_index_generation = generation
+        job.revision += 1
+        job.update_time = self._now()
+        await session.flush()
+        return job
 
     async def afinalize(
         self, session: AsyncSession, lease: JobLease, *, configuration: ProcessingConfiguration
