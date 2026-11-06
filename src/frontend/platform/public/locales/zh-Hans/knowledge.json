@@ -449,5 +449,21 @@
     "addPlaceholder": "请输入要添加的标签，回车保存",
     "existingTags": "已有标签",
     "emptyTags": "暂无标签"
+  },
+  "f118": {
+    "defaults_title": "默认解析与切分",
+    "documents": "普通文档",
+    "future_uploads_only": "修改仅用于后续上传，不会重新处理已有文件。",
+    "header_end": "表头结束行",
+    "header_start": "表头起始行",
+    "integer_at_least": "请输入不小于{{min}}的整数",
+    "integer_between": "请输入{{min}}至{{max}}之间的整数",
+    "invalid_defaults": "请检查两类规则的必填项和参数范围。",
+    "move_down": "下移",
+    "move_up": "上移",
+    "pending_separator": "请先添加或清空输入的分隔规则。",
+    "separator_pattern": "分隔规则{{index}}",
+    "separator_position": "规则{{index}}的切分位置",
+    "tables": "表格"
   }
 }
