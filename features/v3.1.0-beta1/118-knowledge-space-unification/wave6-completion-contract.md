@@ -564,3 +564,5 @@ API只原wrapped axios：POST `/api/v1/knowledge/upload/{sid}` multipart file暂
 页面使用真实useKnowledgePageScope及严格sid/parent_id，只核当前root或folder `upload_file`，不额外读root信息/space.edit；无资格/unknown显示真实拒绝或重试，不直接消费旧upload流。Panel自持队列/AbortController/epoch，只读复用现DropZone的file input/格式/媒体capability和既有容量规则；scope/space/parent/卸载永久退休upload/register/polling旧响应，切回相同scope亦不复活，取消已注册资源不伪报服务端回滚。暂存成功不等于注册或解析成功，按注册实际file ID用listChildren(file_ids)核真实状态，不能靠filename/返回序号匹配。原错误保留可重试，不能吞错误或补造完成。
 
 Files将当前容器已读取的真实upload_file能力挂实际入口，Toolbar按需抽取保持单叶≤600、保目录现scope/keyword/filter/ABA及动作生命周期。所有URL保持parent与原目录语义，无全局管理列表替代普通授权。新文案优先复用已有三语key；必须新key交INT唯一locale集成，不硬编码、不加ts-ignore/eslint抑制。此闭环不宣称目录上传、per-file/高级预分段、完整版本或原T177/T179全部完成；版本需先补服务端原管理资格/目标权限及引用保护，不能前端space.edit补洞。
+
+§36状态文案唯一键冻结：f118.upload_staged、upload_registered、upload_cancelled、upload_status_unavailable、upload_may_continue，由INT的T793/T794三语集成，分别表示暂存完成、已提交处理、已取消、暂时无法获取处理状态，以及停止跟踪不撤销已提交处理；不得把前两者写成解析成功。
