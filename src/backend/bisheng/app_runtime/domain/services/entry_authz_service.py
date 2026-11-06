@@ -79,11 +79,8 @@ DECISION_UNAVAILABLE = "unavailable"
 #: leaked OBO token cannot be replayed as a session (AC-34).
 OBO_AUDIENCE = "bisheng-app-obo"
 
-#: Visible-scope action. ``use`` rather than ``runtime.check_visible``: ``use``
-#: is what the permission dialog's viewer tier grants, so "who can open it"
-#: matches what an owner sees when they share it. ``check_visible`` is wider —
-#: it would admit a custom model that granted ``edit`` without ``use`` (D9).
-ENTRY_ACTION = "use"
+#: Visibility carries entry/use across every permission model (F118).
+ENTRY_ACTION = "visible"
 
 
 async def authorize_entry(
