@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from copy import deepcopy
 from dataclasses import dataclass
 
 from sqlalchemy import and_, or_, update
@@ -14,10 +15,13 @@ from bisheng.common.errcode.knowledge import (
 )
 from bisheng.common.errcode.knowledge_space import SpaceNotFoundError
 from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
-from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeState, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
+from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
+from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
+from bisheng.knowledge.domain.models.knowledge_processing_retry import KnowledgeProcessingRetryReceipt
 from bisheng.knowledge.domain.repositories.model_reference_repository import KnowledgeModelReferenceRepository
 from bisheng.knowledge.domain.repositories.processing_job_repository import (
     ItemLease,
@@ -41,6 +45,180 @@ class ProcessingScopeVersion:
 
 
 class ProcessingOwnerRepository:
+    async def _attempt(self, session, job_id, jobs):
+        candidate = await jobs.aget(session, job_id)
+        root = await KnowledgeModelReferenceRepository().aget(session, candidate.space_id, for_update=True)
+        job = await jobs._job(session, job_id, lock=True)
+        return root, job
+
+    async def _retry_evidence(self, session, job):
+        with strict_tenant_filter():
+            receipt = (
+                await session.exec(
+                    select(KnowledgeProcessingRetryReceipt)
+                    .where(KnowledgeProcessingRetryReceipt.job_id == job.id)
+                    .order_by(
+                        KnowledgeProcessingRetryReceipt.accepted_job_revision.desc(),
+                        KnowledgeProcessingRetryReceipt.id.desc(),
+                    )
+                    .limit(1)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).one_or_none()
+            other = (
+                await session.exec(
+                    select(KnowledgeProcessingJob.id)
+                    .where(
+                        KnowledgeProcessingJob.space_id == job.space_id,
+                        KnowledgeProcessingJob.id != job.id,
+                        KnowledgeProcessingJob.state.in_(("accepted", "running")),
+                    )
+                    .limit(1)
+                )
+            ).first()
+        return receipt, other
+
+    @staticmethod
+    def _current_operation(root, job):
+        return (
+            root is not None
+            and root.type == KnowledgeTypeEnum.SPACE.value
+            and root.tenant_id == job.tenant_id
+            and root.model_transition is None
+            and root.model_config_revision == job.expected_model_config_revision
+            and root.index_generation == job.expected_index_generation
+            and type(job.accepted_model_config_revision) is int
+            and job.expected_model_config_revision == job.accepted_model_config_revision + 1
+            and bool(job.parameters.get("operation_id"))
+        )
+
+    async def abegin_retry_fence(self, session, job, *, jobs):
+        root, locked = await self._attempt(session, job.id, jobs)
+        receipt, other = await self._retry_evidence(session, locked)
+        if (
+            locked is not job
+            or locked.state != "accepted"
+            or receipt is None
+            or receipt.tenant_id != job.tenant_id
+            or receipt.accepted_job_revision != job.revision
+            or other is not None
+            or root is None
+            or (root.model_config_revision, root.index_generation)
+            != (job.expected_model_config_revision, job.expected_index_generation)
+        ):
+            raise KnowledgeProcessingConflictError(reason="processing_retry_fence_conflict")
+        if root.model_transition is not None:
+            if root.model_transition.get("operation_id") != job.parameters.get("operation_id"):
+                raise KnowledgeProcessingConflictError(reason="processing_retry_fence_conflict")
+            return  # The existing pending operation already owns its fence.
+        if not self._current_operation(root, job) or root.state != KnowledgeState.PUBLISHED.value:
+            raise KnowledgeProcessingConflictError(reason="processing_retry_fence_conflict")
+        if receipt.item_count == 0:
+            return  # Finalization has no provider work and never edits successful checkpoints.
+        with strict_tenant_filter():
+            anchor = (
+                await session.exec(
+                    select(KnowledgeProcessingItem)
+                    .where(KnowledgeProcessingItem.job_id == job.id, KnowledgeProcessingItem.state == "pending")
+                    .order_by(
+                        KnowledgeProcessingItem.file_id, KnowledgeProcessingItem.version_id, KnowledgeProcessingItem.id
+                    )
+                    .limit(1)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).one_or_none()
+        if anchor is None or anchor.tenant_id != job.tenant_id:
+            raise KnowledgeProcessingConflictError(reason="processing_retry_fence_conflict")
+        checkpoint = deepcopy(anchor.checkpoint)
+        checkpoint["retry_fence"] = {
+            "schema_version": 1,
+            "job_id": job.id,
+            "retry_receipt_id": receipt.id,
+            "accepted_job_revision": receipt.accepted_job_revision,
+            "model_config_revision": root.model_config_revision,
+            "index_generation": root.index_generation,
+            "first_claim_generation": job.claim_generation + 1,
+            "previous_state": root.state,
+        }
+        anchor.checkpoint = checkpoint
+        root.state = KnowledgeState.REBUILDING.value
+        await session.flush()
+
+    async def _owned_retry_fence(self, session, root, job, *, jobs, lease, expected_job_revision):
+        if not self._current_operation(root, job) or root.state != KnowledgeState.REBUILDING.value:
+            return False
+        if lease is not None:
+            if not jobs._active_job_lease(job, lease):
+                return False
+        elif job.state != "accepted" or job.revision != expected_job_revision:
+            return False
+        receipt, other = await self._retry_evidence(session, job)
+        if receipt is None or receipt.tenant_id != job.tenant_id or other is not None:
+            return False
+        with strict_tenant_filter():
+            items = (
+                await session.exec(
+                    select(KnowledgeProcessingItem)
+                    .where(KnowledgeProcessingItem.job_id == job.id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).all()
+        for item in items:
+            marker = item.checkpoint.get("retry_fence")
+            if not isinstance(marker, dict) or item.tenant_id != job.tenant_id:
+                continue
+            first = marker.get("first_claim_generation")
+            if type(first) is not int or first <= 0:
+                continue
+            expected = {
+                "schema_version": 1,
+                "job_id": job.id,
+                "retry_receipt_id": receipt.id,
+                "accepted_job_revision": receipt.accepted_job_revision,
+                "model_config_revision": root.model_config_revision,
+                "index_generation": root.index_generation,
+                "first_claim_generation": first,
+                "previous_state": KnowledgeState.PUBLISHED.value,
+            }
+            # Canonical JSON keeps bools distinct from revision integers.
+            if json.dumps(marker, sort_keys=True) != json.dumps(expected, sort_keys=True):
+                continue
+            if lease is not None:
+                return job.claim_generation >= first
+            return job.claim_generation + 1 == first and job.revision == receipt.accepted_job_revision
+        return False
+
+    async def afail_attempt(self, session, job_id, *, jobs, expected_job_revision, error_code, lease=None):
+        root, job = await self._attempt(session, job_id, jobs)
+        release = await self._owned_retry_fence(
+            session, root, job, jobs=jobs, lease=lease, expected_job_revision=expected_job_revision
+        )
+        failed = await jobs.afail_attempt(
+            session, job_id, expected_job_revision=expected_job_revision, error_code=error_code, lease=lease
+        )
+        if release and failed is not None and failed.state in {"failed", "partial_failed"}:
+            root.state = KnowledgeState.PUBLISHED.value
+            await session.flush()
+        return failed
+
+    async def afinalize_attempt(self, session, lease, *, jobs):
+        root, job = await self._attempt(session, lease.job_id, jobs)
+        release = await self._owned_retry_fence(
+            session, root, job, jobs=jobs, lease=lease, expected_job_revision=job.revision
+        )
+        if root is None:
+            raise KnowledgeProcessingConflictError(reason="processing_owner_missing")
+        finished = await jobs.afinalize(
+            session, lease, configuration=ProcessingConfiguration(root.model_config_revision, root.index_generation)
+        )
+        if release and finished is not None and finished.state in {"succeeded", "failed", "partial_failed"}:
+            root.state = KnowledgeState.PUBLISHED.value
+            await session.flush()
+        return finished
+
     async def acomplete_file(
         self,
         session,

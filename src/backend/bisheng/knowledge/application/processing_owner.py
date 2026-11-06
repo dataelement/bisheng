@@ -20,11 +20,13 @@ from bisheng.knowledge.domain.repositories.processing_job_repository import (
     ProcessingConfiguration,
     ProcessingJobRepository,
 )
+from bisheng.knowledge.domain.repositories.processing_owner_repository import ProcessingOwnerRepository
 from bisheng.knowledge.domain.schemas.processing_job import EmbeddingRebuildParameters
 from bisheng.knowledge.domain.services.processing_cutover_receipts import _ProcessingCutoverAuthority
 from bisheng.open_api.application.access_context import get_current_open_api_principal
 from bisheng.open_api.domain.context import OpenApiPrincipal
 from bisheng.open_endpoints.domain.utils import get_open_api_operator_async
+from bisheng.permission.application.business_authorization import require_business_action
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +53,7 @@ class _CutoverNotReady(Exception):
 class KnowledgeProcessingOwner:
     def __init__(self, *, jobs=None):
         self.jobs = jobs if jobs is not None else ProcessingJobRepository()
+        self.scope = ProcessingOwnerRepository()
         self._cutovers = _ProcessingCutoverAuthority(self)
 
     @staticmethod
@@ -146,7 +149,25 @@ class KnowledgeProcessingOwner:
             if acknowledged is None:
                 raise ResourceReferenceInvalidError(reason="processing_cutover_lease_changed")
             current = await self.aread_current(session, job.space_id, job=job)
-        return await self.jobs.afinalize(session, lease, configuration=current.configuration)
+        return await self.scope.afinalize_attempt(session, lease, jobs=self.jobs)
+
+    async def abegin_retry_fence(self, session, job, *, identity):
+        await self._operator(identity)
+        await require_business_action(
+            identity, resource_type="knowledge_space", resource_id=job.space_id, action="edit"
+        )
+        await self.aread_current(session, job.space_id, identity=identity, job=job)
+        await self.scope.abegin_retry_fence(session, job, jobs=self.jobs)
+
+    async def afail_attempt(self, session, job_id, *, expected_job_revision, error_code, lease=None):
+        return await self.scope.afail_attempt(
+            session,
+            job_id,
+            jobs=self.jobs,
+            expected_job_revision=expected_job_revision,
+            error_code=error_code,
+            lease=lease,
+        )
 
     async def apreview(
         self,
