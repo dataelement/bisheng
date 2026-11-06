@@ -8,6 +8,7 @@ from bisheng.app_runtime.domain.schemas.app_authorization import required_action
 from bisheng.app_runtime.domain.services.app_authorization_service import AppAuthorizationService
 from bisheng.common.errcode.permission import PermissionDeniedError
 from bisheng.core.context.tenant import management_tenant_scope, tenant_execution_scope
+from bisheng.dsh.application.runtime_identity import resolve_desktop_runtime_identity
 from bisheng.open_api.application.access_context import get_current_open_api_principal
 from bisheng.open_api.application.runtime_authorization import runtime_credential_context, without_open_api_identity
 from bisheng.permission.application.identity import reset_current_permission_actor, set_current_permission_actor
@@ -35,7 +36,7 @@ class RuntimeAuthorizationService:
             self_review = principal.resource_owner_user_id
         else:
             reference = deepcopy(getattr(identity, "_runtime_credential_reference", None))
-            if not reference or reference.get("kind") != "web_session":
+            if not reference or reference.get("kind") not in {"web_session", "dsh_session"}:
                 raise PermissionDeniedError(reason="runtime_web_identity_unavailable")
             self_review = actor.subject_id
         return {
@@ -119,12 +120,15 @@ class RuntimeAuthorizationService:
                     }:
                         raise PermissionDeniedError(reason="runtime_identity_changed")
                     yield identity
-            elif reference.get("kind") == "web_session":
+            elif reference.get("kind") in {"web_session", "dsh_session"}:
                 principal_scope = without_open_api_identity()
                 principal_scope.__enter__()
                 actor_token = set_current_permission_actor(None)
                 try:
-                    identity = await resolve_web_runtime_identity(reference)
+                    if reference["kind"] == "dsh_session":
+                        identity = await resolve_desktop_runtime_identity(reference)
+                    else:
+                        identity = await resolve_web_runtime_identity(reference)
                     actor = await AppAuthorizationService.resolve_actor(identity)
                     if actor_ref != {
                         "subject_type": actor.subject_type,

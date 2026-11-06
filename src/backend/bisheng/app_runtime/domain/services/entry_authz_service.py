@@ -92,33 +92,40 @@ async def authorize_entry(
     access_token: str | None,
     request_id: str = "",
     client_ip: str | None = None,
+    desktop_actor=None,
 ) -> dict[str, Any]:
     """One verdict for one visit. Never raises for a business outcome."""
     if not settings.app_runtime.enabled:
         return {"decision": DECISION_NOT_ENABLED}
 
-    subject = _decode_jwt_subject(access_token) if access_token else None
-    if subject is None:
-        return {"decision": DECISION_LOGIN, "reason": "no_session"}
+    if desktop_actor is not None:
+        user_id, tenant_id = desktop_actor.user_id, desktop_actor.tenant_id
+        subject = {"user_id": user_id, "tenant_id": tenant_id}
+    else:
+        subject = _decode_jwt_subject(access_token) if access_token else None
+        if subject is None:
+            return {"decision": DECISION_LOGIN, "reason": "no_session"}
 
-    user_id = int(subject.get("user_id") or 0)
-    tenant_id = int(subject.get("tenant_id") or 0)
-    if not user_id:
-        return {"decision": DECISION_LOGIN, "reason": "no_session"}
+        user_id = int(subject.get("user_id") or 0)
+        tenant_id = int(subject.get("tenant_id") or 0)
+        if not user_id:
+            return {"decision": DECISION_LOGIN, "reason": "no_session"}
 
-    session_reason = await _session_invalid_reason(user_id, tenant_id, subject, access_token)
-    if session_reason:
-        # Answered as "sign in again" rather than "forbidden": the visitor has
-        # no usable session, and at this point we have not even looked the app
-        # up — saying "forbidden" would imply it exists.
-        return {"decision": DECISION_LOGIN, "reason": session_reason}
+        session_reason = await _session_invalid_reason(user_id, tenant_id, subject, access_token)
+        if session_reason:
+            # Answered as "sign in again" rather than "forbidden": the visitor has
+            # no usable session, and at this point we have not even looked the app
+            # up — saying "forbidden" would imply it exists.
+            return {"decision": DECISION_LOGIN, "reason": session_reason}
 
     app = await _load_app_by_slug(slug)
     if app is None or AppState(app.state) not in ENTRY_VISIBLE_STATES:
         return {"decision": DECISION_NOT_FOUND}
 
+    if desktop_actor is not None and int(app.tenant_id or 0) != int(tenant_id):
+        return {"decision": DECISION_FORBIDDEN}
     set_current_tenant_id(int(app.tenant_id or 0))
-    actor = await _build_actor(user_id, subject)
+    actor = desktop_actor or await _build_actor(user_id, subject)
     try:
         visible = await check_business_action(
             actor,
