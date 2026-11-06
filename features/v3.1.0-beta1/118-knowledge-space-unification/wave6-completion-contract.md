@@ -161,3 +161,5 @@ T667/T668新增窄纯函数`require_space_processing_idle(space: Knowledge, *, o
 T669/T670在原SpaceService的add_file/import_web_link/upload_folder_items及move_items真实入口接此gate，移入/出双方都查实际空间；在原VersionService的link/merge/set_primary接同gate，原版本开关、同空间/MD5、原权限及整版本语义保持。在原动作通过后、fetch/对象/SQL/索引副作用前判断。空folder创建、rename、目录/预览/下载不因这张卡新增阻断；原拒绝照旧。原Chunk/元数据写端由后续精确卡继续接，完整T097/T098保持未完成。
 
 T671/T672在现FileVisibilityService的实际space候选和post-filter读取路径，已核原visible后、检索IO前，对重建态明确10999供调用方说明暂停原因；不把重建误报无权限/零命中，不改变QA和显式历史版本资格。成功态文件裁剪T658继续独立生效。每组先实际红测，消费者用真实SQL/业务调用证明，不以纯helper绿测宣布接线完成；已有正确行为记录首绿。
+
+检索授权补充：原file-visible集合非空即已有对应资格，不新增强制space.visible gate而误拒仅子项可见主体。只有重建态且候选/过滤全空时，可复用既有is_space_visible作原空间可见证明，证明通过才返回暂停；全无权保持原empty/False且不暴露处理状态。ready/QA不增加额外空间资格检查；内部精确tenant root状态读取不作为权限授予。
