@@ -277,3 +277,16 @@ async def test_native_factory_uses_saved_vector_connection_without_rag_model_fac
     assert mv_factory.call_args.kwargs["db_name"] == "business"
     native.es.close.assert_awaited_once()
     native.mv.close.assert_called_once()
+
+
+async def test_explicit_close_inside_factory_context_does_not_close_owned_clients_twice(module, native, monkeypatch):
+    monkeypatch.setattr(module, "AsyncElasticsearch", Mock(return_value=native.es))
+    monkeypatch.setattr(module, "MilvusClient", Mock(return_value=native.mv))
+    config = VectorStores(
+        milvus={"connection_args": {"uri": "http://private.invalid:19530"}},
+        elasticsearch={"url": "http://private.invalid:9200"},
+    )
+    async with module.PhysicalInventoryReader.aopen(config, storage=native.storage) as reader:
+        await reader.aclose()
+    native.es.close.assert_awaited_once()
+    native.mv.close.assert_called_once()
