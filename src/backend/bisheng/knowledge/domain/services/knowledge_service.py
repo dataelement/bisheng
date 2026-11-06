@@ -52,7 +52,6 @@ from bisheng.common.errcode.knowledge_space import SpaceFileSizeLimitError
 from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
 from bisheng.common.schemas.api import PageInfiniteCursorData
 from bisheng.common.services.metric_log import emit_metric
-from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.core.cache.utils import async_file_download, file_download
 from bisheng.core.context.tenant import get_current_tenant_id
@@ -1153,10 +1152,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def delete_knowledge_file_in_vector(cls, knowledge: Knowledge, del_es: bool = True):
-        embeddings = FakeEmbeddings()
-        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
-            invoke_user_id=0, knowledge=knowledge, embeddings=embeddings
-        )
+        vector_client = KnowledgeRag.init_knowledge_milvus_cleanup_sync(knowledge)
         if isinstance(vector_client.col, Collection):
             logger.info(f"delete_vector col={knowledge.collection_name} knowledge_id={knowledge.id}")
             if knowledge.collection_name.startswith("col"):
@@ -1166,7 +1162,7 @@ class KnowledgeService(KnowledgeUtils):
                 raise ValueError("knowledge.collection_name must start with 'col' not support partition mode")
         if del_es:
             index_name = knowledge.index_name or knowledge.collection_name  # Compatible with older versions
-            es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
+            es_client = KnowledgeRag.init_knowledge_es_cleanup_sync(knowledge)
             res = es_client.client.indices.delete(index=index_name, ignore=[400, 404])
             logger.info(f"act=delete_es index={index_name} res={res}")
 
