@@ -27,27 +27,23 @@
 </div>
 
 
-## BISHENG エンタープライズプラットフォーム
-
 BISHENG は、**オープンソースの企業向けオールインワン Agent プラットフォーム**です。オフィス業務の効率化と企業での AI アプリケーションの活用に注力し、さまざまな業界の大手組織や Fortune 500 企業に利用されています。
 
-## 重要アップデート：BISHENG クライアントを公開、デスクトップと企業 AI を接続
+### 重要アップデート：BISHENG クライアントを公開
 
-**BISHENG クライアントは、ローカル作業と企業 AI をつなぐデスクトップ Agent です。** 従業員は企業アカウントで、利用を許可されたモデル、ナレッジベース、ツール、スキルを使い、資料に関する Q&A、複数ステップのタスク、Word・Excel・PPT などのオフィス文書の作成を行い、許可されたローカルディレクトリで修正を続けられます。企業はリソース、権限、クレジット、利用量を一元管理します。
+BISHENG デスクトップクライアントは DeepSeek Harness（DSH）を基盤に開発され、BISHENG プラットフォームと連携することで、オープンソースでプライベート環境にデプロイでき、自社で管理・制御できる企業向け Agent プラットフォームの包括的なソリューションを提供します。
 
-![公式サイトの BISHENG クライアント企業版紹介ページ](docs/images/readme/bisheng-desktop-enterprise.png)
+簡単に言えば、WorkBuddy／豆包工作のオープンソースの代替として、企業が AI の能力を自らの手で管理できるようにするものです。
 
-[BISHENG クライアントをダウンロード](https://dshdesktop.com/zh/enterprise/) · [クライアントの GitHub リポジトリ](https://github.com/dataelement/bisheng-desktop)
+![BISHENG の Web・デスクトップ・モバイル画面](docs/images/readme/bisheng-platform-overview.png)
 
-> 企業連携機能、設定要件、オープンソース版・商用版の提供範囲は、各バージョンの説明をご確認ください。
+[BISHENG クライアントをダウンロード](https://dshdesktop.com/zh/enterprise/)
 
-### DSH クライアント個人版：ローカルのタスクから始める
+クライアントをカスタマイズする場合（ロゴの変更など）は、[クライアントのオープンソースコード](https://github.com/dataelement/bisheng-desktop)を基に変更できます。
 
-**DSH Desktop は、Dataelem チームが DeepSeek Harness を基盤に開発したオープンソースのデスクトップ Agent アプリです。** 個人ユーザーは BISHENG の企業プラットフォームをデプロイせずに、モデルを設定し、ローカルの作業ディレクトリを選んで、日常的な資料処理を Agent に任せられます。
-
-GitHub で **17k Star** を獲得しています。
-
-[DSH クライアント](https://dshdesktop.com/zh/) · [GitHub](https://github.com/dataelement/dsh-desktop)
+> BISHENG チームは、DSH が公開されたその夜に、DSH のデスクトップクライアント（[dshdesktop.com](https://dshdesktop.com/)）をいち早くオープンソースとして公開しました。BISHENG クライアントは DSHDesktop を基盤に開発されています。現在、DSHDesktop は 90 万件以上のダウンロードと GitHub で 17.4K のスター ⭐️ を獲得しています。個人ユーザーは DSHDesktop を利用できます。
+>
+> [DSHDesktop 公式サイト](https://dshdesktop.com/zh/)
 
 ## 特徴
 
@@ -57,10 +53,6 @@ GitHub で **17k Star** を獲得しています。
    - **アカウントの権限に従って企業リソースを利用**：企業アカウントで許可されたモデル、API/MCP ツール、スキル、ナレッジスペースを利用し、アプリセンターで公開済みのアシスタントやワークフローを開けます。ナレッジ検索では、スペースとファイルの権限が引き続き確認されます。
    - **モデルとクレジットを一元管理**：管理者はモデルの利用権限、月間クレジット、呼び出し履歴を管理します。Chat と Work での企業モデルの呼び出しは、現在のユーザーの同じクレジット台帳に記録され、残高と利用量を確認できます。
    - **企業向け拡張機能を一括配布**：管理者がプラグインとワークベンチをまとめてインポートし、従業員は企業の設定と権限に従って利用します。
-
-   ![BISHENG の Web・デスクトップ・モバイル画面](docs/images/readme/bisheng-platform-overview.png)
-
-   > モバイルアプリは近日公開予定です。機能と公開スケジュールは、各バージョンの説明をご確認ください。
 
 2. **🛠️ アプリ工房：Vibe App をチームに公開**
 
