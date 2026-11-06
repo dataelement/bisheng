@@ -1421,7 +1421,9 @@ class KnowledgeService(KnowledgeUtils):
         try:
             for one in req_data.file_list:
                 # Upload source files, create data records
-                db_file = cls.process_one_file(login_user, knowledge, one, split_rule_dict)
+                db_file = cls.process_one_file(
+                    login_user, knowledge, one, split_rule_dict, processing_rule_request=req_data
+                )
                 # Duplicate file data using asynchronous tasks to execute
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
                     if getattr(db_file, "id", None):
@@ -1433,7 +1435,7 @@ class KnowledgeService(KnowledgeUtils):
                     cache_key = cls.preview_cache_key_for_split_rule(
                         req_data.knowledge_id,
                         one.file_path,
-                        {**split_rule_dict, "excel_rule": (one.excel_rule or ExcelRule()).model_dump()},
+                        json.loads(db_file.split_rule),
                     )
                     preview_cache_keys.append(cache_key)
                     process_files.append(db_file)
@@ -1488,7 +1490,9 @@ class KnowledgeService(KnowledgeUtils):
         current_total_file_size = int(await KnowledgeFileDao.aget_user_upload_total_file_size(login_user.user_id))
         try:
             for one in req_data.file_list:
-                db_file = await run_in_threadpool(cls.process_one_file, login_user, knowledge, one, split_rule_dict)
+                db_file = await run_in_threadpool(
+                    cls.process_one_file, login_user, knowledge, one, split_rule_dict, processing_rule_request=req_data
+                )
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
                     if getattr(db_file, "id", None):
                         created_file_ids.append(db_file.id)
@@ -1498,7 +1502,7 @@ class KnowledgeService(KnowledgeUtils):
                     cache_key = cls.preview_cache_key_for_split_rule(
                         req_data.knowledge_id,
                         one.file_path,
-                        {**split_rule_dict, "excel_rule": (one.excel_rule or ExcelRule()).model_dump()},
+                        json.loads(db_file.split_rule),
                     )
                     preview_cache_keys.append(cache_key)
                     process_files.append(db_file)
@@ -1742,6 +1746,7 @@ class KnowledgeService(KnowledgeUtils):
         split_rule: dict,
         file_kwargs: dict = None,
         skip_dedup: bool = False,
+        processing_rule_request: FileProcessBase | None = None,
     ) -> KnowledgeFile:
         """Process uploaded files"""
         # download original file
@@ -1753,6 +1758,32 @@ class KnowledgeService(KnowledgeUtils):
 
         file_extension_name = file_name.split(".")[-1]
         original_file_name = cls.get_upload_file_original_name(file_name)
+        actual_snapshot = None
+        if processing_rule_request is not None:
+            from bisheng.knowledge.application.file_processing_adapter import (
+                capture_legacy_processing_overrides,
+                legacy_rule_from_snapshot,
+            )
+
+            file_overrides = (
+                capture_legacy_processing_overrides(
+                    FileProcessBase(knowledge_id=knowledge.id, excel_rule=file_info.excel_rule)
+                )
+                if file_info.excel_rule is not None
+                else None
+            )
+            actual_snapshot = cls.processing_snapshot_for_legacy_request(
+                processing_rule_request,
+                knowledge=knowledge,
+                file_name=file_name,
+                file_source=(file_kwargs or {}).get("file_source"),
+                file_overrides=file_overrides,
+            )
+            actual_rule = legacy_rule_from_snapshot(actual_snapshot, space_id=knowledge.id)
+            split_rule = actual_rule.model_dump(mode="json")
+            # The old writer always applies a per-file ExcelRule below. Feed
+            # it the resolved value without mutating the caller's raw input.
+            file_info = file_info.model_copy(update={"excel_rule": actual_rule.excel_rule})
         # Does it contain duplicate files?
         repeat_files = KnowledgeFileDao.get_file_by_condition(
             knowledge_id=knowledge.id,
@@ -1763,6 +1794,8 @@ class KnowledgeService(KnowledgeUtils):
         if not file_info.excel_rule:
             file_info.excel_rule = ExcelRule()
         split_rule["excel_rule"] = file_info.excel_rule.model_dump()
+        if actual_snapshot is not None:
+            split_rule["_effective_processing"] = actual_snapshot.model_dump(mode="json")
         str_split_rule = json.dumps(split_rule)
         minio_client = get_minio_storage_sync()
 
