@@ -66,6 +66,22 @@ const accepted: JobAccepted = {
 
 beforeEach(() => vi.resetAllMocks());
 
+describe("space basic information update", () => {
+  it.each([true, false])("projects exactly three fields and preserves published=%s", async (is_released) => {
+    const body = { name: "Renamed", description: "New description", is_released, model: "wrong", processing_defaults: settings.effective_defaults, auth_type: "public", is_shared: true };
+    const response = { id: 7, name: "Renamed", is_released };
+    request.put.mockResolvedValue(response);
+    expect(await api.updateSpaceBasicInfo(7, body)).toBe(response);
+    expect(request.put).toHaveBeenCalledExactlyOnceWith("/api/v1/knowledge/space/7", { name: body.name, description: body.description, is_released });
+    expect(api.knowledgeSpaceApi.updateSpaceBasicInfo).toBe(api.updateSpaceBasicInfo);
+  });
+  it("keeps the original basic-update ApiError rejected", async () => {
+    const error = { status_code: 19000, data: { original: true } };
+    request.put.mockRejectedValue(error);
+    await expect(api.updateSpaceBasicInfo(7, { name: "Name", description: "", is_released: true })).rejects.toBe(error);
+  });
+});
+
 describe("ordinary spaces and creation wire contract", () => {
   it("keeps the ordinary cursor page opaque, including an empty progressing page", async () => {
     const page = { data: [], page_size: 20, has_more: true, next_cursor: "opaque/+==" };
