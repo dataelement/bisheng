@@ -201,3 +201,12 @@ EDGE固定archive独立复核无行动项：原96绿，额外2格native SQL（24
 EDGE a2d779bf0交原T141142：新HTTP默认visible、旧use在HTTP边界归一，Manager仅原action字面改visible，保私有方法名、fresh admission、execution.operator/消息/执行快照/源与旧tenant重验。5实际HTTP行为红、23首绿→新增28及原18组合46绿；没有为原F048已支持的可见行为伪造红。主agent逐段复核三处变更与新测试、正常merge后与工作台/开放工作流原回归9路径98 passed，日志/private/tmp/f118-root-entry-chat-integrated.log/.xml。两个旧prod arch同基线：chat RULE3 warning、manager RULE1两既有输出，新增0；未扩大旧层重构。
 
 主树受测源码194edb3f46f5719b4925e3d8bd6fd50c5314e5dd，整个test/knowledge_unification（明确未收集TCP监听mock合同单模块）**3640 passed、53431 warnings、130.11秒**，无fail/skip。日志/JUnit /private/tmp/f118-root-native-all-entries.log/.xml。前次447的3582是此前快照，不相加；本次包含已合APP预览/删Model、个人配额、聊天和新workstation/RPC测试。T141142按原范围闭合；root T151152/T839已有15/52/98绿及未改生产archive对照，仍等非作者短复核再勾。以上为本地native/HTTP/组件证据，未称CI、正式M2/M3或完整E2E。
+
+
+## 精确SQL阶段计划与工作台/RPC任务闭合（2026-11-07）
+
+MIG固定7998349db的六生产/六测试叶已合主树ddd0894ec58b1075e6df762a98608f8a4eaaba6d，主agent与作者相同25路径**825 passed、6494 warnings、23.03秒**，日志/JUnit /private/tmp/f118-root-exact-conversion-integrated.log/.xml。T831–838按SSOT/纯计划/精确probe/实际M2委托范围闭合。原type0白名单、before/after与实际Owner摘要、自然V1键/模板、Tag精确去重及默认两纯转换均冻结；File所有列零写，不执行M3。401-file预检23 SELECT，3tenant401资源实际app140 SELECT；全局额外唯一键probe一次，不按tenant重复；目录2、Knowledge12为此组合事实，默认五key固定双投影读取未伪报一次。
+
+独立EDGE实际发现两P2并由原作者分别修复：数据库实际collation下的创建目标唯一键漏检（GROUP BY原列+CASE投影，仅SQL NULL豁免）；type0 NULL创建者绕过检查（窄拒无原owner证明）。原正式M2四格逐字对照c3d2红2绿→7998四绿，误commit仍Run0；空串、existingSPACE NULL、deleted但真实User另3绿，六路径288绿。QA/type2不误拦，纯builder不伪装知道DB collation。所有六生产Ruff/format/arch无输出；旧集成测试FGA import告警同基线单列。本卡不代替联合namespace/Catalog计划、原T162/163/164、引用初始回填/Coverage或维护演练。
+
+root原T151/152固定af8b90142仅workstation recent/pin及open workflow invoke三个内部use字面改visible；新ASGI测试7真实红8首绿→15绿，保原scope、SAK/PAT/OBO原主体及snapshot、状态和部门lease。T839只旧两个pin测试补原union缺失的空App表/visible断言，未删业务断言；未改生产archive复现8缺表失败4绿。主树五路径52、联装聊天九路径98通过；PERM对固定194edb3f archive独立实跑五路径52绿、无确认缺陷，源码review严格三处literal、路由/分享/派发/协议不变，原151/152与839据实际范围闭合。

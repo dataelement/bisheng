@@ -133,7 +133,7 @@ W5本地100路径2852测试/15子测试通过，当前137待办；平台typechec
 
 ## W6持续实施（2026-11-07）
 
-W6持续实施；历史840编号：717已完成/历史交付、121当前待办、2外移；原137队列已完成34项、剩103项，另18张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
+W6持续实施；历史840编号：728已完成/历史交付、110当前待办、2外移；原137队列已完成36项、剩101项，另9张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
 
 109:3005由用户撤回后保持不动；109新独立项目已启动标准旧版本API/worker和真实中间件，真实注册/登录并准备隔离租户和mock模型，尚未执行F118迁移。用户选mock模型/ETL并免除本轮DM8实测；不免C2静态，也不以此代替MySQL事务、索引、投影和升级恢复演练。
 
@@ -165,3 +165,10 @@ W6持续实施；历史840编号：717已完成/历史交付、121当前待办�
 以已提交候选95f1279be归档（SHA256 `6b418fca86a1698af2d62002800315f551df22b2cc5d4b1232c68413dde94c0b`）在109独立项目临时只读容器执行，不替换原API/worker。仅SQL克隆库bisheng_f118_probe_20261107，SQL守卫拒DML/DDL/其他库；13条SQL读取3个实际租户、2个统一目标及5个文件。原生ES/Milvus分别回读空间1计数16/49、空间3计数5/6，标识schema兼容均true；8个原文件对象均存在。两种索引原有计数不同按各自原事实保留，不伪造相等或以此误阻迁移。正式前后对账应分别比较对应索引的原摘要/计数。
 
 新版受限MinIO adapter写/回读准备盘点artifact SHA256 `8e7366b92b94ec511e5426a4571a9598da6da09d8c5b2423e93eb34d46b24d81`；无建桶、授权策略、模型或解析IO。真实SQL/fair Redis任务reader返回0项（这是该环境当时事实，不代表已盘点Celery broker）；knowledge_unification_run/processing_job/processing_item仍0行。证据`evidence/preparatory-native-ports.json` SHA256 `72981605007d6e3e2e4b8831dbbc35a663f3aaf24c3964fcced7badcabcf000f`，无凭据脚本同目录`preparatory-native-ports-probe.py`。这不是M1停服一致备份/正式M2 freeze/M3转换/恢复/E2E，3005保持不动。
+
+
+## 联合namespace权限计划的AC-80待确认口径
+
+实现前实际SSOT审计发现：同一权限模型从旧library目标改为SPACE目标时，全局非use selected/effective动作和等级可完全不变，但目标可适用动作发生变化。默认editor由旧库{use,edit}变为{edit,create_folder,upload_file}；manager/owner另适用原share；custom{use,upload_file}变为{upload_file}，不新增edit/rename/download。仅use模型继续只有原可见与撤销，不加其他动作。真实Catalog/ModelSnapshot/GrantService两例验证等级/allow_same与管理边界不变。
+
+用户异步确认待答：是否按同模型的现有SPACE能力执行并列为namespace预期适用变化，或严格保旧库动作、遇新增能力阻断。现spec AC-80仍保原“非use动作效果不变”文字，答复前不修改其语义，不冻结依赖此选择的联合权限计划、不执行namespace/FGA发布。已完成SQL阶段计划和broker/无关开发继续；问题确认后同步spec/design/升级/HTML。不是以新动作、改全局scope、替换model_key或增加文件edit解决此冲突。

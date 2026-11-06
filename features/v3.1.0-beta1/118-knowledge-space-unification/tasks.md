@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史840编号：717已完成/历史交付、121当前待办、2外移；原137队列已完成34项、剩103项，另18张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史840编号：728已完成/历史交付、110当前待办、2外移；原137队列已完成36项、剩101项，另9张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -1233,7 +1233,7 @@
   **配对测试**：T149\
   **验证 / 完成条件**：运行配对测试 T149；验证本卡预期，相关范围检查通过。
 
-- [ ] **T151 · 工作台及开放工作流入口：先写测试**
+- [x] **T151 · 工作台及开放工作流入口：先写测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_edge_apps_rpc.py`（拟新增）\
   **逻辑 / 测试上下文**：实际旧调用default/explicit use都兼容；无scope/业务停止等原限制保持。\
@@ -1241,7 +1241,7 @@
   **覆盖 AC**: AC-35, AC-66, AC-68, AC-79, AC-82, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T152 · 工作台及开放工作流入口**
+- [x] **T152 · 工作台及开放工作流入口**
   **类型 / Owner**：后端 API / EDGE\
   **写入文件**：`src/backend/bisheng/workstation/api/endpoints/apps.py`；`src/backend/bisheng/open_endpoints/api/endpoints/workflow.py`\
   **逻辑 / 测试上下文**：HTTP委托统一visible使用准入，保原路由及请求/错误格式；历史应用/工作流发布与knowledge类型照常解释，无权内容不返回。\
@@ -6726,7 +6726,7 @@
   **配对测试**：T829\
   **验证 / 完成条件**：真实Kombu离线编码与native SQL/只读Redis形状红绿，10001规模/tenant/异常与独立复核；非Redis或缺端口拒绝，不代替正式M2/维护证明。
 
-- [ ] **T831 · KN盘点修订SSOT提取与真实Owner摘要对照测试**
+- [x] **T831 · KN盘点修订SSOT提取与真实Owner摘要对照测试**
   **类型 / Owner**：测试 / MIG\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_source_context.py`\
   **逻辑 / 测试上下文**：W6§43仅M2精确SQL阶段计划，原业务/neutral/来源摘要、自然V1键、creation/Tag/default闭集；不执行M3或权限finalize。\
@@ -6734,7 +6734,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-59, AC-60, AC-61, AC-62, AC-63, AC-85, AC-93\
   **验证 / 完成条件**：原生数据及真实Owner摘要红绿、分页/多版本/碰撞零写、旧来源完整回归与独立复核；不将纯计划计为M3/正式升级完成。
 
-- [ ] **T832 · KN盘点修订纯SSOT提取**
+- [x] **T832 · KN盘点修订纯SSOT提取**
   **类型 / Owner**：后端 Application / MIG\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_sources.py`\
   **逻辑 / 测试上下文**：W6§43仅M2精确SQL阶段计划，原业务/neutral/来源摘要、自然V1键、creation/Tag/default闭集；不执行M3或权限finalize。\
@@ -6742,7 +6742,7 @@
   **配对测试**：T831\
   **验证 / 完成条件**：原生数据及真实Owner摘要红绿、分页/多版本/碰撞零写、旧来源完整回归与独立复核；不将纯计划计为M3/正式升级完成。
 
-- [ ] **T833 · 精确SQL阶段转换命令与受限codec测试**
+- [x] **T833 · 精确SQL阶段转换命令与受限codec测试**
   **类型 / Owner**：测试 / MIG\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_conversion_plan.py`、`src/backend/test/knowledge_unification/test_migration_inventory_codec.py`\
   **逻辑 / 测试上下文**：W6§43仅M2精确SQL阶段计划，原业务/neutral/来源摘要、自然V1键、creation/Tag/default闭集；不执行M3或权限finalize。\
@@ -6750,7 +6750,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-59, AC-60, AC-61, AC-62, AC-63, AC-85, AC-93\
   **验证 / 完成条件**：原生数据及真实Owner摘要红绿、分页/多版本/碰撞零写、旧来源完整回归与独立复核；不将纯计划计为M3/正式升级完成。
 
-- [ ] **T834 · 精确SQL阶段转换计划与闭集codec**
+- [x] **T834 · 精确SQL阶段转换计划与闭集codec**
   **类型 / Owner**：后端 Application / MIG\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_conversion_plan.py`、`src/backend/bisheng/knowledge/application/unification_inventory_codec.py`\
   **逻辑 / 测试上下文**：W6§43仅M2精确SQL阶段计划，原业务/neutral/来源摘要、自然V1键、creation/Tag/default闭集；不执行M3或权限finalize。\
@@ -6758,7 +6758,7 @@
   **配对测试**：T833\
   **验证 / 完成条件**：原生数据及真实Owner摘要红绿、分页/多版本/碰撞零写、旧来源完整回归与独立复核；不将纯计划计为M3/正式升级完成。
 
-- [ ] **T835 · 转换Tag关系全局完整性probe测试**
+- [x] **T835 · 转换Tag关系全局完整性probe测试**
   **类型 / Owner**：测试 / MIG\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_resource_repository.py`\
   **逻辑 / 测试上下文**：W6§43仅M2精确SQL阶段计划，原业务/neutral/来源摘要、自然V1键、creation/Tag/default闭集；不执行M3或权限finalize。\
@@ -6766,7 +6766,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-59, AC-60, AC-61, AC-62, AC-63, AC-85, AC-93\
   **验证 / 完成条件**：原生数据及真实Owner摘要红绿、分页/多版本/碰撞零写、旧来源完整回归与独立复核；不将纯计划计为M3/正式升级完成。
 
-- [ ] **T836 · 转换Tag关系全局只读完整性probe**
+- [x] **T836 · 转换Tag关系全局只读完整性probe**
   **类型 / Owner**：后端 Repository / MIG\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/unification_resource_repository.py`\
   **逻辑 / 测试上下文**：W6§43仅M2精确SQL阶段计划，原业务/neutral/来源摘要、自然V1键、creation/Tag/default闭集；不执行M3或权限finalize。\
@@ -6774,7 +6774,7 @@
   **配对测试**：T835\
   **验证 / 完成条件**：原生数据及真实Owner摘要红绿、分页/多版本/碰撞零写、旧来源完整回归与独立复核；不将纯计划计为M3/正式升级完成。
 
-- [ ] **T837 · M2实际冻结精确转换计划组合测试**
+- [x] **T837 · M2实际冻结精确转换计划组合测试**
   **类型 / Owner**：测试 / MIG\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_preflight.py`、`src/backend/test/knowledge_unification/test_migration_inventory_application.py`\
   **逻辑 / 测试上下文**：W6§43仅M2精确SQL阶段计划，原业务/neutral/来源摘要、自然V1键、creation/Tag/default闭集；不执行M3或权限finalize。\
@@ -6782,7 +6782,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-59, AC-60, AC-61, AC-62, AC-63, AC-85, AC-93\
   **验证 / 完成条件**：原生数据及真实Owner摘要红绿、分页/多版本/碰撞零写、旧来源完整回归与独立复核；不将纯计划计为M3/正式升级完成。
 
-- [ ] **T838 · M2精确转换计划实际委托**
+- [x] **T838 · M2精确转换计划实际委托**
   **类型 / Owner**：后端 Application / MIG\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_preflight.py`、`src/backend/bisheng/knowledge/application/unification_inventory.py`\
   **逻辑 / 测试上下文**：W6§43仅M2精确SQL阶段计划，原业务/neutral/来源摘要、自然V1键、creation/Tag/default闭集；不执行M3或权限finalize。\
@@ -6790,7 +6790,7 @@
   **配对测试**：T837\
   **验证 / 完成条件**：原生数据及真实Owner摘要红绿、分页/多版本/碰撞零写、旧来源完整回归与独立复核；不将纯计划计为M3/正式升级完成。
 
-- [ ] **T839 · 原工作台pin回归夹具与可见性断言对齐**
+- [x] **T839 · 原工作台pin回归夹具与可见性断言对齐**
   **类型 / Owner**：测试夹具 / INT\
   **写入文件**：`src/backend/test/workstation/test_workstation_apps_rebac.py`、`src/backend/test/workstation/test_used_app_pin.py`\
   **逻辑 / 测试上下文**：W6§46实际旧回归：仅原use gate断言改visible，真实union已读App的SQLite夹具补空App表，保所有原pin/取消/跨tenant/offline/hidden业务断言。先固定未改生产对照旧失败，不将夹具失败算产品红。\
