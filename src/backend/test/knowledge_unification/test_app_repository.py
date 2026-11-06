@@ -210,3 +210,52 @@ async def test_current_reads_lock_root_version_and_identity_without_secret_mater
         assert len(statements) >= 6 and all(statement._for_update_arg is not None for statement in statements)
     finally:
         sa.event.remove(Session, "do_orm_execute", capture)
+
+
+async def test_preview_route_and_operation_are_exact_same_session_current_facts(store):
+    engine, _ = store
+    async with AsyncSession(engine) as session, session.begin():
+        session.add(
+            RuntimeOperation(
+                id="operation",
+                tenant_id=101,
+                app_id="app",
+                scope_key="101/app",
+                idempotency_key="preview",
+                request_digest="0" * 64,
+                version_id="history",
+                kind="preview",
+                node_id="node",
+                generation=3,
+                owner_epoch=4,
+                deadline=datetime.utcnow() + timedelta(hours=1),
+                payload={"session_id": "preview"},
+            )
+        )
+        session.add(
+            RuntimeRoute(
+                id="preview-route",
+                tenant_id=101,
+                app_id="app",
+                operation_id="operation",
+                route_key="preview:preview",
+                version_id="history",
+                node_id="node",
+                exec_ref="preview-execution",
+                generation=3,
+                owner_epoch=4,
+                status="serving",
+            )
+        )
+        await session.flush()
+        repo = HostedAppReferenceSourceRepository()
+        root = await repo.aget_root(session, "app")
+        facts = await repo.aget_runtime_identity(session, root, 8, for_update=True)
+        assert facts["route"] is None
+        assert (
+            facts["preview_route"]["operation_id"],
+            facts["preview_route"]["version_id"],
+            facts["preview_route"]["generation"],
+            facts["preview_route"]["owner_epoch"],
+        ) == ("operation", "history", 3, 4)
+        assert facts["operation"]["payload"] == {"session_id": "preview"}
