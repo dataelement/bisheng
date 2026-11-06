@@ -808,7 +808,7 @@ W4最终验证：d4d02e48b7d724c9ffe31d9650b75951eeb94e14，81路径2390 passed�
 
 ## 15.8 本轮修订与剩余范围（2026-11-06）
 
-独立评审两项热点已按用户确认处理：撤销默认 Embedding 的全空间联动，APP 改为每阶段一次目录复核。若未来增加明确的管理员批量换模型功能，应另行设计显式范围、确认与批次校验，不能恢复默认设置隐式联动。历史597编号中438已完成/历史交付、157当前待办、2外移（T404/T405），完整分组及逐条编号见 [pending-tasks.md](./pending-tasks.md)。本地回归不代表完整特性或升级验收。
+独立评审两项热点已按用户确认处理：撤销默认 Embedding 的全空间联动，APP 改为每阶段一次目录复核。若未来增加明确的管理员批量换模型功能，应另行设计显式范围、确认与批次校验，不能恢复默认设置隐式联动。当前历史604编号中465已完成/历史交付、137当前待办、2外移（T404/T405），完整分组及逐条编号见 [pending-tasks.md](./pending-tasks.md)。本地回归不代表完整特性或升级验收。
 
 ## 15.9 剩余任务范围校正（2026-11-06）
 
@@ -819,3 +819,13 @@ W4最终验证：d4d02e48b7d724c9ffe31d9650b75951eeb94e14，81路径2390 passed�
 应用只将原 use 使用检查及其枚举改为可见性。发布动作、分享动作、owner/管理资格、编辑/删除、凭据范围和生命周期继续使用原条件；来源可见也不替代应用自身发布权限。UI 各动作来自对应服务端结果。T135/T136/T193 的过宽表述已修正，不更改已确认 AC。
 
 QA 仅兼容和维护原模型引用，不接入空间高级功能；SDK/MCP 只适配本次 type/ID/use，不升级协议；知识任务恢复不扩成通用任务系统；type=2 不复活且不顺带清理数据；升级入口仅运维 CLI，不建在线迁移 HTTP API或停服控制。默认 Embedding 仍只初始化新空间，worker 在途 I/O 竞态仍排除。已交付能力先复用，任务未验证闭合前不重复开发或自动勾选。
+
+## 15.10 W5使用准入消费面（2026-11-06）
+
+从abb8dc822延续已收敛范围，先冻结[W5合同](./wave5-consumers-contract.md)并从同一checkpoint建立EDGE/PERM/API树，再按前端DTO→APP、builtin输入→Owner的明确依赖正常合流。详情与任务级验证见[W5记录](./wave5-implementation-review.md)。原157队列完成20项，7个既有需求接缝叶子也闭合，当前137待办；前文W3/W4/范围复核数字保留当时时点，当前以本节和任务账本为准。
+
+对外APP allowed_actions现在为visible加原五类管理动作，MANAGEMENT_ACTIONS排除visible，平台appActionState只认五类明确管理动作；未知/意外旧use不能获得管理入口。required_actions映射、审批阅读门禁、owner/publish/share/生命周期保持。当前可见摘要只将四处原use改visible，前后Source比较与原身份不变；对应审批skill已同步。AS与工具HTTP默认visible并兼容旧use，参数/身份/envelope保原；CH readonly仅visible，不封死同tenant管理。
+
+Skill的可见性不能兼任全局enabled状态：真实使用/选择边界available_only=True（含显式candidates）独立过滤disabled，管理visible/edit/delete及重新启用路径保留。内置工具/Skill创建只签visible，与Owner非空visible/download白名单联合交付。系统共享原download、纯可见原等级/Source撤销并集/投影次序继续复用，不激活业务资源Root→Child共享或分享签发。
+
+边界仍以scope-review为准。本波没有新Service/任务平台/新协议/页面风格，也未恢复默认Embedding联动；T063–T076因真实前置缺口保持待办。受测34fcbd7fec1809e5d4dc0513e7c2420f4489f6bc：100路径2852绿及15子测试；34个Python静态通过，前端目标6绿、全lint通过。平台typecheck22条与冻结基线相同，扩展APP query25/前端7个旧失败同集合、新增0，不能伪报这些范围全绿。真实双库/中间件/E2E、正式Coverage/迁移及部署未执行，无push。

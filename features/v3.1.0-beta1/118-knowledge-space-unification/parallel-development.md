@@ -171,3 +171,7 @@ APP6e3fb5784由LLM agent固定archive独立源码+200项通过复核；LLM770769
 WORKER最终交接：KN明确未写T501/T502三叶后，从INT已集成前置2467edc94创建独立118-wave4-worker，LLM agent接这三叶及T591旧可用性测试，KN不并写。APP额外T588–T590仅修原0/3能力边界和管理unsupported；Root保总装配/文档/最终验证。
 
 W4最终主组合：受测d4d02e48b7d724c9ffe31d9650b75951eeb94e14，81路径2390 passed/6subtests，438/597卡完成（较W3新增190）。170文件格式通过，架构/Ruff新增0，55个既有Ruff诊断与基线核对；固定交付及剩余159卡见W4记录。无push/迁移/部署。
+
+## W5固定合同与消费面交付
+
+从范围基线abb8dc822只读审计，d832ac594冻结[W5合同](./wave5-consumers-contract.md)，三个独立lane由同checkpoint推进；INT前端T599先交API，API T136/T144满足后EDGE做HTTP，EDGE T128/T146先交PERM再收紧Owner。跨lane精确SHA正常merge，API/PERM相互固定快照只读复查，INT总装配34fcbd7fe后验证100路径2852 passed/15子测试，34Python静态全过。原队列20项及7叶子闭合，剩137。完整红绿、基线失败和环境限制见[W5记录](./wave5-implementation-review.md)。分享签发仍外移，处理worker等未就绪前置保持待办，无push/迁移/部署。

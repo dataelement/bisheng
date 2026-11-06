@@ -10,7 +10,7 @@
 - [Spec：94 条验收标准](./spec.md)
 - [技术设计：迁移、策略统一、业务绑定维护和强制删除](./design.md)
 - [实施任务：接口、依赖、文件 Owner 与验证](./tasks.md)
-- [剩余157项：需求分组、逐项编号和依赖](./pending-tasks.md)
+- [剩余137项：需求分组、逐项编号和依赖](./pending-tasks.md)
 - [剩余任务范围复核：AC依据、授权边界与外移记录](./scope-review.md)
 - [独立待办：分享链接签发授权（已移出F118）](../../../docs/backlog/share-link-issuance-authorization.md)
 - [多 agent 并行开发：边界、耦合与合流协议](./parallel-development.md)
@@ -21,6 +21,8 @@
 - [W3运行准入、共享来源读取及集成复查](./wave3-implementation-review.md)
 - [W4剩余业务来源接口合同](./business-sources-contract.md)
 - [W4剩余来源接线与集成复查](./wave4-implementation-review.md)
+- [W5使用准入消费面冻结合同](./wave5-consumers-contract.md)
+- [W5多agent交付、复查及验证](./wave5-implementation-review.md)
 - [运行与共享来源接口合同V1](./execution-read-contract.md)
 - [运行与共享读取实际入口接线](./execution-entrypoints.md)
 - [冻结接口合同：REF V1.1、W2 Runtime/batch与P1/J1/A1](./contracts.md)
@@ -35,9 +37,13 @@
 | spec.md | ✅ 已评审、用户已确认 | 2026-11-05 确认完整 94 条 AC，作为设计评审的需求基线 |
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查闭合；2026-11-05 用户授权进入任务拆分 |
 | test-cases.md | 已生成，待执行 | 140 条，94 AC 全覆盖；QA 参考，不是任务或 Harness 输入 |
-| tasks.md / parallel-development.md | ✅ 已拆分、复审 LGTM | 原213项复审通过；W4四类来源和消费者已合流，历史597编号：438已完成/历史交付、157当前待办、2外移；验证见W4记录；完整特性仍在开发 |
+| tasks.md / parallel-development.md | ✅ 已拆分、复审 LGTM | 原213项复审通过；W4四类来源和消费者已合流，历史604编号：465已完成/历史交付、137当前待办、2外移；验证见W4记录；完整特性仍在开发 |
 
-## 当前范围补充（2026-11-06）
+## W5当前交付进度（2026-11-06）
+
+原157队列完成20项，7个既有需求接缝叶子闭合，当前137待办。功能源码34fcbd7fe通过100路径2852测试及15子测试，前端目标6例全绿、全lint通过；平台typecheck22条及扩展回归旧失败均对照基线、新增0。详细证据与限制见W5记录，不代表完整特性/迁移验收。
+
+## 范围复核时点说明（2026-11-06）
 
 分享签发 T404/T405 已移出本特性及其验收前置，尚未实施；原历史记录中的要求由本轮决定替代。其余157项逐条复核，发布/分享等其他动作不因 use 下线放宽，QA/协议/任务/运维只做本次范围。详见范围复核。历史 W3/W4 数字和测试证据保持当时含义，不当作当前任务分母。
 

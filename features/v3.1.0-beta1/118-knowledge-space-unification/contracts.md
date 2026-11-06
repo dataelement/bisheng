@@ -440,3 +440,7 @@ WF generic metadata_filter.document_id不是实际physical file选择器，不�
 ## W4剩余业务来源合同
 
 [业务来源合同V1](./business-sources-contract.md)冻结四类真实来源、完整执行/原生sync、APP名字到真实ID与原principal、频道自动化身份、空间独立模型配置及默认来源原子维护。W3通用UserPayload/async合同不放宽；同root批协议保留，既有mixed只同tenant默认/空间及MODEL，默认保存不再调用。2026-11-06 用户确认默认 Embedding 仅初始化新空间；已建空间自身配置不随默认变动。APP 同阶段多槽名称消费使用 Name Port 的 resolve_model_names_current，完整重验一次，候选/锁后各自重新验证。已确认94AC不变，正式基线冻结后才转换，本波不执行迁移。
+
+## W5使用准入消费面合同
+
+[W5合同V1](./wave5-consumers-contract.md)在d832ac594先冻结、后按依赖交付。APP allowed_actions canonical值以visible替代use，MANAGEMENT_ACTIONS和前端管理入口均明确排除visible；AS/工具HTTP默认visible并在边界解释旧use。系统创建只签visible，Owner仅允许非空visible/download；Skill使用集合独立校验enabled，管理可见与编辑路径保持。publish/share/管理、租户、原身份/scope和其他动作不放宽，不新增权限协议或共享写类型。当前交付及实际验证见[W5记录](./wave5-implementation-review.md)，其余137待办不因该合同通过而自动完成。

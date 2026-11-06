@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | W0/W1–W4已合流，完整特性仍在开发 | 历史597编号：438已完成/历史交付、157范围内待办、2外移；当前待办见[分组清单](./pending-tasks.md)；默认Embedding仅创建时初始化、APP同阶段批量校验；独立复查/组合测试见[W4记录](./wave4-implementation-review.md)，未运行迁移 |
+| 实现 | W0/W1–W4已合流，完整特性仍在开发 | 历史604编号：465已完成/历史交付、137当前待办、2外移；当前待办见[分组清单](./pending-tasks.md)；默认Embedding仅创建时初始化、APP同阶段批量校验；独立复查/组合测试见[W4记录](./wave4-implementation-review.md)，未运行迁移 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -23,7 +23,7 @@
 | T404 | [SL-AUTH-01 签发授权复现与测试](../../../docs/backlog/share-link-issuance-authorization.md) | 已外移，未实施，不计完成或剩余、不计 AC 覆盖 |
 | T405 | [SL-AUTH-02 签发授权实现](../../../docs/backlog/share-link-issuance-authorization.md) | 已外移，未实施，不作为本次依赖或验收前置 |
 
-历史597编号 = 438已完成/历史交付（含后续退役）+157当前待办+2外移；当前带复选框的范围内任务595项。原编号不重排；历史 W3/W4 数字保留其当时含义，由本节替代其中签发加固的旧前置要求。
+范围复核时历史597编号 = 438已完成/历史交付（含后续退役）+157待办+2外移。W5交付后历史604编号 = 465已完成/历史交付+137当前待办+2外移；当前带复选框的范围内任务602项。原编号不重排；历史 W3/W4 数字保留其当时含义，由本节替代其中签发加固的旧前置要求。
 
 ## 领取与执行规则
 
@@ -1037,7 +1037,7 @@
   **配对测试**：T125\
   **验证 / 完成条件**：运行配对测试 T125；验证本卡预期，相关范围检查通过。
 
-- [ ] **T127 · 工具/Skill 使用准入切换：先写测试**
+- [x] **T127 · 工具/Skill 使用准入切换：先写测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_edge_tool.py`（拟新增）；`src/backend/test/tool/test_f048_tool_permissions.py`\
   **逻辑 / 测试上下文**：工具preset/custom及Skill原可见鉴权无use可调用，无可见/无scope仍拒绝，活动动作响应无use；Skill的enabled使用/管理分离由T145/T146独立回归，本组联合验收等待它们。\
@@ -1045,7 +1045,7 @@
   **覆盖 AC**: AC-78, AC-79, AC-82, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T128 · 工具/Skill 使用准入切换**
+- [x] **T128 · 工具/Skill 使用准入切换**
   **类型 / Owner**：后端 Domain / EDGE\
   **写入文件**：`src/backend/bisheng/tool/domain/services/f048_tool_permission.py`\
   **逻辑 / 测试上下文**：工具preset/custom原独立use检查改visible；生产Skill接缝在T146，未接线旧f048_skill_permission不改，保tenant/身份/scope/可执行状态，不给额外动作；调用现有统一 PermissionService，历史保存协议只兼容解释。\
@@ -1103,7 +1103,7 @@
   **配对测试**：T133\
   **验证 / 完成条件**：运行配对测试 T133；验证本卡预期，相关范围检查通过。
 
-- [ ] **T135 · 应用可见资格与能力 DTO：先写测试**
+- [x] **T135 · 应用可见资格与能力 DTO：先写测试**
   **类型 / Owner**：测试 / APP\
   **写入文件**：`src/backend/test/knowledge_unification/test_app_visibility.py`（拟新增）；`src/backend/test/app_runtime/test_f114_action_authorization.py`\
   **逻辑 / 测试上下文**：原使用资格可见无 use 可调用；发布仍须原发布动作/owner 等资格、生命周期及来源条件，可见但缺发布/分享资格仍拒绝；Source 变化复查，旧协议只解释不保存。\
@@ -1111,7 +1111,7 @@
   **覆盖 AC**: AC-78, AC-79, AC-81, AC-82, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T136 · 应用可见资格与能力 DTO**
+- [x] **T136 · 应用可见资格与能力 DTO**
   **类型 / Owner**：后端 Domain / APP\
   **写入文件**：`src/backend/bisheng/app_publish/domain/services/app_publish_current_visibility_service.py`；`src/backend/bisheng/app_runtime/domain/schemas/app_authorization.py`\
   **逻辑 / 测试上下文**：仅来源及应用原 use 使用判断改 visible，活动能力 DTO 不形成独立 use；应用自身发布动作、owner/管理资格、分享动作、生命周期及 capability 范围保持原逻辑，不能把可见当发布或分享许可；保 Source 一致性。\
@@ -1119,7 +1119,7 @@
   **配对测试**：T135\
   **验证 / 完成条件**：运行配对测试 T135；验证本卡预期，相关范围检查通过。
 
-- [ ] **T137 · 助手 HTTP 动作默认与选择器：先写测试**
+- [x] **T137 · 助手 HTTP 动作默认与选择器：先写测试**
   **类型 / Owner**：测试 / AS\
   **写入文件**：`src/backend/test/knowledge_unification/test_as_http.py`（拟新增）\
   **逻辑 / 测试上下文**：旧query默认/显式use按visible；失效助手失败，隐藏知识不暴露；无菜单机器凭证按原scope。\
@@ -1127,7 +1127,7 @@
   **覆盖 AC**: AC-37, AC-68, AC-79, AC-82, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T138 · 助手 HTTP 动作默认与选择器**
+- [x] **T138 · 助手 HTTP 动作默认与选择器**
   **类型 / Owner**：后端 API / AS\
   **写入文件**：`src/backend/bisheng/api/v1/assistant.py`\
   **逻辑 / 测试上下文**：列表/运行旧默认use解释visible，当前输出action不含use；委托AS统一服务，保scope/tenant/执行状态，不重写历史配置。\
@@ -1167,7 +1167,7 @@
   **配对测试**：T141\
   **验证 / 完成条件**：运行配对测试 T141；验证本卡预期，相关范围检查通过。
 
-- [ ] **T143 · 工具枚举与实际执行：先写测试**
+- [x] **T143 · 工具枚举与实际执行：先写测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_edge_tool_call.py`（拟新增）；`src/backend/test/tool/test_tool_executor_permissions.py`\
   **逻辑 / 测试上下文**：列出与执行相同准入；可见无use可执行，disabled和无scope拒绝；剩余use调用方清单闭合。\
@@ -1175,7 +1175,7 @@
   **覆盖 AC**: AC-79, AC-82, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T144 · 工具枚举与实际执行**
+- [x] **T144 · 工具枚举与实际执行**
   **类型 / Owner**：后端 Domain / EDGE\
   **写入文件**：`src/backend/bisheng/tool/domain/services/tool.py`；`src/backend/bisheng/tool/domain/services/executor.py`\
   **逻辑 / 测试上下文**：get_tool_list默认和executor执行统一visible，保preset/owner/tool enabled与既有运行条件，不因仅删use分支丢禁用校验。\
@@ -1183,7 +1183,7 @@
   **配对测试**：T143\
   **验证 / 完成条件**：运行配对测试 T143；验证本卡预期，相关范围检查通过。
 
-- [ ] **T145 · Skill 枚举与启用校验：先写测试**
+- [x] **T145 · Skill 枚举与启用校验：先写测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_edge_skill.py`（拟新增）；`src/backend/test/linsight/test_user_skills.py`\
   **逻辑 / 测试上下文**：批量结果不漏仅可见，停用仍不可运行、无scope拒绝，tenant隔离。\
@@ -1191,7 +1191,7 @@
   **覆盖 AC**: AC-79, AC-82, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T146 · Skill 枚举与启用校验**
+- [x] **T146 · Skill 枚举与启用校验**
   **类型 / Owner**：后端 Domain / EDGE\
   **写入文件**：`src/backend/bisheng/linsight/domain/services/user_skills.py`；`src/backend/bisheng/linsight/domain/services/skill_permission.py`\
   **逻辑 / 测试上下文**：user_skills批量过滤及skill_permission原use分支转visible，同时独立保enabled等业务校验；不要因动作改名使disabled可执行。\
@@ -1199,7 +1199,7 @@
   **配对测试**：T145\
   **验证 / 完成条件**：运行配对测试 T145；验证本卡预期，相关范围检查通过。
 
-- [ ] **T147 · DSH 工具能力目录：先写测试**
+- [x] **T147 · DSH 工具能力目录：先写测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_edge_dsh.py`（拟新增）\
   **逻辑 / 测试上下文**：能力枚举/工作执行一致，仅可见可用但缺scope/停用仍拒绝。\
@@ -1207,7 +1207,7 @@
   **覆盖 AC**: AC-35, AC-68, AC-79, AC-82, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T148 · DSH 工具能力目录**
+- [x] **T148 · DSH 工具能力目录**
   **类型 / Owner**：后端 Domain / EDGE\
   **写入文件**：`src/backend/bisheng/dsh/domain/services/capability_catalog.py`；`src/backend/bisheng/dsh/domain/services/work_capabilities.py`\
   **逻辑 / 测试上下文**：明确tool list准入visible，保原DSH身份上下文、声明范围、内容安全/配额/状态；旧工具绑定不改写。\
@@ -1247,7 +1247,7 @@
   **配对测试**：T151\
   **验证 / 完成条件**：运行配对测试 T151；验证本卡预期，相关范围检查通过。
 
-- [ ] **T153 · 系统应用与租户分享纯可见：先写测试**
+- [x] **T153 · 系统应用与租户分享纯可见：先写测试**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_perm_shared.py`（拟新增）\
   **逻辑 / 测试上下文**：工作流/助手/tool/library系统分享无use，原范围不扩；撤来源不删他源，QA与文档映射正确。\
@@ -1255,7 +1255,7 @@
   **覆盖 AC**: AC-78, AC-79, AC-80, AC-81, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T154 · 系统应用与租户分享纯可见**
+- [x] **T154 · 系统应用与租户分享纯可见**
   **类型 / Owner**：后端 Domain / PERM\
   **写入文件**：`src/backend/bisheng/api/services/f048_application_permission.py`；`src/backend/bisheng/tenant/domain/services/resource_share_service.py`\
   **逻辑 / 测试上下文**：系统应用动作集和tenant share标准集合移除use，保visible、原主体/Source及分享管理资格；合法纯可见仍可撤销，不改租户原共享边界。\
@@ -1263,7 +1263,7 @@
   **配对测试**：T153\
   **验证 / 完成条件**：运行配对测试 T153；验证本卡预期，相关范围检查通过。
 
-- [ ] **T155 · 频道只读准入集合：先写测试**
+- [x] **T155 · 频道只读准入集合：先写测试**
   **类型 / Owner**：测试 / CH\
   **写入文件**：`src/backend/test/knowledge_unification/test_ch_permission.py`（拟新增）\
   **逻辑 / 测试上下文**：普通只读频道可见可用、无编辑能力，tenant和停用状态按原业务执行。\
@@ -1271,7 +1271,7 @@
   **覆盖 AC**: AC-78, AC-79, AC-82, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T156 · 频道只读准入集合**
+- [x] **T156 · 频道只读准入集合**
   **类型 / Owner**：后端 Domain / CH\
   **写入文件**：`src/backend/bisheng/channel/domain/services/f048_channel_permission.py`\
   **逻辑 / 测试上下文**：READ_ONLY_CHANNEL_ACTIONS只保visible并经统一权限服务；保频道状态/归属及配置权限，不用新独立use动作。\
@@ -1797,7 +1797,7 @@
   **依赖**：T222\
   **配对测试**：T222\
   **验证 / 完成条件**：配对测试转绿、相关既有回归及架构检查通过。
-- [ ] **T224 · 资源Owner系统动作白名单：先写测试**
+- [x] **T224 · 资源Owner系统动作白名单：先写测试**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_permission_owner_actions.py`\
   **逻辑 / 测试上下文**：Owner管理受保护系统Source的白名单移除use，合法viewer纯可见识别；保protected/原管理等级及移交规则，不顺带赋予可见主体管理能力。；可见无use可用、无可见/无凭证scope拒绝，旧协议不形成独立授权。\
@@ -1805,14 +1805,14 @@
   **覆盖 AC**: AC-78, AC-79, AC-81, AC-83\
   **验证 / 完成条件**：先记录红阶段，不修改实现。
 
-- [ ] **T225 · 资源Owner系统动作白名单**
+- [x] **T225 · 资源Owner系统动作白名单**
   **类型 / Owner**：后端 Domain / PERM\
   **写入文件**：`src/backend/bisheng/permission/domain/services/owner_service.py`\
   **逻辑 / 测试上下文**：Owner管理受保护系统Source的白名单移除use，合法viewer纯可见识别；保protected/原管理等级及移交规则，不顺带赋予可见主体管理能力。\
   **依赖**：T224, T128, T146\
   **配对测试**：T224\
   **验证 / 完成条件**：配对测试转绿、相关既有回归及架构检查通过。
-- [ ] **T226 · 工具HTTP旧动作参数适配：先写测试**
+- [x] **T226 · 工具HTTP旧动作参数适配：先写测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_tool_http_action.py`\
   **逻辑 / 测试上下文**：当前默认visible、保受支持旧use query按visible解释；经原服务鉴权，旧请求/返回结构维持，活动动作不输出use。；可见无use可用、无可见/无凭证scope拒绝，旧协议不形成独立授权。\
@@ -1820,7 +1820,7 @@
   **覆盖 AC**: AC-35, AC-66, AC-79, AC-82, AC-83\
   **验证 / 完成条件**：先记录红阶段，不修改实现。
 
-- [ ] **T227 · 工具HTTP旧动作参数适配**
+- [x] **T227 · 工具HTTP旧动作参数适配**
   **类型 / Owner**：后端 Domain / EDGE\
   **写入文件**：`src/backend/bisheng/tool/api/tool.py`\
   **逻辑 / 测试上下文**：当前默认visible、保受支持旧use query按visible解释；经原服务鉴权，旧请求/返回结构维持，活动动作不输出use。\
@@ -4746,7 +4746,7 @@
 
 合同见 [wave5-consumers-contract.md](./wave5-consumers-contract.md)。新增六卡仅拆分原需求的前端DTO接缝、旧回归和skill文档，未扩大94条AC；原157待办中本波选择20项。冻结时历史编号603，438已完成/历史交付、163当前待办（原157+6叶子）、2外移，全部待验证后才勾选。
 
-- [ ] **T598 · APP动作DTO前端最小兼容红测**
+- [x] **T598 · APP动作DTO前端最小兼容红测**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/frontend/platform/src/test/f114AppActions.test.tsx`\
   **逻辑 / 测试上下文**：以visible/空/未知旧use仅可见不能管理，五类具体管理动作独立，edit+publish才rebuild；保原publish-only深链不加载私有内容。\
@@ -4754,7 +4754,7 @@
   **覆盖 AC**: AC-78, AC-79, AC-81, AC-83\
   **验证 / 完成条件**：逐卡实际验证、原断言保留、固定SHA复查后由INT勾选；不声称真实环境或全特性验收。
 
-- [ ] **T604 · 能力授权旧回归动作及Skill管理语义对齐**
+- [x] **T604 · 能力授权旧回归动作及Skill管理语义对齐**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/permission/test_capability_authorization.py`\
   **逻辑 / 测试上下文**：保原租户/owner/撤Source/投影失败断言；退休use成功fixture改为目标化纯可见模型，补Catalog当前作用域；Skill目标visible/edit/delete管理不因disabled被封，运行拒绝由T145真实边界回归。不改业务源码。\
@@ -4762,7 +4762,7 @@
   **覆盖 AC**: AC-78, AC-79, AC-81, AC-83\
   **验证 / 完成条件**：记录原3个Grant/Catalog fixture既有失败；保拒绝和Source撤销目的，原文件与EDGE/PERM联合组合通过后勾选。
 
-- [ ] **T599 · APP动作DTO前端最小兼容**
+- [x] **T599 · APP动作DTO前端最小兼容**
   **类型 / Owner**：实现 / INT\
   **写入文件**：`src/frontend/platform/src/controllers/API/hostedApp.ts`；`src/frontend/platform/src/pages/BuildPage/hostedApp/appActions.ts`\
   **逻辑 / 测试上下文**：canonical HostedAppAction替换use为visible；management只认五类已有管理动作，不从未知/visible推导权限。不新增UI/样式，不提前勾完整T193。\
@@ -4770,14 +4770,14 @@
   **配对测试**：T598\
   **验证 / 完成条件**：逐卡实际验证、原断言保留、固定SHA复查后由INT勾选；不声称真实环境或全特性验收。
 
-- [ ] **T600 · 审批当前可见摘要skill契约同步**
+- [x] **T600 · 审批当前可见摘要skill契约同步**
   **类型 / Owner**：基础设施 / INT\
   **写入文件**：`.claude/skills/approval-module/SKILL.md`\
   **逻辑 / 测试上下文**：只将当前事实use来源文案与T136实际visible实现同步；不改审批引擎/节点/路由/候选/通知/outbox。\
   **依赖**：T136\
   **验证 / 完成条件**：逐卡实际验证、原断言保留、固定SHA复查后由INT勾选；不声称真实环境或全特性验收。
 
-- [ ] **T601 · 工具preset原鉴权回归动作对齐**
+- [x] **T601 · 工具preset原鉴权回归动作对齐**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/tool/test_preset_tool_classification.py`\
   **逻辑 / 测试上下文**：保preset/custom/真实Facade/tenant/非法动作原断言，退休use具体成功输入改visible；旧use兼容仍由统一入口回归。\
@@ -4785,7 +4785,7 @@
   **覆盖 AC**: AC-78, AC-79, AC-82, AC-83\
   **验证 / 完成条件**：逐卡实际验证、原断言保留、固定SHA复查后由INT勾选；不声称真实环境或全特性验收。
 
-- [ ] **T602 · 系统应用与租户共享旧回归对齐**
+- [x] **T602 · 系统应用与租户共享旧回归对齐**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/permission/test_f048_application_adapters.py`；`src/backend/test/permission/test_f048_resource_share_boundary.py`\
   **逻辑 / 测试上下文**：保原租户/allowlist/状态/写动作拒绝等断言，仅将退休use的具体成功输入改visible；不激活新共享类型。\
@@ -4793,7 +4793,7 @@
   **覆盖 AC**: AC-78, AC-79, AC-81, AC-83\
   **验证 / 完成条件**：逐卡实际验证、原断言保留、固定SHA复查后由INT勾选；不声称真实环境或全特性验收。
 
-- [ ] **T603 · 系统Owner投影旧回归对齐**
+- [x] **T603 · 系统Owner投影旧回归对齐**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/permission/test_f048_owner_projection.py`\
   **逻辑 / 测试上下文**：将原use投影成功输入改visible，保protected/管理等级/失败不finalize和其他动作拒绝，验证无use marker。\
@@ -4978,3 +4978,9 @@ W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFoun
 ## W5合同冻结启动
 
 从abb8dc822延续范围基线，先三agent只读核接口；本波选EDGE/PERM/API共20项原卡，新增T598–T603六个既有需求接缝叶子。合同冻结后同checkpoint建独立lane，INT负责前端DTO接缝及合流验证。处理任务T063–T076尚缺真实前置，本波不建fake服务或局部改worker。历史157待办是范围复核时点，当前新增叶子和进度以本节及后续交付为准。无push/迁移/部署。
+
+## W5消费面集成出口（2026-11-06）
+
+先冻结d832ac594接口与文件Owner，再由EDGE/PERM/API独立树并行实施，INT负责前端接缝、逐卡L1、固定SHA交叉复查及合流。原157队列完成20项，另7个已确认需求接缝叶子T598–T604全部完成；当前465已完成/历史交付、137待办、2外移（历史604编号、范围内602卡），未新增产品要求。PROC/worker等真实前置不齐卡保持未勾选，T404/T405仍独立待办。
+
+受测干净源码34fcbd7fec1809e5d4dc0513e7c2420f4489f6bc：100路径2852 passed、15 subtests passed；34个变更Python文件Ruff/format与架构违规0，diff-check通过。前端目标6例全绿、全frontend lint通过；平台typecheck22条既有诊断与独立冻结基线相同。扩大APP query/前端回归各25/7个旧失败与同选集基线完全一致，新增失败0，不掩盖这些未绿范围。完整红绿、固定交付/复查、任务级范围和限制见[W5集成记录](./wave5-implementation-review.md)。未运行CI/真实双库及中间件/E2E/迁移/部署，未push。

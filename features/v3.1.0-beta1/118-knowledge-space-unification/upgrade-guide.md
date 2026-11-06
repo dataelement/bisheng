@@ -124,3 +124,9 @@ APP 候选与锁后复核各执行一次完整模型目录/共享验证，逐声
 ### 本次任务范围复核
 
 当前 F118 待办157项，分享签发加固2项独立记录，不作为本次前置。全平台 use 适配不放宽 publish/share/owner/管理等原条件；QA、SDK/MCP 及知识任务只做本次兼容与引用维护；迁移仅运维 CLI、不顺带治理退休个人库数据。逐项依据见 [范围复核](./scope-review.md)。历史 W3/W4 任务数字仅表示当时快照。
+
+### W5消费面升级后核对
+
+工具/Skill/DSH、AS及频道原use准入应按visible解释；旧HTTP显式use保持兼容。系统创建不得再签出use。Skill disabled不可运行但仍按原资格管理；APP visible-only不获得管理、publish/share或重建按钮，重建仍需edit+publish。仅有动作语义变化，不新增模型任务绑定或分享签发加固；旧配置、正式回填和Coverage仍按停服计划另行执行。
+
+W5本地100路径2852测试/15子测试通过，当前137待办；平台typecheck及扩大旧回归的基线失败已单列，不据此宣称全验收。见[W5完整验证](./wave5-implementation-review.md)。
