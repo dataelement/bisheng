@@ -79,3 +79,16 @@ T692两端只读旧表格实际规则镜像通过平台63/client20原API回归�
 主树受测源码7680121ce67081ac878e9d8efa711bbcab7ab5f9：完整F118目录加11个旧知识/权限路径，**2812 passed**、38853 warnings、84.65秒，无fail/skip。日志`/private/tmp/f118-w6-source-metadata-integrated.log`及同名前缀JUnit；包含已合元数据handler与SourceInventory，未包含尚未合入的旧异常兼容修复。历史2760/2567不重复累加。平台主树八路径132绿是基本信息API合入之前的快照；4bc平台候选13路径182绿且strict为原22+旧F064 scope夹具5，已明确未闭合，不报全量绿。
 
 真实旧环境已保留两个版本历史、人工Chunk文本和File元数据值、QA独立数据。旧Chunk PUT曾500后真实GET确认部分已写、旧QA关键词filter偏差均记录在准备证据，未冒称API成功或扩大需求修复。标准旧API仍运行，候选源只在独立临时只读容器验证读取适配；未执行新版API部署、正式停服/备份/盘点冻结/转换/恢复或完整E2E。用户免DM8实测，保C2静态与真实MySQL/中间件验证；3005不操作，无push/生产变更。
+
+
+## 2026-11-07统一入口兼容收口
+
+当前历史747编号：618完成/历史交付、127待办、2外移；原137队列24完成、113待办，另14个必要接缝待办。T176/T720–T732及T743已完成，完整详情/上传/移动/删除和E2E仍未勾；T733–T742元数据闭环与T744–T747/原T149/T150按先冻结的§24/§25并行推进。§24先做精确执行仓储/Owner/J1四事实，后依赖推进实际runner及原协议桥接；不将先交付helper当完整T072。
+
+- 平台入口固定4bc757a2d独立审无确认问题，独立13路径183绿并补共享reader/PUT ABA迟到2项绿后合入；前端异常恢复固定74a94d94f经另一独立代理11路径178绿（包含6个额外时序/透传验证）复核合入。原F064五项能力断言全部保留，普通cursor/admin page切换筛选均从首段重置，旧query与row action epoch不复活。没有改QA/detail/认证store/请求层或依赖。
+- 后端固定a46be00ae经独立实际运行与SQL审后合入：四改动测试叶67绿；扩大组合103绿/5个旧port夹具红，前驱同叶20绿/候选15绿5红，精确缺新增aexists_abnormal_files。T743按登记补空set port及规范False参数后主树该叶20绿，原所有角色、scope、home身份断言保持。独立三项probe覆盖1002 filtered稀疏空页（首1000拒绝/11SQL且零marker、续页继续）、相同/NULL时间cursor和home1/selected101/foreign坏FK。
+- root主树a20ae8a48后端组合增加原F064回归，**2867 passed**、38853 warnings、96.69秒；日志`/private/tmp/f118-root-unified-abnormal.log`与同名前缀JUnit。平台14路径**189 passed**，日志/JSON`/private/tmp/f118-root-unified-platform`。这些是实际合流选集，不累计独立代理选集用例数量；未将SQLite索引计划称MySQL实测。
+- root执行官方pnpm lint:prune成功，生成仅KnowledgeFile原no-console/exhaustive-deps共8行冻结项移除，提交2c43e234e，未手改suppression或清理其他模块。strict仍报告原22条，精确诊断对照未新增；完整typecheck不是通过。
+- 独立旧环境已通过原API保存工作流两版本（1 current/2非current）、助手原模型+legacy/SPACE知识槽及disabled频道同步目标，并GET回读配置/graph摘要。证据`evidence/preparation-saved-sources.json`。第一次助手稀疏PUT因旧代码把省略temperature写NULL报500，保留实际SQL1048及失败记录后，使用原GET temperature完整表单成功；没有改旧产品代码、隐藏失败或将其报为E2E成功。准备样本仍不作为正式基线。
+
+原94AC、140QA及13张SVG不变；当前HTML/设计/升级/任务数字同步。独立环境仍标准旧基线运行，未部署F118、正式停服冻结/转换/备份恢复/完整E2E，无push/生产修改。DM8实库免测继续执行，C2静态和MySQL演练保持。
