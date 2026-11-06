@@ -12,9 +12,11 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史763编号：631已完成/历史交付、130当前待办、2外移；原137队列已完成26项、剩111项，另19张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史764编号：633已完成/历史交付、129当前待办、2外移；原137队列已完成26项、剩111项，另18张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
+
+本轮验证口径以用户2026-11-07决定为准：免DM8实库，继续遵守C2的Model/Repository/DDL可移植规范；MySQL真实事务、中间件和迁移演练照常。下方既有卡及历史记录中的“双库实测”按此口径执行，不改变数据库兼容要求。
 
 本次按已确认 spec 逐项核对原159个待办；T404/T405 已按用户决定移出，其余157项保留并收紧可能扩权的措辞，详见 [范围复核](./scope-review.md)。use→visible、旧知识兼容、模型引用核验分别追溯，不把三类任务混称为使用准入。其他动作及原业务条件继续独立校验；可见不等于可发布或可分享。
 
@@ -6147,7 +6149,7 @@
 
 ## W6正式M2原资源只读事实前置
 
-- [ ] **T760 · M2原资源物理树与标签分页测试**
+- [x] **T760 · M2原资源物理树与标签分页测试**
   **类型 / Owner**：测试 / MIG\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_resource_repository.py`\
   **逻辑 / 测试上下文**：W6§28真实9表PK分页/父链、旧20与neutral7、global异常、未建V1、legacy overdeep、祖先≤500分200、零写/原TX/noauto及大数据查询预算。\
@@ -6155,7 +6157,7 @@
   **覆盖 AC**: AC-56, AC-57, AC-58, AC-59, AC-60, AC-62, AC-63, AC-64, AC-85, AC-93\
   **验证 / 完成条件**：真实红/首绿，native SQL/分页/查询预算与敏感字段repr验证，不把原模型事实当新授权或正式M2全验收。
 
-- [ ] **T761 · M2资源物理树与标签只读仓储**
+- [x] **T761 · M2资源物理树与标签只读仓储**
   **类型 / Owner**：后端 Repository / MIG\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/unification_resource_repository.py`\
   **逻辑 / 测试上下文**：W6§28闭集Row与9分页、一次global完整性和精确ancestor事实；原数据完整保留且不转换、不猜creator/配额或ready。\
@@ -6182,6 +6184,15 @@
   **配对测试**：T762\
   **覆盖 AC**: AC-56, AC-57, AC-58, AC-62, AC-63, AC-64, AC-85, AC-93\
   **验证 / 完成条件**：先真实红/首绿，配对及原MIG组合、实际查询预算、逐叶ruff/arch与固定独立审；不以事实helper勾完整M2。
+
+## W6目录旧静态抑制同步
+
+- [ ] **T764 · 新目录实际类型恢复后官方抑制裁剪**
+  **类型 / Owner**：静态产物 / INT\
+  **写入文件**：`src/frontend/platform/eslint-suppressions.json`\
+  **逻辑 / 测试上下文**：T755移除旧Files整体strict ignore后，只运行仓库官方lint:prune清理该叶已失效抑制，不手改、不加新抑制、不扩其他页面。\
+  **依赖**：T755\
+  **验证 / 完成条件**：官方命令成功、精确差异核对、新目录target lint与22条既有strict诊断对比无新增；真实页面另验。
 
 ## 自动化覆盖索引
 

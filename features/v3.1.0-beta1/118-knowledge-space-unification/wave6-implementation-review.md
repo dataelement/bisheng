@@ -108,3 +108,10 @@ T692两端只读旧表格实际规则镜像通过平台63/client20原API回归�
 真实旧环境增加205个保存工作流版本，跨200行正式盘点页边界；原current_version_id=1不变，17.274秒真实POST/GET验证，证据`evidence/preparation-many-workflow-versions.json`。仅为准备数据，没有执行工作流或冻结正式基线。另已从独立运行MySQL生成single-transaction准备快照并建立单独bisheng_f118_probe_20261107克隆库，原运行库未改；快照SHA256为0eba7c145bf6e2fe84a004f3f26ef62007cd8d7447c25f899810a3d931320629，私有文件probes/20261107/preparation-input.sql。候选backend 3ef4f26a1归档已上传但后续远端checksum/解包/私有配置/DDL探针尚未执行（配置脚本上传自动审批连续两次超时），不能称MySQL候选DDL/仓储已验证。
 
 自动审批超时不是业务拒绝或安全结论；相关远端探针暂挂起，本地开发与实际变更范围验证继续。未操作3005，未部署F118、正式停服冻结/业务转换/恢复或完整E2E，无push。DM8实库用户免测，C2静态保持；当前13张SVG/94AC/140QA未删减。
+
+
+## 原资源盘点事实仓储收口（2026-11-07）
+
+固定作者84c4a5b2经独立EDGE在archive复核：109配对+32额外反例通过，与旧inventory/source同选集208通过；未发现行动项。额外反例覆盖九类稀疏PK间夹foreign行、外租户孤儿全局探针、旧20列逐列摘要变化。主agent读两生产/测试叶后正常merge为9fe943864fd9ee590d90a7effab9b35a82ca7287；主树三路径176 passed（`/private/tmp/f118-root-mig-resource-integrated.log/.xml`），diff-check与文档链接通过。
+
+T760/T761按事实仓储实际范围闭合。九页独立主键seek、每页≤201行、ancestor去重≤500/批200、全局11个LIMIT1探针只由外层每run一次调用；无root×file×version乘积、无DML或自动V1修补。原20业务列摘要和neutral7分离，存量overdeep保留。此为native SQLite真实SQL，不声称MySQL或正式M2已执行；原T161/T162仍待完整创建者/配置/权限事实预检与全租户正式freeze。§29和T762/T763已冻结下一只读事实接口，不新增业务规则。
