@@ -332,23 +332,23 @@ async def test_native_large_conversion_and_fresh_session_recovery_are_linear_and
     checker = module.UnificationConversionService()
     database.queries.clear()
     continuation = None
-    for offset in range(0, count, 200):
+    for offset in range(0, count, 137):
         async with AsyncSession(database.engine) as session, session.begin():
             continuation = await checker.averify_committed_page(
                 session,
                 batch=await issue(
                     checker,
                     session,
-                    commands[offset : offset + 200],
+                    commands[offset : offset + 137],
                     ordinal=offset,
                     expected_checkpoint=current,
                     continuation=continuation,
                     mode="verify",
-                    eof=offset + 200 >= count,
+                    eof=offset + 137 >= count,
                 ),
             )
     assert continuation.verification_complete and continuation.progress == current
-    assert len(database.queries) <= ((count + 199) // 200) * 25
+    assert len(database.queries) <= ((count + 136) // 137) * 25
     # Actual native SQL, including union primary/survivor candidates, never has
     # an unbounded ID parameter list. Recovery never selects whole File history.
     import re
@@ -357,7 +357,7 @@ async def test_native_large_conversion_and_fresh_session_recovery_are_linear_and
         assert all(section.count("?") <= 200 for section in re.findall(r"\bIN \(([^)]+)\)", sql))
     print(
         f"native conversion count={count} apply_SELECT={application_queries} "
-        f"recovery_SELECT={len(database.queries)} pages={(count + 199) // 200}"
+        f"recovery_SELECT={len(database.queries)} apply_pages={(count + 199) // 200} recovery_pages={(count + 136) // 137}"
     )
 
 
@@ -393,3 +393,46 @@ async def test_getter_preserves_pending_run_changes_and_never_initializes_sql_pr
         assert "caller" in run.checkpoints["converting"]
         await session.rollback()
     assert await native.snapshot(database) == before
+
+
+@pytest.mark.parametrize("retag_first", [False, True])
+async def test_real_tag_link_retag_and_duplicate_drop_survivors_remain_valid_across_commits(
+    service, database, module, retag_first
+):
+    commands = tuple(
+        sorted(
+            (cmd for cmd in database.commands if cmd.operation == "tag_link_conversion"),
+            key=lambda cmd: cmd.action == "retag",
+            reverse=retag_first,
+        )
+    )
+    assert {cmd.action for cmd in commands} == {"retag", "drop_duplicate"}
+    before = await native.snapshot(database)
+    current, receipt = None, None
+    for offset, command in enumerate(commands):
+        async with AsyncSession(database.engine) as session, session.begin():
+            receipt = await service.aapply_batch(
+                session,
+                batch=await issue(
+                    service,
+                    session,
+                    (command,),
+                    ordinal=offset,
+                    expected_checkpoint=current,
+                    continuation=receipt,
+                    eof=offset == len(commands) - 1,
+                ),
+            )
+            current = receipt.progress
+    after = await native.snapshot(database)
+    assert [row["id"] for row in after["taglink"]] == [2, 3]
+    assert next(row for row in after["taglink"] if row["id"] == 2) == next(
+        row for row in before["taglink"] if row["id"] == 2
+    )
+    assert next(row for row in after["taglink"] if row["id"] == 3)["resource_type"] == 8
+    checker = module.UnificationConversionService()
+    async with AsyncSession(database.engine) as session, session.begin():
+        verified = await checker.averify_committed_page(
+            session, batch=await issue(checker, session, commands, expected_checkpoint=current, mode="verify", eof=True)
+        )
+        assert verified.verification_complete and verified.progress == current
