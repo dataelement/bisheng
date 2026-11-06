@@ -8,9 +8,11 @@ import asyncio
 from contextlib import contextmanager
 from datetime import timedelta
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 import sqlalchemy as sa
+from pymilvus import Collection
 from sqlmodel import Session
 
 from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
@@ -19,6 +21,7 @@ from bisheng.knowledge.domain import knowledge_rag as module
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob, deletion_now
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_direct_delete_service import KnowledgeSpaceDirectDeleteService
 from bisheng.llm.domain.models.llm_server import LLMModel
 from test.knowledge_unification import test_kn_rag_model_admission as fixtures
@@ -210,3 +213,24 @@ async def test_single_tenant_root_cleanup_uses_c3_default_and_multi_missing_cont
         assert error.value.__cause__ is not None
     finally:
         current_tenant_id.reset(token)
+
+
+async def test_legacy_resource_vector_cleanup_drops_owned_index_without_consuming_deleted_model(cleanup):
+    context, actual, _, _ = cleanup
+    actual.collection_name = "col_actual"
+    async with context.sessions() as session, session.begin():
+        await session.execute(sa.delete(LLMModel).where(LLMModel.id == 11, LLMModel.tenant_id == 101))
+        await session.execute(
+            sa.update(Knowledge)
+            .where(Knowledge.id == 40, Knowledge.tenant_id == 101)
+            .values(collection_name="col_actual")
+        )
+    collection = Mock(spec=Collection)
+    module.MilvusFactory.init_vectorstore.return_value.col = collection
+    module.ElasticsearchFactory.init_vectorstore_sync.return_value.client.indices.delete.return_value = {}
+    await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, actual)
+    collection.drop.assert_called_once()
+    module.ElasticsearchFactory.init_vectorstore_sync.return_value.client.indices.delete.assert_called_once_with(
+        index="actual_index", ignore=[400, 404]
+    )
+    module.LLMService.get_bisheng_knowledge_embedding_sync.assert_not_called()
