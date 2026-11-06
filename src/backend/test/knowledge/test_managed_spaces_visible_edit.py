@@ -27,7 +27,7 @@ from bisheng.core.context.tenant import (
 from bisheng.core.database.tenant_filter import register_tenant_filter_events
 from bisheng.knowledge.api.dependencies import get_knowledge_space_service
 from bisheng.knowledge.domain.models import knowledge as knowledge_module
-from bisheng.knowledge.domain.models.knowledge import KnowledgeState, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.knowledge.domain.repositories.knowledge_space_listing_repository import KnowledgeSpaceListingRepository
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     F048KnowledgeContainerPermissionAdapter,
@@ -321,7 +321,7 @@ async def test_ac04_bulk_adapter_retains_status_tenant_kind_and_snapshot_guards(
     for row in rows:
         row.tenant_id = 1
         row.update_time = datetime(2026, 11, 2)
-    rows[1].state = KnowledgeState.FAILED.value
+    rows[1].state = -1
     rows[2].tenant_id = 2
     rows[3].type = KnowledgeTypeEnum.NORMAL.value
     case.versions.get_permission_snapshots.side_effect = None
