@@ -15,10 +15,7 @@ from bisheng.approval.domain.services.channel_subscribe_scenario_handler import 
 from bisheng.channel.domain.models.article_read_record import ArticleReadRecord
 from bisheng.channel.domain.models.channel import Channel, ChannelVisibilityEnum
 from bisheng.channel.domain.models.channel_info_source import ChannelInfoSource
-from bisheng.channel.domain.models.channel_knowledge_sync import (
-    ChannelKnowledgeSync,
-    ChannelKnowledgeSyncDao,
-)
+from bisheng.channel.domain.models.channel_knowledge_sync import ChannelKnowledgeSync
 from bisheng.channel.domain.models.channel_user_pin import ChannelUserPinDao
 from bisheng.channel.domain.repositories.implementations.channel_repository_impl import ChannelRepositoryImpl
 from bisheng.channel.domain.repositories.interfaces.article_read_repository import ArticleReadRepository
@@ -46,6 +43,7 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
     CreateChannelResponse,
     KnowledgeSyncConfig,
     KnowledgeSyncMainConfig,
+    KnowledgeSyncReferenceState,
     KnowledgeSyncSpaceItem,
     KnowledgeSyncSubConfig,
     MyChannelQueryRequest,
@@ -101,6 +99,7 @@ from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.database import get_async_db_session
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import FileSource
 from bisheng.message.domain.services.message_service import MessageService
 from bisheng.message.domain.services.notification_content import build_notify_content
@@ -122,6 +121,8 @@ from bisheng.permission.domain.services.permission_action_service import (
 )
 from bisheng.resource_reference.application.access import get_reference_binding_runtime
 from bisheng.resource_reference.application.contracts import ReferenceState, SourceKey, SourceType, reference_set_digest
+from bisheng.resource_reference.application.source_access import get_reference_read_runtime
+from bisheng.resource_reference.application.source_contracts import SourceReadRequest
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
 from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import (
@@ -2004,7 +2005,7 @@ class ChannelService:
             current_membership is not None and resolve_channel_relation(current_membership) == ChannelRelationEnum.OWNER
         )
         if is_creator:
-            knowledge_sync_cfg = await self._load_knowledge_sync(channel.id)
+            knowledge_sync_cfg = await self._load_knowledge_sync(channel.id, login_user)
 
         relation = _effective_relation_value(current_membership)
 
@@ -2267,86 +2268,74 @@ class ChannelService:
         # Message projection is handled after the business transaction; it must
         # never commit a partial Channel/configuration/source unit.
 
-    async def _load_knowledge_sync(
-        self,
-        channel_id: str,
-    ) -> KnowledgeSyncConfig:
-        """Build a KnowledgeSyncConfig from the stored rows, plus display
-        names for the bound knowledge spaces."""
-        rows = await ChannelKnowledgeSyncDao.alist_by_channel_id(channel_id)
-        # Sort by create_time for stable, creation-order display (requirement 3.1.1).
-        rows.sort(key=lambda r: r.create_time)
-
-        # Resolve knowledge-space display names for the UI.
-        space_name_by_id: dict[str, str] = {}
-        numeric_ids = [
-            int(r.knowledge_space_id) for r in rows if r.knowledge_space_id and str(r.knowledge_space_id).isdigit()
-        ]
-        if numeric_ids:
-            from sqlmodel import select as _select
-
-            from bisheng.core.database import get_async_db_session
-            from bisheng.knowledge.domain.models.knowledge import Knowledge
-
-            async with get_async_db_session() as session:
-                q = _select(Knowledge).where(Knowledge.id.in_(numeric_ids))
-                for kb in (await session.exec(q)).all():
-                    space_name_by_id[str(kb.id)] = kb.name
-
-        # Defensive filter: drop bindings whose target space or folder no longer
-        # exists. There is a race window between space/folder deletion and
-        # channel_knowledge_sync cleanup; this keeps the UI clean if a row leaks.
-        existing_space_ids = set(space_name_by_id.keys())
-        rows = [
-            r
-            for r in rows
-            if r.knowledge_space_id
-            and str(r.knowledge_space_id).isdigit()
-            and str(r.knowledge_space_id) in existing_space_ids
-        ]
-        folder_ids_to_check = {int(r.folder_id) for r in rows if r.folder_id is not None and str(r.folder_id).isdigit()}
-        if folder_ids_to_check:
-            from sqlmodel import select as _select
-
-            from bisheng.core.database import get_async_db_session
-            from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
-
-            existing_folder_ids: set = set()
-            async with get_async_db_session() as session:
-                q = _select(KnowledgeFile.id).where(KnowledgeFile.id.in_(list(folder_ids_to_check)))
-                for row in (await session.exec(q)).all():
-                    fid = row[0] if isinstance(row, tuple) else row
-                    existing_folder_ids.add(int(fid))
-            rows = [r for r in rows if r.folder_id is None or int(r.folder_id) in existing_folder_ids]
-
-        def _to_item(r: ChannelKnowledgeSync) -> KnowledgeSyncSpaceItem:
-            return KnowledgeSyncSpaceItem(
-                knowledge_space_id=str(r.knowledge_space_id),
-                knowledge_space_name=space_name_by_id.get(str(r.knowledge_space_id), ""),
-                folder_id=r.folder_id,
-                folder_path=r.folder_path,
+    async def _load_knowledge_sync(self, channel_id: str, login_user: UserPayload) -> KnowledgeSyncConfig:
+        runtime = await get_reference_read_runtime()
+        async with get_async_db_session() as session, session.begin():
+            scope = await runtime.verifier.aissue_scope(
+                session,
+                SourceReadRequest(SourceType.CHANNEL_SYNC, channel_id, "current", "inspect"),
+                login_user,
             )
-
-        main_rows = [r for r in rows if not r.sub_channel_name]
-        sub_rows_by_name: dict[str, list[ChannelKnowledgeSync]] = {}
-        for r in rows:
-            if r.sub_channel_name:
-                sub_rows_by_name.setdefault(r.sub_channel_name, []).append(r)
-
-        main_cfg = KnowledgeSyncMainConfig(
-            enabled=bool(main_rows) and all(r.is_enabled for r in main_rows),
-            spaces=[_to_item(r) for r in main_rows],
+            inspected = await runtime.ainspect_source(session, scope, login_user)
+            rows = json.loads(inspected.snapshot.payload_json)["sync"]
+        facts = {fact.key: fact for fact in inspected.target_states}
+        # Metadata is optional decoration after the complete, authoritative
+        # config/index read. Missing or hidden targets retain their original IDs.
+        space_ids = sorted({int(row["knowledge_space_id"]) for row in rows})
+        visible = (
+            await batch_check_business_visible(
+                login_user,
+                resource_type="knowledge_space",
+                resource_ids=tuple(str(ident) for ident in space_ids),
+            )
+            if space_ids
+            else {}
         )
-        subs: list[KnowledgeSyncSubConfig] = []
-        for name, rlist in sub_rows_by_name.items():
-            subs.append(
+        names = (
+            {
+                str(row.id): row.name
+                for row in await KnowledgeDao.aget_list_by_ids(
+                    [ident for ident in space_ids if visible.get(str(ident), False)]
+                )
+            }
+            if space_ids
+            else {}
+        )
+        main, subs = [], {}
+        for row in sorted(rows, key=lambda value: (value["create_time"], value["id"])):
+            states = []
+            for reference in extract_channel_sync_references((row,)):
+                fact = facts[reference.target]
+                states.append(
+                    KnowledgeSyncReferenceState(
+                        slot_key=reference.slot_key,
+                        target_type=reference.target.target_type.value,
+                        target_id=reference.target.target_id,
+                        state=fact.state.value,
+                        is_valid=fact.is_valid,
+                    )
+                )
+            item = KnowledgeSyncSpaceItem(
+                knowledge_space_id=row["knowledge_space_id"],
+                knowledge_space_name=names.get(str(int(row["knowledge_space_id"]))),
+                folder_id=row["folder_id"],
+                folder_path=row["folder_path"],
+                reference_states=states,
+            )
+            (subs.setdefault(row["sub_channel_name"], []) if row["sub_channel_name"] else main).append((row, item))
+        return KnowledgeSyncConfig(
+            main=KnowledgeSyncMainConfig(
+                enabled=bool(main) and all(row["is_enabled"] for row, _ in main), spaces=[item for _, item in main]
+            ),
+            subs=[
                 KnowledgeSyncSubConfig(
                     sub_channel_name=name,
-                    enabled=bool(rlist) and all(r.is_enabled for r in rlist),
-                    spaces=[_to_item(r) for r in rlist],
+                    enabled=all(row["is_enabled"] for row, _ in entries),
+                    spaces=[item for _, item in entries],
                 )
-            )
-        return KnowledgeSyncConfig(main=main_cfg, subs=subs)
+                for name, entries in subs.items()
+            ],
+        )
 
     async def dismiss_channel(self, channel_id: str, login_user: UserPayload, request=None):
         channel = await self._persist_channel_configuration(login_user, channel_id=channel_id, deleting=True)
