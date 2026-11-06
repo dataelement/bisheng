@@ -174,4 +174,17 @@ class HostedAppReferenceSourceRepository:
             else ()
         )
         facts["operation"] = operations[0] if operations else None
+        preview_routes = (
+            await cls._rows(
+                session,
+                RuntimeRoute,
+                (RuntimeRoute.app_id == root["id"], RuntimeRoute.route_key == f"preview:{facts['preview']['id']}"),
+                for_update=for_update,
+            )
+            if facts["preview"]
+            else ()
+        )
+        if len(preview_routes) > 1:
+            raise ResourceReferenceInvalidError(reason="app_preview_route_ambiguous")
+        facts["preview_route"] = preview_routes[0] if preview_routes else None
         return facts
