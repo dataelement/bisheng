@@ -1140,8 +1140,8 @@
 - [ ] **T139 · 应用模型执行逐槽核对冻结ID：先写测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_app_model_binding.py`（拟新增）\
-  **逻辑 / 测试上下文**：版本绑定模型M1，之后同名解析为M2不能调用；模型删除失效明确失败，允许声明名不等于允许任意同名ID。\
-  **依赖**：T136, T134\
+  **逻辑 / 测试上下文**：W6§45：保已有真实同名ID/server漂移等回归，补实际preview principal→gateway和真实删除Model→零provider两例；原主体/route/SQL来源完整，不改SDK或生产以凑断言。\
+  **依赖**：T136, T447\
   **覆盖 AC**: AC-68, AC-71, AC-87, AC-91\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
