@@ -1,5 +1,6 @@
 """One instance privately issues complete, transaction-bound model-name plans."""
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from weakref import WeakKeyDictionary, ref
 
@@ -60,6 +61,9 @@ class _Registration:
     frozen_models: tuple[FrozenModelIdentity, ...]
     shared_ids: frozenset[int]
     catalog: object
+    requested_names: tuple[str, ...]
+    resolutions: tuple[NameResolution, ...]
+    nonce: object
 
 
 def _invalid():
@@ -224,17 +228,22 @@ class ModelNameResolutionPort:
             frozen_models,
             shared_ids,
             catalog,
+            requested_names,
+            deepcopy(resolutions),
+            plan._nonce,
         )
         return plan
 
-    async def resolve_model_name_current(self, session, tenant_id, requested, *, identity, plan, range=None):
+    async def _validate_plan(self, session, tenant_id, *, identity, plan, range=None):
         registered = self._issued.get(plan) if isinstance(plan, PreparedModelNamePlan) else None
         if (
             registered is None
             or registered.original() is not plan
             or registered.identity is not identity
             or plan.tenant_id != tenant_id
-            or requested not in plan.requested_names
+            or plan.requested_names != registered.requested_names
+            or plan.resolutions != registered.resolutions
+            or plan._nonce is not registered.nonce
             or (range if range is not None else TENANT_RANGE) != registered.scope
         ):
             raise _invalid()
@@ -260,7 +269,17 @@ class ModelNameResolutionPort:
         )
         if resolutions != plan.resolutions:
             raise KnowledgeOperationPlanConflictError(reason="model_name_catalog_changed")
-        return next(item.resolved for item in resolutions if item.requested == requested)
+        return resolutions
+
+    async def assert_plan_current(self, session, tenant_id, *, identity, plan, range=None):
+        await self._validate_plan(session, tenant_id, identity=identity, plan=plan, range=range)
+
+    async def resolve_model_name_current(self, session, tenant_id, requested, *, identity, plan, range=None):
+        resolutions = await self._validate_plan(session, tenant_id, identity=identity, plan=plan, range=range)
+        match = next((item.resolved for item in resolutions if item.requested == requested), None)
+        if match is None:
+            raise _invalid()
+        return match
 
 
 _port: ModelNameResolutionPort | None = None
