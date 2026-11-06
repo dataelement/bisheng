@@ -4,6 +4,7 @@ Knowledge, model eligibility, full source admission and R2 use real SQLite;
 only the existing permission/sharing transport boundaries are doubled.
 """
 
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -15,12 +16,18 @@ from bisheng.common.errcode.knowledge import (
     ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
+from bisheng.core.database import tenant_filter
 from bisheng.knowledge.application import processing_owner as module
 from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication as Models
 from bisheng.knowledge.application.processing_owner import KnowledgeProcessingOwner
 from bisheng.knowledge.domain.models.knowledge import Knowledge
-from bisheng.knowledge.domain.repositories.processing_job_repository import ProcessingConfiguration
+from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
+from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
+from bisheng.knowledge.domain.models.knowledge_processing_retry import KnowledgeProcessingRetryReceipt
+from bisheng.knowledge.domain.repositories.processing_job_repository import NewProcessingItem, ProcessingConfiguration
+from bisheng.knowledge.domain.schemas.processing_job import ResourceVersionTarget
 from bisheng.llm.domain.models.llm_server import LLMModel
+from bisheng.worker import tenant_context as workers
 from test.knowledge_unification import test_kn_model_source as fixtures
 
 store = fixtures.store
@@ -145,3 +152,149 @@ async def test_preview_allows_new_valid_target_to_repair_revoked_old_shared_mode
         assert preview.model == "12" and preview.transition["current_model_id"] == "12"
         await session.commit()
     assert fixtures.fixtures.state(context) == before
+
+
+@pytest.fixture
+async def retry_fence(processing, monkeypatch):
+    context, owner = processing
+    for model in (KnowledgeProcessingJob, KnowledgeProcessingItem, KnowledgeProcessingRetryReceipt):
+        model.__table__.create(context.sync, checkfirst=True)
+    monkeypatch.setattr(
+        tenant_filter,
+        "_tenant_aware_tables",
+        tenant_filter._tenant_aware_tables
+        | {"knowledge_processing_job", "knowledge_processing_item", "knowledge_processing_retry_receipt"},
+    )
+    monkeypatch.setattr(module, "require_business_action", AsyncMock(), raising=False)
+    clock = [datetime.now(UTC).replace(tzinfo=None)]
+    owner.jobs.clock = lambda: clock[0]
+    sender = SimpleNamespace(
+        name="bisheng.worker.knowledge.processing_jobs.execute_processing_job",
+        request=SimpleNamespace(id="fence-attempt", headers={"tenant_id": 101}, called_directly=False),
+    )
+    monkeypatch.setattr(workers, "current_task", SimpleNamespace(_get_current_object=lambda: sender))
+    workers.restore_tenant_context(sender=sender)
+    try:
+        async with context.sessions() as session:
+            actual = await owner.aprepare(session, 40, identity=context.user, parameters={}, operation_id="fenced-job")
+            created = await owner.jobs.acreate(
+                session,
+                space_id=40,
+                kind="embedding_rebuild",
+                idempotency_key="fenced-job",
+                actor_user_id=7,
+                actor_reference={"actor_id": 7},
+                parameters={"operation_id": "fenced-job"},
+                configuration=actual.configuration,
+                items=[
+                    NewProcessingItem(
+                        target=ResourceVersionTarget(file_id=81 + i, document_id=80, version_id=181 + i),
+                        expected_space_id=40,
+                    )
+                    for i in range(2)
+                ],
+            )
+            lease = await owner.jobs.aclaim(session, created.job.id, configuration=actual.configuration)
+            for succeeded in (True, False):
+                item = await owner.jobs.aclaim_next_item(session, lease, configuration=actual.configuration)
+                await owner.jobs.acomplete_item(
+                    session, item.lease, configuration=actual.configuration, succeeded=succeeded, error_code=10915
+                )
+            job = await owner.afinalize_and_ack(session, created.job, lease)
+            current = await owner.aread_current(session, 40, job=job)
+            await session.commit()
+        yield SimpleNamespace(
+            context=context, owner=owner, job_id=job.id, configuration=current.configuration, clock=clock
+        )
+    finally:
+        workers.reset_tenant_context(sender=sender)
+
+
+async def begin_retry(fixture, session, key="retry"):
+    job = await fixture.owner.jobs.aget(session, fixture.job_id)
+    result = await fixture.owner.jobs.aretry_failed(
+        session,
+        job.id,
+        idempotency_key=key,
+        expected_job_revision=job.revision,
+        actor_user_id=7,
+        actor_reference={"actor_id": 7},
+        configuration=fixture.configuration,
+    )
+    await fixture.owner.abegin_retry_fence(session, result.job, identity=fixture.context.user)
+    return result.job
+
+
+async def test_current_retry_fence_and_receipt_rollback_together(retry_fence):
+    fixture = retry_fence
+    before = fixtures.fixtures.state(fixture.context)
+    async with fixture.context.sessions() as session:
+        job = await begin_retry(fixture, session)
+        root = await Models.repository.aget(session, 40)
+        assert root.state == 3 and root.model_transition is None
+        assert (root.model_config_revision, root.index_generation) == (
+            fixture.configuration.model_config_revision,
+            fixture.configuration.index_generation,
+        )
+        successful = (
+            await fixture.owner.jobs.alist_items(
+                session, job.id, page=1, page_size=10, state="succeeded", visible_file_ids=(81, 82)
+            )
+        ).rows[0]
+        assert "retry_fence" not in successful.checkpoint
+        await session.rollback()
+    assert fixtures.fixtures.state(fixture.context) == before
+
+
+async def test_fail_and_release_current_fence_are_one_transaction(retry_fence):
+    fixture = retry_fence
+    async with fixture.context.sessions() as session:
+        job = await begin_retry(fixture, session)
+        lease = await fixture.owner.jobs.aclaim(session, job.id, configuration=fixture.configuration)
+        await session.commit()
+    async with fixture.context.sessions() as session:
+        failed = await fixture.owner.afail_attempt(
+            session, job.id, expected_job_revision=job.revision, error_code=25001, lease=lease
+        )
+        assert failed.state == "partial_failed" and (await Models.repository.aget(session, 40)).state == 1
+        await session.rollback()
+    async with fixture.context.sessions() as session:
+        assert (await Models.repository.aget(session, 40)).state == 3
+        assert (await fixture.owner.jobs.aget(session, job.id)).state == "running"
+
+
+async def test_same_retry_takeover_can_release_but_old_lease_cannot(retry_fence):
+    fixture = retry_fence
+    async with fixture.context.sessions() as session:
+        job = await begin_retry(fixture, session)
+        old = await fixture.owner.jobs.aclaim(session, job.id, configuration=fixture.configuration, lease_seconds=1)
+        fixture.clock[0] += timedelta(seconds=2)
+        current = await fixture.owner.jobs.aclaim(session, job.id, configuration=fixture.configuration)
+        assert (
+            await fixture.owner.afail_attempt(
+                session, job.id, expected_job_revision=job.revision, error_code=25001, lease=old
+            )
+            is None
+        )
+        assert (await Models.repository.aget(session, 40)).state == 3
+        assert (
+            await fixture.owner.afail_attempt(
+                session, job.id, expected_job_revision=job.revision, error_code=25001, lease=current
+            )
+            is not None
+        )
+        assert (await Models.repository.aget(session, 40)).state == 1
+
+
+async def test_rejected_preclaim_releases_only_its_current_retry_and_can_restart(retry_fence):
+    fixture = retry_fence
+    async with fixture.context.sessions() as session:
+        job = await begin_retry(fixture, session)
+        failed = await fixture.owner.afail_attempt(
+            session, job.id, expected_job_revision=job.revision, error_code=25001
+        )
+        assert failed.state == "partial_failed" and (await Models.repository.aget(session, 40)).state == 1
+        await session.commit()
+    async with fixture.context.sessions() as session:
+        await begin_retry(fixture, session, key="fresh-authority")
+        assert (await Models.repository.aget(session, 40)).state == 3
