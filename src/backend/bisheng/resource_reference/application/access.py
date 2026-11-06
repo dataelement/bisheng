@@ -13,7 +13,11 @@ def configure_reference_binding_runtime(runtime: ReferenceBindingRuntime | None)
     _runtime = runtime
 
 
-async def get_reference_binding_runtime() -> ReferenceBindingRuntime:
+def get_reference_binding_runtime_sync() -> ReferenceBindingRuntime:
     if _runtime is None:
         raise ReferenceCoverageNotReadyError(reason="reference_runtime_unconfigured")
     return _runtime
+
+
+async def get_reference_binding_runtime() -> ReferenceBindingRuntime:
+    return get_reference_binding_runtime_sync()
