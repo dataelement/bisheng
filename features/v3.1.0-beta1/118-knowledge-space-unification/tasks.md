@@ -5318,6 +5318,56 @@
   **覆盖 AC**: AC-35, AC-48, AC-49, AC-52, AC-53, AC-54\
   **验证 / 完成条件**：记录主组合4项实际夹具失败；原4例及真实新保源/检索/worker组合通过，不恢复已退休删除ES行为。
 
+## W6 KN重建期真实状态接缝
+
+- [ ] **T667 · 重建期纯状态判定测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_processing_guard.py`\
+  **逻辑 / 测试上下文**：已加载空间的REBUILDING/transition拒10999，其他生命周期仍原业务处理；不授权限、不新增动作，不伪造任务或模型。\
+  **依赖**：T078, T605\
+  **覆盖 AC**: AC-31, AC-35, AC-48, AC-51\
+  **验证 / 完成条件**：先测试独立红/首绿，不在测试卡改生产。
+
+- [ ] **T668 · 重建期纯状态判定**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_processing_guard.py`\
+  **逻辑 / 测试上下文**：实现W6§9纯业务状态函数，供已授权业务消费，无DB/FGA/新权限层。\
+  **依赖**：T667\
+  **配对测试**：T667\
+  **验证 / 完成条件**：配对与相关生命周期测试通过。
+
+- [ ] **T669 · 上传版本移动重建冲突入口测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_rebuild_write_entries.py`\
+  **逻辑 / 测试上下文**：真实Space/Version业务及SQL边界覆盖已在重建的上传/网页/目录上传、新版本/主版/合并、移入出；拒绝前零fetch/对象/版本/索引副作用，原权限/开关不放宽，rename/空folder不新增阻断。\
+  **依赖**：T668, T082\
+  **覆盖 AC**: AC-09, AC-10, AC-17, AC-31, AC-51\
+  **验证 / 完成条件**：真实红测后再接生产；不声称覆盖排除的worker在途IO竞态。
+
+- [ ] **T670 · 上传版本移动重建冲突接线**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`；`src/backend/bisheng/knowledge/domain/services/knowledge_version_service.py`\
+  **逻辑 / 测试上下文**：只沿W6§9实际写入口调用统一状态函数，保原权限动作及版本/对象语义，不提前改解析调度/J1快照。\
+  **依赖**：T669\
+  **配对测试**：T669\
+  **验证 / 完成条件**：新旧相关上传/版本/移动回归通过；完整T084/T098仍待后续委托。
+
+- [ ] **T671 · 重建检索暂停原因真实入口测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_rebuild_retrieval_gate.py`\
+  **逻辑 / 测试上下文**：真实SQL空间、原可见授权后，候选及post-filter重建返回10999，未发检索；目录/下载和成功文件/主版裁剪原语义保留。\
+  **依赖**：T668, T658\
+  **覆盖 AC**: AC-35, AC-48, AC-51, AC-53\
+  **验证 / 完成条件**：测试先提交真实红，不mock整个Service。
+
+- [ ] **T672 · 重建检索暂停原因接线**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_file_visibility_service.py`\
+  **逻辑 / 测试上下文**：实际space候选及post-filter已授权路径调用状态gate，保原QA/显式版本/F048行为，不把暂停当无权限/空结果。\
+  **依赖**：T671\
+  **配对测试**：T671\
+  **验证 / 完成条件**：配对、原检索可见性和重建回归通过；真实索引由E2E验。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。

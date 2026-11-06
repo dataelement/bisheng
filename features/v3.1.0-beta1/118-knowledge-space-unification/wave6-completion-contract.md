@@ -151,3 +151,13 @@ Descriptor严格{object_key,sha256}，hash小写64hex且列值从descriptor派�
 - GET /healthz；GET /__control/stats返回embedding/chat_nonstream/chat_stream/etl总数、按model+input_sha256及filename+content_sha256的attempts/failed与pending_failure，不存原文/密钥/header。POST /__control/reset清状态；POST /__control/fail-next只kind(embedding/etl)、非空marker、可选embedding模型，一次一个规则、原子只消费一次。Embedding目标marker一次HTTP400标准OpenAI error（避免SDK自动重试吞掉任务失败），ETL目标filename一次503，后续正常；探针不命中规则。
 
 模型保存合法probe会调用hello/Test text等，不以全局调用数不增判断默认Embedding联动。E2E按旧文件输入hash/model分桶，结合实际space.model/ref/revision、job数与真Milvus schema/数据证明未重建。上游合同单测不替代后续真实中间件、HTTP/浏览器和升级恢复。
+
+## 9. KN重建状态接缝 V1：已冻结
+
+完整T083/084上传委托须等T067–T070实际file handler/规则适配，不把新上传伪装embedding重建，不接受永远pending kind。本节先交付AC-51已开始重建时的顺序调用限制，不新增跨请求原子准入/外部IO围栏。
+
+T667/T668新增窄纯函数`require_space_processing_idle(space: Knowledge, *, operation: str) -> None`，仅消费业务已按当前tenant和原动作核过的实际空间；`state=REBUILDING`或非空/非None model_transition明确10999。不得自行授权、推断actor、读FGA或用旧private模型校验器冒充公共状态判断。operation仅固定业务诊断名，不是新的权限动作；其他生命周期继续原用例校验。
+
+T669/T670在原SpaceService的add_file/import_web_link/upload_folder_items及move_items真实入口接此gate，移入/出双方都查实际空间；在原VersionService的link/merge/set_primary接同gate，原版本开关、同空间/MD5、原权限及整版本语义保持。在原动作通过后、fetch/对象/SQL/索引副作用前判断。空folder创建、rename、目录/预览/下载不因这张卡新增阻断；原拒绝照旧。原Chunk/元数据写端由后续精确卡继续接，完整T097/T098保持未完成。
+
+T671/T672在现FileVisibilityService的实际space候选和post-filter读取路径，已核原visible后、检索IO前，对重建态明确10999供调用方说明暂停原因；不把重建误报无权限/零命中，不改变QA和显式历史版本资格。成功态文件裁剪T658继续独立生效。每组先实际红测，消费者用真实SQL/业务调用证明，不以纯helper绿测宣布接线完成；已有正确行为记录首绿。
