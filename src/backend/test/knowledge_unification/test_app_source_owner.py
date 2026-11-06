@@ -172,6 +172,7 @@ async def application(resolving, monkeypatch):
     pending = AsyncMock(return_value=[])
     monkeypatch.setattr(module, "authorize_loaded_app", auth)
     monkeypatch.setattr(module, "pending_app_reviews", pending)
+    monkeypatch.setattr(module, "get_model_name_resolution_port", lambda: names)
     token = set_current_open_api_principal(identity)
     actor_token = set_current_permission_actor(PermissionActor(subject_type="user", subject_id=4, tenant_id=101))
     try:
