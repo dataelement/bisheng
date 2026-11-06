@@ -127,11 +127,12 @@ def graph(*targets):
 
 
 def version(ident, parent, capabilities=None, **changes):
+    ordinal = changes.pop("version_no", 1)
     return AppVersion(
         id=ident,
         app_id=parent,
-        version_no=1,
-        kind="initial",
+        version_no=ordinal,
+        kind="initial" if ordinal == 1 else "iteration",
         code_object_key=PRIVATE,
         capabilities=capabilities or {},
         injections={"env": {"PRIVATE": PRIVATE}},
@@ -173,7 +174,7 @@ async def test_actual_six_sources_preserve_versions_zero_roots_retired_and_priva
                     {"models": [{"name": "root/rootchat"}], "knowledge_bases": [{"name": "Docs"}, {"id": "43"}]},
                     terminal_state="withdrawn",
                 ),
-                version("app-v2", "app", terminal_state="rejected"),
+                version("app-v2", "app", version_no=2, terminal_state="rejected"),
                 Assistant(id="as", tenant_id=101, user_id=7, model_name="11", status=0),
                 Assistant(id="as-empty", tenant_id=101, user_id=7),
                 Assistant(id="as-deleted", tenant_id=101, user_id=7, model_name="malformed", is_delete=1),
@@ -268,7 +269,7 @@ async def test_401_pages_child_batches_and_duplicate_targets_do_not_repeat_direc
         session.add_all([raw.flow("wf"), raw.app("app")])
         for index in range(401):
             session.add(FlowVersion(id=index + 1, tenant_id=101, flow_id="wf", name="saved", data=graph(11)))
-            session.add(version(f"v-{index:04}", "app", {"models": [{"name": "chat"}]}))
+            session.add(version(f"v-{index:04}", "app", {"models": [{"name": "chat"}]}, version_no=index + 1))
             session.add(Assistant(id=f"as-{index:04}", tenant_id=101, user_id=7, model_name="11"))
             session.add(AssistantLink(tenant_id=101, assistant_id=f"as-{index:04}", knowledge_id=40))
             session.add(raw.channel(f"ch-{index:04}"))
