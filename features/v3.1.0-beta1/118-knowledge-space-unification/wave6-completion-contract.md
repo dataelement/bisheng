@@ -496,3 +496,16 @@ T762测试→T763唯一生产`knowledge/domain/repositories/unification_control_
 
 
 §24.3旧空操作兼容补充（已冻结）：原legacy add/update/delete允许空字段列表。仅该协议writer对解析后changes=[]保原no-op：仍核实际ambient身份、真实SPACE/tenant和原容器edit等原业务准入，返回实际原schema，不把None改为空数组；不建Plan/J1/虚假item、不推进schema或R/G修订，不生成accepted/completed假任务。新processing precheck DTO的changes min_length=1保持。非空原完整schema+J1同TX逻辑不变；T741原叶先加三操作的空请求、无权限拒绝/SQL零写及两协议原响应测试，再在T742原writer叶窄实现。
+
+
+## 31. M2同事务准备上下文与原来源业务修订事实：已冻结
+
+T769测试→T770唯一生产`knowledge/application/unification_sources.py`，在现SourceInventory内补必要事实与只读复用；不写BRR/SourceSet/Coverage/run/artifact或改线上Owner。完整T161/T162与初始回填仍另接，不能借context声称已签授权收据或正式freeze。
+
+同叶定义frozen/slots PreparedSourceInventoryContext，保存可信tenant/run/writer、原TransactionIdentity及本tenant一次实际采集的shared_server_ids、NameCatalog、KnowledgeRow tuple和预编译UnificationNameIndex；raw目录及索引repr=False，仅该实例/原TX内存，不序列化、不全局缓存。`aprepare_tenant_context(session,*,run_id,writer_contract_version)`沿现具体tenant/native原TX/拒bypass与run标识校验，调用原tenant orphan一次、原pin sharing一次、实际model name catalog一次、knowledge主键页一次完整消费。原`aiter_tenant_source_records`增加可选`context=None`，None保持旧行为委托prepare；提供context时核本实例/tenant/run/writer/原native TX，每yield仍核当前范围，不重复这四类准备读取。foreign tenant、别run/writer、别实例、commit/rollback或新TX、bypass均拒绝；不因同SQLSession对象就跨TX复用。预检后续使用同context已采集目录/共享事实，不能再重读全目录或逐槽FGA。physical-target缓存仍该次stream局部，不当跨阶段授权cache。
+
+现RootInventoryRecord/SourceInventoryRecord/RetiredInventoryRecord各补必填`business_revision_digest`（64hex），与原configuration/reference digest和R2初始化source_revision独立。它只摘要现Raw Repository真实已投影业务行身份/tenant/状态/原update_time及完整原引用配置，不伪称数据库有单调版本。WF/APP根以原RawRootRow摘要一次，版本来源和退休版本同时绑定该根摘要+原RawVersionRow（含真实version id/update_time/is_current/terminal等）；不把根mirror当额外Source或每version重读根。AS/CH根及current来源绑定原RawRootRow与完整原links/sync行（含disabled及更新时间），各根只组装一次；defaults绑定实际own RawDefaultRow.id/key/tenant/value/update_time，None/空仍原值。
+
+KN原业务修订摘要从现KnowledgeRow明确排除本轮neutral字段model_transition_json/model_config_revision/index_generation/processing_config_version/metadata_schema_revision/migration_origin，其余已投影旧字段含type/owner/model/物理索引/原update_time均保；neutral事实仍由§28 ResourceRow.neutral独立冻结，配置摘要仍覆盖原model/transition，不删任何事实。0→3或其他计划内变化必须由后续M3显式before/planned-after摘要核对，不能把configuration_digest或新BRS revision=1冒原业务修订。未知SQL字段不凭空加入；当前RawRepo缺字段须另冻结真实投影后再接。
+
+测试用原native六源fixture和真实extractor/name/target流程，覆盖context单次share/catalog/knowledge读取、提供context不重扫、0/401知识页及多source/slot线性计数、跨tenant/run/writer/实例/TX拒绝、所有原6来源/retired/零root语义保持。独立变更真实row更新时间、WF/APP父及版本状态、AS/CH links、defaults row id和值、KN旧model/owner/type/索引必须改变相应business_revision_digest；KN neutral单列变化不混旧业务摘要。保无raw配置泄露、外部no_autoflush/零DML及原20用例回归；新header消费者仅未来M2，不改extractor版本/当前引用业务协议。

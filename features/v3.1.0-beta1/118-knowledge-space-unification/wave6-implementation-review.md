@@ -129,3 +129,12 @@ T760/T761按事实仓储实际范围闭合。九页独立主键seek、每页≤2
 上传固定ba01d10a2经非作者PERM复核，无确认问题：真实process_one_file/snapshot→保存split_rule→preview key/V1→原队列；额外独立四格验证新默认改变新preview指纹且不改旧快照、真实注册后quota/权限失败通过实际DI version/doc仓储补偿，原File/Doc/Version保留，无派发。Root正常merge4e2736f0，主树10路径73绿（`/private/tmp/f118-root-kn-upload-integrated.log/.xml`）。原前驱3新快照红、旧假结果另3红已按T765补字段闭合；扩展version15旧失败及另upload_size6旧失败各与固定前驱同集合，保留未绿不伪报成功。T765闭合，T083/T084仅默认/V1首阶段，整卡与新增高级wire仍未验收；音视频只kind/规则快照验证，非真实ASR。
 
 实际DI核对更正：v2独立KnowledgeService工厂未注入metadata_service，T748补第二API DI叶，共同调用T742 application纯组合工厂。禁止跨API import或以测试mock替代真实DI。元数据739/740新链仍待固定独立审/合流及旧协议桥接，不将待合分支数字记成主树结果。
+
+
+## 元数据新协议实际执行合流（2026-11-07）
+
+原发现者EDGE分阶段固定复核b05查询/JSON预算、4b合法失败落账与schema/RG过期、dd0真实metadata runner。各原反例真实闭合，fresh Session 41/401 items消费10时manifest0、snapshot165960bytes/40读；401失败落账0manifest/0snapshot且外TX回滚保原running/成功项。真实runner的Milvus/ES边界SQLSession均0，原actor/schema/RG/lease逐步复核、File值+item完成同TX、partial重试仅失败历史、无embedding/reset均经native测试；不承诺外部在途IO回滚。
+
+Root读T740真实factory及相对真实merge-base a46be00ae的14叶差异后正常合1c55绿前缀为be946808e287756447c397d79016bd465dc73e14。该主树整个F118目录除未改的TCP监听mock合同模块外，**3136 passed、45445 warnings、103.64秒**，无fail/skip；日志`/private/tmp/f118-root-native-all-metadata.log/.xml`。唯一明确未收集模块test_mock_upstreams_contract.py本轮需监听本地端口，不能把历史53绿算进这次；不称完整中间件/E2E/CI。T733–T740及T766据实际范围闭合，T071/T072仍待旧双协议桥接/实际DI和完整独立复查。T767/T768三语单键已提交848678063/8624416c8，旧key/value语义全保，pnpm check-i18n通过，consumer仍T756/T757。
+
+M2只读审进一步确认现在线LegacyEvidence要求已有BRR、仅target_missing，不能首导入造original解环；Root已撤共享但物理存在的原关系用原valid/new_binding_allowed=False及读取is_valid=False表达，不伪造missing/新增reason。完整首次回填需真实冻结来源证明、业务行锁/原或计划后摘要及精确幂等；当前helper不放行Coverage。已冻结§31补原来源业务修订与一次实际准备上下文，仍不执行转换。

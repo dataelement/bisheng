@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史768编号：639已完成/历史交付、127当前待办、2外移；原137队列已完成26项、剩111项，另16张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史770编号：650已完成/历史交付、118当前待办、2外移；原137队列已完成26项、剩111项，另7张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -5909,7 +5909,7 @@
 
 ## W6元数据结构实际Owner与账本消费闭环
 
-- [ ] **T733 · 元数据精确执行仓储与配置测试**
+- [x] **T733 · 元数据精确执行仓储与配置测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_metadata_execution_repository.py`\
   **逻辑 / 测试上下文**：实际SQL精确链/父/租户/source/value漂移，after-schema revision/digest及大空间逐item查询预算，无全空间重复扫描。\
@@ -5917,7 +5917,7 @@
   **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
   **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
 
-- [ ] **T734 · 元数据实际配置与逐item值提交仓储**
+- [x] **T734 · 元数据实际配置与逐item值提交仓储**
   **类型 / Owner**：后端 Repository / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/metadata_execution_repository.py`\
   **逻辑 / 测试上下文**：W6§24真实Root配置与指定链读取、受控确定after值写；只外部TX、不改File状态或R/G。\
@@ -5926,7 +5926,7 @@
   **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
   **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
 
-- [ ] **T735 · 元数据Owner/J1 schema过期及空范围测试**
+- [x] **T735 · 元数据Owner/J1 schema过期及空范围测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_metadata_owner.py`；`src/backend/test/knowledge_unification/test_metadata_job_repository.py`\
   **逻辑 / 测试上下文**：实际core计划+schemaCAS+J1同TX，非空/空结构记录、幂等回滚、schema ABA与RG过期、零伪file。\
@@ -5934,7 +5934,7 @@
   **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
   **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
 
-- [ ] **T736 · 元数据Owner与J1配置合同**
+- [x] **T736 · 元数据Owner与J1配置合同**
   **类型 / Owner**：后端 Application / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/application/metadata_owner.py`；`src/backend/bisheng/knowledge/domain/repositories/processing_job_repository.py`\
   **逻辑 / 测试上下文**：W6§24 actual Owner组合、metadata配置可选事实和仅metadata空item已完成记录，其余kind原限制保留。\
@@ -5943,7 +5943,7 @@
   **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
   **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
 
-- [ ] **T737 · 元数据实际预检接收重试与worker测试**
+- [x] **T737 · 元数据实际预检接收重试与worker测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_metadata_job.py`；`src/backend/test/knowledge_unification/test_metadata_job_worker.py`\
   **逻辑 / 测试上下文**：实际ASGI/Service/Owner/J1/Celery路径，cancel零写、历史全版本、索引部分失败/重试、lease/config失效及File值同TX。\
@@ -5951,7 +5951,7 @@
   **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
   **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
 
-- [ ] **T738 · 元数据通用处理Service与业务Owner接线**
+- [x] **T738 · 元数据通用处理Service与业务Owner接线**
   **类型 / Owner**：后端 Service / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/services/processing_job_service.py`；`src/backend/bisheng/knowledge/application/processing_owner.py`\
   **逻辑 / 测试上下文**：W6§24 metadata独立preview/accept/retry，原kind不变，不进入rebuild切换或File解析。\
@@ -5960,7 +5960,7 @@
   **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
   **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
 
-- [ ] **T739 · 元数据实际Celery分流与租约执行**
+- [x] **T739 · 元数据实际Celery分流与租约执行**
   **类型 / Owner**：Worker / PROC\
   **写入文件**：`src/backend/bisheng/worker/knowledge/metadata_jobs.py`；`src/backend/bisheng/worker/knowledge/processing_jobs.py`\
   **逻辑 / 测试上下文**：W6§24专用runner逐步原身份/模型/schema/lease/版本guard，真实handler及File值+item完成，部分失败和obsolete落账。\
@@ -5969,7 +5969,7 @@
   **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
   **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
 
-- [ ] **T740 · 元数据真实HTTP装配与kind开放**
+- [x] **T740 · 元数据真实HTTP装配与kind开放**
   **类型 / Owner**：后端 API / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/api/endpoints/processing.py`\
   **逻辑 / 测试上下文**：全部实际执行/retry路径通过后才开放metadata，现A1 wire及原actor/scope保持。\
@@ -6206,7 +6206,7 @@
 
 ## W6全部已声明kind装配后的旧准入夹具
 
-- [ ] **T766 · 旧HTTP未装配门禁改为真实受限装配上下文**
+- [x] **T766 · 旧HTTP未装配门禁改为真实受限装配上下文**
   **类型 / Owner**：测试夹具 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_processing_endpoints.py`\
   **逻辑 / 测试上下文**：T740开放metadata后现precheck DTO四种kind均已实际装配，没有合法未装配wire kind。仅原门禁用例以dependency override从实际get_processing_service取得真实Owner/Service并缩窄available_kinds，合法metadata请求仍验证10999；保原分页422，不为测试新增move/copy DTO或改其他默认工厂路径。\
@@ -6216,19 +6216,38 @@
 
 ## W6实际目录面包屑折叠词条
 
-- [ ] **T767 · Breadcrumb折叠层数中英词条**
+- [x] **T767 · Breadcrumb折叠层数中英词条**
   **类型 / Owner**：文案集成 / INT\
   **写入文件**：`src/frontend/platform/public/locales/zh-Hans/knowledge.json`；`src/frontend/platform/public/locales/en-US/knowledge.json`\
   **逻辑 / 测试上下文**：W6§27唯一f118.expand_folders，保{{count}}及原键值，复用现Breadcrumb，无新视觉组件。\
   **依赖**：T758\
   **验证 / 完成条件**：JSON可解析、三语键/占位符一致、旧键值语义完全保持、check-i18n通过，实际consumer另验。
 
-- [ ] **T768 · Breadcrumb折叠层数日文词条**
+- [x] **T768 · Breadcrumb折叠层数日文词条**
   **类型 / Owner**：文案集成 / INT\
   **写入文件**：`src/frontend/platform/public/locales/ja/knowledge.json`\
   **逻辑 / 测试上下文**：W6§27唯一f118.expand_folders，保{{count}}，与中英同键；不改生成错误词条或QA业务文案。\
   **依赖**：T759\
   **验证 / 完成条件**：JSON可解析、三语键/占位符一致、旧键值语义完全保持、check-i18n通过，实际consumer另验。
+
+## W6正式盘点准备上下文及原业务修订
+
+- [ ] **T769 · 六来源准备上下文与原业务修订测试**
+  **类型 / Owner**：测试 / MIG\
+  **写入文件**：`src/backend/test/knowledge_unification/test_migration_source_context.py`\
+  **逻辑 / 测试上下文**：W6§31实际SQL/原共享目录一次准备、跨TX/scope拒绝、六源原update_time及业务状态修订摘要，与neutral独立；无授权或freeze副作用。\
+  **依赖**：T717, T763\
+  **覆盖 AC**: AC-56, AC-57, AC-58, AC-63, AC-64, AC-85, AC-93\
+  **验证 / 完成条件**：真实红/首绿、原六源及MIG组合、实际SQL预算、逐叶静态和固定独立审，不以context完成完整M2。
+
+- [ ] **T770 · 六来源原生准备上下文与业务修订事实**
+  **类型 / Owner**：后端 Application / MIG\
+  **写入文件**：`src/backend/bisheng/knowledge/application/unification_sources.py`\
+  **逻辑 / 测试上下文**：W6§31同原TX的实际目录/共享事实复用及闭集header business_revision_digest，配置/引用/neutral语义分别保留，不改线上绑定。\
+  **依赖**：T769\
+  **配对测试**：T769\
+  **覆盖 AC**: AC-56, AC-57, AC-58, AC-63, AC-64, AC-85, AC-93\
+  **验证 / 完成条件**：真实红/首绿、原六源及MIG组合、实际SQL预算、逐叶静态和固定独立审，不以context完成完整M2。
 
 ## 自动化覆盖索引
 
@@ -6291,15 +6310,15 @@
 | AC-53 | T061, T065, T067, T071, T097, T208, T657, T659, T664, T666, T671, T673, T675, T677, T687, T699, T701, T714, T733, T735, T737, T741, T766 |
 | AC-54 | T061, T063, T065, T067, T071, T073, T075, T097, T123, T208, T608, T610, T612, T614, T616, T618, T620, T622, T624, T634, T636, T638, T640, T642, T644, T657, T660, T662, T664, T666, T673, T675, T677, T683, T699, T701, T714, T733, T735, T737, T741, T766 |
 | AC-55 | T093, T125, T161, T163, T203, T211, T228, T693 |
-| AC-56 | T157, T159, T161, T173, T203, T211, T681, T688, T693, T703, T710, T712, T716, T760, T762 |
-| AC-57 | T163, T203, T211, T228, T760, T762 |
-| AC-58 | T163, T203, T211, T760, T762 |
+| AC-56 | T157, T159, T161, T173, T203, T211, T681, T688, T693, T703, T710, T712, T716, T760, T762, T769 |
+| AC-57 | T163, T203, T211, T228, T760, T762, T769 |
+| AC-58 | T163, T203, T211, T760, T762, T769 |
 | AC-59 | T023, T157, T163, T169, T203, T211, T228, T681, T760 |
 | AC-60 | T077, T101, T163, T203, T211, T760 |
 | AC-61 | T163, T165, T203, T211 |
 | AC-62 | T163, T165, T203, T211, T760, T762 |
-| AC-63 | T157, T159, T161, T163, T173, T203, T211, T228, T681, T688, T693, T703, T710, T712, T716, T760, T762 |
-| AC-64 | T159, T161, T169, T173, T203, T211, T688, T693, T703, T710, T712, T716, T760, T762 |
+| AC-63 | T157, T159, T161, T163, T173, T203, T211, T228, T681, T688, T693, T703, T710, T712, T716, T760, T762, T769 |
+| AC-64 | T159, T161, T169, T173, T203, T211, T688, T693, T703, T710, T712, T716, T760, T762, T769 |
 | AC-65 | T093, T125, T196, T210, T228, T267 |
 | AC-66 | T069, T125, T131, T133, T151, T196, T210, T222, T226, T228, T229, T233, T265, T267, T679, T690, T744, T746, T747 |
 | AC-67 | T101, T125, T131, T210, T228 |
@@ -6320,7 +6339,7 @@
 | AC-82 | T019, T025, T041, T051, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T155, T202, T204, T210, T222, T226, T239, T240, T241, T242, T601, T744, T746, T747, T749 |
 | AC-83 | T021, T023, T025, T027, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T157, T196, T202, T204, T210, T215, T217, T222, T224, T226, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T272, T273, T282, T315, T323, T329, T350, T353, T355, T357, T362, T366, T369, T371, T382, T384, T392, T394, T395, T397, T399, T401, T403, T406, T408, T409, T411, T413, T415, T417, T419, T421, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T511, T513, T515, T517, T519, T521, T523, T525, T526, T527, T528, T529, T534, T535, T536, T553, T555, T557, T559, T560, T561, T563, T565, T567, T569, T570, T571, T572, T573, T574, T575, T577, T578, T579, T580, T581, T582, T584, T586, T588, T590, T591, T592, T593, T595, T596, T597, T598, T601, T602, T603, T604, T628, T630, T632, T633, T681, T744, T746, T747, T749 |
 | AC-84 | T081, T095, T109, T121, T202, T204, T220, T265, T626, T646, T648, T722 |
-| AC-85 | T075, T157, T159, T161, T173, T202, T203, T211, T651, T653, T655, T681, T688, T693, T716, T760, T762 |
+| AC-85 | T075, T157, T159, T161, T173, T202, T203, T211, T651, T653, T655, T681, T688, T693, T716, T760, T762, T769 |
 | AC-86 | T061, T063, T065, T067, T073, T075, T097, T149, T202, T208, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T591, T592, T593, T596, T608, T610, T612, T614, T616, T618, T620, T622, T624, T636, T638, T640, T642, T644, T660, T662, T677, T733, T735, T737, T741, T744, T746, T747, T766 |
 | AC-87 | T013, T015, T029, T031, T033, T035, T039, T043, T045, T047, T053, T055, T057, T079, T091, T093, T095, T097, T109, T139, T167, T202, T209, T253, T256, T274, T276, T279, T284, T286, T290, T298, T300, T303, T305, T307, T309, T311, T315, T317, T325, T326, T329, T331, T334, T337, T346, T350, T353, T359, T371, T373, T380, T386, T392, T394, T395, T397, T399, T401, T403, T406, T408, T409, T411, T413, T415, T417, T419, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T511, T513, T515, T517, T519, T521, T523, T525, T526, T527, T528, T529, T530, T532, T534, T535, T536, T537, T539, T541, T543, T545, T546, T548, T550, T553, T555, T557, T559, T560, T561, T563, T565, T567, T569, T570, T571, T572, T573, T574, T575, T577, T578, T579, T580, T581, T683, T693, T695, T697, T703, T706, T710, T712, T716, T718, T720, T722, T725, T727, T729, T732, T733, T735, T737, T741, T743, T744, T746, T747, T749, T750, T752, T754, T756 |
 | AC-88 | T013, T015, T031, T033, T035, T037, T039, T043, T045, T047, T049, T053, T055, T057, T091, T093, T109, T167, T202, T209, T253, T256, T257, T274, T279, T284, T286, T290, T296, T298, T300, T303, T305, T307, T309, T311, T317, T325, T326, T331, T334, T337, T367, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T513, T515, T517, T519, T521, T523, T525, T526, T527, T528, T529, T530, T532, T534, T535, T536, T537, T539, T541, T543, T546, T548, T550, T553, T555, T557, T559, T560, T561, T563, T565, T567, T569, T570, T571, T572, T573, T574, T575, T577, T578, T579, T580, T581, T693, T703, T710, T712, T716 |
@@ -6328,7 +6347,7 @@
 | AC-90 | T017, T103, T109, T117, T119, T171, T202, T209, T229, T257, T279 |
 | AC-91 | T015, T017, T037, T039, T041, T045, T049, T053, T103, T109, T117, T129, T139, T141, T167, T202, T209, T253, T256, T257, T274, T279, T281, T282, T288, T294, T297, T309, T315, T321, T326, T329, T331, T346, T353, T355, T357, T359, T364, T366, T367, T369, T375, T378, T380, T382, T384, T392, T394, T395, T397, T399, T401, T403, T406, T408, T409, T411, T413, T415, T417, T419, T421, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T513, T515, T517, T519, T521, T523, T525, T526, T527, T528, T529, T530, T532, T534, T535, T536, T575, T595 |
 | AC-92 | T015, T037, T039, T045, T049, T053, T109, T117, T202, T209, T257, T279, T281, T294, T315, T329, T331, T364, T375, T380, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T541, T543, T546, T548, T550, T553, T555, T557, T559, T560, T561, T563, T565, T567, T569, T570, T571, T572, T573, T574, T575, T577, T578, T579, T580, T581, T582, T584, T586, T588, T590, T591, T592, T593, T595, T596, T597 |
-| AC-93 | T017, T159, T161, T167, T169, T173, T202, T203, T209, T211, T288, T378, T688, T693, T703, T710, T712, T716, T760, T762 |
+| AC-93 | T017, T159, T161, T167, T169, T173, T202, T203, T209, T211, T288, T378, T688, T693, T703, T710, T712, T716, T760, T762, T769 |
 | AC-94 | T085, T103, T105, T107, T202, T206, T209, T584, T595 |
 
 ## 追加与偏差记录
