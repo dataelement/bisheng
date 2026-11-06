@@ -1039,16 +1039,16 @@
 
 - [ ] **T127 · 工具/Skill 使用准入切换：先写测试**
   **类型 / Owner**：测试 / EDGE\
-  **写入文件**：`src/backend/test/knowledge_unification/test_edge_tool.py`（拟新增）\
-  **逻辑 / 测试上下文**：每类工具/Skill可见无use可调用，无可见/无scope/停用仍拒绝；活动动作响应无use。\
+  **写入文件**：`src/backend/test/knowledge_unification/test_edge_tool.py`（拟新增）；`src/backend/test/tool/test_f048_tool_permissions.py`\
+  **逻辑 / 测试上下文**：工具preset/custom及Skill原可见鉴权无use可调用，无可见/无scope仍拒绝，活动动作响应无use；Skill的enabled使用/管理分离由T145/T146独立回归，本组联合验收等待它们。\
   **依赖**：T026\
   **覆盖 AC**: AC-78, AC-79, AC-82, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
 - [ ] **T128 · 工具/Skill 使用准入切换**
   **类型 / Owner**：后端 Domain / EDGE\
-  **写入文件**：`src/backend/bisheng/tool/domain/services/f048_tool_permission.py`；`src/backend/bisheng/linsight/domain/services/f048_skill_permission.py`\
-  **逻辑 / 测试上下文**：各资源system/custom原独立use检查改visible，保tenant/身份/scope/可执行状态，不给额外动作；调用现有统一 PermissionService，历史保存协议只兼容解释。\
+  **写入文件**：`src/backend/bisheng/tool/domain/services/f048_tool_permission.py`\
+  **逻辑 / 测试上下文**：工具preset/custom原独立use检查改visible；生产Skill接缝在T146，未接线旧f048_skill_permission不改，保tenant/身份/scope/可执行状态，不给额外动作；调用现有统一 PermissionService，历史保存协议只兼容解释。\
   **依赖**：T127\
   **配对测试**：T127\
   **验证 / 完成条件**：运行配对测试 T127；验证本卡预期，相关范围检查通过。
@@ -1105,7 +1105,7 @@
 
 - [ ] **T135 · 应用可见资格与能力 DTO：先写测试**
   **类型 / Owner**：测试 / APP\
-  **写入文件**：`src/backend/test/knowledge_unification/test_app_visibility.py`（拟新增）\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_visibility.py`（拟新增）；`src/backend/test/app_runtime/test_f114_action_authorization.py`\
   **逻辑 / 测试上下文**：原使用资格可见无 use 可调用；发布仍须原发布动作/owner 等资格、生命周期及来源条件，可见但缺发布/分享资格仍拒绝；Source 变化复查，旧协议只解释不保存。\
   **依赖**：T052, T026\
   **覆盖 AC**: AC-78, AC-79, AC-81, AC-82, AC-83\
@@ -1115,7 +1115,7 @@
   **类型 / Owner**：后端 Domain / APP\
   **写入文件**：`src/backend/bisheng/app_publish/domain/services/app_publish_current_visibility_service.py`；`src/backend/bisheng/app_runtime/domain/schemas/app_authorization.py`\
   **逻辑 / 测试上下文**：仅来源及应用原 use 使用判断改 visible，活动能力 DTO 不形成独立 use；应用自身发布动作、owner/管理资格、分享动作、生命周期及 capability 范围保持原逻辑，不能把可见当发布或分享许可；保 Source 一致性。\
-  **依赖**：T135\
+  **依赖**：T135, T599\
   **配对测试**：T135\
   **验证 / 完成条件**：运行配对测试 T135；验证本卡预期，相关范围检查通过。
 
@@ -1169,7 +1169,7 @@
 
 - [ ] **T143 · 工具枚举与实际执行：先写测试**
   **类型 / Owner**：测试 / EDGE\
-  **写入文件**：`src/backend/test/knowledge_unification/test_edge_tool_call.py`（拟新增）\
+  **写入文件**：`src/backend/test/knowledge_unification/test_edge_tool_call.py`（拟新增）；`src/backend/test/tool/test_tool_executor_permissions.py`\
   **逻辑 / 测试上下文**：列出与执行相同准入；可见无use可执行，disabled和无scope拒绝；剩余use调用方清单闭合。\
   **依赖**：T128\
   **覆盖 AC**: AC-79, AC-82, AC-83\
@@ -1185,7 +1185,7 @@
 
 - [ ] **T145 · Skill 枚举与启用校验：先写测试**
   **类型 / Owner**：测试 / EDGE\
-  **写入文件**：`src/backend/test/knowledge_unification/test_edge_skill.py`（拟新增）\
+  **写入文件**：`src/backend/test/knowledge_unification/test_edge_skill.py`（拟新增）；`src/backend/test/linsight/test_user_skills.py`\
   **逻辑 / 测试上下文**：批量结果不漏仅可见，停用仍不可运行、无scope拒绝，tenant隔离。\
   **依赖**：T144\
   **覆盖 AC**: AC-79, AC-82, AC-83\
@@ -1809,14 +1809,14 @@
   **类型 / Owner**：后端 Domain / PERM\
   **写入文件**：`src/backend/bisheng/permission/domain/services/owner_service.py`\
   **逻辑 / 测试上下文**：Owner管理受保护系统Source的白名单移除use，合法viewer纯可见识别；保protected/原管理等级及移交规则，不顺带赋予可见主体管理能力。\
-  **依赖**：T224\
+  **依赖**：T224, T128, T146\
   **配对测试**：T224\
   **验证 / 完成条件**：配对测试转绿、相关既有回归及架构检查通过。
 - [ ] **T226 · 工具HTTP旧动作参数适配：先写测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_tool_http_action.py`\
   **逻辑 / 测试上下文**：当前默认visible、保受支持旧use query按visible解释；经原服务鉴权，旧请求/返回结构维持，活动动作不输出use。；可见无use可用、无可见/无凭证scope拒绝，旧协议不形成独立授权。\
-  **依赖**：T136\
+  **依赖**：T136, T144\
   **覆盖 AC**: AC-35, AC-66, AC-79, AC-82, AC-83\
   **验证 / 完成条件**：先记录红阶段，不修改实现。
 
@@ -4742,6 +4742,57 @@
   **覆盖 AC**: AC-68, AC-71, AC-79, AC-83, AC-89, AC-92\
   **验证 / 完成条件**：原4失败有归因，真实读取fixture定向及相同主组合通过，不改生产guard。
 
+## W5消费面接缝补充任务（2026-11-06）
+
+合同见 [wave5-consumers-contract.md](./wave5-consumers-contract.md)。新增六卡仅拆分原需求的前端DTO接缝、旧回归和skill文档，未扩大94条AC；原157待办中本波选择20项。冻结时历史编号603，438已完成/历史交付、163当前待办（原157+6叶子）、2外移，全部待验证后才勾选。
+
+- [ ] **T598 · APP动作DTO前端最小兼容红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/frontend/platform/src/test/f114AppActions.test.tsx`\
+  **逻辑 / 测试上下文**：以visible/空/未知旧use仅可见不能管理，五类具体管理动作独立，edit+publish才rebuild；保原publish-only深链不加载私有内容。\
+  **依赖**：T002\
+  **覆盖 AC**: AC-78, AC-79, AC-81, AC-83\
+  **验证 / 完成条件**：逐卡实际验证、原断言保留、固定SHA复查后由INT勾选；不声称真实环境或全特性验收。
+
+- [ ] **T599 · APP动作DTO前端最小兼容**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/frontend/platform/src/controllers/API/hostedApp.ts`；`src/frontend/platform/src/pages/BuildPage/hostedApp/appActions.ts`\
+  **逻辑 / 测试上下文**：canonical HostedAppAction替换use为visible；management只认五类已有管理动作，不从未知/visible推导权限。不新增UI/样式，不提前勾完整T193。\
+  **依赖**：T598\
+  **配对测试**：T598\
+  **验证 / 完成条件**：逐卡实际验证、原断言保留、固定SHA复查后由INT勾选；不声称真实环境或全特性验收。
+
+- [ ] **T600 · 审批当前可见摘要skill契约同步**
+  **类型 / Owner**：基础设施 / INT\
+  **写入文件**：`.claude/skills/approval-module/SKILL.md`\
+  **逻辑 / 测试上下文**：只将当前事实use来源文案与T136实际visible实现同步；不改审批引擎/节点/路由/候选/通知/outbox。\
+  **依赖**：T136\
+  **验证 / 完成条件**：逐卡实际验证、原断言保留、固定SHA复查后由INT勾选；不声称真实环境或全特性验收。
+
+- [ ] **T601 · 工具preset原鉴权回归动作对齐**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/backend/test/tool/test_preset_tool_classification.py`\
+  **逻辑 / 测试上下文**：保preset/custom/真实Facade/tenant/非法动作原断言，退休use具体成功输入改visible；旧use兼容仍由统一入口回归。\
+  **依赖**：T128\
+  **覆盖 AC**: AC-78, AC-79, AC-82, AC-83\
+  **验证 / 完成条件**：逐卡实际验证、原断言保留、固定SHA复查后由INT勾选；不声称真实环境或全特性验收。
+
+- [ ] **T602 · 系统应用与租户共享旧回归对齐**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/permission/test_f048_application_adapters.py`；`src/backend/test/permission/test_f048_resource_share_boundary.py`\
+  **逻辑 / 测试上下文**：保原租户/allowlist/状态/写动作拒绝等断言，仅将退休use的具体成功输入改visible；不激活新共享类型。\
+  **依赖**：T154\
+  **覆盖 AC**: AC-78, AC-79, AC-81, AC-83\
+  **验证 / 完成条件**：逐卡实际验证、原断言保留、固定SHA复查后由INT勾选；不声称真实环境或全特性验收。
+
+- [ ] **T603 · 系统Owner投影旧回归对齐**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/permission/test_f048_owner_projection.py`\
+  **逻辑 / 测试上下文**：将原use投影成功输入改visible，保protected/管理等级/失败不finalize和其他动作拒绝，验证无use marker。\
+  **依赖**：T225\
+  **覆盖 AC**: AC-78, AC-81, AC-83\
+  **验证 / 完成条件**：逐卡实际验证、原断言保留、固定SHA复查后由INT勾选；不声称真实环境或全特性验收。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
@@ -4825,12 +4876,12 @@
 | AC-75 | T049, T111, T202, T209 |
 | AC-76 | T111, T113, T115, T117, T119, T202, T209, T229 |
 | AC-77 | T113, T115, T117, T119, T202, T209 |
-| AC-78 | T019, T021, T025, T027, T127, T135, T153, T155, T157, T202, T204, T215, T217, T224, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T271, T272, T273, T323 |
-| AC-79 | T023, T025, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T202, T204, T210, T222, T224, T226, T239, T240, T241, T242, T271, T282, T305, T307, T315, T323, T329, T337, T350, T353, T355, T357, T362, T366, T369, T371, T382, T384, T392, T394, T395, T397, T399, T401, T403, T406, T408, T409, T411, T413, T415, T417, T419, T421, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T511, T513, T515, T517, T519, T521, T523, T525, T526, T527, T528, T529, T534, T535, T536, T553, T555, T557, T559, T560, T561, T563, T565, T567, T569, T570, T571, T572, T573, T574, T575, T577, T578, T579, T580, T581, T582, T584, T586, T588, T590, T591, T592, T593, T595, T596, T597 |
+| AC-78 | T019, T021, T025, T027, T127, T135, T153, T155, T157, T202, T204, T215, T217, T224, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T271, T272, T273, T323, T598, T601, T602, T603 |
+| AC-79 | T023, T025, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T202, T204, T210, T222, T224, T226, T239, T240, T241, T242, T271, T282, T305, T307, T315, T323, T329, T337, T350, T353, T355, T357, T362, T366, T369, T371, T382, T384, T392, T394, T395, T397, T399, T401, T403, T406, T408, T409, T411, T413, T415, T417, T419, T421, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T511, T513, T515, T517, T519, T521, T523, T525, T526, T527, T528, T529, T534, T535, T536, T553, T555, T557, T559, T560, T561, T563, T565, T567, T569, T570, T571, T572, T573, T574, T575, T577, T578, T579, T580, T581, T582, T584, T586, T588, T590, T591, T592, T593, T595, T596, T597, T598, T601, T602 |
 | AC-80 | T019, T023, T027, T153, T157, T161, T169, T173, T202, T203, T204, T211, T215, T217, T228, T235, T239, T240, T241, T242, T249, T251, T263, T264, T269, T271, T272, T323 |
-| AC-81 | T019, T021, T023, T027, T135, T153, T157, T202, T203, T204, T211, T215, T217, T224, T228, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T271, T272, T323 |
-| AC-82 | T019, T025, T041, T051, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T155, T202, T204, T210, T222, T226, T239, T240, T241, T242 |
-| AC-83 | T021, T023, T025, T027, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T157, T196, T202, T204, T210, T215, T217, T222, T224, T226, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T272, T273, T282, T315, T323, T329, T350, T353, T355, T357, T362, T366, T369, T371, T382, T384, T392, T394, T395, T397, T399, T401, T403, T406, T408, T409, T411, T413, T415, T417, T419, T421, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T511, T513, T515, T517, T519, T521, T523, T525, T526, T527, T528, T529, T534, T535, T536, T553, T555, T557, T559, T560, T561, T563, T565, T567, T569, T570, T571, T572, T573, T574, T575, T577, T578, T579, T580, T581, T582, T584, T586, T588, T590, T591, T592, T593, T595, T596, T597 |
+| AC-81 | T019, T021, T023, T027, T135, T153, T157, T202, T203, T204, T211, T215, T217, T224, T228, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T271, T272, T323, T598, T602, T603 |
+| AC-82 | T019, T025, T041, T051, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T155, T202, T204, T210, T222, T226, T239, T240, T241, T242, T601 |
+| AC-83 | T021, T023, T025, T027, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T157, T196, T202, T204, T210, T215, T217, T222, T224, T226, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T272, T273, T282, T315, T323, T329, T350, T353, T355, T357, T362, T366, T369, T371, T382, T384, T392, T394, T395, T397, T399, T401, T403, T406, T408, T409, T411, T413, T415, T417, T419, T421, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T511, T513, T515, T517, T519, T521, T523, T525, T526, T527, T528, T529, T534, T535, T536, T553, T555, T557, T559, T560, T561, T563, T565, T567, T569, T570, T571, T572, T573, T574, T575, T577, T578, T579, T580, T581, T582, T584, T586, T588, T590, T591, T592, T593, T595, T596, T597, T598, T601, T602, T603 |
 | AC-84 | T081, T095, T109, T121, T202, T204, T220, T265 |
 | AC-85 | T075, T157, T159, T161, T173, T202, T203, T211 |
 | AC-86 | T061, T063, T065, T067, T073, T075, T097, T149, T202, T208, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T591, T592, T593, T596 |
@@ -4915,3 +4966,7 @@ W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFoun
 ## 剩余任务范围复核收口（2026-11-06）
 
 依据用户决定，T404/T405 移至独立文档，未实施、未计为完成，退出当前任务依赖与 AC 自动覆盖索引；当前待办157项。T135/T136/T193 明确保留发布/分享及其他动作，QA/SDK-MCP/知识任务/type2/迁移CLI等歧义按 [scope-review.md](./scope-review.md) 收紧。原其余157项逐条核对，未再发现需要整项外移的独立需求；本轮未勾选任何代码任务。历史交付报告不重写，当前设计/合同/升级/HTML/导航按新边界同步。
+
+## W5合同冻结启动
+
+从abb8dc822延续范围基线，先三agent只读核接口；本波选EDGE/PERM/API共20项原卡，新增T598–T603六个既有需求接缝叶子。合同冻结后同checkpoint建独立lane，INT负责前端DTO接缝及合流验证。处理任务T063–T076尚缺真实前置，本波不建fake服务或局部改worker。历史157待办是范围复核时点，当前新增叶子和进度以本节及后续交付为准。无push/迁移/部署。
