@@ -17,6 +17,7 @@ from bisheng.core.context.tenant import tenant_execution_scope
 from bisheng.core.database import tenant_filter
 from bisheng.knowledge.domain.models.knowledge_operation_plan import KnowledgeOperationPlan
 from bisheng.llm.domain.repositories.model_delete_plan_repository import ModelDeletePlanRepository
+from bisheng.permission.application.data_scope import DATA_SCOPE_ALL, DATA_SCOPE_PERSONAL
 from bisheng.resource_reference.application.contracts import TargetKey
 from test.knowledge_unification import test_llm_refs as impact_tests
 
@@ -62,8 +63,14 @@ def actor():
         "tenant_id": 101,
         "actor_user_id": 7,
         "management_tenant_id": 101,
-        "credential_reference": {"kind": "web_session", "user_id": 7, "token_version": 3},
-        "data_scope": "all",
+        "credential_reference": {
+            "kind": "web_session",
+            "user_id": 7,
+            "tenant_id": 101,
+            "token_version": 3,
+            "expires_at": "2026-11-06T10:00:00",
+        },
+        "data_scope": DATA_SCOPE_ALL,
     }
 
 
@@ -192,7 +199,7 @@ async def test_manifest_revision_and_coverage_shape_cannot_be_guessed_or_mixed_w
         {"trace_id": "request-1"},
         {"access_token": "secret"},
         {"api_key": "secret"},
-        {"credential_reference": {"kind": "web_session", "user_id": 7, "token_version": 3, "Authorization": "secret"}},
+        {"credential_reference": {**actor()["credential_reference"], "Authorization": "secret"}},
         {"service_request": {"config": {"api_key": "secret"}}},
     ],
 )
@@ -248,3 +255,102 @@ async def test_real_owner_inspection_revisions_enter_the_model_plan_unchanged(im
     assert stored.impact["inbound_digest"] == inspected.inbound_digest
     assert {item["target_id"] for item in stored.target_manifest} == {"12", "13", "14", "15"}
     await session.rollback()
+
+
+@pytest.mark.parametrize("location", ["actor", "credential"])
+@pytest.mark.parametrize("field", ["openai_api_key", "azureOpenAiApiKey", "opaque_extension"])
+async def test_closed_actor_rejects_every_unknown_key_before_sql_instead_of_storing_provider_secrets(
+    plans, repository, clock, location, field
+):
+    reference = actor()
+    target = reference if location == "actor" else reference["credential_reference"]
+    target[field] = "synthetic-private-value"
+    with pytest.raises(ValueError):
+        await create(repository, plans, clock, actor_reference=reference)
+    assert not (await plans.exec(select(KnowledgeOperationPlan))).all()
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"data_scope": "all"},
+        {"data_scope": {}},
+        {"actor_user_id": True},
+        {"management_tenant_id": True},
+        {"credential_reference": {"kind": "web_session", "user_id": 7, "token_version": 3}},
+        {"credential_reference": {**actor()["credential_reference"], "kind": "api_credential"}},
+        {"credential_reference": {**actor()["credential_reference"], "user_id": 8}},
+        {"credential_reference": {**actor()["credential_reference"], "user_id": True}},
+        {"credential_reference": {**actor()["credential_reference"], "tenant_id": True}},
+        {"credential_reference": {**actor()["credential_reference"], "token_version": -1}},
+        {"credential_reference": {**actor()["credential_reference"], "token_version": True}},
+        {"credential_reference": {**actor()["credential_reference"], "expires_at": "not-a-datetime"}},
+        {"credential_reference": {**actor()["credential_reference"], "expires_at": {"value": "nested"}}},
+    ],
+)
+async def test_actor_and_web_credential_use_only_real_typed_identity_fields(plans, repository, clock, change):
+    with pytest.raises(ValueError):
+        await create(repository, plans, clock, actor_reference={**actor(), **change})
+    assert not (await plans.exec(select(KnowledgeOperationPlan))).all()
+
+
+@pytest.mark.parametrize("field", ["tenant_id", "actor_user_id", "credential_reference", "data_scope"])
+async def test_all_stable_actor_fields_are_required(plans, repository, clock, field):
+    reference = actor()
+    del reference[field]
+    with pytest.raises(ValueError):
+        await create(repository, plans, clock, actor_reference=reference)
+
+
+@pytest.mark.parametrize("data_scope", [DATA_SCOPE_ALL, DATA_SCOPE_PERSONAL])
+@pytest.mark.parametrize("home", [1, 101])
+async def test_real_web_reference_preserves_home_and_data_scope_across_the_explicit_management_pin(
+    plans, repository, clock, data_scope, home
+):
+    reference = actor()
+    reference["credential_reference"]["tenant_id"] = home
+    reference["data_scope"] = data_scope
+    confirmation = await create(repository, plans, clock, actor_reference=reference)
+    row = await load(repository, plans, confirmation, actor_reference=reference)
+    assert row.tenant_id == 101 and row.actor_reference == reference
+    assert row.actor_reference["credential_reference"]["tenant_id"] == home
+    await consume(repository, plans, confirmation, actor_reference=reference)
+
+
+async def test_same_home_web_identity_does_not_require_a_management_pin(plans, repository, clock):
+    reference = actor()
+    del reference["management_tenant_id"]
+    confirmation = await create(repository, plans, clock, actor_reference=reference)
+    assert (await load(repository, plans, confirmation, actor_reference=reference)).actor_reference == reference
+
+
+async def test_cross_home_web_identity_requires_the_explicit_matching_management_pin(plans, repository, clock):
+    reference = actor()
+    reference["credential_reference"]["tenant_id"] = 1
+    del reference["management_tenant_id"]
+    with pytest.raises(ValueError):
+        await create(repository, plans, clock, actor_reference=reference)
+    reference["management_tenant_id"] = 202
+    with pytest.raises(ValueError):
+        await create(repository, plans, clock, actor_reference=reference)
+
+
+async def test_invalid_actor_is_rejected_by_get_consume_and_stored_payload_validation(plans, repository, clock):
+    confirmation = await create(repository, plans, clock)
+    reference = actor()
+    reference["credential_reference"]["openai_api_key"] = "synthetic-private-value"
+    for method in (load, consume):
+        with pytest.raises(KnowledgeOperationPlanChangedError):
+            await method(repository, plans, confirmation, actor_reference=reference)
+    row = await plans.get(KnowledgeOperationPlan, confirmation.confirmation_id)
+    assert row.operation_id is None
+    row.actor_reference = reference
+    # A persisted legacy shape can have self-consistent integrity hashes.
+    # Those hashes must not substitute for the newly closed identity schema.
+    from bisheng.llm.domain.repositories.model_delete_plan_repository import _hash
+
+    row.request_hash = _hash(repository._payload(row))
+    row.plan_digest = repository._plan_digest(row)
+    await plans.flush()
+    with pytest.raises(KnowledgeOperationPlanChangedError):
+        repository._validate(row, expiry=False)
