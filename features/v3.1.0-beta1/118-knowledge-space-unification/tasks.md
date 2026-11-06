@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史839编号：717已完成/历史交付、120当前待办、2外移；原137队列已完成34项、剩103项，另17张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史842编号：728已完成/历史交付、112当前待办、2外移；原137队列已完成36项、剩101项，另11张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -1233,7 +1233,7 @@
   **配对测试**：T149\
   **验证 / 完成条件**：运行配对测试 T149；验证本卡预期，相关范围检查通过。
 
-- [ ] **T151 · 工作台及开放工作流入口：先写测试**
+- [x] **T151 · 工作台及开放工作流入口：先写测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_edge_apps_rpc.py`（拟新增）\
   **逻辑 / 测试上下文**：实际旧调用default/explicit use都兼容；无scope/业务停止等原限制保持。\
@@ -1241,7 +1241,7 @@
   **覆盖 AC**: AC-35, AC-66, AC-68, AC-79, AC-82, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T152 · 工作台及开放工作流入口**
+- [x] **T152 · 工作台及开放工作流入口**
   **类型 / Owner**：后端 API / EDGE\
   **写入文件**：`src/backend/bisheng/workstation/api/endpoints/apps.py`；`src/backend/bisheng/open_endpoints/api/endpoints/workflow.py`\
   **逻辑 / 测试上下文**：HTTP委托统一visible使用准入，保原路由及请求/错误格式；历史应用/工作流发布与knowledge类型照常解释，无权内容不返回。\
@@ -6712,7 +6712,7 @@
 
 - [ ] **T829 · M2 broker闭集与真实required-port联装测试**
   **类型 / Owner**：测试 / INT\
-  **写入文件**：`src/backend/test/knowledge_unification/test_migration_inventory_codec.py`、`src/backend/test/knowledge_unification/test_migration_inventory_application.py`\
+  **写入文件**：`src/backend/test/knowledge_unification/test_migration_inventory_codec.py`、`src/backend/test/knowledge_unification/test_migration_broker_application.py`\
   **逻辑 / 测试上下文**：W6§42真实生效broker配置/原始Redis只读消息，签名与SQL归属闭集，取消/规模有界，原消息零写。\
   **依赖**：T828\
   **覆盖 AC**: AC-56, AC-58, AC-63, AC-85, AC-86, AC-93\
@@ -6726,7 +6726,7 @@
   **配对测试**：T829\
   **验证 / 完成条件**：真实Kombu离线编码与native SQL/只读Redis形状红绿，10001规模/tenant/异常与独立复核；非Redis或缺端口拒绝，不代替正式M2/维护证明。
 
-- [ ] **T831 · KN盘点修订SSOT提取与真实Owner摘要对照测试**
+- [x] **T831 · KN盘点修订SSOT提取与真实Owner摘要对照测试**
   **类型 / Owner**：测试 / MIG\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_source_context.py`\
   **逻辑 / 测试上下文**：W6§43仅M2精确SQL阶段计划，原业务/neutral/来源摘要、自然V1键、creation/Tag/default闭集；不执行M3或权限finalize。\
@@ -6734,7 +6734,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-59, AC-60, AC-61, AC-62, AC-63, AC-85, AC-93\
   **验证 / 完成条件**：原生数据及真实Owner摘要红绿、分页/多版本/碰撞零写、旧来源完整回归与独立复核；不将纯计划计为M3/正式升级完成。
 
-- [ ] **T832 · KN盘点修订纯SSOT提取**
+- [x] **T832 · KN盘点修订纯SSOT提取**
   **类型 / Owner**：后端 Application / MIG\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_sources.py`\
   **逻辑 / 测试上下文**：W6§43仅M2精确SQL阶段计划，原业务/neutral/来源摘要、自然V1键、creation/Tag/default闭集；不执行M3或权限finalize。\
@@ -6742,7 +6742,7 @@
   **配对测试**：T831\
   **验证 / 完成条件**：原生数据及真实Owner摘要红绿、分页/多版本/碰撞零写、旧来源完整回归与独立复核；不将纯计划计为M3/正式升级完成。
 
-- [ ] **T833 · 精确SQL阶段转换命令与受限codec测试**
+- [x] **T833 · 精确SQL阶段转换命令与受限codec测试**
   **类型 / Owner**：测试 / MIG\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_conversion_plan.py`、`src/backend/test/knowledge_unification/test_migration_inventory_codec.py`\
   **逻辑 / 测试上下文**：W6§43仅M2精确SQL阶段计划，原业务/neutral/来源摘要、自然V1键、creation/Tag/default闭集；不执行M3或权限finalize。\
@@ -6750,7 +6750,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-59, AC-60, AC-61, AC-62, AC-63, AC-85, AC-93\
   **验证 / 完成条件**：原生数据及真实Owner摘要红绿、分页/多版本/碰撞零写、旧来源完整回归与独立复核；不将纯计划计为M3/正式升级完成。
 
-- [ ] **T834 · 精确SQL阶段转换计划与闭集codec**
+- [x] **T834 · 精确SQL阶段转换计划与闭集codec**
   **类型 / Owner**：后端 Application / MIG\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_conversion_plan.py`、`src/backend/bisheng/knowledge/application/unification_inventory_codec.py`\
   **逻辑 / 测试上下文**：W6§43仅M2精确SQL阶段计划，原业务/neutral/来源摘要、自然V1键、creation/Tag/default闭集；不执行M3或权限finalize。\
@@ -6758,7 +6758,7 @@
   **配对测试**：T833\
   **验证 / 完成条件**：原生数据及真实Owner摘要红绿、分页/多版本/碰撞零写、旧来源完整回归与独立复核；不将纯计划计为M3/正式升级完成。
 
-- [ ] **T835 · 转换Tag关系全局完整性probe测试**
+- [x] **T835 · 转换Tag关系全局完整性probe测试**
   **类型 / Owner**：测试 / MIG\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_resource_repository.py`\
   **逻辑 / 测试上下文**：W6§43仅M2精确SQL阶段计划，原业务/neutral/来源摘要、自然V1键、creation/Tag/default闭集；不执行M3或权限finalize。\
@@ -6766,7 +6766,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-59, AC-60, AC-61, AC-62, AC-63, AC-85, AC-93\
   **验证 / 完成条件**：原生数据及真实Owner摘要红绿、分页/多版本/碰撞零写、旧来源完整回归与独立复核；不将纯计划计为M3/正式升级完成。
 
-- [ ] **T836 · 转换Tag关系全局只读完整性probe**
+- [x] **T836 · 转换Tag关系全局只读完整性probe**
   **类型 / Owner**：后端 Repository / MIG\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/unification_resource_repository.py`\
   **逻辑 / 测试上下文**：W6§43仅M2精确SQL阶段计划，原业务/neutral/来源摘要、自然V1键、creation/Tag/default闭集；不执行M3或权限finalize。\
@@ -6774,7 +6774,7 @@
   **配对测试**：T835\
   **验证 / 完成条件**：原生数据及真实Owner摘要红绿、分页/多版本/碰撞零写、旧来源完整回归与独立复核；不将纯计划计为M3/正式升级完成。
 
-- [ ] **T837 · M2实际冻结精确转换计划组合测试**
+- [x] **T837 · M2实际冻结精确转换计划组合测试**
   **类型 / Owner**：测试 / MIG\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_preflight.py`、`src/backend/test/knowledge_unification/test_migration_inventory_application.py`\
   **逻辑 / 测试上下文**：W6§43仅M2精确SQL阶段计划，原业务/neutral/来源摘要、自然V1键、creation/Tag/default闭集；不执行M3或权限finalize。\
@@ -6782,7 +6782,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-59, AC-60, AC-61, AC-62, AC-63, AC-85, AC-93\
   **验证 / 完成条件**：原生数据及真实Owner摘要红绿、分页/多版本/碰撞零写、旧来源完整回归与独立复核；不将纯计划计为M3/正式升级完成。
 
-- [ ] **T838 · M2精确转换计划实际委托**
+- [x] **T838 · M2精确转换计划实际委托**
   **类型 / Owner**：后端 Application / MIG\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_preflight.py`、`src/backend/bisheng/knowledge/application/unification_inventory.py`\
   **逻辑 / 测试上下文**：W6§43仅M2精确SQL阶段计划，原业务/neutral/来源摘要、自然V1键、creation/Tag/default闭集；不执行M3或权限finalize。\
@@ -6790,12 +6790,35 @@
   **配对测试**：T837\
   **验证 / 完成条件**：原生数据及真实Owner摘要红绿、分页/多版本/碰撞零写、旧来源完整回归与独立复核；不将纯计划计为M3/正式升级完成。
 
-- [ ] **T839 · 原工作台pin回归夹具与可见性断言对齐**
+- [x] **T839 · 原工作台pin回归夹具与可见性断言对齐**
   **类型 / Owner**：测试夹具 / INT\
   **写入文件**：`src/backend/test/workstation/test_workstation_apps_rebac.py`、`src/backend/test/workstation/test_used_app_pin.py`\
   **逻辑 / 测试上下文**：W6§46实际旧回归：仅原use gate断言改visible，真实union已读App的SQLite夹具补空App表，保所有原pin/取消/跨tenant/offline/hidden业务断言。先固定未改生产对照旧失败，不将夹具失败算产品红。\
   **依赖**：T151\
   **验证 / 完成条件**：两旧叶与新入口/原v2身份/invoke组合通过，独立复核不削断言或替真实DAO。
+
+- [ ] **T840 · M2原集成夹具补独立required broker端口**
+  **类型 / Owner**：测试夹具 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_migration_inventory_application.py`\
+  **逻辑 / 测试上下文**：W6§42 root装配required broker后，仅原fixture供独立只读broker port、缺口矩阵补broker；原Catalog/Source/physical/queued/材料与全部原行为断言保持，不fake实际UnificationInventoryApplication。\
+  **依赖**：T830\
+  **验证 / 完成条件**：原集成与新broker消费测试完整组合、拒绝/误commit零Run、frozen replay零重读；不把fixture计作正式迁移。
+
+- [ ] **T841 · SQL转换纯Domain协议与原wire一致性测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_migration_conversion_schema.py`\
+  **逻辑 / 测试上下文**：W6§48唯一七dataclass与纯V1模板从App下沉Domain，旧App导出同一class/函数，原artifact字节、hash与自然键模板不变。\
+  **依赖**：T838\
+  **覆盖 AC**: AC-56, AC-58, AC-59, AC-63\
+  **验证 / 完成条件**：缺Domain模块真红后同class/模板/codec回归绿；新Domain仅stdlib依赖，不执行SQL、授权或迁移。
+
+- [ ] **T842 · SQL转换纯协议唯一Domain所有者**
+  **类型 / Owner**：后端 Schema / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/schemas/unification_conversion.py`、`src/backend/bisheng/knowledge/application/unification_conversion_plan.py`\
+  **逻辑 / 测试上下文**：W6§48仅移动七纯dataclass及initial_version_templates，App显式import/re-export，COMMAND_RECORD_TYPES维持原映射入口；不复制命令/哈希或引新行为。\
+  **依赖**：T841\
+  **配对测试**：T841\
+  **验证 / 完成条件**：原精确计划/codec/Source与新协议组合、Ruff/arch及独立复核；不计M3 SQL或namespace发布完成。
 
 ## 自动化覆盖索引
 
@@ -6858,14 +6881,14 @@
 | AC-53 | T061, T065, T067, T071, T097, T208, T657, T659, T664, T666, T671, T673, T675, T677, T687, T699, T701, T714, T733, T735, T737, T741, T766 |
 | AC-54 | T061, T063, T065, T067, T071, T073, T075, T097, T123, T208, T608, T610, T612, T614, T616, T618, T620, T622, T624, T634, T636, T638, T640, T642, T644, T657, T660, T662, T664, T666, T673, T675, T677, T683, T699, T701, T714, T733, T735, T737, T741, T766, T785 |
 | AC-55 | T093, T125, T161, T163, T203, T211, T228, T693, T787, T789, T791, T799, T801, T803, T805 |
-| AC-56 | T157, T159, T161, T173, T203, T211, T681, T688, T693, T703, T710, T712, T716, T760, T762, T769, T771, T772, T777, T779, T781, T783, T795, T799, T807, T809, T811, T813, T823, T825, T827, T829, T831, T833, T835, T837 |
+| AC-56 | T157, T159, T161, T173, T203, T211, T681, T688, T693, T703, T710, T712, T716, T760, T762, T769, T771, T772, T777, T779, T781, T783, T795, T799, T807, T809, T811, T813, T823, T825, T827, T829, T831, T833, T835, T837, T841 |
 | AC-57 | T163, T203, T211, T228, T760, T762, T769 |
-| AC-58 | T163, T203, T211, T760, T762, T769, T772, T777, T779, T799, T807, T809, T811, T823, T825, T827, T829, T831, T833, T835, T837 |
-| AC-59 | T023, T157, T163, T169, T203, T211, T228, T681, T760, T831, T833, T835, T837 |
+| AC-58 | T163, T203, T211, T760, T762, T769, T772, T777, T779, T799, T807, T809, T811, T823, T825, T827, T829, T831, T833, T835, T837, T841 |
+| AC-59 | T023, T157, T163, T169, T203, T211, T228, T681, T760, T831, T833, T835, T837, T841 |
 | AC-60 | T077, T101, T163, T203, T211, T760, T831, T833, T835, T837 |
 | AC-61 | T163, T165, T203, T211, T831, T833, T835, T837 |
 | AC-62 | T163, T165, T203, T211, T760, T762, T831, T833, T835, T837 |
-| AC-63 | T157, T159, T161, T163, T173, T203, T211, T228, T681, T688, T693, T703, T710, T712, T716, T760, T762, T769, T771, T772, T777, T779, T781, T783, T795, T799, T807, T809, T811, T813, T823, T825, T827, T829, T831, T833, T835, T837 |
+| AC-63 | T157, T159, T161, T163, T173, T203, T211, T228, T681, T688, T693, T703, T710, T712, T716, T760, T762, T769, T771, T772, T777, T779, T781, T783, T795, T799, T807, T809, T811, T813, T823, T825, T827, T829, T831, T833, T835, T837, T841 |
 | AC-64 | T159, T161, T169, T173, T203, T211, T688, T693, T703, T710, T712, T716, T760, T762, T769 |
 | AC-65 | T093, T125, T196, T210, T228, T267 |
 | AC-66 | T069, T125, T131, T133, T151, T196, T210, T222, T226, T228, T229, T233, T265, T267, T679, T690, T744, T746, T747 |

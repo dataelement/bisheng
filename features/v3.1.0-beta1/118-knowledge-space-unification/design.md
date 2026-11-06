@@ -832,7 +832,7 @@ Skill的可见性不能兼任全局enabled状态：真实使用/选择边界avai
 
 ## W6持续实施（2026-11-07）
 
-W6持续实施；历史839编号：717已完成/历史交付、120当前待办、2外移；原137队列已完成34项、剩103项，另17张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
+W6持续实施；历史842编号：728已完成/历史交付、112当前待办、2外移；原137队列已完成36项、剩101项，另11张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
 
 109:3005由用户撤回后保持不动；109新独立项目已启动标准旧版本API/worker和真实中间件，真实注册/登录并准备隔离租户和mock模型，尚未执行F118迁移。用户选mock模型/ETL并免除本轮DM8实测；不免C2静态，也不以此代替MySQL事务、索引、投影和升级恢复演练。
 
@@ -845,3 +845,10 @@ W6持续实施；历史839编号：717已完成/历史交付、120当前待办�
 ## 停服后结构准备与正式基线
 
 旧版缺少F118新私有列与账本表，正式M2实际仓储读取前须在已停服且一致备份后执行中性DDL结构升级。顺序为：旧任务收尾/停所有写端→一致备份及原schema记录→仅中性DDL→正式原业务盘点/预检→全租户正式基线和计划freeze→业务转换/回填/新权限投影。DDL不做任何业务转换、seed或在线runtime启动；原业务事实摘要不把新列默认算成原业务变化，并记录备份/原新schema与DDL摘要。失败保持维护；脚本不检测/控制停服。详细边界见[W6§26](./wave6-completion-contract.md#26-停服维护中的中性结构准备顺序已冻结)。正式迁移命令尚未全部存在，当前不发布猜测命令。
+
+
+## 联合namespace权限计划的AC-80待确认口径
+
+实现前实际SSOT审计发现：同一权限模型从旧library目标改为SPACE目标时，全局非use selected/effective动作和等级可完全不变，但目标可适用动作发生变化。默认editor由旧库{use,edit}变为{edit,create_folder,upload_file}；manager/owner另适用原share；custom{use,upload_file}变为{upload_file}，不新增edit/rename/download。仅use模型继续只有原可见与撤销，不加其他动作。真实Catalog/ModelSnapshot/GrantService两例验证等级/allow_same与管理边界不变。
+
+用户异步确认待答：是否按同模型的现有SPACE能力执行并列为namespace预期适用变化，或严格保旧库动作、遇新增能力阻断。现spec AC-80仍保原“非use动作效果不变”文字，答复前不修改其语义，不冻结依赖此选择的联合权限计划、不执行namespace/FGA发布。已完成SQL阶段计划和broker/无关开发继续；问题确认后同步spec/design/升级/HTML。不是以新动作、改全局scope、替换model_key或增加文件edit解决此冲突。
