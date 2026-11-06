@@ -5250,6 +5250,14 @@
   **配对测试**：T657\
   **验证 / 完成条件**：配对与原visibility/检索回归全绿，真实ES/Milvus行为由后续E2E验，不先标T102全量完成。
 
+- [ ] **T659 · 检索成功态边界旧fixture对齐**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge/test_knowledge_file_visibility_primary_filter.py`；`src/backend/test/knowledge/test_knowledge_file_visibility_batch.py`\
+  **逻辑 / 测试上下文**：原仅权限/主版本的单测补_successful_file_ids成功集合边界，保原FGA/primary拒绝断言；真实SQL状态由T657覆盖，不连接中间件或绕生产过滤。\
+  **依赖**：T658\
+  **覆盖 AC**: AC-35, AC-48, AC-49, AC-52, AC-53\
+  **验证 / 完成条件**：明确原2失败为新增SQL边界缺fixture，新旧同选集全绿；仅两旧测试叶。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
