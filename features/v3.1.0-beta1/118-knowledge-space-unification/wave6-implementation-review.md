@@ -146,3 +146,12 @@ M2只读审进一步确认现在线LegacyEvidence要求已有BRR、仅target_mis
 metadata主树五路径70通过，EDGE固定独立复核77项及S/D只读scope空操作拒绝6项通过；v1原字段可带真实只读任务状态，v2原data=True保持，空旧请求不制造job/CAS/commit。实际原身份及一次schema+J1事务装配闭环，不以HTTP200称索引完成。来源上下文主树四路径162通过，EDGE组合165含跨TX/savepoint反例；codec独立发现193字符slot被错误放行，按真实ReferenceSpec上限192修复，原七反例全部通过，主树四路径136通过。保完整原业务修订，排除中性新增列；不将编码器当正式冻结。
 
 平台独立发现同parent SPA查询fileStatus变化未重建Files，固定3adc通过原六反例及组合129项；主树七路径146通过。T774官方lint:prune退出0，仅移除detail与Header共13行旧抑制。主树strict与冻结基线精确同22条，新增/移除均0，未宣称全库typecheck通过。以上均为本地native/组件验证；未将其计为MySQL升级、CI或浏览器E2E。当前原137队列完成28项、剩109项，当前接缝卡全部闭合；后续必要接缝仍须先冻结并登记。
+
+
+## 独立MySQL克隆的中性DDL准备演练（2026-11-07）
+
+仅在109独立F118项目的`bisheng_f118_probe_20261107`克隆库，以临时只读文件系统容器执行真实Alembic upgrade head；不启动API/worker、不做业务DML、不改原运行库或109:3005。运行时SQL守卫拒绝其他库、GRANT/数据库切换及除alembic_version外DML；配置只在临时目录以600权限保存，不回显凭据。候选archive 3ef4f26a1的Model/Alembic与受核主树6e90bf5bb相同，SHA256为`a9f15fe7b000fa04efd8a816f2e555d0c52c0826fd56d126d84f35eb30d45fbf`；此处只验证结构，不将其旧application代码当最新部署。
+
+实际从`v310b1_f004_workflow_soft_delete`升级到`f118_finalize_retry`，180张旧业务表共1617行的原列计数及确定摘要前后完全相同，8张新增账本表均为0行。正式证据在独立项目`evidence/preparatory-clone-neutral-ddl.json`，SHA256 `c10677f9c6d610e53514f5e34b083de1cff93b3f1b45a6a21989585839af31ad`；无凭据的执行脚本同目录`preparatory-clone-neutral-ddl-probe.py`。原后端仍是旧标准镜像，启动时间2026-11-06T12:16:13.795554937Z，未重启。
+
+这是准备阶段克隆演练，不是停服一致备份、正式M2冻结、M3转换/回填、恢复或新版E2E；T161–T174、T202/T203继续待办。正式维护仍按§26停服后重新备份、盘点并冻结，不复用本次克隆摘要作正式基线。
