@@ -86,6 +86,8 @@ class QueuedTaskInventoryReader:
         seen_keys, seen_cursors = set(), set()
         raw_cursor, values = _page(await self.redis.scan(match=pattern, count=BATCH))
         if type(raw_cursor) is dict:
+            if not raw_cursor:
+                _blocked("invalid_cluster_cursor")
             pending = []
             for name, cursor in raw_cursor.items():
                 name, cursor = _text(name), _cursor(cursor)
