@@ -50,7 +50,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceTenantMismatchError,
 )
 from bisheng.common.errcode.llm import WorkbenchEmbeddingError
-from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
+from bisheng.common.errcode.permission import PermissionDeniedError, PermissionEnumerationIncompleteError
 from bisheng.common.models.space_channel_member import (
     MembershipStatusEnum,
     SpaceChannelMember,
@@ -104,8 +104,13 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceListItemResp,
     SpaceSubscriptionStatusEnum,
 )
+from bisheng.knowledge.domain.schemas.processing_settings import ProcessingDefaults
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
     KnowledgeAuditTelemetryService,
+)
+from bisheng.knowledge.domain.services.knowledge_creation_policy import (
+    KnowledgeCreationContext,
+    KnowledgeCreationPolicy,
 )
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgeContainerPermissionRecord,
@@ -1242,18 +1247,38 @@ class KnowledgeSpaceService(KnowledgeUtils):
         creation_request_id: str | None = None,
         initial_permissions: InitialPermissionsRequest | None = None,
         skip_user_limit: bool = False,
+        embedding_model_id: int | None = None,
+        processing_defaults: ProcessingDefaults | None = None,
+        web_creation_context: KnowledgeCreationContext | None = None,
     ) -> KnowledgeSpaceCreateResp:
         """Create a new knowledge space, subject to the role-level creation quota."""
 
+        advanced = embedding_model_id is not None or processing_defaults is not None
+        if advanced and (
+            not isinstance(web_creation_context, KnowledgeCreationContext)
+            or web_creation_context.user_id != self.login_user.user_id
+        ):
+            raise PermissionDeniedError()
+        if web_creation_context is not None:
+            await KnowledgeCreationPolicy.revalidate(web_creation_context)
+        if embedding_model_id is not None and (type(embedding_model_id) is not int or embedding_model_id <= 0):
+            raise ValueError("embedding_model_id must be a positive integer")
+        defaults = (
+            ProcessingDefaults.model_validate(processing_defaults.model_dump(mode="json"))
+            if processing_defaults is not None
+            else None
+        )
         existing = await self._existing_creation(creation_request_id, None)
-        workbench_llm = None
+        selected_model_id = embedding_model_id
         if existing is None:
             if not skip_user_limit:
                 await self._assert_space_creation_quota()
 
-            workbench_llm = await LLMService.get_workbench_llm()
-            if not workbench_llm or not workbench_llm.embedding_model:
-                raise WorkbenchEmbeddingError()
+            if selected_model_id is None:
+                workbench_llm = await LLMService.get_workbench_llm()
+                if not workbench_llm or not workbench_llm.embedding_model:
+                    raise WorkbenchEmbeddingError()
+                selected_model_id = workbench_llm.embedding_model.id
 
         # Defence-in-depth: a tenant with the feature flag off must not be able to
         # configure auto-tag by hand-crafting requests. Normalize before hashing
@@ -1274,6 +1299,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             auto_tag_library_id=auto_tag_library_id,
             auto_tag_custom_tags=auto_tag_custom_tags,
             initial_permissions=initial_permissions,
+            embedding_model_id=embedding_model_id,
+            processing_defaults=defaults,
         )
         if existing is not None:
             if existing.creation_payload_hash != payload_hash:
@@ -1283,7 +1310,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 creation_request_id=creation_request_id,
                 initial_permissions=initial_permissions,
             )
-        if workbench_llm is None or workbench_llm.embedding_model is None:
+        if selected_model_id is None:
             raise WorkbenchEmbeddingError()
 
         # Library-id needs the freshly minted knowledge.id when we are upserting
@@ -1294,7 +1321,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             icon=icon,
             auth_type=auth_type,
             type=KnowledgeTypeEnum.SPACE.value,
-            model=workbench_llm.embedding_model.id,
+            model=selected_model_id,
+            processing_defaults=defaults.model_dump(mode="json") if defaults is not None else None,
             is_released=is_released,
             auto_tag_enabled=False,
             auto_tag_library_id=None,
@@ -1304,6 +1332,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         created = True
         try:
+            if web_creation_context is not None:
+                await KnowledgeCreationPolicy.revalidate(web_creation_context)
             knowledge_space = await self._create_space_with_model(db_knowledge)
         except IntegrityError:
             # A concurrent request with the same durable key won the insert.
@@ -1478,6 +1508,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         auto_tag_library_id: int | None,
         auto_tag_custom_tags: list[str] | None,
         initial_permissions: InitialPermissionsRequest | None,
+        embedding_model_id: int | None = None,
+        processing_defaults: ProcessingDefaults | None = None,
     ) -> str:
         payload = {
             "name": name,
@@ -1490,6 +1522,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "auto_tag_custom_tags": auto_tag_custom_tags,
             "initial_permissions": None,
         }
+        # Omitted fields retain the legacy command hash for durable retries.
+        if embedding_model_id is not None:
+            payload["embedding_model_id"] = embedding_model_id
+        if processing_defaults is not None:
+            payload["processing_defaults"] = processing_defaults.model_dump(mode="json")
         if initial_permissions is not None:
             grants = sorted(
                 (
