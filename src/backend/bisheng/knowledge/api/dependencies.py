@@ -5,6 +5,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.knowledge.application.metadata_legacy import build_legacy_metadata_service
 from bisheng.knowledge.domain.repositories.implementations.knowledge_chat_session_repository_impl import (
     KnowledgeChatSessionRepositoryImpl,
 )
@@ -80,7 +81,7 @@ async def get_knowledge_metadata_service(
     knowledge_file_repository: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
     permission_service: KnowledgePermissionService = Depends(KnowledgePermissionService),
 ) -> KnowledgeMetadataService:
-    return KnowledgeMetadataService(
+    return build_legacy_metadata_service(
         knowledge_repository=knowledge_repository,
         knowledge_file_repository=knowledge_file_repository,
         permission_service=permission_service,

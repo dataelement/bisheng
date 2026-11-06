@@ -1,6 +1,6 @@
 import copy
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol
 
 from fastapi import BackgroundTasks
 
@@ -12,36 +12,66 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeMetadataFieldImmutableError,
     KnowledgeMetadataFieldNotExistError,
     KnowledgeNotExistError,
+    KnowledgeProcessingConflictError,
 )
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
-from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, UpdateKnowledgeMetadataFieldsReq
+from bisheng.knowledge.domain.schemas.knowledge_schema import (
+    AddKnowledgeMetadataFieldsReq,
+    UpdateKnowledgeMetadataFieldsReq,
+)
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.utils.util import retry_async
+
+
+class MetadataSchemaWriter(Protocol):
+    async def achange(self, login_user: UserPayload, space_id: int, changes: list[dict]) -> dict: ...
 
 
 class KnowledgeMetadataService:
     """Encapsulates metadata field operations for knowledge domain."""
 
     def __init__(
-            self,
-            knowledge_repository: KnowledgeRepository,
-            knowledge_file_repository: KnowledgeFileRepository,
-            permission_service: KnowledgePermissionService,
+        self,
+        knowledge_repository: KnowledgeRepository,
+        knowledge_file_repository: KnowledgeFileRepository,
+        permission_service: KnowledgePermissionService,
+        space_writer: MetadataSchemaWriter | None = None,
     ):
         self.knowledge_repository = knowledge_repository
         self.knowledge_file_repository = knowledge_file_repository
         self.permission_service = permission_service
+        self.space_writer = space_writer
+
+    async def _change_space(self, login_user, space_id, changes):
+        if self.space_writer is None:
+            raise KnowledgeProcessingConflictError(reason="metadata_writer_unavailable")
+        return await self.space_writer.achange(login_user, space_id, changes)
 
     async def add_metadata_fields(
-            self,
-            login_user: UserPayload,
-            add_metadata_fields: AddKnowledgeMetadataFieldsReq,
+        self,
+        login_user: UserPayload,
+        add_metadata_fields: AddKnowledgeMetadataFieldsReq,
     ):
         knowledge_model = await self.knowledge_repository.find_by_id(entity_id=add_metadata_fields.knowledge_id)
         if not knowledge_model:
             raise KnowledgeNotExistError()
+
+        if knowledge_model.type == KnowledgeTypeEnum.SPACE.value:
+            return await self._change_space(
+                login_user,
+                knowledge_model.id,
+                [
+                    {
+                        "operation": "add",
+                        "field_name": field.field_name,
+                        "field_type": field.model_dump(mode="json")["field_type"],
+                    }
+                    for field in add_metadata_fields.metadata_fields
+                ],
+            )
 
         await self.permission_service.ensure_knowledge_write_async(
             login_user=login_user,
@@ -70,14 +100,24 @@ class KnowledgeMetadataService:
         return await self.knowledge_repository.update(knowledge_model)
 
     async def update_metadata_fields(
-            self,
-            login_user: UserPayload,
-            update_metadata_fields: UpdateKnowledgeMetadataFieldsReq,
-            background_tasks: BackgroundTasks,
+        self,
+        login_user: UserPayload,
+        update_metadata_fields: UpdateKnowledgeMetadataFieldsReq,
+        background_tasks: BackgroundTasks,
     ):
         knowledge_model = await self.knowledge_repository.find_by_id(entity_id=update_metadata_fields.knowledge_id)
         if not knowledge_model:
             raise KnowledgeNotExistError()
+
+        if knowledge_model.type == KnowledgeTypeEnum.SPACE.value:
+            return await self._change_space(
+                login_user,
+                knowledge_model.id,
+                [
+                    {"operation": "rename", "field_name": field.old_field_name, "new_field_name": field.new_field_name}
+                    for field in update_metadata_fields.metadata_fields
+                ],
+            )
 
         await self.permission_service.ensure_knowledge_write_async(
             login_user=login_user,
@@ -129,15 +169,22 @@ class KnowledgeMetadataService:
         return knowledge_model
 
     async def delete_metadata_fields(
-            self,
-            login_user: UserPayload,
-            knowledge_id: int,
-            field_names: list[str],
-            background_tasks: BackgroundTasks,
+        self,
+        login_user: UserPayload,
+        knowledge_id: int,
+        field_names: list[str],
+        background_tasks: BackgroundTasks,
     ):
         knowledge_model = await self.knowledge_repository.find_by_id(entity_id=knowledge_id)
         if not knowledge_model:
             raise KnowledgeNotExistError()
+
+        if knowledge_model.type == KnowledgeTypeEnum.SPACE.value:
+            return await self._change_space(
+                login_user,
+                knowledge_model.id,
+                [{"operation": "delete", "field_name": name} for name in field_names],
+            )
 
         await self.permission_service.ensure_knowledge_write_async(
             login_user=login_user,
@@ -185,10 +232,10 @@ class KnowledgeMetadataService:
         return {"knowledge_id": knowledge_model.id, "metadata_fields": knowledge_model.metadata_fields or []}
 
     async def update_vectorstore_metadata_field_names(
-            self,
-            invoke_user_id: int,
-            knowledge_model: Any,
-            field_name_map: dict[str, str],
+        self,
+        invoke_user_id: int,
+        knowledge_model: Any,
+        field_name_map: dict[str, str],
     ) -> None:
         knowledge_model_files = await self.knowledge_file_repository.find_all(knowledge_id=knowledge_model.id)
 
@@ -254,10 +301,10 @@ class KnowledgeMetadataService:
             await self.knowledge_file_repository.update(knowledge_file)
 
     async def delete_vectorstore_metadata_fields(
-            self,
-            invoke_user_id: int,
-            knowledge_model: Any,
-            field_names: list[str],
+        self,
+        invoke_user_id: int,
+        knowledge_model: Any,
+        field_names: list[str],
     ) -> None:
         knowledge_model_files = await self.knowledge_file_repository.find_all(knowledge_id=knowledge_model.id)
 
