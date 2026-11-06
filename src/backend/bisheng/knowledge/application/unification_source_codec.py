@@ -14,7 +14,14 @@ from bisheng.knowledge.application.unification_sources import (
 )
 from bisheng.knowledge.domain.repositories.unification_target_repository import KnowledgeMigrationTargetFact
 from bisheng.llm.domain.repositories.migration_target_repository import ModelMigrationTargetFact
-from bisheng.resource_reference.application.contracts import SourceKey, SourceRootKey, SourceType, TargetKey, TargetType
+from bisheng.resource_reference.application.contracts import (
+    ReferenceSpec,
+    SourceKey,
+    SourceRootKey,
+    SourceType,
+    TargetKey,
+    TargetType,
+)
 
 _MAX_BYTES = 16 * 1024 * 1024
 _KEYS = {
@@ -225,10 +232,15 @@ def _record(value, tenant_id):
     if cls is SourceInventoryRecord:
         _text(item["extractor_version"], 64)
     if cls is ReferenceInventoryRecord:
-        _text(item["slot_key"], 255)
+        if type(item["slot_key"]) is not str:
+            _invalid()
         if type(item["origin"]) is not str or item["origin"] not in {"explicit_id", "resolved_name"}:
             _invalid()
         item["target"] = _key(item["target"], TargetKey)
+        try:
+            ReferenceSpec(item["slot_key"], item["target"])
+        except (ValueError, TypeError):
+            _invalid()
         item["physical_fact"] = _fact(item["physical_fact"], item["target"])
     return cls(**item)
 
