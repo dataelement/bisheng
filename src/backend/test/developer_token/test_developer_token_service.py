@@ -42,6 +42,7 @@ def _token(**kwargs):
         "id": 1,
         "tenant_id": 5,
         "user_id": 7,
+        "knowledge_uploader_user_id": 7,
         "name": "api",
         "token_hash": "hash",
         "token_ciphertext": DeveloperTokenService._encrypt_plaintext("bst_secret"),
@@ -62,6 +63,7 @@ def _read(row: DeveloperToken):
         id=row.id,
         tenant_id=row.tenant_id,
         user_id=row.user_id,
+        knowledge_uploader_user_id=getattr(row, "knowledge_uploader_user_id", None),
         name=row.name,
         token_prefix=row.token_prefix,
         enabled=row.enabled,
@@ -85,6 +87,7 @@ async def test_create_token_returns_secret_once(monkeypatch):
     monkeypatch.setattr(DeveloperTokenService, "repository", Repo)
     monkeypatch.setattr(DeveloperTokenService, "_resolve_binding_tenant", AsyncMock(return_value=5))
     monkeypatch.setattr(DeveloperTokenService, "_to_read", AsyncMock(side_effect=_read))
+    monkeypatch.setattr(DeveloperTokenService, "_validate_knowledge_uploader", AsyncMock())
     monkeypatch.setattr(
         "bisheng.developer_token.domain.services.developer_token_service.AuditLogDao",
         SimpleNamespace(ainsert_v2=AsyncMock()),
@@ -95,6 +98,7 @@ async def test_create_token_returns_secret_once(monkeypatch):
         DeveloperTokenCreate(
             name="api",
             user_id=7,
+            knowledge_uploader_user_id=7,
             department_id=20,
             route_whitelist=[{"match_type": "PATH", "path": "/api/v9/not-registered"}],
         ),
@@ -115,7 +119,7 @@ async def test_tenant_admin_cannot_bind_cross_tenant_user(monkeypatch):
     with pytest.raises(DeveloperTokenAdminForbiddenError):
         await DeveloperTokenService.create_token(
             _Operator(tenant_admin=False),
-            DeveloperTokenCreate(name="api", user_id=7, department_id=80),
+            DeveloperTokenCreate(name="api", user_id=7, knowledge_uploader_user_id=7, department_id=80),
         )
 
 
@@ -204,6 +208,7 @@ async def test_update_token_rebinds_from_selected_department(monkeypatch):
 
     monkeypatch.setattr(DeveloperTokenService, "repository", Repo)
     monkeypatch.setattr(DeveloperTokenService, "_resolve_binding_tenant", AsyncMock(return_value=5))
+    monkeypatch.setattr(DeveloperTokenService, "_validate_knowledge_uploader", AsyncMock())
     monkeypatch.setattr(DeveloperTokenService, "_to_read", AsyncMock(side_effect=_read))
     monkeypatch.setattr(
         "bisheng.developer_token.domain.services.developer_token_service.AuditLogDao",

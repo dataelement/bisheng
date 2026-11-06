@@ -50,6 +50,7 @@ interface TokenFormState {
   id?: number
   name: string
   user: DepartmentUserOption[]
+  knowledge_uploader: DepartmentUserOption[]
   binding_changed: boolean
   enabled: boolean
   override_ip_whitelist: boolean
@@ -71,6 +72,13 @@ function toForm(row?: DeveloperTokenDetail): TokenFormState {
       value: Number(row.user_id),
       tenant_id: row.tenant_id,
     }] : [],
+    knowledge_uploader: row?.knowledge_uploader_user_id
+      ? [{
+          label: row.knowledge_uploader_user_name || String(row.knowledge_uploader_user_id),
+          value: Number(row.knowledge_uploader_user_id),
+          tenant_id: row.tenant_id,
+        }]
+      : [],
     binding_changed: false,
     enabled: row?.enabled ?? true,
     override_ip_whitelist: row?.override_ip_whitelist ?? false,
@@ -85,6 +93,7 @@ function toForm(row?: DeveloperTokenDetail): TokenFormState {
 }
 
 function asPayload(form: TokenFormState): DeveloperTokenPayload {
+  const uploaderId = form.knowledge_uploader[0]?.value
   const payload: DeveloperTokenPayload = {
     name: form.name.trim(),
     enabled: form.enabled,
@@ -94,6 +103,7 @@ function asPayload(form: TokenFormState): DeveloperTokenPayload {
     rate_limit_per_minute: parseLimit(form.rate_limit_per_minute),
     route_whitelist: normalizeDeveloperTokenRouteWhitelist(form.route_whitelist),
     file_sync_rule: fileSyncRuleForSave(form.file_sync_rule),
+    knowledge_uploader_user_id: uploaderId,
   }
   if (!form.id || form.binding_changed) {
     const selected = form.user[0]
@@ -182,6 +192,7 @@ export default function DeveloperToken() {
       user: value,
       binding_changed: true,
       tenant_id: selectedTenantId,
+      knowledge_uploader: bindingChanged ? [] : form.knowledge_uploader,
       file_sync_rule: bindingChanged ? null : form.file_sync_rule,
       file_sync_target_display: bindingChanged ? null : form.file_sync_target_display,
     })
@@ -271,6 +282,14 @@ export default function DeveloperToken() {
         title: t("prompt"),
         variant: "error",
         description: t("system.developerToken.requiredError"),
+      })
+      return
+    }
+    if (form.knowledge_uploader.length === 0) {
+      toast({
+        title: t("prompt"),
+        variant: "error",
+        description: t("system.developerToken.knowledgeUploaderRequiredError"),
       })
       return
     }
@@ -442,6 +461,19 @@ export default function DeveloperToken() {
               />
               {form.user[0]?.department_path && (
                 <div className="text-xs text-muted-foreground">{form.user[0].department_path}</div>
+              )}
+            </div>
+            <div className="space-y-1 text-sm md:col-span-2">
+              <span>{t("system.developerToken.fields.knowledgeUploader")}</span>
+              <DepartmentUsersSelect
+                multiple={false}
+                value={form.knowledge_uploader}
+                onChange={(value) => setForm({ ...form, knowledge_uploader: value })}
+                placeholder={t("system.developerToken.selectKnowledgeUploader")}
+                searchPlaceholder={t("system.developerToken.searchKnowledgeUploader")}
+              />
+              {form.knowledge_uploader[0]?.department_path && (
+                <div className="text-xs text-muted-foreground">{form.knowledge_uploader[0].department_path}</div>
               )}
             </div>
             <label className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">

@@ -117,6 +117,7 @@ class DeveloperTokenPrincipal(BaseModel):
     token_name: str = ""
     tenant_id: int
     user: UserPayload
+    knowledge_uploader_user_id: int | None = None
     raw_file_sync_rule: dict | None = None
 
 
@@ -217,6 +218,7 @@ class DeveloperTokenRouteRule(BaseModel):
 class DeveloperTokenCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     user_id: int
+    knowledge_uploader_user_id: int
     department_id: int | None = None
     dept_id: str | None = None
     enabled: bool = True
@@ -231,6 +233,7 @@ class DeveloperTokenCreate(BaseModel):
 class DeveloperTokenUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=128)
     user_id: int | None = None
+    knowledge_uploader_user_id: int | None = None
     department_id: int | None = None
     dept_id: str | None = None
     enabled: bool | None = None
@@ -248,6 +251,8 @@ class DeveloperTokenRead(BaseModel):
     tenant_name: str | None = None
     user_id: int
     user_name: str | None = None
+    knowledge_uploader_user_id: int | None = None
+    knowledge_uploader_user_name: str | None = None
     name: str
     token_prefix: str
     enabled: bool

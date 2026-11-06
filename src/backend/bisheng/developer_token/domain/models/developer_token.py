@@ -20,6 +20,15 @@ class DeveloperToken(SQLModelSerializable, table=True):
     user_id: int = Field(
         sa_column=Column(Integer, nullable=False, index=True, comment="Bound user ID"),
     )
+    knowledge_uploader_user_id: int | None = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            nullable=True,
+            index=True,
+            comment="知识上传人用户 ID (Filelib 未传 external_id 时写入知识文件的上传人)",
+        ),
+    )
     name: str = Field(
         sa_column=Column(String(128), nullable=False, comment="Developer token name"),
     )

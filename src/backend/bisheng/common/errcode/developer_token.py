@@ -79,3 +79,23 @@ class DeveloperTokenInvalidFileSyncTargetCursorError(BaseErrorCode):
     @property
     def http_status(self) -> int:
         return self.HttpStatus
+
+
+class DeveloperTokenKnowledgeUploaderMissingError(BaseErrorCode):
+    Code: int = 19815
+    Msg: str = "developer_token_knowledge_uploader_missing"
+    HttpStatus: int = 422
+
+    @property
+    def http_status(self) -> int:
+        return self.HttpStatus
+
+
+class DeveloperTokenKnowledgeUploaderInvalidError(BaseErrorCode):
+    Code: int = 19816
+    Msg: str = "developer_token_knowledge_uploader_invalid"
+    HttpStatus: int = 422
+
+    @property
+    def http_status(self) -> int:
+        return self.HttpStatus

@@ -36,6 +36,28 @@ async def get_developer_token_principal(
         DeveloperTokenService.reset_auth_context(principal.user)
 
 
+async def get_optional_developer_token_principal(
+    request: Request,
+) -> AsyncGenerator[DeveloperTokenPrincipal | None, None]:
+    """Same as ``get_developer_token_principal`` but yields ``None`` when the header is absent."""
+    raw = (request.headers.get("X-Developer-Token") or "").strip()
+    if not raw:
+        yield None
+        return
+    principal = await DeveloperTokenService.authenticate_principal(
+        raw,
+        request_ip=get_request_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        endpoint_key=_get_developer_token_endpoint_key(request),
+        request_method=request.method.upper(),
+        route_path=_get_developer_token_route(request)[1],
+    )
+    try:
+        yield principal
+    finally:
+        DeveloperTokenService.reset_auth_context(principal.user)
+
+
 async def get_developer_token_user(
     principal: DeveloperTokenPrincipal = Depends(get_developer_token_principal),
 ) -> UserPayload:

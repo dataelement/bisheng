@@ -8,6 +8,7 @@ from langchain_core.documents import Document
 from starlette.concurrency import run_in_threadpool
 
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import KnowledgeFileDeleteError, KnowledgeSharedStorageUnavailableError
 from bisheng.common.errcode.knowledge_space import SpaceFileNotFoundError
 from bisheng.core.cache.utils import save_download_file
@@ -22,10 +23,11 @@ logger = logging.getLogger(__name__)
 
 
 class FilelibSpaceCommandService:
-    def __init__(self, *, query: FilelibSpaceQueryService) -> None:
+    def __init__(self, *, query: FilelibSpaceQueryService, record_user: UserPayload | None = None) -> None:
         self.query = query
         self.repository, self.owner = query.repository, query.space_service
         self.user, self.request = query.user, query.request
+        self.record_user = record_user or self.user
 
     async def create(self, data: FilelibSpaceCreate) -> Any:
         route = await self.query.route(write=True)
@@ -75,7 +77,12 @@ class FilelibSpaceCommandService:
         limit = await QuotaService.get_knowledge_space_upload_limit_bytes(self.user)
         if synchronous:
             return await run_in_threadpool(
-                KnowledgeService.sync_process_knowledge_file, self.request, self.user, data, upload_limit_bytes=limit
+                KnowledgeService.sync_process_knowledge_file,
+                self.request,
+                self.user,
+                data,
+                upload_limit_bytes=limit,
+                record_user=self.record_user,
             )
         return await KnowledgeService.aprocess_knowledge_file(
             request=self.request,
@@ -83,6 +90,7 @@ class FilelibSpaceCommandService:
             req_data=data,
             background_tasks=background_tasks,
             upload_limit_bytes=limit,
+            record_user=self.record_user,
         )
 
     async def delete_files(self, file_ids: list[int]) -> None:
@@ -136,7 +144,10 @@ class FilelibSpaceCommandService:
         )
         limit = await QuotaService.get_knowledge_space_upload_limit_bytes(self.user)
         knowledge, failed, files, _ = await KnowledgeService.asave_knowledge_file(
-            self.user, data, upload_limit_bytes=limit
+            self.user,
+            data,
+            upload_limit_bytes=limit,
+            record_user=self.record_user,
         )
         if failed:
             return failed[0]
