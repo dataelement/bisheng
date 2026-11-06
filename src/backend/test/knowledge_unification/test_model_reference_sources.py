@@ -189,7 +189,13 @@ async def test_continuation_fresh_permissions_and_trace_change_but_no_stale_cred
         seed(session, ident=str(i))
     await session.commit()
     with original.actor() as user:
-        user._runtime_credential_reference = {"kind": "service_account", "id": 9, "token_version": 1}
+        user._runtime_credential_reference = {
+            "kind": "web",
+            "user_id": 7,
+            "tenant_id": 101,
+            "token_version": 1,
+            "expires_at": "2030-01-01T00:00:00Z",
+        }
         result = await first(impact, user)
         cursor = result.source_page.next_cursor
         trace = trace_id_var.set("a-different-request")
@@ -197,13 +203,55 @@ async def test_continuation_fresh_permissions_and_trace_change_but_no_stale_cred
             owner.hidden.add("2")
             page = await following(impact, user, cursor)
             assert page.data == () and not page.has_more and page.next_cursor is None
-            user._runtime_credential_reference = {"kind": "service_account", "id": 9, "token_version": 2}
+            user._runtime_credential_reference = {**user._runtime_credential_reference, "token_version": 2}
             with pytest.raises(ResourceReferenceInvalidError):
                 await following(impact, user, cursor)
         finally:
             trace_id_var.reset(trace)
     with original.actor(admin=False) as denied, pytest.raises(original.LLMModelSharedReadonlyError):
         await following(impact, denied, cursor)
+
+
+async def test_original_openapi_d_user_admin_does_not_gain_a_new_web_only_credential_gate(impact):
+    from bisheng.open_api.domain.context import (
+        OpenApiPrincipal,
+        reset_current_open_api_principal,
+        set_current_open_api_principal,
+    )
+
+    session, service, _ = impact
+    metadata(service)
+    for i in range(3):
+        seed(session, ident=str(i))
+    await session.flush()
+    principal = OpenApiPrincipal(
+        credential_id=9,
+        actor_kind="natural_person",
+        actor_id=7,
+        actor_name="operator",
+        tenant_id=101,
+        resource_owner_user_id=7,
+        scopes=frozenset({"scope-b", "scope-a"}),
+        mode="D",
+        authorization_subject_type="user",
+        authorization_subject_id=7,
+        effective_user_id=7,
+    )
+    token = set_current_open_api_principal(principal)
+    try:
+        with original.actor() as user:
+            assert user._runtime_credential_reference is None
+            result = await first(impact, user)
+            page = await following(impact, user, result.source_page.next_cursor)
+            assert page.data[0].disclosure.source.source_id == "2"
+            changed = set_current_open_api_principal(principal.model_copy(update={"credential_id": 10}))
+            try:
+                with pytest.raises(ResourceReferenceInvalidError):
+                    await following(impact, user, result.source_page.next_cursor)
+            finally:
+                reset_current_open_api_principal(changed)
+    finally:
+        reset_current_open_api_principal(token)
 
 
 async def test_still_admin_narrowed_scope_and_model_revision_cannot_reuse_a_source_cursor(impact):
