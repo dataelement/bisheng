@@ -577,3 +577,51 @@ class ReferenceRepository:
                 .scalars()
                 .all()
             )
+
+    async def alist_inbound_for_owner_page(
+        self, session: AsyncSession, scope: OwnerTargetScope, *, after_id: int | None = None, limit: int = 200
+    ) -> tuple[BusinessResourceReference, ...]:
+        """Seek one exact Owner's targets, preserving incomplete-source failures.
+
+        The source join includes the entire identity. An OUTER JOIN makes an
+        orphaned or unready set an explicit coverage error instead of erasing
+        its blocking binding. Paused business configurations remain effective.
+        """
+        self._check_scope(session, scope)
+        if type(limit) is not int or not 1 <= limit <= 200:
+            raise ValueError("inbound page limit must be 1..200")
+        if after_id is not None and (type(after_id) is not int or after_id < 0):
+            raise ValueError("inbound cursor must be a non-negative reference ID")
+        source, binding = BusinessReferenceSet, BusinessResourceReference
+        query = (
+            self._target_query(scope.targets)
+            .add_columns(source)
+            .outerjoin(
+                source,
+                and_(
+                    source.tenant_id == binding.tenant_id,
+                    source.source_type == binding.source_type,
+                    source.source_id == binding.source_id,
+                    source.source_version == binding.source_version,
+                ),
+            )
+            .limit(limit)
+            .with_for_update()
+        )
+        if after_id is not None:
+            query = query.where(binding.id > after_id)
+        with bypass_tenant_filter():
+            rows = (await session.execute(query)).all()
+        result = []
+        for reference, indexed in rows:
+            if (
+                indexed is None
+                or indexed.record_kind != "source"
+                or not indexed.ready
+                or not indexed.effective
+                or indexed.source_revision != reference.source_revision
+            ):
+                raise ReferenceCoverageNotReadyError(reason="reference_inbound_source_incomplete")
+            result.append(reference)
+        self._check_scope(session, scope)
+        return tuple(result)
