@@ -35,6 +35,8 @@ AS HTTP query 默认 visible，受支持显式 use 按 visible 解释；WS 原 u
 
 ## 5. 测试、交接与合流
 
+实施中补充单叶 T604（INT）：旧 test/permission/test_capability_authorization.py 的 Skill disabled direct-use 断言须移至管理可见/运行禁用分离；该文件另有3个已实测既有 Grant/Catalog fixture 失败，按现纯可见/作用域形状对齐，原租户/owner/撤Source/投影断言不删。本波共20个原卡+7个接缝叶子，仍无新增产品要求。
+
 所有 lane 从本合同提交建立独立 worktree，只有指定文件可写；旧回归叶子按 tasks 登记由相应 lane 唯一维护，docs/tasks/locale/总装配归 INT。先提交行为红测，再实现；既有正确逻辑可记录首轮绿，不伪造红。语义变化的旧 fixture 保留原拒绝/失败/租户/投影断言，只替换退休动作输入。禁止新增生产 fake、联网依赖安装、真实迁移、push/部署。
 
 后端复用主工作区只读 .venv 与 config.yaml，PYTHONPATH 指向当前 lane 的 src/backend，验证 __file__ 不串主源码；SQLite/Port double 不替代 MySQL/DM8/FGA。前端只用已有离线依赖，验证当前 feature 源码；不改锁文件/依赖、不以全库既有错误扩大修复范围。
