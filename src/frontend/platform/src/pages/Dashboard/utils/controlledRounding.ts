@@ -55,16 +55,29 @@ function partitions(table: ShareTable, scale: number): boolean {
   return cells.every(row => row.every(value => value >= -UNIT_EPSILON))
 }
 
-// Largest remainder. Each part stays on one side of its exact value, and the parts sum to target.
-function apportion(exact: number[], target: number): number[] | null {
+// Largest remainder. The parts sum to target. A normal 100% split moves each part by at most one unit.
+function apportion(exact: number[], target: number): number[] {
   const base = exact.map(value => floorUnits(value))
+  const fraction = exact.map((value, index) => value - base[index])
   let leftover = target - sum(base)
-  if (leftover < 0) return null
-  const order = exact
-    .map((value, index) => ({ index, fraction: value - base[index] }))
-    .sort((left, right) => right.fraction - left.fraction || left.index - right.index)
-  if (leftover > order.length) return null
-  for (let step = 0; step < leftover; step++) base[order[step].index] += 1
+  const indexes = exact.map((_, index) => index)
+  let guard = 0
+  while (leftover !== 0 && guard++ < exact.length * 4 + Math.abs(leftover)) {
+    if (leftover > 0) {
+      indexes.sort((left, right) => fraction[right] - fraction[left] || left - right)
+      const index = indexes[0]
+      base[index] += 1
+      fraction[index] -= 1
+      leftover -= 1
+      continue
+    }
+    indexes.sort((left, right) => fraction[left] - fraction[right] || left - right)
+    const index = indexes.find(item => base[item] > 0)
+    if (index === undefined) break
+    base[index] -= 1
+    fraction[index] += 1
+    leftover += 1
+  }
   return base
 }
 
@@ -147,38 +160,80 @@ function assignIncrements(
   return taken
 }
 
-function nearestTable(cells: number[][], scale: number): ShareTable {
-  const rounded = cells.map(row => row.map(value => Math.round(toUnits(value, scale))))
-  const rowTotals = rounded.map(row => sum(row))
-  const columnTotals = rounded[0].map((_, column) => rounded.reduce((total, row) => total + row[column], 0))
+function fromUnits(cells: number[][], scale: number): ShareTable {
+  const rowTotals = cells.map(row => sum(row))
+  const columnTotals = cells[0].map((_, column) => cells.reduce((total, row) => total + row[column], 0))
   return {
-    cells: rounded.map(row => row.map(units => units / scale)),
+    cells: cells.map(row => row.map(units => units / scale)),
     rowTotals: rowTotals.map(units => units / scale),
     columnTotals: columnTotals.map(units => units / scale),
     grandTotal: sum(rowTotals) / scale,
   }
 }
 
+// The footer is what readers add up. Snap it to the rounded grand total even when a cell
+// is slightly off its rollup, then move that same 0.1 into the cell with the largest fraction.
+function lockFooter(table: ShareTable, scale: number): ShareTable | null {
+  const grandExact = toUnits(table.grandTotal, scale)
+  const grandTarget = Math.round(grandExact)
+  const columnExact = table.columnTotals.map(value => toUnits(value, scale))
+  if (Math.abs(sum(columnExact) - grandExact) > 1 + UNIT_EPSILON) return null
+  const columnTargets = apportion(columnExact, grandTarget)
+  if (sum(columnTargets) !== grandTarget) return null
+
+  const exactCells = table.cells.map(row => row.map(value => toUnits(value, scale)))
+  const structuralZero = exactCells.map(row => row.map(value => value <= UNIT_EPSILON))
+  const fractions = exactCells.map(row => row.map(value => value - floorUnits(value)))
+  const rounded = exactCells.map((row, rowIndex) => row.map((value, columnIndex) => (
+    structuralZero[rowIndex][columnIndex] ? 0 : Math.round(value)
+  )))
+
+  for (let column = 0; column < columnTargets.length; column++) {
+    let need = columnTargets[column] - rounded.reduce((total, row) => total + row[column], 0)
+    let guard = 0
+    while (need !== 0 && guard++ < rounded.length * 4 + Math.abs(need)) {
+      const step = need > 0 ? 1 : -1
+      let best = -1
+      let bestScore = step > 0 ? -Infinity : Infinity
+      for (let row = 0; row < rounded.length; row++) {
+        if (structuralZero[row][column]) continue
+        if (step < 0 && rounded[row][column] + step < 0) continue
+        const score = fractions[row][column]
+        const better = step > 0 ? score > bestScore : score < bestScore
+        if (better) {
+          best = row
+          bestScore = score
+        }
+      }
+      if (best < 0) break
+      rounded[best][column] += step
+      fractions[best][column] -= step
+      need -= step
+    }
+  }
+  return fromUnits(rounded, scale)
+}
+
 export function reconcileShareRatios(table: ShareTable, decimalPlaces: number): ShareTable | null {
   if (table.cells.length === 0 || table.cells[0].length === 0) return null
   const scale = scaleFor(decimalPlaces)
-  if (!partitions(table, scale)) return null
+  if (!partitions(table, scale)) return lockFooter(table, scale)
 
   const cells = table.cells.map(row => row.map(value => toUnits(value, scale)))
   const grand = Math.round(toUnits(table.grandTotal, scale))
   const rowTargets = apportion(table.rowTotals.map(value => toUnits(value, scale)), grand)
   const columnTargets = apportion(table.columnTotals.map(value => toUnits(value, scale)), grand)
-  if (!rowTargets || !columnTargets) return nearestTable(table.cells, scale)
+  if (sum(rowTargets) !== grand || sum(columnTargets) !== grand) return lockFooter(table, scale)
 
   const floors = cells.map(row => row.map(value => floorUnits(value)))
   const eligible = cells.map((row, rowIndex) => row.map((value, columnIndex) => value - floors[rowIndex][columnIndex] > UNIT_EPSILON))
   const fractions = cells.map((row, rowIndex) => row.map((value, columnIndex) => value - floors[rowIndex][columnIndex]))
   const rowNeed = rowTargets.map((target, row) => target - sum(floors[row]))
   const columnNeed = columnTargets.map((target, column) => target - floors.reduce((total, row) => total + row[column], 0))
-  if (rowNeed.some(need => need < 0) || columnNeed.some(need => need < 0)) return nearestTable(table.cells, scale)
+  if (rowNeed.some(need => need < 0) || columnNeed.some(need => need < 0)) return lockFooter(table, scale)
 
   const increments = assignIncrements(eligible, fractions, rowNeed, columnNeed)
-  if (!increments) return nearestTable(table.cells, scale)
+  if (!increments) return lockFooter(table, scale)
 
   const rounded = floors.map((row, rowIndex) => row.map((value, columnIndex) => value + (increments[rowIndex][columnIndex] ? 1 : 0)))
   return {
