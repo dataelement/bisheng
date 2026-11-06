@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userContext } from "@/contexts/userContext";
 import KnowledgeFile from "@/pages/KnowledgePage/KnowledgeFile";
+import type { KnowledgeSpaceInfo, KnowledgeVisibleQuery } from "@/controllers/API/knowledgeSpace";
 
 const testState = vi.hoisted(() => ({ hasAbnormal: true }));
 const visibleQuery = vi.hoisted(() => vi.fn());
@@ -29,7 +30,10 @@ function renderPage(page: ReactNode) {
 describe("F064 document KB list file abnormal status", () => {
   beforeEach(() => {
     testState.hasAbnormal = true; visibleQuery.mockReset(); navigate.mockReset();
-    visibleQuery.mockImplementation(async () => ({ data: [{ id: 41, name: "Policy KB", description: "Description", state: 1, actions: ["visible"], update_time: "2026-09-10T10:00:00", user_name: "Owner", has_abnormal_files: testState.hasAbnormal }], page_size: 20, has_more: false, next_cursor: null }));
+    visibleQuery.mockImplementation(async () => {
+      const space: KnowledgeSpaceInfo = { id: 41, name: "Policy KB", description: "Description", state: 1, actions: ["visible"], update_time: "2026-09-10T10:00:00", user_name: "Owner", has_abnormal_files: testState.hasAbnormal };
+      return { data: [space], page_size: 20, has_more: false, next_cursor: null };
+    });
   });
   afterEach(() => { cleanup(); clients.splice(0).forEach(client => client.clear()); });
 
@@ -48,7 +52,8 @@ describe("F064 document KB list file abnormal status", () => {
     renderPage(<KnowledgeFile scope={scope} />); await screen.findByText("Policy KB");
     fireEvent.click(screen.getByRole("combobox", { name: "fileStatusFilterLabel" }));
     fireEvent.click(screen.getByRole("option", { name: "fileStatusAbnormal" }));
-    await waitFor(() => expect(visibleQuery).toHaveBeenCalledWith({ page_size: 20, has_abnormal: true }));
+    const query: KnowledgeVisibleQuery = { page_size: 20, has_abnormal: true };
+    await waitFor(() => expect(visibleQuery).toHaveBeenCalledWith(query));
   });
   it("opens an abnormal library without prefiltering the file list", async () => {
     renderPage(<KnowledgeFile scope={scope} />);

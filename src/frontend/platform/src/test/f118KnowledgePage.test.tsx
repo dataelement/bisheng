@@ -10,6 +10,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userContext } from "@/contexts/userContext";
 import KnowledgePage from "@/pages/KnowledgePage";
+import type { KnowledgeAdminQuery, KnowledgeVisibleQuery } from "@/controllers/API/knowledgeSpace";
 const pageWindow = window as Window & { LibPage?: { type: string } };
 
 const mocks = vi.hoisted(() => ({
@@ -288,7 +289,8 @@ it.each(["ordinary", "admin"])("retires %s pagination when abnormal filtering ch
   const filter = (label: string) => { fireEvent.click(screen.getByRole("combobox", { name: "fileStatusFilterLabel" })); fireEvent.click(screen.getByRole("option", { name: label })); };
   filter("fileStatusAbnormal");
   const first = view === "ordinary" ? { page_size: 20 } : { page: 1, page_size: 20 };
-  await waitFor(() => expect(api).toHaveBeenLastCalledWith({ ...first, has_abnormal: true }));
+  const filtered: KnowledgeVisibleQuery | KnowledgeAdminQuery = view === "ordinary" ? { page_size: 20, has_abnormal: true } : { page: 1, page_size: 20, has_abnormal: true };
+  await waitFor(() => expect(api).toHaveBeenLastCalledWith(filtered));
   await act(async () => old.resolve(view === "ordinary" ? page([row("Retired row")]) : { data: [row("Retired row")], total: 41 }));
   expect(screen.queryByText("Retired row")).toBeNull();
   filter("fileStatusFilterAll");
