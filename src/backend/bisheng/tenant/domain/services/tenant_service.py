@@ -148,6 +148,22 @@ class TenantService:
             except Exception:
                 logger.warning("built-in skill seeding failed for new tenant %s", tenant.id, exc_info=True)
 
+            # Step 7: seed the preset approval scenarios. Same reason as step 6
+            # — boot-time seeding only covers the tenants that existed then, so
+            # without this a tenant created from the admin console has no
+            # scenario at all and its first `bisheng deploy` fails with
+            # "approval scenario not enabled" (F055 AC-20). Best-effort for the
+            # same reason: an unseeded scenario is recoverable, a tenant that
+            # failed to be created is not.
+            try:
+                from bisheng.approval.domain.services.approval_seed_service import (
+                    seed_approval_scenarios_for_tenant,
+                )
+
+                await seed_approval_scenarios_for_tenant(tenant.id)
+            except Exception:
+                logger.warning("approval scenario seeding failed for new tenant %s", tenant.id, exc_info=True)
+
             return _safe_tenant_dump(tenant)
 
         except TenantCodeDuplicateError:
@@ -618,9 +634,16 @@ class TenantService:
         ``TenantResolver`` so v2.5.0 ``aadd_users`` residue rows do not
         surface as phantom members. Return shape unchanged.
         """
-        from bisheng.database.models.department import UserDepartmentDao
+        from fastapi import HTTPException
 
-        users, total = await UserDepartmentDao.aget_users_by_tenant_subtree(
+        from bisheng.common.subject_search import normalize_keyword
+        from bisheng.tenant.domain.repositories.management_search_repository import ManagementSearchRepository
+
+        try:
+            keyword = normalize_keyword(keyword or "")
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        users, total = await ManagementSearchRepository.tenant_users(
             tenant_id=tenant_id,
             page=page,
             page_size=page_size,

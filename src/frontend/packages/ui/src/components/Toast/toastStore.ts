@@ -1,13 +1,12 @@
 /**
  * Toast queue — the imperative half of the component (组件-Toast轻提示.md §11.1).
  *
- * A toast is fired by an event, never rendered by a page, so the queue lives
- * outside React: business code calls `toast.success('已保存')` from anywhere
- * (event handlers, interceptors, non-component modules) and the single
- * `<Toaster />` mounted at the app root subscribes through
- * `useSyncExternalStore`. No state-management library is involved — the
- * library contract (packages/ui/AGENTS.md) forbids one.
+ * The queue mechanics (cap of three, de-dupe by id, two-phase dismissal, the
+ * single-viewport registry) are shared with Notification and live in
+ * `utils/noticeQueue.ts`; this module only adds what is toast-specific — the
+ * payload shape, the §6 lifetime formula and the `toast.*` API.
  */
+import { createNoticeQueue, type QueueEntry } from '../../utils/noticeQueue';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -36,26 +35,20 @@ export interface ToastOptions {
   closable?: boolean;
 }
 
-export interface ToastItem extends Required<Pick<ToastOptions, 'id' | 'duration' | 'closable'>> {
+export interface ToastItem
+  extends QueueEntry,
+    Required<Pick<ToastOptions, 'id' | 'duration' | 'closable'>> {
   type: ToastType;
   message: string;
   action?: ToastAction;
-  /** Bumped whenever the same id is re-fired — the row watches it to restart its timer (§3). */
-  version: number;
-  /** Playing its exit animation; still in the DOM, no longer occupies a stack slot. */
-  closing: boolean;
 }
 
-/** At most three at a time; a fourth pushes the oldest out (§3). */
-const MAX_VISIBLE = 3;
 /** §6 lifetime formula. */
 const BASE_MS = 3000;
 const MIN_MS = 3000;
 const MAX_MS = 10000;
 const FREE_CHARS = 20;
 const MS_PER_EXTRA_CHAR = 100;
-/** Exit (160ms) + the 200ms others take to close the gap (§7). */
-const EXIT_MS = 200;
 
 /**
  * §6: 3s, +100ms per character past 20, doubled when there is an action button,
@@ -71,96 +64,30 @@ export function computeDuration(message: string, hasAction: boolean): number {
   return Math.min(Math.max(ms, MIN_MS), MAX_MS);
 }
 
-let items: ToastItem[] = [];
-const listeners = new Set<() => void>();
-const removalTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const queue = createNoticeQueue<ToastItem>({
+  // At most three at a time; a fourth pushes the oldest out (§3).
+  maxVisible: 3,
+  // Exit (160ms) + the 200ms others take to close the gap (§7).
+  exitMs: 200,
+});
 
-function emit(next: ToastItem[]) {
-  items = next;
-  listeners.forEach((listener) => listener());
-}
-
-export function subscribeToasts(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-export function getToasts(): ToastItem[] {
-  return items;
-}
-
-function scheduleRemoval(id: string) {
-  const pending = removalTimers.get(id);
-  if (pending) {
-    clearTimeout(pending);
-  }
-  removalTimers.set(
-    id,
-    setTimeout(() => {
-      removalTimers.delete(id);
-      emit(items.filter((item) => item.id !== id));
-    }, EXIT_MS),
-  );
-}
-
+export const subscribeToasts = queue.subscribe;
+export const getToasts = queue.get;
 /** Start the exit animation; the row leaves the DOM once it has played (§7). */
-export function dismissToast(id: string) {
-  if (!items.some((item) => item.id === id && !item.closing)) {
-    return;
-  }
-  emit(items.map((item) => (item.id === id ? { ...item, closing: true } : item)));
-  scheduleRemoval(id);
-}
-
+export const dismissToast = queue.dismiss;
 /** ESC closes the newest one (§6). */
-export function dismissLatestToast() {
-  const live = items.filter((item) => !item.closing);
-  const latest = live[live.length - 1];
-  if (latest) {
-    dismissToast(latest.id);
-  }
-}
-
-export function clearToasts() {
-  removalTimers.forEach((timer) => clearTimeout(timer));
-  removalTimers.clear();
-  emit([]);
-}
+export const dismissLatestToast = queue.dismissLatest;
+export const clearToasts = queue.clear;
+export const subscribeViewports = queue.subscribeViewports;
+export const registerViewport = queue.registerViewport;
+export const isPrimaryViewport = queue.isPrimaryViewport;
 
 function show(type: ToastType, message: string, options: ToastOptions = {}): string {
   const id = options.id ?? `${type}:${message}`;
   const duration = options.duration ?? computeDuration(message, Boolean(options.action));
   // 不自动关闭 must ship an exit (§5.3).
   const closable = options.closable ?? duration <= 0;
-  const next: Omit<ToastItem, 'version'> = {
-    id,
-    type,
-    message,
-    duration,
-    closable,
-    action: options.action,
-    closing: false,
-  };
-
-  const existing = items.find((item) => item.id === id && !item.closing);
-  if (existing) {
-    // §3: same message fired again → update in place and restart the clock.
-    emit(items.map((item) => (item === existing ? { ...next, version: item.version + 1 } : item)));
-    return id;
-  }
-
-  let queued = [...items, { ...next, version: 0 }];
-  const live = queued.filter((item) => !item.closing);
-  if (live.length > MAX_VISIBLE) {
-    // §3: the fourth pushes the oldest out right away, so the newest is always visible.
-    const oldest = live[0];
-    queued = queued.map((item) => (item === oldest ? { ...item, closing: true } : item));
-    scheduleRemoval(oldest.id);
-  }
-  emit(queued);
-  return id;
+  return queue.push({ id, type, message, duration, closable, action: options.action });
 }
 
 export interface ToastPayload extends ToastOptions {
@@ -184,36 +111,3 @@ export const toast = {
   dismissLatest: dismissLatestToast,
   clear: clearToasts,
 };
-
-/* ------------------------------------------------------------------ *
- * Viewport registry — one visible container, however many are mounted.
- * Demo pages (and StrictMode's double mount) can render several
- * <Toaster />s; only the first one registered paints, so a toast never
- * appears twice.
- * ------------------------------------------------------------------ */
-
-const viewports: symbol[] = [];
-const viewportListeners = new Set<() => void>();
-
-export function subscribeViewports(listener: () => void): () => void {
-  viewportListeners.add(listener);
-  return () => {
-    viewportListeners.delete(listener);
-  };
-}
-
-export function registerViewport(token: symbol): () => void {
-  viewports.push(token);
-  viewportListeners.forEach((listener) => listener());
-  return () => {
-    const index = viewports.indexOf(token);
-    if (index >= 0) {
-      viewports.splice(index, 1);
-    }
-    viewportListeners.forEach((listener) => listener());
-  };
-}
-
-export function isPrimaryViewport(token: symbol): boolean {
-  return viewports[0] === token;
-}

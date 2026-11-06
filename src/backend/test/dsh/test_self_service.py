@@ -109,6 +109,13 @@ def test_primary_department_is_display_only_and_missing_is_null(user_store):  # 
 
 
 async def test_usage_exposes_only_authorized_models_without_a_seat(monkeypatch):
+    import sys
+
+    monkeypatch.setitem(
+        sys.modules,
+        "bisheng.llm.domain.services.llm",
+        SimpleNamespace(LLMService=SimpleNamespace(get_dsh_model_snapshot=AsyncMock())),
+    )
     from bisheng.core.context.tenant import get_current_tenant_id
     from bisheng.dsh import admin_runtime
     from bisheng.dsh import runtime as model_runtime
@@ -148,7 +155,9 @@ async def test_usage_exposes_only_authorized_models_without_a_seat(monkeypatch):
     )
     monkeypatch.setattr(model_runtime, "get_model_runtime", AsyncMock(return_value=model))
     result = await service.usage(USER)
-    assert result["models"] == [{"model_id": 4, "name": "Provider / Model", "limit": 100, "used": 10, "remaining": 90}]
+    assert result["models"] == [{"model_id": 4, "name": "Provider / Model", "limit": 100, "used": 10, "remaining": 40}]
+    assert result["remaining"] == 40
+    assert result["used"] == 60
     assert result["billing_timezone"] == "Asia/Shanghai"
     rt.sessions.revoke.assert_not_awaited()
 

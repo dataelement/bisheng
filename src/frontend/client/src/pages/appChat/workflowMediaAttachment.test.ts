@@ -37,11 +37,5 @@ describe('workflow media attachments keep what the chip draws', () => {
         expect(helpers).toContain('mediaDurationSec: el.mediaDurationSec');
     });
 
-    it('the chip still reads the field both of them carry', () => {
-        const chip = readFileSync(
-            join(process.cwd(), 'src/pages/appChat/components/AppChatFileChip.tsx'),
-            'utf8',
-        );
-        expect(chip).toContain('cover_filepath: file.cover_filepath');
-    });
+    // Rendering metadata is covered behaviorally in @bisheng/chat's attachment tests.
 });

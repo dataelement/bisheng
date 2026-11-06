@@ -51,6 +51,13 @@ def test_text_must_be_present_and_bounded(text):
         OpenTaskSubmitReq.model_validate(_body(text=text))
 
 
+def test_text_accepts_a_long_prompt_up_to_the_limit():
+    # A built-in prompt template plus pasted material easily exceeds 20000 characters.
+    assert TASK_TEXT_MAX_LENGTH >= 100000
+    req = OpenTaskSubmitReq.model_validate(_body(text="x" * TASK_TEXT_MAX_LENGTH))
+    assert len(req.text) == TASK_TEXT_MAX_LENGTH
+
+
 def test_execution_must_be_async():
     with pytest.raises(ValidationError):
         OpenTaskSubmitReq.model_validate(_body(execution="sync"))

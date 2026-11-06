@@ -108,6 +108,14 @@ class LinsightSessionVersionBase(SQLModelSerializable):
     api_meta: dict | None = Field(
         None, description="Open API submission metadata", sa_column=Column(JsonType, nullable=True)
     )
+    # Which skill row owns each directory copied into this session. The name
+    # alone is not enough when a personal skill and a tenant skill share it.
+    # Not a retention record: deleting a skill does not consult this column.
+    skill_snapshot: list[dict] | None = Field(
+        None,
+        description="Directory ownership for skills copied into this session",
+        sa_column=Column(JsonType, nullable=True),
+    )
     sop: str | None = Field(None, description="SOPContents", sa_type=Text, nullable=True)
     output_result: dict | None = Field(None, description="Output Results", sa_column=Column(JsonType, nullable=True))
     status: SessionVersionStatusEnum = Field(
@@ -176,6 +184,8 @@ class LinsightSessionVersion(LinsightSessionVersionBase, table=True):
         data.pop("pending_files", None)
         # F073: credential id and caller instructions are internal to the run.
         data.pop("api_meta", None)
+        # Directory ownership is for the worker's read and execute checks.
+        data.pop("skill_snapshot", None)
         return data
 
 
@@ -214,19 +224,30 @@ class LinsightSessionVersionDao:
 
     @staticmethod
     async def get_session_versions_by_session_id(session_id: str) -> list[LinsightSessionVersion]:
-        """
-        By ConversationIDGet all Ideas Conversation versions
-        :param session_id: SessionsID
-        :return: Inspiration Session Version List
+        """Versions of one conversation, newest first.
+
+        Do not ``ORDER BY`` the full row. MySQL filesort packs every selected
+        JSON and TEXT column into ``sort_buffer_size``; a session whose files
+        or output exceed that buffer fails with error 1038 and the version
+        list 500s. Sort the primary key only, then load the rows and keep
+        that order.
         """
         async with get_async_db_session() as session:
-            statement = (
-                select(LinsightSessionVersion)
+            id_statement = (
+                select(LinsightSessionVersion.id)
                 .where(LinsightSessionVersion.session_id == str(session_id))
                 .order_by(col(LinsightSessionVersion.version).desc())
             )
-
-            return (await session.exec(statement)).all()
+            ordered_ids = list((await session.exec(id_statement)).all())
+            if not ordered_ids:
+                return []
+            rows = (
+                await session.exec(
+                    select(LinsightSessionVersion).where(col(LinsightSessionVersion.id).in_(ordered_ids))
+                )
+            ).all()
+            by_id = {row.id: row for row in rows}
+            return [by_id[version_id] for version_id in ordered_ids if version_id in by_id]
 
     @staticmethod
     async def get_session_version_by_file_id(file_id: str) -> LinsightSessionVersion | None:

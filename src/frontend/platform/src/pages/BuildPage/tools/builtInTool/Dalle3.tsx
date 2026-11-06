@@ -1,8 +1,9 @@
 // @ts-strict-ignore
-import { Button } from '@/components/bs-ui/button';
-import { DialogClose, DialogFooter } from "@/components/bs-ui/dialog";
+import { Button } from '@bisheng/ui';
+
+import { DialogClose,DialogFooter } from "@/components/bs-ui/dialog";
 import { Label } from "@/components/bs-ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
+import { RadioGroup,Radio as RadioGroupItem } from "@bisheng/ui";
 import { useState } from 'react';
 import { useTranslation } from "react-i18next";
 import { InputField } from "./InputField";
@@ -210,11 +211,11 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
 
             <DialogFooter className="mt-4">
                 <DialogClose>
-                    <Button variant="outline" className="px-11" type="button">
+                    <Button variant="outlined" type="button" color="default">
                         {t('cancel', { ns: 'bs' })}
                     </Button>
                 </DialogClose>
-                <Button className="px-11" type="submit">
+                <Button type="submit">
                     {t('confirm', { ns: 'bs' })}
                 </Button>
             </DialogFooter>

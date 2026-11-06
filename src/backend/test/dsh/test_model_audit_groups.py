@@ -116,6 +116,7 @@ def test_projection_idempotency_recovery_isolation_and_rollback():
 async def test_group_http_filters_scope_paging_and_no_body_reads():
     """AC-QC-06/07/08/12: all predicates refer to the same request; pages do not read bodies."""
     async with fixture() as (harness, client, objects):
+        harness.queries.now = lambda: NOW + timedelta(seconds=1)
         with audit_session(harness.engine) as session, session.begin():
             for request in (
                 row("e2e-qc-http-a"),
@@ -235,3 +236,60 @@ def test_sparse_directory_scan_returns_continuation_without_grouping_the_audit_t
             assert len(sql) < 35
         finally:
             event.remove(engine, "before_cursor_execute", observed)
+
+
+@pytest.mark.parametrize("external", [False, True])
+def test_content_safety_metadata_additions_preserve_legacy_and_unknown_facts(monkeypatch, external):
+    """Coverage AC: AC-34, AC-36, AC-38, AC-44, AC-46, AC-52."""
+    values = {"model_result": "UNKNOWN"}
+    if external:
+        values = {
+            "record_origin": "EXTERNAL_SAFETY",
+            "session_id": None,
+            "effective_mode": None,
+            "model_result": None,
+            "response_result": None,
+            "usage_settlement": None,
+            "model_entered": False,
+            "audit_status": "NOT_APPLICABLE",
+            "safety_source_id": "synthetic-gateway",
+            "safety_gateway_request_id": "11111111-1111-4111-8111-111111111111",
+            "input_safety_state": "BLOCKED",
+            "output_safety_state": "NOT_APPLICABLE",
+            "input_safety_version": 3,
+            "output_safety_version": 2,
+            "content_safety_state": "BLOCKED",
+            "has_sensitive_hit": True,
+            "input_sensitive_hit": True,
+            "content_safety_updated_at": NOW,
+        }
+    record = row("e2e-qc-safety-metadata", **values)
+    repository = DshModelAuditQueryRepository(None)
+    monkeypatch.setattr(repository, "one", lambda *args, **kwargs: None)
+    metadata = repository.metadata(record, user_names={20: "Synthetic User"})
+    assert metadata["user_name"] == "Synthetic User"
+    assert metadata["usage"] is None
+    assert "tenant_id" not in metadata
+    if external:
+        assert metadata["record_origin"] == "EXTERNAL_SAFETY"
+        assert metadata["source_id"] == "synthetic-gateway"
+        assert metadata["gateway_request_id"] == values["safety_gateway_request_id"]
+        assert metadata["stage_results"] == {"input": "BLOCKED", "output": "NOT_APPLICABLE"}
+        assert metadata["stage_versions"] == {"input": 3, "output": 2}
+        assert metadata["safety_observed_at"] == NOW
+        assert metadata["details_status"] == "PENDING"
+        assert metadata["audit_status"] == "NOT_APPLICABLE"
+        assert metadata["status_reasons"] == [] and not metadata["status_pending"]
+        assert all(
+            metadata[key] is None
+            for key in ("session_id", "effective_mode", "model_result", "response_result", "usage_settlement")
+        )
+        assert metadata["model_entered"] is False
+    else:
+        assert metadata["record_origin"] == "MODEL"
+        assert metadata["model_result"] == "UNKNOWN"
+        assert metadata["model_entered"] is None
+        assert metadata["content_safety_state"] == metadata["details_status"] == "UNREPORTED"
+        assert metadata["stage_results"] == {"input": "UNREPORTED", "output": "UNREPORTED"}
+        assert metadata["stage_versions"] == {"input": 0, "output": 0}
+        assert not metadata["has_sensitive_hit"]

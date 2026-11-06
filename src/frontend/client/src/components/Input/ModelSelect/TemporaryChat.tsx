@@ -4,7 +4,7 @@ import { MessageCircleDashed } from 'lucide-react';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { Constants, getConfigDefaults } from '~/types/chat';
 import { useGetStartupConfig } from '~/hooks/queries/data-provider';
-import { Switch } from '~/components/ui';
+import { Switch } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import store from '~/store';
@@ -54,7 +54,7 @@ export const TemporaryChat = () => {
             checked={isTemporary}
             onCheckedChange={onClick}
             disabled={isActiveConvo}
-            className="ml-4"
+            className="peer ml-4"
             aria-label="Toggle temporary chat"
             data-testid="temporary-chat-switch"
           />

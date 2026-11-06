@@ -39,12 +39,13 @@ replace-decoded mojibake with ``encoding="utf-8"`` silently fed U+FFFD to the
 model and let ``edit`` corrupt originals.
 
 **Storage growth (known trade-off).** ``seed_workspace_from_previous`` copies
-``uploads/`` forward on every follow-up turn, so an original is duplicated once
-per turn (server-side copy — no app-side bytes, but real stored bytes). Skipping
-originals is NOT an option: the code interpreter's cross-turn access depends on
-them. Reclaim belongs to ops — a MinIO lifecycle rule on the ``workspace/``
-prefix — not to this module; the seed logs its byte volume so the growth is
-visible rather than silent.
+``uploads/`` and ``large_tool_results/`` forward on every follow-up turn, so
+those objects are duplicated once per turn (server-side copy — no app-side
+bytes, but real stored bytes). Skipping them is NOT an option: the code
+interpreter's cross-turn access depends on them, and the prompt forbids
+re-running the call that produced an offloaded dump. Reclaim belongs to ops
+— a MinIO lifecycle rule on the ``workspace/`` prefix — not to this module;
+the seed logs its byte volume so the growth is visible rather than silent.
 """
 
 from __future__ import annotations
@@ -110,6 +111,11 @@ WORKSPACE_PREFIX = "workspace"
 UPLOADS_DIR = "uploads"
 OUTPUT_DIR = "output"
 SCRATCH_DIR = "scratch"
+# FilesystemMiddleware offloads oversized tool payloads here. The file tools
+# advertise `/large_tool_results/<call_id>` and the prompt forbids re-running
+# the producing call — so a follow-up turn (and the code interpreter) must
+# still see the same objects.
+LARGE_TOOL_RESULTS_DIR = "large_tool_results"
 MANIFEST_NAME = "manifest.json"
 # Where the platform copies this run's skill bundles at task start (canonical
 # name: ``skill_provisioning.WORKSPACE_SKILLS_DIR``, duplicated here as a literal
@@ -297,6 +303,25 @@ def normalize_workspace_path(path: str, file_dir: str | None = None) -> str:
     return "/".join(parts)
 
 
+def _grep_terms(pattern: str) -> tuple[str, ...]:
+    """Literal terms a grep ``pattern`` matches; a line matching any one is a hit.
+
+    The framework's grep is literal, but models keep writing ``A|B|C`` to search
+    several keywords at once (10-29 on 106: 5 of 7 greps in one session, every one
+    "No matches" although each keyword was in the file). Splitting on ``|`` makes
+    that one call work instead of costing a failed round plus a retry. Nothing else
+    is treated as regex — ``.``, ``(``, ``[`` stay literal.
+
+    The whole pattern is always kept as a term, so every line the literal match
+    found is still found. If any segment is blank (``| col |`` table rows,
+    ``a || b``), the ``|`` is clearly literal and the pattern is not split.
+    """
+    parts = [p.strip() for p in pattern.split("|")]
+    if len(parts) < 2 or not all(parts):
+        return (pattern,)
+    return (pattern, *dict.fromkeys(parts))
+
+
 def _decode_workspace_text(data: bytes, rel_path: str = "") -> str | None:
     """Decode workspace bytes as text, or return ``None`` when they are binary.
 
@@ -420,12 +445,13 @@ async def seed_workspace_from_previous(
     minio,
     src_svid: str,
     dst_svid: str,
-    zones: tuple[str, ...] = (OUTPUT_DIR, UPLOADS_DIR),
+    zones: tuple[str, ...] = (OUTPUT_DIR, UPLOADS_DIR, LARGE_TOOL_RESULTS_DIR),
 ) -> int:
     """Cross-turn continuity: server-side copy a prior session-version's
-    deliverables (``output/``) and sources (``uploads/``) into a new version's
-    workspace, so a follow-up turn (e.g. "convert the report to HTML") can read
-    and build on the previous turn's output.
+    deliverables (``output/``), sources (``uploads/``), and offloaded tool
+    dumps (``large_tool_results/``) into a new version's workspace, so a
+    follow-up turn (e.g. "convert the report to HTML") can read and build on
+    the previous turn's output.
 
     Each version's workspace is cumulative (a turn seeds from its immediate
     predecessor, which already inherited *its* predecessor), so copying just the
@@ -518,6 +544,12 @@ class WorkspaceBackend(FilesystemBackend):
         # citation markers the rest of the platform understands. ``None`` keeps
         # the F047 contract: markdown is only unescaped.
         self.citation_scope = citation_scope
+        # F076: which skill row owns each copied directory. Empty means an older
+        # session or a caller that does not track skills; reads are not checked.
+        # The enabled flag is loaded on each read, not copied here, so a disable
+        # or delete during the run is visible. ``skill_row_enabled`` is a test seam.
+        self.skill_snapshot: list[dict] | None = None
+        self.skill_row_enabled = None
         os.makedirs(self.file_dir, exist_ok=True)
 
     # -- key / cache helpers ------------------------------------------------
@@ -539,14 +571,40 @@ class WorkspaceBackend(FilesystemBackend):
     def _cache_path(self, rel_path: str) -> Path:
         return Path(self.file_dir) / rel_path
 
-    def _not_found_error(self, file_path: str) -> str:
+    def _skill_matches(self, rel_path: str) -> list[str]:
+        """Workspace paths ``/skills/<name>/<rel_path>`` that exist, for the not-found hint.
+
+        A SKILL.md lists its supporting files relative to its own folder
+        (``references/rules.md``); the model kept reading them from the workspace
+        root. Listing goes through MinIO, the authoritative store, so a task
+        resumed on another node gets the same answer. Only runs after a miss.
+        """
+        if not rel_path or rel_path.startswith(f"{SKILLS_DIR}/"):
+            return []
+        listed = self.ls(f"/{SKILLS_DIR}")
+        matches = []
+        for entry in listed.entries or []:
+            parts = entry["path"].lstrip("/").split("/", 2)
+            if len(parts) == 3 and parts[0] == SKILLS_DIR and parts[2] == rel_path:
+                matches.append(entry["path"])
+        return sorted(matches)
+
+    def _not_found_error(self, file_path: str, skill_matches: list[str] | None = None) -> str:
         """ "File not found" plus, when warranted, WHY the path could not resolve.
 
         A bare "File 'X' not found" was actively unhelpful for the most common
         failure: handing back a code-interpreter host path. Naming the two
         namespaces is what lets the model fix it in one step instead of retrying
-        the same path.
+        the same path. ``skill_matches`` names the skill folders that do hold the
+        file; it is only a hint — the read never switches to another path.
         """
+        if skill_matches:
+            candidates = ", ".join(f"'{path}'" for path in skill_matches)
+            return (
+                f"File '{file_path}' not found. Relative paths inside a skill's SKILL.md are "
+                f"rooted at that skill's own folder, not the workspace root — the file exists at "
+                f"{candidates}. Retry with that path."
+            )
         _, stripped = strip_executor_host_prefix((file_path or "").strip(), self.file_dir)
         if stripped:
             rel = normalize_workspace_path(file_path, file_dir=self.file_dir)
@@ -830,11 +888,33 @@ class WorkspaceBackend(FilesystemBackend):
         return WriteResult(path="/" + rel)
 
     # -- read ---------------------------------------------------------------
+    def _skill_enabled_sync(self, skill_id: int) -> bool | None:
+        if self.skill_row_enabled is not None:
+            return self.skill_row_enabled(skill_id)
+        from bisheng.linsight.domain.services.skill_runtime_guard import load_skill_enabled_sync
+
+        return load_skill_enabled_sync(skill_id)
+
+    async def _skill_enabled(self, skill_id: int) -> bool | None:
+        if self.skill_row_enabled is not None:
+            enabled = self.skill_row_enabled(skill_id)
+            if hasattr(enabled, "__await__"):
+                return await enabled
+            return enabled
+        from bisheng.linsight.domain.services.skill_runtime_guard import load_skill_enabled
+
+        return await load_skill_enabled(skill_id)
+
     def read(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
         rel = self._ws_rel(file_path)
+        from bisheng.linsight.domain.services.skill_runtime_guard import refuse_workspace_read
+
+        refusal = refuse_workspace_read(rel, self.skill_snapshot, self._skill_enabled_sync)
+        if refusal:
+            return ReadResult(error=refusal)
         data = self._materialize(rel)
         if data is None:
-            return ReadResult(error=self._not_found_error(file_path))
+            return ReadResult(error=self._not_found_error(file_path, self._skill_matches(rel)))
         text = _decode_workspace_text(data, rel)
         if text is None:
             # Binary: offset/limit are meaningless here (slicing bytes by "lines"
@@ -991,6 +1071,7 @@ class WorkspaceBackend(FilesystemBackend):
         prefix = f"/{WORKSPACE_PREFIX}/{self.svid}/"
         matches: list = []
 
+        terms = _grep_terms(pattern)
         skipped_large = 0
         skipped_binary = 0
         for entry in ls_res.entries or []:
@@ -1014,7 +1095,7 @@ class WorkspaceBackend(FilesystemBackend):
                 skipped_binary += 1
                 continue
             for lineno, line in enumerate(text.splitlines(), start=1):
-                if pattern in line:
+                if any(term in line for term in terms):
                     matches.append(GrepMatch(path=full, line=lineno, text=line))
         if skipped_large or skipped_binary:
             # Never let a bounded scan look like a complete one.
@@ -1075,6 +1156,11 @@ class WorkspaceBackend(FilesystemBackend):
 
     async def aread(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
         rel = self._ws_rel(file_path)
+        from bisheng.linsight.domain.services.skill_runtime_guard import arefuse_workspace_read
+
+        refusal = await arefuse_workspace_read(rel, self.skill_snapshot, self._skill_enabled)
+        if refusal:
+            return ReadResult(error=refusal)
         data = await asyncio.to_thread(self._cache_read, rel)
         if data is None:
             try:
@@ -1094,7 +1180,8 @@ class WorkspaceBackend(FilesystemBackend):
             if data is not None:
                 await asyncio.to_thread(self._cache_write, rel, data)
         if data is None:
-            return ReadResult(error=self._not_found_error(file_path))
+            matches = await asyncio.to_thread(self._skill_matches, rel)
+            return ReadResult(error=self._not_found_error(file_path, matches))
         text = _decode_workspace_text(data, rel)
         if text is None:
             # Same contract as the sync path: binary is decided whole, never sliced.

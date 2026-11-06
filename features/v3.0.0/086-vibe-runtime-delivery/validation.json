@@ -1,0 +1,268 @@
+{
+  "feature": "F086",
+  "date": "2026-10-21",
+  "scope": "checkpoint plus uncommitted multi-tenant bootstrap fix; Docker multi-tenant, representative failure and legacy upgrade acceptance; full gates incomplete",
+  "baseline_sha": "4aa9ce69b2830b81162fe631b9c801057c40ee8b",
+  "branch": "codex/086-vibe-runtime-delivery",
+  "runtime_code_changed": true,
+  "human_spec_confirmation": "用户明确要求修复四项问题并在复审通过后继续；条件已满足",
+  "human_design_confirmation": "2026-10-20 用户回复：确认",
+  "spec_review": "LGTM round 2; four findings closed",
+  "design_review": "confirmed; implementation details synchronized",
+  "tasks_review": "LGTM (same-agent declaration review)",
+  "task_counts": {
+    "local_verified": 84,
+    "native_verified": 8,
+    "total": 94,
+    "pending_integration": [
+      "T055",
+      "T056"
+    ]
+  },
+  "local_tests": {
+    "backend": {
+      "passed": 1214,
+      "failed": 2,
+      "skipped": 24,
+      "log": "/private/tmp/f086-backend-final-regression.log",
+      "log_sha256": "272dfaf662dedbeb3d94759c7a343e21b5bebff486a58b22c2e5ccdac9bc6998",
+      "archived_log": "e2e-evidence/2026-10-20-docker/logs/backend-local-final.log",
+      "archived_log_sha256": "099b2a9eb89db43b67e4ffb358ec751678d2abacc3fbd5be115126f4ae776d0d",
+      "archived_log_normalization": "Line-ending spaces/tabs trimmed; original log hash retained in log_sha256 and evidence normalization.json"
+    },
+    "manager": {
+      "passed": 437,
+      "failed": 0,
+      "skipped": 10,
+      "log": "/private/tmp/f086-manager-final-regression.log",
+      "log_sha256": "4d93549f959da23fc0ff2d32e4a033be59be732095e0e02951f04cede66beee8",
+      "archived_log": "e2e-evidence/2026-10-20-docker/logs/manager-local-final.log"
+    },
+    "app_proxy": {
+      "passed": 256,
+      "failed": 0,
+      "skipped": 0,
+      "log": "/private/tmp/vibe-app-proxy-release-check.log",
+      "log_sha256": "21c834ca3a29d0fb0d76e9fa0e9333e2251a8618864e1874a88a2c64a67f988f"
+    },
+    "cli": {
+      "passed": 383,
+      "failed": 0,
+      "skipped": 0,
+      "log": "/private/tmp/vibe-cli-regression-native.log",
+      "log_sha256": "79b58d6ee98188a1373a9d1e3ecbd92e7388f5d558345b909be7c1595fb393b0"
+    },
+    "sdk": {
+      "passed": 212,
+      "failed": 0,
+      "skipped": 0,
+      "log": "/private/tmp/vibe-sdk-regression.log",
+      "log_sha256": "cc33a6193288cc10c2cd4a96ce151c9790606cc62b119da2cc2fbecbc2a814a4"
+    },
+    "dev_toolkit_frozen_docker": {
+      "passed": 129,
+      "failed": 0,
+      "skipped": 0,
+      "mcp": "1.30.0",
+      "log": "e2e-evidence/2026-10-20-docker/logs/dev-toolkit-frozen-final.log",
+      "log_sha256": "c20b9a5cc0e95dc851c24141e8bcf0cdf7a6f744844792f6947f869460af4ca2"
+    }
+  },
+  "baseline_failures": {
+    "backend_permission_tests": {
+      "baseline": "4aa9ce69",
+      "failed": 2,
+      "passed": 3,
+      "log": "/private/tmp/vibe-baseline-permission.log",
+      "reason": "permission_runtime context not initialized; reproduced on unmodified baseline"
+    },
+    "frontend_lint": {
+      "errors": 95,
+      "warnings": 1,
+      "normalized_output_identical": true,
+      "normalized_sha256": "f5024c001d8ee71ec291d778bd16747c515e11e5e865020fa5ef3d76818f41af",
+      "baseline_log": "/private/tmp/vibe-frontend-lint-baseline.log",
+      "worktree_log": "/private/tmp/vibe-frontend-lint-locked.log"
+    }
+  },
+  "quality": {
+    "changed_python_ruff": "PASS (101 files, final source)",
+    "changed_python_arch_guard": "PASS (101 files, final source)",
+    "frontend_typecheck": "PASS on worktree frozen-lock dependencies",
+    "frontend_i18n": "PASS",
+    "frontend_lint": "FAIL; baseline-identical 95 errors / 1 warning",
+    "compose_contract": "PASS; no services started",
+    "shell_syntax": "PASS",
+    "manager_frozen_lock": "PASS",
+    "cli_wheel_clean_install": "PASS"
+  },
+  "cli_wheel": {
+    "path": "src/backend/bisheng/dev_toolkit/artifacts/bisheng_cli-3.0.0-py3-none-any.whl",
+    "sha256": "a4cd66a21797d45b16bb6d682db95614cb21225eafbadc0bee270346b9e1307e",
+    "sdk_version_unchanged": "0.1.1"
+  },
+  "deployment": {
+    "docker_build_result": "Seven test images built natively on each amd64 and arm64 after approved proxy supplied; official CI/push not run",
+    "real_container_integration_executed": true,
+    "real_platform_e2e_executed": true,
+    "e2e_cases_collected_and_skipped": 6,
+    "native_amd64_arm64_ci_executed": false,
+    "mysql_dm8_integration_executed": false,
+    "offline_installation_executed": false,
+    "k8s_in_scope": false,
+    "images_published": false,
+    "existing_services_modified": false,
+    "mysql_integration_executed": true,
+    "mysql_concurrent_cases_passed": 5,
+    "dm8_integration_executed": false,
+    "native_amd64_container_integration": true,
+    "native_arm64_container_integration": true,
+    "offline_application_prepare_executed": true,
+    "offline_supplement_and_cli_retry": true,
+    "complete_offline_platform_installation_executed": false,
+    "k8s_prerequisites_inspected": true,
+    "native_container_scenarios_per_arch": 5,
+    "native_local_c_extension_wheel": true,
+    "preexisting_business_container_ids_unchanged": 26,
+    "full_application_image_journey": true,
+    "v1_source_image_journey": true,
+    "wrong_port_rejected_before_approval": true,
+    "all_test_apps_deleted": 4,
+    "capacity_reservations_released": 29,
+    "test_services_and_networks_cleaned": true,
+    "test_credential_and_data_directory_removed": true,
+    "cached_images_retained": true,
+    "original_business_container_ids_unchanged": 26
+  },
+  "e2e_gate": "Key Docker/upgrade journeys and dual-native GitHub test release passed; DM8 live deferred by user; exhaustive faults, full offline installation and final feature review remain pending",
+  "code_review": "NEEDS_FIX: remaining integration/release gates, not an unqualified delivery declaration",
+  "review_input_hashes_verified": {
+    "vibe-app-open-source-technical-design.md": "2fb280efb649aae0c6430b3cc418078e559cef8734e3e30fa402a1575a447c52",
+    "vibe-app-open-source-technical-design.html": "36e131d491a8afbf769c695a0f2acefaa51a82e9def2fcf1a203403afc46411e",
+    "vibe-app-hosting-commercialization-review.md": "528d3e7c1f1898711a3cdb34bc14b9ca4786306a8e98074d9d387b09f6326066",
+    "vibe-app-hosting-commercialization-review.html": "082b550f7abc9c4f8b7d85572565abc5d0487f451d6edd086dba0047c331963d",
+    "bisheng-gateway-runtime-manager-implementation-plan.md": "c9c87e983023b858fe35dce701855d9e7ae340ceee84d49f3270db7c9fc19182",
+    "bisheng-gateway-runtime-manager-implementation-plan.html": "b393e3ad7e59bd98847690c3fed786f56361f385f818227eb51f9c2478e308f7"
+  },
+  "git": {
+    "committed": false,
+    "staged": false,
+    "pushed": false,
+    "merged": false,
+    "primary_unrelated_changes_preserved": true,
+    "snapshot_date": "2026-10-20",
+    "runtime_test_release_commit": "755d4456e50c015a3fa88da0c0c35ab53bbd1650",
+    "runtime_test_release_tag": "v3.0.0-test-vibe"
+  },
+  "implementation_task_file_coverage_complete": true,
+  "note": "SQLite transactions, ASGI and mocked external ports prove local contracts only. Skipped tests and written CI workflows are not runtime or release evidence.",
+  "live_report": "live-validation.md",
+  "additional_attempts": [
+    {
+      "scope": "local app_runtime/app_publish/dev_toolkit/live-opt-in combined",
+      "passed": 1311,
+      "failed": 34,
+      "skipped": 24,
+      "log": "/private/tmp/f086-backend-post-mapping-regression.log",
+      "reason": "2 known permission initialization failures; 30 MCP 1.27.1 vs lock 1.30.0 signature failures and 2 sandbox localhost binding failures. dev_toolkit repeated in frozen Docker image; results tracked separately."
+    }
+  ],
+  "checkpoint_authorization": {
+    "date": "2026-10-21",
+    "request": "提交推送代码先",
+    "branch": "codex/086-vibe-runtime-delivery",
+    "scope": "Commit and push current implementation, documentation and sanitized validation evidence; acceptance/release gates remain pending",
+    "merge_authorized": false,
+    "commit_sha": "5131b81194a5fa390593e58d822bcbde52b6ca64",
+    "remote_sha_verified": true
+  },
+  "followup_2026_10_21": {
+    "request": "继续推进剩余验收，先处理多租户启动问题，补齐故障和升级场景的验证",
+    "code_status": "uncommitted follow-up fixes; generic F048 changes require release-line-first landing before a later commit",
+    "bootstrap_regression": {
+      "before_failed": 3,
+      "before_passed": 7,
+      "after_passed": 56,
+      "after_failed": 0
+    },
+    "fresh_multi_tenant_startup": "passed: 18 system resources and natural first-admin registration",
+    "live_owner_foreign_tests": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "acceptance_in_progress": false,
+    "evidence_dir": "e2e-evidence/2026-10-21-docker",
+    "evidence_files": 56,
+    "verified_journeys": [
+      "fresh multi-tenant startup and natural first-admin registration",
+      "ordinary child-tenant owner publication and approval",
+      "six live owner/nonowner/foreign checks",
+      "probe cancellation and timeout",
+      "Node install-hook cancellation and compile timeout",
+      "SIGKILL manager during probe and resume same operation",
+      "object PUT succeeded but SQL snapshot confirmation failed; retry same approval",
+      "DDL committed then startup failed; risk flag and data retained; compatible roll forward",
+      "real visitor Grant removal closes WS within5s",
+      "backend unavailable closes existing WS within5s",
+      "SQL-injected egress revoke closes existing CONNECT within5s",
+      "manager restart preserves existing WS/CONNECT and 32 new HTTP/SDK checks",
+      "real v1 publication, dry-run, pre-import rollback, idempotent import and v2 rebind; history/pending/legacy attachment retained"
+    ],
+    "websocket_permission_revoke_seconds": 4.028708160854876,
+    "websocket_backend_unavailable_seconds": 4.013150930404663,
+    "connect_policy_revoke_seconds": 1.266052007675171,
+    "cleanup": {
+      "applications": 7,
+      "reservations_released": 23,
+      "snapshots_purged": 3,
+      "test_stack_removed": true,
+      "original_containers_full_ids_unchanged": 26
+    },
+    "remaining": [
+      "exhaustive fault matrix including unknown Engine build stop and node loss",
+      "full customer offline installation and complete SDK/model/retrieval combinations",
+      "official CI and image/profile publication",
+      "pre-existing backend/frontend quality gates"
+    ]
+  },
+  "dm8_acceptance": {
+    "user_decision_date": "2026-10-21",
+    "scope": "static model/type/default/constraint/index/tenant/migration review only",
+    "live_test_deferred": true,
+    "live_test_is_current_blocker": false,
+    "central_regression_still_required_for_runtime_claim": true,
+    "tables": 15,
+    "static_review": "passed after BIGINT range fix",
+    "related_regression_passed": 28,
+    "migration_head": "f086_runtime_byte_counters",
+    "new_migration_live_execution": false,
+    "report": "model-review.md"
+  },
+  "image_publication": {
+    "implementation": "workflow and build scripts complete; runner portability fixed in 755d4456e5",
+    "official_github_run": "passed",
+    "run_url": "https://github.com/dataelement/bisheng/actions/runs/39567381522",
+    "tag": "v3.0.0-test-vibe",
+    "commit": "755d4456e50c015a3fa88da0c0c35ab53bbd1650",
+    "dockerhub_release": "test release published, seven image families for each native architecture",
+    "catalog_and_service_indexes": "published; artifact metadata observed in GitHub UI",
+    "platform_catalog_import": "not performed",
+    "dispatch_pushes_images": true,
+    "109_public_service_images": "passed after proxy download and docker load; original 27 containers unchanged",
+    "evidence": "e2e-evidence/2026-10-21-ci-release/README.md"
+  },
+  "development_integration_2026_10_23": {
+    "target_branch": "feat/3.0.0-vibe",
+    "target_base": "4aa9ce69b2830b81162fe631b9c801057c40ee8b",
+    "implementation_source": "cda8dccf26298af91a1df277dcd1a49787b6b444",
+    "f086_source": "667546bb77eeb366e66a13d544d122ef24811e35",
+    "authorization": "user requests development closeout, merge and push; no full-suite rerun",
+    "scope": "development integration only; historical checks retain their original source/date",
+    "code_review": "see code-review.md",
+    "full_delivery_accepted": false,
+    "public_image_release_executed": false,
+    "arm_validation": "deferred by user",
+    "dm8_validation": "static only"
+  }
+}

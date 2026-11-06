@@ -59,7 +59,7 @@ const TwoFactorAuthentication: React.FC = () => {
     if (Array.isArray(user?.backupCodes) && user?.backupCodes.length > 0 && otpauthUrl) {
       disable2FAMutate(undefined, {
         onError: () =>
-          showToast({ message: localize('com_ui_2fa_disable_error'), status: 'error' }),
+          showToast({ message: localize('com_ui_2fa_disable_error'), status: 'warning' }),
       });
     }
 
@@ -80,7 +80,7 @@ const TwoFactorAuthentication: React.FC = () => {
         setBackupCodes(backupCodes);
         setPhase('qr');
       },
-      onError: () => showToast({ message: localize('com_ui_2fa_generate_error'), status: 'error' }),
+      onError: () => showToast({ message: localize('com_ui_2fa_generate_error'), status: 'warning' }),
     });
   }, [enable2FAMutate, localize, showToast]);
 
@@ -99,11 +99,11 @@ const TwoFactorAuthentication: React.FC = () => {
             {
               onSuccess: () => setPhase('backup'),
               onError: () =>
-                showToast({ message: localize('com_ui_2fa_invalid'), status: 'error' }),
+                showToast({ message: localize('com_ui_2fa_invalid'), status: 'warning' }),
             },
           );
         },
-        onError: () => showToast({ message: localize('com_ui_2fa_invalid'), status: 'error' }),
+        onError: () => showToast({ message: localize('com_ui_2fa_invalid'), status: 'warning' }),
       },
     );
   }, [verificationToken, verify2FAMutate, confirm2FAMutate, localize, showToast]);
@@ -177,10 +177,10 @@ const TwoFactorAuthentication: React.FC = () => {
               setOtpauthUrl('');
             },
             onError: () =>
-              showToast({ message: localize('com_ui_2fa_disable_error'), status: 'error' }),
+              showToast({ message: localize('com_ui_2fa_disable_error'), status: 'warning' }),
           });
         },
-        onError: () => showToast({ message: localize('com_ui_2fa_invalid'), status: 'error' }),
+        onError: () => showToast({ message: localize('com_ui_2fa_invalid'), status: 'warning' }),
       });
     },
     [disableToken, verify2FAMutate, disable2FAMutate, showToast, localize, setUser],
@@ -247,7 +247,6 @@ const TwoFactorAuthentication: React.FC = () => {
                   isGenerating={isGenerating}
                   onGenerate={handleGenerateQRCode}
                   onNext={() => setPhase('qr')}
-                  onError={(error) => showToast({ message: error.message, status: 'error' })}
                 />
               )}
 
@@ -256,7 +255,6 @@ const TwoFactorAuthentication: React.FC = () => {
                   secret={secret}
                   otpauthUrl={otpauthUrl}
                   onNext={() => setPhase('verify')}
-                  onError={(error) => showToast({ message: error.message, status: 'error' })}
                 />
               )}
 
@@ -266,7 +264,6 @@ const TwoFactorAuthentication: React.FC = () => {
                   onTokenChange={setVerificationToken}
                   isVerifying={isVerifying}
                   onNext={handleVerify}
-                  onError={(error) => showToast({ message: error.message, status: 'error' })}
                 />
               )}
 
@@ -276,7 +273,6 @@ const TwoFactorAuthentication: React.FC = () => {
                   onDownload={handleDownload}
                   downloaded={downloaded}
                   onNext={handleConfirm}
-                  onError={(error) => showToast({ message: error.message, status: 'error' })}
                 />
               )}
 
@@ -284,7 +280,6 @@ const TwoFactorAuthentication: React.FC = () => {
                 <DisablePhase
                   onDisable={handleDisableVerify}
                   isDisabling={isDisabling}
-                  onError={(error) => showToast({ message: error.message, status: 'error' })}
                 />
               )}
             </AnimatePresence>

@@ -1,4 +1,7 @@
-"""Audit and native-session tables are new relative to main and owned by model bootstrap."""
+"""Audit and native-session tables are new relative to main and owned by model bootstrap.
+
+Coverage AC: AC-52, AC-53.
+"""
 
 from datetime import datetime
 
@@ -27,11 +30,15 @@ GROUP_COLUMNS = {"origin_state", "declared_parent_key", "parent_declaration_miss
 def test_main_upgrade_bootstraps_complete_new_tables_without_incremental_audit_ddl():
     engine = sa.create_engine("sqlite://")
     metadata = sa.MetaData()
-    for model in (*AUDIT_MODELS, DshSession, DshRefreshToken):
+    models = (*AUDIT_MODELS, DshSession, DshRefreshToken)
+    expected_tables = {model.__tablename__ for model in models}
+    for model in models:
         model.__table__.to_metadata(metadata)
     try:
         with engine.begin() as connection:
-            assert len(create_missing_model_tables(connection, metadata)) == 15
+            created = create_missing_model_tables(connection, metadata)
+            assert set(created) == expected_tables
+            assert len(created) == len(expected_tables)
             request = DshModelAuditRequest.__table__
             now = datetime(2026, 10, 20)
             item = DshModelAuditRequest(
@@ -49,6 +56,7 @@ def test_main_upgrade_bootstraps_complete_new_tables_without_incremental_audit_d
             )
             assert create_missing_model_tables(connection, metadata) == ()
             inspector = sa.inspect(connection)
+            assert set(inspector.get_table_names()) == expected_tables
             assert REQUEST_COLUMNS <= {row["name"] for row in inspector.get_columns(request.name)}
             assert GROUP_COLUMNS <= {
                 row["name"] for row in inspector.get_columns(DshModelAuditConversation.__tablename__)

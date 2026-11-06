@@ -9,7 +9,6 @@ import { TabsContextType, TabsState } from "../types/tabs";
 import { generateUUID, updateTemplate } from "../utils";
 import { alertContext } from "./alertContext";
 import { typesContext } from "./typesContext";
-import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 
 const TabsContextInitialValue: TabsContextType = {
   flow: null,
@@ -51,7 +50,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   async function saveFlow(flow: FlowType) {
     // save api
     const { data, ...info } = flow
-    const newFlow = await captureAndAlertRequestErrorHoc(updateFlowApi(info))
+    const newFlow = await updateFlowApi(info)
     if (!newFlow) return null;
     setFlow((flow) => ({ ...newFlow, data: flow.data }))
     setTabsState((prev) => {

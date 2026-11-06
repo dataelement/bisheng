@@ -1,0 +1,230 @@
+[
+  {
+    "id": "demo-app-1",
+    "name": "合同审查助手",
+    "description": "上传合同，自动识别风险条款并给出修改建议",
+    "logo": "",
+    "flow_type": 10,
+    "tags": [
+      {
+        "id": 9000,
+        "name": "法务"
+      },
+      {
+        "id": 9001,
+        "name": "文档"
+      }
+    ],
+    "user_id": "0",
+    "is_pinned": true,
+    "last_chat_time": "2026-09-17T09:10:00",
+    "can_share": false
+  },
+  {
+    "id": "demo-app-2",
+    "name": "行情日报生成",
+    "description": "汇总当日粮油期现货行情，生成可直接发送的日报",
+    "logo": "",
+    "flow_type": 10,
+    "tags": [
+      {
+        "id": 9000,
+        "name": "市场"
+      },
+      {
+        "id": 9001,
+        "name": "写作"
+      }
+    ],
+    "user_id": "0",
+    "is_pinned": true,
+    "last_chat_time": "2026-09-17T08:00:00",
+    "can_share": false
+  },
+  {
+    "id": "demo-app-3",
+    "name": "制度问答",
+    "description": "基于集团制度库回答流程、权限与合规问题",
+    "logo": "",
+    "flow_type": 5,
+    "tags": [
+      {
+        "id": 9000,
+        "name": "知识问答"
+      }
+    ],
+    "user_id": "0",
+    "is_pinned": false,
+    "last_chat_time": "2026-09-16T17:42:00",
+    "can_share": false
+  },
+  {
+    "id": "demo-app-4",
+    "name": "会议纪要整理",
+    "description": "根据录音转写稿提炼议题、结论与待办",
+    "logo": "",
+    "flow_type": 10,
+    "tags": [
+      {
+        "id": 9000,
+        "name": "效率"
+      },
+      {
+        "id": 9001,
+        "name": "写作"
+      }
+    ],
+    "user_id": "0",
+    "is_pinned": false,
+    "last_chat_time": "2026-09-16T14:05:00",
+    "can_share": false
+  },
+  {
+    "id": "demo-app-5",
+    "name": "财务报销助手",
+    "description": "解答报销标准，检查单据是否合规",
+    "logo": "",
+    "flow_type": 5,
+    "tags": [
+      {
+        "id": 9000,
+        "name": "财务"
+      }
+    ],
+    "user_id": "0",
+    "is_pinned": false,
+    "last_chat_time": "2026-09-15T11:30:00",
+    "can_share": false
+  },
+  {
+    "id": "demo-app-6",
+    "name": "周报润色",
+    "description": "把流水账改写成结构清晰的周报",
+    "logo": "",
+    "flow_type": 5,
+    "tags": [
+      {
+        "id": 9000,
+        "name": "写作"
+      }
+    ],
+    "user_id": "0",
+    "is_pinned": false,
+    "last_chat_time": "2026-09-13T18:20:00",
+    "can_share": false
+  },
+  {
+    "id": "demo-app-7",
+    "name": "招投标文件比对",
+    "description": "逐条比对招标要求与投标响应，输出偏离表",
+    "logo": "",
+    "flow_type": 10,
+    "tags": [
+      {
+        "id": 9000,
+        "name": "法务"
+      },
+      {
+        "id": 9001,
+        "name": "文档"
+      }
+    ],
+    "user_id": "0",
+    "is_pinned": false,
+    "last_chat_time": "2026-09-12T10:00:00",
+    "can_share": false
+  },
+  {
+    "id": "demo-app-8",
+    "name": "数据分析助手",
+    "description": "上传表格，用自然语言提问并生成图表",
+    "logo": "",
+    "flow_type": 5,
+    "tags": [
+      {
+        "id": 9000,
+        "name": "数据"
+      }
+    ],
+    "user_id": "0",
+    "is_pinned": false,
+    "last_chat_time": "2026-09-10T16:45:00",
+    "can_share": false
+  },
+  {
+    "id": "demo-app-9",
+    "name": "英文邮件写作",
+    "description": "按商务场景生成和润色英文邮件",
+    "logo": "",
+    "flow_type": 5,
+    "tags": [
+      {
+        "id": 9000,
+        "name": "写作"
+      },
+      {
+        "id": 9001,
+        "name": "翻译"
+      }
+    ],
+    "user_id": "0",
+    "is_pinned": false,
+    "last_chat_time": "2026-09-08T09:25:00",
+    "can_share": false
+  },
+  {
+    "id": "demo-app-10",
+    "name": "新员工入职向导",
+    "description": "一步步引导完成入职手续与账号开通",
+    "logo": "",
+    "flow_type": 10,
+    "tags": [
+      {
+        "id": 9000,
+        "name": "人力"
+      }
+    ],
+    "user_id": "0",
+    "is_pinned": false,
+    "last_chat_time": "2026-09-03T13:15:00",
+    "can_share": false
+  },
+  {
+    "id": "demo-app-11",
+    "name": "食品标准检索",
+    "description": "按品类检索国标、行标与内控指标",
+    "logo": "",
+    "flow_type": 5,
+    "tags": [
+      {
+        "id": 9000,
+        "name": "质量"
+      },
+      {
+        "id": 9001,
+        "name": "知识问答"
+      }
+    ],
+    "user_id": "0",
+    "is_pinned": false,
+    "last_chat_time": "2026-08-29T15:50:00",
+    "can_share": false
+  },
+  {
+    "id": "demo-app-12",
+    "name": "舆情摘要",
+    "description": "聚合指定关键词的新闻与社媒，生成摘要与情绪判断",
+    "logo": "",
+    "flow_type": 10,
+    "tags": [
+      {
+        "id": 9000,
+        "name": "市场"
+      }
+    ],
+    "user_id": "0",
+    "is_pinned": false,
+    "last_chat_time": "2026-08-25T10:40:00",
+    "can_share": false
+  }
+]

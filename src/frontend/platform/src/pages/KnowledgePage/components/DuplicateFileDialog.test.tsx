@@ -1,9 +1,9 @@
 // @ts-strict-ignore
 import { useState } from "react";
 
-import { fireEvent, render, screen } from "@/test/test-utils";
+import { fireEvent,render,screen } from "@/test/test-utils";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe,expect,it } from "vitest";
 
 import { DialogWithRepeatFiles } from "./DuplicateFileDialog";
 

@@ -1,5 +1,5 @@
 import { useRecoilState } from 'recoil';
-import { Switch } from '~/components/ui';
+import { Switch } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import store from '~/store';
@@ -29,7 +29,7 @@ export default function AutoSendPrompt({
       )}
     >
       <div> {localize('com_nav_auto_send_prompts')} </div>
-      <Switch
+      <Switch className="peer"
         aria-label="toggle-auto-send-prompts"
         id="autoSendPrompts"
         checked={autoSendPrompts}

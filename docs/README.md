@@ -9,10 +9,13 @@
 | [`constitution.md`](constitution.md) | 架构铁律 C1–C7(双 DB / 多租户 / 权限 / 分层 / 错误码 / 安全)——不可违反 |
 | [`SDD-Guide.md`](SDD-Guide.md) | 开发流程总纲:流程分级、★ 暂停点、偏差处理、测试分层、harness 现状 |
 | `../AGENTS.md` | 全局 agent 规则入口(各子项目规则按目录自动加载) |
+| [`security-response.md`](security-response.md) | 漏洞报告怎么接、怎么定级、怎么修、怎么发公告;对外承诺见根目录 `SECURITY.md` |
 
 ## 架构(子系统深度)
 
-[`architecture/`](architecture/) — 13 篇:总览 / 后端模块 / 工作流引擎 / RAG / Linsight / 双前端 / 数据模型 / 部署 / 开发指南 / 权限 ReBAC / 商业网关 / 多租户 / 游标分页 + 数据库表结构。子系统架构的唯一正文。
+[`architecture/`](architecture/) — 14 篇:总览 / 后端模块 / 工作流引擎 / RAG / Linsight / 双前端 / 数据模型 / 部署 / 开发指南 / 权限 ReBAC / 商业网关 / 多租户 / 游标分页 / 应用工场部署 + 数据库表结构。子系统架构的唯一正文。
+
+装机相关的两篇:平台本体见 [`architecture/08-deployment.md`](architecture/08-deployment.md);**应用工场**(托管应用运行时层,v3.0 新增、默认不装)见 [`architecture/14-app-factory-deployment.md`](architecture/14-app-factory-deployment.md)——含 `app_runtime` / `open_platform` 配置项详解、两种部署形态、⚠️ 升级顺序与排障对照表。
 
 ## 功能文档(SDD 产出)
 
@@ -22,8 +25,9 @@
 
 | 目录 | 内容 |
 |------|------|
-| [`api/`](api/) | 接口文档(filelib 纯检索、知识空间/知识库接口) |
+| [`api/`](api/) | 接口文档(filelib 纯检索、知识空间/知识库接口、[MCP 服务](../src/backend/docs/api/open-mcp.md)、[模型协议面](api/model-gateway.md)) |
 | [`PRD/`](PRD/) | 现行迭代的产品 PRD 与技术方案(按 `{版本} {主题} PRD/` 组织;3.0 起按版本分子目录,如 [`3.0-beta2/`](PRD/3.0-beta2/)、[`3.0-release/`](PRD/3.0-release/)) |
+| [`customer-guides/`](customer-guides/) | **对外口径**使用说明(如[多租户产品使用说明](customer-guides/多租户产品使用说明.md))——面向客户/实施,不含实现细节;PRD 与产品方案放 [`PRD/`](PRD/) |
 | [`observability/`](observability/) | BS_METRIC 指标日志契约(监控团队解析依据) |
 | [`私有化部署/`](私有化部署/) | 部署文档 |
 | [`blog/`](blog/) | 设计科普(如"企业权限体系的前世今生") |

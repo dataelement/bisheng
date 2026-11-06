@@ -496,11 +496,11 @@ async def list_user(
         else:
             user_ids = list(set(roles_user_ids))
 
-    users, total_count = UserDao.filter_users(user_ids, name, page_num, page_size)
+    users, total_count = UserService.list_management_users(user_ids or None, name, page_num, page_size)
 
     # simple=True: skip avatar/roles/groups — used by lightweight pickers (e.g. approver selector)
     if simple:
-        res = [{"user_id": one.user_id, "user_name": one.user_name} for one in users]
+        res = [{"user_id": one.user_id, "user_name": one.user_name, "external_id": one.external_id} for one in users]
         return resp_200({"data": res, "total": total_count})
 
     uid_list = [int(one.user_id) for one in users if getattr(one, "user_id", None) is not None]

@@ -9,7 +9,7 @@ from typing import Any, Self
 
 import jwt
 from fastapi import Depends, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 from starlette.websockets import WebSocket
 
 from bisheng.approval.domain.services.user_menu_access_service import UserMenuAccessService
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 # All other business menus continue to come from role or personal grants.
 _DEPARTMENT_ADMIN_WEB_MENU_SYSTEM = frozenset({"admin", "system_config", "sys"})
 
-# 角色管理 UI：一级「工作台 / 管理后台」关闭时，二级项仍存库但不应对用户生效（与 Roles.tsx 一致）
+# Disabled parent menu sections keep stored child grants inactive, matching Roles.tsx.
 _WORKBENCH_ENTRY_KEYS = frozenset({"workstation", "frontend"})
 _ADMIN_ENTRY_KEYS = frozenset({"admin", "backend"})
 _ROLE_UI_WORKBENCH_CHILDREN = frozenset(
@@ -60,7 +60,7 @@ _ROLE_UI_ADMIN_CHILDREN = frozenset(
     }
 )
 
-# 登录校验：任一侧有「可生效」菜单即允许（含仅一级 workstation/admin，供需审批模式）
+# Login requires an effective menu on either surface, including parent-only approval access.
 _WEB_MENU_WORKBENCH_ALL = frozenset(
     {
         "workstation",
@@ -140,19 +140,20 @@ class AuthJwt:
         self._encode_algorithm = "HS256"
         self._decode_algorithms = [self._encode_algorithm]
 
-    def create_access_token(self, subject: dict) -> str:
+    def create_access_token(self, subject: dict, *, expires_in: int | None = None) -> str:
         """create jwt token"""
         if isinstance(subject, dict):
             subject = json.dumps(subject)
         payload = {
             "sub": subject,
-            "exp": int(datetime.now(UTC).timestamp()) + self.cookie_conf.jwt_token_expire_time,
+            "exp": int(datetime.now(UTC).timestamp())
+            + (expires_in if expires_in is not None else self.cookie_conf.jwt_token_expire_time),
             "iss": self.cookie_conf.jwt_iss,
         }
         token = jwt.encode(payload, self.jwt_secret, algorithm=self._encode_algorithm)
         return token
 
-    def set_access_token(self, token: str, response: Response = None, max_age: int = None) -> None:
+    def set_access_token(self, token: str, response: Response = None, max_age: int | None = None) -> None:
         """set jwt token to cookie"""
         response = response or self.res
         response.set_cookie(
@@ -175,7 +176,7 @@ class AuthJwt:
         """decode jwt token"""
         if auth_from == "request":
             if not token:
-                token = self.req.cookies.get(self._access_cookie_key)
+                token = self.request_access_token()
         elif auth_from == "websocket":
             if websocket:
                 token = websocket.cookies.get(self._access_cookie_key)
@@ -185,6 +186,18 @@ class AuthJwt:
         else:
             raise ValueError("unsupported auth_from value")
         return self.decode_jwt_token(token)
+
+    def request_access_token(self) -> str | None:
+        """Cookie first, then Bearer. Phone clients only send the header."""
+        if self.req is None:
+            return None
+        token = self.req.cookies.get(self._access_cookie_key)
+        if token:
+            return token
+        authorization = (self.req.headers.get("Authorization") or "").strip()
+        if authorization.lower().startswith("bearer "):
+            return authorization[7:].strip() or None
+        return None
 
     def decode_jwt_token(self, token: str) -> dict:
         """decode jwt token"""
@@ -198,6 +211,8 @@ class AuthJwt:
 
 
 class LoginUser(BaseModel):
+    _runtime_credential_reference: dict | None = PrivateAttr(default=None)
+
     user_id: int
     user_name: str = Field(default="")
     user_role: list[int] = Field(default_factory=list, description="Users GroupsIDVertical")
@@ -387,7 +402,7 @@ class LoginUser(BaseModel):
                 res.append(self.group_cache.get(group_info.id))
         return res
 
-    async def get_user_group_ids(self, user_id: int = None):
+    async def get_user_group_ids(self, user_id: int | None = None):
         if user_id is None:
             user_id = self.user_id
         user_groups = await UserGroupDao.aget_user_group(user_id)
@@ -414,7 +429,7 @@ class LoginUser(BaseModel):
 
         # Legacy fallback
         role_access = RoleAccessDao.get_role_access_batch(self.user_role, access_types)
-        return list(set([one.third_id for one in role_access]))
+        return list({one.third_id for one in role_access})
 
     async def aget_user_access_resource_ids(self, access_types: list[AccessType]) -> list[str]:
         """Async version — delegates to ReBAC for mapped types."""
@@ -433,7 +448,7 @@ class LoginUser(BaseModel):
 
         # Legacy fallback
         role_access = await RoleAccessDao.aget_role_access_batch(self.user_role, access_types)
-        return list(set([one.third_id for one in role_access]))
+        return list({one.third_id for one in role_access})
 
     # ── Identity/LLM compatibility methods ──────────────────────
 
@@ -492,8 +507,8 @@ class LoginUser(BaseModel):
         cls,
         user: User,
         auth_jwt: AuthJwt,
-        tenant_id: int = None,
-        token_version: int = None,
+        tenant_id: int | None = None,
+        token_version: int | None = None,
     ) -> str:
         """Create access token for user with tenant_id + token_version.
 
@@ -527,7 +542,7 @@ class LoginUser(BaseModel):
         cls,
         user_id: int,
         user_name: str,
-        tenant_id: int = None,
+        tenant_id: int | None = None,
         token_version: int = 0,
         role_ids: Iterable[int] | None = None,
     ) -> Self:
@@ -563,7 +578,7 @@ class LoginUser(BaseModel):
         cls,
         user_id: int,
         user_name: str,
-        tenant_id: int = None,
+        tenant_id: int | None = None,
         token_version: int = 0,
     ) -> Self:
         # See ``init_login_user`` — bypass is required because UserRole is
@@ -585,12 +600,25 @@ class LoginUser(BaseModel):
     @classmethod
     async def get_login_user(cls, auth_jwt: AuthJwt = Depends()) -> Self:
         subject = auth_jwt.get_subject()
-        return await cls.init_login_user(
+        user = await cls.init_login_user(
             user_id=subject["user_id"],
             user_name=subject["user_name"],
             tenant_id=subject.get("tenant_id", DEFAULT_TENANT_ID),
             token_version=int(subject.get("token_version", 0) or 0),
         )
+        token = auth_jwt.request_access_token()
+        if token:
+            claims = jwt.decode(
+                token, auth_jwt.jwt_secret, issuer=auth_jwt.cookie_conf.jwt_iss, algorithms=auth_jwt._decode_algorithms
+            )
+            user._runtime_credential_reference = {
+                "kind": "web_session",
+                "user_id": user.user_id,
+                "tenant_id": user.tenant_id,
+                "token_version": user.token_version,
+                "expires_at": datetime.fromtimestamp(claims["exp"], UTC).replace(tzinfo=None).isoformat(),
+            }
+        return user
 
     @classmethod
     async def get_admin_user(cls, auth_jwt: AuthJwt = Depends()) -> Self:
@@ -614,7 +642,7 @@ class LoginUser(BaseModel):
 
         Mirrors the gate on the build page: the "new app" entry is hidden for
         everyone else, and the create endpoints must refuse them too rather
-        than trust the UI (NVDB F068 — hidden button, open API).
+        than trust the UI (NVDB F072 — hidden button, open API).
         """
         login_user = await cls.get_login_user(auth_jwt)
         if login_user.is_admin():
@@ -623,8 +651,14 @@ class LoginUser(BaseModel):
         return login_user
 
     @classmethod
-    async def get_login_user_from_ws(cls, websocket: WebSocket, auth_jwt: AuthJwt = Depends(), t: str = None) -> Self:
+    async def get_login_user_from_ws(
+        cls, websocket: WebSocket, auth_jwt: AuthJwt = Depends(), t: str | None = None
+    ) -> Self:
         subject = auth_jwt.get_subject(auth_from="websocket", websocket=websocket, token=t)
+        if "dsh_web_session" in subject:
+            from bisheng.dsh.domain.services.web_session import validate_web_session
+
+            await validate_web_session(websocket, subject)
         return await cls.init_login_user(
             user_id=subject["user_id"],
             user_name=subject["user_name"],
@@ -633,7 +667,9 @@ class LoginUser(BaseModel):
         )
 
     @classmethod
-    async def get_admin_user_from_ws(cls, websocket: WebSocket, auth_jwt: AuthJwt = Depends(), t: str = None) -> Self:
+    async def get_admin_user_from_ws(
+        cls, websocket: WebSocket, auth_jwt: AuthJwt = Depends(), t: str | None = None
+    ) -> Self:
         login_user = await cls.get_login_user_from_ws(websocket, auth_jwt, t)
         if not login_user.is_admin():
             raise UnAuthorizedError.http_exception()

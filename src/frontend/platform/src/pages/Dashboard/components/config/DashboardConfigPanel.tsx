@@ -1,12 +1,13 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
 // DashboardConfigPanel.tsx
-"use client"
 
-import { Button } from "@/components/bs-ui/button"
-import { ListIndentDecrease, ListIndentIncrease } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
-import { useEditorDashboardStore } from "@/store/dashboardStore"
-import { useTranslation } from "react-i18next"
+
+
+import { useEditorDashboardStore } from "@/store/dashboardStore";
+import { useCallback,useEffect,useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface DashboardConfigPanelProps {
   collapsed?: boolean
@@ -47,7 +48,7 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
   const PanelHeader = ({ title, onCollapse, icon }: any) => (
     <div className="px-4 py-3 border-b flex items-center justify-between bg-muted/20">
       <h3 className="text-base font-semibold">{title}</h3>
-      <Button variant="ghost" size="icon" onClick={onCollapse} className="h-8 w-8">
+      <Button variant="text" size="medium" onClick={onCollapse} className="h-8 w-8" color="default" iconOnly>
         {icon}
       </Button>
     </div>
@@ -69,14 +70,14 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
           <CollapseLabel
             label={t("configPanel.title")}
             onClick={onCollapse}
-            icon={<ListIndentDecrease className="w-4 h-4" />}
+            icon={<Outlined.Left className="w-4 h-4" />}
           />
         ) : (
           <div className="flex-1 flex flex-col overflow-hidden">
             <PanelHeader
               title={t("configPanel.title")}
               onCollapse={onCollapse}
-              icon={<ListIndentIncrease className="w-4 h-4" />}
+              icon={<Outlined.Right className="w-4 h-4" />}
             />
 
             <div className="flex-1 overflow-y-auto px-2 pb-6 pt-4 space-y-6">

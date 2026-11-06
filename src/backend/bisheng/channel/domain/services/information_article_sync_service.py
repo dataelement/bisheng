@@ -7,7 +7,6 @@ from zoneinfo import ZoneInfo
 
 from loguru import logger
 
-from bisheng.channel.domain.models.information_article_sync_state import InformationArticleSyncState
 from bisheng.channel.domain.repositories.interfaces.information_article_sync_state_repository import (
     InformationArticleSyncStateRepository,
 )
@@ -56,9 +55,13 @@ class InformationArticleSyncService:
             return result
 
         state = await self.state_repository.find_by_source_id(subscription.id)
-        if state is not None and (
-            state.processed_remote_sync_at == subscription.last_sync_at
-            and state.processed_article_list_updated_at == subscription.article_list_updated_at
+        if (
+            state is not None
+            and state.article_cursor_create_time is not None
+            and (
+                state.processed_remote_sync_at == subscription.last_sync_at
+                and state.processed_article_list_updated_at == subscription.article_list_updated_at
+            )
         ):
             result["result"] = "no_change"
             self._emit(subscription.id, result, started_at)
@@ -66,6 +69,7 @@ class InformationArticleSyncService:
 
         if (
             state is not None
+            and state.article_cursor_create_time is not None
             and subscription.article_list_updated_at is not None
             and state.processed_article_list_updated_at == subscription.article_list_updated_at
         ):
@@ -85,9 +89,32 @@ class InformationArticleSyncService:
             return result
 
         try:
-            state = await self._ensure_initial_boundary(subscription.id, state)
             if state is None:
-                raise RuntimeError("information article state boundary was not created")
+                raise RuntimeError("information source metadata was not reconciled before article sync")
+            if state.article_cursor_create_time is None:
+                bootstrap = await self._bootstrap(
+                    subscription,
+                    lock_guard,
+                    dispatch_callback,
+                )
+                if not lock_guard.refresh():
+                    result["result"] = "lock_lost"
+                    result["new_article_ids"] = bootstrap["new_ids"]
+                    result["written"] = bootstrap["written"]
+                    self._emit(subscription.id, result, started_at)
+                    return result
+                committed = await self.state_repository.commit_if_unchanged(
+                    subscription.id,
+                    state,
+                    bootstrap["snapshot_max_create_time"],
+                    subscription.last_sync_at,
+                    subscription.article_list_updated_at,
+                )
+                result["result"] = "success" if committed else "state_conflict"
+                result["new_article_ids"] = bootstrap["new_ids"]
+                result["written"] = bootstrap["written"]
+                self._emit(subscription.id, result, started_at)
+                return result
             latest_subscription = subscription
             next_cursor = state.article_cursor_create_time
             all_new_ids: list[str] = []
@@ -99,8 +126,7 @@ class InformationArticleSyncService:
                     lock_guard,
                     dispatch_callback,
                 )
-                if scan["max_create_time"] is not None:
-                    next_cursor = max(next_cursor or scan["max_create_time"], scan["max_create_time"])
+                next_cursor = max(next_cursor, scan["snapshot_max_create_time"])
                 all_new_ids.extend(scan["new_ids"])
                 written += scan["written"]
                 reread = await self._reload_subscription(subscription.id)
@@ -144,34 +170,36 @@ class InformationArticleSyncService:
         remote_day = datetime.fromtimestamp(last_sync_at, tz=timezone).date()
         return remote_day == datetime.now(tz=timezone).date()
 
-    async def _ensure_initial_boundary(
+    async def _bootstrap(
         self,
-        source_id: str,
-        state: InformationArticleSyncState | None,
-    ) -> InformationArticleSyncState:
-        if state is not None and state.article_cursor_create_time is not None:
-            return state
+        subscription: InformationSubscriptionItem,
+        lock_guard: Any,
+        dispatch_callback: Callable[[str, list[str], int], Any],
+    ) -> dict:
         conf = self._conf()
-        page = await self.client.get_information_articles_page(
-            source_id,
-            min_create_time=None,
-            page=1,
-            page_size=conf.information_initial_article_limit,
+        page = await self.client.get_information_articles_bootstrap(
+            subscription.id,
+            limit=conf.information_initial_article_limit,
         )
-        expected_count = min(conf.information_initial_article_limit, page.total)
         if (
-            page.current_page != 1
-            or page.total < 0
-            or len(page.articles) != expected_count
+            page.total < 0
+            or page.total > conf.information_initial_article_limit
+            or len(page.articles) != page.total
             or len({item.id for item in page.articles}) != len(page.articles)
+            or page.snapshot_max_create_time is None
         ):
-            raise RuntimeError("information initial article page was incomplete")
-        cursor = min((self._timestamp(item.create_time) for item in page.articles), default=None)
-        if state is None:
-            return await self.state_repository.create_initial_boundary_if_absent(source_id, cursor)
-        if cursor is None:
-            return state
-        return await self.state_repository.create_initial_boundary_if_absent(source_id, cursor)
+            raise RuntimeError("information bootstrap article response was incomplete")
+        written = await self._write_articles(
+            subscription,
+            page.articles,
+            lock_guard,
+            dispatch_callback,
+        )
+        return {
+            "snapshot_max_create_time": page.snapshot_max_create_time,
+            "new_ids": written["new_ids"],
+            "written": written["written"],
+        }
 
     async def _scan_pages(
         self,
@@ -184,13 +212,14 @@ class InformationArticleSyncService:
         expected_total: int | None = None
         seen_ids: set[str] = set()
         previous_sort_key: tuple[int, str] | None = None
-        max_create_time: int | None = None
+        snapshot_max_create_time: int | None = None
         new_ids: list[str] = []
         written = 0
         while True:
             page = await self.client.get_information_articles_page(
                 subscription.id,
                 min_create_time=boundary,
+                max_create_time=snapshot_max_create_time,
                 page=page_number,
                 page_size=100,
             )
@@ -198,8 +227,13 @@ class InformationArticleSyncService:
                 raise RuntimeError("information article page number changed")
             if expected_total is None:
                 expected_total = page.total
+                snapshot_max_create_time = page.snapshot_max_create_time
+                if snapshot_max_create_time is None:
+                    raise RuntimeError("information article snapshot watermark is missing")
             elif page.total != expected_total:
                 raise RuntimeError("information article totalCount changed")
+            elif page.snapshot_max_create_time != snapshot_max_create_time:
+                raise RuntimeError("information article snapshot watermark changed")
             page_articles: dict[str, ArticleDocument] = {}
             for article in page.articles:
                 if article.id in seen_ids:
@@ -212,54 +246,81 @@ class InformationArticleSyncService:
                     raise RuntimeError("information article response ordering is unstable")
                 previous_sort_key = sort_key
                 seen_ids.add(article.id)
-                max_create_time = max(max_create_time or create_time, create_time)
                 page_articles[article.id] = self._to_document(subscription, article)
             if page_articles:
-                if not lock_guard.refresh():
-                    raise RuntimeError("information article lock ownership lost")
-                existing = await self.article_service.mget_existing_ids(list(page_articles))
-                bulk = await self.article_service.bulk_index_articles_detailed(page_articles)
-                written += len(bulk.success_ids)
-                returned_ids = bulk.success_ids | set(bulk.failed_ids)
-                known_success_ids = bulk.success_ids & set(page_articles)
-                if known_success_ids:
-                    await self.article_service.refresh_index()
-                deliverable = sorted(known_success_ids - existing)
-                if deliverable:
-                    detected_at = int(time())
-                    try:
-                        dispatched = dispatch_callback(subscription.id, deliverable, detected_at)
-                        if inspect.isawaitable(dispatched):
-                            await dispatched
-                    except Exception:
-                        logger.exception(
-                            "information knowledge route dispatch failed source_id={} article_count={}",
-                            subscription.id,
-                            len(deliverable),
-                        )
-                        emit_metric(
-                            "information_article_dispatch",
-                            result="failed",
-                            source_id=subscription.id,
-                            article_count=len(deliverable),
-                        )
-                    new_ids.extend(deliverable)
-                if (
-                    bulk.failed_ids
-                    or returned_ids != set(page_articles)
-                    or bulk.success_ids.intersection(bulk.failed_ids)
-                ):
-                    raise RuntimeError("information article bulk result was incomplete")
+                page_write = await self._write_documents(
+                    subscription.id,
+                    page_articles,
+                    lock_guard,
+                    dispatch_callback,
+                )
+                written += page_write["written"]
+                new_ids.extend(page_write["new_ids"])
             if len(seen_ids) == expected_total:
                 break
             if len(seen_ids) > expected_total or not page.articles:
                 raise RuntimeError("information article snapshot ended before totalCount")
             page_number += 1
         return {
-            "max_create_time": max_create_time,
+            "snapshot_max_create_time": snapshot_max_create_time,
             "new_ids": new_ids,
             "written": written,
         }
+
+    async def _write_articles(
+        self,
+        subscription: InformationSubscriptionItem,
+        articles: list[ArticleInfo],
+        lock_guard: Any,
+        dispatch_callback: Callable[[str, list[str], int], Any],
+    ) -> dict:
+        documents = {article.id: self._to_document(subscription, article) for article in articles}
+        return await self._write_documents(
+            subscription.id,
+            documents,
+            lock_guard,
+            dispatch_callback,
+        )
+
+    async def _write_documents(
+        self,
+        source_id: str,
+        documents: dict[str, ArticleDocument],
+        lock_guard: Any,
+        dispatch_callback: Callable[[str, list[str], int], Any],
+    ) -> dict:
+        if not documents:
+            return {"new_ids": [], "written": 0}
+        if not lock_guard.refresh():
+            raise RuntimeError("information article lock ownership lost")
+        existing = await self.article_service.mget_existing_ids(list(documents))
+        bulk = await self.article_service.bulk_index_articles_detailed(documents)
+        returned_ids = bulk.success_ids | set(bulk.failed_ids)
+        known_success_ids = bulk.success_ids & set(documents)
+        if known_success_ids:
+            await self.article_service.refresh_index()
+        deliverable = sorted(known_success_ids - existing)
+        if deliverable:
+            detected_at = int(time())
+            try:
+                dispatched = dispatch_callback(source_id, deliverable, detected_at)
+                if inspect.isawaitable(dispatched):
+                    await dispatched
+            except Exception:
+                logger.exception(
+                    "information knowledge route dispatch failed source_id={} article_count={}",
+                    source_id,
+                    len(deliverable),
+                )
+                emit_metric(
+                    "information_article_dispatch",
+                    result="failed",
+                    source_id=source_id,
+                    article_count=len(deliverable),
+                )
+        if bulk.failed_ids or returned_ids != set(documents) or bulk.success_ids.intersection(bulk.failed_ids):
+            raise RuntimeError("information article bulk result was incomplete")
+        return {"new_ids": deliverable, "written": len(bulk.success_ids)}
 
     async def _reload_subscription(self, source_id: str) -> InformationSubscriptionItem | None:
         subscriptions = await self.client.list_all_subscriptions()

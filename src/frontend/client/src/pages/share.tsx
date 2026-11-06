@@ -1,5 +1,9 @@
 // @ts-strict-ignore
 
+import { isApiError } from "@bisheng/api-client";
+import { Button } from "@bisheng/ui";
+import { showApiError } from "~/api/request";
+import { useLocalize } from "~/hooks";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getShareParamsApi } from "~/api";
@@ -19,6 +23,22 @@ export default function Share() {
     const [type, setType] = useState('')
     const [shareInfo, setShareInfo] = useState(null)
     const navigate = useNavigate()
+    const localize = useLocalize();
+    const [error, setError] = useState<unknown>(null);
+    const loadShare = () => {
+        setError(null);
+        void getShareParamsApi(shareToken).then(res => {
+            setType(res.data.resource_type);
+            setShareInfo(res.data);
+        }).catch(cause => {
+            if (isApiError(cause) && (cause.status_code === 404 || cause.httpStatus === 404)) {
+                navigate('/404', { replace: true });
+                return;
+            }
+            setError(cause);
+            showApiError(cause);
+        });
+    };
 
     useEffect(() => {
         // Handle app share links: token format is "app_{applicationId}_{flowType}"
@@ -34,16 +54,15 @@ export default function Share() {
             }
         }
 
-        getShareParamsApi(shareToken).then(res => {
-            if ([404, 500].includes(res.status_code)) {
-                console.log('404 page')
-                return navigate('/404', { replace: true })
-            }
-            setType(res.data.resource_type)
-            setShareInfo(res.data)
-        })
+        loadShare();
     }, [])
 
+    if (error) return (
+        <div role="alert">
+            <p>{error instanceof Error ? error.message : localize('com_ui_error')}</p>
+            <Button variant="outlined" onClick={loadShare}>{localize('com_ui_retry')}</Button>
+        </div>
+    );
     if (!shareInfo) return null
 
     const content = (() => {

@@ -66,6 +66,15 @@ PASSWORD_STRENGTH_PATTERN = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W
 
 
 class UserService:
+    @classmethod
+    def list_management_users(cls, user_ids=None, keyword=None, page=0, limit=0):
+        from bisheng.user.domain.repositories.management_search_repository import ManagementSearchRepository
+
+        try:
+            return ManagementSearchRepository.list_users(user_ids, keyword, page, limit)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     @staticmethod
     def _dsh_enabled() -> bool:
         configuration = getattr(settings, "dsh", {})
@@ -488,6 +497,10 @@ class UserService:
         """Reject users without any role or organizational administration, or without an effective entry menu.
 
         In approval mode, a top-level workstation or admin menu alone is sufficient for entry.
+
+        No service-account guard is needed here: service accounts are not rows
+        of ``user`` (F053 design K15 / K17), so no login path can ever hand one
+        in as ``db_user``.
         """
         # Pre-tenant-context check: any role/dept/group access across all tenants
         # qualifies for login. Without bypass, every DAO below trips

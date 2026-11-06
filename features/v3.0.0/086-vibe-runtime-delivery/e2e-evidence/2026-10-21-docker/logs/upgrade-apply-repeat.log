@@ -1,0 +1,3 @@
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+{"inventory_sha256": "13458d7c8062461e95eaa5ac631b0707bdbd8556d6310559bc9162c915f9f794", "applications": 1, "applied": true}
+PASS production upgrade CLI apply

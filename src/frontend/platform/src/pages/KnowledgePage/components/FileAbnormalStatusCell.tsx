@@ -1,3 +1,4 @@
+import { Tag } from "@bisheng/ui";
 import { useTranslation } from "react-i18next";
 
 interface FileAbnormalStatusCellProps {
@@ -10,11 +11,8 @@ export function FileAbnormalStatusCell({ hasAbnormalFiles }: FileAbnormalStatusC
         return null;
     }
     return (
-        <div className="flex items-center gap-2 cursor-default">
-            <span className="size-[6px] rounded-full bg-red-500"></span>
-            <span className="font-[500] text-[14px] leading-[100%] text-red-500">
-                {t("fileStatusAbnormal")}
-            </span>
-        </div>
+        <Tag size="small" dot color="danger" className="shrink-0 whitespace-nowrap">
+            {t("fileStatusAbnormal")}
+        </Tag>
     );
 }

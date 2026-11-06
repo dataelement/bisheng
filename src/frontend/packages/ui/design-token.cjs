@@ -259,12 +259,14 @@ const SHADOW = [
     name: 'popup',
     cssVar: '--shadow-popup',
     value: '0 2px 16px -2px rgba(0, 23, 66, 0.10)',
+    darkValue: '0 2px 16px -2px rgba(0, 0, 0, 0.5)',
     usage: '浮层：下拉菜单、选择器面板、气泡卡片、轻提示——点开即现、点外即走',
   },
   {
     name: 'modal',
     cssVar: '--shadow-modal',
     value: '0 0 16px 0 rgba(3, 7, 117, 0.05)',
+    darkValue: '0 0 16px 0 rgba(0, 0, 0, 0.4)',
     usage: '模态：弹窗、抽屉——要求用户处理完才关闭的打断式浮层',
   },
 ];

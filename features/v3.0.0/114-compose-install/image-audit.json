@@ -1,0 +1,362 @@
+{
+  "date": "2026-10-29",
+  "cr_authenticated_from": "192.168.106.166",
+  "dockerhub_from": "development machine",
+  "images": [
+    {
+      "registry": "cr",
+      "image": "dataelement/bisheng-backend:v3.0.0-beta6",
+      "status": 200,
+      "platforms": [
+        "linux/amd64"
+      ],
+      "digest": "sha256:0a9ce22db4a1c494fa6b8011bb724f2f4a623c5710c4f6dfdf707bcbf12c00bc"
+    },
+    {
+      "registry": "cr",
+      "image": "dataelement/bisheng-frontend:v3.0.0-beta6",
+      "status": 200,
+      "platforms": [
+        "linux/amd64"
+      ],
+      "digest": "sha256:f3975be7880ad4a9e9d2085666366c04056d5f0221044ced730d6fec8fb22f65"
+    },
+    {
+      "registry": "cr",
+      "image": "mysql:8.0",
+      "status": 200,
+      "platforms": [
+        "linux/amd64"
+      ],
+      "digest": "sha256:42932c891d186025011bf6721ef8fb7979a129b49739c63144bf307ae4d81dcf"
+    },
+    {
+      "registry": "cr",
+      "image": "dataelement/openfga:v1.15.2-dm",
+      "status": 200,
+      "platforms": [
+        "linux/amd64"
+      ],
+      "digest": "sha256:3e625401a261d104f9c8275826286b18822ea11e6d2b45664a428cda0c97a253"
+    },
+    {
+      "registry": "cr",
+      "image": "redis:7.0.4",
+      "status": 200,
+      "platforms": [
+        "linux/amd64"
+      ],
+      "digest": "sha256:f3be7cc42282295cdd2ccaafd10e6f315df4d3ce6f27f6d00946b294395966f1"
+    },
+    {
+      "registry": "cr",
+      "image": "bitnami/elasticsearch:8.12.0",
+      "status": 200,
+      "platforms": [
+        "linux/amd64"
+      ],
+      "digest": "sha256:d066a5dc06d1d3d1fda21dda0aed80bc575f1806f0b12641f9e713b2b6a339e9"
+    },
+    {
+      "registry": "cr",
+      "image": "quay.io/coreos/etcd:v3.5.5",
+      "status": 200,
+      "platforms": [
+        "linux/amd64"
+      ],
+      "digest": "sha256:9344cfb9cbe4df0635478b6a2b62765330128fbdf3ca8fc9f2edac262552f700"
+    },
+    {
+      "registry": "cr",
+      "image": "minio/minio:RELEASE.2023-03-20T20-16-18Z",
+      "status": 200,
+      "platforms": [
+        "linux/amd64"
+      ],
+      "digest": "sha256:b36662dc531302f93d0ac2f4f05ae36b877e8d0d1e9b52d5c5d8f17e955b6789"
+    },
+    {
+      "registry": "cr",
+      "image": "milvusdb/milvus:v2.5.10",
+      "status": 200,
+      "platforms": [
+        "linux/amd64"
+      ],
+      "digest": "sha256:8059b2097d27de4636c0180d016acd3f5cadbff755eb6d1c00dfb18d372a95df"
+    },
+    {
+      "registry": "cr",
+      "image": "dataelement/bisheng-sandbox:feat_3.0.0",
+      "status": 200,
+      "platforms": [
+        "linux/amd64"
+      ],
+      "digest": "sha256:513feea801d729aeab57b2d2a6fa39a1d1ef71585c36bf05d55f5f19a5d2e7d8"
+    },
+    {
+      "registry": "cr",
+      "image": "dataelement/bisheng-runtime-manager:v3.0.0",
+      "status": 404
+    },
+    {
+      "registry": "cr",
+      "image": "dataelement/bisheng-app-proxy:v3.0.0",
+      "status": 404
+    },
+    {
+      "registry": "cr",
+      "image": "dataelement/bisheng-runtime-helper:v3.0.0",
+      "status": 404
+    },
+    {
+      "registry": "cr",
+      "image": "dataelement/bisheng-runtime-assembler:v3.0.0",
+      "status": 404
+    },
+    {
+      "registry": "cr",
+      "image": "dataelement/bisheng-app-python:v3.0.0",
+      "status": 404
+    },
+    {
+      "registry": "cr",
+      "image": "dataelement/bisheng-app-python-preparer:v3.0.0",
+      "status": 404
+    },
+    {
+      "registry": "cr",
+      "image": "dataelement/bisheng-app-node:v3.0.0",
+      "status": 404
+    },
+    {
+      "registry": "cr",
+      "image": "dataelement/bisheng-app-node-preparer:v3.0.0",
+      "status": 404
+    },
+    {
+      "registry": "cr",
+      "image": "dataelement/bisheng-app-static:v3.0.0",
+      "status": 404
+    },
+    {
+      "registry": "cr",
+      "image": "tecnativa/docker-socket-proxy:0.3.0",
+      "status": 404
+    },
+    {
+      "registry": "cr",
+      "image": "dataelement/gateway:v1.8.0",
+      "status": 200,
+      "platforms": [
+        "linux/amd64"
+      ],
+      "digest": "sha256:3539060dd29f23489f8f20321bb5b180a34600355da26640e29cf5e5109b4e18"
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-runtime-manager:v3.0.0",
+      "status": 404
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-runtime-manager:v3.0.0-test-vibe-amd64",
+      "status": 200,
+      "platforms": [
+        "linux/amd64"
+      ],
+      "digest": "sha256:a5d39f04412343a527db7d9eed47acc8eb30d6af82a3a8a31abcdb27fd2769dd"
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-runtime-manager:v3.0.0-test-vibe-arm64",
+      "status": 200,
+      "platforms": [
+        "linux/arm64"
+      ],
+      "digest": "sha256:2053e032087d6b79f63ee9146aca0351030cc05492dd7045a19444acb19ddb3a"
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-app-proxy:v3.0.0",
+      "status": 404
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-app-proxy:v3.0.0-test-vibe-amd64",
+      "status": 200,
+      "platforms": [
+        "linux/amd64"
+      ],
+      "digest": "sha256:f811f386d4ed45959eb09eaf1b4666829092b581692586c507b33947ad226713"
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-app-proxy:v3.0.0-test-vibe-arm64",
+      "status": 200,
+      "platforms": [
+        "linux/arm64"
+      ],
+      "digest": "sha256:be3d1ce5d66158db94bc33d82628b232d0c471eb5900737e88de72076d27d686"
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-runtime-helper:v3.0.0",
+      "status": 401
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-runtime-helper:v3.0.0-test-vibe-amd64",
+      "status": 401
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-runtime-helper:v3.0.0-test-vibe-arm64",
+      "status": 401
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-runtime-assembler:v3.0.0",
+      "status": 401
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-runtime-assembler:v3.0.0-test-vibe-amd64",
+      "status": 401
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-runtime-assembler:v3.0.0-test-vibe-arm64",
+      "status": 401
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-app-python:v3.0.0",
+      "status": 404
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-app-python:v3.0.0-test-vibe-amd64",
+      "status": 200,
+      "platforms": [
+        "linux/amd64"
+      ],
+      "digest": "sha256:f395ceeb8d4740bfda3b4438d3ffd6c25e28d6d78d4d6f1585d12c2efb74413b"
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-app-python:v3.0.0-test-vibe-arm64",
+      "status": 200,
+      "platforms": [
+        "linux/arm64"
+      ],
+      "digest": "sha256:43a68c15b5e7ac68246c97572876529a18f6be90172d7a38b5312177e469c6ca"
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-app-python-preparer:v3.0.0",
+      "status": 404
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-app-python-preparer:v3.0.0-test-vibe-amd64",
+      "status": 200,
+      "platforms": [
+        "linux/amd64"
+      ],
+      "digest": "sha256:8088d0cb5303894cade562ab15f1b90108a46c7f2cde64c757958cd256844c39"
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-app-python-preparer:v3.0.0-test-vibe-arm64",
+      "status": 200,
+      "platforms": [
+        "linux/arm64"
+      ],
+      "digest": "sha256:9bba7f7fe05227377698c262cd94ef3b7f27ac2a69748d93f156ffc88684317e"
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-app-node:v3.0.0",
+      "error": "URLError"
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-app-node:v3.0.0-test-vibe-amd64",
+      "status": 200,
+      "platforms": [
+        "linux/amd64"
+      ],
+      "digest": "sha256:5722aff34e7dcea763b5448c7d6b09a755380f737566ed9890b68d18b571b751"
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-app-node:v3.0.0-test-vibe-arm64",
+      "status": 200,
+      "platforms": [
+        "linux/arm64"
+      ],
+      "digest": "sha256:944770ffbe3218fed6f1c8ae3c65eb1c9794069b981c668fcbbe7f337a77f58f"
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-app-node-preparer:v3.0.0",
+      "status": 404
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-app-node-preparer:v3.0.0-test-vibe-amd64",
+      "status": 200,
+      "platforms": [
+        "linux/amd64"
+      ],
+      "digest": "sha256:134c8da11595b08761069f6a3e05dd3631ca3d422a266ce67d97041e313eaafa"
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-app-node-preparer:v3.0.0-test-vibe-arm64",
+      "status": 200,
+      "platforms": [
+        "linux/arm64"
+      ],
+      "digest": "sha256:e23abc4ae2a7fddfd781c1903b0fa52c0640c02139ce29207a75f5706ab73696"
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-app-static:v3.0.0",
+      "status": 404
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-app-static:v3.0.0-test-vibe-amd64",
+      "status": 200,
+      "platforms": [
+        "linux/amd64"
+      ],
+      "digest": "sha256:1c69a7d5a45b6e9d7dcec310928f9380506637606480538efa78f9ec80a9d55d"
+    },
+    {
+      "registry": "hub",
+      "image": "dataelement/bisheng-app-static:v3.0.0-test-vibe-arm64",
+      "status": 200,
+      "platforms": [
+        "linux/arm64"
+      ],
+      "digest": "sha256:6033cb3ae2eb0bc3ddd79ab7dfd5425618d53a7fe3f5fc0b576b6959489e17f9"
+    },
+    {
+      "registry": "hub",
+      "image": "tecnativa/docker-socket-proxy:0.3.0",
+      "status": 200,
+      "platforms": [
+        "linux/386",
+        "linux/amd64",
+        "linux/arm",
+        "linux/arm64",
+        "linux/ppc64le",
+        "linux/s390x",
+        "unknown/unknown"
+      ],
+      "digest": "sha256:9e4b9e7517a6b660f2cc903a19b257b1852d5b3344794e3ea334ff00ae677ac2"
+    }
+  ]
+}

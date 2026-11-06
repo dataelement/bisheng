@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const toast = vi.hoisted(() => vi.fn());
-vi.mock("@/components/bs-ui/toast/use-toast", () => ({ toast }));
-vi.mock("i18next", () => ({ default: { t: (key: string) => key } }));
+vi.mock("@bisheng/ui", () => ({ notification: { open: toast } }));
+vi.mock("i18next", () => ({ default: { t: (key: string) => key, exists: () => false } }));
 beforeEach(() => {
   vi.resetModules();
   const storage = () => {
@@ -65,7 +65,7 @@ describe("shared streaming request policy", () => {
       ),
     );
     const { requestStream } = await import("./requestStream");
-    await expect(requestStream("/api/v1/audit")).rejects.toBeTruthy();
+    await expect(requestStream("/api/v1/audit")).rejects.toMatchObject({ status_code: 10604 });
     expect(kicked).toHaveBeenCalledTimes(1);
   });
   it("reuses session invalidation on HTTP 401 without logging response bodies", async () => {
@@ -91,7 +91,7 @@ describe("shared streaming request policy", () => {
       ),
     );
     const { requestStream } = await import("./requestStream");
-    await expect(requestStream("/api/v1/audit")).rejects.toBeTruthy();
+    await expect(requestStream("/api/v1/audit")).rejects.toMatchObject({ status_code: 403 });
     expect(localStorage.getItem("noAccessUrl")).toContain("/api/v1/audit");
   });
 });

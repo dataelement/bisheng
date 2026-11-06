@@ -1,4 +1,5 @@
-import { Button } from "@/components/bs-ui/button"
+import { Alert, Button } from '@bisheng/ui';
+
 import {
   Dialog,
   DialogContent,
@@ -200,12 +201,11 @@ export function ModeHeader({
                 </p>
               </div>
               {expired && (
-                <p
-                  className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-900"
-                  role="alert"
-                >
-                  {t("mode.expired")}
-                </p>
+                <Alert
+                  type="warning"
+                  description={t("mode.expired")}
+                  live
+                />
               )}
               {conflict && (
                 <p className="text-sm font-medium text-red-700" role="alert">
@@ -215,21 +215,10 @@ export function ModeHeader({
             </div>
           )}
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-11"
-              disabled={applying}
-              onClick={() => setConfirmOpen(false)}
-            >
+            <Button type="button" variant="outlined" className="min-h-11" disabled={applying} onClick={() => setConfirmOpen(false)} color="default">
               {t("mode.cancel")}
             </Button>
-            <Button
-              type="button"
-              className="min-h-11"
-              disabled={!draft || expired || applying}
-              onClick={() => void handleApply()}
-            >
+            <Button type="button" className="min-h-11" disabled={!draft || expired || applying} onClick={() => void handleApply()}>
               {applying ? t("mode.applying") : t("mode.confirm")}
             </Button>
           </DialogFooter>

@@ -28,6 +28,8 @@ export type ChatMessageType = {
   files?: Array<{ data: string; type: string; data_type: string, file_name?: string }>;
   chatKey: string;
   end: boolean;
+  stopped?: boolean;
+  remark?: string;
   id?: number;
   source?: number;
   citations?: any[] | null;
@@ -123,6 +125,12 @@ export type BishengConfig = {
   workbench_menu_unavailable_message?: string;
   /** 是否部署 ETL4LM  */
   enable_etl4lm: boolean;
+  /**
+   * F054 — whether the app-factory runtime layer is deployed in this
+   * environment. Absent on older backends, so consumers must treat
+   * `undefined` as "not deployed" (read it through `useAppRuntimeEnabled`).
+   */
+  app_runtime_enabled?: boolean;
   /** Whether employees may manage a personal access token in account settings. */
   personal_token_enabled?: boolean;
   /** Knowledge space feature flags */

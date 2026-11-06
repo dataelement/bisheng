@@ -1,0 +1,6 @@
+# Build context: repository root. Go modules are verified by the Go checksum database in CI.
+ARG HELPER_IMAGE
+FROM ${HELPER_IMAGE}
+USER 10001:10001
+ENTRYPOINT ["python", "-I", "-m", "runtime_manager.oci_assembler"]
+CMD []

@@ -1,7 +1,9 @@
+import { ApiRequestFailure } from '~/components/ApiRequestFailure';
+import { HoverCard, HoverCardTrigger, HoverCardContent, HoverCardPortal } from '~/components/ui/HoverCard';
 import { Outlined } from "bisheng-icons";
 import { useState, useEffect, useRef, type MouseEvent } from "react";
 import { Button } from "~/components/ui/Button";
-import { Checkbox } from "~/components/ui/Checkbox";
+import { Checkbox } from '@bisheng/ui';
 import { SearchInput } from "@bisheng/ui";
 import { truncateName, type InformationSource } from "~/api/channels";
 import { cn } from "~/utils";
@@ -10,7 +12,7 @@ import { useSourceManager } from "../hooks/useSourceManager";
 import { useConfirm } from "~/Providers";
 import { ChannelRightSmallUpIcon } from "~/components/icons/channels";
 import { ListWebLinkIllustration, EmptyStateIllustration, CrawlingIllustration } from "~/components/illustrations";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+
 // Imported as a module (not a /public URL) so the bundler resolves it against
 // the app's base path and fingerprints it — no env-var lookup at render time.
 import wechatCopyLinkGuide from "./wechat-copy-link-guide.png";
@@ -41,26 +43,12 @@ export function WechatLinkHint({
     const splitAt = sentence.indexOf(linkLabel);
 
     const highlighted = (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                {/* mx-1 gives the highlighted phrase breathing room from the grey
-                    text on both sides; CJK copy has no natural word spacing. */}
-                <span className="mx-1 cursor-pointer text-blue-500 no-underline">{linkLabel}</span>
-            </TooltipTrigger>
-            <TooltipContent
-                side="top"
-                className="w-[280px] max-w-[280px] rounded-md border-none bg-white p-3 text-left text-xs leading-5 text-text-3 shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
-                arrowClassName="bg-white fill-white"
-            >
-                <img src={wechatCopyLinkGuide} alt="" className="mx-auto mb-2 w-[160px] rounded" />
-                {/* Size/colour live on the <p> itself, matching the sentence that
+        <HoverCard openDelay={100} closeDelay={100} ><HoverCardTrigger asChild>{/* mx-1 gives the highlighted phrase breathing room from the grey
+                    text on both sides; CJK copy has no natural word spacing. */}<span tabIndex={0} className="mx-1 cursor-pointer text-blue-500 no-underline">{linkLabel}</span></HoverCardTrigger><HoverCardPortal><HoverCardContent side="top" className="w-[280px] max-w-[280px] rounded-md border-none bg-white p-3 text-left text-xs leading-5 text-text-3 shadow-[0_4px_16px_rgba(0,0,0,0.12)]">{<><img src={wechatCopyLinkGuide} alt="" className="mx-auto mb-2 w-[160px] rounded" />{/* Size/colour live on the <p> itself, matching the sentence that
                     owns the trigger — inheriting from the panel lets the panel's
-                    own text-* classes compete with them. */}
-                <p className="text-[12px] leading-5 text-text-3">
+                    own text-* classes compete with them. */}<p className="text-[12px] leading-5 text-text-3">
                     {localize("com_subscription.wechat_link_copy_tip")}
-                </p>
-            </TooltipContent>
-        </Tooltip>
+                </p></>}</HoverCardContent></HoverCardPortal></HoverCard>
     );
 
     // Defensive: a translation that dropped the placeholder still renders readably.
@@ -221,7 +209,7 @@ export function AddSourceDropdown({
             setIsExpandedListScrolling(false);
         }, 500);
 
-        if (mgr.viewMode !== "list") return;
+        if (mgr.viewMode !== "list" || mgr.sourceListError) return;
         const el = e.currentTarget;
         const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 24;
         if (nearBottom) {
@@ -386,6 +374,7 @@ export function AddSourceDropdown({
                         onScroll={handleExpandedListScroll}
                         data-scrolling={isExpandedListScrolling ? "true" : "false"}
                     >
+                        {mgr.sourceListError ? <ApiRequestFailure error={mgr.sourceListError} onRetry={mgr.retrySources} /> : null}
                         {mgr.viewMode === "noResultNonUrl" && (
                             <div className="flex min-h-full flex-col items-center justify-center px-4 py-8 text-center">
                                 <div className="mb-4">
@@ -461,9 +450,9 @@ export function AddSourceDropdown({
                         )}
                         {mgr.viewMode === "list" && (
                             <>
-                                {displayList.length === 0 ? (
+                                {displayList.length === 0 ? (!mgr.sourceListError && !mgr.loadingSources && (
                                     <div className="flex min-h-full items-center justify-center p-8 text-center text-[14px] text-text-3">{localize("com_subscription.no_data")}</div>
-                                ) : (
+                                )) : (
                                     <div className="">
                                         {displayList.map((source) => {
                                             const sel = mgr.selectedIds.has(source.id);
@@ -520,7 +509,7 @@ export function AddSourceDropdown({
                                                         <Checkbox
                                                             checked={sel}
                                                             onCheckedChange={() => !dis && mgr.toggleSource(source)}
-                                                            className="rounded border-border-deep data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
+                                                            className="peer rounded border-border-deep data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
                                                         />
                                                     </div>
                                                 </div>

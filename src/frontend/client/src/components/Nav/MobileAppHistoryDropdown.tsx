@@ -1,8 +1,9 @@
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import AppAvator from '~/components/Avator';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
+
 import { useLocalize } from '~/hooks';
 import { useAppSidebar } from '~/pages/appChat/hooks/useAppSidebar';
 import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
@@ -56,18 +57,9 @@ function TruncatedLineTooltip({ text, className }: { text: string; className?: s
     }
 
     return (
-        <TooltipProvider delayDuration={300}>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <p ref={ref} className={pClassName}>
+        <SharedTooltipProvider delayDuration={300}><SharedTooltip  content={text} side="bottom"  align="start"><p ref={ref} className={pClassName}>
                         {text}
-                    </p>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" align="start" className="max-w-[200px]">
-                    {text}
-                </TooltipContent>
-            </Tooltip>
-        </TooltipProvider>
+                    </p></SharedTooltip></SharedTooltipProvider>
     );
 }
 
@@ -102,16 +94,34 @@ export function MobileAppHistoryDropdown({
     const flowData = chatState?.flow ?? currentApp;
     const showShareApp = flowData?.can_share === true;
 
+    const historyTrigger = useRef<Element | null>(null);
+    useEffect(() => {
+        historyTrigger.current = open ? document.activeElement : null;
+    }, [open]);
+
+    useEffect(() => {
+        if (!open) return;
+        const trigger = historyTrigger.current;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && !event.defaultPrevented) {
+                event.preventDefault();
+                onClose();
+                if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus();
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [open, onClose]);
+
     if (!open || typeof document === 'undefined') return null;
 
-    // Render through a portal so the dropdown escapes MobileNav's stacking context (its
-    // sibling holds chat content + input form which would otherwise paint on top).
+    // This history region keeps the header and desktop sidebar interactive. Body
+    // portals with modal semantics are expanded to the native window by the host.
     return createPortal(
         <div
             className="fixed inset-x-0 bottom-0 z-[80] flex flex-col bg-white"
             style={{ top: topOffset }}
-            role="dialog"
-            aria-modal="true"
+            role="region"
             aria-label={localize('com_app_chat_sidebar_title')}
         >
             {/* App card — same UI as the SideNav card */}
@@ -134,14 +144,14 @@ export function MobileAppHistoryDropdown({
                         <div className="flex min-w-0 flex-1 flex-col justify-center">
                             <div className="flex items-center justify-between">
                                 <h3 className="truncate text-[14px] font-medium leading-[22px]">
-                                    {flowData?.name || '未知应用'}
+                                    {flowData?.name || localize("com_app.unknown_name")}
                                 </h3>
                                 <div className="ml-1 flex size-[16px] shrink-0 items-center justify-center">
                                     <AppSwitcherDropdown />
                                 </div>
                             </div>
                             <TruncatedLineTooltip
-                                text={flowData?.description || '暂无描述信息'}
+                                text={flowData?.description || localize("com_app_no_description_placeholder")}
                                 className="truncate text-[12px] leading-[19.5px] text-[#a9aeb8]"
                             />
                         </div>

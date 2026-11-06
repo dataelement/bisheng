@@ -75,7 +75,7 @@ const BookmarkEditDialog = ({
           message: bookmark
             ? localize('com_ui_bookmarks_update_error')
             : localize('com_ui_bookmarks_create_error'),
-          severity: NotificationSeverity.ERROR,
+          severity: NotificationSeverity.WARNING,
         });
       },
     },

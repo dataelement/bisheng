@@ -1,0 +1,107 @@
+# Default fullname is "code-runner" so Pod DNS is
+#   code-runner-{n}.code-runner.<namespace>.svc.cluster.local
+# (StatefulSet ordinal from 0). Do not use a ClusterIP Service as the only
+# entry — that breaks keep_session sticky binds.
+fullnameOverride: code-runner
+nameOverride: code-runner
+
+image:
+  repository: dataelement/bisheng-sandbox
+  tag: v3.0.0
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+replicaCount: 2
+
+service:
+  port: 8080
+
+# Shared with the BiSheng worker (BS_SANDBOX_CONF__TOKEN).
+token:
+  value: bisheng-sandbox-local
+  existingSecret: ""
+  existingSecretKey: token
+
+env:
+  SANDBOX_MAX_SESSIONS: "50"
+  # Total bytes copied into one session (512 MiB); files past it are skipped and reported.
+  SANDBOX_MAX_COPY_IN_TOTAL_BYTES: "536870912"
+  SANDBOX_ENABLE_UID_ISOLATION: "true"
+  SANDBOX_LEASE_TTL_S: "900"
+  SANDBOX_LOG_LEVEL: INFO
+  TZ: Asia/Shanghai
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    # Shared by every session on the pod (compose: SANDBOX_CPUS). Keep it set:
+    # without a CPU limit one runaway session starves the node.
+    cpu: "2"
+    memory: 2Gi
+
+# Isolation hardening — keep in lockstep with docker/docker-compose.yml.
+securityContext:
+  runAsUser: 0
+  runAsNonRoot: false
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+    # KILL: signal a session uid's process group on timeout / session delete.
+    add: ["SETUID", "SETGID", "CHOWN", "DAC_OVERRIDE", "KILL"]
+
+podSecurityContext: {}
+
+# Who may call POST /v1/sessions. Uses the automatic namespace name label.
+networkPolicy:
+  enabled: true
+  # User code shares the runner netns. Egress is allowed so the sandbox
+  # can reach the public internet. Ingress stays limited to platform pods.
+  denyEgress: false
+  allowFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: bisheng
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/component: worker
+    # Editor "run once" executes in the API process, not the Celery worker.
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: bisheng
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/component: backend
+    # Task mode (Linsight) runs in its own Deployment; the worker image's
+    # entrypoint does not start it.
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: bisheng
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/component: linsight
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 20
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 3
+  periodSeconds: 10
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+serviceAccount:
+  create: false
+  name: ""

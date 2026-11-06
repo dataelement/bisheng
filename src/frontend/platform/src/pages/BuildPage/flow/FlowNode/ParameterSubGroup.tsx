@@ -1,11 +1,11 @@
 // @ts-strict-ignore
+import { AppHint as QuestionTooltip } from "@/pages/BuildPage/components/AppHint";
 import { WorkflowNode } from "@/types/flow";
+import { Switch } from "@bisheng/ui";
+import { useEffect,useMemo,useRef,useState } from "react";
+import { useTranslation } from "react-i18next";
 import GroupInputFile from "./component/GroupInputFile";
 import Parameter from "./Parameter";
-import { useTranslation } from "react-i18next";
-import { Switch } from "@/components/bs-ui/switch";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 
 type category = WorkflowNode['group_params'][number]
 interface Props {

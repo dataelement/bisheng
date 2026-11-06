@@ -88,8 +88,9 @@ export function ChannelSettingsPage() {
               _resourceType,
               _resourceId,
               config,
+              params,
             ) =>
-              getCreationUserGroups("channel", config),
+              getCreationUserGroups("channel", config, params),
           }
         : undefined,
     [isEditMode],
@@ -132,6 +133,12 @@ export function ChannelSettingsPage() {
     }),
     [displayedPermissionRows],
   );
+  const disabledDepartmentSubtreeRootIds = useMemo(
+    () => displayedPermissionRows
+      .filter((row) => row.subjectType === "department" && row.includeChildren)
+      .map((row) => row.subjectId),
+    [displayedPermissionRows],
+  );
 
   if (settings.isLoading) {
     return (
@@ -170,7 +177,7 @@ export function ChannelSettingsPage() {
         if (!extractApiStatusCode(error)) {
           showToast({
             message: settings.localize("com_subscription.update_failed_retry"),
-            severity: NotificationSeverity.ERROR,
+            severity: NotificationSeverity.WARNING,
           });
         }
       }
@@ -266,7 +273,7 @@ export function ChannelSettingsPage() {
           message: settings.isEditMode
             ? settings.localize("com_subscription.update_failed_retry")
             : settings.localize("com_subscription.create_channel_failed_retry"),
-          severity: NotificationSeverity.ERROR,
+          severity: NotificationSeverity.WARNING,
         });
       }
     }
@@ -362,6 +369,7 @@ export function ChannelSettingsPage() {
         resourceType="channel"
         resourceId={channelId}
         disabledIds={disabledSubjectIds}
+        disabledDepartmentSubtreeRootIds={disabledDepartmentSubtreeRootIds}
         relationModels={relationOptions}
         canAddNonUserSubjects={relationOptions.length > 0}
         onConfirm={settings.permissionDraft.addRows}

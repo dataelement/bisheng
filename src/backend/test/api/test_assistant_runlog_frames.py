@@ -82,3 +82,49 @@ def test_no_citation_wrapper_reopens_a_run_for_the_retriever() -> None:
         source = (BACKEND_ROOT / relative).read_text(encoding="utf-8")
         assert "knowledge_retriever_tool.invoke" not in source, relative
         assert "knowledge_retriever_tool.ainvoke" not in source, relative
+
+
+class _Socket:
+    def __init__(self) -> None:
+        self.frames: list[dict] = []
+
+    async def send_json(self, frame: dict) -> None:
+        self.frames.append(frame)
+
+
+async def test_a_tool_called_by_a_wrapping_tool_gets_no_card_of_its_own() -> None:
+    """A citation wrapper calls the real tool with its own config, so the inner
+    call reports to the same handler with the wrapper as its parent run. Only
+    the wrapper's card is shown; it carries the citation key the model reads."""
+    from uuid import uuid4
+
+    socket = _Socket()
+    handler = AsyncGptsDebugCallbackHandler(socket, flow_id="a1", chat_id="")
+    outer, inner, model = uuid4(), uuid4(), uuid4()
+
+    await handler.on_tool_start({"name": "web_fetch"}, "{'url': 'u'}", run_id=outer, parent_run_id=model)
+    await handler.on_tool_start({"name": "web_fetch"}, "{'url': 'u'}", run_id=inner, parent_run_id=outer)
+    await handler.on_tool_end("page", run_id=inner, parent_run_id=outer, name="web_fetch")
+    await handler.on_tool_error(RuntimeError("x"), run_id=inner, parent_run_id=outer, name="web_fetch")
+    await handler.on_tool_end("page+citation_key", run_id=outer, parent_run_id=model, name="web_fetch")
+
+    assert [(frame["type"], json.loads(frame["extra"])["run_id"]) for frame in socket.frames] == [
+        ("start", outer.hex),
+        ("end", outer.hex),
+    ]
+    assert "citation_key" in socket.frames[-1]["intermediate_steps"]
+    assert handler.tool_cache == {}
+
+
+async def test_sibling_tool_calls_each_get_a_card() -> None:
+    from uuid import uuid4
+
+    socket = _Socket()
+    handler = AsyncGptsDebugCallbackHandler(socket, flow_id="a1", chat_id="")
+    model, first, second = uuid4(), uuid4(), uuid4()
+
+    for run_id in (first, second):
+        await handler.on_tool_start({"name": "web_search"}, "q", run_id=run_id, parent_run_id=model)
+        await handler.on_tool_end("hits", run_id=run_id, parent_run_id=model, name="web_search")
+
+    assert len(socket.frames) == 4

@@ -5,10 +5,15 @@ from datetime import datetime
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, inspect, select
+from sqlalchemy import Column, DateTime, Integer, MetaData, Table, create_engine, inspect, select
 from sqlalchemy.engine import make_url
 from sqlmodel import Session, SQLModel
 
+from bisheng.database.models.department import Department, UserDepartment
+from bisheng.database.models.role import Role
+from bisheng.database.models.tenant import Tenant
+from bisheng.user.domain.models.user_role import UserRole
+from bisheng.dsh.domain.models.unified_policy import CreditRule, ModelVisibility, PersonalLedgerState
 from bisheng.core.context.tenant import current_tenant_id
 from bisheng.dsh.domain.models.model_call import DshModelCall
 from bisheng.dsh.domain.models.monthly_usage import DshMonthlyUsage
@@ -51,18 +56,28 @@ def usage_db():
             raise ValueError("External tests require an explicitly isolated dsh_test_ database")
     engine = create_engine(url)
     tables = [
+        *[model.__table__ for model in (Tenant, Department, UserDepartment, Role, UserRole, CreditRule, ModelVisibility, PersonalLedgerState)],
         DshUserPolicy.__table__,
         DshSubjectPolicy.__table__,
         DshSubjectPolicyAudit.__table__,
         DshModelCall.__table__,
         DshMonthlyUsage.__table__,
     ]
+    if url == "sqlite://":
+        role_table = Table("userrole", MetaData(), Column("id", Integer, primary_key=True),
+                           Column("user_id", Integer), Column("role_id", Integer),
+                           Column("tenant_id", Integer), Column("create_time", DateTime), Column("update_time", DateTime))
+        tables = [role_table if table is UserRole.__table__ else table for table in tables]
     if any(inspect(engine).has_table(table.name) for table in tables):
         raise ValueError("Refusing to modify pre-existing DSH test tables")
     SQLModel.metadata.create_all(engine, tables=tables)
     token = current_tenant_id.set(2)
     with Session(engine) as session:
         session.add_all([DshUserPolicy(model_id=4, enabled=1, tenant_id=2, user_id=u, updated_by=1) for u in (20, 21)])
+        session.add(Tenant(id=2, tenant_code="usage-test", tenant_name="Usage test"))
+        session.add(ModelVisibility(tenant_id=2, model_id=4, everyone=True, subjects=[], updated_by=1))
+        session.add_all([CreditRule(tenant_id=2, subject_type="USER", subject_id=u, monthly_token_limit=100, updated_by=1) for u in (20, 21)])
+        session.add_all([PersonalLedgerState(tenant_id=2, user_id=u) for u in (20, 21)])
         session.commit()
     yield engine
     current_tenant_id.reset(token)
@@ -175,10 +190,25 @@ def test_recovery_epoch_cas_rejects_concurrently_changed_policy(usage_db):
     with Session(usage_db) as session, session.begin():
         _, original = DshUsageRepository(session).recovery_snapshot(20, billing_timezone="UTC")
     with Session(usage_db) as session, session.begin():
-        policy = session.scalar(select(DshUserPolicy).where(DshUserPolicy.user_id == 20))
-        policy.version = 1
+        policy = session.scalar(select(CreditRule).where(CreditRule.subject_id == 20))
+        policy.monthly_token_limit = 200
     with pytest.raises(ValueError, match="SQL policy changed"), Session(usage_db) as session, session.begin():
         DshUsageRepository(session).complete_recovery(20, expected_policy=original, epoch=2)
     with Session(usage_db) as session, session.begin():
-        policy = session.scalar(select(DshUserPolicy).where(DshUserPolicy.user_id == 20))
+        policy = session.scalar(select(PersonalLedgerState).where(PersonalLedgerState.user_id == 20))
         assert policy.quota_epoch == 1
+
+
+def test_weighted_projection_preserves_raw_usage_and_rate(usage_db):
+    call = event(
+        credit_rate=125, status="SUCCEEDED", input_tokens=30, output_tokens=50, total_tokens=80, usage_source="PROVIDER"
+    )
+    with Session(usage_db) as session, session.begin():
+        repo = DshUsageRepository(session)
+        assert repo.project_batch([call]) == 1
+        assert repo.project_batch([call]) == 0
+        row = session.get(DshModelCall, call.request_id)
+        assert (row.total_tokens, row.billed_tokens, row.credit_rate) == (80, 100, 125)
+        assert next(iter(session.scalars(select(DshMonthlyUsage)))).used_tokens == 100
+        with pytest.raises(ValueError, match="immutable"):
+            repo.project_batch([call.model_copy(update={"credit_rate": 150, "event_version": 2})])

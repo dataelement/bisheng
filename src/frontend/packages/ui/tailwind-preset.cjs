@@ -10,7 +10,8 @@ const plugin = require('tailwindcss/plugin');
  * client adopted this preset and deleted its duplicated theme keys — verified by
  * diffing the fully-resolved theme AND the compiled CSS before/after (identical
  * but for the order of the two pointer variants, which the preset now owns).
- * platform has not adopted it yet and still has no semantic layer at all.
+ * platform also consumes the preset, retaining app-specific legacy keys while
+ * its component families migrate in batches.
  *
  * The CSS custom properties this file points at have a single definition too —
  * src/styles/tokens.css, which client loads from its entry. Change a token value
@@ -150,6 +151,8 @@ module.exports = {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+        // Top rung of the ladder (design-token.cjs RADIUS); Tailwind stops at 3xl.
+        '4xl': '2rem',
       },
       // Two shadow tiers only (基础-圆角与阴影规范.mdx §2.1): `shadow-popup` for
       // click-away overlays (dropdown, popover, toast), `shadow-modal` for
@@ -173,6 +176,22 @@ module.exports = {
         popover: 'var(--z-popover)',
         toast: 'var(--z-toast)',
         tooltip: 'var(--z-tooltip)',
+      },
+      // Transition motion for the notice family (组件-Toast轻提示.md §7 /
+      // 组件-Notification通知提醒.md §7). Declared as theme values rather than
+      // written inline as `duration-[240ms]` / `ease-[cubic-bezier(…)]`: client
+      // also loads tailwindcss-animate, which registers its own `duration-*` /
+      // `ease-*` (animation-duration / animation-timing-function), so an
+      // ARBITRARY value matches two utilities and Tailwind silently drops it —
+      // the transition then runs at the 150ms default with the default curve.
+      // Named values compile on both sides without ambiguity.
+      transitionDuration: {
+        160: '160ms',
+        240: '240ms',
+      },
+      transitionTimingFunction: {
+        // The one easing every toast / notification transition uses.
+        notice: 'cubic-bezier(0.2, 0, 0, 1)',
       },
       keyframes: {
         // Tooltip motion (组件-Tooltip文字提示.md 落地 §7): 150ms fade in,
@@ -205,6 +224,30 @@ module.exports = {
           from: { opacity: '1' },
           to: { opacity: '0' },
         },
+        // Select / Dropdown panel motion (组件-Select选择器.md §8): fade in while
+        // sliding 4px in from the trigger's side, fade out in place. `translate`
+        // (the standalone property), not `transform`, so it never fights a
+        // positioning transform.
+        'popup-in-down': {
+          from: { opacity: '0', translate: '0 -4px' },
+          to: { opacity: '1', translate: '0 0' },
+        },
+        'popup-in-up': {
+          from: { opacity: '0', translate: '0 4px' },
+          to: { opacity: '1', translate: '0 0' },
+        },
+        'popup-in-right': {
+          from: { opacity: '0', translate: '-4px 0' },
+          to: { opacity: '1', translate: '0 0' },
+        },
+        'popup-in-left': {
+          from: { opacity: '0', translate: '4px 0' },
+          to: { opacity: '1', translate: '0 0' },
+        },
+        'popup-out': {
+          from: { opacity: '1' },
+          to: { opacity: '0' },
+        },
       },
       animation: {
         'tooltip-in': 'tooltip-in 150ms cubic-bezier(0.2, 0, 0, 1)',
@@ -216,10 +259,26 @@ module.exports = {
         'modal-overlay-out': 'modal-overlay-out 160ms cubic-bezier(0.2, 0, 0, 1)',
         'modal-content-in': 'modal-content-in 200ms cubic-bezier(0.2, 0, 0, 1)',
         'modal-content-out': 'modal-content-out 160ms cubic-bezier(0.2, 0, 0, 1)',
+        // Same 150 / 100ms pair as the tooltip.
+        'popup-in-down': 'popup-in-down 150ms cubic-bezier(0.2, 0, 0, 1)',
+        'popup-in-up': 'popup-in-up 150ms cubic-bezier(0.2, 0, 0, 1)',
+        'popup-in-right': 'popup-in-right 150ms cubic-bezier(0.2, 0, 0, 1)',
+        'popup-in-left': 'popup-in-left 150ms cubic-bezier(0.2, 0, 0, 1)',
+        'popup-out': 'popup-out 100ms cubic-bezier(0.2, 0, 0, 1)',
       },
     },
   },
   plugins: [
+    plugin(({ addUtilities }) => {
+      // Shared exception to native scrollbars: hide them without disabling scrolling.
+      addUtilities({
+        '.no-scrollbar, .scrollbar-hide': {
+          'scrollbar-width': 'none',
+          '-ms-overflow-style': 'none',
+          '&::-webkit-scrollbar': { display: 'none', width: '0', height: '0' },
+        },
+      });
+    }),
     plugin(({ addVariant }) => {
       // Primary input: mouse + hover vs touch / coarse pointer.
       addVariant('fine-pointer', '@media (hover: hover) and (pointer: fine)');

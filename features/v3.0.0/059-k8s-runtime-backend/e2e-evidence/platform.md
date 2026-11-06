@@ -1,0 +1,217 @@
+# F059 K8s 平台业务验收（进行中）
+
+结论：**尚未通过完整业务验收**。当前优先189 K8s；arm新增验证暂停。详见[结构化证据](./platform.json)。
+
+历史R29下新Python单v1的发布、预览审批、HTTP/WebSocket、SDK/OBO/附件、停用SQLite编辑导出及恢复数据一致性已真实通过，九项独立物理核对也通过；详见文末R11记录。T069仍待容量前置负例和安全删除，故障与独立卸载另行验收。下文按时间保留旧批次现场，不把旧“待验”快照当成当前结果。
+
+| 现场步骤 | 真实结果 | 限制 |
+| --- | --- | --- |
+| 新Pod模板与创建事务 | k189r5首个prepare Pod已创建、调度并启动storage-guard/transfer | 不代表应用已上线 |
+| 准备阶段 | precheck_build/16227，原ValueError遮蔽日志缺口 | 固定容器名单已补；原准备失败不能倒推为成功 |
+| 停止与清理 | 同UID kubelet_terminal持久证明；该Pod、Secret、scratch PVC均cleanupcomplete且fresh API缺失 | 只证明该操作已注册资源，不声称全集群未知writer盘点 |
+| 材料入口 | 专用TLS代理缺根路径，origin404/backend401；精确补路由后新连接401，平台env200 | 401只证明入口及拒绝，signed transfer待复验 |
+| 旧k189r4 | 无持久create receipt，仍保留其操作和PVC | 不凭403日志/404或人工文件追认not_created |
+
+## 首个诊断候选（历史）
+
+- manager/egress/admission：`d86e66a2d`，固定digest见JSON；backend四文件来自`709821ecb`，其余平台源码保持先前基线。
+- Helm升级保持descriptor数据/UID、能力报告、CA、helper及profile revision 2；app-proxy未改。
+- `709821ecb`完整amd64九镜像及bundle/SQLite烟测通过；`d86e66a2d`只更改K8s日志目标白名单，原生manager构建/导入烟测及245相关回归通过，不重标helper来源。
+
+待完成：同app明确新attempt、Python完整发布、审批预览、HTTP/WebSocket/SDK/OBO/附件/SQLite，再扩展Node/static/image/source-image及故障升级；不将本地/原生Docker烟测算作K8s业务通过。
+
+## r5 同应用第二次尝试：材料成功，停止确认待修复
+
+`87a95018bda240b695a392fb156f8cd4` 已明确接受；prepare `01a6500a2a7b46578e677abb07320e1c` 的同UID Pod `81be1259-85ac-44df-8a6c-9a43ab4fc332` 成功下载材料并终态Succeeded，准备进度事实200。随后停止确认409：CREATE时节点为空，实际调度到binfeng-k8s-node189后未回写账本。保留删除中的Pod/finalizer/PVC，等待T219/T220正常对账；没有手动清理或重写数据库状态。完整发布未通过，材料入口的有效传输已得到真实验证。
+
+### 延迟绑定修复的现场恢复
+
+706b13861固定源码的amd64镜像原生构建/导入烟测通过，内网digest `ae93f837a58529eee86f85bbd79f46801a9e068ab7c84babe35292209c97ad41`，Helm15三个控制服务升级完成，descriptor UID/data及helper/profile/app-proxy不变。正常对账将原Pod节点补齐，保存同UID的kubelet_terminal停止证明，三条资源账本cleanupcomplete且逐项APIabsent；证据SHA `dc8150cce9cf728a02e90d8b09673a1b025a57fb450389e088a14900fbecb733`。没有直接清理finalizer/PVC或SQL改状态。
+
+同应用第三次正常发布已明确接受，deployment `8070bb448ebe4f0182142ed25bf16038`，version `7e064c50b23348e59666a158404ef229`；旧journal/header保持，续办记录追加，不重放unknown。完整业务验收继续中。
+
+### 第三次失败：可选锁合同和诊断覆盖
+
+prepare `e36537609ef047748674e5172885dddd` 的inputs成功，resolve失败；两个Pod都按真实UID完成kubelet_terminal及正常清理，5条资源账本cleanupcomplete/APIabsent，proof SHA `aa2d35fff5a9c63a46542dff75c1497d564ea30db6846687a4fae66598488cee`。首个failed fact3明确保留preparing/transfer TypeError；清理重试fact4将投影覆盖为failed/空tail，原fact仍在。
+
+189无网络、无凭据原生helper复现：相同已知源码包省略lock成功，仅改lock:null即在k8s_helper.resolve_download写os.environ处TypeError。T221–T224规范化可选锁并保留首次诊断，已本地回归通过；未回填历史。后续采用独立k189r6完整场景batch，r4/r5原journal和追加链保持，完整业务仍未通过。
+
+## k189r6独立完整批次
+
+新helper完整16项安装探测通过，backend节点正常恢复ready后启动原platform六场景。原runner SHA ba5b766e3afbbfa4c4b6f170e3c32c288fccbad58dfc91c498484bb66cf4ac3c，固定源码143606851，profile2；新journal隔离，旧r4/r5及追加链不变。当前进行中，platform失败保留现场，未执行all的finally cleanup。
+
+r6首个Python应用prepare8fb6b53a…真实完成inputs/resolve/install/upload；4Pod同UID停止，8条资源账本正常cleanupcomplete。执行器在第一次cleanup.pending时立即失败，公开16227/precheck_build；首次failed_stage=preparing正确保留。登记T225–T227按原期限等待，不把DELETE受理当完成、不复活失败操作；未生成审批或正式版本。
+
+
+## 当前候选与r7独立批次
+
+开发收尾来源7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13；manager原生amd64构建/禁网导入通过，内网digest `3e0bf023a016b3f486bd5fe5cbcae85d89cc8737daaa9166f926291ec7781de5`。Helm17三个控制服务更新，descriptor UID/data、helper143、profile2与安装报告逐字节保持；新镜像assess_capabilities及平台ready通过，controller_epoch11。无新16项探测或ARM/公开发行冒认。
+
+r6原失败记录保留；正常cleanup后8精确资源逐项fresh API absent、4Pod停止证明，proof SHA `110aab26f2846ed75f35a02a95e948e40e8ec5cba21528ead45acec7dfa87d77`。不复活旧operation。r7使用原runner、原身份及六场景新journal；首个Python deployment d623cbd318f04795bb6121a572ff566e（app baa177a4b5fe42cbb8cf4dadc8f09299）已接受。当前尚在准备/业务验收；platform模式失败保留现场，未执行all自动清理。
+
+### r7准备成功、初始化总窗口失败
+
+prepare6be875…最终completed/cleanupcomplete，4阶段、8资源完整结束且prepared_delivery等于delivery；T226真实路径已通过。probe081663…的材料初始化真实成功，但data-layout/schema-init/material-fetch/env串行共用90秒；Pod调度17:47:32、环境安装17:48:51启动、17:49:03被停止，仅12秒。所有镜像已有本机缓存；tail只到pip Lookinginlinks，app仍PodInitializing。4资源normalcleanupcomplete，保留原失败，不冒认审批/上线。登记T228/T229修正既定阶段计时。
+
+
+## 当前a1de/Helm18与r8
+
+来源a1de5271f5f00cef0cba06d41f09c673a9190525，manager固定digest `06bb857f4caa79499a844d16838831c7429dfc7d499e65649f314d96fd390cad`；原生amd64构建/禁网导入通过。Helm18三个控制服务更新，descriptor UID/data、helper143/profile2和有效16项报告不变，平台自然接管epoch13并ready。backend两个data grant/session源文件先CAS核旧哈希一致，备份/替换/重启专用backend+worker；原loopback检查失败因端口只绑定192.168.106.189，原失败receipt保留；实际私网API HTTP200、文件新哈希再次核对通过，未追加重启或动OpenFGA。
+
+r8按原runner、身份和六场景新journal启动；首个Python app6da0d71cbda643e881e02d707eac7e79，deployment123f35de6d2b4fdf8050a44d75eebc9e，versionab8c8e9a50c84bf899c1aef0a2bf0898。当前真实业务仍进行中，不把修复部署及本地回归算成审批/上线通过。r7公开失败16124/precheck_probe和正常cleanup事实保留。
+
+### r8真实启动通过，终态删除收尾
+
+同UID8c83f28c…创建18:16:57，data-layout/schema/material/environment分别完成18:17:13、18:17:52、18:18:17、18:18:33，4init96秒后appRunning/Ready。probe cd1ad0fe…已ready；随后SQL停止证明kubelet_terminal于18:19:10入库，Pod Failed/app137且finalizers缺省，但grace30和对象仍在。登记T232/T233修复已移除finalizer后的kubelet最终删除误拒；原操作仍active，未人工delete/释放预占或修改证据。正式审批上线未通过。
+
+## 开发闭合与r9新批次
+
+T232/T233原生amd64候选a06b281b2，内网固定digest `4666d75388bde2ae7c1b0b73916442451b4119a7384852cf373633e8489dfe32`，Helm19三个控制服务滚动完成；descriptor UID/data、有效报告、helper143/profile2/app-proxy均不变。r8原probe最终timed_out保留，修复后正常对账cleanupcomplete；4条精确资源fresh API absent，原同UID停止证明不变，proof SHA `a37f1bab1216ab6029b5b7a24cf52f12db04ac375208d95b9a1e5de490855f1b`。无手工delete/finalizer/SQL或操作复活。
+
+T234/T235修正共享E2E75秒HTTP截止，仅精确同步成功preview/resume/stop/delete采用settings总预算且不重试POST。合流d13e9ee91，112新旧合同、完整backend1753/19skip通过；runtime1519/13skip通过的生产字节保持。r9仅测试源码更新，a06生产镜像来源不重标；新六场景原套件、原身份和独立journal启动，旧批次不变。当前开发修复闭合230/235，完整业务/故障/发行/L2仍在门内；ARM和109按用户优先级暂缓。
+
+## r9工具CA修正与r10
+
+r9真实预览已启动，原platform日志保留ConnectError；只读配置确认F059_E2E_CA_FILE缺失，虽公共CA文件已挂载但客户端未加载。相同工具容器仅显式加入公共CA后，TLS校验开启的入口/api/v1/env得到200。原suite.cleanup阶段通过并正常回收r9应用/预览，未手工修改K8s或SQL。r10独立六场景沿用d13工具、a06镜像/helper143/profile2，显式设置CA且在任何业务API前验证TLS，结果见k189r10-entry-tls.json。生产代码未因本操作配置错误修改，未把入口前置200算成应用访问通过。
+
+## r10维护接线修复与同版本显式重试
+
+r10已真实通过preview-and-approval（审批人访问、其他角色拒绝、批准）。首次deploy d9729fe5…maintenance_phase_failed/cleanupcomplete，Pod同UID停止正常，生产PVC4c5b459c…保留；原Pod日志已回收，未声称现场取到KeyError。实际固定8a helper非root/禁网/合成身份A/B与模板→reader双红定位MATERIAL_POD_UID遗漏。单行模板修复79a15870f/合流249d5fc85，全runtime1532/13skip通过；原生镜像digest42c6c3c5…，Helm20保持helper/profile/report，node ready/epoch15。
+
+原900秒套件期限保持。owner专用脚本先核tenant2、精确app/version/原approval executed、旧op failed/cleanupcomplete，再O_EXCL0600持久submission_unknown，仅一次POST既有manual-publish入口发新attempt；不重打包/创建版本/重审批、不改旧失败记录。当前异步等待结果，未知请求不重发；新结果以独立k189r10-manual-publish-once.json记录。
+
+## 首个K8s正式应用与真实访问通过
+
+同一已批准v1的明确新deploy20d42a22…已completed/cleanupcomplete；公开fresh核对online、同版本/审批，无新增版本或审批。正式Pod a27db53e…Running/Ready，生产PVC仍4c5b459c…；证据k189r10-first-online.json，manual receipt SHA `299c8b4816a248611c4ae114cb414eaf528324eb362106bafef312a1678f8a55`。首次维护错误修复的真实上线闭环已成立。
+
+原r10套件按900秒自然退出，日志/parent journal不改（SHA `3a2961d24f6428cc4ee268e166372c7cc404237079441985f837ea4788f773f5`）。薄续办脚本fresh确认已批准v1在线和其余5slug尚无应用，以O_EXCL新journal关联原journal/manual校验和，复用原suite方法，未重发首版。首次原observe真实通过：HTTP200/未登录拒绝、/sdk/identity与/sdk/storage-roundtrip、WebSocket允许/拒绝、owner与非owner/跨租户管理边界、SQLite表/结构/行查询/PATCH/CSV导出及拒绝配对。首版停用恢复和v2、其他语言/交付方式及故障仍在执行，不宣称T069/T070全部完成。
+
+## r10停用真实失败与清理修复
+
+首版observe已通过，原续办在POST stop失败后退出；原journal冻结SHA `1cbdb6186bbf211ce9eded309620fae2b57181e571e69a0d37011cbb5370e32a`，失败事件保持。9f57c389…原deadline19:27:30Z已过，app公开状态stopped但旧serve UID a27db53e…仍运行，不能视为物理停用通过。T238/T239修正已闭合历史UID重复停用，本地全runtime1541/13skip；T240/T241补过期stop先终态pending、再精确旧terminal自身cleanup的闭环，后端全app停止guard保持。当前PVC及writer均持有，无手工delete/finalizer/SQL/期限延长。新真实结果另记；旧cycle未完成不补写成功。
+
+## 原停用收尾真实通过与停用数据性能
+
+最终d7/Helm21内网digest b2288f64…三控制服务ready/epoch16，descriptor/helper/profile/report保持。原9f57…按正常对账timed_out/cleanupcomplete，a27…同UID kubelet_terminal且fresh API absent，原PVC4c5…仍Bound，proof SHA `8b15806b82c3d9c095d1f5204f8d7d848b23e603e8003d287c2be7b49eaa2ae6`；原超时不改成功。
+
+私有check尚未创建续办journal或发resume。首次offline rows data4b25…19:48:20创建、19:49:15 ready、动作done，19:49:20期限到、19:49:29清理完成；HTTP失败保持，不把SQL已执行等同响应通过。同8a镜像CPU25m与100m原生隔离导入实测31.699秒与6.9965秒，登记100m离线资源/预占配对，不放宽60秒或改同步互斥。
+
+## 100m离线数据及独立停启真实通过
+
+当前6f/Helm22，私有digest59692b82…，controller epoch17；同源backend两资源参数文件已更新。实际data Pod776ae57a…的data-layout和data-helper均requests=limits=100m/128MiB，原8a镜像不变。内部op241db50c…20:06:59创建，20:07:12 ready、20:07:16 completed/cleanupcomplete；**13秒就绪、17秒全链路**，原deadline20:07:59（60秒）保持。真实MySQL预占128Mi/100m，停止清理后才released；同UID kubelet_terminal/cleanupcomplete，public API check通过。旧4b25超时原样保留。
+
+同已批准v1新恢复d5c5e311…真实completed/cleanupcomplete，冻结停用数据逐值相等；独立下一趟原suite.cycle亦通过，恢复opa89bbe4d…，不把原9f57失败改成功。v2 a1c22f4e…已完成预检/审批，正式deploy462c127e…starting，当前还不能宣称v2访问/其余五场景全部通过。
+
+## Python/Node两版通过与static PATH修复
+
+原cycle续办的Python v2 a1c22f4e…与Node v2 c92730bc…均完成真实预检/预览/审批/正式上线、HTTP/WebSocket和owner边界；两者独立停用恢复通过。Python另有SDK/OBO、附件与SQLite表/行/编辑/CSV配对。不能把这两类通过视作五类完成。
+
+static原probe486ca50c…的所有init成功，但app exit127/nginx:notfound；公开失败16124/precheck_probe来自resolved_delivery→RuntimeDeliveryCoordinator分支，原操作reason为workload_readiness_timeout/failed_stage=starting。源码artifact7ef77b6b…verified，原MinIO代码对象与原492byte包SHA均ef034a25c23e896d20ecda05b7b2f314b8abeece33f4d6568b9fa4faa2c081ea；只读核对，未改源码/旧失败。原probe同Pod UID kubelet_terminal、四资源cleanupcomplete/APIabsent的fresh proof SHAad356e69…已保存；Service/Secret的absence不独立充当Pod停止证明。
+
+T246/T247修复bundle PATH补系统sbin；同固定2f0311镜像原生A/B及entrypoint nginx -t成功，完整runtime1595/13skip和独立292合同通过。995c80f2a/Helm23/digest7cef8910…/epoch18已部署，backend/helper/profile/report保持。
+
+原cycle journal自然失败退出，SHA94ca8e8590845ab2e4bb10edacaee7198de6eca176141dc9c904fc20bdf46f0f冻结。新薄工具fresh核draft/零正式版本/无审批/assignment和同源摘要后，O_EXCL新static-resumed journal，仅一次同app新attempt50292d68…/version1672b4a7…；前两个已通过场景不重做。static/source/image及缺依赖仍在运行，未知请求不重发，无自动cleanup/延时/改旧终态。
+
+## Static两版通过与源码组装权限修复
+
+static v1 1672b4a7…与v2 4fb07dc0…均真实完成发布、审批预览、访问/owner边界、停用恢复与更新。当前Python/Node/static三个bundle均两版通过，static不要求WebSocket。原static-resumed journal自然停止在下一source-image预检，SHA `9c953e824afb0548e8547911ca386008cc5f8e5e03da7871ea5eec95083a9415`；不把整批写成功。
+
+source prepare70eb72db…依赖安装及产物上传完成，OCI组装失败`oci_privilege_bits_refused`，公开16227/precheck_build；failed/cleanupcomplete，5Pod均有同UID kubelet_terminal，9注册资源正常cleanup，fresh逐项absence另取。只读保留scratch34统计267个SGID目录、零特殊位普通文件，确认fsGroup目录继承；backend存储端口返回的sourceartifact0bce…与原598757byte包SHA538dae69…完全一致。
+
+T248–T251修复只允许归档前的目录SGID并在层内去除，继续拒绝SUID目录和非目录SGID；另补OCI固定PATH标准sbin，保持D7受限布局/冻结基础镜像/凭据及启动合同。source0d5ef7b2b，完整runtime1610/13skip、独立L1通过，新amd64三镜像及descriptor/能力探测刷新后方可新attempt；当前尚未source/fullimage上线，不冒认T069/T070完成。
+
+## 入口CMD误判撤回（替代此前修复结论）
+
+独立链路检查确认source-image的空startup有意交给兼容平台入口解析，但crane此前继承profile默认CMD，先执行基础命令，可能绕过Procfile/包start/static生成配置。T252/T253仅显式写空CMD，显式参数仍CSV无损，实际非rootcrane v0.22.1对三个固定base导出Cmd=null、正确入口，未改仓库manifest。来源d7f7c2e10，完整runtime1622/13skip、独立L1通过，代码248/253闭合。
+
+0d5中间候选已真实Helm24/16项探测/ready；源码续办check已通过，但尚未execute/生成新业务journal，最终d7f镜像与报告待完成后再提交。旧失败/9资源精确正常cleanup和backend原包校验保持。
+
+更正：上述继承CMD问题不成立。固定crane v0.22.1设置entrypoint时已清除Cmd，原代码已满足合同。真实189三个固定base使用**不带--cmd**的原命令，导出后Cmd均null，注册仓库未修改，日志`/private/tmp/f059-crane-entrypoint-clears-cmd-native.log`。此前仅带--cmd空参数的正例及镜像参数Mock不足以证明原缺陷，相关T252/T253与L1已撤回，编号保留。
+
+两个代码/测试文件恢复0d5字节；全部src/scripts/deploy/workflow构建输入相对0d5均无差异。真实SGID/PATH修复保留，完整runtime1610/13skip（33.51s）。d7候选的额外空flag与原CLI行为等价，未发布新应用；当前installer自然完成后恢复已验证0d5精确镜像及与其descriptor匹配的有效16报告，不制造新的构建或冒认新探测。官方依据：https://github.com/google/go-containerregistry/blob/v0.22.1/cmd/crane/cmd/mutate.go#L89-L98
+
+## 正确基线恢复与源码新attempt
+
+当前Helm26/0d5精确镜像/匹配有效16报告，三路径true、自然ready/epoch21。root重新逐项GET确认旧prepare70eb…的9资源正常cleanup/APIabsent，五Pod同UID kubelet_terminal；fresh proof SHA `efbbae5234528e89931fcf51e1bf923daa0d9cfdc712c65a2c4dfdf5dc032ac1`。新工具80d6…的check通过，O_EXCL独立source-resumed journal只一次提交同draft，accepted deployment675d259a…/versiond71f4858…，prepare07b872e0…正在preparing。前三bundle两版不重做，不复活旧操作/延长deadline/自动cleanup；当前journal未冻结，不预造成功或摘要。source及完整镜像/缺依赖后续仍待自然业务结果。
+
+## 第二源码失败与仓库DNAT配置修复
+
+prepare `07b872e0d07441f7a333941560727bba` 的inputs/resolve/install/upload全部完成，SGID修正已进入真实组装路径；crane仓库操作失败，原journal冻结SHA `12231d57220e4f5343f2db67c0fa988382f34a33d62ba14f28c7739ac692e100`，不补写成功。9精确资源正常cleanupcomplete/APIabsent，5Pod有同UID kubelet_terminal，proof SHA `55db28c0b554c8e4c0dfeca61fff76f996471f87cd5f5cfc1f1dca6484f6b7f8`。
+
+真实egress Pod到189:5443原超时3.008秒；临时仅对egress selector及专用仓库IP放行DNAT后5000端口，0.008秒连接；撤销该策略又超时3.011秒。诊断SHA `5c0f8b1033b223b7a6c75e762f9bbdc3d21a3d063b8c5ff9f37679e34f63b52f`。Helm27仅在network.egressPorts增加5000；既有镜像、profile、descriptor及报告不变，不声称重新完成能力探测。修复receipt SHA `bdf01d29a962f0ed0733ef1d275ccb2be9e9883b511fe4025a736419f0ca4a3b`；真实egress公共CA及主机名校验开启，仓库/v2/返回200，TLS证据SHA `873961a7cd15539963d839e981edb17ee8d9cc719c22493569ea9df1d46ff288`。
+
+安装探测原registry-push由外部installer执行crane，网络项仅验证Pod能到proxy3128；T254/T255补同策略canary上游TCP，控制canary保持NotReady避免进入业务Service。TCP、外部TLS/权限和实际assembler推送分别记证据。ARM、109、公开发行继续暂缓；下一次源码发布必须新独立journal/一次POST，原两次失败保持。
+
+## source-image首版真实闭环与版本更新
+
+第三次独立明确提交 `dd3d5b5533aa459eb9cff9d7d3685fd8` / v1 `60ebc5e1230942cb975be94de9fab954`：prepare `f278274b3e924d808ec6f3903a3fa7a9` completed/cleanupcomplete，随后预检、预览审批、正式上线、HTTP/WebSocket允许及拒绝、owner管理边界、独立停用恢复全部真实通过。原两失败及其journal保持；只对新一次POST记通过。
+
+实际产物`f059/apps@sha256:d95ed14789fbb261fa479c1a4c2c06b8d9d47ea113fdcc88d1183e65f0d45074`经CA/主机名校验只读读取manifest/config：保留冻结b632基础10层，仅追加一层；入口、User10001:10001、workdir及显式Cmd[python,main.py]均符合本次冻结startup。lineage SHA `b55761d153e65350cf5e0b9e8c44d66717b90177cefb12d957026663355b7695`。恢复后生产Pod UID `058c99b2-cf64-4227-94ad-111e450f06dc`实际Running/Ready且无删除标记，CRI manifest与Docker config b0a5df71…均一致；identity SHA `74a246285a7f1c82545479fcb8e60787cb9970503386bf22cb76f59ffd0c42bd`。不将显式startup误作缺省Cmd。
+
+第二版已受理`afaaff456f46430a95659bd7de7e2ceb` / `818d435bba5c4902be4c16ff879c87fb`，prepare13c9c01e…进行中。完整镜像/缺依赖/离线数据/故障门未完成，当前成功父journal尚未冻结；不执行依赖成功父的工具。安装器dedc新真实探测等该业务自然结束后串行执行。
+
+## source-image第二版与完整镜像容量拒绝
+
+source v2 `818d435bba5c4902be4c16ff879c87fb` 已实际完成预检、预览审批、更新、HTTP/WebSocket与owner边界；prepare13c9…completed/cleanupcomplete。实际OCI/CRI/Docker config及Running/Ready Pod UID0ad1b4c0…一致，保留原冻结base10层加一应用层；完整身份SHA `3ce4f56806d38ef283f0f27e4f32275488496585375927db4155dec38b860f63`。
+
+完整镜像v1与停用恢复已过；v2 `77d42f56f77f4287b63574b9fd81b0ab` 审批11执行后，deployment c562…failed/publishing/16226，原因为iteration_failed/capacity_exhausted/admission。旧v1仍online、pendingv2保留，没有新deploy操作。v2预览bbe06…已cancelled/cleanupcomplete；公开API与只读SQL证据相符。容量当前6784Mi/3125m含旧r4 held，预算8192/4000，不擅自释放r4。readonly证据SHA `93061b799e0e68d74ef7b3c7d66217c697fe5e7b477b4d9c955b53412da893cd`。
+
+suite按原900秒自然失败退出，父journal SHA `1c1c6a8db64f987ad5e85b816c4ed51219e21692a636bd2289a1909bbcc51aec`；保留两次source旧失败及本次v2失败，不将失败覆写为成功。单次manual-publish续办与缺依赖负例待后续独立记录。
+
+T256/T257开发已L1通过，本地完整runtime1649/13skip；250/255，新增取消检查尚未部署或真实验收。ARM继续暂缓。
+
+## 完整镜像同批准v2单次手动恢复与缺依赖负例通过
+
+确认预览三精确UID正常cleanup、预约released、fresh API absent且容量6784Mi/3125m后，root只读check通过；仅一次owner manual-publish同v2，无新版本或审批。新操作 `68cc365b61d84c6585b7f9db897ea5c0` / generation4 completed/cleanupcomplete；审批仍11、两个版本不变。v2随后原HTTP/WebSocket、SDK/OBO/附件/数据及owner/nonowner/跨租户观察通过，另外四应用current v2/版本与审批未变。旧r4仍held。
+
+缺依赖仅一次新提交：app `fb9a0f9e32f84ef99ae60ee60f6dc34b` / deployment `5df7298126ff4c2a9ec734d0b1fe0787`，真实16227/precheck_build/无审批通过。续办exit0并写最终 `r10-image-capacity-continuation-completed/passed`，成功父SHA `c6e17830766aa738621e7f681f2e04cc3eb9223e46ce5021266fc894e4aea11b`；原失败父1c1c…、source两次失败及c562容量失败历史保留，不伪造generic iteration-passed。
+
+至此Python、Node、static应用包、source-image、完整镜像五种场景均真实首发/升级主路径与停用恢复通过；完整镜像升级明确区分原容量拒绝和新手动成功。离线查改导出/恢复删除、故障升级及L2仍未闭合，不提前勾T069/T070。
+
+
+## R29：保护报告修复实际部署（新业务验收待完成）
+
+T258–T263的生产源码 `f8863f3763285435a5df01fc150400838bdb3f0a` 已完成189原生amd64构建及隔离导入烟测，仅推送专用内网仓库；manager固定digest `0b4bd3e66c1d7c49fe00046c83277dab8b6dbd0628f201abf3192d70dd67ddad`。专用backend/worker仅两个保护源文件按旧哈希备份、原CID重启；新字节哈希复核通过。Helm29升级后manager新UID `fae606c4-3e51-4efa-ba00-a7ce9163de3f`，原UID实际缺席；自然接管epoch24、ready、sticky保护合同v1/current及两guard true。host描述符与Pod投射的完整/保护摘要一致，保护基线 `9006c20349b46e6a60af9d7e2ccdc45f4e4efae5606f58cde88b69bd0b9ad3ff`。
+
+独立fresh核对：旧三个bundle的false/false保持，source/image的true/true保持；四个Running及一个held终态的Pod/CID/PVC/PV身份未变，旧stop仍timed_out/cleanup pending，r4 unknown-create原PVC保持。没有回填历史保护、移除finalizer或释放旧预占。helper/assembler/profile2、代理/准入及描述符数据/UID未变；此次不是重跑16项安装探测、ARM或公开CI发行。新单Python应用的发布/停用/离线数据/恢复仍需单独实测，不能以部署ready代替。结构化证据见JSON的 `protection_report_r29_deployment`。
+
+
+## R11：新Python单版本业务闭环与物理核对通过
+
+R29下新app `43baa81d168a45bfa5e53ffbd04f48fd`、v1 `a5a4faade83743a487803bd6080246bf`、审批12真实通过单次发布、预览访问/拒绝、正式HTTP/WebSocket、SDK/OBO身份、附件往返及owner/非owner/跨租户配对。预览先等待正常清理：纯SELECT首次拒绝未完成，第二次确认preview operation `3ca7af6fe7db41f8b45294a9946c8c5d`的四资源闭合、同UID kubelet_terminal、逐项API缺席、reservation released；原子发布证明SHA `01dfdd2bef68d6d0e0510626d758baede929e2a1f17a78f09a07ed49778b11a1`后，原审批只提交一次，未手工补发。
+
+正式deploy `0b694758d9274f42a7b4078897bbeaf8` gen1 →正常stop `3674c3af161946a39e6df19e1d417a7c` gen2 →停用SQLite随机nonce查改/CSV与权限拒绝 →resume `3d386771f5344e4aac321d2fc830bff3` gen3，均真实完成；仍只有同一已批准v1，恢复后行数据完全等于停用编辑后的数据。最终私有journal SHA `e3ea2f08d158b3c2bb23935a34e69daebc53abec4b047dade849e162635f6697`，随机内容不进入本仓库。
+
+独立metadata-only/API核对九项全通过：PVC UID `e72126ff-98c8-40b0-84d9-25b6b75aa0d0`保持；原serve UID `c96eedd4-44a6-45c1-888e-b282ce695128`有同UID持久停止证据且cleanupcomplete；恢复serve UID `999cf346-e483-439c-90bd-621d39152a9c`为当前对象，gen3、双连续保护true。只读观察SHA `80b98d038e860c6fe0593e4e5831ae8ee329a9f46237abe48ef0fe14c37cf93d`，不冒称重新观察了kubelet终态全过程或跨节点恢复。
+
+驱动r2在首次业务发包前修正真实CookieJar角色识别，并沿既有900秒共享预算；两个只读启动包装路径错误及原r1均保留，不重写为产品失败/通过。最终业务execute exit0。T069仍待容量前置负例和安全删除；T070故障/独立卸载、L2及公开发行仍未完成，256/261保持。ARM与新增109继续暂缓。
+
+## R12 审批前容量拒绝：189真实通过
+
+单次新slug发布在真实v2预检返回16125/precheck_build/details={}，未产生审批或正式版本。收到的version_id仅候选编号。完成前fresh确认R11仍原online/v1/gen3/resume，容量前后7936Mi/3650m/5不变。独立backend租户2纯SELECT确认该app的operation/resource/reservation/app_version/approval全部0，应用draft/current/pending为空；证据与SHA见JSON。
+
+首个工具启动因cap-drop后公开文件不可读而在Python启动前失败，未有发布意图；修正新tools物料可读权限后才发生唯一业务提交。旧日志保留，不重发未知请求。CLI 16125映射及wheel已本地验证，尚未远端部署该wheel。安全删除与其余故障验收保持pending。
+
+## 2026-10-23 停用资源核对与删除失败
+
+R11（37资源/13预约）和完整镜像（26资源/9预约）停止后只读SQL＋manager元数据实采通过：全部Pod持久停止证据与API缺席闭合，全部预约released，生产PVC同UID保留，历史scratch清理完成。独立PV投影核PV06/03仍Retain，未删PV/重绑磁盘。采集摘要见platform.json。
+
+随后R11单次owner DELETE失败：真实destroy `ab3004b3bb4b4cd29b83d214c4241232` failed/cleanupcomplete，purge helper UID `2b6d5264-2e61-4f91-9db2-ead9faf61e59`停止关闭、destroy预约释放，但没有持久purge成功事实，App仍stopped、生产PVC保留。manager facts返回422，内部admitted阶段不在实际ExecutionFactInput中；T266/T267修复中。原未知回执保留，未重发；不将通用failure flags当作数据未变化证明，不宣称删除成功。快照/附件对象样本0的清理未获非空证明。
+
+## R30 实际升级与第二次删除（尚未通过）
+
+固定源码 `686bf68300a5869cfd260833b05448851986e50b` 原生 amd64 构建、隔离导入烟测及内网推送通过；manager镜像digest `6e528c88300f0730486a8d81a1aa4df63caa0fe2e74d8faa2e5a6f68a0e32711`。Helm30只替换manager，新UID `d5570cfb-d8be-4614-bded-cbf58241df6b`，旧UID缺席，epoch26/ready/current/双保护true。5个应用Pod、8个PVC/PV、descriptor及非manager服务身份不变，业务白名单账本相等；两个历史资源仅controller_epoch25→26。该投影不含诊断字段；正常node_plan GET可能清理过期diagnostic，已在r2采集证明明确，不能称严格SQL无写。
+
+R11删除前fresh纯SELECT及元数据核对19个历史Pod均有同UID持久停止证据、所有38资源按保留PVC/已清理资源分组验证、预约全部released。默认业务check通过后只发一次新的owner DELETE（不重放旧请求），新destroy `75437b15cb7b4abba06a2c7cc492fbc4` /gen6。此次合法maintenance事实及 `purge.result.purged=true` 已入库；随后PVC删除尚未结束时抛 `purge_volume_cleanup_pending`，最终failed/cleanupcomplete，App仍stopped。原请求异常/未知日志保留。数据已经purge，不能宣称仍保留，也不能将持久purge事实当作业务删除及PVC清理成功；登记T268/T269继续修复原期限内异步等待。
+
+ARM、追加109与公开发行均未执行。T069/T070保持未完成，所有历史失败记录保留。
+
+## R31 真实升级与安全删除：T069业务流程通过
+
+R31 manager/source6c9694f0f、镜像digest981bf135…已原生amd64构建并在专用Helm31上线。新Pod UID56193f9b-0595-404f-a54a-0d62f0adf820、epoch28、ready/current/双保护true；backend恢复入口为独立source38a700233/c06fb408文件，保持混合源码事实。升级前后4appPod/7PVC及对应PV、descriptor/三个非manager服务身份和SQL business/node精确一致，epoch27→28及资源控制epoch变动独立列出；此处清单是升级时点，非删除后的当前数量。比较proof SHA89e95bb0…，原始引用逐SHA核对。
+
+健康fullimage ec6229…在原stop gen5后，owner唯一DELETE实际66.906734秒成功，详情精确16101、列表无appid/slug。新destroy f5ecf6bafaad4e77b4765b06ccc9eada/gen6已completed/completed/cleanupcomplete，seq3持久purged=true；purge ref d30a4232-ea42-5b70-9f3a-715a2a48c9d7及UID74b984da-7970-496b-80e2-4634bcb7bf11同kubelet证据闭合、Pod自然缺席。原PVC55f2…清理完成/自然404，旧创建op未改，cleanup_operation_id指向本次destroy；10预约released。
+
+原PV production03/UID00a210b6…保持Retain、Released和旧claim UID；宿主目录保留，app.db/wal/shm均不存在。7storage binding revoked且限定prefix为空，snapshot样本0；不冒称非空快照/附件删除。原R11两次失败和数据已purge事实保留，未复活/重发/强删finalizer。正式物理r2字段sqlite_files_present=false，r1误名字段未覆盖历史。SQL proof2fa86783…、物理proof1b919830…及唯一intent完整SHA见JSON。
+
+独立窄L1 b8b0b9eb…确认T069明确业务流程PASS，现265/269任务完成；全AC矩阵仍保留AC-02页面/CLI/MCP开关、AC-17完整档位矩阵、AC-18资源超限故障、AC-37审计通知CLI及AC-45完整缓存失效矩阵的证据边界。T070、追加109、正式发行和L2不由本项替代。后续只做定向验证，不重复完整业务/单测回归。

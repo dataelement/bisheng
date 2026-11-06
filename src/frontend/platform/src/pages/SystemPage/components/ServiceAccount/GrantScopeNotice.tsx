@@ -1,4 +1,5 @@
 import type { ApiKeyItem } from "@/types/api/openApi"
+import { Alert } from "@bisheng/ui"
 import { useTranslation } from "react-i18next"
 import { splitGrantKeys } from "./resourceGrantUtils"
 
@@ -19,9 +20,7 @@ export function GrantScopeNotice({ keys }: GrantScopeNoticeProps) {
 
   if (!own.length && !delegate.length) {
     return (
-      <p className="rounded-md border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-        {t("openApiManagement.grants.notice.noKey")}
-      </p>
+      <Alert description={t("openApiManagement.grants.notice.noKey")} />
     )
   }
 

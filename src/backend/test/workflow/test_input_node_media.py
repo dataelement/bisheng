@@ -62,7 +62,12 @@ def test_count_media_files(monkeypatch):
     assert InputNode._count_media_files(urls) == 1
 
 
-def test_media_count_limit_raises():
+def test_media_count_limit_raises(monkeypatch):
+    monkeypatch.setattr(
+        KnowledgeService,
+        "get_upload_file_original_name",
+        staticmethod(lambda name: name),
+    )
     node = InputNode.__new__(InputNode)
     node.id = "input_1"
     node.workflow_id = "wf"

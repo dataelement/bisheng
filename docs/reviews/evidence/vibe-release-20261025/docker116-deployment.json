@@ -1,0 +1,78 @@
+{
+  "observed_at": 1792922380.5025725,
+  "containers": [
+    {
+      "name": "/bisheng-test-backend",
+      "image_id": "sha256:4995f590ce618f0004abc39dde912297dc0c32d8a47b94210c64b82bbea06348",
+      "reference": "192.168.106.8:6082/dataelement/bisheng-backend:release",
+      "running": true,
+      "restart_count": 0,
+      "health": "healthy"
+    },
+    {
+      "name": "/bisheng-test-backend-worker",
+      "image_id": "sha256:4995f590ce618f0004abc39dde912297dc0c32d8a47b94210c64b82bbea06348",
+      "reference": "192.168.106.8:6082/dataelement/bisheng-backend:release",
+      "running": true,
+      "restart_count": 0,
+      "health": null
+    },
+    {
+      "name": "/bisheng-test-backend-worker-ocr",
+      "image_id": "sha256:4995f590ce618f0004abc39dde912297dc0c32d8a47b94210c64b82bbea06348",
+      "reference": "192.168.106.8:6082/dataelement/bisheng-backend:release",
+      "running": true,
+      "restart_count": 0,
+      "health": null
+    },
+    {
+      "name": "/bisheng-test-frontend",
+      "image_id": "sha256:e52b28a9b21a183c0830737aa9f183c085f9c881231afe1815ffd315fb11e44e",
+      "reference": "192.168.106.8:6082/dataelement/bisheng-frontend:release",
+      "running": true,
+      "restart_count": 0,
+      "health": null
+    },
+    {
+      "name": "/bisheng-runtime-manager",
+      "image_id": "sha256:8bf311a232c826b68ce87ab0e712131da8ee2a47c4563ba92b4ddb7d7bd7b9da",
+      "reference": "192.168.106.189:5443/vibe-release/bisheng-runtime-manager@sha256:e7a38d0239ef9a8ed77f1e1d06cc7b9e2012185f976f4d51c49ec696015156fc",
+      "running": true,
+      "restart_count": 0,
+      "health": null
+    },
+    {
+      "name": "/bisheng-app-proxy",
+      "image_id": "sha256:806585703bb8f7970daa28b062551093c581cc1a295463450a1c42c3dc6a7d37",
+      "reference": "192.168.106.189:5443/vibe-release/bisheng-app-proxy@sha256:6d68b9b61fb32674cd1dab40485f2e1a29b6ae09d039666731dcdbf426a1a964",
+      "running": true,
+      "restart_count": 0,
+      "health": null
+    },
+    {
+      "name": "/bisheng-egress-proxy",
+      "image_id": "sha256:8bf311a232c826b68ce87ab0e712131da8ee2a47c4563ba92b4ddb7d7bd7b9da",
+      "reference": "192.168.106.189:5443/vibe-release/bisheng-runtime-manager@sha256:e7a38d0239ef9a8ed77f1e1d06cc7b9e2012185f976f4d51c49ec696015156fc",
+      "running": true,
+      "restart_count": 0,
+      "health": null
+    },
+    {
+      "name": "/bisheng-docker-socket-proxy",
+      "image_id": "sha256:1484f9fee8a7f423374977ca5e39457c762d859182511192270bf1e542670608",
+      "reference": "192.168.106.189:5443/vibe-release/bisheng-docker-socket-proxy@sha256:2f92c6e85a1199b3403c99d7439695898a162c69689b11130450ffadb352f0a0",
+      "running": true,
+      "restart_count": 0,
+      "health": null
+    }
+  ],
+  "health": {
+    "backend": 200,
+    "frontend": 200
+  },
+  "host_isolation": [
+    "Result=success",
+    "ExecMainStatus=0"
+  ],
+  "timer": "enabled"
+}

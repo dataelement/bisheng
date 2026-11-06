@@ -1,12 +1,13 @@
+import { useSubjectSearch } from "../selectComponent/useSubjectSearch"
 import {
   getDepartmentChildrenApi,
   getDepartmentPathTreeApi,
   searchDepartmentsApi,
 } from "@/controllers/API/department"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { showApiError } from "@/controllers/request"
 import { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
-import { useCallback, useEffect, useRef, useState } from "react"
-import { useQueryClient } from "react-query"
+import { useCallback, useEffect, useRef, useState, type InputHTMLAttributes } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 
 /**
  * F038: per-layer lazy department tree (browse / server search / locate), shared
@@ -18,7 +19,6 @@ import { useQueryClient } from "react-query"
 
 /** childIds map key for the root layer (real department ids are >= 1). */
 const ROOT_KEY = -1
-const SEARCH_DEBOUNCE_MS = 300
 
 export interface UseLazyDepartmentTreeOptions {
   /** Show archived nodes (management nav tree only; pickers leave false). */
@@ -64,6 +64,10 @@ export interface LazyDepartmentTree {
   searchMode: boolean
   searchRoots: DepartmentTreeNode[]
   searching: boolean
+  searchFailed: boolean
+  searchTooLong: boolean
+  retrySearch: () => void
+  searchInputProps: Omit<InputHTMLAttributes<HTMLInputElement>, "size" | "prefix">
   truncated: boolean
   matchedIds: Set<number>
   // locate / echo a deep value
@@ -124,9 +128,15 @@ export function useLazyDepartmentTree(
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set())
   const [initialLoading, setInitialLoading] = useState(autoLoad)
 
-  const [keyword, setKeyword] = useState("")
-  const [searchResult, setSearchResult] = useState<DepartmentSearchResult | null>(null)
-  const [searching, setSearching] = useState(false)
+  const search = useSubjectSearch<DepartmentSearchResult>({
+    emptyByDefault: true,
+    scopeKey: cacheKey,
+    fetchPage: async keyword => ({ data: [await sourceRef.current.search(keyword)], total: 1 }),
+  })
+  const searchResult = search.rows[0] ?? null
+  const keyword = search.keyword
+  const setKeyword = search.changeKeyword
+  const searching = search.loading
 
   // Refs so callbacks stay stable yet read live state (avoids re-fetch storms).
   const childIdsRef = useRef(childIds)
@@ -137,13 +147,11 @@ export function useLazyDepartmentTree(
 
   const fetchLayer = useCallback(
     async (parentId: number | null): Promise<DepartmentTreeNode[] | null> => {
-      const res = await captureAndAlertRequestErrorHoc(
-        queryClient.fetchQuery(
+      const res = await queryClient.fetchQuery(
           [cacheKey, "children", parentId],
           () => sourceRef.current.children(parentId),
           { staleTime: 30_000 }
         )
-      )
       return (res as DepartmentTreeNode[] | null) ?? null
     },
     [queryClient, cacheKey]
@@ -169,13 +177,16 @@ export function useLazyDepartmentTree(
     async (parentId: number): Promise<void> => {
       if (childIdsRef.current[parentId]) return // already loaded
       setLoadingIds((prev) => new Set(prev).add(parentId))
+      try {
       const layer = await fetchLayer(parentId)
       if (layer) storeLayer(parentId, layer)
+      } finally {
       setLoadingIds((prev) => {
         const next = new Set(prev)
         next.delete(parentId)
         return next
       })
+      }
     },
     [fetchLayer, storeLayer]
   )
@@ -189,7 +200,7 @@ export function useLazyDepartmentTree(
           next.delete(node.id)
         } else {
           next.add(node.id)
-          void loadChildren(node.id)
+          void loadChildren(node.id).catch(showApiError)
         }
         return next
       })
@@ -232,7 +243,6 @@ export function useLazyDepartmentTree(
       setNodeMap({})
       setChildIds({})
       setExpanded(new Set())
-      setSearchResult(null)
     }
     loadedKeyRef.current = cacheKey
     let cancelled = false
@@ -249,33 +259,16 @@ export function useLazyDepartmentTree(
         await Promise.all(roots.filter((n) => n.has_children).map((n) => loadChildren(n.id)))
       }
       setInitialLoading(false)
-    })()
+    })().catch(showApiError).finally(() => { if (!cancelled) setInitialLoading(false) })
     return () => {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoLoad, cacheKey])
 
-  // Debounced server-side search.
-  useEffect(() => {
-    const kw = keyword.trim()
-    if (!kw) {
-      setSearchResult(null)
-      setSearching(false)
-      return
-    }
-    setSearching(true)
-    const timer = window.setTimeout(async () => {
-      const res = await captureAndAlertRequestErrorHoc(sourceRef.current.search(kw))
-      setSearchResult((res as DepartmentSearchResult | null) ?? null)
-      setSearching(false)
-    }, SEARCH_DEBOUNCE_MS)
-    return () => window.clearTimeout(timer)
-  }, [keyword, cacheKey])
-
   const reveal = useCallback(
     async (deptInternalId: number): Promise<number[]> => {
-      const res = await captureAndAlertRequestErrorHoc(sourceRef.current.pathTree(deptInternalId))
+      const res = await sourceRef.current.pathTree(deptInternalId)
       const tree = (res as DepartmentSearchResult | null) ?? null
       if (!tree || !tree.roots.length) return []
       const chain = chainOf(tree.roots)
@@ -313,9 +306,13 @@ export function useLazyDepartmentTree(
     refreshAll,
     keyword,
     setKeyword,
-    searchMode: !!keyword.trim(),
+    searchMode: !!search.normalized,
     searchRoots: pruneExcluded(searchResult?.roots ?? [], excludeSubtreePath),
     searching,
+    searchFailed: search.failed,
+    searchTooLong: search.tooLong,
+    retrySearch: search.retry,
+    searchInputProps: search.inputProps,
     truncated: searchResult?.truncated ?? false,
     matchedIds,
     reveal,

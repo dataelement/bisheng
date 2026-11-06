@@ -1,0 +1,17 @@
+Approved dedicated task 4 instance 4
+Application state online
+Application state online
+Application state online
+Application state online
+Application state online
+Application state online
+Application state online
+Application state online
+Entry HTTP 200 {"version": 4, "value": "retained"}
+Backend to manager data helper: ['data']
+Confirmed snapshots 2
+Nonowner snapshot metadata refused: 16105
+SDK storage HTTP 200 {"sdk_storage":"passed"}
+nginx/app-proxy WebSocket echo passed
+nonowner restore refused: 16105
+admin restore refused: 16105

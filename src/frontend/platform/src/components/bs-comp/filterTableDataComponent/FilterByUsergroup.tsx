@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { Select } from "@bisheng/ui";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { getUserGroupsApi } from "@/controllers/API/user";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -10,38 +11,23 @@ interface Group {
 }
 
 export default function FilterByUsergroup({ value, placeholder = '', onChange }) {
+    const selectLabels = useSelectLabels();
     const { groups, loading } = useGroups();
 
     return (
-        <div className="w-[200px] relative">
-            <Select value={value} onValueChange={onChange} disabled={loading}>
-                <SelectTrigger className="w-[200px]">
-                    {value ? (
-                        <span>{groups.find(g => g.id === value)?.group_name}</span>
-                    ) : (
-                        <SelectValue placeholder={placeholder} />
-                    )}
-                </SelectTrigger>
-                <SelectContent className="max-w-[200px] break-all">
-                    <SelectGroup>
-                        {groups.map(g => (
-                            <SelectItem
-                                value={g.id}
-                                key={g.id}
-                                className="truncate max-w-[180px]"
-                            >
-                                {g.group_name}
-                            </SelectItem>
-                        ))}
-                        {!loading && groups.length === 0 && (
-                            <div className="text-gray-400 text-sm px-2 py-1">
-                                列表是空的
-                            </div>
-                        )}
-                    </SelectGroup>
-                </SelectContent>
-            </Select>
-        </div>
+        <Select
+            {...selectLabels}
+            allowClear
+            className="w-[200px]"
+            aria-label={placeholder}
+            placeholder={placeholder}
+            disabled={loading}
+            value={value || null}
+            onChange={(v) => onChange(v == null ? '' : v)}
+            options={groups
+                .filter(g => g.id != null && g.id !== '')
+                .map(g => ({ value: g.id, label: g.group_name }))}
+        />
     );
 };
 

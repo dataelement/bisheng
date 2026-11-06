@@ -1,8 +1,10 @@
-import { Checkbox } from "@/components/bs-ui/checkBox"
-import { Input } from "@/components/bs-ui/input"
-import { Label } from "@/components/bs-ui/label"
-import { useTranslation } from "react-i18next"
-import { clampKnowledgeQuotaGbDisplay, RoleQuotaState } from "./roleQuotaConfig"
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Input } from '@bisheng/ui';
+
+import { Label } from "@/components/bs-ui/label";
+import { Checkbox } from "@bisheng/ui";
+import { useTranslation } from "react-i18next";
+import { clampKnowledgeQuotaGbDisplay,RoleQuotaState } from "./roleQuotaConfig";
 
 interface QuotaCountFieldProps {
   label: string
@@ -31,13 +33,7 @@ function QuotaCountField({
         <Checkbox checked={unlimited} onCheckedChange={(v) => onUnlimitedChange(Boolean(v))} />
         <span className="text-sm">{t("system.unlimited")}</span>
         {!unlimited && (
-          <Input
-            type="number"
-            min={0}
-            value={count}
-            onChange={(e) => onCountChange(e.target.value)}
-            className="w-[120px]"
-          />
+          <Input type="number" min={0} value={count} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, { min: 0 })) return; return onCountChange(e.target.value); }} className={"w-[120px]"} />
         )}
       </div>
     </div>
@@ -70,15 +66,7 @@ export function RoleQuotaFields({ value, onChange }: RoleQuotaFieldsProps) {
           <span className="text-sm">{t("system.unlimited")}</span>
           {!value.fileUnlimited && (
             <>
-              <Input
-                type="number"
-                step={0.1}
-                value={value.fileGb}
-                onChange={(e) => patch({ fileGb: e.target.value })}
-                onBlur={() => patch({ fileGb: clampKnowledgeQuotaGbDisplay(value.fileGb) })}
-                className="w-[120px]"
-                inputMode="decimal"
-              />
+              <Input type="number" step={0.1} value={value.fileGb} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, {  })) return; return patch({ fileGb: e.target.value }); }} onBlur={() => patch({ fileGb: clampKnowledgeQuotaGbDisplay(value.fileGb) })} inputMode="decimal" className={"w-[120px]"} />
               <span className="text-sm">GB</span>
             </>
           )}

@@ -1,7 +1,3 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 .App {
 	text-align: center;
 }
@@ -15,29 +11,6 @@
 	color: #fff;
 	/* background-color: hsl(var(--primary)); */
 	background-color: #111;
-}
-
-/* 整个滚动条（包括轨道） */
-::-webkit-scrollbar {
-	width: 8px;
-	height: 8px;
-}
-
-/* 滚动条滑块 */
-::-webkit-scrollbar-thumb {
-	background-color: hsl(var(--border));
-	;
-	border-radius: 4px;
-}
-
-/* 滚动条轨道 */
-::-webkit-scrollbar-track {
-	background: hsl(var(--background));
-	border-radius: 8px;
-}
-
-.dark ::-webkit-scrollbar-track {
-	background: #111;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -123,16 +96,6 @@
 	to {
 		transform: rotate(360deg);
 	}
-}
-
-@font-face {
-	font-family: AlibabaPuHuiTi-3-55-Regular;
-	/* src: url("assets/text-security-disc.woff") format("woff"); */
-	src: url("assets/AlibabaPuHuiTi-3-55-Regular.otf") format("opentype");
-}
-
-:root {
-	--font-sans: 'AlibabaPuHuiTi-3-55-Regular'
 }
 
 /* pdf-text */

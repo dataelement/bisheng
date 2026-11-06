@@ -1,13 +1,8 @@
 import { Control, Controller, UseFormSetValue, UseFormGetValues } from 'react-hook-form';
 import { CircleHelpIcon } from '~/components/svg';
 import { useLocalize } from '~/hooks';
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardPortal,
-  HoverCardTrigger,
-  Checkbox,
-} from '~/components/ui';
+import { HoverCard, HoverCardContent, HoverCardPortal, HoverCardTrigger } from '~/components/ui';
+import { Checkbox } from '@bisheng/ui';
 import { ESide } from '~/common';
 import type { AssistantForm } from '~/common';
 
@@ -39,7 +34,7 @@ export default function AppendDateCheckbox({ control, setValue }: AppendDateChec
                 id="append_current_datetime"
                 checked={field.value}
                 onCheckedChange={handleChange}
-                className="relative float-left mr-2 inline-flex h-4 w-4 cursor-pointer"
+                className="peer relative float-left mr-2 inline-flex h-4 w-4 cursor-pointer"
                 value={field.value.toString()}
                 aria-labelledby="append-date-label"
               />

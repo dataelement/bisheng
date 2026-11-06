@@ -27,6 +27,7 @@ def _no_persisted_sources(monkeypatch):
 
     monkeypatch.setattr(citation_export_service, "resolve_items_for_export", AsyncMock(return_value=[]))
 
+
 _CITED_MD = (
     "# 报告\n\n"
     "PM2.5 年均浓度下降。\ue200knowledgesearch_18f5868b:0\ue202\n\n"
@@ -63,7 +64,11 @@ async def test_convert_to_docx_strips_markers(stored_report, monkeypatch: pytest
     monkeypatch.setattr(markdocx_mod, "MarkDocx", _FakeMarkDocx)
 
     resp = await endpoint.download_md_to_pdf_or_docx(
-        file_info=stored_report, to_type="docx", login_user=SimpleNamespace(user_id=1)
+        file_info=stored_report,
+        to_type="docx",
+        session_version_id=None,
+        share_link=None,
+        login_user=SimpleNamespace(user_id=1),
     )
 
     assert isinstance(resp, StreamingResponse)
@@ -82,7 +87,11 @@ async def test_convert_to_pdf_strips_markers(stored_report, monkeypatch: pytest.
     monkeypatch.setattr(md_to_pdf_mod, "md_to_pdf_bytes", _fake_pdf)
 
     resp = await endpoint.download_md_to_pdf_or_docx(
-        file_info=stored_report, to_type="pdf", login_user=SimpleNamespace(user_id=1)
+        file_info=stored_report,
+        to_type="pdf",
+        session_version_id=None,
+        share_link=None,
+        login_user=SimpleNamespace(user_id=1),
     )
 
     assert isinstance(resp, StreamingResponse)
@@ -172,7 +181,11 @@ async def test_convert_to_docx_strips_unknown_handles(stored_handle_report, monk
     monkeypatch.setattr(markdocx_mod, "MarkDocx", _FakeMarkDocx)
 
     resp = await endpoint.download_md_to_pdf_or_docx(
-        file_info=stored_handle_report, to_type="docx", login_user=SimpleNamespace(user_id=1)
+        file_info=stored_handle_report,
+        to_type="docx",
+        session_version_id=None,
+        share_link=None,
+        login_user=SimpleNamespace(user_id=1),
     )
 
     assert isinstance(resp, StreamingResponse)
@@ -191,7 +204,11 @@ async def test_convert_to_pdf_strips_unknown_handles(stored_handle_report, monke
     monkeypatch.setattr(md_to_pdf_mod, "md_to_pdf_bytes", _fake_pdf)
 
     resp = await endpoint.download_md_to_pdf_or_docx(
-        file_info=stored_handle_report, to_type="pdf", login_user=SimpleNamespace(user_id=1)
+        file_info=stored_handle_report,
+        to_type="pdf",
+        session_version_id=None,
+        share_link=None,
+        login_user=SimpleNamespace(user_id=1),
     )
 
     assert isinstance(resp, StreamingResponse)
@@ -249,7 +266,9 @@ async def test_convert_to_docx_bakes_for_the_exporter(stored_report, monkeypatch
     monkeypatch.setattr(markdocx_mod, "MarkDocx", _FakeMarkDocx)
     user = SimpleNamespace(user_id=1)
 
-    resp = await endpoint.download_md_to_pdf_or_docx(file_info=stored_report, to_type="docx", login_user=user)
+    resp = await endpoint.download_md_to_pdf_or_docx(
+        file_info=stored_report, to_type="docx", session_version_id=None, share_link=None, login_user=user
+    )
 
     assert isinstance(resp, StreamingResponse)
     assert seen["user"] is user
@@ -267,7 +286,11 @@ async def test_batch_download_bakes_md_entries(monkeypatch: pytest.MonkeyPatch):
     resp = await endpoint.batch_download_files(
         zip_name="bundle", file_info_list=[], login_user=SimpleNamespace(user_id=1)
     )
-    body = b"".join([chunk async for chunk in resp.body_iterator]) if hasattr(resp.body_iterator, "__aiter__") else b"".join(resp.body_iterator)
+    body = (
+        b"".join([chunk async for chunk in resp.body_iterator])
+        if hasattr(resp.body_iterator, "__aiter__")
+        else b"".join(resp.body_iterator)
+    )
     with zipfile.ZipFile(BytesIO(body)) as z:
         md = z.read("report.md").decode("utf-8")
         assert z.read("data.csv") == b"a,b\n"

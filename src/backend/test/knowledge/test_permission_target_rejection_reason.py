@@ -1,6 +1,6 @@
 """Rejecting a permission target must say why — in the log, not the response.
 
-19003 covers seven different causes with one sentence, "Invalid resource type or
+25022 covers seven different causes with one sentence, "Invalid resource type or
 ID". A knowledge space stranded at status=FAILED therefore read exactly like a
 mistyped id, and finding the real cause meant querying the database by hand.
 

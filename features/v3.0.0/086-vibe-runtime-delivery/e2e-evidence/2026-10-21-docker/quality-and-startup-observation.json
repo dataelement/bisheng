@@ -1,0 +1,28 @@
+{
+  "checkpoint_sha": "5131b81194a5fa390593e58d822bcbde52b6ca64",
+  "followup_changes": "uncommitted",
+  "ruff": "passed --no-cache (6 Python files)",
+  "arch_guard": "passed (6 Python files)",
+  "regression": {
+    "passed": 56,
+    "failed": 0
+  },
+  "implementation_hashes": {
+    "src/backend/bisheng/core/context/tenant.py": "6cd240901bab1b9fc8983044ea4e3fe1eb6d31a908304efba6417ef1b5ddf62a",
+    "src/backend/bisheng/permission/application/system_resource_reconcile.py": "48a3ec8b62cca4d97a99eeab896505fbe2a21f7d167b2e4e36f43ccd85c742cf",
+    "src/backend/bisheng/api/services/f048_preset_dashboard_bootstrap.py": "80d0118a2065f2e1e2e69d50a48a512f810d6c43ac40428ec0454e805734ad30",
+    "src/backend/test/permission/test_f048_system_resource_reconcile.py": "fb2ef0cf3b43b570db6809fd274c81c25a25c62cf80b24f8a8081ddff7c26aad",
+    "src/backend/test/permission/test_f048_preset_dashboard_bootstrap.py": "053da8023afe2981354d2555851b1cdaf307c79cf2415adef66c24cb4efe3a41",
+    "src/backend/test/tenant/test_tenant_execution_scope.py": "582700a8ff1a426c53291fc16928ff0516e6d164aa63ea9d393198b0233032ea"
+  },
+  "fresh_start_observation": {
+    "observed_in_session_before_container_replacement": true,
+    "multi_tenant_enabled": true,
+    "system_resources_current": 18,
+    "system_resources_missing_before": 18,
+    "preset_dashboard_owner_ready_before_registration": false,
+    "public_key_http_status": 200,
+    "natural_first_admin_registration_status": 200,
+    "note": "Initial container logs were inspected in session, then replaced during coordinated upgrade; this is a recorded observation, not a retained full startup log."
+  }
+}

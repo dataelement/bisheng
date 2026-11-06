@@ -2,16 +2,18 @@
 
 import base64
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 
 from sqlalchemy import and_, or_
 from sqlmodel import select
 
+from bisheng.core.context.tenant import strict_tenant_filter
 from bisheng.dsh.domain.models.model_audit_content import DshModelAuditBodyAccess
 from bisheng.dsh.domain.models.model_audit_request import DshModelAuditEvidence, DshModelAuditRequest
 from bisheng.dsh.domain.models.model_call import DshModelCall
 from bisheng.dsh.domain.repositories.admin_operation import require_tenant
+from bisheng.dsh.domain.repositories.content_safety_queries import naive_utc
 from bisheng.dsh.domain.repositories.model_audit_conversations import AuditConversationRepository
 from bisheng.dsh.domain.repositories.model_audit_tree_queries import AuditTreeQueryRepository
 from bisheng.dsh.domain.repositories.model_audit_write import DshModelAuditWriteRepository
@@ -76,29 +78,66 @@ class DshModelAuditQueryRepository(AuditTreeQueryRepository, AuditConversationRe
             statement.order_by(DshModelAuditRequest.started_at, DshModelAuditRequest.request_id).limit(100)
         ).all()
 
-    def metadata(self, row, *, user_names=None):
-        usage = self.one(DshModelCall, DshModelCall.request_id == row.request_id)
+    def metadata(self, row, *, user_names=None, usage_by_request=None, failures_by_request=None):
+        usage = (
+            self.one(DshModelCall, DshModelCall.request_id == row.request_id)
+            if usage_by_request is None
+            else usage_by_request.get(row.request_id)
+        )
         names = AuditRequestMetadata.model_fields
         data = {
             key: as_utc(getattr(row, key))
             for key in names
             if key
-            not in {"usage", "status_reasons", "status_pending", "user_name", "model_error_code", "response_error_code"}
+            not in {
+                "usage",
+                "status_reasons",
+                "status_pending",
+                "user_name",
+                "model_error_code",
+                "response_error_code",
+                "source_id",
+                "gateway_request_id",
+                "stage_results",
+                "stage_versions",
+                "safety_observed_at",
+                "details_status",
+            }
         }
-        failure = (
-            self.one(
-                DshModelAuditEvidence,
-                DshModelAuditEvidence.request_id == row.request_id,
-                DshModelAuditEvidence.event_type == "RESPONSE_FAILURE",
+        data.update(
+            source_id=row.safety_source_id,
+            gateway_request_id=row.safety_gateway_request_id,
+            stage_results={"input": row.input_safety_state, "output": row.output_safety_state},
+            stage_versions={"input": row.input_safety_version, "output": row.output_safety_version},
+            safety_observed_at=as_utc(row.content_safety_updated_at),
+            details_status="PENDING"
+            if (
+                row.content_safety_state != "UNREPORTED"
+                or row.has_sensitive_hit
+                or row.input_safety_version
+                or row.output_safety_version
             )
-            if row.response_result in {"ERROR", "INTERRUPTED", "UNKNOWN"}
-            else None
+            else "UNREPORTED",
         )
+        failure = None
+        if row.response_result in {"ERROR", "INTERRUPTED", "UNKNOWN"}:
+            failure = (
+                self.one(
+                    DshModelAuditEvidence,
+                    DshModelAuditEvidence.request_id == row.request_id,
+                    DshModelAuditEvidence.event_type == "RESPONSE_FAILURE",
+                )
+                if failures_by_request is None
+                else failures_by_request.get(row.request_id)
+            )
         data["model_error_code"] = getattr(usage, "error_code", None)
         data["response_error_code"] = failure.reason if failure else None
         names_by_id = self.user_names([row.user_id]) if user_names is None else user_names
         data["user_name"] = names_by_id.get(row.user_id)
-        _, data["status_reasons"], data["status_pending"] = audit_status_facts(row)
+        if row.record_origin == "EXTERNAL_SAFETY":
+            data.update(audit_status="NOT_APPLICABLE", status_reasons=[], status_pending=False)
+        else:
+            _, data["status_reasons"], data["status_pending"] = audit_status_facts(row)
         data["usage"] = (
             {
                 key: as_utc(getattr(usage, key))
@@ -118,15 +157,43 @@ class DshModelAuditQueryRepository(AuditTreeQueryRepository, AuditConversationRe
         )
         return AuditRequestMetadata(**data).model_dump()
 
-    def page(self, *, cursor=None, limit=20, **filters):
+    def page(self, *, cursor=None, limit=20, now=None, exclude_auxiliary=False, **filters):
         tenant = require_tenant()
+        if type(limit) is not int or not 1 <= limit <= 100 or type(exclude_auxiliary) is not bool:
+            raise ValueError("Audit request page exceeds bounds")
         filters = {key: value for key, value in filters.items() if value is not None}
+        window = None
+        if now is not None:
+            for key in ("start_at", "end_at"):
+                if key in filters:
+                    filters[key] = naive_utc(filters[key])
+            end = filters.get("end_at", naive_utc(now))
+            start = filters.get("start_at", end - timedelta(days=7))
+            if start >= end or end - start > timedelta(days=31):
+                raise ValueError("Audit request window exceeds bounds")
+            window = start, end
+        # Bind only explicit filters. A moving default window is not a user edit.
         fingerprint = sha256(
             json.dumps(
-                [tenant, filters], sort_keys=True, default=str, ensure_ascii=False, separators=(",", ":")
+                [tenant, {**filters, "exclude_auxiliary": True} if exclude_auxiliary else filters],
+                sort_keys=True,
+                default=str,
+                ensure_ascii=False,
+                separators=(",", ":"),
             ).encode()
         ).hexdigest()
         statement = select(DshModelAuditRequest)
+        if exclude_auxiliary:
+            statement = statement.where(
+                or_(
+                    DshModelAuditRequest.request_kind.is_(None),
+                    DshModelAuditRequest.request_kind.not_in(("session-title", "compaction")),
+                )
+            )
+        if window is not None:
+            statement = statement.where(
+                DshModelAuditRequest.started_at >= window[0], DshModelAuditRequest.started_at < window[1]
+            )
         for key, value in filters.items():
             if key == "conversation_id":
                 statement = statement.where(
@@ -154,6 +221,13 @@ class DshModelAuditQueryRepository(AuditTreeQueryRepository, AuditConversationRe
                 )
             elif key == "user_ids":
                 statement = statement.where(DshModelAuditRequest.user_id.in_(value))
+            elif key == "sensitive_direction":
+                if value not in {"INPUT", "OUTPUT", "BOTH"}:
+                    raise ValueError("Invalid safety direction")
+                if value in {"INPUT", "BOTH"}:
+                    statement = statement.where(DshModelAuditRequest.input_sensitive_hit.is_(True))
+                if value in {"OUTPUT", "BOTH"}:
+                    statement = statement.where(DshModelAuditRequest.output_sensitive_hit.is_(True))
             else:
                 statement = statement.where(getattr(DshModelAuditRequest, key) == value)
         if cursor:
@@ -175,9 +249,10 @@ class DshModelAuditQueryRepository(AuditTreeQueryRepository, AuditConversationRe
                     ),
                 )
             )
-        rows = self.session.exec(
-            statement.order_by(DshModelAuditRequest.started_at, DshModelAuditRequest.request_id).limit(limit + 1)
-        ).all()
+        with strict_tenant_filter():
+            rows = self.session.exec(
+                statement.order_by(DshModelAuditRequest.started_at, DshModelAuditRequest.request_id).limit(limit + 1)
+            ).all()
         if "conversation_id" in filters and any(row.conversation_id != filters["conversation_id"] for row in rows):
             raise ValueError("Audit conversation digest binding mismatch")
         if "model_name" in filters and any(row.model_name != filters["model_name"] for row in rows):
@@ -192,8 +267,31 @@ class DshModelAuditQueryRepository(AuditTreeQueryRepository, AuditConversationRe
                 ).encode()
             ).decode()
         names_by_id = self.user_names(row.user_id for row in page)
+        ids = [row.request_id for row in page]
+        failure_ids = [row.request_id for row in page if row.response_result in {"ERROR", "INTERRUPTED", "UNKNOWN"}]
+        with strict_tenant_filter():
+            usage = (
+                {
+                    row.request_id: row
+                    for row in self.session.exec(select(DshModelCall).where(DshModelCall.request_id.in_(ids))).all()
+                }
+                if ids
+                else {}
+            )
+            failures = {}
+            if failure_ids:
+                evidence = self.session.exec(
+                    select(DshModelAuditEvidence).where(
+                        DshModelAuditEvidence.request_id.in_(failure_ids),
+                        DshModelAuditEvidence.event_type == "RESPONSE_FAILURE",
+                    )
+                ).all()
+                failures = {row.request_id: row for row in evidence}
         return {
-            "items": [self.metadata(row, user_names=names_by_id) for row in page],
+            "items": [
+                self.metadata(row, user_names=names_by_id, usage_by_request=usage, failures_by_request=failures)
+                for row in page
+            ],
             "next_cursor": next_cursor,
             "progress": {
                 "last_write_at": as_utc(max((row.last_write_at for row in page if row.last_write_at), default=None)),

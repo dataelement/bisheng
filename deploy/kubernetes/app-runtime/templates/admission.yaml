@@ -1,0 +1,33 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ printf "%s-runtime" .Values.execution.installationId }}
+webhooks:
+{{- range $name := list "resources" "status" }}
+  - name: {{ printf "%s.%s.runtime.bisheng.io" $name $.Values.execution.installationId }}
+    admissionReviewVersions: [v1]
+    sideEffects: None
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    timeoutSeconds: {{ $.Values.admission.timeoutSeconds }}
+    namespaceSelector:
+      matchLabels: {runtime.bisheng.io/installation: {{ $.Values.execution.installationId }}}
+    clientConfig:
+      caBundle: {{ $.Values.admission.caBundle | quote }}
+      service:
+        namespace: {{ $.Values.services.namespace }}
+        name: runtime-admission
+        path: /validate
+        port: 443
+    rules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        scope: Namespaced
+{{- if eq $name "status" }}
+        operations: [UPDATE]
+        resources: [pods/status]
+{{- else }}
+        operations: [CREATE, UPDATE, DELETE]
+        resources: [pods, services, secrets, persistentvolumeclaims]
+{{- end }}
+{{- end }}

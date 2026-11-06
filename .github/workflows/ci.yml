@@ -210,12 +210,55 @@ jobs:
           docker tag ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64 cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64
           docker push cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64
 
+  build_sandbox:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build sandbox and push architecture image
+        env:
+          VERSION: ${{ github.ref_name }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          docker buildx build --file docker/bisheng-sandbox/Dockerfile --platform "linux/$ARCH" --provenance=false \
+            --build-arg APT_MIRROR=deb.debian.org --build-arg APT_SECURITY_MIRROR=security.debian.org \
+            --build-arg PYPI_INDEX_URL=https://pypi.org/simple \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.version=$VERSION" \
+            --tag "dataelement/bisheng-sandbox:$VERSION-$ARCH" --push .
+      - uses: docker/login-action@v3
+        with:
+          registry: cr.dataelem.com
+          username: ${{ secrets.CR_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.CR_DOCKERHUB_TOKEN }}
+      - name: Sync sandbox architecture image to CR
+        env:
+          VERSION: ${{ github.ref_name }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          docker pull "dataelement/bisheng-sandbox:$VERSION-$ARCH"
+          docker tag "dataelement/bisheng-sandbox:$VERSION-$ARCH" "cr.dataelem.com/dataelement/bisheng-sandbox:$VERSION-$ARCH"
+          docker push "cr.dataelem.com/dataelement/bisheng-sandbox:$VERSION-$ARCH"
+
   notify_feishu:
     needs:
       - build_bisheng_backend
       - build_backend_arm
       - build_bisheng_frontend
       - build_frontend_arm
+      - build_sandbox
     runs-on: ubuntu-latest
     steps:
       - name: Get version

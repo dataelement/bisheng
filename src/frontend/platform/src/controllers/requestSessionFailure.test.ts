@@ -1,0 +1,21 @@
+import { afterEach, expect, it, vi } from 'vitest';
+const notices = vi.hoisted(() => vi.fn());
+vi.mock('@bisheng/ui', () => ({ notification: { open: notices } }));
+afterEach(() => { vi.resetModules(); vi.unstubAllGlobals(); localStorage.clear(); sessionStorage.clear(); notices.mockClear(); });
+it('lets the session-kick interaction handle an untyped HTTP401 Blob before clearing the session', async () => {
+  const { default: request, requestInterceptor } = await import('./request');
+  const kicked = vi.fn();
+  requestInterceptor.remoteLoginFuc = kicked;
+  localStorage.setItem('ws_token', 'existing-session');
+  const location = { href: '/current' };
+  vi.stubGlobal('location', location);
+  const data = new Blob(['{"status_code":10604,"status_message":"session revoked","data":{"device":"other"}}']);
+  request.defaults.adapter = async config => { throw Object.assign(new Error('HTTP401'), { config, response: { status: 401, data } }); };
+  const error = await request.get('/test', { responseType: 'blob' }).catch(cause => cause);
+  expect(error).toMatchObject({ httpStatus: 401, status_code: 10604, data: { device: 'other' }, presentation: 'global' });
+  expect(error.response.data).toBe(data);
+  expect(kicked).toHaveBeenCalledTimes(1);
+  expect(localStorage.getItem('ws_token')).toBe('existing-session');
+  expect(location.href).toBe('/current');
+  expect(notices).not.toHaveBeenCalled();
+});

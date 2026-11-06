@@ -1,0 +1,44 @@
+{
+  "applications": [
+    {
+      "app_id": "0e7c8fa1ad01451bb4ac7ffff2b79ece",
+      "name": "e2e-f086-cancel",
+      "delete_requested": true
+    },
+    {
+      "app_id": "21d7555bc22c48b29b12be8d63d07284",
+      "name": "e2e-f086-compile-timeout",
+      "delete_requested": true
+    },
+    {
+      "app_id": "2a3a9b211e684496a719987a48c88c35",
+      "name": "e2e-f086-timeout",
+      "delete_requested": true
+    },
+    {
+      "app_id": "749df2ba5e7c46689acd28f13fc62304",
+      "name": "e2e-f086-restart",
+      "delete_requested": true
+    },
+    {
+      "app_id": "fbedd729679c451c8a178884c039f19e",
+      "name": "e2e-f086-install-cancel",
+      "delete_requested": true
+    },
+    {
+      "app_id": "7dcca9caca5b4a2b8d50405717ddcc5c",
+      "name": "e2e-f086-legacy-upgrade",
+      "delete_requested": true
+    },
+    {
+      "app_id": "8411f09dd5f94b249d272492f8536812",
+      "name": "e2e-f086-mt",
+      "delete_requested": true
+    }
+  ],
+  "all_deleted": true,
+  "reservation_count": 23,
+  "all_reservations_released": true,
+  "snapshot_count": 3,
+  "all_snapshots_purged": true
+}

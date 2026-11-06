@@ -130,7 +130,6 @@ def _create_assistant(client: httpx.Client, token: str, ids: list[str]) -> dict:
     run = uuid.uuid4().hex[:8]
     payload = {
         "name": f"{PREFIX}{run}",
-        # prompt has a min_length=20 constraint on AssistantCreateReq
         "prompt": "F041 e2e knowledge space selection round-trip assistant.",
         "logo": "",
     }

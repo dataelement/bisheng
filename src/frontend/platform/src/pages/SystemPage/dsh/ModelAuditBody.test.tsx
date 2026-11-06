@@ -318,9 +318,9 @@ describe("audit body NDJSON-to-message UI", () => {
     await screen.findByText("dsh.modelAuditView.transfer.completed");
     expect(screen.getAllByRole("article")).toHaveLength(1);
     expect(screen.queryByText("visible-tail")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "dsh.next" }));
+    fireEvent.click(screen.getByRole("button", { name: "pagination.next" }));
     expect(screen.getByText("visible-tail")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "dsh.previous" }));
+    fireEvent.click(screen.getByRole("button", { name: "pagination.prev" }));
     expect(screen.getByText("x".repeat(16000))).toBeInTheDocument();
     expect(api.stream).toHaveBeenCalledTimes(1);
   });
@@ -421,7 +421,7 @@ it("AC-14: reverses the complete message list before pagination and retains comp
   expect(within(articles[0]).getByText("Newest answer")).toBeVisible();
   expect(within(articles[1]).getByText("Synthetic history 100")).toBeVisible();
   expect(screen.queryByText("Compacted session summary")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "dsh.next" }));
+  fireEvent.click(screen.getByRole("button", { name: "pagination.next" }));
   expect(screen.getAllByRole("article")).toHaveLength(3);
   expect(
     within(screen.getAllByRole("article")[2]).getByText(
@@ -429,7 +429,7 @@ it("AC-14: reverses the complete message list before pagination and retains comp
     ),
   ).toBeVisible();
   expect(screen.getByText("Synthetic history 0")).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "dsh.previous" }));
+  fireEvent.click(screen.getByRole("button", { name: "pagination.prev" }));
   expect(
     within(screen.getAllByRole("article")[0]).getByText("Newest answer"),
   ).toBeVisible();

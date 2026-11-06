@@ -4,7 +4,7 @@
  * Width: 100% — the parent controls sizing.
  * AI assistant and split-pane logic live in the parent (FilePreviewPage).
  */
-import type * as pdfjsLib from "pdfjs-dist";
+import { usePdfDocument } from "@bisheng/file-viewers/pdf";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
@@ -26,6 +26,8 @@ const DocxViewer = lazy(() => import("./viewers/DocxViewer").then((m) => ({ defa
 const XlsxViewer = lazy(() => import("./viewers/XlsxViewer").then((m) => ({ default: m.XlsxViewer })));
 
 export interface FilePreviewProps {
+    /** Standalone viewers own the browser title; embedded viewers use their host title. */
+    manageDocumentTitle?: boolean;
     /** File display name (with extension) */
     fileName: string;
     /** File extension, e.g. "pdf", "docx" */
@@ -64,6 +66,7 @@ export interface FilePreviewProps {
 }
 
 export default function FilePreview({
+    manageDocumentTitle = true,
     fileName,
     fileType,
     fileUrl,
@@ -89,53 +92,27 @@ export default function FilePreview({
     const showHeader = !compactMode && !hideHeader;
 
     // --- PDF-specific state ---
-    const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+    const pdfState = usePdfDocument(viewerType === 'pdf' ? fileUrl : '', {
+        workerUrl: __APP_ENV__.BASE_URL + '/pdf.worker.min.js',
+        cMapUrl: __APP_ENV__.BASE_URL + '/cmaps/',
+    });
+    const pdfDoc = pdfState.document;
     const [currentPage, setCurrentPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(0);
+    const totalPages = pdfDoc?.numPages ?? 0;
     const [targetPage, setTargetPage] = useState<number | null>(null);
 
     // --- Shared state ---
     const [zoomLevel, setZoomLevel] = useState(100);
     const [sidebarOpen, setSidebarOpen] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const error = pdfState.status === 'error' ? localize('com_knowledge.load_pdf_failed') : null;
 
-    // Load PDF
     useEffect(() => {
-        if (viewerType !== "pdf" || !fileUrl) return;
-
-        let cancelled = false;
-        import("pdfjs-dist")
-            .then((pdfjs) => {
-                pdfjs.GlobalWorkerOptions.workerSrc =
-                    __APP_ENV__.BASE_URL + "/pdf.worker.min.js";
-                return pdfjs.getDocument({
-                    url: fileUrl,
-                    // CMaps are required for CID-keyed PDFs with non-embedded CJK
-                    // fonts (e.g. GBK-EUC-H government docs) — without them the
-                    // text layer renders blank. Shipped to /cmaps/ by viteStaticCopy.
-                    cMapUrl: __APP_ENV__.BASE_URL + "/cmaps/",
-                    cMapPacked: true,
-                }).promise;
-            })
-            .then((doc) => {
-                if (cancelled) return;
-                setPdfDoc(doc);
-                setTotalPages(doc.numPages);
-            })
-            .catch((e) => {
-                if (cancelled) return;
-                console.error("Failed to load PDF:", e);
-                setError(localize("com_knowledge.load_pdf_failed"));
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [fileUrl, viewerType]);
-
-    // Update document title
-    useEffect(() => {
-        document.title = fileName;
-    }, [fileName]);
+        if (manageDocumentTitle) {
+            const previousTitle = document.title;
+            document.title = fileName;
+            return () => { document.title = previousTitle; };
+        }
+    }, [fileName, manageDocumentTitle]);
 
     const handleZoomIn = useCallback(() => {
         setZoomLevel((prev) => Math.min(500, prev + 25));
@@ -180,7 +157,7 @@ export default function FilePreview({
         return (
             <div className="w-full h-full flex flex-col">
                 {showHeader && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
-                <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
+                <div className="flex-1 flex items-center justify-center bg-fill-1">
                     <div className="flex flex-col items-center gap-4 text-text-3">
                         <div className="text-5xl">📄</div>
                         <p className="text-lg">{localize("com_knowledge.unsupported_format_prefix")}{fileType}{localize("com_knowledge.unsupported_format_suffix")}</p>
@@ -212,7 +189,7 @@ export default function FilePreview({
                         actions={actions}
                     />
                 )}
-                <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
+                <div className="flex-1 flex items-center justify-center bg-fill-1">
                     <div className="flex flex-col items-center gap-3 text-text-3">
                         <div className="text-5xl">📄</div>
                         <p className="text-base">{localize("com_knowledge.load_doc_failed")}</p>
@@ -227,7 +204,7 @@ export default function FilePreview({
         return (
             <div className="w-full h-full flex flex-col">
                 {showHeader && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
-                <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
+                <div className="flex-1 flex items-center justify-center bg-fill-1">
                     <div className="flex flex-col items-center gap-3 text-text-3">
                         <div className="text-4xl">📄</div>
                         <p>{error}</p>
@@ -269,7 +246,7 @@ export default function FilePreview({
                 // it. Stacked rather than split: this preview lives in a narrow
                 // citation panel, where two columns leave both halves cramped.
                 return (
-                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#fbfbfb]">
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-fill-1">
                         <div className={cn("shrink-0 p-4", transcriptUrl ? "" : "flex-1")}>
                             <MediaPlayer
                                 kind={viewerType}
@@ -280,7 +257,7 @@ export default function FilePreview({
                         </div>
                         {transcriptUrl ? (
                             <>
-                                <div className="h-px shrink-0 bg-[#e5e6eb]" />
+                                <div className="h-px shrink-0 bg-border-base" />
                                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                                     <MediaTranscriptTabs fileUrl={transcriptUrl} />
                                 </div>

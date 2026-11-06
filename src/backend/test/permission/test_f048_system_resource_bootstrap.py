@@ -7,6 +7,8 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 from bisheng.api.services import f048_system_resource_bootstrap as bootstrap
 from bisheng.permission.application.system_resource_reconcile import (
     SystemOwnedReconcileReport,
@@ -22,12 +24,13 @@ class _Result:
         return self._rows
 
 
-async def test_inventory_requires_each_business_system_predicate(monkeypatch) -> None:
+@pytest.mark.parametrize("owner_user_id", [None, 1])
+async def test_inventory_accepts_presets_regardless_of_creator(monkeypatch, owner_user_id) -> None:
     tool = GptsToolsType(
         id=6,
         name="Code Interpreter",
         is_preset=1,
-        user_id=None,
+        user_id=owner_user_id,
         tenant_id=1,
         is_delete=0,
     )

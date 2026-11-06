@@ -65,6 +65,7 @@ class ParseType(Enum):
     ETL4LM = "etl4lm"  # etl4lmService Insights, includingpdfLayout Analysis for
     UN_ETL4LM = "un_etl4lm"  # Nonetl4lmService parsing, nobboxContent, only source files andmdDoc.
     MINERU = "mineru"
+    MINERU_V4 = "mineru_v4"
     PADDLE_OCR = "paddle_ocr"
 
 

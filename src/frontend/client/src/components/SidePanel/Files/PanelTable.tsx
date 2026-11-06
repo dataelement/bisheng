@@ -97,7 +97,7 @@ export default function DataTable<TData, TValue>({ columns, data }: DataTablePro
       if (!fileMap?.[file.file_id] || !conversation?.endpoint) {
         showToast({
           message: localize('com_ui_attach_error'),
-          status: 'error',
+          status: 'warning',
         });
         return;
       }
@@ -115,7 +115,7 @@ export default function DataTable<TData, TValue>({ columns, data }: DataTablePro
       if (isOpenAIStorage && !isAssistants) {
         showToast({
           message: localize('com_ui_attach_error_openai'),
-          status: 'error',
+          status: 'warning',
         });
         return;
       }
@@ -135,7 +135,7 @@ export default function DataTable<TData, TValue>({ columns, data }: DataTablePro
           message: `${localize('com_ui_attach_error_size')} ${
             fileSizeLimit / megabyte
           } MB (${endpoint})`,
-          status: 'error',
+          status: 'warning',
         });
         return;
       }
@@ -143,7 +143,7 @@ export default function DataTable<TData, TValue>({ columns, data }: DataTablePro
       if (!defaultFileConfig.checkType(file.type, supportedMimeTypes)) {
         showToast({
           message: `${localize('com_ui_attach_error_type')} ${file.type} (${endpoint})`,
-          status: 'error',
+          status: 'warning',
         });
         return;
       }

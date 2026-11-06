@@ -127,14 +127,14 @@ it("request cards do not offer redundant user or parent conversation navigation"
   expect(screen.queryByRole("button", { name: "dsh.modelAuditView.sources.parent" })).toBeNull();
   expect(api.requests).not.toHaveBeenCalled();
   expect(
-    screen.getByRole("button", { name: "dsh.modelAuditView.views.groups" }),
-  ).toHaveAttribute("aria-pressed", "true");
+    screen.getByRole("radio", { name: "dsh.modelAuditView.views.groups" }),
+  ).toHaveAttribute("aria-checked", "true");
 });
 it("AC-QC-06: unassociated requests use a separate exact query without loading all conversations", async () => {
   render(<ModelAuditRequests tenantId={2} />);
   await screen.findByText(/session-main/);
   fireEvent.click(
-    screen.getByRole("button", {
+    screen.getByRole("radio", {
       name: "dsh.modelAuditView.views.unassociated",
     }),
   );
@@ -163,7 +163,8 @@ it("AC-QC-10: empty scan batches and unready indexes do not claim that no logs e
     progress: { ...ready, status_ready: false },
   });
   fireEvent.click(screen.getByRole("button", { name: "dsh.next" }));
-  await screen.findByText("dsh.modelAuditView.index_preparing");
+  await waitFor(() => expect(api.groups).toHaveBeenCalledTimes(2));
+  expect(screen.queryByText("dsh.modelAuditView.index_preparing")).toBeNull();
   expect(screen.queryByText("dsh.modelAuditView.empty")).toBeNull();
 });
 
@@ -188,4 +189,14 @@ it("AC-H07: publication during legacy pagination explicitly requires a refresh i
   await screen.findByText("dsh.modelAuditView.tree.refresh_required");
   expect(api.tree).not.toHaveBeenCalled();
   expect(screen.queryByText("dsh.modelAuditView.empty")).toBeNull();
+});
+
+// Coverage AC: AC-73.
+it("keeps real readiness failures visible while already saved requests remain readable", async () => {
+  api.readiness.mockRejectedValueOnce(new Error("Synthetic private readiness failure"));
+  render(<ModelAuditRequests tenantId={2} initialView="unassociated" />);
+  expect(await screen.findByText("Provider / A")).toBeVisible();
+  expect(await screen.findByText("dsh.modelAuditView.loadError")).toBeVisible();
+  expect(screen.queryByText("dsh.modelAuditView.index_preparing")).toBeNull();
+  expect(screen.queryByText("Synthetic private readiness failure")).toBeNull();
 });

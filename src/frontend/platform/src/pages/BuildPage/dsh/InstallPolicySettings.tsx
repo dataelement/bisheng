@@ -1,5 +1,5 @@
-import { Switch } from "@/components/bs-ui/switch";
-import { toast } from "@/components/bs-ui/toast/use-toast";
+import { Switch } from "@bisheng/ui";
+import { notification } from "@bisheng/ui";
 import { getMarketInstallPolicy, setMarketInstallPolicy } from "@/controllers/API/dshMarket";
 import type { MarketInstallPolicy } from "@/controllers/API/dshMarket";
 import { useEffect, useState } from "react";
@@ -35,7 +35,7 @@ export function InstallPolicySettings({ tenant }: InstallPolicySettingsProps) {
             const saved = await setMarketInstallPolicy(tenant, field, allowed);
             setPolicy(saved);
         } catch {
-            toast({ title: t("policySaveFailed"), description: "", variant: "error" });
+            notification.open({ title: t("policySaveFailed"), description: "", type: "error" });
             setRevision(value => value + 1);
         } finally {
             setPending(false);

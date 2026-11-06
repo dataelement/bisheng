@@ -14,6 +14,8 @@ from bisheng.dsh.domain.models.model_audit_request import (
     DshModelAuditRequest,
 )
 from bisheng.dsh.domain.repositories.admin_operation import require_tenant
+from bisheng.dsh.domain.repositories.content_safety_queries import naive_utc
+from bisheng.dsh.domain.repositories.model_audit_setting import DshModelAuditSettingRepository
 from bisheng.dsh.infrastructure.model_audit_codec import AuditScope, conversation_key
 
 
@@ -33,7 +35,10 @@ class DshModelAuditWriteRepository:
         return self.one(DshModelAuditRequest, DshModelAuditRequest.request_id == request_id, lock=lock)
 
     def upsert_request(self, event):
+        if event.tenant_id != require_tenant():
+            raise ValueError("Conflicting audit identity")
         data = event.metadata
+        setting = DshModelAuditSettingRepository(self.session).lock_retention()
         row = self.request(event.request_id, lock=True)
         identity = (
             "user_id",
@@ -46,12 +51,20 @@ class DshModelAuditWriteRepository:
             "parent_conversation_id",
         )
         if row:
+            if row.record_origin == "EXTERNAL_SAFETY":
+                return self._promote_external(row, event, identity)
             if any(getattr(row, key) != data.get(key) for key in identity):
                 raise ValueError("Conflicting audit identity")
             return row
+        if setting.audit_deleted_before is not None and naive_utc(data["started_at"]) < naive_utc(
+            setting.audit_deleted_before
+        ):
+            raise ValueError("Audit request is below retention watermark")
         conversation = data.get("conversation_id")
         row = DshModelAuditRequest(
             request_id=event.request_id,
+            model_entered=True,
+            model_started_at=data["started_at"],
             user_id=data["user_id"],
             session_id=data["session_id"],
             model_id=data["model_id"],
@@ -76,6 +89,57 @@ class DshModelAuditWriteRepository:
             last_write_at=event.observed_at,
         )
         self.session.add(row)
+        self.session.flush()
+        return row
+
+    def _promote_external(self, row, event, identity):
+        """Confirm native facts atomically, leaving the safety-owned columns intact.
+
+        Coverage AC: AC-03, AC-32, AC-38, AC-41, AC-47, AC-49, AC-52.
+        NULL optional identities are unknown only while the origin is external;
+        an existing MODEL row keeps the original strict identity comparison.
+        """
+        data = event.metadata
+        if (row.tenant_id, row.user_id, row.model_id) != (event.tenant_id, data["user_id"], data["model_id"]):
+            raise ValueError("Conflicting audit identity")
+        mode = data["effective_mode"]
+        if mode not in {"METADATA", "CONTENT"}:
+            raise ValueError("Conflicting audit identity")
+        optional = tuple(key for key in identity if key not in {"user_id", "model_id", "effective_mode"})
+        if any(getattr(row, key) is not None and getattr(row, key) != data.get(key) for key in optional):
+            raise ValueError("Conflicting audit identity")
+        for key in optional:
+            if getattr(row, key) is None:
+                setattr(row, key, data.get(key))
+        row.record_origin, row.effective_mode = "MODEL", mode
+        row.model_entered = True
+        if row.model_started_at is None:
+            row.model_started_at = data["started_at"]
+        row.model_name = data.get("model_name", "")
+        row.model_name_digest = sha256(row.model_name.encode("utf8")).hexdigest()
+        row.provider_name = data.get("provider_name", "")
+        row.conversation_key = (
+            conversation_key(row.tenant_id, row.user_id, row.conversation_id) if row.conversation_id else None
+        )
+        row.conversation_id_digest = (
+            sha256(row.conversation_id.encode("utf8")).hexdigest() if row.conversation_id is not None else None
+        )
+        row.association_status = "ASSOCIATED" if row.conversation_id is not None else "UNASSOCIATED"
+        row.context_invalid = data.get("context_invalid", False)
+        row.message_sources_status = data.get("message_sources_status", "NOT_PROVIDED")
+        for key, initial in (
+            ("model_result", "RUNNING"),
+            ("response_result", "RUNNING"),
+            ("usage_settlement", "PENDING"),
+        ):
+            if getattr(row, key) is None:
+                setattr(row, key, initial)
+        row.content_status = "PENDING" if mode == "CONTENT" else "NOT_CAPTURED"
+        row.input_units = data.get("input_units", 0)
+        row.group_index_pending = bool(row.conversation_key)
+        self.session.add(row)
+        # One flush checks origin and mode together; the caller commits this
+        # promotion with its body/terminal/control facts or rolls all of it back.
         self.session.flush()
         return row
 

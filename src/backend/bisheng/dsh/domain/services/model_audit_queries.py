@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 
 from bisheng.common.errcode.dsh_audit import DshAuditQueryInvalidError, DshAuditRequestUnavailableError
 from bisheng.common.schemas.api import PageData
+from bisheng.dsh.domain.repositories.content_safety_queries import ContentSafetyQueryRepository, as_utc
 from bisheng.dsh.domain.services.profile import profile_scope
 from bisheng.dsh.infrastructure.model_audit_blocking import run_audit_blocking
 
@@ -42,7 +43,7 @@ class DshModelAuditQueryService:
             if value is not None and value.tzinfo is not None:
                 query[key] = value.astimezone(UTC).replace(tzinfo=None)
         try:
-            return await self.execute(tenant, lambda repository: repository.page(**query))
+            return await self.execute(tenant, lambda repository: repository.page(now=self.now(), **query))
         except ValueError:
             raise DshAuditQueryInvalidError() from None
 
@@ -78,7 +79,32 @@ class DshModelAuditQueryService:
 
     async def readiness(self, actor_id, tenant_id):
         tenant = await self.target(actor_id, tenant_id)
-        return await self.execute(tenant, lambda repository: {**repository.readiness(), **repository.tree_progress()})
+
+        def read(repository):
+            readiness = repository.readiness()
+            progress = repository.tree_progress()
+            state = repository.tree_state()
+            published = (
+                state.published_safety_summary_revision
+                if state and state.active and state.published_safety_summary_revision >= 0
+                else None
+            )
+            return {
+                **readiness,
+                **progress,
+                "safety_ready": bool(
+                    published is not None
+                    and state.published_at is not None
+                    and state.safety_summary_revision == published
+                    and progress["summary_ready"]
+                    and not readiness["indexing_pending"]
+                    and not state.failed
+                ),
+                "safety_summary_version": published if published is not None else 0,
+                "safety_summary_as_of": as_utc(state.published_at) if published is not None else None,
+            }
+
+        return await self.execute(tenant, read)
 
     async def tree(self, actor_id, command, *, parent_key="", location_key=None):
         query = command.model_dump(exclude_none=True)
@@ -95,7 +121,7 @@ class DshModelAuditQueryService:
                 if query:
                     raise ValueError("Location accepts only tenant and generation")
                 return repository.tree_location(location_key, generation=generation)
-            return repository.tree_page(parent_key=parent_key, **query)
+            return repository.tree_page(parent_key=parent_key, now=self.now(), **query)
 
         try:
             return await asyncio.wait_for(self.execute(tenant, read), timeout=5)
@@ -114,7 +140,7 @@ class DshModelAuditQueryService:
 
         def read(repository):
             if key is None:
-                return repository.group_page(**query)
+                return repository.group_page(now=self.now(), **query)
             group = repository.group(key)
             if group is None:
                 raise DshAuditRequestUnavailableError()
@@ -130,7 +156,10 @@ class DshModelAuditQueryService:
                     query.get("model_name") and not ready["name_ready"]
                 ):
                     raise ValueError("Audit query backfill required")
-            return {**repository.page(**query), "request_filter_scope": "MATCHING_REQUESTS"}
+            return {
+                **repository.page(now=self.now(), exclude_auxiliary=True, **query),
+                "request_filter_scope": "MATCHING_REQUESTS",
+            }
 
         try:
             # Cancellation retains the executor slot until actual DB work ends.
@@ -143,15 +172,50 @@ class DshModelAuditQueryService:
 
         def read(repository):
             row = repository.request(request_id)
-            return repository.metadata(row) if row else repository.missing(request_id)
+            if row is None:
+                return repository.missing(request_id)
+            # List metadata stays conservative; resolve evidence only on demand.
+            details = ContentSafetyQueryRepository(repository.session).request_events(request_id, limit=1)
+            return {**repository.metadata(row), "details_status": details["details_status"]}
 
-        result = await self.execute(tenant, read)
+        try:
+            result = await self.execute(tenant, read)
+        except LookupError:
+            raise DshAuditRequestUnavailableError() from None
         if result.get("audit_record_missing") and result["gap"] == "CONFIRMED":
             entered = result["model_entered_at"]
             active = await self.activity(request_id) if self.activity is not None else None
             if active is True or (self.now() - entered).total_seconds() < self.window:
                 result["gap"] = "AWAITING"
         return result
+
+    async def request_safety_events(self, actor_id, tenant_id, request_id, *, cursor=None, limit=20):
+        tenant = await self.target(actor_id, tenant_id)
+        try:
+            return await self.execute(
+                tenant,
+                lambda repository: ContentSafetyQueryRepository(repository.session).request_events(
+                    request_id, cursor=cursor, limit=limit
+                ),
+            )
+        except LookupError:
+            raise DshAuditRequestUnavailableError() from None
+        except ValueError:
+            raise DshAuditQueryInvalidError() from None
+
+    async def unassociated_safety_events(self, actor_id, tenant_id, *, association_status="UNASSOCIATED", **query):
+        tenant = await self.target(actor_id, tenant_id)
+        if association_status != "UNASSOCIATED":
+            raise DshAuditQueryInvalidError()
+        try:
+            return await self.execute(
+                tenant,
+                lambda repository: ContentSafetyQueryRepository(repository.session).unassociated_events(
+                    now=self.now(), **query
+                ),
+            )
+        except ValueError:
+            raise DshAuditQueryInvalidError() from None
 
     async def parent_conversation(self, actor_id, tenant_id, request_id):
         tenant = await self.target(actor_id, tenant_id)

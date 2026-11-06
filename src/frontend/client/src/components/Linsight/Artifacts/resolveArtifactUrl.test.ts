@@ -1,5 +1,5 @@
 import request from '~/api/request';
-import { openHtmlArtifactViewer, resolveArtifactUrl } from './artifactUtils';
+import { fetchArtifactBlob, openHtmlArtifactViewer, resolveArtifactUrl } from './artifactUtils';
 
 jest.mock('~/api/request', () => ({
     __esModule: true,
@@ -94,5 +94,34 @@ describe('resolveArtifactUrl share-token plumbing', () => {
         );
 
         expect((postArgs()[2] as any).headers['share-token']).toBe('tok-2');
+    });
+
+    // Regression: the conversation workspace lists every turn's files but holds
+    // only the latest turn's id. An earlier turn's file must resolve against its
+    // own version, or the backend's owned_file_key check answers 403.
+    it('resolves a file against the turn that produced it, not the caller fallback', async () => {
+        const origFetch = global.fetch;
+        global.fetch = jest.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(['x']) }) as never;
+        try {
+            await fetchArtifactBlob(
+                { file_id: '1', file_name: 'plan.pdf', file_url: 'linsight/final_result/SV-1/plan.pdf', versionId: 'SV-1' },
+                'SV-2',
+            );
+        } finally {
+            global.fetch = origFetch;
+        }
+
+        expect((postArgs()[1] as { session_version_id: string }).session_version_id).toBe('SV-1');
+    });
+
+    it('opens the html viewer with the file\'s own turn id', () => {
+        const openSpy = jest.spyOn(window, 'open').mockImplementation(() => null);
+        openHtmlArtifactViewer(
+            { file_id: '1', file_name: 'r.html', file_url: 'linsight/final_result/SV-1/r.html', versionId: 'SV-1' },
+            'SV-2',
+        );
+        const opened = new URL(openSpy.mock.calls[0][0] as string, 'http://localhost');
+        openSpy.mockRestore();
+        expect(opened.searchParams.get('vid')).toBe('SV-1');
     });
 });

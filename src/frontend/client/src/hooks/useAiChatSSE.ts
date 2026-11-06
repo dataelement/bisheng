@@ -21,6 +21,7 @@ import { SSE } from "sse.js";
 import type { AgentEvent, ChatMessage, ContentPart } from "~/api/chatApi";
 import { getSSEUrl } from "~/api/chatApi";
 import { translateApiErrorMessage } from "~/api/request";
+import { captureProjectChatCreation } from "~/layouts/WorkbenchSidebar/projectChatCreation";
 
 /**
  * Structured update emitted as agent SSE events stream in. Consumers merge
@@ -110,7 +111,7 @@ export function openChatStream(
         onTaskHandoff,
         onQuestionFilesUpdate,
     } = submission;
-
+    const assignProject = captureProjectChatCreation(payload.conversationId, submission.sseUrl);
 
     // ---- Agent-mode accumulators ---------------------------------------
     const events: AgentEvent[] = [];
@@ -177,6 +178,7 @@ export function openChatStream(
             // watchdog fire onEnd when the stream drops.
             if (data.event === "linsight_task_handoff") {
                 const handoff = data.data || {};
+                assignProject(String(handoff.chat_id ?? ""));
                 onTaskHandoff?.({
                     session_version_id: String(handoff.session_version_id ?? ""),
                     chat_id: String(handoff.chat_id ?? ""),
@@ -194,6 +196,7 @@ export function openChatStream(
             // --- created: conversation init ---
             if (data.created != null) {
                 const mergedUser = { ...userMessage, ...data.message };
+                assignProject(data.message?.conversationId || userMessage.conversationId);
                 onCreated(
                     data.message?.conversationId || userMessage.conversationId,
                     mergedUser,

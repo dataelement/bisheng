@@ -1,0 +1,109 @@
+name: Runtime delivery images
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Immutable release identifier (a new identifier for changed content)
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: runtime-images-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Login to CR
+        uses: docker/login-action@v3
+        with:
+          registry: cr.dataelem.com
+          username: ${{ secrets.CR_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.CR_DOCKERHUB_TOKEN }}
+      - name: Build, native isolated smoke, push and inventory
+        env:
+          RUNTIME_RELEASE: ${{ inputs.version || github.ref_name }}
+          TARGET_ARCH: ${{ matrix.arch }}
+          RUNTIME_PUBLISH: '1'
+          RUNTIME_REPLACE_RELEASE: ${{ github.event_name == 'push' && github.event.forced && github.ref_name || '' }}
+        run: bash scripts/build_runtime_images.sh
+      - name: Sync verified native images to CR
+        env:
+          RUNTIME_RELEASE: ${{ inputs.version || github.ref_name }}
+          TARGET_ARCH: ${{ matrix.arch }}
+          RUNTIME_REPLACE_RELEASE: ${{ github.event_name == 'push' && github.event.forced && github.ref_name || '' }}
+        run: bash scripts/sync_runtime_images_cr.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-images-${{ matrix.arch }}
+          path: |
+            dist/runtime-images-*.json
+            dist/cr/runtime-images-*.json
+  catalog:
+    # Publish catalogs only after both native image builds and registry pushes succeed.
+    needs: native
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - registry: dockerhub
+            inventory_dir: dist
+            artifact: runtime-profiles
+          - registry: cr
+            inventory_dir: dist/cr
+            artifact: runtime-profiles-cr
+    runs-on: ubuntu-22.04
+    env:
+      CATALOG_DIR: ${{ matrix.inventory_dir }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: runtime-images-*
+          merge-multiple: true
+          path: dist
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Login to CR
+        if: matrix.registry == 'cr'
+        uses: docker/login-action@v3
+        with:
+          registry: cr.dataelem.com
+          username: ${{ secrets.CR_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.CR_DOCKERHUB_TOKEN }}
+      - name: Verify matching native inventories before generating catalogs
+        run: |
+          python src/runtime-manager/runtime_manager/image_catalog.py merge \
+            --inventory "$CATALOG_DIR/runtime-images-amd64.json" --inventory "$CATALOG_DIR/runtime-images-arm64.json" \
+            --output "$CATALOG_DIR/runtime-release.json"
+      # Tag builds produce architecture images and evidence only. Formal service
+      # tags are promoted by release.yml after internal validation and Release publication.
+      - name: Generate both-platform application catalog
+        run: python src/runtime-manager/tools/runtime_materials.py catalog --inventory "$CATALOG_DIR/runtime-images-amd64.json" --inventory "$CATALOG_DIR/runtime-images-arm64.json" --output "$CATALOG_DIR/runtime-profiles.json" --revision ${{ github.run_number }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.inventory_dir }}/runtime-profiles.json
+            ${{ matrix.inventory_dir }}/runtime-release.json

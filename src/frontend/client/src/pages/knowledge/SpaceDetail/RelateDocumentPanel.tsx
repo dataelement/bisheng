@@ -1,7 +1,9 @@
+import { showApiError } from "~/api/request";
+import { Button as RetryButton, Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Loader2, Link2, Search, Check } from "lucide-react";
-import { Tooltip, TooltipTrigger, TooltipContent } from "~/components/ui/Tooltip2";
+
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { useLocalize } from "~/hooks";
@@ -48,27 +50,16 @@ function RecommendationCard({ entry, disabled, onLink }: RecommendationCardProps
         : null;
 
     const versionLine = entry.doc_code
-        ? `${entry.doc_code} · 当前主版本 V${entry.current_primary_version_no ?? 1}`
-        : `当前主版本 V${entry.current_primary_version_no ?? 1}`;
+        ? `${entry.doc_code} · ${localize("com_knowledge.version.primary_version_label", { version: entry.current_primary_version_no ?? 1 })}`
+        : localize("com_knowledge.version.primary_version_label", { version: entry.current_primary_version_no ?? 1 });
 
     return (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-border-base bg-white px-4 py-3 hover:border-blue-500 hover:bg-[#F4F8FF] transition-colors group">
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <p className="min-w-0 cursor-default truncate text-[14px] font-medium text-text-1">
+                    <SharedTooltip  content={entry.title} side="top" ><p className="min-w-0 cursor-default truncate text-[14px] font-medium text-text-1">
                                 {entry.title}
-                            </p>
-                        </TooltipTrigger>
-                        <TooltipContent
-                            noArrow
-                            side="top"
-                            className="max-w-xs rounded-md bg-[#1D2129] px-2 py-1 text-[12px] text-white"
-                        >
-                            {entry.title}
-                        </TooltipContent>
-                    </Tooltip>
+                            </p></SharedTooltip>
                     <span className="shrink-0 rounded bg-[#FFF3E8] px-1.5 py-0.5 text-[12px] text-[#F76F44]">
                         {localize("com_knowledge.version.similarity_label")} {(entry.similarity * 100).toFixed(0)}%
                     </span>
@@ -145,16 +136,18 @@ export function RelateDocumentPanel({
     const debouncedKeyword = useDebounce(keyword, 300);
 
     // Fetch single-version similarity recommendations (merge-source eligible)
-    const { data: candidates = [], isLoading: candidatesLoading } = useQuery({
+    const { data: candidates = [], isLoading: candidatesLoading, error: candidatesError, refetch: retryCandidates } = useQuery({
         queryKey: ["version-recommendations", fileId],
         queryFn: () => getVersionRecommendationsApi(fileId),
+        onError: showApiError,
         enabled: fileId > 0,
     });
 
     // Fetch search results when debounced keyword is at least 1 char
-    const { data: searchResults = [], isLoading: searchLoading } = useQuery({
+    const { data: searchResults = [], isLoading: searchLoading, error: searchError, refetch: retrySearch } = useQuery({
         queryKey: ["version-source-search", spaceId, debouncedKeyword, fileId],
         queryFn: () => searchVersionSourcesApi(spaceId, debouncedKeyword, fileId),
+        onError: showApiError,
         enabled: debouncedKeyword.length >= 1,
     });
 
@@ -171,11 +164,7 @@ export function RelateDocumentPanel({
             });
             onLinked(response);
         },
-        // The unified request interceptor already toasts api_errors.<code>
-        // (e.g. 18061/18062/18063/18064) when skip403Redirect is set, so the
-        // onError handler is a no-op to avoid a duplicate generic toast that
-        // would overwrite the precise product-spec message.
-        onError: () => undefined,
+        onError: showApiError,
     });
 
     // Dismiss the similar-document flag — user chose not to link this file to any
@@ -189,9 +178,7 @@ export function RelateDocumentPanel({
             });
             onDismissed?.();
         },
-        // The unified request interceptor already toasts api_errors.<code> when
-        // skip403Redirect is set, so onError is a no-op to avoid a duplicate toast.
-        onError: () => undefined,
+        onError: showApiError,
     });
 
     const handleLink = async (targetDoc: { document_id: number; title: string }) => {
@@ -219,22 +206,11 @@ export function RelateDocumentPanel({
                     <p className="text-[12px] text-text-3 mb-1">
                         {localize("com_knowledge.version.section_current_file")}
                     </p>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <p className="truncate text-[16px] font-medium text-text-1 mb-1">
+                    <SharedTooltip  content={file.name} side="top" ><p className="truncate text-[16px] font-medium text-text-1 mb-1">
                                 {file.name}
-                            </p>
-                        </TooltipTrigger>
-                        <TooltipContent
-                            noArrow
-                            side="top"
-                            className="max-w-xs rounded-md bg-[#1D2129] px-2 py-1 text-[12px] text-white"
-                        >
-                            {file.name}
-                        </TooltipContent>
-                    </Tooltip>
+                            </p></SharedTooltip>
                     <p className="text-[12px] text-text-3">
-                        当前主版本 V{file.version_no ?? 1} · 上传人 {file.user_name ?? "未知"}
+                        {localize("com_knowledge.version.primary_version_uploader", { version: file.version_no ?? 1, name: file.user_name ?? localize("com_ui_unknown") })}
                     </p>
                 </div>
                 <span className="shrink-0 rounded bg-[#FFF3E8] px-2 py-0.5 text-[12px] text-[#F76F44] font-medium mt-1">
@@ -257,6 +233,11 @@ export function RelateDocumentPanel({
                     {candidatesLoading ? (
                         <div className="flex h-16 items-center justify-center border border-border-base bg-[#FAFAFA] rounded-md">
                             <Loader2 className="size-5 animate-spin text-text-3" />
+                        </div>
+                    ) : candidatesError ? (
+                        <div role="alert">
+                            {candidatesError instanceof Error ? candidatesError.message : localize('com_ui_error')}
+                            <RetryButton variant="outlined" onClick={() => void retryCandidates()}>{localize('com_ui_retry')}</RetryButton>
                         </div>
                     ) : candidates.length === 0 ? (
                         <div className="flex h-[72px] items-center justify-center border border-border-base bg-[#FAFAFA] rounded-md">
@@ -319,6 +300,11 @@ export function RelateDocumentPanel({
                             {searchLoading ? (
                                 <div className="flex h-16 items-center justify-center">
                                     <Loader2 className="size-5 animate-spin text-text-3" />
+                                </div>
+                            ) : searchError ? (
+                                <div role="alert">
+                                    {searchError instanceof Error ? searchError.message : localize('com_ui_error')}
+                                    <RetryButton variant="outlined" onClick={() => void retrySearch()}>{localize('com_ui_retry')}</RetryButton>
                                 </div>
                             ) : searchResults.length === 0 ? (
                                 <p className="px-3 py-4 text-[14px] text-text-3">

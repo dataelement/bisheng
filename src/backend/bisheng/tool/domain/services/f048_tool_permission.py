@@ -29,7 +29,6 @@ class ToolPermissionRecord:
     permission_version: int
     context_version: str
     preset: bool
-    system_allowlisted: bool
 
 
 class ToolPermissionLoader(Protocol):
@@ -74,7 +73,6 @@ class ToolDaoPermissionLoader:
             permission_version=version,
             context_version=context_version,
             preset=preset,
-            system_allowlisted=preset and row.user_id is None,
         )
 
 
@@ -216,11 +214,10 @@ class F048ToolPermissionAdapter:
             or record.resource_id != resource_id
             or record.status != "ACTIVE"
             or (record.tenant_id != actor.current_tenant_id and not actor.super_admin)
-            or (record.preset and not record.system_allowlisted)
             or (not record.preset and not record.owner_user_id)
         ):
             raise PermissionInvalidResourceError()
-        if record.preset and action is not None and action not in SYSTEM_TOOL_ACTIONS:
+        if record.preset and action is not None and action not in SYSTEM_TOOL_ACTIONS | {"manage_permission"}:
             raise InvalidCatalogActionError(msg=f"Preset tool does not support action: {action}")
         return VerifiedPermissionTarget.from_business_service(
             tenant_id=record.tenant_id,

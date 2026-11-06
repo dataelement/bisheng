@@ -16,7 +16,7 @@ class DshModelAuditTitleService:
     async def update(self, principal, command):
         with principal_scope(principal), profile_scope(int(principal.tenant_id)):
             mode = await self.modes.read_effective()
-            if mode.mode == "OFF":
+            if mode.read_failed:
                 return {"status": "DISABLED"}
 
             def write():

@@ -1,6 +1,8 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button"
-import { Checkbox } from "@/components/bs-ui/checkBox"
+import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
+import { Alert, Button, Select } from '@bisheng/ui';
+
+import { Checkbox } from '@bisheng/ui';
 import {
   getGrantablePermissionModelsApi,
   mutateResourceGrantsApi,
@@ -10,11 +12,13 @@ import {
   type PermissionGrantMutationChange,
   type ResourcePermissionContext,
 } from "@/controllers/API/permission"
+import { showApiError } from "@/controllers/request"
 import { LockKeyhole } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { canMutatePermissionAssignee } from "./assigneePolicy"
 import { SourceBadge } from "./SourceBadge"
+import { PermissionModelStatus } from "./PermissionModelStatus"
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment"
 import { SubjectSearchUser } from "./SubjectSearchUser"
 import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup"
@@ -64,6 +68,7 @@ function ExistingAssigneeRow({
   onRemove,
 }: ExistingAssigneeRowProps) {
   const { t } = useTranslation("permission")
+  const selectLabels = useSelectLabels()
   const [targetModelKey, setTargetModelKey] = useState(assignee.model.key)
   const editable = canMutatePermissionAssignee(assignee, context, models)
   const currentIsGrantable = models.some(
@@ -91,6 +96,7 @@ function ExistingAssigneeRow({
         </div>
         <div className="mt-1 flex flex-wrap gap-1">
           <SourceBadge source={assignee.source} />
+          <PermissionModelStatus active={assignee.model.active} />
           {assignee.scope === "INHERITED" && (
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
               {t("scope.inherited")}
@@ -99,44 +105,18 @@ function ExistingAssigneeRow({
         </div>
       </div>
 
-      <select
-        aria-label={`grant.model.${assignee.assignee_id}`}
-        value={targetModelKey}
-        disabled={!editable || pending}
-        onChange={(event) => setTargetModelKey(event.target.value)}
-        className="min-h-11 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-      >
-        {!currentIsGrantable && (
-          <option value={assignee.model.key}>{assignee.model.name}</option>
-        )}
-        {models.map((model) => (
-          <option key={model.key} value={model.key}>
-            {model.name}
-          </option>
-        ))}
-      </select>
+      <Select {...selectLabels} aria-label={`grant.model.${assignee.assignee_id}`}
+        value={targetModelKey} disabled={!editable || pending} size="large"
+        options={[...(!currentIsGrantable ? [{ value: assignee.model.key, label: assignee.model.name }] : []), ...models.map(model => ({ value: model.key, label: model.name }))]}
+        onChange={value => setTargetModelKey(String(value ?? ''))} />
 
       <div className="flex flex-wrap items-start gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          className="min-h-11"
-          aria-label={`grant.move.${assignee.assignee_id}`}
-          disabled={
+        <Button type="button" variant="outlined" className="min-h-11" aria-label={`grant.move.${assignee.assignee_id}`} disabled={
             !editable || pending || targetModelKey === assignee.model.key
-          }
-          onClick={() => onMove(assignee, targetModelKey)}
-        >
+          } onClick={() => onMove(assignee, targetModelKey)} color="default">
           {t("grant.move")}
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="min-h-11 text-red-700"
-          aria-label={`grant.remove.${assignee.assignee_id}`}
-          disabled={!editable || pending}
-          onClick={() => onRemove(assignee)}
-        >
+        <Button type="button" variant="outlined" className="min-h-11 text-red-700" aria-label={`grant.remove.${assignee.assignee_id}`} disabled={!editable || pending} onClick={() => onRemove(assignee)} color="default">
           {t("grant.remove")}
         </Button>
       </div>
@@ -158,6 +138,7 @@ export function PermissionGrantTab({
   onSuccess,
 }: PermissionGrantTabProps) {
   const { t } = useTranslation("permission")
+  const selectLabels = useSelectLabels()
   const [models, setModels] = useState<GrantablePermissionModel[]>([])
   const [subjectType, setSubjectType] = useState<SubjectType>(
     fixedSubjectType ?? "user",
@@ -169,7 +150,8 @@ export function PermissionGrantTab({
   const [internalIncludeChildren, setInternalIncludeChildren] = useState(false)
   const [loadingModels, setLoadingModels] = useState(false)
   const [pendingKey, setPendingKey] = useState<string | null>(null)
-  const [conflict, setConflict] = useState(false)
+  const [failureMessage, setFailureMessage] = useState("")
+  const [candidateRevision, setCandidateRevision] = useState(0)
   const includeChildren = includeChildrenProp ?? internalIncludeChildren
   const handleIncludeChildrenChange =
     onIncludeChildrenChange ?? setInternalIncludeChildren
@@ -177,7 +159,7 @@ export function PermissionGrantTab({
   useEffect(() => {
     let cancelled = false
     setLoadingModels(true)
-    setConflict(false)
+    setFailureMessage("")
     void getGrantablePermissionModelsApi(resourceType, resourceId)
       .then((result) => {
         if (cancelled) return
@@ -189,8 +171,8 @@ export function PermissionGrantTab({
             : (activeModels[0]?.key ?? ""),
         )
       })
-      .catch(() => {
-        if (!cancelled) setConflict(true)
+      .catch((cause: unknown) => {
+        if (!cancelled) setFailureMessage(showApiError(cause).message)
       })
       .finally(() => {
         if (!cancelled) setLoadingModels(false)
@@ -202,8 +184,11 @@ export function PermissionGrantTab({
 
   useEffect(() => {
     if (fixedSubjectType) setSubjectType(fixedSubjectType)
+  }, [fixedSubjectType])
+
+  useEffect(() => {
     setSelectedSubjects([])
-  }, [fixedSubjectType, resourceId])
+  }, [resourceId, resourceType])
 
   const canEdit =
     context.mode === "CUSTOM" && context.can_manage_permission
@@ -230,7 +215,7 @@ export function PermissionGrantTab({
   ) => {
     if (!canEdit || pendingKey) return
     setPendingKey(operationKey)
-    setConflict(false)
+    setFailureMessage("")
     try {
       const result = await mutateResourceGrantsApi(resourceType, resourceId, {
         idempotency_key: createMutationIdempotencyKey(),
@@ -240,8 +225,13 @@ export function PermissionGrantTab({
       })
       setSelectedSubjects([])
       onSuccess(result)
-    } catch {
-      setConflict(true)
+    } catch (cause) {
+      const error = showApiError(cause)
+      setFailureMessage(error.status_code === 25002 ? t("grant.conflict") : error.message)
+      if (error.status_code === 25016) {
+        setSelectedSubjects([])
+        setCandidateRevision(value => value + 1)
+      }
     } finally {
       setPendingKey(null)
     }
@@ -298,12 +288,13 @@ export function PermissionGrantTab({
     `subject.${subjectType === "user_group" ? "userGroup" : subjectType}`,
   )
   const selectedSummaryText = selectedSubjects
-    .map((subject) => subject.name)
+    .map((subject) => [subject.externalId ? `${subject.name} (${t(`subjectSearch.${subject.type}Id`, { ns: "bs" })}: ${subject.externalId})` : subject.name, subject.departmentPath].filter(Boolean).join(" / "))
     .join("、")
   const subjectPicker = (
     <>
       {subjectType === "user" && (
         <SubjectSearchUser
+          key={candidateRevision}
           value={selectedSubjects}
           onChange={setSelectedSubjects}
           resourceType={resourceType}
@@ -341,13 +332,13 @@ export function PermissionGrantTab({
         className="flex h-full min-h-0 flex-col overflow-hidden"
         data-testid="legacy-permission-grant-layout"
       >
-        {conflict && (
-          <p
-            className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-900"
-            role="alert"
-          >
-            {t("grant.conflict")}
-          </p>
+        {failureMessage && (
+          <Alert
+            type="error"
+            className="mb-3"
+            description={failureMessage}
+            live
+          />
         )}
 
         <div className="min-h-0 flex-1 overflow-hidden">
@@ -357,7 +348,7 @@ export function PermissionGrantTab({
         {subjectType === "department" &&
           !hideDepartmentIncludeChildrenControl && (
             <label className="mt-3 flex h-10 shrink-0 items-center gap-2 text-sm">
-              <Checkbox
+              <Checkbox className="peer"
                 checked={includeChildren}
                 onCheckedChange={(checked) =>
                   handleIncludeChildrenChange(checked === true)
@@ -372,7 +363,7 @@ export function PermissionGrantTab({
             <span className="shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]">
               {`${t("action.grant")}${subjectLabel}:`}
             </span>
-            <span className="truncate text-[14px] leading-[22px] text-[#4E5969]">
+            <span className="truncate text-[14px] leading-[22px] text-[#4E5969]" title={selectedSummaryText}>
               {selectedSummaryText}
             </span>
           </div>
@@ -381,32 +372,19 @@ export function PermissionGrantTab({
             <span className="shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]">
               {t("action.grant")}
             </span>
-            <select
-              aria-label={t("grant.addModel")}
-              value={selectedModelKey}
-              disabled={loadingModels || models.length === 0}
-              onChange={(event) => setSelectedModelKey(event.target.value)}
-              className="h-8 w-[132px] rounded-[6px] border-0 bg-white px-1 text-[14px] leading-[22px] text-[#212121] outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-            >
-              {models.map((model) => (
-                <option key={model.key} value={model.key}>
-                  {model.name}
-                </option>
-              ))}
-            </select>
+            <Select {...selectLabels} aria-label={t("grant.addModel")} variant="ghost"
+              value={selectedModelKey || null} disabled={loadingModels || models.length === 0}
+              className="w-[132px]" options={models.map(model => ({ value: model.key, label: model.name }))}
+              onChange={value => setSelectedModelKey(String(value ?? ''))} />
           </div>
         </div>
 
         <div className="mt-4 flex shrink-0 justify-end border-t pt-4">
-          <Button
-            type="button"
-            disabled={
+          <Button type="button" disabled={
               pendingKey !== null ||
               selectedSubjects.length === 0 ||
               !selectedModelKey
-            }
-            onClick={handleAdd}
-          >
+            } onClick={handleAdd}>
             {t("grant.submit")}
           </Button>
         </div>
@@ -417,17 +395,10 @@ export function PermissionGrantTab({
   return (
     <div className="flex min-h-0 flex-col gap-4">
       {!canEdit && (
-        <p className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
-          {t("grant.readOnly")}
-        </p>
+        <Alert description={t("grant.readOnly")} />
       )}
-      {conflict && (
-        <p
-          className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-900"
-          role="alert"
-        >
-          {t("grant.conflict")}
-        </p>
+      {failureMessage && (
+        <Alert type="error" description={failureMessage} live />
       )}
 
       {showExistingAssignees && assignees.length > 0 && (
@@ -464,7 +435,6 @@ export function PermissionGrantTab({
                   className="min-h-11 rounded-md px-3 text-sm text-muted-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm"
                   onClick={() => {
                     setSubjectType(type)
-                    setSelectedSubjects([])
                   }}
                 >
                   {t(`subject.${type === "user_group" ? "userGroup" : type}`)}
@@ -479,7 +449,7 @@ export function PermissionGrantTab({
 
           {subjectType === "department" && (
             <label className="flex min-h-11 items-center gap-2 text-sm">
-              <Checkbox
+              <Checkbox className="peer"
                 checked={includeChildren}
                 onCheckedChange={(checked) =>
                   handleIncludeChildrenChange(checked === true)
@@ -492,30 +462,16 @@ export function PermissionGrantTab({
           <div className="flex flex-wrap items-end justify-between gap-3 border-t pt-3">
             <label className="min-w-56 flex-1 text-sm font-medium">
               <span className="mb-1 block">{t("grant.model")}</span>
-              <select
-                aria-label={t("grant.addModel")}
-                value={selectedModelKey}
-                disabled={loadingModels || models.length === 0}
-                onChange={(event) => setSelectedModelKey(event.target.value)}
-                className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {models.map((model) => (
-                  <option key={model.key} value={model.key}>
-                    {model.name}
-                  </option>
-                ))}
-              </select>
+              <Select {...selectLabels} aria-label={t("grant.addModel")} size="large"
+                value={selectedModelKey || null} disabled={loadingModels || models.length === 0}
+                options={models.map(model => ({ value: model.key, label: model.name }))}
+                onChange={value => setSelectedModelKey(String(value ?? ''))} />
             </label>
-            <Button
-              type="button"
-              className="min-h-11"
-              disabled={
+            <Button type="button" className="min-h-11" disabled={
                 pendingKey !== null ||
                 selectedSubjects.length === 0 ||
                 !selectedModelKey
-              }
-              onClick={handleAdd}
-            >
+              } onClick={handleAdd}>
               {t("grant.submit")}
             </Button>
           </div>

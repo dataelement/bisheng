@@ -66,6 +66,7 @@ def _make_manager(monkeypatch):
 
     mgr.get_execution_task = fake_get
     monkeypatch.setattr(smm.LinsightExecuteTaskDao, "update_by_id", fake_update)
+    monkeypatch.setattr(smm.LinsightExecuteTaskDao, "update_fields_by_id", fake_update)
     return mgr, store
 
 
@@ -213,6 +214,7 @@ async def test_final_thinking_segment_reaches_db_on_status_update(monkeypatch):
     from bisheng.linsight.domain.services import state_message_manager as smm
 
     monkeypatch.setattr(smm.LinsightExecuteTaskDao, "update_by_id", fake_update)
+    monkeypatch.setattr(smm.LinsightExecuteTaskDao, "update_fields_by_id", fake_update)
 
     await mgr.add_execution_task_step("t1", _thinking("c9", "The"))  # first delta -> flush
     await mgr.add_execution_task_step("t1", _thinking("c9", " report is ready."))  # throttled
@@ -621,6 +623,7 @@ def _make_answer_manager(monkeypatch, history, task_data):
 
     mgr.get_execution_task = fake_get
     monkeypatch.setattr(smm.LinsightExecuteTaskDao, "update_by_id", fake_update)
+    monkeypatch.setattr(smm.LinsightExecuteTaskDao, "update_fields_by_id", fake_update)
     return mgr, store
 
 

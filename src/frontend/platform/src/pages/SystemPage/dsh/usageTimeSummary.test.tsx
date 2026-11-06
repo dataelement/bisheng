@@ -64,7 +64,7 @@ describe('usage calendar contracts', () => {
             document.querySelectorAll('[data-usage-calendar-card]'),
         ).toHaveLength(1)
         fireEvent.click(
-            screen.getByRole('button', { name: 'dsh.messageCount' }),
+            screen.getByRole('radio', { name: 'dsh.messageCount' }),
         )
         expect(
             document.querySelectorAll('[data-usage-line-chart="messages"]'),
@@ -133,7 +133,7 @@ describe('usage calendar contracts', () => {
         })
         expect(tokenGrid).toHaveAttribute('data-heatmap-metric', 'tokens')
         fireEvent.click(
-            screen.getByRole('button', { name: 'dsh.messageCount' }),
+            screen.getByRole('radio', { name: 'dsh.messageCount' }),
         )
         const messageGrid = screen.getByRole('list', {
             name: 'dsh.messageActivity',

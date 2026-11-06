@@ -1,7 +1,8 @@
+import { Button } from '@bisheng/ui';
 import { TitleIconBg } from "@/components/bs-comp/cardComponent";
 import ToolsSheet from "@/components/bs-comp/sheets/ToolsSheet";
 import { ToolIcon } from "@/components/bs-icons";
-import { Button } from "@/components/bs-ui/button";
+
 import { CircleMinus } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -41,7 +42,7 @@ export default function ToolItem({ data, onChange, i18nPrefix }) {
             setValue(newValue)
             onChange(newValue.map(el => ({ key: el.id, label: el.name, tool_key: el.tool_key })))
         }}>
-            <Button onClick={() => { }} variant='outline' className="border-primary text-primary mt-2">
+            <Button onClick={() => { }} variant="outlined" className="border-primary text-primary mt-2" color="default">
                 {t(`${i18nPrefix}label`)}
             </Button>
         </ToolsSheet>

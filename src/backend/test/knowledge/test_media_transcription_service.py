@@ -8,7 +8,7 @@ import pytest
 from redis.exceptions import ConnectionError as RedisConnectionError
 
 from bisheng.common.errcode.knowledge import KnowledgeMediaNoRecognizableAudioError, KnowledgeMediaTranscriptionError
-from bisheng.common.errcode.server import NoAsrModelConfigError
+from bisheng.common.errcode.server import AsrModelTypeError, NoAsrModelConfigError
 from bisheng.core.ai.base import ASRSegment, ASRTranscript
 from bisheng.knowledge.domain.services.media_transcription_service import (
     CHUNK_SECONDS,
@@ -178,6 +178,39 @@ def test_resolve_asr_model_accepts_openai_compatible_provider(monkeypatch) -> No
     assert resolved_server is server_info
 
 
+def test_resolve_asr_model_accepts_realtime_type(monkeypatch) -> None:
+    model_info = SimpleNamespace(
+        id=45,
+        model_name="16k_zh",
+        model_type=LLMModelType.ASR_RT.value,
+        server_id=10,
+        online=True,
+        config={},
+    )
+    server_info = SimpleNamespace(name="Tencent", type=LLMServerType.TENCENT.value, config={})
+    _patch_model_lookup(monkeypatch, model_info, server_info)
+
+    resolved_model, _resolved_server = KnowledgeMediaTranscriptionService._resolve_asr_model(tenant_id=1)
+
+    assert resolved_model is model_info
+
+
+def test_resolve_asr_model_rejects_chat_model(monkeypatch) -> None:
+    model_info = SimpleNamespace(
+        id=46,
+        model_name="gpt",
+        model_type=LLMModelType.LLM.value,
+        server_id=10,
+        online=True,
+        config={},
+    )
+    server_info = SimpleNamespace(name="OpenAI", type=LLMServerType.OPENAI.value, config={})
+    _patch_model_lookup(monkeypatch, model_info, server_info)
+
+    with pytest.raises(AsrModelTypeError):
+        KnowledgeMediaTranscriptionService._resolve_asr_model(tenant_id=1)
+
+
 def test_resolve_asr_model_rejects_provider_without_asr_client(monkeypatch) -> None:
     model_info = SimpleNamespace(
         id=44,
@@ -187,14 +220,14 @@ def test_resolve_asr_model_rejects_provider_without_asr_client(monkeypatch) -> N
         online=True,
         config={},
     )
-    server_info = SimpleNamespace(name="Qianfan", type=LLMServerType.QIAN_FAN.value, config={})
+    server_info = SimpleNamespace(name="Local", type=LLMServerType.OLLAMA.value, config={})
     _patch_model_lookup(monkeypatch, model_info, server_info)
 
     with pytest.raises(KnowledgeMediaTranscriptionError) as exc_info:
         KnowledgeMediaTranscriptionService._resolve_asr_model(tenant_id=1)
 
     # The frontend maps this prefix to its "provider not supported" copy.
-    assert "does not support ASR provider qianfan" in exc_info.value.message
+    assert "does not support ASR provider ollama" in exc_info.value.message
 
 
 def _patch_model_lookup(monkeypatch, model_info, server_info) -> None:

@@ -27,7 +27,6 @@ premock_import_chain()
 # ---------------------------------------------------------------------------
 # Standard imports (safe after pre-mock)
 # ---------------------------------------------------------------------------
-from contextlib import contextmanager
 from unittest.mock import MagicMock
 
 import pytest
@@ -38,10 +37,26 @@ from sqlmodel import Session
 from bisheng.core.config.multi_tenant import MultiTenantConf
 from test.fixtures.table_definitions import create_all_tables
 
-
 # ---------------------------------------------------------------------------
 # Settings mock (preserved from F001, enhanced)
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _local_code_tests_stay_unisolated(monkeypatch):
+    """Product default of local_isolation is uid. Tests that spawn a local
+    interpreter were written for the off path; uid-mode tests stub _conf or
+    isolation_mode themselves and do not read this attribute.
+    """
+    try:
+        from bisheng.common.services.config_service import settings
+    except Exception:
+        return
+    conf = getattr(settings, "sandbox_conf", None)
+    if conf is None or not hasattr(conf, "local_isolation"):
+        return
+    monkeypatch.setattr(conf, "local_isolation", "off", raising=False)
+
 
 @pytest.fixture()
 def mock_settings(monkeypatch):
@@ -51,12 +66,12 @@ def mock_settings(monkeypatch):
     """
     mock = MagicMock()
     mock.multi_tenant = MultiTenantConf(enabled=False)
-    mock.jwt_secret = 'test-secret'
+    mock.jwt_secret = "test-secret"
     mock.cookie_conf = MagicMock()
     mock.cookie_conf.jwt_token_expire_time = 86400
-    mock.cookie_conf.jwt_iss = 'bisheng'
+    mock.cookie_conf.jwt_iss = "bisheng"
 
-    monkeypatch.setattr('bisheng.common.services.config_service.settings', mock)
+    monkeypatch.setattr("bisheng.common.services.config_service.settings", mock)
     return mock
 
 
@@ -64,7 +79,8 @@ def mock_settings(monkeypatch):
 # Synchronous DB fixtures
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(scope='session')
+
+@pytest.fixture(scope="session")
 def db_engine():
     """Session-scoped SQLite in-memory engine with all test tables created.
 
@@ -72,8 +88,8 @@ def db_engine():
     Individual test isolation is provided by db_session's ROLLBACK.
     """
     engine = create_engine(
-        'sqlite://',
-        connect_args={'check_same_thread': False},
+        "sqlite://",
+        connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
     create_all_tables(engine)
@@ -102,6 +118,7 @@ def db_session(db_engine):
 # Asynchronous DB fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 async def async_db_engine():
     """Function-scoped async SQLite engine with all test tables created.
@@ -113,16 +130,18 @@ async def async_db_engine():
     from sqlalchemy.ext.asyncio import create_async_engine
 
     engine = create_async_engine(
-        'sqlite+aiosqlite://',
-        connect_args={'check_same_thread': False},
+        "sqlite+aiosqlite://",
+        connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
     async with engine.begin() as conn:
-        from test.fixtures.table_definitions import (
-            TABLE_DEFINITIONS,
-            INDEX_DEFINITIONS,
-        )
         from sqlalchemy import text
+
+        from test.fixtures.table_definitions import (
+            INDEX_DEFINITIONS,
+            TABLE_DEFINITIONS,
+        )
+
         for ddl in TABLE_DEFINITIONS.values():
             await conn.execute(text(ddl))
         for idx in INDEX_DEFINITIONS:
@@ -153,6 +172,7 @@ async def async_db_session(async_db_engine):
 # Tenant context helpers
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def tenant_context():
     """Set current_tenant_id ContextVar for the duration of a test.
@@ -174,6 +194,7 @@ def tenant_context():
 
     # Reset all tokens in reverse order
     from bisheng.core.context.tenant import current_tenant_id as _ctx_var
+
     for token in reversed(tokens):
         _ctx_var.reset(token)
 
@@ -194,6 +215,7 @@ def bypass_tenant():
 # External service mocks
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def mock_redis():
     """Function-scoped fakeredis instance, flushed after each test."""
@@ -209,7 +231,7 @@ def mock_minio():
     """Function-scoped MagicMock mimicking MinIO client operations."""
     mock = MagicMock()
     mock.put_object.return_value = None
-    mock.get_object.return_value = MagicMock(read=MagicMock(return_value=b'test-data'))
+    mock.get_object.return_value = MagicMock(read=MagicMock(return_value=b"test-data"))
     mock.remove_object.return_value = None
     return mock
 
@@ -228,6 +250,7 @@ def mock_openfga():
 # TestClient
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def test_client(monkeypatch):
     """FastAPI TestClient with lifespan disabled.
@@ -244,18 +267,21 @@ def test_client(monkeypatch):
         yield
 
     try:
-        monkeypatch.setattr('bisheng.main.lifespan', _noop_lifespan)
+        monkeypatch.setattr("bisheng.main.lifespan", _noop_lifespan)
         from bisheng.main import create_app
+
         app = create_app()
     except Exception:
         # Fallback: minimal app with /health only
         from fastapi import FastAPI
+
         app = FastAPI()
 
-        @app.get('/health')
+        @app.get("/health")
         def health():
-            return {'status': 'OK'}
+            return {"status": "OK"}
 
     from starlette.testclient import TestClient
+
     with TestClient(app) as client:
         yield client

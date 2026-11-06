@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from bisheng.common.errcode.permission import PermissionVersionConflictError
 from bisheng.permission.application.resource_api import (
     F048ResourcePermissionApi,
 )
@@ -74,6 +75,7 @@ class _Runtime:
     def __init__(self) -> None:
         self.changes = ()
         self.page_calls = []
+        self.model_active = True
 
     async def allocate_source_ids(self, count):
         assert count == 1
@@ -84,7 +86,7 @@ class _Runtime:
         model = SimpleNamespace(
             model_key="viewer",
             derived_level=1,
-            active=True,
+            active=self.model_active,
         )
         source = SimpleNamespace(
             source_id=91,
@@ -110,9 +112,12 @@ class _Runtime:
     async def require_manage_permission(self, actor, target):
         del actor, target
 
+    async def manageable_model_keys(self, **kwargs):
+        return frozenset({"viewer"})
+
     async def current_catalog(self):
         model = SimpleNamespace(
-            snapshot=SimpleNamespace(model_key="viewer"),
+            snapshot=SimpleNamespace(model_key="viewer", active=self.model_active),
             name="Viewer",
         )
         return SimpleNamespace(release_id=12, models=(model,))
@@ -250,6 +255,24 @@ class _ContextRuntime(_Runtime):
         return ("use", "edit", "delete", "manage_permission")
 
 
+class _OrdinaryContextRuntime(_ContextRuntime):
+    """Denies BOTH ``visible`` and ``manage_permission``.
+
+    ``_ContextRuntime`` allows every non-visible action, which makes its actor a
+    manager — and ``get_context`` lets a manager (owner, granted manager, or an
+    admin via check_action's identity shortcut) in without a visible tuple, so
+    that fake cannot model an ordinary user. This one can: no management right,
+    no visibility, therefore no entry.
+    """
+
+    async def check_action(self, actor, target, action):
+        if action in {"visible", "manage_permission"}:
+            if action == "visible":
+                self.visible_checks += 1
+            return False
+        return True
+
+
 class _ExplainRuntime(_ContextRuntime):
     """Visible via FGA, but the grant-derived explanation is empty.
 
@@ -319,7 +342,7 @@ async def test_tenant_admin_reads_context_for_own_tenant_without_visible_tuple()
 async def test_ordinary_user_context_still_requires_a_visible_tuple() -> None:
     from bisheng.common.errcode.permission import PermissionDeniedError
 
-    runtime = _ContextRuntime()
+    runtime = _OrdinaryContextRuntime()
     api = F048ResourcePermissionApi(
         resources=_Resources(),
         runtime=runtime,
@@ -361,25 +384,15 @@ async def test_super_admin_my_permissions_returns_full_effective_actions() -> No
 
 
 @pytest.mark.asyncio
-async def test_ordinary_user_my_permissions_for_preset_tool_returns_empty_actions() -> None:
+async def test_revoked_user_my_permissions_for_preset_tool_requires_visibility() -> None:
+    from bisheng.common.errcode.permission import PermissionDeniedError
+
     runtime = _ContextRuntime()
-    api = F048ResourcePermissionApi(
-        resources=_ToolResources(),
-        runtime=runtime,
-        subjects=_Subjects(),
-    )
+    api = F048ResourcePermissionApi(resources=_ToolResources(), runtime=runtime, subjects=_Subjects())
     actor = PermissionActor(user_id=7, current_tenant_id=9)
-
-    result = await api.get_my_permissions(
-        resource_type="tool",
-        resource_id="20",
-        actor=actor,
-    )
-
-    assert result["actions"] == []
-    assert result["sources"] == []
-    assert result["projection_degraded"] is False
-    assert runtime.visible_checks == 0
+    with pytest.raises(PermissionDeniedError):
+        await api.get_my_permissions(resource_type="tool", resource_id="20", actor=actor)
+    assert runtime.visible_checks == 1
 
 
 @pytest.mark.asyncio
@@ -523,3 +536,87 @@ async def test_roster_uses_bounded_sql_page_instead_of_full_explanation() -> Non
             "limit": 25,
         }
     ]
+
+
+@pytest.mark.parametrize("keyword", ["", "Reviewers"])
+async def test_inactive_existing_model_is_returned_in_roster_and_search(keyword):
+    runtime = _Runtime()
+    runtime.model_active = False
+    api = F048ResourcePermissionApi(resources=_Resources(), runtime=runtime, subjects=_Subjects())
+    result = await api.list_grants(
+        resource_type="workflow",
+        resource_id="wf-1",
+        actor=PermissionActor(user_id=7, current_tenant_id=9),
+        cursor=None,
+        page_size=1,
+        keyword=keyword,
+    )
+    assert result["data"][0]["model"]["active"] is False
+    assert result["data"][0]["model"]["name"] == "Viewer"
+    assert result["data"][0]["subject"]["name"] == "Reviewers"
+    assert result["has_more"] is True
+
+
+async def test_roster_refuses_a_model_missing_from_its_catalog_snapshot():
+    class Runtime(_Runtime):
+        async def current_catalog(self):
+            catalog = await super().current_catalog()
+            catalog.models = ()
+            return catalog
+
+    api = F048ResourcePermissionApi(resources=_Resources(), runtime=Runtime(), subjects=_Subjects())
+    with pytest.raises(PermissionVersionConflictError):
+        await api.list_grants(
+            resource_type="workflow",
+            resource_id="wf-1",
+            actor=PermissionActor(user_id=7, current_tenant_id=9),
+            cursor=None,
+            page_size=1,
+        )
+
+
+async def test_mutation_response_keeps_other_existing_inactive_sources():
+    class Runtime(_Runtime):
+        async def mutate_grants(self, **kwargs):
+            result = await super().mutate_grants(**kwargs)
+            result.grants += (
+                SimpleNamespace(
+                    model=SimpleNamespace(model_key="old-custom", derived_level=1, active=False),
+                    active=True,
+                    sources=(
+                        SimpleNamespace(
+                            source_id=92,
+                            version=1,
+                            subject_type="department",
+                            subject_id="310",
+                            source_type="DEPARTMENT",
+                            include_children=False,
+                            protected=False,
+                            active=True,
+                        ),
+                    ),
+                ),
+            )
+            return result
+
+        async def manageable_model_keys(self, **kwargs):
+            return frozenset({"viewer", "old-custom"})
+
+    api = F048ResourcePermissionApi(resources=_Resources(), runtime=Runtime(), subjects=_Subjects())
+    result = await api.mutate_grants(
+        resource_type="workflow",
+        resource_id="wf-1",
+        actor=PermissionActor(user_id=7, current_tenant_id=9),
+        request=GrantMutationRequest.model_validate(
+            {
+                "idempotency_key": "keep-existing-inactive",
+                "expected_resource_version": 3,
+                "expected_catalog_release_id": 12,
+                "changes": [{"op": "ADD", "model_key": "viewer", "subject": {"type": "user", "id": "8"}}],
+            }
+        ),
+    )
+    assert len(result["items"]) == 2
+    old = result["items"][1]
+    assert old["model"]["active"] is False and old["editable"] is True
+    assert old["subject"] == {"type": "department", "id": "310", "name": None}

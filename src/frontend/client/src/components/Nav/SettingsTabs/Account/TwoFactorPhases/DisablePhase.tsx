@@ -20,7 +20,6 @@ const fadeAnimation = {
 
 interface DisablePhaseProps {
   onSuccess?: () => void;
-  onError?: (error: Error) => void;
   onDisable: (token: string, useBackup: boolean) => void;
   isDisabling: boolean;
 }

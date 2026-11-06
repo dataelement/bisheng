@@ -4,6 +4,7 @@ export type SelectedOrgKb = {
   id: string;
   name: string;
   type: string;
+  tag?: { id: number; name: string };
 };
 
 // v2.5 Agent-mode: the subset of WorkstationConfig.tools the user has toggled on.
@@ -55,19 +56,11 @@ const selectedOrgKbs = atom<SelectedOrgKb[]>({
   default: []
 });
 
-// v2.5: tools currently toggled on in the input bar. Session-scoped (not
-// persisted) — each chat session starts from the admin-configured
-// default_checked set in ChatView's initialisation effect.
+// User tool choices shared by the composer and capability center.
+// useAgentToolPreferences restores and persists the current account snapshot.
 const selectedAgentTools = atom<SelectedAgentTool[]>({
   key: 'selectedAgentTools',
   default: []
-});
-
-// Tracks whether selectedAgentTools has been initialised from bsConfig for
-// the current session, so we don't repeatedly reset on every bsConfig update.
-const agentToolsInitialized = atom<boolean>({
-  key: 'agentToolsInitialized',
-  default: false
 });
 
 const chatId = atom({
@@ -91,7 +84,6 @@ export default {
   chatModel,
   selectedOrgKbs,
   selectedAgentTools,
-  agentToolsInitialized,
   enableOrgKb,
   chatId,
   chatStatesMap,

@@ -57,6 +57,7 @@ export async function setUserGroupAdminsV2(
 }
 
 export type UserGroupMemberRow = {
+  external_id?: string | null;
   user_id: number;
   user_name: string;
   is_group_admin: boolean;

@@ -66,11 +66,11 @@ class ApprovalQueryRepository:
             return (await session.exec(statement)).one()
 
     @classmethod
-    async def list_open_exceptions(cls, tenant_id: int) -> list[ApprovalException]:
+    async def list_open_exceptions(cls, tenant_id: int | None) -> list[ApprovalException]:
         statement = (
             select(ApprovalException)
             .where(
-                ApprovalException.tenant_id == tenant_id,
+                True if tenant_id is None else ApprovalException.tenant_id == tenant_id,
             )
             .order_by(ApprovalException.id.desc())
         )

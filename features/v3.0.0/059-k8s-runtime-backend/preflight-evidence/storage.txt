@@ -1,0 +1,14 @@
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+/bin/sh: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+No resources found
+No resources found
+No resources found
+NAME                  ARCH    CPU     MEMORY        TAINTS
+binfeng-k8s-node189   amd64   7600m   63656577179   <none>
+No resources found
+NAME              UID
+default           ae7de2ee-090d-41f8-b547-f9ae0c061823
+kube-node-lease   572fb8ac-c683-46e6-926a-e92536c7e929
+kube-public       723fbc08-ccce-434f-9fcc-4642ed158b33
+kube-system       6f7b27d4-67df-4888-9285-9bea1f93bb98
+kubekey-system    815be20a-0b3b-47b5-880f-d4e83b472a67

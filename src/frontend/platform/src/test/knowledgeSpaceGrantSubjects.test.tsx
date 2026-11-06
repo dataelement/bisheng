@@ -41,32 +41,13 @@ vi.mock("@/controllers/API/permission", () => ({
   getGrantSubjectUserGroupsApi: vi.fn(),
 }));
 
-vi.mock("@/controllers/request", () => ({
+vi.mock("@/controllers/request", async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/controllers/request')>(),
   captureAndAlertRequestErrorHoc: vi.fn((promise: Promise<unknown>) => promise),
 }));
 
-vi.mock("@/components/bs-ui/input", () => ({
-  SearchInput: ({ value, onChange, placeholder }: any) => (
-    <input value={value} onChange={onChange} placeholder={placeholder} />
-  ),
-}));
 
-vi.mock("@/components/bs-ui/checkBox", () => ({
-  // Stop propagation like the real Radix checkbox so a row click does not also
-  // toggle the row's onSelect (which would cancel out the change).
-  Checkbox: ({ checked, disabled, onCheckedChange }: any) => (
-    <input
-      type="checkbox"
-      readOnly
-      checked={!!checked}
-      disabled={!!disabled}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (!disabled) onCheckedChange?.(!checked);
-      }}
-    />
-  ),
-}));
+
 
 const mockedDeptChildren = vi.mocked(getDepartmentChildrenApi);
 const mockedDeptSearch = vi.mocked(searchDepartmentsApi);
@@ -176,7 +157,7 @@ describe("permission subject discovery business boundary", () => {
 
     render(
       <SubjectSearchDepartment
-        value={[{ type: "department", id: 10, name: "研发部", include_children: true } as any]}
+        value={[{ type: "department", id: 10, name: "研发部", include_children: true, externalId: "BS@10", departmentPath: expect.any(String), departmentTreePath: "/10/" } as any]}
         onChange={vi.fn()}
         resourceType="knowledge_space"
         resourceId="88"
@@ -200,7 +181,7 @@ describe("permission subject discovery business boundary", () => {
 
     render(
       <SubjectSearchDepartment
-        value={[{ type: "department", id: 10, name: "研发部", include_children: true } as any]}
+        value={[{ type: "department", id: 10, name: "研发部", include_children: true, externalId: "BS@10", departmentPath: expect.any(String), departmentTreePath: "/10/" } as any]}
         onChange={vi.fn()}
         resourceType="knowledge_space"
         resourceId="88"
@@ -211,7 +192,7 @@ describe("permission subject discovery business boundary", () => {
 
     await waitFor(() =>
       expect(onSelectionSummaryChange).toHaveBeenLastCalledWith([
-        { type: "department", id: 10, name: "研发部", include_children: true },
+        { type: "department", id: 10, name: "研发部", include_children: true, externalId: "BS@10", departmentPath: expect.any(String), departmentTreePath: "/10/" },
       ]),
     );
   });
@@ -253,7 +234,7 @@ describe("permission subject discovery business boundary", () => {
     fireEvent.click(within(rowOf("研发部")).getByRole("checkbox"));
 
     expect(onChange).toHaveBeenCalledWith([
-      { type: "department", id: 10, name: "研发部", include_children: true },
+      { type: "department", id: 10, name: "研发部", include_children: true, externalId: "BS@10", departmentPath: expect.any(String), departmentTreePath: "/10/" },
     ]);
   });
 
@@ -277,8 +258,8 @@ describe("permission subject discovery business boundary", () => {
     });
 
     expect(mockedScopedUserGroups).toHaveBeenCalledWith("knowledge_space", "88", {
-      pageSize: 200,
-    });
+      keyword: "", page: 1, pageSize: 50,
+    }, { signal: expect.any(AbortSignal) });
     expect(mockedUserGroups).not.toHaveBeenCalled();
   });
 });

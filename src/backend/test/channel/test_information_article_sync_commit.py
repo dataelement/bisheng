@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
-from bisheng.channel.domain.models.information_article_sync_state import InformationArticleSyncState
+from bisheng.channel.domain.models.channel_info_source import ChannelInfoSource
 from bisheng.channel.domain.services.article_es_service import ArticleBulkWriteResult
 from bisheng.channel.domain.services.information_article_sync_service import InformationArticleSyncService
 from bisheng.core.external.bisheng_information_client.response_schema import (
@@ -27,11 +27,12 @@ async def test_only_previously_absent_success_ids_are_dispatched_and_committed()
             ArticleInfo(id="B", title="B", original_url="https://example.test/B", create_time=100),
         ],
         total=2,
+        snapshot_max_create_time=200,
     )
     client = AsyncMock()
     client.get_information_articles_page.return_value = page
     client.list_all_subscriptions.return_value = [subscription]
-    state = InformationArticleSyncState(source_id="source-A", article_cursor_create_time=100)
+    state = ChannelInfoSource(id="source-A", source_name="A", source_type="website", article_cursor_create_time=100)
     repo = AsyncMock()
     repo.find_by_source_id.return_value = state
     repo.commit_if_unchanged.return_value = True
@@ -69,8 +70,9 @@ async def test_partial_bulk_failure_dispatches_successes_but_keeps_state_uncommi
             ArticleInfo(id="A", title="A", original_url="https://example.test/A", create_time=100),
         ],
         total=2,
+        snapshot_max_create_time=200,
     )
-    state = InformationArticleSyncState(source_id="source-A", article_cursor_create_time=100)
+    state = ChannelInfoSource(id="source-A", source_name="A", source_type="website", article_cursor_create_time=100)
     repo = AsyncMock()
     repo.find_by_source_id.return_value = state
     es = AsyncMock()
@@ -109,9 +111,10 @@ async def test_lock_loss_after_write_keeps_state_uncommitted():
     client.get_information_articles_page.return_value = InformationArticlesResponse(
         articles=[ArticleInfo(id="A", title="A", original_url="https://example.test/A", create_time=100)],
         total=1,
+        snapshot_max_create_time=100,
     )
     client.list_all_subscriptions.return_value = [subscription]
-    state = InformationArticleSyncState(source_id="source-A", article_cursor_create_time=100)
+    state = ChannelInfoSource(id="source-A", source_name="A", source_type="website", article_cursor_create_time=100)
     repo = AsyncMock()
     repo.find_by_source_id.return_value = state
     es = AsyncMock()
@@ -142,9 +145,10 @@ async def test_dispatch_failure_does_not_rollback_es_or_public_state():
     client.get_information_articles_page.return_value = InformationArticlesResponse(
         articles=[ArticleInfo(id="A", title="A", original_url="https://example.test/A", create_time=100)],
         total=1,
+        snapshot_max_create_time=100,
     )
     client.list_all_subscriptions.return_value = [subscription]
-    state = InformationArticleSyncState(source_id="source-A", article_cursor_create_time=100)
+    state = ChannelInfoSource(id="source-A", source_name="A", source_type="website", article_cursor_create_time=100)
     repo = AsyncMock()
     repo.find_by_source_id.return_value = state
     repo.commit_if_unchanged.return_value = True
