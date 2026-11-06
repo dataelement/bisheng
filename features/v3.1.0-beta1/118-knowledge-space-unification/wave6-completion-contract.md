@@ -679,3 +679,10 @@ EDGE完成只读历史固定ce4后，仅独占原T139的test/knowledge_unificati
 生产T140已由W4 694859943→2a4e7e991及后续真实APP接线实现，gateway在provider前取原主体完整来源并核实时alias ID/server与冻结版本槽集合；同名解析不等于可换模型。源码未发现SDK依赖，故T139依赖由T134改为真实T136/T447。若新测试首绿明确记录首绿，不伪造红或改无关生产；若真实失败先报最小范围与证据，原T140仅允许登记的model_range_policy.py/model_gateway_service.py内必要修正，其余Owner需另核文件Owner。主agent复查与现四叶组合后按实际完成勾原卡，不以此声称SDK或全产品E2E完成。
 
 §43标签预检精确范围补充：Tag-parent全局probe仅link.resource_type IN(8,9)或Tag确证business_type=knowledge且真实owner Knowledge.type=0的全部入向links；File-parent仅8/9。相关Tag/File缺失、foreign/tenant矛盾和转换Tag被nonKN/他空间共用继续阻断；纯workflow/app等不参与转换的旧Tag孤儿仅保原事实，不成为新增升级障碍。Builder对缺本tenantTag且非8/9的非相关Link不计划转换，不据app UUID猜Knowledge。标准SQL CASE只对知识/File相关字符串ID转换；Knowledge/File主键不CAST，保PK索引查找，不做Link×File全扫描。该收敛不改其他Tag业务、未知知识关系仍拒绝。
+
+
+## 46. 工作台与开放工作流原任务实际使用准入合同 V1：已冻结
+
+INT按已满足前置T150/T042实施原T151测试test/knowledge_unification/test_edge_apps_rpc.py、T152两生产叶workstation/api/endpoints/apps.py与open_endpoints/api/endpoints/workflow.py。仅将record_used_app、pin_used_app、invoke_workflow内部原use gate显式交现visible协议；原推荐/最近列表已visible，不改其他列表、排序/分页/分享签发。v1路由/UsedAppPin/envelope、app型recent与workflow/assistant型pin的原存在/在线检查、用户link幂等原样。v2原workflow:invoke scope/modes/session依赖、PublishedWorkflow读取/版本状态、原principal/PermissionActor与兼容operator、部门并发lease、enqueue/event/stop/错误保持；不把可见变为发布/分享/管理许可，不改历史配置/对话或新增引用。
+
+先写实际ASGI v1/v2入口回归：仅visible授权可达原写link/prepare边界、不可见零写/零派发、类型与offline原错误、原返回/idempotence；v2 SAK/PAT/OBO原主体/scope/缺scope/业务错误保留。可隔离原认证传输和外部FGA/队列/telemetry，但真实scope dependency与principal→PermissionActor上下文必须执行，不mock整个endpoint或将original operator当授权主体。生产只必要三处literal，不做SDK/MCP/聊天或一般流程重构。配对与原开放invoke/身份回归通过后独立复核再闭原卡，完整E2E留后继。
