@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import event
-from sqlmodel import SQLModel, Session, create_engine, select
+from sqlmodel import Session, SQLModel, create_engine, select
 
 from bisheng.common.errcode.knowledge import (
     ReferenceCoverageNotReadyError,
@@ -77,13 +77,13 @@ def native():
     with Session(engine) as session:
         digest = reference_set_digest(scopes.REFS)
         session.add(Assistant(id="assistant-a", name="a", tenant_id=101, user_id=7, model_name="11"))
-        base = dict(
-            tenant_id=101,
-            source_type="assistant",
-            source_id="assistant-a",
-            extractor_version="assistant-v1",
-            digest=digest,
-        )
+        base = {
+            "tenant_id": 101,
+            "source_type": "assistant",
+            "source_id": "assistant-a",
+            "extractor_version": "assistant-v1",
+            "digest": digest,
+        }
         session.add(
             BusinessReferenceSet(
                 **base,
@@ -191,6 +191,13 @@ def test_native_root_cannot_be_revalidated_without_actual_targets(native):
         with pytest.raises(ResourceReferenceInvalidError):
             native.verifier.revalidate_scope(session, scope, native.identity)
         assert native.owner.calls == ["candidate"]
+
+
+async def test_native_scope_cannot_be_consumed_via_async_session_protocol(native):
+    with Session(native.engine) as session:
+        scope = native.verifier.issue_scope(session, scopes.REQUEST, native.identity)
+        with pytest.raises(ResourceReferenceInvalidError):
+            await native.verifier.aget_source_snapshot(session, scope, native.identity)
 
 
 def test_native_incomplete_targets_never_reach_root(native):
