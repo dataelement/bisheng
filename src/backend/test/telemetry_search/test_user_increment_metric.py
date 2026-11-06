@@ -80,5 +80,5 @@ def test_new_user_export_uses_creation_source_and_active_metric_uses_logins():
 def test_login_metric_only_changes_name(code):
     dataset = next(item for item in DASHBOARD_DATASET if item.dataset_code == code)
     metric = next(item for item in dataset.schema_config["metrics"] if item["field"] == "logged_in_employee_count")
-    assert metric["name"] == "实际登录人数"
+    assert metric["name"] == "实际登录人次"
     assert metric["calculation"] == "login_participation"
