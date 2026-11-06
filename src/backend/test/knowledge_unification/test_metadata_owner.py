@@ -211,3 +211,18 @@ async def test_empty_completion_receipt_cannot_cross_native_transaction(owner):
         await session.begin()
         with pytest.raises(ResourceReferenceInvalidError):
             await create(owner, session, accepted)
+
+
+async def test_empty_receipt_preserves_unrelated_pending_name_and_allows_only_real_ledger_additions(owner):
+    await clear_files(owner)
+    async with owner.app.context.sessions() as session:
+        accepted = await accept(owner, session, await preview(owner, session))
+        (await session.get(Knowledge, 40)).name = "pending business name"
+        accepted.parameters.update(
+            operation_id="actual-operation", confirmation_id="actual-confirmation", plan_digest="a" * 64
+        )
+        assert (await create(owner, session, accepted)).job.state == "succeeded"
+        await session.commit()
+    async with owner.app.context.sessions() as session:
+        assert (await session.get(Knowledge, 40)).name == "pending business name"
+        assert (await session.get(Knowledge, 40)).metadata_schema_revision == 1

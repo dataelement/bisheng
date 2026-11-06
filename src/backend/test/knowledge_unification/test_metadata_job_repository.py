@@ -91,7 +91,37 @@ async def test_schema_aba_is_checked_at_each_real_leased_transition(job_session,
             configuration=stale,
         )
     assert job.state == "obsolete" and not job.pending_dispatch
-    assert result is None or result is False or result.job.state == "obsolete" or result.state == "obsolete"
+    assert result is None or result is False or getattr(result, "job", result).state == "obsolete"
+
+
+async def test_same_schema_retry_preserves_successful_items_and_only_requeues_failure(job_session, repository):
+    job, config = await created(repository, job_session)
+    lease = await repository.aclaim(job_session, job.id, configuration=config)
+    success = await repository.aclaim_next_item(job_session, lease, configuration=config)
+    await repository.acomplete_item(
+        job_session, success.lease, configuration=config, succeeded=True, result={"kept": 7}
+    )
+    failed = await repository.aclaim_next_item(job_session, lease, configuration=config)
+    await repository.acomplete_item(job_session, failed.lease, configuration=config, succeeded=False, error_code=10915)
+    await repository.afinalize(job_session, lease, configuration=config)
+    original_attempt = success.item.attempt
+    retried = await repository.aretry_failed(
+        job_session,
+        job.id,
+        idempotency_key="fresh-authorized-retry",
+        expected_job_revision=job.revision,
+        actor_user_id=11,
+        actor_reference=job.actor_reference,
+        configuration=config,
+    )
+    assert retried.job.state == "accepted"
+    assert (
+        success.item.state == "succeeded"
+        and success.item.result == {"kept": 7}
+        and success.item.attempt == original_attempt
+    )
+    next_lease = await repository.aclaim(job_session, job.id, configuration=config)
+    assert (await repository.aclaim_next_item(job_session, next_lease, configuration=config)).item.id == failed.item.id
 
 
 @pytest.mark.parametrize("kind", ["embedding_rebuild", "file_reprocess", "file_resplit", "metadata_schema_change"])
