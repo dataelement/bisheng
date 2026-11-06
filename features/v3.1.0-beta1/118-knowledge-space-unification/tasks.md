@@ -1350,14 +1350,14 @@
 - [ ] **T165 · 迁移空间配额显示与创建统一：先写测试**
   **类型 / Owner**：测试 / KN\
   **写入文件**：`src/backend/test/knowledge_unification/test_quota.py`（拟新增）\
-  **逻辑 / 测试上下文**：换用户/重启后豁免仍在；tenant超限新增拒绝，文件存储不因转换翻倍，部门原限额有效。\
-  **依赖**：T164\
+  **逻辑 / 测试上下文**：W6§44：原sync/async创建计数与QuotaService user显示同一count-only条件；换owner/新Session后origin仍豁免，tenant总量/部门/文件SUM不变。正式T164转换与配额联验保留在T203。\
+  **依赖**：T010, T082\
   **覆盖 AC**: AC-14, AC-61, AC-62\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
 - [ ] **T166 · 迁移空间配额显示与创建统一**
   **类型 / Owner**：后端 Domain / KN\
-  **写入文件**：`src/backend/bisheng/role/domain/services/quota_service.py`\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge.py`；`src/backend/bisheng/role/domain/services/quota_service.py`\
   **逻辑 / 测试上下文**：以durable migration origin持续豁免个人新建空间数量，tenant总量超额保存量限新增；部门/存储原规则保持，校验与展示同计数，不按一次标记跳检查。\
   **依赖**：T165\
   **配对测试**：T165\

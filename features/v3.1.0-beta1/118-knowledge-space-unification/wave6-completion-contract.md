@@ -661,3 +661,12 @@ Tag owner只Tag(tenant,business_type,business_id)，不借首个Link猜。仅bus
 DefaultConversionCommand仅own tenant_system_model_config的linsight_llm真实行。纯plan_default_conversion(row,*,run_id,writer_contract_version)严格校原IDs，依次复用现transform_linsight_llm_config、transform_chat_default：原task_model.id在models保它否则first/empty，移除task_model/linsight_executor_mode；仅原chat_default空才取models最后。保其他JSON键/值/顺序及models次序，artifact只摘要/闭集选择ID、不输出JSON；同值skip零写。其他4keys原样；own缺失不复制Root/新Child覆盖，不用APP NameIndex猜旧默认名。命令含row/key、before_raw_row/config digest、after_config/业务修订digest、before/after_refs_digest、action、selected_linsight/chat ID?、drop flags、algorithm_version及同run旧models槽→新default槽provenance。M3重读真实JSON复算哈希，不调用整库backfill/宽松skip/commit wrapper，不在线bind或造legacy自举。
 
 B实际app/preflight委托仅在全部资源链/精确plan检测及artifact上传读回后afreeze_all；源事实与来源流保持完整，plan闭集禁止raw内容。401稀疏分页/大量多版本/creation投影碰撞、Tag跨owner/重复link/同名、before/after篡改、半链/多主、非法defaultID/Root own缺省及现六来源完整组合必测。后继M3真实锁/白名单SQL、默认SQL、阶段outcome/namespace/FGA finalize尚未授权源码实施，须另冻协议。个人quota迁移豁免后继只count-only predicate三处（sync/async KnowledgeDao及QuotaService user branch），不得改通用排部门predicate/租户总量/文件SUM。
+
+
+## 44. 迁移来源个人配额计数真实接线子合同 V1：已冻结
+
+INT独占原T165测试test/knowledge_unification/test_quota.py与T166两生产叶knowledge/domain/models/knowledge.py、role/domain/services/quota_service.py；先在独立118-w6-kn lane红绿，固定后交非作者复查。沿§43迁移来源run_id字段稳定合同，前置为实际Model T010及原创建门禁T082，不必等待M3实现才写count-only谓词；正式转换后的真实配额联验仍归T203，不以本卡替代迁移。
+
+在Knowledge模块新增私有纯count-only谓词（无数据库入口），以migration_origin非空标记持续排除迁移空间；NULL/空串无来源仍计个人数。仅现KnowledgeDao.count_spaces_by_user/async_count_spaces_by_user及QuotaService._knowledge_space_count_stmt(user_id)复用；不改通用_exclude_department_spaces、不影响任何空间列表/详情。原DAO按当前tenant listener，QuotaService全局per-user原bypass口径保持，不能借此统一成不同租户语义。user创建/显示计数均type3，原部门排除参数保持；tenant_id分支仍统计包括迁移和部门的全部实际SPACE，原tenant链总量超限保留存量并限制新增；文件SUM仅原channel/space_upload、不按处理status，不改file_source/大小/usage。
+
+测试真实sync/async SQLite SQL、原创建_assert_space_creation_quota实际计数、各scope/跨tenant/global per-user原语义、重新Session/owner变更后origin不丢、native/dept/migrated/QA/type2、tenant超限与storage SQL稳定；C2编译type等标识符MySQL/DM8引用，无数据库专有函数/raw type SQL。无新增Model/DDL/API/配置或权限绕过，不执行M3写来源字段。原legacy两叶既有静态诊断冻结比对，新增0。
