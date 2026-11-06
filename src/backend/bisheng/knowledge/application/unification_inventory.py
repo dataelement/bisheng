@@ -6,6 +6,7 @@ business data or certifies Coverage. Backups remain an operational prerequisite.
 """
 
 from collections import defaultdict
+from contextlib import aclosing
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,7 +64,7 @@ _SECTIONS = {
     "permission": {"resource_mode", "grant", "assignee", "visible_source"},
     "catalog": {"catalog_release", "authorization", "catalog_action", "permission_model"},
     "physical": {"physical_index", "physical_object"},
-    "tasks": {"queued_task", "queued_task_orphan"},
+    "tasks": {"queued_task", "queued_task_orphan", "broker_task"},
     "fga": {"fga_tuple"},
     "conversion": {
         "resource_conversion",
@@ -174,13 +175,22 @@ class _Pages:
 
 
 class UnificationInventoryApplication:
-    def __init__(self, *, artifact_store, sharing_reader_factory=None, physical_reader=None, queued_task_reader=None):
+    def __init__(
+        self,
+        *,
+        artifact_store,
+        sharing_reader_factory=None,
+        physical_reader=None,
+        queued_task_reader=None,
+        broker_reader=None,
+    ):
         # No eager clients/factories: general Storage and RAG constructors may
         # create buckets/policies/indexes or enforce unrelated online gates.
         self.store = artifact_store
         self.reader_factory = sharing_reader_factory
         self.physical = physical_reader
         self.queued = queued_task_reader
+        self.broker = broker_reader
         self.runs = KnowledgeUnificationRunRepository()
         self.raw = UnificationInventoryRepository()
         self.permissions = PermissionMigrationSnapshotRepository()
@@ -438,7 +448,10 @@ class UnificationInventoryApplication:
                 return existing
             if (
                 not callable(self.reader_factory)
-                or any(not callable(getattr(port, "aiter_facts", None)) for port in (self.physical, self.queued))
+                or any(
+                    not callable(getattr(port, "aiter_facts", None))
+                    for port in (self.physical, self.queued, self.broker)
+                )
                 or not isinstance(self.store, UnificationArtifactStore)
             ):
                 raise ReferenceCoverageNotReadyError(reason="migration_required_native_ports_missing")
@@ -489,6 +502,16 @@ class UnificationInventoryApplication:
                 if record.data["tenant_id"] not in tenant_ids:
                     _blocked("task_tenant")
                 await pages.add("tasks", record.data["tenant_id"], record)
+            async with aclosing(self.broker.aiter_facts(tenant_ids=tenant_ids)) as broker_stream:
+                async for record in broker_stream:
+                    current()
+                    _section("tasks", record)
+                    if record.record_type != "broker_task":
+                        _blocked("broker_record_type")
+                    tenant = record.data["tenant_id"]
+                    if tenant is not None and tenant not in tenant_ids:
+                        _blocked("broker_tenant")
+                    await pages.add("tasks", tenant, record)
             await pages.finish()
             common = {
                 "writer_contract_version": writer_contract_version,

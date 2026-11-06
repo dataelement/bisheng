@@ -33,6 +33,7 @@ SECTIONS = frozenset(
 )
 KINDS = frozenset({"baseline", "plan", "permission_catalog", "permission_resources", "conversion", "verification"})
 OBJECT_KINDS = frozenset({"original", "preview", "bbox", "thumbnail", "html_snapshot"})
+_BROKER_GLOBAL_STATES = frozenset({"global_control", "target_missing", "unacked_metadata_orphan"})
 
 
 def _invalid():
@@ -183,6 +184,9 @@ _SCHEMAS = {
     "queued_task": _spec(
         "tenant_id:positive task_kind:str task_id:str space_id:int? file_id:int? document_id:int? version_id:int? state:str configuration_digest:hash record_digest:hash"
     ),
+    "broker_task": _spec(
+        "tenant_id:positive? task_kind:str? task_id:str space_id:positive? file_id:positive? document_id:positive? version_id:positive? state:str configuration_digest:hash record_digest:hash header_tenant_id:positive?"
+    ),
     "fga_tuple": _spec("user:str relation:str object:str"),
     "manifest_entry": _spec(
         "section:str scope:str tenant_id:positive? page_index:nonnegative record_count:nonnegative descriptor:descriptor level:nonnegative"
@@ -244,6 +248,14 @@ def _validate(tag, data):
         _invalid()
     for name, spec in schema.items():
         _value(data[name], spec)
+    if tag == "broker_task" and (
+        data["state"] not in _BROKER_GLOBAL_STATES | {"queued", "unacked", "legacy_requires_reissue", "obsolete"}
+        or (data["tenant_id"] is None) != (data["state"] in _BROKER_GLOBAL_STATES)
+        or (data["task_kind"] is None) != (data["state"] == "unacked_metadata_orphan")
+        or (data["task_kind"] is not None and not data["task_kind"].startswith("bisheng.worker.knowledge."))
+        or not data["task_id"]
+    ):
+        _invalid()
     if tag in _CONVERSION_FIELDS:
         _identity(data["run_id"], "conversion", "tenant", data["tenant_id"], 0, "plan")
         if (
@@ -464,6 +476,10 @@ def encode_inventory_page(*, run_id, section, scope, tenant_id, page_index, reco
         ):
             _invalid()
         if record.record_type == "queued_task_orphan" and (section != "tasks" or scope != "global"):
+            _invalid()
+        if record.record_type == "broker_task" and (
+            section != "tasks" or (scope == "global") != (record.data["tenant_id"] is None)
+        ):
             _invalid()
         if (record.record_type == "evidence_material") != (section == "evidence"):
             _invalid()

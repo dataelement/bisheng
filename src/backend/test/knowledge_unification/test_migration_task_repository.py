@@ -262,3 +262,130 @@ async def test_registered_primary_and_history_are_exact_bounded_native_facts(rep
         facts = await repo.aget_file_facts(session, file_ids=(2, 1))
     assert [(row.file_id, row.document_id, row.version_id) for row in facts] == [(2, 10, 21), (1, 10, 20)]
     assert len(native.queries) == 3
+
+
+@pytest.mark.parametrize("kind", ["space", "job", "delete_job", "qa"])
+async def test_broker_target_facts_are_exact_global_lightweight_and_do_not_export_originals(repo, native, kind):
+    await native.insert(resources.Knowledge, [resources.resource(9000, tenant=202)])
+    if kind == "job":
+        await native.insert(
+            Job,
+            [
+                job(tenant=202)
+                | {
+                    "scope_manifest": [{"private-body": "private" * 20000}],
+                    "parameters": {"private-callback": "secret"},
+                }
+            ],
+        )
+    elif kind == "delete_job":
+        await native.insert(DeleteJob, [deletion() | {"tenant_id": 202}])
+    elif kind == "qa":
+        await native.insert(
+            resources.QAKnowledge,
+            [
+                {
+                    "id": 12,
+                    "tenant_id": 202,
+                    "knowledge_id": 9000,
+                    "user_id": 7,
+                    "questions": ["private-question"],
+                    "answers": "private-answer",
+                }
+            ],
+        )
+    method, parameter, ids = {
+        "space": ("aget_space_facts", "space_ids", (9000, 9999)),
+        "job": ("aget_job_facts", "job_ids", ("job-0000", "missing")),
+        "delete_job": ("aget_delete_job_facts", "job_ids", ("delete-0000", "missing")),
+        "qa": ("aget_qa_facts", "qa_ids", (12, 9999)),
+    }[kind]
+    native.queries.clear()
+    async with AsyncSession(native.engine) as session, session.begin():
+        actual = await getattr(repo, method)(session, **{parameter: ids})
+    assert [(fact.target_id, fact.exists) for fact in actual] == [(ids[0], True), (ids[1], False)]
+    assert actual[0].tenant_id == 202 and actual[0].space_id == 9000
+    assert len(native.queries) == 1
+    assert not any(
+        name in native.queries[0][0]
+        for name in ("scope_manifest", "actor_reference", "parameters", "manifest", "questions", "answers")
+    )
+    assert "private-" not in repr(actual) and not hasattr(actual[0], "__dict__")
+
+
+async def test_broker_space_actual_operation_and_rg_are_preserved_without_model_binding(repo, native):
+    await native.insert(
+        resources.Knowledge,
+        [
+            resources.resource(9000)
+            | {
+                "model_config_revision": 4,
+                "index_generation": "g4",
+                "model_transition": {"operation_id": "accepted-op", "private-slot": "original"},
+            }
+        ],
+    )
+    async with AsyncSession(native.engine) as session, session.begin():
+        fact = (await repo.aget_space_facts(session, space_ids=(9000,)))[0]
+    assert (fact.operation_id, fact.revision, fact.index_generation) == ("accepted-op", 4, "g4")
+    assert not hasattr(fact, "model_id") and "private" not in repr(fact)
+
+
+async def test_broker_qa_foreign_parent_is_a_conflict_not_missing(repo, native):
+    await native.insert(resources.Knowledge, [resources.resource(9000, tenant=202)])
+    await native.insert(
+        resources.QAKnowledge, [{"id": 12, "tenant_id": 101, "knowledge_id": 9000, "questions": [], "answers": ""}]
+    )
+    async with AsyncSession(native.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await repo.aget_qa_facts(session, qa_ids=(12,))
+
+
+async def test_broker_exact_target_batches_are_bounded_empty_is_zero_sql(repo, native):
+    async with AsyncSession(native.engine) as session, session.begin():
+        for method, parameter in (
+            ("aget_space_facts", "space_ids"),
+            ("aget_job_facts", "job_ids"),
+            ("aget_delete_job_facts", "job_ids"),
+            ("aget_qa_facts", "qa_ids"),
+        ):
+            native.queries.clear()
+            assert await getattr(repo, method)(session, **{parameter: ()}) == ()
+            assert not native.queries
+            with pytest.raises(KnowledgeOperationPlanConflictError):
+                await getattr(repo, method)(session, **{parameter: tuple(range(1, 202))})
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await repo.aget_space_facts(session, space_ids=(True,))
+
+
+@pytest.mark.parametrize("kind", ["job", "delete_job"])
+async def test_broker_actual_ledger_cannot_point_to_a_foreign_existing_root(repo, native, kind):
+    await native.insert(resources.Knowledge, [resources.resource(8000, tenant=202)])
+    if kind == "job":
+        await native.insert(Job, [job() | {"space_id": 8000}])
+        method, ident = repo.aget_job_facts, "job-0000"
+    else:
+        await native.insert(DeleteJob, [deletion() | {"space_id": 8000}])
+        method, ident = repo.aget_delete_job_facts, "delete-0000"
+    async with AsyncSession(native.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await method(session, job_ids=(ident,))
+
+
+async def test_broker_delete_ledger_retains_real_tenant_after_formal_root_deletion(repo, native):
+    await native.insert(DeleteJob, [deletion()])
+    native.queries.clear()
+    async with AsyncSession(native.engine) as session, session.begin():
+        fact = (await repo.aget_delete_job_facts(session, job_ids=("delete-0000",)))[0]
+    assert fact.exists and fact.tenant_id == 101 and fact.space_id == 9000
+    assert len(native.queries) == 1 and "manifest" not in native.queries[0][0]
+
+
+async def test_broker_j1_missing_root_has_no_executable_target_but_original_ledger_is_retained(repo, native):
+    await native.insert(Job, [job()])
+    async with AsyncSession(native.engine) as session, session.begin():
+        fact = (await repo.aget_job_facts(session, job_ids=("job-0000",)))[0]
+        assert not fact.exists and fact.tenant_id is None and fact.space_id is None
+        ledger = (await repo.alist_jobs(session)).items[0]
+        assert ledger.task_id == "job-0000" and ledger.tenant_id == 101 and ledger.space_id == 9000
+    assert len(fact.record_digest) == 64

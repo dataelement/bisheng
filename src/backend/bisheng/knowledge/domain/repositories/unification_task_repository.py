@@ -14,7 +14,7 @@ from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, QAKnowledge
 from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob
@@ -80,6 +80,27 @@ class QueuedFileFact:
     document_id: int | None
     version_id: int | None
     configuration_digest: str
+    record_digest: str
+
+
+@dataclass(frozen=True, slots=True)
+class BrokerTargetFact:
+    """Execution target facts; J1 existence requires its real Root as well.
+
+    The separate all-state TaskFact stream retains every physical ledger row.
+    A delete ledger remains authoritative after its Root was formally deleted.
+    """
+
+    target_id: int | str
+    exists: bool
+    tenant_id: int | None
+    space_id: int | None
+    knowledge_type: int | None
+    revision: int | None
+    index_generation: str | None
+    operation_id: str | None
+    state: str | int | None
+    kind: str
     record_digest: str
 
 
@@ -312,3 +333,140 @@ class UnificationTaskRepository:
                 )
             )
         return tuple(result)
+
+    async def _broker_targets(self, session, ids, kind):
+        _scope(session)
+        numeric = kind in {"space", "qa"}
+        if (
+            type(ids) is not tuple
+            or len(ids) > 200
+            or any(
+                (type(ident) is not int or ident <= 0)
+                if numeric
+                else (type(ident) is not str or not ident or len(ident) > 36 or "\x00" in ident)
+                for ident in ids
+            )
+        ):
+            _blocked("invalid_broker_target_batch")
+        ids = tuple(dict.fromkeys(ids))
+        if not ids:
+            return ()
+        model, names = {
+            "space": (
+                Knowledge,
+                (
+                    "id",
+                    "tenant_id",
+                    "type",
+                    "state",
+                    "model_config_revision",
+                    "index_generation",
+                    "model_transition",
+                    "update_time",
+                ),
+            ),
+            "job": (
+                KnowledgeProcessingJob,
+                (
+                    "id",
+                    "tenant_id",
+                    "space_id",
+                    "kind",
+                    "state",
+                    "revision",
+                    "request_hash",
+                    "expected_model_config_revision",
+                    "accepted_model_config_revision",
+                    "expected_index_generation",
+                    "claim_generation",
+                    "update_time",
+                ),
+            ),
+            "delete_job": (
+                KnowledgeSpaceDeleteJob,
+                ("id", "tenant_id", "space_id", "state", "attempts", "completed_steps", "lease_until", "update_time"),
+            ),
+            "qa": (QAKnowledge, ("id", "tenant_id", "knowledge_id", "source", "status", "update_time")),
+        }[kind]
+        table = model.__table__.alias("broker_target")
+        query = select(*(table.c[name] for name in names)).where(table.c.id.in_(ids))
+        if kind in {"qa", "job", "delete_job"}:
+            space = Knowledge.__table__.alias("broker_target_space")
+            query = query.add_columns(
+                space.c.id.label("parent_id"),
+                space.c.tenant_id.label("parent_tenant"),
+                space.c.type.label("knowledge_type"),
+            ).outerjoin(space, space.c.id == (table.c.knowledge_id if kind == "qa" else table.c.space_id))
+        rows = {row["id"]: row for row in await self._read(session, query)}
+        result = []
+        for ident in ids:
+            row = rows.get(ident)
+            if row is not None:
+                if type(row["tenant_id"]) is not int or row["tenant_id"] <= 0:
+                    _blocked("broker_target_tenant_invalid")
+                if (
+                    kind in {"job", "delete_job"}
+                    and row["parent_id"] is not None
+                    and row["parent_tenant"] != row["tenant_id"]
+                ):
+                    _blocked("broker_ledger_parent_invalid")
+            if row is None or (kind == "job" and row["parent_id"] is None):
+                result.append(
+                    BrokerTargetFact(
+                        ident,
+                        False,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        kind,
+                        task_digest(
+                            {
+                                "kind": kind,
+                                "id": ident,
+                                "exists": False,
+                                "ledger": dict(row) if row is not None else None,
+                            }
+                        ),
+                    )
+                )
+                continue
+            if kind == "qa" and (row["parent_id"] is None or row["parent_tenant"] != row["tenant_id"]):
+                _blocked("qa_parent_invalid")
+            transition = row.get("model_transition")
+            if transition is not None and type(transition) is not dict:
+                _blocked("broker_space_transition_invalid")
+            operation = transition.get("operation_id") if transition else None
+            if operation is not None and (type(operation) is not str or not operation):
+                _blocked("broker_space_transition_invalid")
+            result.append(
+                BrokerTargetFact(
+                    ident,
+                    True,
+                    row["tenant_id"],
+                    row["id"] if kind == "space" else row["knowledge_id"] if kind == "qa" else row["space_id"],
+                    row["type"] if kind == "space" else row.get("knowledge_type"),
+                    row.get("model_config_revision") if kind == "space" else row.get("revision"),
+                    row.get("index_generation") if kind == "space" else row.get("expected_index_generation"),
+                    operation,
+                    row.get("state") if kind != "qa" else str(row["status"]),
+                    row.get("kind", kind),
+                    task_digest(dict(row)),
+                )
+            )
+        return tuple(result)
+
+    async def aget_space_facts(self, session, *, space_ids: tuple[int, ...]):
+        return await self._broker_targets(session, space_ids, "space")
+
+    async def aget_job_facts(self, session, *, job_ids: tuple[str, ...]):
+        return await self._broker_targets(session, job_ids, "job")
+
+    async def aget_delete_job_facts(self, session, *, job_ids: tuple[str, ...]):
+        return await self._broker_targets(session, job_ids, "delete_job")
+
+    async def aget_qa_facts(self, session, *, qa_ids: tuple[int, ...]):
+        return await self._broker_targets(session, qa_ids, "qa")
