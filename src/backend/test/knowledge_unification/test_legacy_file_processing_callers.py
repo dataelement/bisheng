@@ -11,11 +11,14 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from fastapi import HTTPException
 from sqlmodel import Session
 
 from bisheng.api.services import knowledge_imp
 from bisheng.api.v1.schemas import FileProcessBase, KnowledgeFileProcess, KnowledgeFileReProcess
+from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError
 from bisheng.knowledge.application.file_processing_adapter import system_processing_defaults
+from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication as Models
 from bisheng.knowledge.domain.models import knowledge as knowledge_model
 from bisheng.knowledge.domain.models import knowledge_file as file_model
 from bisheng.knowledge.domain.models.knowledge import Knowledge
@@ -144,3 +147,58 @@ async def test_old_rebuild_keeps_actual_prior_rules_and_applies_only_new_explici
     assert legacy.publish.call_args.args[0] == 81
     async with legacy.files.context.sessions() as session:
         assert (await session.get(Knowledge, 40)).processing_defaults == legacy.defaults
+
+
+async def test_old_rebuild_cannot_modify_file_from_different_authorized_request_space(legacy):
+    async with legacy.files.context.sessions() as session:
+        await Models.acreate(
+            session,
+            Knowledge(
+                id=41, tenant_id=101, user_id=7, name="authorized other", type=3, model="11", index_generation="g41"
+            ),
+            login_user=legacy.files.context.user,
+            project_created=AsyncMock(),
+        )
+        before = (await session.get(KnowledgeFile, 81)).model_dump(mode="json")
+        await session.commit()
+    request = KnowledgeFileReProcess(knowledge_id=41, kb_file_id=81, chunk_size=222)
+    with pytest.raises(HTTPException) as error:
+        await legacy.cls.rebuild_knowledge_file(None, legacy.files.context.user, request)
+    assert error.value.status_code == 404
+    assert legacy.auth.ensure_knowledge_write_async.await_args.kwargs["knowledge_id"] == 41
+    legacy.publish.assert_not_called()
+    async with legacy.files.context.sessions() as session:
+        assert (await session.get(KnowledgeFile, 81)).model_dump(mode="json") == before
+
+
+@pytest.mark.parametrize("status", [1, 4, 5])
+async def test_old_rebuild_rejects_actual_inflight_file_before_rule_status_or_queue(legacy, status):
+    async with legacy.files.context.sessions() as session:
+        row = await session.get(KnowledgeFile, 81)
+        row.status = status
+        await session.commit()
+        before = row.model_dump(mode="json")
+    with pytest.raises(KnowledgeProcessingConflictError):
+        await legacy.cls.rebuild_knowledge_file(
+            None, legacy.files.context.user, KnowledgeFileReProcess(knowledge_id=40, kb_file_id=81, chunk_size=222)
+        )
+    legacy.publish.assert_not_called()
+    async with legacy.files.context.sessions() as session:
+        assert (await session.get(KnowledgeFile, 81)).model_dump(mode="json") == before
+
+
+async def test_old_rebuild_rejects_actual_model_rebuilding_operation_before_file_mutation(legacy):
+    async with legacy.files.context.sessions() as session:
+        plan = await Models.aprepare_model_change(
+            session, 40, 12, login_user=legacy.files.context.user, operation_id="other-model-operation"
+        )
+        await Models.aapply_model_change(session, plan)
+        before = (await session.get(KnowledgeFile, 81)).model_dump(mode="json")
+        await session.commit()
+    with pytest.raises(KnowledgeProcessingConflictError):
+        await legacy.cls.rebuild_knowledge_file(
+            None, legacy.files.context.user, KnowledgeFileReProcess(knowledge_id=40, kb_file_id=81, chunk_size=222)
+        )
+    legacy.publish.assert_not_called()
+    async with legacy.files.context.sessions() as session:
+        assert (await session.get(KnowledgeFile, 81)).model_dump(mode="json") == before
