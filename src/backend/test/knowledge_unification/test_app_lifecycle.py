@@ -12,6 +12,7 @@ from bisheng.app_publish.domain.services import preview_instance_service as prev
 from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeOperation
 from bisheng.app_runtime.domain.services import app_state_service as module
 from bisheng.app_runtime.domain.services import runtime_delivery_coordinator as coordinator_module
+from bisheng.app_runtime.domain.services.runtime_projection_service import RuntimeProjectionService
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
 from bisheng.database.models.app import App
 from bisheng.database.models.app_version import AppVersion
@@ -24,6 +25,8 @@ ctx = fixtures.ctx
 resolving = fixtures.resolving
 application = fixtures.application
 writing = fixtures.writing
+RealCoordinator = coordinator_module.RuntimeDeliveryCoordinator
+RealBlock = RuntimeProjectionService.block
 
 
 @pytest.fixture
@@ -168,6 +171,7 @@ async def test_second_source_apply_failure_rolls_back_all_versions_root_and_inte
     with pytest.raises(RuntimeError, match="second source failed"):
         await delete(deleting)
     assert await fixtures.snapshot(deleting.engine) == before
+    deleting.project_delete.assert_not_awaited()
     async with AsyncSession(deleting.engine) as session:
         assert not (await session.execute(sa.select(RuntimeOperation))).scalars().all()
     if deleting.coordinators:
@@ -182,6 +186,24 @@ async def test_projection_failure_prevents_sql_finalize_and_wakeup(deleting):
     assert await fixtures.snapshot(deleting.engine) == before
     if deleting.coordinators:
         deleting.coordinators[-1].wake.assert_not_awaited()
+
+
+async def test_cleanup_failure_keeps_committed_delete_and_durable_operation_for_repair(deleting, monkeypatch):
+    original = coordinator_module.RuntimeDeliveryCoordinator
+
+    def failing_controller(*args, **kwargs):
+        controller = original(*args, **kwargs)
+        controller.wait.side_effect = RuntimeError("control plane unavailable")
+        return controller
+
+    monkeypatch.setattr(coordinator_module, "RuntimeDeliveryCoordinator", failing_controller)
+    result = await delete(deleting)
+    assert result.state == "deleted" and result.detail["cleanup_pending"] is True
+    assert result.detail["cleanup_operation_id"]
+    async with AsyncSession(deleting.engine) as session, session.begin():
+        assert (await session.get(App, "actual-app")).state == "deleted"
+        assert not (await session.execute(sa.select(BusinessResourceReference))).scalars().all()
+        assert len((await session.execute(sa.select(RuntimeOperation))).scalars().all()) == 1
 
 
 async def test_zero_version_draft_deletion_does_not_invent_a_source(deleting):
@@ -276,3 +298,80 @@ async def test_publish_checks_complete_stored_version_before_constructing_manage
         assert runtime.verifier.aissue_scope.await_args.args[2] is deleting.user
     finally:
         reset_current_open_api_principal(token)
+
+
+async def test_real_destroy_intent_commits_with_sources_then_actual_node_can_read_cleanup(deleting, monkeypatch):
+    from bisheng.app_runtime.domain.models.runtime_delivery import RUNTIME_TABLES, RuntimeAssignment, RuntimeNode
+    from bisheng.app_runtime.domain.services import runtime_projection_service
+    from bisheng.app_runtime.domain.services.runtime_operation_service import RuntimeOperationService
+    from bisheng.app_runtime.domain.services.runtime_protocol import ServiceIdentity
+
+    metadata = sa.MetaData()
+    for model in RUNTIME_TABLES:
+        sa.Table(
+            model.__tablename__,
+            metadata,
+            *[
+                sa.Column(
+                    col.name,
+                    col.type.copy(),
+                    primary_key=col.primary_key,
+                    nullable=col.nullable,
+                    server_default=sa.text("CURRENT_TIMESTAMP")
+                    if col.name in {"create_time", "update_time"}
+                    else col.server_default,
+                )
+                for col in model.__table__.columns
+            ],
+        )
+    async with deleting.engine.begin() as connection:
+        await connection.run_sync(metadata.create_all)
+    async with AsyncSession(deleting.engine) as session, session.begin():
+        session.add(
+            RuntimeNode(
+                id="node",
+                engine_id="engine",
+                platform="linux/amd64",
+                memory_budget_mb=1024,
+                cpu_budget_millicores=2000,
+                heartbeat_at=datetime.utcnow(),
+            )
+        )
+        session.add(
+            RuntimeAssignment(
+                id="assignment", tenant_id=101, app_id="actual-app", node_id="node", generation=1, owner_epoch=1
+            )
+        )
+    controllers = []
+    scopes = []
+
+    def actual_coordinator(repository=None):
+        control = RealCoordinator(repository=repository, control=SimpleNamespace())
+        control.wake = AsyncMock()
+
+        async def wait(op):
+            # This is the existing real node claim and application SQL path,
+            # not a substitute source Owner or proof of Docker/K8s purge IO.
+            await control.repo.claim(op.id, node_id="node", generation=op.generation, owner_epoch=op.owner_epoch)
+            scope = await RuntimeOperationService(control.repo).application(
+                ServiceIdentity("control", "node", ("control",)), op.app_id
+            )
+            scopes.append(scope)
+            return scope
+
+        control.wait = wait
+        controllers.append(control)
+        return control
+
+    monkeypatch.setattr(coordinator_module, "RuntimeDeliveryCoordinator", actual_coordinator)
+
+    # Restore the actual SQL implementation after the generic fixture.
+    monkeypatch.setattr(runtime_projection_service.RuntimeProjectionService, "block", RealBlock)
+    result = await delete(deleting)
+    assert result.state == "deleted" and not result.detail["cleanup_pending"]
+    assert len(scopes) == 1 and scopes[0]["app_id"] == "actual-app" and scopes[0]["generation"] == 2
+    async with AsyncSession(deleting.engine) as session, session.begin():
+        operations = (await session.execute(sa.select(RuntimeOperation))).scalars().all()
+        assert len(operations) == 1 and operations[0].kind == "destroy"
+        assert operations[0].payload["purge_volume"] is True and operations[0].payload["delete_secret_config"] is True
+        assert not (await session.execute(sa.select(BusinessResourceReference))).scalars().all()
