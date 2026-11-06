@@ -392,3 +392,16 @@ T746两叶和T747一叶仅原F073测试夹具适配实际visible结果键/统一
 已rg核所有生产调用：v1 knowledge endpoint与v2 open_endpoints/knowledge皆经KnowledgeService→KnowledgeMetadataService。因此不在Domain import application，也不复制两个API桥接分支。T742在原KnowledgeMetadataService定义窄注入port，SPACE add/rename/delete转交注入writer；writer缺失明确拒绝SPACE写，不回旧无账本路径。QA及其他未统一类型原逻辑保持。T748只在现knowledge/api/dependencies.py的get_knowledge_metadata_service装配真实application/metadata_legacy.py writer；原KnowledgeService facade不用改，其余模块不依赖该application。
 
 writer在application中获取真实ambient OpenApiPrincipal（若有，必须与现上下文对象相同并保原knowledge:write/S-D/data_scope），否则原web UserPayload；此原身份用于capture及Owner，不以v2 persistence/audit投影UserPayload制造web session。space ID只定位真实SQL资源，传入旧knowledge对象不构成CAS或授权证明。全部schema+J1通过Owner自己的同一native TX且一次commit，旧先读Session不能先update/commit业务。v1现有字段保持，可加只读processing_job；v2原data=True保持其既有“接收操作”语义，不改成新的task response或声称索引完成。T741真实DI加v1/v2协议/原身份测试，不只mock三方法即宣称闭环；T072需T748实际装配及T071完整链复核后闭合。
+
+
+### 24.1空结构操作完成证据澄清：已冻结
+
+T736允许在现jobRepo同叶定义专用私有metadata acceptance authority/receipt，由真实application Owner单向import；不反向import application。只有Owner实际core.aaccept完成CAS后签发的原对象、同native Session/原TX、space/完整after-schema revision+digest/actor reference相符且一次消费，才可把空item的metadata结构操作记为succeeded。禁止仅凭kind+当前schema相等、dict/伪造dataclass、跨事务或重放创建空成功。该能力不泛化成任意before/after签发，不放宽其他kind；失败与schema及操作记录一起回滚，测试覆盖伪造/篡改/错事务/重复及回滚。
+
+## 26. 停服维护中的中性结构准备顺序：已冻结
+
+旧标准a1b基线数据库没有F118新增的Knowledge私有revision/来源列、PermissionModel纯可见元数据列及新账本表；实际新仓储不可在旧schema上直接ORM扫描。运维顺序因此明确为：完成旧任务收尾并停API/worker/所有写入者→一致备份与原schema/revision记录→只运行候选版**中性DDL结构升级**→正式M2全量原业务事实盘点/预检→全租户正式基线+计划freeze→任何M3业务转换/回填或新授权投影。正式基线仍是在停服后冻结，不使用早先准备数据。脚本不探测或控制停服。
+
+中性DDL只允许模型新空表、既有列/索引结构及已冻结server_default填充；不运行default seed、R2回填、Knowledge.type/配额/版本/标签/配置/授权数据转换，不启动新版API/worker/FGA在线模型或把新列默认当新业务事实。原业务字段/ID/模型/索引/对象/授权pin必须保持，M2 artifact记录备份点、原/新schema revision与本次DDL版本摘要；baseline原业务摘要排除新中性字段，显式加入旧业务字段完整核对。DDL失败或非中性数据效果明确失败保持维护，不能把转换后状态冒充正式原基线。
+
+这一区分沿仓库“revision只允许DDL及新增列server_default填充；业务数据迁移独立操作”的既有规则。正式脚本尚未完成前，只说明真实存在的alembic结构升级入口，不伪造inventory/convert命令或将原授权pin只读smoke称正式M2。恢复仍整套一致备份点，不只反改type或删新列。全部演练只在109独立项目，3005不操作，DM8实库免测但C2静态保持。
