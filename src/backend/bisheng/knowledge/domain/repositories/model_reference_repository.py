@@ -18,6 +18,47 @@ class KnowledgeModelReferenceRepository:
 
     _protected = ("model", "model_transition", "model_config_revision", "index_generation")
 
+    def _source_statement(self, knowledge_id, *, for_update):
+        self._tenant_id()
+        fields = (
+            "id",
+            "tenant_id",
+            "type",
+            "user_id",
+            "name",
+            "description",
+            "state",
+            "model",
+            "model_transition",
+            "model_config_revision",
+            "index_generation",
+            "index_name",
+            "collection_name",
+        )
+        query = select(*(getattr(Knowledge, name) for name in fields)).where(
+            Knowledge.id == knowledge_id,
+            Knowledge.type.in_(
+                (KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.QA.value, KnowledgeTypeEnum.SPACE.value)
+            ),
+        )
+        return query.with_for_update() if for_update else query
+
+    def load_source(self, session, knowledge_id, *, for_update=False):
+        # Ordinary C3 candidate scope remains intact. The business SourceOwner
+        # still performs the original actor's exact C4 resource decision.
+        with session.no_autoflush:
+            row = session.execute(self._source_statement(knowledge_id, for_update=for_update)).mappings().one_or_none()
+        return deepcopy(dict(row)) if row is not None else None
+
+    async def aload_source(self, session, knowledge_id, *, for_update=False):
+        with session.no_autoflush:
+            row = (
+                (await session.execute(self._source_statement(knowledge_id, for_update=for_update)))
+                .mappings()
+                .one_or_none()
+            )
+        return deepcopy(dict(row)) if row is not None else None
+
     def _embedding_queries(self, session, verifier, source_key, context):
         self._tenant_id()
         # Only original, current-transaction Owner receipts authorize this exact
