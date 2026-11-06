@@ -14,6 +14,7 @@ from bisheng.channel.domain.models.channel_knowledge_sync import ChannelKnowledg
 from bisheng.channel.domain.repositories.reference_binding_repository import ChannelReferenceBindingRepository
 from bisheng.common.errcode.channel import ChannelNotFoundError
 from bisheng.common.errcode.tenant import NoTenantContextError
+from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.common.models.space_channel_member import SpaceChannelMember
 from bisheng.core.context.tenant import (
     bypass_tenant_filter,
@@ -23,6 +24,8 @@ from bisheng.core.context.tenant import (
     visible_tenant_ids,
 )
 from bisheng.core.database import tenant_filter
+from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 
 
 @pytest.fixture(autouse=True)
@@ -194,3 +197,77 @@ async def test_lock_refreshes_existing_identity_map_from_current_sql(store):
         )
         assert root.name == "own"
         assert (await repo.aget(session, "own", for_update=True)).name == "sql-current"
+
+
+@pytest.fixture
+async def choices(store):
+    async with store.begin() as conn:
+        await conn.run_sync(lambda value: Knowledge.__table__.create(value))
+        await conn.run_sync(lambda value: KnowledgeFile.__table__.create(value))
+    async with AsyncSession(store) as session, session.begin():
+        session.add_all(
+            [
+                Knowledge(id=ident, tenant_id=tenant, user_id=owner, name=str(ident), type=3)
+                for ident, tenant, owner in ((10, 101, 7), (11, 101, 8), (20, 202, 7))
+            ]
+        )
+        session.add(SpaceChannelMember(business_id="10", business_type="space", user_id=7, user_role="creator"))
+        session.add_all(
+            [
+                KnowledgeFile(id=ident, tenant_id=101, knowledge_id=space, file_name=str(ident), file_type=kind)
+                for ident, space, kind in ((30, 10, 0), (31, 10, 1), (32, 11, 0))
+            ]
+        )
+    return store
+
+
+@pytest.mark.parametrize(
+    "space,folder,allowed",
+    [
+        ("10", None, True),
+        ("10", "30", True),
+        ("11", None, False),
+        ("20", None, False),
+        ("10", "31", False),
+        ("10", "32", False),
+        ("10", "99", False),
+    ],
+)
+async def test_new_selections_preserve_creator_and_real_folder_parent_rules(choices, space, folder, allowed):
+    repo = ChannelReferenceBindingRepository()
+    async with AsyncSession(choices) as session:
+        root = await repo.aget(session, "own", for_update=True)
+        selections = ({"knowledge_space_id": space, "folder_id": folder},)
+        if allowed:
+            await repo.acheck_new_selections(session, root, user_id=7, rows=selections)
+        else:
+            with pytest.raises(SpacePermissionDeniedError):
+                await repo.acheck_new_selections(session, root, user_id=7, rows=selections)
+
+
+async def test_visibility_membership_changes_share_owner_transaction_and_rollback(store):
+    repo = ChannelReferenceBindingRepository()
+    async with AsyncSession(store) as session, session.begin():
+        session.add_all(
+            [
+                SpaceChannelMember(
+                    business_id="own", business_type="channel", user_id=ident, user_role=role, status=status
+                )
+                for ident, role, status in (
+                    (7, "creator", "ACTIVE"),
+                    (8, "member", "PENDING"),
+                    (9, "member", "REJECTED"),
+                )
+            ]
+        )
+    before = await snapshot(store)
+    async with AsyncSession(store) as session:
+        root = await repo.aget(session, "own", for_update=True)
+        await repo.amutate_members(session, root, activate_pending=True, remove_rejected=True)
+        members = await repo.alist_members(session, root.id)
+        assert {row.user_id for row in members} == {7, 8}
+        assert all(row.status.value == "ACTIVE" for row in members)
+        await repo.amutate_members(session, root, remove_non_creators=True)
+        assert {row.user_id for row in await repo.alist_members(session, root.id)} == {7}
+        await session.rollback()
+    assert await snapshot(store) == before
