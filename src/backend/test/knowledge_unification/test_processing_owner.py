@@ -10,7 +10,11 @@ from unittest.mock import AsyncMock
 import pytest
 import sqlalchemy as sa
 
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeOperationPlanConflictError,
+    ReferenceCoverageNotReadyError,
+    ResourceReferenceInvalidError,
+)
 from bisheng.knowledge.application import processing_owner as module
 from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication as Models
 from bisheng.knowledge.application.processing_owner import KnowledgeProcessingOwner
@@ -107,5 +111,5 @@ async def test_owner_rejects_unowned_space_and_parameter_model_is_never_a_read_f
     async with context.sessions() as session:
         with pytest.raises(ResourceReferenceInvalidError):
             await owner.aread_current(session, 20)
-        with pytest.raises(ResourceReferenceInvalidError):
+        with pytest.raises(ReferenceCoverageNotReadyError):
             await owner.aread_current(session, 40)
