@@ -199,3 +199,44 @@ async def test_missing_actual_worker_proof_rejects_before_job_or_provider(dispat
     with pytest.raises(ResourceReferenceInvalidError):
         await module._execute_processing_job(dispatch.job_id, dispatch.revision)
     dispatch.provider.assert_not_called()
+
+
+async def test_retry_preclaim_credential_rejection_releases_fence_and_new_authority_recovers(dispatch, monkeypatch):
+    dispatch.vector.add_texts.side_effect = RuntimeError("temporary provider failure")
+    await module._execute_processing_job(dispatch.job_id, dispatch.revision)
+    async with dispatch.app.context.sessions() as session:
+        job = await dispatch.app.owner.jobs.aget(session, dispatch.job_id)
+        await dispatch.app.app.aretry(
+            session,
+            40,
+            job.id,
+            ProcessingRetryRequest(idempotency_key="retry-before-revocation", expected_job_revision=job.revision),
+            identity=dispatch.app.context.user,
+            entry_kind="web",
+        )
+        revision = job.revision
+        await session.commit()
+    monkeypatch.setattr(
+        processing_identity, "resolve_web_runtime_identity", AsyncMock(side_effect=PermissionDeniedError())
+    )
+    assert (await module._execute_processing_job(dispatch.job_id, revision))["state"] == "failed"
+    async with dispatch.app.context.sessions() as session:
+        job = await dispatch.app.owner.jobs.aget(session, dispatch.job_id)
+        assert job.failed_count == 2 and not job.pending_dispatch
+        assert (await session.get(Knowledge, 40)).state == 1
+        await dispatch.app.app.aretry(
+            session,
+            40,
+            job.id,
+            ProcessingRetryRequest(idempotency_key="fresh-authorization", expected_job_revision=job.revision),
+            identity=dispatch.app.context.user,
+            entry_kind="web",
+        )
+        revision = job.revision
+        await session.commit()
+    dispatch.vector.add_texts.side_effect = None
+    monkeypatch.setattr(
+        processing_identity, "resolve_web_runtime_identity", AsyncMock(return_value=dispatch.app.context.user)
+    )
+    assert (await module._execute_processing_job(dispatch.job_id, revision))["state"] == "succeeded"
+    dispatch.vector.col.drop.assert_called_once()
