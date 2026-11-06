@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 
+import pytest
 from scripts.backfill_admin_space_belonging_organization import (
+    ensure_openfga,
     first_displayed_manager,
     organization_above_squad,
     organization_for_space,
@@ -90,6 +92,53 @@ def test_squad_without_office_parent_is_skipped():
     )
     assert organization_id is None
     assert reason == "department_manager_squad_parent_not_office"
+
+
+async def test_ensure_openfga_registers_client_before_preview():
+    events = []
+    config = SimpleNamespace(enabled=True)
+
+    class App:
+        def get_context(self, name):
+            raise KeyError(name)
+
+        def register_context(self, context):
+            events.append(context)
+
+    class Manager:
+        def __init__(self, openfga_config):
+            self.openfga_config = openfga_config
+
+    async def aget_client():
+        events.append("client")
+        return object()
+
+    await ensure_openfga(
+        settings=SimpleNamespace(openfga=config),
+        app_context=App(),
+        manager_cls=Manager,
+        get_client=aget_client,
+    )
+
+    assert events[0].openfga_config is config
+    assert events[1] == "client"
+
+
+async def test_ensure_openfga_rejects_missing_client():
+    class App:
+        def get_context(self, name):
+            return object()
+
+    async def aget_client():
+        return None
+
+    with pytest.raises(RuntimeError, match="OpenFGA 客户端初始化失败"):
+        await ensure_openfga(
+            settings=SimpleNamespace(openfga=SimpleNamespace(enabled=True)),
+            app_context=App(),
+            manager_cls=object,
+            get_client=aget_client,
+        )
 
 
 def test_department_space_without_manager_organization_is_skipped():
