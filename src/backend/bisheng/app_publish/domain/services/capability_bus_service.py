@@ -212,6 +212,20 @@ async def _read_effective_source(session, app_id, principal, *, purpose):
     return runtime, result, principal
 
 
+async def _knowledge_names(session, snapshot):
+    # Names decorate already-admitted exact IDs; this observation adds no locks
+    # or authority and never participates in the frozen configuration digest.
+    knowledge_ids = tuple(
+        int(one.target.target_id) for one in snapshot.references if one.target.target_type == TargetType.KNOWLEDGE_SPACE
+    )
+    if not knowledge_ids:
+        return {}
+    return {
+        str(row["id"]): row["name"]
+        for row in await HostedAppReferenceSourceRepository().aget_knowledge_candidates(session, ids=knowledge_ids)
+    }
+
+
 async def _effective_from_source(session, result):
     snapshot = result.snapshot
     payload = json.loads(snapshot.payload_json)
@@ -219,17 +233,9 @@ async def _effective_from_source(session, result):
     frozen = {one.slot_key: one.target for one in snapshot.references}
     facts = {one.key: one for one in result.target_states}
     labels = _declaration_labels(declaration)
-    # Names decorate already-admitted exact IDs; this observation adds no locks
-    # or authority and never participates in the frozen configuration digest.
-    knowledge_ids = tuple(
-        int(one.target.target_id) for one in snapshot.references if one.target.target_type == TargetType.KNOWLEDGE_SPACE
-    )
-    named = {
-        str(row["id"]): row["name"]
-        for row in await HostedAppReferenceSourceRepository().aget_knowledge_candidates(session, ids=knowledge_ids)
-    }
+    named = await _knowledge_names(session, snapshot)
     knowledge = []
-    for request in extract_app_reference_requests(declaration):
+    for request in _ordered_requests(declaration):
         if request.target_type != TargetType.KNOWLEDGE_SPACE:
             continue
         target = frozen[request.slot_key]
@@ -277,12 +283,17 @@ def _declaration_labels(declaration):
     return labels
 
 
+def _ordered_requests(declaration):
+    requests = {one.slot_key: one for one in extract_app_reference_requests(declaration)}
+    return tuple(requests[slot] for slot in _declaration_labels(declaration))
+
+
 def unready_saved_capabilities(capabilities):
     """Retain declaration rows when its index/catalog cannot be inspected; never invent IDs."""
     try:
         declaration = CapabilityDeclaration.model_validate(capabilities or {})
         labels = _declaration_labels(declaration)
-        requests = extract_app_reference_requests(declaration)
+        requests = _ordered_requests(declaration)
     except (TypeError, ValueError):
         return (CapabilityStatus("configuration", "capabilities", "capabilities", True, "not_ready"),)
     return tuple(
@@ -312,8 +323,9 @@ async def inspect_saved_capabilities(app_id, version_id, identity, *, session=No
     declaration = CapabilityDeclaration.model_validate(json.loads(snapshot.payload_json)["capabilities"])
     references = {one.slot_key: one.target for one in snapshot.references}
     states = {one.key: one for one in result.target_states}
-    requests = extract_app_reference_requests(declaration)
+    requests = _ordered_requests(declaration)
     labels = _declaration_labels(declaration)
+    knowledge_names = await _knowledge_names(session, snapshot)
     requested_names = tuple(sorted({one.requested_name for one in requests if one.target_type == TargetType.MODEL}))
     unavailable = False
     try:
@@ -346,7 +358,7 @@ async def inspect_saved_capabilities(app_id, version_id, identity, *, session=No
             CapabilityStatus(
                 CAPABILITY_KIND_MODEL if model else CAPABILITY_KIND_KNOWLEDGE,
                 label,
-                label,
+                knowledge_names.get(target.target_id, label) if not model and fact.is_valid else label,
                 revoked,
                 reason,
                 {"target_id": target.target_id, "target_type": target.target_type.value, "state": fact.state.value},
