@@ -6,6 +6,7 @@ The formal migration owns the original artifacts and their run/hash binding.
 
 import json
 import re
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, fields, is_dataclass, replace
 from datetime import datetime
 from hashlib import sha256
@@ -476,9 +477,7 @@ def _validate_resource(before):
             _blocked("visible_source_not_ready")
 
 
-def _grants(resource, models, actions):
-    by_model = {model.model_key: model for model in models}
-    scopes = {action.code: action.resource_types for action in actions}
+def _grants(resource, by_model, scopes, sources_by_grant):
     result = []
     for grant in resource.grants:
         if grant.model_key not in by_model:
@@ -508,7 +507,7 @@ def _grants(resource, models, actions):
                 resource.resource_id,
                 snapshot,
                 grant.state == "ACTIVE",
-                tuple(source.to_source_record() for source in resource.assignees if source.grant_id == grant.id),
+                sources_by_grant.get(grant.id, ()),
                 grant.version,
             )
         )
@@ -526,9 +525,18 @@ def _resource_payload(plan):
     )
 
 
-def build_resource_retirement_plan(
-    *, catalog_plan: CatalogRetirementPlan, before: PermissionResourceBaseline
-) -> ResourceRetirementPlan:
+@dataclass(frozen=True, slots=True)
+class _ResourceRetirementContext:
+    catalog_plan: CatalogRetirementPlan
+    before_models: dict[str, PermissionModelBaseline]
+    after_models: dict[str, PermissionModelBaseline]
+    before_scopes: dict[str, frozenset[str]]
+    after_scopes: dict[str, frozenset[str]]
+
+
+def _resource_context(catalog_plan):
+    if not isinstance(catalog_plan, CatalogRetirementPlan):
+        _blocked("catalog_plan_required")
     rebuilt = build_catalog_retirement_plan(
         run_id=catalog_plan.run_id,
         writer_contract_version=catalog_plan.writer_contract_version,
@@ -537,10 +545,24 @@ def build_resource_retirement_plan(
     )
     if rebuilt != catalog_plan:
         _blocked("catalog_plan_changed")
+    return _ResourceRetirementContext(
+        catalog_plan,
+        {model.model_key: model for model in catalog_plan.before.models},
+        {model.model_key: model for model in catalog_plan.after_models},
+        {action.code: action.resource_types for action in catalog_plan.before.actions},
+        {action.code: action.resource_types for action in catalog_plan.after_actions},
+    )
+
+
+def _build_resource_retirement_plan(context, before):
     _validate_resource(before)
     try:
-        old = _grants(before, catalog_plan.before.models, catalog_plan.before.actions)
-        after = _grants(before, catalog_plan.after_models, catalog_plan.after_actions)
+        sources_by_grant = {}
+        for source in before.assignees:
+            sources_by_grant.setdefault(source.grant_id, []).append(source.to_source_record())
+        sources_by_grant = {key: tuple(sources) for key, sources in sources_by_grant.items()}
+        old = _grants(before, context.before_models, context.before_scopes, sources_by_grant)
+        after = _grants(before, context.after_models, context.after_scopes, sources_by_grant)
         existing = tuple(row.source for row in before.visible_sources)
         compiler = VisibilityProjectionCompiler()
         first = compiler.compile(tenant_id=before.tenant_id, grants=old, existing_sources=existing)
@@ -564,5 +586,20 @@ def build_resource_retirement_plan(
         changes = tuple(sorted(set(subjects) - previous_use))
     except (TypeError, ValueError, KeyError) as error:
         raise PermissionMigrationBlockedError(reason="f118_permission_invalid_visibility") from error
-    plan = ResourceRetirementPlan(catalog_plan, before, after, subjects, second.deltas, changes, "")
+    plan = ResourceRetirementPlan(context.catalog_plan, before, after, subjects, second.deltas, changes, "")
     return replace(plan, checksum=_checksum(_resource_payload(plan)))
+
+
+def build_resource_retirement_plans(
+    *, catalog_plan: CatalogRetirementPlan, before: Iterable[PermissionResourceBaseline]
+) -> Iterator[ResourceRetirementPlan]:
+    """Compile one frozen directory per batch; retain no context beyond iteration."""
+    context = _resource_context(catalog_plan)
+    for resource in before:
+        yield _build_resource_retirement_plan(context, resource)
+
+
+def build_resource_retirement_plan(
+    *, catalog_plan: CatalogRetirementPlan, before: PermissionResourceBaseline
+) -> ResourceRetirementPlan:
+    return next(build_resource_retirement_plans(catalog_plan=catalog_plan, before=(before,)))

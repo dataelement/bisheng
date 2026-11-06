@@ -1,6 +1,8 @@
 """Pure verification of a frozen permission subplan, without live I/O."""
 
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, replace
+from itertools import zip_longest
 
 from bisheng.permission.migration.f118_plan import (
     CatalogRetirementPlan,
@@ -8,12 +10,13 @@ from bisheng.permission.migration.f118_plan import (
     PermissionResourceBaseline,
     ResourceRetirementPlan,
     _blocked,
+    _build_resource_retirement_plan,
     _checksum,
     _digest,
+    _resource_context,
     _validate_catalog,
     _validate_resource,
     build_catalog_retirement_plan,
-    build_resource_retirement_plan,
 )
 
 
@@ -70,10 +73,31 @@ def verify_catalog_retirement(
 def verify_resource_retirement(
     *, plan: ResourceRetirementPlan, actual: PermissionResourceBaseline
 ) -> PermissionVerification:
-    rebuilt = build_resource_retirement_plan(catalog_plan=plan.catalog_plan, before=plan.before)
-    if rebuilt != plan:
-        _blocked("resource_plan_changed")
-    _validate_resource(actual)
-    if actual != plan.before:
-        _blocked("resource_provenance_changed")
-    return PermissionVerification(True, plan.checksum, _checksum(actual), plan.expected_use_changes)
+    return next(verify_resource_retirements(catalog_plan=plan.catalog_plan, plans=(plan,), actual=(actual,)))
+
+
+def verify_resource_retirements(
+    *,
+    catalog_plan: CatalogRetirementPlan,
+    plans: Iterable[ResourceRetirementPlan],
+    actual: Iterable[PermissionResourceBaseline],
+) -> Iterator[PermissionVerification]:
+    """Verify every paired resource; a partial iteration never proves the whole batch."""
+    context = _resource_context(catalog_plan)
+    missing = object()
+    for plan, resource in zip_longest(plans, actual, fillvalue=missing):
+        if plan is missing or resource is missing:
+            _blocked("resource_batch_length_changed")
+        if not isinstance(plan, ResourceRetirementPlan):
+            _blocked("resource_plan_required")
+        # Shared immutable plans need no repeated directory walk. Independently
+        # deserialized copies still have to match every frozen catalog fact.
+        if plan.catalog_plan is not catalog_plan and plan.catalog_plan != catalog_plan:
+            _blocked("catalog_plan_changed")
+        rebuilt = _build_resource_retirement_plan(context, plan.before)
+        if rebuilt != plan:
+            _blocked("resource_plan_changed")
+        _validate_resource(resource)
+        if resource != plan.before:
+            _blocked("resource_provenance_changed")
+        yield PermissionVerification(True, plan.checksum, _checksum(resource), plan.expected_use_changes)
