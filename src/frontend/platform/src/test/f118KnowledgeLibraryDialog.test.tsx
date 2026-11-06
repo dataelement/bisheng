@@ -247,22 +247,20 @@ it("presents a known local scope error as readable copy instead of its internal 
 it("uses a fresh scope's model metadata and ignores the retired scope's late candidates", async () => {
   const f = setup(),
     old = deferred<unknown>();
-  mocks.models
-    .mockReturnValueOnce(old.promise)
-    .mockResolvedValueOnce([
-      {
-        id: 2,
-        name: "New provider",
-        models: [
-          {
-            id: 20,
-            model_name: "New model",
-            model_type: "embedding",
-            online: true,
-          },
-        ],
-      },
-    ]);
+  mocks.models.mockReturnValueOnce(old.promise).mockResolvedValueOnce([
+    {
+      id: 2,
+      name: "New provider",
+      models: [
+        {
+          id: 20,
+          model_name: "New model",
+          model_type: "embedding",
+          online: true,
+        },
+      ],
+    },
+  ]);
   const view = render(f.draw());
   await waitFor(() => expect(mocks.models).toHaveBeenCalledTimes(1));
   view.rerender(f.draw({ ...scope, tenantId: 202, managementTenantId: 202 }));

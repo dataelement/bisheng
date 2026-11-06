@@ -47,14 +47,12 @@ vi.mock("@/controllers/API/knowledgeSpace", async (importOriginal) => {
     ...actual,
     knowledgeSpaceApi: {
       ...actual.knowledgeSpaceApi,
-      listVisibleSpaces: vi
-        .fn()
-        .mockResolvedValue({
-          data: [],
-          page_size: 20,
-          has_more: false,
-          next_cursor: null,
-        }),
+      listVisibleSpaces: vi.fn().mockResolvedValue({
+        data: [],
+        page_size: 20,
+        has_more: false,
+        next_cursor: null,
+      }),
     },
   };
 });
