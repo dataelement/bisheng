@@ -12,6 +12,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeIdempotencyConflictError,
     KnowledgeOperationConfirmationRequiredError,
     KnowledgeOperationPlanChangedError,
+    KnowledgeOperationPlanConflictError,
     KnowledgeProcessingConflictError,
     KnowledgeProcessingJobNotFoundError,
     KnowledgeProcessingObsoleteError,
@@ -19,7 +20,7 @@ from bisheng.common.errcode.knowledge import (
 from bisheng.common.schemas.api import PageData
 from bisheng.knowledge.application.processing_identity import capture_processing_actor
 from bisheng.knowledge.domain.repositories.operation_plan_repository import OperationPlanRepository
-from bisheng.knowledge.domain.repositories.processing_job_repository import NewProcessingItem
+from bisheng.knowledge.domain.repositories.processing_job_repository import NewProcessingItem, ProcessingConfiguration
 from bisheng.knowledge.domain.repositories.processing_owner_repository import ProcessingOwnerRepository
 from bisheng.knowledge.domain.repositories.processing_settings_repository import ProcessingSettingsRepository
 from bisheng.knowledge.domain.schemas.processing_job import (
@@ -48,7 +49,7 @@ class ProcessingJobService:
         self.scope = scope if scope is not None else ProcessingOwnerRepository()
         self.settings = settings if settings is not None else ProcessingSettingsRepository()
         # File/metadata/move/copy require their own actual handlers and Owners.
-        self.available_kinds = frozenset(available_kinds) & {"embedding_rebuild"}
+        self.available_kinds = frozenset(available_kinds) & {"embedding_rebuild", "file_reprocess", "file_resplit"}
 
     def _kind(self, kind):
         if kind not in self.available_kinds:
@@ -93,6 +94,38 @@ class ProcessingJobService:
             identity, space_id=space_id, required_action="edit", entry_kind=entry_kind
         )
         parameters = request.parameters.model_dump(mode="json")
+        if request.kind in {"file_reprocess", "file_resplit"}:
+            preview = await self.owner.apreview_file_processing(
+                session,
+                space_id,
+                identity=identity,
+                kind=request.kind,
+                targets=[target.model_dump(mode="json") for target in request.targets],
+                overrides=request.parameters.overrides,
+            )
+            plan = await self.plans.acreate(
+                session,
+                operation=request.kind,
+                space_id=space_id,
+                actor_reference=actor.reference,
+                targets=[item.target for item in preview.items],
+                target_revisions=preview.source_revisions["versions"],
+                source_revisions=preview.source_revisions,
+                parameters=parameters,
+                impact={
+                    "overwrite_manual_chunks": True,
+                    "selected_version_count": len(preview.items),
+                    "preserves_chunks": False,
+                    "retrieval_paused": False,
+                },
+                expires_at=self.plans.clock() + timedelta(minutes=5),
+            )
+            return plan.model_copy(
+                update={
+                    "can_execute": bool(preview.items),
+                    "valid_items": [OperationItem(id=space_id, type="space")] if preview.items else [],
+                }
+            )
         preview = await self.owner.apreview(session, space_id, identity=identity, parameters=parameters)
         scope = await self.scope.aload_scope(session, space_id)
         self.require_rebuild_scope_ready(scope)
@@ -162,6 +195,8 @@ class ProcessingJobService:
             raise KnowledgeIdempotencyConflictError()
         if not plan.target_manifest:
             raise KnowledgeOperationConfirmationRequiredError()
+        if plan.operation in {"file_reprocess", "file_resplit"}:
+            return await self._acreate_file(session, space_id, request, plan, identity, actor)
         preview = await self.owner.apreview(session, space_id, identity=identity, parameters=plan.parameters)
         scope = await self.scope.aload_scope(session, space_id, for_update=True)
         self.require_rebuild_scope_ready(scope)
@@ -207,6 +242,44 @@ class ProcessingJobService:
                 )
                 for row in participants
             ],
+        )
+        await self.plans.aconsume(session, plan.id, operation_id=result.job.id, expected_digest=plan.plan_digest)
+        return self._accepted(result)
+
+    async def _acreate_file(self, session, space_id, request, plan, identity, actor):
+        expected = ProcessingConfiguration(
+            plan.source_revisions["model_config_revision"], plan.source_revisions["index_generation"]
+        )
+        try:
+            items = await self.owner.aprepare_file_processing(
+                session,
+                space_id,
+                identity=identity,
+                kind=plan.operation,
+                targets=plan.target_manifest,
+                overrides=plan.parameters["overrides"],
+                expected_configuration=expected,
+                expected_source_revisions=plan.source_revisions,
+                operation_id=plan.id,
+            )
+        except KnowledgeOperationPlanConflictError as error:
+            raise KnowledgeOperationPlanChangedError() from error
+        result = await self.jobs.acreate(
+            session,
+            space_id=space_id,
+            kind=plan.operation,
+            idempotency_key=request.idempotency_key,
+            actor_user_id=actor.actor_user_id,
+            actor_reference=actor.reference,
+            parameters={
+                "operation_id": plan.id,
+                "confirmation_id": plan.id,
+                "plan_digest": plan.plan_digest,
+                "request_parameters": plan.parameters,
+            },
+            configuration=expected,
+            space_config_version=plan.source_revisions["processing_config_version"],
+            items=items,
         )
         await self.plans.aconsume(session, plan.id, operation_id=result.job.id, expected_digest=plan.plan_digest)
         return self._accepted(result)

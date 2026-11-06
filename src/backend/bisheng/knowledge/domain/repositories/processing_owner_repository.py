@@ -63,6 +63,110 @@ class ProcessingOwnerRepository:
         }
     )
 
+    async def aassert_empty_model_change(self, session, space_id) -> str:
+        """Lock the real physical and logical scope; an empty JOIN is no proof."""
+        root = await KnowledgeModelReferenceRepository().aget(session, space_id, for_update=True)
+        if root is None or root.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
+        if root.state in {KnowledgeState.COPYING.value, KnowledgeState.REBUILDING.value} or root.model_transition:
+            raise KnowledgeProcessingConflictError(reason="processing_space_not_ready")
+        with strict_tenant_filter():
+            active = (
+                await session.exec(
+                    select(KnowledgeProcessingJob.id)
+                    .where(
+                        KnowledgeProcessingJob.space_id == space_id,
+                        KnowledgeProcessingJob.state.in_(("accepted", "running")),
+                    )
+                    .with_for_update()
+                    .limit(1)
+                )
+            ).first()
+        if active is not None:
+            raise KnowledgeProcessingConflictError(reason="processing_target_job_active")
+        physical = KnowledgeFile.__table__
+        with strict_tenant_filter():
+            directory_version = (
+                await session.exec(
+                    select(Knowledge.id)
+                    .join(physical, physical.c.knowledge_id == Knowledge.id)
+                    .join(KnowledgeDocumentVersion, KnowledgeDocumentVersion.knowledge_file_id == physical.c.id)
+                    .where(Knowledge.id == space_id, physical.c.file_type == FileType.DIR.value)
+                    .with_for_update()
+                    .limit(1)
+                )
+            ).first()
+        if directory_version is not None:
+            raise KnowledgeOperationPlanConflictError(reason="processing_version_scope_incomplete")
+        # C3 scopes the selected root. Child columns stay visible to integrity
+        # checks even when their tenant/space link is corrupt, as in aload_scope.
+        files_query = (
+            select(Knowledge, KnowledgeDocument, KnowledgeDocumentVersion, *physical.c)
+            .select_from(Knowledge)
+            .join(physical, physical.c.knowledge_id == Knowledge.id)
+            .outerjoin(KnowledgeDocumentVersion, KnowledgeDocumentVersion.knowledge_file_id == physical.c.id)
+            .outerjoin(KnowledgeDocument, KnowledgeDocument.id == KnowledgeDocumentVersion.document_id)
+            .where(
+                Knowledge.id == space_id,
+                or_(physical.c.file_type != FileType.DIR.value, physical.c.file_type.is_(None)),
+            )
+            .order_by(physical.c.id, KnowledgeDocumentVersion.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        documents_query = (
+            select(Knowledge, KnowledgeDocument, KnowledgeDocumentVersion)
+            .join(KnowledgeDocument, KnowledgeDocument.knowledge_id == Knowledge.id)
+            .outerjoin(KnowledgeDocumentVersion, KnowledgeDocumentVersion.document_id == KnowledgeDocument.id)
+            .where(Knowledge.id == space_id)
+            .order_by(KnowledgeDocument.id, KnowledgeDocumentVersion.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        with strict_tenant_filter():
+            file_rows = (await session.exec(files_query)).all()
+            document_rows = (await session.exec(documents_query)).all()
+        files, versions, documents, facts = set(), set(), {}, []
+        for joined in file_rows:
+            _, document, version = joined[:3]
+            row = {column.name: joined._mapping[column] for column in physical.c}
+            if (
+                row["tenant_id"] != root.tenant_id
+                or row["file_type"] != FileType.FILE.value
+                or row["id"] in files
+                or document is None
+                or document.knowledge_id != space_id
+                or version is None
+                or version.version_no <= 0
+            ):
+                raise KnowledgeOperationPlanConflictError(reason="processing_version_scope_incomplete")
+            if row["status"] not in {3, 6, 7}:
+                raise KnowledgeProcessingConflictError(reason="processing_scope_not_empty")
+            files.add(row["id"])
+            versions.add(version.id)
+            primary = documents.setdefault(document.id, [])
+            if version.is_primary:
+                primary.append(version.id)
+            facts.append(
+                {
+                    "file": KnowledgeFile(**row).model_dump(mode="json"),
+                    "document": document.model_dump(mode="json"),
+                    "version": version.model_dump(mode="json"),
+                }
+            )
+        actual_versions = set()
+        for _, document, version in document_rows:
+            if document.id not in documents or version is None or version.id not in versions:
+                raise KnowledgeOperationPlanConflictError(reason="processing_version_scope_incomplete")
+            if documents[document.id] != [document.primary_version_id]:
+                raise KnowledgeOperationPlanConflictError(reason="processing_version_scope_incomplete")
+            actual_versions.add(version.id)
+        if actual_versions != versions:
+            raise KnowledgeOperationPlanConflictError(reason="processing_version_scope_incomplete")
+        return hashlib.sha256(
+            json.dumps(facts, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode()
+        ).hexdigest()
+
     async def aassert_file_processing_available(self, session, space_id, scope, *, exclude_job_id=None):
         root = await KnowledgeModelReferenceRepository().aget(session, space_id, for_update=True)
         if root is None or root.state != KnowledgeState.PUBLISHED.value or root.model_transition is not None:

@@ -202,7 +202,13 @@ async def test_unassembled_kind_and_bad_pagination_remain_explicit_errors(http):
         http,
         "POST",
         "/processing-jobs/precheck",
-        payload={"kind": "file_reprocess", "targets": [{"file_id": 81, "version_id": 181}], "parameters": {}},
+        payload={
+            "kind": "metadata_schema_change",
+            "parameters": {
+                "expected_schema_revision": 0,
+                "changes": [{"operation": "add", "field_name": "extra", "field_type": "string"}],
+            },
+        },
         headers=HEADERS,
     )
     assert result["status_code"] == KnowledgeProcessingConflictError.Code

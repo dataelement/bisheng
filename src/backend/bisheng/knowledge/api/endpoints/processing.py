@@ -32,10 +32,11 @@ router = APIRouter(tags=["knowledge_processing"])
 
 
 def get_processing_service():
-    # Only the actual single-file rebuild worker is assembled in this wave.
-    # File/metadata/move kinds stay explicitly unavailable until their Owners
-    # and real handlers join the final multi-kind assembly.
-    return ProcessingJobService(owner=KnowledgeProcessingOwner(), available_kinds={"embedding_rebuild"})
+    # These kinds have native handlers and same-transaction SQL Owners.
+    # Metadata/move kinds stay unavailable until their real assembly joins.
+    return ProcessingJobService(
+        owner=KnowledgeProcessingOwner(), available_kinds={"embedding_rebuild", "file_reprocess", "file_resplit"}
+    )
 
 
 async def _write_scope(request, identity):
