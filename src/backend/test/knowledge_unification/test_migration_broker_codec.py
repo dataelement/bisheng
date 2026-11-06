@@ -258,7 +258,7 @@ def test_message_and_decoded_body_budgets_fail_closed(codec):
         codec.decode_broker_message(b"x" * (16 * 1024 * 1024 + 1))
 
 
-@pytest.mark.parametrize("driver", ["memory", "pyamqp", "custom.transport:Driver"])
+@pytest.mark.parametrize("driver", ["memory", "pyamqp", "kombu.transport.memory:Transport"])
 def test_actual_celery_transport_override_cannot_be_mistaken_for_redis(codec, driver):
     script = "from celery import Celery; import json,sys; app=Celery('offline',broker='redis://localhost:6379/3'); app.conf.broker_transport=sys.argv[1]; print(json.dumps(app.connection_for_read().transport_cls))"
     actual = json.loads(
