@@ -1,7 +1,8 @@
 """Actual APP whole-source admission and final cached model identity. 覆盖 AC: AC-37, AC-68, AC-71, AC-87, AC-89, AC-91, AC-92."""
 
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import sqlalchemy as sa
@@ -12,8 +13,11 @@ from bisheng.app_publish.application.reference_access import get_hosted_app_refe
 from bisheng.app_publish.domain.services import capability_bus_service as bus
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
+from bisheng.common.errcode.model_face import ModelFaceModelRevokedError
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.llm.domain.services.model_catalog import ResolvedModel
+from bisheng.open_api.domain.schemas.model_gateway import ChatCompletionRequest
+from bisheng.open_api.domain.services import model_gateway_service as gateway
 from bisheng.resource_reference.application.contracts import SourceType
 from bisheng.resource_reference.application.source_contracts import SourceReadRequest
 from test.knowledge_unification import test_app_snapshot as fixtures
@@ -161,7 +165,7 @@ async def test_broken_whitelist_never_silently_drops_a_saved_reference():
         _ = declaration.knowledge_whitelist
 
 
-@pytest.mark.parametrize("knowledge_type", [0, 1, 3])
+@pytest.mark.parametrize("knowledge_type", [0, 3])
 async def test_actual_retrieval_keeps_access_user_narrowing_and_legacy_kinds(
     capability_bus, monkeypatch, knowledge_type
 ):
@@ -194,3 +198,34 @@ async def test_actual_retrieval_keeps_access_user_narrowing_and_legacy_kinds(
             knowledge_ids=[8],
         )
     assert retrieval.await_count == 1
+
+
+async def test_historical_qa_blocks_actual_model_gateway_and_retrieval_before_provider(capability_bus, monkeypatch):
+    from bisheng.knowledge.domain.services.retrieval_facade_service import RetrievalFacadeService
+
+    async with AsyncSession(capability_bus.engine) as session, session.begin():
+        await session.execute(sa.update(Knowledge).where(Knowledge.id == 7).values(type=1))
+    # The real range adapter, APP SourceOwner, Core and final binding run. Only
+    # the existing cached catalog and external model/retrieval effects are doubles.
+    monkeypatch.setattr(gateway, "resolve_model_name", AsyncMock(return_value=resolved()))
+    instantiate = AsyncMock(side_effect=AssertionError("QA source reached provider"))
+    monkeypatch.setattr(gateway.ModelGatewayService, "_instantiate", instantiate)
+    monkeypatch.setattr(gateway.ModelGatewayService, "_start_record", Mock(return_value=SimpleNamespace()))
+    monkeypatch.setattr(gateway.ModelGatewayService, "_finish_record", Mock())
+    with pytest.raises(ModelFaceModelRevokedError):
+        await gateway.ModelGatewayService.complete(
+            capability_bus.identity,
+            None,
+            ChatCompletionRequest(model="alpha", messages=[{"role": "user", "content": "hi"}]),
+        )
+    instantiate.assert_not_awaited()
+    retrieval = AsyncMock()
+    monkeypatch.setattr(RetrievalFacadeService, "retrieve", retrieval)
+    with pytest.raises(ResourceReferenceInvalidError):
+        await bus.CapabilityBusService.retrieve(
+            app_id="actual-app", principal=capability_bus.identity, access_user_id=44, query="question"
+        )
+    retrieval.assert_not_awaited()
+    async with AsyncSession(capability_bus.engine) as session, session.begin():
+        version = await session.get(fixtures.AppVersion, fixtures.fixtures.VERSION)
+        assert version.capabilities["knowledge_bases"] == [{"id": "7"}]
