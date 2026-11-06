@@ -12,7 +12,7 @@ from sqlalchemy import delete, event, update
 from sqlmodel import Session
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
-from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.knowledge.application.reference_read_legacy_evidence import KnowledgeReferenceReadLegacyEvidence
 from bisheng.knowledge.domain.models.knowledge_unification_run import KnowledgeUnificationRun
 from bisheng.llm.application import source_read_target_owner as owner_module
@@ -55,7 +55,7 @@ def seed_default(session, tenant_id=101, key="evaluation_llm", payload=None, *, 
     payload = {"model_id": 11} if payload is None else payload
     references = extract_model_default_references(key, payload)
     session.add(TenantSystemModelConfig(tenant_id=tenant_id, key=key, value=json.dumps(payload)))
-    common = dict(tenant_id=tenant_id, source_type="model_default", source_id=key)
+    common = {"tenant_id": tenant_id, "source_type": "model_default", "source_id": key}
     session.add(
         BusinessReferenceSet(
             **common,

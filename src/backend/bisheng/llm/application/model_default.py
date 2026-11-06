@@ -106,8 +106,15 @@ class ModelDefaultApplication:
                 except (TypeError, ValueError) as error:
                     raise WorkbenchEmbeddingError() from error
             if config.chat_default_model_id is not None:
-                choices = {canonical_target_id(item.id) for item in config.models or ()}
-                if canonical_target_id(config.chat_default_model_id) not in choices:
+                try:
+                    selected = canonical_target_id(config.chat_default_model_id)
+                except (TypeError, ValueError) as error:
+                    raise WorkbenchChatDefaultModelError() from error
+                try:
+                    choices = {canonical_target_id(item.id) for item in config.models or ()}
+                except (TypeError, ValueError) as error:
+                    raise ResourceReferenceInvalidError(reason="model_default_configuration_invalid") from error
+                if selected not in choices:
                     raise WorkbenchChatDefaultModelError()
         return config
 

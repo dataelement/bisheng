@@ -1,188 +1,127 @@
-"""F022 T02 LLMService refactor tests — verify the 5 system-config
-methods route through ``TenantSystemModelConfigDao`` and the new
-``tenant_id`` parameter.
+"""F022 defaults retain typed contracts through F118's real source graph.
 
-Mocks the DAO entirely so we test the Service-layer wiring, not the
-persistence path. The DAO itself is covered by
-``test_tenant_system_model_config_dao.py``.
+覆盖 AC: AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92
+Native/async SQLite sessions are isolated; no provider is initialized.
 """
+
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy import update
+from sqlmodel import Session
+from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.common.models.config import ConfigKeyEnum
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
+from bisheng.common.services.config_service import settings
+from bisheng.database.models.tenant import Tenant
+from bisheng.llm.application import model_default_read
+from bisheng.llm.application.model_default import current_model_default_tenant
+from bisheng.llm.domain.repositories.model_default_repository import ModelDefaultRepository
+from bisheng.llm.domain.schemas import AssistantLLMConfig, EvaluationLLMConfig, KnowledgeLLMConfig
+from bisheng.llm.domain.services.llm import LLMService
+from bisheng.resource_reference.application.contracts import SourceKey
+from test.knowledge_unification import test_llm_default_read as reading
+from test.knowledge_unification import test_llm_defaults as writing
+from test.knowledge_unification import test_model_default_native_target as native
+from test.knowledge_unification.test_ref_repo import tenant
 
-
-# --- _resolve_tenant_id helper ---------------------------------------------
-
-
-def test_resolve_tenant_id_prefers_explicit_arg():
-    from bisheng.llm.domain.services.llm import _resolve_tenant_id
-    with patch('bisheng.llm.domain.services.llm.get_current_tenant_id',
-               return_value=99):
-        assert _resolve_tenant_id(5) == 5  # explicit wins
-
-
-def test_resolve_tenant_id_falls_back_to_context_var():
-    from bisheng.llm.domain.services.llm import _resolve_tenant_id
-    with patch('bisheng.llm.domain.services.llm.get_current_tenant_id',
-               return_value=7):
-        assert _resolve_tenant_id(None) == 7
-
-
-def test_resolve_tenant_id_falls_back_to_root_and_warns():
-    from bisheng.llm.domain.services.llm import _resolve_tenant_id, ROOT_TENANT_ID
-    with patch('bisheng.llm.domain.services.llm.get_current_tenant_id',
-               return_value=None), \
-         patch('bisheng.llm.domain.services.llm.logger') as mock_logger:
-        result = _resolve_tenant_id(None)
-    assert result == ROOT_TENANT_ID
-    mock_logger.warning.assert_called_once()
-    assert 'Celery' in mock_logger.warning.call_args[0][0]
+reads = reading.reads
+business = writing.business
+model_owner_tenant = reading.model_owner_tenant
 
 
-# --- aget_*_llm with tenant_id routing -------------------------------------
+@pytest.fixture
+async def configured(reads, monkeypatch):
+    monkeypatch.setattr(model_default_read, "_runtime", reads.facade)
+    return reads
 
 
-@pytest.mark.asyncio
-async def test_aget_knowledge_llm_routes_to_dao_with_explicit_tenant():
-    from bisheng.llm.domain.services.llm import LLMService
-
-    payload = {'embedding_model_id': 99}
-    aresolve_mock = AsyncMock(return_value=(json.dumps(payload), False, False))
-    with patch('bisheng.llm.domain.services.llm.TenantSystemModelConfigDao.aresolve',
-               aresolve_mock):
-        cfg = await LLMService.aget_knowledge_llm(tenant_id=5)
-    assert cfg.embedding_model_id == 99
-    aresolve_mock.assert_awaited_once_with(
-        tenant_id=5, key=ConfigKeyEnum.KNOWLEDGE_LLM.value,
-    )
+def test_explicit_tenant_cannot_override_the_trusted_current_scope(model_owner_tenant):
+    with pytest.raises(ResourceReferenceInvalidError):
+        current_model_default_tenant(202)
+    assert current_model_default_tenant(101) == 101
 
 
-@pytest.mark.asyncio
-async def test_aget_knowledge_llm_with_meta_returns_envelope():
-    from bisheng.llm.domain.services.llm import LLMService
+def test_omitted_tenant_uses_current_context(model_owner_tenant):
+    assert current_model_default_tenant() == 101
 
-    aresolve_mock = AsyncMock(
-        return_value=(json.dumps({'embedding_model_id': 1}), True, False),
-    )
-    with patch('bisheng.llm.domain.services.llm.TenantSystemModelConfigDao.aresolve',
-               aresolve_mock):
-        cfg, inherited, blocked = await LLMService.aget_knowledge_llm_with_meta(
-            tenant_id=5,
+
+def test_missing_multitenant_context_refuses_instead_of_falling_back_to_root(monkeypatch):
+    monkeypatch.setattr(settings.multi_tenant, "enabled", True)
+    with tenant(None), pytest.raises(ResourceReferenceInvalidError):
+        current_model_default_tenant()
+
+
+async def test_aget_knowledge_llm_keeps_typed_values_after_full_source_admission(configured):
+    with Session(configured.engine) as session, session.begin():
+        native.seed_default(session, key="knowledge_llm", payload={"embedding_model_id": 11})
+    cfg = await LLMService.aget_knowledge_llm(tenant_id=101)
+    assert isinstance(cfg, KnowledgeLLMConfig) and cfg.embedding_model_id == 11
+
+
+async def test_aget_knowledge_llm_with_meta_keeps_inherited_envelope(configured):
+    with Session(configured.engine) as session, session.begin():
+        native.seed_default(session, tenant_id=1, key="knowledge_llm", payload={"embedding_model_id": 22})
+    cfg, inherited, blocked = await LLMService.aget_knowledge_llm_with_meta(tenant_id=101)
+    assert isinstance(cfg, KnowledgeLLMConfig) and cfg.embedding_model_id == 22
+    assert inherited is True and blocked is False
+
+
+async def test_get_assistant_llm_returns_typed_empty_config_when_no_source_exists(configured):
+    cfg = await LLMService.get_assistant_llm(tenant_id=101)
+    assert isinstance(cfg, AssistantLLMConfig) and cfg.llm_list == []
+
+
+async def test_aget_workflow_llm_with_meta_preserves_blocked_root_flag(configured):
+    with Session(configured.engine) as session, session.begin():
+        native.seed_default(session, tenant_id=1, key="workflow_llm", payload={"model_id": 22})
+        session.execute(update(Tenant).where(Tenant.id == 1).values(share_default_to_children=0))
+    cfg, inherited, blocked = await LLMService.aget_workflow_llm_with_meta(tenant_id=101)
+    assert isinstance(cfg, EvaluationLLMConfig) and cfg.model_id is None
+    assert inherited is False and blocked is True
+
+
+async def test_sync_get_assistant_llm_uses_native_session_and_typed_empty_config(configured):
+    with Session(configured.engine) as session, session.begin():
+        native.seed_default(session, key="assistant_llm", payload={"llm_list": []})
+    with Session(configured.engine) as session:
+        cfg = LLMService.sync_get_assistant_llm(tenant_id=101, session=session)
+        assert isinstance(cfg, AssistantLLMConfig) and cfg.llm_list == []
+        assert session.in_transaction() and not session.identity_map
+
+
+@pytest.mark.parametrize(
+    "method,key,payload,field",
+    [
+        ("update_knowledge_llm", "knowledge_llm", KnowledgeLLMConfig(embedding_model_id=11), "embedding_model_id"),
+        ("update_assistant_llm", "assistant_llm", AssistantLLMConfig(llm_list=[]), "llm_list"),
+        ("update_evaluation_llm", "evaluation_llm", EvaluationLLMConfig(model_id=12), "model_id"),
+        ("update_workflow_llm", "workflow_llm", EvaluationLLMConfig(model_id=11), "model_id"),
+    ],
+)
+async def test_setters_preserve_schema_values_and_source_tenant_in_original_session(
+    business, method, key, payload, field
+):
+    async with AsyncSession(business.engine) as session:
+        result = await getattr(LLMService, method)(payload, tenant_id=101, login_user=business.user, session=session)
+        stored = await ModelDefaultRepository().aget_own(session, key)
+        index = await business.runtime.repository.aget_source_set(
+            session, SourceKey(101, "model_default", key, "current")
         )
-    assert cfg.embedding_model_id == 1
-    assert inherited is True
-    assert blocked is False
+        assert type(result) is type(payload)
+        assert getattr(result, field) == getattr(payload, field)
+        assert stored.tenant_id == 101 and json.loads(stored.value)[field] == payload.model_dump(mode="json")[field]
+        assert index.ready and index.effective and index.tenant_id == 101
+        assert session.in_transaction()
+        await session.rollback()
+    async with AsyncSession(business.engine) as check:
+        assert await ModelDefaultRepository().aget_own(check, key) is None
 
 
-@pytest.mark.asyncio
-async def test_get_assistant_llm_returns_typed_config_only():
-    """Backward compat: get_assistant_llm still returns a single value
-    even though it goes through the with_meta path internally."""
-    from bisheng.llm.domain.services.llm import LLMService
-
-    aresolve_mock = AsyncMock(return_value=(None, False, False))
-    with patch('bisheng.llm.domain.services.llm.TenantSystemModelConfigDao.aresolve',
-               aresolve_mock):
-        cfg = await LLMService.get_assistant_llm(tenant_id=5)
-    # Empty config: AssistantLLMConfig defaults
-    assert cfg.llm_list == []
-
-
-@pytest.mark.asyncio
-async def test_aget_workflow_llm_with_meta_blocked_by_root():
-    """AC-06 surface: blocked=True propagates."""
-    from bisheng.llm.domain.services.llm import LLMService
-
-    aresolve_mock = AsyncMock(return_value=(None, False, True))
-    with patch('bisheng.llm.domain.services.llm.TenantSystemModelConfigDao.aresolve',
-               aresolve_mock):
-        cfg, inherited, blocked = await LLMService.aget_workflow_llm_with_meta(
-            tenant_id=5,
+async def test_default_tenant_write_keeps_current_context_without_an_explicit_argument(business):
+    async with AsyncSession(business.engine) as session:
+        await LLMService.update_assistant_llm(
+            AssistantLLMConfig(llm_list=[]), login_user=business.user, session=session
         )
-    assert inherited is False
-    assert blocked is True
-
-
-# --- sync_get_*_llm sync resolve --------------------------------------------
-
-
-def test_sync_get_assistant_llm_routes_to_sync_resolve():
-    from bisheng.llm.domain.services.llm import LLMService
-
-    resolve_mock = MagicMock(return_value=(json.dumps({'llm_list': []}), False, False))
-    with patch('bisheng.llm.domain.services.llm.TenantSystemModelConfigDao.resolve',
-               resolve_mock):
-        cfg = LLMService.sync_get_assistant_llm(tenant_id=5)
-    assert cfg.llm_list == []
-    resolve_mock.assert_called_once_with(
-        tenant_id=5, key=ConfigKeyEnum.ASSISTANT_LLM.value,
-    )
-
-
-# --- update_*_llm goes through aupsert -------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_update_knowledge_llm_writes_via_aupsert():
-    from bisheng.llm.domain.schemas import KnowledgeLLMConfig
-    from bisheng.llm.domain.services.llm import LLMService
-
-    payload = KnowledgeLLMConfig(embedding_model_id=42)
-    aupsert_mock = AsyncMock()
-    with patch('bisheng.llm.domain.services.llm.TenantSystemModelConfigDao.aupsert',
-               aupsert_mock):
-        result = await LLMService.update_knowledge_llm(payload, tenant_id=5)
-    assert result is payload
-    aupsert_mock.assert_awaited_once()
-    call_kwargs = aupsert_mock.call_args.kwargs
-    assert call_kwargs['tenant_id'] == 5
-    assert call_kwargs['key'] == ConfigKeyEnum.KNOWLEDGE_LLM.value
-    assert json.loads(call_kwargs['value'])['embedding_model_id'] == 42
-
-
-@pytest.mark.asyncio
-async def test_update_assistant_llm_default_tenant_falls_back_to_context():
-    from bisheng.llm.domain.schemas import AssistantLLMConfig
-    from bisheng.llm.domain.services.llm import LLMService
-
-    payload = AssistantLLMConfig(llm_list=[])
-    aupsert_mock = AsyncMock()
-    with patch('bisheng.llm.domain.services.llm.TenantSystemModelConfigDao.aupsert',
-               aupsert_mock), \
-         patch('bisheng.llm.domain.services.llm.get_current_tenant_id',
-               return_value=7):
-        await LLMService.update_assistant_llm(payload)  # no tenant_id arg
-    assert aupsert_mock.call_args.kwargs['tenant_id'] == 7
-
-
-@pytest.mark.asyncio
-async def test_update_evaluation_llm_writes_with_tenant():
-    from bisheng.llm.domain.schemas import EvaluationLLMConfig
-    from bisheng.llm.domain.services.llm import LLMService
-
-    payload = EvaluationLLMConfig(model_id=12)
-    aupsert_mock = AsyncMock()
-    with patch('bisheng.llm.domain.services.llm.TenantSystemModelConfigDao.aupsert',
-               aupsert_mock):
-        await LLMService.update_evaluation_llm(payload, tenant_id=8)
-    call_kwargs = aupsert_mock.call_args.kwargs
-    assert call_kwargs['tenant_id'] == 8
-    assert call_kwargs['key'] == ConfigKeyEnum.EVALUATION_LLM.value
-
-
-@pytest.mark.asyncio
-async def test_update_workflow_llm_writes_with_tenant():
-    from bisheng.llm.domain.schemas import EvaluationLLMConfig
-    from bisheng.llm.domain.services.llm import LLMService
-
-    payload = EvaluationLLMConfig(model_id=13)
-    aupsert_mock = AsyncMock()
-    with patch('bisheng.llm.domain.services.llm.TenantSystemModelConfigDao.aupsert',
-               aupsert_mock):
-        await LLMService.update_workflow_llm(payload, tenant_id=9)
-    call_kwargs = aupsert_mock.call_args.kwargs
-    assert call_kwargs['tenant_id'] == 9
-    assert call_kwargs['key'] == ConfigKeyEnum.WORKFLOW_LLM.value
+        assert (await ModelDefaultRepository().aget_own(session, "assistant_llm")).tenant_id == 101
+        await session.rollback()
