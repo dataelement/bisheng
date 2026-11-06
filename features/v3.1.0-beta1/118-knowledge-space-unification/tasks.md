@@ -639,7 +639,7 @@
   **类型 / Owner**：测试 / KN\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_auth.py`（拟新增）\
   **逻辑 / 测试上下文**：继承/自定义同有效动作；only rename 能重命名而不能容器 edit；重建可下载目录，写入和检索暂停；未发布可合法处理。\
-  **依赖**：T026, T064\
+  **依赖**：T026, T605\
   **覆盖 AC**: AC-08, AC-30, AC-31, AC-32, AC-33, AC-51, AC-60\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -5141,6 +5141,40 @@
   **依赖**：T644\
   **配对测试**：T644\
   **验证 / 完成条件**：T644与原job仓储组合全绿，Owner及收据在后续对应卡组合验证。
+
+## W6 KN 生命周期及清单真实接缝
+
+- [ ] **T646 · 普通有界清单与管理员分页测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_list.py`\
+  **逻辑 / 测试上下文**：真实SQL seek/tenant/type3、批量权限、100/1000预算、全拒空页进展、NULL时间/同时间稳定翻页及admin角色/DB总数。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-33, AC-35, AC-84\
+  **验证 / 完成条件**：先测试独立红/首绿，再实现≤2叶；真实接线与有界行为不能由fake-only Service代替。
+
+- [ ] **T647 · 普通有界清单与管理员分页仓储**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/knowledge_space_listing_repository.py`；`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`\
+  **逻辑 / 测试上下文**：按W6§4新增candidate seek与admin SQL分页、service有界visible清单；不全量枚举FGA，不改变旧mine/joined/managed含义。\
+  **依赖**：T646, T082\
+  **覆盖 AC**: AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-33, AC-35, AC-84\
+  **验证 / 完成条件**：先测试独立红/首绿，再实现≤2叶；真实接线与有界行为不能由fake-only Service代替。
+
+- [ ] **T648 · 统一创建与清单HTTP接缝测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_creation_api.py`\
+  **逻辑 / 测试上下文**：真实路由请求/响应、普通与高级create资格/条件管理头、具体tenant清单与普通CursorPage，保旧字段及错误。\
+  **依赖**：T080, T082, T647\
+  **覆盖 AC**: AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-33, AC-35, AC-84\
+  **验证 / 完成条件**：先测试独立红/首绿，再实现≤2叶；真实接线与有界行为不能由fake-only Service代替。
+
+- [ ] **T649 · 统一创建与清单HTTP接缝**
+  **类型 / Owner**：后端 API / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/schemas/knowledge_space_schema.py`；`src/backend/bisheng/knowledge/api/endpoints/knowledge_space.py`\
+  **逻辑 / 测试上下文**：仅新增已冻结两create字段和普通/admin清单，转发可信context，无Endpoint直接SQL、不把body视为权限权威。\
+  **依赖**：T648\
+  **覆盖 AC**: AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-33, AC-35, AC-84\
+  **验证 / 完成条件**：先测试独立红/首绿，再实现≤2叶；真实接线与有界行为不能由fake-only Service代替。
 
 ## 自动化覆盖索引
 
