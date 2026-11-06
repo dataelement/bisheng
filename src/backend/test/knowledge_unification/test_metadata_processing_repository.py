@@ -132,6 +132,7 @@ async def test_invalid_saved_json_shape_is_not_treated_as_empty(metadata, broken
         "empty_document",
         "missing_file",
         "foreign_file",
+        "foreign_directory",
         "foreign_space",
         "duplicate_file",
         "orphan_directory",
@@ -150,6 +151,8 @@ async def test_incomplete_physical_or_logical_scope_never_becomes_empty(metadata
             await session.execute(delete(KnowledgeFile).where(KnowledgeFile.id == 81, KnowledgeFile.tenant_id == 101))
         elif broken == "foreign_file":
             (await session.get(KnowledgeFile, 81)).tenant_id = 202
+        elif broken == "foreign_directory":
+            session.add(KnowledgeFile(id=90, tenant_id=202, knowledge_id=40, file_name="foreign-dir", file_type=0))
         elif broken == "foreign_space":
             (await session.get(KnowledgeFile, 81)).knowledge_id = 999
         elif broken == "duplicate_file":
@@ -283,6 +286,105 @@ async def test_schema_only_cas_uses_original_external_transaction(metadata):
         await session.rollback()
     async with metadata.context.sessions() as session:
         assert (await repo.aload_scope(session, 40)).schema_revision == 0
+
+
+@pytest.mark.parametrize("entry", ["repository", "service"])
+@pytest.mark.parametrize(
+    "dirty",
+    [
+        "revision",
+        "schema_fields",
+        "model_revision",
+        "values",
+        "source",
+        "primary",
+        "binding",
+        "document",
+        "new_file",
+        "new_document",
+        "new_version",
+        "directory_version",
+        "deleted_file",
+    ],
+)
+async def test_schema_cas_refuses_key_pending_scope_changes_before_any_write(metadata, entry, dirty):
+    from bisheng.knowledge.domain.services.metadata_processing_service import MetadataProcessingService
+
+    repo, service = MetadataProcessingRepository(), MetadataProcessingService()
+    if dirty == "directory_version":
+        async with metadata.context.sessions() as session:
+            session.add(KnowledgeFile(id=90, tenant_id=101, knowledge_id=40, file_name="folder", file_type=0))
+            await session.commit()
+    async with metadata.context.sessions() as session:
+        scope = await repo.aload_scope(session, 40)
+        from bisheng.knowledge.domain.schemas.processing_job import MetadataSchemaParameters
+
+        plan = await service.apreview(
+            session,
+            40,
+            MetadataSchemaParameters(
+                expected_schema_revision=0,
+                changes=[{"operation": "add", "field_name": "fresh", "field_type": "string"}],
+            ),
+        )
+        if dirty in {"revision", "schema_fields", "model_revision"}:
+            root = await session.get(Knowledge, 40)
+            if dirty == "revision":
+                root.metadata_schema_revision = 99
+            elif dirty == "schema_fields":
+                root.metadata_fields = []
+            else:
+                root.model_config_revision = 99
+        elif dirty in {"values", "source", "deleted_file"}:
+            row = await session.get(KnowledgeFile, 81)
+            if dirty == "values":
+                row.user_metadata = {"note": {"field_value": "changed-but-not-flushed"}}
+            elif dirty == "source":
+                row.object_name = "changed-but-not-flushed"
+            else:
+                await session.delete(row)
+        elif dirty in {"primary", "binding"}:
+            row = await session.get(KnowledgeDocumentVersion, 181)
+            if dirty == "primary":
+                row.is_primary = False
+            else:
+                row.knowledge_file_id = 82
+        elif dirty == "document":
+            (await session.get(KnowledgeDocument, 80)).primary_version_id = 182
+        elif dirty == "new_file":
+            session.add(KnowledgeFile(tenant_id=101, knowledge_id=40, file_name="unflushed", status=3))
+        elif dirty == "new_document":
+            session.add(KnowledgeDocument(knowledge_id=40))
+        elif dirty == "new_version":
+            session.add(KnowledgeDocumentVersion(document_id=80, knowledge_file_id=81, version_no=3))
+        else:
+            session.add(KnowledgeDocumentVersion(document_id=999, knowledge_file_id=90, version_no=1))
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            if entry == "repository":
+                await repo.areplace_schema(session, scope, after_schema=())
+            else:
+                await service.aaccept(session, plan)
+        with session.no_autoflush:
+            revision = (await session.exec(select(Knowledge.metadata_schema_revision).where(Knowledge.id == 40))).one()
+        assert revision == 0
+        if dirty == "revision":
+            assert root.metadata_schema_revision == 99
+        await session.rollback()
+
+
+async def test_unrelated_pending_writes_remain_owned_by_caller(metadata):
+    repo = MetadataProcessingRepository()
+    async with metadata.context.sessions() as session:
+        scope = await repo.aload_scope(session, 40)
+        root, other = await session.get(Knowledge, 40), await session.get(Knowledge, 10)
+        root.name = "unrelated-name"
+        other.metadata_schema_revision = 77
+        changed = await repo.areplace_schema(session, scope, after_schema=scope.schema_fields)
+        assert changed.schema_revision == 1 and root.name == "unrelated-name" and other.metadata_schema_revision == 77
+        with session.no_autoflush:
+            revision = (await session.exec(select(Knowledge.metadata_schema_revision).where(Knowledge.id == 40))).one()
+        assert revision == 1
+        await session.rollback()
 
 
 @pytest.mark.parametrize("drift", ["schema", "generation", "values", "source"])
