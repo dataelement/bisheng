@@ -247,3 +247,13 @@ SQL原值结构`{field:{field_value,field_type,updated_at}}`与索引的`field�
 `aaccept(session,prepared)->PreparedMetadataSchema`只消费本实例在同一SessionTransaction签发的plan，锁并重读完整事实/原schema revision及摘要，漂移拒绝；然后CAS更新schema与metadata_schema_revision仅一次、只flush。外部J1/items/consume必须同事务一起落地；任一失败整体回滚，内核不自行提交、不写Model R/G/R2、不改File处理状态、不调用provider/索引。执行/重试未来须核接受后的schema revision及after schema和原Model R/G；不得重复接受递增修订。空scope直接真实SQL变更结果，不造零项异步job；有文件的add同样有索引清空残留步骤，不能仅Root append便称全部成功。
 
 后续真实handler固定要求：逐version Milvus query_iterator分页保pk/vector/完整字段、只改user_metadata并finally close；ES参数化脚本、校验timed_out/failures/conflicts；不重新嵌入、不改Chunk文本/原文件、不limit10000截断。SQL文件值与leased item成功同事务，失败明示并只重试失败项。只对冻结目标范围和可控步骤校验；不新增物理staging、外部在途I/O竞态治理或与业务无关整空间写围栏。完整handler/旧公开确认桥与响应的具体叶子在本前置完成后另冻结，旧公开请求/响应和原授权不由前置helper改写。
+
+## 16. 正式盘点目标物理事实子合同 V1：已冻结
+
+M2不能将现在线bind Owner经tenant过滤后的exists=False当全局物理缺失，否则非法跨tenant会被伪装成invalid_legacy。T703/T704只提供两个业务Owner专用的迁移事实仓储：`knowledge/domain/repositories/unification_target_repository.py:KnowledgeMigrationTargetRepository`与`llm/domain/repositories/migration_target_repository.py:ModelMigrationTargetRepository`，各`ainspect(session,*,source_key:SourceKey,targets:tuple[TargetKey,...])->tuple[对应MigrationTargetFact,...]`。普通在线Owner/receipt协议不改；这些事实既不是R2授权收据也不是失效证据签发，不依赖BRR已有索引、不写Source/ready/tombstone。
+
+外部native AsyncSession，调用前须可信具体tenant、strict、非bypass；source_key.tenant_id须等于原当前tenant。targets空返空、去重保持第一次顺序，每批≤200个唯一精确数字PK；非法类型/游标形状/bool/超批在任何SQL前拒绝。KN只接受knowledge_space/knowledge_file，LLM只接受model，禁止通用字符串目标。查询时只在最窄context内按这些精确PK跨tenant读取闭集标量，退出必恢复原scope；无全表扫描/OFFSET、无逐target查询、无provider/config/业务内容、no_autoflush/零写/无commit或外部IO。多target/parent用批量JOIN或IN，一批查询数只与目标kind有关，不随slot增长。
+
+同叶frozen/slots事实不保存原ORM：Model含key、exists、target_tenant_id、model_type、is_online、server_id、server_exists、server_tenant_id、闭集revision_digest；Knowledge含key、exists、target_tenant_id、knowledge_id、knowledge_type、file_type、space_exists、space_tenant_id、闭集revision_digest。space目标knowledge_id即自身；file目标由真实File.knowledge_id和LEFT父空间派生，DIR可能是原频道的合法文件夹引用，不能一概过滤；type0/1/2/3都返回原type事实。digest只覆盖实际闭集标量及相关update_time/model R/G，不声称等价provider全配置摘要，不在事实中输出后者。
+
+全局真实行存在即exists=True，包括foreign、offline、type2、父不存在或父tenant错误；这些必须保留可区分事实，不能因JOIN/资格条件过滤成missing。只有精确原数字ID在该实体全局不存在才exists=False。目标tenant不属于当前、类型不适用或父关系错误由后续真实迁移Owner资格组合明确拒绝；Root共享/默认继承必须使用原真实sharing证据，不能因全局目录已知便扩大资格。未能唯一解析出原ID的APP名称、离线仅名候选/歧义都不能造target_missing证据，仍待M2显式阻断/原语义解析。正式盘点、名称资格、原始失效证据bootstrap与Coverage转换消费者在后续子合同装配，当前两卡不等于完整T162/T168完成。

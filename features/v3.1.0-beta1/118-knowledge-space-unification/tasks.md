@@ -5635,6 +5635,25 @@
   **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-53, AC-54\
   **验证 / 完成条件**：先真实红/首绿，≤2叶和固定SHA独立复查；不把原生事务核心冒充任务或公开入口完成。
 
+## W6正式盘点全局物理目标事实前置
+
+- [ ] **T703 · 迁移物理目标与跨租户区分测试**
+  **类型 / Owner**：测试 / MIG\
+  **写入文件**：`src/backend/test/knowledge_unification/test_migration_knowledge_targets.py`；`src/backend/test/knowledge_unification/test_migration_model_targets.py`\
+  **逻辑 / 测试上下文**：真实local/foreign/Root/offline/type2/缺父/错父/不存在分别保事实；DIR原folder引用不被过滤；200精确PK批量/重复去重/非法输入零SQL、noautoflush/strict/外部TX、无BRR初始化依赖。\
+  **依赖**：T694\
+  **覆盖 AC**: AC-56, AC-63, AC-64, AC-70, AC-71, AC-87, AC-88, AC-89, AC-93\
+  **验证 / 完成条件**：按W6§16先真实红，性能以真实SQL计数断言；不把physical facts当授权收据或legacy证明。
+
+- [ ] **T704 · 两业务Owner迁移物理事实仓储**
+  **类型 / Owner**：后端 Domain / MIG\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/unification_target_repository.py`；`src/backend/bisheng/llm/domain/repositories/migration_target_repository.py`\
+  **逻辑 / 测试上下文**：W6§16对应Owner闭集事实、最窄精确PK跨scope只读；存在foreign与坏父不变missing，普通Owner/R2/ready不改，名称与sharing资格后续。\
+  **依赖**：T703\
+  **配对测试**：T703\
+  **覆盖 AC**: AC-56, AC-63, AC-64, AC-70, AC-71, AC-87, AC-88, AC-89, AC-93\
+  **验证 / 完成条件**：配对及原盘点/target边界通过，C2静态及独立固定SHA审；不勾完整M2/回填任务。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
