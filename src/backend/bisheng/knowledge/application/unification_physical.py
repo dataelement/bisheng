@@ -112,8 +112,9 @@ class PhysicalInventoryReader:
             primary = error
             raise
         finally:
-            reader._closed = True
-            await cls._close_clients(es, mv, primary=primary)
+            if not reader._closed:
+                reader._closed = True
+                await cls._close_clients(es, mv, primary=primary)
 
     @staticmethod
     async def _close_clients(es, mv, *, primary=None):
