@@ -450,3 +450,18 @@ ainspect_file_ancestors(session,*,file_ids:tuple[int,...])->tuple[FileAncestorFa
 独立审已确认no_autoflush下其他既有dirty version的knowledge_file_id可改指目标、历史item的primary file可pending移出；提交前必须把真实当前primary version/file及关联FK history纳入精确必要集合，拒相关关键关系pending，不能先以旧SQL合法链判成功再flush落坏链；无关remark/name继续保留。只精确PK/有界pending候选，不重扫空间。
 
 规模预算覆盖数据库实际JSON反序列化/SQL列，不能只数SELECT或Python属性读取。原401items×4KB快照、10项claim/renew/checkpoint/complete/finalize/retry已实测scope_manifest 55次/94,455,625 bytes及item snapshot 4,387次/18,201,663 bytes。修复中metadata持久scope_manifest仅target/space/parent+各snapshot digest，完整before/after仍在真实JobItem且request_hash仍覆盖完整快照；执行读取使用明确light projection/raiseload，业务查询/audit完整scope兼容保留，不能进程cache遮DB传输。领取下一项只读取实际可领取的最早一条（pending或租约已过期running，保NULL租约语义/原排序/Job锁），不可每次.all读取全部pending snapshots。metadata计数以冻结total_count及真实Item集合核完整性，不为读len而拉整清单；非metadata原行为需同选集回归不回退租约/幂等。原T733/735测试与734/736生产叶内闭合后，由同独立代理复验才允许后继738。
+
+
+## 29. M2原创建者、组织与配额配置事实子合同 V1：已冻结
+
+T762测试→T763唯一生产`knowledge/domain/repositories/unification_control_repository.py:UnificationControlRepository`。沿§28外部native AsyncSession+原TX+可信具体tenant/strict/no_autoflush/拒ambient bypass，不开Session或写/flush/commit，不做在线授权/配额执法、主体恢复或转换。事实只供后续完整M2预检与闭集摘要；原T161/T162、全平台权限采集、正式freeze仍未闭合。
+
+`aget_tenant(session)`仅精确当前Tenant.id，返回闭集TenantControlFact(id,status,parent_tenant_id,root_dept_id,share_default_to_children,quota_config,update_time)，不存在明确10998。quota_config深拷贝且repr=False，有限canonical JSON；不读storage_config/联系信息/凭据。`alist_memberships/alist_departments/alist_roles(session,*,after_id:int|None=None,limit:int=200)`均按真实id seek与limit+1（≤201），返回现InventoryPage及确定next_after。MembershipRow仅原id/user_id/tenant_id/is_default/status/is_active/last_access_time/join_time；UserTenant是listener明确排除表，必须显式当前tenant谓词，不通过active条件吞历史记录。DepartmentRow仅id/tenant_id/parent_id/path/status/is_deleted/is_tenant_root/mounted_tenant_id/update_time，保原路径不改组织。RoleRow仅id/tenant_id/role_type/department_id/quota_config/knowledge_space_file_limit/update_time，普通页只本tenant，不把Root全局角色混成当前归属；quota JSON有限校验且repr=False。
+
+`alist_user_roles(session,*,after_key:tuple[int,int,int]|None=None,limit:int=200)`使用真实复合主键(user_id,role_id,id)作完整字典序seek/order/next_after，不用非唯一id丢行；返回本叶定义frozen/slots ControlPage[UserRoleRow]，next_after仅上述tuple或None，Row保三键+tenant_id/create_time/update_time。输入和DB键均正整数非bool，非法明确失败。SQL用可移植and/or，不能数据库专有tuple函数。
+
+`ainspect_users(session,*,user_ids:tuple[int,...])`去重≤500、每批≤200、空零SQL，按输入去重顺序返CreatorFact(user_id,exists,delete)，精确全局User.user_id，不猜User.id、不读姓名/密码/token。`ainspect_roles(session,*,role_ids:tuple[int,...])`同预算/顺序，精确全局Role.id返RoleFact(exists及上述RoleRow事实；missing其他字段None)，供解释原global角色/坏引用，不能授权。两个精确全局读内部受控跨scope窗口，不接任意tenant、不扩大ordinary页；只有物理不存在才exists=False。inactive/delete/historical membership都不能冒充creator物理不存在，是否异常由实际业务root/lifecycle的后续预检决定。
+
+`avalidate_global_integrity(session)`整个run一次，只对UserTenant/Department/Role/UserRole四表做NULL/<=0/未知Tenant的LIMIT1存在性探针（闭集reason+id；UserRole诊断用完整三键），不按tenant重跑，不读foreign个人信息。关系存在性与活动资格分别留给精确事实和后续预检，不以INNER JOIN静默过滤历史记录。
+
+不新增配额统计SQL：后续M2消费§28真实资源流线性汇总，原个人SPACE计数type3且排除部门空间，原租户计数包含部门空间；迁移来源长期个人豁免由M3及T165/166接线。存储只原file_source channel/space_upload且不按处理状态过滤。保Tenant/Role原quota配置及多角色/原管理身份语义，不自行新增user_count、重算租户用量或把全局每用户显示口径改成本tenant。测试以native SQL覆盖401页、同id不同user/role复合键、500精确ID三批、外部dirty零写、跨scope事实与普通页隔离、历史成员及deleted但存在creator、非法JSON；C2按既有模型/SQL静态复核，DM8实库按用户免测。
