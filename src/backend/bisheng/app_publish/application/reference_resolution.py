@@ -9,6 +9,7 @@ from bisheng.app_publish.domain.services.reference_extractor import (
     extract_app_references,
 )
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
+from bisheng.knowledge.domain.schemas.retrieval_facade import SUPPORTED_KNOWLEDGE_TYPES
 from bisheng.llm.application.model_name_resolution import get_model_name_resolution_port
 from bisheng.resource_reference.application.contracts import TargetKey, TargetType, normalize_references
 
@@ -99,7 +100,7 @@ async def resolve_app_references(
         )
         if locked != registered.rows:
             raise KnowledgeOperationPlanConflictError(reason="app_knowledge_plan_changed")
-    supported = [row for row in registered.rows if row["type"] in {0, 1, 3}]
+    supported = [row for row in registered.rows if row["type"] in SUPPORTED_KNOWLEDGE_TYPES]
     for request in knowledge_requests:
         matches = (
             [row for row in supported if str(row["id"]) == request.target_id]
