@@ -10,7 +10,10 @@ from dataclasses import dataclass
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
 from bisheng.core.context.background_execution import get_current_background_task
-from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication
+from bisheng.knowledge.application.model_reference import (
+    KnowledgeModelReferenceApplication,
+    PreparedKnowledgeModelChange,
+)
 from bisheng.knowledge.application.model_reference_read import AdmittedKnowledgeModel, get_knowledge_model_read_runtime
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.knowledge.domain.repositories.processing_job_repository import (
@@ -145,9 +148,16 @@ class KnowledgeProcessingOwner:
             current = await self.aread_current(session, job.space_id, job=job)
         return await self.jobs.afinalize(session, lease, configuration=current.configuration)
 
-    async def aprepare(
-        self, session, space_id, *, identity, parameters, operation_id, expected_configuration=None
-    ) -> ProcessingBusinessState:
+    async def apreview(
+        self,
+        session,
+        space_id,
+        *,
+        identity,
+        parameters,
+        operation_id: str | None = None,
+        expected_configuration: ProcessingConfiguration | None = None,
+    ) -> PreparedKnowledgeModelChange:
         operator = await self._operator(identity)
         request = EmbeddingRebuildParameters.model_validate(parameters)
         row = await KnowledgeModelReferenceApplication.repository.aget(session, space_id)
@@ -160,8 +170,20 @@ class KnowledgeProcessingOwner:
                 "expected_model_config_revision": expected_configuration.model_config_revision,
                 "expected_index_generation": expected_configuration.index_generation,
             }
-        plan = await KnowledgeModelReferenceApplication.aprepare_rebuild(
+        return await KnowledgeModelReferenceApplication.aprepare_rebuild(
             session, space_id, selected, login_user=operator, operation_id=operation_id, **expected
+        )
+
+    async def aprepare(
+        self, session, space_id, *, identity, parameters, operation_id, expected_configuration=None
+    ) -> ProcessingBusinessState:
+        plan = await self.apreview(
+            session,
+            space_id,
+            identity=identity,
+            parameters=parameters,
+            operation_id=operation_id,
+            expected_configuration=expected_configuration,
         )
         await KnowledgeModelReferenceApplication.aapply_model_change(session, plan)
         # This checks the actual new pending slot, complete source and current
@@ -169,7 +191,7 @@ class KnowledgeProcessingOwner:
         runtime = await get_knowledge_model_read_runtime()
         admitted = await runtime.arequire(
             space_id,
-            login_user=operator if isinstance(identity, UserPayload) else None,
+            login_user=identity if isinstance(identity, UserPayload) else None,
             session=session,
             slot_key="model_transition.pending_model_id",
             expected_operation_id=plan.operation_id,
