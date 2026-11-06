@@ -133,7 +133,8 @@ function mount(props: Partial<FilesProps> = {}) {
   };
 }
 async function menu(name = "report.pdf") {
-  fireEvent.click(await screen.findByRole("button", { name: `more ${name}` }));
+  const target = await screen.findByLabelText(`more ${name}`);
+  fireEvent.keyDown(target, { key: "Enter" });
   return screen.findByRole("menu");
 }
 async function rename(name = "report.pdf") {
@@ -195,7 +196,6 @@ afterEach(() => {
   clients.splice(0).forEach((client) => client.clear());
   vi.restoreAllMocks();
 });
-
 it("reads real SPACE children and continues an opaque empty page without total", async () => {
   mocks.children
     .mockResolvedValueOnce(page([], "opaque/+=="))
@@ -214,7 +214,6 @@ it("reads real SPACE children and continues an opaque empty page without total",
   });
   expect(mocks.legacy).not.toHaveBeenCalled();
 });
-
 it("keeps search as a real page query and returns to a fresh first directory cursor", async () => {
   mocks.children.mockResolvedValue(page([row()], "directory-next"));
   mocks.search
@@ -334,7 +333,8 @@ it("downloads only after an explicit download action and keeps preview separate"
   await waitFor(() =>
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledOnce(),
   );
-  const anchor = vi.mocked(HTMLAnchorElement.prototype.click).mock.instances[0];
+  const anchor = vi.mocked(HTMLAnchorElement.prototype.click).mock
+    .contexts[0] as HTMLAnchorElement;
   expect(anchor.href).toBe("https://objects.test/download.pdf");
   expect(anchor.download).toBe("report.pdf");
   expect(mocks.preview).not.toHaveBeenCalled();
