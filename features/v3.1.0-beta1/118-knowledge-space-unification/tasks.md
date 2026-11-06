@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史672编号：545已完成/历史交付、125当前待办、2外移；原137队列已完成18项、剩119项，另6张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史685编号：545已完成/历史交付、138当前待办、2外移；原137队列已完成18项、剩119项，另19张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -559,7 +559,7 @@
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_file_worker.py`（拟新增）\
   **逻辑 / 测试上下文**：指定版本重处理只改其内容；异常结果真实，重投不重复版本；陈旧任务新步骤拒绝，无配置不能用历史模型。\
-  **依赖**：T066\
+  **依赖**：T066, T070\
   **覆盖 AC**: AC-10, AC-43, AC-44, AC-45, AC-49, AC-53, AC-54, AC-86\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -575,13 +575,13 @@
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_file_process_adapter.py`（拟新增）\
   **逻辑 / 测试上下文**：旧文档/表格/网页/音视频请求回归，优先级与类型参数不串用。\
-  **依赖**：T068\
+  **依赖**：T060, T605\
   **覆盖 AC**: AC-39, AC-40, AC-43, AC-44, AC-66\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
 - [ ] **T070 · 旧 FileProcessBase 与专用规则适配**
   **类型 / Owner**：后端 API / PROC\
-  **写入文件**：`src/backend/bisheng/api/v1/schemas.py`\
+  **写入文件**：`src/backend/bisheng/api/v1/schemas.py`；`src/backend/bisheng/knowledge/application/file_processing_adapter.py`\
   **逻辑 / 测试上下文**：保持旧上传请求与 FileProcessBase 字段兼容，将实际显式值传 J1 解析，不新增不支持参数；不把单次配置污染默认，提交语义不报 completed。\
   **依赖**：T069\
   **配对测试**：T069\
@@ -1283,7 +1283,7 @@
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_perm_migration.py`（拟新增）\
   **逻辑 / 测试上下文**：run/plan/checksum不符拒绝；use-only授权保留可撤销，global download/纯vis拆分正确；非use尤其rename不变，脚本不查停服。\
-  **依赖**：T028, T120\
+  **依赖**：T028, T605\
   **覆盖 AC**: AC-31, AC-56, AC-59, AC-63, AC-78, AC-80, AC-81, AC-83, AC-85\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -5367,6 +5367,118 @@
   **依赖**：T671\
   **配对测试**：T671\
   **验证 / 完成条件**：配对、原检索可见性和重建回归通过；真实索引由E2E验。
+
+## W6文件实际处理及权限正式采集接缝
+
+- [ ] **T673 · 文件处理真实Owner快照测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_file_processing_owner.py`\
+  **逻辑 / 测试上下文**：实际File/Document/Version及当前模型/规则，preview零业务修改，接受冻结原source/实际规则，状态及item同TX，相关RG/源变化拒绝。\
+  **依赖**：T070, T643\
+  **覆盖 AC**: AC-10, AC-43, AC-44, AC-45, AC-49, AC-53, AC-54\
+  **验证 / 完成条件**：按冻结接口先独立真实红测/首绿再生产，≤2叶，记录实际相关组合与未运行项；不以局部helper替代完整调用链。
+
+- [ ] **T674 · 文件处理真实Owner及受控状态写**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/application/processing_owner.py`；`src/backend/bisheng/knowledge/domain/repositories/processing_owner_repository.py`\
+  **逻辑 / 测试上下文**：按W6§10扩preview/prepare/complete，外部native Session，真实租户/版本/源/lease/RG；不改模型/R2、不伪造BG或零项任务。\
+  **依赖**：T673\
+  **覆盖 AC**: AC-10, AC-43, AC-44, AC-45, AC-49, AC-53, AC-54\
+  **配对测试**：T673\
+  **验证 / 完成条件**：按冻结接口先独立真实红测/首绿再生产，≤2叶，记录实际相关组合与未运行项；不以局部helper替代完整调用链。
+
+- [ ] **T675 · 文件处理确认接收恢复用例测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_file_processing_service.py`\
+  **逻辑 / 测试上下文**：指定版本与opaque覆盖确认、实际规则snapshot、无合法模型拒绝、目标重叠冲突、失败/安全/人工重试，成功项不重跑，改默认不影响既有快照。\
+  **依赖**：T674, T064\
+  **覆盖 AC**: AC-34, AC-43, AC-44, AC-45, AC-49, AC-50, AC-53, AC-54\
+  **验证 / 完成条件**：按冻结接口先独立真实红测/首绿再生产，≤2叶，记录实际相关组合与未运行项；不以局部helper替代完整调用链。
+
+- [ ] **T676 · 文件处理确认接收恢复用例**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/processing_job_service.py`\
+  **逻辑 / 测试上下文**：原Service扩两真实kind，只实际装配后接受；接收/重试文件状态和J1同事务，保持原身份、全scope与失效诊断。\
+  **依赖**：T675\
+  **覆盖 AC**: AC-34, AC-43, AC-44, AC-45, AC-49, AC-50, AC-53, AC-54\
+  **配对测试**：T675\
+  **验证 / 完成条件**：按冻结接口先独立真实红测/首绿再生产，≤2叶，记录实际相关组合与未运行项；不以局部helper替代完整调用链。
+
+- [ ] **T677 · 文件处理真实HTTP到worker接线测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_file_processing_wire.py`\
+  **逻辑 / 测试上下文**：真实ASGI/Service/Owner/SQL和两阶段pipeline处理，只指定历史version、不增版本授权、真失败/安全状态、成功保留、旧lease/RG及凭据失效拒绝。\
+  **依赖**：T068, T676\
+  **覆盖 AC**: AC-10, AC-43, AC-44, AC-45, AC-49, AC-50, AC-53, AC-54, AC-86\
+  **验证 / 完成条件**：按冻结接口先独立真实红测/首绿再生产，≤2叶，记录实际相关组合与未运行项；不以局部helper替代完整调用链。
+
+- [ ] **T678 · 文件处理真实worker和HTTP装配**
+  **类型 / Owner**：Worker / PROC\
+  **写入文件**：`src/backend/bisheng/worker/knowledge/processing_jobs.py`；`src/backend/bisheng/knowledge/api/endpoints/processing.py`\
+  **逻辑 / 测试上下文**：prepare真实docs后原actor/lease/RG再验写指定file；结果同TX受控落地，不整col reset/cutover；装配available kinds后实际闭环。\
+  **依赖**：T677\
+  **覆盖 AC**: AC-10, AC-43, AC-44, AC-45, AC-49, AC-50, AC-53, AC-54, AC-86\
+  **配对测试**：T677\
+  **验证 / 完成条件**：按冻结接口先独立真实红测/首绿再生产，≤2叶，记录实际相关组合与未运行项；不以局部helper替代完整调用链。
+
+- [ ] **T679 · 旧文件规则真实调用端测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_legacy_file_processing_callers.py`\
+  **逻辑 / 测试上下文**：原save/asave及rebuild消费同adapter，显式null/缺省/每file Excel区分，已有完整规则不套新默认，不改变旧参数/envelope与身份。\
+  **依赖**：T070\
+  **覆盖 AC**: AC-39, AC-40, AC-43, AC-44, AC-66\
+  **验证 / 完成条件**：按冻结接口先独立真实红测/首绿再生产，≤2叶，记录实际相关组合与未运行项；不以局部helper替代完整调用链。
+
+- [ ] **T680 · 旧文件规则真实调用端接线**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_service.py`；`src/backend/bisheng/knowledge/domain/services/knowledge_utils.py`\
+  **逻辑 / 测试上下文**：仅原save/asave与旧rebuild规则适配，SpaceService由KN T084串行接，不改其他API/模型/权限语义。\
+  **依赖**：T679\
+  **覆盖 AC**: AC-39, AC-40, AC-43, AC-44, AC-66\
+  **配对测试**：T679\
+  **验证 / 完成条件**：按冻结接口先独立真实红测/首绿再生产，≤2叶，记录实际相关组合与未运行项；不以局部helper替代完整调用链。
+
+- [ ] **T681 · 权限正式原始分页采集测试**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_perm_migration_snapshot.py`\
+  **逻辑 / 测试上下文**：真实native Session采旧use Catalog/原Auth pin，四表PK seek无截断/无Cartesian，inactive/retired保留、坏父链与tenant/bypass拒绝、只读不偷flush。\
+  **依赖**：T160, T605\
+  **覆盖 AC**: AC-31, AC-56, AC-59, AC-63, AC-78, AC-80, AC-81, AC-83, AC-85\
+  **验证 / 完成条件**：按冻结接口先独立真实红测/首绿再生产，≤2叶，记录实际相关组合与未运行项；不以局部helper替代完整调用链。
+
+- [ ] **T682 · 权限正式原始分页采集仓储**
+  **类型 / Owner**：后端 Domain / PERM\
+  **写入文件**：`src/backend/bisheng/permission/domain/repositories/f118_migration_snapshot_repository.py`\
+  **逻辑 / 测试上下文**：按W6§11精确物理行/原pin分页，外部Session+no_autoflush+strict，无current_catalog在线派生、网络、DDL、停服检测或写副作用。\
+  **依赖**：T681\
+  **覆盖 AC**: AC-31, AC-56, AC-59, AC-63, AC-78, AC-80, AC-81, AC-83, AC-85\
+  **配对测试**：T681\
+  **验证 / 完成条件**：按冻结接口先独立真实红测/首绿再生产，≤2叶，记录实际相关组合与未运行项；不以局部helper替代完整调用链。
+
+- [ ] **T683 · 无可重建文件显式模型保存测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_empty_model_change.py`\
+  **逻辑 / 测试上下文**：真实物理File/Document/Version完整性和无active任务，合法空/全跳过空间prepare/apply最终current模型/R2；失效目标/漂移回滚，无provider或伪0项job。\
+  **依赖**：T674, T258\
+  **覆盖 AC**: AC-07, AC-33, AC-48, AC-54, AC-74, AC-87\
+  **验证 / 完成条件**：按冻结接口先独立真实红测/首绿再生产，≤2叶，记录实际相关组合与未运行项；不以局部helper替代完整调用链。
+
+- [ ] **T684 · 无可重建文件显式模型保存Owner**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/application/model_reference.py`；`src/backend/bisheng/knowledge/domain/repositories/processing_owner_repository.py`\
+  **逻辑 / 测试上下文**：复用原事务身份登记的真实R2 prepare/apply，核实际全物理scope，不冒充BG finalize；HTTP确认/旧响应待KN原T098接线，纯手动0参与rebuild仍不可执行。\
+  **依赖**：T683\
+  **覆盖 AC**: AC-07, AC-33, AC-48, AC-54, AC-74, AC-87\
+  **配对测试**：T683\
+  **验证 / 完成条件**：按冻结接口先独立真实红测/首绿再生产，≤2叶，记录实际相关组合与未运行项；不以局部helper替代完整调用链。
+
+- [ ] **T685 · 重建状态gate旧上传夹具对齐**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge/test_knowledge_space_folder_upload.py`；`src/backend/test/knowledge/test_web_link_import_dedup.py`\
+  **逻辑 / 测试上下文**：原Mock/简化space fixture补真实idle state及model_transition=None；新增13例缺fixture导致失败，对照同选集基线10红35绿，保count/depth/同名/重复内容断言，不改其他基线失败。\
+  **依赖**：T670\
+  **覆盖 AC**: AC-09, AC-14, AC-51\
+  **验证 / 完成条件**：按冻结接口先独立真实红测/首绿再生产，≤2叶，记录实际相关组合与未运行项；不以局部helper替代完整调用链。
 
 ## 自动化覆盖索引
 

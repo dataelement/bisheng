@@ -163,3 +163,35 @@ T669/T670在原SpaceService的add_file/import_web_link/upload_folder_items及mov
 T671/T672在现FileVisibilityService的实际space候选和post-filter读取路径，已核原visible后、检索IO前，对重建态明确10999供调用方说明暂停原因；不把重建误报无权限/零命中，不改变QA和显式历史版本资格。成功态文件裁剪T658继续独立生效。每组先实际红测，消费者用真实SQL/业务调用证明，不以纯helper绿测宣布接线完成；已有正确行为记录首绿。
 
 检索授权补充：原file-visible集合非空即已有对应资格，不新增强制space.visible gate而误拒仅子项可见主体。只有重建态且候选/过滤全空时，可复用既有is_space_visible作原空间可见证明，证明通过才返回暂停；全无权保持原empty/False且不暴露处理状态。ready/QA不增加额外空间资格检查；内部精确tenant root状态读取不作为权限授予。
+
+## 10. 文件实际处理与旧规则接缝 V1：已冻结
+
+T069/T070规则适配前移为T068真实worker前置，不再假串行等worker后做。application/file_processing_adapter.py增加`capture_legacy_processing_overrides(request: FileProcessBase)->ProcessingOverrides`、`resolve_file_processing_snapshot(*,file_name,file_source,system_defaults,space_defaults,space_config_version,batch_overrides=None,file_overrides=None,legacy_split_rule=None)->EffectiveProcessingSnapshot`、`legacy_rule_from_snapshot(snapshot,*,space_id)->FileProcessBase`。原schemas.py在填默认前以私有属性捕获原raw非null显式字段（含每file ExcelRule）；不进wire/model_dump，不把补默认的fields_set当显式。不改变既有字段/默认，输入不原地污染。
+
+新操作system→space→batch→file→现支持能力/专用规则；表格只TableRule，网页保持原separator及overlap=0，音视频显式选择现ASR/local能力，不新增OCR/解析类型。hierarchical等仅沿既有pipeline支持范围处理，不为不支持类型新增能力；结果快照明确实际规则。原已保存完整legacy split_rule是实际配置，规范化后直接保留，不重新套新space默认。修改默认不改历史文件快照或使已接受任务过期。
+
+T067/T068在原file_worker.py/knowledge_file_pipeline.py复用真实PipelineConfig(TRANSFORMER)：`prepare_processing_file(file_id,*,space_id,invoke_user_id,kind,processing_snapshot,expected_model_config_revision,expected_index_generation)->PreparedFileProcessing`真实加载/转换为内存docs、count和受控file patch；`write_processing_file(prepared,*,space_id,invoke_user_id,expected_model_config_revision,expected_index_generation)->FileProcessingResult`再验当前业务配置后只替换该file的ES/Milvus。两kind保持独立但复用原重跑原文件pipeline能力，不捏造持久全文源；重切分必须确认会覆盖该版本人工Chunk。禁旧addEmbedding/finally自commit路径、整collection reset、新建File/Version/Grant、大docs入账本或持久本地路径。准备物只在进程内，崩溃按原source+冻结规则重跑，不凭checkpoint假定内存docs还在。
+
+T673/T674在现Owner与ScopeRepo增`apreview_file_processing(session,space_id,*,identity,kind,targets,overrides)->PreparedFileProcessingPlan`和`aprepare_file_processing(session,...,expected_configuration,expected_source_revisions,operation_id)->tuple[NewProcessingItem,...]`，真实当前模型/整版本键/对象来源/元数据与settings，外部native Session、固定锁序、仅flush。item snapshot限`schema_version:1,mode,original_status,effective_processing,source_revision`；source_revision是实际对象位置/MD5/大小/来源/版本及原元数据等相关事实摘要，不含受控status/remark/进度字段以免本操作自变造成过期。无provider/model绑定、signedURL、cache/name/sheet临时字段。split_rule保存legacy可消费完整实际规则；实际对象仍从当前File取并验摘要。
+
+T675/T676/T677/T678在原Service/worker/endpoint实际串联后才装配file_reprocess/file_resplit。现kind+精确targets+parameters.overrides、opaque create和原retry请求足够；impact显式overwrite_manual_chunks/实际指定版本数量并绑定确认摘要，不另加request布尔。当前模型无效明确失败，不回退历史模型。file任务不改空间model/R/G/R2、不调用embedding cutover或整空间retry fence；实际操作绑定目标file/version与源摘要，model R/G仍核验过期。
+
+接收仅原合法可重处理状态2/3/6/7，1/4/5及目标重叠活跃任务冲突；安全状态7只有真实重新安全检测后可成功，不直接改成功。接收同job事务置选中文件5，claim置1，真实成功2/失败3/安全拒绝7。ScopeRepo增`acomplete_processed_file(session,item_lease,*,jobs,outcome)`，真实tenant/归属/版本/源/lease/RG核后只写白名单artifact/status与item，再由调用者commit。afail同事务只把本轮仍拥有的unfinished 5/1置失败，不能动成功、别操作或新代状态。人工retry只失败项回5，保原snapshot和全部成功项；无模型/凭据拒绝不能永远pending。已在途IO竞态仍按原排除范围。
+
+T679/T680仅串联原KnowledgeService save/asave及KnowledgeUtils旧rebuild真实调用者；SpaceService上传调用者由KN后续T084按同adapter接入，PROC不抢其热叶。T070只写schema+adapter两叶，不伪称全旧链完成；完整T068须真实wire组合后才勾选。
+
+空配置单列T683/T684：手动纯rebuild无参与文件仍不可执行；显式改模型的空/全部非参与空间可由原ModelReferenceApplication受控prepare/apply直接完成current新槽/R2、清transition、PUBLISHED和单调R/新逻辑G，不伪造0-item新job或BG proof。必须同时核物理非目录File、Document/Version完整链及无活跃操作，不能凭JOIN返回空认定空空间；有未挂版本或活跃解析明确拒绝。保存仍须目标当前有效与二次确认，公开旧/新入口的真实响应由后续KN合同冻结后接。空metadata修改走实际schema CAS的SQL结果，不能伪造文件任务。
+
+## 11. 全平台权限M2子计划与采集接缝 V1：已冻结
+
+T157/T158纯plan/verify前移不等T120；不复用会检测停服/回填dashboard的旧f048_runtime_source/coordinator，也不调用会拒旧use/自开Session的current_catalog冒原始盘点。此内部核心不等于正式M2采集、实际FGA转换或发行放行。
+
+原两prod叶内定义闭集immutable DTO：PermissionCatalogBaseline含原release全部身份/checksum/required auth、实际environment/store/model/checksum/relations/status pin、旧CatalogAction全部语义、模型原id/key/name/kind/config_scope/level/active/allow_same_level/selected/effective actions/visibility元数据/legacy_source_key。PermissionResourceBaseline含tenant/type/id、原Mode(parent/version/projection/operation)、Grant(id/model/state/version/projection)、原Assignee全部身份/Source定位/投影主体/protected/state/version、原visible-source投影全部字段和id。非terminal投影显式阻断，不擅自归零；不存凭据。
+
+精确纯接口：`build_catalog_retirement_plan(*,run_id,writer_contract_version,before:PermissionCatalogBaseline,target_model_checksum)->CatalogRetirementPlan`；`build_resource_retirement_plan(*,catalog_plan:CatalogRetirementPlan,before:PermissionResourceBaseline)->ResourceRetirementPlan`；`verify_catalog_retirement(*,plan,actual:PermissionCatalogBaseline)->PermissionVerification`；`verify_resource_retirement(*,plan,actual:PermissionResourceBaseline)->PermissionVerification`。canonical SHA256绑定原snapshot、run/writer/pin/目标model checksum；run/hash/checksum错、非use或可见性差异均明确PermissionMigrationBlockedError，不将异常当零差异。
+
+只退休use；global download及原folder/file scopes、rename/edit/publish/share/owner/manage等所有其他语义保持。use-only或按目标类型退役后动作空的模型，只在有原可见/use provenance的类型记录pure-visible和原合法1..4等级；保持key/active/allow_same_level/Grant/Source，任意非法空模型不合法化。若mixed模型无法在不变更原非use/管理边界前提下转换则block，不猜补。复用现GrantModelSnapshot/model_snapshot_for_target与VisibilityProjectionCompiler检验来源贡献和union，撤一Source保其他Source，inactive/retired不当active。原可见无use者新增使用资格是已确认预期差异，不签新use Source，不展开部门成员。
+
+T681/T682采集仓储接外部native Session，所有只读no_autoflush、具体当前tenant/strict，global catalog原始物理行与真实Auth pin读，不经过新derive_action_release。Grant/Assignee/Mode/VisibleSource按各自真实整型PK独立seek分页(limit1..200)，完整保inactive/retired；Assignee真实父Grant/tenant链核验，悬空/坏归属显式失败，无Cartesian/N+1目录读取。方法`aload_catalog_baseline(session,*,environment)`及`alist_resource_modes/alist_grants/alist_assignees/alist_visible_sources(session,*,after_id=None,limit=200)`；catalog全模型/关联读取按真实ID分批，不以旧5001上限当完整。只读无网络/DDL/业务修改/停服参数。
+
+后续真实FGA采集/投影、六源inventory和artifact adapter另冻结，不提前写大装配。正式global manifest含全部tenant（含停用保配置）、权限/六源artifact hash、数量/零集/原失效证据；plan含权限子plan/目标model checksum及每tenant转换/回填plan hash。先持久MinIO对象读回验hash，再同run冻结每tenant，未全部冻结禁止转换；不形成自身hash环，重跑只读原artifact/不重冻。投影仍durable prepare→所有FGA成功→SQL finalize/checkpoint，既有COMMIT_UNKNOWN恢复和批量限制不改。脚本不检测/控制停服。
