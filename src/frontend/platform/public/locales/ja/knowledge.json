@@ -453,6 +453,8 @@
     "integer_at_least": "{{min}}以上の整数を入力してください",
     "integer_between": "{{min}}から{{max}}までの整数を入力してください",
     "invalid_defaults": "両方のルールの必須項目と値の範囲を確認してください。",
+    "load_failed": "既定設定を読み込めませんでした。もう一度お試しください。",
+    "loading_defaults": "既定設定を読み込んでいます…",
     "move_down": "下に移動",
     "move_up": "上に移動",
     "pending_separator": "入力した区切りルールを追加するか、消去してください。",
