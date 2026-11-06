@@ -24,6 +24,7 @@ from bisheng.core.context.tenant import (
     set_visible_tenant_ids,
     visible_tenant_ids,
 )
+from bisheng.core.database import tenant_filter
 from bisheng.core.database.tenant_filter import register_tenant_filter_events
 from bisheng.knowledge.api.dependencies import get_knowledge_space_service
 from bisheng.knowledge.domain.models import knowledge as knowledge_module
@@ -42,6 +43,14 @@ from test.knowledge.test_knowledge_space_service import _make_login_user, _make_
 
 MODULE = "bisheng.knowledge.domain.services.knowledge_space_service"
 BUSINESS = "bisheng.permission.application.business_authorization"
+
+
+@pytest.fixture(autouse=True)
+def knowledge_tenant_discovery(monkeypatch):
+    register_tenant_filter_events()
+    # Earlier native SQL fixtures may register discovery under a temporary
+    # model set. Keep this module's real SELECT fence independent of order.
+    monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", tenant_filter._tenant_aware_tables | {"knowledge"})
 
 
 @pytest.fixture
