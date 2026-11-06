@@ -155,13 +155,19 @@ probe plan 为安装者本地文件，不放任何 secret：
 }
 ```
 
-`other-app` 可用 `@preflight` 指向工具自身已启动的独立 idle canary，避免首次安装还没有业务应用的循环前置；负例仍从另一个执行 Pod 发起并做监听正对照。工具运行位置须能连到计划中的正对照目标（通常是专用集群管理机/节点）。
+`other-app` 可用 `@preflight` 指向本项检查专用的 idle canary，避免首次安装还没有业务应用的循环前置。负例仍从另一个执行 Pod 发起；前后正对照都由控制域、带现有 `runtime-manager` 策略身份的无凭据 helper 实际连接同一目标。该 helper 保持未满足的 readiness gate，且工具拒绝对应 Service 的 `publishNotReadyAddresses=true`，避免进入业务端点；不增加 NetworkPolicy 或 RBAC 权限。
+
+backend、MinIO、Kubernetes API 与 DNS 的正对照仍从 installer 所在位置发起，因此该位置须能连接这些目标。DNS正对照每轮最多3次，每次沿用1秒查询窗口，两次间隔0.2秒；持续失败仍报 `dns_control_unconfirmed`，空结果、错误目标名或非布尔成功值都不能确认目标可用。应用Pod的拒绝探测保持单次：收到DNS响应即隔离失败，不通过重试掩盖实际放行。所有拒绝测试前后都必须得到真实正对照证据。
+
+私有镜像由运维预先在两个 namespace 创建 Secret，并分别设置 `execution.pullSecret` 与 `services.pullSecret`。Chart将前者写入 descriptor 的 `pull_secret`、后者写入 `control_pull_secret`；预检执行域/控制域 Pod 分别带入相应 `imagePullSecrets` 引用。工具不读取、创建、复制或挂载仓库密码。旧 descriptor 未包含控制域引用时保持缺省空值；私有镜像环境应先按新Chart渲染描述，不从执行域借用同名凭据。
 
 HMAC 由安全环境变量 `RTM_VERIFY_PLATFORM_KEY_ID`、`RTM_VERIFY_PLATFORM_SECRET` 注入，限本安装 node_id 的 manager 角色。它验证控制侧 HTTPS、签名允许/未签名拒绝及节点范围；**不能代替后续应用 Pod/SDK/材料委托链路 E2E**。
 
 `execution.canaryProfiles` 必须包含本执行域每个实际启用的 runtime/preparer 镜像的 digest 和固定版本命令，例如 Python `["python","--version"]`、Node `["node","--version"]`、static `["nginx","-v"]`。helper 也实际启动；观察原生 Node 架构、Pod spec 固定引用、CRI imageID。只是镜像清单或 Docker 本地缓存存在不会通过这项检查。
 
 工具逐项执行 15 个必需检查：namespace 预算、restricted PSA、允许及拒绝准入、可信 status 来源、删除后原子 binding 拒绝、跨 namespace RBAC、exec 拒绝、入口白名单、直连拒绝、proxy 端口允许、UDP DNS 拒绝、SQLite 卷、实际 CRI、材料 TLS、平台签名 API。危险 PodSpec 负例使用 API-server `dryRun=All`；正例用真实 Pod。网络负例在实际拒绝前后分别验证目标确实监听，connection refused、无路由、未知结果不算隔离成功。入口正反使用系统 namespace 的无凭据 helper Pod，分别采用 entry/manager/untrusted 标签，从实际网络身份发起。
+
+先以短命 helper 版本命令取得真实CRI证据，再优先执行全部 profile 的镜像校验。依赖监听的检查在消费前创建各自独立的 Running listener，保持600秒截止与独立UID，避免冷镜像拉取消耗后续监听寿命。旧实例仍在本次资源账本中，最终按可信停止及UID/RV执行回收；不延长旧Pod截止时间、不通过跳过CRI或复用过期地址来获得通过结果。镜像或监听失败会保持失败，清理异常也按独立原因报告。
 
 `verify_registry: true` 时，先在系统 namespace 创建无凭据的 helper canary，使用与 egress-proxy 相同的策略标签，检查冻结 helper/profile 基础镜像仓库、目标仓库及显式 `imageRegistryEndpoints` 的 TCP 通路。origin 沿用运行时的严格解析；域名由 installer 解析全部 TCP 地址，按 IP/端口去重，解析失败或超过 32 个目标时拒绝，不静默跳过端点。该 Pod 保持 `NotReady`（未填充的 readiness gate），并检查对应 Service 未启用 `publishNotReadyAddresses`，防止探测 Pod 进入业务代理端点；它仍可正常达到 `Succeeded`、读取结果并按原 UID 停止清理。
 

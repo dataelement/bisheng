@@ -3,7 +3,7 @@
 日期：2026-11-05。核查基线：`feat/3.1.0-beta1@0639aa623f`。
 分支：`codex/3.1.0-beta1/runtime-deployment-bugfixes`。
 
-2026-11-06 更新：修复分支已同步发布线 `f20c9cd21c`，按用户确认处理 R1–R4、R6、R9、R10。R5 保留边界说明，R7/R8 说明流程与影响，未实施这三项修复。仅交付代码和配套 CLI 分发产物，不构建或更新镜像、不部署线上。122 的历史对象运维处置与产品缺陷关闭分别记录。
+2026-11-06 更新：修复分支已同步发布线 `f20c9cd21c`，R1–R4、R6、R9、R10 已提交 `541036331d`；随后按用户确认在同一分支继续修复 R5、R7、R8。仅交付代码和配套分发产物，不构建或更新镜像、不部署线上。122 的历史对象运维处置与产品缺陷关闭分别记录。
 
 ## 待修复清单
 
@@ -13,10 +13,10 @@
 | R2 | image-check 不在日志容器白名单 | 允许固定容器名，保留路径、大小、时间范围约束 | 代码已修复 |
 | R3 | Kubernetes 配额拒绝丢失主因，误报依赖构建失败 | 受限提取原生/KubeSphere quota 原因与资源数字，Manager/Backend/CLI 分类及提示一致；普通403不得误判配额不足 | 代码已修复 |
 | R4 | API Key expires_at 丢时区后立即过期 | aware 输入转换为现有本地 naive 时间合同；保留 naive 输入和历史数据语义，不迁移历史记录 | 代码已修复 |
-| R5 | 预检 canary 漏传私有镜像拉取凭据 | 运维供应 Secret 和 namespace 内的引用配置，预检工具应将已配置引用带入 Pod，不创建/复制密码 | 已解释，本轮未改 |
+| R5 | 预检 canary 漏传私有镜像拉取凭据 | 执行/控制域分别引用已有 Secret；descriptor传递既有execution/services配置，不读取/创建/复制密码 | 代码已修复 |
 | R6 | 预检异常停止、回收与恢复闭环不完整 | 停止证明、停止授权、逐对象汇总、控制域删除确认及未知 writer 的冻结卷引用保护；Unknown 维护恢复见 runbook | 代码已修复；异常维护流程已补 |
-| R7 | 冷镜像检查消耗 listener 的有限生命周期 | 见下文流程与影响；本轮不调整检查顺序或生命周期 | 已解释，本轮未改 |
-| R8 | 网络正对照来源和瞬断处理不准确 | 见下文流程与影响；本轮不调整正对照来源或DNS重试 | 已解释，本轮未改 |
+| R7 | 冷镜像检查消耗 listener 的有限生命周期 | 镜像CRI优先，消费者检查前建立独立600秒listener，旧资源仍按UID回收，不延长期限 | 代码已修复 |
+| R8 | 网络正对照来源和瞬断处理不准确 | other-app前后用已有控制域runtime-manager身份；DNS仅正对照固定有界重试；负例不放宽 | 代码已修复 |
 | R9 | 移除配置文件自动预置管理员 | 删除启动建号逻辑与 Settings.admin；旧 YAML 忽略并固定告警；保留首次正常注册授超管 | 代码已修复 |
 | R10 | Docker 不同 cgroup 统计口径导致预算过低 | 有 limit 按承诺额度；无限制按 total_inactive_file / inactive_file / cache 存在性择一扣除；非法 usage 报采集失败 | 代码已修复 |
 
@@ -26,11 +26,11 @@
 
 ## R5、R7、R8：职责、流程与影响
 
-R5：创建私有镜像拉取 Secret、选择 namespace 并配置 `execution.pullSecret` / `services.pullSecret` 属于部署运维；动态创建 Pod 时引用既有 Secret 是工具职责。`PodPlan` 已支持 `pull_secret`，预检 `_pod` / `_control_probe` 未传递该值，属于预检工具漏传引用，不应要求业务代码存密码或复制 Secret。普通运维已正确配置后，这个遗漏仍可能让未缓存私有镜像的节点拉取失败。
+R5：创建私有镜像拉取 Secret、选择 namespace 并配置 `execution.pullSecret` / `services.pullSecret` 属于部署运维；动态创建 Pod 时引用既有 Secret 是工具职责。原 `PodPlan` 已支持 `pull_secret`，预检 `_pod` / `_control_probe` 漏传引用，运维配置正确后仍可能让未缓存私有镜像的节点拉取失败。本次通过 descriptor 的 `pull_secret` / `control_pull_secret` 分别传递两域配置，只带入 `imagePullSecrets` 名称引用，不读取或复制 Secret。
 
-R7：`InstallationVerifier.live()` 先创建共享 idle listener（8080/8092，`activeDeadlineSeconds=600`），`execute_checks()` 按检查名排序，`image-cri` 先逐个启动运行/准备镜像并等待实际 CRI。冷节点的镜像下载可能耗尽 listener 的10分钟寿命，后续 network/ingress 仍探测其旧地址，导致正对照失败。结果是必需预检失败、环境不能报告 ready 或阻断新发布；不是应用依赖文件错误，也不能由此判定实际网络有问题。它不会直接重启已有业务 Pod。
+R7原流程：先创建共享 idle listener（8080/8092，600秒），再启动并校验运行/准备镜像。冷节点下载可能耗尽listener寿命，后续网络检查对过期地址误失败，影响ready/新发布。修复后先以短命helper和每个profile取得真实CRI证据，各消费者在检查前创建独立listener；保持600秒、独立UID和R6回收记录，不跳过CRI、不续期旧Pod。失败仍明确报告，不直接重启业务Pod。
 
-R8：网络拒绝检查前后，`_control_connect()` 从安装工具所在机器连接正对照。`other-app=@preflight` 指向执行域 idle listener，而 `runtime-entry` 策略只允许控制域特定 app-proxy/runtime-manager 身份进入；安装机器可能本来就无权访问，正确的隔离因正对照身份错误被报成预检失败。DNS正对照又是安装机器单次UDP探测，瞬时丢包或延迟便产生 `dns_control_unconfirmed`。同样影响安装/周期复核及环境就绪判断，不是业务应用依赖构建流水线本身。这两项后续应分别调整探测身份/顺序，以及仅对正对照做有界重试，不能放松拒绝测试或全局网络策略。
+R8原流程：网络拒绝测试前后的正对照从installer发起；other-app只允许特定控制域身份进入，正确隔离可能被误报。DNS又是单次UDP正对照，瞬时丢包便失败。修复后other-app前后均通过控制域NotReady的runtime-manager身份helper实测，核对Service隔离、同UID及结果目标名；DNS每轮最多3次、间隔0.2秒，只有恰好匹配目标且布尔成功才确认，参数错误不重试。应用Pod的拒绝测试仍单次，任何实际DNS响应仍判隔离失败；前置失败不开始负例，后置失败不能返回成功，不修改NetworkPolicy/RBAC。
 
 ## R10：Docker 内存口径
 

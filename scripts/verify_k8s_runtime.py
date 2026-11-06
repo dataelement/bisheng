@@ -354,7 +354,11 @@ def stop_confirmed(pod, *, binding_evidence=None):
 
 def execute_checks(drivers, document, *, observed_at):
     rows, artifacts = [], {}
-    for name, driver in sorted(drivers.items()):
+    # Cold CRI pulls must finish before a bounded listener is needed by any
+    # following check. Keep the remaining checks in their stable name order.
+    for name, driver in sorted(
+        drivers.items(), key=lambda item: (item[0] != "image-cri", item[0])
+    ):
         try:
             result = driver()
             uid = result["evidence"]["uid"]
@@ -877,6 +881,7 @@ class InstallationVerifier:
             else min(self.timeout + 60, 600),
             health_path="/healthz",
             runtime_class=runtime_class,
+            pull_secret=self.document.get("pull_secret", ""),
         )
         pod = pod_template(plan)
         pod["metadata"]["name"] = "preflight-" + uuid4().hex[:20]
@@ -1018,9 +1023,25 @@ class InstallationVerifier:
         )
 
     def _admission_negative(self, *, psa=False):
-        original = next(
-            row["plan"] for row in self.created if row["resource"] == "pods"
-        )
+        metadata = (self.idle or {}).get("metadata", {})
+        uid = metadata.get("uid")
+        matches = [
+            row
+            for row in self.created
+            if row.get("resource") == "pods" and uid and row.get("uid") == uid
+        ]
+        if len(matches) != 1:
+            raise ProbeError("admission_negative_unconfirmed")
+        original = matches[0].get("plan")
+        if (
+            not isinstance(original, dict)
+            or original.get("uid") != uid
+            or original.get("kind") != "Pod"
+            or original.get("name") != metadata.get("name")
+            or original.get("namespace") != self.namespace
+            or metadata.get("namespace") != self.namespace
+        ):
+            raise ProbeError("admission_negative_unconfirmed")
         plan = copy.deepcopy(original)
         ref = str(uuid4())
         plan.update(
@@ -1331,8 +1352,20 @@ class InstallationVerifier:
         ]
         return result
 
+    def _listener(self):
+        # A consumer gets its own full, finite listener lifetime. Older canaries
+        # remain tracked for the normal UID-fenced cleanup, never overwritten
+        # in the resource ledger or kept alive by extending their deadline.
+        current = self._observe(self._pod("idle"), running=True)
+        self.idle = current
+        return current
+
+    def _with_listener(self, driver, **kwargs):
+        self._listener()
+        return driver(**kwargs)
+
     def _image(self):
-        result = self._image_one(self.idle, self.document["helper_image"])
+        result = self._image_one(self.image_probe, self.document["helper_image"])
         profiles = self.document.get("canary_profiles", [])
         if not profiles:
             raise ProbeError("runtime_profiles_not_verified")
@@ -1373,17 +1406,46 @@ class InstallationVerifier:
                     | {"expected": "allowed", "protocol": "udp-dns"}
                 ]
             }
-            if not all(item["ok"] for item in network_checks(probe)["checks"]):
-                raise ProbeError("dns_control_unconfirmed")
+            # Only the allowed control gets retries. A denied application probe
+            # must still fail on its first actual DNS response.
+            for attempt in range(3):
+                checks = network_checks(probe).get("checks")
+                if (
+                    isinstance(checks, list)
+                    and len(checks) == 1
+                    and isinstance(checks[0], dict)
+                    and checks[0].get("name") == row["name"]
+                    and checks[0].get("ok") is True
+                ):
+                    return
+                if attempt < 2:
+                    time.sleep(0.2)
+            raise ProbeError("dns_control_unconfirmed")
         else:
             with socket.create_connection((row["host"], row["port"]), timeout=2):
                 pass
+
+    def _network_control(self, row):
+        if row["name"] == "other-app":
+            # The real policy allows this control-namespace identity to reach
+            # the execution listener; the installer host need not be allowed.
+            target = {key: row[key] for key in ("name", "host", "port")} | {
+                "expected": "allowed"
+            }
+            if "protocol" in row:
+                target["protocol"] = row["protocol"]
+            self._control_probe("runtime-manager", [target])
+        else:
+            self._control_connect(row)
 
     def _network(self, group):
         targets = copy.deepcopy(self.options["network_targets"][group])
         for target in targets:
             if target.get("name") == "other-app" and target.get("host") == "@preflight":
-                target["host"] = self.idle["status"]["podIP"]
+                listener = self._listener()
+                target["host"] = listener.get("status", {}).get("podIP")
+                if not target["host"]:
+                    raise ProbeError("ingress_pod_ip_missing")
         if group == "network-direct-denied":
             if not {"backend", "minio", "kubernetes-api", "other-app"} <= {
                 row.get("name") for row in targets
@@ -1408,13 +1470,13 @@ class InstallationVerifier:
                 raise ProbeError("egress_proxy_target_invalid")
         for row in targets:
             if row.get("expected") == "denied":
-                self._control_connect(row)
+                self._network_control(row)
                 row["control_confirmed"] = True
         pod = self._pod("network", targets=targets)
         result = self._result(pod)
         for row in targets:
             if row.get("expected") == "denied":
-                self._control_connect(row)
+                self._network_control(row)
         return check_result(group, result, pod["metadata"]["uid"])
 
     def _control_probe(self, role, targets):
@@ -1456,6 +1518,7 @@ class InstallationVerifier:
             cpu_millicores=50,
             mode="image",
             deadline_seconds=self.timeout + 60,
+            pull_secret=self.document.get("control_pull_secret", ""),
         )
         pod = pod_template(plan)
         # Reuse the real policy label without serving traffic through its Service.
@@ -1512,6 +1575,13 @@ class InstallationVerifier:
                 "--limit-bytes=65536",
             ]
         )
+        if (
+            self.api.get(
+                "pod", observed["metadata"]["name"], namespace=self.api.control
+            )["metadata"]["uid"]
+            != observed["metadata"]["uid"]
+        ):
+            raise ProbeError("control_probe_identity_changed")
         rows = [
             line[len(_RESULT) :]
             for line in response.stdout.splitlines()
@@ -1520,15 +1590,19 @@ class InstallationVerifier:
         if len(rows) != 1:
             raise ProbeError("control_probe_result_missing")
         try:
-            check_result(
-                "network-ingress", json.loads(rows[0]), observed["metadata"]["uid"]
-            )
+            result = json.loads(rows[0])
+            if [item["name"] for item in result["checks"]] != [
+                item["name"] for item in targets
+            ]:
+                raise ValueError()
+            check_result("network-ingress", result, observed["metadata"]["uid"])
         except (ValueError, TypeError, KeyError):
             raise ProbeError("control_probe_failed") from None
         return observed
 
     def _ingress(self):
-        host = self.idle.get("status", {}).get("podIP")
+        listener = self._listener()
+        host = listener.get("status", {}).get("podIP")
         if not host:
             raise ProbeError("ingress_pod_ip_missing")
 
@@ -1593,12 +1667,14 @@ class InstallationVerifier:
     def live(self):
         drivers = {
             "namespace-budget": self._namespace_budget,
-            "restricted-psa": lambda: self._admission_negative(psa=True),
-            "admission-create": self._admission_negative,
-            "status-provenance": self._status,
+            "restricted-psa": lambda: self._with_listener(
+                self._admission_negative, psa=True
+            ),
+            "admission-create": lambda: self._with_listener(self._admission_negative),
+            "status-provenance": lambda: self._with_listener(self._status),
             "binding-delete-fence": self._binding_fence,
             "rbac-namespace": self._rbac,
-            "no-exec": self._no_exec,
+            "no-exec": lambda: self._with_listener(self._no_exec),
             "storage-sqlite": self._storage,
             "image-cri": self._image,
             "network-ingress": self._ingress,
@@ -1620,7 +1696,11 @@ class InstallationVerifier:
             drivers["sandbox-" + requested] = lambda: self._sandbox(requested)
         report, probe_error = None, None
         try:
-            self.idle = self._observe(self._pod("idle"), running=True)
+            # Warm/verify the helper with a finite one-shot command. The
+            # listener is created only when a subsequent check consumes it.
+            self.image_probe = self._observe(
+                self._pod("idle", command=("python", "--version"))
+            )
             report = execute_checks(drivers, self.document, observed_at=time.time())
             return report
         except BaseException as error:

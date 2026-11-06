@@ -265,8 +265,22 @@ def test_dangerous_admission_negative_is_server_dry_run(monkeypatch):
     verifier = tool.InstallationVerifier.__new__(tool.InstallationVerifier)
     verifier.api = Api()
     verifier.namespace = "runtime-apps"
-    verifier.idle = {"metadata": {"uid": str(uuid4())}}
-    verifier.created = [{"resource": "pods", "plan": {"template": template}}]
+    uid = str(uuid4())
+    verifier.idle = {"metadata": {"uid": uid, "name": "preflight-base", "namespace": "runtime-apps"}}
+    verifier.created = [
+        {
+            "resource": "pods",
+            "uid": uid,
+            "name": "preflight-base",
+            "plan": {
+                "uid": uid,
+                "kind": "Pod",
+                "name": "preflight-base",
+                "namespace": "runtime-apps",
+                "template": template,
+            },
+        }
+    ]
     verifier._plans = lambda *args, **kwargs: None
     verifier._wait = lambda callback: callback()
     assert verifier._admission_negative(psa=True)["ok"]
@@ -1606,8 +1620,23 @@ def negative_probe_verifier(tool, *, outcome="psa", initial_failure=False, clean
         },
     }
     verifier = tool.InstallationVerifier.__new__(tool.InstallationVerifier)
-    verifier.namespace, verifier.idle = "runtime-apps", {"metadata": {"uid": str(uuid4())}}
-    verifier.created = [{"resource": "pods", "plan": {"template": template}}]
+    uid = str(uuid4())
+    verifier.namespace = "runtime-apps"
+    verifier.idle = {"metadata": {"uid": uid, "name": "preflight-base", "namespace": "runtime-apps"}}
+    verifier.created = [
+        {
+            "resource": "pods",
+            "uid": uid,
+            "name": "preflight-base",
+            "plan": {
+                "uid": uid,
+                "kind": "Pod",
+                "name": "preflight-base",
+                "namespace": "runtime-apps",
+                "template": template,
+            },
+        }
+    ]
     verifier.plans, verifier.calls = {}, []
 
     def plans(ref, plan=None, *, remove=False):

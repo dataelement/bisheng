@@ -5,7 +5,7 @@
 
 ## 交付范围
 
-用户确认修复 R1、R2、R3、R4、R6、R9、新增 R10。R5 仅解释部署/工具职责，R7/R8 仅说明流程与影响；细节见[问题清单](runtime-deployment-bug-list-20261105.md)。
+用户先确认修复 R1、R2、R3、R4、R6、R9、新增 R10，已提交 `541036331d`；随后继续确认在同一分支修复 R5、R7、R8。三项补修的代码基线为该提交，细节见[问题清单](runtime-deployment-bug-list-20261105.md)。
 
 用户随后明确“先只修复代码”。本轮没有构建、推送或更新容器镜像，没有操作线上集群、数据库、配额或 cgroup 配置。CLI wheel 是后端下载工具包的仓库分发合同，随源码同步重建；不代表后端或 Runtime Manager 镜像已经更新。
 
@@ -17,7 +17,10 @@
 | R2 | `image-check` 加入固定日志容器白名单，原 Pod 名、namespace、行数、时间、1MiB限制保留。 |
 | R3 | 只有明确的HTTP403 Status/Forbidden与配额数量才产生 `k8s_quota_exceeded`；只传递固定资源键的 requested/used/limit。Manager事实、Backend持久化/发布失败、CLI保留原因，准备阶段16226、其它16125、CLI退出14。普通403不判配额，无Pod时不伪造构建日志。 |
 | R4 | 签发/更新请求的 aware expires_at 转为服务器本地 naive 时间；数据库历史值、无时区输入、omit/None语义和PAT上限保持，不迁移数据。 |
+| R5 | execution/services已有拉取Secret名分别渲染为descriptor的pull_secret/control_pull_secret，预检两域各自引用；不读取/创建/复制Secret，允许不同namespace与不同名称、空值及旧descriptor缺省。 |
 | R6 | 对齐普通/init/ephemeral容器可信停止判据，补齐stop_confirmed，按UID/RV解除finalizer并确认执行/控制域对象真正消失。单个失败继续回收独立安全对象，但未知旧writer的冻结计划引用仍保护共享PVC，关联不明保守保留。 |
+| R7 | 实际镜像CRI优先执行；短命helper提供CRI证据，各消费者前创建独立600秒listener并保持原UID跟踪和回收。冷镜像前置不消耗监听寿命，监听失败不复用旧Pod或继续消费。 |
+| R8 | other-app前后用已有runtime-manager策略身份的NotReady控制域helper，前后均实测成功才可确认拒绝；DNS只对正对照3次/0.2秒有界重试，空/错名/非布尔结果拒绝，负例单次可达即失败。 |
 | R9 | 删除Settings.admin及启动预置账户逻辑。旧YAML只固定告警后忽略admin，不打印值；其它未知键仍拒绝。首次正常注册仍走原超管路径，后续注册为普通角色。 |
 | R10 | 有正内存上限继续按承诺额度，无上限才按Docker统计字段计算working set。按存在性选择v1/v2/旧Docker缓存字段，零值有效，异常缓存用总usage，非法usage阻断心跳预算发布；原80%、2048MiB、取整和资源预约保持。 |
 
@@ -64,3 +67,27 @@ CLI：`3.0.0.post3`，SHA256 `6fac8457ad951ebdb3725ac9cc795eb074daad31209ddee286
 | 文档同步 | F059 design、当前配置模板、fixture说明、问题清单与维护runbook同步；PASS |
 
 最终R1/R2/R10非作者七维复核同样PASS，无未解决P1/P2。整体代码审查PASS；本报告不把代码验收当作生产部署验收。
+
+## 同分支补修：R5、R7、R8
+
+代码基线 `541036331d`。本段为用户追加确认后的验证记录，前述首批回归记录与既有失败限制保留。
+
+- R5：实际Helm渲染→descriptor→执行/控制域Pod，验证不同namespace、不同Secret名、仅一域配置、均为空及旧descriptor缺省；只传引用，不创建Secret对象、不读取密码或挂载凭据。
+- R7：模拟4个profile各175秒冷拉取，每项在默认180秒窗口内、总计700秒超过旧listener寿命；CRI证据仍来自真实观察对象，所有消费者的listener均在镜像阶段后新建，保持600秒、新UID、完整回收记录。失败不消费旧监听，不掩盖原探测/清理错误。
+- R8：other-app前后用真实控制域runtime-manager角色canary，前置失败不创建负例、后置失败不返回成功；核对现有Chart策略身份、NotReady gate、Service隔离、日志后的UID和结果目标名。DNS正对照验证首次成功/瞬断恢复/持续失败、空结果/错名/非布尔值及参数错误；拒绝侧收到一次DNS响应即失败，不重试到通过。
+
+独立审查进一步发现并修复R7的旧计划引用：准入负例不能复制最早helper的冻结计划，否则继承冷启动前的旧期限。现按当前listener UID唯一匹配并核对plan UID/kind/name/namespace；无匹配、重复或错配在计划写入和dry-run前拒绝。测试覆盖旧helper计划已过期但当前listener计划有效的两类负例，以及7个身份不明情形；不续期旧计划。
+
+最终组合命令（cwd=`src/runtime-manager`，使用已有Python环境及本地Helm）：
+
+```sh
+HELM_BIN=/private/tmp/helm-3.14.3/darwin-arm64/helm PYTHONPATH=. python -m pytest \
+  tests/test_k8s_installation.py tests/test_k8s_pull_secrets.py \
+  tests/test_k8s_preflight_listener.py tests/test_k8s_preflight_network.py \
+  tests/test_k8s_capabilities.py tests/test_k8s_canary.py \
+  tests/test_k8s_templates.py tests/test_k8s_admission.py -q
+```
+
+结果：**579 passed**，包括本轮35项新回归；该选择无失败或跳过。原installation用例的本机临时HTTP API替身需要本地监听权限，只用于离线Helm lookup模拟，不访问线上。5个变更Python文件Ruff check/format、diff检查通过，格式化前后预检脚本AST一致。R7/R8的非作者七维最终复审均PASS，无未解决P1/P2；R5由主代理复核映射、权限边界及渲染测试。
+
+本次补修未改NetworkPolicy/RBAC、业务API、资源预约、镜像标签或CLI分发包。没有访问线上集群、构建/推送镜像或执行部署；旧镜像中的工具行为需后续经授权交付后才改变。

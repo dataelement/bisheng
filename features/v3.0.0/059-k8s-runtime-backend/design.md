@@ -426,6 +426,9 @@ Docker诊断通过既有 `PlatformClient.node_snapshot()` 读取权威capacity�
 | CI 并发锁若按 ref 分组，而发布标签只按版本产生 | 不同入口同时发布同一版本，存在性检查不能阻止检查后覆盖竞争 | `.github/workflows/runtime-images.yml` 按 `inputs.version || github.ref_name` 分组；仅约束此仓库工作流，仓库外写入仍需权限/不可变策略 |
 | v2预检容量拒绝为16125而legacy为16226 | CLI若只登记legacy码将容量不足显示为未知错误并exit19 | `bisheng_cli/errors.py`两码映射既有EXIT_CAPACITY；实际分发wheel及manifest已同步，T264/T265已实现 |
 | 原生或 KubeSphere 的配额拒绝都是403，但403也可能表示RBAC或其它准入拒绝 | 丢失配额原因会误报依赖构建失败；只按403归因又会误导权限故障 | `k8s_quota_diagnostics.py`仅从明确 Status/Forbidden 配额数量提取；`operations.py`、backend失败事实与CLI保留同一安全原因，R3跨层合同测试验证 |
+| 预检动态Pod未继承各namespace已配置的拉取Secret引用 | 控制面能启动，但私有helper/profile在未缓存节点的预检仍拉取失败 | descriptor的`pull_secret`/`control_pull_secret`分别来自execution/services配置，预检只带名称引用，不读取/复制Secret；Helm→descriptor→Pod回归 |
+| 冷镜像校验与其它检查共用一个已开始计时的listener | 多镜像下载吃掉600秒期限，后续网络/入口检查对过期目标误失败 | 镜像CRI优先；短命helper提供CRI证据，各消费者创建独立限时listener，旧实例保留UID回收记录；R7冷启动与失败回归 |
+| 正对照由installer访问仅允许控制面身份的other-app目标，DNS又无瞬断容忍 | 正确隔离或瞬时DNS丢包被误报为预检故障 | other-app前后均使用现有runtime-manager策略身份的NotReady控制域helper；DNS仅正对照3次/0.2秒有界重试，拒绝测试不重试；R8回归 |
 | 原 Protocol 是 Docker API 形状，目录逻辑散落在多个模块 | 加 K8s 文件后仍然访问 manager 本机路径或 Docker | 新 `executors/`；原 operations/preparer/data API 统一依赖能力接口 |
 | RWO 是单节点挂载，不是单 Pod 或进程写锁 | 同节点新旧应用或维护并发写生产库 | `executors/kubernetes.py`、资源账本、停止确认及固定生产位置准入 |
 | ClusterIP 不能默认由集群外平台主机访问 | 平台与 Pod 均健康，发布唤醒/应用访问却超时 | 安装 values 的共享 entry/control 私网接入及端到端连通性探测 |
@@ -858,3 +861,5 @@ T242–T245已实现并本地L1通过，源6f254f337（backend992905292、runtim
 2026-10-23 开发整合修订：刷新 R32/268-of-272 当前快照、owner 数据与初始化实证；已知坑同步控制器交接与 CI 发布锁。按用户先开发收尾合并并推送的授权执行，未改变规格、存储/安全合同或未验事项。
 
 2026-11-06 R3：修正既有AC-08/09配额故障归因的实现快照，补齐Forbidden白名单数量→manager终态事实→backend持久化/发布五元组→CLI容量提示。原生、KubeSphere包装、普通403、非法数量、终态清理重试及跨层合同测试通过；CLI兼容补丁版3.0.0.post3的wheel/manifest同步，干净venv及新登录shell验收通过。此处记录代码与分发产物验证，不代表镜像已更新或线上已部署。
+
+2026-11-06 R5/R7/R8：按用户继续修复预检交付缺陷。现有execution/services拉取Secret分别进入动态canary，新增非凭据descriptor字段`control_pull_secret`；镜像CRI优先于独立限时listener，正对照other-app使用已有runtime-manager身份且保持Service端点隔离；DNS只对正对照做固定有界重试。没有新凭据权限、NetworkPolicy放宽或业务API变更，没有构建镜像或部署线上。若策略身份或Helper结果合同变化，须先更新对应正/负实证与测试，不以放宽隔离替代适配。
