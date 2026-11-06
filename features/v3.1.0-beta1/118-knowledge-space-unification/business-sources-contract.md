@@ -228,3 +228,7 @@ KN 私有模型身份和命名清理统一沿既有 `_resolve_tenant_id`：单�
 通用Knowledge目标0/1/3的生命周期规则不扩大具体APP RetrievalFacade原0/3能力。APP新保存及完整来源execute含QA(type1)时拒绝；历史管理保原ID逐行标unsupported，不改通用KN Owner/历史配置。此前type1仅由fake retrieval证明参数透传的首绿，不是APP支持QA的证据。
 
 KN明确尚未写的T501/T502三叶（专用红测试、两个rebuild worker）转交WORKER独立lane，KN不并改。受控逐文件partial结果按原规则标失败文件，正常步骤完成后finalize B/PUBLISHED；全局异常、过期或准入失败不无条件发布成功/解除pending，保当前业务stage和诊断供后续处理恢复。旧无stage/无期望消息按前节IO前拒绝。T591将旧仅SimpleNamespace/DAO测试迁到真实stage，明确原全局异常强制PUBLISHED行为与新未完成stage保护的差异；不扩完整Processing/外部在途竞态框架。
+
+### 状态查询不继续生成旧消息（T593–T594）
+
+最后调用方盘点确认 Space.info 与旧个人库 status 仍对非 Published 状态派发无期望的三参数 rebuild。查询只保原可见准入、状态/错误提示与阶段诊断，移除该退休副作用，不从 GET 补造新操作/stage/任务命令。显式模型变更由已有事务 Owner 在 commit 后派发7字段；合法重试/恢复由后续任务处理入口承担，不借 visible 查询授予重建能力。已退役个人库恢复仍在spec排除项，不新增自动恢复框架。

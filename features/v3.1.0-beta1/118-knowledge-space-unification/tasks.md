@@ -4693,6 +4693,22 @@
   **覆盖 AC**: AC-68, AC-71, AC-79, AC-83, AC-86, AC-89, AC-92\
   **验证 / 完成条件**：明确旧signature失败，固定提交独立复查与组合通过。
 
+- [ ] **T593 · 状态查询不得继续派发旧重建消息红测**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_query_rebuild_side_effects.py`\
+  **逻辑 / 测试上下文**：实际Space.info和旧private status只读状态/保原可见授权与响应，不因FAILED/BUILDING在GET派发旧三参消息；部分状态和阶段诊断原行为保留。退休个人库恢复不新增，显式模型变更派发仍沿唯一7字段Owner。\
+  **依赖**：T495, T502\
+  **覆盖 AC**: AC-34, AC-68, AC-71, AC-79, AC-83, AC-86, AC-89, AC-92\
+  **验证 / 完成条件**：两实际查询红→绿，无queue/新operation/模型改动，固定提交独立复查及主组合。
+
+- [ ] **T594 · 移除查询中的退休自动重建派发**
+  **类型 / Owner**：实现 / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/api/endpoints/knowledge.py`；`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`\
+  **逻辑 / 测试上下文**：仅移除get_knowledge_status/get_space_info对非Published的旧三参自动重建；保查询权限/原状态提示及阶段诊断，不补造stage或新操作、不将visible查询变成重建授权，不增加重试框架。\
+  **依赖**：T593\
+  **配对测试**：T593\
+  **验证 / 完成条件**：固定红绿/独立复查，显式改模型7字段路径及info旧回归保持。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
