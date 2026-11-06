@@ -57,7 +57,7 @@ def resolve_file_processing_snapshot(
     file_overrides=None,
     legacy_split_rule=None,
 ) -> EffectiveProcessingSnapshot:
-    extension = (file_name or "").rsplit(".", 1)[-1].lower()
+    extension = "md" if file_source == "web_link" else (file_name or "").rsplit(".", 1)[-1].lower()
     kind = (
         "web"
         if file_source == "web_link"
@@ -72,10 +72,14 @@ def resolve_file_processing_snapshot(
     if legacy_split_rule is not None:
         payload = json.loads(legacy_split_rule) if isinstance(legacy_split_rule, str) else deepcopy(legacy_split_rule)
         actual = FileProcessBase.model_validate(payload)
+        table = actual.excel_rule.model_dump(mode="json")
+        start = max((table["header_start_row"] or 1) - 1, 0) + 1
+        end = max(max((table["header_end_row"] or 1) - 1, 0) + 1, start)
+        table.update(header_start_row=start, header_end_row=end, append_header=int(bool(table["append_header"])))
         resolved = ProcessingDefaults.model_validate(
             {
                 "document": actual.model_dump(include=set(DocumentProcessingRule.model_fields)),
-                "table": actual.excel_rule.model_dump(mode="json"),
+                "table": table,
             }
         )
         snapshot = ProcessingSettingsService.resolve_effective_snapshot(
