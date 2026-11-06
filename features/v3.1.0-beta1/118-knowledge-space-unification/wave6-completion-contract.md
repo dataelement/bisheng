@@ -554,3 +554,13 @@ source ES精确term document_id，size≤1000 scroll至EOF并finally清cursor，
 MoveCheckpointPort只有aload()->MoveIndexCheckpoint|None与asave(checkpoint)->None；asave成功意味着后续J1租约核验且SQL已commit，保存失败立刻停、不清源。闭集checkpoint：schema_version/operation/真实三元组/源目标空间/双R-G及index-collection摘要/policy摘要/step/source count-digest/双目标count/target payload digest；常量大小，不存chunk/embedding/URL。step仅move_target_verified或move_source_cleaned；未知/错operation/target/RG/policy不当合法完成，明确失败。
 
 后继KN/runner组须接原操作确认/F048 durable投影/J1 compact读取，源动作move与目标容器upload_file，不能复用space-edit硬门禁；暂无新版kind可从HTTP接受。最小SQL关联允许OperationPlan.space_id=源、operation='move'、operation_id=真实Job.id，Job.space_id=目标，kind='move_index'，同TX consume/create。源删除依赖用真实plan.operation_id=job.id与item.job_id关联/tenant过滤，不JSON查询，不仅筛accepted/running；源输入保护至少保到source_cleaned（含failed/obsolete），后续精确合同再实施。普通稳定对象键优先保；现copy遗留共享preview/thumbnail必须由删除manifest保护/精确共享分支处理，不照旧注释全量复制。固定space=A/folder=F配置移后可能需手动修复，只列确认impact，不自动改业务配置、禁止全部引用或搬其他文件。源空间删除与目标仍引用对象的真实验收继续原T073/T074/T089后继。
+
+## 36. 平台普通上传实际闭环：已冻结
+
+T787–T792由PLATFORM独占5生产叶：新`controllers/API/knowledgeUploads.ts`、`pages/KnowledgePage/filesUpload.tsx`、新`components/SpaceFileUploadPanel.tsx`、现`components/Files.tsx`、新`components/SpaceDirectoryToolbar.tsx`；API/路由面板/真实目录入口三对任务。原`/filelib/upload/:id`文档路由直接接SPACE，QA实际ImportQa弹窗不经过它，不为判断类型先GET root/info而增加root visible条件，不修未注册的孤立QA跳转。
+
+API只原wrapped axios：POST `/api/v1/knowledge/upload/{sid}` multipart file暂存（返回原file_path等）、POST `/api/v1/knowledge/space/{sid}/files`原注册。注册支持§33可选overrides typed字段，但此组UI先只继承模式（省略整个overrides），不借原legacy process/preview/retry或edit-only processing-settings。API可接受可选AbortSignal，不附新认证/管理pin；暂存沿现可信管理上下文，注册沿普通具体tenant。所有positive safe ID、ApiError、原响应保留。
+
+页面使用真实useKnowledgePageScope及严格sid/parent_id，只核当前root或folder `upload_file`，不额外读root信息/space.edit；无资格/unknown显示真实拒绝或重试，不直接消费旧upload流。Panel自持队列/AbortController/epoch，只读复用现DropZone的file input/格式/媒体capability和既有容量规则；scope/space/parent/卸载永久退休upload/register/polling旧响应，切回相同scope亦不复活，取消已注册资源不伪报服务端回滚。暂存成功不等于注册或解析成功，按注册实际file ID用listChildren(file_ids)核真实状态，不能靠filename/返回序号匹配。原错误保留可重试，不能吞错误或补造完成。
+
+Files将当前容器已读取的真实upload_file能力挂实际入口，Toolbar按需抽取保持单叶≤600、保目录现scope/keyword/filter/ABA及动作生命周期。所有URL保持parent与原目录语义，无全局管理列表替代普通授权。新文案优先复用已有三语key；必须新key交INT唯一locale集成，不硬编码、不加ts-ignore/eslint抑制。此闭环不宣称目录上传、per-file/高级预分段、完整版本或原T177/T179全部完成；版本需先补服务端原管理资格/目标权限及引用保护，不能前端space.edit补洞。
