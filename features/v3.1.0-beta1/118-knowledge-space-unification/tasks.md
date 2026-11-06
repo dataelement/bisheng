@@ -1431,7 +1431,7 @@
   **类型 / Owner**：前端 Platform / PLATFORM\
   **写入文件**：`src/frontend/platform/src/controllers/API/knowledgeSpace.ts`；`src/frontend/platform/src/controllers/hooks/knowledge.ts`\
   **逻辑 / 测试上下文**：按A1/J1/R3冻结 DTO封装普通/admin、settings、jobs、预检确认；react-query key带身份/租户/范围，Mock与真接口可替换；HTTP只在API层。\
-  **依赖**：T002, T007, T003, T006\
+  **依赖**：T002, T007, T003, T006, T605, T606\
   **验证 / 完成条件**：Mock序列化与合同一致；切租户/身份不复用缓存，平台类型检查；关联规格：AC-02, AC-03, AC-04, AC-05, AC-49, AC-50。
 
 - [ ] **T176 · 平台入口/三页签与创建**
@@ -1513,9 +1513,9 @@
 
 - [ ] **T187 · 客户端 API 与 Mock**
   **类型 / Owner**：前端 Client / CLIENT\
-  **写入文件**：`src/frontend/client/src/api/knowledge.ts`；`src/frontend/client/src/pages/knowledge/SpaceDetail/knowledgeSpaceTypes.ts`\
+  **写入文件**：`src/frontend/client/src/api/knowledgeProcessing.ts`（拟新增）；`src/frontend/client/src/pages/knowledge/SpaceDetail/knowledgeSpaceTypes.ts`\
   **逻辑 / 测试上下文**：A1/J1/R3前台简化状态/预检/任务DTO，React-query/Recoil保持，身份/租户key隔离；无后台高级配置。\
-  **依赖**：T002, T007, T003, T006\
+  **依赖**：T002, T007, T003, T006, T605, T607\
   **验证 / 完成条件**：Mock合同及客户端类型检查；不从platform导入页面/hooks/store；关联规格：AC-02, AC-12, AC-13, AC-49, AC-50。
 
 - [ ] **T188 · 客户端入口/选择/失效来源**
@@ -4800,6 +4800,31 @@
   **依赖**：T225\
   **覆盖 AC**: AC-78, AC-81, AC-83\
   **验证 / 完成条件**：逐卡实际验证、原断言保留、固定SHA复查后由INT勾选；不声称真实环境或全特性验收。
+
+## W6 完成阶段接缝任务（2026-11-06）
+
+- [x] **T605 · W6分批合同及真实前置登记**
+  **类型 / Owner**：基础设施 / INT\
+  **写入文件**：`features/v3.1.0-beta1/118-knowledge-space-unification/wave6-completion-contract.md`；`features/v3.1.0-beta1/118-knowledge-space-unification/tasks.md`\
+  **逻辑 / 测试上下文**：冻结已落地DTO的两端API/Mock子合同，标明尚缺的真实PROC/KN/删除与页面叶子；不猜接口或越过真实端点门禁。用户已授权测试环境，凭据不入文档。\
+  **依赖**：T604\
+  **验证 / 完成条件**：三方只读核对现有schema与调用面，逐项记录消费者和唯一Owner；本次只冻结第一子合同。
+
+- [ ] **T606 · 平台API及缓存范围合同测试**
+  **类型 / Owner**：测试 / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/test/knowledgeSpaceContract.test.ts`（拟新增）；`src/frontend/platform/src/test/knowledgeQueryScope.test.tsx`（拟新增）\
+  **逻辑 / 测试上下文**：逐字段DTO与请求路径、两类分页、错误保真、身份/具体租户/管理范围切换和迟到响应隔离；使用同形API测试port，不设生产mock开关。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-02, AC-03, AC-04, AC-05, AC-49, AC-50\
+  **验证 / 完成条件**：先提交测试并记录实际红测；T175实现后同选集验证，不以Mock声称真实API已接线。
+
+- [ ] **T607 · 客户端处理API与Mock合同测试**
+  **类型 / Owner**：测试 / CLIENT\
+  **写入文件**：`src/frontend/client/src/api/knowledgeProcessing.test.ts`（拟新增）\
+  **逻辑 / 测试上下文**：镜像现有processing DTO、request封装/envelope、accepted非完成、隐藏项与分页，验证客户端身份/tenant key，不跨应用导入实现。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-02, AC-12, AC-13, AC-49, AC-50\
+  **验证 / 完成条件**：先提交测试，T187后组合绿验；真实页面及接口联调仍分别执行。
 
 ## 自动化覆盖索引
 
