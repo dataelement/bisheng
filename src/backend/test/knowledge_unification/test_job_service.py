@@ -258,7 +258,7 @@ async def test_unassembled_kind_is_never_accepted_and_invalid_model_has_no_fallb
         assert not (await session.exec(select(KnowledgeProcessingJob))).all()
 
 
-@pytest.mark.parametrize("status", [1, 4, 5, 7])
+@pytest.mark.parametrize("status", [1, 4, 5])
 async def test_rebuild_never_silently_excludes_inflight_or_unsafe_versions(application, status):
     app = application
     async with app.context.sessions() as session:
@@ -280,3 +280,42 @@ async def test_execute_rechecks_inflight_file_state_after_confirmation(applicati
         with pytest.raises(KnowledgeProcessingConflictError):
             await create(app, session, plan)
         await session.rollback()
+
+
+@pytest.mark.parametrize("status", [3, 6, 7])
+async def test_terminal_nonparticipants_are_explicitly_confirmed_and_never_revived(application, status):
+    app = application
+    async with app.context.sessions() as session:
+        skipped = await session.get(KnowledgeFile, 82)
+        skipped.status = status
+        await session.flush()
+        plan = await precheck(app, session)
+        assert plan.can_execute and plan.requires_skip_confirmation
+        assert plan.impact["whole_version_count"] == 2
+        assert plan.impact["participating_version_count"] == 1
+        assert plan.impact["skipped_version_count"] == 1
+        stored = await session.get(KnowledgeOperationPlan, plan.confirmation_id)
+        assert len(stored.target_manifest) == 2
+        assert stored.target_revisions["82:182"]["original_status"] == status
+        assert not stored.target_revisions["82:182"]["participates"]
+        accepted = await create(app, session, plan)
+        job = await app.owner.jobs.aget(session, accepted.job_id)
+        assert job.total_count == 1
+        items = (await session.exec(select(KnowledgeProcessingItem))).all()
+        assert [item.file_id for item in items] == [81]
+        assert items[0].processing_snapshot["original_status"] == 2
+        await session.commit()
+    async with app.context.sessions() as session:
+        assert (await session.get(KnowledgeFile, 82)).status == status
+
+
+async def test_no_participant_produces_no_fake_file_or_job(application):
+    app = application
+    async with app.context.sessions() as session:
+        for ident in (81, 82):
+            (await session.get(KnowledgeFile, ident)).status = 3
+        await session.flush()
+        plan = await precheck(app, session)
+        assert not plan.can_execute and not plan.valid_items
+        assert plan.impact["skipped_version_count"] == 2
+        assert not (await session.exec(select(KnowledgeProcessingJob))).all()
