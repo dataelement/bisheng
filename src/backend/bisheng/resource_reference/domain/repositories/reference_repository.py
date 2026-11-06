@@ -443,17 +443,23 @@ class ReferenceRepository:
 
     @staticmethod
     def _target_query(targets: tuple[TargetKey, ...], *, include_space_contents: bool = False):
+        groups = {}
+        for target in targets:
+            groups.setdefault(target.target_type.value, set()).add(target.target_id)
+
+        def ids(column, values):
+            ordered = sorted(values)
+            return or_(*(column.in_(ordered[start : start + 200]) for start in range(0, len(ordered), 200)))
+
+        # One global id-ordered query, not a rescan per target group/page.
         conditions = [
-            and_(
-                BusinessResourceReference.target_type == target.target_type.value,
-                BusinessResourceReference.target_id == target.target_id,
-            )
-            for target in targets
+            and_(BusinessResourceReference.target_type == kind, ids(BusinessResourceReference.target_id, values))
+            for kind, values in groups.items()
         ]
         if include_space_contents:
             spaces = [target.target_id for target in targets if target.target_type == TargetType.KNOWLEDGE_SPACE]
             if spaces:
-                conditions.append(BusinessResourceReference.target_space_id.in_(spaces))
+                conditions.append(ids(BusinessResourceReference.target_space_id, spaces))
         return (
             select(BusinessResourceReference)
             .where(or_(*conditions) if conditions else false())
