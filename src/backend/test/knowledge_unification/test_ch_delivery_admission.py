@@ -4,6 +4,7 @@
 Core and target Owners are real; only article matching/import effects are fake.
 """
 
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -110,3 +111,28 @@ async def test_disabled_configuration_never_starts_identity_or_import_side_effec
         result = await service.deliver_to_config(101, value.config_id, ["a"], value.detected_at)
     assert result["result"] == "config_disabled"
     ChannelService.add_articles_to_knowledge_space.assert_not_awaited()
+
+
+async def test_worker_releases_its_short_source_read_transaction_before_existing_importer(delivery, monkeypatch):
+    value = delivery
+    opened = []
+
+    @asynccontextmanager
+    async def sessions():
+        async with value.context.sessions() as session:
+            opened.append(session)
+            yield session
+
+    monkeypatch.setattr(database, "get_async_db_session", sessions)
+
+    async def imported(*args, **kwargs):
+        # The normal importer opens independent write transactions for
+        # folder/space timestamps. It must not wait on this task's read locks.
+        assert len(opened) >= 2
+        assert not opened[-1].in_transaction()
+        return []
+
+    ChannelService.add_articles_to_knowledge_space.side_effect = imported
+    async with worker._service_session(include_channel_service=True) as service:
+        result = await service.deliver_to_config(101, value.config_id, ["a"], value.detected_at)
+    assert result["accepted"] == 1 and result["failed"] == {}
