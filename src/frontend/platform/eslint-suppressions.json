@@ -1958,11 +1958,6 @@
       "count": 10
     }
   },
-  "src/pages/KnowledgePage/components/Files.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
   "src/pages/KnowledgePage/components/Header.tsx": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 1
