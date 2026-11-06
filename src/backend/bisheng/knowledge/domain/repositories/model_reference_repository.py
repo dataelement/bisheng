@@ -39,10 +39,14 @@ class KnowledgeModelReferenceRepository:
         if not knowledge_ids:
             return ()
         ids = frozenset(knowledge_ids)
-        if any(
-            isinstance(row, Knowledge) and row.id in ids for row in (*session.dirty, *session.deleted, *session.new)
-        ):
-            raise ResourceReferenceInvalidError(reason="knowledge_disclosure_unflushed_source_changes")
+        for row in (*session.dirty, *session.deleted, *session.new):
+            if not isinstance(row, Knowledge):
+                continue
+            original = inspect(row).identity
+            # The current PK can already have been edited. Checking the real
+            # persistent identity also avoids lazy loading an expired PK.
+            if (original is not None and original[0] in ids) or row.__dict__.get("id") in ids:
+                raise ResourceReferenceInvalidError(reason="knowledge_disclosure_unflushed_source_changes")
         fields = (
             Knowledge.id,
             Knowledge.tenant_id,
