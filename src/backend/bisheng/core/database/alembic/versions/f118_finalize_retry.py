@@ -17,7 +17,7 @@ NEW_CHECK = "expected_job_revision >= 0 AND accepted_job_revision > expected_job
 
 
 def _normalized(value):
-    return re.sub(r'[\s()`\"]', "", value or "").casefold()
+    return re.sub(r"[\s()`\"]", "", value or "").casefold()
 
 
 def upgrade():
