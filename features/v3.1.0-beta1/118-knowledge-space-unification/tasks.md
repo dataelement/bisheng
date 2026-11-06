@@ -3962,7 +3962,7 @@
   **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
 
 - [ ] **T501 · 模型任务从业务配置及过期拒绝红测**
-  **类型 / Owner**：测试 / KN\
+  **类型 / Owner**：测试 / WORKER\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_worker_model_source.py`\
   **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
   **依赖**：T498, T493\
@@ -3970,7 +3970,7 @@
   **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
 
 - [ ] **T502 · 旧重建worker读取业务模型并finalize**
-  **类型 / Owner**：实现 / KN\
+  **类型 / Owner**：实现 / WORKER\
   **写入文件**：`src/backend/bisheng/worker/knowledge/rebuild_knowledge_worker.py`；`src/backend/bisheng/worker/knowledge/qa.py`\
   **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
   **依赖**：T501\
@@ -4652,6 +4652,38 @@
   **依赖**：T586\
   **配对测试**：T586\
   **验证 / 完成条件**：配对红绿、固定提交独立复查及主组合通过，不声称改变多租户fallback规则。
+
+- [ ] **T588 · APP保存解析和观察保原非QA能力边界红测**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_resolve.py`；`src/backend/test/knowledge_unification/test_app_saved_capabilities.py`\
+  **逻辑 / 测试上下文**：通用KN生命周期接受0/1/3不代表APP可检索QA；实际APP能力仍0/3。新保存拒QA，历史QA管理保原ID标不可用，不因通用valid假健康。\
+  **依赖**：T439, T568\
+  **覆盖 AC**: AC-68, AC-71, AC-79, AC-83, AC-89, AC-92\
+  **验证 / 完成条件**：真实SQL红绿及主组合，类型1不以fake检索Port证明可运行。
+
+- [ ] **T589 · APP来源解析和管理观察保持原支持类型**
+  **类型 / Owner**：实现 / APP\
+  **写入文件**：`src/backend/bisheng/app_publish/application/reference_resolution.py`；`src/backend/bisheng/app_publish/domain/services/capability_bus_service.py`\
+  **逻辑 / 测试上下文**：来源执行沿实际resolver守APP原0/3，完整来源含QA也须provider前拒；管理观察保ID逐行标unsupported。通用KN TargetOwner仍0/1/3，无新增权限动作或清理历史配置。\
+  **依赖**：T588, T590\
+  **配对测试**：T588, T590\
+  **验证 / 完成条件**：固定提交独立复查及组合通过，不改源码非授权热点。
+
+- [ ] **T590 · QA业务能力不能借通用有效目标放行模型**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_model_binding.py`\
+  **逻辑 / 测试上下文**：实际QA行与真实Core/APP adapter，Gateway模型guard必须whole-source拒绝；原0/1/3 fake retrieval首次绿改为0/3正例和QA真实拒绝，不伪造旧失败。\
+  **依赖**：T544\
+  **覆盖 AC**: AC-68, AC-71, AC-79, AC-83, AC-89, AC-92\
+  **验证 / 完成条件**：实际SQL红绿、原principal/typed model正例保留，固定提交独立复查。
+
+- [ ] **T591 · 旧重建可用性测试改用真实业务命令和stage**
+  **类型 / Owner**：测试 / WORKER\
+  **写入文件**：`src/backend/test/knowledge/test_rebuild_keeps_container_usable.py`\
+  **逻辑 / 测试上下文**：移除只含id/model的旧DAO假资源，以真实当前stage/来源/op/rev/gen和后台上下文验证受控逐文件部分失败仍完成finalize并PUBLISHED。全局异常/过期/guard失败不伪发布成功、不解除pending，保诊断stage；旧无stage消息明确拒绝。\
+  **依赖**：T502\
+  **覆盖 AC**: AC-68, AC-71, AC-79, AC-83, AC-86, AC-89, AC-92\
+  **验证 / 完成条件**：明确旧无条件发布与新stage合同的差异，保受控部分失败文件可用断言；相同argv组合通过，不实现完整Processing框架。
 
 ## 自动化覆盖索引
 

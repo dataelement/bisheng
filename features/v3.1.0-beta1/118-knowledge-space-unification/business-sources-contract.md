@@ -222,3 +222,9 @@ T500 的 Repository 第二叶专供清理 index 身份核验。清理可读取�
 ### 单租户 C3 有效上下文（T586–T587）
 
 KN 私有模型身份和命名清理统一沿既有 `_resolve_tenant_id`：单租户模式无显式 Context 的合法默认 tenant=1 保留；多租户缺 Context 明确 10996 并保 typed cause，绝不从客户端 ID/参数补租户或跨租户降级。不能以裸 get_current_tenant_id 是否非空额外拒绝单租户内部执行；原对象、业务 own、Session、全源与后台 proof 均保持。
+
+### APP业务类型与worker交接（T588–T591）
+
+通用Knowledge目标0/1/3的生命周期规则不扩大具体APP RetrievalFacade原0/3能力。APP新保存及完整来源execute含QA(type1)时拒绝；历史管理保原ID逐行标unsupported，不改通用KN Owner/历史配置。此前type1仅由fake retrieval证明参数透传的首绿，不是APP支持QA的证据。
+
+KN明确尚未写的T501/T502三叶（专用红测试、两个rebuild worker）转交WORKER独立lane，KN不并改。受控逐文件partial结果按原规则标失败文件，正常步骤完成后finalize B/PUBLISHED；全局异常、过期或准入失败不无条件发布成功/解除pending，保当前业务stage和诊断供后续处理恢复。旧无stage/无期望消息按前节IO前拒绝。T591将旧仅SimpleNamespace/DAO测试迁到真实stage，明确原全局异常强制PUBLISHED行为与新未完成stage保护的差异；不扩完整Processing/外部在途竞态框架。
