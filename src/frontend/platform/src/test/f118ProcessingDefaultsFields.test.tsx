@@ -67,7 +67,7 @@ it("accepts hierarchy six and preserves fractional/cleared drafts instead of coe
 it("renders one table default without per-file inputs and preserves invalid header order", () => {
   render(<TableHarness />);
   expect(screen.queryByText("setSeparately")).toBeNull();
-  const start = screen.getByRole("spinbutton", { name: "f118.headerStart" });
+  const start = screen.getByRole("spinbutton", { name: "f118.header_start" });
   fireEvent.change(start, { target: { value: "8" } });
   expect(draft()).toEqual({ ...table, header_start_row: 8 });
   const rows = screen.getByRole("spinbutton", { name: "maxRowsPerSegment" });
