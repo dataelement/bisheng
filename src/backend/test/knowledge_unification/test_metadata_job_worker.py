@@ -178,6 +178,7 @@ async def test_real_metadata_worker_visits_all_history_without_embedding_or_rebu
     job_id, _ = await fixtures.seed_accepted(execution.flow)
     original = deepcopy(execution.collection.records)
     assert (await run(execution, job_id))["state"] == "succeeded"
+    assert not any("scope_manifest" in statement for statement in execution.sql)
     async with execution.flow.context.sessions() as session:
         job = await session.get(KnowledgeProcessingJob, job_id)
         root = await session.get(Knowledge, 40)
@@ -200,7 +201,6 @@ async def test_real_metadata_worker_visits_all_history_without_embedding_or_rebu
     assert execution.events == [("milvus", 81), ("es", 81), ("milvus", 82), ("es", 82)]
     assert all(iterator.closed for iterator in execution.collection.iterators)
     assert execution.close.await_count == 2 and execution.resolve.await_count >= 4
-    assert not any("scope_manifest" in statement for statement in execution.sql)
     for pk, row in execution.collection.records.items():
         assert all(row[key] == original[pk][key] for key in ("pk", "vector", "text", "extra"))
         assert row["user_metadata"]["kept"] == original[pk]["user_metadata"]["kept"]
