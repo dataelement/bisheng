@@ -907,16 +907,19 @@ class ProcessingJobRepository:
         current_job_lease = JobLease(job.id, job.lease_token, job.claim_generation, job.lease_until)
         return ItemLease(current_job_lease, row.id, row.lease_token, row.claim_generation, row.lease_until)
 
-    async def _item_counts(self, session: AsyncSession, job: KnowledgeProcessingJob) -> dict[str, int]:
+    async def _state_counts(self, session: AsyncSession, job_id: str) -> dict[str, int]:
         with strict_tenant_filter():
             rows = (
                 await session.exec(
                     select(KnowledgeProcessingItem.state, func.count())
-                    .where(KnowledgeProcessingItem.job_id == job.id)
+                    .where(KnowledgeProcessingItem.job_id == job_id)
                     .group_by(KnowledgeProcessingItem.state)
                 )
             ).all()
-        counts = dict(rows)
+        return dict(rows)
+
+    async def _item_counts(self, session: AsyncSession, job: KnowledgeProcessingJob) -> dict[str, int]:
+        counts = await self._state_counts(session, job.id)
         total = sum(counts.values())
         expected_count = job.total_count if job.kind == "metadata_schema_change" else len(job.scope_manifest)
         if total != expected_count:
@@ -924,10 +927,33 @@ class ProcessingJobRepository:
         return counts
 
     async def aretry_eligibility(self, session: AsyncSession, job_id: str) -> RetryEligibility:
-        job = await self._job(session, job_id, lock=False, include_manifest=False)
-        counts = await self._item_counts(session, job)
+        # Eligibility is a read projection, not an execution refresh. Returning
+        # scalars preserves a caller's already loaded public/audit manifest.
+        query = select(
+            KnowledgeProcessingJob.tenant_id,
+            KnowledgeProcessingJob.kind,
+            KnowledgeProcessingJob.state,
+            KnowledgeProcessingJob.total_count,
+            KnowledgeProcessingJob.error_code,
+        ).where(KnowledgeProcessingJob.id == job_id)
+        with strict_tenant_filter():
+            job = (await session.execute(query)).one_or_none()
+        if job is None or job.tenant_id != self._tenant_id():
+            raise KnowledgeProcessingJobNotFoundError()
+        if job.kind == "metadata_schema_change":
+            expected_count = job.total_count
+        else:
+            with strict_tenant_filter():
+                manifest = (
+                    await session.exec(
+                        select(KnowledgeProcessingJob.scope_manifest).where(KnowledgeProcessingJob.id == job_id)
+                    )
+                ).one()
+            expected_count = len(manifest)
+        counts = await self._state_counts(session, job_id)
+        if sum(counts.values()) != expected_count:
+            raise KnowledgeProcessingConflictError(reason="processing_scope_incomplete")
         terminal_failure = job.state in {"failed", "partial_failed"}
-        expected_count = job.total_count if job.kind == "metadata_schema_change" else len(job.scope_manifest)
         finalize_only = (
             terminal_failure
             and job.error_code is not None
