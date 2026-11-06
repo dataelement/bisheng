@@ -475,6 +475,16 @@ export async function createSpace(
 export function getSpaceInfo(spaceId: number): Promise<KnowledgeSpaceInfo> {
   return axios.get<unknown, KnowledgeSpaceInfo>(`${spacePath(spaceId)}/info`);
 }
+export function updateSpaceBasicInfo(
+  spaceId: number,
+  body: { name: string; description: string; is_released: boolean },
+): Promise<KnowledgeSpaceInfo> {
+  return axios.put<unknown, KnowledgeSpaceInfo>(spacePath(spaceId), {
+    name: body.name,
+    description: body.description,
+    is_released: body.is_released,
+  });
+}
 export function listChildren(
   spaceId: number,
   query: KnowledgeChildrenQuery = {},
@@ -566,6 +576,7 @@ export const knowledgeSpaceApi = {
   getCreationSettings,
   createSpace,
   getSpaceInfo,
+  updateSpaceBasicInfo,
   listChildren,
   listAdminSpaces,
   getProcessingSettings,
