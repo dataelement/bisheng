@@ -147,6 +147,9 @@ class Knowledge(KnowledgeBase, table=True):
     processing_config_version: int = Field(
         default=0, exclude=True, sa_column=Column(Integer, nullable=False, server_default=text("0"))
     )
+    metadata_schema_revision: int = Field(
+        default=0, exclude=True, sa_column=Column(Integer, nullable=False, server_default=text("0"))
+    )
     model_config_revision: int = Field(
         default=0, exclude=True, sa_column=Column(Integer, nullable=False, server_default=text("0"))
     )
