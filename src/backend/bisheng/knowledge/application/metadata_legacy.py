@@ -22,6 +22,12 @@ class LegacyMetadataWriter:
         async with get_async_db_session() as session:
             await session.begin()
             current = await owner.metadata.execution.aread_configuration(session, space_id)
+            if not changes:
+                # The old protocols allow empty lists. They express no schema
+                # operation and must not manufacture a completed processing job.
+                await owner.metadata._actor(identity, space_id)
+                row = await KnowledgeModelReferenceRepository().aget(session, space_id)
+                return row.model_dump()
             plan = await service.aprecheck(
                 session,
                 space_id,
