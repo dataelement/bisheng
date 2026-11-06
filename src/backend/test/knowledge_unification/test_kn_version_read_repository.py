@@ -272,3 +272,29 @@ async def test_candidates_require_a_real_current_tenant_space_even_with_local_fi
     await catalog.seed(([root] if root is not None else []) + chain())
     with pytest.raises(SpaceFileNotFoundError):
         await catalog.repository.alist_candidates(tenant_id=101, space_id=10)
+
+
+@pytest.mark.parametrize("corruption", ["missing", "foreign", "folder", "other_document"])
+async def test_anchor_and_candidate_validate_nonprimary_members_of_the_complete_chain(catalog, corruption):
+    rows = [space(), space(20, 202), *chain(1, 2)]
+    historical = next(item for item in rows if isinstance(item, KnowledgeFile) and item.id == 10001)
+    if corruption == "missing":
+        rows.remove(historical)
+    elif corruption == "foreign":
+        historical.tenant_id = 202
+    elif corruption == "folder":
+        historical.file_type = 0
+    else:
+        rows.extend(
+            [
+                KnowledgeDocument(id=2, knowledge_id=20, primary_version_id=20001),
+                KnowledgeDocumentVersion(
+                    id=20001, document_id=2, knowledge_file_id=10001, version_no=1, is_primary=True
+                ),
+            ]
+        )
+    await catalog.seed(rows)
+    with pytest.raises(SpaceFileNotFoundError):
+        await catalog.repository.aget_anchor(tenant_id=101, file_id=10002)
+    with pytest.raises(SpaceFileNotFoundError):
+        await catalog.repository.alist_candidates(tenant_id=101, space_id=10)
