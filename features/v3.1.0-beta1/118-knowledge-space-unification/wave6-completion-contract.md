@@ -509,3 +509,18 @@ T769测试→T770唯一生产`knowledge/application/unification_sources.py`，�
 KN原业务修订摘要从现KnowledgeRow明确排除本轮neutral字段model_transition_json/model_config_revision/index_generation/processing_config_version/metadata_schema_revision/migration_origin，其余已投影旧字段含type/owner/model/物理索引/原update_time均保；neutral事实仍由§28 ResourceRow.neutral独立冻结，配置摘要仍覆盖原model/transition，不删任何事实。0→3或其他计划内变化必须由后续M3显式before/planned-after摘要核对，不能把configuration_digest或新BRS revision=1冒原业务修订。未知SQL字段不凭空加入；当前RawRepo缺字段须另冻结真实投影后再接。
 
 测试用原native六源fixture和真实extractor/name/target流程，覆盖context单次share/catalog/knowledge读取、提供context不重扫、0/401知识页及多source/slot线性计数、跨tenant/run/writer/实例/TX拒绝、所有原6来源/retired/零root语义保持。独立变更真实row更新时间、WF/APP父及版本状态、AS/CH links、defaults row id和值、KN旧model/owner/type/索引必须改变相应business_revision_digest；KN neutral单列变化不混旧业务摘要。保无raw配置泄露、外部no_autoflush/零DML及原20用例回归；新header消费者仅未来M2，不改extractor版本/当前引用业务协议。
+
+
+§31旧闭集断言接缝（已冻结）：T771唯一test_migration_source_inventory.py，仅在原fields(SourceInventoryRecord)精确列表追加必填business_revision_digest，并断言真实64hex；所有原slots/frozen/秘密字段/数量/退休及物理事实断言保留。先T769红→T770实际实现→T771单叶独立提交；不改旧fixture来造业务修订或删除断言。
+
+## 32. M2六来源闭集分页artifact编码：已冻结
+
+INT负责T772测试→T773唯一生产`knowledge/application/unification_source_codec.py`，只纯JSON编解码，供后续正式M2和初始回填读取同一真实artifact。复用§31四种真实Root/Source/Reference/Retired记录及现两类MigrationTargetFact/SourceKey/SourceRootKey/TargetKey，不接Raw Repository Row/任意dict/ORM/provider配置，不开SQL/网络、不授Owner收据/legacy证据、不写run/BRR/ready。
+
+`encode_source_page(*,run_id:str,tenant_id:int,page_index:int,records:tuple[四种record,...])->bytes`；`decode_source_page(content:bytes,*,run_id,tenant_id,page_index)->DecodedSourcePage`。DecodedSourcePage为frozen/slots，tenant_id/page_index/records只保存闭集DTO。run沿现artifact合法标识规则（长度≤64），tenant正int非bool，page_index非负int非bool；records严格tuple、≤199项，允许空页（明确空租户）。保持顺序、不静默去重；完整跨页source count/reference digest/唯一性仍由后续编排校验，不称该codec完成完整盘点。
+
+内容沿现UnificationArtifactStore envelope恰好{schema_version:1,run_id,kind:'sources',records:list}。records第一个固定闭集header恰好{record_type:'page',tenant_id,page_index,record_count}，其后≤199业务record，所以含header每对象≤200闭集record；空页仍有tenant/index头，不混用其他tenant的空对象。各业务record仅增加record_type:'root'|'source'|'reference'|'retired'判别，字段严格等现四DTO（含business_revision_digest）；keys只现真实显式字段/枚举值，lifecycle以标量list编码并还原tuple；Reference中的physical_fact仅现实际Fact闭集并与target相同key，不能塞名称/内容/config。不同target tenant/不在线/坏父等原始scalar事实可编码，它们是预检事实而非授权；不能在codec把foreign过滤成missing或赋予可调用性。
+
+规范UTF8 JSON用ensure_ascii=False/sort_keys/separators及allow_nan=False，最大16MiB，零字节/超限/非bytes/重复键/非规范编码/NaN/额外字段/未知记录/枚举/错run-tenant-index/count/target与fact键错明确10998机器reason，不输出payload；所有digest字段严格64小写hex。Source/Root/Target键走现构造及规范投影，bool/float不能冒整数；nullable原fact scalar按真实类型保留，不借shape校验修数据。只接受精确已登记DTO类型，不因dataclass未来加字段自动导出；新字段必须显式改闭集合同。编码的canonical bytes能直接交现持久store.aput_canonical(kind='sources')，读回decode后仍须后续全页manifest/hash/原业务事实验证才可引用初始化，绝不单凭客户端字典签发证据。
+
+测试必须真实四DTO+双physical Fact roundtrip、跨页199/200边界/空页区分tenant、中文及原lifecycle、dataclass frozen/slots与非法shape/duplicate JSON/错header/错fact/digest/nonfinite/16MiB预算；既有实际UnificationArtifactStore fake-transport读回可组合，但不假称MinIO实测/正式M2。可按已冻结§31 DTO接口与T770并行编码，最终真实组合绿及固定独立审后才合入/闭卡；不为并行给生产加兼容旧缺字段或伪造header事实。
