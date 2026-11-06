@@ -57,7 +57,7 @@ def _login_participation_metrics() -> list[MetricConfig]:
         )
         for field, name in (
             ("participation_rate", "全员参与度占比"),
-            ("logged_in_employee_count", "累计登录人次"),
+            ("logged_in_employee_count", "实际登录人数"),
             ("active_employee_count", "全员有效用户数"),
         )
     ]
