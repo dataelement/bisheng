@@ -41,6 +41,9 @@ function SpaceDetail({
 }: SpaceDetailProps) {
   const { t } = useTranslation("knowledge");
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const fileStatus =
+    searchParams.get("fileStatus") === "abnormal" ? "abnormal" : "all";
   const instance = useId();
   const facts = useQuery<KnowledgeSpaceInfo | SpaceFolderParent[]>({
     queryKey: [
@@ -108,6 +111,7 @@ function SpaceDetail({
         </Button>
       )}
       <Files
+        key={fileStatus}
         scope={scope}
         spaceId={spaceId}
         parentId={parentId}
