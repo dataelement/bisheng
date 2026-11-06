@@ -5697,6 +5697,25 @@
   **依赖**：T708\
   **验证 / 完成条件**：三语新key/插值完全一致，现有i18n检查无新增问题；不把独立文案完成当页面或E2E完成。
 
+## W6迁移APP原名目录线性解析前置
+
+- [ ] **T710 · 原名称解析语义与线性复杂度测试**
+  **类型 / Owner**：测试 / MIG\
+  **写入文件**：`src/backend/test/knowledge_unification/test_migration_name_index.py`\
+  **逻辑 / 测试上下文**：原Port对照bare/qualified/slash/歧义/离线/不可见模型，KN0/3名称及QA/退休排除、显式ID无fallback、坏目录拒绝；大量不同slots真实属性读取预算不形成请求×目录全扫。\
+  **依赖**：T694, T704\
+  **覆盖 AC**: AC-56, AC-63, AC-64, AC-70, AC-71, AC-87, AC-88, AC-89, AC-93\
+  **验证 / 完成条件**：先真实红/首绿，原语义与性能分别举证；无sharing生产装配不勾M2整卡。
+
+- [ ] **T711 · 原APP名称线性索引**
+  **类型 / Owner**：后端 Application / MIG\
+  **写入文件**：`src/backend/bisheng/knowledge/application/unification_names.py`\
+  **逻辑 / 测试上下文**：W6§18纯一次编译原NameCatalog与KN名字目录，逐slot O(1)索引及原错误；不自授Root共享、不写/查外部系统、不改变声明。\
+  **依赖**：T710\
+  **配对测试**：T710\
+  **覆盖 AC**: AC-56, AC-63, AC-64, AC-70, AC-71, AC-87, AC-88, AC-89, AC-93\
+  **验证 / 完成条件**：配对/原APP解析组合通过，固定独立审、C2静态；不是Source授权或legacy证据。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
