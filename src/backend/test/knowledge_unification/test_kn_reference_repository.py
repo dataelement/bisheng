@@ -198,3 +198,30 @@ async def test_persistent_identity_and_write_tenant_cannot_be_forged(store, bad)
 @contextmanager
 def _unchanged():
     yield
+
+
+async def test_database_cas_rejects_a_stale_identity_map_even_for_same_model_request(store):
+    sync, engine = store
+    before = rows(sync)
+    repo = KnowledgeModelReferenceRepository()
+    async with AsyncSession(engine) as session:
+        row = await repo.aget(session, 10)
+        await session.execute(
+            sa.update(Knowledge)
+            .where(Knowledge.id == 10, Knowledge.tenant_id == 101)
+            .values(model_config_revision=5)
+            .execution_options(synchronize_session=False)
+        )
+        assert row.model_config_revision == 4
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await repo.aapply_model_configuration(
+                session,
+                row,
+                model="11",
+                transition=None,
+                expected_revision=4,
+                expected_generation="generation-4",
+                new_generation="generation-5",
+            )
+        await session.rollback()
+    assert rows(sync) == before
