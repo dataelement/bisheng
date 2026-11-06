@@ -217,9 +217,13 @@ def create_app() -> FastAPI:
             elif not isinstance(content, str):
                 return _error("Only text content is supported")
         stream = body.get("stream", False)
-        options = body.get("stream_options") or {}
+        options = body.get("stream_options")
+        if options is None:
+            options = {}
         if type(stream) is not bool or not isinstance(options, dict):
             return _error("stream must be boolean and stream_options an object")
+        if "include_usage" in options and type(options["include_usage"]) is not bool:
+            return _error("include_usage must be boolean")
         number = state.record_chat(stream)
         common = {"id": f"chatcmpl-f118-{number}", "created": int(time.time()), "model": "f118-chat"}
         usage = {"prompt_tokens": 1, "completion_tokens": 4, "total_tokens": 5}
