@@ -81,18 +81,18 @@ async def test_candidate_does_not_expand_current_tenant_to_static_root_sharing(s
 
 
 @pytest.mark.parametrize(
-    "request",
+    "bad_request",
     [
         SourceReadRequest("assistant", "own"),
         SourceReadRequest("channel_sync", "own", "other"),
         SourceReadRequest("channel_sync", "own", purpose="inspect", inspect_token="not-channel-evidence"),
     ],
 )
-async def test_request_cannot_substitute_source_type_version_or_inspect_credential(source, request):
+async def test_request_cannot_substitute_source_type_version_or_inspect_credential(source, bad_request):
     context, _, owner, _ = source
     async with context.sessions() as session, session.begin():
         with pytest.raises(ResourceReferenceInvalidError):
-            await owner.aresolve_source(session, request, context.user)
+            await owner.aresolve_source(session, bad_request, context.user)
 
 
 async def test_malformed_stored_folder_is_not_sanitized_to_space_root(source):
