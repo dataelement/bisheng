@@ -51,7 +51,17 @@ class BrokerRedis(NativeRedis):
 
     async def scan(self, cursor=0, *, match, count, _type=None, target_nodes=None):
         self.scan_types.append(_type)
-        result = await super().scan(cursor=cursor, match=match, count=count, target_nodes=target_nodes)
+        # Redis glob backslash escapes one literal character; Python fnmatch
+        # instead needs a bracket expression for escaped *, ? and brackets.
+        translated, offset = "", 0
+        while offset < len(match):
+            value = match[offset]
+            if value == "\\" and offset + 1 < len(match):
+                offset += 1
+                value = {"*": "[*]", "?": "[?]", "[": "[[]", "]": "[]]"}.get(match[offset], match[offset])
+            translated += value
+            offset += 1
+        result = await super().scan(cursor=cursor, match=translated, count=count, target_nodes=target_nodes)
         if _type is None or type(result) not in (tuple, list) or len(result) != 2:
             return result
         cursor, keys = result
@@ -446,3 +456,27 @@ async def test_owned_builder_uses_actual_native_client_pool_without_connecting(m
         assert len(reader._owned_clients) == 2
     await reader.aclose()
     assert reader._owned_clients == []
+
+
+@pytest.mark.parametrize("prefix", ["[celery]:", "celery?:", "celery*:", "celery\\:"])
+async def test_literal_redis_keyprefix_globs_find_queues_and_original_bindings_without_overscan(
+    module, original, prefix
+):
+    original.config = BrokerReadConfiguration.from_conf(
+        messages.conf(broker_transport_options={"global_keyprefix": prefix})
+    )
+    original.redis.lists = {
+        prefix + "knowledge_celery": [raw_message()],
+        prefix + "historical": [raw_message()],
+        "celeryX:other": [b"ordinary unrelated text"],
+    }
+    original.redis.hashes, original.redis.zsets = {}, {}
+    original.redis.sets = {prefix + "_kombu.binding.old": {b"route\x06\x16\x06\x16historical"}}
+    before = original.redis.snapshot()
+    rows = await read(module, original)
+    assert len(rows) == 2 and all(row.data["tenant_id"] == 101 for row in rows)
+    assert original.redis.snapshot() == before
+    original.redis.lists[prefix + "historical"] = [b"malformed knowledge queue"]
+    with pytest.raises(KnowledgeOperationPlanConflictError) as failure:
+        await read(module, original)
+    assert failure.value.kwargs["reason"] == "migration_broker_invalid_envelope"
