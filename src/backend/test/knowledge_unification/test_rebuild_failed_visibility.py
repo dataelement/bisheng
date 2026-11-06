@@ -12,6 +12,8 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.knowledge.domain.models import knowledge as knowledge_model
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileStatus
@@ -34,7 +36,13 @@ async def visibility(current_tenant, monkeypatch):
     async with engine.begin() as connection:
         await connection.run_sync(
             lambda conn: SQLModel.metadata.create_all(
-                conn, tables=[KnowledgeFile.__table__, KnowledgeDocument.__table__, KnowledgeDocumentVersion.__table__]
+                conn,
+                tables=[
+                    Knowledge.__table__,
+                    KnowledgeFile.__table__,
+                    KnowledgeDocument.__table__,
+                    KnowledgeDocumentVersion.__table__,
+                ],
             )
         )
 
@@ -45,6 +53,12 @@ async def visibility(current_tenant, monkeypatch):
 
     statuses = {1: 2, 2: 3, 3: 1, 4: 4, 5: 5, 6: 6, 7: 7, 8: 2, 9: 2}
     async with sessions() as session:
+        session.add_all(
+            [
+                Knowledge(id=10, tenant_id=101, user_id=7, type=3, name="idle", state=1),
+                Knowledge(id=20, tenant_id=101, user_id=7, type=3, name="other", state=1),
+            ]
+        )
         session.add_all(
             [
                 KnowledgeFile(
@@ -71,6 +85,7 @@ async def visibility(current_tenant, monkeypatch):
         )
         await session.commit()
     monkeypatch.setattr(module, "get_async_db_session", sessions)
+    monkeypatch.setattr(knowledge_model, "get_async_db_session", sessions)
     user = SimpleNamespace(user_id=7, tenant_id=101)
     service = KnowledgeFileVisibilityService(None, user)
     facts = SimpleNamespace(granted=set(range(1, 10)) - {8})
