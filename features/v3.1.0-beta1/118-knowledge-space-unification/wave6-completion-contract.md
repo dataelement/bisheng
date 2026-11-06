@@ -566,3 +566,9 @@ API只原wrapped axios：POST `/api/v1/knowledge/upload/{sid}` multipart file暂
 Files将当前容器已读取的真实upload_file能力挂实际入口，Toolbar按需抽取保持单叶≤600、保目录现scope/keyword/filter/ABA及动作生命周期。所有URL保持parent与原目录语义，无全局管理列表替代普通授权。新文案优先复用已有三语key；必须新key交INT唯一locale集成，不硬编码、不加ts-ignore/eslint抑制。此闭环不宣称目录上传、per-file/高级预分段、完整版本或原T177/T179全部完成；版本需先补服务端原管理资格/目标权限及引用保护，不能前端space.edit补洞。
 
 §36状态文案唯一键冻结：f118.upload_staged、upload_registered、upload_cancelled、upload_status_unavailable、upload_may_continue，由INT的T793/T794三语集成，分别表示暂存完成、已提交处理、已取消、暂时无法获取处理状态，以及停止跟踪不撤销已提交处理；不得把前两者写成解析成功。
+
+## 37. M2原固定Store完整tuple流：已冻结
+
+T795先测试→T796只扩现`permission/application/migration_read.py`，新增frozen/slots `OriginalTupleFact(user,relation,object)`及`PinnedMigrationPermissionReader.aiter_original_tuples()`。只能在现真实原pin discovery成功并进入reader后，沿同一原FGAClient.iter_tuples(consistency='HIGHER_CONSISTENCY')无过滤完整读Store一次；不按tenant或资源重复扫描、不list_objects推断完整原tuple，不写FGA/SQL、不读provider/token/配置或导出客户端。流生命周期不允许同reader第二次采集，关闭/重pin/途中错误明确失败，不缓存全Store、不丢重复或只保知识namespace。
+
+每个真实tuple key严格恰user/relation/object三个非空字符串（各有界4096，不含NUL）；condition或未知权威字段阻断，不静默删除。每yield前重验reader仍open、客户端仍原store/model；输出闭集fact，不泄露raw key至错误文本。普通共享读取aget_shared_server_ids及原tenant/native TX限制完全保持。全Store事实供§34同run原基线，不代表全主体×资源授权矩阵已核；M4仍按原冻结SQL/compiler及实际既定用例验证。
