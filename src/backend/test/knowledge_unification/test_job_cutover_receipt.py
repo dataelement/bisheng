@@ -5,12 +5,14 @@ Only FGA/sharing and Celery's current-task transport are fixture boundaries.
 """
 
 from dataclasses import replace
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlmodel import select
 
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
 from bisheng.core.database import tenant_filter
 from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication as Models
@@ -22,6 +24,13 @@ from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgePr
 from bisheng.knowledge.domain.models.knowledge_processing_retry import KnowledgeProcessingRetryReceipt
 from bisheng.knowledge.domain.repositories.processing_job_repository import NewProcessingItem
 from bisheng.knowledge.domain.repositories.processing_owner_repository import ProcessingOwnerRepository
+from bisheng.knowledge.domain.schemas.processing_job import ProcessingRetryRequest
+from bisheng.knowledge.domain.services import processing_job_service as service_module
+from bisheng.permission.application.identity import (
+    PermissionActor,
+    reset_current_permission_actor,
+    set_current_permission_actor,
+)
 from bisheng.worker import tenant_context as workers
 from test.knowledge_unification import test_processing_owner as fixtures
 from test.knowledge_unification.test_kn_model_bindings import state as business_state
@@ -34,7 +43,7 @@ processing = fixtures.processing
 
 
 @pytest.fixture
-async def cutover(processing, monkeypatch):
+async def cutover(processing, monkeypatch, request):
     context, owner = processing
     for model in (
         KnowledgeFile,
@@ -83,7 +92,11 @@ async def cutover(processing, monkeypatch):
         await owner.jobs.acomplete_item(session, first.lease, configuration=actual.configuration, succeeded=True)
         second = await owner.jobs.aclaim_next_item(session, lease, configuration=actual.configuration)
         await owner.jobs.acomplete_item(
-            session, second.lease, configuration=actual.configuration, succeeded=False, error_code=10915
+            session,
+            second.lease,
+            configuration=actual.configuration,
+            succeeded=bool(getattr(request, "param", False)),
+            error_code=10915,
         )
         await session.commit()
     sender = SimpleNamespace(
@@ -269,3 +282,53 @@ async def test_missing_acceptance_cannot_finish_a_retry_after_business_cutover(c
         await session.flush()
         with pytest.raises(ResourceReferenceInvalidError):
             await owner.afinalize_and_ack(session, job, lease)
+
+
+@pytest.mark.parametrize("cutover", [True], indirect=True)
+async def test_new_original_actor_recovers_only_actual_owner_finalize(cutover, monkeypatch):
+    context, owner, job_id, lease, configuration = cutover
+    fresh = UserPayload(user_id=8, tenant_id=101, user_role=[], token_version=2)
+    fresh._runtime_credential_reference = {
+        "kind": "web_session",
+        "user_id": 8,
+        "tenant_id": 101,
+        "token_version": 2,
+        "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
+    }
+    monkeypatch.setattr(service_module, "require_business_action", AsyncMock())
+    monkeypatch.setattr(
+        service_module,
+        "batch_check_business_actions",
+        AsyncMock(return_value={"81": frozenset({"visible"}), "82": frozenset({"visible"})}),
+    )
+    app = service_module.ProcessingJobService(owner=owner, available_kinds={"embedding_rebuild"})
+    token = set_current_permission_actor(PermissionActor(user_id=8, tenant_id=101))
+    try:
+        async with context.sessions() as session:
+            job = await owner.jobs.aget(session, job_id)
+            before = [(row.id, row.attempt, dict(row.checkpoint)) for row in await owner_items(cutover, session)]
+            failed = await owner.jobs.afail_attempt(
+                session, job_id, expected_job_revision=job.revision, error_code=10994, lease=lease
+            )
+            assert failed.state == "failed" and failed.succeeded_count == 2 and failed.failed_count == 0
+            assert (await app.aget(session, 40, job_id, identity=fresh)).retryable
+            retry = await app.aretry(
+                session,
+                40,
+                job_id,
+                ProcessingRetryRequest(idempotency_key="finish-r2", expected_job_revision=job.revision),
+                identity=fresh,
+                entry_kind="web",
+            )
+            assert retry.error is None
+            receipt = (await session.exec(select(KnowledgeProcessingRetryReceipt))).one()
+            assert receipt.item_count == 0 and receipt.actor_user_id == 8 and job.actor_user_id == 7
+            new_lease = await owner.jobs.aclaim(session, job_id, configuration=configuration)
+            assert await owner.jobs.aclaim_next_item(session, new_lease, configuration=configuration) is None
+            assert (await owner.afinalize_and_ack(session, job, new_lease)).state == "succeeded"
+            assert [
+                (row.id, row.attempt, dict(row.checkpoint)) for row in await owner_items(cutover, session)
+            ] == before
+            await session.commit()
+    finally:
+        reset_current_permission_actor(token)
