@@ -60,7 +60,7 @@ from bisheng.common.models.space_channel_member import (
     UserRoleEnum,
 )
 from bisheng.common.services.metric_log import emit_metric
-from bisheng.core.context.tenant import get_admin_scope_tenant_id, get_current_tenant_id
+from bisheng.core.context.tenant import get_admin_scope_tenant_id, get_current_tenant_id, get_is_management_api
 from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
@@ -2093,6 +2093,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             members = [member for member in members if int(member.business_id) not in department_space_ids]
         return await self._format_member_spaces(members, order_by)
 
+    def _is_management_super_actor(self, actor: PermissionActor, tenant_id: int) -> bool:
+        """Keep the original identity while using one trusted management tenant."""
+        return (
+            actor.subject_type == "user"
+            and actor.subject_id == self.login_user.user_id
+            and actor.current_tenant_id == self.login_user.tenant_id
+            and actor.super_admin
+            and actor.data_scope == DATA_SCOPE_ALL
+            and get_is_management_api()
+            and get_admin_scope_tenant_id() == tenant_id == get_current_tenant_id()
+        )
+
     async def list_admin_spaces(
         self, *, keyword: str | None = None, page: int = 1, page_size: int = 20
     ) -> "PageData[KnowledgeSpaceListItemResp]":
@@ -2107,7 +2119,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         actor = await self._permission_actor()
         if (
             tenant_id != get_current_tenant_id()
-            or actor.current_tenant_id != tenant_id
+            or (actor.current_tenant_id != tenant_id and not self._is_management_super_actor(actor, tenant_id))
             or actor.subject_type != "user"
             or actor.data_scope != DATA_SCOPE_ALL
             or not (actor.super_admin or tenant_id in actor.tenant_admin_tenant_ids)
@@ -2131,7 +2143,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise ValueError("page_size must contain 1..200 items")
         tenant_id = get_current_tenant_id()
         actor = await self._permission_actor()
-        if type(tenant_id) is not int or tenant_id <= 0 or actor.current_tenant_id != tenant_id:
+        management_super = self._is_management_super_actor(actor, tenant_id)
+        if (
+            type(tenant_id) is not int
+            or tenant_id <= 0
+            or (actor.current_tenant_id != tenant_id and not management_super)
+        ):
             raise PermissionDeniedError()
         keyword = keyword.strip() if keyword is not None else None
         context = (
@@ -2178,7 +2195,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
             targets = await adapter.resolve_permission_targets_from_rows(
                 rows=batch, resource_type="knowledge_space", actor=actor
             )
-            visible = await batch_check_verified_business_visible(actor=actor, targets=targets)
+            if management_super:
+                # The system shortcut accepts only IDs that passed this loaded
+                # business/snapshot validation, never the raw SQL candidates.
+                actions = await self._batch_actions(
+                    "knowledge_space", [target.resource_id for target in targets], ("visible",)
+                )
+                visible = {("knowledge_space", ident): "visible" in codes for ident, codes in actions.items()}
+            else:
+                visible = await batch_check_verified_business_visible(actor=actor, targets=targets)
             for row in batch:
                 if len(items) == page_size:
                     # This row has not been consumed and must remain on the next page.
