@@ -35,6 +35,7 @@ import CreateTemp from "./CreateTemp";
 import { locationContext } from "@/contexts/locationContext";
 import { useHostedAppActions } from "./useHostedAppActions";
 import { stateI18nKey } from "./hostedApp/types";
+import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 
 /** 按应用上线(2)/下线(1)状态筛选，与后端 ``/api/v1/workflow/list?status=`` 一致 */
 export const SelectAppStatus = ({ defaultValue = 'all', onChange }: { defaultValue?: string; onChange: (v: string) => void }) => {
@@ -107,7 +108,7 @@ export default function Apps() {
     // useErrorPrompt();
 
     useEffect(() => {
-        i18n.loadNamespaces('flow');
+        i18n.loadNamespaces(['flow', 'shared']);
     }, [i18n]);
     const { user } = useContext(userContext);
     const { message } = useToast()
@@ -313,6 +314,7 @@ export default function Apps() {
     return <div className="h-full relative">
         <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative bg-background-main border-t">
             <div className="flex gap-4">
+                {appConfig.appRuntimeEnabled && <Button variant="link" asChild><a href={getWorkspaceClientUrl('/apps/cloud-workbenches')}>{t('shared:cloudWorkbenches.title')}</a></Button>}
                 <SearchInput className="w-64" placeholder={t('build.searchApp')} onChange={(e) => search(e.target.value)}></SearchInput>
                 <SelectType all includeHosted={!!appConfig.appRuntimeEnabled} onChange={(v) => {
                     tempTypeRef.current = v

@@ -21,6 +21,7 @@ interface AgentCardProps {
   isPinned?: boolean;
   onTogglePin?: (agent: AppItem) => void;
   onStartChat: (agent: AppItem) => void;
+  openLabel?: string;
   onShare: (agent: AppItem) => void;
 }
 
@@ -29,6 +30,7 @@ export function AgentCard({
   isPinned = false,
   onTogglePin,
   onStartChat,
+  openLabel,
   onShare,
 }: AgentCardProps) {
   const localize = useLocalize();
@@ -67,7 +69,7 @@ export function AgentCard({
         }}
         className="flex-1 min-w-0 justify-center items-center h-full max-h-full rounded-md px-2 py-0 text-[14px] font-normal"
       >
-        {localize('com_app_start_chat')}
+        {openLabel ?? localize('com_app_start_chat')}
       </Button>
     </>
   );
@@ -230,7 +232,7 @@ export function AgentCard({
                 : "opacity-100 pointer-events-auto",
             )}
           >
-            {localize('com_app_start_chat')}
+            {openLabel ?? localize('com_app_start_chat')}
           </Button>
         </div>
       ) : (

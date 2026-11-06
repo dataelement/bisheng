@@ -351,3 +351,21 @@ def download_skill_pack(pack: str):
     if archive.version:
         headers[PACK_VERSION_HEADER] = archive.version
     return Response(content=archive.content, media_type="application/gzip", headers=headers)
+
+
+def _workbench_guide_response(language: str):
+    content = artifact_service.read_workbench_guide(language)
+    if content is None:
+        return JSONResponse(status_code=404, content={"message": "Workbench guide is not included in this deployment"})
+    return Response(content=content, media_type="text/markdown; charset=utf-8", headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/workbench-guide.md")
+def get_workbench_guide():
+    """Public instructions only; no user identity, credentials or business data."""
+    return _workbench_guide_response("zh")
+
+
+@router.get("/workbench-guide-en.md")
+def get_workbench_guide_en():
+    return _workbench_guide_response("en")

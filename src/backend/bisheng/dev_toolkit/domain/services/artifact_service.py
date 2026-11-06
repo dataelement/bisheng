@@ -333,3 +333,15 @@ def read_sdk_guide() -> str | None:
     except OSError:
         logger.exception("dev_toolkit sdk guide at {} is unreadable; serving the degraded 404", path)
         return None
+
+
+def read_workbench_guide(language: str = "zh") -> str | None:
+    """Serve the enterprise-hosted protocol; never resolve a caller-supplied path."""
+    if language not in {"zh", "en"}:
+        raise ValueError("Unsupported workbench guide language")
+    path = GUIDES_DIR / f"workbench-guide.{language}.md"
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        logger.exception("dev_toolkit workbench guide at {} is unreadable; serving the degraded 404", path)
+        return None

@@ -67,27 +67,7 @@ class DesktopAppsService:
     async def page(self, principal, *, after=None, managed=False):
         with principal_scope(principal):
             actor = await self.actor(principal)
-            rows, cursor = await self.repository.page(after=after)
-            items = []
-            for app in rows:
-                if int(app.tenant_id) != actor.tenant_id or app.state == "deleted":
-                    continue
-                if not managed and app.state != "online":
-                    continue
-                action = "edit" if managed else "use"
-                if await check_action(actor, resource_type="app", resource_id=app.id, action=action):
-                    items.append(
-                        {
-                            "id": app.id,
-                            "name": app.name,
-                            "slug": app.slug,
-                            "description": app.description,
-                            "state": app.state,
-                            "version_id": app.current_version_id,
-                            "entry_path": f"/apps/{app.slug}/",
-                        }
-                    )
-            return {"items": items, "next_cursor": cursor}
+            return await hosted_app_page(actor, self.repository, after=after, managed=managed)
 
     async def launch(self, principal, app_id):
         _actor, app = await self.require(principal, app_id, "use")
@@ -102,3 +82,28 @@ class DesktopAppsService:
             "ticket": ticket,
             "expires_in": 60,
         }
+
+
+async def hosted_app_page(actor, repository, *, after=None, managed=False):
+    """One tenant- and action-scoped catalog for Desktop and browser app entrances."""
+    rows, cursor = await repository.page(after=after)
+    items = []
+    for app in rows:
+        if int(app.tenant_id) != actor.tenant_id or app.state == "deleted":
+            continue
+        if not managed and app.state != "online":
+            continue
+        action = "edit" if managed else "use"
+        if await check_action(actor, resource_type="app", resource_id=app.id, action=action):
+            items.append(
+                {
+                    "id": app.id,
+                    "name": app.name,
+                    "slug": app.slug,
+                    "description": app.description,
+                    "state": app.state,
+                    "version_id": app.current_version_id,
+                    "entry_path": f"/apps/{app.slug}/",
+                }
+            )
+    return {"items": items, "next_cursor": cursor}
