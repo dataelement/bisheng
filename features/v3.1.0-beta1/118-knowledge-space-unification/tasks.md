@@ -5817,6 +5817,22 @@
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-05, AC-07, AC-84, AC-87\
   **验证 / 完成条件**：先真实红/首绿、每卡≤2叶，target lint/strict新增0、固定独立审；完整详情/上传/浏览器E2E另验。
 
+## W6平台知识入口统一名称
+
+- [ ] **T723 · 平台入口中英文统一空间名称**
+  **类型 / Owner**：文案集成 / INT\
+  **写入文件**：`src/frontend/platform/public/locales/zh-Hans/bs.json`；`src/frontend/platform/public/locales/en-US/bs.json`\
+  **逻辑 / 测试上下文**：仅现menu.knowledge导航名按AC01统一知识空间，QA独立页签；不全局替换旧文档/QA selector及权限资源字段。\
+  **依赖**：T722, T002\
+  **验证 / 完成条件**：原其他keys/值完全不变，三语导航语义一致、i18n无新增漂移；实际页面挂载与门禁由T176验证。
+
+- [ ] **T724 · 平台日文入口统一空间名称**
+  **类型 / Owner**：文案集成 / INT\
+  **写入文件**：`src/frontend/platform/public/locales/ja/bs.json`\
+  **逻辑 / 测试上下文**：同menu.knowledge日文统一，保持既有namespace与路由/resource key，不修改MainLayout架构或QA名称。\
+  **依赖**：T723\
+  **验证 / 完成条件**：对应中英同键值语义及原键保留，JSON/插值与现i18n校验通过，不计完整UI验收。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
