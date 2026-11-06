@@ -1,6 +1,6 @@
 # F118 剩余任务清单
 
-2026-11-07 W6滚动快照，按 [tasks.md](./tasks.md) 未勾选卡生成：**149项**。原137队列完成28项、剩109项；为同一需求登记210张接缝卡T605–T814，其中170张已闭合、40张待办。历史814编号 = 663已完成/历史交付 +149待办 +2外移；范围内812张复选框卡。任务数不代表独立功能数或94条AC完成率。
+2026-11-07 W6滚动快照，按 [tasks.md](./tasks.md) 未勾选卡生成：**128项**。原137队列完成28项、剩109项；为同一需求登记211张接缝卡T605–T815，其中192张已闭合、19张待办。历史815编号 = 685已完成/历史交付 +128待办 +2外移；范围内813张复选框卡。任务数不代表独立功能数或94条AC完成率。
 
 已确认范围见[范围复核](./scope-review.md)，固定提交、复现与环境边界见[W6记录](./wave6-implementation-review.md)，接口见[W6合同](./wave6-completion-contract.md)。分享签发T404/T405继续外移，未记成完成。
 
@@ -18,8 +18,8 @@
 | 装配、国际化与真实接口验证 | 8 |
 | 完整E2E与最终评审 | 10 |
 | 遗留知识/RAG使用适配 | 2 |
-| W6原需求必要接缝 | 40 |
-| **合计** | **149** |
+| W6原需求必要接缝 | 19 |
+| **合计** | **128** |
 
 下一波按冻结合同收口平台入口和既有异常文件能力，再进入元数据Owner/J1、完整KN上传/移动/删除、正式盘点解析/转换/Coverage及页面E2E。仅实际装配的kind可接受；默认Embedding只影响创建。用户免DM8实测，C2静态保留，MySQL真实事务/升级不免除；不操作109:3005。
 
@@ -196,30 +196,10 @@
 
 | 编号 | 任务 | 类型 / Owner | 依赖 |
 | --- | --- | --- | --- |
-| T775 | SPACE显式批次规则真实上传接线测试 | 测试 / INT | T765 |
-| T776 | SPACE显式批次规则真实协议与业务接线 | 后端 API/Domain / INT | T775 |
-| T777 | M2闭集事实与分层manifest编码测试 | 测试 / MIG | T773 |
-| T778 | M2闭集事实与分层manifest编码 | 后端 Application / MIG | T777 |
 | T779 | 正式M2确定事实完整预检测试 | 测试 / MIG | T763, T770, T778 |
 | T780 | 正式M2确定事实完整预检 | 后端 Application/Repository / MIG | T779 |
-| T781 | 全租户正式基线原子冻结测试 | 测试 / MIG | T160, T778 |
-| T782 | 全租户正式基线原子冻结 | 后端 Repository / MIG | T781 |
 | T783 | 完整M2应用编排及required事实失败测试 | 测试 / MIG | T780, T782 |
 | T784 | 完整M2应用入口组合与冻结编排 | 后端 Application / MIG | T783 |
-| T785 | 移动索引真实替换与恢复端口测试 | 测试 / PROC | T064 |
-| T786 | 移动索引真实替换与恢复adapter | Worker / PROC | T785 |
-| T787 | SPACE暂存与注册真实API合同测试 | 测试 / PLATFORM | T757 |
-| T788 | SPACE暂存与注册真实API | 前端 Platform / PLATFORM | T787 |
-| T789 | 平台SPACE普通上传真实页面测试 | 测试 / PLATFORM | T788 |
-| T790 | 平台SPACE普通上传路由与队列面板 | 前端 Platform / PLATFORM | T789 |
-| T791 | 目录当前容器上传入口测试 | 测试 / PLATFORM | T790 |
-| T792 | 目录当前容器实际上传入口与工具栏 | 前端 Platform / PLATFORM | T791 |
-| T793 | 普通上传真实状态中英文词条 | 文案集成 / INT | T789 |
-| T794 | 普通上传真实状态日文词条 | 文案集成 / INT | T793 |
-| T795 | M2原固定Store完整tuple流测试 | 测试 / INT | T713 |
-| T796 | M2原固定Store完整tuple只读适配 | 后端 Permission Application / INT | T795 |
-| T797 | SPACE上传替换后的官方静态抑制清理 | 静态集成 / INT | T790 |
-| T798 | 共享SQLite知识schema夹具补真实metadata修订列 | 测试夹具 / INT | T766 |
 | T799 | M2原生物理只读及受限artifact存储测试 | 测试 / INT | T778, T796 |
 | T800 | M2原生物理只读及受限artifact存储适配 | 后端 Application / INT | T799 |
 | T801 | 版本读取原生链与批量候选仓储测试 | 测试 / EDGE | T778 |
@@ -234,5 +214,4 @@
 | T810 | M2原Redis调度器及SQL任务只读reader | 后端 Application / PROC | T809 |
 | T811 | M2来源manifest材料与全局任务诊断闭集测试 | 测试 / MIG | T778 |
 | T812 | M2来源manifest材料与全局任务诊断闭集 | 后端 Application / MIG | T811 |
-| T813 | 目标FGA模板checksum纯协议测试 | 测试 / INT | T796 |
-| T814 | 目标FGA模板checksum应用纯协议 | 后端 Permission Application / INT | T813 |
+| T815 | 旧版本读取三项夹具接真实新读口 | 测试夹具 / EDGE | T804 |
