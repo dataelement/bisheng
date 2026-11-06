@@ -1,2 +1,2 @@
-/** Preview switch for the remaining legacy create and sort controls. */
+/** Preview switch for the remaining legacy create control. */
 export const USE_PRODUCT_COMPONENTS = true;

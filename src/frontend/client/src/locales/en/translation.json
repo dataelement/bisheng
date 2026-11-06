@@ -1,4 +1,17 @@
 {
+  "project_sync": {
+    "reason": { "cloud_membership_kept": "Cloud assignment kept", "project_unavailable": "Project unavailable", "conversation_unavailable": "Conversation deleted or owned by another account", "invalid_date": "Invalid creation date", "invalid_local_data": "Invalid local record", "unknown": "Item not imported" },
+    "connecting": "Connecting project sync…",
+    "degraded": "Projects saved. Sync is delayed.",
+    "offline": "Projects are not synced. Reconnecting…",
+    "auth_required": "Sign in again to sync projects.",
+    "loading": "Loading…",
+    "more": "Load more",
+    "save_failed": "Could not save the project. Your input is kept. Try again.",
+    "import_running": "Migrating legacy projects automatically…",
+    "import_failed": "Legacy projects have not migrated yet. Retrying automatically. Original records are kept.",
+    "import_done": "Migration finished. {{count}} items were skipped or kept their cloud assignment."
+  },
   "admin": "Administrator",
   "bisheng": "{{bisheng}}",
   "cancel": "Cancel",

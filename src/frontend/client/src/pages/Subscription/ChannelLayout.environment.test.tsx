@@ -121,7 +121,7 @@ it("releases drag cursor and selection when capacity is lost", async () => {
 });
 
 it.each([
-  ["desktop", "512px"],
+  ["desktop", "488px"],
   ["web", "648px"],
 ])("keeps %s browse-card width when opening the reading pane", async (channel, expectedWidth) => {
   mockChannel = channel;

@@ -269,7 +269,12 @@ export function KnowledgeSpacePresentation({
               </div>
             </div>
           ) : (
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div
+              className={cn(
+                "flex min-h-0 min-w-0 flex-1 flex-col",
+                desktopLayout.table,
+              )}
+            >
               <FileListView
                 files={displayFiles}
                 onEnsureFilePermissions={ensureFilePermissions}

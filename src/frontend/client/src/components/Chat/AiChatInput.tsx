@@ -71,6 +71,8 @@ interface DroppableAttachment {
 }
 
 interface AiChatInputProps {
+    /** Identifies the composer across async admission checks and navigation. */
+    composerIdentity?: string;
     size?: '' | 'mini';
     /** Conversation setup choices belong to the new-chat surface. */
     allowConfiguration?: boolean;
@@ -150,6 +152,7 @@ interface AiChatInputProps {
 const AiChatInput = memo(
     ({
         size = '',
+        composerIdentity = '',
         allowConfiguration = true,
         features,
         disabled = false,
@@ -380,12 +383,19 @@ const AiChatInput = memo(
 
         // Blocks a second send while an async onSend (e.g. the department lease
         // check) is still deciding; the draft is not cleared until it resolves.
-        const sendPendingRef = useRef(false);
+        const composerIdentityRef = useRef(composerIdentity);
+        composerIdentityRef.current = composerIdentity;
+        const mountedRef = useRef(true);
+        useEffect(() => {
+            mountedRef.current = true;
+            return () => { mountedRef.current = false; };
+        }, []);
+        const sendPendingRef = useRef<{ identity: string } | null>(null);
         const handleSend = useCallback(async () => {
             const trimmed = text.trim();
             // Workbench: uploaded files require accompanying text before send.
             if (!trimmed || disabled || sendDisabled || isStreaming || isParsingMedia || fileUploading || filesParsing) return;
-            if (sendPendingRef.current) return;
+            if (sendPendingRef.current?.identity === composerIdentity) return;
             if (!taskMode && !isLingsi && chatFiles?.some((file) => !canProcessChatImage(
                 file.name || file.file_name || file.filename || '', supportsVision, supportsImageParsing,
             ))) {
@@ -396,7 +406,8 @@ const AiChatInput = memo(
             // that this component revokes on the very next line, and it outranks
             // the server cover in the message bubble — so it stops here, and the
             // bubble goes back to `cover_filepath` once parsing produces it.
-            sendPendingRef.current = true;
+            const pending = { identity: composerIdentity };
+            sendPendingRef.current = pending;
             let accepted: void | boolean;
             try {
                 accepted = await onSend(trimmed, chatFiles?.map((file) => (
@@ -405,9 +416,11 @@ const AiChatInput = memo(
                         : file
                 )) ?? chatFiles);
             } finally {
-                sendPendingRef.current = false;
+                if (sendPendingRef.current === pending) sendPendingRef.current = null;
             }
-            if (accepted === false) return;
+            // A lease check may finish after another project draft was opened.
+            // Its result must not clear the new draft's text or attachments.
+            if (accepted === false || !mountedRef.current || composerIdentityRef.current !== pending.identity) return;
             setText("");
             setChatFiles(null);
             setUploadingFiles([]);
@@ -422,7 +435,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, supportsVision, supportsImageParsing, showToast, localize]);
+        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, supportsVision, supportsImageParsing, showToast, localize, composerIdentity]);
 
         // ── Handed-over ask (chatAskHandoff): upload its file, then send unattended ──
         const startedAskKeyRef = useRef<string | null>(null);
@@ -575,6 +588,7 @@ const AiChatInput = memo(
                             uploadSizeLimits={resolveUploadSizeLimits(envConfig)}
                             size={envConfig?.uploaded_files_maximum_size || 50}
                             onFilesStateChange={(currentFiles: any[] = []) => {
+                                if (!mountedRef.current) return;
                                 const pending = currentFiles
                                     .filter((f) => f?.isUploading)
                                     .map((f) => ({
@@ -624,6 +638,8 @@ const AiChatInput = memo(
                                 }
                             }}
                             onChange={(files: any) => {
+                                // An abandoned composer's upload may finish late.
+                                if (!mountedRef.current) return;
                                 if (files === null) {
                                     setFileUploading(true);
                                     return;

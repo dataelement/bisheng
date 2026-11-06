@@ -2,13 +2,16 @@ import { useDesktopNavigation } from "./useDesktopNavigation";
 
 let cleanup: (() => void) | undefined;
 const mockNavigate = jest.fn();
+const mockStartNewChat = jest.fn();
+jest.mock('~/components/Nav/NewChat', () => ({ useStartNewChat: () => mockStartNewChat }));
 let mockEmbedded = true;
 jest.mock("react", () => ({
+  useRef: (value: unknown) => ({ current: value }),
   useEffect: (effect: () => () => void) => {
     cleanup = effect();
   },
 }));
-jest.mock("react-router-dom", () => ({ useNavigate: () => mockNavigate }));
+jest.mock("react-router-dom", () => ({ useNavigate: () => mockNavigate, useLocation: () => ({ pathname: '/c/existing', search: '', key: 'initial', state: null }) }));
 jest.mock("~/hooks/useClientEnvironment", () => ({
   useClientEnvironment: () => ({ channel: mockEmbedded ? "desktop" : "web" }),
 }));
@@ -58,6 +61,14 @@ it("handles conversation and explicit module routes in an embedded client and re
       expect(preventDefault).not.toHaveBeenCalled();
     }
     expect(mockNavigate).toHaveBeenCalledTimes(count);
+    for (const path of ['/c/new', '/c/new?projectId=11111111-1111-4111-8111-111111111111']) {
+      receive?.({ detail: { path, resetDraft: true }, preventDefault: jest.fn() });
+      expect(mockStartNewChat).toHaveBeenLastCalledWith(path.includes('?') ? '11111111-1111-4111-8111-111111111111' : undefined);
+    }
+    const starts = mockStartNewChat.mock.calls.length;
+    receive?.({ detail: { path: '/c/new?projectId=11111111-1111-4111-8111-111111111111', resetDraft: false }, preventDefault: jest.fn() });
+    expect(mockStartNewChat).toHaveBeenCalledTimes(starts);
+    expect(mockNavigate).toHaveBeenLastCalledWith('/c/new?projectId=11111111-1111-4111-8111-111111111111');
     cleanup?.();
     expect(listeners.size).toBe(0);
     mockEmbedded = false;

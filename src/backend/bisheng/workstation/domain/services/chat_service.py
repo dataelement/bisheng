@@ -187,14 +187,18 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
     if not conversation_id:
         is_new_conversation = True
         conversation_id = uuid4().hex
-        await MessageSessionDao.async_insert_one(
-            MessageSession(
-                chat_id=conversation_id,
-                name="New Chat",
-                flow_type=FlowType.WORKSTATION.value,
-                user_id=login_user.user_id,
-            )
+        new_session = MessageSession(
+            chat_id=conversation_id,
+            name="New Chat",
+            flow_type=FlowType.WORKSTATION.value,
+            user_id=login_user.user_id,
         )
+        if data.project_id is not None:
+            await ChatSessionService.create_owned_project_session(
+                new_session, login_user, data.project_id, data.project_request_id, data.project_creation_payload()
+            )
+        else:
+            await MessageSessionDao.async_insert_one(new_session)
         await telemetry_service.log_event(
             user_id=login_user.user_id,
             event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
@@ -1431,7 +1435,16 @@ async def _agent_initialize_chat(
         )
         if session_subject is not None:
             new_session = session_subject.stamp(new_session)
-        await MessageSessionDao.async_insert_one(new_session)
+        if data.project_id is not None:
+            if session_subject is not None:
+                from bisheng.common.errcode.chat import ProjectInputError
+
+                raise ProjectInputError()
+            await ChatSessionService.create_owned_project_session(
+                new_session, login_user, data.project_id, data.project_request_id, data.project_creation_payload()
+            )
+        else:
+            await MessageSessionDao.async_insert_one(new_session)
         await telemetry_service.log_event(
             user_id=login_user.user_id,
             event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,

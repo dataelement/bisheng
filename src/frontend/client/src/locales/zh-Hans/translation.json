@@ -1,4 +1,17 @@
 {
+  "project_sync": {
+    "reason": { "cloud_membership_kept": "已保留云端归属", "project_unavailable": "项目已不可用", "conversation_unavailable": "对话已删除或不属于当前账号", "invalid_date": "创建日期无效", "invalid_local_data": "本机记录损坏或格式无效", "unknown": "此项未导入" },
+    "connecting": "正在连接项目同步…",
+    "degraded": "项目已保存，同步暂有延迟",
+    "offline": "项目尚未同步，正在重新连接",
+    "auth_required": "请重新登录以同步项目",
+    "loading": "正在加载…",
+    "more": "加载更多",
+    "save_failed": "项目未能保存，请重试。输入已保留。",
+    "import_running": "正在自动迁移旧版项目…",
+    "import_failed": "旧版项目暂未迁移，正在自动重试。原记录已保留。",
+    "import_done": "迁移完成，{{count}} 项未迁移或保留了云端归属。"
+  },
   "admin": "管理员",
   "bisheng": "{{bishengZh}}",
   "cancel": "取消",

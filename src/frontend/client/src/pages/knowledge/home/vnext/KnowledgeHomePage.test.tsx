@@ -11,6 +11,7 @@ jest.mock('@bisheng/ui', () => ({
   ...jest.requireActual('../../../../../../packages/ui/src/components/Tabs/Tabs.tsx'),
   ...jest.requireActual('../../../../../../packages/ui/src/components/Button/Button.tsx'),
   ...jest.requireActual('../../../../../../packages/ui/src/components/Dropdown/Dropdown.tsx'),
+  ...jest.requireActual('../../../../../../packages/ui/src/components/Select/Select.tsx'),
 }));
 
 const mockCreatorInfo = jest.fn();
@@ -36,6 +37,7 @@ jest.mock('~/hooks', () => ({
 }));
 jest.mock('~/Providers', () => ({ useConfirm: () => mockConfirm }));
 jest.mock('bisheng-icons', () => ({ ...jest.requireActual('bisheng-icons'), Outlined: {
+  ...jest.requireActual('bisheng-icons').Outlined,
   Edit: () => <svg />, Delete: () => <svg />, Plus: () => <svg />, More: () => <svg />, Pin: () => <svg />, People: () => <svg />,
 } }));
 jest.mock('../../hooks/useKnowledgeSpaceLists', () => ({ useKnowledgeSpaceLists: () => ({
@@ -163,8 +165,10 @@ it('closes the shared menu with Escape without reopening its tooltip or entering
 it('closes sorting with Escape without changing its value and restores keyboard focus', async () => {
   mount();
   const sort = screen.getByRole('combobox');
+  sort.focus();
   fireEvent.keyDown(sort, { key: 'ArrowDown' });
-  fireEvent.keyDown(await screen.findByRole('listbox'), { key: 'Escape' });
+  await screen.findByRole('listbox');
+  fireEvent.keyDown(sort, { key: 'Escape' });
   await waitFor(() => {
     expect(sort).toHaveAttribute('aria-expanded', 'false');
     expect(sort).toHaveFocus();

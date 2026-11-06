@@ -1,5 +1,6 @@
 import { DesktopShellBridge } from "./DesktopShellBridge";
 import { useClientEnvironment } from "~/hooks/useClientEnvironment";
+import desktopViewport from "./desktopViewport.module.css";
 import { getBysConfigApi } from "~/api/apps";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useRef, useState } from "react";
@@ -245,6 +246,7 @@ export default function MainLayout() {
       ref={layoutRef}
       className={cn(
         "relative isolate flex w-screen",
+        channel === "desktop" && desktopViewport.surface,
         isMobile && "workbench-mobile-shell",
         (isChatHomeRoute || !showPlatformNavigation) && "dsh-web-chat",
         // Match the sidebar surface behind the mobile panel's exposed rounded corners.
@@ -282,6 +284,7 @@ export default function MainLayout() {
           <div
             className={cn(
               "flex flex-col bg-white",
+              desktopViewport.viewport,
               // Live route shells use page-owned scrolling, like the cached module homes.
               isLiveRoute
                 ? "h-[100dvh] min-h-0 overflow-hidden overscroll-y-none"
@@ -358,6 +361,7 @@ export default function MainLayout() {
               data-workbench-panel
               className={cn(
                 "relative bg-white",
+                desktopViewport.viewport,
                 isMobile
                   ? innerScrollShell
                     ? "flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden"

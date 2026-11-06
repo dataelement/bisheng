@@ -21,7 +21,7 @@ import { SSE } from "sse.js";
 import type { AgentEvent, ChatMessage, ContentPart } from "~/api/chatApi";
 import { getSSEUrl } from "~/api/chatApi";
 import { translateApiErrorMessage } from "~/api/request";
-import { captureProjectChatCreation } from "~/layouts/WorkbenchSidebar/projectChatCreation";
+import { bindProjectChatCreation, captureProjectChatDraft, type ProjectChatDraft } from "~/layouts/WorkbenchSidebar/projectChatCreation";
 
 /**
  * Structured update emitted as agent SSE events stream in. Consumers merge
@@ -41,6 +41,8 @@ export interface AgentPatch {
 
 export interface SSESubmission {
     payload: Record<string, any>;
+    /** Captured at send time; null explicitly marks a draft outside any project. */
+    projectDraft?: ProjectChatDraft | null;
     userMessage: ChatMessage;
     /** Optional SSE endpoint URL override. Defaults to workstation SSE URL. */
     sseUrl?: string;
@@ -117,7 +119,11 @@ export function openChatStream(
         onTaskHandoff,
         onQuestionFilesUpdate,
     } = submission;
-    const assignProject = captureProjectChatCreation(payload.conversationId, submission.sseUrl);
+    const projectDraft = submission.projectDraft === undefined
+        ? captureProjectChatDraft(payload.conversationId, submission.sseUrl)
+        : submission.projectDraft;
+    const projectIntent = bindProjectChatCreation(projectDraft ?? undefined, payload);
+    const draftPath = projectDraft?.href ?? window.location.href;
 
     // ---- Agent-mode accumulators ---------------------------------------
     const events: AgentEvent[] = [];
@@ -152,7 +158,7 @@ export function openChatStream(
 
     const sseUrl = submission.sseUrl || getSSEUrl();
     const sse = new SSE(sseUrl, {
-        payload: JSON.stringify(payload),
+        payload: JSON.stringify({ ...payload, ...projectIntent }),
         headers: {
             "Content-Type": "application/json",
             ...(submission.flowLeaseId ? { 'X-Flow-Lease-Id': submission.flowLeaseId } : {}),
@@ -187,7 +193,6 @@ export function openChatStream(
             // watchdog fire onEnd when the stream drops.
             if (data.event === "linsight_task_handoff") {
                 const handoff = data.data || {};
-                assignProject(String(handoff.chat_id ?? ""));
                 onTaskHandoff?.({
                     session_version_id: String(handoff.session_version_id ?? ""),
                     chat_id: String(handoff.chat_id ?? ""),
@@ -205,7 +210,6 @@ export function openChatStream(
             // --- created: conversation init ---
             if (data.created != null) {
                 const mergedUser = { ...userMessage, ...data.message };
-                assignProject(data.message?.conversationId || userMessage.conversationId);
                 onCreated(
                     data.message?.conversationId || userMessage.conversationId,
                     mergedUser,
@@ -443,6 +447,12 @@ export function openChatStream(
             // back to legacy plain-text shapes, then a generic message.
             const resolved = translateApiErrorMessage(data);
             const code = typeof data?.status_code === "number" ? data.status_code : undefined;
+            if (code === 13018 && typeof data?.data?.chat_id === 'string' && /^[A-Za-z0-9_-]{1,255}$/.test(data.data.chat_id)) {
+                const currentDraft = captureProjectChatDraft(null, submission.sseUrl);
+                if (projectDraft && window.location.href === draftPath && currentDraft?.entryKey === projectDraft.entryKey) window.dispatchEvent(new CustomEvent('bisheng:project-conversation-recovered', { detail: { chatId: data.data.chat_id } }));
+                safeEnd();
+                return;
+            }
             // `data.data` carries the backend's classification alongside the
             // localized copy: without it the bubble could only ever say
             // "服务器错误" and the upstream reason (which file, which service,

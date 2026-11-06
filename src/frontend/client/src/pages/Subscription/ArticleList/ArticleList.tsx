@@ -17,8 +17,8 @@ import { Outlined } from "bisheng-icons";
 import { useNavigate } from "react-router-dom";
 import { cn } from "~/utils";
 import { TruncatedTabLabel } from "./TruncatedTabLabel";
-import { MODULE_PAGE_DESKTOP_COLUMN, MODULE_PAGE_DESKTOP_FRAME } from "~/components/ModuleHome";
-import desktopLayout from "./ArticleListLayout.module.css";
+import { MODULE_PAGE_DESKTOP_COLUMN } from "~/components/ModuleHome";
+import desktopLayout from "../ChannelLayout.module.css";
 
 
 
@@ -85,8 +85,8 @@ export function ArticleList({
   return (
     <div className={cn(
       "flex h-full min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-hidden",
-      isGridMode && MODULE_PAGE_DESKTOP_FRAME,
-      isGridMode && desktopLayout.frame,
+      desktopLayout.list,
+      selectedArticleId && desktopLayout.readingList,
     )}>
       {isH5 ? (
         /* === H5 header === */
