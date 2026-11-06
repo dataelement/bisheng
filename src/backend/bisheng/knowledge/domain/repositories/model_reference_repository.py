@@ -2,13 +2,14 @@
 
 from copy import deepcopy
 
-from sqlalchemy import inspect, update
+from sqlalchemy import delete, inspect, update
 from sqlmodel import select
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
 from bisheng.core.context.tenant import bypass_tenant_filter, is_tenant_filter_bypassed, strict_tenant_filter
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, QAKnowledge
 from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
 from bisheng.resource_reference.application.contracts import ReferenceState, TargetType
 
@@ -236,6 +237,26 @@ class KnowledgeModelReferenceRepository:
         self._bound(session, row)
         session.delete(row)
         session.flush()
+
+    def _content_deletes(self, session, row):
+        self._metadata(session, row)
+        tenant = self._tenant_id()
+        # Bulk DML does not receive C3's SELECT injection. The current owned
+        # parent and exact tenant protect both files/folders and QA pairs.
+        return tuple(
+            delete(model).where(model.knowledge_id == row.id, model.tenant_id == tenant)
+            for model in (KnowledgeFile, QAKnowledge)
+        )
+
+    def clear_contents(self, session, row):
+        for query in self._content_deletes(session, row):
+            session.execute(query)
+        session.flush()
+
+    async def aclear_contents(self, session, row):
+        for query in self._content_deletes(session, row):
+            await session.execute(query)
+        await session.flush()
 
     async def adelete(self, session, row):
         self._bound(session, row)
