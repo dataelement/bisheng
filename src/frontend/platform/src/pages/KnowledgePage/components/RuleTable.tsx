@@ -1,6 +1,7 @@
 // @ts-strict-ignore
 import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
-import { Input } from '@bisheng/ui';
+import { Input, InputNumber } from '@bisheng/ui';
+import type { TableProcessingRule } from '@/controllers/API/knowledgeSpace';
 import { FileIcon } from "@/components/bs-icons/file";
 import {
 Accordion,
@@ -17,6 +18,37 @@ import { KnowledgeHint,KnowledgeTooltip } from "./KnowledgeTooltip";
 import { cn } from "@/util/utils";
 import { useId,useMemo } from "react";
 import { useTranslation } from "react-i18next";
+
+type TableNumberField = 'slice_length' | 'header_start_row' | 'header_end_row';
+export type TableProcessingDefaultsDraft = Omit<TableProcessingRule, TableNumberField> & Record<TableNumberField, number | null>;
+interface TableProcessingDefaultsFieldsProps {
+  value: TableProcessingDefaultsDraft;
+  onChange: (value: TableProcessingDefaultsDraft) => void;
+  disabled?: boolean;
+}
+
+/** A space default has no uploaded file list or per-file switch. */
+export function TableProcessingDefaultsFields({ value, onChange, disabled = false }: TableProcessingDefaultsFieldsProps) {
+  const { t } = useTranslation('knowledge');
+  const id = useId();
+  const numbers = [
+    ['slice_length', 'maxRowsPerSegment'], ['header_start_row', 'f118.headerStart'], ['header_end_row', 'f118.headerEnd'],
+  ] as const;
+  return <fieldset disabled={disabled} className="space-y-4 rounded-lg border p-4">
+    {numbers.map(([key, label]) => <div key={key} className="space-y-2">
+      <Label htmlFor={`${id}-${key}`}>{t(label)}</Label>
+      <InputNumber id={`${id}-${key}`} aria-label={t(label)} value={value[key]} min={1} precision={0} disabled={disabled}
+        onChange={number => onChange({ ...value, [key]: number })}
+        increaseLabel={t('bs:sharedUi.increase')} decreaseLabel={t('bs:sharedUi.decrease')}
+        errorMessage={() => t('f118.integerAtLeast', { min: 1 })} />
+    </div>)}
+    <div className="flex items-center gap-2">
+      <Checkbox id={`${id}-append`} checked={value.append_header === 1} disabled={disabled}
+        onCheckedChange={checked => onChange({ ...value, append_header: checked === true ? 1 : 0 })} />
+      <Label htmlFor={`${id}-append`}>{t('addHeader')}</Label>
+    </div>
+  </fieldset>;
+}
 
 
 /** Number field. The unit is a sibling span, not an overlay -- the native spinner
