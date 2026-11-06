@@ -49,6 +49,9 @@ async def test_original_native_fields_include_private_payloads_that_cannot_be_ar
 @pytest.mark.parametrize("kind", original.MODELS)
 async def test_native_resource_rows_encode_safe_scalars_and_full_original_digests(codec, resource_native, kind):
     await resource_native.insert(original.Knowledge, [original.resource(9000)])
+    if kind == "versions":
+        await resource_native.insert(original.KnowledgeDocument, [original.data("documents", 1)])
+        await resource_native.insert(original.KnowledgeFile, [original.file(1)])
     await resource_native.insert(original.MODELS[kind], [original.data(kind, 1)])
     async with AsyncSession(resource_native.engine) as session, session.begin():
         row = (await getattr(UnificationResourceRepository(), f"alist_{kind}")(session)).items[0]
