@@ -2,6 +2,7 @@
 
 import asyncio
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from datetime import timedelta
 
 from loguru import logger
@@ -23,12 +24,18 @@ from bisheng.knowledge.domain.services.processing_job_service import ProcessingJ
 from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.information.reconcile import _active_tenant_ids
+from bisheng.worker.knowledge.file_worker import prepare_processing_file, write_processing_file
 from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_processing_file, reset_processing_target
 from bisheng.worker.main import bisheng_celery
 
 EXECUTE_TASK = "bisheng.worker.knowledge.processing_jobs.execute_processing_job"
 SCAN_TASK = "bisheng.worker.knowledge.processing_jobs.dispatch_pending_processing_jobs"
-PROCESSING_HANDLERS = {"embedding_rebuild": rebuild_processing_file}
+PROCESSING_HANDLERS = {
+    "embedding_rebuild": rebuild_processing_file,
+    "file_reprocess": prepare_processing_file,
+    "file_resplit": prepare_processing_file,
+}
+_FILE_KINDS = frozenset({"file_reprocess", "file_resplit"})
 
 
 def _new_owner():
@@ -81,6 +88,52 @@ async def _finalize(owner, job_id, lease):
         return result
 
 
+async def _execute_file_item(
+    owner, scope, *, reference, proof, space_id, job_id, item_lease, file_id, kind, snapshot, configuration
+):
+    arguments = {
+        "space_id": space_id,
+        "invoke_user_id": reference["actor_user_id"],
+        "expected_model_config_revision": configuration.model_config_revision,
+        "expected_index_generation": configuration.index_generation,
+    }
+    async with _actor(reference, proof.tenant_id, space_id):
+        prepared = await asyncio.to_thread(
+            PROCESSING_HANDLERS[kind], file_id, kind=kind, processing_snapshot=snapshot, **arguments
+        )
+    # Prepared docs live only in memory. This persisted checkpoint carries
+    # progress/counts; lease takeover repeats the real parse from frozen rules.
+    async with _actor(reference, proof.tenant_id, space_id) as identity:
+        async with get_async_db_session() as session:
+            guarded = await scope.aguard_processed_file(session, item_lease, jobs=owner.jobs)
+            if guarded is None:
+                result = _summary(await owner.jobs.aget(session, job_id))
+                await session.commit()
+                return False, result
+            current = await owner.aread_current(session, space_id, identity=identity, job=guarded[0])
+            checkpoint = {**guarded[1].checkpoint, "chunk_count": len(prepared.documents)}
+            if not await owner.jobs.asave_checkpoint(
+                session, item_lease, configuration=current.configuration, step="file_prepared", checkpoint=checkpoint
+            ):
+                result = _summary(await owner.jobs.aget(session, job_id))
+                await session.commit()
+                return False, result
+            await session.commit()
+        outcome = await asyncio.to_thread(write_processing_file, prepared, **arguments)
+    async with _actor(reference, proof.tenant_id, space_id) as identity:
+        async with get_async_db_session() as session:
+            guarded = await scope.aguard_processed_file(session, item_lease, jobs=owner.jobs)
+            if guarded is None:
+                result = _summary(await owner.jobs.aget(session, job_id))
+                await session.commit()
+                return False, result
+            await owner.aread_current(session, space_id, identity=identity, job=guarded[0])
+            completed = await scope.acomplete_processed_file(session, item_lease, jobs=owner.jobs, outcome=outcome)
+            result = _summary(await owner.jobs.aget(session, job_id))
+            await session.commit()
+            return completed, result
+
+
 async def _execute_processing_job(job_id: str, expected_dispatch_revision: int):
     proof = _task_proof()
     owner = _new_owner()
@@ -101,9 +154,12 @@ async def _execute_processing_job(job_id: str, expected_dispatch_revision: int):
                 current = await owner.aread_current(session, space_id, identity=identity)
                 # Check the complete current version set; never silently omit
                 # a concurrently parsing version from an accepted rebuild.
-                ProcessingJobService.require_rebuild_scope_ready(
-                    await scope.aload_scope(session, space_id, for_update=True)
-                )
+                if kind == "embedding_rebuild":
+                    ProcessingJobService.require_rebuild_scope_ready(
+                        await scope.aload_scope(session, space_id, for_update=True)
+                    )
+                else:
+                    await scope._attempt(session, job_id, owner.jobs)
                 lease = await owner.jobs.aclaim(
                     session,
                     job_id,
@@ -127,8 +183,10 @@ async def _execute_processing_job(job_id: str, expected_dispatch_revision: int):
                         await session.commit()
                         return result
                     lease = renewed
-                    reset = await owner.jobs.areset_target_state(session, lease)
-                    if reset is None:
+                    reset = (
+                        await owner.jobs.areset_target_state(session, lease) if kind == "embedding_rebuild" else None
+                    )
+                    if kind == "embedding_rebuild" and reset is None:
                         result = _summary(job)
                         await session.commit()
                         return result
@@ -136,6 +194,29 @@ async def _execute_processing_job(job_id: str, expected_dispatch_revision: int):
                     if claimed is None:
                         await session.commit()
                         return await _finalize(owner, job_id, lease)
+                    if kind in _FILE_KINDS:
+                        if not await scope.astart_processed_file(session, claimed.lease, jobs=owner.jobs):
+                            result = _summary(await owner.jobs.aget(session, job_id))
+                            await session.commit()
+                            return result
+                        file_id, snapshot = claimed.item.file_id, deepcopy(claimed.item.processing_snapshot)
+                        await session.commit()
+                        completed, result = await _execute_file_item(
+                            owner,
+                            scope,
+                            reference=reference,
+                            proof=proof,
+                            space_id=space_id,
+                            job_id=job_id,
+                            item_lease=claimed.lease,
+                            file_id=file_id,
+                            kind=kind,
+                            snapshot=snapshot,
+                            configuration=current.configuration,
+                        )
+                        if not completed:
+                            return result
+                        continue
                     if claimed.item.processing_snapshot.get("original_status") != 2:
                         raise ResourceReferenceInvalidError(reason="processing_original_file_evidence_required")
                     target = ResourceVersionTarget(
