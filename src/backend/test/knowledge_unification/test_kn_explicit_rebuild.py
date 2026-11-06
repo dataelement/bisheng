@@ -38,7 +38,7 @@ async def test_explicit_same_model_creates_operation_revision_and_generation(bus
             await App.aapply_model_change(session, plan)
             await session.commit()
     state = fixtures.state(business)
-    row = state["knowledge"][0]
+    row = next(row for row in state["knowledge"] if row["id"] == 40)
     assert row["model"] == "11" and row["state"] == 3
     assert row["model_config_revision"] == 1 and row["index_generation"] != "g0"
     assert row["model_transition"] == {
