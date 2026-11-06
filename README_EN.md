@@ -108,6 +108,8 @@ BISHENG is an **open-source, all-in-one enterprise Agent platform** focused on o
    - **From local development to team use**: Submit an application developed locally or with a Coding Agent. After preflight checks, secret scanning, build and release approval, set its access scope and publish it to the Application Center.
    - **Reuse platform capabilities**: Applications can reuse platform sign-in and visitor identity, and access models and knowledge resources as needed, reducing duplicate infrastructure. Capabilities and configuration requirements depend on the relevant release documentation.
 
+   ![Vibe App release management in BISHENG Application Workshop](docs/images/readme/bisheng-vibe-app.png)
+
 7. **🏢 Enterprise-grade features: the controls that enterprise AI needs**
 
    - **Department and user management**: Maintain the organization structure, users and quotas.
@@ -116,6 +118,9 @@ BISHENG is an **open-source, all-in-one enterprise Agent platform** focused on o
    - **Audit**: Records conversation content and system operation logs, searchable by user, time and module.
    - **Dashboards** (commercial edition): Preset dashboards for user activity, application usage, token usage, knowledge base usage and more.
    - **API key permission boundaries**: Administrators issue keys for service accounts, set expiration and interface permissions, and grant access to specific applications, knowledge bases and other resources. Interface permissions determine which actions are allowed; resource grants determine where those actions apply. Possessing a key does not grant access to the entire platform.
+
+     ![BISHENG API key issuance and permission settings](docs/images/readme/bisheng-api-key.png)
+
    - **Xinchuang (domestic IT stack) support**: Supports both MySQL and Dameng DM8.
    - Also: SSO/LDAP, high-availability deployment, content security review, traffic control, monitoring and statistics, and vulnerability scanning and fixes.
    <p align="center"><img src="https://dataelem.com/bs/pro.png" alt="enterprise"></p>
