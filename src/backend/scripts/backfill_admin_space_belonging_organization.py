@@ -1,8 +1,9 @@
 """把 admin 在部门库、科室库、团队库中的文件所属组织改成该库对应的组织。
 
 部门库「首钢集团有限公司现行财务制度汇编」不处理。
-其他部门库取成员列表里的第一个库管理员, 使用该用户的唯一有效主组织。
-列表顺序与成员管理页一致: 创建者优先于管理员, 同角色按 user_name 升序。
+其他部门库只读 OpenFGA 关系 manager, 排除 admin 账号。
+多名 manager 按成员管理页顺序取第一个: user_name 升序, 同名再按 user_id 升序。
+该用户的唯一有效主组织如果是班组, 改用直接上级科室; 否则使用主组织本身。
 科室库使用 department_knowledge_space.department_id, 且必须是有效科室。
 团队库优先使用部门绑定或 owner 为部门的组织; 否则使用团队创建人的唯一有效主组织。
 只改 user_id 为 admin 的文件行, 不改目录、收藏引用和投影墓碑, 不改 update_time。
@@ -35,17 +36,18 @@ SPACE_LEVELS = ("department", "team_ks", "team")
 EXCLUDED_DEPARTMENT_SPACE_NAME = "首钢集团有限公司现行财务制度汇编"
 
 
-def first_library_admin(members: list[tuple[int, str, str]]) -> int | None:
-    """Pick the first creator/admin the way the member list does.
+def first_displayed_manager(managers: list[tuple[int, str]], admin_user_id: int) -> int | None:
+    """Pick the first manager the member page shows, skipping the admin account.
 
-    members are (user_id, role, user_name). This mirrors the page order for tests.
-    The script itself asks the database to order by the same columns.
+    managers are (user_id, user_name) and already limited to OpenFGA manager users.
+    The member page orders one role by user_name. user_id breaks equal names so a
+    rerun selects the same person; the page itself has no third sort key.
     """
-    admins = [item for item in members if item[1] in {"creator", "admin"}]
-    if not admins:
+    eligible = [item for item in managers if int(item[0]) != int(admin_user_id)]
+    if not eligible:
         return None
-    admins.sort(key=lambda item: (0 if item[1] == "creator" else 1, item[2] or "", item[0]))
-    return admins[0][0]
+    eligible.sort(key=lambda item: (item[1] or "", int(item[0])))
+    return int(eligible[0][0])
 
 
 def _value(item: Any) -> str:
@@ -99,6 +101,23 @@ def usable_department(department: Any, tenant_id: int) -> bool:
     )
 
 
+def organization_above_squad(department: Any, parent: Any, tenant_id: int) -> tuple[int | None, str]:
+    """Use the manager primary organization, or its parent office when it is a squad."""
+    if not usable_department(department, tenant_id):
+        return None, "department_manager_organization_missing"
+    if str(department.org_level or "") != "squad":
+        return int(department.id), "ok"
+    parent_id = getattr(department, "parent_id", None)
+    if (
+        parent_id is None
+        or not usable_department(parent, tenant_id)
+        or str(parent.org_level or "") != "office"
+        or int(parent.id) != int(parent_id)
+    ):
+        return None, "department_manager_squad_parent_not_office"
+    return int(parent.id), "ok"
+
+
 def organization_for_space(
     *,
     level: str,
@@ -110,13 +129,14 @@ def organization_for_space(
     tenant_id: int,
     excluded: bool = False,
     admin_organization_id: int | None = None,
+    department_manager_reason: str | None = None,
 ) -> tuple[int | None, str]:
     """Return the organization id to store, and a reason when it cannot be stored."""
     if level == "department":
         if excluded:
             return None, "department_space_excluded"
         if admin_organization_id is None:
-            return None, "department_admin_organization_missing"
+            return None, department_manager_reason or "department_manager_organization_missing"
         return int(admin_organization_id), "ok"
     if level == "team_ks":
         if binding_department_id is None:
@@ -156,50 +176,38 @@ def _creator_user_id(owner_type: str, owner_id: int, created_by: int, knowledge_
     return None
 
 
-async def _load_first_department_admins(session, space_ids: set[int]) -> dict[int, int]:
-    """First creator/admin on the member-management list, one user per space."""
-    from sqlalchemy import case
+async def _load_user_names(session, user_ids: set[int]) -> dict[int, str]:
     from sqlmodel import select
 
-    from bisheng.common.models.space_channel_member import (
-        BusinessTypeEnum,
-        MembershipStatusEnum,
-        SpaceChannelMember,
-        UserRoleEnum,
-    )
     from bisheng.user.domain.models.user import User
+
+    if not user_ids:
+        return {}
+    rows = (await session.exec(select(User.user_id, User.user_name).where(User.user_id.in_(sorted(user_ids))))).all()
+    return {int(row.user_id): row.user_name or "" for row in rows}
+
+
+async def _load_department_managers(session, space_ids: set[int], admin_user_id: int) -> dict[int, int]:
+    """First OpenFGA manager on the member page, excluding the admin account."""
+    from bisheng.points.domain.services.space_fga_roles import read_space_owner_manager_ids
 
     if not space_ids:
         return {}
-    role_order = case(
-        (SpaceChannelMember.user_role == UserRoleEnum.CREATOR, 0),
-        (SpaceChannelMember.user_role == UserRoleEnum.ADMIN, 1),
-        else_=2,
-    )
-    rows = (
-        await session.exec(
-            select(SpaceChannelMember.business_id, SpaceChannelMember.user_id)
-            .join(User, SpaceChannelMember.user_id == User.user_id)
-            .where(
-                SpaceChannelMember.business_id.in_([str(space_id) for space_id in space_ids]),
-                SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
-                SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
-                SpaceChannelMember.user_role.in_([UserRoleEnum.CREATOR, UserRoleEnum.ADMIN]),
-            )
-            .order_by(
-                SpaceChannelMember.business_id,
-                role_order,
-                User.user_name.asc(),
-                SpaceChannelMember.user_id.asc(),
-            )
-        )
-    ).all()
-    first: dict[int, int] = {}
-    for row in rows:
-        space_id = int(row.business_id)
-        if space_id not in first:
-            first[space_id] = int(row.user_id)
-    return first
+    by_space: dict[int, set[int]] = {}
+    user_ids: set[int] = set()
+    for space_id in sorted(space_ids):
+        _owners, manager_ids = await read_space_owner_manager_ids(space_id)
+        eligible = {int(user_id) for user_id in manager_ids if int(user_id) != int(admin_user_id)}
+        by_space[space_id] = eligible
+        user_ids.update(eligible)
+    names = await _load_user_names(session, user_ids)
+    chosen: dict[int, int] = {}
+    for space_id, eligible in by_space.items():
+        visible = [(user_id, names[user_id]) for user_id in eligible if user_id in names]
+        manager_id = first_displayed_manager(visible, admin_user_id)
+        if manager_id is not None:
+            chosen[space_id] = manager_id
+    return chosen
 
 
 async def _load_departments(session, department_ids: set[int]) -> dict[int, Any]:
@@ -329,12 +337,12 @@ async def preview(session, journal: JsonlJournal, *, tenant_id: int, admin_user_
     journal.write(
         {
             "type": "header",
-            "version": 2,
+            "version": 3,
             "mode": "preview",
             "tenant_id": tenant_id,
             "admin_user_id": admin_user_id,
             "database_key": database_key(session),
-            "rule": "admin_file_space_organization_v2",
+            "rule": "admin_file_space_organization_v3",
         }
     )
     while True:
@@ -349,10 +357,10 @@ async def preview(session, journal: JsonlJournal, *, tenant_id: int, admin_user_
             for row in rows
             if _value(row.level) == "department" and row.name != EXCLUDED_DEPARTMENT_SPACE_NAME
         }
-        first_admins = await _load_first_department_admins(session, department_space_ids)
+        department_managers = await _load_department_managers(session, department_space_ids, admin_user_id)
         department_ids = set()
         group_ids = set()
-        creator_ids = set(first_admins.values())
+        creator_ids = set(department_managers.values())
         for row in rows:
             if row.department_id and _value(row.level) != "department":
                 department_ids.add(int(row.department_id))
@@ -377,18 +385,38 @@ async def preview(session, journal: JsonlJournal, *, tenant_id: int, admin_user_
         primaries = await _load_primary_organizations(session, creator_ids, tenant_id)
         department_ids.update(org_id for org_id in primaries.values() if org_id)
         departments = await _load_departments(session, department_ids)
+        squad_parent_ids = {
+            int(department.parent_id)
+            for department in departments.values()
+            if str(department.org_level or "") == "squad" and department.parent_id
+        }
+        missing_parent_ids = squad_parent_ids - set(departments)
+        if missing_parent_ids:
+            departments.update(await _load_departments(session, missing_parent_ids))
         for row in rows:
             counts["scanned"] += 1
             binding_id = None if row.department_id is None else int(row.department_id)
             department = None
             creator_organization_id = None
             admin_organization_id = None
+            department_manager_reason = None
             excluded = _value(row.level) == "department" and row.name == EXCLUDED_DEPARTMENT_SPACE_NAME
-            if _value(row.level) == "department":
-                admin_user_id = first_admins.get(int(row.knowledge_id))
-                admin_organization_id = None if admin_user_id is None else primaries.get(admin_user_id)
-                if admin_organization_id is not None:
-                    department = departments.get(admin_organization_id)
+            if _value(row.level) == "department" and not excluded:
+                manager_user_id = department_managers.get(int(row.knowledge_id))
+                if manager_user_id is None:
+                    department_manager_reason = "department_manager_missing"
+                else:
+                    primary_id = primaries.get(manager_user_id)
+                    primary = None if primary_id is None else departments.get(primary_id)
+                    parent = None
+                    if primary is not None and primary.parent_id is not None:
+                        parent = departments.get(int(primary.parent_id))
+                    admin_organization_id, department_manager_reason = organization_above_squad(
+                        primary, parent, tenant_id
+                    )
+                    if admin_organization_id is not None:
+                        department = departments.get(admin_organization_id)
+                        department_manager_reason = None
             elif _value(row.owner_type) == "department":
                 department = departments.get(int(row.owner_id))
             elif binding_id is not None:
@@ -418,6 +446,7 @@ async def preview(session, journal: JsonlJournal, *, tenant_id: int, admin_user_
                 tenant_id=tenant_id,
                 excluded=excluded,
                 admin_organization_id=admin_organization_id,
+                department_manager_reason=department_manager_reason,
             )
             if organization_id is None:
                 counts["skipped"] += 1
@@ -452,7 +481,7 @@ async def apply_plan(session, path: Path, journal: JsonlJournal) -> dict:
 
     records = list(read_records(path))
     header = records[0] if records else {}
-    if header.get("type") != "header" or header.get("mode") != "preview" or header.get("version") != 2:
+    if header.get("type") != "header" or header.get("mode") != "preview" or header.get("version") != 3:
         raise ValueError("计划头无效")
     if header.get("database_key") != database_key(session):
         raise ValueError("计划与当前数据库不一致")

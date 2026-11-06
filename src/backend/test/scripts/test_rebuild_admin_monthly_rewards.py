@@ -5,8 +5,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-import pytest
-
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "rebuild_admin_monthly_rewards.py"
 SPEC = importlib.util.spec_from_file_location("rebuild_admin_monthly_rewards", SCRIPT)
 script = importlib.util.module_from_spec(SPEC)
@@ -67,8 +65,9 @@ def test_rebuild_shifts_later_balances_and_keeps_later_last_earned_at():
     )
     assert plan.balance_delta == -100
     assert plan.lifetime_earned_delta == -100
-    assert plan.balance_updates[3] == 215
-    assert plan.new_balances[0][1] == 210
+    assert 1 not in plan.balance_updates
+    assert plan.balance_updates[3] == 15
+    assert plan.new_balances[0][1] == 215
     assert plan.new_balances[0][0].occurred_at == datetime(2026, 10, 1, 0, 5)
     assert plan.last_earned_at == datetime(2026, 11, 3, 8, 0)
 
@@ -119,7 +118,32 @@ def test_removed_admin_drops_award_and_recomputes_last_earned_at():
     assert plan.last_earned_at == datetime(2026, 9, 2, 9, 0)
 
 
-def test_broken_chain_is_rejected():
-    logs = [_log(1, datetime(2026, 10, 1, 0, 5), 300, 300)]
-    with pytest.raises(script.RebuildRejected):
-        script.plan_user_rebuild(logs, account_balance=299, delete_ids={1}, new_awards=[])
+def test_monthly_rows_outside_m1_m4_m6_are_left_alone():
+    class Row:
+        def __init__(self, user_id):
+            self.user_id = user_id
+
+    rows = [Row(1), Row(12620), Row(7)]
+    kept = script.rows_for_candidates(rows, {1, 7})
+    assert [row.user_id for row in kept] == [1, 7]
+
+
+def test_backfill_balance_mismatch_does_not_block_monthly_delta():
+    logs = [
+        _log(10, datetime(2026, 11, 2, 9, 0), 2, 2),
+        _log(20, datetime(2026, 8, 1, 0, 0), 142, 144),
+        _log(30, datetime(2026, 10, 1, 0, 5), 300, 444, key="reward:M1:7:2026-09"),
+    ]
+    award = script.NewAward(
+        user_id=7,
+        period_key="2026-09",
+        rule_code="M1",
+        delta=200,
+        occurred_at=datetime(2026, 10, 1, 0, 5),
+        title="公共库所有者月奖",
+        idempotency_key="reward:M1:7:2026-09",
+    )
+    plan = script.plan_user_rebuild(logs, account_balance=444, delete_ids={30}, new_awards=[award])
+    assert plan.balance_delta == -100
+    assert plan.balance_updates == {}
+    assert plan.new_balances[0][1] == 344
