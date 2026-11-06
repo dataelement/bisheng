@@ -3955,7 +3955,7 @@
 
 - [ ] **T500 · 知识RAG原生模型来源准入**
   **类型 / Owner**：实现 / KN\
-  **写入文件**：`src/backend/bisheng/knowledge/domain/knowledge_rag.py`\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/knowledge_rag.py`；`src/backend/bisheng/knowledge/domain/repositories/model_reference_repository.py`\
   **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
   **依赖**：T499\
   **配对测试**：T499\
