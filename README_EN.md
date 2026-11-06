@@ -62,7 +62,15 @@ BISHENG is an **open-source, all-in-one enterprise Agent platform** focused on o
 
    > The mobile app is coming soon. Features and release plans are subject to the relevant release documentation.
 
-2. **🚀 Task Mode: a general-purpose agent for complex, multi-step work**
+2. **🛠️ Application Workshop: publish Vibe Apps for your team**
+
+   - **Turn business needs into applications**: Build dedicated pages for registration forms, project registers or department dashboards, and let colleagues open them from the Application Center.
+   - **From local development to team use**: Submit an application developed locally or with a Coding Agent. After preflight checks, secret scanning, build and release approval, set its access scope and publish it to the Application Center.
+   - **Reuse platform capabilities**: Applications can reuse platform sign-in and visitor identity, and access models and knowledge resources as needed, reducing duplicate infrastructure. Capabilities and configuration requirements depend on the relevant release documentation.
+
+   ![Vibe App release management in BISHENG Application Workshop](docs/images/readme/bisheng-vibe-app.png)
+
+3. **🚀 Task Mode: a general-purpose agent for complex, multi-step work**
    You give it a goal and, if needed, attach files, knowledge bases, tools and skills. The agent breaks the goal into tasks, runs them step by step, and delivers a report, PPT, Excel or Word file.
 
    - 🧠 **Task planning + parallel sub-agents**: The main agent builds a task checklist, tracks progress, and gives independent research tasks to sub-agents that run in parallel.
@@ -71,7 +79,7 @@ BISHENG is an **open-source, all-in-one enterprise Agent platform** focused on o
    - 📎 **Traceable conclusions**: Reports carry citation markers. Click a marker to open the source and go to the cited passage.
    <p align="center"><img src="docs/images/readme/task-mode.png" alt="task-mode"></p>
 
-3. **📚 Knowledge Space: an enterprise knowledge base for teams**
+4. **📚 Knowledge Space: an enterprise knowledge base for teams**
 
    - 🗂️ **Organized content**: Multi-level folders, tags, card and list views, and search by keyword and tag together.
    - 👥 **Built by the team**: Invite members with a permission template (Owner / Manager / Editor / Viewer), or publish the space to the Knowledge Square so that others can join. A super admin can create a Department Space for a department in one step.
@@ -79,26 +87,18 @@ BISHENG is an **open-source, all-in-one enterprise Agent platform** focused on o
    - 💬 **AI Q&A**: Ask questions about one document or about the whole space. Answers show their sources; click a source to open the original text at the cited location.
    <p align="center"><img src="docs/images/readme/knowledge-space.png" alt="knowledge-space"></p>
 
-4. **📡 Channels: external news delivered every day, and saved as knowledge in one click**
+5. **📡 Channels: external news delivered every day, and saved as knowledge in one click**
 
    - 📰 **Topic channels**: Combine WeChat official accounts and websites into topic channels that update every day. A channel can have sub-channels.
    - 🎯 **Precise filtering**: Custom rules filter titles and body text, so only relevant articles stay.
    <p align="center"><img src="docs/images/readme/channel.png" alt="channel"></p>
 
-5. **🧩 Unique [BISHENG Workflow](https://dataelem.feishu.cn/wiki/R7HZwH5ZGiJUDrkHZXicA9pInif)**
+6. **🧩 Unique [BISHENG Workflow](https://dataelem.feishu.cn/wiki/R7HZwH5ZGiJUDrkHZXicA9pInif)**
 
    - **Independent and complete orchestration framework**: There is no split between chatflow and workflow. Multi-turn conversation and automated processing can be in the same flow.
    - **Human in the loop**: A running flow can stop and wait for a person to give input, confirm, or make changes.
    - **Loops, parallel branches and batch runs in any combination**: Draw a circle to make a loop (most similar products do not support loops), place nodes side by side to run them in parallel, and select multiple items to run a batch. This fits complex scenarios such as document review and fixed-layout report generation.
    <p align="center"><img src="https://dataelem.com/bs/bisheng_workflow.png" alt="workflow"></p>
-
-6. **🛠️ Application Workshop: publish Vibe Apps for your team**
-
-   - **Turn business needs into applications**: Build dedicated pages for registration forms, project registers or department dashboards, and let colleagues open them from the Application Center.
-   - **From local development to team use**: Submit an application developed locally or with a Coding Agent. After preflight checks, secret scanning, build and release approval, set its access scope and publish it to the Application Center.
-   - **Reuse platform capabilities**: Applications can reuse platform sign-in and visitor identity, and access models and knowledge resources as needed, reducing duplicate infrastructure. Capabilities and configuration requirements depend on the relevant release documentation.
-
-   ![Vibe App release management in BISHENG Application Workshop](docs/images/readme/bisheng-vibe-app.png)
 
 7. **🏢 Enterprise-grade features: the controls that enterprise AI needs**
 
