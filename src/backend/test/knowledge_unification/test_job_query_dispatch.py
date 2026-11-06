@@ -12,24 +12,6 @@ from bisheng.knowledge.domain.repositories.processing_job_repository import Proc
 from test.knowledge_unification.test_job_repo import (
     clock as clock,
 )
-
-
-@pytest.fixture(autouse=True)
-def job_query_tenant_filters(monkeypatch):
-    from bisheng.core.database import tenant_filter
-
-    names = tenant_filter._tenant_aware_tables | {
-        "knowledge",
-        "knowledge_processing_job",
-        "knowledge_processing_item",
-        "knowledge_processing_retry_receipt",
-    }
-    monkeypatch.setattr(tenant_filter, "_force_import_all_models", lambda: None)
-    monkeypatch.setattr(tenant_filter, "_discover_tenant_aware_tables", lambda: names)
-    monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", names)
-    tenant_filter.register_tenant_filter_events()
-
-
 from test.knowledge_unification.test_job_repo import (
     completed_pair,
     create,
@@ -47,6 +29,22 @@ from test.knowledge_unification.test_job_repo import (
 from test.knowledge_unification.test_job_repo import (
     repository as repository,
 )
+
+
+@pytest.fixture(autouse=True)
+def job_query_tenant_filters(monkeypatch):
+    from bisheng.core.database import tenant_filter
+
+    names = tenant_filter._tenant_aware_tables | {
+        "knowledge",
+        "knowledge_processing_job",
+        "knowledge_processing_item",
+        "knowledge_processing_retry_receipt",
+    }
+    monkeypatch.setattr(tenant_filter, "_force_import_all_models", lambda: None)
+    monkeypatch.setattr(tenant_filter, "_discover_tenant_aware_tables", lambda: names)
+    monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", names)
+    tenant_filter.register_tenant_filter_events()
 
 
 async def test_job_pages_are_complete_and_stable_for_tied_acceptance_time(job_session, repository, configuration):
