@@ -1451,8 +1451,8 @@
 - [ ] **T178 · 平台分类型策略草稿**
   **类型 / Owner**：前端 Platform / PLATFORM\
   **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/components/RuleFile.tsx`；`src/frontend/platform/src/pages/KnowledgePage/components/RuleTable.tsx`\
-  **逻辑 / 测试上下文**：类型切换保各草稿，save/create成功才生效，取消/校验/服务器失败不改已保存默认；支持已有选项和范围，表格不套文档。\
-  **依赖**：T177\
+  **逻辑 / 测试上下文**：W6§17两叶新增具名受控默认fields及Draft类型，保旧上传分支；数字清空不补默认、完整字段保留；切类型/保存父边界由T707承接，实际入口T176/T179另验。\
+  **依赖**：T705, T698, T696\
   **验证 / 完成条件**：切文档/表格保未保存值、overlap/header范围及错误、取消/失败零保存；关联规格：AC-38, AC-39, AC-40, AC-41, AC-42, AC-43, AC-44。
 
 - [ ] **T179 · 平台上传与默认设置接线**
@@ -5653,6 +5653,33 @@
   **配对测试**：T703\
   **覆盖 AC**: AC-56, AC-63, AC-64, AC-70, AC-71, AC-87, AC-88, AC-89, AC-93\
   **验证 / 完成条件**：配对及原盘点/target边界通过，C2静态及独立固定SHA审；不勾完整M2/回填任务。
+
+## W6平台处理默认受控草稿真实消费前置
+
+- [ ] **T705 · 两类默认规则受控字段测试**
+  **类型 / Owner**：测试 / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/test/f118ProcessingDefaultsFields.test.tsx`\
+  **逻辑 / 测试上下文**：真实InputNumber/Checkbox控制保空值与越界输入，文档完整字段、PDF选项、层级6；表格不要求fileList/逐file开关；旧上传原用法回归。\
+  **依赖**：T698, T696\
+  **覆盖 AC**: AC-38, AC-39, AC-40, AC-41, AC-42, AC-43, AC-44\
+  **验证 / 完成条件**：先真实红再T178两叶实现，原组件调用及目标lint/strict基线无新增诊断；locale由INT。
+
+- [ ] **T706 · 双类型草稿及保存边界测试**
+  **类型 / Owner**：测试 / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/test/f118ProcessingDefaultsEditor.test.tsx`；`src/frontend/platform/src/test/f118ProcessingDefaultsDialog.test.tsx`\
+  **逻辑 / 测试上下文**：真实Editor/Dialog切类型保草稿、双类型完整校验、空值不coerce、取消/失败/CAS不改已存、成功整体提交、切scope与迟到响应隔离。\
+  **依赖**：T178, T698\
+  **覆盖 AC**: AC-07, AC-38, AC-39, AC-40, AC-41, AC-42, AC-43, AC-44, AC-87\
+  **验证 / 完成条件**：先真实红，注入形状同原API port，不造生产mock开关；初值不硬编码。
+
+- [ ] **T707 · 双类型默认草稿编辑与持久保存host**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/components/ProcessingDefaultsEditor.tsx`；`src/frontend/platform/src/pages/KnowledgePage/components/ProcessingDefaultsDialog.tsx`\
+  **逻辑 / 测试上下文**：W6§17受控Editor与真实settings API/scope hook host，完整draft和expected版本整体提交，仅成功生效，不建历史任务、不扩权限。\
+  **依赖**：T706\
+  **配对测试**：T706\
+  **覆盖 AC**: AC-07, AC-38, AC-39, AC-40, AC-41, AC-42, AC-43, AC-44, AC-87\
+  **验证 / 完成条件**：配对、旧规则/上传调用回归、lint/strict新增0，固定独立审；真实页面挂载与E2E另卡。
 
 ## 自动化覆盖索引
 

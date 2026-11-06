@@ -257,3 +257,15 @@ M2不能将现在线bind Owner经tenant过滤后的exists=False当全局物理�
 同叶frozen/slots事实不保存原ORM：Model含key、exists、target_tenant_id、model_type、is_online、server_id、server_exists、server_tenant_id、闭集revision_digest；Knowledge含key、exists、target_tenant_id、knowledge_id、knowledge_type、file_type、space_exists、space_tenant_id、闭集revision_digest。space目标knowledge_id即自身；file目标由真实File.knowledge_id和LEFT父空间派生，DIR可能是原频道的合法文件夹引用，不能一概过滤；type0/1/2/3都返回原type事实。digest只覆盖实际闭集标量及相关update_time/model R/G，不声称等价provider全配置摘要，不在事实中输出后者。
 
 全局真实行存在即exists=True，包括foreign、offline、type2、父不存在或父tenant错误；这些必须保留可区分事实，不能因JOIN/资格条件过滤成missing。只有精确原数字ID在该实体全局不存在才exists=False。目标tenant不属于当前、类型不适用或父关系错误由后续真实迁移Owner资格组合明确拒绝；Root共享/默认继承必须使用原真实sharing证据，不能因全局目录已知便扩大资格。未能唯一解析出原ID的APP名称、离线仅名候选/歧义都不能造target_missing证据，仍待M2显式阻断/原语义解析。正式盘点、名称资格、原始失效证据bootstrap与Coverage转换消费者在后续子合同装配，当前两卡不等于完整T162/T168完成。
+
+## 17. 平台处理默认策略受控草稿子合同 V1：已冻结
+
+原T178仅写RuleFile/RuleTable两现有叶，新增具名受控`DocumentProcessingDefaultsFields`、`TableProcessingDefaultsFields`及各自Draft类型（真实Document/Table规则数字字段为number|null，其余逐字段保原类型）；旧默认export/上传/预览调用保持，禁止复用其清空自动补1000/0/10/1、fileList或逐文件开关进入默认保存。新分支复用既有布局/提示和已done共享InputNumber/Checkbox/Select，无新组件库/视觉规范；不得跨client导入。若共享同一旧render实现，必须同样保证所有新草稿边界，文件≤600行。
+
+完整映射：splitMode→split_mode；chunkSize/chunkOverlap/hierarchyLevel/maxChunkSize→四snake数字；appendTitle→bool append_title；retainImages/forceOcr/enableFormula/pageHeaderFooter→0|1；strategies[].regex/position→有序separator/separator_rule。Table四snake字段直接对应，默认模式不展示逐file设置/预览。默认文档策略保现有PDF专用选项及既有适用范围提示，不能因无fileList全部隐藏；选项执行仍由真实文件能力过滤，不新增解析能力。
+
+新`ProcessingDefaultsEditor.tsx`仅受控`value:ProcessingDefaultsDraft,onChange,disabled?`，统一两份草稿，类型切换不重置隐藏字段；含纯toDraft/validate-and-to-wire函数，只有合法完整schema_version=1的ProcessingDefaults才可保存。数字以InputNumber保持number|null；empty不得coerce到0/默认。所有类型一起校验finite/safeInteger、正数/非负、hierarchy1..6、overlap≤chunk_size、header_start≤header_end（append_header=0也校验）、separator非空且两个数组等长/position合法。不校验未展示类型的错误会构成漏口，不能仅依赖blur。
+
+新`ProcessingDefaultsDialog.tsx`用现get/updateProcessingSettings和scope hooks，收到space_id/scope/open/onOpenChange等原页面props。打开先读服务端有效默认和config_version，不猜初值；编辑保持完整draft与发起scope/config_version，保存整体types提交expected_config_version。不为设置保存建J1、不改变历史文件。成功且scope仍原值才更新已保存状态/关闭；取消、校验失败、CAS/服务器失败不污染服务端旧值，失败不自动关闭；scope变化清除旧草稿并拒迟到成功。原资源edit/后台资格由页面与后端独立控制，Dialog不创造新权限动作。
+
+T705先测两个受控fields→原T178；T706再测父Editor/Dialog→T707两叶。创建Dialog、T176三tab/detail与T179上传后续独立接线，不能以此四组件代替整入口完成。locale由INT唯一Owner：平台继续useTranslation与public/locales，不套skill通用client路径；新键统一knowledge:f118命名空间，原save/cancel/字段名及提示优先复用，新增键需报root三语同步，不修改API errors生成文件。
