@@ -98,7 +98,9 @@ def test_sdk_decodes_real_fixed_float32_dimensions(api, dimension, encoding):
                 struct.unpack("<" + "f" * dimension, struct.pack("<" + "f" * dimension, *vector))
             )
             vectors.append(list(vector))
-        repeat = client.embeddings.create(model=model, input="e2e-f118-alpha", encoding_format="float")
+        repeat = client.embeddings.create(
+            model=model, input="e2e-f118-alpha", encoding_format="float", dimensions=dimension
+        )
         assert repeat.data[0].embedding == vectors[0]
         assert vectors[0] != vectors[1]
 
@@ -123,7 +125,15 @@ async def test_real_langchain_sync_and_async_embedding_use_the_same_wire(api):
 
 @pytest.mark.parametrize(
     "changes",
-    [{"model": "unknown"}, {"dimensions": 16}, {"input": []}, {"input": [12]}, {"encoding_format": "unknown"}],
+    [
+        {"model": "unknown"},
+        {"model": {"unexpected": "object"}},
+        {"dimensions": 16},
+        {"input": []},
+        {"input": [12]},
+        {"encoding_format": "unknown"},
+        {"encoding_format": ["float"]},
+    ],
 )
 def test_embedding_rejects_unsupported_models_inputs_and_dimension_overrides(api, changes):
     """AC-48: a model cannot silently turn into another physical vector dimension."""
@@ -146,7 +156,8 @@ async def test_real_chat_client_handles_nonstream_probe_and_stream_with_usage(ap
             )
             answer = client.invoke("hello")
             assert answer.content.startswith("F118 mock") and answer.usage_metadata["total_tokens"] > 0
-            chunks = [chunk async for chunk in client.astream("e2e-f118-question")]
+            streaming_client = client.model_copy(update={"streaming": True})
+            chunks = [chunk async for chunk in streaming_client.astream("e2e-f118-question")]
             assert "".join(chunk.content for chunk in chunks) == answer.content
             assert sum((chunk.usage_metadata or {}).get("total_tokens", 0) for chunk in chunks) > 0
     totals = api.get("/__control/stats").json()["totals"]
@@ -241,7 +252,9 @@ def test_actual_text_and_markdown_loaders_do_not_call_etl(api, tmp_path, extensi
 
     path = tmp_path / f"e2e-f118-local.{extension}"
     path.write_text("# E2E heading\n\ne2e_f118_local_document\n", encoding="utf8")
-    pipeline = LocalPipeline(invoke_user_id=7, file_name=path.name, file_rule=FileProcessBase(split_mode=mode))
+    pipeline = LocalPipeline(
+        invoke_user_id=7, file_name=path.name, file_rule=FileProcessBase(knowledge_id=101, split_mode=mode)
+    )
     pipeline.local_file_path, pipeline.tmp_dir = str(path), str(tmp_path)
     loader = getattr(pipeline, FileExtensionMap[extension]["loader"])()
     assert not isinstance(loader, etl4lm.Etl4lmLoader)
@@ -310,6 +323,7 @@ def test_control_stats_reset_and_unsupported_protocols_are_explicit(api):
     assert api.get("/healthz").json() == {"status": "ok"}
     assert api.post("/__control/fail-next", json={"kind": "embedding", "marker": ""}).status_code == 400
     assert api.post("/__control/fail-next", json={"kind": "chat", "marker": "e2e-f118"}).status_code == 400
+    assert api.post("/__control/fail-next", json={"kind": ["etl"], "marker": "e2e-f118"}).status_code == 400
     assert api.post("/v1/responses", json={}).status_code == 404
     assert (
         api.post(
@@ -317,8 +331,15 @@ def test_control_stats_reset_and_unsupported_protocols_are_explicit(api):
         ).status_code
         == 400
     )
-    api.post("/v1/embeddings", json={"model": "f118-embed-8", "input": "e2e-f118-private-input"})
+    api.post(
+        "/v1/embeddings",
+        json={"model": "f118-embed-8", "input": "e2e-f118-private-input"},
+        headers={"Authorization": "Bearer e2e-f118-private-header"},
+    )
+    stats = json.dumps(api.get("/__control/stats").json())
+    assert "e2e-f118-private-input" not in stats and "e2e-f118-private-header" not in stats
     assert api.post("/__control/fail-next", json={"kind": "etl", "marker": "e2e-f118"}).status_code == 200
+    assert api.post("/__control/fail-next", json={"kind": "embedding", "marker": "e2e-f118"}).status_code == 409
     assert api.post("/__control/reset").status_code == 200
     assert api.get("/__control/stats").json() == {
         "totals": {"embedding": 0, "chat_nonstream": 0, "chat_stream": 0, "etl": 0},
