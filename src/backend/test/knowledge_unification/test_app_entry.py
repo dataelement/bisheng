@@ -9,6 +9,8 @@ from bisheng.app_runtime.domain.services import entry_authz_service as module
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.core.context.tenant import current_tenant_id
 
+SYNTHETIC_SESSION = "original-jwt"
+
 
 @pytest.fixture
 def entry(monkeypatch):
@@ -51,10 +53,10 @@ def entry(monkeypatch):
 
 
 async def test_visible_only_visitor_enters_without_use_or_edit(entry):
-    verdict = await module.authorize_entry(slug="actual", access_token="original-jwt")
+    verdict = await module.authorize_entry(slug="actual", access_token=SYNTHETIC_SESSION)
     assert verdict["decision"] == "allow"
     entry.action.assert_awaited_once_with(entry.user, resource_type="app", resource_id="actual-app", action="visible")
-    entry.session.assert_awaited_once_with(4, 101, entry.subject, "original-jwt")
+    entry.session.assert_awaited_once_with(4, 101, entry.subject, SYNTHETIC_SESSION)
     assert entry.token.call_args.kwargs["user_id"] == 4
     assert entry.token.call_args.kwargs["app_id"] == "actual-app"
     assert verdict["headers"]["X-BiSheng-Access-Token"] == "signed-original-obo"
@@ -63,7 +65,7 @@ async def test_visible_only_visitor_enters_without_use_or_edit(entry):
 async def test_invisible_visitor_never_gets_obo_identity(entry):
     entry.action.side_effect = None
     entry.action.return_value = False
-    verdict = await module.authorize_entry(slug="actual", access_token="original-jwt")
+    verdict = await module.authorize_entry(slug="actual", access_token=SYNTHETIC_SESSION)
     assert verdict["decision"] == "forbidden" and "headers" not in verdict
     entry.token.assert_not_called()
     entry.material.assert_not_awaited()
@@ -71,7 +73,7 @@ async def test_invisible_visitor_never_gets_obo_identity(entry):
 
 async def test_invalid_session_stops_before_application_or_action(entry):
     entry.session.return_value = "session_superseded"
-    assert await module.authorize_entry(slug="actual", access_token="original-jwt") == {
+    assert await module.authorize_entry(slug="actual", access_token=SYNTHETIC_SESSION) == {
         "decision": "login",
         "reason": "session_superseded",
     }
