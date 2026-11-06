@@ -313,3 +313,17 @@ guard在初始化/每个受控批次写前、ES写前及返回前await；后续�
 同tenant同TX iterator-local physical事实缓存按TargetKey复用，所有新unique targets按≤200整批精确PK预检，查询数按unique目标数，不按重复slot×来源×目录增长。fact只物理存在/owner/parent/type，不在本流判valid/legacy或写证据：foreign/offline/type2/坏父不变成missing，Root旧数值槽撤共享的原槽provenance与资格分类须后续单独协议。APP原数字ID origin=explicit_id，名称解析origin=resolved_name；名字无候选/歧义/离线无明确原ID仍失败，不从全局同名猜缺失。每源原references经normalize/digest/count完整枚举，保持确定阶段/PK/slot顺序；所有缓存均当前iterator内，不跨tenant/run/事务。
 
 本流仅只读实际SQL/FGA，不上传artifact、不写BRR/SourceSet/legacy/tombstone/Coverage/ready或ledger phase，不启停/探测服务、不做转换；全部依赖实际装配及分页/原extractor/原NameCatalog/physical预检集成后才能勾T716/T717，完整M2、初始回填/资格与CLI另卡。
+
+## 22. 平台三页签与空间创建实际入口子合同 V1：已冻结
+
+T718测试→T719：现knowledgeSpace API增加`updateSpaceBasicInfo(spaceId,{name:string,description:string,is_released:boolean}):Promise<KnowledgeSpaceInfo>`，既有PUT /knowledge/space/{id}；显式投影这三字段，不透传model/defaults/auth/share或其他body键，不新增全局管理头。此原空间用例继续容器edit，文件/文件夹rename仍原rename。现update DTO默认is_released=False，编辑必须先真getSpaceInfo捕获原bool并按原值提交；缺少原bool拒绝保存，不猜false。API及KnowledgeSpaceApi port更新限现单叶≤600行，配对两现测试的literal port fixture同步；无其他请求层或公共鉴权变更。
+
+T720测试→T721：KnowledgeLibraryDialog单叶改为真实SPACE创建/基本信息编辑，新增必需scope:KnowledgeQueryScope及同形api测试口；原open/onOpenChange/onLoadEnd/mode/currentLib和datalist接口可保，后一页内容不充当全局重名证明。create从真实creation-settings取工作台默认ID/系统规则→新ProcessingDefaultsEditor，两类型全校验，发embedding_model_id+processing_defaults，不发旧type0/model/expected_tenant_id。默认ID只有canonical正整数字符串且在现online embedding候选中才可转number；无效已保存原ID/名称显示待手动修复，不选首个候选或null fallback。候选沿原wrapped getModelListApi(/llm)，在Dialog用带当前scope的query key投影原online embedding options，复用ModelSelect视觉，不改无scope旧useModel hook。edit仅名称/说明及原is_released，不展示可改Embedding或调用旧updateKnowledge。真实API错误沿原showApiError，已知本地scope_changed用本地化可读文案；禁止裸内部token入用户提示。
+
+Dialog打开/关闭/换scope/卸载/ABA epoch及初次GET退休沿92e策略；其他活跃同key读取者保共享请求/cache；发出前、返回后及cache await后都重验，旧结果不设置新draft/跳转/关闭新Dialog。保存成功刷新原列表，正常创建/创建后导入可沿原/filelib/:id与/filelib/upload/:id路由；名称和资源资格必须重新从实际API读取，不将window.libname当权威。详情/目录/旧上传默认真正接线仍T177/T179等后续卡，本Dialog完成不代表那些消费者已完成；不改QA创建。原f115测试只document分支迁新scope/body，QA原pin/断言保留。
+
+原T176生产两叶修正为KnowledgePage/index.tsx+KnowledgeFile.tsx（不含detail），由T722测试先行。index用现userContext的已认证user_id/leaf_tenant_id/is_global_super/is_child_admin，超管另用现useAdminScope(enabled=super)的服务器scope_tenant_id，null/失败不回home/leaf；该hook无error字段，refresh失败由原showApiError呈现。非超管仅已知active membership leaf；正整数具体tenant未定时禁数据请求/创建并给重试，不将0/null当全平台。identityKey=user:{user_id}仅缓存分区，保组件epoch和原服务端身份校验；现无auth-session epoch，不读JWT/ws_token/UUR_INFO、不新增认证store/退出流程。scope两tenant字段均可信执行tenant，view为ordinary/admin。
+
+普通“知识空间”、独立QA及仅super或相应tenant admin的“知识空间管理”三tab；其他身份不因owner/manager/部门admin或旧role='admin'进入管理。普通创建仍super/tenantadmin或原create_knowledge菜单，不限制仅管理员。KnowledgeFile(scope,toolbarTarget?)按view分ordinary useKnowledgeVisibleSpaces opaque cursor与admin useKnowledgeAdminSpaces DB page/total；普通空页有has_more继续推进，不能客户端分页/过滤补管理数据，不造has_abnormal或详情统计。列表资源lazy actions与PermissionDialog仅该SPACE列表改knowledge_space，QA仍library；actions=null需真实懒读，不由admin身份补业务动作。scope/view变化重挂列表并退役对话框，不复用旧row确认状态。
+
+verify edit后挂现ProcessingDefaultsDialog和基本信息Dialog，copy/delete/force等未装配能力不挪旧library调用或资格；后续T180–T183实际R3/操作再接。管理清单只扩列举范围，不扩具体资源动作。原file/qa tab key和已有路由可保，新admin key只对合资格身份接受；旧普通标签到新f118.spaces只限当前入口，不全局改仍未统一的selector。新翻译由INT在三语实际locale同批提交，标题严格“知识空间管理”；sidebar统一名后续词条接线由INT登记，不改MainLayout架构。

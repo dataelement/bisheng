@@ -1436,9 +1436,9 @@
 
 - [ ] **T176 · 平台入口/三页签与创建**
   **类型 / Owner**：前端 Platform / PLATFORM\
-  **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/index.tsx`；`src/frontend/platform/src/pages/KnowledgePage/detail.tsx`\
-  **逻辑 / 测试上下文**：统一命名、QA独立；普通可见列表/admin仅超管租管具体租户；后台创建预选同默认可选模型/默认策略，前台跳转入口可解析ID。\
-  **依赖**：T175\
+  **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/index.tsx`；`src/frontend/platform/src/pages/KnowledgePage/KnowledgeFile.tsx`\
+  **逻辑 / 测试上下文**：按W6§22三tab/scope/ordinary Cursor/admin DB分页与SPACE懒授权、真实创建/基本设置/默认Dialog挂载；QA独立，copy/delete与完整详情/目录/上传后续接线不冒充完成。\
+  **依赖**：T722, T721, T719, T698, T707\
   **验证 / 完成条件**：菜单与角色/租户切换、无权直链、QA入口；Zustand不直接HTTP；关联规格：AC-01, AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-16, AC-84。
 
 - [ ] **T177 · 平台目录/上传/版本**
@@ -5772,6 +5772,50 @@
   **配对测试**：T716\
   **覆盖 AC**: AC-56, AC-63, AC-64, AC-70, AC-71, AC-80, AC-85, AC-87, AC-88, AC-89, AC-93\
   **验证 / 完成条件**：配对/原源提取及盘点相关组合、C2/SQL预算/保密静态和固定独立审；全租户正式freeze与回填/转换另验。
+
+## W6平台空间入口与实际创建接线
+
+- [ ] **T718 · 空间基本信息API闭集与port测试**
+  **类型 / Owner**：测试 / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/test/knowledgeSpaceContract.test.ts`；`src/frontend/platform/src/test/knowledgeQueryScope.test.tsx`\
+  **逻辑 / 测试上下文**：原PUT闭集name/description/is_released，不发model或其他字段，原ApiError与literal API port fixture保持；无新增管理头。\
+  **依赖**：T698\
+  **覆盖 AC**: AC-02, AC-33, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、每卡≤2叶，target lint/strict新增0、固定独立审；完整详情/上传/浏览器E2E另验。
+
+- [ ] **T719 · 空间基本信息窄API**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/controllers/API/knowledgeSpace.ts`\
+  **逻辑 / 测试上下文**：W6§22 updateSpaceBasicInfo显式三字段投影并入原port，单叶≤600行；原高级模型保存另卡。\
+  **依赖**：T718\
+  **配对测试**：T718\
+  **覆盖 AC**: AC-02, AC-33, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、每卡≤2叶，target lint/strict新增0、固定独立审；完整详情/上传/浏览器E2E另验。
+
+- [ ] **T720 · 空间创建与基本编辑Dialog实际测试**
+  **类型 / Owner**：测试 / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/test/f118KnowledgeLibraryDialog.test.tsx`；`src/frontend/platform/src/test/f115KnowledgeCreation.test.tsx`\
+  **逻辑 / 测试上下文**：真实Creator settings/model options/双draft/闭集create与edit保持原is_released；scope/late GET/ABA/取消失败与老QA pin不弱化。\
+  **依赖**：T719, T707\
+  **覆盖 AC**: AC-02, AC-06, AC-07, AC-33, AC-38, AC-40, AC-41, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、每卡≤2叶，target lint/strict新增0、固定独立审；完整详情/上传/浏览器E2E另验。
+
+- [ ] **T721 · 后台空间创建及基本编辑真实入口**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/components/KnowledgeLibraryDialog.tsx`\
+  **逻辑 / 测试上下文**：W6§22原Dialog改SPACE，scope候选/默认初值/双类型编辑与成功后导航；基本信息不改模型、不回旧type0接口，保原QA创建。\
+  **依赖**：T720\
+  **配对测试**：T720\
+  **覆盖 AC**: AC-02, AC-06, AC-07, AC-33, AC-38, AC-40, AC-41, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、每卡≤2叶，target lint/strict新增0、固定独立审；完整详情/上传/浏览器E2E另验。
+
+- [ ] **T722 · 平台三tab与真实范围入口测试**
+  **类型 / Owner**：测试 / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/test/f118KnowledgePage.test.tsx`；`src/frontend/platform/src/test/f051KnowledgeListLazyActions.test.tsx`\
+  **逻辑 / 测试上下文**：super真实管理pin/普通menu创建/tenantadmin管理tab，普通游标空页继续与admin DB分页，SPACE懒授权/QA独立、scope退役、未装配操作不借旧接口。\
+  **依赖**：T721, T719\
+  **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-05, AC-07, AC-84, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、每卡≤2叶，target lint/strict新增0、固定独立审；完整详情/上传/浏览器E2E另验。
 
 ## 自动化覆盖索引
 
