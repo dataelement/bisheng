@@ -10,7 +10,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
 from bisheng.worker import tenant_context as workers
 from bisheng.worker.knowledge import rebuild_knowledge_worker as module
 from test.knowledge_unification import test_kn_worker_model_source as fixtures
@@ -120,4 +120,11 @@ def test_j1_file_entry_requires_actual_worker_proof_before_io(rebuild):
     workers.reset_tenant_context(sender=rebuild.sender)
     with pytest.raises(ResourceReferenceInvalidError):
         module.rebuild_processing_file(701, space_id=40, invoke_user_id=987, **rebuild.arguments)
+    assert rebuild.events == []
+
+
+@pytest.mark.parametrize("field", ["expected_model_config_revision", "expected_index_generation"])
+def test_j1_single_file_expectations_cannot_be_omitted(rebuild, field):
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        module.rebuild_processing_file(701, space_id=40, invoke_user_id=987, **{**rebuild.arguments, field: None})
     assert rebuild.events == []
