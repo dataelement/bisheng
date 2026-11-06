@@ -1,18 +1,15 @@
-**Proudly made by Chinese，May we, like the creators of Deepseek and Black Myth: Wukong, bring more wonder and greatness to the world.**
-
-> 源自中国匠心，希望我们能像 [Deepseek]、[黑神话：悟空] 团队一样，给世界带来更多美好。
-
 <img src="https://dataelem.com/bs/face.png" alt="Bisheng banner">
 
 <p align="center">
     <a href="https://dataelem.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"><img src="https://img.shields.io/badge/docs-Wiki-brightgreen"></a>
     <img src="https://img.shields.io/github/license/dataelement/bisheng" alt="license"/>
+    <img src="https://img.shields.io/docker/pulls/dataelement/bisheng-frontend" alt="docker-pull-count" />
     <a href=""><img src="https://img.shields.io/github/last-commit/dataelement/bisheng"></a>
     <a href="https://star-history.com/#dataelement/bisheng&Timeline"><img src="https://img.shields.io/github/stars/dataelement/bisheng?color=yellow"></a> 
 </p>
 <p align="center">
-  <a href="./README_CN.md">简体中文</a> |
-  <a href="./README.md">English</a> |
+  <a href="./README.md">简体中文</a> |
+  <a href="./README_EN.md">English</a> |
   <a href="./README_JPN.md">日本語</a>
 </p>
 
@@ -28,101 +25,159 @@
 </div>
 
 
-BISHENG is an open LLM application devops platform, focusing on enterprise scenarios. It has been used by a large number of industry leading organizations and Fortune 500 companies.
+## BISHENG 企业平台
 
-"Bi Sheng" was the inventor of movable type printing, which played a vital role in promoting the transmission of human knowledge. We hope that BISHENG can also provide strong support for the widespread implementation of intelligent applications. Everyone is welcome to participate.
+BISHENG是一款 <b>开源的企业级一站式 Agent 平台</b>，专注办公效率与企业 AI 应用落地，已有大量行业头部组织及世界 500 强企业在使用。
 
+## 重要更新：BISHENG 客户端重磅发布，连接桌面与企业 AI
 
-## Features
-1. **🚀 Task Mode: a general-purpose agent for complex, multi-step work**
-   You give it a goal and, if needed, attach files, knowledge bases, tools and skills. The agent breaks the goal into tasks, runs them step by step, and delivers a report, PPT, Excel or Word file.
+**BISHENG Desktop 基于 DSH（DeepSeek Harness）开发，是员工使用企业 AI 服务的桌面入口。** 从电脑里的项目材料出发，结合企业知识、工具和技能，让 Agent 完成资料整理、分析与办公文件交付。
 
-   - 🧠 **Task planning + parallel sub-agents**: The main agent builds a task checklist, tracks progress, and gives independent research tasks to sub-agents that run in parallel.
-   - 🙋 **Human in the loop**: When the agent needs information that only you have, the task pauses until you answer.
-   - 🧰 **Plug-and-play skills**: Three built-in skill packs (PPT, Excel, Word) work out of the box. You can also import your team's own skills from a local file or from GitHub.
-   - 📎 **Traceable conclusions**: Reports carry citation markers. Click a marker to open the source and go to the cited passage.
+- **围绕本地材料完成工作**：在 Work 中选择授权目录，整理文件、制作 Word 汇报、Excel 表格和 PPT，并在同一任务中继续修改成果。
+- **连接企业云端能力**：使用 BISHENG 企业账号登录，在 Chat 中进行知识问答、发起云端任务，调用当前账号获准使用的模型、知识库、工具和技能。
+- **企业统一管理**：管理员在平台侧配置资源、账号与权限，并管理月度积分与用量，让桌面办公沿用企业的管理体系。
+
+![BISHENG 客户端官网企业版介绍页面截图](docs/images/readme/bisheng-desktop-enterprise.png)
+
+[下载 BISHENG 客户端](https://dshdesktop.com/zh/enterprise/) · [GitHub 仓库](https://github.com/dataelement/bisheng-desktop)
+
+> 企业接入能力、配置要求及开源与商业版范围，以对应版本说明为准。
+
+### DSH 客户端个人版：从本地任务开始
+
+**DSH Desktop 是 Dataelem 团队基于 DeepSeek Harness 打造的开源桌面 Agent 应用。** 个人用户无需部署 BISHENG 企业平台，即可配置模型、选择本地工作目录，把日常材料处理交给 Agent。
+
+GitHub 已获 **17k Star**。
+
+[官网与下载](https://dshdesktop.com/zh/) · [GitHub](https://github.com/dataelement/dsh-desktop)
+
+## 特点
+
+1. **🖥️ BISHENG 客户端：连接本地工作与企业云端**
+
+   - **Chat 与 Work 两种工作方式**：Chat 支持知识问答与云端多步任务；Work 在获准的本地目录中整理材料，生成可编辑的 Word、Excel、PPT，并根据反馈持续修改。
+   - **企业资源按身份开放**：使用企业账号调用获准的模型、API/MCP 工具、技能与知识空间，也可从应用中心打开已发布的助手和工作流；知识检索继续检查空间与文件权限。
+   - **模型与积分集中管理**：管理员统一配置模型授权、月度积分和调用记录；Chat 与 Work 的企业模型调用共用当前用户的积分账本，用户可查看余额与用量。
+   - **企业扩展统一分发**：管理员集中导入插件和工作台，员工按企业配置与授权获取使用。
+
+   [客户端使用与版本说明](https://dataelem.feishu.cn/wiki/Q9fYwAGXOiwPV5kqREfcDzyQnkF)。具体能力、部署要求及开源与企业版范围，以对应版本说明为准。
+
+   ![BISHENG 网页端、桌面端与手机端展示](docs/images/readme/bisheng-platform-overview.png)
+
+   > 手机 App 即将推出，具体功能与上线安排以版本说明为准。
+
+   **企业管理**
+
+   ![BISHENG 企业管理后台的客户端积分与用量页面](docs/images/readme/bisheng-enterprise-management.png)
+
+2. **🚀 任务模式：面向多步骤复杂工作的通用 Agent**
+   你给出目标，按需附上文件、知识库、工具和技能，它会拆解任务、逐步执行，最后交付报告、PPT、Excel 或 Word。
+
+   - 🧠 **任务规划 + 子 Agent 并行**：主 Agent 动态生成任务清单、跟踪进度，把独立调研交给子 Agent 并行完成。
+   - 🙋 **人机交互（Human in the loop）**：遇到只有你知道的关键信息，任务暂停等你回答。
+   - 🧰 **技能（Skill）即插即用**：内置 PPT、Excel、Word 三个技能包，开箱即用；也可以从本地或 GitHub 导入团队自己的技能。
+   - 📎 **结论可溯源**：报告带引用角标，点击后打开原文，并定位到被引用的段落。
    <p align="center"><img src="docs/images/readme/task-mode.png" alt="task-mode"></p>
 
-2. **📚 Knowledge Space: an enterprise knowledge base for teams**
+3. **📚 知识空间：企业版团队知识库**
 
-   - 🗂️ **Organized content**: Multi-level folders, tags, card and list views, and search by keyword and tag together.
-   - 👥 **Built by the team**: Invite members with a permission template (Owner / Manager / Editor / Viewer), or publish the space to the Knowledge Square so that others can join. A super admin can create a Department Space for a department in one step.
-   - 🔐 **Permissions down to a single file**: Spaces, folders and files use the same set of permission templates. You can grant access to a person, a department (including its sub-departments) or a user group in one step. Folders and files inherit permissions from their parent by default, and you can also set them separately.
-   - 💬 **AI Q&A**: Ask questions about one document or about the whole space. Answers show their sources; click a source to open the original text at the cited location.
+   - 🗂️ **有序组织**：支持多级文件夹、标签、卡片与列表视图，支持关键词和标签联合检索。
+   - 👥 **团队共建**：可以按权限模板（所有者/管理者/编辑者/查看者）邀请成员，也可以发布到知识广场供他人加入。超级管理员可以为部门一键开通「部门知识空间」。
+   - 🔐 **权限细到单个文件**：空间、文件夹、文件三级共用一套权限模板，可以一次授权给个人、部门（含子部门）或用户组。文件夹和文件默认继承上级权限，也可以单独设置。
+   - 💬 **AI 问答**：可以针对单篇文档提问，也可以基于整个空间提问；回答标注引用来源，点开即可查看原文及溯源定位。
    <p align="center"><img src="docs/images/readme/knowledge-space.png" alt="knowledge-space"></p>
 
-3. **📡 Channels: external news delivered every day, and saved as knowledge in one click**
+4. **📡 频道订阅：外部资讯每天自动送达，有价值的一键存成知识**
 
-   - 📰 **Topic channels**: Combine WeChat official accounts and websites into topic channels that update every day. A channel can have sub-channels.
-   - 🎯 **Precise filtering**: Custom rules filter titles and body text, so only relevant articles stay.
+   - 📰 **主题频道**：把公众号和网站聚合成主题频道，每天自动更新，可以再分子频道。
+   - 🎯 **精准过滤**：自定义规则过滤标题和正文，只留下相关资讯。
    <p align="center"><img src="docs/images/readme/channel.png" alt="channel"></p>
 
-4. **🧩 Unique [BISHENG Workflow](https://dataelem.feishu.cn/wiki/R7HZwH5ZGiJUDrkHZXicA9pInif)**
+5. **🧩 独具特色的 [BISHENG workflow](https://dataelem.feishu.cn/wiki/R7HZwH5ZGiJUDrkHZXicA9pInif)**
 
-   - **Independent and complete orchestration framework**: There is no split between chatflow and workflow. Multi-turn conversation and automated processing can be in the same flow.
-   - **Human in the loop**: A running flow can stop and wait for a person to give input, confirm, or make changes.
-   - **Loops, parallel branches and batch runs in any combination**: Draw a circle to make a loop (most similar products do not support loops), place nodes side by side to run them in parallel, and select multiple items to run a batch. This fits complex scenarios such as document review and fixed-layout report generation.
+   - **独立、完备的应用编排框架**：不区分 chatflow 和 workflow，多轮对话和自动化处理可以混在同一个流程里。
+   - **Human in the loop**：流程执行到中途可以等人输入、确认或修改。
+   - **成环、并行、批量运行自由组合**：画圈即成环（大多数同类产品不支持成环），并列即并行，多选即批量，适合文档审核、固定版式报告生成等复杂场景。
    <p align="center"><img src="https://dataelem.com/bs/bisheng_workflow.png" alt="workflow"></p>
 
-5. **🏢 Enterprise-grade features: the controls that enterprise AI needs**
+6. **🛠️ 应用工场：把 Vibe App 发布给团队**
 
-   - **Department and user management**: Manage the organization structure and users. Roles control which feature menus are available and set quotas.
-   - **RBAC + ReBAC permission model**: Roles control which features a user can use. ReBAC controls which resources a user can access, down to a single file.
-   - **Approvals**: Joining a knowledge space, subscribing to a channel, requesting menu permissions and other actions can require approval. You can customize approval flows and nodes.
-   - **Audit**: Records conversation content and system operation logs, searchable by user, time and module.
-   - **Dashboards** (commercial edition): Preset dashboards for user activity, application usage, token usage, knowledge base usage and more.
-   - **Open API**: Call applications, knowledge bases and other APIs with service accounts and API keys, or call them on behalf of an employee with that employee's own permissions.
-   - **DSH Desktop enterprise access** (commercial edition): Employees sign in to the desktop client with their platform account and use the models configured in BISHENG. Admins can allocate model quotas per user per month.
-   - **Xinchuang (domestic IT stack) support**: Supports both MySQL and Dameng DM8.
-   - Also: SSO/LDAP, high-availability deployment, content security review, traffic control, monitoring and statistics, and vulnerability scanning and fixes.
+   - **从本地开发到团队使用**：提交本地或由 Coding Agent 辅助开发的应用，经预检、密钥扫描、构建和发布审批后，按授权范围发布到应用中心。
+   - **复用平台能力**：应用可按需接入平台身份、模型和知识资源，减少重复建设；具体能力与配置要求以对应版本说明为准。
+
+7. **🏢 企业级特性：企业 AI 落地需要的管控能力**
+
+   - **部门和用户管理**：组织架构管理和人员设置，支持按角色开放功能菜单和设置配额。
+   - **RBAC + ReBAC 双权限模型**：角色控制能用哪些功能，ReBAC 控制能访问哪份资源（精确到单个文件）。
+   - **操作审批**：知识空间加入、频道订阅、菜单权限申请等操作可以走审批，审批流程和节点可自定义。
+   - **审计**：记录会话内容和系统操作日志，可按人、时间、模块追溯。
+   - **统计看板**（商业版）：预置用户活跃度、应用使用、token 用量、知识库使用等数据看板。
+   - **API 开放能力**：通过服务账号和 API 密钥调用应用、知识库等接口，也可以按员工本人权限代表用户调用。
+   - **信创适配**：同时支持 MySQL 和达梦 DM8。
+   - 以及 SSO/LDAP、高可用部署方案、安全审查、流量控制、监控统计、漏洞扫描修复。
    <p align="center"><img src="https://dataelem.com/bs/pro.png" alt="enterprise"></p>
 
-6. **🔍 High-precision document parsing**: Our document parsing models are trained on a large amount of high-quality data collected over 5 years, and you can deploy them privately for free. They include high-precision models for printed text, handwriting and rare characters, table recognition, layout analysis, and seals.
+8. **🔍 高精度文档解析**：5年海量数据沉淀，高精度文档解析模型支持免费私有化部署使用，包括高精度印刷体、手写体与生僻字识别模型、表格识别模型、版式分析模型、印章模型...
    <p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="ocr"></p>
 
-## Quick start 
+## 快速安装 
 
-Please ensure the following conditions are met before installing BISHENG:
-- CPU >= 4 Virtual Cores
-- RAM >= 16 GB
+安装BISHENG前请先确保满足以下条件：
+- CPU >= 8 Core
+- RAM >= 32 GB
 - Docker 19.03.9+
 - Docker Compose 1.25.1+
-> Recommended hardware condition: 18 virtual cores, 48G. In addition to installing BISHENG, we will also install the following third-party components by default: ES, Milvus, and Onlyoffice.
+> 除了BISHENG前后端，我们默认还会安装第三方组件ES、Milvus、Onlyoffice
 
-Download BISHENG
+下载BISHENG代码
 ```bash
+# 如果系统中有git命令，可以直接下载BISHENG代码
 git clone https://github.com/dataelement/bisheng.git
-# Enter the installation directory
+# 进入安装目录
 cd bisheng/docker
 
-# If the system does not have the git command, you can download the BISHENG code as a zip file.
+# 如果系统没有没有git命令，可以下载BISHENG代码zip包
 wget https://github.com/dataelement/bisheng/archive/refs/heads/main.zip
-# Unzip and enter the installation directory
+# 解压并进入安装目录
 unzip main.zip && cd bisheng-main/docker
 ```
-Start BISHENG
+启动BISHENG
 ```bash
+# 进入bisheng/docker或bisheng-main/docker目录，执行
 docker compose -f docker-compose.yml -p bisheng up -d
 ```
-After the startup is complete, access http://IP:3001 in the browser. The login page will appear, proceed with user registration. 
+启动后，在浏览器中访问 http://IP:3001 ，出现登录页，进行用户注册。默认第一个注册的用户会成为系统admin。
 
-By default, the first registered user will become the system admin. 
+其他安装部署问题参考：[私有化部署](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
-For more installation and deployment issues, refer to:：[Self-hosting](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
-## Acknowledgement 
-This repo benefits from [langchain](https://github.com/langchain-ai/langchain) [langflow](https://github.com/logspace-ai/langflow) [unstructured](https://github.com/Unstructured-IO/unstructured) and [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) . Thanks for their wonderful works.
+## 资源
+- [📄应用案例/场景库](https://dataelem.feishu.cn/wiki/ZfkmwLPfeiAhQSkK2WvcX87unxc)
+- [📄经验技巧](https://dataelem.feishu.cn/wiki/OWFRwknFaiIMajke4m5cFeLrnie)
+- [📄功能使用说明](https://dataelem.feishu.cn/wiki/WxH6wubbAiBkRIkSEyecmpDMnjF)
+- [📄BISHENG Blog](https://dataelem.feishu.cn/wiki/BiNowcaYWilewdksXQ5cZl3tnzy)
 
-<b>Thank you to our contributors：</b>
+
+## 感谢 
+
+感谢我们的贡献者：
 
 <a href="https://github.com/dataelement/bisheng/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=dataelement/bisheng" />
 </a>
 
 
+<br>
+Bisheng 采用了以下依赖库:
 
-## Community & contact 
-Welcome to join our discussion group
+- 感谢开源LLM应用开发库 [langchain](https://github.com/langchain-ai/langchain)。
+- 感谢开源langchain可视化工具 [langflow](https://github.com/logspace-ai/langflow)。
+- 感谢开源非结构化数据解析引擎 [unstructured](https://github.com/Unstructured-IO/unstructured)。
+- 感谢开源LLM微调框架 [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) 。
+
+
+## 社区与支持 
+欢迎加入我们的交流群
 
 <img src="https://www.dataelem.com/nstatic/qrcode.png" alt="Wechat QR Code">
 
@@ -133,3 +188,20 @@ Welcome to join our discussion group
 [![Star History Chart](https://api.star-history.com/svg?repos=dataelement/bisheng&type=Date)](https://star-history.com/#dataelement/bisheng&Date)
 -->
 
+## 服务企业
+
+BISHENG 已服务众多行业头部企业，以下为部分客户。
+
+![汇丰银行、博世、屈臣氏、中国移动、中粮集团、首钢集团](docs/images/readme/bisheng-customer-logos-row-1.png)
+
+![中国宝武、中金公司、中国出口信用保险公司、中国石油、中国工商银行、重庆银行](docs/images/readme/bisheng-customer-logos-row-2.png)
+
+![中国电建、华泰证券、华夏银行、辽宁金控、中国民生银行、龙华资本](docs/images/readme/bisheng-customer-logos-row-3.png)
+
+![苏交科、中信银行、中英人寿、北汽集团、中债资信、中国气象局](docs/images/readme/bisheng-customer-logos-row-4.png)
+
+## 企业咨询
+
+如需了解 BISHENG 企业部署、桌面客户端接入、产品演示或商务合作，欢迎联系我们。
+
+[填写飞书表单，联系 BISHENG 团队](https://dataelem.feishu.cn/share/base/form/shrcnVow7GQwwKYEBCD41Bu5qoh)
