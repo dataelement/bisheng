@@ -281,3 +281,11 @@ T705先测两个受控fields→原T178；T706再测父Editor/Dialog→T707两叶
 模型原语义以`ModelNameResolutionPort._resolve`为对照：仅原visible_server_ids内llm，online精确裸名先于provider/name（名称本身可含slash），重复明确ambiguous；无online匹配而原同名eligible offline存在则offline，否则not_found。Root继承/共享候选已由原NameCatalog资格确定，本索引只消费、不补宽；坏provider/tenant链或重复ID目录拒绝。知识仅本tenant type0/3原name精确候选，QA1/退休2不参与普通APP知识名称解析；同名歧义/无候选沿原app_knowledge错误，不能登记invalid_legacy。APP原明确数字ID优先，直接保该ID交物理预检，绝不name fallback；不改原immutable declaration。非法request/重复slot不同含义/目录tenant不一致拒绝，不静默遗漏slot。
 
 编译bare/qualified online、offline及knowledge名字索引均按目录线性一次；后续不同source/slot的lookup不得重新扫描整个Catalog或KN页，不调用原逐name扫描实现。每次resolve仅与请求数/实际同名候选数相关，不使用跨tenant/跨run全局缓存。测试以原NameCatalog+原Port对照优先级/歧义/离线、原APP extractor明确ID与名称边界，并以大量不同名称请求实测目录属性访问预算不随slot×模型增长。源目录/原配置仅内存，结果只slot/TargetKey，名称不额外落公开artifact。
+
+## 19. M2原授权pin与模型共享读取子合同 V1：已冻结
+
+`permission/application/migration_read.py:PinnedMigrationPermissionReader(config:OpenFGAConf,catalog:PermissionCatalogBaseline)`为显式停服操作专用async context manager。进入时使用现`discover_openfga_runtime(expected_model=None,allow_bootstrap=False,required_store_id=原SQL CURRENT授权pin.store_id,required_model_id=原pin.model_id)`验证唯一命名Store及原模型真实checksum；全部匹配原catalog.authorization（ACTIVE及与release的required ID一致）才构造同store/model的原FGAClient。升级前模型允许是已冻结的前驱，不通过普通在线expected新模型/ready gate，不创建/写模型/Store或发heartbeat，不检测/控制停服，不设置全局在线client或HTTP/worker准入。
+
+`aget_shared_server_ids(session,tenant_id)->frozenset[int]`要求已进入reader、外部native事务、具体当前tenant且相等、非bypass，原Root返回空；其他tenant使用完整`stream_list_objects(user='tenant:{id}',relation='shared_with',type='llm_server',consistency='HIGHER_CONSISTENCY')`消费全部NDJSON。每次请求显式原model ID；非法prefix/非规范正整数/流中错误或中断全部失败，不能返回已读前缀或当空共享。每tenant一次，由SourceInventory编排，后续交真实`ModelNameResolutionRepository.ainspect_catalog`核原Root拓扑/默认继承/Provider父链。此读取只说明原sharing事实，不自行授予模型引用资格。
+
+退出必关闭专属client；异常保持cause，旧reader/关闭后拒用；无进程全局缓存、SQL写/flush/commit/BRR/Coverage/授权收据或配置泄露。可为测试替换同形discovery/transport factory，生产默认始终真实现有discovery与FGAClient，不设mock开关。factory结果的store/model也须等于原pin，不接受客户端自行repin；不触碰通用online runtime。T712先测→T713单叶实现，真OpenFGA专项实测与正式M2装配另记。

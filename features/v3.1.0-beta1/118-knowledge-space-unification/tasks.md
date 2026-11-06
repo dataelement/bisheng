@@ -5716,6 +5716,25 @@
   **覆盖 AC**: AC-56, AC-63, AC-64, AC-70, AC-71, AC-87, AC-88, AC-89, AC-93\
   **验证 / 完成条件**：配对/原APP解析组合通过，固定独立审、C2静态；不是Source授权或legacy证据。
 
+## W6正式原授权pin的完整共享事实读取
+
+- [ ] **T712 · M2原pin与共享流完整性测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_migration_permission_read.py`\
+  **逻辑 / 测试上下文**：显式原store/model/checksum与ACTIVE release，错误pin/factory repin/非法原tenant/关闭拒绝；2000共享完整流、畸形/中断不返回部分，专属连接释放且不触发online/停服控制。\
+  **依赖**：T682, T704\
+  **覆盖 AC**: AC-56, AC-63, AC-64, AC-70, AC-87, AC-88, AC-89, AC-93\
+  **验证 / 完成条件**：先真实红/首绿，现FGAClient真实流parser单列组合；端口fake不冒称真实OpenFGA环境。
+
+- [ ] **T713 · M2原pin共享读取适配**
+  **类型 / Owner**：后端 Application / INT\
+  **写入文件**：`src/backend/bisheng/permission/application/migration_read.py`\
+  **逻辑 / 测试上下文**：W6§19专属context manager+现discovery/FGAClient原pin、全量shared stream，外部native/strict、不走online ready/新模型gate，不写模型或业务。\
+  **依赖**：T712\
+  **配对测试**：T712\
+  **覆盖 AC**: AC-56, AC-63, AC-64, AC-70, AC-87, AC-88, AC-89, AC-93\
+  **验证 / 完成条件**：配对/旧pin及原NameCatalog边界通过，固定独立审；M2/CLI完整消费仍待后续。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
