@@ -66,6 +66,7 @@ async def database(storage):
                 LLMModel(id=12, tenant_id=1, server_id=2, model_name="embed", model_type="embedding", online=False),
                 LLMModel(id=21, tenant_id=1, server_id=2, model_name="rootchat", model_type="llm", online=True),
                 LLMModel(id=31, tenant_id=202, server_id=3, model_name="foreign", model_type="llm"),
+                LLMModel(id=32, tenant_id=101, server_id=999, model_name="bad-parent", model_type="llm"),
                 Knowledge(id=40, tenant_id=101, user_id=7, name="Docs", type=0, model="12"),
                 Knowledge(id=41, tenant_id=101, user_id=7, name="QA", type=1, model="11"),
                 Knowledge(id=42, tenant_id=101, user_id=7, name="Retired", type=2, model="31"),
@@ -160,7 +161,9 @@ async def test_actual_six_sources_preserve_versions_zero_roots_retired_and_priva
                 raw.flow("wf", data=graph(777)),
                 raw.flow("wf-empty"),
                 raw.flow("wf-deleted", is_delete=1),
-                FlowVersion(id=1, tenant_id=101, flow_id="wf", name="old", data=graph(11, 12, 31, 999), is_current=0),
+                FlowVersion(
+                    id=1, tenant_id=101, flow_id="wf", name="old", data=graph(11, 12, 31, 32, 999), is_current=0
+                ),
                 FlowVersion(
                     id=2, tenant_id=101, flow_id="wf", name="draft", data=None, is_current=None, is_delete=None
                 ),
@@ -182,6 +185,8 @@ async def test_actual_six_sources_preserve_versions_zero_roots_retired_and_priva
                 AssistantLink(id=1, tenant_id=101, assistant_id="as", knowledge_id=40),
                 AssistantLink(id=2, tenant_id=101, assistant_id="as", knowledge_id=0),
                 AssistantLink(id=3, tenant_id=101, assistant_id="as", knowledge_id=None, tool_id=1),
+                AssistantLink(id=4, tenant_id=101, assistant_id="as", knowledge_id=42),
+                AssistantLink(id=5, tenant_id=101, assistant_id="as", knowledge_id=99),
                 raw.channel("ch", is_released=False),
                 raw.channel("ch-empty"),
                 ChannelKnowledgeSync(
@@ -254,6 +259,10 @@ async def test_actual_six_sources_preserve_versions_zero_roots_retired_and_priva
     assert TargetKey("model", 777) not in physical
     assert physical[TargetKey("model", 12)].exists and not physical[TargetKey("model", 12)].is_online
     assert physical[TargetKey("model", 31)].target_tenant_id == 202
+    assert not physical[TargetKey("model", 32)].server_exists
+    assert physical[TargetKey("model", 32)].exists
+    assert physical[TargetKey("knowledge_space", 42)].knowledge_type == 2
+    assert physical[TargetKey("knowledge_space", 99)].target_tenant_id == 202
     assert not physical[TargetKey("model", 999)].exists
     assert physical[TargetKey("knowledge_file", 81)].file_type == 0
     assert PRIVATE not in repr(records) and "rootchat" not in repr(records)
@@ -314,15 +323,28 @@ async def test_401_pages_child_batches_and_duplicate_targets_do_not_repeat_direc
     assert sum("inventory_assistant_parent" in query for query in queries) == 1
     assert not any("inventory_orphan_parent" in query for query in queries)
     assert sum("llm_server.update_time AS parent_update_time" in query for query in queries) <= 2
+    print(
+        {
+            "case": "401x4",
+            "select_count": len(queries),
+            "catalog_reads": len(catalogs),
+            "sharing_reads": len(requests),
+            "source_count": len(headers),
+            "model_fact_queries": sum("llm_server.update_time AS parent_update_time" in query for query in queries),
+        }
+    )
     assert len(queries) < 55
     assert all(statement._offset_clause is None for statement in statements)
 
 
-async def test_401_unique_model_targets_are_grouped_not_queried_per_source(module, database):
+@pytest.mark.parametrize("many_sources", [True, False])
+async def test_401_unique_model_targets_are_grouped_not_queried_per_source(module, database, many_sources):
     async with AsyncSession(database) as session, session.begin():
         session.add(raw.flow("wf"))
         session.add_all(
             [FlowVersion(id=i + 1, tenant_id=101, flow_id="wf", name="draft", data=graph(i + 1000)) for i in range(401)]
+            if many_sources
+            else [FlowVersion(id=1, tenant_id=101, flow_id="wf", name="draft", data=graph(*range(1000, 1401)))]
         )
     async with AsyncSession(database) as session, session.begin(), sharing() as (reader, _):
         statements = []
@@ -336,7 +358,16 @@ async def test_401_unique_model_targets_are_grouped_not_queried_per_source(modul
         row for row in records if isinstance(row, module.ReferenceInventoryRecord) and int(row.target.target_id) >= 1000
     ]
     assert len(facts) == 401 and all(not row.physical_fact.exists for row in facts)
-    assert sum("llm_server.update_time AS parent_update_time" in query for query in statements) <= 4
+    headers = [
+        row
+        for row in records
+        if isinstance(row, module.SourceInventoryRecord) and row.source_key.source_type == "workflow_version"
+    ]
+    assert len(headers) == (401 if many_sources else 1)
+    assert sum(row.reference_count for row in headers) == 401
+    count = sum("llm_server.update_time AS parent_update_time" in query for query in statements)
+    print({"case": "unique401", "many_sources": many_sources, "physical_model_queries": count})
+    assert count <= 4
 
 
 @pytest.mark.parametrize(
@@ -446,3 +477,19 @@ async def test_no_autoflush_repeated_iterators_are_fresh_and_output_contains_onl
         assert all(
             not any(key in asdict(row) for key in ("ready", "legacy", "payload_json", "references")) for row in first
         )
+
+
+async def test_iterator_cache_is_not_reused_after_real_target_change(module, database):
+    async with AsyncSession(database) as session, session.begin(), sharing() as (reader, _):
+        first = await collect(module, session, reader)
+        await session.execute(update(LLMModel).where(LLMModel.id == 11).values(online=False))
+        second = await collect(module, session, reader)
+
+        def model(rows):
+            return next(
+                row.physical_fact
+                for row in rows
+                if isinstance(row, module.ReferenceInventoryRecord) and row.target == TargetKey("model", 11)
+            )
+
+        assert model(first).is_online is True and model(second).is_online is False
