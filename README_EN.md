@@ -186,13 +186,13 @@ Welcome to join our discussion group
 
 BISHENG serves leading enterprises across industries. Here are some of our customers.
 
-![HSBC, Bosch, Watsons, China Mobile, COFCO and Shougang Group](docs/images/readme/bisheng-customer-logos-row-1.png)
+![China Meteorological Administration, HSBC, Bosch, Watsons, China Mobile and COFCO](docs/images/readme/bisheng-customer-logos-row-1.png)
 
-![China Baowu, CICC, SINOSURE, PetroChina, ICBC and Bank of Chongqing](docs/images/readme/bisheng-customer-logos-row-2.png)
+![Shougang Group, China Baowu, CICC, SINOSURE, PetroChina and ICBC](docs/images/readme/bisheng-customer-logos-row-2.png)
 
-![PowerChina, Huatai Securities, Huaxia Bank, Liaoning Financial Holdings, China Minsheng Bank and Longhua Capital](docs/images/readme/bisheng-customer-logos-row-3.png)
+![Bank of Chongqing, PowerChina, Huatai Securities, Huaxia Bank, Liaoning Financial Holdings and China Minsheng Bank](docs/images/readme/bisheng-customer-logos-row-3.png)
 
-![JSTI, China CITIC Bank, AVIVA-COFCO, BAIC Group, China Bond Rating and China Meteorological Administration](docs/images/readme/bisheng-customer-logos-row-4.png)
+![Longhua Capital, JSTI, China CITIC Bank, AVIVA-COFCO, BAIC Group and China Bond Rating](docs/images/readme/bisheng-customer-logos-row-4.png)
 
 ## Enterprise inquiries
 
