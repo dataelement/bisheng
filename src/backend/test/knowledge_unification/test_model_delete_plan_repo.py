@@ -18,6 +18,11 @@ from bisheng.core.database import tenant_filter
 from bisheng.knowledge.domain.models.knowledge_operation_plan import KnowledgeOperationPlan
 from bisheng.llm.domain.repositories.model_delete_plan_repository import ModelDeletePlanRepository
 from bisheng.resource_reference.application.contracts import TargetKey
+from test.knowledge_unification import test_llm_refs as impact_tests
+
+model_owner_tenant = impact_tests.model_owner_tenant
+removal_session = impact_tests.removal_session
+impact = impact_tests.impact
 
 
 @pytest.fixture
@@ -215,3 +220,31 @@ async def test_tampered_persisted_confirmation_is_not_executable(plans, reposito
 async def test_empty_provider_still_requires_its_single_server_revision(plans, repository, clock):
     confirmation = await create(repository, plans, clock, targets=[], target_revisions={"server:1": "d" * 64})
     assert (await load(repository, plans, confirmation)).target_manifest == []
+
+
+async def test_real_owner_inspection_revisions_enter_the_model_plan_unchanged(impact, repository, clock):
+    session, service, _ = impact
+    await session.run_sync(lambda active: KnowledgeOperationPlan.__table__.create(active.connection(), checkfirst=True))
+    with impact_tests.actor() as identity:
+        inspected = await service.ainspect_removed_models(
+            session, identity=identity, server_id=1, retained_model_ids=(11,), delete_server=False
+        )
+    revisions = {f"model:{target.target_id}": revision for target, revision in inspected.target_revisions}
+    revisions[f"server:{inspected.server_id}"] = inspected.server_revision
+    confirmation = await repository.acreate_model_delete_plan(
+        session,
+        operation="model_update_server",
+        actor_reference=actor(),
+        command_digest="c" * 64,
+        targets=inspected.targets,
+        target_revisions=revisions,
+        inbound_digest=inspected.inbound_digest,
+        coverage_epoch=inspected.coverage_epoch,
+        inventory_hash=inspected.inventory_hash,
+        expires_at=clock[0] + timedelta(minutes=5),
+    )
+    stored = await load(repository, session, confirmation)
+    assert stored.target_revisions == revisions
+    assert stored.impact["inbound_digest"] == inspected.inbound_digest
+    assert {item["target_id"] for item in stored.target_manifest} == {"12", "13", "14", "15"}
+    await session.rollback()
