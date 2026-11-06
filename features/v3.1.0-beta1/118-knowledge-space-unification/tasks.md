@@ -4605,6 +4605,22 @@
   **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
   **验证 / 完成条件**：原失败与新合同差异有记录，固定提交复查及相同argv主组合通过，无生产代码改动。
 
+- [ ] **T582 · 非法工作台默认对话ID保原10811回归**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/llm/test_workbench_update_merge.py`\
+  **逻辑 / 测试上下文**：实际新writer在原Session接收非法chat_default_model_id，保原WorkbenchChatDefaultModelError10811业务断言，不将ValueError或10996改作测试预期；失败不得部分保存。\
+  **依赖**：T481\
+  **覆盖 AC**: AC-68, AC-71, AC-79, AC-83, AC-89, AC-92\
+  **验证 / 完成条件**：固定新实现实际红、窄修后绿及主组合通过。
+
+- [ ] **T583 · 工作台默认对话ID规范化保原业务错误**
+  **类型 / Owner**：实现 / LLM\
+  **写入文件**：`src/backend/bisheng/llm/application/model_default.py`\
+  **逻辑 / 测试上下文**：仅修_config非法chat默认ID规范化的异常包装，保原10811和cause，不改完整来源/身份/tenant/收据/批次/commit合同，不恢复退休DAO。\
+  **依赖**：T582\
+  **配对测试**：T582\
+  **验证 / 完成条件**：红绿、固定提交独立复查及主组合通过。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
