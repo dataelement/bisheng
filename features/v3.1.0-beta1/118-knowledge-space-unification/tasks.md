@@ -526,7 +526,7 @@
   **写入文件**：`src/backend/test/knowledge_unification/test_job_service.py`（拟新增）\
   **逻辑 / 测试上下文**：提交不报完成；故障可恢复且不重复；无合法配置/已删模型明确失败，不回退历史参数。\
   **范围限制**：仅知识处理任务，复用现有 Celery/Beat；不建设全平台任务系统或 worker 在途 I/O 一致性机制。\
-  **依赖**：T062, T026, T243, T244\
+  **依赖**：T062, T026, T243, T244, T609, T611, T613\
   **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -4825,6 +4825,104 @@
   **依赖**：T605\
   **覆盖 AC**: AC-02, AC-12, AC-13, AC-49, AC-50\
   **验证 / 完成条件**：先提交测试，T187后组合绿验；真实页面及接口联调仍分别执行。
+
+## W6 PROC 最小真实前置（同一既定需求）
+
+- [ ] **T608 · 持久确认计划仓储测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_operation_plan_repository.py`\
+  **逻辑 / 测试上下文**：真实Session覆盖actor/tenant/digest/expiry/consume幂等、同plan异operation拒绝，precheck零业务修改。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：测试先提交，记录真实红/首绿，不在测试卡改生产。
+
+- [ ] **T609 · 持久确认计划仓储**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/operation_plan_repository.py`\
+  **逻辑 / 测试上下文**：按W6接口外部Session创建/加锁/consume，规范摘要与原修订，绝不自行commit或外部IO。\
+  **依赖**：T608\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：运行配对T608并记录真实结果，完成后由INT集成复核；不以单元测试声称真实E2E。
+
+- [ ] **T610 · 任务查询及可靠派发仓储测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_job_query_dispatch.py`\
+  **逻辑 / 测试上下文**：分页稳定/隐藏项/跨租户/最新retry actor/扫描租约到期/旧revision投递与claim CAS，失败恢复不重复接新retry。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：测试先提交，记录真实红/首绿，不在测试卡改生产。
+
+- [ ] **T611 · 任务查询及可靠派发仓储**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/processing_job_repository.py`\
+  **逻辑 / 测试上下文**：复用现有模型字段，job/item分页、最新accepted receipt、具体tenant游标扫描和投递CAS；仅flush。\
+  **依赖**：T610\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：运行配对T610并记录真实结果，完成后由INT集成复核；不以单元测试声称真实E2E。
+
+- [ ] **T612 · 知识处理原凭据恢复测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_processing_identity.py`\
+  **逻辑 / 测试上下文**：web/API原credential及S/D delegation重验、scope/data_scope取交集、撤销/过期拒绝、无bearer持久化、不从user_id造人。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：测试先提交，记录真实红/首绿，不在测试卡改生产。
+
+- [ ] **T613 · 知识处理原凭据恢复窄出口**
+  **类型 / Owner**：后端 Application / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/application/processing_identity.py`；`src/backend/bisheng/open_api/application/knowledge_processing_identity.py`\
+  **逻辑 / 测试上下文**：按W6 capture/restore合同，真实原身份、最新retry requester与具体tenant；不复用写死app:manage/S的旧上下文。\
+  **依赖**：T612\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：运行配对T612并记录真实结果，完成后由INT集成复核；不以单元测试声称真实E2E。
+
+- [ ] **T614 · 最小真实处理派发测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_processing_dispatch.py`\
+  **逻辑 / 测试上下文**：持久intent到broker失败/丢ack/重复消息、tenant headers/proof、revision/lease和obsolete持久化，至少一真实kind闭环。\
+  **依赖**：T064\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：测试先提交，记录真实红/首绿，不在测试卡改生产。
+
+- [ ] **T615 · 最小真实处理worker与派发**
+  **类型 / Owner**：Worker / PROC\
+  **写入文件**：`src/backend/bisheng/worker/knowledge/processing_jobs.py`\
+  **逻辑 / 测试上下文**：只传job/revision，原actor恢复、业务模型读取、受控步骤/SQL finalize重验；未装配kind明确拒绝，不造成功或永远pending。\
+  **依赖**：T614\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：运行配对T614并记录真实结果，完成后由INT集成复核；不以单元测试声称真实E2E。
+
+- [ ] **T616 · 处理worker及Beat装配测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_processing_worker_wiring.py`\
+  **逻辑 / 测试上下文**：验证真实Celery注册及Beat恢复扫描，使用现有tenant任务包装，不接新任务平台。\
+  **依赖**：T615\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：测试先提交，记录真实红/首绿，不在测试卡改生产。
+
+- [ ] **T617 · 处理worker及Beat装配**
+  **类型 / Owner**：Worker / PROC\
+  **写入文件**：`src/backend/bisheng/worker/config.py`；`src/backend/bisheng/worker/__init__.py`\
+  **逻辑 / 测试上下文**：前移T076最小派发装配，最终多kind仍由T076完成；无服务启停或迁移自动执行。\
+  **依赖**：T616\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：运行配对T616并记录真实结果，完成后由INT集成复核；不以单元测试声称真实E2E。
+
+- [ ] **T618 · 处理薄路由真实接线测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_processing_endpoints.py`\
+  **逻辑 / 测试上下文**：真实Service入口precheck/create/query/retry/settings、envelope/错误及身份管理scope；非fake-only接线，旧文件动作不扩。\
+  **依赖**：T617\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：测试先提交，记录真实红/首绿，不在测试卡改生产。
+
+- [ ] **T619 · 处理薄路由真实接线**
+  **类型 / Owner**：后端 API / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/api/endpoints/processing.py`；`src/backend/bisheng/knowledge/api/router.py`\
+  **逻辑 / 测试上下文**：按A1注册顺序和原权限动作调用Service，T124待KN完成后全量复核；此卡只提前最小闭环。\
+  **依赖**：T618\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：运行配对T618并记录真实结果，完成后由INT集成复核；不以单元测试声称真实E2E。
 
 ## 自动化覆盖索引
 
