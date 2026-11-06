@@ -206,7 +206,7 @@ async def test_actual_native_producer_emits_domain_objects_consumable_by_origina
     await native.insert(producer.original.KnowledgeFile, [producer.original.file(1)])
     await native.insert(producer.original.Tag, [producer.original.data("tags", 1)])
     await native.insert(producer.original.TagLink, [producer.original.data("tag_links", 1)])
-    default = DefaultRow(7, 101, "linsight_llm", '{"models":[{"id":7}],"task_model":{"id":7}}', NOW)
+    default = DefaultRow(7, 101, "linsight_llm", '{"models":[{"id":"7"}],"task_model":{"id":"7"}}', NOW)
     facts = await producer.acquire(native)
     query_count = len(native.queries)
     commands = producer.build(app, facts, (default,))[1]
