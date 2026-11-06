@@ -84,7 +84,7 @@ async def test_tombstone_batches_are_global_string_index_order_not_numeric_chunk
     result = await ModelReferenceTargetRepository().alock_targets(
         session, tuple(TargetKey("model", str(ident)) for ident in reversed(ids)), None, "owner_query"
     )
-    observations = result[0]
+    observations = result
     assert [int(item.key.target_id) for item in observations] == sorted(ids)
     assert all(item.deletion.operation_id == f"deleted-101-{item.key.target_id}" for item in observations)
     assert len(statements) == 2
@@ -140,6 +140,6 @@ async def test_missing_targets_without_deletion_evidence_stay_missing_and_do_not
     actual = await ModelReferenceTargetRepository().alock_targets(
         session, (TargetKey("model", "999999"),), None, "owner_query"
     )
-    item = actual[0][0]
+    item = actual[0]
     assert not item.exists and item.target_tenant_id == 101 and item.deletion is None
     assert not session.new and not session.dirty
