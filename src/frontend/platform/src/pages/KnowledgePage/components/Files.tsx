@@ -39,7 +39,6 @@ import { FileStatusFilter } from "./FileStatusFilter";
 import PreviewFile from "./PreviewFile";
 import { SpaceDirectoryRow } from "./SpaceDirectoryRow";
 export { StatusIndicator } from "./KnowledgeFileStatus";
-
 export interface FilesProps {
   scope?: KnowledgeQueryScope;
   spaceId?: number;
@@ -55,18 +54,27 @@ interface DirectoryProps extends FilesProps {
   spaceId: number;
 }
 type Epoch = { prefix: readonly unknown[] };
-type Target = { epoch: Epoch; item: KnowledgeSpaceChild };
+type RowLifetime = { retired: boolean };
+type Target = {
+  epoch: Epoch;
+  item: KnowledgeSpaceChild;
+  rowLifetime?: RowLifetime;
+};
 type Menu = {
   token: Target;
   actions: string[];
   loading: boolean;
   error: boolean;
 };
-type Edit = { epoch: Epoch; item?: KnowledgeSpaceChild };
+type Edit = {
+  epoch: Epoch;
+  item?: KnowledgeSpaceChild;
+  rowLifetime?: RowLifetime;
+};
 type Preview = { token: Target; data?: SpaceFilePreview };
 const validId = (id: unknown): id is number =>
   typeof id === "number" && Number.isSafeInteger(id) && id > 0;
-
+const rowKey = (item: KnowledgeSpaceChild) => `${item.file_type}:${item.id}`;
 export default function Files(props: FilesProps) {
   const { t } = useTranslation("knowledge");
   const { scope, spaceId, parentId } = props;
@@ -93,7 +101,6 @@ export default function Files(props: FilesProps) {
     />
   );
 }
-
 function Directory({
   scope,
   spaceId,
@@ -160,7 +167,6 @@ function Directory({
     },
     [epoch],
   );
-
   const filters = statuses.length ? { file_status: statuses } : {};
   const ordinary = useInfiniteQuery({
     queryKey: [...epoch.prefix, "children"],
@@ -201,15 +207,27 @@ function Directory({
       ).map((item) => [item.id, item]),
     ).values(),
   ];
-  const currentRows = useRef(rows);
-  currentRows.current = rows;
+  const rowLifetimes = useRef(new Map<string, RowLifetime>());
+  const rowKeys = new Set(rows.map(rowKey));
+  for (const [key, lifetime] of rowLifetimes.current) {
+    if (!rowKeys.has(key)) {
+      lifetime.retired = true;
+      rowLifetimes.current.delete(key);
+    }
+  }
+  for (const key of rowKeys)
+    if (!rowLifetimes.current.has(key))
+      rowLifetimes.current.set(key, { retired: false });
   const isCurrent = (token: Edit | Target) =>
     current.current === token.epoch &&
-    (!token.item ||
-      currentRows.current.some(
-        (item) =>
-          item.id === token.item?.id && item.file_type === token.item.file_type,
-      ));
+    (!token.item || (!!token.rowLifetime && !token.rowLifetime.retired));
+  useEffect(() => {
+    for (const ref of [menuToken, editToken, previewToken])
+      if (ref.current?.rowLifetime?.retired) ref.current = null;
+    setMenu((value) => (value?.token.rowLifetime?.retired ? null : value));
+    setEdit((value) => (value?.rowLifetime?.retired ? null : value));
+    setPreview((value) => (value?.token.rowLifetime?.retired ? null : value));
+  }, [rows]);
   useEffect(() => {
     if (active.error) showApiError(active.error);
   }, [active.error]);
@@ -232,7 +250,9 @@ function Directory({
       return;
     }
     if (item.file_type !== 0 && item.file_type !== 1) return;
-    const token = { epoch, item };
+    const rowLifetime = rowLifetimes.current.get(rowKey(item));
+    if (!rowLifetime || current.current !== epoch) return;
+    const token = { epoch, item, rowLifetime };
     menuToken.current = token;
     setMenu({ token, actions: [], loading: true, error: false });
     try {
@@ -276,7 +296,11 @@ function Directory({
       )
     )
       return;
-    const token = { epoch, item };
+    const token = {
+      epoch,
+      item,
+      rowLifetime: item ? rowLifetimes.current.get(rowKey(item)) : undefined,
+    };
     editToken.current = token;
     setEdit(token);
     setName(item?.file_name ?? "");
@@ -312,7 +336,9 @@ function Directory({
     setPreview(null);
   };
   const handlePreview = async (item: KnowledgeSpaceChild) => {
-    const token = { epoch, item };
+    const rowLifetime = rowLifetimes.current.get(rowKey(item));
+    if (!rowLifetime || current.current !== epoch) return;
+    const token = { epoch, item, rowLifetime };
     previewToken.current = token;
     setPreview({ token });
     try {

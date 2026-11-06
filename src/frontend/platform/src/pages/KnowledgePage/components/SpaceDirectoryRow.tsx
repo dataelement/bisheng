@@ -77,7 +77,9 @@ export function SpaceDirectoryRow({
                   <DropdownItem disabled>{t("loading")}</DropdownItem>
                 )}
                 {error && (
-                  <DropdownItem onSelect={() => onMenu(true)}>
+                  <DropdownItem
+                    onSelect={() => queueMicrotask(() => onMenu(true))}
+                  >
                     {t("retry")}
                   </DropdownItem>
                 )}
