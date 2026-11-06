@@ -126,9 +126,11 @@ class RetrievalEngine:
                 es_kwargs["filter"] = base_es_filter
 
             milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(
-                self.login_user.user_id, knowledge=space
+                self.login_user.user_id, knowledge=space, login_user=self.login_user
             )
-            es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
+            es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(
+                knowledge=space, login_user=self.login_user
+            )
             vector_retriever = milvus_vector.as_retriever(search_kwargs=milvus_kwargs)
             es_retriever = es_vector.as_retriever(search_kwargs=es_kwargs)
 
