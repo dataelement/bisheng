@@ -4,7 +4,9 @@ No SQL/FGA acquisition, publication, migration or Coverage readiness is claimed.
 """
 
 import importlib
+import sys
 from dataclasses import asdict, replace
+from unittest.mock import patch
 
 import pytest
 
@@ -354,3 +356,148 @@ def test_original_assignee_tenant_and_canonical_subject_must_be_consistent(migra
     broken = replace(original, assignees=(replace(original.assignees[0], **{field: value}), *original.assignees[1:]))
     with pytest.raises(PermissionMigrationBlockedError):
         migration.build_resource_retirement_plan(catalog_plan=catalog_plan(migration), before=broken)
+
+
+def scale_resources(module):
+    before = baseline(module)
+    original = next(model for model in before.models if model.model_key == "only-use")
+    extra = tuple(
+        replace(original, id=100 + i, model_key=f"scale-{i}", name=f"Scale {i}", normalized_name=f"scale {i}")
+        for i in range(20)
+    )
+    plan = catalog_plan(module, replace(before, models=before.models + extra))
+    resources = []
+    for number in range(12):
+        grants, sources, snapshots = [], [], []
+        ident = str(40 + number)
+        for index, model in enumerate(extra):
+            grant_id = 1000 + number * 20 + index
+            grants.append(
+                module.PermissionGrantBaseline(grant_id, 101, "knowledge_space", ident, model.model_key, "ACTIVE")
+            )
+            records = []
+            for slot in range(5):
+                record = GrantSourceService().canonicalize_source(
+                    source_id=1 + number * 100 + index * 5 + slot,
+                    subject_type="user",
+                    subject_id="7",
+                    source_type="OTHER",
+                    source_ref=f"scale:{number}:{index}:{slot}",
+                )
+                values = asdict(record)
+                values["id"] = values.pop("source_id")
+                del values["active"]
+                sources.append(
+                    module.PermissionAssigneeBaseline(grant_id=grant_id, tenant_id=101, state="ACTIVE", **values)
+                )
+                records.append(record)
+            snapshots.append(
+                GrantSnapshot(
+                    str(grant_id),
+                    101,
+                    "knowledge_space",
+                    ident,
+                    GrantModelSnapshot(model.model_key, True, model.effective_action_codes, 1),
+                    True,
+                    tuple(records),
+                )
+            )
+        visible = (
+            VisibilityProjectionCompiler()
+            .compile(tenant_id=101, grants=tuple(snapshots), existing_sources=())
+            .active_sources
+        )
+        resources.append(
+            module.PermissionResourceBaseline(
+                101,
+                "knowledge_space",
+                ident,
+                module.ResourceModeBaseline(number + 1, 101, "knowledge_space", ident, "CUSTOM"),
+                tuple(grants),
+                tuple(sources),
+                tuple(
+                    module.PermissionVisibleSourceBaseline(1 + number * 100 + i, source)
+                    for i, source in enumerate(visible)
+                ),
+            )
+        )
+    return plan, tuple(resources)
+
+
+def measured(module, callback):
+    counts = {"source_reads": 0, "source_filter_reads": 0}
+    original = module.PermissionAssigneeBaseline.__getattribute__
+
+    def observe(self, name):
+        if name == "grant_id":
+            counts["source_reads"] += 1
+            caller = sys._getframe(1)
+            if caller.f_code.co_name == "<genexpr>" and caller.f_back.f_code.co_name == "_grants":
+                counts["source_filter_reads"] += 1
+        return original(self, name)
+
+    with (
+        patch.object(module, "build_catalog_retirement_plan", wraps=module.build_catalog_retirement_plan) as builds,
+        patch.object(module, "derive_permission_models", wraps=module.derive_permission_models) as derivations,
+        patch.object(module.PermissionAssigneeBaseline, "__getattribute__", observe),
+    ):
+        result = callback()
+        counts.update(catalog_builds=builds.call_count, model_derivations=derivations.call_count)
+    return result, counts
+
+
+def test_streaming_batch_validates_the_directory_once_and_groups_sources_linearly(migration, verifier):
+    plan, resources = scale_resources(migration)
+    expected, old_counts = measured(
+        migration,
+        lambda: tuple(migration.build_resource_retirement_plan(catalog_plan=plan, before=row) for row in resources),
+    )
+    print({"single_loop": old_counts, "resources": 12, "catalog_models": 27, "grants_each": 20, "sources_each": 100})
+    actual, new_counts = measured(
+        migration, lambda: tuple(migration.build_resource_retirement_plans(catalog_plan=plan, before=iter(resources)))
+    )
+    print({"batch_build": new_counts})
+    assert actual == expected
+    assert new_counts["catalog_builds"] == new_counts["model_derivations"] == 1
+    assert new_counts["source_reads"] <= 8 * 12 * 100
+    reports, verify_counts = measured(
+        migration,
+        lambda: tuple(
+            verifier.verify_resource_retirements(catalog_plan=plan, plans=iter(actual), actual=iter(resources))
+        ),
+    )
+    print({"batch_verify": verify_counts})
+    assert len(reports) == 12 and all(report.complete for report in reports)
+    assert verify_counts["catalog_builds"] == verify_counts["model_derivations"] == 1
+    assert verify_counts["source_reads"] <= 10 * 12 * 100
+
+
+@pytest.mark.parametrize("change", ["short_actual", "short_plan", "swapped", "catalog", "resource_hash"])
+def test_batch_verification_never_truncates_or_borrows_another_resource_or_catalog(migration, verifier, change):
+    catalog, resources = scale_resources(migration)
+    resources = resources[:2]
+    plans = tuple(migration.build_resource_retirement_plans(catalog_plan=catalog, before=resources))
+    actual = resources
+    if change == "short_actual":
+        actual = actual[:1]
+    elif change == "short_plan":
+        plans = plans[:1]
+    elif change == "swapped":
+        actual = actual[::-1]
+    elif change == "catalog":
+        altered = replace(
+            catalog, after_models=(replace(catalog.after_models[0], active=False), *catalog.after_models[1:])
+        )
+        plans = (replace(plans[0], catalog_plan=altered), plans[1])
+    else:
+        plans = (replace(plans[0], checksum="0" * 64), plans[1])
+    with pytest.raises(PermissionMigrationBlockedError):
+        tuple(verifier.verify_resource_retirements(catalog_plan=catalog, plans=iter(plans), actual=iter(actual)))
+
+
+def test_even_an_empty_batch_rejects_a_tampered_frozen_directory(migration, verifier):
+    catalog = replace(catalog_plan(migration), checksum="0" * 64)
+    with pytest.raises(PermissionMigrationBlockedError):
+        tuple(migration.build_resource_retirement_plans(catalog_plan=catalog, before=()))
+    with pytest.raises(PermissionMigrationBlockedError):
+        tuple(verifier.verify_resource_retirements(catalog_plan=catalog, plans=(), actual=()))
