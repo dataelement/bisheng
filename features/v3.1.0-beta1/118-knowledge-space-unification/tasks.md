@@ -5517,6 +5517,33 @@
   **覆盖 AC**: AC-56, AC-63, AC-64, AC-85, AC-93\
   **验证 / 完成条件**：配对、旧ledger/legacy descriptor组合通过；真实MinIO写读后单列证据，不伪称M2正式冻结已完成。
 
+## W6旧表格不限行实际规则兼容接缝
+
+- [ ] **T690 · 旧表格不限行快照与请求兼容测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_legacy_unbounded_table_snapshot.py`\
+  **逻辑 / 测试上下文**：真实旧renderer对已存None/0/负数、旧3.x明确0/负数、null未指定区分及headers/append实际规则对照；新默认/公开overrides仍拒0及marker，显式正数覆盖和retry实际快照保持。\
+  **依赖**：T070\
+  **覆盖 AC**: AC-39, AC-40, AC-43, AC-44, AC-45, AC-66\
+  **验证 / 完成条件**：先真实红/首绿，不能以猜默认或伪正数隐藏执行override代替实际规则。
+
+- [ ] **T691 · 旧表格不限行内部实际规则表达**
+  **类型 / Owner**：后端 Application / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/schemas/processing_settings.py`；`src/backend/bisheng/knowledge/application/file_processing_adapter.py`\
+  **逻辑 / 测试上下文**：W6§10内部LegacyTableRule/legacy稀疏覆盖与实际snapshot分支，保旧规则不套新space；原公开defaults/overrides继续严格正数，无HTTP/DDL扩展。\
+  **依赖**：T690\
+  **配对测试**：T690\
+  **覆盖 AC**: AC-39, AC-40, AC-43, AC-44, AC-45, AC-66\
+  **验证 / 完成条件**：配对及旧adapter/真实file pipeline/settings组合通过，实际旧无限行分段对照一致。
+
+- [ ] **T692 · 两端只读实际规则镜像补旧分支**
+  **类型 / Owner**：前端 DTO / INT\
+  **写入文件**：`src/frontend/platform/src/controllers/API/knowledgeSpace.ts`；`src/frontend/client/src/api/knowledgeProcessing.ts`\
+  **逻辑 / 测试上下文**：仅EffectiveProcessingSnapshot的只读effective_rule联合增加固定0/legacy_unbounded真分支；新默认/命令类型不引该分支，不新增UI能力。\
+  **依赖**：T691, T175, T187\
+  **覆盖 AC**: AC-40, AC-43, AC-44, AC-66\
+  **验证 / 完成条件**：两端既有API合同回归及新增类型诊断0，无依赖/锁文件变化。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
