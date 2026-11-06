@@ -15,9 +15,11 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
 from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError, LLMModelSharedReadonlyError
 from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id, management_tenant_scope
+from bisheng.core.database import tenant_filter
 from bisheng.database.models.tenant import Tenant
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.models.knowledge_unification_run import KnowledgeUnificationRun
+from bisheng.llm.application.reference_target_owner import ModelReferenceTargetOwner
 from bisheng.llm.domain.services.model_reference_service import ModelReferenceService
 from bisheng.permission.application.identity import (
     PermissionActor,
@@ -30,8 +32,11 @@ from bisheng.resource_reference.application.contracts import (
     SourceType,
     tenant_inventory_digest,
 )
+from bisheng.resource_reference.application.target_verification import ReferenceTargetVerifier
+from bisheng.resource_reference.application.write_runtime import ReferenceBindingRuntime
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
 from bisheng.resource_reference.domain.repositories.coverage_repository import CoverageRepository
+from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
 from test.knowledge_unification import test_model_deletion_repository as models
 from test.knowledge_unification.test_reference_owner_paging import seed
 
@@ -77,7 +82,7 @@ class SqlLedger:
 
 
 @pytest.fixture
-async def impact(removal_session):
+async def impact(removal_session, monkeypatch):
     session = removal_session
     for model in (BusinessReferenceSet, KnowledgeUnificationRun, KnowledgeProcessingJob):
         await session.run_sync(lambda active, model=model: model.__table__.create(active.connection(), checkfirst=True))
@@ -93,8 +98,18 @@ async def impact(removal_session):
         for tenant in (1, 101, 202)
     )
     await session.commit()
+    monkeypatch.setattr(
+        tenant_filter,
+        "_tenant_aware_tables",
+        tenant_filter._tenant_aware_tables
+        | {"knowledge_unification_run", "business_reference_set", "knowledge_processing_job"},
+    )
     ledger = SqlLedger(session)
-    service = ModelReferenceService(coverage_factory=lambda active: CoverageRepository(ledger, global_port=ledger))
+    verifier = ReferenceTargetVerifier({"model": ModelReferenceTargetOwner()})
+    runtime = ReferenceBindingRuntime(ReferenceRepository(verifier=verifier), verifier)
+    service = ModelReferenceService(
+        coverage_factory=lambda active: CoverageRepository(ledger, global_port=ledger), runtime=runtime
+    )
     return session, service, ledger
 
 
@@ -155,11 +170,12 @@ async def test_shared_root_target_counts_both_source_tenants_without_disclosing_
 
 
 async def test_no_production_coverage_adapter_never_means_zero_references(impact):
-    session, _, _ = impact
-    with actor() as user, pytest.raises(ReferenceCoverageNotReadyError):
-        await ModelReferenceService().ainspect_removed_models(
+    session, service, _ = impact
+    with actor() as user, pytest.raises(ReferenceCoverageNotReadyError) as failure:
+        await ModelReferenceService(runtime=service.runtime).ainspect_removed_models(
             session, identity=user, server_id=1, retained_model_ids=()
         )
+    assert failure.value.kwargs["reason"] == "model_reference_coverage_unconfigured"
 
 
 @pytest.mark.parametrize("failure", ["source", "tenant", "epoch", "query"])
