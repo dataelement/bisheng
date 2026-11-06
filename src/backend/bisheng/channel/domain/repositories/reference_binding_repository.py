@@ -9,14 +9,19 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.channel.domain.models.channel import Channel
 from bisheng.channel.domain.models.channel_knowledge_sync import ChannelKnowledgeSync
 from bisheng.common.errcode.channel import ChannelNotFoundError
+from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
     ChannelRelationEnum,
+    MembershipStatusEnum,
     SpaceChannelMember,
     UserRoleEnum,
 )
 from bisheng.core.context.tenant import is_tenant_filter_bypassed, strict_tenant_filter
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
+from bisheng.resource_reference.application.contracts import canonical_target_id
 
 
 class ChannelReferenceBindingRepository:
@@ -163,4 +168,96 @@ class ChannelReferenceBindingRepository:
             .execution_options(synchronize_session=False)
         )
         await session.delete(channel)
+        await session.flush()
+
+    async def acheck_new_selections(self, session: AsyncSession, channel: Channel, *, user_id: int, rows) -> None:
+        """Called after the real target locks; retain the original creator rule.
+
+        No metadata supplied by the client decides folder kind or parent.
+        Only new semantic selections reach this method, so old invalid slots
+        can still be retained or explicitly removed by their business owner.
+        """
+        self._assert_bound(session, channel)
+        pairs = tuple(
+            (
+                int(canonical_target_id(row["knowledge_space_id"])),
+                int(canonical_target_id(row["folder_id"])) if row.get("folder_id") is not None else None,
+            )
+            for row in rows
+        )
+        if not pairs:
+            return
+        ids = tuple(sorted({space for space, _ in pairs}))
+        query = (
+            select(Knowledge.id, Knowledge.tenant_id)
+            .where(Knowledge.id.in_(ids), Knowledge.type == KnowledgeTypeEnum.SPACE.value)
+            .order_by(Knowledge.id)
+            .with_for_update()
+        )
+        with session.no_autoflush, strict_tenant_filter():
+            spaces = (await session.exec(query)).all()
+        if {row.id for row in spaces if row.tenant_id == channel.tenant_id} != set(ids):
+            raise SpacePermissionDeniedError()
+        # These exact globally unique parents were just current-read in this
+        # tenant. Membership itself has no tenant column, like the sync rows.
+        with session.no_autoflush:
+            owned = (
+                await session.exec(
+                    select(SpaceChannelMember.business_id).where(
+                        SpaceChannelMember.business_id.in_(tuple(str(ident) for ident in ids)),
+                        SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
+                        SpaceChannelMember.user_id == user_id,
+                        SpaceChannelMember.user_role == UserRoleEnum.CREATOR,
+                        SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
+                    )
+                )
+            ).all()
+        if set(owned) != {str(ident) for ident in ids}:
+            raise SpacePermissionDeniedError()
+        folder_ids = tuple(sorted({folder for _, folder in pairs if folder is not None}))
+        if folder_ids:
+            with session.no_autoflush, strict_tenant_filter():
+                folders = (
+                    await session.exec(
+                        select(
+                            KnowledgeFile.id,
+                            KnowledgeFile.knowledge_id,
+                            KnowledgeFile.file_type,
+                            KnowledgeFile.tenant_id,
+                        )
+                        .where(KnowledgeFile.id.in_(folder_ids))
+                        .order_by(KnowledgeFile.id)
+                        .with_for_update()
+                    )
+                ).all()
+            facts = {row.id: row for row in folders}
+            if any(
+                folder is not None
+                and (
+                    folder not in facts
+                    or facts[folder].knowledge_id != space
+                    or facts[folder].file_type != FileType.DIR.value
+                    or facts[folder].tenant_id != channel.tenant_id
+                )
+                for space, folder in pairs
+            ):
+                raise SpacePermissionDeniedError()
+
+    async def amutate_members(
+        self,
+        session: AsyncSession,
+        channel: Channel,
+        *,
+        remove_non_creators=False,
+        remove_rejected=False,
+        activate_pending=False,
+    ) -> None:
+        self._assert_bound(session, channel)
+        for row in await self.alist_members(session, channel.id, for_update=True):
+            if (remove_non_creators and row.user_role != UserRoleEnum.CREATOR) or (
+                remove_rejected and row.status == MembershipStatusEnum.REJECTED
+            ):
+                await session.delete(row)
+            elif activate_pending and row.status == MembershipStatusEnum.PENDING:
+                row.status = MembershipStatusEnum.ACTIVE
         await session.flush()

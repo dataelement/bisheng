@@ -88,6 +88,8 @@ async def _deliver_information_articles_to_config_async(
 
 @asynccontextmanager
 async def _service_session(*, include_channel_service: bool):
+    from bisheng.channel.application.automation_identity import resolve_channel_automation_identity
+    from bisheng.channel.application.execution_admission import ChannelSyncExecutionAdmission
     from bisheng.channel.domain.repositories.implementations.article_read_repository_impl import (
         ArticleReadRepositoryImpl,
     )
@@ -112,6 +114,7 @@ async def _service_session(*, include_channel_service: bool):
         channel_repository = ChannelRepositoryImpl(session)
         article_service = ArticleEsService()
         channel_service = None
+        prepare_delivery = None
         if include_channel_service:
             channel_service = ChannelService(
                 channel_repository=channel_repository,
@@ -120,9 +123,30 @@ async def _service_session(*, include_channel_service: bool):
                 article_es_service=article_service,
                 article_read_repository=ArticleReadRepositoryImpl(session),
             )
+
+            async def prepare_delivery(tenant_id, channel_id, config_id, detected_at):
+                # The existing importer later updates folder/space rows in
+                # its own sessions. Release these read locks before handing
+                # it the immutable snapshot, or the task waits on itself.
+                async with get_async_db_session() as reference, reference.begin():
+                    identity = await resolve_channel_automation_identity(
+                        reference,
+                        channel_id,
+                        config_id,
+                        tenant_id=tenant_id,
+                    )
+                    return await ChannelSyncExecutionAdmission.prepare(
+                        identity,
+                        channel_id,
+                        config_id,
+                        detected_at,
+                        session=reference,
+                    )
+
         yield InformationKnowledgeDeliveryService(
             channel_repository,
             ChannelKnowledgeSyncRepositoryImpl(session),
             article_service,
             channel_service=channel_service,
+            prepare_delivery=prepare_delivery,
         )
