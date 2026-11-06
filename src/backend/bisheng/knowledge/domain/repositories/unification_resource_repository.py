@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import or_, select
+from sqlalchemy import Integer, and_, case, cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
@@ -594,6 +594,34 @@ class UnificationResourceRepository:
                 doc.c.primary_version_id.is_not(None), or_(version.c.id.is_(None), version.c.document_id != doc.c.id)
             ),
             "primary_pointer_invalid",
+        )
+        link = TagLink.__table__.alias("m2_relation_link")
+        tag = Tag.__table__.alias("m2_relation_tag")
+        owner = Knowledge.__table__.alias("m2_tag_owner")
+        knowledge_id = case((tag.c.business_type == "knowledge", cast(tag.c.business_id, Integer)), else_=None)
+        related = or_(
+            link.c.resource_type.in_((8, 9)),
+            and_(tag.c.business_type == "knowledge", owner.c.type == 0, owner.c.tenant_id == tag.c.tenant_id),
+        )
+        await self._probe(
+            session,
+            select(link.c.id)
+            .outerjoin(tag, tag.c.id == link.c.tag_id)
+            .outerjoin(owner, owner.c.id == knowledge_id)
+            .where(related, or_(tag.c.id.is_(None), tag.c.tenant_id != link.c.tenant_id)),
+            "tag_parent_invalid",
+        )
+        linked_file = KnowledgeFile.__table__.alias("m2_linked_file")
+        file_id = case((link.c.resource_type.in_((8, 9)), cast(link.c.resource_id, Integer)), else_=None)
+        await self._probe(
+            session,
+            select(link.c.id)
+            .outerjoin(linked_file, linked_file.c.id == file_id)
+            .where(
+                link.c.resource_type.in_((8, 9)),
+                or_(linked_file.c.id.is_(None), linked_file.c.tenant_id != link.c.tenant_id),
+            ),
+            "tag_file_parent_invalid",
         )
 
     async def ainspect_file_ancestors(
