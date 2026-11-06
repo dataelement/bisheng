@@ -6,6 +6,7 @@ from datetime import datetime
 
 import pytest
 from sqlalchemy import event, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
@@ -151,3 +152,13 @@ async def test_bypass_or_missing_native_transaction_cannot_use_empty_batch_to_sk
         async with session.begin():
             with bypass_tenant_filter(), pytest.raises(KnowledgeOperationPlanConflictError):
                 await repo.ainspect(session, source_key=SOURCE, targets=())
+
+
+async def test_real_sql_failure_never_becomes_a_missing_model_and_restores_scope(repo, storage):
+    async with storage.begin() as connection:
+        await connection.run_sync(lambda conn: LLMModel.__table__.drop(conn))
+    async with AsyncSession(storage) as session, session.begin():
+        with pytest.raises(SQLAlchemyError):
+            await repo.ainspect(session, source_key=SOURCE, targets=(TargetKey("model", 1),))
+        assert get_current_tenant_id() == 101 and not is_tenant_filter_bypassed()
+        await session.rollback()

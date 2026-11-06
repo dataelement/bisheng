@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 import pytest
 from sqlalchemy import event, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -245,3 +246,14 @@ async def test_native_transaction_concrete_tenant_and_nonbypass_are_required_eve
         finally:
             current_tenant_id.reset(token)
         assert not observed
+
+
+async def test_real_sql_failure_is_never_reclassified_as_missing_and_restores_scope(repo, storage):
+    async with storage.begin() as connection:
+        await connection.run_sync(lambda conn: Knowledge.__table__.drop(conn))
+    async with AsyncSession(storage) as session, session.begin():
+        with pytest.raises(SQLAlchemyError):
+            await repo.ainspect(session, source_key=SOURCE, targets=(TargetKey("knowledge_space", 10),))
+        assert get_current_tenant_id() == 101
+        assert not is_tenant_filter_bypassed() and not is_strict_tenant_filter()
+        await session.rollback()
