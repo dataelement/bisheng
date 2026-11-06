@@ -5,6 +5,7 @@ Only FGA/sharing and Celery's current-task transport are fixture boundaries.
 """
 
 from dataclasses import replace
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -23,6 +24,7 @@ from bisheng.knowledge.domain.repositories.processing_job_repository import NewP
 from bisheng.knowledge.domain.repositories.processing_owner_repository import ProcessingOwnerRepository
 from bisheng.worker import tenant_context as workers
 from test.knowledge_unification import test_processing_owner as fixtures
+from test.knowledge_unification.test_kn_model_bindings import state as business_state
 
 store = fixtures.store
 tenant = fixtures.tenant
@@ -103,7 +105,7 @@ async def finalize(fixture, session, lease=None):
 
 
 async def test_actual_same_operation_cutover_advances_expected_but_preserves_acceptance(cutover):
-    context, owner, _, _, original = cutover
+    context, _, _, _, original = cutover
     async with context.sessions() as session:
         job = await finalize(cutover, session)
         assert job.state == "partial_failed"
@@ -111,18 +113,18 @@ async def test_actual_same_operation_cutover_advances_expected_but_preserves_acc
         assert job.accepted_model_config_revision == original.model_config_revision
         assert job.expected_index_generation == original.index_generation
         await session.commit()
-    row = next(row for row in fixtures.fixtures.fixtures.state(context)["knowledge"] if row["id"] == 40)
+    row = next(row for row in business_state(context)["knowledge"] if row["id"] == 40)
     assert row["model_transition"] is None and row["state"] == 1
     assert row["model_config_revision"] == job.expected_model_config_revision
 
 
 async def test_caller_rollback_reverts_business_r2_and_job_ack_together(cutover):
     context, _, job_id, _, original = cutover
-    before = fixtures.fixtures.fixtures.state(context)
+    before = business_state(context)
     async with context.sessions() as session:
         assert (await finalize(cutover, session)).state == "partial_failed"
         await session.rollback()
-    assert fixtures.fixtures.fixtures.state(context) == before
+    assert business_state(context) == before
     async with context.sessions() as session:
         job = await session.get(KnowledgeProcessingJob, job_id)
         assert job.state == "running" and job.expected_model_config_revision == original.model_config_revision
@@ -130,7 +132,7 @@ async def test_caller_rollback_reverts_business_r2_and_job_ack_together(cutover)
 
 async def test_r2_failure_cannot_acknowledge_or_publish_model(cutover, monkeypatch):
     context, owner, job_id, _, original = cutover
-    before = fixtures.fixtures.fixtures.state(context)
+    before = business_state(context)
     monkeypatch.setattr(
         context.runtime, "aapply_source_bindings", AsyncMock(side_effect=RuntimeError("actual R2 failed"))
     )
@@ -138,18 +140,29 @@ async def test_r2_failure_cannot_acknowledge_or_publish_model(cutover, monkeypat
         with pytest.raises(RuntimeError, match="actual R2 failed"):
             await finalize(cutover, session)
         await session.rollback()
-    assert fixtures.fixtures.fixtures.state(context) == before
+    assert business_state(context) == before
     async with context.sessions() as session:
         assert (await owner.jobs.aget(session, job_id)).expected_model_config_revision == original.model_config_revision
 
 
-@pytest.mark.parametrize("invalid", ["lease", "missing_acceptance"])
+@pytest.mark.parametrize("invalid", ["lease", "expired", "pending", "missing_acceptance"])
 async def test_old_lease_or_missing_original_evidence_cannot_cut_over(cutover, invalid):
     context, _, job_id, lease, _ = cutover
-    before = fixtures.fixtures.fixtures.state(context)
+    before = business_state(context)
     async with context.sessions() as session:
         if invalid == "lease":
             assert await finalize(cutover, session, replace(lease, lease_token="expired-owner")) is None
+        elif invalid == "expired":
+            job = await session.get(KnowledgeProcessingJob, job_id)
+            job.lease_until -= timedelta(days=1)
+            await session.flush()
+            assert await finalize(cutover, session) is None
+        elif invalid == "pending":
+            job = await session.get(KnowledgeProcessingJob, job_id)
+            item = (await owner_items(cutover, session))[0]
+            item.state = "pending"
+            await session.flush()
+            assert await finalize(cutover, session) is None
         else:
             job = await session.get(KnowledgeProcessingJob, job_id)
             job.accepted_model_config_revision = None
@@ -157,7 +170,12 @@ async def test_old_lease_or_missing_original_evidence_cannot_cut_over(cutover, i
             with pytest.raises(ResourceReferenceInvalidError):
                 await finalize(cutover, session)
         await session.rollback()
-    assert fixtures.fixtures.fixtures.state(context) == before
+    assert business_state(context) == before
+
+
+async def owner_items(fixture, session):
+    _, owner, job_id, _, _ = fixture
+    return (await owner.jobs.alist_items(session, job_id, page=1, page_size=100, visible_file_ids=(81, 82))).rows
 
 
 async def test_failed_only_retry_after_own_cutover_uses_same_job_and_current_business_model(cutover):
@@ -199,8 +217,55 @@ async def test_later_same_model_intent_invalidates_the_old_job(cutover):
             await owner.aread_current(session, 40, job=job)
 
 
+async def test_actual_a_to_b_to_a_business_operations_do_not_revive_old_job(cutover):
+    context, owner, job_id, _, _ = cutover
+    async with context.sessions() as session:
+        await finalize(cutover, session)
+        await session.commit()
+    for selected in (12, 11):
+        async with context.sessions() as session:
+            plan = await Models.aprepare_rebuild(session, 40, selected, login_user=context.user)
+            row = await Models.aapply_model_change(session, plan)
+            final = await Models.aprepare_finalization(
+                session,
+                40,
+                operation_id=plan.operation_id,
+                expected_model_config_revision=row.model_config_revision,
+                expected_index_generation=row.index_generation,
+            )
+            await Models.aapply_finalization(session, final)
+            await session.commit()
+    async with context.sessions() as session:
+        old = await owner.jobs.aget(session, job_id)
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await owner.aread_current(session, 40, job=old)
+
+
 async def test_repository_refuses_an_unsigned_acknowledgement(cutover):
     context, owner, _, lease, _ = cutover
     async with context.sessions() as session:
         with pytest.raises(ResourceReferenceInvalidError):
             await owner.jobs.aacknowledge_cutover(session, lease, receipt={"before": 1, "after": 2})
+
+
+async def test_missing_acceptance_cannot_finish_a_retry_after_business_cutover(cutover):
+    context, owner, _, _, _ = cutover
+    async with context.sessions() as session:
+        job = await finalize(cutover, session)
+        current = await owner.aread_current(session, 40, job=job)
+        await owner.jobs.aretry_failed(
+            session,
+            job.id,
+            idempotency_key="retry-without-audit",
+            expected_job_revision=job.revision,
+            actor_user_id=7,
+            actor_reference={"actor_id": 7},
+            configuration=current.configuration,
+        )
+        lease = await owner.jobs.aclaim(session, job.id, configuration=current.configuration)
+        item = await owner.jobs.aclaim_next_item(session, lease, configuration=current.configuration)
+        await owner.jobs.acomplete_item(session, item.lease, configuration=current.configuration, succeeded=True)
+        job.accepted_model_config_revision = None
+        await session.flush()
+        with pytest.raises(ResourceReferenceInvalidError):
+            await owner.afinalize_and_ack(session, job, lease)
