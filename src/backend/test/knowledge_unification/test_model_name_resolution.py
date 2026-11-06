@@ -407,3 +407,91 @@ async def test_alias_rejects_changed_transaction_and_range(ctx):
             await ctx[2].resolve_model_alias_current(
                 session, 101, "own/alpha", identity=ctx[1], plan=plan, range=allowed
             )
+
+
+async def test_read_inspection_preserves_every_requested_name_and_precise_status(ctx):
+    async with AsyncSession(ctx[0]) as session:
+        findings = await ctx[2].ainspect_model_names_current(
+            session, 101, ("alpha", "gone", "same", "offline", "root/slash", "root/same"), identity=ctx[1]
+        )
+        assert [(row.requested, row.status) for row in findings] == [
+            ("alpha", "valid"),
+            ("gone", "unresolvable"),
+            ("same", "ambiguous"),
+            ("offline", "offline"),
+            ("root/slash", "valid"),
+            ("root/same", "valid"),
+        ]
+        assert [row.resolved.model_id if row.resolved is not None else None for row in findings] == [
+            11,
+            None,
+            None,
+            None,
+            13,
+            21,
+        ]
+        assert session.in_transaction() and not session.sync_session.identity_map
+        with pytest.raises(ResourceReferenceInvalidError):
+            await ctx[2].resolve_model_name_current(session, 101, "alpha", identity=ctx[1], plan=findings)
+
+
+async def test_read_inspection_uses_no_cache_no_locks_no_autoflush_and_cannot_issue_plan(ctx, monkeypatch):
+    from bisheng.llm.domain.services import model_catalog
+
+    monkeypatch.setattr(model_catalog, "resolve_model_name", AsyncMock(side_effect=AssertionError("cached inspection")))
+    monkeypatch.setattr(
+        ctx[2].repository, "aprepare_catalog", AsyncMock(side_effect=AssertionError("lock plan inspection"))
+    )
+    async with AsyncSession(ctx[0]) as session:
+        pending = LLMModel(id=99, server_id=1, tenant_id=101, model_name="pending", model_type="llm")
+        session.add(pending)
+        statements = []
+
+        def record(state):
+            statements.append(state.statement)
+
+        event.listen(session.sync_session, "do_orm_execute", record)
+        rows = await ctx[2].ainspect_model_names_current(session, 101, ("alpha", "pending"), identity=ctx[1])
+        assert [row.status for row in rows] == ["valid", "unresolvable"]
+        assert all(statement._for_update_arg is None for statement in statements if statement.is_select)
+        assert pending in session.new and not session.sync_session.identity_map
+        await session.rollback()
+
+
+@pytest.mark.parametrize("failure", ["sharing", "catalog"])
+async def test_read_inspection_backend_failure_cannot_be_reported_as_healthy_rows(ctx, monkeypatch, failure):
+    error = RuntimeError("catalog backend failed")
+    if failure == "sharing":
+        ctx[3].error = error
+    else:
+        monkeypatch.setattr(ctx[2].repository, "ainspect_catalog", AsyncMock(side_effect=error), raising=False)
+    async with AsyncSession(ctx[0]) as session:
+        with pytest.raises(ModelFaceCatalogUnavailableError) as raised:
+            await ctx[2].ainspect_model_names_current(session, 101, ("alpha", "gone"), identity=ctx[1])
+        assert raised.value.__cause__ is error
+
+
+async def test_read_inspection_keeps_original_identity_tenant_and_transaction(ctx, monkeypatch):
+    async with AsyncSession(ctx[0]) as session, session.begin():
+        with pytest.raises(ResourceReferenceInvalidError):
+            await ctx[2].ainspect_model_names_current(session, 202, ("alpha",), identity=ctx[1])
+        with pytest.raises(ResourceReferenceInvalidError):
+            await ctx[2].ainspect_model_names_current(session, 101, ("alpha",), identity=ctx[1].model_copy())
+        original = ctx[2].repository.ainspect_catalog
+
+        async def change_transaction(*args, **kwargs):
+            value = await original(*args, **kwargs)
+            await session.commit()
+            return value
+
+        monkeypatch.setattr(ctx[2].repository, "ainspect_catalog", change_transaction)
+        with pytest.raises(ResourceReferenceInvalidError):
+            await ctx[2].ainspect_model_names_current(session, 101, ("alpha",), identity=ctx[1])
+
+
+async def test_read_inspection_rejects_non_name_input_and_preserves_explicit_empty_batch(ctx):
+    async with AsyncSession(ctx[0]) as session:
+        for requested in [(True,), ("",), ["alpha"]]:
+            with pytest.raises(ResourceReferenceInvalidError):
+                await ctx[2].ainspect_model_names_current(session, 101, requested, identity=ctx[1])
+        assert await ctx[2].ainspect_model_names_current(session, 101, (), identity=ctx[1]) == ()
