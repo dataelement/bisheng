@@ -11,11 +11,13 @@ from bisheng.common.errcode.admin_scope import AdminScopeChangedError
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.api import SSEResponse, resp_200
 from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.api.dependencies import (
     get_knowledge_document_version_repository,
     get_knowledge_space_chat_service,
     get_knowledge_space_service,
 )
+from bisheng.knowledge.application.creation_settings import get_space_creation_settings
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileOrderField, SpaceFileOrderSort
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
     KnowledgeDocumentVersionRepository,
@@ -74,6 +76,12 @@ async def retrieve_workspace_context(
 
 
 # ──────────────────────────── Space CRUD ──────────────────────────────────────
+
+
+@router.get("/creation-settings")
+async def get_creation_settings(login_user: UserPayload = Depends(UserPayload.get_login_user)) -> Any:
+    async with get_async_db_session() as session:
+        return resp_200(await get_space_creation_settings(login_user, session=session))
 
 
 # No `@require_quota` here, unlike assistant / workflow / tool. Those have no
