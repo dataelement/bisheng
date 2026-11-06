@@ -27,27 +27,23 @@
 </div>
 
 
-## BISHENG Enterprise Platform
-
 BISHENG is an **open-source, all-in-one enterprise Agent platform** focused on office productivity and putting enterprise AI applications to work. It is used by leading organizations across industries and Fortune 500 companies.
 
-## Major update: BISHENG Desktop connects your computer to enterprise AI
+### Major update: BISHENG Desktop is here
 
-**BISHENG Desktop is a desktop Agent that connects local work with enterprise AI.** Employees sign in with their enterprise account to use authorized models, knowledge bases, tools and skills for knowledge Q&A, multi-step tasks and generating Word, Excel and PowerPoint files, then continue refining them in authorized local directories. The enterprise centrally manages resources, permissions, credits and usage.
+BISHENG Desktop is built on DeepSeek Harness (DSH) and works with the BISHENG platform to provide a complete, open-source enterprise Agent platform solution that can be privately deployed and kept fully under your control.
 
-![BISHENG Desktop enterprise introduction page on the official website](docs/images/readme/bisheng-desktop-enterprise.png)
+Simply put, think of it as an open-source alternative to WorkBuddy / Doubao Work, allowing enterprises to truly own and control their AI capabilities.
 
-[Download BISHENG Desktop](https://dshdesktop.com/zh/enterprise/) · [Client GitHub repository](https://github.com/dataelement/bisheng-desktop)
+![BISHENG web, desktop and mobile interfaces](docs/images/readme/bisheng-platform-overview.png)
 
-> Enterprise integration capabilities, configuration requirements, and open-source and commercial edition availability depend on the relevant release documentation.
+[Download BISHENG Desktop](https://dshdesktop.com/zh/enterprise/)
 
-### DSH Desktop personal edition: start with local tasks
+To customize the client (for example, to replace the logo), you can modify the [open-source client code](https://github.com/dataelement/bisheng-desktop).
 
-**DSH Desktop is an open-source desktop Agent application built by Dataelem on DeepSeek Harness.** Individual users can configure a model, choose a local working directory and let the Agent process everyday materials without deploying the BISHENG enterprise platform.
-
-**17k stars** on GitHub.
-
-[DSH Desktop](https://dshdesktop.com/zh/) · [GitHub](https://github.com/dataelement/dsh-desktop)
+> The BISHENG team open-sourced a desktop client for DSH ([dshdesktop.com](https://dshdesktop.com/)) on the very night DSH was released. BISHENG Desktop is built on DSHDesktop. To date, DSHDesktop has received over 900,000 downloads and 17.4K GitHub stars ⭐️. Individual users can use DSHDesktop.
+>
+> [DSHDesktop website](https://dshdesktop.com/zh/)
 
 ## Features
 
@@ -57,10 +53,6 @@ BISHENG is an **open-source, all-in-one enterprise Agent platform** focused on o
    - **Enterprise resources authorized by identity**: Use your enterprise account to access approved models, API/MCP tools, skills and knowledge spaces, or open published assistants and workflows in the Application Center. Knowledge retrieval continues to enforce space and file permissions.
    - **Central model and credit management**: Administrators manage model access, monthly credits and call records. Enterprise model calls in Chat and Work share the current user's credit ledger; users can check their balance and usage.
    - **Central distribution of enterprise extensions**: Administrators import plugins and workbenches centrally. Employees receive them according to enterprise configuration and authorization.
-
-   ![BISHENG web, desktop and mobile interfaces](docs/images/readme/bisheng-platform-overview.png)
-
-   > The mobile app is coming soon. Features and release plans are subject to the relevant release documentation.
 
 2. **🛠️ Application Workshop: publish Vibe Apps for your team**
 

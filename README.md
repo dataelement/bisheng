@@ -27,27 +27,23 @@
 </div>
 
 
-## BISHENG 企业平台
-
 BISHENG是一款 <b>开源的企业级一站式 Agent 平台</b>，专注办公效率与企业 AI 应用落地，已有大量行业头部组织及世界 500 强企业在使用。
 
-## 重要更新：BISHENG 客户端重磅发布，连接桌面与企业 AI
+### 重要更新：BISHENG 客户端重磅发布
 
-**BISHENG 客户端是连接本地工作与企业 AI 的桌面 Agent。** 员工使用企业账号即可调用获准的模型、知识库、工具和技能，完成资料问答、多步任务及 Word、Excel、PPT 等办公文件生成，并在授权的本地目录中持续修改；企业统一管理资源、权限、积分与用量。
+BISHENG 桌面端基于 DeepSeek Harness（DSH）开发，与 BISHENG 平台协同，为企业提供一整套开源、可私有化部署、自主可控的企业级 Agent 平台方案。
 
-![BISHENG 客户端官网企业版介绍页面截图](docs/images/readme/bisheng-desktop-enterprise.png)
+简单来说，你可以把它理解为 WorkBuddy／豆包工作的开源替代方案，让企业把 AI 能力真正掌握在自己手中。
 
-[下载 BISHENG 客户端](https://dshdesktop.com/zh/enterprise/) · [客户端 Github 仓库](https://github.com/dataelement/bisheng-desktop)
+![BISHENG 网页端、桌面端与手机端展示](docs/images/readme/bisheng-platform-overview.png)
 
-> 企业接入能力、配置要求及开源与商业版范围，以对应版本说明为准。
+[下载 BISHENG 客户端](https://dshdesktop.com/zh/enterprise/)
 
-### DSH 客户端个人版：从本地任务开始
+若需要对客户端进行改造（比如更换 LOGO），可基于[客户端开源代码](https://github.com/dataelement/bisheng-desktop)改造。
 
-**DSH Desktop 是 Dataelem 团队基于 DeepSeek Harness 打造的开源桌面 Agent 应用。** 个人用户无需部署 BISHENG 企业平台，即可配置模型、选择本地工作目录，把日常材料处理交给 Agent。
-
-GitHub 已获 **17k Star**。
-
-[DSH 客户端](https://dshdesktop.com/zh/) · [GitHub](https://github.com/dataelement/dsh-desktop)
+> BISHENG 团队于 DSH 发布当晚第一时间开源了 DSH 的桌面客户端（[dshdesktop.com](https://dshdesktop.com/)）。BISHENG 客户端基于 DSHDesktop 开发。截至目前，DSHDesktop 已获得 90 万+下载、17.4K GitHub ⭐️。个人用户可以使用 DSHDesktop。
+>
+> [DSHDesktop 官网](https://dshdesktop.com/zh/)
 
 ## 特点
 
@@ -57,10 +53,6 @@ GitHub 已获 **17k Star**。
    - **企业资源按身份开放**：使用企业账号调用获准的模型、API/MCP 工具、技能与知识空间，也可从应用中心打开已发布的助手和工作流；知识检索继续检查空间与文件权限。
    - **模型与积分集中管理**：管理员统一配置模型授权、月度积分和调用记录；Chat 与 Work 的企业模型调用共用当前用户的积分账本，用户可查看余额与用量。
    - **企业扩展统一分发**：管理员集中导入插件和工作台，员工按企业配置与授权获取使用。
-
-   ![BISHENG 网页端、桌面端与手机端展示](docs/images/readme/bisheng-platform-overview.png)
-
-   > 手机 App 即将推出，具体功能与上线安排以版本说明为准。
 
 2. **🛠️ 应用工场：把 Vibe App 发布给团队**
 
