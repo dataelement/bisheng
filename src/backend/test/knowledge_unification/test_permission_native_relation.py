@@ -17,8 +17,9 @@ from bisheng.permission.application.relation_api import PermissionRelationApplic
 def test_native_accessor_does_not_initialize_an_unready_runtime(monkeypatch):
     context = SimpleNamespace(is_ready=lambda: False, sync_get_instance=Mock())
     monkeypatch.setattr(app_context, "get_context", lambda name: context)
-    with pytest.raises(PermissionServiceUnavailableError):
+    with pytest.raises(PermissionServiceUnavailableError) as raised:
         module.get_permission_relation_api_sync()
+    assert raised.value.kwargs["reason"] == "permission_runtime_not_ready"
     context.sync_get_instance.assert_not_called()
 
 
@@ -66,3 +67,22 @@ def test_native_application_cannot_be_used_for_general_resource_authorization(su
     with pytest.raises(ValueError):
         api.list_resource_ids_sync(subject=subject, relation=relation, resource_type=resource)
     client.list_objects_sync.assert_not_called()
+
+
+def test_native_accessor_distinguishes_missing_runtime_from_broken_ready_components(monkeypatch):
+    def missing(name):
+        raise KeyError(name)
+
+    monkeypatch.setattr(app_context, "get_context", missing)
+    with pytest.raises(PermissionServiceUnavailableError) as raised:
+        module.get_permission_relation_api_sync()
+    assert raised.value.kwargs["reason"] == "permission_runtime_not_ready"
+    assert isinstance(raised.value.__cause__, KeyError)
+    context = SimpleNamespace(
+        is_ready=lambda: True,
+        sync_get_instance=lambda: SimpleNamespace(runtime=SimpleNamespace(components=SimpleNamespace())),
+    )
+    monkeypatch.setattr(app_context, "get_context", lambda name: context)
+    with pytest.raises(PermissionServiceUnavailableError) as raised:
+        module.get_permission_relation_api_sync()
+    assert raised.value.kwargs.get("reason") != "permission_runtime_not_ready"

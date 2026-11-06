@@ -427,9 +427,14 @@ def get_permission_relation_api_sync() -> PermissionRelationApplication:
     from bisheng.permission.application.process_runtime import F048_PERMISSION_RUNTIME_CONTEXT
 
     try:
-        context = app_context.get_context(F048_PERMISSION_RUNTIME_CONTEXT)
+        try:
+            context = app_context.get_context(F048_PERMISSION_RUNTIME_CONTEXT)
+        except KeyError as exc:
+            raise PermissionServiceUnavailableError(reason="permission_runtime_not_ready", exception=exc) from exc
         if not context.is_ready():
-            raise PermissionServiceUnavailableError(msg="Permission runtime is not ready")
+            raise PermissionServiceUnavailableError(
+                msg="Permission runtime is not ready", reason="permission_runtime_not_ready"
+            )
         process = context.sync_get_instance()
         runtime = process.runtime
         components = getattr(runtime, "components", runtime)

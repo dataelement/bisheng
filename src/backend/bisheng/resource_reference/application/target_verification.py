@@ -19,6 +19,7 @@ from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.resource_reference.application.contracts import (
     ReferenceTargetOwnerPort,
     SourceKey,
+    SourceType,
     TargetKey,
     TargetLockReceipt,
     TargetType,
@@ -193,6 +194,44 @@ class ReferenceTargetVerifier:
         issued = {}
         for source, targets in planned:
             issued[source] = await self._averify(session, source, targets, "bind")
+        identity.assert_current(session)
+        return MappingProxyType(issued)
+
+    async def averify_mixed_source_targets(self, session: AsyncSession, requests):
+        """Prelock one model union while preserving source-specific authority."""
+        if not isinstance(requests, tuple) or not requests:
+            raise _invalid("reference_mixed_sources_required")
+        tenant_id = self._tenant_id()
+        planned = []
+        for item in requests:
+            if not isinstance(item, tuple) or len(item) != 2 or not isinstance(item[0], SourceKey):
+                raise _invalid("reference_mixed_sources_required")
+            source, targets = item
+            keys = self._keys(targets)
+            if (
+                source.tenant_id != tenant_id
+                or source.source_type not in (SourceType.MODEL_DEFAULT, SourceType.KNOWLEDGE)
+                or source.source_version != "current"
+                or any(key.target_type != TargetType.MODEL for key in keys)
+            ):
+                raise _invalid("reference_mixed_source_scope_invalid")
+            planned.append((source, keys))
+        if len({source for source, _ in planned}) != len(planned):
+            raise _invalid("reference_mixed_source_duplicate")
+        planned.sort(key=lambda item: (item[0].source_type.value, item[0].source_id, item[0].source_version))
+        sources = tuple(source for source, _ in planned)
+        union = self._keys(tuple(key for _, keys in planned for key in keys))
+        _, _, identity, groups = self._plan(session, sources[0], union, "bind")
+        for owner, keys in groups:
+            prelock = getattr(owner, "aprelock_mixed_targets", None)
+            if not callable(prelock):
+                raise ReferenceCoverageNotReadyError(reason="reference_mixed_prelock_unavailable")
+            if await prelock(session, keys, sources) is not None:
+                raise _invalid("reference_prelock_must_not_issue_receipts")
+            identity.assert_current(session)
+        issued = {}
+        for source, keys in planned:
+            issued[source] = await self._averify(session, source, keys, "bind")
         identity.assert_current(session)
         return MappingProxyType(issued)
 
