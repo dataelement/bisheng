@@ -551,7 +551,7 @@
   **类型 / Owner**：Worker / PROC\
   **写入文件**：`src/backend/bisheng/worker/knowledge/rebuild_knowledge_worker.py`\
   **逻辑 / 测试上下文**：复用现有 Chunk/metadata，分页超过 10000；失败保留 ES 重试源、只切成功文件检索，不重切分/丢人工修改。tenant_id 从 Celery headers 注入 ContextVar，使用业务模型配置。\
-  **依赖**：T065\
+  **依赖**：T065, T658\
   **配对测试**：T065\
   **验证 / 完成条件**：运行配对测试 T065；验证本卡预期，相关范围检查通过。
 
@@ -5233,6 +5233,22 @@
   **依赖**：T655\
   **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-77, AC-85, AC-89\
   **验证 / 完成条件**：先真实红/首绿测试再实现，每卡≤2叶；无真实Coverage不能假ready，后续执行/HTTP另验。
+
+- [ ] **T657 · 保留失败重建源的检索隔离测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_rebuild_failed_visibility.py`\
+  **逻辑 / 测试上下文**：真实SQL文件状态下，保留ES源但空间候选/post-filter排除失败与处理中，仅成功合法版本参与；F048/QA/原显式版本语义及预览下载保持。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-35, AC-48, AC-49, AC-52, AC-53, AC-54\
+  **验证 / 完成条件**：先提交真实状态回归，不能以删ES文本或只清Milvus代替检索裁剪。
+
+- [ ] **T658 · 保留失败重建源的检索隔离接线**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_file_visibility_service.py`\
+  **逻辑 / 测试上下文**：空间候选与post_filter按现真实成功状态裁剪检索，保权限/primary及原显式版本/QA语义，不扩大edit或禁止预览下载；与066后组合验证。\
+  **依赖**：T657\
+  **配对测试**：T657\
+  **验证 / 完成条件**：配对与原visibility/检索回归全绿，真实ES/Milvus行为由后续E2E验，不先标T102全量完成。
 
 ## 自动化覆盖索引
 

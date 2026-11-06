@@ -89,6 +89,12 @@ KnowledgeSpaceListingRepository新增alist_candidates(keyword?,after?,limit)和a
 
 T063/064是可组合接收用例，不得把未装配kind接受成永远pending；T614/615的真实闭环前置增加T065/066。先实现既有rebuild_knowledge_worker.py超过10000的完整分页，失败保ES文本和人工Chunk/metadata；同文件中实际单file处理能力供J1逐item调用，返回实际处理结果，不伪造成功。J1业务Owner负责租约/代际与SQL finalize；旧task入口不伪装成job，也不让整库旧worker自行finalize新job。tenant/proof/原业务模型来源保持当前合同，不新增physical staging、外部CAS或任务模型绑定。
 
+失败保ES必须配合T657/658真实retrieval过滤：在现knowledge_file_visibility_service的空间候选和post_filter路径，按当前SQL真实文件成功状态排除处理中/失败文件，保现F048、primary/显式版本和QA既有语义；只裁检索，不据此禁止目录/预览/下载。不能只清Milvus而让失败ES源继续召回。T066完成依赖此过滤，最后真实API/E2E验证保源可重试、成功项可检索、失败项不可检索。
+
+PROC原ProcessingOwnerRepository允许补受控文件状态写端（原643叶及原测试叶），必须在当前item/job lease、R/G和归属核验之后，同外部native Session按真实file ID/tenant/expected space更新status及已脱敏错误，不调用自commit旧DAO；结果提交与子项终态原子落地。preview/download仍沿原资格。
+
+原Owner增加apreview(session,space_id,*,identity,parameters,operation_id=None,expected_configuration=None)只prepare现ModelReference计划、不apply新业务/R2配置；旧invalid模型显式repair只验新合法目标。JobRepo增加aget_by_request_key(session,kind,idempotency_key,*,lock=False)用于幂等优先检查，但始终重新鉴权，异plan/规范请求/actor不得复用。
+
 T078已知生命周期放行使原adapter测试把COPYING视为非法的断言退休；T650只将该例改为未知/已删除的非法态，保原租户、类型和隐藏断言，不放宽任何权限。
 
 ## 5. LLM 目标影响与持久计划核心 V1：已冻结
