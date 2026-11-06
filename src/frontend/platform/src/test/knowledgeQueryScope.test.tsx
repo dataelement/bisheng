@@ -78,6 +78,7 @@ function apiPort() {
     getCreationSettings: vi.fn().mockResolvedValue({ embedding_model: null, system_defaults: settings.effective_defaults }),
     createSpace: vi.fn().mockResolvedValue({ id: 8, name: "Created" }),
     getSpaceInfo: vi.fn().mockResolvedValue({ id: 7, name: "Space" }),
+    updateSpaceBasicInfo: vi.fn().mockResolvedValue({ id: 7, name: "Changed" }),
     listChildren: vi.fn().mockResolvedValue({
       data: [],
       page_size: 40,
