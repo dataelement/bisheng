@@ -6049,6 +6049,16 @@
   **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-66, AC-82, AC-83, AC-86, AC-87\
   **验证 / 完成条件**：真实DI/两protocol及原身份用例通过，架构无Domain反向import application，原QA和其他kind回归不变，独立固定审后原T072才闭合。
 
+## W6开放任务技能旧授权结果夹具兼容
+
+- [ ] **T749 · 原任务个人技能fixture改实际visible结果键**
+  **类型 / Owner**：测试夹具 / PERM\
+  **写入文件**：`src/backend/test/open_api/test_task_mode_personal_skills.py`\
+  **逻辑 / 测试上下文**：原permitted假结果仍只含退休use，实际UserSkillsService已使用visible，导致候选与检查两例失败。仅适配结果键并断言真实请求动作；保caller-only、enabled、私有他人、优先级及原错误断言，不改生产技能策略。\
+  **依赖**：T146, T150\
+  **覆盖 AC**: AC-35, AC-79, AC-82, AC-83, AC-87\
+  **验证 / 完成条件**：精确前驱两红保留证据，仅适配后当前Task mode/Skill相关同选集全绿，无新生产叶；不把退休fixture当作产品可忽略失败。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。

@@ -405,3 +405,6 @@ T736允许在现jobRepo同叶定义专用私有metadata acceptance authority/rec
 中性DDL只允许模型新空表、既有列/索引结构及已冻结server_default填充；不运行default seed、R2回填、Knowledge.type/配额/版本/标签/配置/授权数据转换，不启动新版API/worker/FGA在线模型或把新列默认当新业务事实。原业务字段/ID/模型/索引/对象/授权pin必须保持，M2 artifact记录备份点、原/新schema revision与本次DDL版本摘要；baseline原业务摘要排除新中性字段，显式加入旧业务字段完整核对。DDL失败或非中性数据效果明确失败保持维护，不能把转换后状态冒充正式原基线。
 
 这一区分沿仓库“revision只允许DDL及新增列server_default填充；业务数据迁移独立操作”的既有规则。正式脚本尚未完成前，只说明真实存在的alembic结构升级入口，不伪造inventory/convert命令或将原授权pin只读smoke称正式M2。恢复仍整套一致备份点，不只反改type或删新列。全部演练只在109独立项目，3005不操作，DM8实库免测但C2静态保持。
+
+
+§25补T749：旧task_mode_personal_skills.py的permitted fixture仍回退休use，而已合UserSkillsService实际请求visible；同选集前驱/当前各两失败由该假结果导致。仅本叶改visible结果并保所有原行为断言，不扩改production Skill/WorkStation。
