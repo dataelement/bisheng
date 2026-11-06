@@ -10,10 +10,13 @@ from sqlmodel import select
 
 from bisheng.common.errcode.knowledge import KnowledgeIdempotencyConflictError, ResourceReferenceInvalidError
 from bisheng.core.database.dialect_helpers import JsonType
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
+from bisheng.knowledge.domain.repositories.metadata_processing_repository import metadata_digest
 from bisheng.knowledge.domain.repositories.processing_job_repository import ProcessingConfiguration
 from test.knowledge_unification import test_job_repo as fixtures
+from test.knowledge_unification.test_job_query_dispatch import actual_processing_task as actual_processing_task
 
 job_tenant, job_session, clock = fixtures.job_tenant, fixtures.job_session, fixtures.clock
 repository, configuration = fixtures.repository, fixtures.configuration
@@ -301,3 +304,48 @@ async def test_execution_read_raiseloads_manifest_even_after_same_session_full_r
     light = await repository.aget_execution(job_session, job.id)
     with pytest.raises(InvalidRequestError):
         _ = light.scope_manifest
+
+
+@pytest.mark.parametrize("changed", [None, "schema_revision", "schema_digest", "model", "generation"])
+async def test_fail_attempt_uses_locked_actual_metadata_facts_and_bounded_payload(
+    job_session, repository, json_meter, actual_processing_task, changed
+):
+    root = await job_session.get(Knowledge, 1)
+    root.index_generation, root.metadata_schema_revision, root.metadata_fields = "index-7", 1, []
+    config = metadata_configuration(digest=metadata_digest([]))
+    job = (
+        await fixtures.create(
+            repository,
+            job_session,
+            config,
+            kind="metadata_schema_change",
+            items=large_items(),
+            parameters={"metadata_schema_revision": 1, "metadata_schema_digest": config.metadata_schema_digest},
+        )
+    ).job
+    lease = await repository.aclaim(job_session, job.id, configuration=config)
+    first = await repository.aclaim_next_item(job_session, lease, configuration=config)
+    assert await repository.acomplete_item(job_session, first.lease, configuration=config, succeeded=True)
+    if changed == "schema_revision":
+        root.metadata_schema_revision += 2
+    elif changed == "schema_digest":
+        root.metadata_fields = [{"field_name": "changed", "field_type": "string"}]
+    elif changed == "model":
+        root.model_config_revision += 1
+    elif changed == "generation":
+        root.index_generation = "new-generation"
+    job_id, revision = job.id, job.revision
+    await job_session.commit()
+    job_session.expunge_all()
+    json_meter.update(dict.fromkeys(json_meter, 0))
+    result = await repository.afail_attempt(
+        job_session, job_id, expected_job_revision=revision, error_code=10915, lease=lease
+    )
+    assert result.state == ("obsolete" if changed else "partial_failed")
+    if not changed:
+        assert (result.succeeded_count, result.failed_count, result.pending_count) == (1, 400, 0)
+    assert not result.pending_dispatch
+    assert json_meter["manifest_bytes"] == json_meter["snapshot_bytes"] == 0, json_meter
+    await job_session.commit()
+    job_session.expunge_all()
+    assert (await repository.aget_execution(job_session, job_id)).state == result.state
