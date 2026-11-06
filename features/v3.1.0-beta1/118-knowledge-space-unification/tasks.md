@@ -4924,6 +4924,56 @@
   **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
   **验证 / 完成条件**：运行配对T618并记录真实结果，完成后由INT集成复核；不以单元测试声称真实E2E。
 
+## W6 业务Owner及任务自身切换接缝
+
+- [ ] **T620 · 处理任务真实业务Owner测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_processing_owner.py`\
+  **逻辑 / 测试上下文**：按W6真实Owner补充合同；同Session实际业务模型读取、显式同模型新操作、原lease/R/G核验及私有事务收据消费。不允许任意before/after推进、不加物理staging、不联动默认Embedding。\
+  **依赖**：T613, T609, T611\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先提交场景测试，记录真实红/首绿。
+
+- [ ] **T621 · 处理任务真实业务Owner**
+  **类型 / Owner**：后端 Application / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/application/processing_owner.py`\
+  **逻辑 / 测试上下文**：按W6真实Owner补充合同；同Session实际业务模型读取、显式同模型新操作、原lease/R/G核验及私有事务收据消费。不允许任意before/after推进、不加物理staging、不联动默认Embedding。\
+  **依赖**：T620, T623\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：运行配对T620及真实Owner组合；相关原回归不退化。
+
+- [ ] **T622 · 显式同模型重建业务边界测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_explicit_rebuild.py`\
+  **逻辑 / 测试上下文**：按W6真实Owner补充合同；同Session实际业务模型读取、显式同模型新操作、原lease/R/G核验及私有事务收据消费。不允许任意before/after推进、不加物理staging、不联动默认Embedding。\
+  **依赖**：T613\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先提交场景测试，记录真实红/首绿。
+
+- [ ] **T623 · 显式同模型重建业务边界**
+  **类型 / Owner**：后端 Application / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/application/model_reference.py`\
+  **逻辑 / 测试上下文**：按W6真实Owner补充合同；同Session实际业务模型读取、显式同模型新操作、原lease/R/G核验及私有事务收据消费。不允许任意before/after推进、不加物理staging、不联动默认Embedding。\
+  **依赖**：T622\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：运行配对T622及真实Owner组合；相关原回归不退化。
+
+- [ ] **T624 · 自身切换收据与任务代际测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_job_cutover_receipt.py`\
+  **逻辑 / 测试上下文**：按W6真实Owner补充合同；同Session实际业务模型读取、显式同模型新操作、原lease/R/G核验及私有事务收据消费。不允许任意before/after推进、不加物理staging、不联动默认Embedding。\
+  **依赖**：T621, T611\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先提交场景测试，记录真实红/首绿。
+
+- [ ] **T625 · 自身切换任务代际收据消费**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/processing_job_repository.py`\
+  **逻辑 / 测试上下文**：按W6真实Owner补充合同；同Session实际业务模型读取、显式同模型新操作、原lease/R/G核验及私有事务收据消费。不允许任意before/after推进、不加物理staging、不联动默认Embedding。\
+  **依赖**：T624\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：运行配对T624及真实Owner组合；相关原回归不退化。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
