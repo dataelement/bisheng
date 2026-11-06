@@ -202,6 +202,25 @@ async def test_actual_safety_result_is_failed_item_and_violation_file(wire, monk
     wire.files.provider.assert_not_called()
 
 
+async def test_credential_revoked_after_real_parse_stops_ingest_and_fails_owned_file(wire, monkeypatch):
+    actual_prepare = native.prepare_processing_file
+
+    def revoke_after_prepare(*args, **kwargs):
+        result = actual_prepare(*args, **kwargs)
+        processing_identity.resolve_web_runtime_identity.side_effect = PermissionDeniedError()
+        return result
+
+    monkeypatch.setitem(worker.PROCESSING_HANDLERS, "file_resplit", revoke_after_prepare)
+    job_id = await submit(wire)
+    accepted = await detail(wire, job_id)
+    assert (await worker._execute_processing_job(job_id, accepted["revision"]))["state"] == "failed"
+    async with wire.files.context.sessions() as session:
+        assert (await session.get(KnowledgeFile, 82)).status == 3
+        assert (await session.exec(select(KnowledgeProcessingJob))).one().pending_count == 0
+    wire.files.provider.assert_not_called()
+    wire.files.vector.col.delete.assert_not_called()
+
+
 async def test_related_configuration_change_after_real_parse_refuses_new_ingest_and_sql_finalize(wire, monkeypatch):
     actual_prepare = native.prepare_processing_file
 
@@ -214,7 +233,7 @@ async def test_related_configuration_change_after_real_parse_refuses_new_ingest_
             session.commit()
         return result
 
-    monkeypatch.setattr(worker, "prepare_processing_file", change_after_prepare, raising=False)
+    monkeypatch.setitem(worker.PROCESSING_HANDLERS, "file_resplit", change_after_prepare)
     job_id = await submit(wire)
     accepted = await detail(wire, job_id)
     assert (await worker._execute_processing_job(job_id, accepted["revision"]))["state"] == "obsolete"
