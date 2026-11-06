@@ -26,7 +26,6 @@ from bisheng.common.errcode.http_error import NotFoundError, ServerError, UnAuth
 from bisheng.common.errcode.knowledge import (
     KnowledgeCPEmptyError,
     KnowledgeCPError,
-    KnowledgeNoEmbeddingError,
     KnowledgeNotExistError,
     KnowledgeNotQAError,
     KnowledgePreviewError,
@@ -34,7 +33,6 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeRebuildingError,
     KnowledgeSpaceListNotSupportedError,
 )
-from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200, resp_500
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.redis_manager import get_redis_client
@@ -69,8 +67,6 @@ from bisheng.knowledge.domain.services.knowledge_creation_policy import Knowledg
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
 from bisheng.llm.domain import LLMService
-from bisheng.llm.domain.const import LLMModelType
-from bisheng.llm.domain.models import LLMDao
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService, require_quota
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import calc_data_sha256, generate_uuid
@@ -996,75 +992,14 @@ def get_knowledge_status(*, login_user: UserPayload = Depends(UserPayload.get_lo
 def update_knowledge_model(
     *, login_user: UserPayload = Depends(UserPayload.get_login_user), req_data: UpdateKnowledgeReq
 ):
-    """
-    Update Knowledge Base Interface
-    Update embedding Rebuild Knowledge Base on Model
-    Receive:
-    1. According to the incoming from the front-endmodel_id, model_type, let's first determine ifembeddingModels
-    2. If not, go backresp501("Is notembeddingModels") If so, place theknowledgeAll in the tabletypeare2DatastatusChange to...3，modelChange to Incomingmodel_id
-    3. everyknowledge_idBoth initiate asynchronous tasks to rebuild the knowledge base
-    """
-    # 1. Verify that isembeddingModels
-    # Cross-tenant references surface as "not found" via the tenant_filter
-    # event layer; raise the dedicated 19802 so the UI renders the
-    # "model not accessible" toast instead of "model config missing".
-    model_info = LLMDao.get_model_by_id(req_data.model_id)
-    if not model_info:
-        return LLMModelNotAccessibleError.return_resp()
-
-    # If the front-end does not passmodel_type, using themodel_type
-    model_type = req_data.model_type if req_data.model_type else model_info.model_type
-
-    if model_type != LLMModelType.EMBEDDING.value:
-        return KnowledgeNoEmbeddingError.return_resp()
-
-    # Process the specified knowledge base
-    knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
-    if not knowledge:
-        return KnowledgeNotExistError.return_resp()
-
-    try:
-        KnowledgeService.permission_service.ensure_knowledge_write_sync(
-            login_user=login_user,
-            owner_user_id=knowledge.user_id,
-            knowledge_id=knowledge.id,
-        )
-    except UnAuthorizedError:
-        return UnAuthorizedError.return_resp()
-
-    old_model_id = knowledge.model
-
-    # Update Knowledge Base Status and Models
-    knowledge.model = str(req_data.model_id)
-    knowledge.name = req_data.knowledge_name
-    knowledge.description = req_data.description
-
-    if int(old_model_id) == int(req_data.model_id):
-        # If the model does not change, there is no need to rebuild
-        KnowledgeDao.update_one(knowledge)
-        return resp_200()
-    if knowledge.state == KnowledgeState.REBUILDING.value:
-        return KnowledgeRebuildingError.return_resp()
-
-    knowledge.state = KnowledgeState.REBUILDING.value
-    KnowledgeDao.update_one(knowledge)
-
-    # Start asynchronous task
-
-    if knowledge.type == KnowledgeTypeEnum.NORMAL.value:
-        # Delay imports to avoid looping imports
-        from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
-
-        rebuild_knowledge_celery.delay(knowledge.id, req_data.model_id, login_user.user_id)
-
-    elif knowledge.type == KnowledgeTypeEnum.QA.value:
-        # Delay imports to avoid looping imports
-        from bisheng.worker.knowledge.qa import rebuild_qa_knowledge_celery
-
-        rebuild_qa_knowledge_celery.delay(knowledge.id, req_data.model_id, login_user.user_id)
-
-    logger.info(f"Started rebuild task for knowledge_id={knowledge.id} with model_id={req_data.model_id}")
-
+    """Save actual model configuration and references before task dispatch."""
+    KnowledgeService.update_knowledge_model(
+        login_user=login_user,
+        knowledge_id=req_data.knowledge_id,
+        model_id=req_data.model_id,
+        name=req_data.knowledge_name,
+        description=req_data.description,
+    )
     return resp_200()
 
 

@@ -41,7 +41,9 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeFileFailedError,
     KnowledgeInvalidCursorError,
     KnowledgeNoEmbeddingError,
+    KnowledgeNotExistError,
     KnowledgeNotQAError,
+    KnowledgeOperationPlanConflictError,
     KnowledgeTagExistError,
     KnowledgeTagNotExistError,
     KnowledgeTenantMismatchError,
@@ -60,7 +62,10 @@ from bisheng.database.models.group_resource import (
     ResourceTypeEnum,
 )
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagDao
-from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication
+from bisheng.knowledge.application.model_reference import (
+    KnowledgeModelRebuildCommand,
+    KnowledgeModelReferenceApplication,
+)
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import (
     Knowledge,
@@ -77,7 +82,6 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
     ParseType,
-    QAKnoweldgeDao,
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
@@ -104,6 +108,7 @@ from bisheng.permission.application.business_authorization import (
 )
 from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
 from bisheng.permission.application.identity import resolve_permission_actor
+from bisheng.resource_reference.application.contracts import canonical_target_id
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_knowledge_index_name, generate_uuid
 from bisheng.utils.async_utils import run_async_safe
@@ -1053,44 +1058,22 @@ class KnowledgeService(KnowledgeUtils):
         knowledge_id: int,
         only_clear: bool = False,
     ):
-        knowledge = KnowledgeDao.query_by_id(knowledge_id)
-        if not knowledge:
-            raise NotFoundError.http_exception()
-
-        try:
-            cls.permission_service.ensure_knowledge_delete_sync(
-                login_user=login_user,
-                owner_user_id=knowledge.user_id,
-                knowledge_id=knowledge_id,
+        with get_sync_db_session() as session:
+            prepared = KnowledgeModelReferenceApplication.prepare_removal(
+                session, knowledge_id, login_user=login_user, only_clear=only_clear
             )
-        except UnAuthorizedError:
-            raise UnAuthorizedError.http_exception()
-
-        run_async_safe(
-            cls._project_library_deletion(
-                login_user,
-                knowledge_id=knowledge_id,
-                include_container=not only_clear,
-            ),
-            timeout=300,
-        )
-
-        # Cleaned vectorData in
-        cls.delete_knowledge_file_in_vector(knowledge)
-
-        # CleanedminioData
-        cls.delete_knowledge_file_in_minio(knowledge_id)
-
-        # DeletemysqlDATA
-        KnowledgeDao.delete_knowledge(knowledge_id, only_clear)
-
-        # QA knowledge bases keep their Q&A pairs in the QAKnowledge table (not
-        # KnowledgeFile), so the deletion above doesn't touch them. Remove them
-        # explicitly for both clear and full delete to avoid orphaned rows.
-        if knowledge.type == KnowledgeTypeEnum.QA.value:
-            qa_rows = QAKnoweldgeDao.get_qa_knowledge_by_knowledge_ids([knowledge_id])
-            if qa_rows:
-                QAKnoweldgeDao.delete_batch([qa.id for qa in qa_rows])
+            knowledge = prepared.row
+            # Preserve the existing projection -> external cleanup -> SQL
+            # finalize order. Files, QA pairs, Knowledge and outgoing bindings
+            # now finalize inside this one transaction.
+            run_async_safe(
+                cls._project_library_deletion(login_user, knowledge_id=knowledge_id, include_container=not only_clear),
+                timeout=300,
+            )
+            cls.delete_knowledge_file_in_vector(knowledge)
+            cls.delete_knowledge_file_in_minio(knowledge_id)
+            KnowledgeModelReferenceApplication.apply_removal(session, prepared)
+            session.commit()
 
         # Clear dropped the Milvus collection + ES index above; recreate empty
         # indices so the cleared (still-existing) resource stays queryable instead
@@ -1103,6 +1086,70 @@ class KnowledgeService(KnowledgeUtils):
         if not only_clear:
             cls.delete_knowledge_hook(request, login_user, knowledge)
         return True
+
+    @classmethod
+    def update_knowledge_model(cls, *, login_user, knowledge_id, model_id, name=None, description=None):
+        """Legacy endpoint: same-ID metadata retains old bindings unchanged."""
+        command = None
+        repository = KnowledgeModelReferenceApplication.repository
+        with get_sync_db_session() as session:
+            candidate = repository.get(session, knowledge_id)
+            if candidate is None:
+                raise KnowledgeNotExistError()
+            selected = canonical_target_id(model_id)
+            current = canonical_target_id(candidate.model) if candidate.model else None
+            if current == selected:
+                old = KnowledgeModelReferenceApplication._facts(candidate)
+                row = repository.get(session, knowledge_id, for_update=True)
+                if row is None or KnowledgeModelReferenceApplication._facts(row) != old:
+                    raise KnowledgeOperationPlanConflictError(reason="knowledge_model_configuration_changed")
+                KnowledgeModelReferenceApplication._user(login_user)
+                run_async_safe(KnowledgeModelReferenceApplication._authorize(login_user, row))
+                if name is not None:
+                    row.name = name
+                row.description = description
+                repository.save(session, row)
+            else:
+                prepared = KnowledgeModelReferenceApplication.prepare_model_change(
+                    session, knowledge_id, selected, login_user=login_user
+                )
+                row = prepared.row
+                if name is not None:
+                    row.name = name
+                row.description = description
+                KnowledgeModelReferenceApplication.apply_model_change(session, prepared)
+                if prepared.changed:
+                    command = KnowledgeModelRebuildCommand(
+                        row.id,
+                        row.type,
+                        prepared.operation_id,
+                        row.model_config_revision,
+                        row.index_generation,
+                        row.tenant_id,
+                        login_user.user_id,
+                    )
+            session.commit()
+        if command is not None:
+            # A queue failure cannot roll back already committed business
+            # configuration. Operators retry this same operation/revision.
+            cls._dispatch_model_rebuild(command)
+        return row
+
+    @staticmethod
+    def _dispatch_model_rebuild(command: KnowledgeModelRebuildCommand):
+        if command.type == KnowledgeTypeEnum.QA.value:
+            from bisheng.worker.knowledge.qa import rebuild_qa_knowledge_celery as task
+        else:
+            from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery as task
+        task.apply_async(
+            args=(command.knowledge_id, None, command.actor_user_id),
+            kwargs={
+                "operation_id": command.operation_id,
+                "expected_model_config_revision": command.expected_model_config_revision,
+                "expected_index_generation": command.expected_index_generation,
+            },
+            headers={"tenant_id": command.tenant_id},
+        )
 
     @classmethod
     def delete_knowledge_file_in_vector(cls, knowledge: Knowledge, del_es: bool = True):
