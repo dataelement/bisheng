@@ -441,3 +441,24 @@ async def test_every_native_update_or_delete_has_an_explicit_tenant_predicate(re
     finally:
         sa.event.remove(database.engine.sync_engine, "before_cursor_execute", seen)
     assert writes and all("tenant_id" in statement.split(" WHERE ", 1)[1] for statement in writes)
+
+
+async def test_actual_native_sql_path_compiles_for_mysql_without_database_specific_dml(repo, database):
+    from sqlalchemy.dialects.mysql import dialect
+
+    compiled = []
+
+    @sa.event.listens_for(database.engine.sync_engine, "before_execute")
+    def seen(_connection, statement, _multiparams, _params, _options):
+        if getattr(statement, "is_select", False) or getattr(statement, "is_dml", False):
+            compiled.append(str(statement.compile(dialect=dialect())))
+
+    try:
+        async with AsyncSession(database.engine) as session, session.begin():
+            await apply(repo, session, database.commands)
+    finally:
+        sa.event.remove(database.engine.sync_engine, "before_execute", seen)
+    assert any(sql.startswith("UPDATE knowledge ") for sql in compiled)
+    assert any(sql.startswith("INSERT INTO knowledge_document ") for sql in compiled)
+    assert any(sql.startswith("DELETE FROM taglink ") for sql in compiled)
+    assert all("ON CONFLICT" not in sql and "INSERT OR" not in sql for sql in compiled)
