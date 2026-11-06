@@ -445,21 +445,33 @@
     "emptyTags": "タグはありません"
   },
   "f118": {
+    "advanced_settings": "詳細設定",
+    "create_space": "スペースを作成",
     "defaults_title": "解析・分割の既定設定",
     "documents": "一般文書",
+    "edit_space": "スペースを編集",
+    "embedding_model": "Embeddingモデル",
     "future_uploads_only": "変更は今後のアップロードに適用されます。既存ファイルは再処理されません。",
     "header_end": "ヘッダー終了行",
     "header_start": "ヘッダー開始行",
     "integer_at_least": "{{min}}以上の整数を入力してください",
     "integer_between": "{{min}}から{{max}}までの整数を入力してください",
     "invalid_defaults": "両方のルールの必須項目と値の範囲を確認してください。",
+    "invalid_embedding_model": "有効なEmbeddingモデルを選択してください。",
     "load_failed": "既定設定を読み込めませんでした。もう一度お試しください。",
     "loading_defaults": "既定設定を読み込んでいます…",
+    "loading_space": "スペース設定を読み込んでいます…",
+    "manage_spaces": "ナレッジスペース管理",
     "move_down": "下に移動",
     "move_up": "上に移動",
     "pending_separator": "入力した区切りルールを追加するか、消去してください。",
+    "scope_changed": "テナントまたはログイン情報が変更されました。フォームを開き直してください。",
+    "scope_unavailable": "現在の管理対象テナントを確認できませんでした。もう一度お試しください。",
     "separator_pattern": "区切りルール{{index}}",
     "separator_position": "ルール{{index}}の分割位置",
+    "space_description": "スペースの説明",
+    "space_name": "スペース名",
+    "spaces": "ナレッジスペース",
     "tables": "表形式ファイル"
   }
 }
