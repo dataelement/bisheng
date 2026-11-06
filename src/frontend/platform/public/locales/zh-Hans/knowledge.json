@@ -459,6 +459,8 @@
     "integer_at_least": "请输入不小于{{min}}的整数",
     "integer_between": "请输入{{min}}至{{max}}之间的整数",
     "invalid_defaults": "请检查两类规则的必填项和参数范围。",
+    "load_failed": "加载默认设置失败，请重试。",
+    "loading_defaults": "正在加载默认设置…",
     "move_down": "下移",
     "move_up": "上移",
     "pending_separator": "请先添加或清空输入的分隔规则。",

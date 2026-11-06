@@ -459,6 +459,8 @@
     "integer_at_least": "Enter a whole number of at least {{min}}",
     "integer_between": "Enter a whole number between {{min}} and {{max}}",
     "invalid_defaults": "Check required values and ranges in both rule types.",
+    "load_failed": "Could not load defaults. Try again.",
+    "loading_defaults": "Loading defaults…",
     "move_down": "Move down",
     "move_up": "Move up",
     "pending_separator": "Add or clear the entered separator rule first.",
