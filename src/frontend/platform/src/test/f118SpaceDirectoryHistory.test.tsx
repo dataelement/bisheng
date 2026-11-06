@@ -313,7 +313,9 @@ it("does not revive history after a real row disappears and the same file return
       predicate: (query) => query.queryKey.includes("children"),
     }),
   );
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
   expect(signal.aborted).toBe(true);
   mocks.children.mockResolvedValue(page([row()]));
   await act(() =>
@@ -366,7 +368,9 @@ it("retires history if a refreshed file stops being multiversion", async () => {
       predicate: (query) => query.queryKey.includes("children"),
     }),
   );
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
   mocks.children.mockResolvedValue(page([row()]));
   await act(() =>
     view.client.invalidateQueries({
