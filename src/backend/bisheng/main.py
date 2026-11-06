@@ -120,6 +120,15 @@ def _register_resource_reference_composition() -> None:
     register()
 
 
+async def _prepare_native_reference_permissions() -> None:
+    """Await permission readiness before synchronous business readers run."""
+    if not settings.openfga.enabled:
+        return
+    from bisheng.permission.application.process_runtime import get_f048_process_runtime
+
+    await get_f048_process_runtime()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with AsyncExitStack() as stack:
@@ -127,6 +136,7 @@ async def lifespan(app: FastAPI):
         await stack.enter_async_context(app.state.work_mcp_runtime.run())
         await initialize_app_context(config=settings)
         _register_permission_runtime_contexts()
+        await _prepare_native_reference_permissions()
         _register_app_publish_composition()
         _register_resource_reference_composition()
         from bisheng.app_runtime.domain.services.entry_authz_service import diagnose_obo_configuration
