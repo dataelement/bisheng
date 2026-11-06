@@ -24,6 +24,7 @@ def listing(tenant_context):
         alist_admin=AsyncMock(
             return_value=([Knowledge(id=3, tenant_id=101, user_id=99, name="Not joined", type=3)], 17)
         ),
+        aexists_abnormal_files=AsyncMock(return_value=set()),
     )
     user = SimpleNamespace(user_id=7, tenant_id=101, is_admin=lambda: True)
     service = KnowledgeSpaceService(None, user, space_listing_repository=repository)
@@ -44,7 +45,7 @@ async def test_only_actual_admins_list_all_selected_tenant_rows_without_visible_
     with management_tenant_scope(101):
         result = await service.list_admin_spaces(keyword="Not", page=2, page_size=10)
     assert result.total == 17 and [row.id for row in result.data] == [3]
-    repository.alist_admin.assert_awaited_once_with(keyword="Not", page=2, page_size=10)
+    repository.alist_admin.assert_awaited_once_with(keyword="Not", page=2, page_size=10, has_abnormal=False)
     service._check_action.assert_not_awaited()
     assert service.login_user.tenant_id == 101
 
