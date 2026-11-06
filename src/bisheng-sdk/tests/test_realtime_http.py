@@ -13,23 +13,38 @@ import sys
 import time
 from pathlib import Path
 
-
-EXAMPLE = Path(__file__).resolve().parents[3] / "src/backend/bisheng/dev_toolkit/skills/platform-wiring/workbench-realtime/main.py"
+EXAMPLE = (
+    Path(__file__).resolve().parents[3]
+    / "src/backend/bisheng/dev_toolkit/skills/platform-wiring/workbench-realtime/main.py"
+)
 SDK = Path(__file__).resolve().parents[1]
 
 
 def headers(user):
-    return {"X-BiSheng-User-Id": user, "X-BiSheng-Tenant-Id": "team", "X-BiSheng-App-Id": "shared-demo",
-            "Content-Type": "application/json"}
+    return {
+        "X-BiSheng-User-Id": user,
+        "X-BiSheng-Tenant-Id": "team",
+        "X-BiSheng-App-Id": "shared-demo",
+        "Content-Type": "application/json",
+    }
 
 
 def start(database):
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
-    process = subprocess.Popen([sys.executable, str(EXAMPLE)], env={"PATH": os.environ.get("PATH", ""),
-        "PYTHONPATH": str(SDK), "PORT": str(port), "BISHENG_APP_DB_PATH": str(database), "BISHENG_APP_BIND": "127.0.0.1"},
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    process = subprocess.Popen(
+        [sys.executable, str(EXAMPLE)],
+        env={
+            "PATH": os.environ.get("PATH", ""),
+            "PYTHONPATH": str(SDK),
+            "PORT": str(port),
+            "BISHENG_APP_DB_PATH": str(database),
+            "BISHENG_APP_BIND": "127.0.0.1",
+        },
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     try:
         for _ in range(100):
             if process.poll() is not None:
@@ -62,8 +77,9 @@ def stop(process):
 def request(port, method, path, body=None, user="alice"):
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
     try:
-        connection.request(method, path, body=json.dumps(body) if body is not None else None,
-                           headers=headers(user) if user else {})
+        connection.request(
+            method, path, body=json.dumps(body) if body is not None else None, headers=headers(user) if user else {}
+        )
         response = connection.getresponse()
         return response.status, json.loads(response.read())
     finally:
@@ -92,7 +108,16 @@ def test_ac07_ac08_ac09_http_sse_conflict_retry_and_process_restart(tmp_path):
         else:
             raise AssertionError("Bob did not receive Alice's change event")
         assert request(port, "POST", "/api/record", body)[1] == saved
-        assert request(port, "POST", "/api/record", {**body, "operation_id": "bob-stale", "text": "Stale overwrite"}, user="bob")[0] == 409
+        assert (
+            request(
+                port,
+                "POST",
+                "/api/record",
+                {**body, "operation_id": "bob-stale", "text": "Stale overwrite"},
+                user="bob",
+            )[0]
+            == 409
+        )
         after = request(port, "GET", "/api/snapshot", user="bob")[1]
         assert after["records"][0]["value"]["text"] == body["text"]
     finally:

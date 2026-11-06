@@ -24,8 +24,8 @@ def test_public_modules_include_record_collaboration():
     assert public == {"auth", "retrieve", "storage", "errors", "realtime"}
 
 
-def test_dunder_all_is_the_three_capability_modules():
-    assert bisheng_sdk.__all__ == ("auth", "retrieve", "storage", "realtime")
+def test_dunder_all_is_the_four_capability_modules():
+    assert bisheng_sdk.__all__ == ("auth", "realtime", "retrieve", "storage")
 
 
 @pytest.mark.parametrize("name", ["chat", "appdb", "llm", "db", "client", "models"])

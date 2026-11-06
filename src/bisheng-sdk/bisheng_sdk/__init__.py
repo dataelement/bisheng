@@ -24,4 +24,4 @@ from bisheng_sdk import auth, realtime, retrieve, storage
 
 #: The capability surface. ``errors`` is importable but not a capability, so it
 #: is not listed here (design D2).
-__all__ = ("auth", "retrieve", "storage", "realtime")
+__all__ = ("auth", "realtime", "retrieve", "storage")

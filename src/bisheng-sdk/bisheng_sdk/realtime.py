@@ -73,25 +73,36 @@ class RealtimeStore:
         if type(expected_revision) is not int or expected_revision < 0:
             raise ValueError("A non-negative expected revision is required")
         data = self.encode(value) if value is not None else None
-        request_hash = hashlib.sha256(self.encode([collection, record_id, data, expected_revision]).encode()).hexdigest()
+        request_hash = hashlib.sha256(
+            self.encode([collection, record_id, data, expected_revision]).encode()
+        ).hexdigest()
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
-            prior = db.execute("SELECT request_hash,result FROM wb_operations WHERE actor=? AND operation_id=?",
-                               (actor, operation_id)).fetchone()
+            prior = db.execute(
+                "SELECT request_hash,result FROM wb_operations WHERE actor=? AND operation_id=?", (actor, operation_id)
+            ).fetchone()
             if prior:
                 if prior["request_hash"] != request_hash:
                     raise OperationConflict()
                 return json.loads(prior["result"])
-            row = db.execute("SELECT revision FROM wb_records WHERE collection=? AND id=?", (collection, record_id)).fetchone()
+            row = db.execute(
+                "SELECT revision FROM wb_records WHERE collection=? AND id=?", (collection, record_id)
+            ).fetchone()
             revision = row["revision"] if row else 0
             if revision != expected_revision:
                 raise RevisionConflict()
             revision += 1
-            db.execute("INSERT INTO wb_records VALUES(?,?,?,?) ON CONFLICT(collection,id) DO UPDATE SET revision=excluded.revision,data=excluded.data",
-                       (collection, record_id, revision, data))
-            event = db.execute("INSERT INTO wb_events(collection,record_id,revision) VALUES(?,?,?)", (collection, record_id, revision))
+            db.execute(
+                "INSERT INTO wb_records VALUES(?,?,?,?) ON CONFLICT(collection,id) DO UPDATE SET revision=excluded.revision,data=excluded.data",
+                (collection, record_id, revision, data),
+            )
+            event = db.execute(
+                "INSERT INTO wb_events(collection,record_id,revision) VALUES(?,?,?)", (collection, record_id, revision)
+            )
             result = {"id": record_id, "revision": revision, "value": value, "cursor": event.lastrowid}
-            db.execute("INSERT INTO wb_operations VALUES(?,?,?,?)", (actor, operation_id, request_hash, self.encode(result)))
+            db.execute(
+                "INSERT INTO wb_operations VALUES(?,?,?,?)", (actor, operation_id, request_hash, self.encode(result))
+            )
             return result
 
     def snapshot(self, collection):
@@ -100,9 +111,16 @@ class RealtimeStore:
             db.execute("BEGIN")
             cursor = db.execute("SELECT COALESCE(MAX(seq),0) FROM wb_events").fetchone()[0]
             floor = db.execute("SELECT floor FROM wb_replay WHERE id=1").fetchone()[0]
-            rows = db.execute("SELECT id,revision,data FROM wb_records WHERE collection=? AND data IS NOT NULL ORDER BY id", (collection,)).fetchall()
-            return {"cursor": max(cursor, floor), "records": [{"id": row["id"], "revision": row["revision"],
-                    "value": json.loads(row["data"])} for row in rows]}
+            rows = db.execute(
+                "SELECT id,revision,data FROM wb_records WHERE collection=? AND data IS NOT NULL ORDER BY id",
+                (collection,),
+            ).fetchall()
+            return {
+                "cursor": max(cursor, floor),
+                "records": [
+                    {"id": row["id"], "revision": row["revision"], "value": json.loads(row["data"])} for row in rows
+                ],
+            }
 
     def events(self, after, *, limit=100):
         if type(after) is not int or after < 0 or type(limit) is not int or not 1 <= limit <= 1000:
@@ -113,7 +131,13 @@ class RealtimeStore:
             maximum = db.execute("SELECT COALESCE(MAX(seq),0) FROM wb_events").fetchone()[0]
             if after < floor or after > max(floor, maximum):
                 raise ReplayExpired()
-            return [dict(row) for row in db.execute("SELECT seq,collection,record_id,revision FROM wb_events WHERE seq>? ORDER BY seq LIMIT ?", (after, limit))]
+            return [
+                dict(row)
+                for row in db.execute(
+                    "SELECT seq,collection,record_id,revision FROM wb_events WHERE seq>? ORDER BY seq LIMIT ?",
+                    (after, limit),
+                )
+            ]
 
     def prune(self, through):
         if type(through) is not int or through < 0:

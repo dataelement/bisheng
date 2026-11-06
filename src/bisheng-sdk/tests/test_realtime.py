@@ -16,7 +16,9 @@ def test_two_users_read_same_committed_result_and_replay(tmp_path):
     alice, bob = RealtimeStore(path), RealtimeStore(path)
     initial = bob.snapshot("tasks")
     result = write(alice, {"status": "done"})
-    assert bob.events(initial["cursor"]) == [{"seq": result["cursor"], "collection": "tasks", "record_id": "one", "revision": 1}]
+    assert bob.events(initial["cursor"]) == [
+        {"seq": result["cursor"], "collection": "tasks", "record_id": "one", "revision": 1}
+    ]
     assert bob.snapshot("tasks")["records"][0]["value"] == {"status": "done"}
     assert RealtimeStore(path).snapshot("tasks") == bob.snapshot("tasks")
 
@@ -33,11 +35,13 @@ def test_duplicate_is_idempotent_conflicting_reuse_fails(tmp_path):
 def test_simultaneous_updates_never_silently_overwrite(tmp_path):
     store = RealtimeStore(tmp_path / "app.db")
     write(store, {"value": 0})
+
     def attempt(n):
         try:
             return write(store, {"value": n}, revision=1, op=f"change-{n}", actor=f"user-{n}")
         except RevisionConflict:
             return None
+
     with ThreadPoolExecutor(max_workers=8) as executor:
         results = list(executor.map(attempt, range(16)))
     assert len([result for result in results if result]) == 1
